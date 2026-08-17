@@ -282,11 +282,19 @@ export function mapDriveMarkdownSourceRange(
   nextSource: string,
   range: DriveAnnotationTextPositionSelector,
 ): DriveAnnotationTextPositionSelector | null {
+  return mapDriveMarkdownSourceRanges(previousSource, nextSource, [range])[0] ?? null
+}
+
+export function mapDriveMarkdownSourceRanges(
+  previousSource: string,
+  nextSource: string,
+  ranges: readonly DriveAnnotationTextPositionSelector[],
+): Array<DriveAnnotationTextPositionSelector | null> {
+  if (ranges.length === 0) return []
   const previous = Array.from(previousSource)
   const next = Array.from(nextSource)
-  if (range.start < 0 || range.end < range.start || range.end > previous.length) return null
-  const changes = diffArrays(previous, next, { timeout: 75, maxEditLength: 8192 })
-  if (!changes) return null
+  const changes = diffArrays(previous, next, { timeout: 500, maxEditLength: 20_000 })
+  if (!changes) return ranges.map(() => null)
   const unchanged: Array<{ oldStart: number; oldEnd: number; newStart: number; newEnd: number }> = []
   let oldCursor = 0
   let newCursor = 0
@@ -300,9 +308,12 @@ export function mapDriveMarkdownSourceRange(
       newCursor += length
     }
   }
-  const mapStart = mapSourceBoundary(range.start, unchanged, next.length, "start")
-  const mapEnd = mapSourceBoundary(range.end, unchanged, next.length, "end")
-  return mapStart === null || mapEnd === null || mapEnd < mapStart ? null : { start: mapStart, end: mapEnd }
+  return ranges.map((range) => {
+    if (range.start < 0 || range.end < range.start || range.end > previous.length) return null
+    const mapStart = mapSourceBoundary(range.start, unchanged, next.length, "start")
+    const mapEnd = mapSourceBoundary(range.end, unchanged, next.length, "end")
+    return mapStart === null || mapEnd === null || mapEnd < mapStart ? null : { start: mapStart, end: mapEnd }
+  })
 }
 
 export function extractDriveMarkdownRenderedText(tree: MarkdownProjectionNode): string {
@@ -313,7 +324,7 @@ export function extractDriveMarkdownRenderedText(tree: MarkdownProjectionNode): 
       for (const child of children) visit(child)
       return
     }
-    if (!markdownSegmentTypes.has(node.type ?? "")) return
+    if (!markdownSegmentTypes.has(node.type ?? "") && !markdownImageTypes.has(node.type ?? "")) return
     values.push(visibleText(node))
   }
   visit(tree)

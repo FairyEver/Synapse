@@ -35,6 +35,9 @@ export function resolveDriveAnnotationAnchor(input: {
   let relationshipIndicatesDeletion = crdtRangeCollapsed
   if (crdtCandidate) {
     const crdtResolution = classifyCandidate(input, crdtCandidate, 1, true)
+    if (crdtResolution?.quoteStatus === "exact") return crdtResolution
+    const fuzzyResolution = resolveNearbyModifiedCandidate(input, crdtCandidate.renderedRange, 0.9)
+    if (fuzzyResolution) return preferNearbyResolution(input, crdtResolution, fuzzyResolution)
     if (crdtResolution?.positionStatus === "attached") return crdtResolution
     relationshipIndicatesDeletion = true
   }
@@ -42,6 +45,9 @@ export function resolveDriveAnnotationAnchor(input: {
   const semanticCandidate = semanticCandidateRange(input.selectors, input.projection)
   if (semanticCandidate) {
     const semanticResolution = classifyCandidate(input, semanticCandidate, 0.97, false)
+    if (semanticResolution?.quoteStatus === "exact") return semanticResolution
+    const fuzzyResolution = resolveNearbyModifiedCandidate(input, semanticCandidate.renderedRange, 0.88)
+    if (fuzzyResolution) return preferNearbyResolution(input, semanticResolution, fuzzyResolution)
     if (semanticResolution) return semanticResolution
   }
 
@@ -49,7 +55,10 @@ export function resolveDriveAnnotationAnchor(input: {
     ? sourceToRenderedCandidate(input.projection, input.diffSourceRange)
     : null
   if (diffCandidate) {
-    const diffResolution = classifyCandidate(input, diffCandidate, 0.92, true)
+    const diffResolution = classifyCandidate(input, diffCandidate, 0.92, true, 0.72)
+    if (diffResolution?.quoteStatus === "exact") return diffResolution
+    const fuzzyResolution = resolveNearbyModifiedCandidate(input, diffCandidate.renderedRange, 0.84)
+    if (fuzzyResolution) return preferNearbyResolution(input, diffResolution, fuzzyResolution)
     if (diffResolution?.positionStatus === "attached") return diffResolution
     relationshipIndicatesDeletion = true
   }
@@ -216,6 +225,7 @@ function classifyCandidate(
   candidate: { readonly sourceRange: DriveAnnotationTextPositionSelector; readonly renderedRange: DriveAnnotationTextPositionSelector },
   confidence: number,
   allowRelationshipEvidence: boolean,
+  minimumSimilarity = 0.35,
 ): DriveAnnotationAnchorResolution | null {
   const selected = sliceByCodePoints(input.renderedText, candidate.renderedRange.start, candidate.renderedRange.end)
   if (selected === input.selectors.quote.exact) {
@@ -223,7 +233,7 @@ function classifyCandidate(
   }
   const similarity = quoteSimilarity(selected, input.selectors.quote.exact)
   if (candidate.renderedRange.end > candidate.renderedRange.start
-    && (similarity >= 0.35 || preservesQuoteContext(input, candidate.renderedRange))) {
+    && (similarity >= minimumSimilarity || preservesQuoteContext(input, candidate.renderedRange))) {
     return { positionStatus: "attached", quoteStatus: "modified", ...candidate, confidence: Math.min(confidence, 0.86) }
   }
   if (allowRelationshipEvidence) return {
@@ -234,6 +244,139 @@ function classifyCandidate(
     confidence: 0,
   }
   return null
+}
+
+function resolveNearbyModifiedCandidate(
+  input: Parameters<typeof resolveDriveAnnotationAnchor>[0],
+  origin: DriveAnnotationTextPositionSelector,
+  confidence: number,
+): DriveAnnotationAnchorResolution | null {
+  const exactLength = codePointCount(input.selectors.quote.exact)
+  if (exactLength < 6 || exactLength > 128) return null
+  const renderedLength = codePointCount(input.renderedText)
+  const windowStart = Math.max(0, origin.start - 96)
+  const windowEnd = Math.min(renderedLength, origin.end + 96)
+  const match = closestApproximateSubstring(
+    sliceByCodePoints(input.renderedText, windowStart, windowEnd),
+    input.selectors.quote.exact,
+    { start: origin.start - windowStart, end: origin.end - windowStart },
+  )
+  if (!match || match.score < 0.72) return null
+  const renderedRange = { start: windowStart + match.start, end: windowStart + match.end }
+  const sourceRange = renderedToSourceRange(input.projection!, renderedRange)
+  if (!sourceRange) return null
+  const selected = sliceByCodePoints(input.renderedText, renderedRange.start, renderedRange.end)
+  return {
+    positionStatus: "attached",
+    quoteStatus: selected === input.selectors.quote.exact ? "exact" : "modified",
+    sourceRange,
+    renderedRange,
+    confidence: Math.min(confidence, match.score * 0.9),
+  }
+}
+
+function preferNearbyResolution(
+  input: Parameters<typeof resolveDriveAnnotationAnchor>[0],
+  direct: DriveAnnotationAnchorResolution | null,
+  nearby: DriveAnnotationAnchorResolution,
+): DriveAnnotationAnchorResolution {
+  if (direct?.positionStatus !== "attached" || !direct.renderedRange || !nearby.renderedRange) return nearby
+  const exact = Array.from(input.selectors.quote.exact)
+  const directScore = editSimilarity(exact, Array.from(sliceByCodePoints(
+    input.renderedText,
+    direct.renderedRange.start,
+    direct.renderedRange.end,
+  )))
+  const nearbyScore = editSimilarity(exact, Array.from(sliceByCodePoints(
+    input.renderedText,
+    nearby.renderedRange.start,
+    nearby.renderedRange.end,
+  )))
+  return nearbyScore - directScore >= 0.08 ? nearby : direct
+}
+
+function closestApproximateSubstring(
+  textValue: string,
+  exactValue: string,
+  origin: DriveAnnotationTextPositionSelector,
+): { readonly start: number; readonly end: number; readonly score: number } | null {
+  const text = Array.from(textValue)
+  const exact = Array.from(exactValue)
+  const minimumLength = Math.max(2, Math.floor(exact.length * 0.55))
+  const maximumLength = Math.min(text.length, Math.ceil(exact.length * 1.55) + 16)
+  const startMinimum = Math.max(0, origin.start - 48)
+  const startMaximum = Math.min(text.length - minimumLength, origin.start + 48)
+  const exactBigrams = bigramCounts(exact)
+  const candidates: Array<{ readonly start: number; readonly end: number; readonly score: number }> = []
+  for (let start = startMinimum; start <= startMaximum; start += 1) {
+    for (let length = minimumLength; length <= maximumLength && start + length <= text.length; length += 1) {
+      const score = bigramSimilarity(exact, exactBigrams, text.slice(start, start + length))
+      if (score >= 0.5) candidates.push({ start, end: start + length, score })
+    }
+  }
+  candidates.sort((left, right) => right.score - left.score
+    || rangeDistance(left, origin) - rangeDistance(right, origin)
+    || left.start - right.start)
+  const refined = candidates.slice(0, 64).map((candidate) => ({
+    ...candidate,
+    score: editSimilarity(exact, text.slice(candidate.start, candidate.end)),
+  })).sort((left, right) => right.score - left.score
+    || rangeDistance(left, origin) - rangeDistance(right, origin)
+    || left.start - right.start)
+  const best = refined[0]
+  if (!best) return null
+  const bestDistance = rangeDistance(best, origin)
+  if (refined.some((candidate) => (candidate.end <= best.start || candidate.start >= best.end)
+    && candidate.score >= best.score - 0.08
+    && rangeDistance(candidate, origin) <= bestDistance + 8)) return null
+  return best
+}
+
+function rangeDistance(
+  range: DriveAnnotationTextPositionSelector,
+  origin: DriveAnnotationTextPositionSelector,
+): number {
+  return Math.abs(range.start - origin.start) + Math.abs(range.end - origin.end)
+}
+
+function bigramSimilarity(
+  left: readonly string[],
+  leftPairs: ReadonlyMap<string, number>,
+  right: readonly string[],
+): number {
+  const rightPairs = bigramCounts(right)
+  let intersection = 0
+  for (const [pair, count] of leftPairs) {
+    intersection += Math.min(count, rightPairs.get(pair) ?? 0)
+  }
+  const denominator = Math.max(1, left.length - 1 + right.length - 1)
+  return (2 * intersection) / denominator
+}
+
+function editSimilarity(left: readonly string[], right: readonly string[]): number {
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index)
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = new Array<number>(right.length + 1)
+    current[0] = leftIndex
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1]! + 1,
+        previous[rightIndex]! + 1,
+        previous[rightIndex - 1]! + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      )
+    }
+    previous = current
+  }
+  return 1 - previous[right.length]! / Math.max(1, left.length, right.length)
+}
+
+function bigramCounts(value: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (let index = 1; index < value.length; index += 1) {
+    const pair = `${value[index - 1]}\0${value[index]}`
+    counts.set(pair, (counts.get(pair) ?? 0) + 1)
+  }
+  return counts
 }
 
 function quoteSimilarity(left: string, right: string): number {

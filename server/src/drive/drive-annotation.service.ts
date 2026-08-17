@@ -9,6 +9,7 @@ import type {
   DriveAnnotationTargetDto,
   DriveAnnotationThreadDto,
   DriveAnnotationSelectorsV2,
+  DriveAnnotationTextPositionSelector,
   DriveAnnotationTextSelectorsV2,
   DriveLinkAnnotationTargetInput,
 } from "@synapse/shared"
@@ -795,13 +796,35 @@ export class DriveAnnotationService {
       }, "Drive annotation anchor document resolution failed")
       return threads.map((thread) => ({ ...thread, anchor: unavailableAnchorRecord(thread) }))
     }
-    return Promise.all(threads.map(async (thread) => {
+    const prepared = threads.map((thread) => {
       const selectors = parseAnchorSelectors(thread.anchor?.selectors) ?? toDriveAnnotationSelectorsV2(thread.target as DriveAnnotationTargetDto)
       const target = thread.target as DriveAnnotationTargetDto
       const hasReliableSourceRange = Boolean(selectors.crdt || selectors.semantic || target.source)
-      const diffSourceRange = thread.baseVersionId === document.versionId || !hasReliableSourceRange
-        ? null
-        : await this.drive.resolveAnnotationDiffRange(thread.itemId, thread.baseVersionId, document.sourceText, selectors.position)
+      return { thread, selectors, hasReliableSourceRange }
+    })
+    const diffSourceRangeByThreadId = new Map<string, DriveAnnotationTextPositionSelector | null>()
+    const diffGroups = new Map<string, typeof prepared>()
+    for (const entry of prepared) {
+      if (!entry.thread.baseVersionId
+        || entry.thread.baseVersionId === document.versionId
+        || !entry.hasReliableSourceRange) continue
+      const group = diffGroups.get(entry.thread.baseVersionId) ?? []
+      group.push(entry)
+      diffGroups.set(entry.thread.baseVersionId, group)
+    }
+    await Promise.all([...diffGroups.entries()].map(async ([baseVersionId, entries]) => {
+      const ranges = await this.drive.resolveAnnotationDiffRanges(
+        item.id,
+        baseVersionId,
+        document.sourceText,
+        entries.map((entry) => entry.selectors.position),
+      )
+      entries.forEach((entry, index) => {
+        diffSourceRangeByThreadId.set(entry.thread.id, ranges[index] ?? null)
+      })
+    }))
+    return Promise.all(prepared.map(async ({ thread, selectors }) => {
+      const diffSourceRange = diffSourceRangeByThreadId.get(thread.id) ?? null
       const crdtSourceRange = selectors.crdt
         ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
         : null

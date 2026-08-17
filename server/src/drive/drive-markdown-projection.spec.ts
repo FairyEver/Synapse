@@ -1,6 +1,7 @@
+import { resolveDriveAnnotationAnchor, sliceByCodePoints } from '@synapse/shared'
 import { describe, expect, it } from 'vitest'
 import { renderDriveMarkdownFragment } from './drive-markdown-renderer'
-import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRange } from './drive-markdown-projection'
+import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRange, mapDriveMarkdownSourceRanges } from './drive-markdown-projection'
 
 describe('Drive Markdown projection', () => {
   it('emits stable non-sensitive block and segment identifiers into sanitized HTML', async () => {
@@ -37,6 +38,44 @@ describe('Drive Markdown projection', () => {
     const rendered = await renderDriveMarkdownFragment('前 ![图标](logo.png) 后  \n下一行')
 
     expect(rendered.renderedText).toBe('前 图标 后\n下一行')
+  })
+
+  it('keeps text anchors aligned after a reference image alternative', async () => {
+    const quote = '后文唯一评论文本。'
+    const rendered = await renderDriveMarkdownFragment([
+      '前文 ![图示][asset] 后文唯一评论文本。',
+      '',
+      '[asset]: https://example.com/a.png',
+    ].join('\n'))
+    const paragraph = rendered.projection.blocks.find((block) => block.type === 'paragraph')
+    if (!paragraph) throw new Error('Missing paragraph projection')
+    const renderedStart = 6
+    const renderedEnd = renderedStart + Array.from(quote).length
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: 18, end: 27 },
+        renderedPosition: { start: renderedStart, end: renderedEnd },
+        semantic: {
+          blockId: paragraph.blockId,
+          start: renderedStart,
+          end: renderedEnd,
+          headingPath: [],
+        },
+        quote: { exact: quote, prefix: '图示 ', suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: '前文 ![图示][asset] 后文唯一评论文本。\n\n[asset]: https://example.com/a.png',
+      renderedText: rendered.renderedText,
+    })
+
+    expect(rendered.renderedText).toBe('前文 图示 后文唯一评论文本。')
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      renderedRange: { start: renderedStart, end: renderedEnd },
+    })
+    expect(sliceByCodePoints(rendered.renderedText, renderedStart, renderedEnd)).toBe(quote)
   })
 
   it('projects inline, reference, empty-alt and standalone raw images', async () => {
@@ -97,5 +136,12 @@ describe('Drive Markdown projection', () => {
   it('maps source ranges through bounded Unicode-aware edits', () => {
     expect(mapDriveMarkdownSourceRange('aa目标🙂bb', '前缀aa目标🙂bb', { start: 2, end: 5 })).toEqual({ start: 4, end: 7 })
     expect(mapDriveMarkdownSourceRange('aa目标bb', 'aabb', { start: 2, end: 4 })).toEqual({ start: 2, end: 2 })
+    expect(mapDriveMarkdownSourceRanges('aa目标bb尾部', '前缀aa全新目标bb尾部', [
+      { start: 2, end: 4 },
+      { start: 6, end: 8 },
+    ])).toEqual([
+      { start: 4, end: 8 },
+      { start: 10, end: 12 },
+    ])
   })
 })

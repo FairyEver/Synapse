@@ -66,7 +66,7 @@ import {
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
-import { mapDriveMarkdownSourceRange } from "./drive-markdown-projection"
+import { mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import {
   extractDriveMarkdownRelativeImages,
@@ -2243,15 +2243,24 @@ export class DriveService implements OnApplicationBootstrap {
     currentSource: string,
     range: import("@synapse/shared").DriveAnnotationTextPositionSelector,
   ) {
-    if (!baseVersionId) return null
+    return (await this.resolveAnnotationDiffRanges(itemId, baseVersionId, currentSource, [range]))[0] ?? null
+  }
+
+  async resolveAnnotationDiffRanges(
+    itemId: string,
+    baseVersionId: string | null,
+    currentSource: string,
+    ranges: readonly import("@synapse/shared").DriveAnnotationTextPositionSelector[],
+  ) {
+    if (!baseVersionId || ranges.length === 0) return ranges.map(() => null)
     const version = await this.prisma.driveFileVersion.findFirst({
       where: { id: baseVersionId, itemId, deletedAt: null },
       select: { storageKey: true },
     })
-    if (!version) return null
+    if (!version) return ranges.map(() => null)
     const previous = await this.readTextPreview(version.storageKey)
-    if (previous.truncated) return null
-    return mapDriveMarkdownSourceRange(previous.text, currentSource, range)
+    if (previous.truncated) return ranges.map(() => null)
+    return mapDriveMarkdownSourceRanges(previous.text, currentSource, ranges)
   }
 
   async openShareBrowserItemDownload(input: {

@@ -60,6 +60,35 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveFileVersion.findFirst).not.toHaveBeenCalled()
   })
 
+  it("batches source diff mapping for threads from the same document version", async () => {
+    const anchored = {
+      ...threadRecord({ baseVersionId: "version-1" }),
+      anchor: {
+        ...anchorRecord(),
+        selectors: {
+          ...anchorRecord().selectors,
+          semantic: { blockId: "old-block", start: 0, end: 4, blockType: "paragraph" },
+        },
+      },
+    }
+    prisma.driveAnnotationThread.findMany.mockResolvedValue([
+      anchored,
+      { ...anchored, id: "thread-2" },
+    ])
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Updated Note", "version-3"))
+    drive.resolveAnnotationDiffRanges.mockResolvedValue([{ start: 8, end: 12 }, { start: 8, end: 12 }])
+
+    await service.listOwnerAnnotations("owner-1", "item-1")
+
+    expect(drive.resolveAnnotationDiffRanges).toHaveBeenCalledTimes(1)
+    expect(drive.resolveAnnotationDiffRanges).toHaveBeenCalledWith(
+      "item-1",
+      "version-1",
+      "Updated Note",
+      [{ start: 0, end: 4 }, { start: 0, end: 4 }],
+    )
+  })
+
   it("keeps shared annotations from multiple document versions visible", async () => {
     prisma.driveFileVersion.findFirst.mockResolvedValue({ id: "version-3" })
     prisma.driveAnnotationThread.findMany.mockResolvedValue([
@@ -1006,6 +1035,13 @@ function createDriveServiceMock() {
     getShareBrowserSnapshot: vi.fn(),
     resolveShareAnnotationAccess: vi.fn(),
     resolveAnnotationDocument: vi.fn(),
+    resolveAnnotationDiffRanges: vi.fn(async (
+      _itemId: string,
+      _baseVersionId: string | null,
+      _currentSource: string,
+      ranges: readonly { readonly start: number; readonly end: number }[],
+    ): Promise<Array<{ readonly start: number; readonly end: number } | null>> => ranges.map(() => null)),
+    resolveAnnotationCrdtRange: vi.fn(() => null),
   }
 }
 

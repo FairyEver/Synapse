@@ -143,7 +143,7 @@ describe("DriveCollaborationService", () => {
     expect(html).not.toContain("onerror")
     expect(html).not.toContain("style=")
     expect(html).not.toContain("srcset=")
-    expect(html).toMatch(/<img alt="Unsafe">/u)
+    expect(html).toMatch(/<img(?=[^>]*alt="Unsafe")[^>]*>/u)
     expect(html).not.toContain("javascript:")
     expect(html).not.toContain("<div><img")
     expect(html).not.toContain("<script>")

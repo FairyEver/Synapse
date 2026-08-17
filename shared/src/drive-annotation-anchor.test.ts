@@ -44,6 +44,56 @@ describe('resolveDriveAnnotationAnchor', () => {
     expect(result.quoteStatus).toBe('modified')
   })
 
+  it('reattaches a uniquely modified quote near a trusted diff range', () => {
+    const text = '前缀表格中默认展示带出已匹配的赠品名称和赠送数量后缀'
+    const exact = '表格中默认展示已匹配的赠品名称'
+    const expected = '表格中默认展示带出已匹配的赠品名称'
+    const expectedStart = Array.from(text).findIndex((_, index) => sliceByCodePoints(text, index, index + Array.from(expected).length) === expected)
+    const result = resolveDriveAnnotationAnchor({
+      selectors: selectors(exact, 2, 2 + Array.from(exact).length),
+      projection: projection(text),
+      sourceText: text,
+      renderedText: text,
+      diffSourceRange: { start: expectedStart + 3, end: expectedStart + Array.from(expected).length + 4 },
+    })
+
+    expect(result.positionStatus).toBe('attached')
+    expect(result.quoteStatus).toBe('modified')
+    expect(result.renderedRange && sliceByCodePoints(text, result.renderedRange.start, result.renderedRange.end)).toBe(expected)
+  })
+
+  it('uses a trusted diff neighborhood to disambiguate an exact repeated quote', () => {
+    const exact = '赠送数量、出库数量、'
+    const text = `第一处${exact}间隔第二处${exact}结尾`
+    const secondStart = Array.from(`第一处${exact}间隔第二处`).length
+    const result = resolveDriveAnnotationAnchor({
+      selectors: selectors(exact, 0, Array.from(exact).length),
+      projection: projection(text),
+      sourceText: text,
+      renderedText: text,
+      diffSourceRange: { start: secondStart + 1, end: secondStart + Array.from(exact).length + 1 },
+    })
+
+    expect(result.positionStatus).toBe('attached')
+    expect(result.quoteStatus).toBe('exact')
+    expect(result.renderedRange).toEqual({ start: secondStart, end: secondStart + Array.from(exact).length })
+  })
+
+  it('does not fuzzily attach deleted text to unrelated nearby content', () => {
+    const text = '前缀完全不同的现有内容后缀'
+    const result = resolveDriveAnnotationAnchor({
+      selectors: selectors('已删除的财务公式和收入分摊', 2, 15),
+      projection: projection(text),
+      sourceText: text,
+      renderedText: text,
+      diffSourceRange: { start: 2, end: 11 },
+    })
+
+    expect(result.positionStatus).toBe('source_deleted')
+    expect(result.quoteStatus).toBe('deleted')
+    expect(result.renderedRange).toBeNull()
+  })
+
   it('does not claim source deletion when a quote-only anchor loses its exact text', () => {
     const text = '一段新版文字'
     const result = resolveDriveAnnotationAnchor({
