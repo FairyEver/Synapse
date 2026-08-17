@@ -27,6 +27,26 @@ type MeasurementTarget =
 
 type PendingMeasurement = number | HTMLElement | null
 
+type ThreadComposerState =
+  | { readonly kind: 'closed' }
+  | {
+      readonly kind: 'reply'
+      readonly parentCommentId: string | null
+      readonly value: string
+      readonly submitting: boolean
+      readonly error: string | null
+      readonly revision: number
+    }
+  | {
+      readonly kind: 'edit'
+      readonly commentId: string
+      readonly value: string
+      readonly submitting: boolean
+      readonly error: string | null
+    }
+
+type ThreadEditComposerState = Extract<ThreadComposerState, { readonly kind: 'edit' }>
+
 export type MarkdownCommentsRailThread = {
   readonly thread: DriveAnnotationThreadDto
   readonly anchorTop: number | null
@@ -374,45 +394,77 @@ function ThreadView({
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
   readonly onStartReassociate?: (threadId: string) => void
 }) {
-  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null)
-  const [replyComposerOpen, setReplyComposerOpen] = useState(active)
-  const [replyComposerRevision, setReplyComposerRevision] = useState(0)
-  const [replyValue, setReplyValue] = useState('')
-  const [replySubmitting, setReplySubmitting] = useState(false)
-  const [replyError, setReplyError] = useState<string | null>(null)
+  const [composer, setComposer] = useState<ThreadComposerState>(() => active
+    ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
+    : { kind: 'closed' })
   const previousActiveRef = useRef(active)
   const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
-  const replyingToComment = thread.comments.find((comment) => comment.id === replyingToCommentId && !comment.deleted) ?? null
-  const composerVisible = replyComposerOpen && (active || replyingToCommentId !== null)
+  const replyingToComment = composer.kind === 'reply'
+    ? thread.comments.find((comment) => comment.id === composer.parentCommentId && !comment.deleted) ?? null
+    : null
+  const composerVisible = composer.kind === 'edit'
+    || (composer.kind === 'reply' && (active || composer.parentCommentId !== null))
   const emphasized = active || composerVisible
+  const composerSubmitting = composer.kind !== 'closed' && composer.submitting
   const quote = annotationQuoteExcerpt(thread)
 
   useEffect(() => {
-    if (active && !previousActiveRef.current) setReplyComposerOpen(true)
+    if (active && !previousActiveRef.current) {
+      setComposer((current) => current.kind === 'closed'
+        ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
+        : current)
+    }
     previousActiveRef.current = active
   }, [active])
 
   const openReplyComposer = (commentId: string | null) => {
-    setReplyingToCommentId(commentId)
-    setReplyComposerOpen(true)
-    setReplyValue('')
-    setReplyError(null)
-    setReplyComposerRevision((current) => current + 1)
+    if (composerSubmitting) return
+    setComposer((current) => ({
+      kind: 'reply',
+      parentCommentId: commentId,
+      value: '',
+      submitting: false,
+      error: null,
+      revision: current.kind === 'reply' ? current.revision + 1 : 0,
+    }))
+  }
+
+  const openEditComposer = (comment: DriveAnnotationCommentDto) => {
+    if (composerSubmitting) return
+    setComposer({
+      kind: 'edit',
+      commentId: comment.id,
+      value: comment.body,
+      submitting: false,
+      error: null,
+    })
   }
 
   const submitReply = async () => {
-    if (!replyValue.trim() || replySubmitting) return
-    setReplySubmitting(true)
-    setReplyError(null)
+    if (composer.kind !== 'reply' || !composer.value.trim() || composer.submitting) return
+    const submission = composer
+    setComposer({ ...submission, submitting: true, error: null })
     try {
-      await onReply({ threadId: thread.id, parentCommentId: replyingToComment?.id ?? null, body: replyValue })
-      setReplyComposerOpen(false)
-      setReplyingToCommentId(null)
-      setReplyValue('')
+      await onReply({ threadId: thread.id, parentCommentId: submission.parentCommentId, body: submission.value })
+      setComposer({ kind: 'closed' })
     } catch (cause) {
-      setReplyError(getCommentActionErrorMessage(cause))
-    } finally {
-      setReplySubmitting(false)
+      setComposer((current) => current.kind === 'reply'
+        ? { ...current, submitting: false, error: getCommentActionErrorMessage(cause) }
+        : current)
+    }
+  }
+
+  const submitEdit = async () => {
+    if (composer.kind !== 'edit' || !composer.value.trim() || composer.submitting) return
+    const submission = composer
+    setComposer({ ...submission, submitting: true, error: null })
+    try {
+      await onUpdateComment({ commentId: submission.commentId, body: submission.value })
+      setComposer({ kind: 'closed' })
+    } catch (cause) {
+      setComposer((current) => current.kind === 'edit'
+        ? { ...current, submitting: false, error: getCommentActionErrorMessage(cause) }
+        : current)
     }
   }
 
@@ -467,38 +519,43 @@ function ThreadView({
             canReply={canReply}
             compact={compact}
             deleteDescription={commentDeleteDescription(comment, thread.comments)}
+            editComposer={composer.kind === 'edit' && composer.commentId === comment.id ? composer : null}
+            actionsHidden={composer.kind === 'edit'}
+            actionsDisabled={composerSubmitting}
             onStartReply={() => openReplyComposer(comment.id)}
-            onStartEdit={() => setReplyComposerOpen(false)}
-            onUpdateComment={onUpdateComment}
+            onStartEdit={() => openEditComposer(comment)}
+            onEditValueChange={(value) => {
+              setComposer((current) => current.kind === 'edit'
+                ? { ...current, value, error: null }
+                : current)
+            }}
+            onCancelEdit={() => setComposer({ kind: 'closed' })}
+            onSubmitEdit={() => { void submitEdit() }}
             onDeleteComment={onDeleteComment}
           />
         ))}
       </div>
-      {replyComposerOpen ? (
+      {composer.kind === 'reply' ? (
         <div className={cn(!composerVisible && 'hidden')}>
           <CommentComposer
-            key={replyComposerRevision}
+            key={composer.revision}
             dataAttribute='reply'
-            value={replyValue}
+            value={composer.value}
             ariaLabel={replyingToComment ? `回复 ${displayAuthor(replyingToComment.author)}` : '回复讨论'}
             label={replyingToComment ? `回复 ${displayAuthor(replyingToComment.author)}` : null}
             placeholder='回复'
             compact={compact}
-            submitting={replySubmitting}
-            error={replyError}
+            submitting={composer.submitting}
+            error={composer.error}
             submitLabel='发送'
             submittingLabel='发送中'
-            autoFocus={replyingToCommentId !== null}
+            autoFocus={composer.parentCommentId !== null}
             onValueChange={(value) => {
-              setReplyValue(value)
-              if (replyError) setReplyError(null)
+              setComposer((current) => current.kind === 'reply'
+                ? { ...current, value, error: null }
+                : current)
             }}
-            onCancel={() => {
-              setReplyComposerOpen(false)
-              setReplyingToCommentId(null)
-              setReplyValue('')
-              setReplyError(null)
-            }}
+            onCancel={() => setComposer({ kind: 'closed' })}
             onSubmit={() => { void submitReply() }}
           />
         </div>
@@ -520,9 +577,14 @@ function CommentView({
   canReply,
   compact,
   deleteDescription,
+  editComposer,
+  actionsHidden,
+  actionsDisabled,
   onStartReply,
   onStartEdit,
-  onUpdateComment,
+  onEditValueChange,
+  onCancelEdit,
+  onSubmitEdit,
   onDeleteComment,
 }: {
   readonly comment: DriveAnnotationCommentDto
@@ -530,14 +592,16 @@ function CommentView({
   readonly canReply: boolean
   readonly compact: boolean
   readonly deleteDescription: string
+  readonly editComposer: ThreadEditComposerState | null
+  readonly actionsHidden: boolean
+  readonly actionsDisabled: boolean
   readonly onStartReply: () => void
   readonly onStartEdit: () => void
-  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onEditValueChange: (value: string) => void
+  readonly onCancelEdit: () => void
+  readonly onSubmitEdit: () => void
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
-  const [editValue, setEditValue] = useState<string | null>(null)
-  const [editSubmitting, setEditSubmitting] = useState(false)
-  const [editError, setEditError] = useState<string | null>(null)
   const authorName = displayAuthor(comment.author)
   return (
     <article className='group/comment'>
@@ -554,10 +618,11 @@ function CommentView({
               <RelativeTime value={comment.createdAt} className='text-xs text-muted-foreground' />
               {comment.editedAt ? <span className='text-xs text-muted-foreground'>已编辑</span> : null}
             </div>
-            {comment.permissions.canDelete ? (
+            {comment.permissions.canDelete && !actionsHidden ? (
               <div className='shrink-0'>
                 <CommentDeleteButton
                   compact={compact}
+                  disabled={actionsDisabled}
                   deleteDescription={deleteDescription}
                   onDeleteComment={() => onDeleteComment(comment.id)}
                 />
@@ -565,54 +630,42 @@ function CommentView({
             ) : null}
           </div>
           {replyToName ? <div className='text-xs text-muted-foreground'>回复 {replyToName}</div> : null}
-          <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
-          <div className={cn(
-            '-ml-2 flex flex-wrap items-center gap-1 transition-opacity',
-            !compact && 'opacity-70 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100'
-          )}>
-            {canReply ? (
-              <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={onStartReply}>回复</Button>
-            ) : null}
-            {comment.permissions.canEdit ? (
-              <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} onClick={() => {
-                onStartEdit()
-                setEditValue(comment.body)
-              }}>编辑</Button>
-            ) : null}
-          </div>
+          {editComposer ? (
+            <CommentComposer
+              dataAttribute='edit'
+              value={editComposer.value}
+              ariaLabel='编辑评论'
+              placeholder='编辑评论'
+              compact={compact}
+              submitting={editComposer.submitting}
+              error={editComposer.error}
+              submitLabel='保存'
+              submittingLabel='保存中'
+              autoFocus
+              onValueChange={onEditValueChange}
+              onCancel={onCancelEdit}
+              onSubmit={onSubmitEdit}
+            />
+          ) : (
+            <>
+              <p className='whitespace-pre-wrap break-words text-sm leading-5'>{comment.body}</p>
+              {!actionsHidden ? (
+                <div className={cn(
+                  '-ml-2 flex flex-wrap items-center gap-1 transition-opacity',
+                  !compact && 'opacity-70 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100'
+                )}>
+                  {canReply ? (
+                    <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartReply}>回复</Button>
+                  ) : null}
+                  {comment.permissions.canEdit ? (
+                    <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartEdit}>编辑</Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
-      {editValue !== null ? (
-        <CommentComposer
-          dataAttribute='edit'
-          value={editValue}
-          ariaLabel='编辑评论'
-          placeholder='编辑评论'
-          compact={compact}
-          submitting={editSubmitting}
-          error={editError}
-          submitLabel='保存'
-          submittingLabel='保存中'
-          autoFocus
-          onValueChange={(value) => {
-            setEditValue(value)
-            if (editError) setEditError(null)
-          }}
-          onCancel={() => {
-            setEditValue(null)
-            setEditError(null)
-          }}
-          onSubmit={() => {
-            if (!editValue.trim() || editSubmitting) return
-            setEditSubmitting(true)
-            setEditError(null)
-            void onUpdateComment({ commentId: comment.id, body: editValue })
-              .then(() => setEditValue(null))
-              .catch((cause) => setEditError(getCommentActionErrorMessage(cause)))
-              .finally(() => setEditSubmitting(false))
-          }}
-        />
-      ) : null}
     </article>
   )
 }
@@ -672,7 +725,7 @@ function CommentComposer({
       data-markdown-comment-draft-composer={dataAttribute === 'draft' ? 'true' : undefined}
       data-markdown-comment-reply-composer={dataAttribute === 'reply' ? 'true' : undefined}
       data-markdown-comment-edit-composer={dataAttribute === 'edit' ? 'true' : undefined}
-      className='mt-3 border-t pt-3'
+      className={cn(dataAttribute === 'edit' ? 'mt-2' : 'mt-3 border-t pt-3')}
       onClick={(event) => event.stopPropagation()}
     >
       {label ? <div className='mb-2 text-xs text-muted-foreground'>{label}</div> : null}
@@ -698,10 +751,12 @@ function CommentComposer({
 
 function CommentDeleteButton({
   compact = false,
+  disabled = false,
   deleteDescription,
   onDeleteComment,
 }: {
   readonly compact?: boolean
+  readonly disabled?: boolean
   readonly deleteDescription: string
   readonly onDeleteComment: () => CommentActionPromise
 }) {
@@ -734,7 +789,7 @@ function CommentDeleteButton({
       aria-label={confirming ? '确认删除评论' : '删除评论'}
       aria-pressed={confirming}
       title={confirming ? deleteDescription : '删除评论'}
-      disabled={deleting}
+      disabled={disabled || deleting}
       onBlur={() => {
         if (!deleting) setConfirming(false)
       }}

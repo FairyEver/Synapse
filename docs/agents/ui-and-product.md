@@ -29,6 +29,13 @@
 - `ResizeObserver` 等动态测量必须复用最少数量的 observer，批量读取后按帧提交更新，更新前比较新旧值，并在卸载时清理 observer 和待执行帧。不得在滚动循环中交替读写布局属性。
 - callback ref 短暂收到 `null` 时，不得立即丢弃仍可复用的最近有效测量；先区分临时脱离和业务对象删除，避免在真实值与预估值之间形成布局振荡。
 
+### Markdown 预览与评论定位
+
+- 修改 Markdown 正文或评论卡片的字号、字重、行高、间距、宽度、单元格 padding 等纯布局样式时，不得为此修改评论锚点算法或新增定位配置；定位必须继续基于实际 DOM 测量，并验证高亮范围、评论卡片对齐和评论导航滚动。
+- 修改 Markdown 的可见文本、DOM 文本顺序、解析器/渲染器语义、图片 alt、换行、代码块或表格的文本映射规则时，必须同步检查服务端 Markdown projection、Renderer rendered-text 映射和评论锚点测试。
+- 修改正文、高亮层、评论栏的滚动容器或定位坐标系，或引入折叠、虚拟化、`transform`、异步字体等可能绕过正文 `ResizeObserver` 的动态几何变化时，必须同步检查坐标换算，并在必要时补充重新测量触发机制。
+- Drive Markdown 评论定位的权威设计见 `docs/superpowers/specs/2026-06-21-drive-markdown-annotations-design.md`。
+
 ## 产品文案
 
 - UI 文案只保留标题、必要 label、操作、空/错误/加载状态。

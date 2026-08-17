@@ -281,12 +281,15 @@ sync_remote_code() {
     --exclude='dashboard/dist' \
     --exclude='shared/node_modules' \
     --exclude='shared/dist' \
+    --exclude='ui/node_modules' \
+    --exclude='ui/dist' \
     --include='/.dockerignore' \
     --include='/setup.sh' \
     --include='/restart.sh' \
     --include='/server/***' \
     --include='/dashboard/***' \
     --include='/shared/***' \
+    --include='/ui/***' \
     --include='/patches/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \

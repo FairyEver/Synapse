@@ -147,6 +147,7 @@ Comment rail:
 - Does not include filters because there is no product status.
 - Shows nested replies as a readable discussion stream, not an infinitely indented tree.
 - A reply can show "回复 <name>" metadata instead of increasing indentation for every level.
+- A thread card exposes at most one composer at a time. Editing replaces the comment body and its actions; reply and edit modes never appear together.
 - Deletable comments show a direct delete icon. The first click changes it to a check icon, and the second click performs the deletion.
 - Deleting a comment also hides all of its descendant replies, including legacy descendants whose parent was deleted before this rule was introduced.
 - Deleting the first comment removes the entire thread and its rendered text marker.
@@ -157,6 +158,13 @@ Rendered text markers:
 - Markers must not make the Markdown harder to read.
 - Orphaned threads do not render a body marker.
 - Orphaned threads remain readable and writable in the unlocated section.
+
+### Rendering Style And Positioning Invariants
+
+- Typography and spacing changes such as font size, font weight, line height, block spacing, reading width, and table-cell padding do not change annotation anchor semantics and must not introduce anchor-algorithm branches or duplicated positioning configuration.
+- Highlight rectangles and comment-rail positions are derived from the rendered DOM. Pure layout changes must keep the DOM measurement and `ResizeObserver` flow authoritative, with regression coverage for highlight alignment, rail alignment, and comment navigation after reflow.
+- Changes to visible text, DOM text order, Markdown parser or renderer semantics, image alt handling, line breaks, code blocks, tables, or ignored/generated nodes must update and test both the server Markdown projection and the Renderer rendered-text model when their shared text stream changes.
+- Changes to the document scroll container, overlay coordinate space, virtualization, collapsed content, transforms, or asynchronous geometry that can move text without notifying the observed Markdown body must update the coordinate conversion or add an explicit remeasurement trigger.
 
 ## Data Model
 

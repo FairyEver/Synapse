@@ -470,9 +470,9 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
-    expect(body?.className.split(/\s+/u)).toContain('break-words')
+    expect(body?.className.split(/\s+/u)).toContain('markdown-body')
     expect(body?.querySelector('code')?.textContent).toBe(path)
-    expect(body?.className).toContain('[&_pre]:overflow-x-auto')
+    expect(body?.className).not.toContain('[&_pre]')
   })
 
   it('keeps wide markdown tables scrollable inside the reader column', () => {
@@ -504,14 +504,8 @@ describe('DriveMarkdownRenderer', () => {
     const table = document.querySelector<HTMLTableElement>('[data-testid="markdown-body"] table')
     expect(wrapper).not.toBeNull()
     expect(table).not.toBeNull()
-    expect(body?.className).toContain('[&_[data-drive-markdown-table-scroll="true"]]:max-w-full')
-    expect(body?.className).toContain('[&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto')
-    expect(body?.className).toContain('[&_table]:w-max')
-    expect(body?.className).toContain('[&_table]:min-w-full')
-    expect(body?.className).toContain('[&_td:not(:first-child)]:min-w-56')
-    expect(body?.className).toContain('[&_th:not(:first-child)]:min-w-56')
-    expect(body?.className).not.toContain('[&_table]:block')
-    expect(body?.className).not.toContain('[&_table]:w-full')
+    expect(body?.className.split(/\s+/u)).toContain('markdown-body')
+    expect(body?.className).not.toContain('[&_table]')
     expect(body?.parentElement?.className).toContain('max-w-3xl')
   })
 

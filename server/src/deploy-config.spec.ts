@@ -229,6 +229,18 @@ describe("server deployment configuration", () => {
     expect(dockerfile).toContain("COPY --from=build /app/shared ./shared")
   })
 
+  it("includes the UI workspace package in the deployed dashboard build", () => {
+    const deployScript = readRepoFile("deploy.sh")
+    const dockerfile = readRepoFile("server/Dockerfile")
+
+    expect(dockerfile).toContain("COPY ui/package.json ui/package.json")
+    expect(dockerfile).toContain("COPY --from=deps /app/ui/node_modules ./ui/node_modules")
+    expect(dockerfile).toContain("COPY ui/ ui/")
+    expect(deployScript).toContain("--exclude='ui/node_modules'")
+    expect(deployScript).toContain("--exclude='ui/dist'")
+    expect(deployScript).toContain("--include='/ui/***'")
+  })
+
   it("syncs pnpm patches required by the server Docker build", () => {
     const deployScript = readRepoFile("deploy.sh")
     const dockerfile = readRepoFile("server/Dockerfile")

@@ -252,6 +252,65 @@ describe('MarkdownCommentsRail', () => {
     expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
   })
 
+  it('keeps reply and edit modes mutually exclusive within a thread', async () => {
+    renderRail({ activeThreadId: 'thread-1' })
+
+    expect(replyComposer('thread-1')).not.toBeNull()
+    await click(buttonWithText('编辑'))
+
+    const card = threadCard('thread-1')
+    expect(replyComposer('thread-1')).toBeNull()
+    expect(card.querySelectorAll('[data-markdown-comment-edit-composer="true"]')).toHaveLength(1)
+    expect(card.querySelectorAll('textarea')).toHaveLength(1)
+    expect(card.querySelector('p')).toBeNull()
+    expect(Array.from(card.querySelectorAll('button')).some((button) => button.textContent === '回复')).toBe(false)
+    expect(buttonWithLabel('删除评论')).toBeNull()
+  })
+
+  it('does not reopen reply mode when an edited thread becomes active again', async () => {
+    renderRail({ activeThreadId: 'thread-1' })
+    await click(buttonWithText('编辑'))
+
+    rerenderRail({ activeThreadId: null })
+    rerenderRail({ activeThreadId: 'thread-1' })
+
+    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).not.toBeNull()
+    expect(replyComposer('thread-1')).toBeNull()
+    expect(threadCard('thread-1').querySelectorAll('textarea')).toHaveLength(1)
+  })
+
+  it('keeps the edit value visible when saving fails', async () => {
+    const onUpdateComment = vi.fn(async () => {
+      throw new Error('保存失败')
+    })
+    renderRail({ onUpdateComment })
+
+    await click(buttonWithText('编辑'))
+    await inputValue(textarea(), 'Updated comment')
+    await click(buttonWithText('保存'))
+
+    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).not.toBeNull()
+    expect(document.querySelector('[role="status"]')?.textContent).toBe('保存失败')
+    expect(textarea().value).toBe('Updated comment')
+  })
+
+  it('locks the edit composer while changes are being saved', async () => {
+    let resolveUpdate: (() => void) | null = null
+    const onUpdateComment = vi.fn(() => new Promise<void>((resolve) => {
+      resolveUpdate = resolve
+    }))
+    renderRail({ onUpdateComment })
+
+    await click(buttonWithText('编辑'))
+    await inputValue(textarea(), 'Updated comment')
+    await click(buttonWithText('保存'))
+
+    expect(buttonWithText('保存中').disabled).toBe(true)
+    expect(textarea().disabled).toBe(true)
+    await act(async () => resolveUpdate?.())
+    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+  })
+
   it('cancels inline edits without updating the comment', async () => {
     const onUpdateComment = vi.fn(async () => undefined)
     renderRail({ onUpdateComment })

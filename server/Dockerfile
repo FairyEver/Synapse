@@ -6,6 +6,7 @@ FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY patches/ patches/
 COPY shared/package.json shared/package.json
+COPY ui/package.json ui/package.json
 COPY server/package.json server/package.json
 COPY dashboard/package.json dashboard/package.json
 RUN pnpm install --frozen-lockfile --filter @synapse/shared --filter @synapse/server... --filter @synapse/dashboard...
@@ -13,11 +14,13 @@ RUN pnpm install --frozen-lockfile --filter @synapse/shared --filter @synapse/se
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
+COPY --from=deps /app/ui/node_modules ./ui/node_modules
 COPY --from=deps /app/server/node_modules ./server/node_modules
 COPY --from=deps /app/dashboard/node_modules ./dashboard/node_modules
 COPY server/ server/
 COPY dashboard/ dashboard/
 COPY shared/ shared/
+COPY ui/ ui/
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build
