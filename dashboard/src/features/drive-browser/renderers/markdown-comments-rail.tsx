@@ -838,7 +838,8 @@ function annotationQuoteExcerpt(thread: DriveAnnotationThreadDto): string {
     const alt = thread.target.snapshot.alt.trim()
     if (alt) return alt
     const source = thread.target.snapshot.src.split(/[?#]/u)[0] ?? ''
-    const fileName = source.split(/[\\/]/u).at(-1)?.trim()
+    const pathSegments = source.split(/[\\/]/u)
+    const fileName = pathSegments[pathSegments.length - 1]?.trim()
     return fileName || '图片'
   }
   return thread.target.quote.exact.replace(/\s+/gu, ' ').trim()

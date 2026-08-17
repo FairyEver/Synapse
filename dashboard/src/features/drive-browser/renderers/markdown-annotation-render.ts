@@ -47,8 +47,9 @@ export function renderMarkdownAnnotationHtml(
   const renderedText = getMarkdownRenderedText(template.content)
   const resolved = threads.map((thread) => {
     if (thread.target.kind === 'image') {
+      const targetImageId = thread.target.imageId
       const imageExists = Array.from(template.content.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'))
-        .some((element) => element.dataset.driveMarkdownImageId === thread.target.imageId)
+        .some((element) => element.dataset.driveMarkdownImageId === targetImageId)
       const imageProjection = liveDocument?.projection ?? currentProjection
       if (thread.anchor?.selectors.kind === 'image' && imageProjection) {
         const resolution = resolveDriveImageAnnotationAnchor({
@@ -79,7 +80,7 @@ export function renderMarkdownAnnotationHtml(
         && imageExists
       return {
         threadId: thread.id,
-        imageId: attached ? thread.target.imageId : null,
+        imageId: attached ? targetImageId : null,
         anchorStatus: attached ? 'attached' as const : 'orphaned' as const,
         range: null,
         renderedRange: null,

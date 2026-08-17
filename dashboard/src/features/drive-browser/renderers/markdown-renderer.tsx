@@ -506,7 +506,12 @@ function DriveMarkdownBody({
     const imageId = resolvedByThreadId.get(threadId)?.imageId
     const imageElement = root && imageId ? findVisibleMarkdownCommentImage(root, imageId) : null
     if (root && imageElement) {
-      scrollPreviewContainerToRect(root, imageElement.getBoundingClientRect())
+      const rootRect = root.getBoundingClientRect()
+      const imageRect = imageElement.getBoundingClientRect()
+      scrollPreviewContainerToRect(root, {
+        top: imageRect.top - rootRect.top,
+        height: imageRect.height,
+      })
       return
     }
     const overlayRect = findOverlayRectByThreadId(annotationOverlayRects, threadId, root)
@@ -1040,7 +1045,8 @@ function markdownAnnotationTargetLabel(target: DriveAnnotationTargetDto): string
   const alt = target.snapshot.alt.trim()
   if (alt) return alt
   const source = target.snapshot.src.split(/[?#]/u)[0] ?? ''
-  return source.split(/[\\/]/u).at(-1)?.trim() || '图片'
+  const pathSegments = source.split(/[\\/]/u)
+  return pathSegments[pathSegments.length - 1]?.trim() || '图片'
 }
 
 function encodeStateVector(doc: Y.Doc): string {
@@ -1292,7 +1298,7 @@ function readRenderedOverlayRect(element: HTMLElement): Omit<MarkdownAnnotationO
   return { visible: true, top, left, width, height }
 }
 
-function scrollPreviewContainerToRect(root: HTMLElement, rect: MarkdownAnnotationOverlayRect): void {
+function scrollPreviewContainerToRect(root: HTMLElement, rect: Pick<MarkdownAnnotationOverlayRect, 'top' | 'height'>): void {
   const container = findNearestScrollContainer(root)
   if (!container) return
   const rootRect = root.getBoundingClientRect()
