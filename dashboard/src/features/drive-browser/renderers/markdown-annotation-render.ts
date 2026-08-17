@@ -46,6 +46,10 @@ export function renderMarkdownAnnotationHtml(
   template.innerHTML = html
   const renderedText = getMarkdownRenderedText(template.content)
   const resolved = threads.map((thread) => {
+    const refreshedSourceRange = currentVersionId !== null
+      && thread.anchor?.lastResolvedVersionId === currentVersionId
+      ? thread.anchor.resolvedSourceRange
+      : null
     if (thread.target.kind === 'image') {
       const targetImageId = thread.target.imageId
       const imageExists = Array.from(template.content.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'))
@@ -58,6 +62,7 @@ export function renderMarkdownAnnotationHtml(
           crdtSourceRange: liveDocument && thread.anchor.selectors.crdt
             ? liveDocument.resolveCrdtRange(thread.anchor.selectors.crdt)
             : thread.anchor.resolvedSourceRange,
+          diffSourceRange: liveDocument ? refreshedSourceRange : null,
         })
         const currentImageId = resolution.sourceRange
           ? imageProjection.images?.find((image) => image.sourceStart === resolution.sourceRange?.start
@@ -103,6 +108,7 @@ export function renderMarkdownAnnotationHtml(
           crdtSourceRange: thread.anchor.selectors.crdt
             ? liveDocument.resolveCrdtRange(thread.anchor.selectors.crdt)
             : null,
+          diffSourceRange: refreshedSourceRange,
         })
         return {
           threadId: thread.id,

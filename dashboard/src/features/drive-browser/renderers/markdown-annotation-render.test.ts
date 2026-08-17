@@ -136,6 +136,49 @@ describe('renderMarkdownAnnotationHtml', () => {
     })
   })
 
+  it('keeps a server-refreshed modified anchor attached while a live document is active', () => {
+    const text = '前缀表格中默认展示带出已匹配的赠品名称后缀'
+    const expected = '表格中默认展示带出已匹配的赠品名称'
+    const start = Array.from('前缀').length
+    const refreshedThread: DriveAnnotationThreadDto = {
+      ...anchoredThread(),
+      anchor: {
+        ...anchoredThread().anchor!,
+        selectors: {
+          schemaVersion: 2,
+          crdt: { epoch: 'epoch-1', start: 'start', end: 'end' },
+          position: { start: 8, end: 23 },
+          renderedPosition: { start: 8, end: 23 },
+          semantic: { blockId: 'old-block', start: 8, end: 23, blockType: 'paragraph' },
+          quote: { exact: '表格中默认展示已匹配的赠品名称', prefix: '', suffix: '' },
+        },
+        positionStatus: 'attached',
+        quoteStatus: 'modified',
+        resolvedSourceRange: { start, end: start + Array.from(expected).length },
+        resolvedRenderedRange: { start, end: start + Array.from(expected).length },
+        lastResolvedVersionId: 'version-2',
+      },
+    }
+    const result = renderMarkdownAnnotationHtml(
+      `<p>${text}</p>`,
+      [refreshedThread],
+      'version-2',
+      {
+        sourceText: text,
+        projection: projection(text),
+        resolveCrdtRange: () => null,
+      },
+    )
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-anchored',
+      anchorStatus: 'attached',
+      positionStatus: 'attached',
+      quoteStatus: 'modified',
+      renderedRange: { start, end: start + Array.from(expected).length },
+    })
+  })
+
   it('converts cached V2 code-point ranges to UTF-16 offsets for DOM measurement', () => {
     const html = '<p>😀 Note</p>'
     const result = renderMarkdownAnnotationHtml(html, [unicodeAnchoredThread()], 'version-1')
@@ -218,6 +261,49 @@ describe('renderMarkdownAnnotationHtml', () => {
       'version-2',
       null,
       currentProjection,
+    )
+
+    expect(result.resolved[0]).toMatchObject({ imageId: 'mdimg_moved', anchorStatus: 'attached', quoteStatus: 'exact' })
+  })
+
+  it('uses the server-refreshed image range while a live document is active', () => {
+    const movedThread = {
+      ...imageThread(),
+      anchor: {
+        ...imageThread().anchor!,
+        resolvedSourceRange: { start: 20, end: 38 },
+        lastResolvedVersionId: 'version-2',
+      },
+    }
+    const text = '占位内容'.repeat(10)
+    const currentProjection: DriveMarkdownProjectionDto = {
+      ...projection(text),
+      imageAnchorsVersion: 1,
+      images: [{
+        imageId: 'mdimg_moved',
+        segmentId: 'segment-image',
+        blockId: 'block-moved',
+        imageIndex: 0,
+        documentIndex: 0,
+        sourceStart: 20,
+        sourceEnd: 38,
+        renderedStart: 6,
+        renderedEnd: 6,
+        source: '/files/asset_1',
+        resourceKey: 'file:asset_1',
+        alt: '',
+        title: null,
+      }],
+    }
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_moved" src="/files/asset_1"></p>',
+      [movedThread],
+      'version-2',
+      {
+        sourceText: text,
+        projection: currentProjection,
+        resolveCrdtRange: () => null,
+      },
     )
 
     expect(result.resolved[0]).toMatchObject({ imageId: 'mdimg_moved', anchorStatus: 'attached', quoteStatus: 'exact' })
