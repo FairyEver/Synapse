@@ -1234,7 +1234,7 @@ function readRenderedOverlayRect(element: HTMLElement): Omit<MarkdownAnnotationO
   const width = Number.parseFloat(element.style.width)
   const height = Number.parseFloat(element.style.height)
   if (![top, left, width, height].every(Number.isFinite)) return null
-  return { top, left, width, height }
+  return { visible: true, top, left, width, height }
 }
 
 function scrollPreviewContainerToRect(root: HTMLElement, rect: MarkdownAnnotationOverlayRect): void {
