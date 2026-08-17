@@ -46,10 +46,7 @@ export function renderMarkdownAnnotationHtml(
   template.innerHTML = html
   const renderedText = getMarkdownRenderedText(template.content)
   const resolved = threads.map((thread) => {
-    const refreshedSourceRange = currentVersionId !== null
-      && thread.anchor?.lastResolvedVersionId === currentVersionId
-      ? thread.anchor.resolvedSourceRange
-      : null
+    const refreshedSourceRange = thread.anchor?.resolvedSourceRange ?? null
     if (thread.target.kind === 'image') {
       const targetImageId = thread.target.imageId
       const imageExists = Array.from(template.content.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'))

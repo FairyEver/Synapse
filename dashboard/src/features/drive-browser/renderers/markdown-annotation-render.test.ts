@@ -162,7 +162,7 @@ describe('renderMarkdownAnnotationHtml', () => {
     const result = renderMarkdownAnnotationHtml(
       `<p>${text}</p>`,
       [refreshedThread],
-      'version-2',
+      'checkpoint-version-2',
       {
         sourceText: text,
         projection: projection(text),
@@ -298,7 +298,7 @@ describe('renderMarkdownAnnotationHtml', () => {
     const result = renderMarkdownAnnotationHtml(
       '<p><img data-drive-markdown-image-id="mdimg_moved" src="/files/asset_1"></p>',
       [movedThread],
-      'version-2',
+      'checkpoint-version-2',
       {
         sourceText: text,
         projection: currentProjection,
