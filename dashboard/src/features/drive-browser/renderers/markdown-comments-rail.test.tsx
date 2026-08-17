@@ -169,6 +169,10 @@ describe('MarkdownCommentsRail', () => {
     renderRail({ onFocusThread })
 
     const action = requiredButtonWithLabel('查看评论：Note')
+    const quoteMarker = action.previousElementSibling
+    expect(quoteMarker).not.toBeNull()
+    expect(action.parentElement?.className).toContain('items-center')
+    expect(quoteMarker?.className).not.toContain('mt-')
     expect(action.getAttribute('aria-current')).toBeNull()
     await click(action)
 

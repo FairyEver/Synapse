@@ -510,6 +510,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(body?.className).toContain('[&_table]:w-max')
     expect(body?.className).toContain('[&_table]:min-w-full')
     expect(body?.className).toContain('[&_table]:max-w-none')
+    expect(body?.className).toContain('[&_td:first-child]:whitespace-nowrap')
+    expect(body?.className).toContain('[&_th:first-child]:whitespace-nowrap')
     expect(body?.className).toContain('[&_td:not(:first-child)]:min-w-56')
     expect(body?.className).toContain('[&_th:not(:first-child)]:min-w-56')
     expect(body?.className).not.toContain('[&_td]:border')

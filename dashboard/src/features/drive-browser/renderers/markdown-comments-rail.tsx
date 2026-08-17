@@ -481,9 +481,9 @@ function ThreadView({
     >
       {active ? <span className='sr-only'>当前评论</span> : null}
       {emphasized ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' /> : null}
-      <div className='mb-3 flex items-start gap-2'>
-        <span aria-hidden className='mt-0.5 h-4 w-0.5 shrink-0 rounded-full bg-border' />
-        <div className='min-w-0 flex-1 space-y-1'>
+      <div className='mb-3 space-y-1'>
+        <div className='flex items-center gap-2'>
+          <span aria-hidden className='h-4 w-0.5 shrink-0 rounded-full bg-border' />
           <Button
             type='button'
             variant='ghost'
@@ -498,17 +498,17 @@ function ThreadView({
           >
             <span className='line-clamp-2'>“{quote}”</span>
           </Button>
-          {thread.anchorStatus === 'orphaned' ? (
-            <div className='flex flex-wrap items-center gap-1'>
-              <span className='text-xs text-muted-foreground'>{annotationPositionLabel(thread)}</span>
-              {canReply && onStartReassociate ? (
-                <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => onStartReassociate(thread.id)}>
-                  重新关联
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
         </div>
+        {thread.anchorStatus === 'orphaned' ? (
+          <div className='ml-2.5 flex flex-wrap items-center gap-1'>
+            <span className='text-xs text-muted-foreground'>{annotationPositionLabel(thread)}</span>
+            {canReply && onStartReassociate ? (
+              <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => onStartReassociate(thread.id)}>
+                重新关联
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <div className='space-y-4'>
         {thread.comments.map((comment) => (
