@@ -703,6 +703,7 @@ describe('DriveMarkdownRenderer', () => {
     await act(async () => undefined)
     await setPreviewWidth(390)
     await click(buttonWithText('评论 1'))
+    await click(buttonByLabel('查看 1 条未定位评论'))
     await click(elementWithText('Lost comment'))
 
     expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
@@ -1418,6 +1419,7 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown()
 
     await act(async () => undefined)
+    await click(buttonByLabel('查看 1 条未定位评论'))
 
     expect(elementWithText('Lost comment').textContent).toContain('原文已修改或删除')
     expect(elementWithText('Lost comment').textContent).toContain('“缺失”')

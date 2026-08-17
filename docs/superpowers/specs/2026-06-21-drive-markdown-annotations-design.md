@@ -154,7 +154,8 @@ Comment rail:
 
 - Lists every non-deleted thread for the document, regardless of the version where the thread was created.
 - Keeps attached threads aligned with their computed document position.
-- Shows orphaned threads in an expanded `未定位 N` section at the top, ordered by latest activity.
+- Shows a compact unlocated-comment entry at the top of the rail when orphaned threads exist.
+- Opens orphaned threads in a dedicated scrollable dialog, ordered by latest activity, instead of mixing their cards into the positioned comment flow.
 - Shows the original selected quote and `原文已修改或删除` on orphaned threads.
 - Displays thread count in the header toggle.
 - Does not include filters because there is no product status.

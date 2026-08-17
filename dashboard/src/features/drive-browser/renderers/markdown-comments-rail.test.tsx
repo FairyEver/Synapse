@@ -21,26 +21,37 @@ afterEach(() => {
 })
 
 describe('MarkdownCommentsRail', () => {
-  it('renders plain text comments and orphaned position messages', () => {
-    renderRail()
+  it('opens unlocated comments in a dialog instead of the normal comment flow', async () => {
+    renderRail({
+      threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })],
+    })
 
     expect(document.body.textContent).toContain('评论')
     expect(document.body.textContent).toContain('1')
+    expect(document.body.textContent).toContain('未定位评论')
+    expect(document.body.textContent).toContain('暂无已定位评论')
+    expect(document.body.textContent).not.toContain('First line')
+
+    await click(buttonWithText('未定位评论'))
+
     expect(document.body.textContent).toContain('First line')
     expect(document.body.textContent).toContain('Second line')
-    expect(document.body.textContent).toContain('未定位 1')
+    expect(optionalDialogContent()).not.toBeNull()
+    expect(optionalDialogContent()?.textContent).toContain('1 条评论无法定位到当前文档')
     expect(document.body.textContent).toContain('原文已修改或删除')
     expect(document.body.textContent).toContain('“Note”')
     expect(document.body.textContent).not.toContain('重新关联')
     expect(document.body.innerHTML).not.toContain('<strong>unsafe</strong>')
   })
 
-  it('describes orphaned image threads without offering reassociation', () => {
+  it('describes orphaned image threads without offering reassociation', async () => {
     const source = thread()
     const imageItem = {
       ...source,
+      anchorTop: null,
       thread: {
         ...source.thread,
+        anchorStatus: 'orphaned',
         targetKind: 'image',
         target: {
           schemaVersion: 1,
@@ -56,33 +67,43 @@ describe('MarkdownCommentsRail', () => {
     } as MarkdownCommentsRailThread
 
     renderRail({ threads: [imageItem] })
+    await click(buttonWithText('未定位评论'))
 
     expect(document.body.textContent).toContain('图片已替换或删除')
     expect(document.body.textContent).toContain('“asset_1”')
     expect(document.body.textContent).not.toContain('重新关联')
   })
 
-  it('orders unlocated comments by latest activity before attached comments in compact mode', () => {
+  it('orders unlocated comments by latest activity in the compact dialog', async () => {
     renderRail({
       mode: 'list',
       threads: [
         thread({ id: 'attached', body: 'Attached', anchorStatus: 'attached', anchorTop: 10 }),
-        thread({ id: 'older', body: 'Older lost', updatedAt: '2026-06-21T00:01:00.000Z' }),
-        thread({ id: 'newer', body: 'Newer lost', updatedAt: '2026-06-21T00:02:00.000Z' }),
+        thread({ id: 'older', body: 'Older lost', anchorStatus: 'orphaned', anchorTop: null, updatedAt: '2026-06-21T00:01:00.000Z' }),
+        thread({ id: 'newer', body: 'Newer lost', anchorStatus: 'orphaned', anchorTop: null, updatedAt: '2026-06-21T00:02:00.000Z' }),
       ],
     })
 
+    expect(document.body.textContent).toContain('Attached')
+    expect(document.body.textContent).not.toContain('Older lost')
+    expect(document.body.textContent).not.toContain('Newer lost')
+
+    await click(buttonWithText('未定位评论'))
+
     const text = document.body.textContent ?? ''
     expect(text.indexOf('Newer lost')).toBeLessThan(text.indexOf('Older lost'))
-    expect(text.indexOf('Older lost')).toBeLessThan(text.indexOf('Attached'))
   })
 
-  it('keeps the unlocated section visible when its comments are collapsed', async () => {
-    renderRail()
+  it('keeps the unlocated entry visible after its dialog is closed', async () => {
+    renderRail({
+      threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })],
+    })
 
-    await click(buttonWithText('未定位 1'))
+    await click(buttonWithText('未定位评论'))
+    expect(document.body.textContent).toContain('First line')
+    await click(buttonWithText('关闭'))
 
-    expect(document.body.textContent).toContain('未定位 1')
+    expect(document.body.textContent).toContain('未定位评论')
     expect(document.body.textContent).not.toContain('First line')
   })
 
@@ -906,7 +927,7 @@ function thread(input: {
         range: { start: 0, end: 4 },
         quote: { exact: input.quote ?? 'Note', prefix: '', suffix: '' },
       },
-      anchorStatus: input.anchorStatus ?? 'orphaned' as const,
+      anchorStatus: input.anchorStatus ?? 'attached' as const,
       author: { id: 'user-1', email, handle },
       comments: [{
         id: 'comment-1',
@@ -925,7 +946,7 @@ function thread(input: {
       updatedAt: input.updatedAt ?? '2026-06-21T00:00:00.000Z',
       permissions: { canDelete: input.canDeleteThread ?? true },
     },
-    anchorTop: input.anchorTop ?? null,
+    anchorTop: 'anchorTop' in input ? input.anchorTop ?? null : 0,
   }
 }
 

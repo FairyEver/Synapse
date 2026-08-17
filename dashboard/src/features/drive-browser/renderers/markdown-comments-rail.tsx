@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
-import { Check, ChevronDown, ChevronUp, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ChevronUp, Loader2, MapPinOff, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { RelativeTime } from '@/components/relative-time'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import {
+  Dialog,
+  DialogContent,
+  DialogFrame,
+  DialogFrameBody,
+  DialogFrameHeader,
+} from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { cn, getDisplayNameInitials } from '@/lib/utils'
 
@@ -104,7 +112,7 @@ export function MarkdownCommentsRail({
   readonly onAnchoredHeightChange?: (height: number) => void
   readonly onAnchoredWheel?: (event: WheelEvent) => void
 }) {
-  const [unlocatedOpen, setUnlocatedOpen] = useState(true)
+  const [unlocatedDialogOpen, setUnlocatedDialogOpen] = useState(false)
   const anchoredRegionRef = useRef<HTMLDivElement | null>(null)
   const partition = useMemo(() => partitionRailThreads(threads), [threads])
   const anchoredCards = useMemo<readonly AnchoredRailCard[]>(() => {
@@ -145,6 +153,33 @@ export function MarkdownCommentsRail({
     return () => element.removeEventListener('wheel', onAnchoredWheel)
   }, [compact, onAnchoredWheel])
 
+  useEffect(() => {
+    if (partition.orphaned.length === 0) setUnlocatedDialogOpen(false)
+  }, [partition.orphaned.length])
+
+  const unlocatedButton = partition.orphaned.length > 0 ? (
+    <UnlocatedCommentsButton
+      count={partition.orphaned.length}
+      compact={compact}
+      elementRef={compact ? undefined : measurements.unlocatedSectionRef}
+      onClick={() => setUnlocatedDialogOpen(true)}
+    />
+  ) : null
+  const unlocatedDialog = partition.orphaned.length > 0 ? (
+    <UnlocatedCommentsDialog
+      open={unlocatedDialogOpen}
+      threads={partition.orphaned}
+      activeThreadId={activeThreadId}
+      canReply={canReply}
+      compact={compact}
+      onOpenChange={setUnlocatedDialogOpen}
+      onFocusThread={onFocusThread}
+      onReply={onReply}
+      onUpdateComment={onUpdateComment}
+      onDeleteComment={onDeleteComment}
+    />
+  ) : null
+
   if (compact) {
     return (
       <div
@@ -160,12 +195,15 @@ export function MarkdownCommentsRail({
           onNavigatePrevious={onNavigatePrevious}
           onNavigateNext={onNavigateNext}
         />
-        {threads.length === 0 && !draft ? (
-          <div className='px-3 py-6 text-sm text-muted-foreground'>暂无评论</div>
+        {unlocatedButton}
+        {partition.anchored.length === 0 && !draft ? (
+          <div className='px-3 py-6 text-sm text-muted-foreground'>
+            {threads.length === 0 ? '暂无评论' : '暂无已定位评论'}
+          </div>
         ) : (
           <div className='space-y-3 p-3'>
             {draft ? <CommentDraftCard draft={draft} compact /> : null}
-            {[...partition.orphaned, ...partition.anchored].map((item) => (
+            {partition.anchored.map((item) => (
               <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
                 <ThreadView
                   thread={item.thread}
@@ -181,6 +219,7 @@ export function MarkdownCommentsRail({
             ))}
           </div>
         )}
+        {unlocatedDialog}
       </div>
     )
   }
@@ -200,42 +239,12 @@ export function MarkdownCommentsRail({
         onNavigateNext={onNavigateNext}
         elementRef={measurements.headerRef}
       />
-      {partition.orphaned.length > 0 ? (
-        <div ref={measurements.unlocatedSectionRef} data-markdown-comments-unlocated='true' className='shrink-0 border-b bg-muted/30'>
-          <Collapsible open={unlocatedOpen} onOpenChange={setUnlocatedOpen}>
-            <CollapsibleTrigger asChild>
-              <Button type='button' variant='ghost' size='sm' className='w-full justify-between rounded-none px-3'>
-                <span>未定位 {partition.orphaned.length}</span>
-                <ChevronDown className={cn('size-4 transition-transform', unlocatedOpen && 'rotate-180')} />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div data-markdown-comments-unlocated-scroll='true' className='max-h-64 space-y-3 overflow-auto p-3 pt-0'>
-                {partition.orphaned.map((item) => (
-                  <div
-                    key={item.thread.id}
-                    data-markdown-comment-thread-id={item.thread.id}
-                  >
-                    <ThreadView
-                      thread={item.thread}
-                      active={item.thread.id === activeThreadId}
-                      canReply={canReply}
-                      compact={false}
-                      onFocusThread={onFocusThread}
-                      onReply={onReply}
-                      onUpdateComment={onUpdateComment}
-                      onDeleteComment={onDeleteComment}
-                    />
-                  </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
-      ) : null}
+      {unlocatedButton}
       <div ref={anchoredRegionRef} data-markdown-comments-scroll-region='true' className='relative min-h-0 flex-1 overflow-hidden'>
-        {threads.length === 0 && !draft ? (
-          <div className='px-3 py-6 text-sm text-muted-foreground'>暂无评论</div>
+        {partition.anchored.length === 0 && !draft ? (
+          <div className='px-3 py-6 text-sm text-muted-foreground'>
+            {threads.length === 0 ? '暂无评论' : '暂无已定位评论'}
+          </div>
         ) : null}
         {layout.anchored.length > 0 ? (
           <div className='relative min-h-full overflow-hidden'>
@@ -272,7 +281,109 @@ export function MarkdownCommentsRail({
           </div>
         ) : null}
       </div>
+      {unlocatedDialog}
     </div>
+  )
+}
+
+function UnlocatedCommentsButton({
+  count,
+  compact,
+  elementRef,
+  onClick,
+}: {
+  readonly count: number
+  readonly compact: boolean
+  readonly elementRef?: (element: HTMLDivElement | null) => void
+  readonly onClick: () => void
+}) {
+  return (
+    <div
+      ref={elementRef}
+      data-markdown-comments-unlocated='true'
+      className='shrink-0 border-b bg-background p-3'
+    >
+      <Button
+        type='button'
+        variant='outline'
+        size='sm'
+        className={cn('w-full justify-between', compact && 'min-h-11')}
+        aria-label={`查看 ${count} 条未定位评论`}
+        aria-haspopup='dialog'
+        onClick={onClick}
+      >
+        <span className='flex min-w-0 items-center gap-2'>
+          <MapPinOff />
+          <span>未定位评论</span>
+        </span>
+        <span className='flex items-center gap-1.5'>
+          <Badge variant='secondary'>{count}</Badge>
+          <ChevronRight className='text-muted-foreground' />
+        </span>
+      </Button>
+    </div>
+  )
+}
+
+function UnlocatedCommentsDialog({
+  open,
+  threads,
+  activeThreadId,
+  canReply,
+  compact,
+  onOpenChange,
+  onFocusThread,
+  onReply,
+  onUpdateComment,
+  onDeleteComment,
+}: {
+  readonly open: boolean
+  readonly threads: readonly MarkdownCommentsRailThread[]
+  readonly activeThreadId: string | null
+  readonly canReply: boolean
+  readonly compact: boolean
+  readonly onOpenChange: (open: boolean) => void
+  readonly onFocusThread: (threadId: string) => void
+  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
+  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onDeleteComment: (commentId: string) => CommentActionPromise
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        data-markdown-comments-unlocated-dialog='true'
+        className='h-[min(44rem,calc(100svh-2rem))] gap-0 overflow-hidden p-0 sm:max-w-2xl'
+      >
+        <DialogFrame>
+          <DialogFrameHeader
+            bordered
+            title='未定位评论'
+            description={`${threads.length} 条评论无法定位到当前文档`}
+          />
+          <DialogFrameBody>
+            <ScrollArea className='h-full'>
+              <div className='space-y-3 p-4'>
+                {threads.map((item) => (
+                  <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
+                    <ThreadView
+                      thread={item.thread}
+                      active={item.thread.id === activeThreadId}
+                      canReply={canReply}
+                      compact={compact}
+                      onFocusThread={onFocusThread}
+                      onReply={onReply}
+                      onUpdateComment={onUpdateComment}
+                      onDeleteComment={onDeleteComment}
+                    />
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </DialogFrameBody>
+        </DialogFrame>
+      </DialogContent>
+    </Dialog>
   )
 }
 
