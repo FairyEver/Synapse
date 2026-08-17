@@ -475,6 +475,19 @@ describe('DriveMarkdownRenderer', () => {
     expect(body?.className).not.toContain('[&_pre]')
   })
 
+  it('keeps lower-level markdown headings at least as large as body text', () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<h4>四级标题</h4><h5>五级标题</h5><h6>六级标题</h6><p>正文</p>',
+      }),
+    })
+
+    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+    expect(body?.className).toContain('[&_h4]:text-base!')
+    expect(body?.className).toContain('[&_h5]:text-base!')
+    expect(body?.className).toContain('[&_h6]:text-base!')
+  })
+
   it('keeps wide markdown tables scrollable inside the reader column', () => {
     renderMarkdown({
       previewData: preview({
