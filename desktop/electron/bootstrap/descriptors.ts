@@ -1521,7 +1521,7 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
     "core.audit-sink",
     "core.data-repository",
   ],
-  async create(ctx) {
+  create(ctx) {
     const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
@@ -1543,8 +1543,7 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
         })
       : null)
     updateService.initialize()
-    await updateService.initializeInstallRecovery()
-    updateService.startAutoCheck()
+    updateService.startInstallRecoveryInBackground()
     return updateService
   },
 }

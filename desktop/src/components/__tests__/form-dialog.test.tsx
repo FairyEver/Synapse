@@ -41,10 +41,16 @@ vi.mock("@/components/ui/scroll-area", () => ({
   ScrollArea: ({
     children,
     className,
+    viewportClassName,
   }: {
     readonly children: ReactNode
     readonly className?: string
-  }) => <div data-slot="scroll-area" className={className}>{children}</div>,
+    readonly viewportClassName?: string
+  }) => (
+    <div data-slot="scroll-area" className={className}>
+      <div data-slot="scroll-area-viewport" className={viewportClassName}>{children}</div>
+    </div>
+  ),
 }))
 
 import { FormDialog } from "@/components/form-dialog"
@@ -79,5 +85,19 @@ describe("FormDialog", () => {
 
     expect(html).not.toContain('data-slot="scroll-area" class="min-h-0 flex-1 px-5 py-4 overflow-hidden"')
     expect(html).toContain('class="px-5 py-4 overflow-hidden"')
+  })
+
+  it("keeps long unbroken field values within the dialog width", () => {
+    const html = renderToStaticMarkup(
+      <FormDialog
+        title="文件已分享"
+        footer={<button type="button">关闭</button>}
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <input value="https://synapse.test/share/a-very-long-unbroken-share-token" readOnly />
+      </FormDialog>,
+    )
+
+    expect(html).toContain('data-slot="scroll-area-viewport" class="min-w-0 max-w-full overflow-x-hidden [&amp;&gt;div]:!block [&amp;&gt;div]:!min-w-0 [&amp;&gt;div]:!max-w-full"')
   })
 })

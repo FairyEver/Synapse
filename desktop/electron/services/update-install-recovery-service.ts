@@ -1,6 +1,4 @@
 import path from "node:path"
-import { rm } from "node:fs/promises"
-import type { RmOptions } from "node:fs"
 
 import type {
   DataNamespace,
@@ -9,22 +7,24 @@ import type {
 } from "../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { ControlledProcessResult, ControlledProcessRunner } from "../runtime/process"
+import {
+  DESKTOP_UPDATE_RECOVERY_OPERATION_TIMEOUT_MS,
+  DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS,
+} from "../../config"
 import { createMainLogger } from "./log-store"
 
 const SHIPIT_SERVICE_LABEL = "com.fairyever.synapse.ShipIt"
 const UPDATE_CACHE_DIRECTORY_NAME = "@synapsedesktop-updater"
 const SHIPIT_CACHE_DIRECTORY_NAME = SHIPIT_SERVICE_LABEL
 const UPDATE_RECOVERY_SOURCE = "desktop.update-install.recovery"
-const UPDATE_CACHE_REMOVE_OPTIONS = {
-  force: true,
-  maxRetries: 5,
-  recursive: true,
-  retryDelay: 200,
-} as const satisfies RmOptions
+const SHIPIT_START_POLL_INTERVAL_MS = 250
+const UPDATE_CACHE_REMOVE_MAX_ATTEMPTS = 3
+const UPDATE_CACHE_REMOVE_RETRY_DELAY_MS = 200
 const recoveryActor = { kind: "user" } as const
 const logger = createMainLogger("update-install-recovery")
 
-type RemovePath = (targetPath: string, options: RmOptions) => Promise<void>
+type RemovePath = (targetPath: string) => Promise<void>
+type Wait = (delayMs: number) => Promise<void>
 
 export type UpdateInstallRecoveryDecision =
   | { readonly kind: "none" }
@@ -52,6 +52,7 @@ type UpdateInstallRecoveryServiceDeps = {
   readonly processRunner: ControlledProcessRunner
   readonly removePath?: RemovePath
   readonly stateStore: DataNamespace<UpdateInstallRecoveryEntryV1>
+  readonly wait?: Wait
 }
 
 export class UpdateInstallRecoveryService {
@@ -60,8 +61,9 @@ export class UpdateInstallRecoveryService {
   private readonly getUid: () => number | undefined
   private readonly permissionGuard: PermissionGuard
   private readonly processRunner: ControlledProcessRunner
-  private readonly removePath: RemovePath
+  private readonly removePath: RemovePath | null
   private readonly stateStore: DataNamespace<UpdateInstallRecoveryEntryV1>
+  private readonly wait: Wait
 
   constructor(deps: UpdateInstallRecoveryServiceDeps) {
     this.auditSink = deps.auditSink
@@ -69,8 +71,69 @@ export class UpdateInstallRecoveryService {
     this.getUid = deps.getUid
     this.permissionGuard = deps.permissionGuard
     this.processRunner = deps.processRunner
-    this.removePath = deps.removePath ?? rm
+    this.removePath = deps.removePath ?? null
     this.stateStore = deps.stateStore
+    this.wait = deps.wait ?? wait
+  }
+
+  async ensureShipItStarted(abortSignal?: AbortSignal): Promise<boolean> {
+    const uid = this.getUid()
+    if (uid === undefined) {
+      logger.error("Cannot verify ShipIt startup because current user id is unavailable.")
+      return false
+    }
+
+    const serviceTarget = `gui/${String(uid)}/${SHIPIT_SERVICE_LABEL}`
+    const deadline = Date.now() + DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS
+    let snapshot = await this.inspectShipItLaunchService(uid, "verify-shipit-start", abortSignal)
+    if (abortSignal?.aborted || Date.now() >= deadline) return false
+    if (isShipItRunning(snapshot)) {
+      this.logVerifiedShipItStart(snapshot, false)
+      return true
+    }
+
+    logger.warn("ShipIt launch service is registered but not running; requesting explicit start.", {
+      ...summarizeLaunchService(snapshot),
+      serviceLabel: SHIPIT_SERVICE_LABEL,
+    })
+    const kickstart = await this.processRunner.run({
+      action: "shell.exec",
+      actor: recoveryActor,
+      args: ["kickstart", serviceTarget],
+      command: "/bin/launchctl",
+      metadata: {
+        operation: "start-shipit-launch-service",
+        source: UPDATE_RECOVERY_SOURCE,
+      },
+      output: { stderr: "buffer", stdout: "ignore" },
+      timeoutMs: Math.min(5_000, DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS),
+      abortSignal,
+    })
+    if (kickstart.exitCode !== 0 || kickstart.timedOut) {
+      logger.error("Unable to start the registered ShipIt launch service.", {
+        ...summarizeLaunchService(kickstart),
+        serviceLabel: SHIPIT_SERVICE_LABEL,
+      })
+      return false
+    }
+
+    while (Date.now() < deadline) {
+      if (abortSignal?.aborted) return false
+      await this.wait(Math.min(SHIPIT_START_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())))
+      if (abortSignal?.aborted) return false
+      snapshot = await this.inspectShipItLaunchService(uid, "verify-shipit-start", abortSignal)
+      if (isShipItRunning(snapshot)) {
+        this.logVerifiedShipItStart(snapshot, true)
+        return true
+      }
+    }
+
+    logger.error("ShipIt launch service did not start before the verification timeout.", {
+      ...summarizeLaunchService(snapshot),
+      serviceLabel: SHIPIT_SERVICE_LABEL,
+      timeoutMs: DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS,
+    })
+    return false
   }
 
   async recordInstallAttempt(
@@ -226,23 +289,7 @@ export class UpdateInstallRecoveryService {
 
   private async logShipItLaunchServiceState(uid: number): Promise<void> {
     try {
-      const result = await this.processRunner.run({
-        action: "shell.exec",
-        actor: recoveryActor,
-        args: ["print", `gui/${String(uid)}/${SHIPIT_SERVICE_LABEL}`],
-        command: "/bin/launchctl",
-        metadata: {
-          operation: "inspect-shipit-launch-service",
-          source: UPDATE_RECOVERY_SOURCE,
-        },
-        output: {
-          maxBufferBytes: 64 * 1024,
-          overflow: "truncate",
-          stderr: "buffer",
-          stdout: "buffer",
-        },
-        timeoutMs: 10_000,
-      })
+      const result = await this.inspectShipItLaunchService(uid, "inspect-shipit-launch-service")
       logger.info("Captured ShipIt launch service state before recovery.", {
         ...summarizeLaunchService(result),
         serviceLabel: SHIPIT_SERVICE_LABEL,
@@ -250,6 +297,36 @@ export class UpdateInstallRecoveryService {
     } catch (error) {
       logger.warn("Unable to inspect ShipIt launch service before recovery.", { error })
     }
+  }
+
+  private async inspectShipItLaunchService(
+    uid: number,
+    operation: string,
+    abortSignal?: AbortSignal,
+  ): Promise<ControlledProcessResult> {
+    return await this.processRunner.run({
+      action: "shell.exec",
+      actor: recoveryActor,
+      args: ["print", `gui/${String(uid)}/${SHIPIT_SERVICE_LABEL}`],
+      command: "/bin/launchctl",
+      metadata: { operation, source: UPDATE_RECOVERY_SOURCE },
+      output: {
+        maxBufferBytes: 64 * 1024,
+        overflow: "truncate",
+        stderr: "buffer",
+        stdout: "buffer",
+      },
+      timeoutMs: DESKTOP_UPDATE_RECOVERY_OPERATION_TIMEOUT_MS,
+      abortSignal,
+    })
+  }
+
+  private logVerifiedShipItStart(result: ControlledProcessResult, kickstarted: boolean): void {
+    logger.info("Verified that the ShipIt process is running before app quit.", {
+      ...summarizeLaunchService(result),
+      kickstarted,
+      serviceLabel: SHIPIT_SERVICE_LABEL,
+    })
   }
 
   private async removeCacheDirectory(directoryName: string): Promise<void> {
@@ -284,7 +361,15 @@ export class UpdateInstallRecoveryService {
     }
 
     try {
-      await this.removePath(targetPath, UPDATE_CACHE_REMOVE_OPTIONS)
+      if (this.removePath) {
+        await withTimeout(
+          this.removePath(targetPath),
+          DESKTOP_UPDATE_RECOVERY_OPERATION_TIMEOUT_MS,
+          `Updater cache removal timed out: ${directoryName}`,
+        )
+      } else {
+        await this.removeCacheDirectoryWithControlledProcess(targetPath, directoryName, context)
+      }
       logger.info("Removed macOS updater cache directory during recovery.", {
         directoryName,
       })
@@ -310,6 +395,43 @@ export class UpdateInstallRecoveryService {
     }
   }
 
+  private async removeCacheDirectoryWithControlledProcess(
+    targetPath: string,
+    directoryName: string,
+    context: Record<string, string>,
+  ): Promise<void> {
+    const deadline = Date.now() + DESKTOP_UPDATE_RECOVERY_OPERATION_TIMEOUT_MS
+    for (let attempt = 1; attempt <= UPDATE_CACHE_REMOVE_MAX_ATTEMPTS; attempt++) {
+      const remainingMs = deadline - Date.now()
+      if (remainingMs <= 0) break
+      const result = await this.processRunner.run({
+        action: "shell.exec",
+        actor: recoveryActor,
+        args: ["-rf", targetPath],
+        command: "/bin/rm",
+        metadata: { ...context, attempt },
+        output: { stderr: "buffer", stdout: "ignore" },
+        timeoutMs: remainingMs,
+      })
+      if (result.exitCode === 0 && !result.timedOut) return
+      if (attempt < UPDATE_CACHE_REMOVE_MAX_ATTEMPTS) {
+        const retryDelayMs = Math.min(
+          attempt * UPDATE_CACHE_REMOVE_RETRY_DELAY_MS,
+          Math.max(0, deadline - Date.now()),
+        )
+        logger.warn("Retrying macOS updater cache removal.", {
+          attempt,
+          directoryName,
+          exitCode: result.exitCode,
+          retryDelayMs,
+          timedOut: result.timedOut,
+        })
+        await this.wait(retryDelayMs)
+      }
+    }
+    throw new Error(`Unable to remove updater cache directory: ${directoryName}`)
+  }
+
   private async readState(): Promise<UpdateInstallRecoveryEntryV1> {
     return await this.stateStore.getSingleton() ?? {
       schemaVersion: 1,
@@ -330,6 +452,27 @@ export class UpdateInstallRecoveryService {
       pendingAttempt,
     })
   }
+}
+
+function isShipItRunning(result: ControlledProcessResult): boolean {
+  if (result.exitCode !== 0 || result.timedOut) return false
+  const pid = readLaunchctlValue(result.stdout ?? "", "pid")
+  const state = readLaunchctlValue(result.stdout ?? "", "state")
+  return state === "running" && pid !== null && /^\d+$/.test(pid) && Number(pid) > 0
+}
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs))
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error(message)), timeoutMs)
+  })
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
 }
 
 function decisionFromAttempt(

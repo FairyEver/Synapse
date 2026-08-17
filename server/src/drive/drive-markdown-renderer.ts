@@ -117,6 +117,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
           "data-drive-markdown-block-id",
           "data-drive-markdown-segment-id",
         ],
+        a: [...(defaultSchema.attributes?.a ?? []), "target", "rel"],
         img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading", "data-drive-markdown-relative-src"],
       },
       protocols: {
@@ -125,6 +126,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
       },
     })
     .use(wrapTablesPlugin)
+    .use(openCompleteWebUrlsExternallyPlugin)
     .use(rehypeStringify)
   const tree = processor.parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
   normalizeDriveMarkdownLooseImageNodes(tree)
@@ -284,6 +286,22 @@ function wrapTablesPlugin() {
   return (tree: HtmlAstNode) => {
     wrapTablesInHtmlAst(tree)
   }
+}
+
+function openCompleteWebUrlsExternallyPlugin() {
+  return (tree: HtmlAstNode) => {
+    visitCompleteWebUrlLinks(tree)
+  }
+}
+
+function visitCompleteWebUrlLinks(node: HtmlAstNode): void {
+  const properties = node.properties
+  const href = properties?.href
+  if (node.tagName === "a" && properties && typeof href === "string" && /^https?:\/\//iu.test(href.trim())) {
+    properties.target = "_blank"
+    properties.rel = ["noopener", "noreferrer"]
+  }
+  for (const child of node.children ?? []) visitCompleteWebUrlLinks(child)
 }
 
 function wrapTablesInHtmlAst(node: HtmlAstNode): void {

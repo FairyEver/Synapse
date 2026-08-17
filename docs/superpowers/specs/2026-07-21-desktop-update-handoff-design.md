@@ -625,6 +625,8 @@ macOS 与 Windows runner 必须在上传安装包前验证正式打包产物的�
 
 macOS 更新下载完成不等于 ShipIt 已经接管安装。客户端在调用安装前持久化目标版本和安装尝试，并在 Electron 原生 `before-quit-for-update` 事件到达后才放开退出门；原生交接超时则保留当前进程和已下载状态。
 
+`before-quit-for-update` 也不再单独视为安装接管成功。原生更新器提交 ShipIt job 后，客户端必须读取当前用户 launchd domain，观察到 ShipIt 的 `state = running` 和有效 `pid` 才允许退出。如果 job 只是 `waiting` 或出现 `pended nondemand spawn`，客户端通过受控进程执行器请求一次 `launchctl kickstart`，并在 10 秒硬超时内继续验证；仍未启动则回滚本次安装记录、保留主窗口和已下载更新。该校验必须记录 kickstart 是否发生、最终 `state`、`pid`、`runs`、退出码和超时状态。
+
 下次启动时，客户端以当前版本是否达到目标版本作为安装后置条件：
 
 - 已达到目标版本时清除安装记录。
@@ -632,6 +634,12 @@ macOS 更新下载完成不等于 ShipIt 已经接管安装。客户端在调用
 - 用户再次明确安装后仍未达到目标版本时停止自动恢复，在“关于 Synapse”提供该版本官方 DMG；公开网页仍不提供安装包。
 - 恢复准备完成后，如果用户在再次安装前正常关闭应用，下次启动只继续下载，不重复清理，也不计为第二次安装失败。
 
-该恢复不改变更新源、签名校验、公证要求或 `electron-updater` 制品信任链。launchd 与缓存操作必须经过 PermissionGuard、AuditSink 和受控进程执行器，并严格限制在当前用户的两个预期缓存目录。递归删除缓存遇到 `ENOTEMPTY`、`EBUSY`、`EPERM` 等瞬时文件系统错误时必须使用有界线性退避重试；只有重试耗尽后才进入人工安装状态。
+恢复协调必须在服务启动后转入后台，主窗口创建不得等待 launchctl、缓存清理、DataRepository 恢复判断或重新下载。该恢复不改变更新源、签名校验、公证要求或 `electron-updater` 制品信任链。launchd 与缓存操作必须经过 PermissionGuard、AuditSink 和受控进程执行器，并严格限制在当前用户的两个预期缓存目录。每个缓存删除最多运行 10 秒，超时后受控进程必须被终止；瞬时失败采用最多三次的有界线性退避，只有重试耗尽后才进入人工安装状态。
+
+### 17.1 Electron 44 与 Squirrel 回移结论（2026-08-14）
+
+当前 [Electron 41.2.1](https://github.com/electron/electron/blob/v41.2.1/DEPS#L10-L11) 内置的 Squirrel.Mac 仍是 2021 年版本；[Electron 43.4.0](https://github.com/electron/electron/blob/v43.4.0/DEPS#L10-L11) 稳定线仍使用同一提交。[Electron 44 beta](https://github.com/electron/electron/blob/v44.0.0-beta.4/DEPS#L10-L11) 已更新到包含 [Squirrel.Mac `0f51b134` 修复](https://github.com/Squirrel/Squirrel.Mac/commit/0f51b134)的版本：job 增加 Mach service，并在 `SMJobSubmit` 后发送真实 XPC demand，解决 macOS `on-demand-only mode` 只登记、不启动 ShipIt 的问题。
+
+本次正式版不升级 Electron 44 beta，也不单独替换 `Squirrel.framework`。前者会把整个 Electron beta 运行时引入生产；后者会改变 app bundle 内的原生嵌套 framework，必须重新完成双架构构建、产物来源固定、嵌套签名、整体签名、公证与真实更新验收，不能把另一个 Electron 包中的预编译 framework 直接复制进正式包。当前安全方案是保留 Electron 41 与既有信任链，用显式 kickstart 和进程验证兜底；Electron 44 stable 发布后整体升级，并执行完整桌面回归、打包结构检查、签名公证检查以及旧版到新版真实更新验收。
 
 更新诊断必须能按安装请求时间串联下载完成、原生 Squirrel 暂存、`before-quit-for-update` 退出交接和下次启动恢复。第一次安装未生效时，在卸载旧 job 前通过受控进程执行器读取并结构化记录 ShipIt launchd 的 `state`、`runs`、`last exit code` 与 pending spawn 状态；读取失败不得阻断既有恢复流程。诊断脚本同时收集持久化恢复状态、全部保留期内的更新相关应用日志、当前 launchd 状态及最近 ShipIt 系统日志，历史安装成功证据仍必须晚于最近一次安装请求才可计入本次判断。

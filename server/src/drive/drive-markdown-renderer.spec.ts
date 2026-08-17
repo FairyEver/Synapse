@@ -79,6 +79,26 @@ describe("drive markdown renderer", () => {
     expect(html).toMatch(/<a[^>]*href="https:\/\/example\.com\/guide"[^>]*>external<\/a>/u)
   })
 
+  it("opens complete web urls in a new browser context", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "https://example.com/plain",
+      "",
+      "[secure](https://example.com/secure)",
+      "",
+      "[insecure](http://example.com/insecure)",
+      "",
+      "[heading](#notes)",
+      "",
+      "[local](./notes.md)",
+    ].join("\n"))
+
+    expect(result.html).toContain('<a href="https://example.com/plain" target="_blank" rel="noopener noreferrer">https://example.com/plain</a>')
+    expect(result.html).toContain('<a href="https://example.com/secure" target="_blank" rel="noopener noreferrer">secure</a>')
+    expect(result.html).toContain('<a href="http://example.com/insecure" target="_blank" rel="noopener noreferrer">insecure</a>')
+    expect(result.html).toContain('<a href="#notes">heading</a>')
+    expect(result.html).toContain('<a>local</a>')
+  })
+
   it("renders resolved Markdown and standalone raw images without changing other relative links", async () => {
     const result = await renderDriveMarkdownFragment([
       "![diagram](./diagram.png)",

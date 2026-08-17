@@ -55,10 +55,11 @@ export function createMarkdownRenderedTextModel(
       if (isNonRenderedText(node)) return
       const textNode = node as Text
       const text = canonicalTextNodeValue(textNode, projectedLengthBySegmentId)
+      const bounds = canonicalTextNodeBounds(textNode, text)
       append(
-        text,
-        { node: textNode, offset: 0 },
-        { node: textNode, offset: text.length },
+        text.slice(bounds.start, bounds.end),
+        { node: textNode, offset: bounds.start },
+        { node: textNode, offset: bounds.end },
         textNode,
       )
       return
@@ -66,6 +67,7 @@ export function createMarkdownRenderedTextModel(
 
     if (node instanceof HTMLElement) {
       if (node.matches('[data-drive-mermaid-rendered="true"]')) return
+      if (node.matches('[data-drive-markdown-image-fallback-host="true"]')) return
       if (node.closest('[data-drive-annotation-marker="true"]')) return
       if (node.tagName === 'IMG') {
         const points = elementBoundaryPoints(node)
@@ -180,5 +182,40 @@ function isNonRenderedText(node: Node): boolean {
   const parent = node.parentElement
   if (parent?.closest('[data-drive-annotation-marker="true"]')) return true
   if (node.textContent?.trim() || parent?.closest('pre, code')) return false
-  return !parent?.closest('p, h1, h2, h3, h4, h5, h6, li, td, th, a, em, strong, del, s')
+  if (parent?.closest('p, h1, h2, h3, h4, h5, h6, a, em, strong, del, s')) return false
+  if (!parent?.matches('li, td, th')) return true
+  return isMarkdownBlockElement(renderedSibling(node, 'previous'))
+    || isMarkdownBlockElement(renderedSibling(node, 'next'))
+}
+
+function canonicalTextNodeBounds(node: Text, text: string): { readonly start: number; readonly end: number } {
+  const parent = node.parentElement
+  let start = 0
+  let end = text.length
+  const previous = renderedSibling(node, 'previous')
+  const next = renderedSibling(node, 'next')
+  if (previous instanceof HTMLElement && previous.tagName === 'BR') {
+    start = text.match(/^\r?\n/u)?.[0].length ?? 0
+  }
+  if (parent?.matches('li.task-list-item') && previous instanceof HTMLElement && previous.matches('input[type="checkbox"]')) {
+    start = text.match(/^\s*/u)?.[0].length ?? 0
+  }
+  if (parent?.matches('li, td, th')) {
+    if (isMarkdownBlockElement(previous)) start = Math.max(start, text.match(/^\s*/u)?.[0].length ?? 0)
+    if (isMarkdownBlockElement(next)) end = text.match(/\s*$/u)?.index ?? end
+  }
+  return { start, end: Math.max(start, end) }
+}
+
+function renderedSibling(node: Node, direction: 'previous' | 'next'): ChildNode | null {
+  let sibling = direction === 'previous' ? node.previousSibling : node.nextSibling
+  while (sibling instanceof HTMLElement && sibling.matches('[data-drive-annotation-marker="true"]')) {
+    sibling = direction === 'previous' ? sibling.previousSibling : sibling.nextSibling
+  }
+  return sibling
+}
+
+function isMarkdownBlockElement(node: Node | null): node is HTMLElement {
+  return node instanceof HTMLElement
+    && node.matches('blockquote, div, figure, h1, h2, h3, h4, h5, h6, ol, p, pre, table, ul')
 }

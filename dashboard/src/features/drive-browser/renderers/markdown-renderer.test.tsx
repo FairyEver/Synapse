@@ -154,6 +154,32 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ previewData: preview() })
 
     expect(document.querySelector('img')?.hasAttribute('src')).toBe(false)
+    expect(document.querySelector('[data-drive-markdown-image-fallback="true"]')?.textContent).toContain('private')
+    expect(document.querySelector('[data-drive-markdown-image-fallback="true"]')?.textContent).toContain('图片无法显示')
+  })
+
+  it('replaces a failed markdown image with the shared fallback component', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img src="/missing.png" alt="客户管理"></p>',
+      }),
+    })
+
+    const image = document.querySelector<HTMLImageElement>('[data-testid="markdown-body"] img')
+    if (!image) throw new Error('Missing markdown image')
+
+    await act(async () => {
+      image.dispatchEvent(new Event('error'))
+    })
+
+    const fallback = document.querySelector<HTMLElement>('[data-drive-markdown-image-fallback="true"]')
+    expect(image.hidden).toBe(true)
+    expect(image.hasAttribute('role')).toBe(false)
+    expect(fallback?.getAttribute('role')).toBe('img')
+    expect(fallback?.getAttribute('aria-label')).toBe('客户管理，图片无法显示')
+    expect(fallback?.textContent).toContain('客户管理')
+    expect(fallback?.textContent).toContain('图片无法显示')
+    expect(fallback?.className).toContain('bg-muted/40')
   })
 
   it('restores the share-scoped image url without converting it to an owner url', () => {
@@ -321,7 +347,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentColumn?.getAttribute('data-markdown-width-mode')).toBe('reading')
   })
 
-  it('activates the current outline item and reveals it inside the independent outline scroller', async () => {
+  it('keeps the selected outline item active when the markdown document scrolls', async () => {
     renderMarkdown({
       previewData: preview({
         html: '<h1 id="heading-1">First</h1><h2 id="heading-2">Second</h2>',
@@ -334,24 +360,20 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     const scroller = markdownDocumentScroller()
-    const outlineScroller = document.querySelector<HTMLElement>('nav[aria-label="目录"]')
     const firstHeading = document.getElementById('heading-1')
     const secondHeading = document.getElementById('heading-2')
     const secondLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-2"]')
-    if (!outlineScroller || !firstHeading || !secondHeading || !secondLink) throw new Error('Missing outline fixtures')
+    if (!firstHeading || !secondHeading || !secondLink) throw new Error('Missing outline fixtures')
     Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
     vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: -20, height: 20 }))
-    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
-    vi.spyOn(outlineScroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(secondLink, 'getBoundingClientRect').mockReturnValue(domRect({ top: 120, height: 20 }))
-    scrollIntoViewMock.mockClear()
+    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 500, height: 20 }))
 
+    await click(secondLink)
     scroller.dispatchEvent(new Event('scroll'))
     await flushAnimationFrames()
 
     expect(secondLink.getAttribute('aria-current')).toBe('location')
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest' })
   })
 
   it('scrolls the markdown document instead of the page when an outline item is selected', async () => {
@@ -373,7 +395,8 @@ describe('DriveMarkdownRenderer', () => {
 
     await click(link)
 
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 226, behavior: 'smooth' })
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 226, behavior: 'instant' })
+    expect(link.getAttribute('aria-current')).toBe('location')
     expect(host?.scrollTop).toBe(0)
   })
 
@@ -727,6 +750,26 @@ describe('DriveMarkdownRenderer', () => {
       }),
     }))
     expect(pendingOverlay()).toBeNull()
+  })
+
+  it('keeps the first inline comment draft from scrolling its anchored rail during autofocus', async () => {
+    const nativeFocus = HTMLTextAreaElement.prototype.focus
+    vi.spyOn(HTMLTextAreaElement.prototype, 'focus').mockImplementation(function (options?: FocusOptions) {
+      nativeFocus.call(this, options)
+      const scrollRegion = this.closest<HTMLElement>('[data-markdown-comments-scroll-region="true"]')
+      if (scrollRegion && !options?.preventScroll) scrollRegion.scrollTop = 480
+    })
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      dispatchPointerUpOnMarkdownBody()
+    })
+    await click(buttonWithText('添加评论'))
+
+    const scrollRegion = document.querySelector<HTMLElement>('[data-markdown-comments-scroll-region="true"]')
+    expect(scrollRegion?.scrollTop).toBe(0)
+    expect(document.activeElement).toBe(textarea())
   })
 
   it('waits for pointer completion before creating a selection anchor', async () => {

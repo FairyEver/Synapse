@@ -147,8 +147,8 @@ Comment rail:
 - Does not include filters because there is no product status.
 - Shows nested replies as a readable discussion stream, not an infinitely indented tree.
 - A reply can show "回复 <name>" metadata instead of increasing indentation for every level.
-- Deleted comments with visible replies render as "评论已删除".
-- Deleted comments with no visible replies are hidden.
+- Deleting a comment also hides all of its descendant replies, including legacy descendants whose parent was deleted before this rule was introduced.
+- Deleting the first comment removes the entire thread and its rendered text marker.
 
 Rendered text markers:
 
@@ -440,6 +440,9 @@ Delete comments:
 ```text
 Comment author can delete their own comment.
 File owner can delete any comment on the file.
+Permission is checked only for the selected comment.
+Deleting a comment also deletes all descendant replies regardless of author.
+Deleting the first comment deletes the entire thread.
 ```
 
 Delete threads:
@@ -544,7 +547,8 @@ Responsibilities:
 - Create thread plus first comment transactionally.
 - Add replies.
 - Edit own comment.
-- Soft-delete comments.
+- Soft-delete a comment and all descendant replies.
+- Soft-delete the thread when its first comment is deleted.
 - Soft-delete threads.
 - Return author display metadata.
 - Refresh anchorStatus when annotations are listed for a current file version.
@@ -586,13 +590,15 @@ Server tests:
 - Reject editing another user's comment.
 - Delete own comment.
 - File owner deletes another user's comment.
+- Deleting a parent comment also deletes all nested descendants regardless of author.
+- Deleting the first comment removes the entire thread.
 - File owner deletes a thread.
 - Anonymous share viewer can list annotations.
 - Anonymous share viewer cannot create annotations.
 - Logged-in share viewer can create annotations with read-only document access.
 - `.mdx`, `.markdown`, and non-Markdown files reject comment creation in first version.
-- Deleted comment without replies is omitted from response.
-- Deleted comment with visible replies returns a deleted placeholder.
+- Deleted comments and all of their descendants are omitted from responses.
+- Legacy threads whose first comment was deleted are omitted from responses.
 - Threads created on older versions remain visible and writable after later saves or restores.
 
 Anchor tests:

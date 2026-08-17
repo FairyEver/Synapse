@@ -74,6 +74,7 @@ const updaterMock = vi.hoisted(() => {
 
   return {
     appEmit: vi.fn(),
+    appQuit: vi.fn(),
     autoUpdater: new MockAutoUpdater(),
     nativeAutoUpdater: new MockAutoUpdater(),
     MockCancellationToken,
@@ -102,6 +103,7 @@ vi.mock("electron", () => ({
     getVersion: () => "0.2.28",
     isPackaged: true,
     emit: updaterMock.appEmit,
+    quit: updaterMock.appQuit,
   },
   autoUpdater: updaterMock.nativeAutoUpdater,
   Notification: class {
@@ -171,6 +173,7 @@ describe("UpdateService", () => {
     updaterMock.autoUpdater.checkForUpdates.mockClear()
     updaterMock.autoUpdater.quitAndInstall.mockClear()
     updaterMock.appEmit.mockClear()
+    updaterMock.appQuit.mockClear()
     updaterMock.notificationInstances.length = 0
     updaterMock.notificationSupported = false
     Object.defineProperty(process, "platform", {
@@ -637,6 +640,7 @@ describe("UpdateService", () => {
     const canQuit = vi.fn(() => true)
     const allowQuit = vi.fn()
     const installRecovery = {
+      ensureShipItStarted: vi.fn(async () => true),
       markManualRequired: vi.fn(async () => ({ kind: "none" as const })),
       reconcile: vi.fn(async () => ({ kind: "none" as const })),
       recordInstallAttempt: vi.fn(async () => ({ schemaVersion: 1 as const, pendingAttempt: null })),
@@ -669,6 +673,8 @@ describe("UpdateService", () => {
     await installing
 
     expect(allowQuit).toHaveBeenCalledTimes(1)
+    expect(installRecovery.ensureShipItStarted).toHaveBeenCalledTimes(1)
+    expect(updaterMock.appQuit).toHaveBeenCalledTimes(1)
     expect(loggerMock.info).toHaveBeenCalledWith(
       "macOS native updater requested app quit.",
       expect.objectContaining({ targetVersion: "0.2.32" }),
@@ -688,6 +694,84 @@ describe("UpdateService", () => {
         targetVersion: "0.2.32",
       }),
     )
+  })
+
+  it("keeps the app open when ShipIt is registered but never starts", async () => {
+    const { updateService } = await importUpdateService()
+    const previousState = { schemaVersion: 1 as const, pendingAttempt: null }
+    const allowQuit = vi.fn()
+    const installRecovery = {
+      ensureShipItStarted: vi.fn(async () => false),
+      markManualRequired: vi.fn(async () => ({ kind: "none" as const })),
+      reconcile: vi.fn(async () => ({ kind: "none" as const })),
+      recordInstallAttempt: vi.fn(async () => previousState),
+      restoreState: vi.fn(async () => undefined),
+      updatePreparedTarget: vi.fn(async () => undefined),
+    }
+
+    await updateService.checkForUpdates()
+    updateService.downloadUpdate()
+    updaterMock.autoUpdater.emit("update-downloaded", {
+      version: "0.2.32",
+      downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
+    })
+    updateService.setInstallQuitHandlers({ allowQuit, canQuit: () => true })
+    updateService.setInstallRecoveryService(installRecovery)
+
+    const installing = updateService.installUpdate()
+    await vi.waitFor(() => {
+      expect(updaterMock.autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
+    })
+    updaterMock.nativeAutoUpdater.emit("before-quit-for-update")
+
+    await expect(installing).rejects.toThrow("无法启动更新安装程序，请重新打开 Synapse 后重试。")
+    expect(installRecovery.restoreState).toHaveBeenCalledWith(previousState)
+    expect(allowQuit).not.toHaveBeenCalled()
+    expect(updaterMock.appQuit).not.toHaveBeenCalled()
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      error: "无法启动更新安装程序，请重新打开 Synapse 后重试。",
+      status: "downloaded",
+    }))
+  })
+
+  it("hard-times out ShipIt startup verification and aborts the probe", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    const previousState = { schemaVersion: 1 as const, pendingAttempt: null }
+    let probeSignal: AbortSignal | undefined
+    const installRecovery = {
+      ensureShipItStarted: vi.fn((signal?: AbortSignal) => {
+        probeSignal = signal
+        return new Promise<boolean>(() => {})
+      }),
+      markManualRequired: vi.fn(async () => ({ kind: "none" as const })),
+      reconcile: vi.fn(async () => ({ kind: "none" as const })),
+      recordInstallAttempt: vi.fn(async () => previousState),
+      restoreState: vi.fn(async () => undefined),
+      updatePreparedTarget: vi.fn(async () => undefined),
+    }
+
+    await updateService.checkForUpdates()
+    updateService.downloadUpdate()
+    updaterMock.autoUpdater.emit("update-downloaded", {
+      version: "0.2.32",
+      downloadedFile: "/tmp/Synapse-0.2.32-mac-arm64.zip",
+    })
+    updateService.setInstallQuitHandlers({ allowQuit: vi.fn(), canQuit: () => true })
+    updateService.setInstallRecoveryService(installRecovery)
+
+    const installing = updateService.installUpdate()
+    await vi.advanceTimersByTimeAsync(0)
+    updaterMock.nativeAutoUpdater.emit("before-quit-for-update")
+    const rejection = expect(installing).rejects.toThrow(
+      "无法启动更新安装程序，请重新打开 Synapse 后重试。",
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    await rejection
+    expect(probeSignal?.aborted).toBe(true)
+    expect(installRecovery.restoreState).toHaveBeenCalledWith(previousState)
+    expect(updaterMock.appQuit).not.toHaveBeenCalled()
   })
 
   it("does not install a downloaded update when app quit is blocked", async () => {
@@ -716,6 +800,7 @@ describe("UpdateService", () => {
     const { updateService } = await importUpdateService()
     const previousState = { schemaVersion: 1 as const, pendingAttempt: null }
     const installRecovery = {
+      ensureShipItStarted: vi.fn(async () => true),
       markManualRequired: vi.fn(async () => ({ kind: "none" as const })),
       reconcile: vi.fn(async () => ({ kind: "none" as const })),
       recordInstallAttempt: vi.fn(async () => previousState),
@@ -747,6 +832,7 @@ describe("UpdateService", () => {
   it("repairs and redownloads once without automatically installing", async () => {
     const { updateService } = await importUpdateService()
     const installRecovery = {
+      ensureShipItStarted: vi.fn(async () => true),
       markManualRequired: vi.fn(),
       reconcile: vi.fn(async () => ({
         kind: "recover" as const,

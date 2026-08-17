@@ -553,9 +553,6 @@ function CommentView({
   const [editValue, setEditValue] = useState<string | null>(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
-  if (comment.deleted) {
-    return <div className='text-xs text-muted-foreground'>评论已删除</div>
-  }
   const authorName = displayAuthor(comment.author)
   return (
     <article className='group/comment'>
@@ -666,6 +663,12 @@ function CommentComposer({
   readonly onCancel: () => void
   readonly onSubmit: () => void
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useLayoutEffect(() => {
+    if (autoFocus) textareaRef.current?.focus({ preventScroll: true })
+  }, [autoFocus])
+
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -689,11 +692,11 @@ function CommentComposer({
     >
       {label ? <div className='mb-2 text-xs text-muted-foreground'>{label}</div> : null}
       <Textarea
+        ref={textareaRef}
         value={value}
         aria-label={ariaLabel}
         placeholder={placeholder}
         disabled={submitting}
-        autoFocus={autoFocus}
         onChange={(event) => onValueChange(event.currentTarget.value)}
         onKeyDown={handleKeyDown}
       />
@@ -830,8 +833,8 @@ function commentDeleteDescription(
   comments: readonly DriveAnnotationCommentDto[]
 ): string {
   const visibleComments = comments.filter((item) => !item.deleted)
-  if (visibleComments.length === 1) return '删除后，该讨论和原文标记会一并移除。'
-  if (hasVisibleDescendant(comment.id, visibleComments)) return '删除后将显示“评论已删除”，回复会保留。'
+  if (visibleComments[0]?.id === comment.id) return '删除后，整条讨论及原文标记将一并移除，且无法恢复。'
+  if (hasVisibleDescendant(comment.id, visibleComments)) return '删除后，该评论及其所有回复将一并删除，且无法恢复。'
   return '删除后无法恢复。'
 }
 

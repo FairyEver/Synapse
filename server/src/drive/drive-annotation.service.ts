@@ -223,7 +223,7 @@ export class DriveAnnotationService {
     const item = await this.requireOwnerItem(userId, itemId)
     if (item.userId !== userId) throw new ForbiddenException("不能删除该评论。")
     const { comment, thread } = await this.requireCommentThread(item.id, commentId)
-    await this.prisma.driveAnnotationComment.update({ where: { id: commentId }, data: { deletedAt: new Date() } })
+    const deletion = await this.deleteCommentTree(comment, thread)
     await this.recordAnnotationAudit({
       actorUserId: userId,
       action: "drive.annotation.comment.delete",
@@ -235,6 +235,8 @@ export class DriveAnnotationService {
         itemId: item.id,
         threadId: comment.threadId,
         commentId,
+        deletedCommentCount: deletion.deletedCommentCount,
+        threadDeleted: deletion.threadDeleted,
         baseVersionId: thread.baseVersionId,
       },
       ipAddress: auditContext.ipAddress,
@@ -483,7 +485,7 @@ export class DriveAnnotationService {
     const item = await this.requireCommentableShareItem(input)
     const { comment, thread } = await this.requireCommentThread(item.id, input.commentId)
     if (comment.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) throw new ForbiddenException("不能删除该评论。")
-    await this.prisma.driveAnnotationComment.update({ where: { id: input.commentId }, data: { deletedAt: new Date() } })
+    const deletion = await this.deleteCommentTree(comment, thread)
     await this.recordShareAnnotationAudit({
       actorUserId: input.actorUserId,
       shareId: input.shareId,
@@ -495,6 +497,8 @@ export class DriveAnnotationService {
         itemId: item.id,
         threadId: comment.threadId,
         commentId: input.commentId,
+        deletedCommentCount: deletion.deletedCommentCount,
+        threadDeleted: deletion.threadDeleted,
         baseVersionId: thread.baseVersionId,
       },
       ipAddress: input.auditContext?.ipAddress,
@@ -787,6 +791,12 @@ export class DriveAnnotationService {
         positionStatus: resolution.positionStatus,
         quoteStatus: resolution.quoteStatus,
       }, "Drive annotation anchor position validation failed")
+      if (resolution.positionStatus === "ambiguous") {
+        throw new ConflictException({
+          code: "DRIVE_ANNOTATION_TARGET_AMBIGUOUS",
+          message: "所选内容存在多个相同位置，请选择更多文字。",
+        })
+      }
       throw staleAnnotationConflict()
     }
     return { selectors, resolution }
@@ -903,6 +913,32 @@ export class DriveAnnotationService {
     const comment = await this.requireComment(itemId, commentId)
     const thread = await this.requireThread(itemId, comment.threadId)
     return { comment, thread }
+  }
+
+  private async deleteCommentTree(comment: Pick<AnnotationCommentRecord, "id">, thread: AnnotationThreadRecord) {
+    const deletedAt = new Date()
+    const threadDeleted = thread.comments[0]?.id === comment.id
+    const commentIds = commentSubtreeIds(comment.id, thread.comments)
+    if (threadDeleted) {
+      await this.prisma.$transaction([
+        this.prisma.driveAnnotationComment.updateMany({
+          where: { threadId: thread.id, deletedAt: null },
+          data: { deletedAt },
+        }),
+        this.prisma.driveAnnotationThread.update({ where: { id: thread.id }, data: { deletedAt } }),
+      ])
+    } else {
+      await this.prisma.driveAnnotationComment.updateMany({
+        where: { id: { in: commentIds }, deletedAt: null },
+        data: { deletedAt },
+      })
+    }
+    return {
+      deletedCommentCount: thread.comments.filter((item) => (
+        !item.deletedAt && (threadDeleted || commentIds.includes(item.id))
+      )).length,
+      threadDeleted,
+    }
   }
 
   private async findCurrentVersionId(item: {
@@ -1167,20 +1203,40 @@ function canDeleteThread(
 }
 
 function visibleComments(comments: readonly AnnotationCommentRecord[]): readonly AnnotationCommentRecord[] {
+  if (comments[0]?.deletedAt) return []
   const byId = new Map(comments.map((comment) => [comment.id, comment]))
-  const visibleIds = new Set(comments.filter((comment) => !comment.deletedAt).map((comment) => comment.id))
-  for (const comment of comments) {
-    if (!visibleIds.has(comment.id)) continue
+  return comments.filter((comment) => {
+    if (comment.deletedAt) return false
     let parentCommentId = comment.parentCommentId
-    while (parentCommentId) {
-      if (visibleIds.has(parentCommentId)) break
+    const visited = new Set<string>()
+    while (parentCommentId && !visited.has(parentCommentId)) {
+      visited.add(parentCommentId)
       const parent = byId.get(parentCommentId)
       if (!parent) break
-      visibleIds.add(parent.id)
+      if (parent.deletedAt) return false
       parentCommentId = parent.parentCommentId
     }
+    return true
+  })
+}
+
+function commentSubtreeIds(commentId: string, comments: readonly AnnotationCommentRecord[]): string[] {
+  const childrenByParentId = new Map<string, string[]>()
+  for (const comment of comments) {
+    if (!comment.parentCommentId) continue
+    const children = childrenByParentId.get(comment.parentCommentId) ?? []
+    children.push(comment.id)
+    childrenByParentId.set(comment.parentCommentId, children)
   }
-  return comments.filter((comment) => visibleIds.has(comment.id))
+  const subtreeIds = new Set<string>()
+  const pending = [commentId]
+  while (pending.length > 0) {
+    const currentId = pending.pop()
+    if (!currentId || subtreeIds.has(currentId)) continue
+    subtreeIds.add(currentId)
+    pending.push(...(childrenByParentId.get(currentId) ?? []))
+  }
+  return comments.filter((comment) => subtreeIds.has(comment.id)).map((comment) => comment.id)
 }
 
 function toCommentDto(

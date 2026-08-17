@@ -35,6 +35,7 @@ import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
+import { MarkdownImageFallbacks } from './markdown-image-fallback'
 import { renderDriveMermaidDiagrams, restoreDriveMermaidDiagrams } from './markdown-mermaid-renderer'
 import {
   createMarkdownRenderedDomRange,
@@ -185,7 +186,9 @@ function DriveMarkdownBody({
   }, [annotationStateKey])
 
   useEffect(() => {
-    setActiveOutlineId(outlineItems[0]?.id ?? null)
+    setActiveOutlineId((current) => current && outlineItems.some((item) => item.id === current)
+      ? current
+      : outlineItems[0]?.id ?? null)
   }, [outlineItems])
 
   useEffect(() => {
@@ -232,15 +235,6 @@ function DriveMarkdownBody({
     }
   }, [annotated.html, resolvedTheme])
 
-  useEffect(() => {
-    const root = bodyRef.current
-    if (!root) return
-    for (const image of root.querySelectorAll<HTMLImageElement>('img[src]')) {
-      image.tabIndex = 0
-      image.setAttribute('role', 'button')
-      image.setAttribute('aria-label', image.alt ? `预览图片：${image.alt}` : '预览图片')
-    }
-  }, [annotated.html])
   const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canComment)
   const canCreateAnnotation = annotationsEnabled
     && Boolean(effectiveAnnotationContext)
@@ -578,32 +572,13 @@ function DriveMarkdownBody({
     }
   }, [canCreateAnnotation, syncSelectionActionFromCurrentSelection])
 
-  const updateActiveOutline = useCallback(() => {
-    const scroller = documentScrollRef.current
-    const body = bodyRef.current
-    if (!scroller || !body || outlineItems.length === 0) return
-    const threshold = scroller.getBoundingClientRect().top + 24
-    let nextActiveId = outlineItems[0]?.id ?? null
-    for (const item of outlineItems) {
-      const heading = findMarkdownHeadingById(body, item.id)
-      if (!heading) continue
-      if (heading.getBoundingClientRect().top > threshold) break
-      nextActiveId = item.id
-    }
-    if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1) {
-      nextActiveId = outlineItems[outlineItems.length - 1]?.id ?? nextActiveId
-    }
-    setActiveOutlineId((current) => current === nextActiveId ? current : nextActiveId)
-  }, [outlineItems])
-
   const flushDocumentScrollEffects = useCallback(() => {
     documentScrollFrameRef.current = null
     const scroller = documentScrollRef.current
     if (!scroller) return
     setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, scroller.scrollTop)
-    updateActiveOutline()
     if (selectionPopover || pendingTarget) syncSelectionPopoverPositionFromCurrentSelection()
-  }, [pendingTarget, selectionPopover, syncSelectionPopoverPositionFromCurrentSelection, updateActiveOutline])
+  }, [pendingTarget, selectionPopover, syncSelectionPopoverPositionFromCurrentSelection])
 
   const scheduleDocumentScrollEffects = useCallback(() => {
     if (documentScrollFrameRef.current !== null) return
@@ -616,8 +591,7 @@ function DriveMarkdownBody({
 
   useLayoutEffect(() => {
     setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, documentScrollRef.current?.scrollTop ?? 0)
-    updateActiveOutline()
-  }, [commentsOpen, isCompact, outlineOpen, updateActiveOutline, widthMode])
+  }, [commentsOpen, isCompact, outlineOpen, widthMode])
 
   useEffect(() => {
     if (!activeOutlineId) return
@@ -630,7 +604,7 @@ function DriveMarkdownBody({
     const scrollerRect = outlineScroller.getBoundingClientRect()
     const linkRect = activeLink.getBoundingClientRect()
     if (linkRect.top < scrollerRect.top || linkRect.bottom > scrollerRect.bottom) {
-      activeLink.scrollIntoView({ block: 'nearest' })
+      activeLink.scrollIntoView({ block: 'nearest', behavior: 'instant' })
     }
   }, [activeOutlineId])
 
@@ -648,7 +622,7 @@ function DriveMarkdownBody({
     )
     setActiveOutlineId(itemId)
     if (typeof scroller.scrollTo === 'function') {
-      scroller.scrollTo({ top: targetTop, behavior: 'smooth' })
+      scroller.scrollTo({ top: targetTop, behavior: 'instant' })
     } else {
       scroller.scrollTop = targetTop
     }
@@ -774,6 +748,7 @@ function DriveMarkdownBody({
             onPointerUp={syncSelectionActionFromCurrentSelection}
             dangerouslySetInnerHTML={annotatedHtmlProperty}
           />
+          <MarkdownImageFallbacks contentKey={annotated.html} rootRef={bodyRef} />
           {annotationOverlayRects.length > 0 ? (
             <div aria-hidden className='pointer-events-none absolute inset-0'>
               {annotationOverlayRects.map((rect) => (

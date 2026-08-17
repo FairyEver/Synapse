@@ -45,7 +45,10 @@ function FormDialog({
           <DialogFrameHeader title={title} description={description} />
 
           <DialogFrameBody>
-            <ScrollArea className="h-full min-h-0">
+            <ScrollArea
+              className="h-full min-h-0 min-w-0 max-w-full"
+              viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
+            >
               <div className={cn("px-5 py-4", bodyClassName)}>
                 {children}
               </div>

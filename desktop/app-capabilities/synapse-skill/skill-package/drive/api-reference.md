@@ -280,7 +280,7 @@ All list and mutation results redact author email addresses as `author.email: nu
 
 ### `app_drive_link_annotation_thread_list`
 
-Returns `{ itemId, canComment, threads }`. `threads` includes every visible cross-version thread, nested comments, authoritative anchors, author-safe metadata with email addresses redacted, deletion placeholders needed by visible replies, and projected thread/comment permissions.
+Returns `{ itemId, canComment, threads }`. `threads` includes every visible cross-version thread, nested comments, authoritative anchors, author-safe metadata with email addresses redacted, and projected thread/comment permissions.
 
 ### `app_drive_link_annotation_thread_create`
 
@@ -302,7 +302,7 @@ Additional input: `commentId` and replacement `body` up to 4000 characters. Only
 
 ### `app_drive_link_annotation_comment_delete`
 
-Additional input: `commentId`. The author or file owner can delete a comment. Call only when the user explicitly identifies the comment to delete.
+Additional input: `commentId`. The author or file owner can delete the selected comment. Deletion also removes all descendant replies regardless of author; deleting the first comment removes the entire thread. Call only when the user explicitly identifies the comment to delete.
 
 ### `app_drive_link_annotation_thread_delete`
 

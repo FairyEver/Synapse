@@ -10,6 +10,12 @@ export const DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS = 3_000
 // macOS 原生更新器交接超时（毫秒）：超时后保留当前应用并恢复安装状态，避免应用提前退出。
 export const DESKTOP_UPDATE_INSTALL_HANDOFF_TIMEOUT_MS = 120_000
 
+// macOS ShipIt 启动确认超时（毫秒）：job 注册后必须观察到真实运行进程，超时则保留当前应用。
+export const DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS = 10_000
+
+// macOS 更新恢复单项文件操作超时（毫秒）：超时后终止受控进程并降级到人工安装。
+export const DESKTOP_UPDATE_RECOVERY_OPERATION_TIMEOUT_MS = 10_000
+
 // 桌面安装包官方 CDN 根地址：用于从更新元数据生成失败后的人工安装入口。
 export const DESKTOP_UPDATE_RELEASE_BASE_URL = "https://desktop.release.synapse.d2.pub/"
 

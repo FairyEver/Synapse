@@ -18,7 +18,9 @@ const updateServiceMock = vi.hoisted(() => {
       allowQuit: () => void
       canQuit: () => boolean | void
     } | null,
+    installHandoffPending: false,
     cancelDownload: vi.fn(async () => {}),
+    isInstallHandoffPending: vi.fn(() => mock.installHandoffPending),
     setInstallQuitHandlers: vi.fn(),
   }
 
@@ -63,6 +65,7 @@ vi.mock("../../services/update-service", () => ({
 describe("attachBeforeQuitHandler", () => {
   beforeEach(() => {
     updateServiceMock.installQuitHandlers = null
+    updateServiceMock.installHandoffPending = false
     vi.clearAllMocks()
     vi.useRealTimers()
   })
@@ -116,6 +119,30 @@ describe("attachBeforeQuitHandler", () => {
     expect(canQuit).toBe(false)
     expect(allowQuit).toBe(false)
     expect(storageMigration.focusDialog).toHaveBeenCalled()
+  })
+
+  it("holds native app quit until ShipIt startup verification completes", async () => {
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const event = { preventDefault: vi.fn() }
+    const stopAll = vi.fn(async () => {})
+    updateServiceMock.installHandoffPending = true
+
+    attachBeforeQuitHandler({
+      state: { current: null },
+      registry: { stopAll } as never,
+      setAllowQuit: vi.fn(),
+      isAllowedToQuit: () => false,
+    })
+    const beforeQuitHandler = electronMock.app.on.mock.calls.find(
+      ([eventName]) => eventName === "before-quit",
+    )?.[1] as (event: { preventDefault: () => void }) => Promise<void>
+
+    await beforeQuitHandler(event)
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    expect(updateServiceMock.cancelDownload).not.toHaveBeenCalled()
+    expect(stopAll).not.toHaveBeenCalled()
+    expect(electronMock.app.quit).not.toHaveBeenCalled()
   })
 
   it("allows update install quit when failed knowledge base migration requires restart recovery", async () => {

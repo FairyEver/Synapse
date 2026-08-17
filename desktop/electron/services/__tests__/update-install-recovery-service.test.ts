@@ -19,7 +19,10 @@ vi.mock("../log-store", () => ({
   createMainLogger: () => loggerMock,
 }))
 
-function createFixture(initial: UpdateInstallRecoveryEntryV1["pendingAttempt"] = null) {
+function createFixture(
+  initial: UpdateInstallRecoveryEntryV1["pendingAttempt"] = null,
+  options: { readonly useControlledRemoval?: boolean } = {},
+) {
   let entry: UpdateInstallRecoveryEntryV1 = {
     schemaVersion: 1,
     pendingAttempt: initial,
@@ -52,23 +55,16 @@ function createFixture(initial: UpdateInstallRecoveryEntryV1["pendingAttempt"] =
   const processRunner = {
     run: runProcess,
   } as unknown as ControlledProcessRunner
-  const removePath = vi.fn<(
-    targetPath: string,
-    options?: {
-      force?: boolean
-      maxRetries?: number
-      recursive?: boolean
-      retryDelay?: number
-    },
-  ) => Promise<void>>(async () => undefined)
+  const removePath = vi.fn<(targetPath: string) => Promise<void>>(async () => undefined)
   const service = new UpdateInstallRecoveryService({
     auditSink,
     cacheDirectory: "/Users/test/Library/Caches",
     getUid: () => 501,
     permissionGuard,
     processRunner,
-    removePath,
+    removePath: options.useControlledRemoval ? undefined : removePath,
     stateStore,
+    wait: async () => undefined,
   })
 
   return {
@@ -84,6 +80,63 @@ function createFixture(initial: UpdateInstallRecoveryEntryV1["pendingAttempt"] =
 }
 
 describe("UpdateInstallRecoveryService", () => {
+  it("does not treat a pending launchd job as a running ShipIt process", async () => {
+    const fixture = createFixture()
+    fixture.runProcess
+      .mockResolvedValueOnce({
+        durationMs: 1,
+        exitCode: 0,
+        signal: null,
+        stdout: "state = waiting\nruns = 0\npended nondemand spawn = semaphore\n",
+        timedOut: false,
+      })
+      .mockResolvedValueOnce({
+        durationMs: 1,
+        exitCode: 0,
+        signal: null,
+        stdout: "",
+        timedOut: false,
+      })
+      .mockResolvedValueOnce({
+        durationMs: 1,
+        exitCode: 0,
+        signal: null,
+        stdout: "state = running\npid = 99123\nruns = 1\n",
+        timedOut: false,
+      })
+
+    await expect(fixture.service.ensureShipItStarted()).resolves.toBe(true)
+
+    expect(fixture.runProcess).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      args: ["kickstart", "gui/501/com.fairyever.synapse.ShipIt"],
+    }))
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "Verified that the ShipIt process is running before app quit.",
+      expect.objectContaining({ kickstarted: true, pid: "99123", state: "running" }),
+    )
+  })
+
+  it("refuses handoff when launchd cannot start ShipIt", async () => {
+    const fixture = createFixture()
+    fixture.runProcess
+      .mockResolvedValueOnce({
+        durationMs: 1,
+        exitCode: 0,
+        signal: null,
+        stdout: "state = waiting\nruns = 0\npended nondemand spawn = semaphore\n",
+        timedOut: false,
+      })
+      .mockResolvedValueOnce({
+        durationMs: 1,
+        exitCode: 5,
+        signal: null,
+        stderr: "kickstart failed",
+        timedOut: false,
+      })
+
+    await expect(fixture.service.ensureShipItStarted()).resolves.toBe(false)
+  })
+
   it("repairs a first failed install exactly once", async () => {
     const fixture = createFixture({
       attemptedAt: "2026-08-11T00:00:00.000Z",
@@ -108,18 +161,8 @@ describe("UpdateInstallRecoveryService", () => {
       "/Users/test/Library/Caches/@synapsedesktop-updater",
       "/Users/test/Library/Caches/com.fairyever.synapse.ShipIt",
     ])
-    expect(fixture.removePath).toHaveBeenNthCalledWith(1, expect.any(String), {
-      force: true,
-      maxRetries: 5,
-      recursive: true,
-      retryDelay: 200,
-    })
-    expect(fixture.removePath).toHaveBeenNthCalledWith(2, expect.any(String), {
-      force: true,
-      maxRetries: 5,
-      recursive: true,
-      retryDelay: 200,
-    })
+    expect(fixture.removePath).toHaveBeenNthCalledWith(1, expect.any(String))
+    expect(fixture.removePath).toHaveBeenNthCalledWith(2, expect.any(String))
     expect(fixture.current().pendingAttempt).toEqual(expect.objectContaining({
       installAttempts: 1,
       recoveryPhase: "prepared",
@@ -130,6 +173,31 @@ describe("UpdateInstallRecoveryService", () => {
     }))
     expect(fixture.processRunner.run).toHaveBeenCalledTimes(2)
     expect(fixture.removePath).toHaveBeenCalledTimes(2)
+  })
+
+  it("removes only the two exact updater caches through the controlled runner", async () => {
+    const fixture = createFixture({
+      attemptedAt: "2026-08-11T00:00:00.000Z",
+      installAttempts: 1,
+      manualInstallerUrl: DMG_URL,
+      recoveryPhase: "not-started",
+      targetVersion: "0.2.32",
+    }, { useControlledRemoval: true })
+
+    await expect(fixture.service.reconcile("0.2.28")).resolves.toEqual(expect.objectContaining({
+      kind: "recover",
+    }))
+
+    expect(fixture.runProcess).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      command: "/bin/rm",
+      args: ["-rf", "/Users/test/Library/Caches/@synapsedesktop-updater"],
+      timeoutMs: expect.any(Number),
+    }))
+    expect(fixture.runProcess).toHaveBeenNthCalledWith(4, expect.objectContaining({
+      command: "/bin/rm",
+      args: ["-rf", "/Users/test/Library/Caches/com.fairyever.synapse.ShipIt"],
+      timeoutMs: expect.any(Number),
+    }))
   })
 
   it("does not count an ordinary restart before the recovered install as a second failure", async () => {
@@ -205,6 +273,25 @@ describe("UpdateInstallRecoveryService", () => {
       action: "fs.write.outside-userdata",
       outcome: "denied",
     }))
+  })
+
+  it("hard-times out a stuck cache removal and falls back to manual recovery", async () => {
+    vi.useFakeTimers()
+    const fixture = createFixture({
+      attemptedAt: "2026-08-11T00:00:00.000Z",
+      installAttempts: 1,
+      manualInstallerUrl: DMG_URL,
+      recoveryPhase: "not-started",
+      targetVersion: "0.2.32",
+    })
+    fixture.removePath.mockImplementationOnce(() => new Promise<void>(() => {}))
+
+    const recovery = fixture.service.reconcile("0.2.28")
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    await expect(recovery).resolves.toEqual(expect.objectContaining({ kind: "manual" }))
+    expect(fixture.current().pendingAttempt?.recoveryPhase).toBe("manual-required")
+    vi.useRealTimers()
   })
 
   it("falls back without deleting caches when launchctl fails unexpectedly", async () => {

@@ -274,7 +274,7 @@ describe("DriveAnnotationService", () => {
     await expect(service.listOwnerAnnotations("owner-1", "item-1")).resolves.toEqual([])
   })
 
-  it("keeps deleted parent comments when visible replies remain", async () => {
+  it("hides legacy replies whose first comment was already deleted", async () => {
     const deletedAt = new Date("2026-06-22T00:00:00.000Z")
     prisma.driveAnnotationThread.findMany.mockResolvedValueOnce([
       threadRecord({
@@ -285,12 +285,25 @@ describe("DriveAnnotationService", () => {
       }),
     ])
 
+    await expect(service.listOwnerAnnotations("owner-1", "item-1")).resolves.toEqual([])
+  })
+
+  it("hides legacy descendants of a deleted reply while keeping sibling comments", async () => {
+    const deletedAt = new Date("2026-06-22T00:00:00.000Z")
+    prisma.driveAnnotationThread.findMany.mockResolvedValueOnce([
+      threadRecord({
+        comments: [
+          commentRecord({ id: "comment-root" }),
+          commentRecord({ id: "comment-parent", parentCommentId: "comment-root", deletedAt }),
+          commentRecord({ id: "comment-child", parentCommentId: "comment-parent" }),
+          commentRecord({ id: "comment-sibling", parentCommentId: "comment-root" }),
+        ],
+      }),
+    ])
+
     const result = await service.listOwnerAnnotations("owner-1", "item-1")
 
-    expect(result[0]?.comments.map((comment) => ({ id: comment.id, deleted: comment.deleted }))).toEqual([
-      { id: "comment-parent", deleted: true },
-      { id: "comment-reply", deleted: false },
-    ])
+    expect(result[0]?.comments.map((comment) => comment.id)).toEqual(["comment-root", "comment-sibling"])
   })
 
   it("creates a thread plus first comment for .md files", async () => {
@@ -400,25 +413,44 @@ describe("DriveAnnotationService", () => {
       .rejects.toBeInstanceOf(ForbiddenException)
   })
 
-  it("allows authors to delete their own comments", async () => {
-    const ownComment = commentRecord({ createdByUserId: "owner-1" })
-    prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(ownComment)
+  it("lets the file owner delete the first comment with the entire thread", async () => {
+    const comments = [
+      commentRecord({ id: "comment-root" }),
+      commentRecord({ id: "comment-reply", parentCommentId: "comment-root", createdByUserId: "reader-2" }),
+    ]
+    prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[0])
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
 
-    await service.deleteOwnerComment("owner-1", "item-1", "comment-1")
+    await service.deleteOwnerComment("owner-1", "item-1", "comment-root")
 
-    expect(prisma.driveAnnotationComment.update).toHaveBeenCalledWith({
-      where: { id: "comment-1" },
+    expect(prisma.driveAnnotationComment.updateMany).toHaveBeenCalledWith({
+      where: { threadId: "thread-1", deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    })
+    expect(prisma.driveAnnotationThread.update).toHaveBeenCalledWith({
+      where: { id: "thread-1" },
       data: { deletedAt: expect.any(Date) },
     })
   })
 
-  it("allows file owners to delete another user's single comment", async () => {
-    await service.deleteOwnerComment("owner-1", "item-1", "comment-1")
+  it("lets the file owner delete another user's reply and its descendants", async () => {
+    const comments = [
+      commentRecord({ id: "comment-root" }),
+      commentRecord({ id: "comment-target", parentCommentId: "comment-root", createdByUserId: "reader-1" }),
+      commentRecord({ id: "comment-child", parentCommentId: "comment-target", createdByUserId: "reader-2" }),
+      commentRecord({ id: "comment-grandchild", parentCommentId: "comment-child", createdByUserId: "reader-3" }),
+      commentRecord({ id: "comment-sibling", parentCommentId: "comment-root", createdByUserId: "reader-3" }),
+    ]
+    prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[1])
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
 
-    expect(prisma.driveAnnotationComment.update).toHaveBeenCalledWith({
-      where: { id: "comment-1" },
+    await service.deleteOwnerComment("owner-1", "item-1", "comment-target")
+
+    expect(prisma.driveAnnotationComment.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["comment-target", "comment-child", "comment-grandchild"] }, deletedAt: null },
       data: { deletedAt: expect.any(Date) },
     })
+    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
   })
 
   it("lets the file owner delete any thread", async () => {
@@ -463,6 +495,26 @@ describe("DriveAnnotationService", () => {
       cookie: "cookie",
       body: createInput({ baseVersionId: "version-1" }),
     })).rejects.toBeInstanceOf(ConflictException)
+
+    expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
+  })
+
+  it("reports an ambiguous repeated target separately from a stale document position", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Note and Note"))
+    const input = createInput({ baseVersionId: "version-1" })
+
+    await expect(service.createShareAnnotation({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      body: {
+        ...input,
+        target: { ...input.target, range: { start: 5, end: 9 } },
+      },
+    })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "DRIVE_ANNOTATION_TARGET_AMBIGUOUS" }),
+    })
 
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
@@ -765,17 +817,75 @@ describe("DriveAnnotationService", () => {
     expect(result[0]?.permissions.canDelete).toBe(true)
   })
 
-  it("allows share file owners to delete another user's single comment", async () => {
+  it("allows comment authors to delete their own reply with descendants from other authors", async () => {
+    const comments = [
+      commentRecord({ id: "comment-root", createdByUserId: "reader-2" }),
+      commentRecord({ id: "comment-target", parentCommentId: "comment-root", createdByUserId: "reader-1" }),
+      commentRecord({ id: "comment-child", parentCommentId: "comment-target", createdByUserId: "reader-2" }),
+      commentRecord({ id: "comment-sibling", parentCommentId: "comment-root", createdByUserId: "reader-3" }),
+    ]
+    prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[1])
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+
+    await service.deleteShareComment({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-target",
+    })
+
+    expect(prisma.driveAnnotationComment.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["comment-target", "comment-child"] }, deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    })
+  })
+
+  it("allows comment authors to delete their own first comment with the entire thread", async () => {
+    const comments = [
+      commentRecord({ id: "comment-root", createdByUserId: "reader-1" }),
+      commentRecord({ id: "comment-reply", parentCommentId: "comment-root", createdByUserId: "reader-2" }),
+    ]
+    prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[0])
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+
+    await service.deleteShareComment({
+      actorUserId: "reader-1",
+      shareId: "share-1",
+      itemId: "item-1",
+      cookie: "cookie",
+      commentId: "comment-root",
+    })
+
+    expect(prisma.driveAnnotationComment.updateMany).toHaveBeenCalledWith({
+      where: { threadId: "thread-1", deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    })
+    expect(prisma.driveAnnotationThread.update).toHaveBeenCalledWith({
+      where: { id: "thread-1" },
+      data: { deletedAt: expect.any(Date) },
+    })
+  })
+
+  it("allows share file owners to delete another user's comment with its descendants", async () => {
+    const comments = [
+      commentRecord({ id: "comment-root", createdByUserId: "reader-1" }),
+      commentRecord({ id: "comment-target", parentCommentId: "comment-root", createdByUserId: "reader-2" }),
+      commentRecord({ id: "comment-child", parentCommentId: "comment-target", createdByUserId: "reader-3" }),
+    ]
+    prisma.driveAnnotationComment.findFirst.mockResolvedValueOnce(comments[1])
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(threadRecord({ comments }))
+
     await service.deleteShareComment({
       actorUserId: "owner-1",
       shareId: "share-1",
       itemId: "item-1",
       cookie: "cookie",
-      commentId: "comment-1",
+      commentId: "comment-target",
     })
 
-    expect(prisma.driveAnnotationComment.update).toHaveBeenCalledWith({
-      where: { id: "comment-1" },
+    expect(prisma.driveAnnotationComment.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["comment-target", "comment-child"] }, deletedAt: null },
       data: { deletedAt: expect.any(Date) },
     })
   })
@@ -789,7 +899,8 @@ describe("DriveAnnotationService", () => {
       commentId: "comment-1",
     })).rejects.toBeInstanceOf(ForbiddenException)
 
-    expect(prisma.driveAnnotationComment.update).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationComment.updateMany).not.toHaveBeenCalled()
+    expect(prisma.driveAnnotationThread.update).not.toHaveBeenCalled()
   })
 })
 
@@ -880,6 +991,7 @@ function createPrismaMock() {
       create: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     driveAnnotationAnchor: { upsert: vi.fn() },
   }

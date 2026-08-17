@@ -2229,6 +2229,39 @@ describe("bootstrap descriptors (T1.5)", () => {
     ])
   })
 
+  it("starts update recovery without putting it on the startup critical path", async () => {
+    const { coreUpdateDescriptor } = await importBootstrap()
+    const pendingStateRead = new Promise<never>(() => {})
+    const registry = {
+      get: vi.fn((id: string) => {
+        if (id === "core.window-manager") return {}
+        if (id === "core.permission-guard") {
+          return { check: vi.fn(async () => ({ allowed: true })), registerPolicy: vi.fn() }
+        }
+        if (id === "core.audit-sink") {
+          return { clearForTests: vi.fn(), list: vi.fn(() => []), record: vi.fn() }
+        }
+        if (id === "core.data-repository") {
+          return {
+            namespace: vi.fn(() => ({
+              getSingleton: vi.fn(() => pendingStateRead),
+              setSingleton: vi.fn(),
+            })),
+          }
+        }
+        throw new Error(`unexpected service ${id}`)
+      }),
+    }
+
+    const created = coreUpdateDescriptor.create({
+      ...makeFakeContext(),
+      registry,
+    } as never)
+
+    expect(created).not.toBeInstanceOf(Promise)
+    expect(created).toBeDefined()
+  })
+
   it("coreDriveSyncDescriptor restores local watching during startup", async () => {
     const { coreDriveSyncDescriptor } = await importBootstrap()
     const calls: string[] = []

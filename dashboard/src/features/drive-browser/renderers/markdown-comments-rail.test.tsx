@@ -627,7 +627,7 @@ describe('MarkdownCommentsRail', () => {
     await click(actionElementWithText('删除评论'))
 
     expect(document.body.textContent).toContain('删除评论？')
-    expect(document.body.textContent).toContain('讨论和原文标记会一并移除')
+    expect(document.body.textContent).toContain('整条讨论及原文标记将一并移除')
     expect(onDeleteComment).not.toHaveBeenCalled()
 
     await click(buttonWithText('删除评论'))
@@ -647,7 +647,7 @@ describe('MarkdownCommentsRail', () => {
     expect(buttonWithLabel('讨论操作')).toBeNull()
   })
 
-  it('explains that replies remain when deleting a parent comment', async () => {
+  it('explains that descendant replies are deleted with a parent comment', async () => {
     const source = thread()
     const firstComment = source.thread.comments[0]
     const reply = {
@@ -665,8 +665,36 @@ describe('MarkdownCommentsRail', () => {
     await click(actionButton)
     await click(actionElementWithText('删除评论'))
 
-    expect(document.body.textContent).toContain('回复会保留')
-    expect(document.body.textContent).toContain('评论已删除')
+    expect(document.body.textContent).toContain('整条讨论及原文标记将一并移除')
+    expect(document.body.textContent).not.toContain('回复会保留')
+  })
+
+  it('explains that nested replies are deleted with a non-root parent comment', async () => {
+    const source = thread()
+    const firstComment = source.thread.comments[0]
+    const parent = {
+      ...firstComment,
+      id: 'comment-2',
+      parentCommentId: firstComment.id,
+      body: 'Parent reply',
+    }
+    const child = {
+      ...firstComment,
+      id: 'comment-3',
+      parentCommentId: parent.id,
+      body: 'Child reply',
+    }
+    renderRail({
+      threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, parent, child] } }],
+    })
+
+    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="更多评论操作"]')
+    const parentActionButton = actionButtons[1]
+    if (!parentActionButton) throw new Error('Missing parent comment action button')
+    await click(parentActionButton)
+    await click(actionElementWithText('删除评论'))
+
+    expect(document.body.textContent).toContain('该评论及其所有回复将一并删除')
   })
 
   it('deletes the selected reply from its own action menu', async () => {

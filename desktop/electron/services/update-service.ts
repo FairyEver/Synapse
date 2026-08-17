@@ -23,6 +23,7 @@ import {
   DESKTOP_UPDATE_INSTALL_HANDOFF_TIMEOUT_MS,
   DESKTOP_UPDATE_INTENT_VERIFY_TIMEOUT_MS,
   DESKTOP_UPDATE_RELEASE_BASE_URL,
+  DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS,
 } from "../../config"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 
@@ -64,6 +65,7 @@ type InstallQuitHandlers = {
 
 type InstallRecoveryController = Pick<
   UpdateInstallRecoveryService,
+  | "ensureShipItStarted"
   | "markManualRequired"
   | "reconcile"
   | "recordInstallAttempt"
@@ -155,6 +157,7 @@ class UpdateService {
   private installQuitHandlers: InstallQuitHandlers | null = null
   private installRecoveryService: InstallRecoveryController | null = null
   private macInstallHandoffTimedOut = false
+  private macInstallHandoffPending = false
   private updateIntentVerificationSecurity: UpdateIntentVerificationSecurity | null = null
   private pendingOpenRequest: SynapseAppUpdateOpenRequest | null = null
   private nextOpenRequestId = 0
@@ -169,6 +172,10 @@ class UpdateService {
 
   setInstallRecoveryService(service: InstallRecoveryController | null): void {
     this.installRecoveryService = service
+  }
+
+  isInstallHandoffPending(): boolean {
+    return this.macInstallHandoffPending
   }
 
   setUpdateIntentVerificationSecurity(security: UpdateIntentVerificationSecurity): void {
@@ -416,29 +423,35 @@ class UpdateService {
   private async handoffMacUpdate(
     previousRecoveryState: UpdateInstallRecoveryEntryV1 | null,
   ): Promise<void> {
+    this.macInstallHandoffPending = true
     await new Promise<void>((resolve, reject) => {
       const handoffStartedAt = Date.now()
       let settled = false
       const finish = (callback: () => void) => {
         if (settled) return
         settled = true
+        this.macInstallHandoffPending = false
         clearTimeout(timeout)
         nativeAutoUpdater.removeListener("before-quit-for-update", handleBeforeQuitForUpdate)
         callback()
       }
       const handleBeforeQuitForUpdate = () => {
+        clearTimeout(timeout)
         logger.info("macOS native updater requested app quit.", {
           elapsedMs: Date.now() - handoffStartedAt,
           targetVersion: this.state.releaseVersion,
         })
-        finish(() => {
-          try {
-            this.installQuitHandlers?.allowQuit()
-            resolve()
-          } catch (error) {
-            reject(error)
-          }
-        })
+        void this.verifyAndCompleteMacUpdateHandoff(previousRecoveryState, () => !settled).then(
+          () => finish(() => {
+            try {
+              app.quit()
+              resolve()
+            } catch (error) {
+              reject(error)
+            }
+          }),
+          (error) => finish(() => reject(error)),
+        )
       }
       const timeout = setTimeout(() => {
         logger.warn("macOS native update handoff timed out.", {
@@ -467,6 +480,33 @@ class UpdateService {
         })
       }
     })
+  }
+
+  private async verifyAndCompleteMacUpdateHandoff(
+    previousRecoveryState: UpdateInstallRecoveryEntryV1 | null,
+    isActive: () => boolean,
+  ): Promise<void> {
+    const abortController = new AbortController()
+    try {
+      const shipItStarted = await withHardTimeout(
+        this.installRecoveryService?.ensureShipItStarted(abortController.signal) ?? Promise.resolve(false),
+        DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS,
+        abortController,
+      )
+      if (!isActive()) return
+      if (!shipItStarted) {
+        throw new Error("ShipIt launch service was registered but did not start.")
+      }
+      this.installQuitHandlers?.allowQuit()
+      logger.info("macOS update handoff verified; quitting for installation.", {
+        targetVersion: this.state.releaseVersion,
+      })
+    } catch (error) {
+      if (!isActive()) return
+      logger.error("macOS ShipIt startup verification failed.", error)
+      await this.rollbackTimedOutInstall(previousRecoveryState)
+      throw new Error(UPDATE_INSTALL_HANDOFF_TIMEOUT_MESSAGE, { cause: error })
+    }
   }
 
   private async rollbackTimedOutInstall(
@@ -695,6 +735,15 @@ class UpdateService {
       logger.error("Failed to redownload the update after repairing ShipIt.", error)
       await this.enterManualRecovery()
     }
+  }
+
+  startInstallRecoveryInBackground(): void {
+    this.initialize()
+    void this.initializeInstallRecovery().catch((error) => {
+      logger.error("Background update install recovery failed.", error)
+    }).finally(() => {
+      this.startAutoCheck()
+    })
   }
 
   async checkForUpdates(): Promise<SynapseAppUpdateState> {
@@ -1129,6 +1178,23 @@ class UpdateService {
 
     notification.show()
   }
+}
+
+function withHardTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  abortController: AbortController,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      abortController.abort()
+      reject(new Error(`Operation timed out after ${String(timeoutMs)}ms.`))
+    }, timeoutMs)
+  })
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
 }
 
 const updateService = new UpdateService()

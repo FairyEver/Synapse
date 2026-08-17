@@ -48,6 +48,12 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
   })
 
   app.on("before-quit", async (event) => {
+    if (updateService.isInstallHandoffPending()) {
+      event.preventDefault()
+      logger.info("App quit held while ShipIt startup is being verified.")
+      return
+    }
+
     if (!deps.isAllowedToQuit()) {
       event.preventDefault()
     }

@@ -30,6 +30,49 @@ describe('markdown rendered text model', () => {
     expect(createMarkdownRenderedDomRange(root, model.segments, piniaStart, piniaStart + 5)?.toString()).toBe('Pinia')
   })
 
+  it('ignores formatting whitespace around block children in loose list items', () => {
+    document.body.innerHTML = [
+      '<main><ul>',
+      '<li>\n<p>系统按订单创建时匹配的赠品默认带出赠品。</p>\n</li>',
+      '<li>\n<p>赠品信息展示：活动名称、赠送封顶值、是否赠送、赠品名称、物料名称。</p>\n</li>',
+      '</ul></main>',
+    ].join('\n')
+    const root = document.querySelector<HTMLElement>('main')
+    if (!root) throw new Error('missing fixture')
+
+    const model = createMarkdownRenderedTextModel(root)
+    const nameStart = model.text.lastIndexOf('名称')
+
+    expect(model.text).toBe('系统按订单创建时匹配的赠品默认带出赠品。赠品信息展示：活动名称、赠送封顶值、是否赠送、赠品名称、物料名称。')
+    expect(createMarkdownRenderedDomRange(root, model.segments, nameStart, nameStart + 2)?.toString()).toBe('名称')
+  })
+
+  it('keeps authored inline list spacing while ignoring nested-list and task-checkbox formatting', () => {
+    document.body.innerHTML = [
+      '<main><ul>',
+      '<li><strong>A</strong> <em>B</em>\n<ul>\n<li>行内子级</li>\n</ul>\n</li>',
+      '<li>父级\n<ul>\n<li>子级</li>\n</ul>\n</li>',
+      '<li class="task-list-item"><input type="checkbox" checked disabled> 已完成</li>',
+      '</ul></main>',
+    ].join('\n')
+    const root = document.querySelector<HTMLElement>('main')
+    if (!root) throw new Error('missing fixture')
+
+    expect(createMarkdownRenderedTextModel(root).text).toBe('A B行内子级父级子级已完成')
+  })
+
+  it('counts a rendered hard break once when HTML serialization also adds a newline', () => {
+    document.body.innerHTML = '<main><p>前一行<br>\n后一行</p></main>'
+    const root = document.querySelector<HTMLElement>('main')
+    if (!root) throw new Error('missing fixture')
+
+    const model = createMarkdownRenderedTextModel(root)
+    const nextLineStart = model.text.indexOf('后一行')
+
+    expect(model.text).toBe('前一行\n后一行')
+    expect(createMarkdownRenderedDomRange(root, model.segments, nextLineStart, nextLineStart + 3)?.toString()).toBe('后一行')
+  })
+
   it('keeps hidden Mermaid source in the projection while ignoring generated SVG text', () => {
     document.body.innerHTML = [
       '<main>',
@@ -48,6 +91,19 @@ describe('markdown rendered text model', () => {
 
     expect(model.text).toBe('Beforeflowchart TB\nA --> BAfter')
     expect(model.text).not.toContain('Generated label')
+  })
+
+  it('keeps image alt offsets while ignoring the visual fallback copy', () => {
+    document.body.innerHTML = [
+      '<main><p>Before',
+      '<img alt="客户管理" hidden>',
+      '<span data-drive-markdown-image-fallback-host="true">客户管理 图片无法显示</span>',
+      'After</p></main>',
+    ].join('')
+    const root = document.querySelector<HTMLElement>('main')
+    if (!root) throw new Error('missing fixture')
+
+    expect(createMarkdownRenderedTextModel(root).text).toBe('Before客户管理After')
   })
 })
 

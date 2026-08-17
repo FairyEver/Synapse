@@ -31,7 +31,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.link.annotation.thread.create" as CapabilityId, title: "Create Drive link annotation thread", description: "Create an anchored annotation thread on uniquely identified visible text in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.create" as CapabilityId, title: "Reply to Drive link annotation", description: "Add a comment or nested reply to an annotation thread in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.update" as CapabilityId, title: "Update Drive link annotation comment", description: "Edit the current user's annotation comment in a shared Markdown document.", mutates: true },
-  { id: "app.drive.link.annotation.comment.delete" as CapabilityId, title: "Delete Drive link annotation comment", description: "Delete one annotation comment when the current user has permission.", mutates: true },
+  { id: "app.drive.link.annotation.comment.delete" as CapabilityId, title: "Delete Drive link annotation comment", description: "Delete one permitted annotation comment with its descendant replies; deleting the first comment removes the thread.", mutates: true },
   { id: "app.drive.link.annotation.thread.delete" as CapabilityId, title: "Delete Drive link annotation thread", description: "Delete one annotation thread when the current user has permission.", mutates: true },
   { id: "app.drive.link.annotation.anchor.update" as CapabilityId, title: "Update Drive link annotation anchor", description: "Reassociate an annotation thread with uniquely identified visible text in the current shared Markdown version.", mutates: true },
   { id: "app.drive.link.materialize" as CapabilityId, title: "Materialize Drive link", description: "Download a Synapse Drive link into a local cache directory for local Agent tools.", mutates: true },
@@ -391,7 +391,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_thread_list",
-      description: "List every visible annotation thread on a shared .md document, including anchors, authors, nested comments, deletion placeholders, and per-comment permissions. Returns itemId and canComment. Author emails are redacted. The anchor field is the current authority; target preserves the original quote snapshot.",
+      description: "List every visible annotation thread on a shared .md document, including anchors, authors, nested comments, and per-comment permissions. Returns itemId and canComment. Author emails are redacted. The anchor field is the current authority; target preserves the original quote snapshot.",
       inputSchema: { type: "object", properties: driveLinkAnnotationBaseProperties, required: ["url"] },
     },
     {
@@ -437,7 +437,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_comment_delete",
-      description: "Delete one annotation comment on a shared .md document when permitted. Call only when the user explicitly identifies the deletion target.",
+      description: "Delete one permitted annotation comment and all of its descendant replies on a shared .md document. Deleting the first comment removes the entire thread. Call only when the user explicitly identifies the deletion target.",
       inputSchema: {
         type: "object",
         properties: { ...driveLinkAnnotationBaseProperties, commentId: stringField("Annotation comment id to delete.") },
