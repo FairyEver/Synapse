@@ -147,6 +147,7 @@ Comment rail:
 - Does not include filters because there is no product status.
 - Shows nested replies as a readable discussion stream, not an infinitely indented tree.
 - A reply can show "回复 <name>" metadata instead of increasing indentation for every level.
+- Deletable comments show a direct delete icon. The first click changes it to a check icon, and the second click performs the deletion.
 - Deleting a comment also hides all of its descendant replies, including legacy descendants whose parent was deleted before this rule was introduced.
 - Deleting the first comment removes the entire thread and its rendered text marker.
 

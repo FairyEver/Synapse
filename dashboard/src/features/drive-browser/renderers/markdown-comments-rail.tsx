@@ -1,26 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto } from '@synapse/shared'
-import { ChevronDown, ChevronUp, Loader2, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { RelativeTime } from '@/components/relative-time'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
 import { cn, getDisplayNameInitials } from '@/lib/utils'
 
@@ -570,8 +555,8 @@ function CommentView({
               {comment.editedAt ? <span className='text-xs text-muted-foreground'>已编辑</span> : null}
             </div>
             {comment.permissions.canDelete ? (
-              <div className={cn('shrink-0 transition-opacity', !compact && 'opacity-40 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100')}>
-                <CommentActionMenu
+              <div className='shrink-0'>
+                <CommentDeleteButton
                   compact={compact}
                   deleteDescription={deleteDescription}
                   onDeleteComment={() => onDeleteComment(comment.id)}
@@ -711,7 +696,7 @@ function CommentComposer({
   )
 }
 
-function CommentActionMenu({
+function CommentDeleteButton({
   compact = false,
   deleteDescription,
   onDeleteComment,
@@ -720,97 +705,49 @@ function CommentActionMenu({
   readonly deleteDescription: string
   readonly onDeleteComment: () => CommentActionPromise
 }) {
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  return (
-    <>
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button type='button' variant='ghost' size='icon' className={compact ? 'size-11' : 'h-7 w-7'} aria-label='更多评论操作' onClick={() => setMenuOpen(true)}>
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align='end'>
-          <DropdownMenuItem variant='destructive' onSelect={() => {
-            setMenuOpen(false)
-            setDeleteOpen(true)
-          }}>
-            删除评论
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {deleteOpen ? (
-        <DeleteConfirmDialog
-          open={true}
-          onOpenChange={setDeleteOpen}
-          title='删除评论？'
-          description={deleteDescription}
-          actionLabel='删除评论'
-          onConfirm={onDeleteComment}
-        />
-      ) : null}
-    </>
-  )
-}
-
-function DeleteConfirmDialog({
-  open,
-  title,
-  description,
-  actionLabel,
-  onOpenChange,
-  onConfirm,
-}: {
-  readonly open: boolean
-  readonly title: string
-  readonly description: string
-  readonly actionLabel: string
-  readonly onOpenChange: (open: boolean) => void
-  readonly onConfirm: () => CommentActionPromise
-}) {
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const handleConfirm = async () => {
-    if (submitting) return
-    setSubmitting(true)
-    setError(null)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const handleDelete = async () => {
+    if (deleting) return
+    if (!confirming) {
+      setConfirming(true)
+      return
+    }
+    setDeleting(true)
     try {
-      await onConfirm()
-      onOpenChange(false)
+      await onDeleteComment()
+      setConfirming(false)
     } catch (cause) {
-      setError(getCommentActionErrorMessage(cause))
+      setConfirming(false)
+      toast.error(getCommentActionErrorMessage(cause))
     } finally {
-      setSubmitting(false)
+      setDeleting(false)
     }
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={(nextOpen) => {
-      if (submitting) return
-      if (!nextOpen) setError(null)
-      onOpenChange(nextOpen)
-    }}>
-      <AlertDialogContent onClick={(event) => event.stopPropagation()}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        {error ? <div role='status' className='text-sm text-destructive'>{error}</div> : null}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={submitting}>取消</AlertDialogCancel>
-          <AlertDialogAction
-            className='bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40'
-            disabled={submitting}
-            onClick={(event) => {
-              event.preventDefault()
-              void handleConfirm()
-            }}
-          >
-            {actionLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <Button
+      type='button'
+      variant='ghost'
+      size='icon'
+      className={cn(compact ? 'size-11' : 'h-7 w-7', 'text-muted-foreground hover:text-destructive', confirming && 'text-destructive')}
+      aria-label={confirming ? '确认删除评论' : '删除评论'}
+      aria-pressed={confirming}
+      title={confirming ? deleteDescription : '删除评论'}
+      disabled={deleting}
+      onBlur={() => {
+        if (!deleting) setConfirming(false)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') setConfirming(false)
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        void handleDelete()
+      }}
+    >
+      {deleting ? <Loader2 className='animate-spin' /> : confirming ? <Check /> : <Trash2 />}
+    </Button>
   )
 }
 

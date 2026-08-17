@@ -285,7 +285,7 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).not.toContain('编辑')
     expect(document.body.textContent).not.toContain('删除评论')
     expect(document.body.textContent).not.toContain('删除讨论')
-    expect(buttonWithLabel('更多评论操作')).toBeNull()
+    expect(buttonWithLabel('删除评论')).toBeNull()
     expect(buttonWithLabel('讨论操作')).toBeNull()
   })
 
@@ -611,7 +611,7 @@ describe('MarkdownCommentsRail', () => {
     expect(threadTop('thread-2')).toBe(140)
   })
 
-  it('keeps own comment deletion in the comment action menu and confirms before deleting', async () => {
+  it('shows a direct delete icon and requires a second click to delete', async () => {
     const onDeleteComment = vi.fn(async () => undefined)
     renderRail({
       onDeleteComment,
@@ -620,17 +620,18 @@ describe('MarkdownCommentsRail', () => {
 
     expect(document.body.textContent).toContain('编辑')
     expect(document.body.textContent).not.toContain('删除评论')
+    expect(optionalDialogContent()).toBeNull()
+    expect(requiredButtonWithLabel('删除评论').querySelector('.lucide-trash-2')).not.toBeNull()
 
-    await click(requiredButtonWithLabel('更多评论操作'))
+    await click(requiredButtonWithLabel('删除评论'))
 
-    expect(document.body.textContent).not.toContain('删除讨论')
-    await click(actionElementWithText('删除评论'))
-
-    expect(document.body.textContent).toContain('删除评论？')
-    expect(document.body.textContent).toContain('整条讨论及原文标记将一并移除')
+    expect(buttonWithLabel('删除评论')).toBeNull()
+    expect(requiredButtonWithLabel('确认删除评论').querySelector('.lucide-check')).not.toBeNull()
+    expect(requiredButtonWithLabel('确认删除评论').title).toContain('整条讨论及原文标记将一并移除')
+    expect(optionalDialogContent()).toBeNull()
     expect(onDeleteComment).not.toHaveBeenCalled()
 
-    await click(buttonWithText('删除评论'))
+    await click(requiredButtonWithLabel('确认删除评论'))
 
     expect(onDeleteComment).toHaveBeenCalledWith('comment-1')
   })
@@ -643,7 +644,7 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).not.toContain('编辑')
     expect(document.body.textContent).not.toContain('删除评论')
     expect(document.body.textContent).not.toContain('删除讨论')
-    expect(buttonWithLabel('更多评论操作')).toBeNull()
+    expect(buttonWithLabel('删除评论')).toBeNull()
     expect(buttonWithLabel('讨论操作')).toBeNull()
   })
 
@@ -660,13 +661,12 @@ describe('MarkdownCommentsRail', () => {
       threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
     })
 
-    const actionButton = document.querySelector<HTMLButtonElement>('button[aria-label="更多评论操作"]')
+    const actionButton = document.querySelector<HTMLButtonElement>('button[aria-label="删除评论"]')
     if (!actionButton) throw new Error('Missing comment action button')
     await click(actionButton)
-    await click(actionElementWithText('删除评论'))
 
-    expect(document.body.textContent).toContain('整条讨论及原文标记将一并移除')
-    expect(document.body.textContent).not.toContain('回复会保留')
+    expect(requiredButtonWithLabel('确认删除评论').title).toContain('整条讨论及原文标记将一并移除')
+    expect(requiredButtonWithLabel('确认删除评论').title).not.toContain('回复会保留')
   })
 
   it('explains that nested replies are deleted with a non-root parent comment', async () => {
@@ -688,13 +688,12 @@ describe('MarkdownCommentsRail', () => {
       threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, parent, child] } }],
     })
 
-    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="更多评论操作"]')
+    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="删除评论"]')
     const parentActionButton = actionButtons[1]
     if (!parentActionButton) throw new Error('Missing parent comment action button')
     await click(parentActionButton)
-    await click(actionElementWithText('删除评论'))
 
-    expect(document.body.textContent).toContain('该评论及其所有回复将一并删除')
+    expect(requiredButtonWithLabel('确认删除评论').title).toContain('该评论及其所有回复将一并删除')
   })
 
   it('deletes the selected reply from its own action menu', async () => {
@@ -712,7 +711,7 @@ describe('MarkdownCommentsRail', () => {
       threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
     })
 
-    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="更多评论操作"]')
+    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label="删除评论"]')
     expect(actionButtons).toHaveLength(2)
     expect(buttonWithLabel('讨论操作')).toBeNull()
     const replyActionButton = actionButtons[1]
@@ -720,11 +719,7 @@ describe('MarkdownCommentsRail', () => {
 
     await click(replyActionButton)
 
-    expect(document.body.textContent).toContain('删除评论')
-    expect(document.body.textContent).not.toContain('删除讨论')
-
-    await click(actionElementWithText('删除评论'))
-    await click(buttonWithText('删除评论'))
+    await click(requiredButtonWithLabel('确认删除评论'))
 
     expect(onDeleteComment).toHaveBeenCalledWith('comment-2')
   })
@@ -860,13 +855,6 @@ function buttonWithText(text: string) {
   const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes(text))
   if (!button) throw new Error(`Missing button ${text}`)
   return button as HTMLButtonElement
-}
-
-function actionElementWithText(text: string) {
-  const element = Array.from(document.querySelectorAll<HTMLElement>('button, [role="menuitem"]'))
-    .find((item) => item.textContent?.includes(text))
-  if (!element) throw new Error(`Missing action ${text}`)
-  return element
 }
 
 function buttonWithLabel(label: string) {
