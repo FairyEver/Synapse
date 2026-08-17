@@ -1124,6 +1124,40 @@ describe('DriveMarkdownRenderer', () => {
     windowAddEventListener.mockRestore()
   })
 
+  it('moves and clips table comment overlays when the table scrolls horizontally', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown({
+      previewData: preview({
+        html: '<div data-drive-markdown-table-scroll="true"><table><tbody><tr><td>这是 <strong>重点</strong> 内容</td></tr></tbody></table></div>',
+      }),
+    })
+
+    await act(async () => undefined)
+
+    const tableScroller = document.querySelector<HTMLElement>('[data-drive-markdown-table-scroll="true"]')
+    if (!tableScroller) throw new Error('Missing markdown table scroller')
+    vi.spyOn(markdownBody(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 500 }))
+    vi.spyOn(tableScroller, 'getBoundingClientRect').mockReturnValue(domRect({ left: 100, top: 80, width: 200, height: 80 }))
+
+    rangeRects = [domRect({ left: 50, top: 100, width: 100, height: 20 })]
+    await act(async () => {
+      tableScroller.dispatchEvent(new Event('scroll'))
+    })
+    await flushAnimationFrames()
+
+    expect(threadOverlay('thread-1')?.style.left).toBe('100px')
+    expect(threadOverlay('thread-1')?.style.width).toBe('50px')
+
+    rangeRects = [domRect({ left: -100, top: 100, width: 60, height: 20 })]
+    await act(async () => {
+      tableScroller.dispatchEvent(new Event('scroll'))
+    })
+    await flushAnimationFrames()
+
+    expect(threadOverlay('thread-1')).toBeNull()
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top:')
+  })
+
   it('does not walk the rendered text once per comment overlay', async () => {
     annotationsMock.threads = [
       thread({ id: 'thread-1', range: { start: 3, end: 5 }, quote: '重点' }),

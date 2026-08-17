@@ -66,6 +66,7 @@ type MarkdownAnnotationOverlayRect = {
   readonly key: string
   readonly kind: 'thread' | 'pending'
   readonly threadId: string | null
+  readonly visible: boolean
   readonly top: number
   readonly left: number
   readonly width: number
@@ -378,8 +379,11 @@ function DriveMarkdownBody({
     }
     const observer = new ResizeObserver(scheduleMeasurement)
     observer.observe(root)
+    const tableScrollers = Array.from(root.querySelectorAll<HTMLElement>('[data-drive-markdown-table-scroll="true"]'))
+    tableScrollers.forEach((element) => element.addEventListener('scroll', scheduleMeasurement, { passive: true }))
     return () => {
       observer.disconnect()
+      tableScrollers.forEach((element) => element.removeEventListener('scroll', scheduleMeasurement))
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
   }, [measureAnnotationLayout])
@@ -752,7 +756,7 @@ function DriveMarkdownBody({
           <MarkdownImageFallbacks contentKey={annotated.html} rootRef={bodyRef} />
           {annotationOverlayRects.length > 0 ? (
             <div aria-hidden className='pointer-events-none absolute inset-0'>
-              {annotationOverlayRects.map((rect) => (
+              {annotationOverlayRects.filter((rect) => rect.visible).map((rect) => (
                 <div
                   key={rect.key}
                   data-drive-annotation-overlay-kind={rect.kind}
@@ -1093,17 +1097,45 @@ function measureRenderedTextRange(
   const rects = typeof domRange.getClientRects === 'function'
     ? Array.from(domRange.getClientRects())
     : [domRange.getBoundingClientRect()]
+  const clipRect = findMarkdownTableScrollClipRect(domRange, root)
   domRange.detach()
-  return removeContainerOverlayRects(rects.filter((rect) => isUsableOverlayRect(rect, rootRect)))
-    .map((rect) => ({
-      top: rect.top - rootRect.top,
-      left: rect.left - rootRect.left,
-      width: rect.width,
-      height: rect.height,
-    }))
+  const preciseRects = removeContainerOverlayRects(rects.filter((rect) => clipRect
+    ? rect.width > 2 && rect.height > 0
+    : isUsableOverlayRect(rect, rootRect)))
+  return preciseRects.map((rect) => {
+    const clipped = clipRect ? intersectOverlayRect(rect, clipRect) : rect
+    const visible = Boolean(clipped && isUsableOverlayRect(clipped, rootRect))
+    const measured = visible && clipped ? clipped : rect
+    return {
+      visible,
+      top: measured.top - rootRect.top,
+      left: measured.left - rootRect.left,
+      width: measured.width,
+      height: measured.height,
+    }
+  })
 }
 
-function isUsableOverlayRect(rect: DOMRect, rootRect: DOMRect): boolean {
+type OverlayClientRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>
+
+function findMarkdownTableScrollClipRect(range: Range, root: HTMLElement): DOMRect | null {
+  const ancestor = range.commonAncestorContainer
+  const element = ancestor instanceof Element ? ancestor : ancestor.parentElement
+  const tableScroller = element?.closest<HTMLElement>('[data-drive-markdown-table-scroll="true"]')
+  return tableScroller && root.contains(tableScroller) ? tableScroller.getBoundingClientRect() : null
+}
+
+function intersectOverlayRect(rect: OverlayClientRect, clipRect: OverlayClientRect): OverlayClientRect | null {
+  const left = Math.max(rect.left, clipRect.left)
+  const top = Math.max(rect.top, clipRect.top)
+  const right = Math.min(rect.right, clipRect.right)
+  const bottom = Math.min(rect.bottom, clipRect.bottom)
+  const width = right - left
+  const height = bottom - top
+  return width > 2 && height > 0 ? { left, top, right, bottom, width, height } : null
+}
+
+function isUsableOverlayRect(rect: OverlayClientRect, rootRect: OverlayClientRect): boolean {
   if (rect.width <= 2 || rect.height <= 0) return false
   if (rootRect.width <= 0 && rootRect.height <= 0) return true
   return rect.right >= rootRect.left
@@ -1112,7 +1144,7 @@ function isUsableOverlayRect(rect: DOMRect, rootRect: DOMRect): boolean {
     && rect.top <= rootRect.bottom
 }
 
-function removeContainerOverlayRects(rects: readonly DOMRect[]): readonly DOMRect[] {
+function removeContainerOverlayRects(rects: readonly OverlayClientRect[]): readonly OverlayClientRect[] {
   return rects.filter((rect, index) => {
     return !rects.some((other, otherIndex) => {
       return index !== otherIndex
@@ -1122,14 +1154,14 @@ function removeContainerOverlayRects(rects: readonly DOMRect[]): readonly DOMRec
   })
 }
 
-function containsOverlayRect(container: DOMRect, inner: DOMRect): boolean {
+function containsOverlayRect(container: OverlayClientRect, inner: OverlayClientRect): boolean {
   return inner.left >= container.left - 0.5
     && inner.right <= container.right + 0.5
     && inner.top >= container.top - 0.5
     && inner.bottom <= container.bottom + 0.5
 }
 
-function isMeaningfullyBroaderRect(container: DOMRect, inner: DOMRect): boolean {
+function isMeaningfullyBroaderRect(container: OverlayClientRect, inner: OverlayClientRect): boolean {
   const containerArea = container.width * container.height
   const innerArea = inner.width * inner.height
   return containerArea > innerArea * 1.2
@@ -1147,6 +1179,7 @@ function findOverlayThreadAtPoint(
   const x = clientX - rootRect.left
   const y = clientY - rootRect.top
   const hit = rects.find((rect) => rect.kind === 'thread'
+    && rect.visible
     && rect.threadId
     && x >= rect.left
     && x <= rect.left + rect.width
@@ -1274,6 +1307,7 @@ function sameOverlayRects(left: readonly MarkdownAnnotationOverlayRect[], right:
       && item.key === other.key
       && item.kind === other.kind
       && item.threadId === other.threadId
+      && item.visible === other.visible
       && item.top === other.top
       && item.left === other.left
       && item.width === other.width
