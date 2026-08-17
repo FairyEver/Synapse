@@ -35,6 +35,11 @@ export function MarkdownImageFallbacks({ contentKey, rootRef }: MarkdownImageFal
       if (fallbackByImage.has(image)) return
       const host = document.createElement('span')
       host.setAttribute('data-drive-markdown-image-fallback-host', 'true')
+      const imageId = image.getAttribute('data-drive-markdown-image-id')
+      if (imageId) host.setAttribute('data-drive-markdown-image-id', imageId)
+      host.tabIndex = 0
+      host.setAttribute('role', 'group')
+      host.setAttribute('aria-label', image.alt.trim() ? `图片评论目标：${image.alt.trim()}` : '图片评论目标')
       image.hidden = true
       image.removeAttribute('tabindex')
       image.removeAttribute('role')

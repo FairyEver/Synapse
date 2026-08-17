@@ -2199,20 +2199,25 @@ export class DriveService implements OnApplicationBootstrap {
     if (sourcePreview?.truncated) throw new PayloadTooLargeException("文件内容过大。")
     const sourceText = liveDocument?.sourceText ?? sourcePreview?.text ?? ""
     const storedProjection = await this.projections?.load(versionId) ?? null
+    const storedProjectionHasImages = storedProjection?.imageAnchorsVersion === 1
     const rendered = await renderDriveMarkdownFragment(sourceText, liveDocument
       ? {
-          projection: liveDocument.projectionSource === sourceText ? liveDocument.projection : null,
-          previousProjection: liveDocument.projectionSource === sourceText
+          projection: liveDocument.projectionSource === sourceText && liveDocument.projection.imageAnchorsVersion === 1
+            ? liveDocument.projection
+            : null,
+          previousProjection: liveDocument.projectionSource === sourceText && liveDocument.projection.imageAnchorsVersion === 1
             ? null
             : { source: liveDocument.projectionSource, projection: liveDocument.projection },
         }
       : {
-          projection: storedProjection,
-          previousProjection: storedProjection || !this.projections
-            ? null
+          projection: storedProjectionHasImages ? storedProjection : null,
+          previousProjection: storedProjection
+            ? { source: sourceText, projection: storedProjection }
+            : !this.projections
+              ? null
             : await this.projections.loadPrevious({ itemId: item.id, versionId }),
         })
-    if (!storedProjection) {
+    if (!storedProjectionHasImages) {
       await this.projections?.persist({ itemId: item.id, versionId, projection: rendered.projection })
     }
     const collaboration = await this.prisma.driveCollaborationDocument.findUnique({

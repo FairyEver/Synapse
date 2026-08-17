@@ -231,6 +231,35 @@ describe("ImageLightbox", () => {
     expect(onClose).toHaveBeenCalledOnce()
     expect(document.activeElement).toBe(openingElement)
   })
+
+  it("closes from the empty background without closing from the image or controls", async () => {
+    const onClose = vi.fn()
+    renderViewer(preview({
+      images: [
+        { src: "/first.png", alt: "第一张" },
+        { src: "/second.png", alt: "第二张" },
+      ],
+    }), onClose)
+    const viewport = imageViewport()
+
+    await dispatch(activeImage(), pointerEvent("pointerdown", 1, 400, 300))
+    await dispatch(viewport, pointerEvent("pointerup", 1, 400, 300))
+    await dispatch(viewport, new MouseEvent("click", { bubbles: true }))
+    await click(buttonByLabel("下一张图片"))
+    expect(onClose).not.toHaveBeenCalled()
+
+    await dispatch(viewport, pointerEvent("pointerdown", 2, 100, 100))
+    await dispatch(viewport, pointerEvent("pointermove", 2, 120, 100))
+    await dispatch(viewport, pointerEvent("pointerup", 2, 120, 100))
+    await dispatch(viewport, new MouseEvent("click", { bubbles: true, clientX: 120, clientY: 100 }))
+    expect(onClose).not.toHaveBeenCalled()
+
+    await dispatch(viewport, pointerEvent("pointerdown", 3, 100, 100))
+    await dispatch(viewport, pointerEvent("pointerup", 3, 100, 100))
+    await dispatch(viewport, new MouseEvent("click", { bubbles: true, clientX: 100, clientY: 100 }))
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(trigger)
+  })
 })
 
 function renderViewer(input = preview(), onClose = vi.fn()) {

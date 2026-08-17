@@ -933,13 +933,30 @@ export interface DriveLinkReadTextDto {
     readonly linkType: DriveLinkType
     readonly versionId?: string | null
   }
+  readonly markdownImages?: readonly DriveLinkMarkdownImageDto[]
 }
 
-export interface DriveLinkAnnotationTargetInput {
+export interface DriveLinkMarkdownImageDto {
+  readonly imageId: string
+  readonly index: number
+  readonly source: string
+  readonly alt: string
+  readonly title: string | null
+}
+
+export interface DriveLinkAnnotationTextTargetInput {
+  readonly kind?: never
   readonly exact: string
   readonly prefix?: string
   readonly suffix?: string
 }
+
+export interface DriveLinkAnnotationImageTargetInput {
+  readonly kind: "image"
+  readonly imageId: string
+}
+
+export type DriveLinkAnnotationTargetInput = DriveLinkAnnotationTextTargetInput | DriveLinkAnnotationImageTargetInput
 
 export interface DriveLinkAnnotationBaseInput extends DriveLinkResolveInput {
   readonly itemId?: string
@@ -977,12 +994,6 @@ export interface DriveLinkAnnotationCommentDeleteInput extends DriveLinkAnnotati
 
 export interface DriveLinkAnnotationThreadDeleteInput extends DriveLinkAnnotationBaseInput {
   readonly threadId: string
-}
-
-export interface DriveLinkAnnotationAnchorUpdateInput extends DriveLinkAnnotationBaseInput {
-  readonly threadId: string
-  readonly target: DriveLinkAnnotationTargetInput
-  readonly idempotencyKey: string
 }
 
 export interface DriveLinkMaterializeInput extends DriveLinkResolveInput {
@@ -1023,7 +1034,7 @@ export interface DriveLinkDownloadFileDto {
   readonly size: string
 }
 
-export type DriveAnnotationTargetKind = "textRange"
+export type DriveAnnotationTargetKind = "textRange" | "image"
 export type DriveAnnotationAnchorStatus = "attached" | "shifted" | "orphaned"
 export type DriveAnnotationPositionStatus = "attached" | "source_deleted" | "ambiguous" | "orphaned" | "unavailable"
 export type DriveAnnotationQuoteStatus = "exact" | "modified" | "deleted"
@@ -1056,14 +1067,33 @@ export interface DriveAnnotationTextQuoteSelector {
   readonly suffix: string
 }
 
-export interface DriveAnnotationSelectorsV2 {
+export interface DriveAnnotationTextSelectorsV2 {
   readonly schemaVersion: 2
+  readonly kind?: "textRange"
   readonly crdt?: DriveAnnotationCrdtRangeSelector
   readonly semantic?: DriveAnnotationSemanticRangeSelector
   readonly position: DriveAnnotationTextPositionSelector
   readonly renderedPosition?: DriveAnnotationTextPositionSelector
   readonly quote: DriveAnnotationTextQuoteSelector
 }
+
+export interface DriveAnnotationImageSelectorsV2 {
+  readonly schemaVersion: 2
+  readonly kind: "image"
+  readonly crdt?: DriveAnnotationCrdtRangeSelector
+  readonly position: DriveAnnotationTextPositionSelector
+  readonly semantic: {
+    readonly blockId: string
+    readonly imageIndex: number
+    readonly headingPath: readonly string[]
+  }
+  readonly identity: {
+    readonly imageId: string
+    readonly resourceKey: string
+  }
+}
+
+export type DriveAnnotationSelectorsV2 = DriveAnnotationTextSelectorsV2 | DriveAnnotationImageSelectorsV2
 
 export interface DriveAnnotationAnchorDto {
   readonly schemaVersion: 2
@@ -1109,7 +1139,30 @@ export interface DriveAnnotationTextRangeTargetV1 {
   }
 }
 
-export type DriveAnnotationTargetDto = DriveAnnotationTextRangeTargetV1
+export interface DriveAnnotationImageTargetV1 {
+  readonly schemaVersion: 1
+  readonly kind: "image"
+  readonly surface: "markdownRenderedImage"
+  readonly imageId: string
+  readonly resourceKey: string
+  readonly source: {
+    readonly startOffset: number
+    readonly endOffset: number
+  }
+  readonly snapshot: {
+    readonly src: string
+    readonly alt: string
+    readonly title: string | null
+  }
+  readonly blockHint: {
+    readonly blockId: string
+    readonly blockIndex: number
+    readonly imageIndex: number
+    readonly headingPath: readonly string[]
+  }
+}
+
+export type DriveAnnotationTargetDto = DriveAnnotationTextRangeTargetV1 | DriveAnnotationImageTargetV1
 
 export interface DriveAnnotationCommentDto {
   readonly id: string
@@ -1156,14 +1209,6 @@ export interface DriveAnnotationCreateInput {
   readonly body: string
 }
 
-export interface DriveAnnotationAnchorUpdateInput {
-  readonly baseVersionId: string
-  readonly epoch?: string | null
-  readonly stateVector?: string | null
-  readonly selectors: DriveAnnotationSelectorsV2
-  readonly idempotencyKey: string
-}
-
 export interface DriveMarkdownProjectionBlockDto {
   readonly blockId: string
   readonly type: string
@@ -1186,12 +1231,30 @@ export interface DriveMarkdownProjectionSegmentDto {
   readonly mapping: "identity" | "markdown_syntax" | "generated"
 }
 
+export interface DriveMarkdownProjectionImageDto {
+  readonly imageId: string
+  readonly segmentId: string
+  readonly blockId: string
+  readonly imageIndex: number
+  readonly documentIndex: number
+  readonly sourceStart: number
+  readonly sourceEnd: number
+  readonly renderedStart: number
+  readonly renderedEnd: number
+  readonly source: string
+  readonly resourceKey: string
+  readonly alt: string
+  readonly title: string | null
+}
+
 export interface DriveMarkdownProjectionDto {
   readonly schemaVersion: 1
   readonly parserVersion: string
   readonly sourceSha256: string
   readonly blocks: readonly DriveMarkdownProjectionBlockDto[]
   readonly segments: readonly DriveMarkdownProjectionSegmentDto[]
+  readonly imageAnchorsVersion?: 1
+  readonly images?: readonly DriveMarkdownProjectionImageDto[]
 }
 
 export const DRIVE_COLLABORATION_PROTOCOL_VERSION = 1

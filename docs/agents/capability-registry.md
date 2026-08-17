@@ -86,8 +86,8 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 | `automation` | 14 | 14 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
-| `drive` | 64 | 64 |
-| 合计 | 226 | 224 |
+| `drive` | 63 | 63 |
+| 合计 | 225 | 223 |
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -100,7 +100,7 @@ Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问�
 
 Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。
 
-Drive 分享评论通过 7 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论、删除线程和重关联锚点。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下的 `.md` 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
+Drive 分享评论通过 6 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论和删除线程。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下的 `.md` 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
 
 ## 同步硬规则
 

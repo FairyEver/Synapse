@@ -75,7 +75,6 @@ app_drive_link_annotation_comment_create
 app_drive_link_annotation_comment_update
 app_drive_link_annotation_comment_delete
 app_drive_link_annotation_thread_delete
-app_drive_link_annotation_anchor_update
 app_drive_link_materialize
 app_drive_link_download_file
 ```
@@ -203,11 +202,20 @@ Output shape:
   "source": {
     "linkType": "share",
     "versionId": "optional"
-  }
+  },
+  "markdownImages": [
+    {
+      "imageId": "mdimg_...",
+      "index": 1,
+      "source": "./images/diagram.png",
+      "alt": "架构图",
+      "title": null
+    }
+  ]
 }
 ```
 
-This tool must reject binary and non-previewable files with a clear message suggesting `app_drive_link_download_file`.
+This tool must reject binary and non-previewable files with a clear message suggesting `app_drive_link_download_file`. A complete, untruncated Markdown result includes `source.versionId` and `markdownImages`; non-Markdown and truncated results omit `markdownImages`.
 
 ### `app_drive_link_materialize`
 
@@ -462,7 +470,7 @@ If the user asks to manage their own Drive files, use existing drive_* owner too
 Prefer resolve -> list -> read_text, and materialize only when local files are useful.
 ```
 
-Annotation tools accept the same URL/password/item/path selection model, with `itemId` taking precedence. Thread creation and reassociation accept only `{ exact, prefix?, suffix? }`; the server reads the current Markdown projection/version and generates V2 selectors. Missing and ambiguous targets are distinct errors and must never be guessed. Passwords and comment bodies are excluded from audits. Deletion is an ordinary mutation, while Agent guidance still requires an explicitly identified target.
+Annotation tools accept the same URL/password/item/path selection model, with `itemId` taking precedence. Text thread creation accepts `{ exact, prefix?, suffix? }`. Whole-image creation accepts `{ kind: "image", imageId }`; Agents must first obtain the current ID from a complete `read_text.markdownImages` result. The server reads the current Markdown projection/version and generates V2 selectors. Missing, stale, and ambiguous targets are distinct errors and must never be guessed. No annotation target exposes manual reassociation. Passwords and comment bodies are excluded from audits. Deletion is an ordinary mutation, while Agent guidance still requires an explicitly identified target.
 
 ## Testing
 

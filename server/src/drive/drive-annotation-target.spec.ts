@@ -30,7 +30,27 @@ describe("drive annotation target helpers", () => {
     })
 
     expect(parsed.body).toBe("Looks good")
-    expect(parsed.target.range).toEqual({ start: 2, end: 5 })
+    expect(parsed.target.kind).toBe("textRange")
+    if (parsed.target.kind === "textRange") expect(parsed.target.range).toEqual({ start: 2, end: 5 })
+  })
+
+  it("validates image create bodies", () => {
+    const parsed = parseDriveAnnotationCreateBody({
+      targetKind: "image",
+      target: {
+        schemaVersion: 1,
+        kind: "image",
+        surface: "markdownRenderedImage",
+        imageId: "mdimg_1",
+        resourceKey: "file:asset_1",
+        source: { startOffset: 2, endOffset: 18 },
+        snapshot: { src: "/files/asset_1", alt: "", title: null },
+        blockHint: { blockId: "block-1", blockIndex: 0, imageIndex: 0, headingPath: [] },
+      },
+      body: "图片评论",
+    })
+
+    expect(parsed).toMatchObject({ targetKind: "image", target: { imageId: "mdimg_1" }, body: "图片评论" })
   })
 
   it("rejects empty comments and collapsed ranges in first-version UI input", () => {

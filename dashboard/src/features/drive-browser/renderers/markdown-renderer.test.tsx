@@ -3,7 +3,7 @@
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DriveDocumentImageImportResult, DriveDocumentImageSource, DriveDocumentImageSourcesDto, DriveMarkdownOutlineItemDto } from '@synapse/shared'
+import type { DriveAnnotationThreadDto, DriveDocumentImageImportResult, DriveDocumentImageSource, DriveDocumentImageSourcesDto, DriveMarkdownOutlineItemDto, DriveMarkdownProjectionDto } from '@synapse/shared'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { useAuthStore } from '@/stores/auth-store'
 import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
@@ -161,7 +161,8 @@ describe('DriveMarkdownRenderer', () => {
   it('replaces a failed markdown image with the shared fallback component', async () => {
     renderMarkdown({
       previewData: preview({
-        html: '<p><img src="/missing.png" alt="客户管理"></p>',
+        html: '<p><img data-drive-markdown-image-id="mdimg_1" src="/missing.png" alt="客户管理"></p>',
+        markdownProjection: imageProjection(),
       }),
     })
 
@@ -173,6 +174,7 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     const fallback = document.querySelector<HTMLElement>('[data-drive-markdown-image-fallback="true"]')
+    const fallbackHost = document.querySelector<HTMLElement>('[data-drive-markdown-image-fallback-host="true"]')
     expect(image.hidden).toBe(true)
     expect(image.hasAttribute('role')).toBe(false)
     expect(fallback?.getAttribute('role')).toBe('img')
@@ -180,6 +182,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(fallback?.textContent).toContain('客户管理')
     expect(fallback?.textContent).toContain('图片无法显示')
     expect(fallback?.className).toContain('bg-muted/40')
+    expect(fallbackHost?.dataset.driveMarkdownImageId).toBe('mdimg_1')
+    expect(fallbackHost?.tabIndex).toBe(0)
   })
 
   it('restores the share-scoped image url without converting it to an owner url', () => {
@@ -248,6 +252,85 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     expect(document.querySelector('[data-image-lightbox] img')?.getAttribute('src')).toBe('/image.png')
+  })
+
+  it('opens an image comment draft from the hover action without opening the lightbox', async () => {
+    mockImageCommentRects()
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1" alt="示意图"></p>',
+        markdownProjection: imageProjection(),
+      }),
+      edit: editable(),
+      annotationContext: { context: 'owner', itemId: 'item-1' },
+    })
+    await setPreviewWidth(1200)
+    triggerAllResizeObservers()
+    await flushAnimationFrames()
+    const image = document.querySelector<HTMLImageElement>('[data-drive-markdown-image-id="mdimg_1"]')
+    if (!image) throw new Error('Missing projected image')
+
+    await act(async () => image.dispatchEvent(new Event('pointerover', { bubbles: true })))
+    await click(buttonWithText('添加评论'))
+
+    expect(document.querySelector('[data-image-lightbox]')).toBeNull()
+    expect(textarea()).toBeTruthy()
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')?.textContent).toContain('示意图')
+
+    await inputValue(textarea(), '检查这张图')
+    await click(buttonWithText('评论'))
+    expect(annotationsMock.createThread).toHaveBeenCalledWith(expect.objectContaining({
+      targetKind: 'image',
+      target: expect.objectContaining({ kind: 'image', imageId: 'mdimg_1', resourceKey: 'file:asset_1' }),
+      body: '检查这张图',
+    }))
+  })
+
+  it('shows the image comment action when a projected image receives keyboard focus', async () => {
+    mockImageCommentRects()
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1" alt="示意图"></p>',
+        markdownProjection: imageProjection(),
+      }),
+      edit: editable(),
+      annotationContext: { context: 'owner', itemId: 'item-1' },
+    })
+    await setPreviewWidth(1200)
+    triggerAllResizeObservers()
+    await flushAnimationFrames()
+    const image = document.querySelector<HTMLImageElement>('[data-drive-markdown-image-id="mdimg_1"]')
+    if (!image) throw new Error('Missing projected image')
+
+    await act(async () => image.focus())
+
+    expect(buttonWithText('添加评论')).toBeTruthy()
+  })
+
+  it('shows one persistent image marker counting threads and keeps the current same-image thread', async () => {
+    mockImageCommentRects()
+    annotationsMock.threads = [
+      imageThread('thread-image-1', '2026-06-21T00:00:00.000Z'),
+      imageThread('thread-image-2', '2026-06-21T01:00:00.000Z'),
+    ]
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1" alt="示意图"></p>',
+        markdownProjection: imageProjection(),
+      }),
+      edit: editable(),
+      annotationContext: { context: 'owner', itemId: 'item-1' },
+    })
+    await setPreviewWidth(1200)
+    triggerAllResizeObservers()
+    await flushAnimationFrames()
+
+    const marker = document.querySelector<HTMLButtonElement>('[data-drive-markdown-image-comment-count="2"]')
+    expect(marker?.textContent).toBe('2')
+    if (!marker) throw new Error('Missing image comment marker')
+    await click(marker)
+    expect(document.querySelector('[data-drive-markdown-image-active="true"]')).not.toBeNull()
+    expect(document.querySelector('[data-image-lightbox]')).toBeNull()
   })
 
   it('opens markdown images as a document-ordered preview group', async () => {
@@ -1520,6 +1603,15 @@ function configureMarkdownDocumentScroller() {
   })
 }
 
+function mockImageCommentRects() {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.hasAttribute('data-drive-markdown-image-id')) {
+      return domRect({ left: 100, top: 120, width: 240, height: 180 })
+    }
+    return domRect({ left: 0, top: 0, width: 800, height: 600 })
+  })
+}
+
 function dispatchPointerUpOnMarkdownBody() {
   document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new Event('pointerup', { bubbles: true }))
 }
@@ -1563,11 +1655,13 @@ function preview({
   html = '<p>这是 <strong>重点</strong> 内容</p>',
   text = '这是 重点 内容',
   relativeImages = [],
+  markdownProjection,
 }: {
   readonly outline?: DriveMarkdownOutlineItemDto[]
   readonly html?: string
   readonly text?: string
   readonly relativeImages?: readonly { readonly src: string; readonly resolvedUrl: string | null }[]
+  readonly markdownProjection?: DriveMarkdownProjectionDto
 } = {}) {
   return {
     kind: 'markdown' as const,
@@ -1578,6 +1672,7 @@ function preview({
     imageUrl: null,
     visitUrl: null,
     relativeImages,
+    markdownProjection,
   }
 }
 
@@ -1636,9 +1731,79 @@ function thread({
   }
 }
 
+function imageProjection(): DriveMarkdownProjectionDto {
+  return {
+    schemaVersion: 1,
+    parserVersion: 'test',
+    sourceSha256: 'hash',
+    blocks: [{
+      blockId: 'block-image',
+      type: 'paragraph',
+      parentBlockId: null,
+      headingPath: [],
+      sourceStart: 0,
+      sourceEnd: 24,
+      renderedStart: 0,
+      renderedEnd: 3,
+      textFingerprint: 'hash',
+    }],
+    segments: [],
+    imageAnchorsVersion: 1,
+    images: [{
+      imageId: 'mdimg_1',
+      segmentId: 'segment-image',
+      blockId: 'block-image',
+      imageIndex: 0,
+      documentIndex: 0,
+      sourceStart: 0,
+      sourceEnd: 24,
+      renderedStart: 0,
+      renderedEnd: 3,
+      source: '/files/asset_1',
+      resourceKey: 'file:asset_1',
+      alt: '示意图',
+      title: null,
+    }],
+  }
+}
+
+function imageThread(id = 'thread-image', createdAt = '2026-06-21T00:00:00.000Z'): DriveAnnotationThreadDto {
+  return {
+    ...thread({ id, createdAt }),
+    targetKind: 'image',
+    target: {
+      schemaVersion: 1,
+      kind: 'image',
+      surface: 'markdownRenderedImage',
+      imageId: 'mdimg_1',
+      resourceKey: 'file:asset_1',
+      source: { startOffset: 0, endOffset: 24 },
+      snapshot: { src: '/files/asset_1', alt: '示意图', title: null },
+      blockHint: { blockId: 'block-image', blockIndex: 0, imageIndex: 0, headingPath: [] },
+    },
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: 'version-1',
+      selectors: {
+        schemaVersion: 2,
+        kind: 'image',
+        position: { start: 0, end: 24 },
+        semantic: { blockId: 'block-image', imageIndex: 0, headingPath: [] },
+        identity: { imageId: 'mdimg_1', resourceKey: 'file:asset_1' },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 0, end: 24 },
+      resolvedRenderedRange: null,
+      confidence: 1,
+      lastResolvedVersionId: 'version-1',
+    },
+  }
+}
+
 function createAnnotationsMock() {
   return {
-    threads: [] as ReturnType<typeof thread>[],
+    threads: [] as DriveAnnotationThreadDto[],
     loading: false,
     error: null as string | null,
     refresh: vi.fn(async () => undefined),
@@ -1830,6 +1995,10 @@ function triggerMarkdownResize() {
   const observer = markdownResizeObserver()
   if (!observer) throw new Error('Missing ResizeObserver')
   observer.callback([], observer as unknown as ResizeObserver)
+}
+
+function triggerAllResizeObservers() {
+  for (const observer of resizeObservers) observer.callback([], observer as unknown as ResizeObserver)
 }
 
 async function setPreviewWidth(width: number) {

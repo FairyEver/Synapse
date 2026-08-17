@@ -13,7 +13,6 @@ import {
   type DriveBrowserSnapshotDto,
   type DriveLinkEntryDto,
   type DriveLinkDownloadFileInput,
-  type DriveLinkAnnotationAnchorUpdateInput,
   type DriveLinkAnnotationCommentCreateInput,
   type DriveLinkAnnotationCommentDeleteInput,
   type DriveLinkAnnotationCommentUpdateInput,
@@ -258,18 +257,6 @@ export class DriveLinkIntakeService {
     })
   }
 
-  async updateAnnotationAnchor(input: DriveLinkAnnotationAnchorUpdateInput, context: DriveLinkAnnotationContext) {
-    const target = await this.resolveAnnotationShareTarget(input, context.actorUserId)
-    return this.deps.annotations.updateShareAnchorByQuote({
-      ...target,
-      actorUserId: context.actorUserId,
-      threadId: input.threadId,
-      target: input.target,
-      idempotencyKey: input.idempotencyKey,
-      auditContext: context.auditContext,
-    })
-  }
-
   async openDownload(input: DriveLinkDownloadFileInput): Promise<{
     readonly stream: NodeJS.ReadableStream
     readonly fileName: string
@@ -402,13 +389,28 @@ export class DriveLinkIntakeService {
       throw new BadRequestException("该链接不是可读取的文本内容。")
     }
     const text = truncateUtf8(preview.text, input.maxBytes ?? DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES)
+    const truncated = preview.truncated || text.truncated
     return {
       path: snapshot.current.name,
       mimeType: snapshot.current.mimeType,
       previewKind: preview.kind,
       text: text.text,
-      truncated: preview.truncated || text.truncated,
-      source: { linkType: parsed.itemId ? "share_item" : "share" },
+      truncated,
+      source: {
+        linkType: parsed.itemId ? "share_item" : "share",
+        versionId: snapshot.edit?.currentVersionId ?? null,
+      },
+      ...(!truncated && preview.kind === "markdown" && preview.markdownProjection?.images
+        ? {
+            markdownImages: preview.markdownProjection.images.map((image) => ({
+              imageId: image.imageId,
+              index: image.documentIndex + 1,
+              source: image.source,
+              alt: image.alt,
+              title: image.title,
+            })),
+          }
+        : {}),
     }
   }
 

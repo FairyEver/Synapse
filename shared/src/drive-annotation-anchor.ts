@@ -1,7 +1,8 @@
 import type {
+  DriveAnnotationImageSelectorsV2,
   DriveAnnotationPositionStatus,
   DriveAnnotationQuoteStatus,
-  DriveAnnotationSelectorsV2,
+  DriveAnnotationTextSelectorsV2,
   DriveAnnotationTextPositionSelector,
   DriveMarkdownProjectionDto,
 } from "./drive.js"
@@ -15,7 +16,7 @@ export interface DriveAnnotationAnchorResolution {
 }
 
 export function resolveDriveAnnotationAnchor(input: {
-  readonly selectors: DriveAnnotationSelectorsV2
+  readonly selectors: DriveAnnotationTextSelectorsV2
   readonly projection: DriveMarkdownProjectionDto | null
   readonly sourceText: string
   readonly renderedText: string
@@ -104,6 +105,63 @@ export function resolveDriveAnnotationAnchor(input: {
     sourceRange: null,
     renderedRange: null,
     confidence: 0,
+  }
+}
+
+export function resolveDriveImageAnnotationAnchor(input: {
+  readonly selectors: DriveAnnotationImageSelectorsV2
+  readonly projection: DriveMarkdownProjectionDto | null
+  readonly crdtSourceRange?: DriveAnnotationTextPositionSelector | null
+  readonly diffSourceRange?: DriveAnnotationTextPositionSelector | null
+}): DriveAnnotationAnchorResolution {
+  const images = input.projection?.images
+  if (!input.projection || !images) return unavailableResolution()
+  const resourceKey = input.selectors.identity.resourceKey
+
+  const positionedCandidates = [input.selectors.position, input.crdtSourceRange, input.diffSourceRange]
+  for (const range of positionedCandidates) {
+    if (!range) continue
+    const match = images.find((image) => image.sourceStart === range.start
+      && image.sourceEnd === range.end
+      && image.resourceKey === resourceKey)
+    if (match) return attachedImageResolution(match.sourceStart, match.sourceEnd, range === input.selectors.position ? 1 : 0.96)
+  }
+
+  const semanticMatch = images.find((image) => image.blockId === input.selectors.semantic.blockId
+    && image.imageIndex === input.selectors.semantic.imageIndex
+    && image.resourceKey === resourceKey)
+  if (semanticMatch) return attachedImageResolution(semanticMatch.sourceStart, semanticMatch.sourceEnd, 0.92)
+
+  const identityMatches = images.filter((image) => image.resourceKey === resourceKey)
+  if (identityMatches.length === 1) {
+    const match = identityMatches[0]
+    return attachedImageResolution(match.sourceStart, match.sourceEnd, 0.86)
+  }
+  if (identityMatches.length > 1) {
+    return {
+      positionStatus: "ambiguous",
+      quoteStatus: "deleted",
+      sourceRange: null,
+      renderedRange: null,
+      confidence: 0,
+    }
+  }
+  return {
+    positionStatus: "orphaned",
+    quoteStatus: "deleted",
+    sourceRange: null,
+    renderedRange: null,
+    confidence: 0,
+  }
+}
+
+function attachedImageResolution(start: number, end: number, confidence: number): DriveAnnotationAnchorResolution {
+  return {
+    positionStatus: "attached",
+    quoteStatus: "exact",
+    sourceRange: { start, end },
+    renderedRange: null,
+    confidence,
   }
 }
 
@@ -203,7 +261,7 @@ function preservesQuoteContext(
 }
 
 function semanticCandidateRange(
-  selectors: DriveAnnotationSelectorsV2,
+  selectors: DriveAnnotationTextSelectorsV2,
   projection: DriveMarkdownProjectionDto,
 ): { readonly sourceRange: DriveAnnotationTextPositionSelector; readonly renderedRange: DriveAnnotationTextPositionSelector } | null {
   const semantic = selectors.semantic

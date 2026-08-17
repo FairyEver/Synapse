@@ -210,39 +210,43 @@ describe("DriveAnnotationService", () => {
     expect(prisma.driveAnnotationThread.create).not.toHaveBeenCalled()
   })
 
-  it("reassociates quote anchors for the thread creator with a stable idempotency key", async () => {
-    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Alpha Note Omega"))
+  it("creates an image annotation from a current projection image id", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("", "version-1", true))
+    prisma.driveAnnotationThread.findFirst.mockResolvedValueOnce(null)
 
-    await service.updateShareAnchorByQuote({
+    await service.createShareAnnotationByQuote({
       actorUserId: "reader-1",
       shareId: "share-1",
       itemId: "item-1",
-      threadId: "thread-1",
-      target: { exact: "Note" },
-      idempotencyKey: "anchor-key-1",
+      target: { kind: "image", imageId: "mdimg_1" },
+      body: "图片评论",
+      idempotencyKey: "image-thread-key-1",
     })
 
-    expect(prisma.driveAnnotationAnchor.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { threadId: "thread-1" },
-      update: expect.objectContaining({
-        idempotencyKey: "anchor-key-1",
-        resolvedRenderedStart: 6,
-        resolvedRenderedEnd: 10,
+    expect(prisma.driveAnnotationThread.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        targetKind: "image",
+        target: expect.objectContaining({ imageId: "mdimg_1", resourceKey: "file:asset_1" }),
+        anchor: { create: expect.objectContaining({
+          selectors: expect.objectContaining({ kind: "image", identity: { imageId: "mdimg_1", resourceKey: "file:asset_1" } }),
+          resolvedRenderedStart: null,
+          resolvedRenderedEnd: null,
+        }) },
       }),
     }))
   })
 
-  it("rejects quote anchor reassociation by another share viewer", async () => {
-    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("Note"))
+  it("rejects an expired image id without guessing by position", async () => {
+    drive.resolveAnnotationDocument.mockResolvedValue(annotationDocument("", "version-1", true))
 
-    await expect(service.updateShareAnchorByQuote({
-      actorUserId: "reader-2",
+    await expect(service.createShareAnnotationByQuote({
+      actorUserId: "reader-1",
       shareId: "share-1",
       itemId: "item-1",
-      threadId: "thread-1",
-      target: { exact: "Note" },
-      idempotencyKey: "anchor-key-2",
-    })).rejects.toBeInstanceOf(ForbiddenException)
+      target: { kind: "image", imageId: "mdimg_stale" },
+      body: "图片评论",
+      idempotencyKey: "image-thread-key-2",
+    })).rejects.toMatchObject({ response: expect.objectContaining({ code: "DRIVE_ANNOTATION_TARGET_NOT_FOUND" }) })
   })
 
   it("rejects owner annotation writes when the item is no longer active", async () => {
@@ -1005,7 +1009,7 @@ function createDriveServiceMock() {
   }
 }
 
-function annotationDocument(text: string, versionId = "version-1") {
+function annotationDocument(text: string, versionId = "version-1", withImage = false) {
   const length = Array.from(text).length
   return {
     versionId,
@@ -1036,6 +1040,24 @@ function annotationDocument(text: string, versionId = "version-1") {
         renderedEnd: length,
         mapping: "identity" as const,
       }],
+      ...(withImage ? {
+        imageAnchorsVersion: 1 as const,
+        images: [{
+          imageId: "mdimg_1",
+          segmentId: "segment-image-1",
+          blockId: "block-1",
+          imageIndex: 0,
+          documentIndex: 0,
+          sourceStart: 0,
+          sourceEnd: 18,
+          renderedStart: 0,
+          renderedEnd: 0,
+          source: "/files/asset_1",
+          resourceKey: "file:asset_1",
+          alt: "",
+          title: null,
+        }],
+      } : {}),
     },
   }
 }

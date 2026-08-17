@@ -262,12 +262,14 @@ Input:
 
 Use for Markdown, HTML source, JSON, and text, including public TXT, MD, and CSV assets. PDF, Office, and other binary files should use `app_drive_link_download_file`.
 
+For a complete, untruncated Markdown response, `markdownImages` contains each authored image's current `imageId`, 1-based document `index`, `source`, `alt`, and `title`. The field is omitted for truncated or non-Markdown content. Use a current `imageId` to create a whole-image comment.
+
 For `/share` children, prefer `itemId` from `app_drive_link_list`; `path` is primarily for `/sites` assets and share fallback lookup.
 Protected `/share` and `/sites` links require `password`; without it, this tool reports that the link needs a password rather than treating the link as missing.
 
 ### Shared Markdown annotation tools
 
-All seven tools accept:
+All six tools accept:
 
 - `url` required: current Synapse `/share/...` URL.
 - `password` optional: used only for this request and never returned.
@@ -276,7 +278,7 @@ All seven tools accept:
 
 They reject `/sites`, `/files`, folders, and files whose name is not `.md`. They do not expose document editing, presence, or collaboration-room controls.
 
-All list and mutation results redact author email addresses as `author.email: null`. In every returned thread, `anchor` is the current authoritative position. The legacy `target` field preserves the original quote snapshot for compatibility and can differ after reassociation; use `anchor.selectors`, `anchor.positionStatus`, and `anchor.quoteStatus` to inspect the current anchor.
+All list and mutation results redact author email addresses as `author.email: null`. In every returned thread, `anchor` is the current authoritative position and `target` preserves the original text or image snapshot. Use `anchor.selectors`, `anchor.positionStatus`, and `anchor.quoteStatus` to inspect the current anchor. There is no manual reassociation operation.
 
 ### `app_drive_link_annotation_thread_list`
 
@@ -286,11 +288,11 @@ Returns `{ itemId, canComment, threads }`. `threads` includes every visible cros
 
 Additional input:
 
-- `target` required: `{ exact, prefix?, suffix? }` visible text.
+- `target` required: either `{ exact, prefix?, suffix? }` visible text, or `{ kind: "image", imageId }` for one whole Markdown image. Obtain `imageId` from a fresh `app_drive_link_read_text` response.
 - `body` required: initial comment, at most 4000 characters.
 - `idempotencyKey` required: stable 8-128 character key; reuse it when retrying the same creation.
 
-The server resolves the current Markdown projection and version. Missing text returns `DRIVE_ANNOTATION_TARGET_NOT_FOUND`; unresolved repetition returns `DRIVE_ANNOTATION_TARGET_AMBIGUOUS`. Add visible `prefix` or `suffix` context instead of guessing.
+The server resolves the current Markdown projection and version. Missing text or a stale image id returns `DRIVE_ANNOTATION_TARGET_NOT_FOUND`; unresolved text repetition returns `DRIVE_ANNOTATION_TARGET_AMBIGUOUS`. Add visible `prefix` or `suffix` context for text instead of guessing. Image comments cover the whole image only; point and region selection are not supported.
 
 ### `app_drive_link_annotation_comment_create`
 
@@ -307,10 +309,6 @@ Additional input: `commentId`. The author or file owner can delete the selected 
 ### `app_drive_link_annotation_thread_delete`
 
 Additional input: `threadId`. The file owner can delete any thread; the thread creator can delete it only when all visible comments belong to that creator. Call only when the user explicitly identifies the thread to delete.
-
-### `app_drive_link_annotation_anchor_update`
-
-Additional input: `threadId`, `target: { exact, prefix?, suffix? }`, and stable `idempotencyKey`. Only the thread creator or file owner can reassociate the anchor. Target resolution uses the same missing/ambiguous behavior as thread creation. Read the returned `anchor` for the new current position; the compatibility `target` remains the original quote snapshot.
 
 ### `app_drive_link_materialize`
 

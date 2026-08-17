@@ -82,7 +82,6 @@ export function MarkdownCommentsRail({
   onReply,
   onUpdateComment,
   onDeleteComment,
-  onStartReassociate,
   anchorLayerRef,
   onAnchoredHeightChange,
   onAnchoredWheel,
@@ -101,7 +100,6 @@ export function MarkdownCommentsRail({
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
-  readonly onStartReassociate?: (threadId: string) => void
   readonly anchorLayerRef?: (element: HTMLDivElement | null) => void
   readonly onAnchoredHeightChange?: (height: number) => void
   readonly onAnchoredWheel?: (event: WheelEvent) => void
@@ -178,7 +176,6 @@ export function MarkdownCommentsRail({
                   onReply={onReply}
                   onUpdateComment={onUpdateComment}
                   onDeleteComment={onDeleteComment}
-                  onStartReassociate={onStartReassociate}
                 />
               </div>
             ))}
@@ -228,7 +225,6 @@ export function MarkdownCommentsRail({
                       onReply={onReply}
                       onUpdateComment={onUpdateComment}
                       onDeleteComment={onDeleteComment}
-                      onStartReassociate={onStartReassociate}
                     />
                   </div>
                 ))}
@@ -268,7 +264,6 @@ export function MarkdownCommentsRail({
                       onReply={onReply}
                       onUpdateComment={onUpdateComment}
                       onDeleteComment={onDeleteComment}
-                      onStartReassociate={onStartReassociate}
                     />
                   ) : <CommentDraftCard draft={item.draft} compact={false} />}
                 </div>
@@ -382,7 +377,6 @@ function ThreadView({
   onReply,
   onUpdateComment,
   onDeleteComment,
-  onStartReassociate,
 }: {
   readonly thread: DriveAnnotationThreadDto
   readonly active: boolean
@@ -392,7 +386,6 @@ function ThreadView({
   readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
   readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
-  readonly onStartReassociate?: (threadId: string) => void
 }) {
   const [composer, setComposer] = useState<ThreadComposerState>(() => active
     ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
@@ -502,11 +495,6 @@ function ThreadView({
         {thread.anchorStatus === 'orphaned' ? (
           <div className='ml-2.5 flex flex-wrap items-center gap-1'>
             <span className='text-xs text-muted-foreground'>{annotationPositionLabel(thread)}</span>
-            {canReply && onStartReassociate ? (
-              <Button type='button' variant='ghost' size='sm' className='h-7 px-2 text-xs' onClick={() => onStartReassociate(thread.id)}>
-                重新关联
-              </Button>
-            ) : null}
           </div>
         ) : null}
       </div>
@@ -565,6 +553,7 @@ function ThreadView({
 }
 
 function annotationPositionLabel(thread: DriveAnnotationThreadDto): string {
+  if (thread.targetKind === 'image') return '图片已替换或删除'
   if (thread.anchor?.positionStatus === 'source_deleted') return '原文已删除'
   if (thread.anchor?.positionStatus === 'ambiguous') return '位置不明确'
   if (thread.anchor?.positionStatus === 'unavailable') return '暂无法定位'
@@ -845,6 +834,13 @@ function hasVisibleDescendant(commentId: string, comments: readonly DriveAnnotat
 }
 
 function annotationQuoteExcerpt(thread: DriveAnnotationThreadDto): string {
+  if (thread.target.kind === 'image') {
+    const alt = thread.target.snapshot.alt.trim()
+    if (alt) return alt
+    const source = thread.target.snapshot.src.split(/[?#]/u)[0] ?? ''
+    const fileName = source.split(/[\\/]/u).at(-1)?.trim()
+    return fileName || '图片'
+  }
   return thread.target.quote.exact.replace(/\s+/gu, ' ').trim()
 }
 

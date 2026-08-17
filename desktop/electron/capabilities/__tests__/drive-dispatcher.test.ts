@@ -107,7 +107,6 @@ describe("createDriveCapabilityDispatcher", () => {
       "app_drive_link_annotation_comment_update",
       "app_drive_link_annotation_comment_delete",
       "app_drive_link_annotation_thread_delete",
-      "app_drive_link_annotation_anchor_update",
       "app_drive_link_materialize",
       "app_drive_link_download_file",
       "app_drive_folder_zip_create",
@@ -417,7 +416,6 @@ describe("createDriveCapabilityDispatcher", () => {
     const updateDriveLinkAnnotationComment = vi.fn(async () => ({ id: "comment-2" }))
     const deleteDriveLinkAnnotationComment = vi.fn(async () => ({ ok: true as const }))
     const deleteDriveLinkAnnotationThread = vi.fn(async () => ({ ok: true as const }))
-    const updateDriveLinkAnnotationAnchor = vi.fn(async () => ({ id: "thread-1" }))
     const accountService = createAccountService({
       listDriveLinkAnnotationThreads,
       createDriveLinkAnnotationThread,
@@ -425,7 +423,6 @@ describe("createDriveCapabilityDispatcher", () => {
       updateDriveLinkAnnotationComment,
       deleteDriveLinkAnnotationComment,
       deleteDriveLinkAnnotationThread,
-      updateDriveLinkAnnotationAnchor,
     })
     const auditSink = createAuditSink()
     const dispatcher = createDriveCapabilityDispatcher({ accountService, auditSink })
@@ -438,6 +435,12 @@ describe("createDriveCapabilityDispatcher", () => {
       target: { exact: " 可见原文 ", prefix: " 前文 " },
       body: "private initial body",
       idempotencyKey: "thread-key-1",
+    }, { source: "mcp-stdio" })
+    await dispatcher.dispatch("app.drive.link.annotation.thread.create", {
+      ...base,
+      target: { kind: "image", imageId: "mdimg_1" },
+      body: "private image body",
+      idempotencyKey: "thread-key-image-1",
     }, { source: "mcp-stdio" })
     await dispatcher.dispatch("app.drive.link.annotation.comment.create", {
       ...base,
@@ -452,27 +455,23 @@ describe("createDriveCapabilityDispatcher", () => {
     }, { source: "mcp-stdio" })
     await dispatcher.dispatch("app.drive.link.annotation.comment.delete", { ...base, commentId: "comment-2" }, { source: "mcp-stdio" })
     await dispatcher.dispatch("app.drive.link.annotation.thread.delete", { ...base, threadId: "thread-1" }, { source: "mcp-stdio" })
-    await dispatcher.dispatch("app.drive.link.annotation.anchor.update", {
-      ...base,
-      threadId: "thread-1",
-      target: { exact: "新位置", suffix: "后文" },
-      idempotencyKey: "anchor-key-1",
-    }, { source: "mcp-stdio" })
-
     expect(createDriveLinkAnnotationThread).toHaveBeenCalledWith(expect.objectContaining({
       itemId: "item-1",
       path: "ignored.md",
       target: { exact: " 可见原文 ", prefix: " 前文 ", suffix: undefined },
     }))
     expect(createDriveLinkAnnotationComment).toHaveBeenCalledWith(expect.objectContaining({ parentCommentId: "comment-1" }))
-    expect(updateDriveLinkAnnotationAnchor).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: "anchor-key-1" }))
+    expect(createDriveLinkAnnotationThread).toHaveBeenLastCalledWith(expect.objectContaining({
+      target: { kind: "image", imageId: "mdimg_1" },
+      idempotencyKey: "thread-key-image-1",
+    }))
     const audit = JSON.stringify(vi.mocked(auditSink.record).mock.calls)
     expect(audit).not.toContain("link-secret")
     expect(audit).not.toContain("private initial body")
+    expect(audit).not.toContain("private image body")
     expect(audit).not.toContain("private reply body")
     expect(audit).not.toContain("private edited body")
     expect(audit).not.toContain("可见原文")
-    expect(audit).not.toContain("新位置")
   })
 
   it("authorizes Drive link materialize as a local write", async () => {
@@ -2441,7 +2440,6 @@ function createAccountService(overrides: Partial<DriveAccountService> & Record<s
     updateDriveLinkAnnotationComment: vi.fn(),
     deleteDriveLinkAnnotationComment: vi.fn(),
     deleteDriveLinkAnnotationThread: vi.fn(),
-    updateDriveLinkAnnotationAnchor: vi.fn(),
     materializeDriveLink: vi.fn(),
     downloadDriveLinkFile: vi.fn(),
     downloadDriveFolderZip: vi.fn(),

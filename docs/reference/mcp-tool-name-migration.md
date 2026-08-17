@@ -139,7 +139,7 @@
 | `content_prompt_update` | `app_resource_repository_prompt_update` |
 | `content_prompt_delete` | `app_resource_repository_prompt_delete` |
 
-## Drive（48）
+## Drive（47）
 
 | 旧名称（已移除） | 新名称（当前可用） |
 | --- | --- |
@@ -168,7 +168,6 @@
 | `drive_link_annotation_comment_update` | `app_drive_link_annotation_comment_update` |
 | `drive_link_annotation_comment_delete` | `app_drive_link_annotation_comment_delete` |
 | `drive_link_annotation_thread_delete` | `app_drive_link_annotation_thread_delete` |
-| `drive_link_annotation_anchor_update` | `app_drive_link_annotation_anchor_update` |
 | `drive_link_materialize` | `app_drive_link_materialize` |
 | `drive_link_download_file` | `app_drive_link_download_file` |
 | `drive_folder_zip_create` | `app_drive_folder_zip_create` |

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { resolveDriveAnnotationAnchor, sliceByCodePoints } from './drive-annotation-anchor.js'
-import type { DriveAnnotationSelectorsV2, DriveMarkdownProjectionDto } from './drive.js'
+import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor, sliceByCodePoints } from './drive-annotation-anchor.js'
+import type { DriveAnnotationImageSelectorsV2, DriveAnnotationTextSelectorsV2, DriveMarkdownProjectionDto } from './drive.js'
 
 describe('resolveDriveAnnotationAnchor', () => {
   it('reattaches a unique quote after text is inserted before it', () => {
@@ -202,12 +202,82 @@ describe('resolveDriveAnnotationAnchor', () => {
   })
 })
 
-function selectors(exact: string, start: number, end: number): DriveAnnotationSelectorsV2 {
+describe('resolveDriveImageAnnotationAnchor', () => {
+  const selectors: DriveAnnotationImageSelectorsV2 = {
+    schemaVersion: 2,
+    kind: 'image',
+    position: { start: 2, end: 18 },
+    semantic: { blockId: 'block', imageIndex: 0, headingPath: [] },
+    identity: { imageId: 'mdimg_original', resourceKey: 'file:asset_1' },
+  }
+
+  it('keeps the same resource attached after it moves', () => {
+    const result = resolveDriveImageAnnotationAnchor({
+      selectors,
+      projection: imageProjection([
+        image('mdimg_current', 'other', 0, 10, 0),
+        image('mdimg_original', 'file:asset_1', 30, 46, 1),
+      ]),
+    })
+
+    expect(result).toMatchObject({ positionStatus: 'attached', quoteStatus: 'exact', sourceRange: { start: 30, end: 46 } })
+    expect(result.renderedRange).toBeNull()
+  })
+
+  it('orphans a different resource placed at the original position', () => {
+    const result = resolveDriveImageAnnotationAnchor({
+      selectors,
+      projection: imageProjection([image('mdimg_replacement', 'file:asset_2', 2, 18, 0)]),
+    })
+
+    expect(result).toMatchObject({ positionStatus: 'orphaned', quoteStatus: 'deleted' })
+  })
+
+  it('does not guess between duplicate resources', () => {
+    const result = resolveDriveImageAnnotationAnchor({
+      selectors: { ...selectors, semantic: { ...selectors.semantic, blockId: 'missing' } },
+      projection: imageProjection([
+        image('mdimg_a', 'file:asset_1', 30, 46, 0),
+        image('mdimg_b', 'file:asset_1', 50, 66, 1),
+      ]),
+    })
+
+    expect(result).toMatchObject({ positionStatus: 'ambiguous', quoteStatus: 'deleted' })
+  })
+})
+
+function selectors(exact: string, start: number, end: number): DriveAnnotationTextSelectorsV2 {
   return {
     schemaVersion: 2,
     position: { start, end },
     renderedPosition: { start, end },
     quote: { exact, prefix: '', suffix: '' },
+  }
+}
+
+function image(imageId: string, resourceKey: string, sourceStart: number, sourceEnd: number, imageIndex: number) {
+  return {
+    imageId,
+    segmentId: `segment_${imageId}`,
+    blockId: 'block',
+    imageIndex,
+    documentIndex: imageIndex,
+    sourceStart,
+    sourceEnd,
+    renderedStart: 0,
+    renderedEnd: 0,
+    source: `/files/${resourceKey.slice('file:'.length)}`,
+    resourceKey,
+    alt: '',
+    title: null,
+  }
+}
+
+function imageProjection(images: NonNullable<DriveMarkdownProjectionDto['images']>): DriveMarkdownProjectionDto {
+  return {
+    ...projection(' '.repeat(100)),
+    imageAnchorsVersion: 1,
+    images,
   }
 }
 

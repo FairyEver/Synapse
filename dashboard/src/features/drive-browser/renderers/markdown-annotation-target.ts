@@ -3,6 +3,8 @@ import {
   codePointCount,
   sliceByCodePoints,
   type DriveAnnotationSelectorsV2,
+  type DriveAnnotationImageTargetV1,
+  type DriveMarkdownProjectionImageDto,
   type DriveAnnotationTextRangeTargetV1,
   type DriveMarkdownProjectionDto,
 } from '@synapse/shared'
@@ -139,6 +141,56 @@ export function createMarkdownAnnotationAnchorFromSelection(input: {
       position,
       renderedPosition,
       quote,
+    },
+  }
+}
+
+export function createMarkdownImageAnnotationAnchor(input: {
+  readonly image: DriveMarkdownProjectionImageDto
+  readonly projection: DriveMarkdownProjectionDto
+  readonly epoch?: string | null
+  readonly yText?: Y.Text | null
+}): { readonly target: DriveAnnotationImageTargetV1; readonly selectors: DriveAnnotationSelectorsV2 } {
+  const block = input.projection.blocks.find((candidate) => candidate.blockId === input.image.blockId)
+  const semantic = {
+    blockId: input.image.blockId,
+    imageIndex: input.image.imageIndex,
+    headingPath: block?.headingPath ?? [],
+  }
+  const crdt = input.yText?.doc && input.epoch
+    ? {
+        epoch: input.epoch,
+        start: encodeRelativePosition(Y.createRelativePositionFromTypeIndex(
+          input.yText,
+          codePointOffsetToUtf16(input.yText.toString(), input.image.sourceStart),
+        )),
+        end: encodeRelativePosition(Y.createRelativePositionFromTypeIndex(
+          input.yText,
+          codePointOffsetToUtf16(input.yText.toString(), input.image.sourceEnd),
+        )),
+      }
+    : undefined
+  return {
+    target: {
+      schemaVersion: 1,
+      kind: 'image',
+      surface: 'markdownRenderedImage',
+      imageId: input.image.imageId,
+      resourceKey: input.image.resourceKey,
+      source: { startOffset: input.image.sourceStart, endOffset: input.image.sourceEnd },
+      snapshot: { src: input.image.source, alt: input.image.alt, title: input.image.title },
+      blockHint: {
+        ...semantic,
+        blockIndex: Math.max(0, input.projection.blocks.findIndex((candidate) => candidate.blockId === input.image.blockId)),
+      },
+    },
+    selectors: {
+      schemaVersion: 2,
+      kind: 'image',
+      ...(crdt ? { crdt } : {}),
+      position: { start: input.image.sourceStart, end: input.image.sourceEnd },
+      semantic,
+      identity: { imageId: input.image.imageId, resourceKey: input.image.resourceKey },
     },
   }
 }

@@ -2,10 +2,12 @@ import { createHash } from "node:crypto"
 import type {
   DriveMarkdownProjectionBlockDto,
   DriveMarkdownProjectionDto,
+  DriveMarkdownProjectionImageDto,
   DriveMarkdownProjectionSegmentDto,
 } from "@synapse/shared"
 import { diffArrays } from "diff"
 import type { DriveAnnotationTextPositionSelector } from "@synapse/shared"
+import { parseDriveMarkdownRelativeImageSrc } from "./drive-markdown-relative-images"
 
 export const DRIVE_MARKDOWN_PROJECTION_SCHEMA_VERSION = 1
 export const DRIVE_MARKDOWN_PARSER_VERSION = "remark-15-gfm-4-space-image-1"
@@ -19,6 +21,9 @@ export type MarkdownProjectionNode = {
   readonly type?: string
   readonly value?: unknown
   readonly alt?: unknown
+  readonly url?: unknown
+  readonly title?: unknown
+  readonly identifier?: unknown
   readonly depth?: unknown
   readonly position?: MarkdownPosition
   data?: {
@@ -53,6 +58,7 @@ const markdownBlockTypes = new Set([
 ])
 
 const markdownSegmentTypes = new Set(["text", "inlineCode", "code", "image", "break"])
+const markdownImageTypes = new Set(["image", "imageReference"])
 
 export function buildDriveMarkdownProjection(
   markdown: string,
@@ -62,6 +68,17 @@ export function buildDriveMarkdownProjection(
   const sourceSha256 = sha256(markdown)
   const blocks: MutableProjectionBlock[] = []
   const segments: DriveMarkdownProjectionSegmentDto[] = []
+  const pendingImages: Array<{
+    readonly sourceStart: number
+    readonly sourceEnd: number
+    readonly renderedStart: number
+    readonly renderedEnd: number
+    readonly source: string
+    readonly resourceKey: string
+    readonly alt: string
+    readonly title: string | null
+  }> = []
+  const definitions = collectImageDefinitions(tree)
   const utf16ToCodePoint = createUtf16ToCodePointMap(markdown)
   const headingStack: string[] = []
   let renderedCursor = 0
@@ -69,7 +86,7 @@ export function buildDriveMarkdownProjection(
   const visit = (node: MarkdownProjectionNode, parentBlockIndex: number | null): void => {
     const type = node.type ?? "unknown"
     let currentParentBlockIndex = parentBlockIndex
-    if (markdownBlockTypes.has(type) && hasOffsets(node)) {
+    if ((markdownBlockTypes.has(type) || (markdownImageTypes.has(type) && parentBlockIndex === null)) && hasOffsets(node)) {
       if (type === "heading") {
         const depth = typeof node.depth === "number" ? node.depth : 1
         headingStack.splice(Math.max(0, depth - 1))
@@ -98,10 +115,11 @@ export function buildDriveMarkdownProjection(
       return
     }
 
-    if (!markdownSegmentTypes.has(type) || !hasOffsets(node)) return
+    if ((!markdownSegmentTypes.has(type) && !markdownImageTypes.has(type)) || !hasOffsets(node)) return
     const text = visibleText(node)
     const renderedLength = codePointLength(text)
-    if (renderedLength === 0 && type !== "break") return
+    const imageSource = markdownImageTypes.has(type) ? resolveImageSource(node, definitions) : null
+    if (renderedLength === 0 && type !== "break" && imageSource === null) return
     const blockIndex = currentParentBlockIndex ?? nearestContainingBlock(blocks, utf16ToCodePoint(node.position.start.offset ?? 0))
     if (blockIndex === null) return
     const block = blocks[blockIndex]
@@ -116,6 +134,18 @@ export function buildDriveMarkdownProjection(
       renderedEnd: renderedCursor + renderedLength,
       mapping: sourceEnd - sourceStart === renderedLength ? "identity" : type === "break" ? "generated" : "markdown_syntax",
     })
+    if (imageSource !== null) {
+      pendingImages.push({
+        sourceStart,
+        sourceEnd,
+        renderedStart: renderedCursor,
+        renderedEnd: renderedCursor + renderedLength,
+        source: imageSource,
+        resourceKey: driveMarkdownImageResourceKey(imageSource),
+        alt: typeof node.alt === "string" ? node.alt : "",
+        title: resolveImageTitle(node, definitions),
+      })
+    }
     renderedCursor += renderedLength
   }
 
@@ -142,6 +172,30 @@ export function buildDriveMarkdownProjection(
       segmentId: `mds_${sha256(`${blockId}\0${segment.sourceStart}\0${segment.sourceEnd}\0${index}`).slice(0, 20)}`,
     }
   })
+  const blockImageCounts = new Map<string, number>()
+  const images: DriveMarkdownProjectionImageDto[] = pendingImages.map((image, documentIndex) => {
+    const segment = finalizedSegments.find((candidate) =>
+      candidate.sourceStart === image.sourceStart && candidate.sourceEnd === image.sourceEnd)
+    const block = narrowestContainingBlock(finalizedBlocks, image.sourceStart, image.sourceEnd)
+    const blockId = block?.blockId ?? segment?.blockId ?? finalizedBlocks[0]?.blockId ?? "mdb_root"
+    const imageIndex = blockImageCounts.get(blockId) ?? 0
+    blockImageCounts.set(blockId, imageIndex + 1)
+    return {
+      imageId: `mdimg_${sha256(`${blockId}\0${imageIndex}\0${image.resourceKey}`).slice(0, 24)}`,
+      segmentId: segment?.segmentId ?? `mds_${sha256(`${blockId}\0${image.sourceStart}\0${image.sourceEnd}\0image`).slice(0, 20)}`,
+      blockId,
+      imageIndex,
+      documentIndex,
+      sourceStart: image.sourceStart,
+      sourceEnd: image.sourceEnd,
+      renderedStart: image.renderedStart,
+      renderedEnd: image.renderedEnd,
+      source: image.source,
+      resourceKey: image.resourceKey,
+      alt: image.alt,
+      title: image.title,
+    }
+  })
 
   return {
     schemaVersion: DRIVE_MARKDOWN_PROJECTION_SCHEMA_VERSION,
@@ -149,6 +203,8 @@ export function buildDriveMarkdownProjection(
     sourceSha256,
     blocks: finalizedBlocks,
     segments: finalizedSegments,
+    imageAnchorsVersion: 1,
+    images,
   }
 }
 
@@ -166,13 +222,17 @@ export function annotateMarkdownProjectionTree(
       const segment = (node.children?.length ?? 0) === 0
         ? projection.segments.find((candidate) => candidate.sourceStart === sourceStart && candidate.sourceEnd === sourceEnd)
         : undefined
-      if (block || segment) {
+      const image = markdownImageTypes.has(node.type ?? "")
+        ? projection.images?.find((candidate) => candidate.sourceStart === sourceStart && candidate.sourceEnd === sourceEnd)
+        : undefined
+      if (block || segment || image) {
         node.data = {
           ...(node.data ?? {}),
           hProperties: {
             ...(node.data?.hProperties ?? {}),
             ...(block ? { "data-drive-markdown-block-id": block.blockId } : {}),
             ...(segment ? { "data-drive-markdown-segment-id": segment.segmentId } : {}),
+            ...(image ? { "data-drive-markdown-image-id": image.imageId } : {}),
           },
         }
       }
@@ -184,6 +244,37 @@ export function annotateMarkdownProjectionTree(
 
 export function codePointLength(value: string): number {
   return Array.from(value).length
+}
+
+export function driveMarkdownImageResourceKey(source: string): string {
+  const trimmed = source.trim()
+  if (/^data:/iu.test(trimmed)) return `data:${sha256(trimmed)}`
+
+  const fileMatch = /^\/files\/([^/?#]+)/u.exec(trimmed)
+  if (fileMatch) {
+    let assetId = fileMatch[1]
+    try {
+      assetId = decodeURIComponent(assetId)
+    } catch {
+      // Keep the authored identifier when it is not valid percent encoding.
+    }
+    return `file:${assetId.normalize("NFC")}`
+  }
+
+  const relative = parseDriveMarkdownRelativeImageSrc(trimmed)
+  if (relative) {
+    return `relative:${relative.segments.map((segment) => encodeURIComponent(segment)).join("/")}${relative.suffix}`
+  }
+
+  try {
+    const url = new URL(trimmed)
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return `${url.protocol.toLowerCase()}//${url.host.toLowerCase()}${url.pathname}${url.search}${url.hash}`
+    }
+  } catch {
+    // Preserve an otherwise unsupported authored source as an opaque identity.
+  }
+  return `opaque:${trimmed.normalize("NFC")}`
 }
 
 export function mapDriveMarkdownSourceRange(
@@ -347,10 +438,51 @@ function hasOffsets(node: MarkdownProjectionNode): node is MarkdownProjectionNod
 }
 
 function visibleText(node: MarkdownProjectionNode): string {
-  if (node.type === "image" && typeof node.alt === "string") return node.alt
+  if (markdownImageTypes.has(node.type ?? "") && typeof node.alt === "string") return node.alt
   if (node.type === "break") return "\n"
   if (typeof node.value === "string") return node.value
   return (node.children ?? []).map(visibleText).join("")
+}
+
+function collectImageDefinitions(tree: MarkdownProjectionNode): ReadonlyMap<string, { readonly source: string; readonly title: string | null }> {
+  const definitions = new Map<string, { readonly source: string; readonly title: string | null }>()
+  const visit = (node: MarkdownProjectionNode): void => {
+    if (node.type === "definition" && typeof node.identifier === "string" && typeof node.url === "string") {
+      definitions.set(normalizeReferenceIdentifier(node.identifier), {
+        source: node.url.trim(),
+        title: typeof node.title === "string" ? node.title : null,
+      })
+    }
+    for (const child of node.children ?? []) visit(child)
+  }
+  visit(tree)
+  return definitions
+}
+
+function resolveImageSource(
+  node: MarkdownProjectionNode,
+  definitions: ReadonlyMap<string, { readonly source: string; readonly title: string | null }>,
+): string | null {
+  if (node.type === "image" && typeof node.url === "string") return node.url.trim()
+  if (node.type === "imageReference" && typeof node.identifier === "string") {
+    return definitions.get(normalizeReferenceIdentifier(node.identifier))?.source ?? null
+  }
+  return null
+}
+
+function resolveImageTitle(
+  node: MarkdownProjectionNode,
+  definitions: ReadonlyMap<string, { readonly source: string; readonly title: string | null }>,
+): string | null {
+  if (typeof node.title === "string") return node.title
+  if (node.type === "imageReference" && typeof node.identifier === "string") {
+    return definitions.get(normalizeReferenceIdentifier(node.identifier))?.title ?? null
+  }
+  return null
+}
+
+function normalizeReferenceIdentifier(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").toLowerCase()
 }
 
 function normalizedVisibleText(node: MarkdownProjectionNode): string {

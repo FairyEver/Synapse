@@ -2,13 +2,13 @@
 
 ## Summary
 
-This design adds public discussion comments with conservative stable anchors to cloud drive `.md` files. Comments stay outside the Markdown source, Markdown Render owns the comment UI, and Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and non-Markdown comment targets remain out of scope.
+This design adds public discussion comments with conservative stable anchors to cloud drive `.md` files. Comments stay outside the Markdown source, Markdown Render owns the comment UI, and Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and targets outside Markdown rendered text and whole images remain out of scope.
 
 The implementation scope is intentionally small:
 
 - Only `.md` files are commentable.
 - Only the Markdown Render view exposes comment UI.
-- Users create comments by selecting rendered text.
+- Users create comments by selecting rendered text or targeting a whole rendered image.
 - Comments are plain text.
 - Comment threads support replies, nested replies, edit, and delete.
 - Any user who can view the document can view comments.
@@ -49,24 +49,25 @@ Important boundary:
 - Comment rail opens by default when the file has comments.
 - Heading outline opens by default.
 - No persisted sidebar preference.
-- Select rendered text to create a comment.
+- Select rendered text or use a rendered image's hover/focus action to create a comment.
 - Highlight attached comment ranges in rendered Markdown.
 - Click highlighted text to focus the corresponding thread.
 - Click a comment thread to scroll to the corresponding highlighted range.
-- Show orphaned threads in the comment rail with a short "位置已变化" message.
+- Show orphaned text threads with `原文已修改或删除` and orphaned image threads with `图片已替换或删除`.
 - Reply to a thread.
 - Reply to a reply, with unlimited depth in data.
 - Edit own comment.
 - Delete own comment.
 - File owner can delete any thread or comment.
 - Plain-text comments with preserved line breaks.
-- Four-layer Anchor V2 resolution and manual reassociation.
+- Conservative Anchor V2 resolution for text and whole-image targets.
 - Realtime Markdown preview and comment invalidation from the collaboration room.
 - Yjs collaboration in Monaco when `DRIVE_COLLABORATION_ENABLED=true`.
 
 ### Out of Scope
 
-- `.mdx`, `.markdown`, plain text, HTML, PDF, image, and Code Render comments.
+- `.mdx`, `.markdown`, plain text, HTML, PDF, standalone image files, and Code Render comments.
+- Image point or region selection and Mermaid comments.
 - Insert-point comment UI.
 - Paragraph comment UI.
 - Comment status such as open, resolved, done, rejected, assigned.
@@ -137,6 +138,18 @@ User selects rendered text
 
 Empty selections do not show the comment action.
 
+Whole-image comment creation:
+
+```text
+User hovers or focuses a rendered image
+  -> show the add-comment action above the visible top edge when it fully fits
+  -> otherwise show it below the visible bottom edge when it fully fits
+  -> image click still opens the lightbox; action click stops that event
+  -> create annotation thread plus first comment
+```
+
+Images with attached threads always show a top-right thread-count marker. Broken-image fallbacks retain the same image identity and remain focusable/commentable. Empty alt text uses the source filename, then `图片`, as the target label. The first touch implementation keeps existing markers interactive but does not add a separate compact-mode creation entry.
+
 Comment rail:
 
 - Lists every non-deleted thread for the document, regardless of the version where the thread was created.
@@ -158,6 +171,12 @@ Rendered text markers:
 - Markers must not make the Markdown harder to read.
 - Orphaned threads do not render a body marker.
 - Orphaned threads remain readable and writable in the unlocated section.
+
+Rendered image markers:
+
+- The focused image thread marks the whole image with the existing theme ring.
+- A thread-count marker counts threads, not replies; focusing a new image chooses its earliest thread and preserves the current thread when it already belongs to that image.
+- The image action overlay is measured independently from the Markdown renderer and uses the intersection of the window, scroll container, and horizontal clipping ancestors.
 
 ### Rendering Style And Positioning Invariants
 
@@ -226,13 +245,13 @@ orphaned: the target could not be safely reattached
 
 There is no product status such as resolved.
 
-Anchor V2 is authoritative. `DriveAnnotationAnchor` is a one-to-one record owned by the thread and stores four selectors, current position/quote status, last resolved ranges, confidence, parser/version context, idempotency, and independent deletion metadata. The legacy `target` and `anchorStatus` fields remain a temporary compatibility projection; `target` preserves the original quote snapshot and is not rewritten by manual reassociation, so consumers must use `anchor` for the current position. `shifted` is not a V2 product state.
+Anchor V2 is authoritative. `DriveAnnotationAnchor` is a one-to-one record owned by the thread and stores selectors, current position/quote status, last resolved ranges, confidence, parser/version context, idempotency, and independent deletion metadata. The legacy `target` and `anchorStatus` fields remain a temporary compatibility projection; `target` preserves the original snapshot, while consumers use `anchor` for the current position. `shifted` is not a V2 product state. Neither text nor image targets expose manual reassociation.
 
 Rollout policy: the Anchor V2 migration intentionally deletes all pre-V2 annotation threads and their comments. V1 browser offsets use UTF-16 units and cannot be losslessly converted to the V2 Unicode code-point coordinate system, so the migration must not synthesize V2 anchors from legacy targets. `DriveItem`, `DriveShare`, `DriveFileVersion`, source objects, and share identifiers are not modified by this cleanup. Threads created after the migration write both the V2 anchor and the temporary legacy projection so an application rollback can still read newly created comments.
 
 ## Target Model
 
-First version uses only `textRange`.
+The first version supports rendered `textRange` and whole `image` targets.
 
 ```ts
 type DriveAnnotationTargetV1 = {
@@ -260,6 +279,17 @@ type DriveAnnotationTargetV1 = {
     textHash: string
   }
 }
+
+type DriveAnnotationImageTargetV1 = {
+  schemaVersion: 1
+  kind: "image"
+  surface: "markdownRenderedImage"
+  imageId: string
+  resourceKey: string
+  source: { startOffset: number; endOffset: number }
+  blockHint: { blockId: string; blockIndex: number; imageIndex: number; path: number[] }
+  snapshot: { src: string; alt: string; title: string | null }
+}
 ```
 
 `range.start` and `range.end` are offsets in the rendered plain-text stream, not raw Markdown source offsets. This matches what the user selected in Render view.
@@ -276,7 +306,7 @@ Rendered text:
 
 The comment attaches to `重点` in rendered text, while source offsets are only hints.
 
-Although the model can represent collapsed ranges with `start === end`, the first UI does not expose insert-point comments.
+Although the text model can represent collapsed ranges with `start === end`, the first UI does not expose insert-point comments. Image identity is based on the authored resource, never on alt or title: `/files/<assetId>` ignores query and fragment, relative paths use Markdown path normalization, HTTP(S) normalizes scheme and host while preserving path/query/fragment, and data URLs store only a hash.
 
 ## Anchor Resolution
 
@@ -291,7 +321,9 @@ The V1 rendered-text algorithm below is retained only as the rollback projection
 6. Ambiguous, deleted, unavailable, or orphaned when evidence is insufficient.
 ```
 
-Offsets in Anchor V2 use Unicode code points. UI selection must end at grapheme boundaries. The service response is authoritative; the Renderer must not maintain a second quote-search implementation. Moving an attached range does not create a `shifted` state. Text edited inside a still-related range is `attached/modified`; fully deleted source is `source_deleted/deleted`. Manual reassociation preserves the original quote snapshot and audit history.
+Offsets in Anchor V2 use Unicode code points. UI selection must end at grapheme boundaries. The service response is authoritative; the Renderer must not maintain a second quote-search implementation. Moving an attached range does not create a `shifted` state. Text edited inside a still-related range is `attached/modified`; fully deleted source is `source_deleted/deleted`.
+
+Image anchors resolve in this order: current source range, same-Epoch Yjs relative position, bounded source diff, stable block plus block-local image index, then globally unique resource identity. Every candidate must have the same resource identity. An attached image always has `quoteStatus=exact`; a replaced, deleted, or ambiguous image becomes `orphaned/deleted` and never `modified`. Projection metadata is versioned; an old projection is used only to inherit stable block IDs before the image metadata cache is rebuilt.
 
 The implementation should build a current rendered text model from the same sanitized Markdown render used by the preview:
 
@@ -341,7 +373,6 @@ POST   /api/drive/browser/owner/items/:itemId/annotations/:threadId/comments
 PATCH  /api/drive/browser/owner/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/owner/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/owner/items/:itemId/annotations/:threadId
-PATCH  /api/drive/browser/owner/items/:itemId/annotations/:threadId/anchor
 POST   /api/drive/browser/owner/items/:itemId/collaboration/checkpoint
 ```
 
@@ -361,7 +392,6 @@ POST   /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/co
 PATCH  /api/drive/browser/shares/:shareId/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/shares/:shareId/items/:itemId/annotations/comments/:commentId
 DELETE /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId
-PATCH  /api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/anchor
 POST   /api/drive/browser/shares/:shareId/items/:itemId/collaboration/checkpoint
 ```
 
@@ -374,10 +404,9 @@ POST   /api/drive/link-intake/annotations/comments
 PATCH  /api/drive/link-intake/annotations/comments
 DELETE /api/drive/link-intake/annotations/comments
 DELETE /api/drive/link-intake/annotations/threads
-PATCH  /api/drive/link-intake/annotations/anchor
 ```
 
-These routes accept only current-origin `/share/...` `.md` targets and reuse password checks, child-item resolution, logged-in identity, annotation permissions, anchor validation, visibility projection, email redaction for list and mutation responses, and audit behavior. Creation and reassociation identify visible text with `{ exact, prefix?, suffix? }`; the server generates V2 selectors against the current Markdown projection/version and rejects missing or ambiguous targets. They do not expose source offsets, CRDT coordinates, file editing, presence, or collaboration-room control.
+These routes accept only current-origin `/share/...` `.md` targets and reuse password checks, child-item resolution, logged-in identity, annotation permissions, anchor validation, visibility projection, email redaction for list and mutation responses, and audit behavior. Text creation identifies visible text with `{ exact, prefix?, suffix? }`. Image creation uses `{ kind: "image", imageId }`, where `imageId` must come from the current complete `read_text.markdownImages` response; stale or unknown IDs return target-not-found without positional guessing. The server generates V2 selectors against the current Markdown projection/version and rejects missing or ambiguous targets. The API does not expose reassociation, source offsets, CRDT coordinates, file editing, presence, or collaboration-room control.
 
 The custom WebSocket endpoint is `/api/drive/collaboration`. Its first message is a versioned JSON join containing owner/share context, item identity, client identity, Epoch, and state vector; credentials remain in existing cookies and the server requires the exact configured public Origin. Binary messages carry Yjs sync/update/awareness. Control messages carry durable acknowledgement, permission changes, Epoch replacement, preview changes, and comment invalidation. Message payloads are capped at 256 KiB and awareness never carries email, document content, or comment content.
 
@@ -402,6 +431,17 @@ Create thread:
   "body": "评论内容"
 }
 ```
+
+Create an image thread through Link Intake/MCP:
+
+```json
+{
+  "target": { "kind": "image", "imageId": "mdimg_..." },
+  "body": "评论内容"
+}
+```
+
+For a complete, untruncated Markdown response, `read_text` includes `source.versionId` and `markdownImages` entries with `imageId`, 1-based document index, authored source, alt, and title. Non-Markdown and truncated responses omit `markdownImages`.
 
 Reply:
 
@@ -518,11 +558,16 @@ Suggested helper modules:
 dashboard/src/features/drive-browser/renderers/markdown-annotation-target.ts
   build rendered text model
   selection to textRange target
+  image id to whole-image target
   DOM range to rendered text offsets
 
 dashboard/src/features/drive-browser/renderers/markdown-annotation-render.ts
   resolve target results to HTML markers
   create marker metadata for click and scroll sync
+
+dashboard/src/features/drive-browser/renderers/markdown-image-comments-overlay.tsx
+  measure visible image edges
+  own hover/focus state and thread-count actions
 ```
 
 Rendering approach:
@@ -552,7 +597,7 @@ Responsibilities:
 - Resolve owner item access.
 - Resolve share item access.
 - Validate `.md` support for first version.
-- Validate `targetKind` and target schema.
+- Validate text/image `targetKind` and target schema.
 - Create thread plus first comment transactionally.
 - Add replies.
 - Edit own comment.
@@ -586,7 +631,7 @@ shared/src/drive.ts
 Markdown rendering:
 
 - Keep current safe Markdown HTML and outline behavior.
-- Add or reuse a rendered text extraction helper for anchor resolution.
+- Add or reuse rendered-text and image-projection helpers for anchor resolution.
 - Do not allow comments to modify Markdown source.
 
 ## Testing Plan
@@ -619,6 +664,9 @@ Anchor tests:
 - Delete selected text and mark orphaned.
 - Repeat exact quote multiple times and use prefix/suffix to choose.
 - Repeat exact quote ambiguously and mark orphaned.
+- Keep image attachment when alt/title changes or a `/files/<assetId>` query changes.
+- Reattach an image after movement when stable block/index or unique resource identity is sufficient.
+- Orphan images replaced in place, deleted, or ambiguous among repeated resources.
 
 Frontend tests:
 
@@ -635,6 +683,10 @@ Frontend tests:
 - Orphaned annotations appear first with their original quote and remain actionable.
 - Comment bodies render as plain text with line breaks.
 - Replies render without unbounded indentation.
+- Image hover/focus action chooses top, bottom, or hidden placement from visible edges.
+- Image action does not open the lightbox; image click still does.
+- Attached image thread markers stay clickable and count threads.
+- Broken and empty-alt images remain commentable; replaced/deleted images show `图片已替换或删除` without reassociation.
 
 ## Risks And Mitigations
 
@@ -690,4 +742,4 @@ Future target examples:
 }
 ```
 
-These future renderers should own their own internal comment UI, just as Markdown Render owns its internal header and rails.
+`imageRegion` is distinct from the implemented whole-image Markdown target. These future renderers should own their own internal comment UI, just as Markdown Render owns its internal header and rails.

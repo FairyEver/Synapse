@@ -2,7 +2,6 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import type { Prisma } from "@prisma/client"
 import type {
   DriveAnnotationAnchorDto,
-  DriveAnnotationAnchorUpdateInput,
   DriveAnnotationCommentDto,
   DriveAnnotationCommentUpdateInput,
   DriveAnnotationCreateInput,
@@ -10,9 +9,10 @@ import type {
   DriveAnnotationTargetDto,
   DriveAnnotationThreadDto,
   DriveAnnotationSelectorsV2,
+  DriveAnnotationTextSelectorsV2,
   DriveLinkAnnotationTargetInput,
 } from "@synapse/shared"
-import { resolveDriveAnnotationAnchor } from "@synapse/shared"
+import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor } from "@synapse/shared"
 import { formatAuditError } from "../common/audit-error"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
@@ -268,29 +268,6 @@ export class DriveAnnotationService {
     return { ok: true }
   }
 
-  async updateOwnerAnchor(
-    userId: string,
-    itemId: string,
-    threadId: string,
-    input: DriveAnnotationAnchorUpdateInput,
-    auditContext: DriveAuditContext = {},
-  ): Promise<DriveAnnotationThreadDto> {
-    const item = await this.requireOwnerItem(userId, itemId)
-    const thread = await this.requireThread(item.id, threadId)
-    const validated = await this.validateSelectors(item, input.baseVersionId, input.selectors, input.epoch ?? null)
-    const updated = await this.replaceAnchor(thread, input, validated)
-    await this.recordAnnotationAudit({
-      actorUserId: userId,
-      action: "drive.annotation.anchor.reassociate",
-      targetType: "drive.annotationAnchor",
-      targetId: thread.id,
-      detail: { actorUserId: userId, ownerId: item.userId, itemId, threadId, baseVersionId: input.baseVersionId },
-      ipAddress: auditContext.ipAddress,
-    })
-    this.notifyAnnotationChanged(item.id)
-    return toThreadDto(updated, userId, item.userId)
-  }
-
   async listShareAnnotations(input: {
     readonly shareId: string
     readonly itemId?: string
@@ -540,61 +517,6 @@ export class DriveAnnotationService {
     return { ok: true }
   }
 
-  async updateShareAnchor(input: {
-    readonly actorUserId: string
-    readonly shareId: string
-    readonly itemId?: string
-    readonly cookie?: string | null
-    readonly password?: string
-    readonly threadId: string
-    readonly body: DriveAnnotationAnchorUpdateInput
-    readonly auditContext?: DriveAuditContext
-  }): Promise<DriveAnnotationThreadDto> {
-    const item = await this.requireCommentableShareItem(input)
-    const thread = await this.requireThread(item.id, input.threadId)
-    if (thread.createdByUserId !== input.actorUserId && item.userId !== input.actorUserId) {
-      throw new ForbiddenException("不能重新关联该评论。")
-    }
-    const validated = await this.validateSelectors(item, input.body.baseVersionId, input.body.selectors, input.body.epoch ?? null)
-    const updated = await this.replaceAnchor(thread, input.body, validated)
-    await this.recordShareAnnotationAudit({
-      actorUserId: input.actorUserId,
-      shareId: input.shareId,
-      action: "drive.share_annotation.anchor.reassociate",
-      targetType: "drive.annotationAnchor",
-      targetId: thread.id,
-      detail: { ownerId: item.userId, itemId: item.id, threadId: thread.id, baseVersionId: input.body.baseVersionId },
-      ipAddress: input.auditContext?.ipAddress,
-    })
-    this.notifyAnnotationChanged(item.id)
-    return toThreadDto(updated, input.actorUserId, item.userId, true, true)
-  }
-
-  async updateShareAnchorByQuote(input: {
-    readonly actorUserId: string
-    readonly shareId: string
-    readonly itemId?: string
-    readonly cookie?: string | null
-    readonly password?: string
-    readonly threadId: string
-    readonly target: DriveLinkAnnotationTargetInput
-    readonly idempotencyKey: string
-    readonly auditContext?: DriveAuditContext
-  }): Promise<DriveAnnotationThreadDto> {
-    const item = await this.requireCommentableShareItem(input)
-    const anchorInput = await this.resolveQuoteAnchorInput(item, input.target, input.idempotencyKey)
-    return this.updateShareAnchor({
-      actorUserId: input.actorUserId,
-      shareId: input.shareId,
-      itemId: item.id,
-      cookie: input.cookie,
-      password: input.password,
-      threadId: input.threadId,
-      body: anchorInput,
-      auditContext: input.auditContext,
-    })
-  }
-
   private async requireOwnerItem(userId: string, itemId: string): Promise<DriveAnnotationItem> {
     const item = await this.prisma.driveItem.findFirst({
       where: {
@@ -659,15 +581,56 @@ export class DriveAnnotationService {
     item: DriveAnnotationItem,
     target: DriveLinkAnnotationTargetInput,
     idempotencyKey: string,
-  ): Promise<DriveAnnotationAnchorUpdateInput & { readonly targetKind: "textRange"; readonly target: DriveAnnotationTargetDto }> {
+  ): Promise<Omit<DriveAnnotationCreateInput, "body">> {
     const document = await this.drive.resolveAnnotationDocument(item)
+    if ("kind" in target && target.kind === "image") {
+      const image = document.projection.images?.find((candidate) => candidate.imageId === target.imageId)
+      if (!image) {
+        throw new ConflictException({
+          code: "DRIVE_ANNOTATION_TARGET_NOT_FOUND",
+          message: "未找到图片，请重新读取文档。",
+        })
+      }
+      return {
+        baseVersionId: document.versionId,
+        epoch: document.epoch,
+        selectors: {
+          schemaVersion: 2,
+          kind: "image",
+          position: { start: image.sourceStart, end: image.sourceEnd },
+          semantic: {
+            blockId: image.blockId,
+            imageIndex: image.imageIndex,
+            headingPath: document.projection.blocks.find((block) => block.blockId === image.blockId)?.headingPath ?? [],
+          },
+          identity: { imageId: image.imageId, resourceKey: image.resourceKey },
+        },
+        idempotencyKey,
+        targetKind: "image",
+        target: {
+          schemaVersion: 1,
+          kind: "image",
+          surface: "markdownRenderedImage",
+          imageId: image.imageId,
+          resourceKey: image.resourceKey,
+          source: { startOffset: image.sourceStart, endOffset: image.sourceEnd },
+          snapshot: { src: image.source, alt: image.alt, title: image.title },
+          blockHint: {
+            blockId: image.blockId,
+            blockIndex: Math.max(0, document.projection.blocks.findIndex((block) => block.blockId === image.blockId)),
+            imageIndex: image.imageIndex,
+            headingPath: document.projection.blocks.find((block) => block.blockId === image.blockId)?.headingPath ?? [],
+          },
+        },
+      }
+    }
     const quote = {
       exact: target.exact,
       prefix: target.prefix ?? "",
       suffix: target.suffix ?? "",
     }
     const exactLength = Array.from(quote.exact).length
-    const initialSelectors: DriveAnnotationSelectorsV2 = {
+    const initialSelectors: DriveAnnotationTextSelectorsV2 = {
       schemaVersion: 2,
       position: { start: 0, end: exactLength },
       renderedPosition: { start: 0, end: exactLength },
@@ -699,7 +662,7 @@ export class DriveAnnotationService {
       .filter((candidate) => candidate.renderedStart <= renderedRange.start
         && candidate.renderedEnd >= renderedRange.end)
       .sort((left, right) => (left.renderedEnd - left.renderedStart) - (right.renderedEnd - right.renderedStart))[0]
-    const selectors: DriveAnnotationSelectorsV2 = {
+    const selectors: DriveAnnotationTextSelectorsV2 = {
       schemaVersion: 2,
       position: resolution.sourceRange,
       renderedPosition: renderedRange,
@@ -735,7 +698,16 @@ export class DriveAnnotationService {
   private async validateAnchorInput(item: DriveAnnotationItem, input: DriveAnnotationCreateInput, baseVersionId: string | null) {
     if (!baseVersionId) throw staleAnnotationConflict()
     const selectors = input.selectors ?? toDriveAnnotationSelectorsV2(input.target)
-    if (selectors.quote.exact !== input.target.quote.exact) throw new BadRequestException("评论位置无效。")
+    if (input.targetKind !== input.target.kind) throw new BadRequestException("评论位置无效。")
+    if (input.target.kind === "image") {
+      if (selectors.kind !== "image"
+        || selectors.identity.imageId !== input.target.imageId
+        || selectors.identity.resourceKey !== input.target.resourceKey) {
+        throw new BadRequestException("评论位置无效。")
+      }
+    } else if (selectors.kind === "image" || selectors.quote.exact !== input.target.quote.exact) {
+      throw new BadRequestException("评论位置无效。")
+    }
     return this.validateSelectors(item, baseVersionId, selectors, input.epoch ?? null)
   }
 
@@ -755,7 +727,7 @@ export class DriveAnnotationService {
           positionStatus: "attached" as const,
           quoteStatus: "exact" as const,
           sourceRange: selectors.position,
-          renderedRange: selectors.renderedPosition ?? null,
+          renderedRange: selectors.kind === "image" ? null : selectors.renderedPosition ?? null,
           confidence: 1,
         },
       }
@@ -771,18 +743,21 @@ export class DriveAnnotationService {
       }, "Drive annotation anchor revision validation failed")
       throw staleAnnotationConflict()
     }
-    if (selectors.renderedPosition && !hasGraphemeBoundaries(document.renderedText, selectors.renderedPosition)) {
+    if (selectors.kind !== "image" && selectors.renderedPosition && !hasGraphemeBoundaries(document.renderedText, selectors.renderedPosition)) {
       throw new BadRequestException("评论位置无效。")
     }
-    const resolution = resolveDriveAnnotationAnchor({
-      selectors,
-      projection: document.projection,
-      sourceText: document.sourceText,
-      renderedText: document.renderedText,
-      crdtSourceRange: selectors.crdt
-        ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
-        : null,
-    })
+    const crdtSourceRange = selectors.crdt
+      ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
+      : null
+    const resolution = selectors.kind === "image"
+      ? resolveDriveImageAnnotationAnchor({ selectors, projection: document.projection, crdtSourceRange })
+      : resolveDriveAnnotationAnchor({
+          selectors,
+          projection: document.projection,
+          sourceText: document.sourceText,
+          renderedText: document.renderedText,
+          crdtSourceRange,
+        })
     if (resolution.positionStatus !== "attached" || resolution.quoteStatus !== "exact") {
       this.logger.warn({
         hasCrdtSelector: Boolean(selectors.crdt),
@@ -800,38 +775,6 @@ export class DriveAnnotationService {
       throw staleAnnotationConflict()
     }
     return { selectors, resolution }
-  }
-
-  private async replaceAnchor(
-    thread: AnnotationThreadRecord,
-    input: DriveAnnotationAnchorUpdateInput,
-    validated: Awaited<ReturnType<DriveAnnotationService["validateSelectors"]>>,
-  ): Promise<AnnotationThreadRecord> {
-    await this.prisma.$transaction([
-      this.prisma.driveAnnotationAnchor.upsert({
-        where: { threadId: thread.id },
-        create: { ...buildAnchorCreateData(thread.itemId, input.baseVersionId, validated.selectors, validated.resolution, input.idempotencyKey), threadId: thread.id },
-        update: {
-          baseVersionId: input.baseVersionId,
-          selectors: validated.selectors as unknown as Prisma.InputJsonValue,
-          positionStatus: validated.resolution.positionStatus,
-          quoteStatus: validated.resolution.quoteStatus,
-          lastResolvedVersionId: input.baseVersionId,
-          resolvedSourceStart: validated.resolution.sourceRange?.start ?? null,
-          resolvedSourceEnd: validated.resolution.sourceRange?.end ?? null,
-          resolvedRenderedStart: validated.resolution.renderedRange?.start ?? null,
-          resolvedRenderedEnd: validated.resolution.renderedRange?.end ?? null,
-          confidence: validated.resolution.confidence,
-          idempotencyKey: input.idempotencyKey,
-          deletedAt: null,
-        },
-      }),
-      this.prisma.driveAnnotationThread.update({
-        where: { id: thread.id },
-        data: { baseVersionId: input.baseVersionId, anchorStatus: "attached" },
-      }),
-    ])
-    return this.requireThread(thread.itemId, thread.id)
   }
 
   private async refreshThreadAnchors(
@@ -859,16 +802,24 @@ export class DriveAnnotationService {
       const diffSourceRange = thread.baseVersionId === document.versionId || !hasReliableSourceRange
         ? null
         : await this.drive.resolveAnnotationDiffRange(thread.itemId, thread.baseVersionId, document.sourceText, selectors.position)
-      const resolution = resolveDriveAnnotationAnchor({
-        selectors,
-        projection: document.projection,
-        sourceText: document.sourceText,
-        renderedText: document.renderedText,
-        crdtSourceRange: selectors.crdt
-          ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
-          : null,
-        diffSourceRange,
-      })
+      const crdtSourceRange = selectors.crdt
+        ? this.drive.resolveAnnotationCrdtRange(item.id, selectors.crdt)
+        : null
+      const resolution = selectors.kind === "image"
+        ? resolveDriveImageAnnotationAnchor({
+            selectors,
+            projection: document.projection,
+            crdtSourceRange,
+            diffSourceRange,
+          })
+        : resolveDriveAnnotationAnchor({
+            selectors,
+            projection: document.projection,
+            sourceText: document.sourceText,
+            renderedText: document.renderedText,
+            crdtSourceRange,
+            diffSourceRange,
+          })
       const anchor = await this.prisma.driveAnnotationAnchor.upsert({
         where: { threadId: thread.id },
         create: { ...buildAnchorCreateData(thread.itemId, thread.baseVersionId, selectors, resolution), threadId: thread.id },
@@ -1060,7 +1011,7 @@ function toThreadDto(
     id: record.id,
     itemId: record.itemId,
     baseVersionId: record.baseVersionId,
-    targetKind: "textRange",
+    targetKind: record.targetKind === "image" ? "image" : "textRange",
     target: record.target as DriveAnnotationTargetDto,
     anchorStatus: record.anchor?.positionStatus === "attached"
       ? "attached"
@@ -1087,7 +1038,9 @@ function toAnchorDto(record: AnnotationThreadRecord): DriveAnnotationAnchorDto |
       positionStatus: record.anchorStatus === "orphaned" ? "orphaned" : "attached",
       quoteStatus: "exact",
       resolvedSourceRange: null,
-      resolvedRenderedRange: record.anchorStatus === "orphaned" ? null : selectors.renderedPosition ?? null,
+      resolvedRenderedRange: record.anchorStatus === "orphaned" || selectors.kind === "image"
+        ? null
+        : selectors.renderedPosition ?? null,
       confidence: null,
       lastResolvedVersionId: null,
     }
@@ -1142,7 +1095,12 @@ function buildAnchorCreateData(
 function parseAnchorSelectors(value: unknown): DriveAnnotationSelectorsV2 | null {
   if (!value || typeof value !== "object") return null
   const selectors = value as Partial<DriveAnnotationSelectorsV2>
-  if (selectors.schemaVersion !== 2 || !selectors.position || !selectors.quote) return null
+  if (selectors.schemaVersion !== 2 || !selectors.position) return null
+  if (selectors.kind === "image") {
+    if (!selectors.semantic || !("imageIndex" in selectors.semantic) || !selectors.identity) return null
+  } else if (!("quote" in selectors) || !selectors.quote) {
+    return null
+  }
   return selectors as DriveAnnotationSelectorsV2
 }
 
@@ -1157,12 +1115,13 @@ function normalizeQuoteStatus(value: string): DriveAnnotationAnchorDto["quoteSta
 }
 
 function unavailableAnchorRecord(thread: AnnotationThreadRecord): AnnotationAnchorRecord {
+  const selectors = parseAnchorSelectors(thread.anchor?.selectors) ?? toDriveAnnotationSelectorsV2(thread.target as DriveAnnotationTargetDto)
   return {
     schemaVersion: 2,
     baseVersionId: thread.baseVersionId,
-    selectors: thread.anchor?.selectors ?? toDriveAnnotationSelectorsV2(thread.target as DriveAnnotationTargetDto),
+    selectors,
     positionStatus: "unavailable",
-    quoteStatus: thread.anchor?.quoteStatus ?? "exact",
+    quoteStatus: thread.anchor?.quoteStatus ?? (selectors.kind === "image" ? "deleted" : "exact"),
     lastResolvedVersionId: thread.anchor?.lastResolvedVersionId ?? null,
     resolvedSourceStart: null,
     resolvedSourceEnd: null,

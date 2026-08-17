@@ -550,7 +550,6 @@ describe("AccountService", () => {
     await service.updateDriveLinkAnnotationComment({ ...base, commentId: "comment-2", body: "编辑" })
     await service.deleteDriveLinkAnnotationComment({ ...base, commentId: "comment-2" })
     await service.deleteDriveLinkAnnotationThread({ ...base, threadId: "thread-1" })
-    await service.updateDriveLinkAnnotationAnchor({ ...base, threadId: "thread-1", target: { exact: "新位置" }, idempotencyKey: "anchor-key-1" })
 
     expect(requestAuthenticatedJson.mock.calls.map(([method, url]) => [method, url])).toEqual([
       ["POST", expectedApiUrl("/drive/link-intake/annotations/threads/list")],
@@ -559,7 +558,6 @@ describe("AccountService", () => {
       ["PATCH", expectedApiUrl("/drive/link-intake/annotations/comments")],
       ["DELETE", expectedApiUrl("/drive/link-intake/annotations/comments")],
       ["DELETE", expectedApiUrl("/drive/link-intake/annotations/threads")],
-      ["PATCH", expectedApiUrl("/drive/link-intake/annotations/anchor")],
     ])
     expect(JSON.stringify(requestAuthenticatedJson.mock.calls.map((call) => call[1]))).not.toContain("secret")
   })

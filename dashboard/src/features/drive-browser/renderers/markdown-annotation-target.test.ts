@@ -5,6 +5,7 @@ import { DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH } from '@synapse/shared'
 import * as Y from 'yjs'
 import {
   createMarkdownAnnotationAnchorFromSelection,
+  createMarkdownImageAnnotationAnchor,
   createMarkdownAnnotationTargetFromSelection,
   getMarkdownRenderedText,
 } from './markdown-annotation-target'
@@ -242,5 +243,38 @@ describe('markdown annotation target helpers', () => {
     expect(performance.now() - startedAt).toBeLessThan(750)
     expect(anchor?.selectors.renderedPosition).toEqual({ start: value.length - 2, end: value.length })
     expect(anchor?.selectors.quote.exact).toBe('重点')
+  })
+
+  it('creates a first-class image target without using alt text as identity', () => {
+    const projection = {
+      schemaVersion: 1 as const,
+      parserVersion: 'test',
+      sourceSha256: 'hash',
+      blocks: [{
+        blockId: 'block-1', type: 'paragraph', parentBlockId: null, headingPath: ['标题'],
+        sourceStart: 0, sourceEnd: 30, renderedStart: 0, renderedEnd: 3, textFingerprint: 'hash',
+      }],
+      segments: [],
+      imageAnchorsVersion: 1 as const,
+      images: [{
+        imageId: 'mdimg_1', segmentId: 'segment-1', blockId: 'block-1', imageIndex: 0, documentIndex: 0,
+        sourceStart: 2, sourceEnd: 24, renderedStart: 0, renderedEnd: 3,
+        source: '/files/asset_1?v=2', resourceKey: 'file:asset_1', alt: '图示', title: '标题',
+      }],
+    }
+
+    const result = createMarkdownImageAnnotationAnchor({ image: projection.images[0], projection })
+
+    expect(result.target).toMatchObject({
+      kind: 'image',
+      imageId: 'mdimg_1',
+      resourceKey: 'file:asset_1',
+      snapshot: { src: '/files/asset_1?v=2', alt: '图示', title: '标题' },
+    })
+    expect(result.selectors).toMatchObject({
+      kind: 'image',
+      position: { start: 2, end: 24 },
+      semantic: { blockId: 'block-1', imageIndex: 0, headingPath: ['标题'] },
+    })
   })
 })

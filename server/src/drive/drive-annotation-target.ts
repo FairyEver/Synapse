@@ -6,7 +6,7 @@ import {
   isDriveMarkdownItem,
   type DriveAnnotationAnchorStatus,
   type DriveAnnotationCreateInput,
-  type DriveAnnotationAnchorUpdateInput,
+  type DriveAnnotationImageTargetV1,
   type DriveAnnotationSelectorsV2,
   type DriveAnnotationTextRangeTargetV1,
 } from "@synapse/shared"
@@ -38,45 +38,84 @@ const textRangeTargetSchema = z.object({
   }).strict().optional(),
 }).strict()
 
-const createBodySchema = z.object({
-  baseVersionId: z.string().min(1).nullable().optional(),
-  targetKind: z.literal("textRange"),
-  target: textRangeTargetSchema,
-  epoch: z.string().min(1).max(64).nullable().optional(),
-  stateVector: z.string().max(64 * 1024).nullable().optional(),
-  selectors: z.object({
-    schemaVersion: z.literal(2),
-    crdt: z.object({
-      epoch: z.string().min(1).max(64),
-      start: z.string().min(1).max(64 * 1024),
-      end: z.string().min(1).max(64 * 1024),
-    }).strict().optional(),
-    semantic: z.object({
-      blockId: z.string().min(1).max(128),
-      start: z.number().int().nonnegative(),
-      end: z.number().int().nonnegative(),
-      blockType: z.string().min(1).max(64).optional(),
-      headingPath: z.array(z.string().max(500)).max(32).optional(),
-    }).strict().optional(),
-    position: z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict(),
-    renderedPosition: z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict().optional(),
-    quote: z.object({
-      exact: z.string().min(1).max(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH),
-      prefix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
-      suffix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
-    }).strict(),
-  }).strict().optional(),
-  idempotencyKey: z.string().min(8).max(128).optional(),
-  body: z.string().max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
+const imageTargetSchema = z.object({
+  schemaVersion: z.literal(1),
+  kind: z.literal("image"),
+  surface: z.literal("markdownRenderedImage"),
+  imageId: z.string().min(1).max(128),
+  resourceKey: z.string().min(1).max(2048),
+  source: z.object({
+    startOffset: z.number().int().nonnegative(),
+    endOffset: z.number().int().nonnegative(),
+  }).strict(),
+  snapshot: z.object({
+    src: z.string().max(1024 * 1024),
+    alt: z.string().max(4000),
+    title: z.string().max(4000).nullable(),
+  }).strict(),
+  blockHint: z.object({
+    blockId: z.string().min(1).max(128),
+    blockIndex: z.number().int().nonnegative(),
+    imageIndex: z.number().int().nonnegative(),
+    headingPath: z.array(z.string().max(500)).max(32),
+  }).strict(),
 }).strict()
 
-const anchorUpdateBodySchema = createBodySchema.pick({
-  baseVersionId: true,
-  epoch: true,
-  stateVector: true,
-  selectors: true,
-  idempotencyKey: true,
-}).required({ baseVersionId: true, selectors: true, idempotencyKey: true })
+const textSelectorsSchema = z.object({
+  schemaVersion: z.literal(2),
+  crdt: z.object({
+    epoch: z.string().min(1).max(64),
+    start: z.string().min(1).max(64 * 1024),
+    end: z.string().min(1).max(64 * 1024),
+  }).strict().optional(),
+  semantic: z.object({
+    blockId: z.string().min(1).max(128),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
+    blockType: z.string().min(1).max(64).optional(),
+    headingPath: z.array(z.string().max(500)).max(32).optional(),
+  }).strict().optional(),
+  position: z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict(),
+  renderedPosition: z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict().optional(),
+  quote: z.object({
+    exact: z.string().min(1).max(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH),
+    prefix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
+    suffix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH),
+  }).strict(),
+}).strict()
+
+const imageSelectorsSchema = z.object({
+  schemaVersion: z.literal(2),
+  kind: z.literal("image"),
+  crdt: z.object({
+    epoch: z.string().min(1).max(64),
+    start: z.string().min(1).max(64 * 1024),
+    end: z.string().min(1).max(64 * 1024),
+  }).strict().optional(),
+  position: z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }).strict(),
+  semantic: z.object({
+    blockId: z.string().min(1).max(128),
+    imageIndex: z.number().int().nonnegative(),
+    headingPath: z.array(z.string().max(500)).max(32),
+  }).strict(),
+  identity: z.object({
+    imageId: z.string().min(1).max(128),
+    resourceKey: z.string().min(1).max(2048),
+  }).strict(),
+}).strict()
+
+const createBaseSchema = z.object({
+  baseVersionId: z.string().min(1).nullable().optional(),
+  epoch: z.string().min(1).max(64).nullable().optional(),
+  stateVector: z.string().max(64 * 1024).nullable().optional(),
+  idempotencyKey: z.string().min(8).max(128).optional(),
+  body: z.string().max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
+})
+
+const createBodySchema = z.discriminatedUnion("targetKind", [
+  createBaseSchema.extend({ targetKind: z.literal("textRange"), target: textRangeTargetSchema, selectors: textSelectorsSchema.optional() }).strict(),
+  createBaseSchema.extend({ targetKind: z.literal("image"), target: imageTargetSchema, selectors: imageSelectorsSchema.optional() }).strict(),
+])
 
 export type DriveAnnotationResolvedTarget = {
   readonly anchorStatus: DriveAnnotationAnchorStatus
@@ -96,29 +135,31 @@ export function parseDriveAnnotationCreateBody(value: unknown): DriveAnnotationC
   if (!parsed.success) throw new BadRequestException("评论请求无效。")
   const body = parsed.data.body.trim()
   if (!body) throw new BadRequestException("评论内容不能为空。")
-  if (parsed.data.target.range.end <= parsed.data.target.range.start || !parsed.data.target.quote.exact) {
+  if (parsed.data.targetKind === "textRange") {
+    if (parsed.data.target.range.end <= parsed.data.target.range.start || !parsed.data.target.quote.exact) {
+      throw new BadRequestException("评论位置无效。")
+    }
+  } else if (parsed.data.target.source.endOffset <= parsed.data.target.source.startOffset) {
     throw new BadRequestException("评论位置无效。")
   }
   if (parsed.data.selectors) assertSelectorRanges(parsed.data.selectors)
   return { ...parsed.data, body }
 }
 
-export function parseDriveAnnotationAnchorUpdateBody(value: unknown): DriveAnnotationAnchorUpdateInput {
-  const parsed = anchorUpdateBodySchema.safeParse(value)
-  if (!parsed.success || !parsed.data.baseVersionId || !parsed.data.selectors || !parsed.data.idempotencyKey) {
-    throw new BadRequestException("评论位置请求无效。")
+export function toDriveAnnotationSelectorsV2(target: DriveAnnotationTextRangeTargetV1 | DriveAnnotationImageTargetV1): DriveAnnotationSelectorsV2 {
+  if (target.kind === "image") {
+    return {
+      schemaVersion: 2,
+      kind: "image",
+      position: { start: target.source.startOffset, end: target.source.endOffset },
+      semantic: {
+        blockId: target.blockHint.blockId,
+        imageIndex: target.blockHint.imageIndex,
+        headingPath: target.blockHint.headingPath,
+      },
+      identity: { imageId: target.imageId, resourceKey: target.resourceKey },
+    }
   }
-  assertSelectorRanges(parsed.data.selectors)
-  return {
-    baseVersionId: parsed.data.baseVersionId,
-    epoch: parsed.data.epoch,
-    stateVector: parsed.data.stateVector,
-    selectors: parsed.data.selectors,
-    idempotencyKey: parsed.data.idempotencyKey,
-  }
-}
-
-export function toDriveAnnotationSelectorsV2(target: DriveAnnotationTextRangeTargetV1): DriveAnnotationSelectorsV2 {
   return {
     schemaVersion: 2,
     position: {
@@ -132,6 +173,7 @@ export function toDriveAnnotationSelectorsV2(target: DriveAnnotationTextRangeTar
 
 function assertSelectorRanges(selectors: DriveAnnotationSelectorsV2): void {
   if (selectors.position.end <= selectors.position.start) throw new BadRequestException("评论位置无效。")
+  if (selectors.kind === "image") return
   if (selectors.renderedPosition && selectors.renderedPosition.end <= selectors.renderedPosition.start) {
     throw new BadRequestException("评论位置无效。")
   }

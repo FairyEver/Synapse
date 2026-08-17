@@ -1,6 +1,7 @@
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
+import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 
 const publicAppUrl = "https://synapse.test"
 
@@ -107,7 +108,6 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
     updateShareComment: vi.fn(async () => ({ id: "comment-2" })),
     deleteShareComment: vi.fn(async () => ({ ok: true })),
     deleteShareThread: vi.fn(async () => ({ ok: true })),
-    updateShareAnchorByQuote: vi.fn(async () => ({ id: "thread-1" })),
   }
 
   return {
@@ -190,7 +190,6 @@ describe("DriveLinkIntakeService", () => {
     await service.updateAnnotationComment({ ...base, commentId: "comment-2", body: "编辑" }, { actorUserId: "user-1" })
     await service.deleteAnnotationComment({ ...base, commentId: "comment-2" }, { actorUserId: "user-1" })
     await service.deleteAnnotationThread({ ...base, threadId: "thread-1" }, { actorUserId: "user-1" })
-    await service.updateAnnotationAnchor({ ...base, threadId: "thread-1", target: { exact: "新正文" }, idempotencyKey: "anchor-key-1" }, { actorUserId: "user-1" })
 
     expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
       shareId: "shr_123",
@@ -213,10 +212,6 @@ describe("DriveLinkIntakeService", () => {
     expect(annotations.replyShareAnnotation).toHaveBeenCalledWith(expect.objectContaining({
       threadId: "thread-1",
       body: { parentCommentId: "comment-1", body: "回复" },
-    }))
-    expect(annotations.updateShareAnchorByQuote).toHaveBeenCalledWith(expect.objectContaining({
-      target: { exact: "新正文" },
-      idempotencyKey: "anchor-key-1",
     }))
   })
 
@@ -532,6 +527,47 @@ describe("DriveLinkIntakeService", () => {
       truncated: false,
       source: { linkType: "share" },
     })
+  })
+
+  it("returns current Markdown image ids only for complete untruncated text", async () => {
+    const { service, drive } = createService()
+    const baseSnapshot = await drive.getShareBrowserSnapshot()
+    const markdown = "# 需求\n\n![架构图](./images/architecture.png \"V1\")"
+    const rendered = await renderDriveMarkdownFragment(markdown)
+    const snapshot = {
+      ...baseSnapshot,
+      current: { ...baseSnapshot.current, size: String(Buffer.byteLength(markdown)) },
+      preview: {
+        ...baseSnapshot.preview,
+        text: markdown,
+        html: rendered.html,
+        markdownProjection: rendered.projection,
+      },
+      edit: {
+        canEdit: true,
+        editorKind: "monaco",
+        currentVersionId: "version-2",
+        maxInlineEditBytes: "1048576",
+        reason: null,
+      },
+    }
+    drive.getShareBrowserSnapshot.mockResolvedValue(snapshot as never)
+
+    const complete = await service.readText({ url: `${publicAppUrl}/share/shr_123`, maxBytes: 1024 })
+    expect(complete.source.versionId).toBe("version-2")
+    expect(complete.markdownImages).toEqual([
+      {
+        imageId: rendered.projection.images?.[0]?.imageId,
+        index: 1,
+        source: "./images/architecture.png",
+        alt: "架构图",
+        title: "V1",
+      },
+    ])
+
+    const truncated = await service.readText({ url: `${publicAppUrl}/share/shr_123`, maxBytes: 8 })
+    expect(truncated.truncated).toBe(true)
+    expect(truncated.markdownImages).toBeUndefined()
   })
 
   it("does not split UTF-8 characters when limiting share text bytes", async () => {

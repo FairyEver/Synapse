@@ -116,6 +116,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
           ...(defaultSchema.attributes?.["*"] ?? []),
           "data-drive-markdown-block-id",
           "data-drive-markdown-segment-id",
+          "data-drive-markdown-image-id",
         ],
         a: [...(defaultSchema.attributes?.a ?? []), "target", "rel"],
         img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading", "data-drive-markdown-relative-src"],
@@ -130,6 +131,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     .use(rehypeStringify)
   const tree = processor.parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
   normalizeDriveMarkdownLooseImageNodes(tree)
+  if (options.allowStandaloneRawImages === true) visitRawImageAst(tree)
   const renderedText = extractDriveMarkdownRenderedText(tree)
   const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
   annotateMarkdownProjectionTree(tree, projection, markdown)

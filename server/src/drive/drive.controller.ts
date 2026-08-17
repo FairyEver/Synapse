@@ -37,7 +37,6 @@ import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import {
   parseDriveAnnotationCommentUpdateBody,
   parseDriveAnnotationCreateBody,
-  parseDriveAnnotationAnchorUpdateBody,
   parseDriveAnnotationReplyBody,
 } from "./drive-annotation-target"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
@@ -146,11 +145,15 @@ const driveLinkAnnotationBaseSchema = driveLinkResolveSchema.extend({
   path: z.string().min(1).max(1024).optional(),
   itemId: z.string().min(1).optional(),
 }).strict()
-const driveLinkAnnotationTargetSchema = z.object({
+const driveLinkAnnotationTextTargetSchema = z.object({
   exact: z.string().min(1).max(DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH),
   prefix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH).optional(),
   suffix: z.string().max(DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH).optional(),
 }).strict()
+const driveLinkAnnotationTargetSchema = z.union([
+  driveLinkAnnotationTextTargetSchema,
+  z.object({ kind: z.literal("image"), imageId: z.string().min(1).max(128) }).strict(),
+])
 const driveLinkAnnotationThreadCreateSchema = driveLinkAnnotationBaseSchema.extend({
   target: driveLinkAnnotationTargetSchema,
   body: z.string().trim().min(1).max(DRIVE_ANNOTATION_COMMENT_MAX_LENGTH),
@@ -170,11 +173,6 @@ const driveLinkAnnotationCommentDeleteSchema = driveLinkAnnotationBaseSchema.ext
 }).strict()
 const driveLinkAnnotationThreadDeleteSchema = driveLinkAnnotationBaseSchema.extend({
   threadId: z.string().min(1),
-}).strict()
-const driveLinkAnnotationAnchorUpdateSchema = driveLinkAnnotationBaseSchema.extend({
-  threadId: z.string().min(1),
-  target: driveLinkAnnotationTargetSchema,
-  idempotencyKey: z.string().min(8).max(128),
 }).strict()
 const driveAccessSettingsSchema = z.object({
   passwordEnabled: z.boolean().optional(),
@@ -699,22 +697,6 @@ export class DriveUserController {
     )
   }
 
-  @Patch("/browser/owner/items/:itemId/annotations/:threadId/anchor")
-  updateOwnerAnnotationAnchor(
-    @Param("itemId") itemId: string,
-    @Param("threadId") threadId: string,
-    @Body() body: unknown,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    return requireDriveAnnotationService(this.annotations).updateOwnerAnchor(
-      request.user!.id,
-      itemId,
-      threadId,
-      parseDriveAnnotationAnchorUpdateBody(body),
-      driveAuditContext(request),
-    )
-  }
-
   @Patch("/browser/owner/items/:itemId/annotations/comments/:commentId")
   updateOwnerAnnotationComment(
     @Param("itemId") itemId: string,
@@ -1158,15 +1140,6 @@ export class DrivePublicController {
     )
   }
 
-  @UseGuards(UserAuthGuard)
-  @Patch("/api/drive/link-intake/annotations/anchor")
-  updateDriveLinkAnnotationAnchor(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    return requireDriveLinkIntakeService(this.linkIntake).updateAnnotationAnchor(
-      parseBody(driveLinkAnnotationAnchorUpdateSchema, body, "评论位置请求无效。"),
-      { actorUserId: request.user!.id, auditContext: driveAuditContext(request) },
-    )
-  }
-
   @Get("/files/:assetId")
   @Head("/files/:assetId")
   async sendPublicAsset(@Param("assetId") assetId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
@@ -1495,44 +1468,6 @@ export class DrivePublicController {
       commentId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
       body: parseDriveAnnotationCommentUpdateBody(body),
-      auditContext: driveAuditContext(request),
-    })
-  }
-
-  @UseGuards(UserAuthGuard)
-  @Patch("/api/drive/browser/shares/:shareId/annotations/:threadId/anchor")
-  updateShareRootAnnotationAnchor(
-    @Param("shareId") shareId: string,
-    @Param("threadId") threadId: string,
-    @Body() body: unknown,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    return requireDriveAnnotationService(this.annotations).updateShareAnchor({
-      actorUserId: request.user!.id,
-      shareId,
-      threadId,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-      body: parseDriveAnnotationAnchorUpdateBody(body),
-      auditContext: driveAuditContext(request),
-    })
-  }
-
-  @UseGuards(UserAuthGuard)
-  @Patch("/api/drive/browser/shares/:shareId/items/:itemId/annotations/:threadId/anchor")
-  updateShareItemAnnotationAnchor(
-    @Param("shareId") shareId: string,
-    @Param("itemId") itemId: string,
-    @Param("threadId") threadId: string,
-    @Body() body: unknown,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    return requireDriveAnnotationService(this.annotations).updateShareAnchor({
-      actorUserId: request.user!.id,
-      shareId,
-      itemId,
-      threadId,
-      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-      body: parseDriveAnnotationAnchorUpdateBody(body),
       auditContext: driveAuditContext(request),
     })
   }

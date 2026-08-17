@@ -158,6 +158,70 @@ describe('renderMarkdownAnnotationHtml', () => {
       range: null,
     })
   })
+
+  it('resolves an attached image thread by its projected image id', () => {
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1"></p>',
+      [imageThread()],
+      'version-1',
+    )
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-image',
+      imageId: 'mdimg_1',
+      anchorStatus: 'attached',
+      range: null,
+    })
+  })
+
+  it('orphans an image thread when the image resource identity changes', () => {
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_replacement" src="/files/asset_2"></p>',
+      [imageThread()],
+      'version-2',
+    )
+
+    expect(result.resolved[0]).toMatchObject({ imageId: null, anchorStatus: 'orphaned', quoteStatus: 'deleted' })
+  })
+
+  it('uses the refreshed source range to attach a moved image with a new projected id', () => {
+    const movedThread = {
+      ...imageThread(),
+      anchor: {
+        ...imageThread().anchor!,
+        resolvedSourceRange: { start: 20, end: 38 },
+        lastResolvedVersionId: 'version-2',
+      },
+    }
+    const currentProjection: DriveMarkdownProjectionDto = {
+      ...projection('前文占位内容'),
+      imageAnchorsVersion: 1,
+      images: [{
+        imageId: 'mdimg_moved',
+        segmentId: 'segment-image',
+        blockId: 'block-moved',
+        imageIndex: 0,
+        documentIndex: 0,
+        sourceStart: 20,
+        sourceEnd: 38,
+        renderedStart: 6,
+        renderedEnd: 6,
+        source: '/files/asset_1',
+        resourceKey: 'file:asset_1',
+        alt: '',
+        title: null,
+      }],
+    }
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_moved" src="/files/asset_1"></p>',
+      [movedThread],
+      'version-2',
+      null,
+      currentProjection,
+    )
+
+    expect(result.resolved[0]).toMatchObject({ imageId: 'mdimg_moved', anchorStatus: 'attached', quoteStatus: 'exact' })
+  })
 })
 
 function thread(input: {
@@ -203,6 +267,41 @@ function anchoredThread(): DriveAnnotationThreadDto {
       quoteStatus: 'exact',
       resolvedSourceRange: { start: 2, end: 7 },
       resolvedRenderedRange: { start: 2, end: 7 },
+      confidence: 1,
+      lastResolvedVersionId: 'version-1',
+    },
+  }
+}
+
+function imageThread(): DriveAnnotationThreadDto {
+  return {
+    ...thread(),
+    id: 'thread-image',
+    targetKind: 'image',
+    target: {
+      schemaVersion: 1,
+      kind: 'image',
+      surface: 'markdownRenderedImage',
+      imageId: 'mdimg_1',
+      resourceKey: 'file:asset_1',
+      source: { startOffset: 0, endOffset: 18 },
+      snapshot: { src: '/files/asset_1', alt: '', title: null },
+      blockHint: { blockId: 'block', blockIndex: 0, imageIndex: 0, headingPath: [] },
+    },
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: 'version-1',
+      selectors: {
+        schemaVersion: 2,
+        kind: 'image',
+        position: { start: 0, end: 18 },
+        semantic: { blockId: 'block', imageIndex: 0, headingPath: [] },
+        identity: { imageId: 'mdimg_1', resourceKey: 'file:asset_1' },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 0, end: 18 },
+      resolvedRenderedRange: null,
       confidence: 1,
       lastResolvedVersionId: 'version-1',
     },

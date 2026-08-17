@@ -3,12 +3,13 @@ import 'github-markdown-css/github-markdown-light.css'
 import {
   isDriveMarkdownItem,
   type DriveAnnotationSelectorsV2,
-  type DriveAnnotationTextRangeTargetV1,
+  type DriveAnnotationTargetDto,
   type DriveBrowserCollaborationCapabilityDto,
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
   type DriveMarkdownOutlineItemDto,
+  type DriveMarkdownProjectionImageDto,
   type DriveCollaborationJoinContext,
 } from '@synapse/shared'
 import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
@@ -34,9 +35,10 @@ import { DriveCodeRenderer } from './code-renderer'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
-import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
+import { createMarkdownAnnotationAnchorFromSelection, createMarkdownImageAnnotationAnchor } from './markdown-annotation-target'
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
 import { MarkdownImageFallbacks } from './markdown-image-fallback'
+import { MarkdownImageCommentsOverlay, type MarkdownImageThreadMarker } from './markdown-image-comments-overlay'
 import { renderDriveMermaidDiagrams, restoreDriveMermaidDiagrams } from './markdown-mermaid-renderer'
 import {
   createMarkdownRenderedDomRange,
@@ -155,14 +157,14 @@ function DriveMarkdownBody({
   const [widthMode, setWidthMode] = useState<MarkdownWidthMode>('reading')
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [pendingTarget, setPendingTarget] = useState<{
-    readonly target: DriveAnnotationTextRangeTargetV1
+    readonly target: DriveAnnotationTargetDto
     readonly selectors: DriveAnnotationSelectorsV2
   } | null>(null)
   const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverPosition | null>(null)
   const [commentDraftOpen, setCommentDraftOpen] = useState(false)
   const [commentBody, setCommentBody] = useState('')
   const [commentCreateError, setCommentCreateError] = useState<string | null>(null)
-  const [reassociatingThreadId, setReassociatingThreadId] = useState<string | null>(null)
+  const [pendingImageAnchorTop, setPendingImageAnchorTop] = useState<number | null>(null)
   const [commentAnchorBaseOffset, setCommentAnchorBaseOffset] = useState(0)
   const [commentAnchoredDocumentHeight, setCommentAnchoredDocumentHeight] = useState(0)
   const [documentNaturalHeight, setDocumentNaturalHeight] = useState(0)
@@ -178,7 +180,7 @@ function DriveMarkdownBody({
     setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
-    setReassociatingThreadId(null)
+    setPendingImageAnchorTop(null)
     setCommentAnchoredDocumentHeight(0)
     setDocumentNaturalHeight(0)
     setThreadAnchorTopById({})
@@ -209,6 +211,7 @@ function DriveMarkdownBody({
             resolveCrdtRange: liveCollaboration.session.resolveRelativeRange,
           }
         : null,
+      projection,
     ),
     [
       annotations.threads,
@@ -297,6 +300,18 @@ function DriveMarkdownBody({
     ? navigableThreadIds[0] ?? null
     : navigableThreadIds[activeNavigableIndex + 1] ?? null
   const commentCount = railThreads.length + (commentDraftOpen ? 1 : 0)
+  const imageThreadMarkers = useMemo<readonly MarkdownImageThreadMarker[]>(() => {
+    const threadIdsByImageId = new Map<string, string[]>()
+    for (const thread of sortedThreads) {
+      const resolved = resolvedByThreadId.get(thread.id)
+      if (thread.target.kind !== 'image' || resolved?.anchorStatus !== 'attached' || !resolved.imageId) continue
+      const threadIds = threadIdsByImageId.get(resolved.imageId) ?? []
+      threadIds.push(thread.id)
+      threadIdsByImageId.set(resolved.imageId, threadIds)
+    }
+    return [...threadIdsByImageId].map(([imageId, threadIds]) => ({ imageId, threadIds }))
+  }, [resolvedByThreadId, sortedThreads])
+  const activeImageId = activeThreadId ? resolvedByThreadId.get(activeThreadId)?.imageId ?? null : null
 
   useEffect(() => {
     if (!activeThreadId || railThreads.some((item) => item.thread.id === activeThreadId)) return
@@ -325,7 +340,13 @@ function DriveMarkdownBody({
     const nextRects: MarkdownAnnotationOverlayRect[] = []
 
     for (const item of annotated.resolved) {
-      if (item.anchorStatus === 'orphaned' || !item.range) continue
+      if (item.anchorStatus === 'orphaned') continue
+      if (item.imageId) {
+        const imageElement = findVisibleMarkdownCommentImage(root, item.imageId)
+        if (imageElement) nextAnchors[item.threadId] = imageElement.getBoundingClientRect().top - rootRect.top
+        continue
+      }
+      if (!item.range) continue
       const rects = measureRenderedTextRange(root, renderedTextSegments, item.range, rootRect)
       if (rects.length === 0) continue
       nextAnchors[item.threadId] = rects[0].top
@@ -339,7 +360,7 @@ function DriveMarkdownBody({
       })
     }
 
-    if (pendingTarget) {
+    if (pendingTarget?.target.kind === 'textRange') {
       const pending = resolveMarkdownAnnotationTextRange(pendingTarget.target, renderedText)
       if (pending.range) {
         measureRenderedTextRange(root, renderedTextSegments, pending.range, rootRect).forEach((rect, index) => {
@@ -415,38 +436,16 @@ function DriveMarkdownBody({
     setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
-    setReassociatingThreadId(null)
+    setPendingImageAnchorTop(null)
     window.getSelection()?.removeAllRanges()
   }, [])
 
   const clearPendingSelectionAction = useCallback(() => {
     setPendingTarget(null)
+    setPendingImageAnchorTop(null)
     setSelectionPopover(null)
     setCommentCreateError(null)
   }, [])
-
-  const applyReassociation = useCallback(async () => {
-    const baseVersionId = liveCollaboration.state?.checkpointVersionId ?? edit?.currentVersionId
-    if (!reassociatingThreadId || !pendingTarget || !baseVersionId) return
-    setCommentCreateError(null)
-    try {
-      await annotations.updateAnchor({
-        threadId: reassociatingThreadId,
-        baseVersionId,
-        epoch: liveCollaboration.state?.epoch ?? null,
-        stateVector: liveCollaboration.session ? encodeStateVector(liveCollaboration.session.doc) : null,
-        selectors: pendingTarget.selectors,
-        idempotencyKey: crypto.randomUUID(),
-      })
-      setActiveThreadId(reassociatingThreadId)
-      setPendingTarget(null)
-      setSelectionPopover(null)
-      setReassociatingThreadId(null)
-      window.getSelection()?.removeAllRanges()
-    } catch (cause) {
-      setCommentCreateError(getCommentActionErrorMessage(cause))
-    }
-  }, [annotations, edit?.currentVersionId, liveCollaboration.session, liveCollaboration.state?.checkpointVersionId, liveCollaboration.state?.epoch, pendingTarget, reassociatingThreadId])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [
@@ -504,6 +503,12 @@ function DriveMarkdownBody({
   const scrollToThread = (threadId: string) => {
     setActiveThreadId(threadId)
     const root = bodyRef.current
+    const imageId = resolvedByThreadId.get(threadId)?.imageId
+    const imageElement = root && imageId ? findVisibleMarkdownCommentImage(root, imageId) : null
+    if (root && imageElement) {
+      scrollPreviewContainerToRect(root, imageElement.getBoundingClientRect())
+      return
+    }
     const overlayRect = findOverlayRectByThreadId(annotationOverlayRects, threadId, root)
     if (!root || !overlayRect) return
     scrollPreviewContainerToRect(root, overlayRect)
@@ -546,6 +551,7 @@ function DriveMarkdownBody({
       return
     }
     setPendingTarget(target)
+    setPendingImageAnchorTop(null)
     setSelectionPopover({
       top: Math.max(8, rect.top - 40),
       left: rect.left + rect.width / 2,
@@ -646,6 +652,36 @@ function DriveMarkdownBody({
     scheduleDocumentScrollEffects()
   }, [scheduleDocumentScrollEffects])
 
+  const startImageComment = useCallback((image: DriveMarkdownProjectionImageDto) => {
+    if (!projection) return
+    const pending = createMarkdownImageAnnotationAnchor({
+      image,
+      projection,
+      epoch: liveCollaboration.state?.epoch,
+      yText: liveCollaboration.session && collaborationTextMatchesProjection
+        ? liveCollaboration.session.text
+        : null,
+    })
+    const root = bodyRef.current
+    const imageElement = root ? findVisibleMarkdownCommentImage(root, image.imageId) : null
+    setPendingTarget(pending)
+    setPendingImageAnchorTop(root && imageElement
+      ? imageElement.getBoundingClientRect().top - root.getBoundingClientRect().top
+      : 0)
+    setSelectionPopover(null)
+    setCommentCreateError(null)
+    setCommentDraftOpen(true)
+    setCommentPanelOpen(true)
+  }, [collaborationTextMatchesProjection, liveCollaboration.session, liveCollaboration.state?.epoch, projection, setCommentPanelOpen])
+
+  const focusImageThreads = useCallback((marker: MarkdownImageThreadMarker) => {
+    setCommentPanelOpen(true)
+    const currentThreadIsOnImage = activeThreadId
+      ? marker.threadIds.includes(activeThreadId)
+      : false
+    if (!currentThreadIsOnImage) setActiveThreadId(marker.threadIds[0] ?? null)
+  }, [activeThreadId, setCommentPanelOpen])
+
   const openImagePreview = (image: HTMLImageElement) => {
     const root = bodyRef.current
     if (!root) return
@@ -711,7 +747,7 @@ function DriveMarkdownBody({
         stateVector: liveCollaboration.session ? encodeStateVector(liveCollaboration.session.doc) : null,
         selectors: pendingTarget.selectors,
         idempotencyKey: crypto.randomUUID(),
-        targetKind: 'textRange',
+        targetKind: pendingTarget.target.kind,
         target: pendingTarget.target,
         body: commentBody,
       })
@@ -721,6 +757,7 @@ function DriveMarkdownBody({
       setSelectionPopover(null)
       setCommentDraftOpen(false)
       setCommentBody('')
+      setPendingImageAnchorTop(null)
       window.getSelection()?.removeAllRanges()
     } catch (cause) {
       setCommentCreateError(getCommentActionErrorMessage(cause))
@@ -753,6 +790,18 @@ function DriveMarkdownBody({
             dangerouslySetInnerHTML={annotatedHtmlProperty}
           />
           <MarkdownImageFallbacks contentKey={annotated.html} rootRef={bodyRef} />
+          <MarkdownImageCommentsOverlay
+            contentKey={`${annotated.html}\0${layoutMode}`}
+            rootRef={bodyRef}
+            containerRef={documentContentRef}
+            scrollRef={documentScrollRef}
+            images={projection?.images ?? []}
+            markers={imageThreadMarkers}
+            activeImageId={activeImageId}
+            canCreate={canCreateAnnotation && !isCompact && !commentDraftOpen && !annotations.creatingThread}
+            onAddComment={startImageComment}
+            onFocusThreads={focusImageThreads}
+          />
           {annotationOverlayRects.length > 0 ? (
             <div aria-hidden className='pointer-events-none absolute inset-0'>
               {annotationOverlayRects.filter((rect) => rect.visible).map((rect) => (
@@ -795,8 +844,10 @@ function DriveMarkdownBody({
 
   const commentDraft = commentDraftOpen && pendingTarget
     ? {
-        anchorTop: annotationOverlayRects.find((rect) => rect.kind === 'pending')?.top ?? 0,
-        quote: pendingTarget.target.quote.exact.replace(/\s+/gu, ' ').trim(),
+        anchorTop: pendingTarget.target.kind === 'image'
+          ? pendingImageAnchorTop ?? 0
+          : annotationOverlayRects.find((rect) => rect.kind === 'pending')?.top ?? 0,
+        quote: markdownAnnotationTargetLabel(pendingTarget.target),
         value: commentBody,
         submitting: annotations.creatingThread,
         error: commentCreateError,
@@ -828,13 +879,6 @@ function DriveMarkdownBody({
       onReply={annotations.reply}
       onUpdateComment={annotations.updateComment}
       onDeleteComment={annotations.deleteComment}
-      onStartReassociate={(threadId) => {
-        setReassociatingThreadId(threadId)
-        setActiveThreadId(threadId)
-        setPendingTarget(null)
-        setSelectionPopover(null)
-        if (isCompact) setCompactPanel(null)
-      }}
     />
   )
 
@@ -851,15 +895,11 @@ function DriveMarkdownBody({
             className='shadow-md'
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
-              if (reassociatingThreadId) {
-                void applyReassociation()
-                return
-              }
               setCommentDraftOpen(true)
               setCommentPanelOpen(true)
             }}
           >
-            {reassociatingThreadId ? '重新关联' : '添加评论'}
+            添加评论
           </Button>
         </div>
       ) : null}
@@ -985,6 +1025,22 @@ function findMarkdownPreviewImage(target: EventTarget | null, root: HTMLElement)
   return target instanceof HTMLImageElement && root.contains(target) && target.hasAttribute('src')
     ? target
     : null
+}
+
+function findVisibleMarkdownCommentImage(root: HTMLElement, imageId: string): HTMLElement | null {
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'))
+    .filter((element) => element.dataset.driveMarkdownImageId === imageId && !element.hidden)
+  return candidates.find((element) => element.hasAttribute('data-drive-markdown-image-fallback-host'))
+    ?? candidates.find((element) => element.tagName === 'IMG')
+    ?? null
+}
+
+function markdownAnnotationTargetLabel(target: DriveAnnotationTargetDto): string {
+  if (target.kind === 'textRange') return target.quote.exact.replace(/\s+/gu, ' ').trim()
+  const alt = target.snapshot.alt.trim()
+  if (alt) return alt
+  const source = target.snapshot.src.split(/[?#]/u)[0] ?? ''
+  return source.split(/[\\/]/u).at(-1)?.trim() || '图片'
 }
 
 function encodeStateVector(doc: Y.Doc): string {

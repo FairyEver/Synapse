@@ -26,14 +26,13 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.file_version_pin.update" as CapabilityId, title: "Update file version pin", description: "Keep or unkeep a non-current Synapse Drive file version that is not pending cleanup.", mutates: true },
   { id: "app.drive.link.resolve" as CapabilityId, title: "Resolve Drive link", description: "Resolve a Synapse Drive /share, /sites, or /files URL for Agent consumption.", mutates: false },
   { id: "app.drive.link.list" as CapabilityId, title: "List Drive link", description: "List children or resources for a resolved Synapse Drive link.", mutates: false },
-  { id: "app.drive.link.read_text" as CapabilityId, title: "Read Drive link text", description: "Read previewable Markdown, HTML source, or text from a Synapse Drive link.", mutates: false },
+  { id: "app.drive.link.read_text" as CapabilityId, title: "Read Drive link text", description: "Read previewable Markdown, HTML source, or text from a Synapse Drive link, including image ids for complete Markdown responses.", mutates: false },
   { id: "app.drive.link.annotation.thread.list" as CapabilityId, title: "List Drive link annotation threads", description: "List all visible annotation threads and projected permissions for a shared Markdown document.", mutates: false },
-  { id: "app.drive.link.annotation.thread.create" as CapabilityId, title: "Create Drive link annotation thread", description: "Create an anchored annotation thread on uniquely identified visible text in a shared Markdown document.", mutates: true },
+  { id: "app.drive.link.annotation.thread.create" as CapabilityId, title: "Create Drive link annotation thread", description: "Create an anchored annotation thread on uniquely identified visible text or a projected whole image in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.create" as CapabilityId, title: "Reply to Drive link annotation", description: "Add a comment or nested reply to an annotation thread in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.update" as CapabilityId, title: "Update Drive link annotation comment", description: "Edit the current user's annotation comment in a shared Markdown document.", mutates: true },
   { id: "app.drive.link.annotation.comment.delete" as CapabilityId, title: "Delete Drive link annotation comment", description: "Delete one permitted annotation comment with its descendant replies; deleting the first comment removes the thread.", mutates: true },
   { id: "app.drive.link.annotation.thread.delete" as CapabilityId, title: "Delete Drive link annotation thread", description: "Delete one annotation thread when the current user has permission.", mutates: true },
-  { id: "app.drive.link.annotation.anchor.update" as CapabilityId, title: "Update Drive link annotation anchor", description: "Reassociate an annotation thread with uniquely identified visible text in the current shared Markdown version.", mutates: true },
   { id: "app.drive.link.materialize" as CapabilityId, title: "Materialize Drive link", description: "Download a Synapse Drive link into a local cache directory for local Agent tools.", mutates: true },
   { id: "app.drive.link.download_file" as CapabilityId, title: "Download Drive link file", description: "Download one file or public asset from a Synapse Drive link to a local path or cache.", mutates: true },
   { id: "app.drive.folder_zip.create" as CapabilityId, title: "Create folder zip", description: "Download a Synapse Drive folder as a local zip file.", mutates: true },
@@ -122,14 +121,28 @@ const driveLinkAnnotationBaseProperties = {
   itemId: stringField("Optional Drive item id inside the share. Takes precedence over path."),
 }
 const driveLinkAnnotationTargetProperty = {
-  type: "object",
-  description: "Visible Markdown text to anchor. Add prefix or suffix only when exact occurs more than once.",
-  properties: {
-    exact: { type: "string", minLength: 1, maxLength: 1000, description: "Exact visible text to anchor." },
-    prefix: { type: "string", maxLength: 200, description: "Optional visible text immediately before exact for disambiguation." },
-    suffix: { type: "string", maxLength: 200, description: "Optional visible text immediately after exact for disambiguation." },
-  },
-  required: ["exact"],
+  description: "Visible Markdown text or a whole Markdown image. Obtain imageId from drive_link_read_text immediately before creating an image thread.",
+  oneOf: [
+    {
+      type: "object",
+      properties: {
+        exact: { type: "string", minLength: 1, maxLength: 1000, description: "Exact visible text to anchor." },
+        prefix: { type: "string", maxLength: 200, description: "Optional visible text immediately before exact for disambiguation." },
+        suffix: { type: "string", maxLength: 200, description: "Optional visible text immediately after exact for disambiguation." },
+      },
+      required: ["exact"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["image"], description: "Whole-image annotation target." },
+        imageId: { type: "string", minLength: 1, maxLength: 128, description: "Current image id from drive_link_read_text.markdownImages." },
+      },
+      required: ["kind", "imageId"],
+      additionalProperties: false,
+    },
+  ],
 }
 const accessSettingsProperties = {
   passwordEnabled: { type: "boolean", description: "Whether public access should require a password. Defaults to false." },
@@ -377,7 +390,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_read_text",
-      description: "Read Markdown, HTML source, JSON, or other previewable text from a Drive link. Use drive_link_download_file for binary files.",
+      description: "Read Markdown, HTML source, JSON, or other previewable text from a Drive link. Complete, untruncated Markdown responses include markdownImages with current imageId values. Use drive_link_download_file for binary files.",
       inputSchema: {
         type: "object",
         properties: {
@@ -396,7 +409,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_thread_create",
-      description: "Create an annotation thread on visible text in a shared .md document. The server resolves the current Markdown projection and rejects missing or ambiguous text instead of guessing.",
+      description: "Create an annotation thread on visible text or one whole projected image in a shared .md document. For an image, first call drive_link_read_text and pass { kind: image, imageId } from markdownImages. The server rejects stale, missing, or ambiguous targets instead of guessing.",
       inputSchema: {
         type: "object",
         properties: {
@@ -451,20 +464,6 @@ export function buildDriveTools(): McpToolDefinition[] {
         type: "object",
         properties: { ...driveLinkAnnotationBaseProperties, threadId: stringField("Annotation thread id to delete.") },
         required: ["url", "threadId"],
-      },
-    },
-    {
-      name: "drive_link_annotation_anchor_update",
-      description: "Reassociate an annotation thread with visible text in the current shared .md version. The server rejects missing or ambiguous text instead of guessing. Read the returned anchor for the current position; target preserves the original quote snapshot.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          ...driveLinkAnnotationBaseProperties,
-          threadId: stringField("Annotation thread id."),
-          target: driveLinkAnnotationTargetProperty,
-          idempotencyKey: { type: "string", minLength: 8, maxLength: 128, description: "Stable caller-generated key. Reuse it when retrying the same reassociation." },
-        },
-        required: ["url", "threadId", "target", "idempotencyKey"],
       },
     },
     {

@@ -31,7 +31,6 @@ Use these tools only for Synapse Drive:
 - `app_drive_link_annotation_comment_update`
 - `app_drive_link_annotation_comment_delete`
 - `app_drive_link_annotation_thread_delete`
-- `app_drive_link_annotation_anchor_update`
 - `app_drive_link_materialize`
 - `app_drive_link_download_file`
 - `app_drive_folder_zip_create`
@@ -73,7 +72,7 @@ Use these tools only for Synapse Drive:
 
 Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing unrelated to a Drive operation.
 
-Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments and anchors only through the seven `app_drive_link_annotation_*` tools for shared `.md` documents. These annotation calls do not join a browser collaboration room, and MCP file content writes continue to use the versioned file APIs.
+Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared `.md` documents. These annotation calls do not join a browser collaboration room, and MCP file content writes continue to use the versioned file APIs.
 
 ## One-Time Upload Versus Persistent Sync
 
@@ -143,9 +142,10 @@ When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL
 For comments on a `/share/...` `.md` document, use the annotation tools with the same `url`, optional `password`, and optional `itemId` or `path`. `itemId` takes precedence over `path`.
 
 - List threads before acting so ids and current permissions are fresh. The list includes all visible cross-version threads, nested comments, anchors, and per-comment permissions.
-- Treat `thread.anchor` as the current authoritative position. The legacy `thread.target` remains the original quote snapshot for compatibility and may still show the pre-reassociation text. Link annotation list and mutation results always return `author.email: null`; use the author id or handle for identity.
-- For a new thread or anchor reassociation, pass visible text as `target.exact`; add `prefix` and/or `suffix` when the exact text repeats. If the server reports missing or ambiguous text, reread the document or ask for more context. Never guess an anchor.
-- Reuse the same stable `idempotencyKey` when retrying the same thread creation or anchor reassociation.
+- Treat `thread.anchor` as the current authoritative position. `thread.target` preserves the original text or image snapshot. Link annotation list and mutation results always return `author.email: null`; use the author id or handle for identity.
+- For a new text thread, pass visible text as `target.exact`; add `prefix` and/or `suffix` when the exact text repeats. For a whole-image thread, first call `app_drive_link_read_text`, take the current `imageId` from `markdownImages`, then pass `target: { kind: "image", imageId }`. If the server reports a missing or ambiguous target, reread the document or ask for more context. Never guess an anchor.
+- Reuse the same stable `idempotencyKey` when retrying the same thread creation.
+- Comments cannot be manually reassociated. When text is deleted or an image resource is replaced or deleted, the thread remains visible as unlocated.
 - Reply with `parentCommentId` only when targeting a specific comment. Comment bodies are limited to 4000 characters.
 - Edit only comments whose returned permissions allow editing. Delete only after the user explicitly identifies the exact comment or thread target, even though deletion is registered as an ordinary mutation.
 - Do not use annotation tools for `/sites`, `/files`, folders, non-`.md` files, document editing, presence, or collaboration-room control.
@@ -350,6 +350,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 - "读取这个需求链接": call `app_drive_link_read_text`.
 - "读取并回复这个分享文档的评论": call `app_drive_link_annotation_thread_list`, then `app_drive_link_annotation_comment_create` with the selected thread or comment id.
 - "在这段原文上评论": call `app_drive_link_annotation_thread_create` with visible quote text and a stable idempotency key.
+- "评论这张 Markdown 图片": call `app_drive_link_read_text`, choose the matching entry from `markdownImages`, then call `app_drive_link_annotation_thread_create` with `{ kind: "image", imageId }` and a stable idempotency key.
 - "删除这条评论": list first, verify the explicitly identified target and returned permission, warn that its descendant replies will also be deleted (or that the whole thread will be removed for the first comment), then call `app_drive_link_annotation_comment_delete`.
 - "分析这个 HTML 原型站点": call `app_drive_link_resolve`, `app_drive_link_list`, then `app_drive_link_materialize` when local files are useful.
 - "下载这个公开素材": call `app_drive_link_download_file`.

@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MarkdownCommentsRail } from './markdown-comments-rail'
+import { MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -31,7 +31,35 @@ describe('MarkdownCommentsRail', () => {
     expect(document.body.textContent).toContain('未定位 1')
     expect(document.body.textContent).toContain('原文已修改或删除')
     expect(document.body.textContent).toContain('“Note”')
+    expect(document.body.textContent).not.toContain('重新关联')
     expect(document.body.innerHTML).not.toContain('<strong>unsafe</strong>')
+  })
+
+  it('describes orphaned image threads without offering reassociation', () => {
+    const source = thread()
+    const imageItem = {
+      ...source,
+      thread: {
+        ...source.thread,
+        targetKind: 'image',
+        target: {
+          schemaVersion: 1,
+          kind: 'image',
+          surface: 'markdownRenderedImage',
+          imageId: 'mdimg_1',
+          resourceKey: 'file:asset_1',
+          source: { startOffset: 0, endOffset: 18 },
+          snapshot: { src: '/files/asset_1', alt: '', title: null },
+          blockHint: { blockId: 'block', blockIndex: 0, imageIndex: 0, headingPath: [] },
+        },
+      },
+    } as MarkdownCommentsRailThread
+
+    renderRail({ threads: [imageItem] })
+
+    expect(document.body.textContent).toContain('图片已替换或删除')
+    expect(document.body.textContent).toContain('“asset_1”')
+    expect(document.body.textContent).not.toContain('重新关联')
   })
 
   it('orders unlocated comments by latest activity before attached comments in compact mode', () => {

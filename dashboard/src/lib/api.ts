@@ -4,7 +4,6 @@ import type {
   DriveAnnotationCommentDto,
   DriveAnnotationCommentUpdateInput,
   DriveAnnotationCreateInput,
-  DriveAnnotationAnchorUpdateInput,
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
   DriveAccessSettingsInput,
@@ -1061,11 +1060,6 @@ export const driveAnnotationApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  updateOwnerAnchor: (itemId: string, threadId: string, input: DriveAnnotationAnchorUpdateInput) =>
-    request<DriveAnnotationThreadDto>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}/anchor`), {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    }),
   replyOwner: (itemId: string, threadId: string, input: DriveAnnotationReplyInput) =>
     request<DriveAnnotationCommentDto>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}/comments`), {
       method: 'POST',
@@ -1085,11 +1079,6 @@ export const driveAnnotationApi = {
   createShare: (shareId: string, itemId: string | null | undefined, input: DriveAnnotationCreateInput) =>
     request<DriveAnnotationThreadDto>(shareAnnotationPath(shareId, itemId), {
       method: 'POST',
-      body: JSON.stringify(input),
-    }),
-  updateShareAnchor: (shareId: string, itemId: string | null | undefined, threadId: string, input: DriveAnnotationAnchorUpdateInput) =>
-    request<DriveAnnotationThreadDto>(shareAnnotationPath(shareId, itemId, `/${encodeURIComponent(threadId)}/anchor`), {
-      method: 'PATCH',
       body: JSON.stringify(input),
     }),
   replyShare: (shareId: string, itemId: string | null | undefined, threadId: string, input: DriveAnnotationReplyInput) =>

@@ -8,11 +8,12 @@ import type {
   DriveAnnotationThreadDto,
   DriveMarkdownProjectionDto,
 } from '@synapse/shared'
-import { resolveDriveAnnotationAnchor, sliceByCodePoints } from '@synapse/shared'
+import { resolveDriveAnnotationAnchor, resolveDriveImageAnnotationAnchor, sliceByCodePoints } from '@synapse/shared'
 import { getMarkdownRenderedText } from './markdown-rendered-text'
 
 export type MarkdownAnnotationResolvedRange = {
   readonly threadId: string
+  readonly imageId?: string | null
   readonly anchorStatus: DriveAnnotationAnchorStatus
   readonly range: { readonly start: number; readonly end: number } | null
   readonly renderedRange?: { readonly start: number; readonly end: number } | null
@@ -38,13 +39,60 @@ export function renderMarkdownAnnotationHtml(
   threads: readonly DriveAnnotationThreadDto[],
   currentVersionId: string | null = null,
   liveDocument: MarkdownAnnotationLiveDocument | null = null,
+  currentProjection: DriveMarkdownProjectionDto | null = null,
 ): MarkdownAnnotationHtmlResult {
   if (threads.length === 0) return { html, resolved: [] }
   const template = document.createElement('template')
   template.innerHTML = html
   const renderedText = getMarkdownRenderedText(template.content)
   const resolved = threads.map((thread) => {
+    if (thread.target.kind === 'image') {
+      const imageExists = Array.from(template.content.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'))
+        .some((element) => element.dataset.driveMarkdownImageId === thread.target.imageId)
+      const imageProjection = liveDocument?.projection ?? currentProjection
+      if (thread.anchor?.selectors.kind === 'image' && imageProjection) {
+        const resolution = resolveDriveImageAnnotationAnchor({
+          selectors: thread.anchor.selectors,
+          projection: imageProjection,
+          crdtSourceRange: liveDocument && thread.anchor.selectors.crdt
+            ? liveDocument.resolveCrdtRange(thread.anchor.selectors.crdt)
+            : thread.anchor.resolvedSourceRange,
+        })
+        const currentImageId = resolution.sourceRange
+          ? imageProjection.images?.find((image) => image.sourceStart === resolution.sourceRange?.start
+            && image.sourceEnd === resolution.sourceRange?.end)?.imageId ?? null
+          : null
+        return {
+          threadId: thread.id,
+          imageId: currentImageId,
+          anchorStatus: resolution.positionStatus === 'attached' && currentImageId ? 'attached' as const : 'orphaned' as const,
+          range: null,
+          renderedRange: null,
+          positionStatus: resolution.positionStatus,
+          quoteStatus: resolution.quoteStatus,
+          sourceRange: resolution.sourceRange,
+          confidence: resolution.confidence,
+        }
+      }
+      const attached = thread.anchorStatus !== 'orphaned'
+        && thread.anchor?.positionStatus === 'attached'
+        && imageExists
+      return {
+        threadId: thread.id,
+        imageId: attached ? thread.target.imageId : null,
+        anchorStatus: attached ? 'attached' as const : 'orphaned' as const,
+        range: null,
+        renderedRange: null,
+        positionStatus: attached ? 'attached' as const : thread.anchor?.positionStatus ?? 'orphaned' as const,
+        quoteStatus: attached ? 'exact' as const : 'deleted' as const,
+        sourceRange: attached ? thread.anchor?.resolvedSourceRange ?? null : null,
+        confidence: thread.anchor?.confidence ?? undefined,
+      }
+    }
     if (thread.anchor) {
+      if (thread.anchor.selectors.kind === 'image') {
+        return { threadId: thread.id, anchorStatus: 'orphaned' as const, range: null }
+      }
       if (liveDocument) {
         const resolution = resolveDriveAnnotationAnchor({
           selectors: thread.anchor.selectors,

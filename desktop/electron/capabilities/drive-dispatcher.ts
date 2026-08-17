@@ -20,7 +20,6 @@ import type {
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
   DriveLinkDownloadFileInput,
-  DriveLinkAnnotationAnchorUpdateInput,
   DriveLinkAnnotationCommentCreateInput,
   DriveLinkAnnotationCommentDeleteInput,
   DriveLinkAnnotationCommentUpdateInput,
@@ -144,7 +143,6 @@ type DriveAccountServicePort = {
   readonly updateDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentUpdateInput) => Promise<unknown>
   readonly deleteDriveLinkAnnotationComment: (input: DriveLinkAnnotationCommentDeleteInput) => Promise<unknown>
   readonly deleteDriveLinkAnnotationThread: (input: DriveLinkAnnotationThreadDeleteInput) => Promise<unknown>
-  readonly updateDriveLinkAnnotationAnchor: (input: DriveLinkAnnotationAnchorUpdateInput) => Promise<unknown>
   readonly downloadDriveFolderZip: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
   readonly listDrivePublicAssets: (input?: DrivePublicLinksPageInput) => Promise<DrivePublicAssetListPageDto>
   readonly getDrivePublicAsset: (assetId: string) => Promise<DrivePublicAssetDto>
@@ -393,11 +391,6 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
           return dispatchDriveMutation(deps, action, params, context, async () => ({
             ok: true,
             data: await deps.accountService.deleteDriveLinkAnnotationThread(parseDriveLinkAnnotationThreadDeleteInput(params)),
-          }))
-        case "app.drive.link.annotation.anchor.update":
-          return dispatchDriveMutation(deps, action, params, context, async () => ({
-            ok: true,
-            data: await deps.accountService.updateDriveLinkAnnotationAnchor(parseDriveLinkAnnotationAnchorUpdateInput(params)),
           }))
         case "app.drive.link.materialize":
           return dispatchDriveMutation(deps, action, params, context, async () => {
@@ -1741,20 +1734,18 @@ function parseDriveLinkAnnotationThreadDeleteInput(params: Record<string, unknow
   }
 }
 
-function parseDriveLinkAnnotationAnchorUpdateInput(params: Record<string, unknown>): DriveLinkAnnotationAnchorUpdateInput {
-  return {
-    ...parseDriveLinkAnnotationBaseInput(params),
-    threadId: requireString(params, "threadId"),
-    target: parseDriveLinkAnnotationTarget(params.target),
-    idempotencyKey: requireString(params, "idempotencyKey"),
-  }
-}
-
 function parseDriveLinkAnnotationTarget(value: unknown): DriveLinkAnnotationThreadCreateInput["target"] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Missing or invalid 'target': expected object")
   }
   const target = value as Record<string, unknown>
+  if (target.kind === "image") {
+    return {
+      kind: "image",
+      imageId: requireString(target, "imageId"),
+    }
+  }
+  if (target.kind !== undefined) throw new Error("Missing or invalid 'target.kind': expected image or omitted")
   return {
     exact: requireDriveLinkAnnotationText(target, "exact"),
     prefix: optionalDriveLinkAnnotationContext(target.prefix, "prefix"),

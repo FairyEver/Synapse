@@ -18,6 +18,7 @@ const ZOOM_STEP = 1.25
 const MIN_SCALE = 0.1
 const MAX_SCALE = 5
 const SCALE_EPSILON = 0.001
+const BACKGROUND_CLICK_MOVEMENT_TOLERANCE = 4
 
 type Point = {
   readonly x: number
@@ -73,6 +74,12 @@ type PointerGesture =
       readonly distance: number
       readonly transform: ViewerTransform
     }
+
+type BackgroundPress = {
+  readonly pointerId: number
+  readonly start: Point
+  moved: boolean
+}
 
 const DEFAULT_TRANSFORM: ViewerTransform = { scale: 1, x: 0, y: 0 }
 
@@ -143,6 +150,7 @@ export function createImageLightbox(
     const closeRequestedRef = useRef(false)
     const pointersRef = useRef(new Map<number, Point>())
     const gestureRef = useRef<PointerGesture | null>(null)
+    const backgroundPressRef = useRef<BackgroundPress | null | undefined>(undefined)
     const activeImage = preview.images[activeIndex]
     const fitScale = useMemo(
       () => calculateFitScale(naturalSize, viewportSize),
@@ -296,6 +304,33 @@ export function createImageLightbox(
       updateScale(targetScale, pointFromClient(event.clientX, event.clientY, event.currentTarget))
     }
 
+    const handleBackgroundPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button > 0) {
+        backgroundPressRef.current = null
+        return
+      }
+      const isBackground = event.target === event.currentTarget || event.target === viewportRef.current
+      backgroundPressRef.current = isBackground
+        ? { pointerId: event.pointerId, start: { x: event.clientX, y: event.clientY }, moved: false }
+        : null
+    }
+
+    const handleBackgroundPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+      const press = backgroundPressRef.current
+      if (!press || press.pointerId !== event.pointerId) return
+      if (
+        Math.abs(event.clientX - press.start.x) > BACKGROUND_CLICK_MOVEMENT_TOLERANCE
+        || Math.abs(event.clientY - press.start.y) > BACKGROUND_CLICK_MOVEMENT_TOLERANCE
+      ) press.moved = true
+    }
+
+    const handleBackgroundClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+      const press = backgroundPressRef.current
+      backgroundPressRef.current = undefined
+      const isBackground = event.target === event.currentTarget || event.target === viewportRef.current
+      if (isBackground && press !== null && !press?.moved) requestClose()
+    }
+
     const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
       if (controlsDisabled || event.button > 0) return
       event.currentTarget.setPointerCapture?.(event.pointerId)
@@ -355,8 +390,11 @@ export function createImageLightbox(
           aria-describedby={undefined}
           className="h-screen max-h-none w-screen max-w-none gap-0 rounded-none border-0 bg-black p-0 text-white shadow-none sm:max-w-none"
           data-image-lightbox="true"
+          onClick={handleBackgroundClick}
           onKeyDown={handleKeyDown}
+          onPointerDownCapture={handleBackgroundPointerDown}
           onPointerDownOutside={(event: { preventDefault: () => void }) => event.preventDefault()}
+          onPointerMoveCapture={handleBackgroundPointerMove}
           showCloseButton={false}
         >
           <DialogTitle className="sr-only">{activeImage.alt || "图片预览"}</DialogTitle>
