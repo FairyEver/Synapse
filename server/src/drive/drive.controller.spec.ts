@@ -626,7 +626,10 @@ describe("DriveController", () => {
       annotations.deleteOwnerComment.mockResolvedValue({ ok: true })
       annotations.deleteOwnerThread.mockResolvedValue({ ok: true })
 
-      await request(userApp.getHttpServer()).get("/api/drive/browser/owner/items/item-1/annotations").expect(200)
+      const ownerAnnotationResponse = await request(userApp.getHttpServer())
+        .get("/api/drive/browser/owner/items/item-1/annotations")
+        .expect(200)
+      expect(ownerAnnotationResponse.headers["cache-control"]).toBe("no-store")
       await request(userApp.getHttpServer())
         .post("/api/drive/browser/owner/items/item-1/annotations")
         .send(createAnnotationInput())
@@ -1320,10 +1323,11 @@ describe("DriveController", () => {
     annotations.deleteShareThread.mockResolvedValue({ ok: true })
 
     const cookieHeader = `${driveAccessCookieName("share", "shr_file")}=file-cookie`
-    await request(app!.getHttpServer())
+    const shareAnnotationResponse = await request(app!.getHttpServer())
       .get("/api/drive/browser/shares/shr_file/items/file-1/annotations")
       .set("Cookie", cookieHeader)
       .expect(200)
+    expect(shareAnnotationResponse.headers["cache-control"]).toBe("no-store")
 
     expect(annotations.listShareAnnotations).toHaveBeenCalledWith({
       shareId: "shr_file",

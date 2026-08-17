@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Head, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Head, Header, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import archiver from "archiver"
@@ -663,6 +663,7 @@ export class DriveUserController {
   }
 
   @Get("/browser/owner/items/:itemId/annotations")
+  @Header("Cache-Control", "no-store")
   listOwnerAnnotations(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest) {
     return requireDriveAnnotationService(this.annotations).listOwnerAnnotations(request.user!.id, itemId)
   }
@@ -1368,6 +1369,7 @@ export class DrivePublicController {
   }
 
   @Get("/api/drive/browser/shares/:shareId/annotations")
+  @Header("Cache-Control", "no-store")
   async listShareRootAnnotations(@Param("shareId") shareId: string, @Req() request: Request) {
     return requireDriveAnnotationService(this.annotations).listShareAnnotations({
       shareId,
@@ -1377,6 +1379,7 @@ export class DrivePublicController {
   }
 
   @Get("/api/drive/browser/shares/:shareId/items/:itemId/annotations")
+  @Header("Cache-Control", "no-store")
   async listShareItemAnnotations(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Req() request: Request) {
     return requireDriveAnnotationService(this.annotations).listShareAnnotations({
       shareId,

@@ -1054,7 +1054,7 @@ function shareAnnotationPath(shareId: string, itemId?: string | null, suffix = '
 
 export const driveAnnotationApi = {
   listOwner: (itemId: string) =>
-    request<DriveAnnotationThreadDto[]>(ownerAnnotationPath(itemId)),
+    request<DriveAnnotationThreadDto[]>(ownerAnnotationPath(itemId), { cache: 'no-store' }),
   createOwner: (itemId: string, input: DriveAnnotationCreateInput) =>
     request<DriveAnnotationThreadDto>(ownerAnnotationPath(itemId), {
       method: 'POST',
@@ -1075,7 +1075,7 @@ export const driveAnnotationApi = {
   deleteOwnerThread: (itemId: string, threadId: string) =>
     request<{ ok: true }>(ownerAnnotationPath(itemId, `/${encodeURIComponent(threadId)}`), { method: 'DELETE' }),
   listShare: (shareId: string, itemId?: string | null) =>
-    request<DriveAnnotationThreadDto[]>(shareAnnotationPath(shareId, itemId)),
+    request<DriveAnnotationThreadDto[]>(shareAnnotationPath(shareId, itemId), { cache: 'no-store' }),
   createShare: (shareId: string, itemId: string | null | undefined, input: DriveAnnotationCreateInput) =>
     request<DriveAnnotationThreadDto>(shareAnnotationPath(shareId, itemId), {
       method: 'POST',

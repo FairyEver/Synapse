@@ -1,5 +1,34 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, dashboardApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAdminAuthExpired, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, driveAnnotationApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAdminAuthExpired, subscribeAuthExpired } from './api'
+
+describe('driveAnnotationApi', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('bypasses the browser cache when refreshing annotation lists', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify([]), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    ))
+
+    await driveAnnotationApi.listOwner('item/id')
+    await driveAnnotationApi.listShare('share/id', 'item/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/drive/browser/owner/items/item%2Fid/annotations',
+      expect.objectContaining({ cache: 'no-store', credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/drive/browser/shares/share%2Fid/items/item%2Fid/annotations',
+      expect.objectContaining({ cache: 'no-store', credentials: 'include' })
+    )
+  })
+})
 
 describe('adminApi.users', () => {
   afterEach(() => {
