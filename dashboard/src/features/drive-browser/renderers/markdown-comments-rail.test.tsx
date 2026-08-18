@@ -123,7 +123,7 @@ describe('MarkdownCommentsRail', () => {
     expect(replyComposer('thread-1')).not.toBeNull()
     expect(optionalDialogContent()).toBeNull()
     expect(threadCard('thread-1').querySelector('textarea')).not.toBeNull()
-    expect(threadCard('thread-1').querySelector('.bg-amber-400')).not.toBeNull()
+    expect(threadCard('thread-1').className).toContain('border-primary')
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
@@ -417,12 +417,12 @@ describe('MarkdownCommentsRail', () => {
   it('uses restrained product styling for active cards and comment actions', () => {
     renderRail({ activeThreadId: 'thread-1' })
 
-    expect(threadCard('thread-1').className).toContain('border-amber-400/70')
+    expect(threadCard('thread-1').className).toContain('border-primary')
+    expect(threadCard('thread-1').className).toContain('bg-muted/50')
     expect(threadCard('thread-1').className).not.toContain('border-foreground')
     expect(threadCard('thread-1').textContent).toContain('“Note”')
     expect(threadCard('thread-1').querySelector('[data-slot="avatar"]')).not.toBeNull()
     expect(threadCard('thread-1').querySelector('time')).not.toBeNull()
-    expect(threadCard('thread-1').querySelector('.bg-amber-400')).not.toBeNull()
     expect(buttonWithText('回复').className).toContain('text-xs')
     expect(buttonWithText('回复').className).toContain('h-7')
   })

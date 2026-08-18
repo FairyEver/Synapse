@@ -166,6 +166,7 @@ function DriveMarkdownBody({
   const [activeOutlineId, setActiveOutlineId] = useState<string | null>(null)
   const [threadAnchorTopById, setThreadAnchorTopById] = useState<Record<string, number>>({})
   const [annotationOverlayRects, setAnnotationOverlayRects] = useState<readonly MarkdownAnnotationOverlayRect[]>([])
+  const [textSelectionActive, setTextSelectionActive] = useState(false)
   const [previewImage, setPreviewImage] = useState<ImageLightboxPreview | null>(null)
 
   useEffect(() => {
@@ -180,6 +181,7 @@ function DriveMarkdownBody({
     setDocumentNaturalHeight(0)
     setThreadAnchorTopById({})
     setAnnotationOverlayRects([])
+    setTextSelectionActive(false)
     setPreviewImage(null)
     window.getSelection()?.removeAllRanges()
   }, [annotationStateKey])
@@ -428,6 +430,7 @@ function DriveMarkdownBody({
   const clearPendingComment = useCallback(() => {
     setPendingTarget(null)
     selectionRangeRef.current = null
+    setTextSelectionActive(false)
     setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
@@ -439,6 +442,7 @@ function DriveMarkdownBody({
     setPendingTarget(null)
     setPendingImageAnchorTop(null)
     selectionRangeRef.current = null
+    setTextSelectionActive(false)
     setCommentCreateError(null)
   }, [])
 
@@ -447,6 +451,8 @@ function DriveMarkdownBody({
     label: '添加评论',
     icon: MessageSquarePlus,
     onSelect: () => {
+      setTextSelectionActive(false)
+      window.getSelection()?.removeAllRanges()
       setCommentDraftOpen(true)
       setCommentPanelOpen(true)
     },
@@ -567,6 +573,14 @@ function DriveMarkdownBody({
       document.removeEventListener('keyup', syncSelectionActionFromCurrentSelection)
     }
   }, [canCreateAnnotation, syncSelectionActionFromCurrentSelection])
+
+  useEffect(() => {
+    const root = bodyRef.current
+    if (!root) return
+    const syncTextSelectionState = () => setTextSelectionActive(hasSelectionWithin(root))
+    document.addEventListener('selectionchange', syncTextSelectionState)
+    return () => document.removeEventListener('selectionchange', syncTextSelectionState)
+  }, [])
 
   const flushDocumentScrollEffects = useCallback(() => {
     documentScrollFrameRef.current = null
@@ -789,19 +803,23 @@ function DriveMarkdownBody({
             onFocusThreads={focusImageThreads}
           />
           {annotationOverlayRects.length > 0 ? (
-            <div aria-hidden className='pointer-events-none absolute inset-0'>
+            <div
+              aria-hidden
+              data-drive-annotation-overlay-layer='true'
+              className={cn('pointer-events-none absolute inset-0', textSelectionActive && 'opacity-0')}
+            >
               {annotationOverlayRects.filter((rect) => rect.visible).map((rect) => (
                 <div
                   key={rect.key}
                   data-drive-annotation-overlay-kind={rect.kind}
                   data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
                   className={cn(
-                    'absolute mix-blend-multiply dark:mix-blend-screen',
+                    'absolute',
                     rect.kind === 'pending'
-                      ? 'bg-amber-200/55 ring-1 ring-amber-300/70 dark:bg-amber-800/40 dark:ring-amber-600/60'
+                      ? 'bg-primary/15 ring-1 ring-primary/50'
                       : rect.threadId === activeThreadId
-                        ? 'bg-amber-200/70 ring-1 ring-amber-400/70 dark:bg-amber-800/45 dark:ring-amber-600/70'
-                        : 'bg-amber-200/55 dark:bg-amber-800/35'
+                        ? 'bg-primary/25 ring-2 ring-primary/70'
+                        : 'bg-muted-foreground/15'
                   )}
                   style={{
                     top: rect.top,

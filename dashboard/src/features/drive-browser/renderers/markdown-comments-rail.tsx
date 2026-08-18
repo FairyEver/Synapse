@@ -456,9 +456,8 @@ function CommentDraftCard({ draft, compact }: { readonly draft: MarkdownCommentD
   return (
     <section
       data-markdown-comment-draft-card='true'
-      className='relative overflow-hidden rounded-lg border border-amber-400/70 bg-muted/30 p-3 pt-4 text-sm dark:border-amber-600/70'
+      className='rounded-lg border border-primary bg-muted/50 p-3 text-sm'
     >
-      <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' />
       <div className='mb-3 line-clamp-2 text-xs font-medium text-muted-foreground'>“{draft.quote}”</div>
       <CommentComposer
         dataAttribute='draft'
@@ -575,8 +574,8 @@ function ThreadView({
   return (
     <section
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
-        emphasized && 'border-amber-400/70 bg-muted/30 dark:border-amber-600/70'
+        'cursor-default rounded-lg border border-border bg-card p-3 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
+        emphasized && 'border-primary bg-muted/50 hover:border-primary focus-within:border-primary'
       )}
       onClick={(event) => {
         if (isInteractiveCommentTarget(event.target) || hasSelectionWithin(event.currentTarget)) return
@@ -584,7 +583,6 @@ function ThreadView({
       }}
     >
       {active ? <span className='sr-only'>当前评论</span> : null}
-      {emphasized ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' /> : null}
       <div className='mb-3 space-y-1'>
         <div className='flex items-center gap-2'>
           <span aria-hidden className='h-4 w-0.5 shrink-0 rounded-full bg-border' />

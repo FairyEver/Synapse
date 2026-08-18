@@ -842,7 +842,6 @@ describe('DriveMarkdownRenderer', () => {
     expect(buttonWithText('添加评论').querySelector('svg')).not.toBeNull()
     expect(selectionAction()?.getAttribute('data-inline-toolbar')).toBe('true')
     expect(pendingOverlay()).not.toBeNull()
-    expect(pendingOverlay()?.className).toContain('mix-blend-multiply')
     expect(pendingMarker()).toBeNull()
 
     await click(buttonWithText('添加评论'))
@@ -910,12 +909,22 @@ describe('DriveMarkdownRenderer', () => {
     selectStrongText()
 
     await act(async () => {
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+    await act(async () => {
       dispatchPointerUpOnMarkdownBody()
     })
 
     expect(window.getSelection()?.toString()).toBe('重点')
     expect(buttonWithText('添加评论')).not.toBeNull()
     expect(pendingOverlay()).not.toBeNull()
+    expect(document.querySelector('[data-drive-annotation-overlay-layer="true"]')?.className).toContain('opacity-0')
+
+    await click(buttonWithText('添加评论'))
+
+    expect(window.getSelection()?.toString()).toBe('')
+    expect(document.querySelector('[data-drive-annotation-overlay-layer="true"]')?.className).not.toContain('opacity-0')
+    expect(pendingOverlay()?.className).toContain('bg-primary/15')
   })
 
   it('creates one selection anchor for the pointer release event sequence', async () => {
@@ -1133,17 +1142,17 @@ describe('DriveMarkdownRenderer', () => {
     expect(buttonByLabel('下一条评论').disabled).toBe(false)
 
     await click(buttonByLabel('下一条评论'))
-    expect(threadOverlay('thread-1')?.className).toContain('ring-1')
+    expect(threadOverlay('thread-1')?.className).toContain('ring-2')
     expect(buttonByLabel('上一条评论').disabled).toBe(true)
     expect(buttonByLabel('下一条评论').disabled).toBe(false)
 
     await click(buttonByLabel('下一条评论'))
-    expect(threadOverlay('thread-2')?.className).toContain('ring-1')
+    expect(threadOverlay('thread-2')?.className).toContain('ring-2')
     expect(buttonByLabel('上一条评论').disabled).toBe(false)
     expect(buttonByLabel('下一条评论').disabled).toBe(true)
 
     await click(buttonByLabel('上一条评论'))
-    expect(threadOverlay('thread-1')?.className).toContain('ring-1')
+    expect(threadOverlay('thread-1')?.className).toContain('ring-2')
   })
 
   it('uses instant positioning for comment navigation when reduced motion is requested', async () => {
@@ -1165,7 +1174,7 @@ describe('DriveMarkdownRenderer', () => {
 
     const overlay = threadOverlay('thread-1')
     expect(overlay).not.toBeNull()
-    expect(overlay?.className).toContain('mix-blend-multiply')
+    expect(overlay?.className).toContain('bg-muted-foreground/15')
     expect(document.querySelector('[data-drive-annotation-thread-id]')).toBeNull()
 
     await act(async () => {
@@ -1353,8 +1362,8 @@ describe('DriveMarkdownRenderer', () => {
 
     await click(elementWithText('First comment'))
 
-    expect(threadOverlay('thread-1')?.className).toContain('ring-1')
-    expect(threadOverlay('thread-1')?.className).toContain('bg-amber-200/70')
+    expect(threadOverlay('thread-1')?.className).toContain('ring-2')
+    expect(threadOverlay('thread-1')?.className).toContain('bg-primary/25')
     expect(threadOverlay('thread-2')?.className).not.toContain('ring-1')
   })
 
