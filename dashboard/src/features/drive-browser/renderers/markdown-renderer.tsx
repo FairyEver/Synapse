@@ -12,9 +12,8 @@ import {
   type DriveMarkdownProjectionImageDto,
   type DriveCollaborationJoinContext,
 } from '@synapse/shared'
-import { ListTree, Maximize2, MessageSquare } from 'lucide-react'
+import { ListTree, Maximize2, MessageSquare, MessageSquarePlus } from 'lucide-react'
 import * as Y from 'yjs'
-import { Button } from '@/components/ui/button'
 import { ImageLightbox, type ImageLightboxPreview } from '@/components/image-lightbox'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import {
@@ -39,6 +38,7 @@ import { createMarkdownAnnotationAnchorFromSelection, createMarkdownImageAnnotat
 import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
 import { MarkdownImageFallbacks } from './markdown-image-fallback'
 import { MarkdownImageCommentsOverlay, type MarkdownImageThreadMarker } from './markdown-image-comments-overlay'
+import { InlineToolbar, type InlineToolbarAction } from './inline-toolbar'
 import { renderDriveMermaidDiagrams, restoreDriveMermaidDiagrams } from './markdown-mermaid-renderer'
 import {
   createMarkdownRenderedDomRange,
@@ -58,11 +58,6 @@ const COMMENT_SCROLL_SAFE_INSET = 24
 
 type ResizablePanelPercent = `${number}%`
 type MarkdownWidthMode = 'reading' | 'wide'
-
-type SelectionPopoverPosition = {
-  readonly top: number
-  readonly left: number
-}
 
 type MarkdownAnnotationOverlayRect = {
   readonly key: string
@@ -132,6 +127,7 @@ function DriveMarkdownBody({
   const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
   const documentScrollFrameRef = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const selectionRangeRef = useRef<Range | null>(null)
   const commentsTouchedRef = useRef(false)
   const layoutMode = useFilePreviewLayoutMode()
   const isCompact = layoutMode === 'compact'
@@ -160,7 +156,6 @@ function DriveMarkdownBody({
     readonly target: DriveAnnotationTargetDto
     readonly selectors: DriveAnnotationSelectorsV2
   } | null>(null)
-  const [selectionPopover, setSelectionPopover] = useState<SelectionPopoverPosition | null>(null)
   const [commentDraftOpen, setCommentDraftOpen] = useState(false)
   const [commentBody, setCommentBody] = useState('')
   const [commentCreateError, setCommentCreateError] = useState<string | null>(null)
@@ -176,7 +171,7 @@ function DriveMarkdownBody({
   useEffect(() => {
     setActiveThreadId(null)
     setPendingTarget(null)
-    setSelectionPopover(null)
+    selectionRangeRef.current = null
     setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
@@ -432,7 +427,7 @@ function DriveMarkdownBody({
 
   const clearPendingComment = useCallback(() => {
     setPendingTarget(null)
-    setSelectionPopover(null)
+    selectionRangeRef.current = null
     setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
@@ -443,9 +438,19 @@ function DriveMarkdownBody({
   const clearPendingSelectionAction = useCallback(() => {
     setPendingTarget(null)
     setPendingImageAnchorTop(null)
-    setSelectionPopover(null)
+    selectionRangeRef.current = null
     setCommentCreateError(null)
   }, [])
+
+  const selectionToolbarActions = useMemo<readonly InlineToolbarAction[]>(() => [{
+    id: 'add-comment',
+    label: '添加评论',
+    icon: MessageSquarePlus,
+    onSelect: () => {
+      setCommentDraftOpen(true)
+      setCommentPanelOpen(true)
+    },
+  }], [setCommentPanelOpen])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [
@@ -550,34 +555,10 @@ function DriveMarkdownBody({
       if (!commentDraftOpen) clearPendingSelectionAction()
       return
     }
-    const rect = getSelectionRect(selection.getRangeAt(0))
-    if (!rect) {
-      if (!commentDraftOpen) clearPendingSelectionAction()
-      return
-    }
+    selectionRangeRef.current = selection.getRangeAt(0).cloneRange()
     setPendingTarget(target)
     setPendingImageAnchorTop(null)
-    setSelectionPopover({
-      top: Math.max(8, rect.top - 40),
-      left: rect.left + rect.width / 2,
-    })
   }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDraftOpen, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
-
-  const syncSelectionPopoverPositionFromCurrentSelection = useCallback(() => {
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return
-    const rect = getSelectionRect(selection.getRangeAt(0))
-    if (!rect) return
-    const nextPosition = {
-      top: Math.max(8, rect.top - 40),
-      left: rect.left + rect.width / 2,
-    }
-    setSelectionPopover((current) => current
-      && current.top === nextPosition.top
-      && current.left === nextPosition.left
-      ? current
-      : nextPosition)
-  }, [])
 
   useEffect(() => {
     if (!canCreateAnnotation) return
@@ -592,8 +573,7 @@ function DriveMarkdownBody({
     const scroller = documentScrollRef.current
     if (!scroller) return
     setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, scroller.scrollTop)
-    if (selectionPopover || pendingTarget) syncSelectionPopoverPositionFromCurrentSelection()
-  }, [pendingTarget, selectionPopover, syncSelectionPopoverPositionFromCurrentSelection])
+  }, [])
 
   const scheduleDocumentScrollEffects = useCallback(() => {
     if (documentScrollFrameRef.current !== null) return
@@ -673,7 +653,7 @@ function DriveMarkdownBody({
     setPendingImageAnchorTop(root && imageElement
       ? imageElement.getBoundingClientRect().top - root.getBoundingClientRect().top
       : 0)
-    setSelectionPopover(null)
+    selectionRangeRef.current = null
     setCommentCreateError(null)
     setCommentDraftOpen(true)
     setCommentPanelOpen(true)
@@ -759,7 +739,7 @@ function DriveMarkdownBody({
       setActiveThreadId(thread.id)
       setCommentPanelOpen(true)
       setPendingTarget(null)
-      setSelectionPopover(null)
+      selectionRangeRef.current = null
       setCommentDraftOpen(false)
       setCommentBody('')
       setPendingImageAnchorTop(null)
@@ -889,24 +869,12 @@ function DriveMarkdownBody({
 
   return (
     <div className='h-full min-h-0 overflow-hidden bg-background'>
-      {selectionPopover && pendingTarget && !commentDraftOpen ? (
-        <div
+      {selectionRangeRef.current && pendingTarget?.target.kind === 'textRange' && !commentDraftOpen ? (
+        <InlineToolbar
           data-drive-annotation-selection-action
-          className='fixed z-50 -translate-x-1/2'
-          style={{ top: selectionPopover.top, left: selectionPopover.left }}
-        >
-          <Button
-            type='button'
-            className='shadow-md'
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              setCommentDraftOpen(true)
-              setCommentPanelOpen(true)
-            }}
-          >
-            添加评论
-          </Button>
-        </div>
+          anchor={selectionRangeRef.current}
+          actions={selectionToolbarActions}
+        />
       ) : null}
       <div data-testid='markdown-layout' className='h-full min-h-0 w-full overflow-hidden'>
         {isCompact ? documentView : (
@@ -1137,14 +1105,6 @@ function relativeImageSourceKey(source: string): string {
   } catch {
     return trimmed
   }
-}
-
-function getSelectionRect(range: Range): DOMRect | null {
-  const rects = typeof range.getClientRects === 'function'
-    ? Array.from(range.getClientRects()).filter((rect) => rect.width > 0 || rect.height > 0)
-    : []
-  const rect = rects[0] ?? range.getBoundingClientRect()
-  return rect.width > 0 || rect.height > 0 ? rect : null
 }
 
 function measureRenderedTextRange(

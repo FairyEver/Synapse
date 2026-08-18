@@ -2,19 +2,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { DriveMarkdownProjectionImageDto } from '@synapse/shared'
 import { MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { InlineToolbar, type InlineToolbarAction } from './inline-toolbar'
 
-const ACTION_HEIGHT = 32
-const ACTION_WIDTH = 104
-const ACTION_GAP = 6
 const HOVER_CLOSE_DELAY = 120
 
 type ImageElementPosition = {
   readonly imageId: string
+  readonly element: HTMLElement
   readonly top: number
   readonly left: number
   readonly width: number
   readonly height: number
-  readonly action: { readonly top: number; readonly left: number } | null
 }
 
 export type MarkdownImageThreadMarker = {
@@ -82,14 +80,13 @@ export function MarkdownImageCommentsOverlay({
         if (!element) return []
         const rect = element.getBoundingClientRect()
         if (rect.width <= 0 || rect.height <= 0) return []
-        const clip = findImageClipRect(element, scrollRef.current)
         return [{
           imageId: image.imageId,
+          element,
           top: rect.top - containerRect.top,
           left: rect.left - containerRect.left,
           width: rect.width,
           height: rect.height,
-          action: resolveMarkdownImageCommentActionPlacement(rect, clip, containerRect),
         }]
       })
       setPositions((current) => samePositions(current, next) ? current : next)
@@ -168,6 +165,14 @@ export function MarkdownImageCommentsOverlay({
   const hoveredImage = hoveredImageId ? imageById.get(hoveredImageId) ?? null : null
   const hoveredPosition = hoveredImageId ? positionById.get(hoveredImageId) ?? null : null
   const activePosition = activeImageId ? positionById.get(activeImageId) ?? null : null
+  const commentActions = useMemo<readonly InlineToolbarAction[]>(() => hoveredImage
+    ? [{
+        id: 'add-comment',
+        label: '添加评论',
+        icon: MessageSquarePlus,
+        onSelect: () => onAddComment(hoveredImage),
+      }]
+    : [], [hoveredImage, onAddComment])
 
   return (
     <>
@@ -205,57 +210,21 @@ export function MarkdownImageCommentsOverlay({
           </Button>
         )
       })}
-      {canCreate && hoveredImage && hoveredPosition?.action ? (
-        <div
+      {canCreate && hoveredImage && hoveredPosition ? (
+        <InlineToolbar
           data-drive-markdown-image-comment-action='true'
-          className='absolute z-30'
-          style={hoveredPosition.action}
+          anchor={hoveredPosition.element}
+          actions={commentActions}
+          containerRef={containerRef}
+          boundaryRef={scrollRef}
           onPointerEnter={cancelClose}
           onPointerLeave={scheduleClose}
           onFocus={cancelClose}
           onBlur={scheduleClose}
-        >
-          <Button
-            type='button'
-            size='sm'
-            className='h-8 w-26'
-            onPointerDown={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            onClick={(event) => {
-              event.stopPropagation()
-              onAddComment(hoveredImage)
-            }}
-          >
-            <MessageSquarePlus />
-            添加评论
-          </Button>
-        </div>
+        />
       ) : null}
     </>
   )
-}
-
-export function resolveMarkdownImageCommentActionPlacement(
-  imageRect: Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width'>,
-  clipRect: Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>,
-  containerRect: Pick<DOMRect, 'top' | 'left'>,
-): { readonly top: number; readonly left: number } | null {
-  const horizontalLeft = Math.max(clipRect.left, Math.min(
-    imageRect.left + imageRect.width / 2 - ACTION_WIDTH / 2,
-    clipRect.right - ACTION_WIDTH,
-  ))
-  if (horizontalLeft < clipRect.left || horizontalLeft + ACTION_WIDTH > clipRect.right) return null
-  const topEdgeVisible = imageRect.top >= clipRect.top && imageRect.top <= clipRect.bottom
-  const bottomEdgeVisible = imageRect.bottom >= clipRect.top && imageRect.bottom <= clipRect.bottom
-  if (topEdgeVisible && imageRect.top - ACTION_GAP - ACTION_HEIGHT >= clipRect.top) {
-    return { top: imageRect.top - containerRect.top - ACTION_GAP - ACTION_HEIGHT, left: horizontalLeft - containerRect.left }
-  }
-  if (bottomEdgeVisible && imageRect.bottom + ACTION_GAP + ACTION_HEIGHT <= clipRect.bottom) {
-    return { top: imageRect.bottom - containerRect.top + ACTION_GAP, left: horizontalLeft - containerRect.left }
-  }
-  return null
 }
 
 function findVisibleMarkdownImageElement(root: HTMLElement, imageId: string): HTMLElement | null {
@@ -266,42 +235,15 @@ function findVisibleMarkdownImageElement(root: HTMLElement, imageId: string): HT
     ?? null
 }
 
-type ImageClipRect = Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left'>
-
-function findImageClipRect(element: HTMLElement, requiredScroller: HTMLElement | null): ImageClipRect {
-  let clip: ImageClipRect = { top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 }
-  let ancestor: HTMLElement | null = element.parentElement
-  while (ancestor) {
-    const style = window.getComputedStyle(ancestor)
-    const clips = ancestor === requiredScroller || [style.overflowX, style.overflowY]
-      .some((value) => value === 'auto' || value === 'scroll' || value === 'hidden' || value === 'clip')
-    if (clips) clip = intersectRects(clip, ancestor.getBoundingClientRect())
-    ancestor = ancestor.parentElement
-  }
-  return clip
-}
-
-function intersectRects(left: ImageClipRect, right: ImageClipRect): ImageClipRect {
-  const rightEdge = Math.min(left.right, right.right)
-  const bottomEdge = Math.min(left.bottom, right.bottom)
-  return {
-    top: Math.max(left.top, right.top),
-    right: rightEdge,
-    bottom: bottomEdge,
-    left: Math.max(left.left, right.left),
-  }
-}
-
 function samePositions(left: readonly ImageElementPosition[], right: readonly ImageElementPosition[]): boolean {
   return left.length === right.length && left.every((value, index) => {
     const candidate = right[index]
     return Boolean(candidate
       && value.imageId === candidate.imageId
+      && value.element === candidate.element
       && value.top === candidate.top
       && value.left === candidate.left
       && value.width === candidate.width
-      && value.height === candidate.height
-      && value.action?.top === candidate.action?.top
-      && value.action?.left === candidate.action?.left)
+      && value.height === candidate.height)
   })
 }

@@ -271,6 +271,9 @@ describe('DriveMarkdownRenderer', () => {
     if (!image) throw new Error('Missing projected image')
 
     await act(async () => image.dispatchEvent(new Event('pointerover', { bubbles: true })))
+    const imageToolbar = document.querySelector('[data-drive-markdown-image-comment-action="true"]')
+    expect(imageToolbar?.getAttribute('data-inline-toolbar')).toBe('true')
+    expect(buttonWithText('添加评论').querySelector('svg')).not.toBeNull()
     await click(buttonWithText('添加评论'))
 
     expect(document.querySelector('[data-image-lightbox]')).toBeNull()
@@ -826,9 +829,9 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(document.querySelector('textarea')).toBeNull()
     expect(buttonWithText('添加评论')).not.toBeNull()
-    expect(buttonWithText('添加评论').className).toContain('shadow-md')
-    expect(selectionAction()?.className).not.toContain('bg-popover')
-    expect(selectionAction()?.className).not.toContain('border')
+    expect(buttonWithText('添加评论').className).toContain('h-8')
+    expect(buttonWithText('添加评论').querySelector('svg')).not.toBeNull()
+    expect(selectionAction()?.getAttribute('data-inline-toolbar')).toBe('true')
     expect(pendingOverlay()).not.toBeNull()
     expect(pendingOverlay()?.className).toContain('mix-blend-multiply')
     expect(pendingMarker()).toBeNull()
@@ -921,6 +924,7 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('updates only the selection action position while the document scrolls', async () => {
+    mockInlineToolbarRect()
     renderMarkdown()
     selectStrongText()
     await act(async () => {
@@ -933,8 +937,8 @@ describe('DriveMarkdownRenderer', () => {
     await flushAnimationFrames()
 
     expect(cloneContents).not.toHaveBeenCalled()
-    expect(selectionAction()?.style.top).toBe('200px')
-    expect(selectionAction()?.style.left).toBe('200px')
+    expect(selectionAction()?.style.top).toBe('202px')
+    expect(selectionAction()?.style.left).toBe('148px')
   })
 
   it('shows an error when creating a comment fails', async () => {
@@ -1607,10 +1611,21 @@ function configureMarkdownDocumentScroller() {
 
 function mockImageCommentRects() {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.hasAttribute('data-inline-toolbar')) {
+      return domRect({ width: 104, height: 32 })
+    }
     if (this.hasAttribute('data-drive-markdown-image-id')) {
       return domRect({ left: 100, top: 120, width: 240, height: 180 })
     }
     return domRect({ left: 0, top: 0, width: 800, height: 600 })
+  })
+}
+
+function mockInlineToolbarRect() {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    return this.hasAttribute('data-inline-toolbar')
+      ? domRect({ width: 104, height: 32 })
+      : domRect({ left: 0, top: 0, width: 0, height: 0 })
   })
 }
 
