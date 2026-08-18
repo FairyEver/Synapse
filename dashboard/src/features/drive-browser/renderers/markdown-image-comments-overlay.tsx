@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import type { DriveMarkdownProjectionImageDto } from '@synapse/shared'
 import { MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { InlineToolbar, type InlineToolbarAction } from './inline-toolbar'
 
 const HOVER_CLOSE_DELAY = 120
@@ -28,6 +29,7 @@ export function MarkdownImageCommentsOverlay({
   images,
   markers,
   activeImageId,
+  commentTargetImageId,
   canCreate,
   onAddComment,
   onFocusThreads,
@@ -39,6 +41,7 @@ export function MarkdownImageCommentsOverlay({
   readonly images: readonly DriveMarkdownProjectionImageDto[]
   readonly markers: readonly MarkdownImageThreadMarker[]
   readonly activeImageId: string | null
+  readonly commentTargetImageId: string | null
   readonly canCreate: boolean
   readonly onAddComment: (image: DriveMarkdownProjectionImageDto) => void
   readonly onFocusThreads: (marker: MarkdownImageThreadMarker) => void
@@ -165,6 +168,9 @@ export function MarkdownImageCommentsOverlay({
   const hoveredImage = hoveredImageId ? imageById.get(hoveredImageId) ?? null : null
   const hoveredPosition = hoveredImageId ? positionById.get(hoveredImageId) ?? null : null
   const activePosition = activeImageId ? positionById.get(activeImageId) ?? null : null
+  const pendingTargetPosition = commentTargetImageId ? positionById.get(commentTargetImageId) ?? null : null
+  const commentTargetPosition = pendingTargetPosition ?? (canCreate ? hoveredPosition : null)
+  const highlightedPosition = commentTargetPosition ?? activePosition
   const commentActions = useMemo<readonly InlineToolbarAction[]>(() => hoveredImage
     ? [{
         id: 'add-comment',
@@ -176,12 +182,23 @@ export function MarkdownImageCommentsOverlay({
 
   return (
     <>
-      {activePosition ? (
+      {highlightedPosition ? (
         <div
           aria-hidden
-          data-drive-markdown-image-active='true'
-          className='pointer-events-none absolute z-10 ring-2 ring-ring ring-offset-2 ring-offset-background'
-          style={{ top: activePosition.top, left: activePosition.left, width: activePosition.width, height: activePosition.height }}
+          data-drive-markdown-image-comment-target={commentTargetPosition ? 'true' : undefined}
+          data-drive-markdown-image-active={commentTargetPosition ? undefined : 'true'}
+          className={cn(
+            'pointer-events-none absolute z-10 ring-2',
+            commentTargetPosition
+              ? 'ring-inset ring-primary'
+              : 'ring-ring ring-offset-2 ring-offset-background',
+          )}
+          style={{
+            top: highlightedPosition.top,
+            left: highlightedPosition.left,
+            width: highlightedPosition.width,
+            height: highlightedPosition.height,
+          }}
         />
       ) : null}
       {markers.map((marker) => {

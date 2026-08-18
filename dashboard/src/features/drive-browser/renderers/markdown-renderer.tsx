@@ -783,6 +783,7 @@ function DriveMarkdownBody({
             images={projection?.images ?? []}
             markers={imageThreadMarkers}
             activeImageId={activeImageId}
+            commentTargetImageId={pendingTarget?.target.kind === 'image' ? pendingTarget.target.imageId : null}
             canCreate={canCreateAnnotation && !isCompact && !commentDraftOpen && !annotations.creatingThread}
             onAddComment={startImageComment}
             onFocusThreads={focusImageThreads}

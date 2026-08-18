@@ -272,11 +272,20 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => image.dispatchEvent(new Event('pointerover', { bubbles: true })))
     const imageToolbar = document.querySelector('[data-drive-markdown-image-comment-action="true"]')
+    const imageTarget = document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')
     expect(imageToolbar?.getAttribute('data-inline-toolbar')).toBe('true')
     expect(buttonWithText('添加评论').querySelector('svg')).not.toBeNull()
+    expect(imageTarget?.className).toContain('pointer-events-none')
+    expect(imageTarget?.className).toContain('absolute')
+    expect(imageTarget?.className).toContain('ring-inset')
+    expect(imageTarget?.style.top).toBe('120px')
+    expect(imageTarget?.style.left).toBe('100px')
+    expect(imageTarget?.style.width).toBe('240px')
+    expect(imageTarget?.style.height).toBe('180px')
     await click(buttonWithText('添加评论'))
 
     expect(document.querySelector('[data-image-lightbox]')).toBeNull()
+    expect(document.querySelector('[data-drive-markdown-image-comment-target="true"]')).not.toBeNull()
     expect(textarea()).toBeTruthy()
     expect(document.querySelector('[data-markdown-comment-draft-card="true"]')?.textContent).toContain('示意图')
 
