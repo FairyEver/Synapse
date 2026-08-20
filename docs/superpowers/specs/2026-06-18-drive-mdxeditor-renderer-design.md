@@ -21,6 +21,7 @@ This is an adapter for the current Drive render pipeline. It is not a new deskto
 - The implementation lives in the dashboard Drive browser renderer layer.
 - The existing Drive text save flow remains authoritative: `preview.text`, `edit.currentVersionId`, `editContext.saveText(...)`, reload, and version conflict handling.
 - `.mdx` files should be recognized as Markdown-compatible Drive browser files.
+- In MDXEditor tables, `Enter` keeps the existing next-row cell navigation and `Shift + Enter` inserts an inline `<br />` break in the current cell.
 
 ## Non-Goals
 
