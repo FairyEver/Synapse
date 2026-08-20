@@ -814,12 +814,12 @@ function DriveMarkdownBody({
                   data-drive-annotation-overlay-kind={rect.kind}
                   data-drive-annotation-overlay-thread-id={rect.threadId ?? undefined}
                   className={cn(
-                    'absolute',
+                    'absolute mix-blend-multiply dark:mix-blend-screen',
                     rect.kind === 'pending'
-                      ? 'bg-primary/15 ring-1 ring-primary/50'
+                      ? 'bg-amber-200/60 ring-1 ring-amber-400/80 dark:bg-amber-800/45 dark:ring-amber-500/80'
                       : rect.threadId === activeThreadId
-                        ? 'bg-primary/25 ring-2 ring-primary/70'
-                        : 'bg-muted-foreground/15'
+                        ? 'bg-amber-300/80 ring-2 ring-amber-500/90 dark:bg-amber-700/55 dark:ring-amber-400/90'
+                        : 'bg-amber-200/45 dark:bg-amber-800/30'
                   )}
                   style={{
                     top: rect.top,

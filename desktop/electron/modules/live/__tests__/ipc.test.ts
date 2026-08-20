@@ -26,6 +26,7 @@ describe("liveIpcModule", () => {
   it("declares live invoke and event channels", () => {
     expect(liveIpcModule.id).toBe("live")
     expect(liveIpcModule.methods.getState.operationId).toBe("app.live.operation.get_state")
+    expect(liveIpcModule.methods.retry.operationId).toBe("app.live.operation.retry")
     expect(liveIpcModule.events.stateChanged.operationId).toBe("app.live.state.changed")
   })
 

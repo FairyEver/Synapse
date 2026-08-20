@@ -512,6 +512,76 @@ describe("LiveConnectionService", () => {
     expect(socket.close).not.toHaveBeenCalled()
   })
 
+  it("connects after an offline account recovers without an active socket or retry timer", async () => {
+    let token: string | null = null
+    let accountState: SynapseAccountState = {
+      ...authenticatedState,
+      connectivity: "offline",
+      offlineReason: "network_error",
+    }
+    const socket = new FakeSocket()
+    const createSocket = vi.fn(() => socket as never)
+    const accountService = {
+      getAccessTokenForLive: vi.fn(() => token),
+      getApiBaseUrlForLive: vi.fn().mockReturnValue("http://localhost:3000/api"),
+      getState: vi.fn(() => accountState),
+      refreshFromStorage: vi.fn(async () => accountState),
+    }
+    const service = new LiveConnectionService({
+      accountService: accountService as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+    })
+
+    service.handleAccountState(accountState)
+    await flushPromises()
+
+    expect(createSocket).not.toHaveBeenCalled()
+    expect(service.getState()).toMatchObject({
+      status: "reconnecting",
+      lastError: "网络不可用",
+    })
+
+    token = "fresh-token"
+    accountState = authenticatedState
+    service.handleAccountState(accountState)
+    await flushPromises()
+
+    expect(createSocket).toHaveBeenCalledTimes(1)
+    expect(createSocket).toHaveBeenCalledWith("ws://localhost:3000/api/live/desktop", {
+      headers: { Authorization: "Bearer fresh-token" },
+    })
+  })
+
+  it("retries immediately when a reconnect timer is pending", async () => {
+    const firstSocket = new FakeSocket()
+    const secondSocket = new FakeSocket()
+    const timers = createTimerFns()
+    const createSocket = vi.fn()
+      .mockReturnValueOnce(firstSocket as never)
+      .mockReturnValueOnce(secondSocket as never)
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket,
+      setTimeout: timers.setTimeout as never,
+      clearTimeout: timers.clearTimeout as never,
+      reconnectDelay: () => 30_000,
+    })
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    firstSocket.emit("close")
+
+    expect(createSocket).toHaveBeenCalledTimes(1)
+    expect(timers.timers).toHaveLength(1)
+
+    await service.retryNow()
+
+    expect(timers.clearTimeout).toHaveBeenCalled()
+    expect(createSocket).toHaveBeenCalledTimes(2)
+  })
+
   it("reconnects after a normal close without refreshing the account token", async () => {
     const firstSocket = new FakeSocket()
     const secondSocket = new FakeSocket()
@@ -666,7 +736,7 @@ describe("LiveConnectionService", () => {
     expect(createSocket).not.toHaveBeenCalled()
     expect(service.getState()).toMatchObject({
       status: "reconnecting",
-      lastError: "网络不可用，正在重试",
+      lastError: "网络不可用",
     })
   })
 

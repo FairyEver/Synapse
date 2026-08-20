@@ -786,6 +786,7 @@ const synapseBridge: SynapseBridge = {
   },
   live: {
     getState: invoke(IPC_CHANNELS.live.getState),
+    retry: invoke(IPC_CHANNELS.live.retry),
     onStateChanged: createDomainEventPayloadSubscription<SynapseLiveStateChangedEvent>(
       subscribe,
       "live",

@@ -91,7 +91,7 @@ export function DriveMDXeditorRenderer({
   readonly editContext?: DriveRendererEditContext
   readonly imageSourceContext?: DriveMarkdownImageSourceContext
 }) {
-  const initialText = preview.text ?? ''
+  const initialText = normalizeMdxEditorBreakTags(preview.text ?? '')
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedValueRef = useRef(initialText)
@@ -695,6 +695,61 @@ function normalizeMdxEditorImageMarkdown(markdown: string): string {
     const title = image.title ? ` "${escapeMarkdownImageTitle(image.title)}"` : ''
     return `![${escapeMarkdownImageAlt(alt)}](${image.src}${title})`
   })
+}
+
+function normalizeMdxEditorBreakTags(markdown: string): string {
+  let fenceMarker: string | null = null
+  let inlineCodeMarker: string | null = null
+
+  return markdown.split(/(\r?\n)/u).map((line) => {
+    if (/^\r?\n$/u.test(line)) return line
+
+    if (fenceMarker) {
+      const closingFence = new RegExp(`^ {0,3}${escapeRegExp(fenceMarker[0])}{${fenceMarker.length},}\\s*$`, 'u')
+      if (closingFence.test(line)) fenceMarker = null
+      return line
+    }
+
+    const openingFence = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line)
+    if (openingFence && (openingFence[1][0] === '~' || !openingFence[2].includes('`'))) {
+      fenceMarker = openingFence[1]
+      return line
+    }
+
+    let result = ''
+    for (let index = 0; index < line.length;) {
+      if (line[index] === '`' && !isEscaped(line, index)) {
+        const marker = /^`+/u.exec(line.slice(index))?.[0] ?? '`'
+        inlineCodeMarker = inlineCodeMarker === marker ? null : inlineCodeMarker ?? marker
+        result += marker
+        index += marker.length
+        continue
+      }
+
+      const breakTag = inlineCodeMarker === null && !isEscaped(line, index)
+        ? /^<br\s*>/iu.exec(line.slice(index))?.[0]
+        : undefined
+      if (breakTag) {
+        result += '<br />'
+        index += breakTag.length
+        continue
+      }
+
+      result += line[index]
+      index += 1
+    }
+    return result
+  }).join('')
+}
+
+function isEscaped(value: string, index: number): boolean {
+  let backslashCount = 0
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) backslashCount += 1
+  return backslashCount % 2 === 1
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
 
 function parseImageTag(tag: string): { readonly src: string; readonly alt?: string; readonly title?: string } | null {

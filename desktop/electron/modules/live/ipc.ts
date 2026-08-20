@@ -28,6 +28,13 @@ export const liveIpcModule: IpcModule = {
       response: liveStateSchema,
       handler: async () => liveConnectionService.getState(),
     },
+    retry: {
+      kind: "invoke",
+      operationId: "app.live.operation.retry",
+      request: z.void(),
+      response: liveStateSchema,
+      handler: async () => liveConnectionService.retryNow(),
+    },
   },
   events: {
     stateChanged: {

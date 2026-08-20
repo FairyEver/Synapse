@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react"
-import { Wifi, WifiOff } from "lucide-react"
+import { RefreshCw, Wifi, WifiOff } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import { StatusPill } from "@/modules/settings/components/status-pill"
-import { getSynapseBridge } from "@/lib/electron-bridge"
+import { useLiveConnection } from "@/modules/settings/hooks/use-live-connection"
 import type { SynapseLiveState, SynapseLiveStatus } from "@/types/live"
 
 const DEFAULT_LIVE_STATE: SynapseLiveState = {
@@ -26,48 +26,48 @@ type LiveConnectionPanelProps = {
 }
 
 function LiveConnectionPanel({ initialState = DEFAULT_LIVE_STATE }: LiveConnectionPanelProps) {
-  const [state, setState] = useState<SynapseLiveState>(initialState)
-
-  useEffect(() => {
-    const bridge = getSynapseBridge()?.live
-    if (!bridge) return undefined
-
-    let mounted = true
-    void bridge.getState()
-      .then((nextState) => {
-        if (mounted) {
-          setState(nextState)
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setState((current) => ({ ...current, lastError: "未连接" }))
-        }
-      })
-
-    const unsubscribe = bridge.onStateChanged((event) => {
-      setState(event.state)
-    })
-
-    return () => {
-      mounted = false
-      unsubscribe()
-    }
-  }, [])
+  const { isRetrying, retry, state } = useLiveConnection(initialState)
 
   const Icon = state.status === "connected" ? Wifi : WifiOff
   const label = LIVE_STATUS_LABELS[state.status]
+  const canRetry = state.status === "reconnecting" || state.status === "disconnected"
 
   return (
-    <SettingsFieldRow label="服务器连接" error={state.lastError}>
-      <div className="flex items-center gap-2">
-        <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-        <StatusPill
-          active={state.status === "connected"}
-          activeLabel={label}
-          inactiveLabel={label}
-          variant={state.status === "reconnecting" ? "warning" : "default"}
-        />
+    <SettingsFieldRow
+      label="服务器连接"
+      contentClassName="md:max-w-md"
+      controlClassName="w-full md:max-w-md"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3" aria-live="polite">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <StatusPill
+              active={state.status === "connected"}
+              activeLabel={label}
+              inactiveLabel={label}
+              variant={state.status === "reconnecting" ? "warning" : "default"}
+            />
+            {state.lastError ? (
+              <p className="mt-1 text-xs text-muted-foreground">{state.lastError}</p>
+            ) : null}
+          </div>
+        </div>
+        {canRetry ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isRetrying}
+            data-track="live-connection-retry"
+            onClick={() => void retry()}
+          >
+            <RefreshCw data-icon="inline-start" className={isRetrying ? "animate-spin" : undefined} />
+            {isRetrying ? "连接中" : "立即重试"}
+          </Button>
+        ) : null}
       </div>
     </SettingsFieldRow>
   )

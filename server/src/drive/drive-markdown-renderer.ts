@@ -66,6 +66,8 @@ type MutableDriveMarkdownOutlineItem = {
   children: MutableDriveMarkdownOutlineItem[]
 }
 
+const safeHtmlBreakPattern = /^<br\s*\/?>$/iu
+
 export async function renderDriveMarkdownFragment(
   markdown: string,
   options: DriveMarkdownRenderOptions = {},
@@ -132,6 +134,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
   const tree = processor.parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
   normalizeDriveMarkdownLooseImageNodes(tree)
   if (options.allowStandaloneRawImages === true) visitRawImageAst(tree)
+  normalizeSafeTableHtmlBreaks(tree)
   const renderedText = extractDriveMarkdownRenderedText(tree)
   const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
   annotateMarkdownProjectionTree(tree, projection, markdown)
@@ -142,6 +145,16 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     projection,
     renderedText,
   }
+}
+
+function normalizeSafeTableHtmlBreaks(node: MarkdownAstNode, insideTableCell = false): void {
+  if (insideTableCell && node.type === "html" && typeof node.value === "string" && safeHtmlBreakPattern.test(node.value.trim())) {
+    node.type = "break"
+    delete node.value
+    return
+  }
+  const childInsideTableCell = insideTableCell || node.type === "tableCell"
+  for (const child of node.children ?? []) normalizeSafeTableHtmlBreaks(child, childInsideTableCell)
 }
 
 function prepareStandaloneRawImagesPlugin(enabled: boolean) {

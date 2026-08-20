@@ -758,6 +758,38 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().value).toBe('![diagram](./images/diagram.png)')
   })
 
+  it('normalizes bare break tags for MDX without changing code examples', () => {
+    renderRenderer({
+      preview: {
+        ...basePreview(),
+        text: [
+          '| 写法 | 表格内容 |',
+          '| --- | --- |',
+          '| `<br>` | 借：管理费用<br>贷：应付职工薪酬 |',
+          '| `<br/>` | 借：应付职工薪酬<br/>贷：银行存款 |',
+          '| `<br />` | 第一行<br />第二行 |',
+          '',
+          '```html',
+          '<br>',
+          '```',
+        ].join('\n'),
+      },
+    })
+
+    expect(editor().value).toBe([
+      '| 写法 | 表格内容 |',
+      '| --- | --- |',
+      '| `<br>` | 借：管理费用<br />贷：应付职工薪酬 |',
+      '| `<br/>` | 借：应付职工薪酬<br/>贷：银行存款 |',
+      '| `<br />` | 第一行<br />第二行 |',
+      '',
+      '```html',
+      '<br>',
+      '```',
+    ].join('\n'))
+    expect(document.body.textContent).not.toContain('解析失败')
+  })
+
   it('shows recoverable source editing when mdx parsing fails', async () => {
     renderRenderer({ edit: editable() })
 

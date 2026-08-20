@@ -68,6 +68,7 @@ export const IPC_CHANNELS = {
   },
   "live": {
     "getState": "synapse:app:live:operation:get_state",
+    "retry": "synapse:app:live:operation:retry",
     "stateChanged": "synapse:app:live:state:changed",
   },
   "content": {

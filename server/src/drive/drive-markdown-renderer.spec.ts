@@ -61,6 +61,25 @@ describe("drive markdown renderer", () => {
     expect(text).toContain("来自本地计算，不直接对应后台响应数组。")
   })
 
+  it("renders safe HTML break tags inside table cells while escaping other raw HTML", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "| 摘要 | 会计分录 |",
+      "| --- | --- |",
+      "| 计提工资 | 借：管理费用<br>贷：应付职工薪酬 |",
+      "| 发放工资 | 借：应付职工薪酬<br/>贷：银行存款 |",
+      "| 备注 | 第一行<br />第二行 <em>保持转义</em> |",
+      "",
+      "表外<br>保持转义",
+    ].join("\n"))
+
+    expect(result.html).toMatch(/借：管理费用<br[^>]*>\s*贷：应付职工薪酬/u)
+    expect(result.html).toMatch(/借：应付职工薪酬<br[^>]*>\s*贷：银行存款/u)
+    expect(result.html).toMatch(/第一行<br[^>]*>\s*第二行 &#x3C;em>保持转义&#x3C;\/em>/u)
+    expect(result.html).toContain("表外&#x3C;br>保持转义")
+    expect(result.renderedText).toContain("借：管理费用\n贷：应付职工薪酬")
+    expect(result.projection.segments.filter((segment) => segment.mapping === "generated")).toHaveLength(3)
+  })
+
   it("removes relative resource urls from markdown previews", async () => {
     const result = await renderDriveMarkdownFragment([
       "# Notes",

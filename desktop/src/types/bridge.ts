@@ -1374,6 +1374,7 @@ export type SynapseBridge = {
   }
   live: {
     getState: () => Promise<SynapseLiveState>
+    retry: () => Promise<SynapseLiveState>
     onStateChanged: (listener: (event: SynapseLiveStateChangedEvent) => void) => () => void
   }
   resourceRepository: {

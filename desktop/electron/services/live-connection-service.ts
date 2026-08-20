@@ -48,6 +48,8 @@ export class LiveConnectionService {
   private reconnectTimer: NodeJS.Timeout | null = null
   private heartbeatTimer: NodeJS.Timeout | null = null
   private serverTimeoutTimer: NodeJS.Timeout | null = null
+  private connectInFlight: Promise<void> | null = null
+  private accountRefreshInFlight = false
   private heartbeatTimeoutMs = defaultHeartbeatTimeoutMs
   private reconnectAttempt = 0
   private connectionGeneration = 0
@@ -104,11 +106,36 @@ export class LiveConnectionService {
     const nextUserId = state.profile.user.id
     const isSameAccount = this.authenticatedAccountUserId === nextUserId
     this.authenticatedAccountUserId = nextUserId
-    if (isSameAccount && (this.socket || this.reconnectTimer || this.state.status === "connected" || this.state.status === "reconnecting")) {
+    if (isSameAccount && (
+      this.socket
+      || this.reconnectTimer
+      || this.connectInFlight
+      || this.accountRefreshInFlight
+      || this.state.status === "connected"
+    )) {
       return
     }
 
     this.startConnect()
+  }
+
+  async retryNow(): Promise<SynapseLiveState> {
+    const accountState = this.accountService.getState()
+    if (accountState.status !== "authenticated" || this.state.status === "connected") {
+      return this.state
+    }
+    if (this.connectInFlight) {
+      await this.connectInFlight
+      return this.state
+    }
+    if (this.accountRefreshInFlight) {
+      return this.state
+    }
+
+    this.closeSocket("manual_retry")
+    this.closedIntentionally = false
+    await this.startConnect()
+    return this.state
   }
 
   async connect(): Promise<void> {
@@ -358,11 +385,21 @@ export class LiveConnectionService {
     }, delay)
   }
 
-  private startConnect(): void {
+  private startConnect(): Promise<void> {
+    if (this.connectInFlight) return this.connectInFlight
+
     const generation = this.connectionGeneration + 1
-    void this.connect().catch((error: unknown) => {
-      this.handleConnectStartupFailure(error, generation)
-    })
+    const attempt = this.connect()
+      .catch((error: unknown) => {
+        this.handleConnectStartupFailure(error, generation)
+      })
+      .finally(() => {
+        if (this.connectInFlight === attempt) {
+          this.connectInFlight = null
+        }
+      })
+    this.connectInFlight = attempt
+    return attempt
   }
 
   private handleConnectStartupFailure(error: unknown, generation: number): void {
@@ -417,13 +454,16 @@ export class LiveConnectionService {
   }
 
   private refreshAfterAuthFailure(): void {
+    if (this.accountRefreshInFlight) return
+    this.accountRefreshInFlight = true
+
     this.socket = null
     this.clearHeartbeat()
     const generation = this.nextConnectionGeneration()
     this.setState({
       ...this.state,
       status: "reconnecting",
-      lastError: "登录已过期，正在重新连接",
+      lastError: "登录已过期",
     })
 
     void this.accountService.refreshFromStorage({ reason: "live-auth-failure" })
@@ -454,6 +494,9 @@ export class LiveConnectionService {
           lastError: "账号未登录",
         })
       })
+      .finally(() => {
+        this.accountRefreshInFlight = false
+      })
   }
 
   private keepReconnectingForOfflineAccount(): boolean {
@@ -468,7 +511,7 @@ export class LiveConnectionService {
     this.setState({
       ...this.state,
       status: "reconnecting",
-      lastError: "网络不可用，正在重试",
+      lastError: "网络不可用",
     })
     return true
   }

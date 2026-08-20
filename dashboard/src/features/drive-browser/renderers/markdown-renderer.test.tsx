@@ -924,7 +924,7 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(window.getSelection()?.toString()).toBe('')
     expect(document.querySelector('[data-drive-annotation-overlay-layer="true"]')?.className).not.toContain('opacity-0')
-    expect(pendingOverlay()?.className).toContain('bg-primary/15')
+    expect(pendingOverlay()?.className).toContain('bg-amber-200/60')
   })
 
   it('creates one selection anchor for the pointer release event sequence', async () => {
@@ -1174,7 +1174,9 @@ describe('DriveMarkdownRenderer', () => {
 
     const overlay = threadOverlay('thread-1')
     expect(overlay).not.toBeNull()
-    expect(overlay?.className).toContain('bg-muted-foreground/15')
+    expect(overlay?.className).toContain('mix-blend-multiply')
+    expect(overlay?.className).toContain('dark:mix-blend-screen')
+    expect(overlay?.className).toContain('bg-amber-200/45')
     expect(document.querySelector('[data-drive-annotation-thread-id]')).toBeNull()
 
     await act(async () => {
@@ -1363,7 +1365,8 @@ describe('DriveMarkdownRenderer', () => {
     await click(elementWithText('First comment'))
 
     expect(threadOverlay('thread-1')?.className).toContain('ring-2')
-    expect(threadOverlay('thread-1')?.className).toContain('bg-primary/25')
+    expect(threadOverlay('thread-1')?.className).toContain('bg-amber-300/80')
+    expect(threadOverlay('thread-1')?.className).toContain('ring-amber-500/90')
     expect(threadOverlay('thread-2')?.className).not.toContain('ring-1')
   })
 
