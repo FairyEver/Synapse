@@ -597,6 +597,61 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('已同步')
   })
 
+  it('rejects empty selected images before creating a draft url', async () => {
+    renderRenderer({ edit: editable() })
+
+    await selectImage(new File([], 'empty.png', { type: 'image/png' }))
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('图片内容为空，请重新复制或选择图片。')
+    expect(document.body.textContent).not.toContain('插入公开素材')
+  })
+
+  it('rejects empty pasted images before the mdxeditor upload handler runs', async () => {
+    renderRenderer({ edit: editable() })
+
+    await pasteClipboardImage(new File([], 'empty.png', { type: 'image/png' }), false)
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('图片内容为空，请重新复制或选择图片。')
+  })
+
+  it('uploads image files from mixed clipboard payloads before saving markdown', async () => {
+    window.localStorage.setItem('synapse.drive.markdown.publicImageUploadConsent.v1', 'true')
+    const file = new File(['image'], 'chart.png', { type: 'image/png' })
+    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
+      name: 'chart.png',
+      url: 'https://synapse.test/files/asset_image',
+    }))
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await pasteClipboardImage(file)
+
+    expect(editor().value).toBe('# Notes![chart](blob:synapse-test-1)')
+    await click(buttonWithText('保存'))
+    expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledWith(
+      file,
+      { name: 'chart.png', mimeType: 'image/png' }
+    )
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Notes![chart](https://synapse.test/files/asset_image)',
+      baseVersionId: 'version-1',
+    })
+  })
+
+  it('does not save markdown containing unmatched temporary image urls', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), '# Notes\n\n![chart](blob:https://synapse.d2.pub/missing)')
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('图片尚未完成上传，请重新粘贴或选择图片。')
+    expect(document.body.textContent).toContain('未保存')
+  })
+
   it('remembers public image consent after the first confirmed insertion', async () => {
     const editContext = createEditContext()
     vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
@@ -1039,6 +1094,27 @@ async function selectImage(file: File) {
       value: [file],
     })
     input.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+async function pasteClipboardImage(file: File, mixed = true) {
+  const imageItem = {
+    type: file.type,
+    getAsFile: () => file,
+  }
+  const htmlItem = {
+    type: 'text/html',
+    getAsFile: () => null,
+  }
+  await act(async () => {
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      configurable: true,
+      value: { items: mixed ? [imageItem, htmlItem] : [imageItem] },
+    })
+    editor().dispatchEvent(event)
     await Promise.resolve()
     await Promise.resolve()
   })

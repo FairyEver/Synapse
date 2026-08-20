@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -162,6 +162,11 @@ export function DriveMDXeditorRenderer({
     }
   }, [])
   const stageDraftImage = useCallback(async (file: File) => {
+    const validationError = publicImageUploadValidationError(file)
+    if (validationError) {
+      setError(validationError)
+      throw new Error(validationError)
+    }
     const input = resolvePublicImageUploadInput(file)
     if (!input) {
       setError('格式不支持。')
@@ -172,10 +177,17 @@ export function DriveMDXeditorRenderer({
     draftPublicImagesRef.current.set(url, { file, input, url })
     return url
   }, [])
-  const confirmPublicImageUpload = useCallback((file: File) => {
+  const confirmPublicImageUpload = useCallback((file: File | null) => {
     return new Promise<string>((resolve, reject) => {
       if (!canEdit) {
         reject(new Error('没有编辑权限。'))
+        return
+      }
+      const validationError = publicImageUploadValidationError(file)
+      if (validationError || !file) {
+        const message = validationError ?? '图片内容为空，请重新复制或选择图片。'
+        setError(message)
+        reject(new Error(message))
         return
       }
       if (!resolvePublicImageUploadInput(file)) {
@@ -200,6 +212,11 @@ export function DriveMDXeditorRenderer({
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
     if (!file || !canEdit) return
+    const validationError = publicImageUploadValidationError(file)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
     if (!resolvePublicImageUploadInput(file)) {
       setError('格式不支持。')
       return
@@ -215,6 +232,33 @@ export function DriveMDXeditorRenderer({
     }
     setPendingPublicImageUpload({ file, insertMarkdown: true })
   }, [canEdit, insertPublicImageMarkdown, stageDraftImage])
+  const insertMixedClipboardImages = useCallback(async (files: readonly File[]) => {
+    for (const file of files) {
+      try {
+        const url = await confirmPublicImageUpload(file)
+        insertPublicImageMarkdown(file, url)
+      } catch {
+        return
+      }
+    }
+  }, [confirmPublicImageUpload, insertPublicImageMarkdown])
+  const handlePasteCapture = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
+    if (!canEdit) return
+    const items = Array.from(event.clipboardData.items)
+    const imageItems = items.filter((item) => item.type.startsWith('image/'))
+    if (imageItems.length === 0) return
+    const files = imageItems.map((item) => item.getAsFile())
+    const validationError = files.map((file) => publicImageUploadValidationError(file)).find((message) => message !== null) ?? null
+    const mixedPayload = items.some((item) => !item.type.startsWith('image/'))
+    if (!validationError && !mixedPayload) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    void insertMixedClipboardImages(files.filter((file): file is File => file !== null))
+  }, [canEdit, insertMixedClipboardImages])
   const cancelPendingPublicImageUpload = useCallback(() => {
     pendingPublicImageUpload?.reject?.(new Error('已取消。'))
     setPendingPublicImageUpload(null)
@@ -319,6 +363,9 @@ export function DriveMDXeditorRenderer({
       )
       normalizedValue = materialized.markdown
       replacedDraftUrls = materialized.replacedDraftUrls
+      if (hasTemporaryImageSource(normalizedValue)) {
+        throw new Error('图片尚未完成上传，请重新粘贴或选择图片。')
+      }
       await editContext.saveText({ text: normalizedValue, baseVersionId: edit.currentVersionId })
       if (normalizedValue !== submittedValue && valueRef.current === submittedValue) {
         valueRef.current = normalizedValue
@@ -464,6 +511,7 @@ export function DriveMDXeditorRenderer({
       data-drive-mdxeditor-renderer='true'
       className='flex h-full min-h-0 w-full flex-col overflow-hidden'
       onKeyDown={handleSaveShortcut}
+      onPasteCapture={handlePasteCapture}
     >
       <input
         ref={imageInputRef}
@@ -665,6 +713,17 @@ function resolvePublicImageUploadInput(file: File): { readonly name: string; rea
   const mimeType = file.type || inferDrivePublicAssetMimeType(name)
   if (!isDrivePublicAssetImageMimeType(mimeType)) return null
   return { name, mimeType }
+}
+
+function publicImageUploadValidationError(file: File | null | undefined): string | null {
+  if (!file || file.size <= 0) return '图片内容为空，请重新复制或选择图片。'
+  if (!resolvePublicImageUploadInput(file)) return '格式不支持。'
+  return null
+}
+
+function hasTemporaryImageSource(markdown: string): boolean {
+  return /!\[[^\r\n]*\]\(\s*<?blob:/iu.test(markdown)
+    || /^\s*\[[^\]\r\n]+\]:\s*<?blob:/imu.test(markdown)
 }
 
 function isDrivePublicAssetImageMimeType(value: string | null): value is DrivePublicAssetImageMimeType {
