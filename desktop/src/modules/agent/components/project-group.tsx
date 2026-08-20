@@ -143,7 +143,7 @@ function ProjectGroup({
                   data-track="agent-project-custom-new-session"
                   onSelect={onCustomizeSession}
                 >
-                  自定义对话
+                  创建自定义对话
                 </DropdownMenuItem>
                 {onShowProjectInFolder ? (
                   <DropdownMenuItem

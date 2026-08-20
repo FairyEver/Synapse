@@ -213,8 +213,10 @@ describe("AgentComposer", () => {
     expect(attachmentTrigger!.compareDocumentPosition(quickInputTrigger!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     openAttachmentMenu(container)
-    const folderItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-      .find((item) => item.textContent?.includes("添加文件夹"))
+    const attachmentItems = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+    expect(attachmentItems.some((item) => item.textContent?.trim() === "附加文件")).toBe(true)
+    const folderItem = attachmentItems
+      .find((item) => item.textContent?.includes("附加文件夹"))
     expect(folderItem).toBeTruthy()
     await act(async () => {
       folderItem?.click()

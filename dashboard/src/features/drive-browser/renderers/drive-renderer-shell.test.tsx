@@ -72,7 +72,7 @@ vi.mock('@mdxeditor/editor', async () => {
     realmPlugin: () => () => ({ name: 'realmPlugin' }),
     createActiveEditorSubscription$: Symbol('createActiveEditorSubscription$'),
     createRootEditorSubscription$: Symbol('createRootEditorSubscription$'),
-    lexical: {},
+    lexical: { LineBreakNode: class {} },
     $createGenericHTMLNode: () => null,
     $isImageNode: () => false,
     tablePlugin: () => ({ name: 'tablePlugin' }),

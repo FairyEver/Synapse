@@ -174,7 +174,7 @@ describe("ProjectGroup", () => {
       await Promise.resolve()
     })
     const customItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
-      .find((item) => item.textContent === "自定义对话")
+      .find((item) => item.textContent === "创建自定义对话")
     expect(customItem).toBeDefined()
 
     await act(async () => {

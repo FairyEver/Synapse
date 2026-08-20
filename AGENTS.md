@@ -43,6 +43,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 | Workflow 数据、分享包、App Capability Package、DataRepository | `docs/agents/workflow-and-capabilities.md` |
 | 具体业务模块长期边界 | `docs/agents/module-boundaries.md` |
 | Knowledge Base、Agent Runtime、Claude SDK、MCP 诊断 | `docs/agents/knowledge-base.md`、`docs/agents/agent-runtime-security.md` |
+| macOS 自动更新、ShipIt/Squirrel、`quitAndInstall`、更新退出与恢复 | `docs/superpowers/specs/2026-07-21-desktop-update-handoff-design.md` |
 | UI、样式、交互、产品文案 | `docs/agents/ui-and-product.md`、`.claude/rules/design.md`、`.claude/rules/ui-rules.md` |
 | 后续规划 | `docs/agents/future-plans.md` |
 | System Notifier | `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md` |
@@ -80,6 +81,16 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 pnpm --filter @synapse/desktop run check:hard-constraints
 pnpm --filter @synapse/desktop run test
 ```
+
+## macOS 更新交接硬约束
+
+修改 `desktop/electron/services/update-service.ts`、`update-install-recovery-service.ts`、`desktop/electron/bootstrap/before-quit.ts`、`core.update`、Electron/Squirrel 版本或桌面更新打包逻辑前，必须先阅读 `docs/superpowers/specs/2026-07-21-desktop-update-handoff-design.md`，并遵守以下不变量：
+
+- `before-quit-for-update` 只表示原生更新任务已提交，不表示 ShipIt 已启动；只有确认当前用户 launchd domain 中 ShipIt 为 `state = running` 且有有效 PID，才允许 Synapse 退出。
+- ShipIt 未启动或验证超时时，必须回滚本次安装记录并保留当前进程、主窗口和已下载更新，不得提前退出应用。
+- 更新恢复必须在后台执行；launchctl、缓存清理、DataRepository 恢复判断和重新下载不得阻塞主窗口创建。
+- launchd 与缓存操作必须经过 `PermissionGuard`、`AuditSink` 和受控进程执行器；只能操作设计文档规定的两个精确缓存目录，并设置可终止的硬超时。
+- 不得删除或弱化 ShipIt 未启动、启动验证超时、缓存删除卡死和恢复不阻塞启动的回归测试。相关修改至少运行更新专项测试、desktop typecheck、`check:hard-constraints`；涉及打包边界时还要运行 `check:packaged-asar`，正式发布前完成真实 macOS 跨版本更新验收。
 
 ## 开发命令
 

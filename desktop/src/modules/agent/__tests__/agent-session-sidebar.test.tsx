@@ -1187,7 +1187,7 @@ function provider(overrides: Partial<SynapseAgentProvider> = {}): SynapseAgentPr
 async function openCustomSessionDialog(index = 0): Promise<void> {
   await openProjectActionMenu(index)
   const customItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
-    .find((item) => item.textContent === "自定义对话")
+    .find((item) => item.textContent === "创建自定义对话")
   expect(customItem).toBeDefined()
   await act(async () => {
     customItem?.click()

@@ -35,11 +35,11 @@ function AgentAttachmentMenu({ disabled, onChoose }: AgentAttachmentMenuProps) {
       >
         <DropdownMenuItem onSelect={() => onChoose("file")}>
           <FilePlus2 data-icon="inline-start" />
-          添加文件
+          附加文件
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => onChoose("directory")}>
           <FolderPlus data-icon="inline-start" />
-          添加文件夹
+          附加文件夹
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

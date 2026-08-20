@@ -117,7 +117,7 @@ Input methods:
 - paste file or folder paths from clipboard;
 - drag files or folders into the conversation workspace.
 
-The `+` button opens a two-item menu with `添加文件` and `添加文件夹`. Both native pickers allow multiple selections, and repeated selections accumulate in the current draft. Electron cannot present one native dialog as both a file and directory selector on Windows and Linux, so the two-item menu is consistent across platforms. The main process resolves selected, pasted, and dropped paths with `lstat`; Renderer does not infer directory type from file size or MIME metadata. Supported selected images remain direct model image content.
+The `+` button opens a two-item menu with `附加文件` and `附加文件夹`. Both native pickers allow multiple selections, and repeated selections accumulate in the current draft. Electron cannot present one native dialog as both a file and directory selector on Windows and Linux, so the two-item menu is consistent across platforms. The main process resolves selected, pasted, and dropped paths with `lstat`; Renderer does not infer directory type from file size or MIME metadata. Supported selected images remain direct model image content.
 
 Use existing shadcn/Radix components, lucide icons, and theme token classes. Do not add custom colors, gradients, glow, page-specific CSS, nested cards, or marketing copy.
 
