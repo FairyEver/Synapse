@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, OnApplicationShutdown } from "@nestjs/common"
-import { codePointCount, type DriveAnnotationCrdtRangeSelector, type DriveAnnotationTextPositionSelector, type DriveCollaborationControlMessage, type DriveFileContentUpdateResult, type DriveMarkdownOutlineItemDto, type DriveMarkdownProjectionDto } from "@synapse/shared"
+import { codePointCount, DRIVE_MAX_FILE_BYTES, DRIVE_MAX_FILE_SIZE_LABEL, type DriveAnnotationCrdtRangeSelector, type DriveAnnotationTextPositionSelector, type DriveCollaborationControlMessage, type DriveFileContentUpdateResult, type DriveMarkdownOutlineItemDto, type DriveMarkdownProjectionDto } from "@synapse/shared"
 import { createHash, randomUUID } from "node:crypto"
 import * as Y from "yjs"
 import { Awareness } from "y-protocols/awareness"
@@ -7,7 +7,6 @@ import { Prisma } from "@prisma/client"
 import { loadEnv } from "../config/env"
 import { PrismaService } from "../prisma/prisma.service"
 import { DriveChangeLogService } from "./drive-change-log"
-import { DRIVE_INLINE_TEXT_EDIT_MAX_BYTES } from "./drive-editable-preview"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 import { isPlainDriveMarkdownName } from "./drive-markdown-relative-images"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
@@ -87,7 +86,7 @@ const maxCheckpointDelayMs = 5 * 60_000
 const leaveCheckpointDelayMs = 5_000
 const previewDelayMs = 300
 const shutdownPersistenceTimeoutMs = 10_000
-const objectReadMaxBytes = 16 * 1024 * 1024
+const objectReadMaxBytes = DRIVE_MAX_FILE_BYTES
 const initializationOrigin = Symbol("drive-collaboration-initialization")
 
 @Injectable()
@@ -189,9 +188,10 @@ export class DriveCollaborationService implements OnApplicationShutdown {
     Y.applyUpdate(candidate, update, initializationOrigin)
     const candidateSize = Buffer.byteLength(candidate.getText("content").toString(), "utf8")
     candidate.destroy()
-    if (candidateSize > DRIVE_INLINE_TEXT_EDIT_MAX_BYTES) {
-      connection.sendControl({ type: "error", code: "DRIVE_COLLABORATION_TOO_LARGE", message: "文件内容过大。" })
-      throw new BadRequestException("文件内容过大。")
+    if (candidateSize > DRIVE_MAX_FILE_BYTES) {
+      const message = `文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`
+      connection.sendControl({ type: "error", code: "DRIVE_COLLABORATION_TOO_LARGE", message })
+      throw new BadRequestException(message)
     }
     Y.applyUpdate(room.doc, update, connection)
     room.pending.push({ update, connection, updateId: randomUUID() })
@@ -519,8 +519,7 @@ export class DriveCollaborationService implements OnApplicationShutdown {
     const document = await this.prisma.driveCollaborationDocument.findUniqueOrThrow({ where: { itemId: item.id } })
     const doc = new Y.Doc()
     const checkpointObject = await this.storage.getObjectStream({ key: version.storageKey })
-    const checkpointSource = await readStreamBuffer(checkpointObject.stream, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES + 1)
-    if (checkpointSource.byteLength > DRIVE_INLINE_TEXT_EDIT_MAX_BYTES) throw new BadRequestException("文件内容过大。")
+    const checkpointSource = await readStreamBuffer(checkpointObject.stream, DRIVE_MAX_FILE_BYTES)
     if (document.snapshotStorageKey) {
       const snapshotObject = await this.storage.getObjectStream({ key: document.snapshotStorageKey })
       const snapshot = await readStreamBuffer(snapshotObject.stream, objectReadMaxBytes)

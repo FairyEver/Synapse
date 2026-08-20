@@ -547,7 +547,6 @@ describe("DriveLinkIntakeService", () => {
         canEdit: true,
         editorKind: "monaco",
         currentVersionId: "version-2",
-        maxInlineEditBytes: "1048576",
         reason: null,
       },
     }

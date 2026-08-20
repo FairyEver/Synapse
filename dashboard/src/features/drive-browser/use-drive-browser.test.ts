@@ -343,7 +343,6 @@ describe('toDriveBrowserQueryKey', () => {
         canEdit: true,
         editorKind: 'text',
         currentVersionId: 'version-1',
-        maxInlineEditBytes: '1024',
         reason: null,
       },
     })
@@ -407,7 +406,6 @@ describe('toDriveBrowserQueryKey', () => {
         canEdit: true,
         editorKind: 'text',
         currentVersionId: 'version-1',
-        maxInlineEditBytes: '1024',
         reason: null,
       },
     })
@@ -474,7 +472,6 @@ describe('toDriveBrowserQueryKey', () => {
         canEdit: true,
         editorKind: 'mdxeditor',
         currentVersionId: 'version-1',
-        maxInlineEditBytes: '1024',
         reason: null,
       },
     })
@@ -531,7 +528,6 @@ describe('toDriveBrowserQueryKey', () => {
         canEdit: true,
         editorKind: 'mdxeditor',
         currentVersionId: 'version-1',
-        maxInlineEditBytes: '1024',
         reason: null,
       },
     })
@@ -574,7 +570,6 @@ describe('toDriveBrowserQueryKey', () => {
         canEdit: true,
         editorKind: 'mdxeditor',
         currentVersionId: 'version-1',
-        maxInlineEditBytes: '1024',
         reason: null,
       },
     })

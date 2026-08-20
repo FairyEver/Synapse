@@ -762,7 +762,6 @@ export interface DriveBrowserEditDto {
   readonly canEdit: boolean
   readonly editorKind: DriveBrowserEditKind
   readonly currentVersionId: string | null
-  readonly maxInlineEditBytes: string
   readonly reason: DriveBrowserEditUnavailableReason | null
 }
 

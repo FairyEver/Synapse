@@ -16,6 +16,7 @@ Editing is not Markdown-specific. Markdown, plain text, JSON, CSV, code files, i
 - Renderers decide whether to expose editing UI based on the shared context.
 - The first editable renderer is the existing Monaco-based code renderer.
 - The first editable file set is text-like files whose full content is available in preview.
+- Text renderers do not impose a smaller file-size limit than Drive itself.
 - Truncated previews are read-only to prevent saving partial content over the full file.
 - Saving is explicit. There is no real-time collaborative editing and no auto-save version creation in the first version.
 - Every successful save creates a new file version with `source=online_edit`.
@@ -473,7 +474,6 @@ type DriveRendererContext = {
     readonly editable: boolean
     readonly editorKind: "text" | "replace" | "none"
     readonly currentVersionId: string | null
-    readonly maxInlineEditBytes: string
     readonly saving: boolean
     readonly saveText: (input: {
       readonly text: string
@@ -493,7 +493,6 @@ edit: {
   readonly canEdit: boolean
   readonly editorKind: "text" | "replace" | "none"
   readonly currentVersionId: string | null
-  readonly maxInlineEditBytes: string
   readonly reason?: "unsupported" | "truncated" | "login_required" | "permission_denied" | "quota" | null
 } | null
 ```
@@ -585,7 +584,7 @@ Errors:
 - `403`: logged-in user lacks edit rights.
 - `404`: share or item is not available.
 - `409`: base version is stale.
-- `413`: submitted text exceeds edit limit.
+- `413`: submitted text exceeds the Drive single-file limit.
 - `422`: file type or current preview state is not editable.
 
 The `409` response should not include the user's submitted text. The renderer already has the local text and is responsible for offering the local download.

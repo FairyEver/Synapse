@@ -127,7 +127,6 @@ function editable(overrides: Partial<DriveBrowserEditDto> = {}): DriveBrowserEdi
     canEdit: true,
     editorKind: 'text',
     currentVersionId: 'version-1',
-    maxInlineEditBytes: '1024',
     reason: null,
     ...overrides,
   }

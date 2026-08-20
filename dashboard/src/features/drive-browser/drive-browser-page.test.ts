@@ -29,7 +29,7 @@ import {
   getDrivePreviewSystemMenuSections,
 } from './renderers/drive-preview-actions'
 import { DrivePreviewFloatingMenu } from './renderers/drive-preview-floating-menu'
-import { DrivePreviewHeader, DriveRendererOptionMenuLabel } from './renderers/drive-preview-header'
+import { DrivePreviewHeader } from './renderers/drive-preview-header'
 import { DriveRendererToolbarProvider } from './renderers/drive-renderer-toolbar-context'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from './shared/drive-format'
 import {
@@ -435,7 +435,7 @@ describe('drive browser view model', () => {
     expect(getDriveRendererOptions(image).map((option) => option.id)).toEqual(['image'])
   })
 
-  it('keeps oversized MDXeditor options visible but disabled', () => {
+  it('allows MDXeditor for markdown above the former rich-text size limit', () => {
     const snapshot = createSnapshot({
       current: {
         ...baseCurrent(),
@@ -457,22 +457,15 @@ describe('drive browser view model', () => {
     const mdxeditor = options.find((option) => option.id === 'mdxeditor')
 
     expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'code'])
-    expect(mdxeditor?.disabledReason).toBe('超过富文本限制')
-    expect(findDriveRendererOption(snapshot, 'mdxeditor')?.id).toBe('markdown')
-    if (!mdxeditor) throw new Error('MDXeditor option not found')
-
-    const labelHtml = renderToStaticMarkup(createElement(DriveRendererOptionMenuLabel, { option: mdxeditor }))
-
-    expect(labelHtml).toContain('MDXeditor')
-    expect(labelHtml).toContain('超过富文本限制')
+    expect(mdxeditor?.disabledReason).toBeUndefined()
+    expect(findDriveRendererOption(snapshot, 'mdxeditor')?.id).toBe('mdxeditor')
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, {
       snapshot,
       initialRendererId: 'mdxeditor',
     }))
 
-    expect(html).toContain('data-testid="markdown-body"')
-    expect(html).not.toContain('data-mdxeditor="true"')
+    expect(html).toContain('data-mdxeditor="true"')
   })
 
   it('uses iframe as the default renderer for html files with visit urls', () => {

@@ -5,13 +5,10 @@ import type {
   DriveBrowserPreviewKind,
 } from "@synapse/shared"
 
-export const DRIVE_INLINE_TEXT_EDIT_MAX_BYTES = 128 * 1024
-
 export function buildDriveBrowserEdit(input: {
   readonly canWrite: boolean
   readonly item: {
     readonly type: string
-    readonly size: bigint
   }
   readonly preview: DriveBrowserPreviewDto | null
   readonly currentVersionId: string | null
@@ -23,7 +20,6 @@ export function buildDriveBrowserEdit(input: {
     canEdit,
     editorKind: support.supported ? "text" : "none",
     currentVersionId: input.currentVersionId,
-    maxInlineEditBytes: DRIVE_INLINE_TEXT_EDIT_MAX_BYTES.toString(),
     reason: canEdit ? null : resolveEditUnavailableReason({
       supportReason: support.reason,
       canWrite: input.canWrite,
@@ -38,13 +34,13 @@ export function isDriveTextEditablePreviewKind(kind: DriveBrowserPreviewKind): b
 }
 
 function resolveTextEditSupport(
-  item: { readonly type: string; readonly size: bigint },
+  item: { readonly type: string },
   preview: DriveBrowserPreviewDto | null,
 ): { readonly supported: boolean; readonly reason: DriveBrowserEditUnavailableReason | null } {
   if (item.type !== "file" || !preview || !isDriveTextEditablePreviewKind(preview.kind)) {
     return { supported: false, reason: "unsupported" }
   }
-  if (preview.truncated || item.size > BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)) {
+  if (preview.truncated) {
     return { supported: false, reason: "truncated" }
   }
   return { supported: true, reason: null }

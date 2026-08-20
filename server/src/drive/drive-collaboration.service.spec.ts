@@ -177,6 +177,25 @@ describe("DriveCollaborationService", () => {
     }
   })
 
+  it("accepts document updates above the former inline edit limit", async () => {
+    const { service, connection } = createService()
+    const joined = await service.join(access, connection, null)
+    const clientDocument = new Y.Doc()
+    Y.applyUpdate(clientDocument, Y.encodeStateAsUpdate(joined.doc))
+    const before = Y.encodeStateVector(clientDocument)
+    const text = clientDocument.getText("content")
+    text.insert(text.length, "x".repeat(150 * 1024))
+
+    await service.applyClientUpdate(
+      "item-1",
+      connection.clientId,
+      Y.encodeStateAsUpdate(clientDocument, before),
+    )
+
+    expect(service.getRoomDocument("item-1")?.getText("content").length).toBeGreaterThan(128 * 1024)
+    clientDocument.destroy()
+  })
+
   it("retries an object-storage failure without dropping the pending update", async () => {
     vi.useFakeTimers()
     try {

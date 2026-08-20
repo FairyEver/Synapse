@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException, PayloadTooLargeException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common"
 import { DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
@@ -8,7 +8,6 @@ import type { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
 import type { DriveStoragePort } from "./drive-storage"
 import type { DriveService } from "./drive.service"
 import { DriveService as RealDriveService } from "./drive.service"
-import { DRIVE_INLINE_TEXT_EDIT_MAX_BYTES } from "./drive-editable-preview"
 
 const OWNER_ASSET_ID = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ"
 const COLLABORATOR_ASSET_ID = "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5Yua"
@@ -422,10 +421,11 @@ describe("DriveDocumentImageService", () => {
     }
   })
 
-  it("rejects oversized markdown image documents before reading preview content", async () => {
+  it("reads markdown image documents above the former inline edit limit", async () => {
     const previousSecret = process.env.USER_ACCESS_JWT_SECRET
     process.env.USER_ACCESS_JWT_SECRET = "drive-document-image-service-test-secret"
-    const item = createDriveItemRecord({ size: BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES + 1) })
+    const markdown = `![external](https://example.test/a.png)\n${"x".repeat(150 * 1024)}`
+    const item = createDriveItemRecord({ size: BigInt(Buffer.byteLength(markdown)) })
     const prisma = {
       driveItem: {
         findFirst: vi.fn(async () => item),
@@ -436,15 +436,15 @@ describe("DriveDocumentImageService", () => {
     }
     const storage = {
       getObjectStream: vi.fn(async () => ({
-        stream: Readable.from(`![external](https://example.test/a.png)\n${"x".repeat(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)}`),
+        stream: Readable.from(markdown),
       })),
     }
     try {
       const service = new RealDriveService(prisma as never, storage as unknown as DriveStoragePort)
 
       await expect(service.getOwnerMarkdownImageDocument({ actorUserId: "owner-1", itemId: "item-1" }))
-        .rejects.toBeInstanceOf(PayloadTooLargeException)
-      expect(storage.getObjectStream).not.toHaveBeenCalled()
+        .resolves.toMatchObject({ markdown })
+      expect(storage.getObjectStream).toHaveBeenCalledOnce()
     } finally {
       if (previousSecret === undefined) {
         delete process.env.USER_ACCESS_JWT_SECRET

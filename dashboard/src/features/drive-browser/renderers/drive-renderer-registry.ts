@@ -2,7 +2,6 @@ import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 
 export type DriveRendererId = 'mdxeditor' | 'markdown' | 'code' | 'image' | 'iframe' | 'download'
 export type DriveRendererContainer = 'reading' | 'media' | 'full'
-export const DRIVE_MDXEDITOR_MAX_MARKDOWN_BYTES = 64 * 1024
 
 export type DriveRendererOption = {
   readonly id: DriveRendererId
@@ -65,22 +64,5 @@ function driveMdxEditorRendererOption(snapshot: DriveBrowserSnapshotDto): DriveR
 
 function canRenderDriveMdxEditor(snapshot: DriveBrowserSnapshotDto): boolean {
   const preview = snapshot.preview
-  if (!preview || preview.kind !== 'markdown' || preview.truncated || preview.text === null) return false
-  const size = parseDriveItemSize(snapshot.current.size) ?? markdownByteLength(preview.text)
-  if (size === null) return false
-  return size <= BigInt(DRIVE_MDXEDITOR_MAX_MARKDOWN_BYTES)
-}
-
-function parseDriveItemSize(value: string): bigint | null {
-  try {
-    const size = BigInt(value)
-    return size >= 0n ? size : null
-  } catch {
-    return null
-  }
-}
-
-function markdownByteLength(value: string): bigint | null {
-  if (typeof TextEncoder === 'undefined') return BigInt(value.length)
-  return BigInt(new TextEncoder().encode(value).byteLength)
+  return Boolean(preview && preview.kind === 'markdown' && !preview.truncated && preview.text !== null)
 }

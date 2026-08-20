@@ -1,4 +1,4 @@
-import { Body, Controller, Module, Post } from "@nestjs/common"
+import { Body, Controller, Module, Patch, Post } from "@nestjs/common"
 import { Test } from "@nestjs/testing"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -10,7 +10,10 @@ type SupertestChain = {
   readonly expect: (status: number) => Promise<{ readonly body: unknown }>
 }
 
-const request = require("supertest") as (server: unknown) => { readonly post: (path: string) => SupertestChain }
+const request = require("supertest") as (server: unknown) => {
+  readonly patch: (path: string) => SupertestChain
+  readonly post: (path: string) => SupertestChain
+}
 
 let authLoginCalls = 0
 
@@ -30,6 +33,11 @@ class BodyParserTestController {
   @Post("/api/skill-repositories/import")
   receiveSkillRepositoryImport(@Body() body: { readonly value?: string }) {
     return { size: body.value?.length ?? 0 }
+  }
+
+  @Patch("/api/drive/browser/owner/items/:itemId/content")
+  receiveDriveText(@Body() body: { readonly text?: string }) {
+    return { size: body.text?.length ?? 0 }
   }
 }
 
@@ -84,6 +92,18 @@ describe("HTTP body parser configuration", () => {
       .set("content-type", "application/json")
       .send({ value })
       .expect(201)
+
+    expect(response.body).toEqual({ size: value.length })
+  })
+
+  it("accepts Drive text edits above the general JSON body limit", async () => {
+    const value = "x".repeat(2 * 1024 * 1024)
+
+    const response = await request(app.getHttpServer())
+      .patch("/api/drive/browser/owner/items/item-1/content")
+      .set("content-type", "application/json")
+      .send({ text: value })
+      .expect(200)
 
     expect(response.body).toEqual({ size: value.length })
   })

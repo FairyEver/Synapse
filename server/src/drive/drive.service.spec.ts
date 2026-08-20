@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client"
 import { Readable } from "node:stream"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
-import { DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES } from "./drive-browser"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveService } from "./drive.service"
 import type { DriveStoragePort } from "./drive-storage"
@@ -249,6 +248,29 @@ describe("DriveService", () => {
     const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
     expect(usage.usedBytes).toBe(25n)
     expect(usage.reservedBytes).toBe(0n)
+  })
+
+  it("saves text content above the former inline edit limit", async () => {
+    const prisma = createPrismaMemory()
+    const storage = { ...storageMock, putObject: vi.fn(async () => undefined) }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "large.md",
+      mimeType: "text/markdown",
+    })
+    const baseVersion = (await service.listFileVersions("user-1", file.id, { offset: 0, limit: 20 })).items[0]!
+    const text = "x".repeat(150 * 1024)
+
+    const saved = await service.updateOwnerFileText("user-1", file.id, {
+      contentType: "text",
+      text,
+      baseVersionId: baseVersion.id,
+    })
+
+    expect(saved.version.size).toBe(String(Buffer.byteLength(text)))
+    expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({ body: Buffer.from(text) }))
   })
 
   it("records a content change when an upload is completed", async () => {
@@ -2650,7 +2672,6 @@ describe("DriveService", () => {
       "",
       "x".repeat(150 * 1024),
     ].join("\n")
-    const expectedPreviewText = longMarkdown.slice(0, DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES)
     const storage: DriveStoragePort = {
       ...storageMock,
       getObjectStream: vi.fn(async () => ({ stream: Readable.from(longMarkdown), size: BigInt(Buffer.byteLength(longMarkdown)), contentType: "text/markdown" })),
@@ -2673,7 +2694,7 @@ describe("DriveService", () => {
     expect(snapshot.annotation).toEqual({ canComment: true, reason: null })
     expect(snapshot.preview).toMatchObject({
       kind: "markdown",
-      text: expectedPreviewText,
+      text: longMarkdown,
       html: expect.stringMatching(/<h1[^>]*id="notes"[^>]*>Notes<\/h1>/u),
       outline: [
         {
@@ -2690,9 +2711,10 @@ describe("DriveService", () => {
           ],
         },
       ],
-      truncated: true,
+      truncated: false,
       visitUrl: null,
     })
+    expect(snapshot.edit).toMatchObject({ canEdit: true, editorKind: "text", reason: null })
   })
 
   it("resolves owner Markdown images from the DriveItem directory tree", async () => {

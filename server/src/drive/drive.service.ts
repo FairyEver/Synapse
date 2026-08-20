@@ -15,6 +15,7 @@ import {
   buildDriveUrlWithPassword,
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_SHARE_UNLOCK_REQUIRED_ERROR_CODE,
+  DRIVE_MAX_FILE_BYTES,
   DRIVE_MAX_FILE_SIZE_LABEL,
   type DriveAccessSettingsInput,
   type DriveAccessSettingsUpdateInput,
@@ -107,7 +108,6 @@ import {
   buildDriveBrowserBreadcrumb,
   buildDriveBrowserItemDto,
   buildDriveBrowserPreview,
-  DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES,
   resolveDriveBrowserPreviewKind,
   shouldCreateDriveBrowserImagePreview,
   shouldReadDriveBrowserTextPreview,
@@ -117,7 +117,7 @@ import {
 import { isCommentableMarkdownItem } from "./drive-annotation-target"
 import { DriveChangeLogService, type DriveChangeAppendInput } from "./drive-change-log"
 import { DriveCollaborationService, type DriveCollaborationAccess } from "./drive-collaboration.service"
-import { buildDriveBrowserEdit, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES, isDriveTextEditablePreviewKind } from "./drive-editable-preview"
+import { buildDriveBrowserEdit, isDriveTextEditablePreviewKind } from "./drive-editable-preview"
 import {
   canUserEditShare,
   DRIVE_SHARE_ACCESS_MODE,
@@ -586,7 +586,7 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertActiveBrowserItem(item)
     this.assertEditableTextFile(item)
     const storageKey = this.requireActiveFileStorage(item)
-    const markdown = await this.readInlineEditableTextFile(item, storageKey)
+    const markdown = await this.readInlineEditableTextFile(storageKey)
     return {
       itemId: item.id,
       ownerId: item.userId,
@@ -612,7 +612,7 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertActiveBrowserItem(current)
     this.assertEditableTextFile(current)
     const storageKey = this.requireActiveFileStorage(current)
-    const markdown = await this.readInlineEditableTextFile(current, storageKey)
+    const markdown = await this.readInlineEditableTextFile(storageKey)
     return {
       itemId: current.id,
       ownerId: access.value.ownerId,
@@ -2768,7 +2768,7 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertEditableTextFile(input.item)
     const body = Buffer.from(input.input.text, "utf8")
     const bodySize = BigInt(body.byteLength)
-    if (body.byteLength > DRIVE_INLINE_TEXT_EDIT_MAX_BYTES) throw new PayloadTooLargeException("文件内容过大。")
+    if (bodySize > driveMaxFileBytes) throw new PayloadTooLargeException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
     await this.collaboration?.prepareExternalChange(input.item.id)
     const currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
     if (!currentVersionId || currentVersionId !== input.input.baseVersionId) {
@@ -2877,7 +2877,6 @@ export class DriveService implements OnApplicationBootstrap {
     if (item.type !== DRIVE_ITEM_TYPE.file || !item.storageKey) throw new BadRequestException("目标不是文件。")
     const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item))
     if (!isDriveTextEditablePreviewKind(previewKind)) throw new BadRequestException("文件类型暂不支持编辑。")
-    if (item.size > BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)) throw new PayloadTooLargeException("文件内容过大。")
   }
 
   private async buildCollaborationCapability(
@@ -3249,7 +3248,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly nextMarkdown: string
   }): Promise<void> {
     const storageKey = this.requireActiveFileStorage(input.item)
-    const currentMarkdown = await this.readInlineEditableTextFile(input.item, storageKey)
+    const currentMarkdown = await this.readInlineEditableTextFile(storageKey)
     const currentSources = new Set(extractDriveMarkdownRelativeImages(currentMarkdown).map(({ src }) => src))
     const nextReferences = extractDriveMarkdownRelativeImages(input.nextMarkdown)
     const addedReferences = nextReferences.filter(({ src }) => !currentSources.has(src))
@@ -3272,14 +3271,13 @@ export class DriveService implements OnApplicationBootstrap {
 
   private async readTextPreview(storageKey: string): Promise<{ readonly text: string; readonly truncated: boolean }> {
     const object = await this.storage.getObjectStream({ key: storageKey })
-    return readStreamTextPrefix(object.stream, DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES)
+    return readStreamTextPrefix(object.stream, DRIVE_MAX_FILE_BYTES)
   }
 
-  private async readInlineEditableTextFile(item: DriveItemRecordWithStorage, storageKey: string): Promise<string> {
-    if (item.size > BigInt(DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)) throw new PayloadTooLargeException("文件内容过大。")
+  private async readInlineEditableTextFile(storageKey: string): Promise<string> {
     const object = await this.storage.getObjectStream({ key: storageKey })
-    const content = await readStreamTextPrefix(object.stream, DRIVE_INLINE_TEXT_EDIT_MAX_BYTES)
-    if (content.truncated) throw new PayloadTooLargeException("文件内容过大。")
+    const content = await readStreamTextPrefix(object.stream, DRIVE_MAX_FILE_BYTES)
+    if (content.truncated) throw new PayloadTooLargeException(`文件超过 ${DRIVE_MAX_FILE_SIZE_LABEL} 限制。`)
     return content.text
   }
 

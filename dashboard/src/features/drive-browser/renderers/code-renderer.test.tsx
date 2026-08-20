@@ -324,7 +324,6 @@ function editable(): DriveBrowserEditDto {
     canEdit: true,
     editorKind: 'text',
     currentVersionId: 'version-1',
-    maxInlineEditBytes: '1048576',
     reason: null,
   }
 }

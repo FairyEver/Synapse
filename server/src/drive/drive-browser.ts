@@ -18,7 +18,6 @@ import {
   isDriveMarkdownItem,
 } from "@synapse/shared"
 
-export const DRIVE_BROWSER_TEXT_PREVIEW_MAX_BYTES = 128 * 1024
 export const DRIVE_CONSOLE_ROOT_ID = "root"
 
 export type DriveBrowserSourceItem = {
