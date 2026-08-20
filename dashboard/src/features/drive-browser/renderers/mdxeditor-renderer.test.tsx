@@ -60,6 +60,7 @@ vi.mock('@mdxeditor/editor', async () => {
       onError,
       plugins,
       className,
+      contentEditableClassName,
       translation,
     }: {
       readonly markdown: string
@@ -68,6 +69,7 @@ vi.mock('@mdxeditor/editor', async () => {
       readonly onError?: (payload: { readonly error: Error; readonly source: string }) => void
       readonly plugins?: readonly unknown[]
       readonly className?: string
+      readonly contentEditableClassName?: string
       readonly translation?: (key: string, defaultValue: string, interpolations?: Record<string, unknown>) => string
     }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
       const [value, setValue] = React.useState(markdown)
@@ -99,6 +101,7 @@ vi.mock('@mdxeditor/editor', async () => {
           'data-mdxeditor': 'true',
           'data-toolbar-plugin': String(pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)),
           'data-toolbar-controls': Array.from(pluginCalls).join(','),
+          'data-content-editable-class': contentEditableClassName ?? '',
           'data-translation-bold': translation?.('toolbar.bold', 'Bold') ?? '',
           'data-translation-undo': translation?.('toolbar.undo', 'Undo {{shortcut}}', { shortcut: 'Ctrl+Z' }) ?? '',
           'data-translation-heading': translation?.('toolbar.blockTypes.heading', 'Heading {{level}}', { level: 2 }) ?? '',
@@ -172,6 +175,10 @@ vi.mock('@mdxeditor/editor', async () => {
     listsPlugin: () => ({ name: 'listsPlugin' }),
     markdownShortcutPlugin: () => ({ name: 'markdownShortcutPlugin' }),
     quotePlugin: () => ({ name: 'quotePlugin' }),
+    realmPlugin: () => () => ({ name: 'realmPlugin' }),
+    createRootEditorSubscription$: Symbol('createRootEditorSubscription$'),
+    lexical: {},
+    $isImageNode: () => false,
     tablePlugin: () => ({ name: 'tablePlugin' }),
     thematicBreakPlugin: () => ({ name: 'thematicBreakPlugin' }),
     toolbarPlugin: (input: { readonly toolbarContents: () => React.ReactNode }) => {
@@ -534,12 +541,13 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().dataset.translationUnknown).toBe('Fallback OK')
   })
 
-  it('lets the mdxeditor root grow with long content so the sticky toolbar remains bounded by the full document', () => {
+  it('lets the editor grow with long content and keeps a bottom click area', () => {
     renderRenderer({ edit: editable() })
 
     const rootElement = mdxEditorRoot()
     expect(rootElement.classList.contains('min-h-full')).toBe(true)
     expect(rootElement.classList.contains('h-full')).toBe(false)
+    expect(editor().dataset.contentEditableClass?.split(' ')).toContain('pb-12')
   })
 
   it('disables image source import while markdown has unsaved edits', async () => {

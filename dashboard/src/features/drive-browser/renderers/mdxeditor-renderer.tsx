@@ -51,6 +51,7 @@ import { ApiError, driveApi, driveBrowserApi } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
+import { trailingImageParagraphPlugin } from './mdxeditor-trailing-image-plugin'
 import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -318,6 +319,7 @@ export function DriveMDXeditorRenderer({
       imageUploadHandler: confirmPublicImageUpload,
       imagePreviewHandler: resolveImagePreview,
     }),
+    trailingImageParagraphPlugin(),
     tablePlugin(),
     codeBlockPlugin(),
     codeMirrorPlugin(),
@@ -564,7 +566,7 @@ export function DriveMDXeditorRenderer({
             plugins={plugins}
             translation={mdxEditorZhCnTranslation}
             className='min-h-full'
-            contentEditableClassName='mx-auto min-h-full max-w-4xl px-4 py-6 md:px-6'
+            contentEditableClassName='mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6'
           />
         )}
       </div>
