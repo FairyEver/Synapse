@@ -1306,6 +1306,7 @@ export type SynapseBridge = {
       list: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>
       get: (input: { itemId: string }) => Promise<DriveItemDto>
       previewUrl: (input: { itemId: string }) => Promise<{ url: string }>
+      download: (input: { itemId: string }) => Promise<{ ok: true; path: string } | null>
       rename: (input: { itemId: string; name: string }) => Promise<DriveItemDto>
       move: (input: { itemId: string; parentId: string | null }) => Promise<DriveItemDto>
       delete: (input: { itemId: string }) => Promise<{ ok: true }>

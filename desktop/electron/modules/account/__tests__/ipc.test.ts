@@ -3,8 +3,15 @@ import { vi } from "vitest"
 import os from "node:os"
 import path from "node:path"
 import vm from "node:vm"
+import type { DriveItemDto } from "@synapse/shared"
 import type { IpcHandlerContext } from "../../../runtime/ipc/types"
 import { DRIVE_LOCAL_UPLOAD_MAX_FILES } from "../../../../src/lib/drive-local-upload-limits"
+
+const electronMocks = vi.hoisted(() => ({
+  getAllWindows: vi.fn(() => []),
+  getFocusedWindow: vi.fn(() => null),
+  showSaveDialog: vi.fn(),
+}))
 
 function assertParseableSchema(schema: unknown): asserts schema is { parse: (value: unknown) => unknown } {
   if (
@@ -30,6 +37,13 @@ vi.mock("electron", () => ({
     encryptString: (plaintext: string) => Buffer.from(plaintext, "utf8"),
     decryptString: (cipher: Buffer) => cipher.toString("utf8"),
   },
+  BrowserWindow: {
+    getAllWindows: electronMocks.getAllWindows,
+    getFocusedWindow: electronMocks.getFocusedWindow,
+  },
+  dialog: {
+    showSaveDialog: electronMocks.showSaveDialog,
+  },
   shell: {
     openExternal: vi.fn().mockResolvedValue(undefined),
   },
@@ -52,12 +66,15 @@ vi.mock("../../../services/account-service", () => ({
     uploadDriveLocalItems: vi.fn(async () => ({ completed: 0, failed: 0, skipped: 0 })),
     cancelDriveUpload: async () => ({ ok: true }),
     createDriveFolder: async () => ({}),
+    getDriveItem: vi.fn(async (itemId: string) => createDriveItemForDownload({ id: itemId })),
     getDriveItemPreviewUrl: vi.fn(async () => ({ url: "https://synapse.test/drive/items/file-1" })),
     renameDriveItem: async () => ({}),
     moveDriveItem: async () => ({}),
     deleteDriveItem: async () => ({ ok: true }),
     listDriveFileVersions: vi.fn(async () => ({ items: [], total: 0, page: { offset: 0, limit: 20, hasMore: false, nextOffset: null } })),
     downloadDriveFileVersion: vi.fn(async () => ({ ok: true, path: "/tmp/report.md" })),
+    downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => ({ ok: true, path: outputPath })),
+    downloadDriveFolderZip: vi.fn(async ({ outputPath }: { outputPath: string }) => ({ ok: true, path: outputPath })),
     restoreDriveFileVersion: vi.fn(async () => ({})),
     deleteDriveFileVersion: vi.fn(async () => ({ ok: true })),
     updateDriveFileVersionPin: vi.fn(async () => ({})),
@@ -101,6 +118,24 @@ vi.mock("../../../services/account-service", () => ({
 
 import { accountService } from "../../../services/account-service"
 import { accountIpcModule } from "../ipc"
+
+function createDriveItemForDownload(overrides: Partial<DriveItemDto> = {}): DriveItemDto {
+  return {
+    id: "file-1",
+    parentId: null,
+    type: "file",
+    name: "report.md",
+    size: "12",
+    mimeType: "text/markdown",
+    storageStatus: "active",
+    shared: false,
+    activeShareId: null,
+    activeShare: null,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+    ...overrides,
+  }
+}
 
 type PermissionResultForTest =
   | { readonly allowed: true }
@@ -967,6 +1002,106 @@ describe("accountIpcModule", () => {
     expect(accountService.restoreDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
     expect(accountService.deleteDriveFileVersion).toHaveBeenCalledWith("item-1", "version-1")
     expect(accountService.updateDriveFileVersionPin).toHaveBeenCalledWith("item-1", "version-1", true)
+  })
+
+  it("downloads files and folders to paths selected by the user", async () => {
+    const { ctx, permissionGuard } = createAccountSecurityContext()
+    vi.mocked(accountService.getDriveItem).mockReset()
+    vi.mocked(accountService.downloadDriveFile).mockClear()
+    vi.mocked(accountService.downloadDriveFolderZip).mockClear()
+    electronMocks.showSaveDialog.mockReset()
+    vi.mocked(accountService.getDriveItem)
+      .mockResolvedValueOnce(createDriveItemForDownload())
+      .mockResolvedValueOnce(createDriveItemForDownload({ id: "folder-1", type: "folder", name: "资料" }))
+    electronMocks.showSaveDialog
+      .mockResolvedValueOnce({ canceled: false, filePath: "/tmp/report.md" })
+      .mockResolvedValueOnce({ canceled: false, filePath: "/tmp/资料.zip" })
+
+    await expect(accountIpcModule.methods.downloadDriveItem.handler(ctx, { itemId: "file-1" }))
+      .resolves.toEqual({ ok: true, path: "/tmp/report.md" })
+    await expect(accountIpcModule.methods.downloadDriveItem.handler(ctx, { itemId: "folder-1" }))
+      .resolves.toEqual({ ok: true, path: "/tmp/资料.zip" })
+
+    expect(electronMocks.showSaveDialog).toHaveBeenNthCalledWith(1, {
+      title: "下载",
+      defaultPath: path.join(os.tmpdir(), "synapse-account-downloads", "report.md"),
+    })
+    expect(electronMocks.showSaveDialog).toHaveBeenNthCalledWith(2, {
+      title: "下载",
+      defaultPath: path.join(os.tmpdir(), "synapse-account-downloads", "资料.zip"),
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+    })
+    expect(accountService.downloadDriveFile).toHaveBeenCalledWith({ itemId: "file-1", outputPath: "/tmp/report.md" })
+    expect(accountService.downloadDriveFolderZip).toHaveBeenCalledWith({ itemId: "folder-1", outputPath: "/tmp/资料.zip" })
+    expect(permissionGuard.check).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not write when a drive item download is cancelled", async () => {
+    const { ctx, permissionGuard } = createAccountSecurityContext()
+    vi.mocked(accountService.getDriveItem).mockReset()
+    vi.mocked(accountService.getDriveItem).mockResolvedValueOnce(createDriveItemForDownload())
+    vi.mocked(accountService.downloadDriveFile).mockClear()
+    electronMocks.showSaveDialog.mockReset()
+    electronMocks.showSaveDialog.mockResolvedValueOnce({ canceled: true })
+
+    await expect(accountIpcModule.methods.downloadDriveItem.handler(ctx, { itemId: "file-1" })).resolves.toBeNull()
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(accountService.downloadDriveFile).not.toHaveBeenCalled()
+  })
+
+  it("stops drive item downloads when fs write permission is denied", async () => {
+    const { auditSink, ctx } = createAccountSecurityContext({
+      allowed: false,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })
+    vi.mocked(accountService.getDriveItem).mockReset()
+    vi.mocked(accountService.getDriveItem).mockResolvedValueOnce(createDriveItemForDownload())
+    vi.mocked(accountService.downloadDriveFile).mockClear()
+    electronMocks.showSaveDialog.mockReset()
+    electronMocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: "/tmp/report.md" })
+
+    await expect(accountIpcModule.methods.downloadDriveItem.handler(ctx, { itemId: "file-1" }))
+      .rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "denied",
+      resource: "/tmp/report.md",
+      metadata: expect.objectContaining({
+        source: "account.driveItemDownload.write",
+        itemId: "file-1",
+        itemType: "file",
+      }),
+    }))
+    expect(accountService.downloadDriveFile).not.toHaveBeenCalled()
+  })
+
+  it("audits failed drive item downloads without leaking secrets", async () => {
+    const { auditSink, ctx } = createAccountSecurityContext()
+    vi.mocked(accountService.getDriveItem).mockReset()
+    vi.mocked(accountService.getDriveItem).mockResolvedValueOnce(createDriveItemForDownload())
+    vi.mocked(accountService.downloadDriveFile).mockReset()
+    vi.mocked(accountService.downloadDriveFile).mockRejectedValueOnce(new Error("download failed token=sk-secret"))
+    electronMocks.showSaveDialog.mockReset()
+    electronMocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: "/tmp/report.md" })
+
+    await expect(accountIpcModule.methods.downloadDriveItem.handler(ctx, { itemId: "file-1" }))
+      .rejects.toThrow("download failed")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      resource: "/tmp/report.md",
+      metadata: expect.objectContaining({
+        source: "account.driveItemDownload.write",
+        itemId: "file-1",
+        itemType: "file",
+        error: "download failed token=[redacted]",
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
   })
 
   it("guards drive file version downloads with fs write permission and audit", async () => {

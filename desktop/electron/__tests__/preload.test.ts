@@ -788,6 +788,7 @@ describe("preload bridge", () => {
     expect(bridge.shell.filePathForDroppedFile(droppedFile)).toBe("/tmp/report.txt")
     await bridge.drive.folder.create({ parentId: null, name: "交接材料" })
     await bridge.drive.item.delete({ itemId: "item-1" })
+    await bridge.drive.item.download({ itemId: "item-1" })
     await bridge.drive.fileVersion.list({ itemId: "item-1", limit: 20 })
     await bridge.drive.fileVersionDownload.create({ itemId: "item-1", versionId: "version-1", outputPath: "/tmp/report-v1.txt" })
     await bridge.drive.fileVersion.restore({ itemId: "item-1", versionId: "version-1" })
@@ -831,6 +832,10 @@ describe("preload bridge", () => {
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:app:drive:item:delete",
+      { itemId: "item-1" },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:app:drive:item:download",
       { itemId: "item-1" },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(

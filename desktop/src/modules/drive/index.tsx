@@ -327,6 +327,11 @@ function DriveModuleContent() {
     busyIdsRef: deletingItemIdsRef,
     setBusyId: setDeletingItemId,
   } = useBusyIdSet()
+  const {
+    busyIds: downloadingItemIds,
+    busyIdsRef: downloadingItemIdsRef,
+    setBusyId: setDownloadingItemId,
+  } = useBusyIdSet()
   const [submitting, setSubmitting] = useState(false)
   const [uploadTask, setUploadTask] = useState<DriveUploadTask | null>(null)
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false)
@@ -804,6 +809,19 @@ function DriveModuleContent() {
     }
   }, [])
 
+  const handleDownload = useCallback(async (item: DriveItemDto) => {
+    if (item.storageStatus !== "active" || downloadingItemIdsRef.current.has(item.id)) return
+    setDownloadingItemId(item.id, true)
+    try {
+      const result = await requireSynapseBridge().drive.item.download({ itemId: item.id })
+      if (result) toast("已下载")
+    } catch (rawError) {
+      toast(errorMessage(rawError, "下载失败"))
+    } finally {
+      setDownloadingItemId(item.id, false)
+    }
+  }, [downloadingItemIdsRef, setDownloadingItemId])
+
   const handleAccessSettingsConfirm = useCallback(async (settings: DriveAccessSettingsInput) => {
     const target = accessSettingsTarget
     if (!target) return
@@ -1013,6 +1031,7 @@ function DriveModuleContent() {
         onRename={handleRename}
         onMove={handleMove}
         onDelete={handleDelete}
+        onDownload={handleDownload}
         onOpenItem={handlePreview}
         onShare={handleShare}
         onOpenSyncBinding={(item, drivePathHint) => {
@@ -1025,6 +1044,7 @@ function DriveModuleContent() {
         onDisableShare={handleDisableShare}
         disablingShareIds={disablingShareIds}
         deletingItemIds={deletingItemIds}
+        downloadingItemIds={downloadingItemIds}
         onUploadDroppedFiles={handleDroppedFiles}
         uploadDisabled={uploadActionsDisabled}
         syncBindings={syncSnapshot?.bindings ?? []}
@@ -1607,6 +1627,7 @@ function DriveFileList({
   onRename,
   onMove,
   onDelete,
+  onDownload,
   onOpenItem,
   onShare,
   onOpenSyncBinding,
@@ -1614,6 +1635,7 @@ function DriveFileList({
   onDisableShare,
   disablingShareIds,
   deletingItemIds,
+  downloadingItemIds,
   onUploadDroppedFiles,
   syncBindings,
   uploadDisabled,
@@ -1632,6 +1654,7 @@ function DriveFileList({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
+  readonly onDownload: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
@@ -1639,6 +1662,7 @@ function DriveFileList({
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShareIds: ReadonlySet<string>
   readonly deletingItemIds: ReadonlySet<string>
+  readonly downloadingItemIds: ReadonlySet<string>
   readonly onUploadDroppedFiles: (dataTransfer: DataTransfer) => Promise<void>
   readonly syncBindings: DriveSyncSnapshotDto["bindings"]
   readonly uploadDisabled: boolean
@@ -1717,6 +1741,7 @@ function DriveFileList({
                   onRename={onRename}
                   onMove={onMove}
                   onDelete={onDelete}
+                  onDownload={onDownload}
                   onOpenItem={onOpenItem}
                   onShare={onShare}
                   onOpenSyncBinding={onOpenSyncBinding}
@@ -1724,6 +1749,7 @@ function DriveFileList({
                   onDisableShare={onDisableShare}
                   disablingShare={item.activeShareId ? disablingShareIds.has(item.activeShareId) : false}
                   deleting={deletingItemIds.has(item.id)}
+                  downloading={downloadingItemIds.has(item.id)}
                   hasSyncBinding={syncBindingIds.has(item.id)}
                 />
               ))}
@@ -1964,6 +1990,7 @@ function DriveFileListRow({
   onRename,
   onMove,
   onDelete,
+  onDownload,
   onOpenItem,
   onShare,
   onOpenSyncBinding,
@@ -1971,6 +1998,7 @@ function DriveFileListRow({
   onDisableShare,
   disablingShare,
   deleting,
+  downloading,
   hasSyncBinding,
 }: {
   readonly drivePath: string
@@ -1980,6 +2008,7 @@ function DriveFileListRow({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onDelete: (item: DriveItemDto, event: MouseEvent<HTMLElement>) => void
+  readonly onDownload: (item: DriveItemDto) => void
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
@@ -1987,6 +2016,7 @@ function DriveFileListRow({
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShare: boolean
   readonly deleting: boolean
+  readonly downloading: boolean
   readonly hasSyncBinding: boolean
 }) {
   const isFolder = item.type === "folder"
@@ -2112,6 +2142,8 @@ function DriveFileListRow({
           <DriveItemMenu
             item={item}
             hasSyncBinding={hasSyncBinding}
+            downloading={downloading}
+            onDownload={() => onDownload(item)}
             onRename={onRename}
             onMove={onMove}
             onOpenSyncBinding={() => onOpenSyncBinding(item, drivePath)}
@@ -2176,12 +2208,16 @@ function DriveItemNameContextMenu({
 function DriveItemMenu({
   hasSyncBinding,
   item,
+  downloading,
+  onDownload,
   onRename,
   onMove,
   onOpenSyncBinding,
 }: {
   readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
+  readonly downloading: boolean
+  readonly onDownload: () => void
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: () => void
@@ -2195,6 +2231,7 @@ function DriveItemMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
+          <DropdownMenuItem disabled={item.storageStatus !== "active" || downloading} onSelect={onDownload}>下载</DropdownMenuItem>
           <DropdownMenuItem onClick={onOpenSyncBinding}>{hasSyncBinding ? "同步详情" : "同步"}</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>

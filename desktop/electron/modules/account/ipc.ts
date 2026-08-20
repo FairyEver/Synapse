@@ -1,3 +1,5 @@
+import path from "node:path"
+import { app, BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
@@ -613,6 +615,7 @@ const driveTrashItemSchemaInput = z.object({
   assetId: z.string().optional(),
 })
 const okSchema = z.object({ ok: z.literal(true) })
+const driveItemDownloadResultSchema = okSchema.extend({ path: z.string() }).nullable()
 const driveFileVersionDeleteResultSchema = okSchema.extend({ deletePending: z.boolean().optional() })
 
 const accountStateSchema = z.discriminatedUnion("status", [
@@ -657,6 +660,7 @@ function toArrayBufferForIpc(value: ArrayBuffer | ArrayBufferView): ArrayBuffer 
 
 type DriveLocalUploadRequestForIpc = z.infer<typeof driveLocalUploadRequestSchema>
 type DrivePreparedFileUploadRequestForIpc = z.infer<typeof drivePreparedFileUploadSchema>
+type DriveItemDownloadRequestForIpc = z.infer<typeof driveItemIdSchema>
 type DriveFileVersionDownloadRequestForIpc = z.infer<typeof driveFileVersionDownloadSchema>
 type DriveLinkMaterializeRequestForIpc = z.infer<typeof driveLinkMaterializeSchema>
 type DriveLinkMaterializeResponseForIpc = z.infer<typeof driveLinkMaterializeResponseSchema>
@@ -878,6 +882,67 @@ async function runGuardedDriveFileVersionDownload<T>(options: {
   }
 }
 
+function focusedWindow(): Electron.BrowserWindow | undefined {
+  return BrowserWindow.getFocusedWindow()
+    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
+    ?? undefined
+}
+
+async function chooseDriveItemDownloadPath(item: { readonly name: string; readonly type: "file" | "folder" }): Promise<string | null> {
+  const defaultName = item.type === "folder" ? `${item.name}.zip` : item.name
+  const options: Electron.SaveDialogOptions = {
+    title: "下载",
+    defaultPath: path.join(app.getPath("downloads"), defaultName),
+    ...(item.type === "folder" ? { filters: [{ name: "ZIP", extensions: ["zip"] }] } : {}),
+  }
+  const parentWindow = focusedWindow()
+  const result = parentWindow
+    ? await dialog.showSaveDialog(parentWindow, options)
+    : await dialog.showSaveDialog(options)
+  return result.canceled || !result.filePath ? null : result.filePath
+}
+
+async function runGuardedDriveItemDownload<T>(options: {
+  ctx: IpcHandlerContext
+  request: DriveItemDownloadRequestForIpc
+  outputPath: string
+  itemType: "file" | "folder"
+  run(): Promise<T>
+}): Promise<T> {
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const actor = { kind: "user" } as const
+  const metadata = {
+    itemId: options.request.itemId,
+    itemType: options.itemType,
+  }
+  await checkAccountPermission({
+    ctx: options.ctx,
+    action: "fs.write",
+    resource: options.outputPath,
+    source: "account.driveItemDownload.write",
+    context: metadata,
+  })
+  try {
+    return await options.run()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource: options.outputPath,
+      outcome: "failed",
+      metadata: {
+        source: "account.driveItemDownload.write",
+        ...metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        error: sanitizeError(message),
+        errorLength: message.length,
+      },
+    })
+    throw error
+  }
+}
+
 async function runGuardedDriveLinkMaterialize(options: {
   ctx: IpcHandlerContext
   request: DriveLinkMaterializeRequestForIpc
@@ -1047,6 +1112,27 @@ export const accountIpcModule: IpcModule = {
       request: driveItemIdSchema,
       response: driveItemSchema,
       handler: async (_ctx, input) => accountService.getDriveItem(driveItemIdSchema.parse(input).itemId),
+    },
+    downloadDriveItem: {
+      kind: "invoke",
+      operationId: "app.drive.item.download",
+      request: driveItemIdSchema,
+      response: driveItemDownloadResultSchema,
+      handler: async (ctx, input) => {
+        const parsed = driveItemIdSchema.parse(input)
+        const item = await accountService.getDriveItem(parsed.itemId)
+        const outputPath = await chooseDriveItemDownloadPath(item)
+        if (!outputPath) return null
+        return runGuardedDriveItemDownload({
+          ctx,
+          request: parsed,
+          outputPath,
+          itemType: item.type,
+          run: () => item.type === "folder"
+            ? accountService.downloadDriveFolderZip({ itemId: item.id, outputPath })
+            : accountService.downloadDriveFile({ itemId: item.id, outputPath }),
+        })
+      },
     },
     prepareDriveUpload: {
       kind: "invoke",

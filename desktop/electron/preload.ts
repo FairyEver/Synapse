@@ -680,6 +680,7 @@ const synapseBridge: SynapseBridge = {
       list: invoke(IPC_CHANNELS.account.listDriveItems),
       get: invoke(IPC_CHANNELS.account.getDriveItem),
       previewUrl: invoke(IPC_CHANNELS.account.getDriveItemPreviewUrl),
+      download: invoke(IPC_CHANNELS.account.downloadDriveItem),
       rename: invoke(IPC_CHANNELS.account.renameDriveItem),
       move: invoke(IPC_CHANNELS.account.moveDriveItem),
       delete: invoke(IPC_CHANNELS.account.deleteDriveItem),

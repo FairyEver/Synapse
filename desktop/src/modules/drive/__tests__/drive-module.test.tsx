@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => ({
   completeDriveUpload: vi.fn(),
   createDriveFolder: vi.fn(),
   deleteDriveItem: vi.fn(),
+  downloadDriveItem: vi.fn(),
   disableDriveShare: vi.fn(),
   filePathForDroppedFile: vi.fn(),
   getDriveItem: vi.fn(),
@@ -127,6 +128,7 @@ vi.mock("@/lib/electron-bridge", () => ({
         list: mocks.listDriveItems,
         get: mocks.getDriveItem,
         previewUrl: mocks.getDriveItemPreviewUrl,
+        download: mocks.downloadDriveItem,
         rename: mocks.renameDriveItem,
         move: mocks.moveDriveItem,
         delete: mocks.deleteDriveItem,
@@ -194,6 +196,7 @@ beforeEach(() => {
   mocks.completeDriveUpload.mockResolvedValue(createDriveItem({ id: "file-1", name: "report.txt", type: "file", size: "6" }))
   mocks.createDriveFolder.mockResolvedValue(createDriveItem({ id: "folder-1", name: "E2E" }))
   mocks.deleteDriveItem.mockResolvedValue({ ok: true })
+  mocks.downloadDriveItem.mockResolvedValue({ ok: true, path: "/tmp/download" })
   mocks.disableDriveShare.mockResolvedValue({ ok: true })
   mocks.filePathForDroppedFile.mockImplementation((file: File) => `/tmp/${file.name}`)
   mocks.getDriveItem.mockImplementation(async ({ itemId }: { itemId: string }) => createDriveItem({ id: itemId }))
@@ -3351,6 +3354,7 @@ describe("DriveModule", () => {
     expect(menu?.querySelectorAll("[role='menuitem'] svg")).toHaveLength(0)
     expect(menu?.querySelectorAll("[role='separator']")).toHaveLength(0)
     expect(menuItemTexts()).toEqual([
+      "下载",
       "同步",
       "重命名",
       "移动",
@@ -3367,8 +3371,84 @@ describe("DriveModule", () => {
 
     await openFirstMenu()
 
-    expect(menuItemTexts()).toEqual(["同步", "重命名", "移动"])
+    expect(menuItemTexts()).toEqual(["下载", "同步", "重命名", "移动"])
     expect(rowButton("shared.txt", "删除")).not.toBeUndefined()
+  })
+
+  it("downloads files and folders from the row more menu", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.md", type: "file" }),
+      createDriveItem({ id: "folder-1", name: "资料", type: "folder" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.md")
+    expect(menuItemTexts()[0]).toBe("下载")
+    expect(getMenuItem("下载").querySelector("svg")).toBeNull()
+    await clickMenuItemText("下载")
+
+    expect(mocks.downloadDriveItem).toHaveBeenLastCalledWith({ itemId: "file-1" })
+    expect(mocks.toast).toHaveBeenLastCalledWith("已下载")
+
+    await openRowMenu("资料")
+    await clickMenuItemText("下载")
+
+    expect(mocks.downloadDriveItem).toHaveBeenLastCalledWith({ itemId: "folder-1" })
+    expect(mocks.downloadDriveItem).toHaveBeenCalledTimes(2)
+  })
+
+  it("silently finishes when a drive item download is cancelled", async () => {
+    mocks.downloadDriveItem.mockResolvedValueOnce(null)
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.md", type: "file" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.md")
+    await clickMenuItemText("下载")
+
+    expect(mocks.downloadDriveItem).toHaveBeenCalledWith({ itemId: "file-1" })
+    expect(mocks.toast).not.toHaveBeenCalled()
+  })
+
+  it("shows the download error and prevents duplicate downloads", async () => {
+    const download = createDeferred<{ ok: true; path: string } | null>()
+    mocks.downloadDriveItem.mockReturnValueOnce(download.promise)
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.md", type: "file" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("report.md")
+    await clickMenuItemText("下载")
+    await openRowMenu("report.md")
+
+    expect(getMenuItem("下载").getAttribute("aria-disabled")).toBe("true")
+    await clickMenuItemText("下载")
+    expect(mocks.downloadDriveItem).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      download.reject(new Error("下载连接中断"))
+      await flushPromises()
+    })
+    expect(mocks.toast).toHaveBeenCalledWith("下载连接中断")
+  })
+
+  it("disables downloads for unavailable drive items", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "failed.md", type: "file", storageStatus: "failed" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+
+    await openRowMenu("failed.md")
+
+    expect(getMenuItem("下载").getAttribute("aria-disabled")).toBe("true")
+    await clickMenuItemText("下载")
+    expect(mocks.downloadDriveItem).not.toHaveBeenCalled()
   })
 
   it("opens an in-app confirmation before deleting an item", async () => {
