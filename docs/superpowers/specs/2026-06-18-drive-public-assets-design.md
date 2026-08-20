@@ -46,6 +46,7 @@ The feature is not a separate image-hosting or public-file product. Public asset
 - Public URL responses do not support download query parameters, filename parameters, `/download`, or directory URLs.
 - Public URL responses support `ETag` and `If-None-Match`.
 - Public URL responses use `Cache-Control: public, max-age=300`.
+- Public URL responses use `Cross-Origin-Resource-Policy: cross-origin` so images can be embedded by documents served from other origins.
 - Public URL responses do not support Range in the first version.
 - `GET` and `HEAD` are accepted on `/files/:assetId`.
 - `HEAD` writes access detail but does not increase the user-visible access count.

@@ -2076,6 +2076,7 @@ describe("DrivePublicController public asset streaming", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-cache, must-revalidate")
     expect(response.headers.get("ETag")).toBe("\"etag-1\"")
     expect(response.headers.get("Content-Disposition")).toContain("inline")
+    expect(response.headers.get("Cross-Origin-Resource-Policy")).toBe("cross-origin")
     expect(response.headers.get("Content-Security-Policy")).toBeUndefined()
   })
 
@@ -2138,6 +2139,7 @@ describe("DrivePublicController public asset streaming", () => {
 
     expect(response.headers.get("Cache-Control")).toBe("no-cache, must-revalidate")
     expect(response.headers.get("ETag")).toBe("\"etag-1\"")
+    expect(response.headers.get("Cross-Origin-Resource-Policy")).toBe("cross-origin")
     expect(response.status).toHaveBeenCalledWith(304)
   })
 
