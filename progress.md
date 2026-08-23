@@ -403,6 +403,14 @@
 - Docker Compose 配置检查、生产构建参数契约和 `git diff --check` 全部通过。
 - 最终环境边界：DEV 文档为 `http://localhost:19773/document`、DEV 应用/API 为 `http://localhost:3000`；生产由 `DOCUMENT_PUBLIC_URL` 与 `APP_PUBLIC_URL` 配置，前者为空时从后者派生 `/document`。
 
+### 阶段 36：生产部署与健康检查
+- **状态：** complete
+- 用户已明确要求部署；按仓库正式生产入口 `bash deploy.sh` 执行，不额外发版或推送 Git。
+- 部署 ID `20260823_210354`，19/19 步全部完成，总耗时 503 秒；无待执行 migration，临时数据库预演、最终备份与恢复验证均通过。
+- 当前生产镜像 `synapse-server:deploy-20260823_210354`，容器状态 `running healthy`；回滚镜像为 `synapse-server:rollback-20260823_210354`。
+- 生产容器内复核：`/healthz` 200、`/api/open/openapi.json` 200，`externalDocs` 为 `https://synapse.d2.pub/document/open-api/`，OpenAPI `servers[0].url` 保持 `/api/open/v1`。
+- 部署脚本公开健康门禁通过：Console、Admin、Document、Desktop Update、Dashboard redirect、Webhook 与 Drive 分享路由均符合预期。
+
 ### 阶段 31：开放 API 机器可读契约
 - 用户要求实施机器可读契约；范围限定为当前开放 API 的 OpenAPI 3.x 描述、稳定访问入口与验证，不扩展其它成熟度能力。
 - 开始前已重新读取 `planning-with-files-zh` 与 `karpathy-guidelines`，并完成会话恢复检查。
