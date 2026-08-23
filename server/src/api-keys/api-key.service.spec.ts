@@ -146,6 +146,70 @@ describe("ApiKeyService", () => {
     expect(JSON.stringify(auditLog.recordWithClient.mock.calls)).not.toContain("keyHash")
   })
 
+  it("renames an active key owned by the current user without changing its secret or scopes", async () => {
+    const { service, transactionApiKey, auditLog } = createService()
+    transactionApiKey.findFirst.mockResolvedValue({
+      id: "key-1",
+      name: "开发环境",
+      keyPrefix: "syn_sk_abcdefgh",
+      scopes: ["drive.share_link.download"],
+      lastUsedAt: null,
+      createdAt,
+    })
+    transactionApiKey.updateMany.mockResolvedValue({ count: 1 })
+
+    await expect(service.renameForUser("user-1", "key-1", {
+      name: " 生产环境 ",
+    }, "203.0.113.13")).resolves.toEqual({
+      id: "key-1",
+      name: "生产环境",
+      prefix: "syn_sk_abcdefgh",
+      scopes: ["drive.share_link.download"],
+      lastUsedAt: null,
+      createdAt: createdAt.toISOString(),
+    })
+    expect(transactionApiKey.findFirst).toHaveBeenCalledWith({
+      where: { id: "key-1", userId: "user-1", revokedAt: null },
+      select: expect.objectContaining({ name: true, keyPrefix: true, scopes: true }),
+    })
+    expect(transactionApiKey.updateMany).toHaveBeenCalledWith({
+      where: { id: "key-1", userId: "user-1", revokedAt: null },
+      data: { name: "生产环境" },
+    })
+    expect(auditLog.recordWithClient).toHaveBeenCalledWith(expect.anything(), {
+      adminEmail: "user-1",
+      action: "api_key.rename",
+      targetType: "api_key",
+      targetId: "key-1",
+      detail: {
+        previousName: "开发环境",
+        name: "生产环境",
+      },
+      ipAddress: "203.0.113.13",
+    })
+    expect(JSON.stringify(auditLog.recordWithClient.mock.calls)).not.toContain("keyHash")
+  })
+
+  it("does not rename a missing, revoked, or other-user key", async () => {
+    const { service, transactionApiKey, auditLog } = createService()
+    transactionApiKey.findFirst.mockResolvedValue(null)
+
+    await expect(service.renameForUser("user-1", "key-2", { name: "生产环境" }))
+      .rejects.toBeInstanceOf(NotFoundException)
+    expect(transactionApiKey.updateMany).not.toHaveBeenCalled()
+    expect(auditLog.recordWithClient).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid names at the service boundary", async () => {
+    const { service, transactionApiKey } = createService()
+
+    await expect(service.renameForUser("user-1", "key-1", { name: " " }))
+      .rejects.toBeInstanceOf(BadRequestException)
+    await expect(service.renameForUser("user-1", "key-1", { name: "a".repeat(81) }))
+      .rejects.toBeInstanceOf(BadRequestException)
+    expect(transactionApiKey.findFirst).not.toHaveBeenCalled()
+  })
+
   it("does not update a missing, revoked, or other-user key", async () => {
     const { service, transactionApiKey, auditLog } = createService()
     transactionApiKey.findFirst.mockResolvedValue(null)

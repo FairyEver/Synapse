@@ -631,6 +631,11 @@ export const dashboardApi = {
       method: 'PATCH',
       body: JSON.stringify({ scopes }),
     }),
+  renameApiKey: (id: string, name: string) =>
+    request<DashboardApiKey>(`${consoleApiBasePath}/api-keys/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
   revokeApiKey: (id: string) =>
     request<{ ok: true }>(
       `${consoleApiBasePath}/api-keys/${encodeURIComponent(id)}`,

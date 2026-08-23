@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { formatBytes } from '@synapse/shared'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Copy, FileText, List, Plus, ShieldCheck } from 'lucide-react'
+import { Copy, FileText, List, Pencil, Plus, ShieldCheck } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -49,6 +49,8 @@ export function ApiKeysSettings() {
   const [name, setName] = useState('')
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
   const [created, setCreated] = useState<DashboardApiKeyCreateResult | null>(null)
+  const [renameTarget, setRenameTarget] = useState<DashboardApiKey | null>(null)
+  const [renameName, setRenameName] = useState('')
   const [editTarget, setEditTarget] = useState<DashboardApiKey | null>(null)
   const [editScopes, setEditScopes] = useState<string[]>([])
   const [revokeTarget, setRevokeTarget] = useState<DashboardApiKey | null>(null)
@@ -109,6 +111,19 @@ export function ApiKeysSettings() {
     },
     onError: (mutationError: Error) => toast.error(mutationError.message),
   })
+  const renameApiKey = useMutation({
+    mutationFn: (input: { id: string; name: string }) => (
+      dashboardApi.renameApiKey(input.id, input.name)
+    ),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<DashboardApiKey[]>(apiKeysQueryKey, (current = []) => (
+        current.map((apiKey) => apiKey.id === updated.id ? updated : apiKey)
+      ))
+      closeRenameDialog()
+      toast.success('名称已更新')
+    },
+    onError: (mutationError: Error) => toast.error(mutationError.message),
+  })
 
   function submitCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -124,6 +139,23 @@ export function ApiKeysSettings() {
   function openPermissionEditor(apiKey: DashboardApiKey) {
     setEditTarget(apiKey)
     setEditScopes([...apiKey.scopes])
+  }
+
+  function openRenameDialog(apiKey: DashboardApiKey) {
+    setRenameTarget(apiKey)
+    setRenameName(apiKey.name)
+  }
+
+  function closeRenameDialog() {
+    setRenameTarget(null)
+    setRenameName('')
+  }
+
+  function submitRename(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmedName = renameName.trim()
+    if (!renameTarget || !trimmedName || trimmedName === renameTarget.name) return
+    renameApiKey.mutate({ id: renameTarget.id, name: trimmedName })
   }
 
   function closePermissionEditor() {
@@ -190,6 +222,10 @@ export function ApiKeysSettings() {
                       </CardDescription>
                     </div>
                     <div className='flex flex-wrap items-center gap-1 sm:justify-end'>
+                      <Button variant='ghost' size='sm' onClick={() => openRenameDialog(apiKey)}>
+                        <Pencil />
+                        重命名
+                      </Button>
                       <Button variant='ghost' size='sm' onClick={() => openPermissionEditor(apiKey)}>
                         <ShieldCheck />
                         编辑权限
@@ -337,6 +373,46 @@ export function ApiKeysSettings() {
           <DialogFooter>
             <Button type='button' onClick={() => setCreated(null)}>完成</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(renameTarget)}
+        onOpenChange={(open) => !open && closeRenameDialog()}
+      >
+        <DialogContent>
+          <form className='space-y-4' onSubmit={submitRename}>
+            <DialogHeader>
+              <DialogTitle>重命名秘钥</DialogTitle>
+              <DialogDescription>{renameTarget?.prefix ?? ''}...</DialogDescription>
+            </DialogHeader>
+            <div className='space-y-2'>
+              <Label htmlFor='api-key-rename-name'>名称</Label>
+              <Input
+                id='api-key-rename-name'
+                value={renameName}
+                maxLength={80}
+                onChange={(event) => setRenameName(event.target.value)}
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type='button' variant='outline' onClick={closeRenameDialog}>
+                取消
+              </Button>
+              <Button
+                type='submit'
+                disabled={
+                  !renameTarget
+                  || !renameName.trim()
+                  || renameName.trim() === renameTarget.name
+                  || renameApiKey.isPending
+                }
+              >
+                保存名称
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

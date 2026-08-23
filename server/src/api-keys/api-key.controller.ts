@@ -15,13 +15,19 @@ const createApiKeySchema = z.object({
   }),
 }).strict()
 
-const updateApiKeySchema = z.object({
+const updateApiKeyScopesSchema = z.object({
   scopes: z.array(z.enum(API_KEY_SCOPES)).superRefine((scopes, context) => {
     if (new Set(scopes).size !== scopes.length) {
       context.addIssue({ code: "custom", message: "scopes 不能重复" })
     }
   }),
 }).strict()
+
+const renameApiKeySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+}).strict()
+
+const updateApiKeySchema = z.union([updateApiKeyScopesSchema, renameApiKeySchema])
 
 @UseGuards(UserAuthGuard)
 @Controller(["/api/console", "/api/dashboard"])
@@ -57,6 +63,9 @@ export class ApiKeyController {
     const result = updateApiKeySchema.safeParse(body)
     if (!result.success) {
       throw badRequestFromZodError(result.error, "API key update request is invalid.")
+    }
+    if ("name" in result.data) {
+      return this.apiKeys.renameForUser(request.user!.id, id, result.data, request.ip)
     }
     return this.apiKeys.updateScopesForUser(request.user!.id, id, result.data, request.ip)
   }

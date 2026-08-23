@@ -121,6 +121,40 @@ export class ApiKeyService {
     return toUserApiKeyDto(apiKey)
   }
 
+  async renameForUser(
+    userId: string,
+    id: string,
+    input: { readonly name: string },
+    ipAddress = "system",
+  ): Promise<UserApiKeyDto> {
+    const name = assertValidApiKeyName(input.name)
+    const apiKey = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.userApiKey.findFirst({
+        where: { id, userId, revokedAt: null },
+        select: apiKeySelect,
+      })
+      if (!existing) throw new NotFoundException("API key not found")
+      const result = await tx.userApiKey.updateMany({
+        where: { id, userId, revokedAt: null },
+        data: { name },
+      })
+      if (result.count === 0) throw new NotFoundException("API key not found")
+      await this.auditLog.recordWithClient(tx, {
+        adminEmail: userId,
+        action: "api_key.rename",
+        targetType: "api_key",
+        targetId: id,
+        detail: {
+          previousName: existing.name,
+          name,
+        },
+        ipAddress,
+      })
+      return { ...existing, name }
+    })
+    return toUserApiKeyDto(apiKey)
+  }
+
   async revokeForUser(
     userId: string,
     id: string,
@@ -198,4 +232,12 @@ function assertValidApiKeyScopes(scopes: readonly string[], allowEmpty: boolean)
   ) {
     throw new BadRequestException("API key scopes are invalid.")
   }
+}
+
+function assertValidApiKeyName(name: string): string {
+  const trimmedName = name.trim()
+  if (!trimmedName || trimmedName.length > 80) {
+    throw new BadRequestException("API key name is invalid.")
+  }
+  return trimmedName
 }

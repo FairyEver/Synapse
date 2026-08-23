@@ -28,6 +28,7 @@ describe("ApiKeyController", () => {
       listForUser: vi.fn().mockResolvedValue([]),
       createForUser: vi.fn().mockResolvedValue({ apiKey: { id: "key-1" }, secret: "syn_sk_secret" }),
       updateScopesForUser: vi.fn().mockResolvedValue({ id: "key-1", scopes: [] }),
+      renameForUser: vi.fn().mockResolvedValue({ id: "key-1", name: "生产环境" }),
       revokeForUser: vi.fn().mockResolvedValue({ ok: true }),
     }
     const controller = new ApiKeyController(service as unknown as ApiKeyService)
@@ -48,6 +49,10 @@ describe("ApiKeyController", () => {
       id: "key-1",
       scopes: [],
     })
+    await expect(controller.update("key-1", { name: " 生产环境 " }, request as never)).resolves.toEqual({
+      id: "key-1",
+      name: "生产环境",
+    })
     await expect(controller.revoke("key-1", request as never)).resolves.toEqual({ ok: true })
 
     expect(service.listForUser).toHaveBeenCalledWith("user-1")
@@ -57,6 +62,9 @@ describe("ApiKeyController", () => {
     }, "203.0.113.12")
     expect(service.updateScopesForUser).toHaveBeenCalledWith("user-1", "key-1", {
       scopes: [],
+    }, "203.0.113.12")
+    expect(service.renameForUser).toHaveBeenCalledWith("user-1", "key-1", {
+      name: "生产环境",
     }, "203.0.113.12")
     expect(service.revokeForUser).toHaveBeenCalledWith("user-1", "key-1", "203.0.113.12")
   })
@@ -73,7 +81,10 @@ describe("ApiKeyController", () => {
   })
 
   it("rejects invalid update bodies while allowing an empty permission list", async () => {
-    const service = { updateScopesForUser: vi.fn().mockResolvedValue({ id: "key-1", scopes: [] }) }
+    const service = {
+      updateScopesForUser: vi.fn().mockResolvedValue({ id: "key-1", scopes: [] }),
+      renameForUser: vi.fn().mockResolvedValue({ id: "key-1", name: "生产环境" }),
+    }
     const controller = new ApiKeyController(service as unknown as ApiKeyService)
     const request = { user: { id: "user-1" }, ip: "203.0.113.12" }
 
@@ -84,11 +95,18 @@ describe("ApiKeyController", () => {
     }, request as never)).toThrow("API key update request is invalid")
     expect(() => controller.update("key-1", { scopes: [], name: "renamed" }, request as never))
       .toThrow("API key update request is invalid")
+    expect(() => controller.update("key-1", { name: " " }, request as never))
+      .toThrow("API key update request is invalid")
     expect(service.updateScopesForUser).not.toHaveBeenCalled()
+    expect(service.renameForUser).not.toHaveBeenCalled()
 
     await expect(controller.update("key-1", { scopes: [] }, request as never)).resolves.toEqual({
       id: "key-1",
       scopes: [],
+    })
+    await expect(controller.update("key-1", { name: "生产环境" }, request as never)).resolves.toEqual({
+      id: "key-1",
+      name: "生产环境",
     })
   })
 })

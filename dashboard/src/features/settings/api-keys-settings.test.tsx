@@ -16,6 +16,7 @@ vi.mock('@/lib/api', () => ({
     listApiKeyUsageLogs: vi.fn(),
     createApiKey: vi.fn(),
     updateApiKeyPermissions: vi.fn(),
+    renameApiKey: vi.fn(),
     revokeApiKey: vi.fn(),
   },
 }))
@@ -83,6 +84,7 @@ describe('ApiKeysSettings', () => {
     expect(card?.textContent).toContain('开发环境')
     expect(card?.textContent).toContain('syn_sk_12345678...')
     expect(card?.textContent).toContain('获取分享链接文件')
+    expect(buttonByText('重命名').closest('[data-slot="card"]')).toBe(card)
     expect(buttonByText('编辑权限').closest('[data-slot="card"]')).toBe(card)
     expect(buttonByText('使用记录').closest('[data-slot="card"]')).toBe(card)
     expect(buttonByText('撤销').closest('[data-slot="card"]')).toBe(card)
@@ -147,6 +149,31 @@ describe('ApiKeysSettings', () => {
       expect(document.body.textContent).toContain('无开放接口权限')
       expect(document.body.textContent).not.toContain('编辑 API 权限')
     })
+  })
+
+  it('renames an existing key without changing its secret or permissions', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
+    mockedDashboardApi.renameApiKey.mockResolvedValue(apiKey({ name: '生产环境' }))
+
+    renderSettings()
+    await waitForText('开发环境')
+    await click(buttonByText('重命名'))
+    await waitForText('重命名秘钥')
+
+    expect(inputById('api-key-rename-name').value).toBe('开发环境')
+    expect(buttonByText('保存名称').disabled).toBe(true)
+
+    await inputValue(inputById('api-key-rename-name'), ' 生产环境 ')
+    expect(buttonByText('保存名称').disabled).toBe(false)
+    await click(buttonByText('保存名称'))
+
+    await waitFor(() => {
+      expect(mockedDashboardApi.renameApiKey).toHaveBeenCalledWith('key-1', '生产环境')
+      expect(document.body.textContent).toContain('生产环境')
+      expect(document.body.textContent).not.toContain('重命名秘钥')
+    })
+    expect(document.body.textContent).toContain('syn_sk_12345678...')
+    expect(document.body.textContent).toContain('获取分享链接文件')
   })
 
   it('shows a retry action when API permissions fail to load', async () => {
