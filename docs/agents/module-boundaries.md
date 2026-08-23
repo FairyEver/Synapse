@@ -58,8 +58,10 @@
 
 - 用户 API 秘钥只通过受登录保护的 `/api/console/api-keys` 管理；创建响应只展示一次完整秘钥，数据库只保存 SHA-256 摘要和可识别前缀，列表不得返回摘要或明文。
 - 查询、创建、重命名、权限更新和撤销必须绑定当前 `userId`；撤销保留记录并使其失效，审计不得包含完整秘钥、摘要或可还原材料。
-- 密钥创建时必须显式选择非空开放 API scopes；已有未撤销密钥可以原地重命名、增删或清空 scopes，但不得通过该接口轮换密钥。首个 scope `drive.share_link.download` 仅授权 `/api/open/v1/drive/share-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。
+- 密钥创建时必须显式选择非空开放 API scopes；已有未撤销密钥可以原地重命名、增删或清空 scopes，但不得通过该接口轮换密钥。首个 canonical scope `drive.public_link.download` 仅授权 `/api/open/v1/drive/public-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。旧 `drive.share_link.download` 与 `/api/open/v1/drive/share-links/downloads` 只作为已发布集成的兼容入口，不再用于新密钥或新文档。
 - 开放 API 使用独立 `OpenApiKeyGuard`；临时下载地址使用十分钟数据库 grant 和仅存摘要的 bearer token。创建下载地址的请求体只接收完整分享 URL，受密码保护时密码保留在 URL query 中。grant 固定 POST 时的不可变文件版本或 Site deployment，源分享/API key/当前 scope/用户失效会阻止新的下载。
+- `/api/open/openapi.json` 是开放 API 的权威 OpenAPI 3.1 机器契约发现入口。运行时路由和 strict 请求校验必须复用契约模块导出的路径与 Zod schema；新增、弃用或修改开放接口时必须同批更新契约和契约回归测试，不维护第二份静态 JSON。
+- 开放 API 的应用地址使用 `APP_PUBLIC_URL`，文档地址使用 `DOCUMENT_PUBLIC_URL`；生产未配置文档地址时从应用根地址派生 `/document`，DEV 必须显式指向独立的本地文档服务。API capability 和 OpenAPI `externalDocs` 由服务端输出绝对文档地址，契约 `servers` 继续保持版本化相对路径。
 - 开放 API 数据面只写固定列 `OpenApiUsageLog`，禁止 URL、密码、token、文件名、路径、storage key、manifest 和文件内容。POST/GET 显式跳过全局 Throttler，不增加密钥、IP、次数或频率限制。
 
 ## Drive

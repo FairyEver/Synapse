@@ -88,13 +88,13 @@ export class OpenApiShareLinkDownloadService {
 function mapPreparationError(error: unknown): OpenApiHttpError {
   if (!(error instanceof DriveOpenApiDownloadPreparationError)) return toOpenApiError(error)
   if (error.reason === "unsupported_link") {
-    return new OpenApiHttpError(422, "UNSUPPORTED_LINK", "不支持该分享链接。")
+    return new OpenApiHttpError(422, "UNSUPPORTED_LINK", "不支持该公共链接。")
   }
   if (error.reason === "password_required") {
-    return new OpenApiHttpError(403, "LINK_PASSWORD_REQUIRED_OR_INVALID", "分享密码缺失或错误。")
+    return new OpenApiHttpError(403, "LINK_PASSWORD_REQUIRED_OR_INVALID", "链接密码缺失或错误。")
   }
   if (error.reason === "archive_too_large") {
     return new OpenApiHttpError(413, "ARCHIVE_TOO_LARGE", "归档内容超过支持范围。")
   }
-  return new OpenApiHttpError(404, "LINK_NOT_FOUND", "分享链接不存在或已失效。")
+  return new OpenApiHttpError(404, "LINK_NOT_FOUND", "公共链接不存在或已失效。")
 }

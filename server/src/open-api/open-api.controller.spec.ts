@@ -9,7 +9,7 @@ describe("Open API controllers", () => {
   it("mounts the stable v1 routes and skips the global throttler", () => {
     expect(Reflect.getMetadata(PATH_METADATA, OpenApiController)).toBe("/api/open/v1")
     expect(Reflect.getMetadata(PATH_METADATA, OpenApiController.prototype.createDownload))
-      .toBe("/drive/share-links/downloads")
+      .toEqual(["/drive/public-links/downloads", "/drive/share-links/downloads"])
     expect(Reflect.getMetadata("THROTTLER:SKIPdefault", OpenApiController.prototype.createDownload))
       .toBe(true)
     expect(Reflect.getMetadata(PATH_METADATA, OpenApiDownloadController)).toBe("/api/open/v1/downloads")
@@ -30,7 +30,7 @@ describe("Open API controllers", () => {
       openApiPrincipal: {
         userId: "user-1",
         apiKeyId: "key-1",
-        scopes: ["drive.share_link.download"],
+        scopes: ["drive.public_link.download"],
       },
     }
     vi.stubEnv("APP_PUBLIC_URL", "https://synapse.example")

@@ -1,11 +1,20 @@
-# 获取分享链接文件
+# 获取公共链接文件
 
 将完整的 Synapse Drive 分享链接、Drive Site 或公开素材 URL 转换为十分钟有效的下载地址。创建地址需要 API 密钥；使用临时地址下载时不再发送 API 密钥。
 
-## 创建分享链接下载地址
+## 机器可读契约
+
+[OpenAPI 3.1 JSON]({{APP_PUBLIC_URL}}/api/open/openapi.json) 包含本页接口的请求、响应、认证和错误 schema。
+
+| operationId | 方法与路径 | 认证 |
+|---|---|---|
+| `createPublicLinkDownload` | `POST /drive/public-links/downloads` | API 密钥与 `drive.public_link.download` |
+| `downloadPublicLinkArtifact` | `GET /downloads/{grantId}` | 创建接口返回的临时 token |
+
+## 创建公共链接下载地址
 
 ```http
-POST /drive/share-links/downloads
+POST /drive/public-links/downloads
 Content-Type: application/json
 Authorization: Bearer syn_sk_...
 ```
@@ -14,7 +23,7 @@ Authorization: Bearer syn_sk_...
 
 ```json
 {
-  "url": "https://synapse.d2.pub/share/shr_example?password=optional-password"
+  "url": "{{APP_PUBLIC_URL}}/share/shr_example?password=optional-password"
 }
 ```
 
@@ -28,27 +37,27 @@ Authorization: Bearer syn_sk_...
 
 | URL 形式 | 目标 |
 |---|---|
-| `https://synapse.d2.pub/share/<shareId>` | Drive 分享根目标 |
-| `https://synapse.d2.pub/share/<shareId>/items/<itemId>` | 分享内指定文件或文件夹 |
-| `https://synapse.d2.pub/sites/<siteId>/` | Drive Site 根路径 |
-| `https://synapse.d2.pub/sites/<siteId>/<path>` | Drive Site 页面或 asset |
-| `https://synapse.d2.pub/files/<assetId>` | 公开素材 |
+| `{{APP_PUBLIC_URL}}/share/<shareId>` | Drive 分享根目标 |
+| `{{APP_PUBLIC_URL}}/share/<shareId>/items/<itemId>` | 分享内指定文件或文件夹 |
+| `{{APP_PUBLIC_URL}}/sites/<siteId>/` | Drive Site 根路径 |
+| `{{APP_PUBLIC_URL}}/sites/<siteId>/<path>` | Drive Site 页面或 asset |
+| `{{APP_PUBLIC_URL}}/files/<assetId>` | 公开素材 |
 
 只接受当前 Synapse 公共地址的同源 URL。外部域名、其它 Synapse 部署地址和不受支持的路径会返回 `422 UNSUPPORTED_LINK`。
 
 受密码保护时，将密码放入完整 URL 的 `password` query，并进行 URL 编码：
 
 ```text
-https://synapse.d2.pub/share/shr_example?password=encoded-password
+{{APP_PUBLIC_URL}}/share/shr_example?password=encoded-password
 ```
 
 cURL 示例：
 
 ```bash
-curl --request POST 'https://synapse.d2.pub/api/open/v1/drive/share-links/downloads' \
+curl --request POST '{{APP_PUBLIC_URL}}/api/open/v1/drive/public-links/downloads' \
   --header 'Authorization: Bearer syn_sk_example000000000000000000000000000000000000' \
   --header 'Content-Type: application/json' \
-  --data '{"url":"https://synapse.d2.pub/share/shr_example?password=optional-password"}'
+  --data '{"url":"{{APP_PUBLIC_URL}}/share/shr_example?password=optional-password"}'
 ```
 
 成功时返回 `201 Created`：
@@ -68,7 +77,7 @@ curl --request POST 'https://synapse.d2.pub/api/open/v1/drive/share-links/downlo
     },
     "download": {
       "method": "GET",
-      "url": "https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=example",
+      "url": "{{APP_PUBLIC_URL}}/api/open/v1/downloads/dlg_example?token=example",
       "expiresAt": "2026-08-23T09:10:00.000Z"
     }
   }
@@ -113,7 +122,7 @@ curl --request POST 'https://synapse.d2.pub/api/open/v1/drive/share-links/downlo
 `download.url` 是 bearer credential，固定十分钟有效。下载请求不需要 `Authorization` header。原样执行响应中的 GET 地址，不要自行构造 `grantId` 或 token：
 
 ```bash
-curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=example' \
+curl --location '{{APP_PUBLIC_URL}}/api/open/v1/downloads/dlg_example?token=example' \
   --output download.bin
 ```
 
@@ -133,7 +142,7 @@ curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=
 | `Referrer-Policy` | `no-referrer` |
 | `X-Content-Type-Options` | `nosniff` |
 
-临时地址不能进入日志、工单、公开消息或 Referer。地址到期，或 API 密钥被撤销、移除“获取分享链接文件”权限、用户被禁用、源分享或 Site 被停用、源资源不可用时，尚未开始的下载会返回 `410 DOWNLOAD_UNAVAILABLE`。
+临时地址不能进入日志、工单、公开消息或 Referer。地址到期，或 API 密钥被撤销、移除“获取公共链接文件”权限、用户被禁用、源分享或 Site 被停用、源资源不可用时，尚未开始的下载会返回 `410 DOWNLOAD_UNAVAILABLE`。
 
 ## 错误码
 
@@ -144,7 +153,7 @@ curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=
   "requestId": "req_example",
   "error": {
     "code": "LINK_NOT_FOUND",
-    "message": "分享链接不存在或已失效。"
+    "message": "公共链接不存在或已失效。"
   }
 }
 ```
@@ -154,8 +163,8 @@ curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=
 | 400 | `INVALID_REQUEST` | JSON 请求体、`url` 或字段集合无效 |
 | 400 | `INVALID_DOWNLOAD_TOKEN` | 临时下载 token 缺失或格式无效 |
 | 401 | `INVALID_API_KEY` | API 密钥缺失、无效、已撤销或所属用户不可用 |
-| 403 | `INSUFFICIENT_SCOPE` | API 密钥没有“获取分享链接文件”权限 |
-| 403 | `LINK_PASSWORD_REQUIRED_OR_INVALID` | 分享密码缺失或错误 |
+| 403 | `INSUFFICIENT_SCOPE` | API 密钥没有“获取公共链接文件”权限 |
+| 403 | `LINK_PASSWORD_REQUIRED_OR_INVALID` | 链接密码缺失或错误 |
 | 404 | `LINK_NOT_FOUND` | 创建地址时源链接不存在、已失效或目标不可用 |
 | 404 | `DOWNLOAD_NOT_FOUND` | 临时下载地址不存在 |
 | 410 | `DOWNLOAD_UNAVAILABLE` | 已创建的临时地址到期、权限被收回或源内容不可用 |
@@ -167,3 +176,5 @@ curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=
 POST 成功响应和所有 JSON 错误响应都使用 `Cache-Control: no-store`，并同时返回 `requestId` 和 `X-Request-Id`。
 
 该接口不设置 API 密钥、IP、次数、并发数或请求频率限制。十分钟有效期与归档大小属于授权和同步归档边界，不是流量配额。
+
+旧版 `/drive/share-links/downloads` 路径和 `drive.share_link.download` scope 继续兼容已有集成；新集成使用本页记录的公共链接路径和 scope。

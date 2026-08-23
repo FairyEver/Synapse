@@ -5,7 +5,7 @@ import { OpenApiShareLinkDownloadService } from "./open-api-share-link-download.
 const principal = {
   userId: "user-1",
   apiKeyId: "key-1",
-  scopes: ["drive.share_link.download"],
+  scopes: ["drive.public_link.download"],
 }
 
 describe("OpenApiShareLinkDownloadService", () => {
@@ -56,6 +56,9 @@ describe("OpenApiShareLinkDownloadService", () => {
       url: "https://synapse.example/share/shr-1?password=share-secret",
     })
     expect(usageLogs.start).toHaveBeenCalledOnce()
+    expect(usageLogs.start).toHaveBeenCalledWith(expect.objectContaining({
+      scope: "drive.public_link.download",
+    }))
     expect(usageLogs.finish).toHaveBeenCalledWith(expect.objectContaining({
       status: "succeeded",
       httpStatus: 201,

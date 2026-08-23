@@ -16,7 +16,7 @@ describe('dashboardApi.apiKeys', () => {
 
     await dashboardApi.listApiKeys()
     await dashboardApi.listApiKeyCapabilities()
-    await dashboardApi.createApiKey({ name: 'CLI', scopes: ['drive.share_link.download'] })
+    await dashboardApi.createApiKey({ name: 'CLI', scopes: ['drive.public_link.download'] })
     await dashboardApi.updateApiKeyPermissions('key/id', [])
     await dashboardApi.renameApiKey('key/id', '生产环境')
     await dashboardApi.revokeApiKey('key/id')
@@ -36,7 +36,7 @@ describe('dashboardApi.apiKeys', () => {
       3,
       '/api/console/api-keys',
       expect.objectContaining({
-        body: JSON.stringify({ name: 'CLI', scopes: ['drive.share_link.download'] }),
+        body: JSON.stringify({ name: 'CLI', scopes: ['drive.public_link.download'] }),
         credentials: 'include',
         method: 'POST',
       })

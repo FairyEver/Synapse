@@ -3,7 +3,11 @@ import type { Prisma } from "@prisma/client"
 import type { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
-import { isApiKeyScope, type ApiKeyScope } from "./api-key-capabilities"
+import {
+  isApiKeyScope,
+  normalizeApiKeyScopes,
+  type ApiKeyScope,
+} from "./api-key-capabilities"
 import { createApiKeySecret, getApiKeyPrefix, hashApiKeySecret, isApiKeySecret } from "./api-key-token"
 
 const apiKeySelect = {
@@ -190,7 +194,11 @@ export class ApiKeyService {
       },
     })
     if (!apiKey || apiKey.revokedAt || apiKey.user.status !== "active") return null
-    return { userId: apiKey.userId, apiKeyId: apiKey.id, scopes: apiKey.scopes }
+    return {
+      userId: apiKey.userId,
+      apiKeyId: apiKey.id,
+      scopes: normalizeApiKeyScopes(apiKey.scopes),
+    }
   }
 
   async touchLastUsed(apiKeyId: string, now = new Date()): Promise<void> {
@@ -218,7 +226,7 @@ function toUserApiKeyDto(apiKey: ApiKeyRecord): UserApiKeyDto {
     id: apiKey.id,
     name: apiKey.name,
     prefix: apiKey.keyPrefix,
-    scopes: apiKey.scopes,
+    scopes: normalizeApiKeyScopes(apiKey.scopes),
     lastUsedAt: apiKey.lastUsedAt?.toISOString() ?? null,
     createdAt: apiKey.createdAt.toISOString(),
   }

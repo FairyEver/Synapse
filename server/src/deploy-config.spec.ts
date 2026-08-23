@@ -255,13 +255,18 @@ describe("server deployment configuration", () => {
   it("builds and serves the VitePress document package with the server image", () => {
     const deployScript = readRepoFile("deploy.sh")
     const dockerfile = readRepoFile("server/Dockerfile")
+    const compose = readRepoFile("server/compose.yml")
     const nginx = readRepoFile("server/nginx.conf")
 
     expect(dockerfile).toContain("COPY document/package.json document/package.json")
     expect(dockerfile).toContain("--filter @synapse/document...")
     expect(dockerfile).toContain("COPY document/ document/")
+    expect(dockerfile).toContain("ARG APP_PUBLIC_URL")
+    expect(dockerfile).toContain("APP_PUBLIC_URL=$APP_PUBLIC_URL pnpm --filter @synapse/document build")
     expect(dockerfile).toContain("pnpm --filter @synapse/document build")
     expect(dockerfile).toContain("/app/document/.vitepress/dist ./document")
+    expect(compose).toContain("APP_PUBLIC_URL: ${APP_PUBLIC_URL:?APP_PUBLIC_URL is required}")
+    expect(compose).toContain("DOCUMENT_PUBLIC_URL: ${DOCUMENT_PUBLIC_URL:-}")
     expect(deployScript).toContain("--exclude='document/node_modules'")
     expect(deployScript).toContain("--exclude='document/.vitepress/dist'")
     expect(deployScript).toContain("--include='/document/***'")

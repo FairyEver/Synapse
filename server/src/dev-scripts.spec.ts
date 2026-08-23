@@ -17,6 +17,7 @@ describe("server dev scripts", () => {
 
     expect(scripts.dev).toContain("dev:api")
     expect(scripts.dev).toContain("APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000}")
+    expect(scripts.dev).toContain("DOCUMENT_PUBLIC_URL=${DOCUMENT_PUBLIC_URL:-http://localhost:19773/document}")
     expect(scripts["dev:api"]).toContain("pnpm --filter @synapse/shared run build")
     expect(scripts["dev:api"]).toContain("nest start --watch")
     expect(scripts["dev:admin"]).toBeUndefined()

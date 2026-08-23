@@ -32,6 +32,14 @@ const optionalEnvString = z.preprocess((value) => {
   return value
 }, z.string().optional())
 
+const optionalEnvUrl = z.preprocess((value) => {
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined
+  }
+
+  return value
+}, z.string().url().optional())
+
 const highEntropyBase64UrlSecretSchema = z.string()
   .regex(/^[A-Za-z0-9_-]{43,}$/u, "must contain at least 43 Base64URL characters")
   .refine((value) => new Set(value).size >= 16, "must be a high-entropy random value")
@@ -76,6 +84,7 @@ const envSchema = z
     USER_REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().default(30),
     NODE_ENV: z.string().optional(),
     APP_PUBLIC_URL: z.string().url().optional(),
+    DOCUMENT_PUBLIC_URL: optionalEnvUrl,
     TRUST_PROXY: z.string().optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
     PORT: z.coerce.number().int().positive().default(3000),
@@ -167,6 +176,7 @@ export interface ServerEnv {
   readonly userAccessTokenMinutes: number
   readonly userRefreshTokenDays: number
   readonly appPublicUrl?: string
+  readonly documentPublicUrl?: string
   readonly trustProxy: TrustProxySetting
   readonly databasePoolSize: number
   readonly port: number
@@ -205,6 +215,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     userAccessTokenMinutes: result.data.USER_ACCESS_TOKEN_MINUTES,
     userRefreshTokenDays: result.data.USER_REFRESH_TOKEN_DAYS,
     appPublicUrl: result.data.APP_PUBLIC_URL,
+    documentPublicUrl: result.data.DOCUMENT_PUBLIC_URL,
     trustProxy: parseTrustProxySetting(result.data.TRUST_PROXY),
     databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,

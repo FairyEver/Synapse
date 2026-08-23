@@ -1,5 +1,13 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
+import {
+  replaceDocumentDeploymentLinks,
+  resolveDocumentAppPublicUrl
+} from './deployment-links.mjs'
+
+const appPublicUrl = resolveDocumentAppPublicUrl(process.env, process.argv.includes('dev'))
 
 export default defineConfig({
   base: '/document/',
@@ -8,6 +16,25 @@ export default defineConfig({
   description: 'Synapse 文档',
   cleanUrls: true,
   srcExclude: ['README.md'],
+
+  async transformPageData(pageData, { siteConfig }) {
+    if (!pageData.filePath) return
+
+    return {
+      rawMarkdown: replaceDocumentDeploymentLinks(
+        await readFile(resolve(siteConfig.srcDir, pageData.filePath), 'utf8'),
+        appPublicUrl
+      )
+    }
+  },
+
+  markdown: {
+    config(markdown) {
+      markdown.core.ruler.before('normalize', 'synapse-deployment-links', (state) => {
+        state.src = replaceDocumentDeploymentLinks(state.src, appPublicUrl)
+      })
+    }
+  },
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/document/synapse-logo.png' }]
@@ -38,7 +65,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             {
-              text: '获取分享链接文件',
+              text: '获取公共链接文件',
               link: '/open-api/api/share-link-download'
             }
           ]

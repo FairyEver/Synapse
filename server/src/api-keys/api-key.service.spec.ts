@@ -17,7 +17,7 @@ describe("ApiKeyService", () => {
         id: "key-1",
         name: "开发环境",
         prefix: "syn_sk_abcdefgh",
-        scopes: ["drive.share_link.download"],
+        scopes: ["drive.public_link.download"],
         lastUsedAt: null,
         createdAt: createdAt.toISOString(),
       },
@@ -49,7 +49,7 @@ describe("ApiKeyService", () => {
 
     const result = await service.createForUser("user-1", {
       name: "CLI",
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
     }, "203.0.113.10")
     const createInput = transactionApiKey.create.mock.calls[0]?.[0]
 
@@ -58,7 +58,7 @@ describe("ApiKeyService", () => {
       id: "key-1",
       name: "CLI",
       prefix: result.secret.slice(0, 15),
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
       lastUsedAt: null,
       createdAt: createdAt.toISOString(),
     })
@@ -67,7 +67,7 @@ describe("ApiKeyService", () => {
       name: "CLI",
       keyHash: hashApiKeySecret(result.secret),
       keyPrefix: result.secret.slice(0, 15),
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
     })
     expect(JSON.stringify(createInput)).not.toContain(result.secret)
     expect(auditLog.recordWithClient).toHaveBeenCalledWith(expect.anything(), {
@@ -75,7 +75,7 @@ describe("ApiKeyService", () => {
       action: "api_key.create",
       targetType: "api_key",
       targetId: "key-1",
-      detail: { name: "CLI", scopes: ["drive.share_link.download"] },
+      detail: { name: "CLI", scopes: ["drive.public_link.download"] },
       ipAddress: "203.0.113.10",
     })
     expect(JSON.stringify(auditLog.recordWithClient.mock.calls)).not.toContain(result.secret)
@@ -107,7 +107,7 @@ describe("ApiKeyService", () => {
       id: "key-1",
       name: "开发环境",
       keyPrefix: "syn_sk_abcdefgh",
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
       lastUsedAt: null,
       createdAt,
     })
@@ -138,7 +138,7 @@ describe("ApiKeyService", () => {
       targetId: "key-1",
       detail: {
         name: "开发环境",
-        previousScopes: ["drive.share_link.download"],
+        previousScopes: ["drive.public_link.download"],
         scopes: [],
       },
       ipAddress: "203.0.113.12",
@@ -152,7 +152,7 @@ describe("ApiKeyService", () => {
       id: "key-1",
       name: "开发环境",
       keyPrefix: "syn_sk_abcdefgh",
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
       lastUsedAt: null,
       createdAt,
     })
@@ -164,7 +164,7 @@ describe("ApiKeyService", () => {
       id: "key-1",
       name: "生产环境",
       prefix: "syn_sk_abcdefgh",
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
       lastUsedAt: null,
       createdAt: createdAt.toISOString(),
     })
@@ -227,7 +227,7 @@ describe("ApiKeyService", () => {
       scopes: ["unknown"] as never,
     })).rejects.toBeInstanceOf(BadRequestException)
     await expect(service.updateScopesForUser("user-1", "key-1", {
-      scopes: ["drive.share_link.download", "drive.share_link.download"],
+      scopes: ["drive.public_link.download", "drive.public_link.download"],
     })).rejects.toBeInstanceOf(BadRequestException)
   })
 
@@ -254,7 +254,7 @@ describe("ApiKeyService", () => {
     await expect(service.verifyOpenApiSecret(secret)).resolves.toEqual({
       userId: "user-1",
       apiKeyId: "key-1",
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
     })
     expect(prisma.userApiKey.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { keyHash: hashApiKeySecret(secret) },

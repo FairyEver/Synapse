@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises"
 import { attachmentContentDisposition } from "../common/content-disposition"
 import { sendDriveZip } from "../drive/drive-download-stream"
 import type { DriveStoragePort } from "../drive/drive-storage"
+import { OPEN_API_DOWNLOADS_BASE_PATH } from "./open-api-contract"
 import { OpenApiDownloadGrantService } from "./open-api-download-grant.service"
 import { OpenApiExceptionFilter } from "./open-api-exception.filter"
 import { OpenApiUsageLogService, type OpenApiUsageStatus } from "./open-api-usage-log.service"
@@ -16,7 +17,7 @@ import {
   type OpenApiRequest,
 } from "./open-api.types"
 
-@Controller("/api/open/v1/downloads")
+@Controller(OPEN_API_DOWNLOADS_BASE_PATH)
 @UseFilters(OpenApiExceptionFilter)
 export class OpenApiDownloadController {
   constructor(

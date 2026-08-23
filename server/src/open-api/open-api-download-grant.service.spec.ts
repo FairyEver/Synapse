@@ -79,7 +79,7 @@ describe("OpenApiDownloadGrantService", () => {
     const baseGrant = {
       expiresAt: new Date("2026-08-23T09:10:00.000Z"),
       planVersion: 1,
-      apiKey: { scopes: ["drive.share_link.download"], revokedAt: null, user: { status: "active" } },
+      apiKey: { scopes: ["drive.public_link.download"], revokedAt: null, user: { status: "active" } },
     }
 
     await expect(service.assertAvailable({
@@ -92,7 +92,7 @@ describe("OpenApiDownloadGrantService", () => {
     await expect(service.assertAvailable({
       ...baseGrant,
       apiKey: {
-        scopes: ["drive.share_link.download"],
+        scopes: ["drive.public_link.download"],
         revokedAt: new Date("2026-08-23T08:59:00.000Z"),
         user: { status: "active" },
       },
@@ -148,6 +148,31 @@ describe("OpenApiDownloadGrantService", () => {
       expiresAt: new Date("2026-08-23T09:10:00.000Z"),
       planVersion: 1,
       apiKey: {
+        scopes: ["drive.public_link.download"],
+        revokedAt: null,
+        user: { status: "active" },
+      },
+      target: { kind: "share", shareId: "share-1", itemId: "item-1" },
+      entries: [],
+    } as never, new Date("2026-08-23T09:00:00.000Z"))).resolves.toBeUndefined()
+    expect(revalidateOpenApiShareTarget).toHaveBeenCalledOnce()
+  })
+
+  it("keeps legacy share-link scopes valid for previously issued keys", async () => {
+    const revalidateOpenApiShareTarget = vi.fn().mockResolvedValue(true)
+    const service = new OpenApiDownloadGrantService(
+      {} as never,
+      { revalidateOpenApiShareTarget } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { warn: vi.fn() } as never,
+    )
+
+    await expect(service.assertAvailable({
+      expiresAt: new Date("2026-08-23T09:10:00.000Z"),
+      planVersion: 1,
+      apiKey: {
         scopes: ["drive.share_link.download"],
         revokedAt: null,
         user: { status: "active" },
@@ -170,7 +195,7 @@ describe("OpenApiDownloadGrantService", () => {
     const grant = {
       expiresAt: new Date("2026-08-23T09:10:00.000Z"),
       planVersion: 1,
-      apiKey: { scopes: ["drive.share_link.download"], revokedAt: null, user: { status: "active" } },
+      apiKey: { scopes: ["drive.public_link.download"], revokedAt: null, user: { status: "active" } },
       target: { kind: "public_asset", assetId: "asset-1", publicAssetId: "public-1" },
       entries: [{
         entryType: "file",

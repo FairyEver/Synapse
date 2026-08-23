@@ -139,6 +139,8 @@ USER_REFRESH_TOKEN_DAYS=30
 
 # 外部访问地址（用于生成密码重置和 Webhook 公开链接，填写用户访问的站点根地址，不带 /api）
 APP_PUBLIC_URL=https://yourdomain.com
+# 文档站公开根地址；留空时使用 APP_PUBLIC_URL 加 /document，文档独立部署时填写完整公开地址
+DOCUMENT_PUBLIC_URL=
 
 # API 在容器内部监听 3001，由容器内 Nginx 统一从 3000 对外暴露
 PORT=3001
@@ -165,6 +167,7 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 - `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_ACCESS_SECRET` 相同
 - `DESKTOP_UPDATE_INTENT_SECRET` 不是由至少 32 个随机字节生成的高熵 Base64URL 值，包含明显重复字符，或与管理访问密钥、用户 JWT 密钥相同
 - `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
+- `DOCUMENT_PUBLIC_URL` 不是合法的 HTTP(S) URL；同域部署可以留空，独立部署时填写文档站根地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
 - `DRIVE_COLLABORATION_ENABLED` 只接受 `true` 或 `false`；启用后 `/api/drive/collaboration` 必须允许 WebSocket Upgrade
 

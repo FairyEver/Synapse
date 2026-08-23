@@ -1,8 +1,9 @@
 import type { Request } from "express"
 import { randomUUID } from "node:crypto"
+import { PUBLIC_LINK_DOWNLOAD_SCOPE } from "../api-keys/api-key-capabilities"
 import type { OpenApiPrincipal } from "../api-keys/api-key.service"
 
-export const OPEN_API_DOWNLOAD_SCOPE = "drive.share_link.download"
+export const OPEN_API_DOWNLOAD_SCOPE = PUBLIC_LINK_DOWNLOAD_SCOPE
 
 export type OpenApiRequest = Request & {
   readonly id?: string | number | (() => string)

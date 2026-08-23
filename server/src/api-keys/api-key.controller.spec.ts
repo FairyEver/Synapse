@@ -1,11 +1,20 @@
 import "reflect-metadata"
 import { PATH_METADATA } from "@nestjs/common/constants"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ApiKeyController } from "./api-key.controller"
 import type { ApiKeyService } from "./api-key.service"
 
 const throttleLimitMetadata = "THROTTLER:LIMITdefault"
 const throttleTtlMetadata = "THROTTLER:TTLdefault"
+
+beforeEach(() => {
+  vi.stubEnv("APP_PUBLIC_URL", "http://localhost:3000")
+  vi.stubEnv("DOCUMENT_PUBLIC_URL", "http://localhost:19773/document")
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 describe("ApiKeyController", () => {
   it("mounts current and legacy Console API key routes", () => {
@@ -36,12 +45,12 @@ describe("ApiKeyController", () => {
 
     await expect(controller.list(request as never)).resolves.toEqual([])
     expect(controller.capabilities()).toEqual([{
-      scope: "drive.share_link.download",
-      name: "获取分享链接文件",
-      description: "允许通过开放接口下载分享文件、文件夹、站点和公开素材。",
-      documentationUrl: "/document/open-api/api/share-link-download",
+      scope: "drive.public_link.download",
+      name: "获取公共链接文件",
+      description: "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。",
+      documentationUrl: "http://localhost:19773/document/open-api/api/share-link-download",
     }])
-    await expect(controller.create({ name: " CLI ", scopes: ["drive.share_link.download"] }, request as never)).resolves.toEqual({
+    await expect(controller.create({ name: " CLI ", scopes: ["drive.public_link.download"] }, request as never)).resolves.toEqual({
       apiKey: { id: "key-1" },
       secret: "syn_sk_secret",
     })
@@ -58,7 +67,7 @@ describe("ApiKeyController", () => {
     expect(service.listForUser).toHaveBeenCalledWith("user-1")
     expect(service.createForUser).toHaveBeenCalledWith("user-1", {
       name: "CLI",
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
     }, "203.0.113.12")
     expect(service.updateScopesForUser).toHaveBeenCalledWith("user-1", "key-1", {
       scopes: [],
@@ -77,6 +86,10 @@ describe("ApiKeyController", () => {
       .toThrow("API key create request is invalid")
     expect(() => controller.create({ name: "CLI", scopes: ["unknown"] }, { user: { id: "user-1" } } as never))
       .toThrow("API key create request is invalid")
+    expect(() => controller.create({
+      name: "CLI",
+      scopes: ["drive.share_link.download"],
+    }, { user: { id: "user-1" } } as never)).toThrow("API key create request is invalid")
     expect(service.createForUser).not.toHaveBeenCalled()
   })
 
@@ -91,7 +104,7 @@ describe("ApiKeyController", () => {
     expect(() => controller.update("key-1", { scopes: ["unknown"] }, request as never))
       .toThrow("API key update request is invalid")
     expect(() => controller.update("key-1", {
-      scopes: ["drive.share_link.download", "drive.share_link.download"],
+      scopes: ["drive.public_link.download", "drive.public_link.download"],
     }, request as never)).toThrow("API key update request is invalid")
     expect(() => controller.update("key-1", { scopes: [], name: "renamed" }, request as never))
       .toThrow("API key update request is invalid")

@@ -1,21 +1,21 @@
-# 开放 API 分享链接下载实施记录
+# 开放 API 公共链接下载实施记录
 
 > 状态：已完成
 >
 > 完成日期：2026-08-23
 >
-> 设计文档：[开放 API 分享链接下载设计](../specs/2026-08-22-open-api-share-link-download-design.md)
+> 设计文档：[开放 API 公共链接下载设计](../specs/2026-08-22-open-api-share-link-download-design.md)
 
 ## 交付结果
 
-Synapse 已实现首个公开开放接口。用户可以在 Console 创建带开放 API 权限的开发密钥，使用密钥提交完整的 Synapse 云盘分享 URL，并获得十分钟有效的下载地址。单个物理文件按原文件下载；多个文件和集合型目标统一下载为 ZIP。
+Synapse 已实现首个公开开放接口。用户可以在 Console 创建带开放 API 权限的开发密钥，使用密钥提交完整的 Synapse Drive 公共 URL，并获得十分钟有效的下载地址。单个物理文件按原文件下载；多个文件和集合型目标统一下载为 ZIP。
 
 本次同时完成了 API 密钥权限、不可变下载快照、临时授权、下载流、使用日志、Dashboard 管理和文档站开放接口页面。实施未整理工作区中既有的 Desktop、文档站迁移及其他无关改动。
 
 ## 产品目标
 
 - 复用用户开发密钥完成开放 API 身份认证。
-- 接受可能带访问密码的 Synapse 云盘分享链接。
+- 接受可能带访问密码的 Synapse Drive 公共链接。
 - 支持分享文件、分享文件夹、分享内条目、Drive Site 页面及公开素材。
 - 让自动化审核工具能够稳定取得实际文件，而不是只读取元数据。
 - 为后续新增开放接口保留稳定、可横向扩展的版本化路径。
@@ -23,15 +23,25 @@ Synapse 已实现首个公开开放接口。用户可以在 Console 创建带开
 
 ## 最终接口契约
 
+机器可读的 OpenAPI 3.1 契约通过以下固定地址提供：
+
+```http
+GET /api/open/openapi.json
+```
+
+契约覆盖 canonical 创建接口、标记为 deprecated 的旧路径和临时下载 GET。创建接口的路径与 strict Zod 请求 schema 由运行时 controller 和契约共同复用，不维护静态 JSON 副本。
+
+契约的 `servers` 保持相对 `/api/open/v1`；`externalDocs` 与 Console 权限目录的文档链接使用环境解析后的绝对地址。Server 通过 `DOCUMENT_PUBLIC_URL` 区分独立 DEV 文档服务和生产文档根地址，VitePress 从当前环境的 `APP_PUBLIC_URL` 生成 API、契约、cURL 和公共链接示例。
+
 ### 创建下载制品
 
 ```http
-POST /api/open/v1/drive/share-links/downloads
+POST /api/open/v1/drive/public-links/downloads
 Authorization: Bearer syn_sk_...
 Content-Type: application/json
 ```
 
-请求体只包含完整分享 URL `url`。受密码保护时，调用方原样保留 URL 自带的 `?password=`；独立 `password` 字段按未知字段拒绝。密码不会进入响应或持久化日志。
+请求体只包含完整公共 URL `url`。受密码保护时，调用方原样保留 URL 自带的 `?password=`；独立 `password` 字段按未知字段拒绝。密码不会进入响应或持久化日志。
 
 成功响应提供：
 
@@ -66,7 +76,8 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 ## API 密钥与权限
 
 - 开放 API 使用独立 guard，只接受 `Authorization: Bearer syn_sk_...`。
-- 首期权限为 `drive.share_link.download`，Console 展示为“获取分享链接文件”。
+- 权限为 `drive.public_link.download`，Console 展示为“获取公共链接文件”。
+- 旧路径 `/api/open/v1/drive/share-links/downloads` 和旧 scope `drive.share_link.download` 仅兼容已有集成；新建、编辑密钥只使用新 scope。
 - 创建密钥时必须显式勾选至少一个权限。
 - 已有未撤销密钥可以原地修改或清空权限，不修改名称或轮换密钥。
 - 迁移前创建的密钥 scopes 默认为空，不会自动获得开放 API 权限。
@@ -134,6 +145,7 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 6. 实现 Open API POST/GET、原文件流、ZIP 流、用量日志和清理任务。
 7. 完成 Dashboard 权限创建与编辑、使用记录和文档站开放接口页面。
 8. 完成服务端、Dashboard、文档站、Prisma、安全与交付验证。
+9. 补充 OpenAPI 3.1 机器契约、稳定发现入口和契约回归测试。
 
 ## 验证结果
 
@@ -165,7 +177,7 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 本次没有启动开发服务器、浏览器或真实数据库，也没有执行生产迁移。发布流程仍需完成：
 
 1. 在目标环境应用 Prisma migration。
-2. 创建显式包含 `drive.share_link.download` 的新密钥。
+2. 创建显式包含 `drive.public_link.download` 的新密钥。
 3. 使用真实无密码分享、密码分享、单文件、文件夹、Site 和公开素材完成端到端下载。
 4. 验证密钥撤销、分享失效、授权过期和截断下载的错误行为。
 5. 核对用量日志可查询且不含 URL、密码、token、文件名、路径、对象引用或文件内容。

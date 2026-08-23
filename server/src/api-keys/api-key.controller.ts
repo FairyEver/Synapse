@@ -3,7 +3,8 @@ import { Throttle } from "@nestjs/throttler"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { badRequestFromZodError } from "../common/zod-validation"
-import { API_KEY_CAPABILITIES, API_KEY_SCOPES } from "./api-key-capabilities"
+import { resolvePublicDocumentUrl } from "../common/public-document-url"
+import { API_KEY_SCOPES, apiKeyCapabilities } from "./api-key-capabilities"
 import { ApiKeyService } from "./api-key.service"
 
 const createApiKeySchema = z.object({
@@ -41,7 +42,10 @@ export class ApiKeyController {
 
   @Get("/api-key-capabilities")
   capabilities() {
-    return API_KEY_CAPABILITIES
+    return apiKeyCapabilities(resolvePublicDocumentUrl({
+      configuredDocumentPublicUrl: process.env.DOCUMENT_PUBLIC_URL,
+      configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
+    }))
   }
 
   @Post("/api-keys")

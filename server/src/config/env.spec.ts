@@ -54,6 +54,31 @@ describe("loadEnv", () => {
     expect(env.appPublicUrl).toBeUndefined()
   })
 
+  it("parses an optional public document root", () => {
+    const env = loadEnv({
+      ...baseEnv,
+      DOCUMENT_PUBLIC_URL: "http://localhost:19773/document",
+    })
+
+    expect(env.documentPublicUrl).toBe("http://localhost:19773/document")
+  })
+
+  it("treats an empty public document root as unset", () => {
+    const env = loadEnv({
+      ...baseEnv,
+      DOCUMENT_PUBLIC_URL: "",
+    })
+
+    expect(env.documentPublicUrl).toBeUndefined()
+  })
+
+  it("rejects an invalid public document root", () => {
+    expect(() => loadEnv({
+      ...baseEnv,
+      DOCUMENT_PUBLIC_URL: "not-a-url",
+    })).toThrow("DOCUMENT_PUBLIC_URL")
+  })
+
   it("rejects missing public app URL in production", () => {
     expect(() =>
       loadEnv({

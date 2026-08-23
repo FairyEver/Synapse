@@ -13,6 +13,7 @@ COPY dashboard/package.json dashboard/package.json
 RUN pnpm install --frozen-lockfile --filter @synapse/shared --filter @synapse/server... --filter @synapse/dashboard... --filter @synapse/document...
 
 FROM base AS build
+ARG APP_PUBLIC_URL=https://synapse.d2.pub
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/ui/node_modules ./ui/node_modules
@@ -28,7 +29,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build
 RUN pnpm --filter @synapse/dashboard build
-RUN pnpm --filter @synapse/document build
+RUN APP_PUBLIC_URL=$APP_PUBLIC_URL pnpm --filter @synapse/document build
 
 FROM base AS production
 ENV NODE_ENV=production

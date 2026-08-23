@@ -3,23 +3,33 @@
 Synapse 开放接口使用版本化路径。当前版本的基础地址为：
 
 ```text
-https://synapse.d2.pub/api/open/v1
+{{APP_PUBLIC_URL}}/api/open/v1
 ```
+
+## 机器可读契约
+
+OpenAPI 3.1 契约由服务端提供：
+
+```text
+{{APP_PUBLIC_URL}}/api/open/openapi.json
+```
+
+[打开契约]({{APP_PUBLIC_URL}}/api/open/openapi.json)。该地址包含当前 canonical 接口、标记为 deprecated 的兼容路径、认证方式、请求和响应 schema，可直接导入支持 OpenAPI 3.1 的客户端或代码生成工具。
 
 ## 快速开始
 
-1. 在 Console 的“设置 > API 秘钥”中创建 API 密钥，选择“获取分享链接文件”。
+1. 在 Console 的“设置 > API 秘钥”中创建 API 密钥，选择“获取公共链接文件”。
 2. 使用 API 密钥调用创建下载地址接口。
 3. 在十分钟内对响应中的临时地址发起 `GET` 请求。
 
-完整示例：[获取分享链接文件](/open-api/api/share-link-download)
+完整示例：[获取公共链接文件](/open-api/api/share-link-download)
 
 ## 创建 API 密钥
 
-在 Console 的“设置 > API 秘钥”中创建密钥，并选择“获取分享链接文件”。该权限对应的 scope 是：
+在 Console 的“设置 > API 秘钥”中创建密钥，并选择“获取公共链接文件”。该权限对应的 scope 是：
 
 ```text
-drive.share_link.download
+drive.public_link.download
 ```
 
 完整密钥只显示一次。创建后可以编辑或清空 API 权限，不会轮换密钥；撤销密钥后无法恢复。移除下载权限或撤销密钥会使新请求以及尚未开始的临时下载失效。
@@ -43,6 +53,7 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 
 ## 可用 API
 
-| 方法 | 路径 | 权限 | 文档 |
-|---|---|---|---|
-| `POST` | `/drive/share-links/downloads` | `drive.share_link.download` | [获取分享链接文件](/open-api/api/share-link-download) |
+| operationId | 方法 | 路径 | 认证 | 文档 |
+|---|---|---|---|---|
+| `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | API 密钥与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
+| `downloadPublicLinkArtifact` | `GET` | `/downloads/{grantId}` | 创建接口返回的临时 token | [获取公共链接文件](/open-api/api/share-link-download#临时下载地址) |

@@ -3,6 +3,7 @@ import { Cron } from "@nestjs/schedule"
 import { Prisma } from "@prisma/client"
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import { PinoLogger } from "nestjs-pino"
+import { hasPublicLinkDownloadScope } from "../api-keys/api-key-capabilities"
 import { DrivePublicAssetService } from "../drive/drive-public-asset.service"
 import { DriveService } from "../drive/drive.service"
 import { DriveSiteService } from "../drive/drive-site.service"
@@ -12,7 +13,7 @@ import type {
   DriveOpenApiDownloadTarget,
 } from "../drive/drive-open-api-download"
 import { PrismaService } from "../prisma/prisma.service"
-import { OPEN_API_DOWNLOAD_SCOPE, OpenApiHttpError } from "./open-api.types"
+import { OpenApiHttpError } from "./open-api.types"
 
 const OPEN_API_DOWNLOAD_PLAN_VERSION = 1
 const OPEN_API_DOWNLOAD_TTL_MS = 10 * 60 * 1000
@@ -84,7 +85,7 @@ export class OpenApiDownloadGrantService {
           },
         })
         if (availableVersions !== new Set(versionIds).size) {
-          throw new OpenApiHttpError(404, "LINK_NOT_FOUND", "分享链接不存在或已失效。")
+          throw new OpenApiHttpError(404, "LINK_NOT_FOUND", "公共链接不存在或已失效。")
         }
       }
       await tx.openApiDownloadGrant.create({
@@ -147,7 +148,7 @@ export class OpenApiDownloadGrantService {
       || grant.planVersion !== OPEN_API_DOWNLOAD_PLAN_VERSION
       || grant.apiKey.revokedAt
       || grant.apiKey.user.status !== "active"
-      || !grant.apiKey.scopes.includes(OPEN_API_DOWNLOAD_SCOPE)
+      || !hasPublicLinkDownloadScope(grant.apiKey.scopes)
     ) {
       throw downloadUnavailable()
     }

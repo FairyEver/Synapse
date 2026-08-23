@@ -7,6 +7,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, "../..")
 const envPath = path.join(repoRoot, "server/.env.local")
 const localServerPublicAppUrl = "http://localhost:3000"
+const localDocumentPublicUrl = "http://localhost:19773/document"
 
 function parseEnvFile(raw) {
   const env = {}
@@ -69,7 +70,9 @@ function resolveDevCommandEnv(args, processEnv, serverEnv) {
 
   if (isServerDevCommand(args)) {
     const explicitPublicAppUrl = processEnv.APP_PUBLIC_URL?.trim()
+    const explicitDocumentPublicUrl = processEnv.DOCUMENT_PUBLIC_URL?.trim()
     env.APP_PUBLIC_URL = explicitPublicAppUrl || localServerPublicAppUrl
+    env.DOCUMENT_PUBLIC_URL = explicitDocumentPublicUrl || localDocumentPublicUrl
   }
 
   return env

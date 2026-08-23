@@ -7,7 +7,7 @@ describe("OpenApiKeyGuard", () => {
       verifyOpenApiSecret: vi.fn().mockResolvedValue({
         userId: "user-1",
         apiKeyId: "key-1",
-        scopes: ["drive.share_link.download"],
+        scopes: ["drive.public_link.download"],
       }),
       touchLastUsed: vi.fn().mockResolvedValue(undefined),
     }
@@ -20,7 +20,7 @@ describe("OpenApiKeyGuard", () => {
     expect(request.openApiPrincipal).toEqual({
       userId: "user-1",
       apiKeyId: "key-1",
-      scopes: ["drive.share_link.download"],
+      scopes: ["drive.public_link.download"],
     })
     expect(apiKeys.touchLastUsed).toHaveBeenCalledWith("key-1")
   })

@@ -45,10 +45,10 @@ beforeEach(() => {
   })
   clipboardWrite.mockResolvedValue(undefined)
   mockedDashboardApi.listApiKeyCapabilities.mockResolvedValue([{
-    scope: 'drive.share_link.download',
-    name: '获取分享链接文件',
-    description: '允许通过开放接口下载分享文件、文件夹、站点和公开素材。',
-    documentationUrl: '/document/open-api/api/share-link-download',
+    scope: 'drive.public_link.download',
+    name: '获取公共链接文件',
+    description: '允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。',
+    documentationUrl: 'https://docs.example.com/document/open-api/api/share-link-download',
   }])
   mockedDashboardApi.listApiKeyUsageLogs.mockResolvedValue({
     data: [],
@@ -83,7 +83,7 @@ describe('ApiKeysSettings', () => {
     expect(document.querySelector('table')).toBeNull()
     expect(card?.textContent).toContain('开发环境')
     expect(card?.textContent).toContain('syn_sk_12345678...')
-    expect(card?.textContent).toContain('获取分享链接文件')
+    expect(card?.textContent).toContain('获取公共链接文件')
     expect(buttonByText('重命名').closest('[data-slot="card"]')).toBe(card)
     expect(buttonByText('编辑权限').closest('[data-slot="card"]')).toBe(card)
     expect(buttonByText('使用记录').closest('[data-slot="card"]')).toBe(card)
@@ -100,15 +100,15 @@ describe('ApiKeysSettings', () => {
     renderSettings()
     await waitForText('尚无秘钥')
     await click(buttonByText('创建秘钥'))
-    await waitForText('允许通过开放接口下载分享文件、文件夹、站点和公开素材。')
+    await waitForText('允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。')
     await inputValue(inputById('api-key-name'), ' CLI ')
-    await click(permissionOption('获取分享链接文件'))
+    await click(permissionOption('获取公共链接文件'))
     await click(buttonByText('创建', 'last'))
 
     await waitForText('秘钥已创建')
     expect(mockedDashboardApi.createApiKey).toHaveBeenCalledWith({
       name: 'CLI',
-      scopes: ['drive.share_link.download'],
+      scopes: ['drive.public_link.download'],
     })
     expect(document.body.textContent).toContain('关闭后无法再次查看')
     expect(inputByValue('syn_sk_once-only-secret')).not.toBeNull()
@@ -133,14 +133,14 @@ describe('ApiKeysSettings', () => {
     expect(checkbox().getAttribute('data-state')).toBe('checked')
     expect(buttonByText('保存权限').disabled).toBe(true)
     const documentationLink = linkByText('文档')
-    const permissionTitle = document.querySelector('label[for="api-key-edit-drive.share_link.download"]')
-    const permissionDescription = document.getElementById('api-key-edit-drive.share_link.download-description')
-    expect(documentationLink.getAttribute('href')).toBe('/document/open-api/api/share-link-download')
+    const permissionTitle = document.querySelector('label[for="api-key-edit-drive.public_link.download"]')
+    const permissionDescription = document.getElementById('api-key-edit-drive.public_link.download-description')
+    expect(documentationLink.getAttribute('href')).toBe('https://docs.example.com/document/open-api/api/share-link-download')
     expect(documentationLink.getAttribute('target')).toBe('_blank')
     expect(documentationLink.parentElement).toBe(permissionTitle?.parentElement)
     expect(documentationLink.parentElement?.contains(permissionDescription)).toBe(false)
 
-    await click(permissionOption('获取分享链接文件'))
+    await click(permissionOption('获取公共链接文件'))
     expect(buttonByText('保存权限').disabled).toBe(false)
     await click(buttonByText('保存权限'))
 
@@ -173,7 +173,7 @@ describe('ApiKeysSettings', () => {
       expect(document.body.textContent).not.toContain('重命名秘钥')
     })
     expect(document.body.textContent).toContain('syn_sk_12345678...')
-    expect(document.body.textContent).toContain('获取分享链接文件')
+    expect(document.body.textContent).toContain('获取公共链接文件')
   })
 
   it('shows a retry action when API permissions fail to load', async () => {
@@ -181,10 +181,10 @@ describe('ApiKeysSettings', () => {
     mockedDashboardApi.listApiKeyCapabilities
       .mockRejectedValueOnce(new Error('权限服务不可用'))
       .mockResolvedValueOnce([{
-        scope: 'drive.share_link.download',
-        name: '获取分享链接文件',
-        description: '允许通过开放接口下载分享文件、文件夹、站点和公开素材。',
-        documentationUrl: '/document/open-api/api/share-link-download',
+        scope: 'drive.public_link.download',
+        name: '获取公共链接文件',
+        description: '允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。',
+        documentationUrl: 'https://docs.example.com/document/open-api/api/share-link-download',
       }])
 
     renderSettings()
@@ -193,7 +193,7 @@ describe('ApiKeysSettings', () => {
     await waitForText('权限加载失败')
     await click(buttonByText('重试'))
 
-    await waitForText('允许通过开放接口下载分享文件、文件夹、站点和公开素材。')
+    await waitForText('允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。')
     expect(mockedDashboardApi.listApiKeyCapabilities).toHaveBeenCalledTimes(2)
   })
 
@@ -274,7 +274,7 @@ function apiKey(overrides: Partial<Awaited<ReturnType<typeof dashboardApi.listAp
     id: 'key-1',
     name: '开发环境',
     prefix: 'syn_sk_12345678',
-    scopes: ['drive.share_link.download'],
+    scopes: ['drive.public_link.download'],
     lastUsedAt: null,
     createdAt: '2026-08-21T08:00:00.000Z',
     ...overrides,

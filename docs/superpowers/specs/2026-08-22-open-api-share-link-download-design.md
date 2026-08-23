@@ -1,4 +1,4 @@
-# 开放 API 云盘分享链接临时下载设计
+# 开放 API 公共链接临时下载设计
 
 Date: 2026-08-22
 
@@ -6,7 +6,7 @@ Scope: `server/`、`dashboard/`、`document/`、`docs/agents/module-boundaries.m
 
 ## 目标
 
-基于现有用户 API 密钥提供第一个稳定的开放 API：调用方提交完整的 Synapse Drive 分享 URL，服务端返回一个十分钟有效的下载地址。
+基于现有用户 API 密钥提供第一个稳定的开放 API：调用方提交完整的 Synapse Drive 公共 URL，服务端返回一个十分钟有效的下载地址。
 
 调用方不需要理解分享目标是文件、文件夹、网页、Drive Site 还是公开素材。服务端把不同目标统一转换为可下载制品：
 
@@ -16,12 +16,13 @@ Scope: `server/`、`dashboard/`、`document/`、`docs/agents/module-boundaries.m
 - Drive Site 页面包含 HTML 及其依赖资源，下载完整站点 ZIP；
 - Site 中的单一非 HTML asset 和单一公开素材下载原始文件。
 
-开放 API 的基础路径、版本、认证、scope、临时下载授权和扩展规则在本期固定，后续新增其它开放接口不迁移本接口。
+开放 API 的基础路径、版本、认证、临时下载授权和扩展规则保持稳定。公共链接资源使用统一命名；旧分享链接路径和 scope 作为兼容别名保留，不要求已有集成迁移。
 
 ## 已确认决策
 
 - 对外基础路径固定为 `/api/open/v1`。
-- 创建临时下载地址使用 `POST /api/open/v1/drive/share-links/downloads`。
+- 创建临时下载地址使用 `POST /api/open/v1/drive/public-links/downloads`。
+- 旧路径 `/api/open/v1/drive/share-links/downloads` 继续兼容已有集成；新集成不再使用。
 - 返回的临时下载地址由服务端生成，调用方不得自行构造。
 - 临时下载授权固定十分钟有效；该 Open API grant TTL 独立于普通 Drive 对象下载 TTL。
 - 下载在过期前开始后允许继续完成；过期后不能开始新的下载。
@@ -150,7 +151,7 @@ https://synapse.d2.pub/api/open/v1
 首个业务接口：
 
 ```text
-POST /api/open/v1/drive/share-links/downloads
+POST /api/open/v1/drive/public-links/downloads
 ```
 
 临时下载入口：
@@ -164,7 +165,7 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 后续示例仅说明路径扩展方式，不代表本期实现：
 
 ```text
-POST /api/open/v1/drive/share-links/text-reads
+POST /api/open/v1/drive/public-links/text-reads
 GET  /api/open/v1/skills
 POST /api/open/v1/workflows/<workflowId>/runs
 ```
@@ -198,7 +199,7 @@ Authorization: Bearer syn_sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 首期 scope：
 
 ```text
-drive.share_link.download
+drive.public_link.download
 ```
 
 `UserApiKey` 增加：
@@ -221,9 +222,9 @@ GET /api/console/api-key-capabilities
 ```json
 [
   {
-    "scope": "drive.share_link.download",
-    "name": "获取分享链接文件",
-    "description": "允许通过开放接口下载分享文件、文件夹、站点和公开素材。"
+    "scope": "drive.public_link.download",
+    "name": "获取公共链接文件",
+    "description": "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。"
   }
 ]
 ```
@@ -233,7 +234,7 @@ GET /api/console/api-key-capabilities
 ```json
 {
   "name": "自动化下载",
-  "scopes": ["drive.share_link.download"]
+  "scopes": ["drive.public_link.download"]
 }
 ```
 
@@ -258,6 +259,8 @@ Console 列表响应增加 `scopes` 和 `lastUsedAt`，管理页显示已授权�
 
 scope 不匹配返回 `403 INSUFFICIENT_SCOPE`。
 
+旧 scope `drive.share_link.download` 仅兼容已有密钥：读取密钥 DTO 和建立 Open API principal 时归一化为 `drive.public_link.download`，下载授权检查同时接受新旧值。权限目录以及新建、编辑密钥只接受新 scope，不继续扩散旧名称。
+
 临时 GET 下载不再读取 API key header，但会通过 grant 关联重新检查原 API key 和用户状态。
 
 ## 创建临时下载地址
@@ -265,7 +268,7 @@ scope 不匹配返回 `403 INSUFFICIENT_SCOPE`。
 ### 请求
 
 ```http
-POST /api/open/v1/drive/share-links/downloads
+POST /api/open/v1/drive/public-links/downloads
 Content-Type: application/json
 Authorization: Bearer syn_sk_...
 ```
@@ -492,7 +495,7 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 
 1. 读取 grant id 和 token，计算摘要并做固定失败响应；
 2. 检查 grant 未过期并按 `planVersion` 解码下载 plan；
-3. 检查关联 API key 未撤销、仍有 `drive.share_link.download` 权限且用户为 active；
+3. 检查关联 API key 未撤销、仍有公共链接下载权限且用户为 active；
 4. 先创建一条 `started` 用量日志，写入失败则返回 503 且不发送 header；
 5. 检查分享、Site 或公开素材仍然启用且未删除/过期；
 6. 验证不可变对象版本、大小和 etag/sha256；
@@ -555,7 +558,7 @@ POST 创建 grant 和临时 GET 下载都使用 `@SkipThrottle()`，显式绕过
   "requestId": "req_01k3...",
   "error": {
     "code": "LINK_NOT_FOUND",
-    "message": "分享链接不存在或已失效。"
+    "message": "公共链接不存在或已失效。"
   }
 }
 ```
@@ -564,8 +567,8 @@ POST 创建 grant 和临时 GET 下载都使用 `@SkipThrottle()`，显式绕过
 |---:|---|---|
 | 400 | `INVALID_REQUEST` | JSON、字段、Content-Type 或未知字段不合法 |
 | 401 | `INVALID_API_KEY` | key 缺失、无效、撤销或用户禁用 |
-| 403 | `INSUFFICIENT_SCOPE` | 缺少 `drive.share_link.download` |
-| 403 | `LINK_PASSWORD_REQUIRED_OR_INVALID` | 分享密码缺失或错误 |
+| 403 | `INSUFFICIENT_SCOPE` | 缺少 `drive.public_link.download` |
+| 403 | `LINK_PASSWORD_REQUIRED_OR_INVALID` | 链接密码缺失或错误 |
 | 404 | `LINK_NOT_FOUND` | 链接不存在、过期、停用、目标删除或对象缺失 |
 | 413 | `ARCHIVE_TOO_LARGE` | 文件夹/Site 超过归档上限 |
 | 422 | `UNSUPPORTED_LINK` | 非当前 Synapse origin 或不支持的 Drive 路径 |
@@ -738,14 +741,18 @@ document/open-api/index.md
 document/open-api/api/share-link-download.md
 ```
 
-VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档使用独立左侧导航，第一项为“概览”，其下为展开的“API”分组；当前分组内只有“获取分享链接文件”，不创建未来接口占位。
+VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档使用独立左侧导航，第一项为“概览”，其下为展开的“API”分组；当前分组内只有“获取公共链接文件”，不创建未来接口占位。
+
+服务端在 `GET /api/open/openapi.json` 提供 OpenAPI 3.1 机器可读契约。发现地址不包含业务版本，文档中的 `servers` 指向 `/api/open/v1`；canonical POST、deprecated 兼容 POST 和临时下载 GET 均必须纳入。运行时 POST 路径与 strict 请求 schema 直接复用契约模块导出，避免手工文档与校验规则分叉。
+
+应用/API 根地址与文档根地址必须分别解析环境。`APP_PUBLIC_URL` 表示 Console、API 和 Drive 公共链接根地址；`DOCUMENT_PUBLIC_URL` 表示文档站根地址，生产同域部署可从 `APP_PUBLIC_URL + /document` 派生，DEV 指向 `http://localhost:19773/document`。API capability 与 OpenAPI `externalDocs` 返回绝对文档地址，OpenAPI `servers` 保持相对 `/api/open/v1`。VitePress DEV 中的操作性 API 地址指向 `http://localhost:3000`，生产构建从 `APP_PUBLIC_URL` 注入，不在页面中固定生产域名。
 
 页面内容顺序：
 
 1. 基础地址；
 2. 创建 API 密钥；
 3. Bearer 认证；
-4. `POST /drive/share-links/downloads`；
+4. `POST /drive/public-links/downloads`；
 5. 请求字段与 cURL；
 6. 文件、文件夹、Site 和公开素材的制品映射；
 7. 临时下载地址与十分钟有效期；
@@ -761,6 +768,7 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 ### Server
 
 - 新增 `server/src/open-api/` 模块、controllers、services 和测试。
+- 新增 OpenAPI 3.1 权威契约和 `/api/open/openapi.json` 发现 controller；不新增 Swagger 依赖或静态 JSON 副本。
 - Prisma 新增 `OpenApiDownloadGrant`、`OpenApiDownloadGrantEntry`、`OpenApiUsageLog` migration；`UserApiKey` 和 `DriveFileVersion` 增加关系，旧密钥 scopes 保持空数组。
 - `ApiKeyService` 增加权限目录、create/update scopes 校验、API key verify、scope 和 last-used 支持。
 - `DriveLinkIntakeService` 增加 prepare-download plan。
@@ -783,6 +791,7 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 ### Documentation
 
 - 新增 `document/open-api/index.md` 和顶部导航。
+- 概览记录机器可读契约发现地址和导入边界。
 - 更新 `docs/agents/module-boundaries.md`，记录 API key 只授权本开放接口和临时 grant 边界。
 - 更新 `RELEASE_NOTES_PENDING.md`。
 
@@ -879,20 +888,22 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 - VitePress build 通过。
 - 顶部“开放接口”指向 `/open-api/`。
 - “概览”记录基础地址、API 密钥和认证方式；“API”分组记录已部署的 POST 接口和它返回的 opaque GET 地址。
+- `/api/open/openapi.json` 返回 OpenAPI 3.1 JSON，并覆盖 canonical、deprecated 兼容路径和临时下载路径。
 - 示例全部使用虚构凭证与链接。
 
 ## 验收标准
 
-- 使用 Console 创建的 API key 可以调用 `POST /api/open/v1/drive/share-links/downloads`。
+- 使用 Console 创建的 API key 可以调用 `POST /api/open/v1/drive/public-links/downloads`。
 - 任一受支持链接都返回统一的十分钟下载地址与制品信息。
 - 单一文件和单一素材下载原始字节；多个文件或集合型目标下载 ZIP；文件夹始终下载 ZIP；Site 页面下载完整站点 ZIP。
 - 密码只在创建 grant 时使用，不进入临时 URL、数据库、日志或审计。
 - grant 在服务重启后仍有效，并能因 API key 撤销、权限移除或源状态变化立即失效。
 - Synapse 分享保持 live view；每次 POST 固定调用瞬间的 current version，后续编辑不改变已有 grant。
 - 响应中的 snapshotId 可以与自动化审核报告关联，但不暴露历史版本 id 或 storage key。
-- 开发密钥只有在当前 scopes 包含“获取分享链接文件”时才能调用；既有密钥默认无权限，可在 Console 中显式授权。
+- 开发密钥只有在当前 scopes 包含“获取公共链接文件”时才能调用；既有密钥默认无权限，可在 Console 中显式授权。
 - 每次创建授权和实际下载都有一条不含文件信息的持久化用量记录，并可由密钥所属用户查询。
 - 开放 API 不做请求、IP、密钥、次数或频率限流；临时 URL 在十分钟内可重复下载。
 - 文件夹/Site 归档受 1000 文件、200 MiB 上限保护。
-- 开放接口文档包含“概览”和“API”分组，API 分组当前只有“获取分享链接文件”，契约与生产行为一致。
+- 开放接口文档包含“概览”和“API”分组，API 分组当前只有“获取公共链接文件”，契约与生产行为一致。
+- 机器可读契约可通过固定发现地址获取，关键路径和创建请求 schema 与运行时实现共享来源。
 - 未来接口可以直接加入 `/api/open/v1/<domain>/<resource>`，无需改变本接口路径或认证边界。

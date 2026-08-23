@@ -1,5 +1,104 @@
 # 发现与决策
 
+## 公共链接资源命名兼容迁移（阶段 30）
+- 本轮唯一产品目标：将外部资源概念从过窄的“分享链接”统一为“公共链接”；不实施限流、OpenAPI 规范、密钥生命周期或其它评估建议。
+- 默认兼容策略：新增 canonical `/drive/public-links/downloads` 与准确 scope，不删除已发布 `/drive/share-links/downloads` 和 `drive.share_link.download`。
+- 需要先核对 API capability 目录、Dashboard 权限选择器如何处理 deprecated scope，以及现有未提交文档导航改动，避免覆盖用户工作。
+- 现有未提交文档改动用于“复制 Markdown”功能，涉及 VitePress config、README 和发布说明；本任务只需保留这些改动，不修改其逻辑。
+- 当前公开命名散布在 controller route、Open API scope、API capability 名称、Dashboard 测试、公开文档、模块边界、设计与实施记录中；下载 grant、数据库表和制品模型本身使用中性命名，无需修改。
+- Dashboard 根据 capability 目录显示权限名称，API key DTO 直接返回数据库 scopes。兼容方案可以在服务端 DTO/principal 投影时把旧 scope 规范化为新 scope，使旧密钥继续有效且 Console 自动显示新名称，无需给 UI 增加“旧版权限”选项。
+- 新建/编辑密钥只接受 canonical scope；运行时下载授权检查同时接受 canonical 和 legacy scope。这样无需数据库 migration，也避免部署迁移期间旧服务与新数据不兼容。
+- 设计文档原先声明路径和 scope 固定；用户本轮明确要求修正该产品边界。实现采用新增 canonical 路径、保留 legacy alias 的加法变更，不删除既有 v1 契约。
+- 核心实现不需要修改下载 service、grant 数据结构或数据库 schema：只需调整 capability 目录、API key scope 投影、scope 可用性判断和 controller route metadata。
+- 旧 scope 不再允许创建或编辑写入，但旧数据库记录会被透明投影为 canonical scope；若旧 key 同时意外含有新旧两个值，规范化时会去重。
+
+## 开放 API 机器可读契约（阶段 31）
+
+- 仓库未安装 `@nestjs/swagger`，且规则禁止未经授权新增依赖；Zod 4 已原生提供 JSON Schema 转换，可复用当前请求校验 schema，无需引入新包。
+- 当前公开数据面有两个动作：创建公共链接下载授权，以及使用响应中的临时 bearer URL 下载二进制制品。旧 `share-links` POST 仍是兼容入口，应在契约中标记 `deprecated`，不能静默遗漏。
+- 推荐稳定发现地址为不带业务版本的 `/api/open/openapi.json`，契约本身使用 OpenAPI 3.1 并描述 `/api/open/v1/...` 路径；未来新增 v2 时无需改变发现地址。
+- 创建请求的 Zod schema 应由契约模块导出并被 controller 直接复用，使运行时 strict 校验与机器可读 requestBody 至少共享同一来源。
+- 临时下载 GET 使用 query bearer token，响应为任意二进制；契约需要声明 query `apiKey` security scheme、binary response、下载响应头和稳定 JSON 错误 envelope。
+- 下载 grant id 实际格式为 `dlg_` 加 32 个小写十六进制字符；token 为 32 随机字节编码成的 43 字符 base64url。两项都可在 OpenAPI parameter schema 中精确表达。
+- 仓库当前没有其它 OpenAPI/Swagger 发现端点或机器契约文档，因此新增一个服务端权威文档不会与既有生成流程冲突。
+- 发现 endpoint 的 Nest HTTP 验证已通过，实际返回 OpenAPI vendor JSON media type、5 分钟公共缓存头和完整 JSON body；服务端 TypeScript 同时通过。
+- 公开文档概览已有“基础地址/快速开始/可用 API”结构，机器契约入口适合放在基础地址之后，无需新增导航页或重复维护一份静态 JSON 文件。
+
+## 环境相关链接只读审计（阶段 32）
+
+- 本地开发端口当前分离：Dashboard 为 `http://localhost:3000`，Server 为 `http://localhost:3001`，Document 为 `http://localhost:19773/document/`。因此相对 `/document/...` 从 Dashboard 打开时不会天然落到本地文档服务，除非开发代理显式转发。
+- API key 权限目录当前返回相对 `documentationUrl: /document/open-api/api/share-link-download`，Dashboard 设置页把该值直接作为 `<a href>`；这是用户点名场景的首个明确审计项。
+- Server 的下载地址、Drive 分享/Site/公开素材等业务 URL 主要通过 `APP_PUBLIC_URL` 或请求解析结果生成；开发脚本默认 `APP_PUBLIC_URL=http://localhost:3000`，这条主链路已经具备环境区分，不应改成硬编码生产域名。
+- 新增的 OpenAPI 文档中 `servers` 为相对 `/api/open/v1`，可随获取契约的 origin 解析；但 `externalDocs.url` 当前为相对 `/document/open-api/`，若直接从 Server 端口 3001 获取契约，会指向没有文档站的 3001 origin，需要进一步确认预期获取入口。
+- 文档站开放接口页面把 API base、OpenAPI JSON、示例公共 URL 和 cURL 全部写为 `https://synapse.d2.pub`。其中可点击/可导入入口在 DEV 明确会跳生产；示例是否应随环境变化需要与“文档内容示例”和“实际操作链接”分开分类。
+- Desktop 的账号、Drive、Skill Repository 链接通过构建生成的 `SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl/apiBaseUrl` 解析，开发默认 localhost、正式包强制配置公开根地址；初步看属于已正确区分环境的独立链路。
+- Dashboard Vite 开发代理只转发 `/api`、Webhook、Drive 文件、Site 和分享下载等路径到 Server 3001，没有把 `/document` 转发到 Document 19773。因此当前权限“文档”按钮在 DEV 会打开 `http://localhost:3000/document/...` 并落空；这不是理论风险，而是配置链路已确认的不匹配。
+- Dashboard API 客户端本身统一使用相对 `/api/...`，由 DEV Vite proxy 和生产同源反向代理分别解析，属于正确模式。问题集中在“跨本地服务”的文档地址，而不是所有相对地址。
+- Server `APP_PUBLIC_URL` 在生产必填，开发启动脚本默认 `http://localhost:3000`。开放 API 临时下载 URL、密码重置、Webhook、Drive 分享、Site、公开素材、上传/下载地址等均沿用该根地址，整体已经按环境区分。
+- `APP_PUBLIC_URL` 只表达应用公开根地址，无法表达 DEV 中独立的 Document 19773；直接拿它拼 `/document` 仍会得到 Dashboard 3000。因此文档链接需要独立的 Document origin/base 配置或由 Dashboard 的集中 URL resolver 知道 DEV 文档端口。
+- 固定 `desktop.release.synapse.d2.pub` 的 updater/CDN 链接和 `deploy.sh` 的生产验收 URL 属于发布专用地址，不应跟随普通 DEV 环境切换；需要与 Console/文档/API 运行时链接分开治理。
+- OpenAPI 契约的 `servers: [{ url: "/api/open/v1" }]` 应继续保持相对路径：从 Dashboard 3000 获取时走 DEV proxy，从 Server 3001 直接获取时也能访问实际 API，生产则走同源 Nginx。它和 `externalDocs` 的跨服务链接不是同一类问题。
+- 文档站配置目前只有稳定部署路径 `base=/document/` 和 DEV 端口 19773，没有“当前应用公开根地址”或“当前文档公开根地址”的配置入口；因此 Markdown 内的绝对 API/OpenAPI/cURL URL 只能硬编码生产域名。
+- 推荐后续把部署地址拆成两个明确概念：既有 `APP_PUBLIC_URL` 表达 Console/API/分享公开根地址；新增集中式 `DOCUMENT_PUBLIC_URL` 表达文档根地址。生产可解析为 `${APP_PUBLIC_URL}/document`，DEV 明确为 `http://localhost:19773/document`，避免组件自行判断 `DEV`。
+- Server 同时拥有 API key capability 目录和 OpenAPI 契约，最适合统一使用 `DOCUMENT_PUBLIC_URL` 输出绝对文档地址；文档站则需要注入当前 `APP_PUBLIC_URL`，用于机器契约入口、API base、可复制 cURL 与同源公共链接示例。仅增加 Dashboard `/document` proxy 只能修按钮，不能覆盖直接读取契约和文档示例。
+- 文档生产包在 `server/Dockerfile` build stage 执行 VitePress 构建，而 `APP_PUBLIC_URL` 目前只在 compose 的 production runtime 注入，build stage 不可见。后续若在构建时替换文档 URL，必须同步设计 Docker build arg/发布注入；更稳妥的是让集中式文档 URL 组件在浏览器运行时读取当前 origin，并为 DEV 单独注入应用根地址。
+- `document/open-api/index.md` 与 `document/open-api/api/share-link-download.md` 中的可点击 OpenAPI 地址、API base、cURL、请求 URL 和响应 URL 都属于需要环境解析的操作性内容；纯格式占位符可以保留示例语义，但不能让本地文档默认把请求发到生产。
+- `DrivePublicAssetService` 在缺失请求上下文时以 `https://synapse.local` 生成 DTO URL。正常 HTTP controller 已传入解析后的 `APP_PUBLIC_URL`，因此主链路不会触发；但服务重启后的上传完成或未来内部调用若漏传上下文，哨兵地址可能进入用户可见响应，应作为次优先级集中配置风险处理。
+- `setup.sh` 的线上域名只是交互式部署默认值，仍允许输入其它公开地址；`deploy.sh` 的线上文档/更新验收和 Desktop release CDN 是当前生产发布基础设施，不属于 DEV 文档跳转修复范围。测试夹具、URL 解析用的 `synapse.local` base、localhost 内部监听/MCP 地址也不应纳入环境链接改造。
+- 审计优先级结论：P0 为 API key 文档按钮、OpenAPI `externalDocs` 和文档页机器契约链接；P1 为文档页 API/cURL/公共链接示例的环境注入；P2 为 `DrivePublicAssetService` 可见 URL 哨兵兜底。Dashboard 相对 API、Server `APP_PUBLIC_URL` 业务链接、Desktop deployment config 无需调整模式。
+
+## 环境相关链接实施（阶段 33–35）
+
+- 采用最小双根地址模型：既有 `APP_PUBLIC_URL` 继续表示 Console/API/公共资源根地址；新增可选 `DOCUMENT_PUBLIC_URL` 表示文档站根地址。生产未显式配置文档地址时从 `APP_PUBLIC_URL + /document` 派生，避免给现有部署增加必填项。
+- DEV Server 启动必须显式得到 `DOCUMENT_PUBLIC_URL=http://localhost:19773/document`；不能依赖从 `APP_PUBLIC_URL=http://localhost:3000` 派生，否则会回到已确认的错误地址。
+- API capability 由服务端返回绝对文档 URL，Dashboard 继续直接渲染服务端契约，不增加前端环境判断或 `/document` proxy。
+- OpenAPI 文档对象改为按文档根地址创建；`servers` 继续保持相对 `/api/open/v1`，仅 `externalDocs` 使用绝对文档地址。
+- 文档站使用单一 Markdown 占位符替换入口：DEV 应用根地址固定为 `http://localhost:3000`，生产构建读取 `APP_PUBLIC_URL`；渲染内容与“复制 Markdown”的原文必须使用同一替换函数，避免页面和复制结果分叉。
+- 生产文档在 Docker build stage 生成，因此 compose build args 必须把 `APP_PUBLIC_URL` 传入 Dockerfile；容器 runtime 的同名环境变量不能补救已经构建完成的静态页面。
+- 本轮不处理 `DrivePublicAssetService` 的 `synapse.local` 次要兜底；它不属于用户点名的文档/OpenAPI 环境链接实施主链，避免扩大修改范围。
+
+## 开放接口产品成熟度评估（阶段 29）
+- 当前公开面只有一个能力：`POST /api/open/v1/drive/share-links/downloads` 创建十分钟下载授权，再通过临时 GET URL 下载。
+- 成熟基础已经具备：版本化基础路径、Bearer API key、细粒度 scope、strict 请求 schema、稳定错误 envelope、requestId、no-store、不可变快照、权限即时收回、归档边界和完整下载安全响应头。
+- 公开文档与当前 controller/types/guard/filter 基本一致，成功和错误语义清楚，单文件/ZIP/Site/公开素材的行为边界写得较完整。
+- 首个明显产品模型问题：接口路径和名称是“share-links”，但实际同时接受 `/share`、`/sites`、`/files` 三类公共链接。能力本质是“将 Drive 公共链接解析为下载制品”，当前命名会限制未来认知与目录扩展。
+- 当前明确 `@SkipThrottle()` 且文档声明 API key、IP、次数、并发和频率均无限制。对公开生产 API，这是首要成熟度缺口；归档生成和可重复下载会放大计算、存储出口及滥用风险。
+- 文档目前是手写 Markdown，没有在已读材料中看到机器可读 OpenAPI 3.x 契约、schema 生成或契约漂移检查；未来接口增多后，手写文档会成为扩展瓶颈。
+- POST 创建授权没有幂等键契约。网络超时重试会产生多个 grant 和多条用量记录；当前虽不破坏数据，但会增加资源与排障噪音。
+- 错误 envelope 稳定但较薄：没有字段级 `details`、文档错误链接、是否可重试或 `Retry-After`；单接口尚可，多接口后调用方会自行硬编码例外。
+- 设计明确把“不限流、不发布 OpenAPI/Swagger、不做计费/套餐”列为 v1 决策或非目标；因此这些不是实现遗漏，而是产品平台尚未补齐的已知边界。
+- 下载 grant 的工程质量较高：token 仅存 hash、常量时间比较、持久化十分钟 TTL、快照 manifest、历史版本租约、每次下载重校验 key/user/scope/source、流式 ZIP backpressure/断连释放、细粒度用量日志和敏感字段脱敏均有明确实现。
+- 当前 API key 是用户级长期密钥：只有名称、scope、lastUsedAt、撤销，没有到期时间、双密钥平滑轮换、环境/应用身份、来源 IP/网络限制或每 key 配额。首个 API 可用，但不够支撑较严肃的生产集成治理。
+- `drive.share_link.download` scope 同时覆盖分享、Site 和公开素材，scope 名称与实际权限范围不一致。以后若分别开放 Site、素材或普通 Drive 能力，很难在不扩大既有 scope 含义的前提下拆分最小权限。
+- v1 设计规则本身正确：允许新增端点和可选字段，破坏性字段/类型/状态码/认证/资源路径变化进入 v2；同时 grant 有 `planVersion`，具备服务端滚动兼容意识。
+- 创建授权失败前必须写使用日志，日志不可用返回 503；这是可审计优先的明确产品选择。后续应在文档中提供可重试语义，否则调用方难以区分安全重试与永久失败。
+- 仓库中没有 OpenAPI JSON/YAML、Swagger 生成器、`Idempotency-Key`、`Retry-After`、`Deprecation` 或 `Sunset` 契约；文档导航和接口清单均为手工维护。
+- 服务端已有全局 600 次/分钟限流和多个专门限流实现，Open API 是主动跳过，而非缺少基础设施。建议从“完全跳过”改为 API key 主维度、IP 辅助维度的独立公开 API 限流，并让临时下载增加并发/字节保护。
+- 使用日志提供 requestId、operation、status、HTTP 状态、source/artifact 类型、耗时与响应字节，并按 key 查询、保留 30 天；这已经超过许多首版 API 的可观测性水平。但公开文档没有配额头、服务状态、可用性承诺或故障/维护入口。
+- API capability 目录是服务端单一权威来源，并带文档 URL，这对未来新增 scope 是正确模式；但公开文档没有自动从该目录或机器契约生成，仍存在三处同步成本（代码目录、Console、VitePress）。
+- API key 管理端具备创建、重命名、改 scope、撤销和使用记录，但没有过期、轮换、最后四位之外的身份元数据、创建者/环境标签等生命周期能力。
+- 当前自动化测试覆盖路由元数据、strict DTO、guard、错误脱敏、service 映射、grant 生命周期与下载内部行为；已读 controller 测试直接调用方法，没有覆盖真实 HTTP 栈中的 malformed JSON、错误 Content-Type、HEAD/OPTIONS、代理头和通用异常到公开 envelope 的完整契约。
+- exception filter 会把所有非 `OpenApiHttpError` 统一映射为 500。若 Nest/Express 在 controller 前后产生 `BadRequestException`（例如 malformed JSON），公开文档承诺的 `400 INVALID_REQUEST` 是否成立需要 HTTP 级回归测试确认，不能仅由当前单元测试证明。
+- Nginx 对临时下载显式关闭 access log 和 buffering，符合长流与 token 保密要求；同时测试明确要求该 location 不得有 `limit_req`，再次证明无限流是被固化的产品契约。
+- 数据模型对 grant、entry 和 usage log 做了合理索引，但没有配额计数、并发租户限制或 key 过期字段；若未来增加更多重任务 API，不能继续依赖单纯日志事后观察。
+- 公开文档没有变更日志、弃用策略、SLA/状态页、SDK/Postman、幂等或配额章节；当前只靠概览和单接口参考，适合作为首版说明，不是完整开发者门户。
+- 仓库现有 HTTP 级测试集中在其它模块，Open API 没有独立 `supertest` 合同测试。公开接口的 controller/service 单测丰富，但“真实请求经过 body parser、全局 filter、controller filter、CORS、Helmet、Nginx 后仍符合契约”尚未自动固化。
+- 服务端使用自定义 body parser 和全局异常 filter；malformed JSON 发生在 controller 前时可能走全局 envelope，而不是 Open API 专用 envelope。该点需要真实 HTTP 测试验证，评估中标记为“合同风险”，不直接断言线上已错误。
+- 继续核对后确认全局异常 filter 已对 `/api/open/v1/*` 做专门处理：400/413/415 统一成 `400 INVALID_REQUEST`，并带 no-store 和独立 requestId。因此 malformed JSON 的实现路径有保护；仍建议补 HTTP 合同测试防止未来回归。
+- Drive 领域类型和 intake 实现从一开始就把公开来源建模为 `share | share_item | site | site_path | public_asset`。这不是文档偶然扩大范围，而是接口真实领域模型；因此外部路径 `share-links` 和 scope `share_link` 确实比内部模型更窄。
+- 现有两步模式本身合理：POST 创建一个短期、可审计、可撤销、可重复读取的下载授权资源，返回 201；GET 使用 opaque bearer URL。无需改成“POST 直接返回文件”或泄漏底层对象存储 URL。
+- API key 和 grant token 都由 32 个随机字节生成、只存 SHA-256 摘要；对高熵随机 bearer secret 这是合适实现。请求日志会按敏感 query/header key 脱敏，Nginx 对 token 下载路径关闭 access log。
+- 安全建议应保留“不开放生产 CORS”：长期 API key 面向服务端、CLI 和自动化，不应鼓励放进浏览器。这不是成熟度缺口。
+- 对 Open API HTTP 测试文件的安全搜索没有找到匹配项，确认当前缺少专用真实 HTTP 合同测试，而不是文件命名漏搜。
+- 发现一处可验证的契约偏差：文档/设计把请求定义为 JSON 且称无效 Content-Type 返回 `INVALID_REQUEST`，但应用全局启用了 `urlencoded` parser，Open API controller 只校验解析后的对象、没有校验 Content-Type，因此合法的 form body 也会通过。成熟接口应明确“只支持 JSON”并在 HTTP 测试中固化，或修改文档承认兼容 form；推荐前者。
+- 全局 filter 的 Open API 特殊分支没有自动化测试覆盖；对于不存在的 `/api/open/v1/*` 路径或错误 HTTP 方法，它可能返回 HTTP 404 但错误 code 为 `INTERNAL_ERROR`，缺少稳定的 `ENDPOINT_NOT_FOUND`/`METHOD_NOT_ALLOWED` 平台语义。
+- OpenApiModule 仍按首个接口逐个注册 controller/service，没有共享的请求契约、错误目录、rate-limit policy、版本/弃用 middleware 或文档生成层。当前结构清楚，但新增第 2–5 个开放接口时会开始复制基础设施。
+- 综合评级：当前“下载接口本身”约 8/10，已达到可用于生产集成的 v1；“开放平台整体”约 4.5/10，尚缺公开 API 治理、机器契约、流量保护和密钥生命周期。整体结论是“生产可用的首个 API”，不是“成熟开放平台”。
+- 上线/继续扩展前的优先级：P0 为公共资源命名与 scope 语义定版、公开 API 独立限流/并发保护、OpenAPI 3.x 单一契约源与 HTTP 合同测试、修复 Content-Type/未知路由语义；P1 为 key 到期/轮换/集成身份、重试与幂等、错误 details/Retry-After、版本与弃用政策；P2 为 SDK/Postman、状态页/SLA、更大归档的异步任务。
+- 推荐目标路径仍按领域拆分，不建设万能入口：当前能力的准确抽象是 `/drive/public-links/downloads`；以后分别使用 `/workflows/{id}/runs`、`/skills` 等。若当前 v1 已有外部调用，保留旧路径并增加 canonical 新路径与弃用周期；若尚无外部调用，应在传播前直接修正。
+- scope 建议先做产品决策：若三类公共链接始终是同一权限，改用准确的 `drive.public_link.download`；若未来需要最小权限隔离，则拆成 share/site/public_asset 三个 scope，并按输入来源校验。不得继续让 `share_link` 名称静默覆盖新增来源。
+- 推荐文档信息架构：快速开始、认证与密钥生命周期、通用错误、限流与重试、版本/变更日志、按领域组织的 API Reference、机器可读 OpenAPI；端点页只保留端点特有请求/响应和业务边界，减少重复。
+
 ## 全量提交、推送与生产部署（阶段 26）
 - 用户明确授权提交当前工作区全部变更、推送远端并执行服务端生产部署。
 - 已知正式部署入口为仓库根目录 `deploy.sh`；上一轮使用该入口完成 19 步生产部署和健康检查。

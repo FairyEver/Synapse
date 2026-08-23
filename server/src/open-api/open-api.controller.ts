@@ -1,8 +1,12 @@
 import { Body, Controller, HttpCode, Post, Req, Res, UseFilters, UseGuards } from "@nestjs/common"
 import { SkipThrottle } from "@nestjs/throttler"
 import type { Response } from "express"
-import { z } from "zod"
 import { resolvePublicAppUrl } from "../common/public-app-url"
+import {
+  OPEN_API_CREATE_DOWNLOAD_PATHS,
+  OPEN_API_V1_BASE_PATH,
+  createDownloadRequestSchema,
+} from "./open-api-contract"
 import { OpenApiExceptionFilter } from "./open-api-exception.filter"
 import { OpenApiKeyGuard } from "./open-api-key.guard"
 import { OpenApiShareLinkDownloadService } from "./open-api-share-link-download.service"
@@ -13,16 +17,12 @@ import {
   type OpenApiRequest,
 } from "./open-api.types"
 
-const createDownloadSchema = z.object({
-  url: z.string().max(2048).url(),
-}).strict()
-
-@Controller("/api/open/v1")
+@Controller(OPEN_API_V1_BASE_PATH)
 @UseFilters(OpenApiExceptionFilter)
 export class OpenApiController {
   constructor(private readonly shareLinkDownloads: OpenApiShareLinkDownloadService) {}
 
-  @Post("/drive/share-links/downloads")
+  @Post([...OPEN_API_CREATE_DOWNLOAD_PATHS])
   @HttpCode(201)
   @SkipThrottle()
   @UseGuards(OpenApiKeyGuard)
@@ -31,7 +31,7 @@ export class OpenApiController {
     @Req() request: OpenApiRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const parsed = createDownloadSchema.safeParse(body)
+    const parsed = createDownloadRequestSchema.safeParse(body)
     if (!parsed.success) {
       throw new OpenApiHttpError(400, "INVALID_REQUEST", "请求参数无效。")
     }

@@ -2,6 +2,27 @@
 
 ## 会话：2026-08-23
 
+### 阶段 30：公共链接资源命名兼容迁移
+- **状态：** in_progress
+- 用户要求只修复“资源名称与实际能力不一致”，其它成熟度建议本轮不实施。
+- 采用兼容迁移假设：新增 canonical `public-links` 路径和准确 scope，同时保留已发布旧路径/旧 scope，避免现有调用立即失效。
+- 当前工作区已有 `RELEASE_NOTES_PENDING.md`、文档配置和 README 的未提交修改；这些变更视为用户既有内容，后续只在与本任务直接重叠时做窄修改。
+- 已补充 canonical route/scope、旧 scope 运行兼容和 API key 投影回归断言。
+- 红灯验证得到 5 个测试文件中 11 个预期失败，覆盖路径元数据、权限目录、新 scope 校验、旧 scope 规范化和 grant scope 校验；既有无关断言仍通过。
+- 已实现 canonical `drive.public_link.download`、`/drive/public-links/downloads` 和权限名称“获取公共链接文件”。
+- 已同步公开文档、导航、模块边界、设计记录和待发布说明；旧名称仅保留在兼容说明、兼容入口与兼容测试中。
+- 最终验证：Server 相关测试 10 个文件 36/36、Dashboard 测试 2 个文件 38/38、Server/Dashboard 类型检查、Dashboard 生产构建、VitePress 构建和 `git diff --check` 全部通过；Dashboard 构建仅输出既有大 chunk 警告。
+- 阶段 30 已完成；未修改限流、密钥生命周期、OpenAPI 规范或其它成熟度问题。
+- 旧路径继续注册为同一 controller alias；数据库旧 scope 在 API key DTO/principal 中规范化为新 scope，grant 运行校验仍接受旧 scope，无需数据迁移。
+- Server 定向绿灯：7 个测试文件、32 个测试全部通过。
+
+### 阶段 29：开放接口产品成熟度评估
+- **状态：** complete
+- 用户授权在 Synapse MCP 不支持 `/document/...` 路由后，改用当前仓库中的文档源码和接口实现进行评估。
+- 本轮只做只读评审；规划文件用于记录证据，不修改产品代码或公开文档。
+- 已完成文档、设计、controller、guard、grant、下载流、API key、usage log、Nginx 和测试证据交叉核对。
+- 结论：下载能力本身已生产可用，但开放平台治理尚不成熟；优先修正资源/scope 命名、限流、机器契约和 HTTP 合同测试。
+
 ### 阶段 26：提交前审计与验证
 - **状态：** in_progress
 - 用户要求提交当前工作区全部代码、推送当前分支并部署生产服务端。
@@ -351,3 +372,44 @@
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*
+
+### 阶段 32：环境相关链接只读审计
+- 用户要求先不修改实现，只检查 DEV 与生产环境下所有相关链接的解析方式，重点包含 Console API 密钥权限的文档跳转和 OpenAPI 契约地址。
+- 本轮产品代码与公开文档保持只读；仅在既有规划文件记录审计过程和结论。
+- **状态：** complete
+- 已核对 Dashboard 3000、Server 3001、Document 19773 的本地拓扑，以及生产 Nginx 将 `/api`、`/console`、`/document` 合并到同一 origin 的部署拓扑。
+- 已确认 API key capability 的相对文档地址在 DEV 会错误落到 Dashboard 3000；Dashboard Vite proxy 当前没有 `/document` 转发。
+- 已确认 OpenAPI 相对 `servers` 是正确模式，但相对 `externalDocs`、文档页硬编码机器契约/API/cURL URL 都需要独立环境地址来源。
+- 已把地址分为 P0/P1/P2，并确认 Dashboard 相对 API、Server `APP_PUBLIC_URL` 业务链接、Desktop 生成式 deployment config 和固定 release CDN 不需要改变现有模式。
+- 未修改任何产品代码、公开文档、环境文件或部署配置，未启动服务；本轮仅更新任务规划记录。
+
+### 阶段 33：环境链接契约与回归测试
+- **状态：** complete
+- 用户已授权实施阶段 32 的环境链接治理结论。
+- 范围限定为文档相关运行时/构建时链接及其集中配置，不修改已正确的 Dashboard 相对 API、Desktop deployment config 或固定发布 CDN。
+- 已新增 Server 文档 URL helper、API capability、OpenAPI externalDocs、env/schema、DEV 脚本、Docker/compose 和文档 Markdown 替换回归测试。
+- 首轮红灯符合预期：Server 76 项中 71 项通过、5 项因实现缺失失败，另有 2 个测试文件因新 helper/factory 尚不存在无法加载；Node 脚本 6 项中 4 项通过、2 项因文档 helper 与 DEV 默认值缺失失败。
+- 已实现 Server 文档 URL resolver、绝对 API capability 文档地址、动态 OpenAPI externalDocs、DEV 文档地址注入、env/schema、compose runtime 和 Docker build arg。
+- 文档站已使用集中占位符替换应用根地址，页面渲染与复制 Markdown 共用同一替换函数；开放接口概览和接口页已移除操作性生产域名硬编码。
+- 首轮绿灯：Server 6 个目标测试文件 86/86，Node 开发/文档脚本测试 9/9。
+- 已同步 Server 配置示例与 README、Document README、模块长期边界、Open API 设计/实施记录、Dashboard 绝对链接交互夹具和待发布说明。
+- 阶段 34 完成，进入类型检查、Dashboard 测试与三端构建验证。
+
+### 阶段 35：环境链接验证与交付
+- **状态：** complete
+- Server 目标测试 86/86、文档/开发脚本测试 9/9、Dashboard 相关测试 38/38 通过。
+- Server 完整回归 96 个测试文件、1164/1164 通过；Server typecheck 通过；额外覆盖 Compose 空 `DOCUMENT_PUBLIC_URL` 会按未配置处理并回退派生地址。
+- Server、Dashboard 与 Document 构建全部通过；Document 分别验证 localhost 开发根地址和自定义生产根地址，生成页面与复制 Markdown 均无占位符或跨环境地址残留。
+- Docker Compose 配置检查、生产构建参数契约和 `git diff --check` 全部通过。
+- 最终环境边界：DEV 文档为 `http://localhost:19773/document`、DEV 应用/API 为 `http://localhost:3000`；生产由 `DOCUMENT_PUBLIC_URL` 与 `APP_PUBLIC_URL` 配置，前者为空时从后者派生 `/document`。
+
+### 阶段 31：开放 API 机器可读契约
+- 用户要求实施机器可读契约；范围限定为当前开放 API 的 OpenAPI 3.x 描述、稳定访问入口与验证，不扩展其它成熟度能力。
+- 开始前已重新读取 `planning-with-files-zh` 与 `karpathy-guidelines`，并完成会话恢复检查。
+- 已新增机器契约回归测试，首轮按预期因 `open-api-contract` 模块尚不存在而失败；红灯覆盖发现入口、三条路径、兼容端点弃用标记、共享 strict 请求 schema、响应 envelope 和两种 bearer 认证描述。
+- 已实现 OpenAPI 3.1 权威文档、`GET /api/open/openapi.json` 发现 controller 和模块注册；canonical POST、deprecated 旧 POST、临时下载 GET、认证、请求/响应 schema、错误状态和下载 headers 均已描述。
+- 运行时创建下载 controller 已改为复用契约模块导出的路径数组和 Zod strict 请求 schema；首轮绿灯为 2 个测试文件 6/6 通过。
+- 增加真实 Nest HTTP 回归后，契约测试与 controller 测试合计 7/7 通过，响应 media type、缓存头和 JSON body 均已验证；Server typecheck 通过。
+- 已同步开放接口概览、模块长期边界、原设计与实施记录、待发布说明；明确不维护第二份静态 JSON，后续开放接口变更必须同批更新契约测试。
+- 最终验证：Open API/API key 相关测试 11 个文件 42/42、Server typecheck、Server 生产构建、VitePress 生产构建和 `git diff --check` 全部通过；契约测试同时验证真实 HTTP 返回、JSON 序列化和全部内部 `$ref` 可解析。
+- 阶段 31 已完成；未新增依赖，未修改限流、密钥生命周期或其它开放 API 成熟度事项。

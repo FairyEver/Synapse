@@ -17,7 +17,7 @@ describe("OpenApiUsageLogService", () => {
       apiKeyId: "key-1",
       requestId: "req-1",
       operation: "grant_create",
-      scope: "drive.share_link.download",
+      scope: "drive.public_link.download",
       ipAddress: "203.0.113.1",
     })
 
@@ -33,7 +33,7 @@ describe("OpenApiUsageLogService", () => {
         grantId: null,
         requestId: "req-1",
         operation: "grant_create",
-        scope: "drive.share_link.download",
+        scope: "drive.public_link.download",
         status: "started",
         sourceType: null,
         artifactType: null,
@@ -54,7 +54,7 @@ describe("OpenApiUsageLogService", () => {
       apiKeyId: "key-1",
       requestId: "req-1",
       operation: "download",
-      scope: "drive.share_link.download",
+      scope: "drive.public_link.download",
       ipAddress: "203.0.113.1",
     })).rejects.toMatchObject({ statusCode: 503, code: "USAGE_LOG_UNAVAILABLE" })
   })
