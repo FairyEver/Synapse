@@ -21,6 +21,7 @@
 - Server 全量测试单独复跑 94 个文件、1147/1147 通过，1000 文件边界测试在全套中稳定通过。
 - 提交前 `git diff --check` 通过；23 个修改文件均在用户要求的“所有代码”范围内，无未跟踪文件。
 - 真实 API 密钥不在 diff 中，`server/.env.server` 由 `.gitignore` 的 `.env.*` 规则排除，不会进入提交。
+- 全量源码与规划记录已创建提交 `66a7b8243`，提交信息为 `feat: complete open API permissions and reliability`。
 
 ## 文档网站与代码契约对齐（阶段 23）
 - 仓库规则指定的 `docs/agents/document-copy.md` 不存在；需从现存 `.claude/rules/` 与 `document/` 配置定位真实约束。
