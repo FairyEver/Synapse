@@ -23,6 +23,12 @@
 - 真实 API 密钥不在 diff 中，`server/.env.server` 由 `.gitignore` 的 `.env.*` 规则排除，不会进入提交。
 - 全量源码与规划记录已创建提交 `66a7b8243`，提交信息为 `feat: complete open API permissions and reliability`。
 - 提交前验证记录另存为 `10f45691a`；`main` 的 4 个本地提交已成功推送到 `origin/main`，远端更新范围为 `31b374e71..10f45691a`。
+- 部署开始记录提交为 `4c8acf781`，部署前 `main` 与 `origin/main` 完全一致且工作树干净。
+- 正式部署 ID `20260823_115548` 完成全部 19 步，候选镜像为 `synapse-server:deploy-20260823_115548`，回滚镜像为 `synapse-server:rollback-20260823_115548`。
+- 远端核对到 57 个已应用迁移，仓库当前 56 个 migration 目录，无待发布迁移；在线备份、最终备份、临时数据库预演和最终备份恢复验证均通过。
+- 新容器启动后的前两次健康轮询处于初始化阶段，第 3 次全部通过；部署脚本最终退出码 0，耗时 110 秒，未触发回滚。
+- 独立复核确认新容器 `79006a820e42` 运行目标镜像且状态 healthy，公开 `/healthz` 返回 `{"status":"ok"}`。
+- 线上文档首页已包含“跨编辑器 AI 能力管理工具”，开放接口页已包含“响应字段”和 `DOWNLOAD_UNAVAILABLE`，确认新版文档随服务端镜像发布。
 
 ## 文档网站与代码契约对齐（阶段 23）
 - 仓库规则指定的 `docs/agents/document-copy.md` 不存在；需从现存 `.claude/rules/` 与 `document/` 配置定位真实约束。
