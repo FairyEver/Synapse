@@ -68,6 +68,22 @@ afterEach(() => {
 })
 
 describe('ApiKeysSettings', () => {
+  it('right-aligns the action header and row controls', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
+
+    renderSettings()
+    await waitForText('开发环境')
+
+    const actionHeader = Array.from(document.querySelectorAll('th'))
+      .find((header) => header.textContent === '操作')
+    const actionGroup = buttonByText('使用记录').parentElement
+
+    expect(actionHeader?.classList.contains('text-right')).toBe(true)
+    expect(actionGroup?.parentElement?.classList.contains('text-right')).toBe(true)
+    expect(actionGroup?.classList.contains('justify-end')).toBe(true)
+    expect(buttonByText('撤销').parentElement).toBe(actionGroup)
+  })
+
   it('creates a named key and reveals the secret once', async () => {
     mockedDashboardApi.listApiKeys.mockResolvedValue([])
     mockedDashboardApi.createApiKey.mockResolvedValue({

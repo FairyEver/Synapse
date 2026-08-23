@@ -151,7 +151,7 @@ export function ApiKeysSettings() {
                   <TableHead>API 权限</TableHead>
                   <TableHead>最后使用</TableHead>
                   <TableHead>创建时间</TableHead>
-                  <TableHead className='text-end'>操作</TableHead>
+                  <TableHead className='text-right'>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -174,14 +174,16 @@ export function ApiKeysSettings() {
                     <TableCell>
                       <RelativeTime value={apiKey.createdAt} mode='absolute' />
                     </TableCell>
-                    <TableCell className='text-end'>
-                      <Button variant='ghost' size='sm' onClick={() => setUsageTarget(apiKey)}>
-                        <List />
-                        使用记录
-                      </Button>
-                      <Button variant='ghost' size='sm' onClick={() => setRevokeTarget(apiKey)}>
-                        撤销
-                      </Button>
+                    <TableCell className='text-right'>
+                      <div className='flex items-center justify-end gap-1'>
+                        <Button variant='ghost' size='sm' onClick={() => setUsageTarget(apiKey)}>
+                          <List />
+                          使用记录
+                        </Button>
+                        <Button variant='ghost' size='sm' onClick={() => setRevokeTarget(apiKey)}>
+                          撤销
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
