@@ -3,6 +3,7 @@ export const API_KEY_CAPABILITIES = [
     scope: "drive.share_link.download",
     name: "获取分享链接文件",
     description: "允许通过开放接口下载分享文件、文件夹、站点和公开素材。",
+    documentationUrl: "/document/open-api/api/share-link-download",
   },
 ] as const
 

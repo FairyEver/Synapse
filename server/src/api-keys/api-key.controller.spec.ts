@@ -38,6 +38,7 @@ describe("ApiKeyController", () => {
       scope: "drive.share_link.download",
       name: "获取分享链接文件",
       description: "允许通过开放接口下载分享文件、文件夹、站点和公开素材。",
+      documentationUrl: "/document/open-api/api/share-link-download",
     }])
     await expect(controller.create({ name: " CLI ", scopes: ["drive.share_link.download"] }, request as never)).resolves.toEqual({
       apiKey: { id: "key-1" },

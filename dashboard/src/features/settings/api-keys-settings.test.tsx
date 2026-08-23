@@ -47,6 +47,7 @@ beforeEach(() => {
     scope: 'drive.share_link.download',
     name: '获取分享链接文件',
     description: '允许通过开放接口下载分享文件、文件夹、站点和公开素材。',
+    documentationUrl: '/document/open-api/api/share-link-download',
   }])
   mockedDashboardApi.listApiKeyUsageLogs.mockResolvedValue({
     data: [],
@@ -129,6 +130,8 @@ describe('ApiKeysSettings', () => {
 
     expect(checkbox().getAttribute('data-state')).toBe('checked')
     expect(buttonByText('保存权限').disabled).toBe(true)
+    expect(linkByText('文档').getAttribute('href')).toBe('/document/open-api/api/share-link-download')
+    expect(linkByText('文档').getAttribute('target')).toBe('_blank')
 
     await click(permissionOption('获取分享链接文件'))
     expect(buttonByText('保存权限').disabled).toBe(false)
@@ -149,6 +152,7 @@ describe('ApiKeysSettings', () => {
         scope: 'drive.share_link.download',
         name: '获取分享链接文件',
         description: '允许通过开放接口下载分享文件、文件夹、站点和公开素材。',
+        documentationUrl: '/document/open-api/api/share-link-download',
       }])
 
     renderSettings()
@@ -319,4 +323,11 @@ function buttonByText(text: string, position: 'first' | 'last' = 'first'): HTMLB
   const button = position === 'last' ? buttons.at(-1) : buttons[0]
   if (!(button instanceof HTMLButtonElement)) throw new Error(`Button not found: ${text}`)
   return button
+}
+
+function linkByText(text: string): HTMLAnchorElement {
+  const link = Array.from(document.querySelectorAll('a'))
+    .find((item) => item.textContent?.includes(text))
+  if (!(link instanceof HTMLAnchorElement)) throw new Error(`Link not found: ${text}`)
+  return link
 }

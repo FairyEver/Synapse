@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { formatBytes } from '@synapse/shared'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Copy, List, Plus, ShieldCheck } from 'lucide-react'
+import { Copy, FileText, List, Plus, ShieldCheck } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -400,25 +400,40 @@ function ApiKeyPermissionSelector({
               const checkboxId = `${idPrefix}-${capability.scope}`
               const descriptionId = `${checkboxId}-description`
               return (
-                <label
+                <div
                   key={capability.scope}
-                  htmlFor={checkboxId}
-                  className='flex cursor-pointer items-start gap-3 px-3 py-3 hover:bg-muted/50'
+                  className='flex items-center gap-3 px-3 py-3 hover:bg-muted/50'
                 >
-                  <Checkbox
-                    id={checkboxId}
-                    className='mt-0.5'
-                    checked={selectedScopes.includes(capability.scope)}
-                    aria-describedby={descriptionId}
-                    onCheckedChange={(checked) => onToggle(capability.scope, checked === true)}
-                  />
-                  <span className='min-w-0 space-y-1'>
-                    <span className='block text-sm font-medium'>{capability.name}</span>
-                    <span id={descriptionId} className='block text-sm text-muted-foreground'>
-                      {capability.description}
+                  <label
+                    htmlFor={checkboxId}
+                    className='flex min-w-0 flex-1 cursor-pointer items-start gap-3'
+                  >
+                    <Checkbox
+                      id={checkboxId}
+                      className='mt-0.5'
+                      checked={selectedScopes.includes(capability.scope)}
+                      aria-describedby={descriptionId}
+                      onCheckedChange={(checked) => onToggle(capability.scope, checked === true)}
+                    />
+                    <span className='min-w-0 space-y-1'>
+                      <span className='block text-sm font-medium'>{capability.name}</span>
+                      <span id={descriptionId} className='block text-sm text-muted-foreground'>
+                        {capability.description}
+                      </span>
                     </span>
-                  </span>
-                </label>
+                  </label>
+                  <Button asChild variant='ghost' size='sm'>
+                    <a
+                      href={capability.documentationUrl}
+                      target='_blank'
+                      rel='noreferrer'
+                      aria-label={`${capability.name} API 文档`}
+                    >
+                      <FileText />
+                      文档
+                    </a>
+                  </Button>
+                </div>
               )
             })}
           </div>

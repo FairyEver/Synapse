@@ -191,6 +191,7 @@ export type DashboardApiKeyCapability = {
   scope: string
   name: string
   description: string
+  documentationUrl: string
 }
 
 export type DashboardApiKeyUsageLog = {
