@@ -59,13 +59,7 @@ export class ApiKeyService {
     input: { readonly name: string; readonly scopes: readonly ApiKeyScope[] },
     ipAddress = "system",
   ): Promise<UserApiKeyCreateResult> {
-    if (
-      input.scopes.length === 0
-      || new Set(input.scopes).size !== input.scopes.length
-      || input.scopes.some((scope) => !isApiKeyScope(scope))
-    ) {
-      throw new BadRequestException("API key scopes are invalid.")
-    }
+    assertValidApiKeyScopes(input.scopes, false)
     const secret = createApiKeySecret()
     const apiKey = await this.prisma.$transaction(async (tx) => {
       const created = await tx.userApiKey.create({
@@ -89,6 +83,42 @@ export class ApiKeyService {
       return created
     })
     return { apiKey: toUserApiKeyDto(apiKey), secret }
+  }
+
+  async updateScopesForUser(
+    userId: string,
+    id: string,
+    input: { readonly scopes: readonly ApiKeyScope[] },
+    ipAddress = "system",
+  ): Promise<UserApiKeyDto> {
+    assertValidApiKeyScopes(input.scopes, true)
+    const scopes = [...input.scopes]
+    const apiKey = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.userApiKey.findFirst({
+        where: { id, userId, revokedAt: null },
+        select: apiKeySelect,
+      })
+      if (!existing) throw new NotFoundException("API key not found")
+      const result = await tx.userApiKey.updateMany({
+        where: { id, userId, revokedAt: null },
+        data: { scopes },
+      })
+      if (result.count === 0) throw new NotFoundException("API key not found")
+      await this.auditLog.recordWithClient(tx, {
+        adminEmail: userId,
+        action: "api_key.update",
+        targetType: "api_key",
+        targetId: id,
+        detail: {
+          name: existing.name,
+          previousScopes: existing.scopes,
+          scopes,
+        },
+        ipAddress,
+      })
+      return { ...existing, scopes }
+    })
+    return toUserApiKeyDto(apiKey)
   }
 
   async revokeForUser(
@@ -157,5 +187,15 @@ function toUserApiKeyDto(apiKey: ApiKeyRecord): UserApiKeyDto {
     scopes: apiKey.scopes,
     lastUsedAt: apiKey.lastUsedAt?.toISOString() ?? null,
     createdAt: apiKey.createdAt.toISOString(),
+  }
+}
+
+function assertValidApiKeyScopes(scopes: readonly string[], allowEmpty: boolean): void {
+  if (
+    (!allowEmpty && scopes.length === 0)
+    || new Set(scopes).size !== scopes.length
+    || scopes.some((scope) => !isApiKeyScope(scope))
+  ) {
+    throw new BadRequestException("API key scopes are invalid.")
   }
 }

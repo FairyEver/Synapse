@@ -12,7 +12,7 @@ import type {
   DriveOpenApiDownloadTarget,
 } from "../drive/drive-open-api-download"
 import { PrismaService } from "../prisma/prisma.service"
-import { OpenApiHttpError } from "./open-api.types"
+import { OPEN_API_DOWNLOAD_SCOPE, OpenApiHttpError } from "./open-api.types"
 
 const OPEN_API_DOWNLOAD_PLAN_VERSION = 1
 const OPEN_API_DOWNLOAD_TTL_MS = 10 * 60 * 1000
@@ -26,6 +26,7 @@ const grantInclude = {
   },
   apiKey: {
     select: {
+      scopes: true,
       revokedAt: true,
       user: { select: { status: true } },
     },
@@ -146,6 +147,7 @@ export class OpenApiDownloadGrantService {
       || grant.planVersion !== OPEN_API_DOWNLOAD_PLAN_VERSION
       || grant.apiKey.revokedAt
       || grant.apiKey.user.status !== "active"
+      || !grant.apiKey.scopes.includes(OPEN_API_DOWNLOAD_SCOPE)
     ) {
       throw downloadUnavailable()
     }

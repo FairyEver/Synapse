@@ -15,6 +15,7 @@ describe("ApiKeyController", () => {
     ])
     expect(Reflect.getMetadata(PATH_METADATA, ApiKeyController.prototype.list)).toBe("/api-keys")
     expect(Reflect.getMetadata(PATH_METADATA, ApiKeyController.prototype.capabilities)).toBe("/api-key-capabilities")
+    expect(Reflect.getMetadata(PATH_METADATA, ApiKeyController.prototype.update)).toBe("/api-keys/:id")
   })
 
   it("limits API key creation", () => {
@@ -22,10 +23,11 @@ describe("ApiKeyController", () => {
     expect(Reflect.getMetadata(throttleTtlMetadata, ApiKeyController.prototype.create)).toBe(60000)
   })
 
-  it("lists, creates, and revokes keys for the current user", async () => {
+  it("lists, creates, updates, and revokes keys for the current user", async () => {
     const service = {
       listForUser: vi.fn().mockResolvedValue([]),
       createForUser: vi.fn().mockResolvedValue({ apiKey: { id: "key-1" }, secret: "syn_sk_secret" }),
+      updateScopesForUser: vi.fn().mockResolvedValue({ id: "key-1", scopes: [] }),
       revokeForUser: vi.fn().mockResolvedValue({ ok: true }),
     }
     const controller = new ApiKeyController(service as unknown as ApiKeyService)
@@ -35,10 +37,15 @@ describe("ApiKeyController", () => {
     expect(controller.capabilities()).toEqual([{
       scope: "drive.share_link.download",
       name: "获取分享链接文件",
+      description: "允许通过开放接口下载分享文件、文件夹、站点和公开素材。",
     }])
     await expect(controller.create({ name: " CLI ", scopes: ["drive.share_link.download"] }, request as never)).resolves.toEqual({
       apiKey: { id: "key-1" },
       secret: "syn_sk_secret",
+    })
+    await expect(controller.update("key-1", { scopes: [] }, request as never)).resolves.toEqual({
+      id: "key-1",
+      scopes: [],
     })
     await expect(controller.revoke("key-1", request as never)).resolves.toEqual({ ok: true })
 
@@ -46,6 +53,9 @@ describe("ApiKeyController", () => {
     expect(service.createForUser).toHaveBeenCalledWith("user-1", {
       name: "CLI",
       scopes: ["drive.share_link.download"],
+    }, "203.0.113.12")
+    expect(service.updateScopesForUser).toHaveBeenCalledWith("user-1", "key-1", {
+      scopes: [],
     }, "203.0.113.12")
     expect(service.revokeForUser).toHaveBeenCalledWith("user-1", "key-1", "203.0.113.12")
   })
@@ -59,5 +69,25 @@ describe("ApiKeyController", () => {
     expect(() => controller.create({ name: "CLI", scopes: ["unknown"] }, { user: { id: "user-1" } } as never))
       .toThrow("API key create request is invalid")
     expect(service.createForUser).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid update bodies while allowing an empty permission list", async () => {
+    const service = { updateScopesForUser: vi.fn().mockResolvedValue({ id: "key-1", scopes: [] }) }
+    const controller = new ApiKeyController(service as unknown as ApiKeyService)
+    const request = { user: { id: "user-1" }, ip: "203.0.113.12" }
+
+    expect(() => controller.update("key-1", { scopes: ["unknown"] }, request as never))
+      .toThrow("API key update request is invalid")
+    expect(() => controller.update("key-1", {
+      scopes: ["drive.share_link.download", "drive.share_link.download"],
+    }, request as never)).toThrow("API key update request is invalid")
+    expect(() => controller.update("key-1", { scopes: [], name: "renamed" }, request as never))
+      .toThrow("API key update request is invalid")
+    expect(service.updateScopesForUser).not.toHaveBeenCalled()
+
+    await expect(controller.update("key-1", { scopes: [] }, request as never)).resolves.toEqual({
+      id: "key-1",
+      scopes: [],
+    })
   })
 })

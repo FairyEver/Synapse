@@ -2,9 +2,9 @@
 layout: home
 
 hero:
-  name: Synapse AI Studio
-  text: AI 能力中枢
-  tagline: Where ideas connect.
+  name: Synapse
+  text: 跨编辑器 AI 能力管理工具
+  tagline: 管理 Rule、Skill、Prompt、Agent 与自动化任务。
   image:
     src: /synapse-logo.png
     alt: Synapse

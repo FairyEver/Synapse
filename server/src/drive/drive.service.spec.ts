@@ -2106,6 +2106,30 @@ describe("DriveService", () => {
     expect(await prisma.driveChange.findMany()).toHaveLength(2)
   })
 
+  it("prepares the supported 1000-file folder upload boundary with a bounded long-running transaction", async () => {
+    const prisma = createPrismaMemory()
+    const transaction = vi.spyOn(prisma, "$transaction")
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const result = await service.prepareFolderUpload("user-1", {
+      parentId: null,
+      folderName: "边界目录",
+      files: Array.from({ length: 1_000 }, (_, index) => ({
+        relativePath: `file-${index.toString().padStart(4, "0")}.txt`,
+        size: "1",
+        mimeType: "text/plain",
+      })),
+      publicAppUrl: "https://synapse.test",
+    })
+
+    expect(result.entries).toHaveLength(1_000)
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 30_000,
+    })
+  }, 15_000)
+
   it("prepares folder uploads that contain zero-byte files", async () => {
     const prisma = createPrismaMemory()
     const storage = {
@@ -2528,6 +2552,16 @@ describe("DriveService", () => {
     })
     expect(result.artifact.entries[0]?.driveFileVersionId).toBeTruthy()
     expect(storageMock.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("reports a missing share as not found during Open API preparation", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+
+    await expect(service.prepareOpenApiShareDownload({
+      shareId: "shr_missing_valid_format_1234567890",
+      sourceType: "share",
+    })).resolves.toEqual({ status: "not_found" })
   })
 
   it("prepares a stable folder manifest with empty directories and current file versions", async () => {

@@ -29,7 +29,7 @@ Scope: `server/`、`dashboard/`、`document/`、`docs/agents/module-boundaries.m
 - API key、分享密码和临时下载 token 均不落明文、不进入日志和审计。
 - 临时授权持久化到 PostgreSQL，服务重启不能导致有效地址提前失效。
 - 返回统一 Synapse 下载地址，不把 COS presigned URL 固化为公开契约。
-- API key 撤销、用户禁用、分享/Site 停用或源资源删除会立即使临时地址不可用。
+- API key 撤销、移除当前下载权限、用户禁用、分享/Site 停用或源资源删除会立即使临时地址不可用。
 - 开发密钥创建时由用户显式勾选开放 API 权限；既有密钥不自动扩权。
 - grant 在十分钟有效期内不限制下载次数，POST 和 GET 都不做 API key、IP、次数或频率限流。
 - 每次有效的创建授权和下载请求持久化一条固定字段用量日志，ZIP 不逐文件记录。
@@ -130,7 +130,6 @@ Site 不使用 DriveFileVersion 固定下载内容。发布时文件已复制到
 - 不返回 owner、协作者、storage key、COS bucket、内部数据库记录或密码材料。
 - 不允许 API key 访问 `/api/console/*`、`/api/drive/*` 或其它内部业务接口。
 - 不在本期做计费、套餐、自定义 TTL、自定义归档上限或永久链接。
-- 不支持创建后原地增删密钥权限；变更权限时撤销并重建密钥。
 - 不提供下载任务队列、异步轮询、预生成 ZIP 或归档缓存。
 - 不发布 Swagger UI 或在线调试控制台。
 
@@ -209,7 +208,7 @@ scopes     String[]  @default([])
 lastUsedAt DateTime?
 ```
 
-迁移时现有 key 的 scopes 保持空数组，不自动获得下载权限。用户需要重新创建密钥并主动勾选权限。未来新增开放接口也不得自动给旧 key 增加权限。
+迁移时现有 key 的 scopes 保持空数组，不自动获得下载权限。用户可以在 Console 中为已有密钥显式添加权限。未来新增开放接口也不得自动给旧 key 增加权限。
 
 新增服务端权威权限目录：
 
@@ -223,7 +222,8 @@ GET /api/console/api-key-capabilities
 [
   {
     "scope": "drive.share_link.download",
-    "name": "获取分享链接文件"
+    "name": "获取分享链接文件",
+    "description": "允许通过开放接口下载分享文件、文件夹、站点和公开素材。"
   }
 ]
 ```
@@ -239,7 +239,22 @@ GET /api/console/api-key-capabilities
 
 Server 使用 strict Zod schema，要求 scopes 非空、无重复且全部来自权限目录。Dashboard 创建弹窗根据权限目录渲染“API 权限”复选框，默认不勾选，至少选择一项才能创建。
 
-Console 列表响应增加 `scopes` 和 `lastUsedAt`，管理页显示已授权能力和最后使用时间。权限创建后只读，不提供 PATCH；变更权限时撤销旧密钥并创建新密钥。创建和撤销继续写现有 `AuditLog`，detail 只记录 scopes，不记录完整密钥。
+已有密钥通过以下接口原地修改权限，不修改名称或轮换密钥：
+
+```http
+PATCH /api/console/api-keys/<id>
+Content-Type: application/json
+```
+
+```json
+{
+  "scopes": []
+}
+```
+
+更新请求同样使用 strict Zod schema，要求 scopes 无重复且全部来自权限目录，但允许空数组用于停用全部开放接口权限。查询、创建、更新和撤销都绑定当前用户；更新只作用于未撤销密钥，返回更新后的密钥 DTO，并以 `api_key.update` 审计变更前后的 scopes，不记录完整密钥、摘要或其它可还原材料。
+
+Console 列表响应增加 `scopes` 和 `lastUsedAt`，管理页显示已授权能力和最后使用时间。创建和编辑弹窗共用单列权限列表，展示服务端名称与说明；列表可滚动，并处理加载、失败重试和无可用权限状态。
 
 scope 不匹配返回 `403 INSUFFICIENT_SCOPE`。
 
@@ -463,7 +478,7 @@ model OpenApiDownloadGrantEntry {
 - `expiresAt = createdAt + 10 分钟`。
 - `leaseUntil` 初始等于 expiresAt；活跃下载通过短租约心跳延长对象保护。
 - grant 在有效期内可重复使用，不记录或限制下载次数。
-- 到期、API key 撤销、用户禁用、源分享/Site/素材不可用时统一拒绝。
+- 到期、API key 撤销、缺少当前下载权限、用户禁用、源分享/Site/素材不可用时统一拒绝。
 - 下载开始后不因十分钟到期而中断正在传输的 stream。
 - grant 到期 24 小时后由后台清理任务物理删除；Open API 用量日志独立保留 30 天。
 
@@ -477,7 +492,7 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 
 1. 读取 grant id 和 token，计算摘要并做固定失败响应；
 2. 检查 grant 未过期并按 `planVersion` 解码下载 plan；
-3. 检查关联 API key 未撤销、用户仍为 active；
+3. 检查关联 API key 未撤销、仍有 `drive.share_link.download` 权限且用户为 active；
 4. 先创建一条 `started` 用量日志，写入失败则返回 503 且不发送 header；
 5. 检查分享、Site 或公开素材仍然启用且未删除/过期；
 6. 验证不可变对象版本、大小和 etag/sha256；
@@ -619,7 +634,7 @@ GET OpenApiDownloadController
 - Drive service 负责把当时 current storageKey 映射为具体 `DriveFileVersion`、生成 grant entries，并让版本清理/手动删除识别 grant lease；Site service 负责绑定 deployment assets 的 entries。
 - Open API service 负责 scope 上下文、公开制品映射和 grant 创建。
 - grant service 负责 token、planVersion、持久化、生命周期和清理。
-- `api-key-capabilities.ts` 是可选 scope、名称和校验的唯一权威目录，Controller、Service 和 Dashboard 响应都从该目录派生。
+- `api-key-capabilities.ts` 是可选 scope、名称、说明和校验的唯一权威目录，Controller、Service 和 Dashboard 响应都从该目录派生。
 - usage log service 只接受固定字段 DTO，不接受任意 detail、请求 body、文件名或 manifest。
 - 共享 ZIP helper 从 `drive.controller.ts` 提取到 Drive 领域 helper，内部浏览下载和开放下载共同使用。
 - Open API controller 不直接查询 Drive Prisma 表，不读取 storage key。
@@ -747,7 +762,7 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 
 - 新增 `server/src/open-api/` 模块、controllers、services 和测试。
 - Prisma 新增 `OpenApiDownloadGrant`、`OpenApiDownloadGrantEntry`、`OpenApiUsageLog` migration；`UserApiKey` 和 `DriveFileVersion` 增加关系，旧密钥 scopes 保持空数组。
-- `ApiKeyService` 增加权限目录、create scopes 校验、API key verify、scope 和 last-used 支持。
+- `ApiKeyService` 增加权限目录、create/update scopes 校验、API key verify、scope 和 last-used 支持。
 - `DriveLinkIntakeService` 增加 prepare-download plan。
 - `DriveService` 增加 current storageKey → DriveFileVersion 固定、规范化 grant entries、lease-aware 历史版本清理和手动删除保护。
 - `DriveSiteService` 增加绑定不可变 deployment assets 的 archive manifest 能力。
@@ -759,9 +774,10 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 ### Dashboard
 
 - API key DTO 增加 scopes、lastUsedAt。
-- 新增权限目录查询；创建 DTO 改为 `{ name, scopes }`。
-- 创建弹窗使用现有 Checkbox 渲染“API 权限”，默认不选且至少选择一项。
+- 新增带说明的权限目录查询；创建 DTO 为 `{ name, scopes }`，更新 DTO 为 `{ scopes }`。
+- 创建和编辑弹窗共用现有 Checkbox 权限列表；创建默认不选且至少选择一项，编辑允许清空。
 - 列表显示已授权能力和最后使用时间；旧密钥显示“无开放接口权限”。
+- 每个未撤销密钥提供“编辑权限”入口，保存成功后原地更新列表。
 - 增加每个密钥的“使用记录”入口，只显示固定摘要字段，不显示文件信息。
 
 ### Documentation
@@ -787,11 +803,12 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 
 ### API key
 
-- 权限目录只返回受支持的固定 scope 与产品名称。
+- 权限目录只返回受支持的固定 scope、产品名称与说明。
 - 创建请求必须显式传非空、无重复、受支持的 scopes；未知 scope 返回 400。
 - 创建弹窗默认不勾选，未选择权限不能提交；选择结果原样进入 create DTO。
 - 旧 key 迁移后 scopes 为空且调用下载 API 返回 403，不发生静默扩权。
-- scopes 创建后不可 PATCH；撤销并重建可以选择不同权限。
+- PATCH 只更新当前用户未撤销密钥的 scopes，允许清空，拒绝重复、未知 scope 和额外字段，且不会轮换密钥。
+- 移除下载 scope 后，新 POST 返回 403，尚未开始的已有临时下载返回 410；已经开始的 stream 不强制中断。
 - 有效 key 建立 principal；无效、撤销和禁用统一 401。
 - scope 缺失返回 403。
 - API key 不能访问非 `/api/open/*` 业务接口。
@@ -870,10 +887,10 @@ VitePress 顶部导航“开放接口”指向 `/open-api/`。开放接口文档
 - 任一受支持链接都返回统一的十分钟下载地址与制品信息。
 - 单一文件和单一素材下载原始字节；多个文件或集合型目标下载 ZIP；文件夹始终下载 ZIP；Site 页面下载完整站点 ZIP。
 - 密码只在创建 grant 时使用，不进入临时 URL、数据库、日志或审计。
-- grant 在服务重启后仍有效，并能因 API key 或源状态变化立即失效。
+- grant 在服务重启后仍有效，并能因 API key 撤销、权限移除或源状态变化立即失效。
 - Synapse 分享保持 live view；每次 POST 固定调用瞬间的 current version，后续编辑不改变已有 grant。
 - 响应中的 snapshotId 可以与自动化审核报告关联，但不暴露历史版本 id 或 storage key。
-- 开发密钥只有在创建时显式勾选“获取分享链接文件”后才能调用；既有密钥默认无权限。
+- 开发密钥只有在当前 scopes 包含“获取分享链接文件”时才能调用；既有密钥默认无权限，可在 Console 中显式授权。
 - 每次创建授权和实际下载都有一条不含文件信息的持久化用量记录，并可由密钥所属用户查询。
 - 开放 API 不做请求、IP、密钥、次数或频率限流；临时 URL 在十分钟内可重复下载。
 - 文件夹/Site 归档受 1000 文件、200 MiB 上限保护。

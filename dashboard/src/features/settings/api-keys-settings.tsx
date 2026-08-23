@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { formatBytes } from '@synapse/shared'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Copy, List, Plus } from 'lucide-react'
+import { Copy, List, Plus, ShieldCheck } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   dashboardApi,
   type DashboardApiKey,
+  type DashboardApiKeyCapability,
   type DashboardApiKeyCreateResult,
   type DashboardApiKeyUsageLog,
 } from '@/lib/api'
@@ -19,6 +20,13 @@ import {
 import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -31,14 +39,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const apiKeysQueryKey = ['dashboard-api-keys'] as const
 
@@ -48,13 +49,20 @@ export function ApiKeysSettings() {
   const [name, setName] = useState('')
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
   const [created, setCreated] = useState<DashboardApiKeyCreateResult | null>(null)
+  const [editTarget, setEditTarget] = useState<DashboardApiKey | null>(null)
+  const [editScopes, setEditScopes] = useState<string[]>([])
   const [revokeTarget, setRevokeTarget] = useState<DashboardApiKey | null>(null)
   const [usageTarget, setUsageTarget] = useState<DashboardApiKey | null>(null)
   const { data = [], error, isError, isLoading, refetch } = useQuery({
     queryKey: apiKeysQueryKey,
     queryFn: dashboardApi.listApiKeys,
   })
-  const { data: capabilities = [], isLoading: capabilitiesLoading } = useQuery({
+  const {
+    data: capabilities = [],
+    isError: capabilitiesIsError,
+    isLoading: capabilitiesLoading,
+    refetch: refetchCapabilities,
+  } = useQuery({
     queryKey: ['dashboard-api-key-capabilities'],
     queryFn: dashboardApi.listApiKeyCapabilities,
   })
@@ -87,6 +95,20 @@ export function ApiKeysSettings() {
     },
     onError: (mutationError: Error) => toast.error(mutationError.message),
   })
+  const updateApiKeyPermissions = useMutation({
+    mutationFn: (input: { id: string; scopes: string[] }) => (
+      dashboardApi.updateApiKeyPermissions(input.id, input.scopes)
+    ),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<DashboardApiKey[]>(apiKeysQueryKey, (current = []) => (
+        current.map((apiKey) => apiKey.id === updated.id ? updated : apiKey)
+      ))
+      setEditTarget(null)
+      setEditScopes([])
+      toast.success('权限已更新')
+    },
+    onError: (mutationError: Error) => toast.error(mutationError.message),
+  })
 
   function submitCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -96,9 +118,23 @@ export function ApiKeysSettings() {
   }
 
   function toggleScope(scope: string, checked: boolean) {
-    setSelectedScopes((current) => checked
-      ? current.includes(scope) ? current : [...current, scope]
-      : current.filter((item) => item !== scope))
+    setSelectedScopes((current) => toggleScopeValue(current, scope, checked))
+  }
+
+  function openPermissionEditor(apiKey: DashboardApiKey) {
+    setEditTarget(apiKey)
+    setEditScopes([...apiKey.scopes])
+  }
+
+  function closePermissionEditor() {
+    setEditTarget(null)
+    setEditScopes([])
+  }
+
+  function submitPermissionUpdate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editTarget || sameScopes(editTarget.scopes, editScopes)) return
+    updateApiKeyPermissions.mutate({ id: editTarget.id, scopes: editScopes })
   }
 
   async function copySecret() {
@@ -143,23 +179,33 @@ export function ApiKeysSettings() {
             <div className='py-8 text-center text-sm text-muted-foreground'>尚无秘钥</div>
           ) : null}
           {!isLoading && !isError && data.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>名称</TableHead>
-                  <TableHead>秘钥</TableHead>
-                  <TableHead>API 权限</TableHead>
-                  <TableHead>最后使用</TableHead>
-                  <TableHead>创建时间</TableHead>
-                  <TableHead className='text-right'>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((apiKey) => (
-                  <TableRow key={apiKey.id}>
-                    <TableCell className='font-medium'>{apiKey.name}</TableCell>
-                    <TableCell className='font-mono'>{apiKey.prefix}...</TableCell>
-                    <TableCell>
+            <div className='space-y-3'>
+              {data.map((apiKey) => (
+                <Card key={apiKey.id} className='gap-4 py-4 shadow-none'>
+                  <CardHeader className='flex flex-col gap-3 px-4 sm:flex-row sm:items-start sm:justify-between'>
+                    <div className='min-w-0'>
+                      <CardTitle className='truncate text-base'>{apiKey.name}</CardTitle>
+                      <CardDescription className='mt-1 truncate font-mono'>
+                        {apiKey.prefix}...
+                      </CardDescription>
+                    </div>
+                    <div className='flex flex-wrap items-center gap-1 sm:justify-end'>
+                      <Button variant='ghost' size='sm' onClick={() => openPermissionEditor(apiKey)}>
+                        <ShieldCheck />
+                        编辑权限
+                      </Button>
+                      <Button variant='ghost' size='sm' onClick={() => setUsageTarget(apiKey)}>
+                        <List />
+                        使用记录
+                      </Button>
+                      <Button variant='ghost' size='sm' onClick={() => setRevokeTarget(apiKey)}>
+                        撤销
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className='flex flex-col gap-4 px-4 sm:flex-row sm:items-end sm:justify-between'>
+                    <div className='min-w-0 space-y-2'>
+                      <div className='text-xs font-medium text-muted-foreground'>API 权限</div>
                       <div className='flex flex-wrap gap-1'>
                         {apiKey.scopes.length > 0 ? apiKey.scopes.map((scope) => (
                           <Badge key={scope} variant='outline'>
@@ -167,28 +213,25 @@ export function ApiKeysSettings() {
                           </Badge>
                         )) : <span className='text-sm text-muted-foreground'>无开放接口权限</span>}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <RelativeTime value={apiKey.lastUsedAt} />
-                    </TableCell>
-                    <TableCell>
-                      <RelativeTime value={apiKey.createdAt} mode='absolute' />
-                    </TableCell>
-                    <TableCell className='text-right'>
-                      <div className='flex items-center justify-end gap-1'>
-                        <Button variant='ghost' size='sm' onClick={() => setUsageTarget(apiKey)}>
-                          <List />
-                          使用记录
-                        </Button>
-                        <Button variant='ghost' size='sm' onClick={() => setRevokeTarget(apiKey)}>
-                          撤销
-                        </Button>
+                    </div>
+                    <dl className='grid shrink-0 grid-cols-2 gap-x-6 gap-y-2'>
+                      <div>
+                        <dt className='text-xs text-muted-foreground'>最后使用</dt>
+                        <dd className='mt-1 text-sm'>
+                          <RelativeTime value={apiKey.lastUsedAt} />
+                        </dd>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <div>
+                        <dt className='text-xs text-muted-foreground'>创建时间</dt>
+                        <dd className='mt-1 text-sm'>
+                          <RelativeTime value={apiKey.createdAt} mode='absolute' />
+                        </dd>
+                      </div>
+                    </dl>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : null}
         </div>
       </div>
@@ -210,29 +253,68 @@ export function ApiKeysSettings() {
                 autoFocus
               />
             </div>
-            <div className='space-y-2'>
-              <Label>API 权限</Label>
-              <div className='space-y-2'>
-                {capabilities.map((capability) => (
-                  <label key={capability.scope} className='flex items-center gap-2 text-sm'>
-                    <Checkbox
-                      checked={selectedScopes.includes(capability.scope)}
-                      onCheckedChange={(checked) => toggleScope(capability.scope, checked === true)}
-                    />
-                    {capability.name}
-                  </label>
-                ))}
-              </div>
-            </div>
+            <ApiKeyPermissionSelector
+              idPrefix='api-key-create'
+              capabilities={capabilities}
+              selectedScopes={selectedScopes}
+              onToggle={toggleScope}
+              isLoading={capabilitiesLoading}
+              isError={capabilitiesIsError}
+              onRetry={() => void refetchCapabilities()}
+              disabled={createApiKey.isPending}
+            />
             <DialogFooter>
               <Button type='button' variant='outline' onClick={() => setCreateOpen(false)}>
                 取消
               </Button>
               <Button
                 type='submit'
-                disabled={!name.trim() || selectedScopes.length === 0 || capabilitiesLoading || createApiKey.isPending}
+                disabled={!name.trim() || selectedScopes.length === 0 || capabilitiesLoading || capabilitiesIsError || createApiKey.isPending}
               >
                 创建
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editTarget)}
+        onOpenChange={(open) => !open && closePermissionEditor()}
+      >
+        <DialogContent>
+          <form className='space-y-4' onSubmit={submitPermissionUpdate}>
+            <DialogHeader>
+              <DialogTitle>编辑 API 权限</DialogTitle>
+              <DialogDescription>{editTarget?.name ?? ''}</DialogDescription>
+            </DialogHeader>
+            <ApiKeyPermissionSelector
+              idPrefix='api-key-edit'
+              capabilities={capabilities}
+              selectedScopes={editScopes}
+              onToggle={(scope, checked) => (
+                setEditScopes((current) => toggleScopeValue(current, scope, checked))
+              )}
+              isLoading={capabilitiesLoading}
+              isError={capabilitiesIsError}
+              onRetry={() => void refetchCapabilities()}
+              disabled={updateApiKeyPermissions.isPending}
+            />
+            <DialogFooter>
+              <Button type='button' variant='outline' onClick={closePermissionEditor}>
+                取消
+              </Button>
+              <Button
+                type='submit'
+                disabled={
+                  !editTarget
+                  || sameScopes(editTarget.scopes, editScopes)
+                  || capabilitiesLoading
+                  || capabilitiesIsError
+                  || updateApiKeyPermissions.isPending
+                }
+              >
+                保存权限
               </Button>
             </DialogFooter>
           </form>
@@ -273,6 +355,87 @@ export function ApiKeysSettings() {
       <ApiKeyUsageDialog apiKey={usageTarget} onOpenChange={(open) => !open && setUsageTarget(null)} />
     </section>
   )
+}
+
+function ApiKeyPermissionSelector({
+  idPrefix,
+  capabilities,
+  selectedScopes,
+  onToggle,
+  isLoading,
+  isError,
+  onRetry,
+  disabled,
+}: {
+  readonly idPrefix: string
+  readonly capabilities: readonly DashboardApiKeyCapability[]
+  readonly selectedScopes: readonly string[]
+  readonly onToggle: (scope: string, checked: boolean) => void
+  readonly isLoading: boolean
+  readonly isError: boolean
+  readonly onRetry: () => void
+  readonly disabled: boolean
+}) {
+  return (
+    <fieldset className='space-y-2' disabled={disabled}>
+      <legend className='text-sm font-medium'>API 权限</legend>
+      {isLoading ? (
+        <div className='space-y-3 rounded-lg border p-3' aria-label='API 权限加载中'>
+          <Skeleton className='h-4 w-32' />
+          <Skeleton className='h-4 w-64' />
+        </div>
+      ) : isError ? (
+        <div className='flex items-center justify-between gap-3 rounded-lg border p-3'>
+          <span className='text-sm text-muted-foreground'>权限加载失败</span>
+          <Button type='button' variant='outline' size='sm' onClick={onRetry}>
+            重试
+          </Button>
+        </div>
+      ) : capabilities.length === 0 ? (
+        <div className='rounded-lg border p-3 text-sm text-muted-foreground'>暂无可用权限</div>
+      ) : (
+        <div className='max-h-64 overflow-y-auto rounded-lg border'>
+          <div className='divide-y'>
+            {capabilities.map((capability) => {
+              const checkboxId = `${idPrefix}-${capability.scope}`
+              const descriptionId = `${checkboxId}-description`
+              return (
+                <label
+                  key={capability.scope}
+                  htmlFor={checkboxId}
+                  className='flex cursor-pointer items-start gap-3 px-3 py-3 hover:bg-muted/50'
+                >
+                  <Checkbox
+                    id={checkboxId}
+                    className='mt-0.5'
+                    checked={selectedScopes.includes(capability.scope)}
+                    aria-describedby={descriptionId}
+                    onCheckedChange={(checked) => onToggle(capability.scope, checked === true)}
+                  />
+                  <span className='min-w-0 space-y-1'>
+                    <span className='block text-sm font-medium'>{capability.name}</span>
+                    <span id={descriptionId} className='block text-sm text-muted-foreground'>
+                      {capability.description}
+                    </span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </fieldset>
+  )
+}
+
+function toggleScopeValue(current: readonly string[], scope: string, checked: boolean): string[] {
+  return checked
+    ? current.includes(scope) ? [...current] : [...current, scope]
+    : current.filter((item) => item !== scope)
+}
+
+function sameScopes(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((scope) => right.includes(scope))
 }
 
 function ApiKeyUsageDialog({

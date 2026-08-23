@@ -79,7 +79,7 @@ describe("OpenApiDownloadGrantService", () => {
     const baseGrant = {
       expiresAt: new Date("2026-08-23T09:10:00.000Z"),
       planVersion: 1,
-      apiKey: { revokedAt: null, user: { status: "active" } },
+      apiKey: { scopes: ["drive.share_link.download"], revokedAt: null, user: { status: "active" } },
     }
 
     await expect(service.assertAvailable({
@@ -91,7 +91,11 @@ describe("OpenApiDownloadGrantService", () => {
     })
     await expect(service.assertAvailable({
       ...baseGrant,
-      apiKey: { revokedAt: new Date("2026-08-23T08:59:00.000Z"), user: { status: "active" } },
+      apiKey: {
+        scopes: ["drive.share_link.download"],
+        revokedAt: new Date("2026-08-23T08:59:00.000Z"),
+        user: { status: "active" },
+      },
     } as never, new Date("2026-08-23T09:00:00.000Z"))).rejects.toMatchObject({
       statusCode: 410,
       code: "DOWNLOAD_UNAVAILABLE",
@@ -103,6 +107,55 @@ describe("OpenApiDownloadGrantService", () => {
       statusCode: 410,
       code: "DOWNLOAD_UNAVAILABLE",
     })
+  })
+
+  it("rejects a previously issued download after its API key loses the required scope", async () => {
+    const revalidateOpenApiShareTarget = vi.fn().mockResolvedValue(true)
+    const service = new OpenApiDownloadGrantService(
+      {} as never,
+      { revalidateOpenApiShareTarget } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { warn: vi.fn() } as never,
+    )
+
+    await expect(service.assertAvailable({
+      expiresAt: new Date("2026-08-23T09:10:00.000Z"),
+      planVersion: 1,
+      apiKey: { scopes: [], revokedAt: null, user: { status: "active" } },
+      target: { kind: "share", shareId: "share-1", itemId: "item-1" },
+      entries: [],
+    } as never, new Date("2026-08-23T09:00:00.000Z"))).rejects.toMatchObject({
+      statusCode: 410,
+      code: "DOWNLOAD_UNAVAILABLE",
+    })
+    expect(revalidateOpenApiShareTarget).not.toHaveBeenCalled()
+  })
+
+  it("keeps a previously issued download available while its API key retains the required scope", async () => {
+    const revalidateOpenApiShareTarget = vi.fn().mockResolvedValue(true)
+    const service = new OpenApiDownloadGrantService(
+      {} as never,
+      { revalidateOpenApiShareTarget } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { warn: vi.fn() } as never,
+    )
+
+    await expect(service.assertAvailable({
+      expiresAt: new Date("2026-08-23T09:10:00.000Z"),
+      planVersion: 1,
+      apiKey: {
+        scopes: ["drive.share_link.download"],
+        revokedAt: null,
+        user: { status: "active" },
+      },
+      target: { kind: "share", shareId: "share-1", itemId: "item-1" },
+      entries: [],
+    } as never, new Date("2026-08-23T09:00:00.000Z"))).resolves.toBeUndefined()
+    expect(revalidateOpenApiShareTarget).toHaveBeenCalledOnce()
   })
 
   it("requires the fixed public asset etag to remain verifiable", async () => {
@@ -117,7 +170,7 @@ describe("OpenApiDownloadGrantService", () => {
     const grant = {
       expiresAt: new Date("2026-08-23T09:10:00.000Z"),
       planVersion: 1,
-      apiKey: { revokedAt: null, user: { status: "active" } },
+      apiKey: { scopes: ["drive.share_link.download"], revokedAt: null, user: { status: "active" } },
       target: { kind: "public_asset", assetId: "asset-1", publicAssetId: "public-1" },
       entries: [{
         entryType: "file",

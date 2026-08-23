@@ -68,9 +68,10 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 - 开放 API 使用独立 guard，只接受 `Authorization: Bearer syn_sk_...`。
 - 首期权限为 `drive.share_link.download`，Console 展示为“获取分享链接文件”。
 - 创建密钥时必须显式勾选至少一个权限。
-- 权限创建后不可原地修改；需要变更时撤销并重建密钥。
+- 已有未撤销密钥可以原地修改或清空权限，不修改名称或轮换密钥。
 - 迁移前创建的密钥 scopes 默认为空，不会自动获得开放 API 权限。
-- 服务端提供权威权限目录，Dashboard 根据目录渲染权限选项，便于未来横向扩展。
+- 服务端提供带名称和说明的权威权限目录，Dashboard 在创建和编辑弹窗中复用可滚动权限列表，便于未来横向扩展。
+- 移除下载权限后，新请求和尚未开始的临时下载立即失效；已经开始的响应流不强制中断。
 - API key 不会因此获得 Console API 或内部 Drive API 的访问能力。
 
 ## 快照、版本与临时授权
@@ -83,7 +84,7 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 - `snapshotId` 根据规范化 grant 内容计算，用于审核结果关联，不暴露 versionId、storageKey 或历史版本号。
 - 活跃 grant 对 `DriveFileVersion` 建立临时租约，版本清理和手动删除不能移除仍被有效授权引用的版本。
 - grant 持久化到 PostgreSQL，只保存随机 token 的摘要；`planVersion` 用于兼容滚动发布期间尚未过期的授权。
-- 下载开始前重新检查 API key、所属用户和源分享状态；撤销密钥、停用分享或删除源内容会使授权失效。
+- 下载开始前重新检查 API key 当前权限、所属用户和源分享状态；撤销密钥、移除权限、停用分享或删除源内容会使授权失效。
 
 ## 下载执行
 
@@ -131,7 +132,7 @@ GET /api/open/v1/downloads/<grantId>?token=<secret>
 4. 增加 API key 权限目录、显式 scopes、旧密钥零权限迁移和最近使用时间。
 5. 实现不可变下载计划、grant entries、`snapshotId` 和 DriveFileVersion 临时租约。
 6. 实现 Open API POST/GET、原文件流、ZIP 流、用量日志和清理任务。
-7. 完成 Dashboard 权限勾选、使用记录和文档站开放接口页面。
+7. 完成 Dashboard 权限创建与编辑、使用记录和文档站开放接口页面。
 8. 完成服务端、Dashboard、文档站、Prisma、安全与交付验证。
 
 ## 验证结果

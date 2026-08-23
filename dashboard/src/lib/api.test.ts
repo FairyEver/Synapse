@@ -17,6 +17,7 @@ describe('dashboardApi.apiKeys', () => {
     await dashboardApi.listApiKeys()
     await dashboardApi.listApiKeyCapabilities()
     await dashboardApi.createApiKey({ name: 'CLI', scopes: ['drive.share_link.download'] })
+    await dashboardApi.updateApiKeyPermissions('key/id', [])
     await dashboardApi.revokeApiKey('key/id')
     await dashboardApi.listApiKeyUsageLogs('key/id', { page: 2, pageSize: 10 })
 
@@ -42,10 +43,19 @@ describe('dashboardApi.apiKeys', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
       '/api/console/api-keys/key%2Fid',
-      expect.objectContaining({ credentials: 'include', method: 'DELETE' })
+      expect.objectContaining({
+        body: JSON.stringify({ scopes: [] }),
+        credentials: 'include',
+        method: 'PATCH',
+      })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       5,
+      '/api/console/api-keys/key%2Fid',
+      expect.objectContaining({ credentials: 'include', method: 'DELETE' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
       '/api/console/api-keys/key%2Fid/usage-logs?page=2&pageSize=10&sortBy=startedAt&sortOrder=desc',
       expect.objectContaining({ credentials: 'include' })
     )

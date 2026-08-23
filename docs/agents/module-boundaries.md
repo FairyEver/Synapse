@@ -57,9 +57,9 @@
 ## Console 用户 API 秘钥
 
 - 用户 API 秘钥只通过受登录保护的 `/api/console/api-keys` 管理；创建响应只展示一次完整秘钥，数据库只保存 SHA-256 摘要和可识别前缀，列表不得返回摘要或明文。
-- 查询、创建和撤销必须绑定当前 `userId`；撤销保留记录并使其失效，创建与撤销审计不得包含完整秘钥、摘要或可还原材料。
-- 密钥创建时必须显式选择非空开放 API scopes；现有密钥迁移后 scopes 为空，权限只读，变更时撤销并重建。首个 scope `drive.share_link.download` 仅授权 `/api/open/v1/drive/share-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。
-- 开放 API 使用独立 `OpenApiKeyGuard`；临时下载地址使用十分钟数据库 grant 和仅存摘要的 bearer token。创建下载地址的请求体只接收完整分享 URL，受密码保护时密码保留在 URL query 中。grant 固定 POST 时的不可变文件版本或 Site deployment，源分享/API key/用户失效会阻止新的下载。
+- 查询、创建、权限更新和撤销必须绑定当前 `userId`；撤销保留记录并使其失效，审计不得包含完整秘钥、摘要或可还原材料。
+- 密钥创建时必须显式选择非空开放 API scopes；已有未撤销密钥可以原地增删或清空 scopes，但不得通过该接口修改名称或轮换密钥。首个 scope `drive.share_link.download` 仅授权 `/api/open/v1/drive/share-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。
+- 开放 API 使用独立 `OpenApiKeyGuard`；临时下载地址使用十分钟数据库 grant 和仅存摘要的 bearer token。创建下载地址的请求体只接收完整分享 URL，受密码保护时密码保留在 URL query 中。grant 固定 POST 时的不可变文件版本或 Site deployment，源分享/API key/当前 scope/用户失效会阻止新的下载。
 - 开放 API 数据面只写固定列 `OpenApiUsageLog`，禁止 URL、密码、token、文件名、路径、storage key、manifest 和文件内容。POST/GET 显式跳过全局 Throttler，不增加密钥、IP、次数或频率限制。
 
 ## Drive

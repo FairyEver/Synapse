@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common"
+import { BadRequestException, NotFoundException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import { hashApiKeySecret } from "./api-key-token"
 import { ApiKeyService } from "./api-key.service"
@@ -101,6 +101,72 @@ describe("ApiKeyService", () => {
     })
   })
 
+  it("updates scopes for an active key owned by the current user without rotating it", async () => {
+    const { service, transactionApiKey, auditLog } = createService()
+    transactionApiKey.findFirst.mockResolvedValue({
+      id: "key-1",
+      name: "开发环境",
+      keyPrefix: "syn_sk_abcdefgh",
+      scopes: ["drive.share_link.download"],
+      lastUsedAt: null,
+      createdAt,
+    })
+    transactionApiKey.updateMany.mockResolvedValue({ count: 1 })
+
+    await expect(service.updateScopesForUser("user-1", "key-1", {
+      scopes: [],
+    }, "203.0.113.12")).resolves.toEqual({
+      id: "key-1",
+      name: "开发环境",
+      prefix: "syn_sk_abcdefgh",
+      scopes: [],
+      lastUsedAt: null,
+      createdAt: createdAt.toISOString(),
+    })
+    expect(transactionApiKey.findFirst).toHaveBeenCalledWith({
+      where: { id: "key-1", userId: "user-1", revokedAt: null },
+      select: expect.objectContaining({ scopes: true }),
+    })
+    expect(transactionApiKey.updateMany).toHaveBeenCalledWith({
+      where: { id: "key-1", userId: "user-1", revokedAt: null },
+      data: { scopes: [] },
+    })
+    expect(auditLog.recordWithClient).toHaveBeenCalledWith(expect.anything(), {
+      adminEmail: "user-1",
+      action: "api_key.update",
+      targetType: "api_key",
+      targetId: "key-1",
+      detail: {
+        name: "开发环境",
+        previousScopes: ["drive.share_link.download"],
+        scopes: [],
+      },
+      ipAddress: "203.0.113.12",
+    })
+    expect(JSON.stringify(auditLog.recordWithClient.mock.calls)).not.toContain("keyHash")
+  })
+
+  it("does not update a missing, revoked, or other-user key", async () => {
+    const { service, transactionApiKey, auditLog } = createService()
+    transactionApiKey.findFirst.mockResolvedValue(null)
+
+    await expect(service.updateScopesForUser("user-1", "key-2", { scopes: [] }))
+      .rejects.toBeInstanceOf(NotFoundException)
+    expect(transactionApiKey.updateMany).not.toHaveBeenCalled()
+    expect(auditLog.recordWithClient).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid scope updates at the service boundary", async () => {
+    const { service } = createService()
+
+    await expect(service.updateScopesForUser("user-1", "key-1", {
+      scopes: ["unknown"] as never,
+    })).rejects.toBeInstanceOf(BadRequestException)
+    await expect(service.updateScopesForUser("user-1", "key-1", {
+      scopes: ["drive.share_link.download", "drive.share_link.download"],
+    })).rejects.toBeInstanceOf(BadRequestException)
+  })
+
   it("does not revoke a missing or other-user key", async () => {
     const { service, transactionApiKey, auditLog } = createService()
     transactionApiKey.updateMany.mockResolvedValue({ count: 0 })
@@ -156,6 +222,7 @@ describe("ApiKeyService", () => {
 function createService() {
   const transactionApiKey = {
     create: vi.fn(),
+    findFirst: vi.fn(),
     updateMany: vi.fn(),
   }
   const transactionClient = { userApiKey: transactionApiKey }

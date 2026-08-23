@@ -190,6 +190,7 @@ export type DashboardApiKey = {
 export type DashboardApiKeyCapability = {
   scope: string
   name: string
+  description: string
 }
 
 export type DashboardApiKeyUsageLog = {
@@ -623,6 +624,11 @@ export const dashboardApi = {
     request<DashboardApiKeyCreateResult>(`${consoleApiBasePath}/api-keys`, {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+  updateApiKeyPermissions: (id: string, scopes: string[]) =>
+    request<DashboardApiKey>(`${consoleApiBasePath}/api-keys/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scopes }),
     }),
   revokeApiKey: (id: string) =>
     request<{ ok: true }>(

@@ -1,6 +1,6 @@
 # 获取分享链接文件
 
-将完整的 Synapse Drive 分享链接、Drive Site 或公开素材 URL 转换为十分钟有效的下载地址。
+将完整的 Synapse Drive 分享链接、Drive Site 或公开素材 URL 转换为十分钟有效的下载地址。创建地址需要 API 密钥；使用临时地址下载时不再发送 API 密钥。
 
 ## 创建分享链接下载地址
 
@@ -20,7 +20,27 @@ Authorization: Bearer syn_sk_...
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `url` | string | 是 | 当前 Synapse 地址下完整的 `/share`、`/sites` 或 `/files` URL，最长 2048 字符；受密码保护时 URL 需包含 `password` query |
+| `url` | string | 是 | 当前 Synapse 公共地址下的完整 HTTP(S) URL，最长 2048 字符 |
+
+请求体只允许 `url` 字段。独立的 `password` 字段或其它未知字段会返回 `400 INVALID_REQUEST`。
+
+### 支持的 URL
+
+| URL 形式 | 目标 |
+|---|---|
+| `https://synapse.d2.pub/share/<shareId>` | Drive 分享根目标 |
+| `https://synapse.d2.pub/share/<shareId>/items/<itemId>` | 分享内指定文件或文件夹 |
+| `https://synapse.d2.pub/sites/<siteId>/` | Drive Site 根路径 |
+| `https://synapse.d2.pub/sites/<siteId>/<path>` | Drive Site 页面或 asset |
+| `https://synapse.d2.pub/files/<assetId>` | 公开素材 |
+
+只接受当前 Synapse 公共地址的同源 URL。外部域名、其它 Synapse 部署地址和不受支持的路径会返回 `422 UNSUPPORTED_LINK`。
+
+受密码保护时，将密码放入完整 URL 的 `password` query，并进行 URL 编码：
+
+```text
+https://synapse.d2.pub/share/shr_example?password=encoded-password
+```
 
 cURL 示例：
 
@@ -55,7 +75,23 @@ curl --request POST 'https://synapse.d2.pub/api/open/v1/drive/share-links/downlo
 }
 ```
 
-`snapshotId` 标识创建下载地址时固定的内容快照，不是 Drive 历史版本 ID。ZIP 的压缩后大小未知，`artifact.size` 为 `null`。
+### 响应字段
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `requestId` | string | 本次请求 ID，与 `X-Request-Id` 响应头一致 |
+| `data.sourceType` | string | `share`、`share_item`、`site`、`site_path` 或 `public_asset` |
+| `data.artifact.type` | string | `file` 或 `archive` |
+| `data.artifact.fileName` | string | 下载响应使用的原始文件名或 ZIP 文件名 |
+| `data.artifact.mimeType` | string | 下载制品的 MIME type |
+| `data.artifact.size` | string \| null | 文件字节数的十进制字符串；流式 ZIP 为 `null` |
+| `data.artifact.entryPath` | string \| null | Site ZIP 中建议首先打开的 HTML 相对路径；其它制品为 `null` |
+| `data.artifact.snapshotId` | string | 创建下载地址时固定的内容快照标识 |
+| `data.download.method` | string | 固定为 `GET` |
+| `data.download.url` | string | 包含临时 token 的完整下载地址 |
+| `data.download.expiresAt` | string | RFC 3339 格式的到期时间 |
+
+`snapshotId` 是 opaque 标识，用于关联本次输入快照，不是 Drive 历史版本 ID，也不能用于构造下载地址。创建地址后源文件出现新版本时，本次下载仍读取已固定的内容；源分享、Site 或公开素材仍需保持可用。
 
 ## 下载制品
 
@@ -74,7 +110,7 @@ curl --request POST 'https://synapse.d2.pub/api/open/v1/drive/share-links/downlo
 
 ## 临时下载地址
 
-`download.url` 是 bearer credential，固定十分钟有效。原样执行响应中的 GET 地址，不要自行构造 `grantId` 或 token：
+`download.url` 是 bearer credential，固定十分钟有效。下载请求不需要 `Authorization` header。原样执行响应中的 GET 地址，不要自行构造 `grantId` 或 token：
 
 ```bash
 curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=example' \
@@ -83,7 +119,21 @@ curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=
 
 同一地址在有效期内可以重复下载。接口不提供 Range 或断点续传；失败重试时执行完整 GET，地址过期后重新创建。
 
-临时地址不能进入日志、工单、公开消息或 Referer。撤销 API 密钥、禁用用户或停用源分享后，尚未开始的下载立即失效。
+下载在十分钟内开始后可以继续完成。若文件读取或 ZIP 流在响应开始后失败，连接可能只收到截断文件；调用方应丢弃该文件并完整重试。
+
+成功下载使用以下响应头：
+
+| Header | 说明 |
+|---|---|
+| `X-Request-Id` | 下载请求 ID |
+| `Content-Type` | 文件或 ZIP 的 MIME type |
+| `Content-Disposition` | `attachment` 与 UTF-8 文件名 |
+| `Content-Length` | 仅原始文件提供；流式 ZIP 不提供 |
+| `Cache-Control` | `private, no-store` |
+| `Referrer-Policy` | `no-referrer` |
+| `X-Content-Type-Options` | `nosniff` |
+
+临时地址不能进入日志、工单、公开消息或 Referer。地址到期，或 API 密钥被撤销、移除“获取分享链接文件”权限、用户被禁用、源分享或 Site 被停用、源资源不可用时，尚未开始的下载会返回 `410 DOWNLOAD_UNAVAILABLE`。
 
 ## 错误码
 
@@ -101,17 +151,19 @@ curl --location 'https://synapse.d2.pub/api/open/v1/downloads/dlg_example?token=
 
 | HTTP | code | 说明 |
 |---:|---|---|
-| 400 | `INVALID_REQUEST` | 请求体或字段无效 |
+| 400 | `INVALID_REQUEST` | JSON 请求体、`url` 或字段集合无效 |
 | 400 | `INVALID_DOWNLOAD_TOKEN` | 临时下载 token 缺失或格式无效 |
-| 401 | `INVALID_API_KEY` | API 密钥无效、已撤销或所属用户不可用 |
+| 401 | `INVALID_API_KEY` | API 密钥缺失、无效、已撤销或所属用户不可用 |
 | 403 | `INSUFFICIENT_SCOPE` | API 密钥没有“获取分享链接文件”权限 |
 | 403 | `LINK_PASSWORD_REQUIRED_OR_INVALID` | 分享密码缺失或错误 |
-| 404 | `LINK_NOT_FOUND` | 分享链接不存在或已失效 |
+| 404 | `LINK_NOT_FOUND` | 创建地址时源链接不存在、已失效或目标不可用 |
 | 404 | `DOWNLOAD_NOT_FOUND` | 临时下载地址不存在 |
-| 410 | `DOWNLOAD_UNAVAILABLE` | 临时地址到期、源分享失效或内容不可用 |
+| 410 | `DOWNLOAD_UNAVAILABLE` | 已创建的临时地址到期、权限被收回或源内容不可用 |
 | 413 | `ARCHIVE_TOO_LARGE` | ZIP 超过文件数或未压缩大小上限 |
 | 422 | `UNSUPPORTED_LINK` | 链接来源或路径不受支持 |
 | 503 | `USAGE_LOG_UNAVAILABLE` | 必需的用量记录暂时无法写入 |
 | 500 | `INTERNAL_ERROR` | 未预期的服务端错误 |
 
-该接口不设置 API 密钥、IP、次数或请求频率限制。十分钟有效期与归档大小属于授权和同步归档边界，不是流量配额。
+POST 成功响应和所有 JSON 错误响应都使用 `Cache-Control: no-store`，并同时返回 `requestId` 和 `X-Request-Id`。
+
+该接口不设置 API 密钥、IP、次数、并发数或请求频率限制。十分钟有效期与归档大小属于授权和同步归档边界，不是流量配额。

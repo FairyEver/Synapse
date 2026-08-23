@@ -144,6 +144,9 @@ import {
 
 type DrivePrismaClient = PrismaService | Prisma.TransactionClient
 
+const DRIVE_FOLDER_UPLOAD_TRANSACTION_MAX_WAIT_MS = 10_000
+const DRIVE_FOLDER_UPLOAD_TRANSACTION_TIMEOUT_MS = 30_000
+
 type DriveReorganizationPlan = {
   readonly userId: string
   readonly planId: string
@@ -1059,6 +1062,9 @@ export class DriveService implements OnApplicationBootstrap {
           })
         }
         return result
+      }, {
+        maxWait: DRIVE_FOLDER_UPLOAD_TRANSACTION_MAX_WAIT_MS,
+        timeout: DRIVE_FOLDER_UPLOAD_TRANSACTION_TIMEOUT_MS,
       })
 
       preparedSessionIds.push(...preparedFiles.map((prepared) => prepared.session.id))
@@ -2333,10 +2339,16 @@ export class DriveService implements OnApplicationBootstrap {
     readonly password?: string
     readonly sourceType: "share" | "share_item"
   }): Promise<DriveOpenApiDownloadPreparationResult> {
-    const access = await this.resolvePublicShareAccess({
-      shareId: input.shareId,
-      password: input.password,
-    })
+    let access: DrivePublicAccessResult<DrivePublicShareValue>
+    try {
+      access = await this.resolvePublicShareAccess({
+        shareId: input.shareId,
+        password: input.password,
+      })
+    } catch (error) {
+      if (error instanceof NotFoundException) return { status: "not_found" }
+      throw error
+    }
     if (access.status === "password_required") return { status: "password_required" }
     if (access.status !== "ok") return { status: "not_found" }
 

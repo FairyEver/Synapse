@@ -15,6 +15,7 @@ vi.mock('@/lib/api', () => ({
     listApiKeyCapabilities: vi.fn(),
     listApiKeyUsageLogs: vi.fn(),
     createApiKey: vi.fn(),
+    updateApiKeyPermissions: vi.fn(),
     revokeApiKey: vi.fn(),
   },
 }))
@@ -45,6 +46,7 @@ beforeEach(() => {
   mockedDashboardApi.listApiKeyCapabilities.mockResolvedValue([{
     scope: 'drive.share_link.download',
     name: '获取分享链接文件',
+    description: '允许通过开放接口下载分享文件、文件夹、站点和公开素材。',
   }])
   mockedDashboardApi.listApiKeyUsageLogs.mockResolvedValue({
     data: [],
@@ -68,20 +70,21 @@ afterEach(() => {
 })
 
 describe('ApiKeysSettings', () => {
-  it('right-aligns the action header and row controls', async () => {
+  it('renders each key as a card instead of a table row', async () => {
     mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
 
     renderSettings()
     await waitForText('开发环境')
 
-    const actionHeader = Array.from(document.querySelectorAll('th'))
-      .find((header) => header.textContent === '操作')
-    const actionGroup = buttonByText('使用记录').parentElement
+    const card = document.querySelector('[data-slot="card"]')
 
-    expect(actionHeader?.classList.contains('text-right')).toBe(true)
-    expect(actionGroup?.parentElement?.classList.contains('text-right')).toBe(true)
-    expect(actionGroup?.classList.contains('justify-end')).toBe(true)
-    expect(buttonByText('撤销').parentElement).toBe(actionGroup)
+    expect(document.querySelector('table')).toBeNull()
+    expect(card?.textContent).toContain('开发环境')
+    expect(card?.textContent).toContain('syn_sk_12345678...')
+    expect(card?.textContent).toContain('获取分享链接文件')
+    expect(buttonByText('编辑权限').closest('[data-slot="card"]')).toBe(card)
+    expect(buttonByText('使用记录').closest('[data-slot="card"]')).toBe(card)
+    expect(buttonByText('撤销').closest('[data-slot="card"]')).toBe(card)
   })
 
   it('creates a named key and reveals the secret once', async () => {
@@ -94,8 +97,9 @@ describe('ApiKeysSettings', () => {
     renderSettings()
     await waitForText('尚无秘钥')
     await click(buttonByText('创建秘钥'))
+    await waitForText('允许通过开放接口下载分享文件、文件夹、站点和公开素材。')
     await inputValue(inputById('api-key-name'), ' CLI ')
-    await click(checkbox())
+    await click(permissionOption('获取分享链接文件'))
     await click(buttonByText('创建', 'last'))
 
     await waitForText('秘钥已创建')
@@ -112,6 +116,49 @@ describe('ApiKeysSettings', () => {
     await click(buttonByText('完成'))
     expect(document.body.textContent).not.toContain('syn_sk_once-only-secret')
     expect(document.body.textContent).toContain('CLI')
+  })
+
+  it('edits an existing key permission set without rotating the secret', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
+    mockedDashboardApi.updateApiKeyPermissions.mockResolvedValue(apiKey({ scopes: [] }))
+
+    renderSettings()
+    await waitForText('开发环境')
+    await click(buttonByText('编辑权限'))
+    await waitForText('编辑 API 权限')
+
+    expect(checkbox().getAttribute('data-state')).toBe('checked')
+    expect(buttonByText('保存权限').disabled).toBe(true)
+
+    await click(permissionOption('获取分享链接文件'))
+    expect(buttonByText('保存权限').disabled).toBe(false)
+    await click(buttonByText('保存权限'))
+
+    await waitFor(() => {
+      expect(mockedDashboardApi.updateApiKeyPermissions).toHaveBeenCalledWith('key-1', [])
+      expect(document.body.textContent).toContain('无开放接口权限')
+      expect(document.body.textContent).not.toContain('编辑 API 权限')
+    })
+  })
+
+  it('shows a retry action when API permissions fail to load', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([])
+    mockedDashboardApi.listApiKeyCapabilities
+      .mockRejectedValueOnce(new Error('权限服务不可用'))
+      .mockResolvedValueOnce([{
+        scope: 'drive.share_link.download',
+        name: '获取分享链接文件',
+        description: '允许通过开放接口下载分享文件、文件夹、站点和公开素材。',
+      }])
+
+    renderSettings()
+    await waitForText('尚无秘钥')
+    await click(buttonByText('创建秘钥'))
+    await waitForText('权限加载失败')
+    await click(buttonByText('重试'))
+
+    await waitForText('允许通过开放接口下载分享文件、文件夹、站点和公开素材。')
+    expect(mockedDashboardApi.listApiKeyCapabilities).toHaveBeenCalledTimes(2)
   })
 
   it('revokes a key only after confirmation', async () => {
@@ -256,6 +303,13 @@ function inputByValue(value: string): HTMLInputElement {
 function checkbox(): HTMLButtonElement {
   const element = document.querySelector('[role="checkbox"]')
   if (!(element instanceof HTMLButtonElement)) throw new Error('Checkbox not found')
+  return element
+}
+
+function permissionOption(name: string): HTMLLabelElement {
+  const element = Array.from(document.querySelectorAll('label'))
+    .find((label) => label.textContent?.includes(name))
+  if (!(element instanceof HTMLLabelElement)) throw new Error(`Permission option not found: ${name}`)
   return element
 }
 
