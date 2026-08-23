@@ -130,8 +130,13 @@ describe('ApiKeysSettings', () => {
 
     expect(checkbox().getAttribute('data-state')).toBe('checked')
     expect(buttonByText('保存权限').disabled).toBe(true)
-    expect(linkByText('文档').getAttribute('href')).toBe('/document/open-api/api/share-link-download')
-    expect(linkByText('文档').getAttribute('target')).toBe('_blank')
+    const documentationLink = linkByText('文档')
+    const permissionTitle = document.querySelector('label[for="api-key-edit-drive.share_link.download"]')
+    const permissionDescription = document.getElementById('api-key-edit-drive.share_link.download-description')
+    expect(documentationLink.getAttribute('href')).toBe('/document/open-api/api/share-link-download')
+    expect(documentationLink.getAttribute('target')).toBe('_blank')
+    expect(documentationLink.parentElement).toBe(permissionTitle?.parentElement)
+    expect(documentationLink.parentElement?.contains(permissionDescription)).toBe(false)
 
     await click(permissionOption('获取分享链接文件'))
     expect(buttonByText('保存权限').disabled).toBe(false)

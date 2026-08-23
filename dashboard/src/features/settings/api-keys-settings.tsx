@@ -402,37 +402,39 @@ function ApiKeyPermissionSelector({
               return (
                 <div
                   key={capability.scope}
-                  className='flex items-center gap-3 px-3 py-3 hover:bg-muted/50'
+                  className='flex items-start gap-3 px-3 py-3 hover:bg-muted/50'
                 >
-                  <label
-                    htmlFor={checkboxId}
-                    className='flex min-w-0 flex-1 cursor-pointer items-start gap-3'
-                  >
-                    <Checkbox
-                      id={checkboxId}
-                      className='mt-0.5'
-                      checked={selectedScopes.includes(capability.scope)}
-                      aria-describedby={descriptionId}
-                      onCheckedChange={(checked) => onToggle(capability.scope, checked === true)}
-                    />
-                    <span className='min-w-0 space-y-1'>
-                      <span className='block text-sm font-medium'>{capability.name}</span>
-                      <span id={descriptionId} className='block text-sm text-muted-foreground'>
-                        {capability.description}
-                      </span>
+                  <Checkbox
+                    id={checkboxId}
+                    className='mt-2'
+                    checked={selectedScopes.includes(capability.scope)}
+                    aria-describedby={descriptionId}
+                    onCheckedChange={(checked) => onToggle(capability.scope, checked === true)}
+                  />
+                  <div className='min-w-0 flex-1 space-y-1'>
+                    <div className='flex items-center justify-between gap-3'>
+                      <label
+                        htmlFor={checkboxId}
+                        className='min-w-0 cursor-pointer truncate text-sm font-medium'
+                      >
+                        {capability.name}
+                      </label>
+                      <Button asChild variant='ghost' size='sm'>
+                        <a
+                          href={capability.documentationUrl}
+                          target='_blank'
+                          rel='noreferrer'
+                          aria-label={`${capability.name} API 文档`}
+                        >
+                          <FileText />
+                          文档
+                        </a>
+                      </Button>
+                    </div>
+                    <span id={descriptionId} className='block text-sm text-muted-foreground'>
+                      {capability.description}
                     </span>
-                  </label>
-                  <Button asChild variant='ghost' size='sm'>
-                    <a
-                      href={capability.documentationUrl}
-                      target='_blank'
-                      rel='noreferrer'
-                      aria-label={`${capability.name} API 文档`}
-                    >
-                      <FileText />
-                      文档
-                    </a>
-                  </Button>
+                  </div>
                 </div>
               )
             })}
