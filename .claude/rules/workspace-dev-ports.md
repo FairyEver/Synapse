@@ -4,8 +4,8 @@ paths:
   - package.json
   - desktop/vite.config.ts
   - desktop/scripts/dev*.mjs
-  - website/.vitepress/config.*
-  - website/vite.config.*
+  - document/.vitepress/config.*
+  - document/vite.config.*
 ---
 
 # workspace 子包 dev 端口分配
@@ -23,7 +23,7 @@ paths:
 | 子包 | dev 端口 | 配置位置 |
 | --- | --- | --- |
 | `@synapse/desktop` | 5173 | `desktop/scripts/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs`（三处都有默认值，可由 `SYNAPSE_DEV_PORT` 环境变量覆盖） |
-| `@synapse/website` | 5174 | `website/.vitepress/config.mts` 的 `vite.server.port` |
+| `@synapse/document` | 19773 | `document/.vitepress/config.mts` 的 `vite.server.port` |
 
 ## 新增子包时
 
@@ -51,5 +51,5 @@ paths:
 - 本规则的"当前端口分配"表
 - 本规则 frontmatter 的 `paths`（新增子包时追加配置文件路径）
 - 子包 `README.md`（如果 README 里写了 dev URL）
-- 顶层 `README.md` / `desktop/README.md` / `website/README.md`（如果列出了 dev URL）
+- 顶层 `README.md` / `desktop/README.md` / `document/README.md`（如果列出了 dev URL）
 - `AGENTS.md` / `CLAUDE.md`（如果引用了端口）

@@ -2,7 +2,7 @@ packages:
   - shared
   - ui
   - desktop
-  - website
+  - document
   - server
   - dashboard
   - auto

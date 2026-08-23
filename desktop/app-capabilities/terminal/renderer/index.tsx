@@ -62,6 +62,7 @@ import { getRendererPlatform } from "../../../src/lib/runtime-platform"
 import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
+import type { SynapseSystemAppTerminalOpenRequest } from "../../../src/modules/apps/types"
 import type {
   SynapseTerminalGlobalLaunchSettings,
   SynapseTerminalGroup,
@@ -91,7 +92,13 @@ const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
 
 const logger = createRendererLogger("terminal.app")
 
-export function TerminalModule() {
+export function TerminalModule({
+  openRequest = null,
+  onOpenRequestConsumed,
+}: {
+  readonly openRequest?: SynapseSystemAppTerminalOpenRequest | null
+  readonly onOpenRequestConsumed?: (requestId: string) => void
+} = {}) {
   const terminalBridge = requireBridgeDomain("terminal")
   const shellBridge = requireBridgeDomain("shell")
   const [groups, setGroups] = useState<SynapseTerminalGroupSummary[]>([])
@@ -204,6 +211,33 @@ export function TerminalModule() {
       active = false
     }
   }, [refreshSessions])
+
+  useEffect(() => {
+    if (!openRequest) return
+    let cancelled = false
+    Promise.all([
+      terminalBridge.group.list(),
+      terminalBridge.session.get({ sessionId: openRequest.sessionId }),
+    ])
+      .then(([nextGroups, session]) => {
+        if (cancelled) return
+        setGroups(nextGroups)
+        setSessions((current) => mergeSession(current, session))
+        setActiveSessionId(session.id)
+        setOpenGroupIds((current) => ({ ...current, [session.groupId]: true }))
+      })
+      .catch((error) => {
+        if (cancelled) return
+        logger.warn("Failed to focus requested terminal session.", error)
+        toast.error("终端会话不存在")
+      })
+      .finally(() => {
+        if (!cancelled) onOpenRequestConsumed?.(openRequest.requestId)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [onOpenRequestConsumed, openRequest, terminalBridge])
 
   const createSession = useCallback(async (input: SynapseTerminalCreateSessionInput = {}) => {
     try {

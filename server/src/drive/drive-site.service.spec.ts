@@ -105,6 +105,54 @@ describe("DriveSiteService", () => {
     })
   })
 
+  it("prepares HTML as a full deployment archive and non-HTML assets as files", async () => {
+    const storage = createMemoryStorage()
+    const prisma = createMemoryPrisma()
+    const service = new DriveSiteService(prisma as never, storage as never)
+    const site = await service.createSite("user-1", "https://synapse.test", {
+      sourceFolderItemId: "folder-1",
+      name: "原型",
+      entryPath: null,
+      accessMode: "public",
+      expiresIn: "forever",
+    })
+
+    const page = await service.prepareOpenApiSiteDownload(site.siteId, {
+      relativePath: "index.html",
+      sourceType: "site_path",
+    })
+    expect(page).toMatchObject({
+      status: "ok",
+      artifact: {
+        sourceType: "site_path",
+        artifactType: "archive",
+        fileName: "原型.zip",
+        entryPath: "index.html",
+      },
+    })
+    if (page.status !== "ok") throw new Error("expected Site archive")
+    expect(page.artifact.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entryType: "directory", relativePath: "assets/" }),
+      expect.objectContaining({ entryType: "file", relativePath: "index.html" }),
+      expect.objectContaining({ entryType: "file", relativePath: "assets/app.js" }),
+      expect.objectContaining({ entryType: "file", relativePath: "assets/logo.png" }),
+    ]))
+
+    await expect(service.prepareOpenApiSiteDownload(site.siteId, {
+      relativePath: "assets/logo.png",
+      sourceType: "site_path",
+    })).resolves.toMatchObject({
+      status: "ok",
+      artifact: {
+        sourceType: "site_path",
+        artifactType: "file",
+        fileName: "logo.png",
+        mimeType: "image/png",
+        entryPath: null,
+      },
+    })
+  })
+
   it("generates a share-style password when publishing a protected site without manual password input", async () => {
     const storage = createMemoryStorage()
     const prisma = createMemoryPrisma()

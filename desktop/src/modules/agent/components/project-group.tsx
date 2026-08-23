@@ -43,6 +43,7 @@ type ProjectGroupProps = {
   onQuickCreateSession: () => void
   onCustomizeSession: () => void
   onShowProjectInFolder?: () => void
+  onOpenProjectInTerminal?: () => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void | Promise<void>
   onDeleteOthers: (
@@ -65,6 +66,7 @@ function ProjectGroup({
   onQuickCreateSession,
   onCustomizeSession,
   onShowProjectInFolder,
+  onOpenProjectInTerminal,
   onSelect,
   onDelete,
   onDeleteOthers,
@@ -151,6 +153,14 @@ function ProjectGroup({
                     onSelect={onShowProjectInFolder}
                   >
                     在文件夹中显示
+                  </DropdownMenuItem>
+                ) : null}
+                {onOpenProjectInTerminal ? (
+                  <DropdownMenuItem
+                    data-track="agent-project-open-terminal"
+                    onSelect={onOpenProjectInTerminal}
+                  >
+                    在终端中打开
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem

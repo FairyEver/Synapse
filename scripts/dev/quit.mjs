@@ -16,10 +16,10 @@ async function runCleanup(scriptName) {
 
 const serverResult = await runCleanup("quit:server")
 const desktopResult = await runCleanup("quit:desktop")
-const websiteResult = await runCleanup("quit:website")
+const documentResult = await runCleanup("quit:document")
 
-if (serverResult.signal || desktopResult.signal || websiteResult.signal) {
+if (serverResult.signal || desktopResult.signal || documentResult.signal) {
   process.exit(1)
 }
 
-process.exit(serverResult.code || desktopResult.code || websiteResult.code || 0)
+process.exit(serverResult.code || desktopResult.code || documentResult.code || 0)

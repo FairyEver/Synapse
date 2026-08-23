@@ -7,11 +7,13 @@ import { join } from "node:path"
 import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
 import { AgentPersonasModule } from "./agent-personas/agent-personas.module"
+import { ApiKeyModule } from "./api-keys/api-key.module"
 import { UserAuthModule } from "./auth/user-auth.module"
 import { BackupModule } from "./backup/backup.module"
 import { DashboardModule } from "./dashboard/dashboard.module"
 import { DriveModule } from "./drive/drive.module"
 import { HealthModule } from "./health/health.module"
+import { OpenApiModule } from "./open-api/open-api.module"
 import { LiveModule } from "./live/live.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
@@ -77,6 +79,8 @@ type RequestLogObject = {
     AdminAuthModule,
     DashboardModule,
     AgentPersonasModule,
+    ApiKeyModule,
+    OpenApiModule,
     SkillRepositoryModule,
     DriveModule,
     AdminModule,

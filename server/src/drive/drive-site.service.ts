@@ -37,6 +37,11 @@ import {
   verifyDrivePasswordInput,
 } from "./drive-access-protection"
 import { normalizeDriveSiteRelativePath, resolveDriveSiteRequestPath } from "./drive-site-path"
+import {
+  DRIVE_OPEN_API_ARCHIVE_MAX_BYTES,
+  DRIVE_OPEN_API_ARCHIVE_MAX_FILES,
+  type DriveOpenApiDownloadPreparationResult,
+} from "./drive-open-api-download"
 import type { DriveStoragePort } from "./drive-storage"
 import { createDriveSiteId } from "./drive-token"
 import { toDriveSiteDto } from "./drive.types"
@@ -119,6 +124,7 @@ type DriveSiteAssetRecord = {
   readonly relativePath: string
   readonly contentType: string | null
   readonly size: bigint
+  readonly sha256?: string | null
 }
 
 type DriveSiteFolderRecord = {
@@ -504,6 +510,165 @@ export class DriveSiteService {
     }
   }
 
+  async prepareOpenApiSiteDownload(siteId: string, input: {
+    readonly password?: string
+    readonly relativePath?: string
+    readonly sourceType: "site" | "site_path"
+  }): Promise<DriveOpenApiDownloadPreparationResult> {
+    const access = await this.resolvePublicSite(siteId, {
+      cookie: null,
+      password: input.password,
+      relativePath: input.relativePath,
+    })
+    if (access.status === "password_required") return { status: "password_required" }
+    if (access.status !== "ok") return { status: "not_found" }
+
+    const target = {
+      kind: "site" as const,
+      siteId,
+      deploymentId: access.deployment.id,
+    }
+    if (!isHtmlSiteAsset(access.asset.relativePath, access.asset.contentType)) {
+      return {
+        status: "ok",
+        artifact: {
+          sourceType: input.sourceType,
+          artifactType: "file",
+          fileName: siteAssetBasename(access.asset.relativePath),
+          mimeType: access.asset.contentType ?? "application/octet-stream",
+          size: access.asset.size,
+          entryPath: null,
+          target,
+          entries: [{
+            entryType: "file",
+            relativePath: null,
+            storageKey: access.asset.storageKey,
+            driveFileVersionId: null,
+            immutableId: access.asset.id ?? access.asset.storageKey,
+            size: access.asset.size,
+            mimeType: access.asset.contentType,
+            etag: null,
+            sha256: access.asset.sha256 ?? null,
+          }],
+        },
+      }
+    }
+
+    if (
+      access.deployment.fileCount > DRIVE_OPEN_API_ARCHIVE_MAX_FILES
+      || access.deployment.totalBytes > DRIVE_OPEN_API_ARCHIVE_MAX_BYTES
+    ) {
+      return { status: "archive_too_large" }
+    }
+    const [folders, assets] = await Promise.all([
+      driveSiteFolderDelegate(this.prisma).findMany({
+        where: { deploymentId: access.deployment.id },
+        orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+      }),
+      this.prisma.driveSiteAsset.findMany({
+        where: { deploymentId: access.deployment.id },
+        orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+      }),
+    ])
+    const entries = [
+      ...folders.map((folder) => ({
+        entryType: "directory" as const,
+        relativePath: `${folder.relativePath.replace(/\/+$/u, "")}/`,
+        storageKey: null,
+        driveFileVersionId: null,
+        immutableId: folder.id,
+        size: null,
+        mimeType: null,
+        etag: null,
+        sha256: null,
+      })),
+      ...assets.map((asset) => ({
+        entryType: "file" as const,
+        relativePath: asset.relativePath,
+        storageKey: asset.storageKey,
+        driveFileVersionId: null,
+        immutableId: asset.id,
+        size: asset.size,
+        mimeType: asset.contentType,
+        etag: null,
+        sha256: asset.sha256,
+      })),
+    ].sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0)
+
+    return {
+      status: "ok",
+      artifact: {
+        sourceType: input.sourceType,
+        artifactType: "archive",
+        fileName: `${access.site.name}.zip`,
+        mimeType: "application/zip",
+        size: null,
+        entryPath: access.asset.relativePath,
+        target,
+        entries,
+      },
+    }
+  }
+
+  async revalidateOpenApiSiteTarget(input: {
+    readonly siteId: string
+    readonly deploymentId: string
+  }): Promise<boolean> {
+    const site = await this.prisma.driveSite.findUnique({ where: { siteId: input.siteId } })
+    if (!site || site.deletedAt || site.disabledAt || site.status !== DRIVE_SITE_STATUS.active) return false
+    if (site.expiresAt && site.expiresAt.getTime() <= Date.now()) return false
+    const deployment = await this.prisma.driveSiteDeployment.findFirst({
+      where: {
+        id: input.deploymentId,
+        driveSiteId: site.id,
+        status: DRIVE_SITE_DEPLOYMENT_STATUS.active,
+      },
+      select: { id: true },
+    })
+    return Boolean(deployment)
+  }
+
+  async revalidateOpenApiSiteEntries(input: {
+    readonly deploymentId: string
+    readonly entries: ReadonlyArray<{
+      readonly entryType: string
+      readonly relativePath: string | null
+      readonly storageKey: string | null
+      readonly size: bigint | null
+      readonly sha256: string | null
+    }>
+  }): Promise<boolean> {
+    const fileEntries = input.entries.filter((entry) => entry.entryType === "file")
+    const directoryEntries = input.entries.filter((entry) => entry.entryType === "directory")
+    const [assets, folders] = await Promise.all([
+      this.prisma.driveSiteAsset.findMany({
+        where: {
+          deploymentId: input.deploymentId,
+          storageKey: { in: fileEntries.map((entry) => entry.storageKey).filter((key): key is string => Boolean(key)) },
+        },
+        select: { storageKey: true, size: true, sha256: true },
+      }),
+      driveSiteFolderDelegate(this.prisma).findMany({
+        where: { deploymentId: input.deploymentId },
+        orderBy: [{ relativePath: "asc" }, { id: "asc" }],
+      }),
+    ])
+    const assetsByKey = new Map(assets.map((asset) => [asset.storageKey, asset]))
+    const folderPaths = new Set(folders.map((folder) => folder.relativePath.replace(/\/+$/u, "")))
+    return fileEntries.every((entry) => {
+      if (!entry.storageKey || entry.size === null) return false
+      const asset = assetsByKey.get(entry.storageKey)
+      return Boolean(
+        asset
+        && asset.size === entry.size
+        && (!entry.sha256 || asset.sha256 === entry.sha256),
+      )
+    }) && directoryEntries.every((entry) => (
+      Boolean(entry.relativePath)
+      && folderPaths.has(entry.relativePath!.replace(/\/+$/u, ""))
+    ))
+  }
+
   private async resolvePublicDeployment(siteId: string, input: { readonly cookie: string | null; readonly password?: string }): Promise<
     | { readonly status: "not_found" | "disabled" | "expired" | "password_required" }
     | { readonly status: "ok"; readonly site: DriveSiteRecord; readonly deployment: DriveSiteDeploymentRecord }
@@ -820,6 +985,15 @@ function comparePublicSiteEntries(first: DrivePublicSiteEntryRecord, second: Dri
   if (pathOrder !== 0) return pathOrder
   if (first.kind !== second.kind) return first.kind === "folder" ? -1 : 1
   return (first.id ?? "").localeCompare(second.id ?? "")
+}
+
+function isHtmlSiteAsset(relativePath: string, contentType: string | null): boolean {
+  const normalizedContentType = contentType?.split(";", 1)[0]?.trim().toLowerCase()
+  return normalizedContentType === "text/html" || /\.html?$/iu.test(relativePath)
+}
+
+function siteAssetBasename(relativePath: string): string {
+  return relativePath.split("/").filter(Boolean).at(-1) ?? "download"
 }
 
 function siteAuditDetail(userId: string, site: DriveSiteDto, extra: Record<string, unknown> = {}): Record<string, unknown> {

@@ -178,6 +178,40 @@ export type DashboardMe = {
   teams: []
 }
 
+export type DashboardApiKey = {
+  id: string
+  name: string
+  prefix: string
+  scopes: string[]
+  lastUsedAt: string | null
+  createdAt: string
+}
+
+export type DashboardApiKeyCapability = {
+  scope: string
+  name: string
+}
+
+export type DashboardApiKeyUsageLog = {
+  id: string
+  requestId: string
+  operation: 'grant_create' | 'download'
+  status: 'started' | 'succeeded' | 'failed' | 'aborted'
+  httpStatus: number | null
+  errorCode: string | null
+  sourceType: string | null
+  artifactType: string | null
+  durationMs: number | null
+  responseBytes: string | null
+  startedAt: string
+  completedAt: string | null
+}
+
+export type DashboardApiKeyCreateResult = {
+  apiKey: DashboardApiKey
+  secret: string
+}
+
 export type AdminSkillRepositoryRow = {
   id: string
   name: string
@@ -581,6 +615,28 @@ export const dashboardApi = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  listApiKeys: () =>
+    request<DashboardApiKey[]>(`${consoleApiBasePath}/api-keys`),
+  listApiKeyCapabilities: () =>
+    request<DashboardApiKeyCapability[]>(`${consoleApiBasePath}/api-key-capabilities`),
+  createApiKey: (input: { name: string; scopes: string[] }) =>
+    request<DashboardApiKeyCreateResult>(`${consoleApiBasePath}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  revokeApiKey: (id: string) =>
+    request<{ ok: true }>(
+      `${consoleApiBasePath}/api-keys/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    ),
+  listApiKeyUsageLogs: (id: string, options: PaginationOptions = {}) =>
+    request<PaginatedResponse<DashboardApiKeyUsageLog>>(
+      `${consoleApiBasePath}/api-keys/${encodeURIComponent(id)}/usage-logs${paginationSuffix({
+        ...options,
+        sortBy: options.sortBy ?? 'startedAt',
+        sortOrder: options.sortOrder ?? 'desc',
+      })}`
+    ),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${consoleApiBasePath}/live-clients`),
   listDevices: (options: PaginationOptions = {}) =>

@@ -96,6 +96,25 @@ describe("appsIpcModule", () => {
     expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("git", { gitOpenRequest })
   })
 
+  it("accepts Terminal open requests only for the Terminal app", async () => {
+    const terminalOpenRequest = { requestId: "request-1", sessionId: "session-1" }
+    expect(appsIpcModule.methods.openSystemApp.request.safeParse({
+      appId: "terminal",
+      options: { terminalOpenRequest },
+    }).success).toBe(true)
+    expect(appsIpcModule.methods.openSystemApp.request.safeParse({
+      appId: "database",
+      options: { terminalOpenRequest },
+    }).success).toBe(false)
+
+    await appsIpcModule.methods.openSystemApp.handler(createContext({}), {
+      appId: "terminal",
+      options: { terminalOpenRequest },
+    })
+
+    expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("terminal", { terminalOpenRequest })
+  })
+
   it("rejects direct workflow windows while the workflow entry is hidden", async () => {
     cheatCodeStateServiceMock.getStates.mockResolvedValue({ [WORKFLOW_ENTRY_CHEAT_CODE_NAME]: false })
 

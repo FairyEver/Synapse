@@ -32,6 +32,7 @@ import type {
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
+  SynapseSystemAppTerminalOpenRequest,
 } from "../types"
 
 type AppsBridge = {
@@ -49,6 +50,8 @@ type SystemAppContentProps = {
   readonly onPendingAgentSessionConsumed?: () => void
   readonly gitOpenRequest?: SynapseSystemAppGitOpenRequest | null
   readonly onGitOpenRequestConsumed?: (requestId: string) => void
+  readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
+  readonly onTerminalOpenRequestConsumed?: (requestId: string) => void
 }
 
 function SystemAppContent({
@@ -62,6 +65,8 @@ function SystemAppContent({
   onPendingAgentSessionConsumed,
   gitOpenRequest = null,
   onGitOpenRequestConsumed,
+  terminalOpenRequest = null,
+  onTerminalOpenRequestConsumed,
 }: SystemAppContentProps) {
   useEffect(() => {
     if (appId === "resource-repository" || !onContentOpenRequest) return undefined
@@ -103,7 +108,14 @@ function SystemAppContent({
   if (appId === "synapse-skill") return <SynapseSkillModule />
   if (appId === "secrets") return <SecretsModule />
   if (appId === "quick-input") return <QuickInputModule />
-  if (appId === "terminal") return <TerminalModule />
+  if (appId === "terminal") {
+    return (
+      <TerminalModule
+        openRequest={terminalOpenRequest}
+        onOpenRequestConsumed={onTerminalOpenRequestConsumed}
+      />
+    )
+  }
   if (appId === "git") {
     return (
       <GitModule

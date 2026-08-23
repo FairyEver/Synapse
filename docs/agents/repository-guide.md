@@ -6,7 +6,7 @@
 
 - Electron 41 + Vite 8 + React 19 + TypeScript 6。
 - shadcn/ui（`radix-nova`）+ Tailwind CSS 4。
-- pnpm monorepo：`@synapse/desktop`、`@synapse/website`、`@synapse/server`、`@synapse/auto`、`@synapse/auto-web`。
+- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/auto`、`@synapse/auto-web`。
 - Git 管理内容，SQLite / DataRepository 管理业务数据。
 
 ```text
@@ -21,7 +21,7 @@ desktop/
     ├── hooks/          # 共享 hooks
     ├── lib/            # 共享纯工具
     └── types/          # Renderer 全局类型
-website/                # VitePress 文档站
+document/               # VitePress 文档站
 server/                 # 服务端与管理后台
 ```
 
@@ -29,11 +29,11 @@ server/                 # 服务端与管理后台
 
 ## 启动与验证
 
-- `pnpm dev`：desktop + server。
+- `pnpm dev`：desktop + server + document。
 - `pnpm dev:desktop`：仅桌面端。
 - `pnpm dev:server`：服务端 API、dashboard 和 compose 服务。
-- `pnpm dev:website`：官网。
-- 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:website`。
+- `pnpm dev:document`：文档站。
+- 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`。
 
 只启动任务需要的最小范围。只改 `desktop/` 不要启动全栈；服务已经运行且热更新覆盖改动时不要重启。除非用户明确要求，不要为了验证主动启动 dev server、浏览器、应用窗口、DevTools、Playwright 或 MCP 页面检查。
 

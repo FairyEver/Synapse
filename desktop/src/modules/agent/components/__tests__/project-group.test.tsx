@@ -128,10 +128,11 @@ describe("ProjectGroup", () => {
     expect(document.body.textContent).not.toContain("重命名会话")
   })
 
-  it("renders tracked actions for quick creation, custom creation, and showing the project folder", async () => {
+  it("renders tracked actions for quick creation, custom creation, folder reveal, and Terminal", async () => {
     const onQuickCreateSession = vi.fn()
     const onCustomizeSession = vi.fn()
     const onShowProjectInFolder = vi.fn()
+    const onOpenProjectInTerminal = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -148,6 +149,7 @@ describe("ProjectGroup", () => {
           onQuickCreateSession={onQuickCreateSession}
           onCustomizeSession={onCustomizeSession}
           onShowProjectInFolder={onShowProjectInFolder}
+          onOpenProjectInTerminal={onOpenProjectInTerminal}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
@@ -176,6 +178,13 @@ describe("ProjectGroup", () => {
     const customItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
       .find((item) => item.textContent === "创建自定义对话")
     expect(customItem).toBeDefined()
+    expect([...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .map((item) => item.textContent)).toEqual([
+      "创建自定义对话",
+      "在文件夹中显示",
+      "在终端中打开",
+      "清空对话",
+    ])
 
     await act(async () => {
       customItem?.click()
@@ -206,6 +215,27 @@ describe("ProjectGroup", () => {
     expect(track).toHaveBeenCalledWith({
       component: "dropdown-menu-item",
       name: "agent-project-show-in-folder",
+      action: "select",
+    })
+
+    await act(async () => {
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="更多操作"]')
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+    const terminalItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "在终端中打开")
+    expect(terminalItem).toBeDefined()
+
+    await act(async () => {
+      terminalItem?.click()
+    })
+
+    expect(onOpenProjectInTerminal).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "dropdown-menu-item",
+      name: "agent-project-open-terminal",
       action: "select",
     })
     expect(document.querySelector('[data-slot="dropdown-menu-separator"]')).toBeNull()

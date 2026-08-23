@@ -31,6 +31,11 @@ import {
   type DriveLinkType,
 } from "@synapse/shared"
 import { DriveAnnotationService } from "./drive-annotation.service"
+import {
+  DriveOpenApiDownloadPreparationError,
+  type DriveOpenApiDownloadArtifact,
+  type DriveOpenApiDownloadPreparationResult,
+} from "./drive-open-api-download"
 
 type PublicShareAccessResult =
   | {
@@ -77,6 +82,12 @@ export type DriveLinkIntakeDeps = {
       }
       | { readonly kind: "zip"; readonly filename: string; readonly entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }> }
     >
+    readonly prepareOpenApiShareDownload?: (input: {
+      readonly shareId: string
+      readonly itemId?: string | null
+      readonly password?: string
+      readonly sourceType: "share" | "share_item"
+    }) => Promise<DriveOpenApiDownloadPreparationResult>
   }
   readonly sites: {
     readonly resolvePublicSite: (siteId: string, input: {
@@ -104,10 +115,15 @@ export type DriveLinkIntakeDeps = {
       }
       | { readonly status: "password_required" | "not_found" | "disabled" | "expired" | "deleted" }
     >
+    readonly prepareOpenApiSiteDownload?: (siteId: string, input: {
+      readonly password?: string
+      readonly relativePath?: string
+      readonly sourceType: "site" | "site_path"
+    }) => Promise<DriveOpenApiDownloadPreparationResult>
   }
   readonly publicAssets: {
     readonly resolvePublicAsset: (assetId: string, headers: Record<string, never>) => Promise<
-      | { readonly status: "ok"; readonly name: string; readonly mimeType: string; readonly size: bigint; readonly storageKey: string }
+      | { readonly status: "ok"; readonly assetId: string; readonly publicAssetId: string; readonly name: string; readonly mimeType: string; readonly size: bigint; readonly storageKey: string; readonly etag: string | null }
       | { readonly status: "not_found" | "not_modified" }
     >
   }
@@ -302,6 +318,69 @@ export class DriveLinkIntakeService {
     })
     if (transfer.kind === "zip") throw new BadRequestException("请选择具体文件下载。")
     return transfer
+  }
+
+  async prepareDownloadArtifact(input: {
+    readonly url: string
+  }): Promise<DriveOpenApiDownloadArtifact> {
+    let parsed: ParsedDriveLink
+    try {
+      parsed = parseDriveLinkUrl(input.url, this.deps.publicAppUrl)
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new DriveOpenApiDownloadPreparationError("unsupported_link")
+      }
+      throw error
+    }
+    const password = parsed.password ?? undefined
+    if (parsed.linkType === "share") {
+      if (!this.deps.drive.prepareOpenApiShareDownload) {
+        throw new Error("Drive Open API download preparation is unavailable.")
+      }
+      return unwrapOpenApiPreparation(await this.deps.drive.prepareOpenApiShareDownload({
+        shareId: parsed.shareId,
+        itemId: parsed.itemId,
+        password,
+        sourceType: parsed.itemId ? "share_item" : "share",
+      }))
+    }
+    if (parsed.linkType === "site") {
+      if (!this.deps.sites.prepareOpenApiSiteDownload) {
+        throw new Error("Drive Site Open API download preparation is unavailable.")
+      }
+      return unwrapOpenApiPreparation(await this.deps.sites.prepareOpenApiSiteDownload(parsed.siteId, {
+        password,
+        relativePath: parsed.path,
+        sourceType: parsed.path ? "site_path" : "site",
+      }))
+    }
+
+    const access = await this.deps.publicAssets.resolvePublicAsset(parsed.assetId, {})
+    if (access.status !== "ok") throw new DriveOpenApiDownloadPreparationError("not_found")
+    return {
+      sourceType: "public_asset",
+      artifactType: "file",
+      fileName: access.name,
+      mimeType: access.mimeType,
+      size: access.size,
+      entryPath: null,
+      target: {
+        kind: "public_asset",
+        assetId: access.assetId,
+        publicAssetId: access.publicAssetId,
+      },
+      entries: [{
+        entryType: "file",
+        relativePath: null,
+        storageKey: access.storageKey,
+        driveFileVersionId: null,
+        immutableId: access.publicAssetId,
+        size: access.size,
+        mimeType: access.mimeType,
+        etag: access.etag,
+        sha256: null,
+      }],
+    }
   }
 
   private async resolveShare(parsed: Extract<ParsedDriveLink, { readonly linkType: "share" }>, input: DriveLinkResolveInput): Promise<DriveLinkResolveDto> {
@@ -554,6 +633,17 @@ function parseDriveLinkUrl(value: string, publicAppUrl: string): ParsedDriveLink
 
 function driveLinkPassword(inputPassword: string | undefined, parsedPassword: string | null): string | undefined {
   return inputPassword ?? parsedPassword ?? undefined
+}
+
+function unwrapOpenApiPreparation(result: DriveOpenApiDownloadPreparationResult): DriveOpenApiDownloadArtifact {
+  if (result.status === "ok") return result.artifact
+  if (result.status === "password_required") {
+    throw new DriveOpenApiDownloadPreparationError("password_required")
+  }
+  if (result.status === "archive_too_large") {
+    throw new DriveOpenApiDownloadPreparationError("archive_too_large")
+  }
+  throw new DriveOpenApiDownloadPreparationError("not_found")
 }
 
 function normalizeDriveLinkPassword(value: string | null): string | null {

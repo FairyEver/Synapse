@@ -1,7 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Head, Header, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
-import archiver from "archiver"
 import { Buffer } from "node:buffer"
 import { Readable, Writable } from "node:stream"
 import { pipeline } from "node:stream/promises"
@@ -44,6 +43,7 @@ import { driveSiteCacheControl, driveSiteContentType, renderDriveSiteNotFoundPag
 import { DriveSiteService } from "./drive-site.service"
 import { isDriveSiteHtmlPath } from "./drive-site-path"
 import { DriveUploadTooLargeError, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
+import { sendDriveZip } from "./drive-download-stream"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
 const legacyDriveAccessCookieName = driveAccessCookieNamePrefix
@@ -2241,43 +2241,6 @@ function decodeCookieValue(value: string): string | undefined {
   } catch {
     return value
   }
-}
-
-async function sendDriveZip(
-  response: Response,
-  filename: string,
-  entries: AsyncIterable<{ readonly path: string; readonly storageKey: string | null }>,
-  storage: DriveStoragePort,
-): Promise<void> {
-  response.setHeader("Content-Type", "application/zip")
-  response.setHeader("Content-Disposition", attachmentContentDisposition(filename))
-  const archive = archiver("zip", { zlib: { level: 6 } })
-  const archiveError = new Promise<never>((_, reject) => {
-    archive.once("error", reject)
-  })
-  archive.pipe(response)
-  try {
-    for await (const entry of entries) {
-      if (entry.storageKey === null) {
-        archive.append(Buffer.alloc(0), { name: ensureDriveZipDirectoryPath(entry.path) })
-        continue
-      }
-      const object = await storage.getObjectStream({ key: entry.storageKey })
-      archive.append(object.stream as unknown as Readable, { name: entry.path })
-    }
-    await Promise.race([archive.finalize(), archiveError])
-  } catch (error) {
-    archive.destroy()
-    if (!response.headersSent) {
-      throw error
-    }
-    response.destroy(error instanceof Error ? error : new Error("Drive zip stream failed."))
-    throw error
-  }
-}
-
-function ensureDriveZipDirectoryPath(path: string): string {
-  return path.endsWith("/") ? path : `${path}/`
 }
 
 function setProtectedShareContentCacheHeaders(response: Response): void {

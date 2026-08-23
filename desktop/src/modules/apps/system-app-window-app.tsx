@@ -9,6 +9,7 @@ import type {
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
+  SynapseSystemAppTerminalOpenRequest,
 } from "./types"
 import { parseSystemAppId } from "./definitions"
 
@@ -16,6 +17,7 @@ type AppsBridge = {
   readonly openSystemApp: (appId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions) => Promise<void>
   readonly onContentOpenRequest: (listener: (request: ContentOpenRequest) => void) => () => void
   readonly onGitOpenRequest: (listener: (request: SynapseSystemAppGitOpenRequest) => void) => () => void
+  readonly onTerminalOpenRequest: (listener: (request: SynapseSystemAppTerminalOpenRequest) => void) => () => void
 }
 
 function getAppsBridge(): AppsBridge | undefined {
@@ -49,6 +51,22 @@ function parseInitialGitOpenRequest(): SynapseSystemAppGitOpenRequest | null {
   }
 }
 
+function parseInitialTerminalOpenRequest(): SynapseSystemAppTerminalOpenRequest | null {
+  const raw = new URLSearchParams(window.location.search).get("terminalOpenRequest")
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<SynapseSystemAppTerminalOpenRequest>
+    return typeof parsed.requestId === "string"
+      && parsed.requestId.length > 0
+      && typeof parsed.sessionId === "string"
+      && parsed.sessionId.length > 0
+      ? { requestId: parsed.requestId, sessionId: parsed.sessionId }
+      : null
+  } catch {
+    return null
+  }
+}
+
 export function SystemAppWindowApp() {
   const appId = useMemo(
     () => parseSystemAppId(new URLSearchParams(window.location.search).get("appId")),
@@ -58,12 +76,22 @@ export function SystemAppWindowApp() {
     useState<ContentOpenRequest | null>(() => parseInitialContentOpenRequest())
   const [pendingGitOpenRequest, setPendingGitOpenRequest] =
     useState<SynapseSystemAppGitOpenRequest | null>(() => parseInitialGitOpenRequest())
+  const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
+    useState<SynapseSystemAppTerminalOpenRequest | null>(() => parseInitialTerminalOpenRequest())
 
   useEffect(() => {
     const bridge = getAppsBridge()
     if (!bridge) return undefined
     return bridge.onContentOpenRequest((request) => {
       setPendingContentOpenRequest(request)
+    })
+  }, [])
+
+  useEffect(() => {
+    const bridge = getAppsBridge()
+    if (!bridge) return undefined
+    return bridge.onTerminalOpenRequest((request) => {
+      setPendingTerminalOpenRequest(request)
     })
   }, [])
 
@@ -95,6 +123,10 @@ export function SystemAppWindowApp() {
       gitOpenRequest={pendingGitOpenRequest}
       onGitOpenRequestConsumed={(requestId) => {
         setPendingGitOpenRequest((current) => current?.requestId === requestId ? null : current)
+      }}
+      terminalOpenRequest={pendingTerminalOpenRequest}
+      onTerminalOpenRequestConsumed={(requestId) => {
+        setPendingTerminalOpenRequest((current) => current?.requestId === requestId ? null : current)
       }}
       onContentOpenRequest={forwardContentOpenRequest}
     />

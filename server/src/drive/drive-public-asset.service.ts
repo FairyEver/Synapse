@@ -723,6 +723,34 @@ export class DrivePublicAssetService {
     }
   }
 
+  async revalidateOpenApiPublicAssetTarget(input: {
+    readonly assetId: string
+    readonly publicAssetId: string
+    readonly storageKey: string
+  }): Promise<boolean> {
+    const asset = await this.prisma.publicAsset.findFirst({
+      where: {
+        id: input.publicAssetId,
+        assetId: input.assetId,
+        deletedAt: null,
+        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+        item: { lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active, deletedAt: null },
+      },
+      select: { storageKey: true },
+    })
+    if (!asset) return false
+    if (asset.storageKey === input.storageKey) return true
+    const revision = await this.prisma.publicAssetRevision.findFirst({
+      where: {
+        publicAssetId: input.publicAssetId,
+        assetId: input.assetId,
+        storageKey: input.storageKey,
+      },
+      select: { id: true },
+    })
+    return Boolean(revision)
+  }
+
   async recordAccessSafely(input: DrivePublicAssetAccessInput): Promise<void> {
     if (!isDrivePublicAssetId(input.assetId)) return
     try {

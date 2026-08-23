@@ -66,6 +66,19 @@ describe("webhook sanitize", () => {
     expect(JSON.stringify(request)).not.toContain("raw-signature")
   })
 
+  it("redacts Open API download tokens before request logs are serialized", () => {
+    const request = sanitizeWebhookLogRequest({
+      originalUrl: "/api/open/v1/downloads/dlg_public?token=download-secret&retry=1",
+      query: { token: "download-secret", retry: "1" },
+    })
+
+    expect(request).toMatchObject({
+      url: "/api/open/v1/downloads/dlg_public?token=[redacted]&retry=1",
+      query: { token: "[redacted]", retry: "1" },
+    })
+    expect(JSON.stringify(request)).not.toContain("download-secret")
+  })
+
   it("keeps non-webhook request log URLs unchanged", () => {
     expect(sanitizeWebhookLogUrl("/api/webhooks?status=active")).toBe("/api/webhooks?status=active")
   })

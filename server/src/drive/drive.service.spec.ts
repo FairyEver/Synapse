@@ -2495,6 +2495,98 @@ describe("DriveService", () => {
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
 
+  it("prepares a share file against its current immutable version without opening a stream", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "需求说明.md",
+      mimeType: "text/markdown",
+    })
+    const share = await service.createShare("user-1", file.id, "https://synapse.test")
+    vi.mocked(storageMock.getObjectStream).mockClear()
+
+    const result = await service.prepareOpenApiShareDownload({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+      sourceType: "share",
+    })
+
+    expect(result.status).toBe("ok")
+    if (result.status !== "ok") throw new Error("expected prepared artifact")
+    expect(result.artifact).toMatchObject({
+      artifactType: "file",
+      fileName: "需求说明.md",
+      size: 11n,
+      target: { kind: "share", shareId: share.shareId, itemId: file.id },
+    })
+    expect(result.artifact.entries[0]).toMatchObject({
+      entryType: "file",
+      relativePath: null,
+      size: 11n,
+    })
+    expect(result.artifact.entries[0]?.driveFileVersionId).toBeTruthy()
+    expect(storageMock.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("prepares a stable folder manifest with empty directories and current file versions", async () => {
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const root = await service.createFolder("user-1", { parentId: null, name: "交付" })
+    await service.createFolder("user-1", { parentId: root.id, name: "empty" })
+    await service.createFolder("user-1", { parentId: root.id, name: "附件" })
+    await createCompletedUpload(service, "user-1", {
+      parentId: root.id,
+      name: "需求说明.md",
+      mimeType: "text/markdown",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: root.id,
+      name: "附件",
+      mimeType: "application/octet-stream",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: root.id,
+      name: "Report.md",
+      mimeType: "text/markdown",
+    })
+    await createCompletedUpload(service, "user-1", {
+      parentId: root.id,
+      name: "report.md",
+      mimeType: "text/markdown",
+    })
+    const share = await service.createShare("user-1", root.id, "https://synapse.test")
+
+    const first = await service.prepareOpenApiShareDownload({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+      sourceType: "share",
+    })
+    const second = await service.prepareOpenApiShareDownload({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+      sourceType: "share",
+    })
+
+    expect(first.status).toBe("ok")
+    expect(second.status).toBe("ok")
+    if (first.status !== "ok" || second.status !== "ok") throw new Error("expected prepared artifact")
+    expect(first.artifact).toMatchObject({ artifactType: "archive", fileName: "交付.zip", size: null })
+    expect(first.artifact.entries).toEqual(second.artifact.entries)
+    expect(first.artifact.entries).toHaveLength(6)
+    expect(first.artifact.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entryType: "directory", relativePath: "empty/", storageKey: null }),
+      expect.objectContaining({ entryType: "directory", relativePath: "附件/", storageKey: null }),
+      expect.objectContaining({ entryType: "file", relativePath: "附件", driveFileVersionId: expect.any(String) }),
+      expect.objectContaining({ entryType: "file", relativePath: "Report.md", driveFileVersionId: expect.any(String) }),
+      expect.objectContaining({ entryType: "file", relativePath: "report.md", driveFileVersionId: expect.any(String) }),
+      expect.objectContaining({ entryType: "file", relativePath: "需求说明.md", driveFileVersionId: expect.any(String) }),
+    ]))
+    expect(first.artifact.entries.some((entry) => entry.relativePath?.includes(" (2)"))).toBe(false)
+  })
+
   it("includes empty directories in owner folder archive entries", async () => {
     const prisma = createPrismaMemory()
     const service = new DriveService(prisma as unknown as PrismaService, storageMock)
@@ -4623,6 +4715,9 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
       },
       count: async ({ where }: any = {}) => [...versions.values()].filter((version) => matchesWhere(version, where ?? {})).length,
     },
+    openApiDownloadGrantEntry: {
+      count: async () => 0,
+    },
     driveShare: {
       create: async ({ data }: any) => {
         const enabled = data.enabled ?? true
@@ -4714,6 +4809,9 @@ function matchesWhere(row: any, where: any): boolean {
     if (value && typeof value === "object" && "is" in value) return matchesWhere(row[key], value.is)
     if (value && typeof value === "object" && "some" in value) {
       return Array.isArray(row[key]) && row[key].some((entry) => matchesWhere(entry, value.some))
+    }
+    if (value && typeof value === "object" && "none" in value) {
+      return !Array.isArray(row[key]) || row[key].every((entry) => !matchesWhere(entry, value.none))
     }
     if (value && typeof value === "object" && "in" in value) return value.in.includes(row[key])
     if (value && typeof value === "object" && "not" in value) return row[key] !== value.not

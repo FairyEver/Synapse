@@ -522,6 +522,7 @@ import type {
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
+  SynapseSystemAppTerminalOpenRequest,
 } from "../modules/apps/types"
 
 export type SynapseOpsDiagnostics = {
@@ -1026,6 +1027,9 @@ export type SynapseBridge = {
     ) => () => void
     onGitOpenRequest: (
       listener: (request: SynapseSystemAppGitOpenRequest) => void,
+    ) => () => void
+    onTerminalOpenRequest: (
+      listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
     ) => () => void
   }
   documentTemplate: {

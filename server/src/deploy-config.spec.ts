@@ -185,6 +185,17 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_buffering off")
   })
 
+  it("streams opaque Open API downloads without logging token queries", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const location = nginx.match(/location \^~ \/api\/open\/v1\/downloads\/ \{([\s\S]*?)\n  \}/u)?.[1]
+
+    expect(location).toBeDefined()
+    expect(location).toContain("access_log off")
+    expect(location).toContain("proxy_request_buffering off")
+    expect(location).toContain("proxy_buffering off")
+    expect(location).not.toContain("limit_req")
+  })
+
   it("uses the configured postgres identity in compose", () => {
     const compose = readRepoFile("server/compose.yml")
     const envExample = readRepoFile("server/.env.example")
@@ -239,6 +250,28 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("--exclude='ui/node_modules'")
     expect(deployScript).toContain("--exclude='ui/dist'")
     expect(deployScript).toContain("--include='/ui/***'")
+  })
+
+  it("builds and serves the VitePress document package with the server image", () => {
+    const deployScript = readRepoFile("deploy.sh")
+    const dockerfile = readRepoFile("server/Dockerfile")
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(dockerfile).toContain("COPY document/package.json document/package.json")
+    expect(dockerfile).toContain("--filter @synapse/document...")
+    expect(dockerfile).toContain("COPY document/ document/")
+    expect(dockerfile).toContain("pnpm --filter @synapse/document build")
+    expect(dockerfile).toContain("/app/document/.vitepress/dist ./document")
+    expect(deployScript).toContain("--exclude='document/node_modules'")
+    expect(deployScript).toContain("--exclude='document/.vitepress/dist'")
+    expect(deployScript).toContain("--include='/document/***'")
+    expect(deployScript).toContain("run_remote_health_check true")
+    expect(deployScript).toContain("https://synapse.d2.pub/document/")
+    expect(nginx).toContain("location = /document")
+    expect(nginx).toContain("return 301 /document/")
+    expect(nginx).toContain("location ^~ /document/")
+    expect(nginx).toContain("try_files $uri $uri.html $uri/index.html =404")
+    expect(nginx).toContain("error_page 404 /document/404.html")
   })
 
   it("syncs pnpm patches required by the server Docker build", () => {
@@ -379,7 +412,7 @@ describe("server deployment configuration", () => {
     const deployScript = readRepoFile("deploy.sh")
     const restartScript = readRepoFile("restart.sh")
 
-    expect(deployScript).not.toContain("<title>Synapse</title>")
+    expect(deployScript).toContain("<title>Synapse</title>")
     expect(deployScript).toContain("run_remote_health_check")
     expect(deployScript).toContain("http://127.0.0.1:3000/healthz")
     expect(deployScript).toContain("http://127.0.0.1:3000/console/")
@@ -428,7 +461,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain('%{url_effective}')
     expect(deployScript).toContain('<title>更新 Synapse</title>')
     expect(deployScript).toContain('if effective_url=$(curl')
-    expect(deployScript).toMatch(/run_deployed_health_check\(\) \{\s+run_remote_health_check && check_public_desktop_update_page\s+\}/)
+    expect(deployScript).toMatch(/run_deployed_health_check\(\) \{\s+run_remote_health_check true && check_public_desktop_update_page && check_public_document_page\s+\}/)
     expect(deployScript).toContain("rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check")
     expect(deployScript).not.toContain("rollback_remote_service 2>&1 | sed 's/^/  /' && run_deployed_health_check")
     expect(publicHandoffCheck).toBeGreaterThan(internalCredentialCheck)

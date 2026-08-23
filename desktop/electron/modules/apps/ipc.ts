@@ -36,11 +36,17 @@ const gitOpenRequestSchema = z.object({
   repositoryId: z.string().min(1),
 }).strict()
 
+const terminalOpenRequestSchema = z.object({
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+}).strict()
+
 const openSystemAppRequestSchema = z.object({
   appId: systemAppIdSchema,
   options: z.object({
     contentOpenRequest: contentOpenRequestSchema.optional(),
     gitOpenRequest: gitOpenRequestSchema.optional(),
+    terminalOpenRequest: terminalOpenRequestSchema.optional(),
   }).optional(),
 }).superRefine((request, context) => {
   if (request.options?.gitOpenRequest && request.appId !== "git") {
@@ -48,6 +54,13 @@ const openSystemAppRequestSchema = z.object({
       code: "custom",
       message: "Git open requests require the Git app.",
       path: ["options", "gitOpenRequest"],
+    })
+  }
+  if (request.options?.terminalOpenRequest && request.appId !== "terminal") {
+    context.addIssue({
+      code: "custom",
+      message: "Terminal open requests require the Terminal app.",
+      path: ["options", "terminalOpenRequest"],
     })
   }
 })

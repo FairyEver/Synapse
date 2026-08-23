@@ -16,7 +16,7 @@ If either location does not exist, proceed silently. Domain documents are create
 ├── CONTEXT.md
 ├── docs/adr/
 ├── desktop/
-├── website/
+├── document/
 ├── server/
 └── shared/
 ```

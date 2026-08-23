@@ -12,6 +12,7 @@ import { SystemAppWindowApp } from "../system-app-window-app"
 const mocks = vi.hoisted(() => ({
   openSystemApp: vi.fn(),
   gitOpenRequestListener: null as null | ((request: { requestId: string; repositoryId: string }) => void),
+  terminalOpenRequestListener: null as null | ((request: { requestId: string; sessionId: string }) => void),
 }))
 
 vi.mock("@/modules/agent", () => ({
@@ -65,7 +66,9 @@ vi.mock("../../../../app-capabilities/agent-personas/renderer", () => ({
 }))
 
 vi.mock("../../../../app-capabilities/terminal/renderer", () => ({
-  TerminalModule: () => <div>终端窗口</div>,
+  TerminalModule: ({ openRequest }: { openRequest?: { sessionId: string } | null }) => (
+    <div>终端窗口 {openRequest?.sessionId}</div>
+  ),
 }))
 
 vi.mock("../../../../app-capabilities/secrets/renderer", () => ({
@@ -90,6 +93,12 @@ vi.mock("@/lib/electron-bridge", () => ({
           mocks.gitOpenRequestListener = null
         }
       },
+      onTerminalOpenRequest: (listener: (request: { requestId: string; sessionId: string }) => void) => {
+        mocks.terminalOpenRequestListener = listener
+        return () => {
+          mocks.terminalOpenRequestListener = null
+        }
+      },
       openSystemApp: mocks.openSystemApp,
     },
   }),
@@ -103,6 +112,7 @@ describe("SystemAppWindowApp", () => {
     document.body.innerHTML = ""
     mocks.openSystemApp.mockReset()
     mocks.gitOpenRequestListener = null
+    mocks.terminalOpenRequestListener = null
   })
 
   afterEach(() => {
@@ -123,6 +133,30 @@ describe("SystemAppWindowApp", () => {
     window.history.replaceState({}, "", "/?window=system-app&appId=terminal")
     await renderSystemAppWindow(roots)
     expect(document.body.textContent).toContain("终端窗口")
+  })
+
+  it("passes initial and subsequent Terminal session open requests to the Terminal app", async () => {
+    const request = encodeURIComponent(JSON.stringify({
+      requestId: "request-1",
+      sessionId: "session-1",
+    }))
+    window.history.replaceState({}, "", `/?window=system-app&appId=terminal&terminalOpenRequest=${request}`)
+    await renderSystemAppWindow(roots)
+    expect(document.body.textContent).toContain("终端窗口 session-1")
+
+    await act(async () => {
+      mocks.terminalOpenRequestListener?.({ requestId: "request-2", sessionId: "session-2" })
+    })
+    expect(document.body.textContent).toContain("终端窗口 session-2")
+  })
+
+  it("ignores malformed initial Terminal session open requests", async () => {
+    const request = encodeURIComponent(JSON.stringify({ requestId: "", sessionId: "session-1" }))
+    window.history.replaceState({}, "", `/?window=system-app&appId=terminal&terminalOpenRequest=${request}`)
+    await renderSystemAppWindow(roots)
+
+    expect(document.body.textContent).toContain("终端窗口")
+    expect(document.body.textContent).not.toContain("session-1")
   })
 
   it("renders workflow after the main process has authorized its window", async () => {

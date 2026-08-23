@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, type LinkProps } from '@tanstack/react-router'
-import { UserCog, type LucideIcon } from 'lucide-react'
+import { KeyRound, UserCog, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -17,6 +17,11 @@ const userSettingsNavItems: SettingsNavItem[] = [
     title: '个人资料',
     href: '/settings',
     icon: UserCog,
+  },
+  {
+    title: 'API 秘钥',
+    href: '/settings/api-keys',
+    icon: KeyRound,
   },
 ]
 

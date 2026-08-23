@@ -172,14 +172,11 @@ describe("API and MCP capability surface", () => {
   })
 
   it("does not ship or document the retired Synapse CLI surface", () => {
-    const packageJson = JSON.parse(readRepoFile("package.json")) as { scripts?: Record<string, string> }
     const docsMatrix = readRepoFile("../docs/reference/capability-naming-matrix.md")
-    const websiteMatrix = readRepoFile("../website/developer/capability-naming-matrix.md")
-    const websiteCapabilities = readRepoFile("../website/reference/synapse-mcp-capabilities.md")
 
     expect(existsSync(new URL("database/cli", repoRoot))).toBe(false)
     expect(existsSync(new URL("electron/database/cli-installer.ts", repoRoot))).toBe(false)
-    expect(`${docsMatrix}\n${websiteMatrix}\n${websiteCapabilities}`).not.toMatch(/\bCLI command\b|CLI 命令|synapse database|synapse scheduler|synapse content/u)
+    expect(docsMatrix).not.toMatch(/\bCLI command\b|CLI 命令|synapse database|synapse scheduler|synapse content/u)
   })
 
   it("does not ship the retired stdio MCP bridge", () => {

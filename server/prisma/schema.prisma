@@ -45,6 +45,9 @@ model User {
   passwordResetTokens            UserPasswordResetToken[]
   modulePermissions              UserModulePermission[]
   webhooks                       UserWebhook[]
+  apiKeys                        UserApiKey[]
+  openApiDownloadGrants          OpenApiDownloadGrant[]
+  openApiUsageLogs               OpenApiUsageLog[]
   devices                        UserDevice[]
   driveItems                     DriveItem[]
   driveUsage                     DriveUsage?
@@ -64,6 +67,94 @@ model User {
   agentPersonaPreferences        AgentPersonaPreference[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
+}
+
+model UserApiKey {
+  id                    String                 @id @default(cuid())
+  userId                String
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String                 @db.VarChar(80)
+  keyHash               String                 @unique @db.VarChar(64)
+  keyPrefix             String                 @db.VarChar(24)
+  scopes                String[]               @default([])
+  lastUsedAt            DateTime?
+  revokedAt             DateTime?
+  createdAt             DateTime               @default(now())
+  openApiDownloadGrants OpenApiDownloadGrant[]
+  openApiUsageLogs      OpenApiUsageLog[]
+
+  @@index([userId, revokedAt, createdAt])
+}
+
+model OpenApiDownloadGrant {
+  id           String                      @id @default(cuid())
+  tokenHash    String                      @unique @db.VarChar(64)
+  apiKeyId     String
+  apiKey       UserApiKey                  @relation(fields: [apiKeyId], references: [id], onDelete: Restrict)
+  userId       String
+  user         User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceType   String                      @db.VarChar(32)
+  artifactType String                      @db.VarChar(16)
+  planVersion  Int                         @default(1)
+  snapshotId   String                      @db.VarChar(64)
+  fileName     String                      @db.VarChar(255)
+  mimeType     String                      @db.VarChar(255)
+  size         BigInt?
+  entryPath    String?                     @db.VarChar(1024)
+  target       Json
+  expiresAt    DateTime
+  leaseUntil   DateTime
+  createdAt    DateTime                    @default(now())
+  entries      OpenApiDownloadGrantEntry[]
+
+  @@index([apiKeyId, expiresAt])
+  @@index([expiresAt])
+  @@index([leaseUntil])
+}
+
+model OpenApiDownloadGrantEntry {
+  id                 String               @id @default(cuid())
+  grantId            String
+  grant              OpenApiDownloadGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  ordinal            Int
+  entryType          String               @db.VarChar(16)
+  relativePath       String?              @db.VarChar(1024)
+  storageKey         String?
+  driveFileVersionId String?
+  driveFileVersion   DriveFileVersion?    @relation(fields: [driveFileVersionId], references: [id], onDelete: Restrict)
+  size               BigInt?
+  mimeType           String?              @db.VarChar(255)
+  etag               String?
+  sha256             String?              @db.VarChar(64)
+
+  @@unique([grantId, ordinal])
+  @@index([driveFileVersionId, grantId])
+}
+
+model OpenApiUsageLog {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKeyId      String
+  apiKey        UserApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Restrict)
+  grantId       String?
+  requestId     String     @unique @db.VarChar(64)
+  operation     String     @db.VarChar(32)
+  scope         String     @db.VarChar(120)
+  status        String     @db.VarChar(16)
+  httpStatus    Int?
+  errorCode     String?    @db.VarChar(64)
+  sourceType    String?    @db.VarChar(32)
+  artifactType  String?    @db.VarChar(16)
+  durationMs    Int?
+  responseBytes BigInt?
+  ipAddress     String     @db.VarChar(64)
+  startedAt     DateTime   @default(now())
+  completedAt   DateTime?
+
+  @@index([apiKeyId, startedAt])
+  @@index([userId, startedAt])
+  @@index([startedAt])
 }
 
 model AgentPersona {
@@ -508,6 +599,7 @@ model DriveFileVersion {
   createdAt             DateTime                      @default(now())
   contributors          DriveFileVersionContributor[]
   markdownProjection    DriveMarkdownProjection?
+  openApiGrantEntries   OpenApiDownloadGrantEntry[]
 
   @@unique([itemId, versionNumber])
   @@index([itemId, deletedAt, versionNumber])

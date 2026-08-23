@@ -283,6 +283,9 @@ sync_remote_code() {
     --exclude='shared/dist' \
     --exclude='ui/node_modules' \
     --exclude='ui/dist' \
+    --exclude='document/node_modules' \
+    --exclude='document/.vitepress/cache' \
+    --exclude='document/.vitepress/dist' \
     --include='/.dockerignore' \
     --include='/setup.sh' \
     --include='/restart.sh' \
@@ -290,6 +293,7 @@ sync_remote_code() {
     --include='/dashboard/***' \
     --include='/shared/***' \
     --include='/ui/***' \
+    --include='/document/***' \
     --include='/patches/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \
@@ -458,7 +462,9 @@ print_deployment_artifacts() {
 }
 
 run_remote_health_check() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT'
+  local check_document=${1:-false}
+
+  ssh "$SERVER" "cd $REMOTE_DIR/server && CHECK_DOCUMENT='$check_document' bash -s" <<'REMOTE_SCRIPT'
 set -uo pipefail
 
 failed=0
@@ -628,6 +634,9 @@ run_checks_once() {
   check_body_contains "admin" "http://127.0.0.1:3000/admin/" '<title>Synapse 管理</title>'
   check_body_contains "admin deep route" "http://127.0.0.1:3000/admin/system" '<title>Synapse 管理</title>'
   check_body_contains "desktop update page" "http://127.0.0.1:3000/desktop/update" '<title>更新 Synapse</title>'
+  if [ "$CHECK_DOCUMENT" = "true" ]; then
+    check_body_contains "document" "http://127.0.0.1:3000/document/" '<title>Synapse</title>'
+  fi
   # Expected redirect header: Location: /console/
   check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
   check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found/test"
@@ -702,8 +711,47 @@ check_public_desktop_update_page() {
   return 1
 }
 
+check_public_document_page() {
+  local body_file
+  local error_file
+  local effective_url
+  local curl_status
+
+  body_file=$(mktemp)
+  error_file=$(mktemp)
+  if effective_url=$(curl \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --output "$body_file" \
+    --write-out '%{url_effective}' \
+    --connect-timeout 20 \
+    --max-time 60 \
+    "https://synapse.d2.pub/document/" 2>"$error_file"); then
+    curl_status=0
+  else
+    curl_status=$?
+  fi
+
+  if [ "$curl_status" -eq 0 ] \
+    && [ "$effective_url" = "https://synapse.d2.pub/document/" ] \
+    && grep -Fq '<title>Synapse</title>' "$body_file"; then
+    echo "public document page ok"
+    rm -f "$body_file" "$error_file"
+    return 0
+  fi
+
+  printf "public document page FAILED (effective URL: %s)\n" "${effective_url:-unavailable}"
+  if [ -s "$error_file" ]; then
+    sed -n '1,4p' "$error_file"
+  fi
+  rm -f "$body_file" "$error_file"
+  return 1
+}
+
 run_deployed_health_check() {
-  run_remote_health_check && check_public_desktop_update_page
+  run_remote_health_check true && check_public_desktop_update_page && check_public_document_page
 }
 
 run_cutover_steps() {

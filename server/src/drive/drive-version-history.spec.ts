@@ -39,7 +39,11 @@ describe("drive-version-history", () => {
       where: {
         itemId: "item-1",
         deletedAt: null,
-        OR: [{ isPinned: true }, { storageKey: "storage-current" }],
+        OR: [
+          { isPinned: true },
+          { openApiGrantEntries: { some: { grant: { leaseUntil: { gt: new Date("2026-07-01T00:00:00.000Z") } } } } },
+          { storageKey: "storage-current" },
+        ],
       },
     })
     expect(findMany).toHaveBeenNthCalledWith(1, {
@@ -47,6 +51,7 @@ describe("drive-version-history", () => {
         itemId: "item-1",
         deletedAt: null,
         isPinned: false,
+        openApiGrantEntries: { none: { grant: { leaseUntil: { gt: new Date("2026-07-01T00:00:00.000Z") } } } },
         storageKey: { not: "storage-current" },
         createdAt: { lt: expiredAt },
       },
@@ -58,6 +63,7 @@ describe("drive-version-history", () => {
         itemId: "item-1",
         deletedAt: null,
         isPinned: false,
+        openApiGrantEntries: { none: { grant: { leaseUntil: { gt: new Date("2026-07-01T00:00:00.000Z") } } } },
         storageKey: { not: "storage-current" },
       },
       select: { id: true, storageKey: true, size: true },

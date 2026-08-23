@@ -73,6 +73,7 @@ const EVENT_CHANNELS = {
   apps: {
     contentOpenRequest: "synapse:app:apps:operation:content_open_request",
     gitOpenRequest: "synapse:app:apps:operation:git_open_request",
+    terminalOpenRequest: "synapse:app:apps:operation:terminal_open_request",
   },
 }
 
@@ -400,6 +401,10 @@ const synapseBridge: SynapseBridge = {
     onGitOpenRequest: createRawPayloadSubscription(
       subscribe,
       EVENT_CHANNELS.apps.gitOpenRequest,
+    ),
+    onTerminalOpenRequest: createRawPayloadSubscription(
+      subscribe,
+      EVENT_CHANNELS.apps.terminalOpenRequest,
     ),
   },
   documentTemplate: {

@@ -64,6 +64,19 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
       canZip: false,
     })),
     openShareBrowserItemDownload: vi.fn(),
+    prepareOpenApiShareDownload: vi.fn(async (input: { readonly sourceType: "share" | "share_item" }) => ({
+      status: "ok" as const,
+      artifact: {
+        sourceType: input.sourceType,
+        artifactType: "file" as const,
+        fileName: "需求说明.md",
+        mimeType: "text/markdown",
+        size: 12n,
+        entryPath: null,
+        target: { kind: "share" as const, shareId: "shr_123", itemId: "item-1" },
+        entries: [],
+      },
+    })),
   }
   const sites = {
     resolvePublicSite: vi.fn(async () => ({
@@ -81,10 +94,24 @@ function createService(overrides: Partial<ConstructorParameters<typeof DriveLink
       ],
       page: { hasMore: false, nextOffset: null },
     })),
+    prepareOpenApiSiteDownload: vi.fn(async (_siteId: string, input: { readonly sourceType: "site" | "site_path" }) => ({
+      status: "ok" as const,
+      artifact: {
+        sourceType: input.sourceType,
+        artifactType: "archive" as const,
+        fileName: "Site.zip",
+        mimeType: "application/zip",
+        size: null,
+        entryPath: "index.html",
+        target: { kind: "site" as const, siteId: "site_123", deploymentId: "deployment-1" },
+        entries: [],
+      },
+    })),
   }
   const publicAssets = {
     resolvePublicAsset: vi.fn(async () => ({
       status: "ok",
+      assetId: "asset_123",
       publicAssetId: "asset_123",
       userId: "owner-1",
       name: "screen.png",
@@ -178,6 +205,53 @@ describe("DriveLinkIntakeService", () => {
       password: "query-secret",
       cookie: undefined,
     })
+  })
+
+  it("prepares all supported Open API link types without opening object streams", async () => {
+    const { service, drive, sites, storage } = createService()
+
+    await expect(service.prepareDownloadArtifact({
+      url: `${publicAppUrl}/share/shr_123/items/item-1?password=query-secret`,
+    })).resolves.toMatchObject({ sourceType: "share_item", artifactType: "file" })
+    expect(drive.prepareOpenApiShareDownload).toHaveBeenCalledWith({
+      shareId: "shr_123",
+      itemId: "item-1",
+      password: "query-secret",
+      sourceType: "share_item",
+    })
+
+    await expect(service.prepareDownloadArtifact({
+      url: `${publicAppUrl}/sites/site_123/docs/index.html`,
+    })).resolves.toMatchObject({
+      sourceType: "site_path",
+      artifactType: "archive",
+      entryPath: "index.html",
+    })
+    expect(sites.prepareOpenApiSiteDownload).toHaveBeenCalledWith("site_123", {
+      password: undefined,
+      relativePath: "docs/index.html",
+      sourceType: "site_path",
+    })
+
+    await expect(service.prepareDownloadArtifact({
+      url: `${publicAppUrl}/files/asset_123`,
+    })).resolves.toMatchObject({
+      sourceType: "public_asset",
+      artifactType: "file",
+      target: { kind: "public_asset", assetId: "asset_123", publicAssetId: "asset_123" },
+    })
+    expect(storage.getObjectStream).not.toHaveBeenCalled()
+  })
+
+  it("rejects external origins before resolving any source", async () => {
+    const { service, drive, sites, publicAssets } = createService()
+
+    await expect(service.prepareDownloadArtifact({
+      url: "https://outside.example/share/shr_123",
+    })).rejects.toMatchObject({ reason: "unsupported_link" })
+    expect(drive.prepareOpenApiShareDownload).not.toHaveBeenCalled()
+    expect(sites.prepareOpenApiSiteDownload).not.toHaveBeenCalled()
+    expect(publicAssets.resolvePublicAsset).not.toHaveBeenCalled()
   })
 
   it("lists and mutates shared Markdown annotations using itemId before path", async () => {
@@ -698,6 +772,7 @@ describe("DriveLinkIntakeService", () => {
     const { service, publicAssets, storage } = createService()
     publicAssets.resolvePublicAsset.mockResolvedValue({
       status: "ok",
+      assetId: "asset_123",
       publicAssetId: "public-asset-row-1",
       userId: "owner-1",
       name: "notes.md",
@@ -729,6 +804,7 @@ describe("DriveLinkIntakeService", () => {
     const { service, publicAssets } = createService()
     publicAssets.resolvePublicAsset.mockResolvedValue({
       status: "ok",
+      assetId: "asset_123",
       publicAssetId: "public-asset-row-1",
       userId: "owner-1",
       name: "report.pdf",

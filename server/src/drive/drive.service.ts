@@ -94,6 +94,12 @@ import {
   driveUploadUrlTtlSeconds,
 } from "./drive.constants"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
+import {
+  DRIVE_OPEN_API_ARCHIVE_MAX_BYTES,
+  DRIVE_OPEN_API_ARCHIVE_MAX_FILES,
+  type DriveOpenApiDownloadEntry,
+  type DriveOpenApiDownloadPreparationResult,
+} from "./drive-open-api-download"
 import { ensureDriveUsage, reserveDriveUsageBytes } from "./drive-usage"
 import {
   createDriveShareId,
@@ -639,11 +645,26 @@ export class DriveService implements OnApplicationBootstrap {
     this.assertFileVersionNotCleanupPending(version)
     if (item.storageKey === version.storageKey) throw new BadRequestException("不能删除当前版本。")
     if (version.isPinned) throw new BadRequestException("请先取消保留后再删除历史版本。")
+    const leaseCheckTime = new Date()
     const claimed = await this.prisma.driveFileVersion.updateMany({
-      where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false, isPinned: false },
+      where: {
+        id: version.id,
+        itemId: item.id,
+        userId,
+        deletedAt: null,
+        deletePending: false,
+        isPinned: false,
+        openApiGrantEntries: { none: { grant: { leaseUntil: { gt: leaseCheckTime } } } },
+      },
       data: { deletePending: true },
     })
-    if (claimed.count === 0) return { ok: true, deletePending: true }
+    if (claimed.count === 0) {
+      const activeGrantCount = await this.prisma.openApiDownloadGrantEntry.count({
+        where: { driveFileVersionId: version.id, grant: { leaseUntil: { gt: leaseCheckTime } } },
+      })
+      if (activeGrantCount > 0) throw new BadRequestException("版本正在被临时下载使用。")
+      return { ok: true, deletePending: true }
+    }
     let deletePending = false
     try {
       await this.storage.deleteObject(version.storageKey)
@@ -2306,6 +2327,84 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
+  async prepareOpenApiShareDownload(input: {
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly sourceType: "share" | "share_item"
+  }): Promise<DriveOpenApiDownloadPreparationResult> {
+    const access = await this.resolvePublicShareAccess({
+      shareId: input.shareId,
+      password: input.password,
+    })
+    if (access.status === "password_required") return { status: "password_required" }
+    if (access.status !== "ok") return { status: "not_found" }
+
+    let current: DriveItemRecordWithStorage
+    try {
+      current = (await this.resolveShareBrowserCurrent(access.value, input.itemId)).current
+    } catch (error) {
+      if (error instanceof NotFoundException) return { status: "not_found" }
+      throw error
+    }
+
+    const target = {
+      kind: "share" as const,
+      shareId: input.shareId,
+      itemId: current.id,
+    }
+    if (current.type === DRIVE_ITEM_TYPE.folder) {
+      const entries = await this.createOpenApiFolderEntries(current.userId, current.id)
+      if (!entries) return { status: "archive_too_large" }
+      return {
+        status: "ok",
+        artifact: {
+          sourceType: input.sourceType,
+          artifactType: "archive",
+          fileName: `${current.name}.zip`,
+          mimeType: "application/zip",
+          size: null,
+          entryPath: null,
+          target,
+          entries,
+        },
+      }
+    }
+
+    const version = await this.requireCurrentOpenApiFileVersion(current)
+    return {
+      status: "ok",
+      artifact: {
+        sourceType: input.sourceType,
+        artifactType: "file",
+        fileName: current.name,
+        mimeType: resolveDriveDownloadContentType(current.name, version.mimeType, current.mimeType) ?? "application/octet-stream",
+        size: version.size,
+        entryPath: null,
+        target,
+        entries: [toOpenApiDriveFileEntry(version, null)],
+      },
+    }
+  }
+
+  async revalidateOpenApiShareTarget(input: {
+    readonly shareId: string
+    readonly itemId: string
+  }): Promise<boolean> {
+    const share = await this.prisma.driveShare.findUnique({
+      where: { shareId: input.shareId },
+      include: { item: true },
+    })
+    if (!share || !share.enabled || share.disabledAt || (share.expiresAt && share.expiresAt.getTime() <= Date.now())) {
+      return false
+    }
+    if (share.item.deletedAt || share.item.lifecycleStatus !== DRIVE_ITEM_LIFECYCLE_STATUS.active) return false
+    const item = await this.findActiveDriveItem(share.userId, input.itemId)
+    if (!item) return false
+    if (item.id === share.itemId) return true
+    return share.type === DRIVE_ITEM_TYPE.folder && this.isDescendantOf(item.id, share.itemId)
+  }
+
   async resolveShareRenderAccess(input: {
     readonly shareId: string
     readonly itemId?: string | null
@@ -3584,6 +3683,78 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
+  private async createOpenApiFolderEntries(
+    userId: string,
+    folderId: string,
+  ): Promise<DriveOpenApiDownloadEntry[] | null> {
+    const pending: Array<{ readonly parentId: string; readonly prefix: string }> = [
+      { parentId: folderId, prefix: "" },
+    ]
+    const records: Array<
+      | { readonly kind: "directory"; readonly relativePath: string }
+      | { readonly kind: "file"; readonly relativePath: string; readonly item: DriveItemRecordWithStorage }
+    > = []
+    let fileCount = 0
+    let totalBytes = 0n
+
+    while (pending.length > 0) {
+      const current = pending.shift()!
+      const children = (await this.listActiveChildren(userId, current.parentId))
+        .sort(compareOpenApiDriveItems)
+      for (const child of children) {
+        const relativePath = current.prefix ? `${current.prefix}/${child.name}` : child.name
+        if (child.type === DRIVE_ITEM_TYPE.folder) {
+          records.push({ kind: "directory", relativePath: `${relativePath}/` })
+          pending.push({ parentId: child.id, prefix: relativePath })
+          continue
+        }
+        fileCount += 1
+        totalBytes += child.size
+        if (fileCount > DRIVE_OPEN_API_ARCHIVE_MAX_FILES || totalBytes > DRIVE_OPEN_API_ARCHIVE_MAX_BYTES) {
+          return null
+        }
+        records.push({ kind: "file", relativePath, item: child })
+      }
+    }
+
+    records.sort((left, right) => compareCodePoints(left.relativePath, right.relativePath))
+    const entries: DriveOpenApiDownloadEntry[] = []
+    for (const record of records) {
+      if (record.kind === "directory") {
+        entries.push({
+          entryType: "directory",
+          relativePath: record.relativePath,
+          storageKey: null,
+          driveFileVersionId: null,
+          immutableId: null,
+          size: null,
+          mimeType: null,
+          etag: null,
+          sha256: null,
+        })
+        continue
+      }
+      const version = await this.requireCurrentOpenApiFileVersion(record.item)
+      entries.push(toOpenApiDriveFileEntry(version, record.relativePath))
+    }
+    return entries
+  }
+
+  private async requireCurrentOpenApiFileVersion(item: DriveItemRecordWithStorage) {
+    const storageKey = this.requireActiveFileStorage(item)
+    await this.prisma.$transaction((tx) => ensureCurrentDriveFileVersion(tx, { item }))
+    const version = await this.prisma.driveFileVersion.findFirst({
+      where: {
+        itemId: item.id,
+        storageKey,
+        deletedAt: null,
+        deletePending: false,
+      },
+    })
+    if (!version) throw new NotFoundException("文件未找到")
+    return version
+  }
+
   private decryptStoredPassword(value: string | null | undefined): string | null {
     if (!value) return null
     return decryptDrivePassword(value, this.accessSecret)
@@ -3745,7 +3916,15 @@ export class DriveService implements OnApplicationBootstrap {
         }))
       for (const version of candidates) {
         const claimed = await this.prisma.driveFileVersion.updateMany({
-          where: { id: version.id, itemId: item.id, userId, deletedAt: null, deletePending: false, isPinned: false },
+          where: {
+            id: version.id,
+            itemId: item.id,
+            userId,
+            deletedAt: null,
+            deletePending: false,
+            isPinned: false,
+            openApiGrantEntries: { none: { grant: { leaseUntil: { gt: new Date() } } } },
+          },
           data: { deletePending: true },
         })
         if (claimed.count === 0) continue
@@ -4399,6 +4578,39 @@ function resolveDriveDownloadContentType(
     ?? inferDrivePublicAssetMimeType(fileName)
     ?? objectContentType
     ?? itemMimeType
+}
+
+function toOpenApiDriveFileEntry(version: {
+  readonly id: string
+  readonly storageKey: string
+  readonly size: bigint
+  readonly mimeType: string | null
+  readonly etag: string | null
+}, relativePath: string | null): DriveOpenApiDownloadEntry {
+  return {
+    entryType: "file",
+    relativePath,
+    storageKey: version.storageKey,
+    driveFileVersionId: version.id,
+    immutableId: version.id,
+    size: version.size,
+    mimeType: version.mimeType,
+    etag: version.etag,
+    sha256: null,
+  }
+}
+
+function compareOpenApiDriveItems(
+  left: { readonly name: string; readonly type: string; readonly id: string },
+  right: { readonly name: string; readonly type: string; readonly id: string },
+): number {
+  return compareCodePoints(left.name, right.name)
+    || compareCodePoints(left.type, right.type)
+    || compareCodePoints(left.id, right.id)
+}
+
+function compareCodePoints(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
 }
 
 function readUserAccessJwtSecret(source: NodeJS.ProcessEnv): string {

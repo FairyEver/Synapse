@@ -26,6 +26,7 @@ import { Route as AuthenticatedDriveIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
 import { Route as AuthenticatedSkillRepositoriesExploreRouteImport } from './routes/_authenticated/skill-repositories/explore'
 import { Route as AuthenticatedSkillRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/skill-repositories/$repositoryId'
+import { Route as AuthenticatedSettingsApiKeysRouteImport } from './routes/_authenticated/settings/api-keys'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 import { Route as ShareShareIdItemsBrowserItemIdRouteImport } from './routes/share/$shareId_/items/$browserItemId'
 import { Route as AuthenticatedSkillsOwnerHandleRepositoryNameRouteImport } from './routes/_authenticated/skills/$ownerHandle/$repositoryName'
@@ -125,6 +126,12 @@ const AuthenticatedSkillRepositoriesRepositoryIdRoute =
     path: '/skill-repositories/$repositoryId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSettingsApiKeysRoute =
+  AuthenticatedSettingsApiKeysRouteImport.update({
+    id: '/api-keys',
+    path: '/api-keys',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
   id: '/(auth)/auth/desktop',
   path: '/auth/desktop',
@@ -164,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof authSignUpRoute
   '/share/$shareId': typeof ShareShareIdRoute
   '/auth/desktop': typeof authAuthDesktopRoute
+  '/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
   '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
@@ -186,6 +194,7 @@ export interface FileRoutesByTo {
   '/share/$shareId': typeof ShareShareIdRoute
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
+  '/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
   '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
@@ -211,6 +220,7 @@ export interface FileRoutesById {
   '/share/$shareId': typeof ShareShareIdRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
+  '/_authenticated/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
   '/_authenticated/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
   '/_authenticated/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
@@ -236,6 +246,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/share/$shareId'
     | '/auth/desktop'
+    | '/settings/api-keys'
     | '/skill-repositories/$repositoryId'
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
@@ -258,6 +269,7 @@ export interface FileRouteTypes {
     | '/share/$shareId'
     | '/'
     | '/auth/desktop'
+    | '/settings/api-keys'
     | '/skill-repositories/$repositoryId'
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
@@ -282,6 +294,7 @@ export interface FileRouteTypes {
     | '/share/$shareId'
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
+    | '/_authenticated/settings/api-keys'
     | '/_authenticated/skill-repositories/$repositoryId'
     | '/_authenticated/skill-repositories/explore'
     | '/_authenticated/webhooks/$webhookId'
@@ -429,6 +442,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSkillRepositoriesRepositoryIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/settings/api-keys': {
+      id: '/_authenticated/settings/api-keys'
+      path: '/api-keys'
+      fullPath: '/settings/api-keys'
+      preLoaderRoute: typeof AuthenticatedSettingsApiKeysRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/(auth)/auth/desktop': {
       id: '/(auth)/auth/desktop'
       path: '/auth/desktop'
@@ -468,11 +488,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedSettingsRouteRouteChildren {
+  AuthenticatedSettingsApiKeysRoute: typeof AuthenticatedSettingsApiKeysRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
 
 const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteChildren =
   {
+    AuthenticatedSettingsApiKeysRoute: AuthenticatedSettingsApiKeysRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   }
 

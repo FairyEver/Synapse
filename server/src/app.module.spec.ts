@@ -3,9 +3,11 @@ import { APP_INTERCEPTOR } from "@nestjs/core"
 import { Test } from "@nestjs/testing"
 import { describe, expect, it } from "vitest"
 import { AdminModule } from "./admin/admin.module"
+import { ApiKeyModule } from "./api-keys/api-key.module"
 import { AppModule } from "./app.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { LiveModule } from "./live/live.module"
+import { OpenApiModule } from "./open-api/open-api.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { UpdateIntentModule } from "./update-intent/update-intent.module"
 
@@ -20,6 +22,8 @@ describe("AppModule", () => {
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([LiveModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([SkillRepositoryModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([UpdateIntentModule]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([ApiKeyModule]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([OpenApiModule]))
   })
 
   it("does not assemble retired team or invitation modules", () => {

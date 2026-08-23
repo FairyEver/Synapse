@@ -54,6 +54,14 @@
 - Renderer 只通过顶层 `window.synapse.mcp` bridge 访问 MCP 专属 IPC；不得在 `database` bridge 中恢复兼容别名。
 - MCP 设置分类只管理产品入口与客户端注册，不新增 MCP capability/tool，也不改变 loopback HTTP transport、端口、自动注册、ActionRouter 或运行生命周期。底层服务继续聚合全部已注册 capability domain。
 
+## Console 用户 API 秘钥
+
+- 用户 API 秘钥只通过受登录保护的 `/api/console/api-keys` 管理；创建响应只展示一次完整秘钥，数据库只保存 SHA-256 摘要和可识别前缀，列表不得返回摘要或明文。
+- 查询、创建和撤销必须绑定当前 `userId`；撤销保留记录并使其失效，创建与撤销审计不得包含完整秘钥、摘要或可还原材料。
+- 密钥创建时必须显式选择非空开放 API scopes；现有密钥迁移后 scopes 为空，权限只读，变更时撤销并重建。首个 scope `drive.share_link.download` 仅授权 `/api/open/v1/drive/share-links/downloads`，不能访问 Console、内部 Drive 或其它业务 API。
+- 开放 API 使用独立 `OpenApiKeyGuard`；临时下载地址使用十分钟数据库 grant 和仅存摘要的 bearer token。创建下载地址的请求体只接收完整分享 URL，受密码保护时密码保留在 URL query 中。grant 固定 POST 时的不可变文件版本或 Site deployment，源分享/API key/用户失效会阻止新的下载。
+- 开放 API 数据面只写固定列 `OpenApiUsageLog`，禁止 URL、密码、token、文件名、路径、storage key、manifest 和文件内容。POST/GET 显式跳过全局 Throttler，不增加密钥、IP、次数或频率限制。
+
 ## Drive
 
 - `公开素材`使用稳定、匿名、不过期 `/files/<assetId>`。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV；禁止 SVG、主动网页内容、压缩包、可执行、旧 Office 和宏格式。
@@ -73,6 +81,7 @@
 - slash menu 只插入，不立即发送，也不是通用命令面板。
 - Quick Input 是独立 System App。Agent 只消费其文本并默认直接发送；不得恢复“直接发送”开关或塞回 slash menu。
 - Agent 项目路径与 Git System App 已登记仓库根路径精确匹配时，可在 composer 复用窄类型化 Git IPC；该入口不得经过 Agent 消息、slash command、MCP 或任意 Git 命令，提交仍必须使用仓库绑定的选择令牌。
+- Agent 已配置项目可通过窄类型化 Terminal IPC 以项目目录新建 UI 终端会话，再通过仅含 `sessionId` 的 System App 打开请求定位该会话；虚拟本地对话工作区不提供该入口，也不扩展为 MCP 或 Deep Link。
 - 其它 Knowledge Base 规则见 `docs/agents/knowledge-base.md`。
 
 ## Workflow 与 Automation

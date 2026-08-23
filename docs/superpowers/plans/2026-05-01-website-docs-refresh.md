@@ -131,7 +131,6 @@ sed -n '1,220p' desktop/package.json
 ```
 
 Expected evidence:
-- Official download target is GitHub Releases at `https://github.com/FairyEver/SynapseAppRelease/releases`.
 - macOS package is `.dmg`; Windows package is `.exe`.
 - Root `pnpm dev` starts the broader local development environment.
 - Desktop package scripts include `build`, `package:mac`, and `package:win`.
@@ -144,12 +143,6 @@ Write the page with this structure:
 # 下载
 
 <!-- Sources: README.md; desktop/README.md; website/guide/download.md; desktop/package.json -->
-
-## 下载地址
-
-Synapse 的安装包通过 GitHub Releases 发布：
-
-- [Synapse Releases](https://github.com/FairyEver/SynapseAppRelease/releases)
 
 ## 安装包
 
@@ -553,7 +546,7 @@ For `desktop/`, mention renderer modules under `desktop/src/modules/`, Electron 
 
 - [ ] **Step 5: Write `website/developer/build-release.md`**
 
-Document build and packaging commands from `desktop/package.json` and release behavior from `.github/workflows/release.yml`. Include GitHub Releases destination only if confirmed by workflow or `desktop/README.md`.
+Document build and packaging commands from `desktop/package.json` and release behavior from `.github/workflows/release.yml`.
 
 - [ ] **Step 6: Build and commit**
 

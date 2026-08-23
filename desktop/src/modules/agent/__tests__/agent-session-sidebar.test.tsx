@@ -194,13 +194,15 @@ describe("AgentSessionSidebar", () => {
     expect(showItemInFolder).toHaveBeenCalledWith("/tmp/test")
   })
 
-  it("does not offer a folder action for the virtual local conversation workspace", async () => {
+  it("does not offer filesystem actions for the virtual local conversation workspace", async () => {
     await renderCreationSidebar(vi.fn(), DEFAULT_AGENT_WORKSPACE_PROJECT)
 
     await openProjectActionMenu()
 
     expect([...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
       .some((item) => item.textContent === "在文件夹中显示")).toBe(false)
+    expect([...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .some((item) => item.textContent === "在终端中打开")).toBe(false)
   })
 
   it("allows long session titles to truncate inside the sidebar", () => {

@@ -205,6 +205,23 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith(event)
   })
 
+  it("subscribes Terminal window targeting requests to the apps channel", async () => {
+    const bridge = await loadPreloadBridge()
+    const listener = vi.fn()
+    const request = { requestId: "request-1", sessionId: "session-1" }
+
+    bridge.apps.onTerminalOpenRequest(listener)
+
+    expect(electronMock.ipcRenderer.on).toHaveBeenCalledTimes(1)
+    expect(electronMock.ipcRenderer.on.mock.calls[0]?.[0])
+      .toBe("synapse:app:apps:operation:terminal_open_request")
+
+    const wrapped = electronMock.ipcRenderer.on.mock.calls[0]?.[1]
+    wrapped?.({}, request)
+
+    expect(listener).toHaveBeenCalledWith(request)
+  })
+
   it("subscribes Workflow listeners to the EventBus domain channel", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

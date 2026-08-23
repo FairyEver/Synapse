@@ -8,6 +8,7 @@ import {
 import { Prisma } from "@prisma/client"
 import type { Response } from "express"
 import { PinoLogger } from "nestjs-pino"
+import { randomUUID } from "node:crypto"
 import { formatAuditError } from "./audit-error"
 
 @Catch()
@@ -19,14 +20,29 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = http.getResponse<Response>()
     const request =
       typeof http.getRequest === "function"
-        ? http.getRequest<{ readonly originalUrl?: string; readonly url?: string }>()
+        ? http.getRequest<{ readonly id?: string | number | (() => string); readonly originalUrl?: string; readonly url?: string }>()
         : {}
     const { statusCode, error, message, code } = this.resolve(exception)
     const problemFeedbackPath = isProblemFeedbackPath(request.originalUrl ?? request.url ?? "")
+    const openApiPath = isOpenApiPath(request.originalUrl ?? request.url ?? "")
 
-    if (problemFeedbackPath) response.setHeader("Cache-Control", "no-store")
+    if (problemFeedbackPath || openApiPath) response.setHeader("Cache-Control", "no-store")
     if (statusCode >= 500 && !problemFeedbackPath) {
       this.logger.error(createExceptionLogMetadata(exception), "Unhandled server exception")
+    }
+
+    if (openApiPath) {
+      const requestId = `req_${randomUUID().replace(/-/gu, "")}`
+      const invalidRequest = statusCode === 400 || statusCode === 413 || statusCode === 415
+      response.setHeader("X-Request-Id", requestId)
+      response.status(invalidRequest ? 400 : statusCode).json({
+        requestId,
+        error: {
+          code: invalidRequest ? "INVALID_REQUEST" : code ?? "INTERNAL_ERROR",
+          message: invalidRequest ? "请求参数无效。" : message,
+        },
+      })
+      return
     }
 
     response.status(statusCode).json({
@@ -98,6 +114,11 @@ function isProblemFeedbackPath(url: string): boolean {
   return pathname === "/api/problem-feedback"
     || pathname === "/api/admin/problem-feedback"
     || pathname.startsWith("/api/admin/problem-feedback/")
+}
+
+function isOpenApiPath(url: string): boolean {
+  const pathname = url.split("?")[0] ?? ""
+  return pathname === "/api/open/v1" || pathname.startsWith("/api/open/v1/")
 }
 
 function createExceptionLogMetadata(exception: unknown): Record<string, unknown> {

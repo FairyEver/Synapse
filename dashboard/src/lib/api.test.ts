@@ -1,6 +1,57 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { adminApi, dashboardApi, driveAnnotationApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAdminAuthExpired, subscribeAuthExpired } from './api'
 
+describe('dashboardApi.apiKeys', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('uses current-user API key endpoints', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ ok: true }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    ))
+
+    await dashboardApi.listApiKeys()
+    await dashboardApi.listApiKeyCapabilities()
+    await dashboardApi.createApiKey({ name: 'CLI', scopes: ['drive.share_link.download'] })
+    await dashboardApi.revokeApiKey('key/id')
+    await dashboardApi.listApiKeyUsageLogs('key/id', { page: 2, pageSize: 10 })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/console/api-keys',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/console/api-key-capabilities',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/console/api-keys',
+      expect.objectContaining({
+        body: JSON.stringify({ name: 'CLI', scopes: ['drive.share_link.download'] }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/console/api-keys/key%2Fid',
+      expect.objectContaining({ credentials: 'include', method: 'DELETE' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      '/api/console/api-keys/key%2Fid/usage-logs?page=2&pageSize=10&sortBy=startedAt&sortOrder=desc',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+})
+
 describe('driveAnnotationApi', () => {
   afterEach(() => {
     vi.restoreAllMocks()

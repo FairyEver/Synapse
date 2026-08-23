@@ -123,7 +123,10 @@ export async function listCleanupCandidateVersions(tx: VersionTx, input: {
   const retentionDays = input.retentionDays ?? DRIVE_FILE_VERSION_RETENTION_DAYS
   const cutoff = new Date(input.now.getTime() - retentionDays * 24 * 60 * 60 * 1000)
   const baseWhere = { itemId: input.itemId, deletedAt: null } satisfies Prisma.DriveFileVersionWhereInput
-  const protectedFilters: Prisma.DriveFileVersionWhereInput[] = [{ isPinned: true }]
+  const protectedFilters: Prisma.DriveFileVersionWhereInput[] = [
+    { isPinned: true },
+    { openApiGrantEntries: { some: { grant: { leaseUntil: { gt: input.now } } } } },
+  ]
   if (input.currentStorageKey) protectedFilters.push({ storageKey: input.currentStorageKey })
   const protectedCount = await tx.driveFileVersion.count({
     where: { ...baseWhere, OR: protectedFilters },
@@ -132,6 +135,7 @@ export async function listCleanupCandidateVersions(tx: VersionTx, input: {
   const unprotectedWhere = {
     ...baseWhere,
     isPinned: false,
+    openApiGrantEntries: { none: { grant: { leaseUntil: { gt: input.now } } } },
     ...(input.currentStorageKey ? { storageKey: { not: input.currentStorageKey } } : {}),
   } satisfies Prisma.DriveFileVersionWhereInput
   const candidateSelect = { id: true, storageKey: true, size: true } satisfies Prisma.DriveFileVersionSelect

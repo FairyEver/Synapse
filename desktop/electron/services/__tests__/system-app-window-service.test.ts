@@ -97,6 +97,31 @@ describe("createSystemAppWindowService", () => {
     )
   })
 
+  it("opens and retargets a Terminal window to a session", async () => {
+    const window = createWindowMock()
+    const createWindow = vi.fn(() => window as never)
+    const windowManager = createWindowManagerMock()
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      windowManager,
+    })
+    const firstRequest = { requestId: "request-1", sessionId: "session-1" }
+    const secondRequest = { requestId: "request-2", sessionId: "session-2" }
+
+    await service.open("terminal", { terminalOpenRequest: firstRequest })
+    await service.open("terminal", { terminalOpenRequest: secondRequest })
+
+    expect(window.loadURL).toHaveBeenCalledWith(
+      expect.stringContaining("appId=terminal&terminalOpenRequest="),
+    )
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:app:apps:operation:terminal_open_request",
+      secondRequest,
+      expect.any(Function),
+    )
+  })
+
   it("opens different windows for different app ids", async () => {
     const windows = [createWindowMock(), createWindowMock()]
     const createWindow = vi.fn(() => windows.shift() as never)

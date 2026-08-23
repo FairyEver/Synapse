@@ -62,22 +62,22 @@ test("matchesSynapseDevProcess filters by requested dev script", () => {
   assert.equal(matchesSynapseDevProcess({
     pid: 301,
     pgid: 301,
-    commandLine: "pnpm --filter @synapse/website run dev",
+    commandLine: "pnpm --filter @synapse/document run dev",
     cwd: workspaceRoot,
-  }, { workspaceRoot, targetScripts: ["dev:website"] }), true)
+  }, { workspaceRoot, targetScripts: ["dev:document"] }), true)
 
   assert.equal(matchesSynapseDevProcess({
     pid: 302,
     pgid: 302,
-    commandLine: "vitepress dev --port 19773",
-    cwd: `${workspaceRoot}/website`,
-  }, { workspaceRoot, targetScripts: ["dev:website"] }), true)
+    commandLine: "vitepress dev",
+    cwd: `${workspaceRoot}/document`,
+  }, { workspaceRoot, targetScripts: ["dev:document"] }), true)
 
   assert.equal(matchesSynapseDevProcess({
     pid: 303,
     pgid: 303,
-    commandLine: "vitepress dev --port 19773",
-    cwd: `${workspaceRoot}/website`,
+    commandLine: "vitepress dev",
+    cwd: `${workspaceRoot}/document`,
   }, { workspaceRoot, targetScripts: ["dev:desktop"] }), false)
 
   assert.equal(matchesSynapseDevProcess({
@@ -126,8 +126,8 @@ test("filterSynapseDevProcessRows applies requested dev script targets", () => {
     {
       pid: 403,
       pgid: 403,
-      commandLine: "vitepress dev --port 19773",
-      cwd: `${workspaceRoot}/website`,
+      commandLine: "vitepress dev",
+      cwd: `${workspaceRoot}/document`,
     },
   ]
 
@@ -162,10 +162,10 @@ test("filterRemainingDevProcessState keeps unrelated tracked dev scripts", () =>
   assert.deepEqual(filterRemainingDevProcessState([
     { pid: 10, processGroupPid: -10, scriptName: "dev:server" },
     { pid: 20, processGroupPid: -20, scriptName: "dev:desktop" },
-    { pid: 30, processGroupPid: -30, scriptName: "dev:website" },
+    { pid: 30, processGroupPid: -30, scriptName: "dev:document" },
   ], ["dev:server"]), [
     { pid: 20, processGroupPid: -20, scriptName: "dev:desktop" },
-    { pid: 30, processGroupPid: -30, scriptName: "dev:website" },
+    { pid: 30, processGroupPid: -30, scriptName: "dev:document" },
   ])
 
   assert.deepEqual(filterRemainingDevProcessState([

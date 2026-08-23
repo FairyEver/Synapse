@@ -19,6 +19,7 @@ import { createMainLogger } from "./log-store"
 
 const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:content_open_request"
 const SYSTEM_APP_GIT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:git_open_request"
+const SYSTEM_APP_TERMINAL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:terminal_open_request"
 
 type SystemAppWindowLogger = {
   readonly info: (message: string, metadata?: Record<string, unknown>) => void
@@ -120,6 +121,20 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
             })
           }
         }
+        if (options.terminalOpenRequest) {
+          const sent = sendToSystemAppWindow(
+            deps.windowManager,
+            existing,
+            SYSTEM_APP_TERMINAL_OPEN_REQUEST_CHANNEL,
+            options.terminalOpenRequest,
+          )
+          if (sent === 0) {
+            logger.warn("Skipped Terminal open request for unmanaged system app window.", {
+              appId,
+              appType: definition.type,
+            })
+          }
+        }
         logger.info("Focused existing system app window.", { appId, appType: definition.type })
         return
       }
@@ -131,6 +146,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       }
       if (options.gitOpenRequest) {
         params.set("gitOpenRequest", JSON.stringify(options.gitOpenRequest))
+      }
+      if (options.terminalOpenRequest) {
+        params.set("terminalOpenRequest", JSON.stringify(options.terminalOpenRequest))
       }
       const url = buildDetachedViewWindowUrl(baseUrl, params)
       await detachedWindows.open({

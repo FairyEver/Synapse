@@ -51,6 +51,26 @@ describe("TerminalService core", () => {
     expect(harness.service.listSessions().map((item) => item.id)).toContain(session.id)
   })
 
+  it("creates an ungrouped UI session in the first terminal group", async () => {
+    const harness = await startedHarness()
+    const firstGroup = harness.service.listGroups()[0]!
+    await harness.service.createGroup({ name: "Second" })
+
+    const session = await harness.service.createSession({})
+
+    expect(session.groupId).toBe(firstGroup.id)
+  })
+
+  it("recreates the default group when an ungrouped UI session has no group", async () => {
+    const harness = await startedHarness()
+    const originalGroup = harness.service.listGroups()[0]!
+    await harness.service.deleteGroup({ groupId: originalGroup.id })
+
+    const session = await harness.service.createSession({})
+
+    expect(harness.service.getGroup(session.groupId).name).toBe("默认")
+  })
+
   it("records explicit launch overrides as redacted facts", async () => {
     const harness = await startedHarness()
     const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-override-"))

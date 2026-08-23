@@ -21,6 +21,7 @@ import { AgentSessionCreateDialog } from "./agent-session-create-dialog"
 import { ProjectGroup } from "./project-group"
 import { useAgentProviderCatalog } from "../hooks/use-agent-provider-catalog"
 import { useAgentProjectShellActions } from "../hooks/use-agent-project-shell-actions"
+import { useAgentProjectTerminalActions } from "../hooks/use-agent-project-terminal-actions"
 import {
   CONVERSATION_SOURCE_OPTIONS,
   filterSessionsBySource,
@@ -85,6 +86,7 @@ function AgentSessionSidebar({
   const [quickCreatingProjectId, setQuickCreatingProjectId] = useState<string | null>(null)
   const { reload: loadProviders } = useAgentProviderCatalog(false)
   const { showProjectInFolder } = useAgentProjectShellActions()
+  const { openProjectInTerminal } = useAgentProjectTerminalActions()
   const [createTarget, setCreateTarget] = useState<{
     readonly project: ProjectOption
     readonly initialName: string
@@ -177,6 +179,9 @@ function AgentSessionSidebar({
             onShowProjectInFolder={isDefaultAgentWorkspaceProjectId(project.id)
               ? undefined
               : () => void showProjectInFolder(project)}
+            onOpenProjectInTerminal={isDefaultAgentWorkspaceProjectId(project.id)
+              ? undefined
+              : () => void openProjectInTerminal(project)}
             onSelect={onSelect}
             onDelete={onDelete}
             onDeleteOthers={onDeleteOthers}

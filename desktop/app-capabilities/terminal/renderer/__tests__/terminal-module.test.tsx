@@ -608,6 +608,35 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Session 1")
   })
 
+  it("focuses and consumes a requested terminal session", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "First" })
+    createSession({ id: "session-2", groupId: "group-1", title: "Requested" })
+    const onConsumed = vi.fn()
+
+    await renderModule({
+      openRequest: { requestId: "request-1", sessionId: "session-2" },
+      onOpenRequestConsumed: onConsumed,
+    })
+
+    expect(terminalBridge.getSession).toHaveBeenCalledWith({ sessionId: "session-2" })
+    expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
+    expect(onConsumed).toHaveBeenCalledWith("request-1")
+  })
+
+  it("reports and consumes a missing requested terminal session", async () => {
+    terminalBridge.getSession.mockRejectedValueOnce(new Error("Session not found"))
+    const onConsumed = vi.fn()
+
+    await renderModule({
+      openRequest: { requestId: "request-1", sessionId: "missing" },
+      onOpenRequestConsumed: onConsumed,
+    })
+
+    expect(toastState.error).toHaveBeenCalledWith("终端会话不存在")
+    expect(onConsumed).toHaveBeenCalledWith("request-1")
+  })
+
   it("renders terminal actions in the embedded header", async () => {
     await renderEmbeddedModule()
 
@@ -1780,11 +1809,14 @@ describe("TerminalModule", () => {
   })
 })
 
-async function renderModule(): Promise<void> {
+async function renderModule(
+  props: NonNullable<Parameters<typeof TerminalModule>[0]> = {},
+): Promise<void> {
   const root = createRoot(document.body.appendChild(document.createElement("div")))
   roots.push(root)
   await act(async () => {
-    root.render(<TerminalModule />)
+    root.render(<TerminalModule {...props} />)
+    await Promise.resolve()
     await Promise.resolve()
   })
 }

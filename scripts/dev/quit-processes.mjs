@@ -8,9 +8,9 @@ import { clearDevProcessState, readDevProcessState, writeDevProcessState } from 
 const execFileAsync = promisify(execFile)
 const currentFilePath = fileURLToPath(import.meta.url)
 const defaultWorkspaceRoot = path.resolve(path.dirname(currentFilePath), "../..")
-const DEV_SCRIPT_NAMES = ["dev:website", "dev:desktop", "dev:server"]
+const DEV_SCRIPT_NAMES = ["dev:document", "dev:desktop", "dev:server"]
 const DEV_PORTS_BY_SCRIPT = {
-  "dev:website": [19773],
+  "dev:document": [19773],
   "dev:desktop": [19731],
   "dev:server": [],
 }
@@ -31,7 +31,7 @@ const RELATIVE_DEV_COMMAND_MATCHERS = [
   /nodemon/u,
   /electron[/\\]cli\.js \./u,
   /\belectron \./u,
-  /pnpm(?:\.cjs)?.*\bdev(?::(?:website|desktop|server|renderer|electron:build|electron:app|api|admin|dashboard))?\b/u,
+  /pnpm(?:\.cjs)?.*\bdev(?::(?:document|desktop|server|renderer|electron:build|electron:app|api|admin|dashboard))?\b/u,
 ]
 
 const WORKSPACE_DEV_COMMAND_MATCHERS = [
@@ -41,10 +41,10 @@ const WORKSPACE_DEV_COMMAND_MATCHERS = [
 ]
 
 const DEV_COMMAND_MATCHERS_BY_SCRIPT = {
-  "dev:website": [
+  "dev:document": [
     /vitepress.*dev/u,
-    /pnpm(?:\.cjs)?.*@synapse[/\\]website.*\brun dev\b/u,
-    /pnpm(?:\.cjs)?.*\bdev:website\b/u,
+    /pnpm(?:\.cjs)?.*@synapse[/\\]document.*\brun dev\b/u,
+    /pnpm(?:\.cjs)?.*\bdev:document\b/u,
   ],
   "dev:desktop": [
     /scripts[/\\]dev[/\\]dev\.mjs/u,

@@ -23,7 +23,7 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用，技术�
 - App 能力包：`desktop/app-capabilities/`
 - 共享 UI：`desktop/src/components/ui/`
 - 共享 renderer helper / 类型：`desktop/src/lib/`、`desktop/src/types/`
-- 文档站：`website/`
+- 文档站：`document/`
 - 服务端：`server/`
 
 Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问特权能力。文件系统、Git、安装、下载、dialog、updater 和 OS 逻辑属于 Electron 主进程。
@@ -38,7 +38,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 | 主进程 service / IPC handler | `.claude/rules/api.md` |
 | 测试 | `.claude/rules/testing.md` |
 | 子包开发端口 | `.claude/rules/workspace-dev-ports.md` |
-| 官网文案 | `.claude/rules/website-copy.md` |
+| 文档站文案 | `.claude/rules/document-copy.md` |
 | System App、Dock、Workflow/Automation/MCP/Deep Link 注册 | `docs/agents/capability-registry.md` |
 | Workflow 数据、分享包、App Capability Package、DataRepository | `docs/agents/workflow-and-capabilities.md` |
 | 具体业务模块长期边界 | `docs/agents/module-boundaries.md` |
@@ -94,8 +94,8 @@ pnpm --filter @synapse/desktop run test
 
 ## 开发命令
 
-- 根目录：`pnpm dev`、`pnpm dev:desktop`、`pnpm dev:server`、`pnpm dev:website`
-- 停止：`pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:website`
+- 根目录：`pnpm dev`、`pnpm dev:desktop`、`pnpm dev:server`、`pnpm dev:document`
+- 停止：`pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`
 - 只启动本次改动所需的最小范围；服务已运行且热更新足够时不要重启。
 - 自动化测试或 UI 测试只能使用上述根命令，不要猜测启动方式。
 

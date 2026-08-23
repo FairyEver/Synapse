@@ -62,6 +62,6 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: [DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentImageService, DriveLinkIntakeService],
+  exports: ["DriveStoragePort", DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentImageService, DriveLinkIntakeService],
 })
 export class DriveModule {}
