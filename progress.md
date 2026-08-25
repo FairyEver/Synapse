@@ -1,5 +1,30 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 4 轮持续复审
+
+- **状态：** complete
+- **启动时间：** 2026-08-26 03:35:44 CST
+- **启动 HEAD：** `dca057a0f0d3deb16c32d7622f5a114160d23bc3`
+- **启动工作树：** `main...origin/main [ahead 9]`，无未提交文件；HEAD 与主任务指定值一致。
+- 主任务首次创建本轮时，提示词中的反引号进入 JavaScript 模板字符串后导致解析失败；该次没有创建 Codex 任务，也没有修改共享工作区或规划状态。主任务修正编排后才成功创建当前第 4 轮。
+- 已完整读取 planning-with-files-zh 与 computer-use 技能，运行 session catch-up，并开始恢复 `AGENTS.md`、`task_plan.md`、`progress.md`、`findings.md`。本轮不创建其它任务、子任务、分支或 worktree，不启停开发服务或 Electron；真实 UI 仅通过 `node_repl + @oai/sky` 操作现有应用。
+- 主任务给出的 `f937c5e73b8a29c845fae73f539a44fd9d32dff4` 完整哈希无法解析；日志确认同前缀真实提交为 `f937c5e73c3ee3525eddcaa820287eac461d9d7f`。后续使用真实对象继续，且仍以 `db189074...HEAD` 的完整直接影响范围为准。
+- 已完整读取执行、仓库、测试、Renderer、UI、design、ui-rules、文档文案、模块边界规则，以及 Drive MDXEditor、Markdown projection/评论、Mermaid、协作与格式检测相关设计和 Hard Rules；code-review 的并行流程被本轮禁止子任务的用户约束覆盖，Standards / Spec 双轴在当前任务串行完成。
+- 固定盘点 `f937c5e73` 与 `db189074...dca057a0` 的 Drive Markdown/MDX/Mermaid/heading/annotation 直接生产、测试、共享契约与设计文档，`findings.md` 建立并完成 12 项“修改点 → 文件/提交 → 用户行为 → 自动化 → 实机 → 结论”矩阵，没有以抽样代替修改点覆盖。
+- 真实 MDXEditor 红灯确认并最小修复五类边界：CommonMark `<=` 保存产生多余转义；合法 `.mdx` 缺 JSX descriptor；顶层 MDX ESM 和 CommonMark HTML 注释会在富文本往返中静默丢失；非 1 有序列表起始值丢失；评论格式在 Renderer/服务端/link intake 错误扩展到 `.mdx`、`.markdown` 或 MIME-only 文件。
+- 修复严格保持现有链路：CommonMark serializer 只归一比较符转义；`.mdx` 只增加通用 JSX editor，顶层 ESM 与 CommonMark HTML 注释使用既有源码 Textarea；窄 list visitor 只补 `start`；共享 `.md` 判定统一三个评论入口。未新增依赖、IPC、样式层或保存实现。
+- Mermaid 生产实现复核无新增缺陷；补充 `1200px` SVG 固有宽度、上游内联 `max-width` 清理、`min-w-fit` 与横向 scroller 回归。空 heading、重复/Unicode heading、projection 顺序、异常 Mermaid、保存失败、XSS 与竞态继续由既有同层专项覆盖。
+- Computer Use 首先穷尽 Electron Drive 和本地 Dashboard，两者均受登录门槛阻塞；未输入或迁移生产凭据。之后仅通过持久 `node_repl + @oai/sky` 操作已有登录态的 `synapse.d2.pub`，每次动作后重新 `get_app_state`。
+- 新建无敏感测试目录 `Codex Round 4 Markdown Test 2026-08-26`，上传 `.md`、合法 `.mdx`、非法 `.mdx`。完成预览/编辑/同步/刷新、三级混合列表、任务项、`a <= b`、空/重复/Unicode heading、宽 Mermaid、表格、严格 MDX 错误和选文评论；评论 `Round 4 projection 定位测试` 刷新后仍锚定正文。
+- 线上部署版真实暴露 `<=` 解析错误、合法 MDX `mdxJsxTextElement` 错误、列表编辑往返变形和空 heading 目录占位；非法 MDX 严格错误、保存后“已同步”、刷新持久化、重复/Unicode ID 与评论 projection 通过。窗口在约 1325×768、1063×768、768×775 检查，紧凑工具栏可用且无页面级横向溢出。
+- Computer Use 对代码编辑器批量 `type_text` 时丢失部分中文和缩进，导致测试专用 `.md` 保留为部分畸形的 545 B 内容；没有修改用户重要文档，也未将该行为记作产品通过。测试目录与三份文档按用户允许保留供验收。
+- 本地两个入口的登录阻塞意味着部署版红灯修复后无法在当前热更新 UI 重验；`findings.md` 已逐项区分“部署版旧失败 / 当前源码自动化通过 / 修复后实机阻塞”，未以自动化冒充实机。
+- 执行期间的非产品错误均已纠正：从错误工作目录加载 Node 包失败后改在 `dashboard/` 重跑；两次 zsh 路径/引号命令分别因重复 `desktop/` 前缀和未配对双引号失败，改用真实相对路径与 `sed`；文件 picker 不能直接使用不可见 `/tmp` 路径后改用无敏感临时桌面文件并用 `apply_patch` 精确移除；Dashboard production build 两次命中新增 list visitor 的类型收窄错误，逐步补全公开 Lexical 类型守卫后构建通过；一次最终专项命令列入 7 个不存在文件名只实际执行 5 文件、141 项，随后从真实文件列表重跑完整 12 文件、235 项。
+- 最终 Dashboard Markdown/MDX/Mermaid/editor/preview/comment/TOC 12 文件、235/235；Server Drive 保存/renderer/projection/annotation/link intake 7 文件、255/255；Shared Drive 1 文件、43/43，合计 20 文件、533/533。
+- Dashboard production build（6,801 modules）、Server typecheck/build、Desktop typecheck、hard constraints 与 `git diff --check` 全部通过；仅有既有大 chunk 警告。本轮未改变 IPC 或 Electron 打包边界，因此不运行 IPC codegen、Electron build 或 `check:packaged-asar`。
+- 聚焦 diff 最终为 19 个预期文件（含 1 个新增 list plugin）；静态纪律扫描未发现本轮新增自定义颜色、渐变、`console.log` 或内联样式，命中的两处 inline style 均为既有评论浮层动态坐标/高度。
+- **结束时间：** 2026-08-26 04:31:39 CST。第 4 轮完成，待提交当前 `main` 并交由主任务验收；阶段 23 总体保持 `in_progress`，由主任务验收后再创建下一轮。
+
 ## 2026-08-26 阶段 23 第 3 轮持续复审
 
 - **状态：** complete

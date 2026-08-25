@@ -44,7 +44,9 @@ export const commonMarkTextCompatibilityPlugin = realmPlugin({
 export const commonMarkToMarkdownOptions = {
   handlers: {
     text(node, _parent, state, info) {
-      return state.safe(node.value, info).replace(/\\<=/gu, '<=')
+      return state.safe(node.value, info)
+        .replace(/\\<\\=/gu, '<=')
+        .replace(/\\<=/gu, '<=')
     },
   },
 } satisfies ToMarkdownOptions

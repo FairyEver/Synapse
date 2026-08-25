@@ -3,7 +3,7 @@ import {
   DRIVE_ANNOTATION_COMMENT_MAX_LENGTH,
   DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
   DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH,
-  isDriveMarkdownItem,
+  isDriveCommentableMarkdownItem,
   type DriveAnnotationAnchorStatus,
   type DriveAnnotationCreateInput,
   type DriveAnnotationImageTargetV1,
@@ -127,7 +127,7 @@ export function isCommentableMarkdownItem(item: {
   readonly type: string
   readonly mimeType: string | null
 }): boolean {
-  return isDriveMarkdownItem(item)
+  return isDriveCommentableMarkdownItem(item)
 }
 
 export function parseDriveAnnotationCreateBody(value: unknown): DriveAnnotationCreateInput {

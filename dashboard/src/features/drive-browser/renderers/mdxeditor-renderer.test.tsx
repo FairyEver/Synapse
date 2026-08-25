@@ -84,8 +84,15 @@ vi.mock('@mdxeditor/editor', async () => {
       const hasCommonMarkCompatibility = plugins?.some((plugin) => (
         (plugin as { readonly name?: string }).name === 'commonMarkTextCompatibilityPlugin'
       )) ?? false
+      const hasMdxCompatibility = plugins?.some((plugin) => (
+        (plugin as { readonly name?: string }).name === 'jsxPlugin'
+      )) ?? false
       const reportParseError = (source: string) => {
-        if (source.includes('broken-mdx') || (source.includes('<=') && !hasCommonMarkCompatibility)) {
+        if (
+          source.includes('broken-mdx')
+          || (source.includes('<=') && !hasCommonMarkCompatibility)
+          || (source.includes('<Callout') && !hasMdxCompatibility)
+        ) {
           onError?.({ error: new Error('Parse failed'), source })
         }
       }
@@ -118,6 +125,7 @@ vi.mock('@mdxeditor/editor', async () => {
           'data-toolbar-controls': Array.from(pluginCalls).join(','),
           'data-content-editable-class': contentEditableClassName ?? '',
           'data-commonmark-options': toMarkdownOptions?.marker ?? '',
+          'data-mdx-support': String(hasMdxCompatibility),
           'data-translation-bold': translation?.('toolbar.bold', 'Bold') ?? '',
           'data-translation-undo': translation?.('toolbar.undo', 'Undo {{shortcut}}', { shortcut: 'Ctrl+Z' }) ?? '',
           'data-translation-heading': translation?.('toolbar.blockTypes.heading', 'Heading {{level}}', { level: 2 }) ?? '',
@@ -188,6 +196,8 @@ vi.mock('@mdxeditor/editor', async () => {
     linkPlugin: () => ({ name: 'linkPlugin' }),
     listsPlugin: () => ({ name: 'listsPlugin' }),
     markdownShortcutPlugin: () => ({ name: 'markdownShortcutPlugin' }),
+    GenericJsxEditor: () => null,
+    jsxPlugin: () => ({ name: 'jsxPlugin' }),
     quotePlugin: () => ({ name: 'quotePlugin' }),
     realmPlugin: () => () => ({ name: 'realmPlugin' }),
     createActiveEditorSubscription$: Symbol('createActiveEditorSubscription$'),
@@ -924,6 +934,75 @@ describe('DriveMDXeditorRenderer', () => {
 
     expect(sourceEditor().value).toBe('金额 <= 1000')
     expect(document.body.textContent).toContain('解析失败')
+  })
+
+  it('opens valid MDX components in rich mode for MDX files', async () => {
+    renderRenderer({
+      current: { ...baseCurrent(), name: 'notes.mdx' },
+      preview: { ...basePreview(), text: '<Callout tone="info">正文</Callout>' },
+    })
+
+    await act(async () => { await Promise.resolve() })
+
+    expect(editor().value).toBe('<Callout tone="info">正文</Callout>')
+    expect(editor().dataset.mdxSupport).toBe('true')
+    expect(document.body.textContent).not.toContain('解析失败')
+  })
+
+  it('keeps MDX ESM source intact instead of normalizing it through rich mode', async () => {
+    const editContext = createEditContext()
+    const markdown = [
+      'export const total = 2',
+      '',
+      '<Callout>{total}</Callout>',
+    ].join('\n')
+    renderRenderer({
+      current: { ...baseCurrent(), name: 'notes.mdx' },
+      preview: { ...basePreview(), text: markdown },
+      editContext,
+    })
+
+    expect(sourceEditor().value).toBe(markdown)
+    expect(document.body.textContent).not.toContain('解析失败')
+    expect(document.querySelector('[data-mdxeditor="true"]')).toBeNull()
+  })
+
+  it('does not mistake fenced import or export examples for MDX ESM', async () => {
+    const markdown = [
+      '```tsx',
+      'export const total = 2',
+      '```',
+    ].join('\n')
+    renderRenderer({
+      current: { ...baseCurrent(), name: 'notes.mdx' },
+      preview: { ...basePreview(), text: markdown },
+    })
+
+    expect(editor().value).toBe(markdown)
+    expect(document.body.textContent).not.toContain('解析失败')
+  })
+
+  it('keeps CommonMark HTML comments in source mode instead of dropping them', async () => {
+    const markdown = ['正文', '', '<!-- keep this comment -->'].join('\n')
+    renderRenderer({ preview: { ...basePreview(), text: markdown } })
+
+    expect(sourceEditor().value).toBe(markdown)
+    expect(document.body.textContent).not.toContain('解析失败')
+    expect(document.querySelector('[data-mdxeditor="true"]')).toBeNull()
+  })
+
+  it('does not mistake fenced or inline HTML comment examples for source comments', async () => {
+    const markdown = [
+      '行内 `<!-- example -->`',
+      '',
+      '```html',
+      '<!-- example -->',
+      '```',
+    ].join('\n')
+    renderRenderer({ preview: { ...basePreview(), text: markdown } })
+
+    expect(editor().value).toBe(markdown)
+    expect(document.body.textContent).not.toContain('解析失败')
   })
 
   it('keeps invalid MDX source editable after saving it', async () => {

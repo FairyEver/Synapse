@@ -512,23 +512,10 @@ describe('DriveMarkdownRenderer', () => {
     expect(buttonWithText('阅读')).not.toBeNull()
   })
 
-  it('enables comments for markdown extensions and markdown mime types', () => {
-    const cases = [
-      current({ name: 'notes.md', mimeType: null }),
-      current({ name: 'notes.markdown', mimeType: null }),
-      current({ name: 'component.mdx', mimeType: null }),
-      current({ name: 'upload.bin', mimeType: 'text/markdown' }),
-    ]
+  it('enables comments for .md files', () => {
+    renderMarkdown({ currentItem: current({ name: 'notes.md', mimeType: null }) })
 
-    for (const currentItem of cases) {
-      renderMarkdown({ currentItem })
-      expect(buttonWithText('评论 0')).not.toBeNull()
-      root?.unmount()
-      host?.remove()
-      root = null
-      host = null
-      document.body.innerHTML = ''
-    }
+    expect(buttonWithText('评论 0')).not.toBeNull()
   })
 
   it('does not enable comments for non-markdown files', () => {
@@ -1087,6 +1074,19 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).not.toContain('评论')
     expect(document.body.textContent).not.toContain('添加评论')
     expect(document.querySelector('textarea')).toBeNull()
+    expect(pendingOverlay()).toBeNull()
+  })
+
+  it('does not show .md-only comment controls for MDX previews', async () => {
+    renderMarkdown({ currentItem: current({ name: 'notes.mdx', mimeType: 'text/markdown' }) })
+    selectStrongText()
+
+    await act(async () => {
+      dispatchPointerUpOnMarkdownBody()
+    })
+
+    expect(document.body.textContent).not.toContain('评论')
+    expect(document.body.textContent).not.toContain('添加评论')
     expect(pendingOverlay()).toBeNull()
   })
 

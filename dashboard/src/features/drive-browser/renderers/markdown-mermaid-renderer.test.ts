@@ -108,6 +108,28 @@ describe('drive markdown Mermaid renderer', () => {
     expect(mermaid.render).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps wide SVG content at its intrinsic width inside the horizontal scroller', async () => {
+    const root = markdownRoot(mermaidBlock('flowchart LR\nA --> B --> C --> D'))
+    const mermaid = mermaidApi({
+      render: vi.fn(async () => ({
+        svg: '<svg width="1200" viewBox="0 0 1200 200" style="max-width: 100%"><text>wide</text></svg>',
+      })),
+    })
+
+    await renderDriveMermaidDiagrams({ root, resolvedTheme: 'light', loadMermaid: async () => mermaid })
+
+    const figure = root.querySelector('figure')
+    const rendered = root.querySelector('[data-drive-mermaid-rendered="true"]')
+    const svg = root.querySelector('svg')
+    expect(figure?.className).toContain('mx-0')
+    expect(figure?.className).toContain('max-w-full')
+    expect(figure?.className).toContain('overflow-x-auto')
+    expect(rendered?.className).toContain('min-w-fit')
+    expect(svg?.getAttribute('width')).toBe('1200')
+    expect(svg?.style.maxWidth).toBe('')
+    expect(svg?.classList.contains('max-w-none')).toBe(true)
+  })
+
   it('keeps source visible when the Mermaid chunk cannot load', async () => {
     const root = markdownRoot(mermaidBlock('flowchart LR\nA --> B'))
 

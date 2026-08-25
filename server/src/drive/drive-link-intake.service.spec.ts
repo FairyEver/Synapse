@@ -318,6 +318,13 @@ describe("DriveLinkIntakeService", () => {
     } as never)
     await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/share/shr_123` }, "user-1"))
       .rejects.toThrow("评论管理仅支持 .md 文档。")
+
+    drive.getShareBrowserSnapshot.mockResolvedValueOnce({
+      current: { id: "item-mdx", name: "notes.mdx", type: "file", mimeType: "text/markdown" },
+      children: [],
+    } as never)
+    await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/share/shr_123` }, "user-1"))
+      .rejects.toThrow("评论管理仅支持 .md 文档。")
     expect(annotations.getShareAnnotationSnapshot).not.toHaveBeenCalled()
   })
 

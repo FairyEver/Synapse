@@ -1,5 +1,54 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 4 轮 Drive Markdown / MDX / Mermaid 审查
+
+- 起始基线为 `dca057a0f0d3deb16c32d7622f5a114160d23bc3`，工作树在本轮记录前干净；固定比较范围为 `db189074...HEAD`。
+- 主任务给出的 `f937c5e73b8a29c845fae73f539a44fd9d32dff4` 不是现有对象；同前缀真实 Mermaid 提交为 `f937c5e73c3ee3525eddcaa820287eac461d9d7f`。
+- 权威边界：Markdown 源文本始终是协同和版本历史的权威；普通 `.md/.markdown` 需要兼容 CommonMark 文本，`.mdx` 保持严格解析；评论锚点只接受服务端 projection 的保守解析，Renderer 不猜测重挂；MDXEditor 保存继续复用现有版本冲突与失败保留链路。
+
+### 第 4 轮修改点矩阵（完成 12 项）
+
+| # | 修改点 | 文件 / 提交 | 用户行为 | 自动化 | 实机 | 结论 |
+|---:|---|---|---|---|---|---|
+| 1 | Mermaid figure 取消默认横向 margin | Mermaid renderer；`f937c5e73` | 宽图与正文、表格共用内容边界 | Mermaid renderer 专项通过 | 合法宽图完成渲染并与正文/表格对比 | 通过 |
+| 2 | Mermaid 多图、错误、取消、主题重绘 | Mermaid renderer/test；`f937c5e73` | 多图独立，异常保留源码，旧渲染不回写 | 多图、异常、取消、重绘均通过 | 合法图可见；编辑损坏后的非法图保留源码 | 通过；多图竞态由同层自动化覆盖 |
+| 3 | Mermaid 内容宽度与横向滚动 | Mermaid renderer/test；本轮补回归 | SVG 保留固有宽度，窄窗在图内滚动 | 新增 `1200px` SVG 宽度、`max-width` 清除、scroller 断言通过 | 1325/1063/768 px 检查无页面级横向溢出；合法宽图在编辑前可见 | 通过；图内滚动行为由布局专项补证 |
+| 4 | 普通 Markdown `<=` 兼容 | CommonMark plugin；`5c2ac491` + 本轮修复 | `a <= b` 可进入富文本且保存不加反斜杠 | 真实 MDXEditor 比较、代码、转义往返通过 | 线上旧版本富文本报严格 MDX 错误；源码编辑、同步、重开可持久化 | 红灯后修复；本地热更新 UI 受登录阻塞，不能声称修复后实机通过 |
+| 5 | `.md` HTML/JSX/表达式/代码/转义/注释边界 | CommonMark plugin / renderer；本轮修复 | 普通 HTML 与代码示例不误判，HTML 注释不丢失 | HTML、属性、代码块、行内代码、转义、注释边界通过 | 普通正文/代码路径可达；生产测试文档未构造全部语法组合 | 通过；HTML 注释保守进入源码模式 |
+| 6 | `.mdx` 严格解析与恢复编辑 | MDXEditor renderer；`5c2ac491` + 本轮修复 | 合法 JSX 可编辑；非法 MDX 显示源码；ESM 不静默丢失 | 真实 MDXEditor 覆盖属性、表达式、嵌套组件、注释；ESM/非法专项通过 | 线上合法 MDX 仍报 `mdxJsxTextElement`，非法 MDX 正确报错 | 红灯后修复；部署版验证了旧失败与严格错误，本地 UI 登录受阻 |
+| 7 | 有序/无序/三级混合列表 marker 与缩进 | MDXEditor/reader；`5c2ac491` + 本轮修复 | 编辑与阅读 marker、层级一致 | 真实编辑器三级混合列表往返通过 | 预览显示三层混合与任务项；线上编辑批量输入后缩进变形 | 当前代码通过；部署版旧行为失败，修复后实机受登录阻塞 |
+| 8 | 列表编号起始、任务列表、空项与保存重开 | 新 ordered-list start plugin；本轮修复 | 非 1 起始、任务/空项不变形 | 真实编辑器 `3.` 起始、混合嵌套、任务、空项 7/7 通过 | 测试文档同步并重开成功，但线上编辑已把编号/缩进规范化 | 红灯后修复；持久化通过，修复后格式实机受环境阻塞 |
+| 9 | 空 heading 不进入目录 | server markdown renderer；`5c2ac491` | 空标题无目录占位项 | Server renderer/projection 专项通过 | 线上目录仍出现 `heading 2` | 当前 main 已有修复且自动化通过；部署版落后，未把线上失败算作修复后通过 |
+| 10 | 重复/Unicode/显式 ID 与目录顺序 | server markdown renderer | 重复标题唯一 ID，Unicode 与顺序稳定 | renderer/projection 专项通过 | 重复标题生成 `-2`，Unicode 标题稳定；CommonMark `{#id}` 按正文显示 | 通过；显式 ID 不是当前 CommonMark 产品契约 |
+| 11 | heading/list projection 与评论定位 | server projection + dashboard annotation；本轮收紧评论格式 | 选文评论保存后仍对准正文，非 `.md` 不开放评论 | projection、annotation、link intake、`.md` 边界专项通过 | 对 `projection` 建评论，刷新后正文与评论锚点仍在 | 通过 |
+| 12 | 保存/读取/竞态/XSS、错误状态与样式纪律 | Drive save、server renderer、MDXEditor；本轮审查 | 失败保留源码，内容安全，无新增自定义视觉 | Server/Dashboard/Shared 20 文件 533 项；build/typecheck/hard constraints 通过 | `.md` 保存显示“已同步”且刷新持久；非法 `.mdx` 错误可见；本地两入口均受登录阻塞 | 通过；本轮未新增颜色、内联样式、依赖或吞错 |
+
+### 第 4 轮红绿灯与代码审查结论
+
+- 红灯 1：真实 MDXEditor 将普通 Markdown 的 `a <= b` 序列化为带额外转义的源码；兼容 serializer 同时归一 `\\<\\=` 与 `\\<=` 后，正文、行内代码、代码块和显式转义往返通过。
+- 红灯 2：`.mdx` 没有 JSX descriptor，合法组件在真实 UI/真实编辑器中报 `mdxJsxTextElement`；仅对 `.mdx` 注册通用 JSX editor，属性、表达式、嵌套组件和 MDX 注释均保留，非法 MDX 继续严格报错。
+- 红灯 3：MDXEditor 对顶层 `import`/`export` 和 CommonMark HTML 注释不能无损往返；检测 fenced code 之外的对应源码并进入现有 Textarea 源码模式，不引入新的保存链路。
+- 红灯 4：MDXEditor 默认丢失有序列表非 1 起始值；新增窄插件只在 list import/export 补 `start`，三级混合、任务列表与空项继续走上游 list visitor。
+- 红灯 5：评论格式边界在 Renderer、服务端 target 和链接 intake 不一致，曾允许 `.markdown`、`.mdx` 或仅 MIME 命中的文件；提取共享 `.md` 判定并在三层统一。
+- Mermaid 生产代码本轮未再改动；新增布局回归固定 SVG 原始宽度、清理上游内联 `max-width`、内容 `min-w-fit` 与 figure 横向滚动约束。空 heading、重复/Unicode 标题、projection 顺序、异常 Mermaid、XSS、保存冲突与错误保留均复核既有实现及专项，未发现需要扩大修改范围的问题。
+- Standards：diff 只使用现有 MDXEditor、Textarea、主题 token 和 utility class；聚焦扫描命中的两处 inline style 是既有评论浮层动态坐标/高度，不是本轮新增。无自定义颜色、渐变、`console.log`、新依赖或跨模块内部导入。
+- Spec：Markdown 源码仍是版本与协作权威；`.md` 使用 CommonMark 兼容链，`.mdx` 保持严格语法；评论只支持 `.md`；保存、冲突和失败恢复继续复用既有 Drive text save flow。
+
+### 第 4 轮实机证据与环境边界
+
+- Electron Drive 停在“需要登录账号”，本地 Dashboard `127.0.0.1:3000` 同样重定向登录；未输入或迁移生产凭据。随后只用 Computer Use 的持久 `node_repl + @oai/sky` 操作已有登录态的 `synapse.d2.pub`，每次动作后重新读取应用状态。
+- 新建无敏感目录 `Codex Round 4 Markdown Test 2026-08-26`，保留 `.md`、合法 `.mdx`、非法 `.mdx` 三份测试文档供验收。`.md` 完成正文、三级混合列表、任务项、比较表达式、空/重复/Unicode heading、Mermaid、表格和评论操作；`.mdx` 分别覆盖合法组件与严格错误。
+- `.md` 先在阅读预览确认宽 Mermaid、正文、表格、列表、TOC，再切编辑。线上部署版暴露 `<=` 误报、列表缩进往返、空 heading 占位三项旧失败；源码模式编辑后显示“已同步”，刷新确认持久化。
+- Computer Use 对代码编辑器执行批量 `type_text` 时丢失了部分中文和 Markdown 缩进，测试专用 `.md` 因而保留为可识别但部分畸形的 545 B 内容；未修改用户重要文档，也不把该次畸形保存解释为产品通过。
+- 选中正文 `projection` 后创建评论 `Round 4 projection 定位测试`，刷新后评论与正文锚点仍在。合法 `.mdx` 在部署版进入编辑时复现缺 descriptor 的解析错误，非法 `.mdx` 复现严格错误状态。
+- 窗口依次检查约 1325×768、1063×768、768×775；紧凑工具栏可用且没有页面级横向溢出。由于当前运行页面是未包含本轮本地修复的部署版、两个本地入口又受登录阻塞，所有“修复后实机”缺口均明确标为环境阻塞，并由真实组件/服务同层专项覆盖，未声称实机通过。
+
+### 第 4 轮最终验证
+
+- Dashboard Markdown/MDX/Mermaid/editor/preview/comment/TOC：12 文件、235/235。
+- Server Drive 保存、Markdown renderer/projection、annotation 与 link intake：7 文件、255/255；Shared Drive 契约：1 文件、43/43。合计 20 文件、533/533。
+- Dashboard production build（6,801 modules）、Server typecheck/build、Desktop typecheck、`check:hard-constraints`、`git diff --check` 均通过；构建只有既有大 chunk 警告。本轮未改变 IPC 或打包边界，不运行 IPC codegen / `check:packaged-asar`。
+
 ## 2026-08-26 阶段 23 第 3 轮 Git diff 工作台审查
 
 - 基线为 `2cdd8a39370dd26d73b4fa77b9fce3c0add0630a`，起始工作树干净；固定代码比较范围 `db189074...HEAD`，本轮产品主题固定为 `7b474594f` 及其在 `5c2ac491` 中的 Git diff 直接后续变化。

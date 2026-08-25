@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import 'github-markdown-css/github-markdown-light.css'
 import {
-  isDriveMarkdownItem,
+  isDriveCommentableMarkdownItem,
   type DriveAnnotationSelectorsV2,
   type DriveAnnotationTargetDto,
   type DriveBrowserCollaborationCapabilityDto,
@@ -134,7 +134,7 @@ function DriveMarkdownBody({
   const { resolvedTheme } = useTheme()
   const outlineItems = useMemo(() => flattenMarkdownOutline(outline), [outline])
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
-  const annotationsEnabled = isDriveMarkdownItem(current)
+  const annotationsEnabled = isDriveCommentableMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotationStateKey = driveMarkdownAnnotationStateKey(current.id, edit?.currentVersionId ?? null, effectiveAnnotationContext)
   const annotations = useDriveAnnotations(effectiveAnnotationContext)

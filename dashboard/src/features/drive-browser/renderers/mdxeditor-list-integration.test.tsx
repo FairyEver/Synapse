@@ -4,6 +4,10 @@ import { act, createRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  codeBlockPlugin,
+  codeMirrorPlugin,
+  GenericJsxEditor,
+  jsxPlugin,
   ListsToggle,
   MDXEditor,
   type MDXEditorMethods,
@@ -11,6 +15,11 @@ import {
   toolbarPlugin,
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
+import {
+  commonMarkTextCompatibilityPlugin,
+  commonMarkToMarkdownOptions,
+} from './mdxeditor-commonmark-compatibility-plugin'
+import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -51,6 +60,154 @@ afterEach(() => {
 })
 
 describe('MDXEditor list integration', () => {
+  it('keeps CommonMark comparisons out of MDX parsing in text and code contexts', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onError = vi.fn()
+    const markdown = [
+      '正文 a <= b。',
+      '',
+      '行内代码 `a <= b`。',
+      '',
+      '转义比较 a \\<= b。',
+      '',
+      '```tsx',
+      'const ok = a <= b',
+      '```',
+    ].join('\n')
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={markdown}
+          onError={onError}
+          toMarkdownOptions={commonMarkToMarkdownOptions}
+          plugins={[commonMarkTextCompatibilityPlugin(), codeBlockPlugin(), codeMirrorPlugin()]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(editorRef.current?.getMarkdown()).toContain('正文 a <= b。')
+    expect(editorRef.current?.getMarkdown()).toContain('`a <= b`')
+    expect(editorRef.current?.getMarkdown()).toContain('const ok = a <= b')
+  })
+
+  it('keeps CommonMark HTML, escapes, comments, and JSX-looking code in Markdown mode', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onError = vi.fn()
+    const markdown = [
+      '<span title="a <= b">HTML</span>',
+      '',
+      String.raw`转义标签 \<Callout />`,
+      '',
+      '行内 `<Badge value={a <= b} />`',
+      '',
+      '```jsx',
+      '<Callout value={a <= b} />',
+      '```',
+    ].join('\n')
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={markdown}
+          onError={onError}
+          toMarkdownOptions={commonMarkToMarkdownOptions}
+          plugins={[commonMarkTextCompatibilityPlugin(), codeBlockPlugin(), codeMirrorPlugin()]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
+    expect(onError).not.toHaveBeenCalled()
+    expect(savedMarkdown).toContain('<span title="a <= b">HTML</span>')
+    expect(savedMarkdown).toContain(String.raw`\<Callout />`)
+    expect(savedMarkdown).toContain('`<Badge value={a <= b} />`')
+    expect(savedMarkdown).toContain('<Callout value={a <= b} />')
+  })
+
+  it('parses and preserves a valid MDX component with the generic JSX editor', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onError = vi.fn()
+    const markdown = '<Callout tone="info">正文</Callout>'
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={markdown}
+          onError={onError}
+          plugins={[jsxPlugin({
+            jsxComponentDescriptors: [{
+              name: '*',
+              kind: 'flow',
+              props: [],
+              hasChildren: true,
+              Editor: GenericJsxEditor,
+            }],
+          })]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(editorRef.current?.getMarkdown()).toBe(markdown)
+  })
+
+  it('preserves MDX attributes, expressions, inline components, and comments', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onError = vi.fn()
+    const markdown = [
+      '<Callout tone={"info"}>',
+      '  正文 <Badge>{count}</Badge>',
+      '  {/* keep this comment */}',
+      '</Callout>',
+    ].join('\n')
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={markdown}
+          onError={onError}
+          plugins={[jsxPlugin({
+            jsxComponentDescriptors: [{
+              name: '*',
+              kind: 'flow',
+              props: [],
+              hasChildren: true,
+              Editor: GenericJsxEditor,
+            }],
+          })]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
+    expect(onError).not.toHaveBeenCalled()
+    expect(savedMarkdown).toContain('<Callout tone={"info"}>')
+    expect(savedMarkdown).toContain('<Badge>{count}</Badge>')
+    expect(savedMarkdown).toContain('{/* keep this comment */}')
+  })
+
   it('converts selected text between ordered and unordered lists with the real toolbar', async () => {
     const editorRef = createRef<MDXEditorMethods>()
     host = document.createElement('div')
@@ -103,7 +260,7 @@ describe('MDXEditor list integration', () => {
         <MDXEditor
           ref={editorRef}
           markdown={markdown}
-          plugins={[listsPlugin()]}
+          plugins={[listsPlugin(), orderedListStartPlugin()]}
           contentEditableClassName='[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6'
         />
       )
@@ -136,6 +293,46 @@ describe('MDXEditor list integration', () => {
 
     expect(orderedList.children).toHaveLength(2)
     expect(editorRef.current?.getMarkdown()).toBe(markdown)
+  })
+
+  it('preserves ordered starts, mixed nesting, task items, and an empty item', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const markdown = [
+      '3. 起始第三项',
+      '4. 第二项',
+      '   - 二级无序',
+      '     1. 三级有序',
+      '',
+      '- [x] 已完成',
+      '- [ ] 未完成',
+      '-',
+    ].join('\n')
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={markdown}
+          plugins={[listsPlugin(), orderedListStartPlugin()]}
+          contentEditableClassName='[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6'
+        />
+      )
+      await Promise.resolve()
+    })
+
+    const contentEditable = document.querySelector<HTMLElement>('[contenteditable="true"]')
+    const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
+    expect(savedMarkdown).toMatch(/^3\. 起始第三项\n4\. 第二项/u)
+    expect(savedMarkdown).toMatch(/\n {3}[*-] 二级无序\n {5}1\. 三级有序/u)
+    expect(savedMarkdown).toMatch(/\n[*-] \[x\] 已完成\n[*-] \[ \] 未完成\n[*-]$/u)
+    expect(contentEditable?.querySelector('ol')?.getAttribute('start')).toBe('3')
+    expect(contentEditable?.querySelectorAll('ol ul ol')).toHaveLength(1)
+    const taskItems = contentEditable?.querySelectorAll('li[role="checkbox"]') ?? []
+    expect(taskItems).toHaveLength(3)
+    expect(Array.from(taskItems, (item) => item.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false'])
   })
 })
 

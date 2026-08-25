@@ -12,6 +12,8 @@ import {
   InsertCodeBlock,
   InsertTable,
   InsertThematicBreak,
+  GenericJsxEditor,
+  jsxPlugin,
   linkDialogPlugin,
   linkPlugin,
   ListsToggle,
@@ -25,7 +27,7 @@ import {
   UndoRedo,
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
-import type { MDXEditorMethods } from '@mdxeditor/editor'
+import type { JsxComponentDescriptor, MDXEditorMethods } from '@mdxeditor/editor'
 import {
   DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION,
   inferDrivePublicAssetMimeType,
@@ -55,6 +57,7 @@ import {
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
 } from './mdxeditor-commonmark-compatibility-plugin'
+import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
 import { tableCellLineBreakPlugin } from './mdxeditor-table-cell-line-break-plugin'
 import { trailingImageParagraphPlugin } from './mdxeditor-trailing-image-plugin'
 import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
@@ -83,6 +86,14 @@ type PublicImageUploadInput = {
 type DrivePublicAssetImageMimeType = typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION[keyof typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION]
 
 const DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES = Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION) as readonly DrivePublicAssetImageMimeType[]
+
+const GENERIC_MDX_COMPONENT_DESCRIPTOR = {
+  name: '*',
+  kind: 'flow',
+  props: [],
+  hasChildren: true,
+  Editor: GenericJsxEditor,
+} satisfies JsxComponentDescriptor
 
 export function DriveMDXeditorRenderer({
   current,
@@ -119,6 +130,9 @@ export function DriveMDXeditorRenderer({
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const usesMdxSyntax = isMdxDocument(current.name)
+  const requiresSourceMode = usesMdxSyntax
+    ? containsTopLevelMdxEsm(initialText)
+    : containsCommonMarkHtmlComment(initialText)
   const loginUrl = buildLoginUrl()
   const imageSources = useDriveMarkdownImageSources({
     context: imageSourceContext,
@@ -318,6 +332,7 @@ export function DriveMDXeditorRenderer({
     }),
     headingsPlugin(),
     listsPlugin(),
+    orderedListStartPlugin(),
     quotePlugin(),
     thematicBreakPlugin(),
     linkPlugin(),
@@ -331,6 +346,7 @@ export function DriveMDXeditorRenderer({
     tableCellLineBreakPlugin(),
     codeBlockPlugin(),
     codeMirrorPlugin(),
+    ...(usesMdxSyntax ? [jsxPlugin({ jsxComponentDescriptors: [GENERIC_MDX_COMPONENT_DESCRIPTOR] })] : []),
     ...(!usesMdxSyntax ? [commonMarkTextCompatibilityPlugin()] : []),
     diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
     markdownShortcutPlugin(),
@@ -542,11 +558,11 @@ export function DriveMDXeditorRenderer({
         onChange={(event) => { void handleImageSelected(event) }}
       />
       <div className='min-h-0 flex-1 overflow-auto'>
-        {parseError ? (
+        {parseError || requiresSourceMode ? (
           <div className='mx-auto flex min-h-full max-w-4xl flex-col gap-3 px-4 py-6 md:px-6'>
             <div className='flex items-center justify-between gap-2'>
               <span className='text-sm font-medium text-foreground'>源码</span>
-              <span className='text-xs text-destructive'>解析失败</span>
+              {parseError ? <span className='text-xs text-destructive'>解析失败</span> : null}
             </div>
             <Textarea
               value={value}
@@ -731,6 +747,37 @@ function imageAltText(name: string): string {
 
 function isMdxDocument(name: string): boolean {
   return /\.mdx$/iu.test(name)
+}
+
+function containsTopLevelMdxEsm(markdown: string): boolean {
+  return someLineOutsideFencedCode(markdown, (line) => /^ {0,3}(?:import|export)(?:\s|\{|\*)/u.test(line))
+}
+
+function containsCommonMarkHtmlComment(markdown: string): boolean {
+  return someLineOutsideFencedCode(markdown, (line) => {
+    const withoutInlineCode = line.replace(/(`+).*?\1/gu, '')
+    return withoutInlineCode.includes('<!--')
+  })
+}
+
+function someLineOutsideFencedCode(markdown: string, predicate: (line: string) => boolean): boolean {
+  let fence: { readonly marker: '`' | '~'; readonly length: number } | null = null
+  for (const line of markdown.split(/\r?\n/u)) {
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/u.exec(line)
+    if (fenceMatch) {
+      const sequence = fenceMatch[1]
+      const marker = sequence[0] as '`' | '~'
+      if (!fence) {
+        fence = { marker, length: sequence.length }
+      } else if (marker === fence.marker && sequence.length >= fence.length) {
+        fence = null
+      }
+      continue
+    }
+    if (fence) continue
+    if (predicate(line)) return true
+  }
+  return false
 }
 
 function resolvePublicImageUploadInput(file: File): { readonly name: string; readonly mimeType: DrivePublicAssetImageMimeType } | null {

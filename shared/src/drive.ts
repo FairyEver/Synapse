@@ -142,6 +142,13 @@ export function isDriveMarkdownItem(item: {
     || mimeType === "text/x-markdown"
 }
 
+export function isDriveCommentableMarkdownItem(item: {
+  readonly type: DriveItemType | string
+  readonly name: string
+}): boolean {
+  return item.type === "file" && /\.md$/iu.test(item.name)
+}
+
 export interface DriveAccessSettingsInput {
   readonly passwordEnabled: boolean
   readonly expiresIn: DriveAccessExpiresIn

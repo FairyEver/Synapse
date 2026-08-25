@@ -41,6 +41,7 @@ import {
   drivePublicAssetContentKind,
   inferDrivePublicAssetMimeType,
   isDrivePublicAssetTextMimeType,
+  isDriveCommentableMarkdownItem,
   isDriveMarkdownItem,
   isDrivePublicAssetId,
   parseDrivePublicAssetUrl,
@@ -336,6 +337,14 @@ describe("drive URL helpers", () => {
     expect(isDriveMarkdownItem({ name: "legacy.bin", type: "file", mimeType: "text/x-markdown" })).toBe(true)
     expect(isDriveMarkdownItem({ name: "folder.md", type: "folder", mimeType: "text/markdown" })).toBe(false)
     expect(isDriveMarkdownItem({ name: "notes.txt", type: "file", mimeType: "text/plain" })).toBe(false)
+  })
+
+  it("keeps Drive comments limited to .md files", () => {
+    expect(isDriveCommentableMarkdownItem({ name: "notes.md", type: "file" })).toBe(true)
+    expect(isDriveCommentableMarkdownItem({ name: "NOTES.MD", type: "file" })).toBe(true)
+    expect(isDriveCommentableMarkdownItem({ name: "notes.markdown", type: "file" })).toBe(false)
+    expect(isDriveCommentableMarkdownItem({ name: "component.mdx", type: "file" })).toBe(false)
+    expect(isDriveCommentableMarkdownItem({ name: "folder.md", type: "folder" })).toBe(false)
   })
 
   it("defines drive annotation DTOs for text range comments", () => {

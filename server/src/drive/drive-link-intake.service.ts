@@ -5,7 +5,7 @@ import {
   DRIVE_PUBLIC_PATH_PREFIX,
   DRIVE_SITE_PATH_PREFIX,
   decodeUtf8Prefix,
-  isDriveMarkdownItem,
+  isDriveCommentableMarkdownItem,
   isDrivePublicAssetTextMimeType,
   truncateUtf8StringToBytes,
   type DriveBrowserItemDto,
@@ -594,7 +594,7 @@ export class DriveLinkIntakeService {
       cookie: undefined,
       actorUserId,
     })
-    if (!isDriveMarkdownItem(snapshot.current)) {
+    if (!isDriveCommentableMarkdownItem(snapshot.current)) {
       throw new BadRequestException("评论管理仅支持 .md 文档。")
     }
     return { shareId: parsed.shareId, itemId: snapshot.current.id, password }

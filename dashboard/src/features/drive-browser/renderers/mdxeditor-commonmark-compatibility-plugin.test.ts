@@ -38,7 +38,7 @@ describe('MDXEditor CommonMark compatibility', () => {
   it('keeps less-than-or-equal text unescaped when exporting ordinary Markdown', () => {
     const handler = commonMarkToMarkdownOptions.handlers?.text
     if (!handler) throw new Error('text handler not found')
-    const safe = vi.fn(() => '金额 \\<= 1000')
+    const safe = vi.fn(() => '金额 \\<\\= 1000')
 
     expect(handler(
       { type: 'text', value: '金额 <= 1000' },
