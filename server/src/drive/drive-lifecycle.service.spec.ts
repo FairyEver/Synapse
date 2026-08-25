@@ -40,6 +40,28 @@ describe("DriveLifecycleService", () => {
     expect(await usedBytes(prisma, "user-1")).toBe(10n)
   })
 
+  it("uses a bounded long-running transaction when trashing a 1000-file folder", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const transaction = vi.spyOn(prisma, "$transaction")
+    const changes = { append: vi.fn(async () => undefined) }
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage, undefined, changes as never)
+    const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", name: "Large folder" })
+    await Promise.all(Array.from({ length: 1_000 }, (_, index) => seedActiveDriveFile(prisma, {
+      userId: "user-1",
+      parentId: folder.id,
+      name: `file-${index}.txt`,
+      size: 0n,
+    })))
+
+    await lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" })
+
+    expect(changes.append).toHaveBeenCalledTimes(1_001)
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 10_000,
+      timeout: 30_000,
+    })
+  })
+
   it("stores trash metadata without setting deletedAt", async () => {
     const prisma = createLifecyclePrismaMemory()
     const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)

@@ -56,6 +56,8 @@ type DriveTrashRootQueryRecord = Omit<DriveLifecycleItemRecord, "publicAsset" | 
 
 const DRIVE_TRASH_DEFAULT_LIMIT = 50
 const DRIVE_TRASH_MAX_LIMIT = 200
+const DRIVE_TRASH_TRANSACTION_MAX_WAIT_MS = 10_000
+const DRIVE_TRASH_TRANSACTION_TIMEOUT_MS = 30_000
 
 @Injectable()
 export class DriveLifecycleService {
@@ -133,6 +135,9 @@ export class DriveLifecycleService {
           actor: input.actorId,
         }, tx)
       }
+    }, {
+      maxWait: DRIVE_TRASH_TRANSACTION_MAX_WAIT_MS,
+      timeout: DRIVE_TRASH_TRANSACTION_TIMEOUT_MS,
     })
     await this.recordLifecycleAuditSafely({
       actorId: input.actorId,

@@ -1,5 +1,12 @@
 # 发现与决策
 
+## 大目录删除事务超时（阶段 37–40）
+- 正式环境 `Codex-OpenAPI-E2E-20260823-01a02c53` 是开放接口边界实测留下的大目录，包含至少 1000 个文件；删除入口实际执行整棵子树的软删除。
+- `DriveLifecycleService.trashItem` 在默认 Prisma 交互事务中批量更新条目后，仍逐条调用 `DriveChangeLogService.append`；每个条目至少执行元数据查询和 change insert，大目录会产生数千次串行 SQL。
+- 全局异常过滤器把未单独映射的 Prisma 已知错误统一返回 `500 数据库操作失败`；结合目录规模与默认事务配置，正式报错与 P2028 事务超时一致。
+- 修复必须保留整棵目录迁移和同步 change 的原子性，不通过跳过 change、拆成可见的部分删除或吞掉错误规避。
+- 采用与已在正式 PostgreSQL 验证过的 1000 文件上传相同的有界事务配置：获取事务最多等待 10 秒，执行最多 30 秒；不改变删除 SQL、变更记录数量或回滚语义。
+
 ## 公共链接资源命名兼容迁移（阶段 30）
 - 本轮唯一产品目标：将外部资源概念从过窄的“分享链接”统一为“公共链接”；不实施限流、OpenAPI 规范、密钥生命周期或其它评估建议。
 - 默认兼容策略：新增 canonical `/drive/public-links/downloads` 与准确 scope，不删除已发布 `/drive/share-links/downloads` 和 `drive.share_link.download`。
