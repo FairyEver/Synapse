@@ -933,6 +933,7 @@ describe("git worktree services", () => {
       outputOverflow: "truncate",
     }))
     expect(run).toHaveBeenNthCalledWith(4, expect.objectContaining({
+      args: ["diff", "--patch", "--find-renames", "b".repeat(40), hash],
       maxBufferBytes: 2 * 1024 * 1024,
       outputOverflow: "truncate",
     }))
@@ -970,7 +971,7 @@ describe("git worktree services", () => {
       args: ["diff-tree", "--root", "--no-commit-id", "--name-status", "-z", "-r", "--find-renames", hash],
     }))
     expect(run).toHaveBeenNthCalledWith(3, expect.objectContaining({
-      args: ["show", "--format=", "--patch", "--root", hash],
+      args: ["show", "--format=", "--patch", "--find-renames", "--root", hash],
     }))
   })
 

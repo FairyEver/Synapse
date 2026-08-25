@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -24,6 +23,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitRepository, SynapseGitWorkingTreeChange } from "@/types/git"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { getGitActionPlan } from "../lib/git-status-view"
+import { GitDiffViewer, type GitDiffViewMode } from "./git-diff-viewer"
 
 type GitChangesTabProps = {
   readonly repository: SynapseGitRepository
@@ -33,6 +33,10 @@ type GitChangesTabProps = {
   readonly pushDisabled?: boolean
   readonly commitDialogOpen: boolean
   readonly onCommitDialogOpenChange: (open: boolean) => void
+  readonly diffViewMode: GitDiffViewMode
+  readonly diffWrap: boolean
+  readonly onDiffViewModeChange: (mode: GitDiffViewMode) => void
+  readonly onDiffWrapChange: (wrap: boolean) => void
 }
 
 type CommitNotice = {
@@ -63,6 +67,10 @@ export function GitChangesTab({
   pushDisabled,
   commitDialogOpen,
   onCommitDialogOpenChange,
+  diffViewMode,
+  diffWrap,
+  onDiffViewModeChange,
+  onDiffWrapChange,
 }: GitChangesTabProps) {
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
@@ -221,37 +229,30 @@ export function GitChangesTab({
           data-git-changes-detail-pane="true"
           viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
         >
-          <div className="min-w-0 max-w-full overflow-hidden p-4" data-git-changes-detail-content="true">
+          <div className="min-w-0 max-w-full overflow-hidden" data-git-changes-detail-content="true">
             {status.diffLoading ? (
-              <GitDiffSkeleton />
+              <div className="p-4"><GitDiffSkeleton /></div>
             ) : status.diff ? (
-              <div className="grid min-w-0 gap-3">
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{status.diff.path}</div>
-                    {status.selectedFile ? (
-                      <div className="mt-1">
-                        <Badge variant="outline">{statusIndicators[status.selectedFile.status].label}</Badge>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                {status.diff.truncated ? (
-                  <Alert>
-                    <AlertTitle>差异内容已截断</AlertTitle>
-                    <AlertDescription>内容过大，仅显示前 2 MiB。</AlertDescription>
-                  </Alert>
-                ) : null}
-                <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
-                  {status.diff.binary ? "文件已变更。" : <GitDiffText text={status.diff.text || "没有文本差异。"} />}
-                </pre>
-              </div>
+              <GitDiffViewer
+                path={status.diff.path}
+                originalPath={status.diff.originalPath}
+                statusLabel={status.selectedFile ? statusIndicators[status.selectedFile.status].label : undefined}
+                text={status.diff.text}
+                binary={status.diff.binary}
+                truncated={status.diff.truncated}
+                mode={diffViewMode}
+                wrap={diffWrap}
+                onModeChange={onDiffViewModeChange}
+                onWrapChange={onDiffWrapChange}
+              />
             ) : (
-              <Empty className="min-h-64 border bg-muted/20">
-                <EmptyHeader>
-                  <EmptyTitle>选择文件查看差异</EmptyTitle>
-                </EmptyHeader>
-              </Empty>
+              <div className="p-4">
+                <Empty className="min-h-64 border bg-muted/20">
+                  <EmptyHeader>
+                    <EmptyTitle>选择文件查看差异</EmptyTitle>
+                  </EmptyHeader>
+                </Empty>
+              </div>
             )}
           </div>
         </ScrollArea>
@@ -326,31 +327,6 @@ export function GitChangesTab({
         </DialogContent>
       </Dialog>
     </div>
-  )
-}
-
-function GitDiffText({ text }: { readonly text: string }) {
-  return (
-    <>
-      {text.split(/\r?\n/).map((line, index) => {
-        const isAddition = line.startsWith("+") && !line.startsWith("+++")
-        const isDeletion = line.startsWith("-") && !line.startsWith("---")
-        return (
-          <span
-            key={`${index}:${line}`}
-            className={
-              isDeletion
-                ? "block whitespace-pre text-destructive"
-                : isAddition
-                  ? "block whitespace-pre bg-background font-medium"
-                  : "block whitespace-pre"
-            }
-          >
-            {line || " "}
-          </span>
-        )
-      })}
-    </>
   )
 }
 

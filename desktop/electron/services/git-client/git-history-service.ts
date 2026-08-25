@@ -152,8 +152,8 @@ export function createGitHistoryService(deps: {
         const diffResult = await deps.commandRunner.run({
           cwd: repository.localPath,
           args: firstParent
-            ? ["diff", "--patch", firstParent, commitHash]
-            : ["show", "--format=", "--patch", "--root", commitHash],
+            ? ["diff", "--patch", "--find-renames", firstParent, commitHash]
+            : ["show", "--format=", "--patch", "--find-renames", "--root", commitHash],
           operation,
           operationId,
           maxBufferBytes: PREVIEW_MAX_BYTES,

@@ -1,15 +1,16 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GitChangesTab } from "../components/git-changes-tab"
+import { GitDiffViewer } from "../components/git-diff-viewer"
 import { GitHistoryTab } from "../components/git-history-tab"
 import { GitWorkbench } from "../components/git-workbench"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
-import type { SynapseGitRepositorySnapshot } from "@/types/git"
+import type { SynapseGitCommitDetail, SynapseGitRepositorySnapshot } from "@/types/git"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -17,8 +18,21 @@ HTMLElement.prototype.scrollIntoView = vi.fn()
 HTMLElement.prototype.hasPointerCapture = vi.fn(() => false)
 HTMLElement.prototype.setPointerCapture = vi.fn()
 HTMLElement.prototype.releasePointerCapture = vi.fn()
+Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+  configurable: true,
+  value: vi.fn(() => ({
+    font: "",
+    measureText: (value: string) => ({ width: value.length * 7 }),
+  })),
+})
 
 const repository = { id: "repo-1", name: "Docs", localPath: "/repo", addedAt: "now", lastOpenedAt: null }
+const defaultDiffViewProps = {
+  diffViewMode: "unified" as const,
+  diffWrap: false,
+  onDiffViewModeChange: vi.fn(),
+  onDiffWrapChange: vi.fn(),
+}
 const bridge = vi.hoisted(() => ({
   git: {
     getSnapshot: vi.fn(),
@@ -55,6 +69,7 @@ describe("GitWorkbench", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     document.body.innerHTML = ""
+    document.documentElement.classList.remove("dark")
     bridge.git.getSnapshot.mockResolvedValue({
       repositoryId: "repo-1",
       pathExists: true,
@@ -69,7 +84,13 @@ describe("GitWorkbench", () => {
       changesTruncated: false,
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
     })
-    bridge.git.getDiff.mockResolvedValue({ path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" })
+    bridge.git.getDiff.mockResolvedValue({
+      path: "docs/a.md",
+      originalPath: null,
+      binary: false,
+      truncated: false,
+      text: "diff --git a/docs/a.md b/docs/a.md\n--- a/docs/a.md\n+++ b/docs/a.md\n@@ -0,0 +1 @@\n+hello\n",
+    })
     bridge.git.prepareChangeSelection.mockResolvedValue({
       selectionId: "selection-1",
       repositoryId: "repo-1",
@@ -102,7 +123,7 @@ describe("GitWorkbench", () => {
       authorEmail: "zhang@example.com",
       committedAt: "2026-06-17T10:00:00+08:00",
       files: [{ path: "docs/a.md", originalPath: null, status: "modified" }],
-      diff: "+hello",
+      diff: "diff --git a/docs/a.md b/docs/a.md\n--- a/docs/a.md\n+++ b/docs/a.md\n@@ -0,0 +1 @@\n+hello\n",
       filesTruncated: false,
       diffTruncated: false,
       truncated: false,
@@ -125,7 +146,7 @@ describe("GitWorkbench", () => {
     expect(document.body.textContent).toContain("Docs")
     expect(document.body.textContent).toContain("main")
     expect(document.body.textContent).toContain("docs/a.md")
-    expect(document.body.textContent).toContain("+hello")
+    expect(document.body.textContent).toContain("hello")
 
     await click(findButton("提交改动"))
     expect(findDialog().textContent).toContain("提交改动")
@@ -262,7 +283,177 @@ describe("GitWorkbench", () => {
 
     await click(findButton("更新文档"))
     expect(bridge.git.getCommit).toHaveBeenCalledWith("repo-1", "abc")
-    expect(document.body.textContent).toContain("+hello")
+    expect(document.body.textContent).toContain("hello")
+  })
+
+  it("switches diff layout, wrapping, and theme", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    function ViewerHarness() {
+      const [mode, setMode] = useState<"unified" | "split">("unified")
+      const [wrap, setWrap] = useState(false)
+      return (
+        <GitDiffViewer
+          path="docs/a.md"
+          statusLabel="修改"
+          text={createPatch("docs/a.md", "hello")}
+          mode={mode}
+          wrap={wrap}
+          onModeChange={setMode}
+          onWrapChange={setWrap}
+        />
+      )
+    }
+
+    await act(async () => {
+      root.render(<ViewerHarness />)
+      await flush()
+    })
+
+    expect(findButtonByLabel("统一视图").getAttribute("data-state")).toBe("on")
+    expect(findButtonByLabel("自动换行").getAttribute("data-state")).toBe("off")
+    expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-theme")).toBe("light")
+
+    await click(findButtonByLabel("分栏视图"))
+    await click(findButtonByLabel("自动换行"))
+    expect(findButtonByLabel("分栏视图").getAttribute("data-state")).toBe("on")
+    expect(findButtonByLabel("自动换行").getAttribute("data-state")).toBe("on")
+
+    await act(async () => {
+      document.documentElement.classList.add("dark")
+      await flush()
+    })
+    expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-theme")).toBe("dark")
+  })
+
+  it("shares diff layout and wrapping between changes and history", async () => {
+    await renderWorkbench(roots)
+
+    await click(findButtonByLabel("分栏视图"))
+    await click(findButtonByLabel("自动换行"))
+    await click(findButton("历史"))
+    await click(findButton("更新文档"))
+
+    expect(findButtonByLabel("分栏视图").getAttribute("data-state")).toBe("on")
+    expect(findButtonByLabel("自动换行").getAttribute("data-state")).toBe("on")
+  })
+
+  it("switches history files and resets to the first file for a new commit", async () => {
+    const firstCommit = createCommitDetail({
+      hash: "first",
+      files: [
+        { path: "docs/a.md", originalPath: null, status: "modified" },
+        { path: "docs/b.md", originalPath: null, status: "modified" },
+      ],
+      diff: createPatch("docs/a.md", "first") + createPatch("docs/b.md", "second"),
+    })
+    const nextCommit = createCommitDetail({
+      hash: "next",
+      files: [
+        { path: "docs/c.md", originalPath: null, status: "modified" },
+        { path: "docs/d.md", originalPath: null, status: "modified" },
+      ],
+      diff: createPatch("docs/c.md", "third") + createPatch("docs/d.md", "fourth"),
+    })
+    let showNextCommit: (() => void) | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    function HistoryHarness() {
+      const [selectedCommit, setSelectedCommit] = useState(firstCommit)
+      showNextCommit = () => setSelectedCommit(nextCommit)
+      return (
+        <GitHistoryTab
+          {...defaultDiffViewProps}
+          history={{
+            commits: [],
+            selectedCommit,
+            loading: false,
+            detailLoading: false,
+            error: null,
+            hasLoaded: true,
+            hasMore: false,
+            loadingMore: false,
+            refresh: vi.fn(async () => undefined),
+            loadMore: vi.fn(async () => undefined),
+            loadCommit: vi.fn(async () => undefined),
+          }}
+        />
+      )
+    }
+
+    await act(async () => {
+      root.render(<HistoryHarness />)
+      await flush()
+    })
+    expect(diffViewerText()).toContain("docs/a.md")
+
+    await click(findButton("docs/b.md"))
+    expect(diffViewerText()).toContain("docs/b.md")
+
+    await act(async () => {
+      showNextCommit?.()
+      await flush()
+    })
+    expect(diffViewerText()).toContain("docs/c.md")
+    expect(findButton("docs/c.md").getAttribute("data-active")).toBe("true")
+  })
+
+  it("falls back to copyable raw text when history patches cannot be mapped safely", () => {
+    const html = renderToStaticMarkup(
+      <GitHistoryTab
+        {...defaultDiffViewProps}
+        history={{
+          commits: [],
+          selectedCommit: createCommitDetail({
+            files: [
+              { path: "docs/a.md", originalPath: null, status: "modified" },
+              { path: "docs/b.md", originalPath: null, status: "modified" },
+            ],
+            diff: createPatch("docs/a.md", "first"),
+          }),
+          loading: false,
+          detailLoading: false,
+          error: null,
+          hasLoaded: true,
+          hasMore: false,
+          loadingMore: false,
+          refresh: vi.fn(async () => undefined),
+          loadMore: vi.fn(async () => undefined),
+          loadCommit: vi.fn(async () => undefined),
+        }}
+      />,
+    )
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    expect(container.textContent).toContain("无法格式化差异")
+    expect(container.querySelector("pre")?.getAttribute("data-allow-select")).toBe("true")
+    expect(container.querySelector('[data-component="git-diff-view"]')).toBeNull()
+  })
+
+  it("retains truncated and binary diff states", () => {
+    const html = renderToStaticMarkup(
+      <GitDiffViewer
+        path="assets/logo.png"
+        statusLabel="修改"
+        text="GIT binary patch\nliteral 0\n"
+        binary
+        truncated
+        mode={defaultDiffViewProps.diffViewMode}
+        wrap={defaultDiffViewProps.diffWrap}
+        onModeChange={defaultDiffViewProps.onDiffViewModeChange}
+        onWrapChange={defaultDiffViewProps.onDiffWrapChange}
+      />,
+    )
+
+    expect(html).toContain("差异内容已截断")
+    expect(html).toContain("文件已变更")
   })
 
   it("does not leave a surface gap between tabs and content", () => {
@@ -524,6 +715,7 @@ describe("GitWorkbench", () => {
     }
     const html = renderToStaticMarkup(
       <GitChangesTab
+        {...defaultDiffViewProps}
         repository={repository}
         status={status}
         commitDialogOpen={false}
@@ -566,6 +758,7 @@ describe("GitWorkbench", () => {
     })
     const html = renderToStaticMarkup(
       <GitChangesTab
+        {...defaultDiffViewProps}
         repository={repository}
         status={status}
         commitDialogOpen={false}
@@ -592,6 +785,7 @@ describe("GitWorkbench", () => {
 
   it("uses shared empty states for empty history panes", () => {
     const html = renderToStaticMarkup(<GitHistoryTab
+      {...defaultDiffViewProps}
       history={{
         commits: [],
         selectedCommit: null,
@@ -618,6 +812,7 @@ describe("GitWorkbench", () => {
     const longPath = "app/portal/views/simple/finance/form/001/page/pc/edit/index.vue"
     const longDiffLine = `diff --git a/${longPath} b/${longPath} `.repeat(4)
     const html = renderToStaticMarkup(<GitHistoryTab
+      {...defaultDiffViewProps}
       history={{
         commits: [],
         selectedCommit: {
@@ -652,7 +847,8 @@ describe("GitWorkbench", () => {
     const rightViewport = rightPane?.querySelector('[data-slot="scroll-area-viewport"]')
     const detailContent = container.querySelector('[data-git-history-detail-content="true"]')
     const fileList = container.querySelector('[data-git-history-file-list="true"]')
-    const diff = container.querySelector("pre")
+    const diff = container.querySelector('[data-component="git-diff-view"]')
+    const diffScroller = diff?.parentElement
 
     expect(root?.className).toContain("min-w-0")
     expect(rightPane?.className).toContain("min-w-0")
@@ -661,11 +857,10 @@ describe("GitWorkbench", () => {
     expect(rightViewport?.className).toContain("[&>div]:!max-w-full")
     expect(detailContent?.className).toContain("min-w-0")
     expect(fileList?.className).toContain("max-w-full")
-    expect(diff?.className).toContain("block")
-    expect(diff?.className).toContain("w-full")
-    expect(diff?.className).toContain("min-w-0")
-    expect(diff?.className).toContain("max-w-full")
-    expect(diff?.className).toContain("overflow-x-auto")
+    expect(diff).toBeTruthy()
+    expect(diffScroller?.className).toContain("min-w-0")
+    expect(diffScroller?.className).toContain("overflow-x-auto")
+    expect(diffScroller?.getAttribute("data-allow-select")).toBe("true")
   })
 
   it("keeps long worktree diffs inside the right pane", () => {
@@ -702,6 +897,7 @@ describe("GitWorkbench", () => {
     }
     const html = renderToStaticMarkup(
       <GitChangesTab
+        {...defaultDiffViewProps}
         repository={repository}
         status={status}
         commitDialogOpen={false}
@@ -718,7 +914,8 @@ describe("GitWorkbench", () => {
     const commitPanel = container.querySelector('[data-git-changes-commit-panel="true"]')
     const selectionBar = container.querySelector('[data-git-changes-selection-bar="true"]')
     const textarea = container.querySelector("textarea")
-    const diff = container.querySelector("pre")
+    const diff = container.querySelector('[data-component="git-diff-view"]')
+    const diffScroller = diff?.parentElement
 
     expect(root?.className).toContain("min-w-0")
     expect(rightPane?.className).toContain("min-w-0")
@@ -730,11 +927,10 @@ describe("GitWorkbench", () => {
     expect(commitPanel).toBeNull()
     expect(selectionBar).toBeNull()
     expect(textarea).toBeNull()
-    expect(diff?.className).toContain("block")
-    expect(diff?.className).toContain("w-full")
-    expect(diff?.className).toContain("min-w-0")
-    expect(diff?.className).toContain("max-w-full")
-    expect(diff?.className).toContain("overflow-x-auto")
+    expect(diff).toBeTruthy()
+    expect(diffScroller?.className).toContain("min-w-0")
+    expect(diffScroller?.className).toContain("overflow-x-auto")
+    expect(diffScroller?.getAttribute("data-allow-select")).toBe("true")
   })
 
   it("places selection actions in the workbench action row", async () => {
@@ -756,6 +952,7 @@ describe("GitWorkbench", () => {
 
   it("does not render an empty history file list border", () => {
     const html = renderToStaticMarkup(<GitHistoryTab
+      {...defaultDiffViewProps}
       history={{
         commits: [],
         selectedCommit: {
@@ -915,7 +1112,7 @@ function createStatus(overrides: Partial<ReturnType<typeof useGitWorktreeStatus>
       changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
     }),
     selectedFile: { path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" },
-    diff: { path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: "+hello" },
+    diff: { path: "docs/a.md", originalPath: null, binary: false, truncated: false, text: createPatch("docs/a.md", "hello") },
     selectedPaths: ["docs/a.md"],
     loading: false,
     diffLoading: false,
@@ -961,6 +1158,7 @@ async function renderChangesTab(
   await act(async () => {
     root.render(
       <GitChangesTab
+        {...defaultDiffViewProps}
         repository={repository}
         status={status}
         onPush={vi.fn()}
@@ -1041,6 +1239,34 @@ function findAlertDialog(): HTMLElement {
 function exactButtonsByLabel(label: string): HTMLButtonElement[] {
   return Array.from(document.querySelectorAll("button"))
     .filter((item): item is HTMLButtonElement => item instanceof HTMLButtonElement && item.textContent === label)
+}
+
+function createPatch(path: string, addedLine: string): string {
+  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -0,0 +1 @@\n+${addedLine}\n`
+}
+
+function createCommitDetail(overrides: Partial<SynapseGitCommitDetail> = {}): SynapseGitCommitDetail {
+  return {
+    hash: "abc",
+    shortHash: "abc123",
+    subject: "更新文档",
+    authorName: "张三",
+    authorEmail: "zhang@example.com",
+    committedAt: "2026-06-17T10:00:00+08:00",
+    files: [{ path: "docs/a.md", originalPath: null, status: "modified" }],
+    diff: createPatch("docs/a.md", "hello"),
+    filesTruncated: false,
+    diffTruncated: false,
+    truncated: false,
+    ...overrides,
+  }
+}
+
+function diffViewerText(): string {
+  const diff = document.querySelector('[data-component="git-diff-view"]')
+  const viewer = diff?.parentElement?.parentElement
+  if (!viewer) throw new Error("Diff viewer not found")
+  return viewer.textContent ?? ""
 }
 
 function textareaByLabel(label: string): HTMLTextAreaElement {

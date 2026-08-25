@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,9 +12,15 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { SynapseGitCommitFileChange } from "@/types/git"
 import type { useGitHistory } from "../hooks/use-git-history"
+import { mapCommitDiffSections } from "../lib/git-diff-sections"
+import { GitDiffViewer, GitRawDiff, type GitDiffViewMode } from "./git-diff-viewer"
 
 type GitHistoryTabProps = {
   readonly history: ReturnType<typeof useGitHistory>
+  readonly diffViewMode: GitDiffViewMode
+  readonly diffWrap: boolean
+  readonly onDiffViewModeChange: (mode: GitDiffViewMode) => void
+  readonly onDiffWrapChange: (wrap: boolean) => void
 }
 
 const statusLabels: Record<SynapseGitCommitFileChange["status"], string> = {
@@ -24,7 +31,30 @@ const statusLabels: Record<SynapseGitCommitFileChange["status"], string> = {
   unknown: "未知",
 }
 
-export function GitHistoryTab({ history }: GitHistoryTabProps) {
+export function GitHistoryTab({
+  history,
+  diffViewMode,
+  diffWrap,
+  onDiffViewModeChange,
+  onDiffWrapChange,
+}: GitHistoryTabProps) {
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0)
+  const selectedCommit = history.selectedCommit
+  const diffSections = useMemo(() => (
+    selectedCommit ? mapCommitDiffSections(selectedCommit.diff, selectedCommit.files) : null
+  ), [selectedCommit])
+  const canUseFormattedDiff = Boolean(
+    selectedCommit
+    && !selectedCommit.filesTruncated
+    && !selectedCommit.diffTruncated
+    && diffSections,
+  )
+  const selectedSection = canUseFormattedDiff ? diffSections?.[selectedFileIndex] : undefined
+
+  useEffect(() => {
+    setSelectedFileIndex(0)
+  }, [selectedCommit?.hash])
+
   return (
     <div className="grid h-full min-h-0 min-w-0 bg-background md:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
       <ScrollArea className="min-h-0 min-w-0 border-b md:border-r md:border-b-0">
@@ -75,55 +105,97 @@ export function GitHistoryTab({ history }: GitHistoryTabProps) {
         data-git-history-detail-pane="true"
         viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
       >
-        <div className="min-w-0 max-w-full overflow-hidden space-y-3 p-4" data-git-history-detail-content="true">
+        <div className="min-w-0 max-w-full overflow-hidden" data-git-history-detail-content="true">
           {history.error ? (
-            <Alert variant="destructive">
-              <AlertTitle>读取失败</AlertTitle>
-              <AlertDescription>{history.error}</AlertDescription>
-            </Alert>
+            <div className="p-4 pb-0">
+              <Alert variant="destructive">
+                <AlertTitle>读取失败</AlertTitle>
+                <AlertDescription>{history.error}</AlertDescription>
+              </Alert>
+            </div>
           ) : null}
           {history.detailLoading ? (
-            <GitCommitDetailSkeleton />
-          ) : history.selectedCommit ? (
-            <>
-              <div className="grid min-w-0 gap-1">
-                <div className="truncate text-base font-semibold">{history.selectedCommit.subject || "无提交说明"}</div>
-                <div className="truncate text-sm text-muted-foreground">
-                  {history.selectedCommit.shortHash} · {history.selectedCommit.authorName} · <RelativeTime value={history.selectedCommit.committedAt} fallback={history.selectedCommit.committedAt} />
+            <div className="p-4"><GitCommitDetailSkeleton /></div>
+          ) : selectedCommit ? (
+            <div className="grid min-w-0">
+              <div className="grid min-w-0 gap-3 border-b p-4">
+                <div className="grid min-w-0 gap-1">
+                  <div className="truncate text-base font-semibold">{selectedCommit.subject || "无提交说明"}</div>
+                  <div className="truncate text-sm text-muted-foreground">
+                    {selectedCommit.shortHash} · {selectedCommit.authorName} · <RelativeTime value={selectedCommit.committedAt} fallback={selectedCommit.committedAt} />
+                  </div>
                 </div>
+                {selectedCommit.files.length > 0 ? (
+                  <div className="max-w-full divide-y divide-border overflow-hidden rounded-lg border" data-git-history-file-list="true">
+                    {selectedCommit.files.map((file, index) => {
+                      const content = (
+                        <>
+                          <span className="min-w-0 truncate font-medium">{file.path}</span>
+                          <Badge variant="outline">{statusLabels[file.status]}</Badge>
+                        </>
+                      )
+                      return canUseFormattedDiff ? (
+                        <button
+                          key={`${file.path}:${file.originalPath ?? ""}`}
+                          type="button"
+                          data-active={selectedFileIndex === index ? "true" : undefined}
+                          className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
+                          onClick={() => setSelectedFileIndex(index)}
+                        >
+                          {content}
+                        </button>
+                      ) : (
+                        <div key={`${file.path}:${file.originalPath ?? ""}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm">
+                          {content}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : null}
+                {selectedCommit.filesTruncated ? (
+                  <Alert>
+                    <AlertTitle>文件列表已截断</AlertTitle>
+                    <AlertDescription>文件数量过多，仅显示前 2 MiB。</AlertDescription>
+                  </Alert>
+                ) : null}
+                {selectedCommit.diffTruncated ? (
+                  <Alert>
+                    <AlertTitle>差异内容已截断</AlertTitle>
+                    <AlertDescription>差异过大，仅显示前 2 MiB。</AlertDescription>
+                  </Alert>
+                ) : null}
               </div>
-              {history.selectedCommit.files.length > 0 ? (
-                <div className="max-w-full divide-y divide-border overflow-hidden rounded-lg border" data-git-history-file-list="true">
-                  {history.selectedCommit.files.map((file) => (
-                    <div key={`${file.path}:${file.originalPath ?? ""}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm">
-                      <span className="min-w-0 truncate font-medium">{file.path}</span>
-                      <Badge variant="outline">{statusLabels[file.status]}</Badge>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {history.selectedCommit.filesTruncated ? (
-                <Alert>
-                  <AlertTitle>文件列表已截断</AlertTitle>
-                  <AlertDescription>文件数量过多，仅显示前 2 MiB。</AlertDescription>
-                </Alert>
-              ) : null}
-              {history.selectedCommit.diffTruncated ? (
-                <Alert>
-                  <AlertTitle>差异内容已截断</AlertTitle>
-                  <AlertDescription>差异过大，仅显示前 2 MiB。</AlertDescription>
-                </Alert>
-              ) : null}
-              <pre className="block w-full min-w-0 max-w-full overflow-x-auto rounded-lg border bg-muted p-3 text-xs leading-relaxed text-foreground">
-                {history.selectedCommit.diff || "没有文本差异。"}
-              </pre>
-            </>
+              {selectedSection ? (
+                <GitDiffViewer
+                  path={selectedSection.path}
+                  originalPath={selectedSection.originalPath}
+                  statusLabel={statusLabels[selectedSection.status]}
+                  text={selectedSection.text}
+                  mode={diffViewMode}
+                  wrap={diffWrap}
+                  onModeChange={onDiffViewModeChange}
+                  onWrapChange={onDiffWrapChange}
+                />
+              ) : (
+                <GitRawDiff
+                  text={selectedCommit.diff}
+                  parseFailed={Boolean(
+                    selectedCommit.diff
+                    && !selectedCommit.filesTruncated
+                    && !selectedCommit.diffTruncated
+                    && diffSections === null
+                  )}
+                />
+              )}
+            </div>
           ) : (
-            <Empty className="min-h-64 border bg-muted/20">
-              <EmptyHeader>
-                <EmptyTitle>选择提交查看详情</EmptyTitle>
-              </EmptyHeader>
-            </Empty>
+            <div className="p-4">
+              <Empty className="min-h-64 border bg-muted/20">
+                <EmptyHeader>
+                  <EmptyTitle>选择提交查看详情</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
+            </div>
           )}
         </div>
       </ScrollArea>

@@ -30,6 +30,7 @@ import { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { GitBranchSwitcher } from "./git-branch-switcher"
 import { GitChangesTab } from "./git-changes-tab"
 import { GitDiscardChangesDialog } from "./git-discard-changes-dialog"
+import type { GitDiffViewMode } from "./git-diff-viewer"
 import { GitHistoryTab } from "./git-history-tab"
 import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import { getGitActionPlan, getGitErrorAdvice } from "../lib/git-status-view"
@@ -55,6 +56,8 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const [branchRefreshKey, setBranchRefreshKey] = useState(0)
   const [commitDialogOpen, setCommitDialogOpen] = useState(false)
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false)
+  const [diffViewMode, setDiffViewMode] = useState<GitDiffViewMode>("unified")
+  const [diffWrap, setDiffWrap] = useState(false)
   const activeOperationIdRef = useRef<string | null>(null)
   const observedBranchRef = useRef<string | null | undefined>(undefined)
   const retryActionRef = useRef<(() => void) | null>(null)
@@ -388,10 +391,20 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             onCommitDialogOpenChange={setCommitDialogOpen}
             onCommitted={history.hasLoaded ? history.refresh : undefined}
             onPush={() => void runPush()}
+            diffViewMode={diffViewMode}
+            diffWrap={diffWrap}
+            onDiffViewModeChange={setDiffViewMode}
+            onDiffWrapChange={setDiffWrap}
           />
         </TabsContent>
         <TabsContent value="history" className="m-0 min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">
-          <GitHistoryTab history={history} />
+          <GitHistoryTab
+            history={history}
+            diffViewMode={diffViewMode}
+            diffWrap={diffWrap}
+            onDiffViewModeChange={setDiffViewMode}
+            onDiffWrapChange={setDiffWrap}
+          />
         </TabsContent>
       </Tabs>
     </div>
