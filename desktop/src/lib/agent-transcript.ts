@@ -123,7 +123,17 @@ function messageLabel(entry: SynapseAgentMessageTimelineItem): string {
 
 function timelineItemText(entry: SynapseAgentTimelineItem): string {
   switch (entry.kind) {
-    case "message":
+    case "message": {
+      const content = entry.content.trim() ? redactSensitiveText(entry.content) : undefined
+      const attachments = entry.attachments?.map((attachment, index) => {
+        if (attachment.kind === "image") {
+          return `图片 ${index + 1}: ${attachment.name ?? attachment.id} · ${attachment.mimeType} · ${attachment.byteSize} B`
+        }
+        const size = attachment.byteSize === undefined ? "" : ` · ${attachment.byteSize} B`
+        return `${attachment.entryType === "directory" ? "文件夹" : "文件"}: ${attachment.name}${size}`
+      }).join("\n")
+      return [attachments, content].filter((part): part is string => Boolean(part)).join("\n")
+    }
     case "thinking":
       return redactSensitiveText(entry.content)
     case "result": {

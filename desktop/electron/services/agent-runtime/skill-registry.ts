@@ -13,6 +13,7 @@ import {
   agentRuntimeErrorSummary,
   rawAgentRuntimeErrorMessage,
 } from "./error-message"
+import { readSkillIdFile } from "../editor-adapters/skill-identity"
 
 export interface AgentSkill {
   readonly name: string
@@ -20,6 +21,7 @@ export interface AgentSkill {
   readonly description?: string
   readonly prompt: string
   readonly source: string
+  readonly skillOrigin?: "synapse-installed" | "other"
 }
 
 export interface SkillRegistryDeps {
@@ -93,6 +95,7 @@ export class SkillRegistry {
         description: parsed.frontmatter.description ?? firstBodyLine(parsed.prompt),
         prompt: parsed.prompt.trim(),
         source: filePath,
+        skillOrigin: await readSkillOrigin(filePath),
       })
     }
     const sorted = skills.sort((a, b) => a.name.localeCompare(b.name))
@@ -106,6 +109,7 @@ export class SkillRegistry {
       description: skill.description,
       source: "skill",
       kind: "skill",
+      skillOrigin: skill.skillOrigin ?? "other",
       adminOnly: false,
     }))
   }
@@ -116,6 +120,10 @@ export class SkillRegistry {
       skill.name === normalized || normalizeCommandName(skill.displayName ?? "") === normalized)
       ?? null
   }
+}
+
+async function readSkillOrigin(filePath: string): Promise<AgentSkill["skillOrigin"]> {
+  return await readSkillIdFile(path.dirname(filePath)) ? "synapse-installed" : "other"
 }
 
 export function buildSkillInvocationPrompt(skill: AgentSkill, args: readonly string[]): string {

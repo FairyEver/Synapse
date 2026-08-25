@@ -90,6 +90,163 @@ describe("AgentMessageEvent", () => {
     expect(html).toContain(expected)
   })
 
+  it.each([
+    [1, "1"],
+    [2, "2"],
+    [3, "2"],
+    [4, "2"],
+    [5, "3"],
+    [8, "3"],
+  ])("renders %i user images with the expected grid columns", (count, columns) => {
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={{
+          ...baseEntry,
+          role: "user",
+          attachments: Array.from({ length: count }, (_, index) => ({
+            kind: "image" as const,
+            id: `image-${index}`,
+            name: `image-${index}.png`,
+            mimeType: "image/png" as const,
+            byteSize: 3,
+            url: `synapse-agent-artifact://local/project/conversation/image-${index}.png`,
+          })),
+        }}
+        profile={mockProfile}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain(`data-image-count="${count}"`)
+    expect(html).toContain(`data-grid-columns="${columns}"`)
+  })
+
+  it("renders attachment-only messages without placeholder text or copy action", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={{
+          ...baseEntry,
+          role: "user",
+          content: "",
+          attachments: [{
+            kind: "image",
+            id: "image-1",
+            name: "screen.png",
+            mimeType: "image/png",
+            byteSize: 3,
+            url: "synapse-agent-artifact://local/project/conversation/image-1.png",
+          }],
+        }}
+        profile={mockProfile}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("screen.png")
+    expect(html).not.toContain("[Image #1]")
+    expect(html).not.toContain('aria-label="复制"')
+  })
+
+  it("opens path attachments through the existing local reference callback", async () => {
+    const onOpenReference = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            ...baseEntry,
+            role: "user",
+            attachments: [{
+              kind: "path",
+              path: "/Users/liyang/Desktop/report.pdf",
+              entryType: "file",
+              name: "report.pdf",
+              byteSize: 2048,
+            }],
+          }}
+          profile={mockProfile}
+          onOpenReference={onOpenReference}
+        />,
+      )
+    })
+
+    const button = container.querySelector<HTMLButtonElement>('button[title="/Users/liyang/Desktop/report.pdf"]')
+    expect(button?.textContent).toContain("report.pdf")
+    expect(button?.textContent).toContain("PDF")
+    await act(async () => button?.click())
+    expect(onOpenReference).toHaveBeenCalledWith("/Users/liyang/Desktop/report.pdf")
+  })
+
+  it("opens user images in the existing lightbox at the selected image", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            ...baseEntry,
+            role: "user",
+            attachments: ["first", "second"].map((name) => ({
+              kind: "image" as const,
+              id: name,
+              name: `${name}.png`,
+              mimeType: "image/png" as const,
+              byteSize: 3,
+              url: `https://example.com/${name}.png`,
+            })),
+          }}
+          profile={mockProfile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const previewButton = container.querySelector<HTMLButtonElement>('button[aria-label="预览second.png"]')
+    await act(async () => previewButton?.click())
+
+    expect(document.querySelector("[data-image-lightbox]")?.textContent).toContain("2 / 2")
+    expect(document.querySelector("[data-image-lightbox-active]")?.getAttribute("src"))
+      .toBe("https://example.com/second.png")
+  })
+
+  it("shows a concise fallback when a user image cannot load", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            ...baseEntry,
+            role: "user",
+            attachments: [{
+              kind: "image",
+              id: "broken-image",
+              name: "broken.png",
+              mimeType: "image/png",
+              byteSize: 3,
+              url: "synapse-agent-artifact://local/project/conversation/broken.png",
+            }],
+          }}
+          profile={mockProfile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const image = container.querySelector("img")
+    await act(async () => image?.dispatchEvent(new Event("error")))
+    expect(container.textContent).toContain("broken.png")
+    expect(container.textContent).toContain("图片无法加载")
+  })
+
   it("left-aligns assistant messages with markdown rendering", () => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent

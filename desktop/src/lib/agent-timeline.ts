@@ -3,6 +3,7 @@ import type {
   SynapseAgentErrorKind,
   SynapseAgentImageArtifact,
   SynapseAgentMainThreadPersonaMetadata,
+  SynapseAgentMessageAttachment,
   SynapseAgentMessageTimelineItem,
   SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
@@ -244,15 +245,19 @@ export function historyRecordToTimelineItem(
         label: stringMetadata(metadata, "sdkType") === "nativeSlashPassthrough" ? "Native slash" : "SDK event",
         summary: stringMetadata(metadata, "sdkSubtype"),
       }
-    default:
+    default: {
+      const presentation = entry.role === "user" ? userMessagePresentationMetadata(metadata) : undefined
+      const attachments = presentation ? messageAttachmentsMetadata(metadata) : undefined
       return {
         ...base,
         kind: "message",
         role: entry.role,
-        content: entry.content,
+        content: presentation?.content ?? entry.content,
+        ...(attachments ? { attachments } : {}),
         legacy: entry.role === "tool" || entry.role === "system",
         ...(storedMetadata ? { metadata: storedMetadata } : {}),
       }
+    }
   }
 }
 
@@ -605,18 +610,22 @@ export function localUserTimelineItem(
   content: string,
   timestamp: string,
   index: number,
+  attachments?: readonly SynapseAgentMessageAttachment[],
 ): SynapseAgentTimelineItem {
   return {
     id: `local:${timestamp}:user:${index}`,
     kind: "message",
     role: "user",
     content,
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
     timestamp,
   }
 }
 
 function isEmptyTimelineItem(item: SynapseAgentTimelineItem): boolean {
-  if (item.kind === "message") return item.content.trim().length === 0
+  if (item.kind === "message") {
+    return item.content.trim().length === 0 && (item.attachments?.length ?? 0) === 0
+  }
   if (item.kind === "thinking") return item.content.trim().length === 0
   if (item.kind === "error") return item.message.trim().length === 0
   return false
@@ -646,6 +655,68 @@ function recordMetadata(metadata: Record<string, unknown> | undefined, key: stri
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
+}
+
+function userMessagePresentationMetadata(
+  metadata: Record<string, unknown> | undefined,
+): { readonly content: string } | undefined {
+  const presentation = recordMetadata(metadata, "userMessagePresentation")
+  if (presentation?.version !== 1 || typeof presentation.content !== "string") return undefined
+  return { content: presentation.content }
+}
+
+function messageAttachmentsMetadata(
+  metadata: Record<string, unknown> | undefined,
+): readonly SynapseAgentMessageAttachment[] | undefined {
+  const value = metadata?.attachments
+  if (!Array.isArray(value)) return undefined
+  const attachments: SynapseAgentMessageAttachment[] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue
+    const record = item as Record<string, unknown>
+    if (
+      record.kind === "image"
+      && typeof record.id === "string"
+      && isAgentArtifactImageMimeType(record.mimeType)
+      && typeof record.byteSize === "number"
+      && typeof record.url === "string"
+    ) {
+      attachments.push({
+        kind: "image",
+        id: record.id,
+        ...(typeof record.name === "string" ? { name: record.name } : {}),
+        mimeType: record.mimeType,
+        byteSize: record.byteSize,
+        url: record.url,
+        ...(typeof record.sha256 === "string" ? { sha256: record.sha256 } : {}),
+      })
+      continue
+    }
+    if (
+      record.kind === "path"
+      && typeof record.path === "string"
+      && (record.entryType === "file" || record.entryType === "directory")
+      && typeof record.name === "string"
+    ) {
+      attachments.push({
+        kind: "path",
+        path: record.path,
+        entryType: record.entryType,
+        name: record.name,
+        ...(typeof record.byteSize === "number" ? { byteSize: record.byteSize } : {}),
+      })
+    }
+  }
+  return attachments.length > 0 ? attachments : undefined
+}
+
+function isAgentArtifactImageMimeType(
+  value: unknown,
+): value is Extract<SynapseAgentMessageAttachment, { kind: "image" }>["mimeType"] {
+  return value === "image/png"
+    || value === "image/jpeg"
+    || value === "image/gif"
+    || value === "image/webp"
 }
 
 function questionsMetadata(

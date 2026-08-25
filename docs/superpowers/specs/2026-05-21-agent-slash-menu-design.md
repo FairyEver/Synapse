@@ -18,7 +18,8 @@ The menu must follow the current shadcn/Radix visual baseline and the repository
 - Open a dedicated Agent composer slash menu when `/` appears anywhere in the textarea.
 - Let users select a skill or command and insert it as `/<name>`.
 - Replace only the current slash fragment near the cursor, preserving surrounding text.
-- Display candidates grouped as `Skills` and `Commands`.
+- Put the three most recently sent Skills first, then Synapse-installed Skills, other Skills,
+  Knowledge Base commands, and other commands.
 - Use the same current-project plus global command/skill data that the Agent runtime can execute.
 - Keep the existing top-right command popover behavior separate.
 
@@ -39,9 +40,15 @@ Typing `/` anywhere in the draft opens the menu. The typed slash fragment filter
 | Please review /rev in this implementation       |
 |        ^                                       |
 | +------------------------------------------+   |
-| | Skills                                   |   |
+| | 最近使用                                 |   |
 | |  /review-code  Review code changes       |   |
-| | Commands                                 |   |
+| | 我的 Skills                              |   |
+| |  /team-worklog  Record team work         |   |
+| | 其它 Skills                              |   |
+| |  /openai-docs  Use OpenAI docs           |   |
+| | 知识库                                   |   |
+| |  /wiki-query  查询知识库                 |   |
+| | 其它命令                                 |   |
 | |  /status  Show agent status              |   |
 | |  /model  Switch model                    |   |
 | +------------------------------------------+   |
@@ -103,13 +110,23 @@ Candidate fields:
 
 - `name`: normalized command or skill name without leading `/`
 - `description`: optional short description from the published entry
-- `kind`: `skill` or `command`
+- `kind`: `skill`, `knowledgeBase`, or `command`
 - `source`: original published source for diagnostics and stable grouping
+- `skillOrigin`: `synapse-installed` only when the Skill has a valid Synapse installation identity;
+  otherwise `other`
 
-Grouping:
+Grouping order:
 
-- `kind === "skill"` appears under `Skills`
-- all other published command entries appear under `Commands`
+- `最近使用`: up to three available Skills from the global MRU list
+- `我的 Skills`: remaining Skills with `skillOrigin === "synapse-installed"`
+- `其它 Skills`: remaining Skills
+- `知识库`: managed Knowledge Base commands
+- `其它命令`: all other published commands
+
+Recent Skills are recorded only after a leading, currently available Skill invocation is sent
+successfully. Manual Slash input and menu insertion share this behavior. Failed sends and menu-only
+insertion do not update the list. Search filters by the existing name/description rules before grouping,
+and a recent Skill never repeats in a later group.
 
 De-duplication should follow the existing `mergedCommands` behavior in `AgentModule`: first entry by name wins after combining selected agent definition commands and runtime commands.
 
@@ -149,7 +166,9 @@ Unit tests for `slash-menu.ts`:
 - replaces only the active fragment
 - preserves surrounding text
 - filters by typed fragment
-- groups skills before commands
+- groups recent, installed, other, Knowledge Base, and command candidates in the fixed order
+- keeps search results and keyboard navigation in the same flattened order
+- normalizes and limits the recent Skill MRU list to three entries
 
 Component tests:
 
@@ -159,7 +178,8 @@ Component tests:
 - `Esc` closes without changing the draft
 - normal `Enter` still submits when the menu is closed
 - click selection inserts `/<name>`
-- rendered groups include `Skills` and `Commands` when both are present
+- rendered groups use the fixed order and omit empty groups
+- successful direct and queued Skill sends update recent usage; failed sends and commands do not
 
 ## Decisions
 
@@ -169,4 +189,6 @@ All user-facing behavior needed for implementation is decided:
 - insert `/<name>`
 - replace the current slash fragment
 - use current project plus global published runtime entries
-- display `Skills` and `Commands` groups
+- display recent Skills, Synapse-installed Skills, other Skills, Knowledge Base commands, and other
+  commands in that order
+- keep recent Skill usage global across projects and persist only the three normalized names

@@ -215,12 +215,14 @@ function visitHeadingAst(
         id,
       },
     }
-    insertOutlineItem(state.items, {
-      id,
-      text: text || `heading ${state.sequence}`,
-      depth: node.depth,
-      children: [],
-    })
+    if (text) {
+      insertOutlineItem(state.items, {
+        id,
+        text,
+        depth: node.depth,
+        children: [],
+      })
+    }
   }
 
   for (const child of node.children ?? []) visitHeadingAst(child, state)

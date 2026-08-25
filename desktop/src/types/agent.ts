@@ -275,10 +275,29 @@ export interface SynapseAgentMainThreadPersonaMetadata {
   readonly definitionHash?: string
 }
 
+export type SynapseAgentMessageAttachment =
+  | {
+      readonly kind: "image"
+      readonly id: string
+      readonly name?: string
+      readonly mimeType: SynapseAgentArtifactImageMimeType
+      readonly byteSize: number
+      readonly url: string
+      readonly sha256?: string
+    }
+  | {
+      readonly kind: "path"
+      readonly path: string
+      readonly entryType: "file" | "directory"
+      readonly name: string
+      readonly byteSize?: number
+    }
+
 export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "message"
   readonly role: "user" | "assistant" | "system" | "tool"
   readonly content: string
+  readonly attachments?: readonly SynapseAgentMessageAttachment[]
   readonly streaming?: boolean
   readonly legacy?: boolean
   readonly metadata?: SynapseAgentResultMetadata
@@ -539,6 +558,7 @@ export interface SynapseAgentPublishedCommand {
   readonly description?: string
   readonly source: "builtin" | "custom" | "skill" | "agent-native"
   readonly kind: "builtin" | "prompt" | "exec" | "skill" | "agent-native"
+  readonly skillOrigin?: "synapse-installed" | "other"
   readonly adminOnly: boolean
   readonly allowedPlatforms?: string[]
   readonly ui?: SynapseAgentPublishedCommandUi

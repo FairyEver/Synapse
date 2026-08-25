@@ -12,6 +12,7 @@ import {
 describe("Synapse config Agent defaults", () => {
   it("defaults new Agent conversations to default permission mode", () => {
     expect(createDefaultConfig().agent.defaultPermissionMode).toBe("default")
+    expect(createDefaultConfig().agent.recentSlashSkills).toEqual([])
   })
 
   it("normalizes missing Agent config to safe defaults", () => {
@@ -61,6 +62,19 @@ describe("Synapse config Agent defaults", () => {
 
     expect(next.agent.defaultPermissionMode).toBe("bypassPermissions")
     expect(next.global.themeMode).toBe(current.global.themeMode)
+  })
+
+  it("normalizes recent Slash Skills as a global three-item MRU list", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: {
+        recentSlashSkills: [" /Review-Code ", "OPENAI-DOCS", "review-code", "fourth"],
+      },
+    })
+
+    expect(config.agent.recentSlashSkills).toEqual(["review-code", "openai-docs", "fourth"])
   })
 
   it("defaults defaultProviderModel to null", () => {

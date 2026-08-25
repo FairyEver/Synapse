@@ -299,4 +299,47 @@ describe("drive markdown renderer", () => {
       },
     ])
   })
+
+  it("omits empty headings from the outline without changing rendered content or projection", async () => {
+    const result = await renderDriveMarkdownFragment([
+      "# Notes",
+      "",
+      "#####",
+      "",
+      "## Details",
+      "",
+      "#####",
+      "",
+      "## Summary",
+    ].join("\n"))
+
+    expect(result.html).toMatch(/<h5[^>]*id="heading-2"[^>]*><\/h5>/u)
+    expect(result.html).toMatch(/<h5[^>]*id="heading-4"[^>]*><\/h5>/u)
+    expect(result.html).toMatch(/<h2[^>]*id="details"[^>]*>Details<\/h2>/u)
+    expect(result.html).toMatch(/<h2[^>]*id="summary"[^>]*>Summary<\/h2>/u)
+    expect(result.renderedText).toBe("NotesDetailsSummary")
+    expect(result.projection.blocks.filter((block) => block.type === "heading")).toHaveLength(5)
+    expect(result.projection.blocks.filter((block) => block.type === "heading" && block.renderedStart === block.renderedEnd)).toHaveLength(2)
+    expect(result.outline).toEqual([
+      {
+        id: "notes",
+        text: "Notes",
+        depth: 1,
+        children: [
+          {
+            id: "details",
+            text: "Details",
+            depth: 2,
+            children: [],
+          },
+          {
+            id: "summary",
+            text: "Summary",
+            depth: 2,
+            children: [],
+          },
+        ],
+      },
+    ])
+  })
 })

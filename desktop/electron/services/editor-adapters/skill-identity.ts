@@ -248,5 +248,6 @@ export {
   checkSkillNameConflict,
   findSkillDirectoryByContentId,
   isSkillDirectoryOwnedByContentId,
+  readSkillIdFile,
   resolveSkillTargetPath,
 }

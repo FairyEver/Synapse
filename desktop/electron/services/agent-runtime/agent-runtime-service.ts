@@ -1136,6 +1136,7 @@ export class AgentRuntimeService {
     const deleted = await this.sessionLifecycle.deleteSession(conversationIdValue)
     if (deleted) {
       this.conversationRouter.forgetSavedSdkSession(conversationIdValue)
+      await this.deps.agentArtifactStore?.removeConversationArtifacts(conversationIdValue)
     }
     return deleted
   }

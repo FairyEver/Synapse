@@ -273,6 +273,7 @@ async function normalizeSendAttachments(
       path: normalizedPath,
       entryType: stat.isDirectory() ? "directory" : "file",
       name: attachment.name ?? attachmentBasename(normalizedPath),
+      ...(stat.isFile() ? { size: typeof stat.size === "bigint" ? Number(stat.size) : stat.size } : {}),
     })
   }
   return normalized
@@ -345,6 +346,7 @@ const sendRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   conversationId: z.string().min(1).optional(),
   content: z.string(),
+  displayContent: z.string().optional(),
   clientSubmittedAt: z.string().optional(),
   providerId: z.string().min(1).optional(),
   attachments: z.array(z.discriminatedUnion("kind", [
@@ -360,6 +362,7 @@ const sendRequestSchema = projectRequestSchema.extend({
       path: attachmentPathSchema,
       entryType: z.enum(["file", "directory"]),
       name: z.string().optional(),
+      size: z.number().int().nonnegative().optional(),
     }),
   ])).optional(),
 }).superRefine((request, ctx) => {
@@ -653,6 +656,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           userId: "renderer",
           userName: "Renderer",
           content: request.content,
+          displayContent: request.displayContent,
           providerId: request.providerId,
           attachments,
           replyCtx: {

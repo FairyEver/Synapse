@@ -19,6 +19,7 @@ interface AgentMessageToolbarProps {
   readonly usagePrefix?: string
   readonly className?: string
   readonly copyButtonClassName?: string
+  readonly showCopy?: boolean
 }
 
 function AgentMessageToolbar({
@@ -30,6 +31,7 @@ function AgentMessageToolbar({
   usagePrefix,
   className,
   copyButtonClassName,
+  showCopy = true,
 }: AgentMessageToolbarProps) {
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -79,7 +81,7 @@ function AgentMessageToolbar({
         </time>
       ) : null}
       <TokenUsageSummary usage={usage} prefix={usagePrefix} />
-      <button
+      {showCopy ? <button
         type="button"
         className={cn(
           "inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
@@ -91,7 +93,7 @@ function AgentMessageToolbar({
         {copied
           ? <Check className="size-3.5" />
           : <Clipboard className="size-3.5" />}
-      </button>
+      </button> : null}
     </div>
   )
 }

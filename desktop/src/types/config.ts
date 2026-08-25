@@ -88,6 +88,7 @@ export type SynapseGlobalConfig = {
 export type SynapseAgentGlobalConfig = {
   defaultPermissionMode: SynapseAgentPermissionMode
   defaultProviderModel: { providerId: string; modelTier: ModelTier } | null
+  recentSlashSkills: string[]
 }
 
 export type SynapseConfig = {

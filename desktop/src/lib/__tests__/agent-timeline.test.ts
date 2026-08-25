@@ -155,6 +155,61 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("uses versioned user presentation metadata for structured attachments", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "user",
+      content: "[Image #1]\n\n请分析",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      metadata: {
+        userMessagePresentation: { version: 1, content: "请分析" },
+        attachments: [{
+          kind: "image",
+          id: "image-1",
+          name: "screen.png",
+          mimeType: "image/png",
+          byteSize: 3,
+          sha256: "hash",
+          url: "synapse-agent-artifact://local/project/session/image-1.png",
+        }, {
+          kind: "path",
+          path: "/tmp/report.pdf",
+          entryType: "file",
+          name: "report.pdf",
+          byteSize: 42,
+        }],
+      },
+    }, 1)).toMatchObject({
+      kind: "message",
+      role: "user",
+      content: "请分析",
+      attachments: [
+        expect.objectContaining({ kind: "image", id: "image-1", name: "screen.png" }),
+        expect.objectContaining({ kind: "path", name: "report.pdf", byteSize: 42 }),
+      ],
+    })
+  })
+
+  it("keeps legacy user attachment placeholders when presentation metadata is absent", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "user",
+      content: "[Image #1]",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      metadata: {
+        attachments: [{ kind: "image", mimeType: "image/png", size: 3 }],
+      },
+    }, 1)).toMatchObject({
+      kind: "message",
+      role: "user",
+      content: "[Image #1]",
+    })
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "user",
+      content: "[Image #1]",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      metadata: { attachments: [] },
+    }, 1)).not.toHaveProperty("attachments")
+  })
+
   it("restores user question ids, keys, and resolution metadata", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "system",

@@ -50,7 +50,11 @@ import {
   type SessionManager,
 } from "./session-manager"
 import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput } from "./project-contributions"
-import { attachmentHistoryMetadata, withReadablePathAttachmentContent } from "./attachments"
+import {
+  attachmentHistoryMetadata,
+  userMessagePresentationHistoryMetadata,
+  withReadablePathAttachmentContent,
+} from "./attachments"
 import type {
   PendingPermissionState,
   RuntimeSessionState,
@@ -360,6 +364,7 @@ export class ConversationRouter {
     if (state.busy && state.queue.length >= this.queueLimit()) {
       return this.finishWithError(message, conversation.id, AGENT_QUEUE_FULL_MESSAGE)
     }
+    const userHistoryMetadata = await this.prepareUserMessageHistory(message, conversation.id, turnId)
 
     return new Promise<AgentRuntimeTurnResult>((resolve) => {
       const turn = {
@@ -367,6 +372,7 @@ export class ConversationRouter {
         conversationId: conversation.id,
         turnId,
         lifecycle,
+        userHistoryMetadata,
         abortSignal: options.abortSignal,
         liveEventTimeoutMs: options.liveEventTimeoutMs,
         onResponseStarted: options.onResponseStarted,
@@ -385,6 +391,10 @@ export class ConversationRouter {
           const idx = state.queue.indexOf(turn)
           if (idx >= 0) {
             state.queue.splice(idx, 1)
+            void this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(
+              conversation.id,
+              turnId,
+            )
             resolve(this.buildCancelledResult(message, conversation.id))
           }
         }
@@ -414,6 +424,10 @@ export class ConversationRouter {
         try {
           if (externalSignal?.aborted) ac.abort(externalSignal.reason)
           if (state.closing || ac.signal.aborted) {
+            await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(
+              turn.conversationId,
+              turn.turnId,
+            )
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
             continue
           }
@@ -424,6 +438,7 @@ export class ConversationRouter {
             this.nativeSlashPassthroughs.get(turn),
             turn.conversationId,
             turn.turnId,
+            turn.userHistoryMetadata,
             ac.signal,
             turn.liveEventTimeoutMs,
             turn.onResponseStarted,
@@ -476,6 +491,7 @@ export class ConversationRouter {
     nativeSlashPassthrough: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> | undefined,
     conversationId: string,
     turnId: string,
+    userHistoryMetadata: Record<string, unknown> | undefined,
     abortSignal?: AbortSignal,
     liveEventTimeoutMs?: number,
     onResponseStarted?: () => void,
@@ -485,16 +501,14 @@ export class ConversationRouter {
     try {
       let conversation = await this.repository.get(conversationId)
       if (!conversation) {
+        await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(conversationId, turnId)
         throw new Error(`Conversation "${conversationId}" was deleted while queued`)
       }
-      conversation = await this.repository.appendHistory(
-        conversation.id,
-        "user",
-        message.content,
-        mergeHistoryMetadata(
-          attachmentHistoryMetadata(message.attachments),
-          mainThreadPersonaHistoryMetadata(conversation),
-        ),
+      conversation = await this.appendUserMessageHistory(
+        conversation,
+        message,
+        turnId,
+        userHistoryMetadata,
       )
       this.emitConversationUpdated(conversation)
 
@@ -984,14 +998,12 @@ export class ConversationRouter {
     let assistantHistoryPersisted = false
     let error: string | undefined
     try {
-      const savedConversation = await this.repository.appendHistory(
-        conversation.id,
-        "user",
-        message.content,
-        mergeHistoryMetadata(
-          attachmentHistoryMetadata(message.attachments),
-          mainThreadPersonaHistoryMetadata(conversation),
-        ),
+      const userHistoryMetadata = await this.prepareUserMessageHistory(message, conversation.id, turnId)
+      const savedConversation = await this.appendUserMessageHistory(
+        conversation,
+        message,
+        turnId,
+        userHistoryMetadata,
       )
       const sessionHandle = await this.sessionManager.getOrCreateSession({
         state,
@@ -1282,6 +1294,50 @@ export class ConversationRouter {
       state.activeTurns = Math.max(0, state.activeTurns - 1)
       state.busy = false
       state.lastActivity = Date.now()
+    }
+  }
+
+  private async prepareUserMessageHistory(
+    message: AgentMessage,
+    conversationId: string,
+    turnId: string,
+  ): Promise<Record<string, unknown> | undefined> {
+    if (message.displayContent === undefined) {
+      return attachmentHistoryMetadata(message.attachments)
+    }
+    const images = (message.attachments ?? []).filter(
+      (attachment) => attachment.kind === "image",
+    )
+    if (images.length === 0) {
+      return userMessagePresentationHistoryMetadata(message, [])
+    }
+    const store = this.deps.agentArtifactStore
+    if (!store) throw new Error("Agent artifact storage is unavailable")
+    const persistedImages = await store.materializeUserMessageImages({
+      projectId: message.projectId,
+      conversationId,
+      turnId,
+      images,
+    })
+    return userMessagePresentationHistoryMetadata(message, persistedImages)
+  }
+
+  private async appendUserMessageHistory(
+    conversation: ConversationEntryV1,
+    message: AgentMessage,
+    turnId: string,
+    metadata: Record<string, unknown> | undefined,
+  ): Promise<ConversationEntryV1> {
+    try {
+      return await this.repository.appendHistory(
+        conversation.id,
+        "user",
+        message.content,
+        mergeHistoryMetadata(metadata, mainThreadPersonaHistoryMetadata(conversation)),
+      )
+    } catch (error) {
+      await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(conversation.id, turnId)
+      throw error
     }
   }
 

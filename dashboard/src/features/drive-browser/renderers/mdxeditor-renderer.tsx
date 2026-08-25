@@ -51,6 +51,10 @@ import { ApiError, driveApi, driveBrowserApi } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
+import {
+  commonMarkTextCompatibilityPlugin,
+  commonMarkToMarkdownOptions,
+} from './mdxeditor-commonmark-compatibility-plugin'
 import { tableCellLineBreakPlugin } from './mdxeditor-table-cell-line-break-plugin'
 import { trailingImageParagraphPlugin } from './mdxeditor-trailing-image-plugin'
 import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
@@ -102,6 +106,7 @@ export function DriveMDXeditorRenderer({
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
+  const parseErrorRequestRef = useRef(0)
   const draftPublicImagesRef = useRef<Map<string, DraftPublicImage>>(new Map())
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
@@ -113,6 +118,7 @@ export function DriveMDXeditorRenderer({
   const [parseError, setParseError] = useState<string | null>(null)
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
+  const usesMdxSyntax = isMdxDocument(current.name)
   const loginUrl = buildLoginUrl()
   const imageSources = useDriveMarkdownImageSources({
     context: imageSourceContext,
@@ -325,9 +331,15 @@ export function DriveMDXeditorRenderer({
     tableCellLineBreakPlugin(),
     codeBlockPlugin(),
     codeMirrorPlugin(),
+    ...(!usesMdxSyntax ? [commonMarkTextCompatibilityPlugin()] : []),
     diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
     markdownShortcutPlugin(),
-  ], [canEdit, confirmPublicImageUpload, resolveImagePreview, uploadingImage])
+  ], [canEdit, confirmPublicImageUpload, resolveImagePreview, uploadingImage, usesMdxSyntax])
+
+  const clearParseError = useCallback(() => {
+    parseErrorRequestRef.current += 1
+    setParseError(null)
+  }, [])
 
   useEffect(() => {
     savedValueRef.current = initialText
@@ -336,14 +348,14 @@ export function DriveMDXeditorRenderer({
     setDirty(false)
     setError(null)
     setUploadingImage(false)
-    setParseError(null)
+    clearParseError()
     setConflictOpen(false)
     setReloadConfirmOpen(false)
     setPendingPublicImageUpload(null)
     clearDraftPublicImages()
     beginExternalMarkdownSync(initialText)
     editorRef.current?.setMarkdown(initialText)
-  }, [beginExternalMarkdownSync, clearDraftPublicImages, current.id, edit?.currentVersionId, initialText])
+  }, [beginExternalMarkdownSync, clearDraftPublicImages, clearParseError, current.id, edit?.currentVersionId, initialText])
 
   useEffect(() => () => {
     clearExternalMarkdownSync()
@@ -371,6 +383,7 @@ export function DriveMDXeditorRenderer({
         throw new Error('图片尚未完成上传，请重新粘贴或选择图片。')
       }
       await editContext.saveText({ text: normalizedValue, baseVersionId: edit.currentVersionId })
+      clearParseError()
       if (normalizedValue !== submittedValue && valueRef.current === submittedValue) {
         valueRef.current = normalizedValue
         setValue(normalizedValue)
@@ -389,7 +402,6 @@ export function DriveMDXeditorRenderer({
       savedValueRef.current = normalizedValue
       clearDraftPublicImages(replacedDraftUrls)
       setDirty(valueRef.current !== normalizedValue)
-      setParseError(null)
     } catch (saveError) {
       const cleanupFailed = await cleanupUploadedPublicAssets(uploadedAssets)
       if (saveError instanceof ApiError && saveError.status === 409) {
@@ -401,7 +413,7 @@ export function DriveMDXeditorRenderer({
     } finally {
       saveInFlightRef.current = false
     }
-  }, [beginExternalMarkdownSync, canSave, clearDraftPublicImages, edit?.currentVersionId, editContext])
+  }, [beginExternalMarkdownSync, canSave, clearDraftPublicImages, clearParseError, edit?.currentVersionId, editContext])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key.toLowerCase() !== 's' || (!event.metaKey && !event.ctrlKey) || event.shiftKey || event.altKey) return
@@ -415,9 +427,13 @@ export function DriveMDXeditorRenderer({
       : payload.error instanceof Error
         ? payload.error.message
         : '解析失败。'
-    setValue(payload.source)
-    valueRef.current = payload.source
-    setParseError(message || '解析失败。')
+    const request = ++parseErrorRequestRef.current
+    queueMicrotask(() => {
+      if (parseErrorRequestRef.current !== request) return
+      setValue(payload.source)
+      valueRef.current = payload.source
+      setParseError(message || '解析失败。')
+    })
   }, [])
 
   const handleReload = useCallback(async () => {
@@ -430,7 +446,7 @@ export function DriveMDXeditorRenderer({
       valueRef.current = nextText
       setValue(nextText)
       setDirty(false)
-      setParseError(null)
+      clearParseError()
       setConflictOpen(false)
       setReloadConfirmOpen(false)
       clearDraftPublicImages()
@@ -439,7 +455,7 @@ export function DriveMDXeditorRenderer({
     } catch (reloadError) {
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
-  }, [beginExternalMarkdownSync, clearDraftPublicImages, editContext])
+  }, [beginExternalMarkdownSync, clearDraftPublicImages, clearParseError, editContext])
 
   const requestReload = useCallback(() => {
     if (dirty) {
@@ -551,6 +567,7 @@ export function DriveMDXeditorRenderer({
             markdown={value}
             readOnly={!canEdit}
             onError={handleEditorError}
+            toMarkdownOptions={usesMdxSyntax ? undefined : commonMarkToMarkdownOptions}
             onChange={(nextValue, initialMarkdownNormalize) => {
               if (!canEdit) return
               valueRef.current = nextValue
@@ -710,6 +727,10 @@ function imageAltText(name: string): string {
   const trimmed = name.trim()
   if (!trimmed) return fallback
   return trimmed.replace(/\.(?:png|jpe?g|gif|webp|avif|ico)$/iu, '') || fallback
+}
+
+function isMdxDocument(name: string): boolean {
+  return /\.mdx$/iu.test(name)
 }
 
 function resolvePublicImageUploadInput(file: File): { readonly name: string; readonly mimeType: DrivePublicAssetImageMimeType } | null {

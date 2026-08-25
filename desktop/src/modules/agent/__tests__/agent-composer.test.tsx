@@ -466,6 +466,8 @@ describe("AgentComposer", () => {
     expect(attachments).toBeTruthy()
     expect(editor).toBeTruthy()
     if (!notice || !pending || !attachments || !editor) throw new Error("Composer regions are missing")
+    expect(attachments.classList.contains("px-1")).toBe(true)
+    expect(attachments.classList.contains("pt-1")).toBe(true)
     expect(notice.compareDocumentPosition(pending) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(pending.compareDocumentPosition(attachments) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(attachments.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -2197,6 +2199,46 @@ describe("AgentComposer", () => {
     expect(onDraftChange).toHaveBeenCalledWith("Please /review-code now")
     expect(onSubmit).not.toHaveBeenCalled()
     expect(onInputKeyDown).not.toHaveBeenCalled()
+  })
+
+  it("uses the displayed recent-first order for keyboard selection", async () => {
+    const onDraftChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="/"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          slashCandidates={[
+            { name: "status", kind: "command", source: "builtin" },
+            { name: "review-code", kind: "skill", source: "skill", skillOrigin: "synapse-installed" },
+            { name: "openai-docs", kind: "skill", source: "skill" },
+          ]}
+          recentSlashSkills={["openai-docs"]}
+          onDraftChange={onDraftChange}
+          onInputKeyDown={vi.fn()}
+          onSubmit={(event) => event.preventDefault()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    textarea!.focus()
+    textarea!.setSelectionRange(1, 1)
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+
+    expect(onDraftChange).toHaveBeenCalledWith("/openai-docs")
   })
 
   it("inserts knowledge base slash candidates without submitting", async () => {

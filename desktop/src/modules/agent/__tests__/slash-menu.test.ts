@@ -4,7 +4,10 @@ import {
   filterAgentSlashCandidates,
   findAgentSlashFragment,
   groupAgentSlashCandidates,
+  nextRecentSlashSkills,
+  orderAgentSlashCandidates,
   replaceAgentSlashFragment,
+  submittedSlashSkillName,
   toAgentSlashCandidates,
   uniqueAgentSlashCandidates,
   type AgentSlashCandidate,
@@ -22,6 +25,7 @@ const candidates: AgentSlashCandidate[] = [
     description: "Review code changes",
     kind: "skill",
     source: "skill",
+    skillOrigin: "synapse-installed",
   },
   {
     name: "openai-docs",
@@ -130,19 +134,62 @@ describe("agent slash menu utilities", () => {
       .toEqual(["review-code", "openai-docs", "status", "model"])
   })
 
-  it("groups skills before commands", () => {
+  it("groups installed Skills, other Skills, and commands in order", () => {
     expect(groupAgentSlashCandidates(candidates)).toEqual([
       {
-        kind: "skill",
-        label: "Skills",
-        items: [candidates[0], candidates[1]],
+        kind: "installedSkill",
+        label: "我的 Skills",
+        items: [candidates[0]],
+      },
+      {
+        kind: "otherSkill",
+        label: "其它 Skills",
+        items: [candidates[1]],
       },
       {
         kind: "command",
-        label: "Commands",
+        label: "其它命令",
         items: [candidates[2], candidates[3]],
       },
     ])
+  })
+
+  it("puts up to three available recent Skills first without duplicates", () => {
+    const knowledgeBase = toKnowledgeBaseSlashCandidates([{
+      name: "wiki-query",
+      description: "查询知识库",
+      slashText: "/wiki-query ",
+    }])[0]
+    const input = [knowledgeBase, ...candidates]
+    const groups = groupAgentSlashCandidates(input, ["openai-docs", "missing", "openai-docs", "review-code"])
+
+    expect(groups.map((group) => [group.label, group.items.map((item) => item.name)])).toEqual([
+      ["最近使用", ["openai-docs", "review-code"]],
+      ["知识库", ["wiki-query"]],
+      ["其它命令", ["status", "model"]],
+    ])
+    expect(orderAgentSlashCandidates(input, ["openai-docs", "review-code"]).map((item) => item.name))
+      .toEqual(["openai-docs", "review-code", "wiki-query", "status", "model"])
+  })
+
+  it("keeps grouped order after Slash search filtering", () => {
+    const filtered = filterAgentSlashCandidates(candidates, "code")
+    expect(orderAgentSlashCandidates(filtered, ["review-code"]).map((item) => item.name))
+      .toEqual(["review-code"])
+  })
+
+  it("recognizes only available leading Skill invocations for recent usage", () => {
+    expect(submittedSlashSkillName(" /Review-Code src/app.ts ", candidates)).toBe("review-code")
+    expect(submittedSlashSkillName("Please /review-code", candidates)).toBeNull()
+    expect(submittedSlashSkillName("/status", candidates)).toBeNull()
+    expect(submittedSlashSkillName("/missing", candidates)).toBeNull()
+  })
+
+  it("updates the three-item recent Skill MRU list", () => {
+    expect(nextRecentSlashSkills(["one", "two", "three"], "/TWO"))
+      .toEqual(["two", "one", "three"])
+    expect(nextRecentSlashSkills(["one", "two", "three"], "four"))
+      .toEqual(["four", "one", "two"])
   })
 
   it("keeps command names with spaces for wiki subcommands", () => {
@@ -303,7 +350,7 @@ describe("agent slash menu utilities", () => {
     })
   })
 
-  it("groups knowledge base candidates before skills", () => {
+  it("groups knowledge base candidates after Skills and before commands", () => {
     const knowledgeBase = toKnowledgeBaseSlashCandidates([
       {
         name: "wiki-query",
@@ -315,18 +362,18 @@ describe("agent slash menu utilities", () => {
     expect(groupAgentSlashCandidates([candidates[0], candidates[2], knowledgeBase]))
       .toEqual([
         {
+          kind: "installedSkill",
+          label: "我的 Skills",
+          items: [candidates[0]],
+        },
+        {
           kind: "knowledgeBase",
           label: "知识库",
           items: [knowledgeBase],
         },
         {
-          kind: "skill",
-          label: "Skills",
-          items: [candidates[0]],
-        },
-        {
           kind: "command",
-          label: "Commands",
+          label: "其它命令",
           items: [candidates[2]],
         },
       ])

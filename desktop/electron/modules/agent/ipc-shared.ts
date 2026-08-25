@@ -139,6 +139,18 @@ export const agentImageArtifactSchema = z.object({
   url: z.string(),
   sha256: z.string().optional(),
 })
+const agentMessageAttachmentSchema = z.discriminatedUnion("kind", [
+  agentImageArtifactSchema.extend({
+    name: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("path"),
+    path: z.string(),
+    entryType: z.enum(["file", "directory"]),
+    name: z.string(),
+    byteSize: z.number().int().nonnegative().optional(),
+  }),
+])
 const agentToolResultImageDiagnosticSchema = z.object({
   mimeType: z.string().optional(),
   base64Length: z.number().int().nonnegative().optional(),
@@ -206,6 +218,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     kind: z.literal("message"),
     role: z.enum(["user", "assistant", "system", "tool"]),
     content: z.string(),
+    attachments: z.array(agentMessageAttachmentSchema).optional(),
     legacy: z.boolean().optional(),
     metadata: resultMetadataSchema.optional(),
   }),

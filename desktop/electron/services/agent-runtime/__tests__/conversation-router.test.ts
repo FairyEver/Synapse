@@ -1908,6 +1908,94 @@ describe("ConversationRouter", () => {
     ).not.toHaveProperty("data")
   })
 
+  it("persists versioned user message presentation without changing model-visible content", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-user-message-artifacts-"))
+    try {
+      const session = new ScriptedSession([
+        { type: "result", content: "read image", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1")
+      const artifactRows = new MemoryNamespace<AgentArtifactEntryV1>("agent.artifacts")
+      const agentArtifactStore = new AgentArtifactStore({
+        rootDirectory: root,
+        artifacts: artifactRows,
+        randomId: () => "user-image-1",
+        now: fixedNow,
+      })
+      const { conversations, router } = createRouter({ session, agentArtifactStore })
+
+      const result = await router.send({
+        ...baseMessage("[Image #1]\n\n请分析"),
+        displayContent: "请分析",
+        attachments: [{
+          kind: "image",
+          mimeType: "image/png",
+          name: "screen.png",
+          size: 3,
+          data: new Uint8Array([1, 2, 3]),
+        }, {
+          kind: "path",
+          path: "/Users/liyang/Desktop/report.pdf",
+          entryType: "file",
+          name: "report.pdf",
+          size: 2048,
+        }],
+      })
+      const savedConversation = await conversations.get(result.conversationId)
+      const userEntry = savedConversation?.history.find((entry) => entry.role === "user")
+
+      expect(session.sent).toEqual(["[Image #1]\n\n请分析"])
+      expect(userEntry?.content).toBe("[Image #1]\n\n请分析")
+      expect(userEntry?.metadata).toEqual({
+        userMessagePresentation: { version: 1, content: "请分析" },
+        attachments: [{
+          kind: "image",
+          id: "user-image-1",
+          name: "screen.png",
+          mimeType: "image/png",
+          byteSize: 3,
+          url: expect.stringContaining("/user-image-1.png"),
+          sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+        }, {
+          kind: "path",
+          path: "/Users/liyang/Desktop/report.pdf",
+          entryType: "file",
+          name: "report.pdf",
+          byteSize: 2048,
+        }],
+      })
+      expect(JSON.stringify(userEntry)).not.toContain("AQID")
+      expect(await artifactRows.list()).toEqual([
+        expect.objectContaining({ origin: "user-message", originalName: "screen.png" }),
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects the send before model execution when user image persistence fails", async () => {
+    const session = new ScriptedSession([
+      { type: "result", content: "unexpected", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const agentArtifactStore = {
+      materializeUserMessageImages: vi.fn().mockRejectedValue(new Error("disk full")),
+    } as unknown as AgentArtifactStore
+    const { conversations, router } = createRouter({ session, agentArtifactStore })
+
+    await expect(router.send({
+      ...baseMessage("[Image #1]"),
+      displayContent: "",
+      attachments: [{
+        kind: "image",
+        mimeType: "image/png",
+        size: 3,
+        data: new Uint8Array([1, 2, 3]),
+      }],
+    })).rejects.toThrow("disk full")
+
+    expect(session.sent).toEqual([])
+    expect((await conversations.list())[0]?.history).toEqual([])
+  })
+
   it("persists active main-thread persona metadata with user and assistant history", async () => {
     const session = new ScriptedSession([
       { type: "result", content: "Hello", done: true, sdkSessionId: "sdk-1" },

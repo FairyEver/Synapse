@@ -40,6 +40,11 @@ installObjectUrlMocks()
 
 vi.mock('@mdxeditor/editor/style.css', () => ({}))
 
+vi.mock('./mdxeditor-commonmark-compatibility-plugin', () => ({
+  commonMarkTextCompatibilityPlugin: () => ({ name: 'commonMarkTextCompatibilityPlugin' }),
+  commonMarkToMarkdownOptions: { marker: 'commonmark' },
+}))
+
 vi.mock('@mdxeditor/editor', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
   const pluginCalls = new Set<string>()
@@ -61,6 +66,7 @@ vi.mock('@mdxeditor/editor', async () => {
       plugins,
       className,
       contentEditableClassName,
+      toMarkdownOptions,
       translation,
     }: {
       readonly markdown: string
@@ -70,23 +76,32 @@ vi.mock('@mdxeditor/editor', async () => {
       readonly plugins?: readonly unknown[]
       readonly className?: string
       readonly contentEditableClassName?: string
+      readonly toMarkdownOptions?: { readonly marker?: string }
       readonly translation?: (key: string, defaultValue: string, interpolations?: Record<string, unknown>) => string
     }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
       const [value, setValue] = React.useState(markdown)
       const valueRef = React.useRef(markdown)
+      const hasCommonMarkCompatibility = plugins?.some((plugin) => (
+        (plugin as { readonly name?: string }).name === 'commonMarkTextCompatibilityPlugin'
+      )) ?? false
+      const reportParseError = (source: string) => {
+        if (source.includes('broken-mdx') || (source.includes('<=') && !hasCommonMarkCompatibility)) {
+          onError?.({ error: new Error('Parse failed'), source })
+        }
+      }
+      if (markdown.includes('<=') && !hasCommonMarkCompatibility) reportParseError(markdown)
       const updateValue = (nextValue: string) => {
         valueRef.current = nextValue
         setValue(nextValue)
         onChange?.(nextValue)
-        if (nextValue.includes('broken-mdx')) {
-          onError?.({ error: new Error('Parse failed'), source: nextValue })
-        }
+        reportParseError(nextValue)
       }
       React.useImperativeHandle(ref, () => ({
         getMarkdown: () => valueRef.current,
         setMarkdown: (nextValue: string) => {
           valueRef.current = nextValue
           setValue(nextValue)
+          reportParseError(nextValue)
         },
         insertMarkdown: (markdownValue: string) => updateValue(`${valueRef.current}${markdownValue}`),
         focus: (callback?: () => void) => callback?.(),
@@ -102,6 +117,7 @@ vi.mock('@mdxeditor/editor', async () => {
           'data-toolbar-plugin': String(pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)),
           'data-toolbar-controls': Array.from(pluginCalls).join(','),
           'data-content-editable-class': contentEditableClassName ?? '',
+          'data-commonmark-options': toMarkdownOptions?.marker ?? '',
           'data-translation-bold': translation?.('toolbar.bold', 'Bold') ?? '',
           'data-translation-undo': translation?.('toolbar.undo', 'Undo {{shortcut}}', { shortcut: 'Ctrl+Z' }) ?? '',
           'data-translation-heading': translation?.('toolbar.blockTypes.heading', 'Heading {{level}}', { level: 2 }) ?? '',
@@ -111,9 +127,7 @@ vi.mock('@mdxeditor/editor', async () => {
           onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
             setValue(event.currentTarget.value)
             onChange?.(event.currentTarget.value, event.currentTarget.dataset.initialNormalize === 'true')
-            if (event.currentTarget.value.includes('broken-mdx')) {
-              onError?.({ error: new Error('Parse failed'), source: event.currentTarget.value })
-            }
+            reportParseError(event.currentTarget.value)
           },
         })
       )
@@ -853,6 +867,49 @@ describe('DriveMDXeditorRenderer', () => {
       '```',
     ].join('\n'))
     expect(document.body.textContent).not.toContain('解析失败')
+  })
+
+  it('opens less-than-or-equal text in rich mode for Markdown files', () => {
+    renderRenderer({
+      preview: { ...basePreview(), text: '金额 <= 1000' },
+    })
+
+    expect(editor().value).toBe('金额 <= 1000')
+    expect(editor().dataset.commonmarkOptions).toBe('commonmark')
+    expect(document.body.textContent).not.toContain('解析失败')
+  })
+
+  it('keeps strict MDX parsing for MDX files', async () => {
+    renderRenderer({
+      current: { ...baseCurrent(), name: 'notes.mdx' },
+      preview: { ...basePreview(), text: '金额 <= 1000' },
+    })
+
+    await act(async () => { await Promise.resolve() })
+
+    expect(sourceEditor().value).toBe('金额 <= 1000')
+    expect(document.body.textContent).toContain('解析失败')
+  })
+
+  it('keeps invalid MDX source editable after saving it', async () => {
+    const editContext = createEditContext()
+    renderRenderer({
+      current: { ...baseCurrent(), name: 'notes.mdx' },
+      preview: { ...basePreview(), text: '金额 <= 1000' },
+      editContext,
+    })
+    await act(async () => { await Promise.resolve() })
+
+    await inputValue(sourceEditor(), '金额 <= 2000')
+    await click(buttonWithText('保存'))
+    await act(async () => { await Promise.resolve() })
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '金额 <= 2000',
+      baseVersionId: 'version-1',
+    })
+    expect(sourceEditor().value).toBe('金额 <= 2000')
+    expect(document.body.textContent).toContain('解析失败')
   })
 
   it('shows recoverable source editing when mdx parsing fails', async () => {

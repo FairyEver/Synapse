@@ -653,10 +653,24 @@ function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
       }
     : null
 
+  const recentSlashSkills = normalizeRecentSlashSkills(value.recentSlashSkills)
+
   return {
     defaultPermissionMode,
     defaultProviderModel,
+    recentSlashSkills,
   }
+}
+
+function normalizeRecentSlashSkills(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return dedupeByKey(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().replace(/^\/+/, "").toLowerCase())
+      .filter(Boolean),
+    (item) => item,
+  ).slice(0, 3)
 }
 
 export function createDefaultConfig(): SynapseConfig {

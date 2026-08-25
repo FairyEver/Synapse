@@ -5,7 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { SynapseAgentSessionSummary } from "@/types/agent"
+import type { SynapseAgentPublishedCommand, SynapseAgentSessionSummary } from "@/types/agent"
 import type { SynapseProjectConfig } from "@/types/config"
 import { AgentConversationWorkspace } from "../components/agent-conversation-workspace"
 import type { AgentConversationWorkspaceController } from "../components/agent-conversation-workspace"
@@ -16,21 +16,34 @@ const mocks = vi.hoisted(() => ({
     showInFolder: vi.fn(),
   },
   timelineProps: [] as Array<{ readonly referenceActions?: unknown }>,
+  composerProps: [] as Array<{
+    readonly onDraftChange: (value: string) => void
+    readonly onSubmit: (
+      event: { preventDefault: () => void },
+      attachments: readonly [],
+      acceptAttachments: () => () => void,
+    ) => void
+    readonly recentSlashSkills?: readonly string[]
+  }>,
+  config: {
+    agent: {
+      defaultProviderModel: {
+        providerId: "provider-1",
+        providerName: "百炼",
+        modelTier: "sonnet",
+        modelName: "glm-5.1",
+      },
+      recentSlashSkills: [] as string[],
+    },
+  },
+  updateConfig: vi.fn(),
   useAgentReferenceActions: vi.fn(),
 }))
 
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
-    config: {
-      agent: {
-        defaultProviderModel: {
-          providerId: "provider-1",
-          providerName: "百炼",
-          modelTier: "sonnet",
-          modelName: "glm-5.1",
-        },
-      },
-    },
+    config: mocks.config,
+    updateConfig: mocks.updateConfig,
   }),
 }))
 
@@ -39,7 +52,15 @@ vi.mock("../components/agent-composer", () => ({
     readonly onStartNewConversation?: () => void
     readonly disabled?: boolean
     readonly quickInputs?: readonly { readonly content: string }[]
+    readonly onDraftChange: (value: string) => void
+    readonly onSubmit: (
+      event: { preventDefault: () => void },
+      attachments: readonly [],
+      acceptAttachments: () => () => void,
+    ) => void
+    readonly recentSlashSkills?: readonly string[]
   }) => {
+    mocks.composerProps.push(props)
     return (
       <div data-testid="agent-composer">
         {props.quickInputs?.map((item) => <span key={item.content}>{item.content}</span>)}
@@ -82,6 +103,9 @@ let roots: Root[] = []
 
 beforeEach(() => {
   mocks.timelineProps.length = 0
+  mocks.composerProps.length = 0
+  mocks.config.agent.recentSlashSkills = []
+  mocks.updateConfig.mockResolvedValue(mocks.config)
   mocks.useAgentReferenceActions.mockReturnValue(mocks.referenceActions)
   Object.defineProperty(window, "synapse", {
     configurable: true,
@@ -375,7 +399,83 @@ describe("AgentConversationWorkspace", () => {
     expect(list).toHaveBeenCalled()
     expect(container.textContent).toContain("桥接快捷输入")
   })
+
+  it("records an available Skill after a successful manual Slash send", async () => {
+    const sendMessage = vi.fn(async () => true)
+    renderWorkspace({
+      mode: "embedded",
+      commands: [skillCommand("review-code")],
+      chat: createController({ sendMessage }),
+    })
+
+    await submitComposerDraft("/review-code src/app.ts")
+
+    expect(sendMessage).toHaveBeenCalledWith("/review-code src/app.ts", expect.any(Object))
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      agent: { recentSlashSkills: ["review-code"] },
+    })
+  })
+
+  it("does not record a Skill when sending fails", async () => {
+    renderWorkspace({
+      mode: "embedded",
+      commands: [skillCommand("review-code")],
+      chat: createController({ sendMessage: vi.fn(async () => false) }),
+    })
+
+    await submitComposerDraft("/review-code")
+
+    expect(mocks.updateConfig).not.toHaveBeenCalled()
+  })
+
+  it("records a queued Skill only after the queued send succeeds", async () => {
+    const sendMessage = vi.fn(async () => true)
+    renderWorkspace({
+      mode: "embedded",
+      commands: [skillCommand("review-code")],
+      chat: createController({ sending: true, sendMessage }),
+    })
+
+    await submitComposerDraft("/review-code")
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      "/review-code",
+      expect.any(Object),
+      { attachments: [] },
+    )
+    expect(mocks.updateConfig).toHaveBeenCalledWith({
+      agent: { recentSlashSkills: ["review-code"] },
+    })
+  })
 })
+
+async function submitComposerDraft(content: string): Promise<void> {
+  await act(async () => {
+    mocks.composerProps.at(-1)?.onDraftChange(content)
+  })
+  await act(async () => {
+    mocks.composerProps.at(-1)?.onSubmit(
+      { preventDefault: () => undefined },
+      [],
+      () => () => undefined,
+    )
+    await Promise.resolve()
+  })
+}
+
+function skillCommand(name: string): SynapseAgentPublishedCommand {
+  return {
+    name,
+    description: "Test Skill",
+    source: "skill",
+    kind: "skill",
+    skillOrigin: "synapse-installed",
+    adminOnly: false,
+  }
+}
 
 function renderWorkspace(options: {
   readonly mode: "embedded" | "window"
@@ -385,6 +485,7 @@ function renderWorkspace(options: {
   readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
   readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly chat?: AgentConversationWorkspaceController
+  readonly commands?: readonly SynapseAgentPublishedCommand[]
 }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -398,7 +499,7 @@ function renderWorkspace(options: {
         target={{ projectId: "project-1", conversationId: "conversation-1", sessionKey: "local:renderer" }}
         chat={options.chat ?? createController()}
         quickInputs={[]}
-        commands={[]}
+        commands={options.commands ?? []}
         providers={{
           agentType: "claude-code",
           activeProviderId: "provider-1",

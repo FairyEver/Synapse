@@ -52,7 +52,7 @@ function AgentToolImageArtifacts({ toolName, artifacts }: AgentToolImageArtifact
   )
 }
 
-function displayableImageUrl(url: string): string {
+export function displayableImageUrl(url: string): string {
   const value = url.trim()
   if (!value) return value
   const artifactUrl = legacyAgentArtifactUrl(value)

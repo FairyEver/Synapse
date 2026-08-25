@@ -188,6 +188,7 @@ const publishedCommandSchema = z.object({
   description: z.string().optional(),
   source: z.enum(["builtin", "custom", "skill", "agent-native"]),
   kind: z.enum(["builtin", "prompt", "exec", "skill", "agent-native"]),
+  skillOrigin: z.enum(["synapse-installed", "other"]).optional(),
   adminOnly: z.boolean(),
   allowedPlatforms: z.array(z.string()).optional(),
   ui: publishedCommandUiSchema.optional(),

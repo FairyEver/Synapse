@@ -7,6 +7,7 @@ import type {
   AgentMessage,
   AgentImageAttachment,
   AgentPathAttachment,
+  AgentUserMessageImageArtifact,
 } from "./types"
 
 type SdkMessageContent = SDKUserMessage["message"]["content"]
@@ -101,6 +102,45 @@ export function attachmentHistoryMetadata(
 ): Record<string, unknown> | undefined {
   const diagnostics = attachmentDiagnostics(attachments)
   return diagnostics.length > 0 ? { attachments: diagnostics } : undefined
+}
+
+export function userMessagePresentationHistoryMetadata(
+  message: AgentMessage,
+  persistedImages: readonly AgentUserMessageImageArtifact[],
+): Record<string, unknown> {
+  const attachments: Record<string, unknown>[] = []
+  let imageIndex = 0
+  for (const attachment of normalizeAgentAttachments(message.attachments)) {
+    if (isImageAttachment(attachment)) {
+      const persisted = persistedImages[imageIndex]
+      if (!persisted) throw new Error("Persisted user image metadata is incomplete")
+      attachments.push({
+        kind: "image",
+        id: persisted.id,
+        ...(persisted.name ? { name: persisted.name } : {}),
+        mimeType: persisted.mimeType,
+        byteSize: persisted.byteSize,
+        url: persisted.url,
+        ...(persisted.sha256 ? { sha256: persisted.sha256 } : {}),
+      })
+      imageIndex += 1
+      continue
+    }
+    attachments.push({
+      kind: "path",
+      path: attachment.path,
+      entryType: attachment.entryType,
+      name: attachment.name ?? path.basename(attachment.path),
+      ...(attachment.size !== undefined ? { byteSize: attachment.size } : {}),
+    })
+  }
+  return {
+    userMessagePresentation: {
+      version: 1,
+      content: message.displayContent ?? message.content,
+    },
+    ...(attachments.length > 0 ? { attachments } : {}),
+  }
 }
 
 export function readablePathAttachmentContent(

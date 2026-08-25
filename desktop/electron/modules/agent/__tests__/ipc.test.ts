@@ -483,6 +483,7 @@ describe("agentIpcModule", () => {
       await harness.invoke("synapse:app:agent:operation:send", {
         projectId: "project-1",
         content: "hello",
+        displayContent: "hello",
         attachments: [
           {
             kind: "image",
@@ -516,8 +517,10 @@ describe("agentIpcModule", () => {
           path: filePath,
           entryType: "file",
           name: "report.md",
+          size: 6,
         }),
       ],
+      displayContent: "hello",
     }))
   })
 

@@ -23,6 +23,7 @@ const candidates: AgentSlashCandidate[] = [
     description: "Review code changes",
     kind: "skill",
     source: "skill",
+    skillOrigin: "synapse-installed",
   },
   {
     name: "status",
@@ -141,10 +142,11 @@ describe("AgentSlashMenu", () => {
     Element.prototype.scrollIntoView = originalScrollIntoView
   })
 
-  it("renders knowledge base, skills, and commands in order", () => {
+  it("renders recent, installed Skills, knowledge base, and commands in order", () => {
     const html = renderToStaticMarkup(
       <AgentSlashMenu
         candidates={candidates}
+        recentSkillNames={["review-code"]}
         highlightedIndex={0}
         onHighlight={vi.fn()}
         onSelect={vi.fn()}
@@ -152,10 +154,11 @@ describe("AgentSlashMenu", () => {
     )
 
     expect(html).toContain("知识库")
-    expect(html).toContain("Skills")
-    expect(html).toContain("Commands")
-    expect(html.indexOf("知识库")).toBeLessThan(html.indexOf("Skills"))
-    expect(html.indexOf("Skills")).toBeLessThan(html.indexOf("Commands"))
+    expect(html).toContain("最近使用")
+    expect(html).toContain("其它命令")
+    expect(html.indexOf("最近使用")).toBeLessThan(html.indexOf("知识库"))
+    expect(html.indexOf("知识库")).toBeLessThan(html.indexOf("其它命令"))
+    expect(html.match(/\/review-code/g)).toHaveLength(1)
     expect(html).toContain("/wiki-query")
     expect(html).toContain("查询知识库并基于已有页面回答")
     expect(html).toContain("/review-code")

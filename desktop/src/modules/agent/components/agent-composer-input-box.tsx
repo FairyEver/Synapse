@@ -47,7 +47,7 @@ function AgentComposerInputBox({
           </div>
         ) : null}
         {attachments ? (
-          <div className="agent-composer-input-box__attachments px-1 pt-2">
+          <div className="agent-composer-input-box__attachments px-1 pt-1">
             {attachments}
           </div>
         ) : null}

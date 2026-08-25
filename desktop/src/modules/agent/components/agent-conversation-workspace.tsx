@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, CircleHelp, Copy, Download, ExternalLink, LoaderCircle, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 
@@ -46,6 +46,8 @@ import {
   type PendingMessageTarget,
 } from "../pending-message-queue"
 import {
+  nextRecentSlashSkills,
+  submittedSlashSkillName,
   toAgentSlashCandidates,
   uniqueAgentSlashCandidates,
 } from "../slash-menu"
@@ -164,7 +166,7 @@ function AgentConversationWorkspace({
   onRename,
   onUserSessionRequested,
 }: AgentConversationWorkspaceProps) {
-  const { config } = useAppConfig()
+  const { config, updateConfig } = useAppConfig()
   const referenceActions = useAgentReferenceActions(target.projectId)
   const projectGit = useProjectGitActions(project)
   const [draft, setDraft] = useState("")
@@ -176,6 +178,7 @@ function AgentConversationWorkspace({
   const [createMode, setCreateMode] = useState<SynapseAgentPermissionMode | undefined>()
   const [createInitialName, setCreateInitialName] = useState("")
   const pendingMessageIdRef = useRef(0)
+  const recentSlashSkillsRef = useRef(config.agent.recentSlashSkills)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
   const latestEntry = chat.timeline.at(-1)
@@ -203,6 +206,37 @@ function AgentConversationWorkspace({
   const [conversationRolloverPromptNow, setConversationRolloverPromptNow] = useState(() => Date.now())
   const canManageKnowledgeSources = canUseManagedKnowledgeBase(project)
   const quickInputItems = useQuickInputItems(quickInputs)
+  const knowledgeBaseSlashCandidates = useMemo(
+    () => canManageKnowledgeSources ? toKnowledgeBaseSlashCandidates() : [],
+    [canManageKnowledgeSources],
+  )
+  const slashCandidates = useMemo(
+    () => uniqueAgentSlashCandidates([
+      ...knowledgeBaseSlashCandidates,
+      ...toAgentSlashCandidates(commands),
+    ]),
+    [commands, knowledgeBaseSlashCandidates],
+  )
+  const recordRecentSlashSkill = useCallback((content: string) => {
+    const skillName = submittedSlashSkillName(content, slashCandidates)
+    if (!skillName) return
+    const current = recentSlashSkillsRef.current
+    const next = nextRecentSlashSkills(current, skillName)
+    if (next.length === current.length && next.every((name, index) => name === current[index])) return
+    recentSlashSkillsRef.current = next
+    void updateConfig({ agent: { recentSlashSkills: next } }).catch((error: unknown) => {
+      recentSlashSkillsRef.current = config.agent.recentSlashSkills
+      logger.error("Agent recent Slash Skill update failed.", {
+        boundary: "renderer.agent.slash-recent.update",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: error instanceof Error ? error.message.length : String(error).length,
+      })
+    })
+  }, [config.agent.recentSlashSkills, slashCandidates, updateConfig])
+
+  useEffect(() => {
+    recentSlashSkillsRef.current = config.agent.recentSlashSkills
+  }, [config.agent.recentSlashSkills])
   const personas = chat.personas ?? []
   const activePersona = personas.find((item) => item.id === session.activeMainThreadPersonaId)
   const personaUnavailable = Boolean(
@@ -247,11 +281,12 @@ function AgentConversationWorkspace({
     void chat.sendMessage(sendingMessage.content, sendingMessage.target, {
       attachments: sendingMessage.attachments,
     }).then((sent) => {
+      if (sent) recordRecentSlashSkill(sendingMessage.content)
       setPendingMessages((current) => sent
         ? removePendingMessage(current, sendingMessage.id)
         : replacePendingMessage(current, markPendingMessageFailed(sendingMessage, "发送失败")))
     })
-  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages])
+  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages, recordRecentSlashSkill])
 
   const queueMessage = (
     content: string,
@@ -315,6 +350,7 @@ function AgentConversationWorkspace({
       setDraft(content)
       return false
     }
+    recordRecentSlashSkill(content)
     return true
   }
 
@@ -470,17 +506,6 @@ function AgentConversationWorkspace({
     provider: headerProvider,
     modelTier: effectiveModelTier,
   })
-  const knowledgeBaseSlashCandidates = useMemo(
-    () => canManageKnowledgeSources ? toKnowledgeBaseSlashCandidates() : [],
-    [canManageKnowledgeSources],
-  )
-  const slashCandidates = useMemo(
-    () => uniqueAgentSlashCandidates([
-      ...knowledgeBaseSlashCandidates,
-      ...toAgentSlashCandidates(commands),
-    ]),
-    [commands, knowledgeBaseSlashCandidates],
-  )
   const knowledgeBaseActions = useMemo(
     () => canManageKnowledgeSources ? toKnowledgeBaseComposerActions() : [],
     [canManageKnowledgeSources],
@@ -723,6 +748,7 @@ function AgentConversationWorkspace({
         onQuickInputDirectSend={(content) =>
           void submitContent(content, { preserveDraft: true, trackSource: "quick-input-direct" })}
         slashCandidates={slashCandidates}
+        recentSlashSkills={config.agent.recentSlashSkills}
         knowledgeBaseActions={knowledgeBaseActions}
         onKnowledgeBaseCommand={sendComposerCommand}
         onOpenKnowledgeBaseSourceManager={canManageKnowledgeSources

@@ -203,6 +203,7 @@ describe("ConfigBackupService quick inputs", () => {
       agent: {
         defaultPermissionMode: "bypassPermissions",
         defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+        recentSlashSkills: ["/Review-Code", "openai-docs", "review-code", "third", "fourth"],
         conversationRolloverPrompt: {
           costThresholdCny: 18,
           tokenThreshold: 6_000_000,
@@ -230,6 +231,7 @@ describe("ConfigBackupService quick inputs", () => {
       agent: {
         defaultPermissionMode: "bypassPermissions",
         defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+        recentSlashSkills: ["review-code", "openai-docs", "third"],
       },
     }))
       const importedConfig = vi.mocked(configStore.replace).mock.calls[0]?.[0] as SynapseConfig | undefined
@@ -288,6 +290,7 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
+          recentSlashSkills: [],
         },
       }))
     } finally {
@@ -314,6 +317,7 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
+          recentSlashSkills: [],
         },
       }))
     } finally {

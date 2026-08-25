@@ -322,6 +322,8 @@ export interface AgentArtifactEntryV1 extends Record<string, unknown> {
   turnId: string
   toolUseId?: string
   toolName?: string
+  origin?: "user-message" | "tool-result"
+  originalName?: string
   kind: "image"
   mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
   byteSize: number
@@ -344,6 +346,10 @@ export const agentArtifactsSchema: NamespaceSchema<AgentArtifactEntryV1> = {
     && typeof (v as AgentArtifactEntryV1).turnId === "string"
     && isOptionalString((v as AgentArtifactEntryV1).toolUseId)
     && isOptionalString((v as AgentArtifactEntryV1).toolName)
+    && ((v as AgentArtifactEntryV1).origin === undefined
+      || (v as AgentArtifactEntryV1).origin === "user-message"
+      || (v as AgentArtifactEntryV1).origin === "tool-result")
+    && isOptionalString((v as AgentArtifactEntryV1).originalName)
     && (v as AgentArtifactEntryV1).kind === "image"
     && supportedAgentArtifactImageMimeTypes.has((v as AgentArtifactEntryV1).mimeType)
     && typeof (v as AgentArtifactEntryV1).byteSize === "number"

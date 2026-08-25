@@ -57,6 +57,7 @@ import type { AgentGitAction } from "../hooks/use-project-git-actions"
 import {
   filterAgentSlashCandidates,
   findAgentSlashFragment,
+  orderAgentSlashCandidates,
   replaceAgentSlashFragment,
   type AgentSlashCandidate,
   type AgentSlashFragment,
@@ -98,6 +99,7 @@ function AgentComposer({
   onStartNewConversation,
   onJumpToBottom,
   slashCandidates = [],
+  recentSlashSkills = [],
   quickInputs = [],
   knowledgeBaseActions = [],
   onKnowledgeBaseCommand,
@@ -125,6 +127,7 @@ function AgentComposer({
   readonly showIdleJumpToBottom?: boolean
   readonly showConversationRolloverPrompt?: boolean
   readonly slashCandidates?: readonly AgentSlashCandidate[]
+  readonly recentSlashSkills?: readonly string[]
   readonly quickInputs?: readonly SynapseQuickInputItem[]
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
   readonly onDraftChange: (value: string) => void
@@ -176,9 +179,12 @@ function AgentComposer({
   )
   const visibleSlashCandidates = useMemo(
     () => activeSlashFragment
-      ? filterAgentSlashCandidates(slashCandidates, activeSlashFragment.query)
+      ? orderAgentSlashCandidates(
+          filterAgentSlashCandidates(slashCandidates, activeSlashFragment.query),
+          recentSlashSkills,
+        )
       : [],
-    [activeSlashFragment, slashCandidates],
+    [activeSlashFragment, recentSlashSkills, slashCandidates],
   )
   const slashMenuOpen = Boolean(activeSlashFragment && !slashMenuDismissed && slashCandidates.length > 0)
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
@@ -402,7 +408,10 @@ function AgentComposer({
 
     const currentFragment = findAgentSlashFragment(draft, event.currentTarget.selectionStart)
     const currentCandidates = currentFragment
-      ? filterAgentSlashCandidates(slashCandidates, currentFragment.query)
+      ? orderAgentSlashCandidates(
+          filterAgentSlashCandidates(slashCandidates, currentFragment.query),
+          recentSlashSkills,
+        )
       : []
     const currentMenuOpen = !slashMenuDismissed && slashCandidates.length > 0
 
@@ -510,6 +519,7 @@ function AgentComposer({
           slashMenu={slashMenuOpen ? (
             <AgentSlashMenu
               candidates={visibleSlashCandidates}
+              recentSkillNames={recentSlashSkills}
               highlightedIndex={highlightedSlashIndex}
               onHighlight={setHighlightedSlashIndex}
               onSelect={selectSlashCandidate}

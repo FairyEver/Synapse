@@ -254,7 +254,12 @@ class AgentConversationExportService {
           } as Partial<AgentArtifactEntryV1>),
           skipped,
         )
-        await this.writeAgentArtifacts(packageRoot, agentArtifacts, included, skipped)
+        await this.writeAgentArtifacts(
+          packageRoot,
+          agentArtifacts.filter((artifact) => artifact.origin !== "user-message"),
+          included,
+          skipped,
+        )
       }
       await this.writeJson(packageRoot, "summary.json", summary, included)
       await this.writeText(packageRoot, "transcript.md", `${formatAgentTranscript(timeline)}\n`, included)
@@ -688,7 +693,7 @@ function buildAttachmentExportIndex(conversation: ConversationEntryV1): Attachme
       messageIndex: index,
       role: entry.role,
       timestamp: entry.timestamp,
-      contentPreview: previewContent(entry.content),
+      contentPreview: previewContent(userDisplayContent(entry.metadata) ?? entry.content),
       attachments,
     })
   })
@@ -699,6 +704,12 @@ function buildAttachmentExportIndex(conversation: ConversationEntryV1): Attachme
     attachmentCount: messages.reduce((sum, message) => sum + message.attachments.length, 0),
     messages,
   }
+}
+
+function userDisplayContent(metadata: Record<string, unknown> | undefined): string | undefined {
+  const value = metadata?.userMessagePresentation
+  if (!isRecord(value) || value.version !== 1 || typeof value.content !== "string") return undefined
+  return value.content
 }
 
 function previewContent(content: string): string {

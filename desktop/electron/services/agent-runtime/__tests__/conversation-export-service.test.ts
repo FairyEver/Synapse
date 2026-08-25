@@ -312,8 +312,10 @@ describe("AgentConversationExportService", () => {
     tempRoots.push(tempRoot)
     const outputPath = path.join(tempRoot, "conversation.zip")
     const imagePath = path.join(tempRoot, "artifact-source.png")
+    const userImagePath = path.join(tempRoot, "user-image-source.png")
     const { writeFile } = await import("node:fs/promises")
     await writeFile(imagePath, Buffer.from([137, 80, 78, 71]))
+    await writeFile(userImagePath, Buffer.from([1, 2, 3]))
 
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
@@ -335,6 +337,21 @@ describe("AgentConversationExportService", () => {
       storagePath: imagePath,
       createdAt: "2026-07-03T00:00:00.000Z",
     })
+    await agentArtifacts.upsert({
+      id: "user-image-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-2",
+      origin: "user-message",
+      originalName: "screen.png",
+      kind: "image",
+      mimeType: "image/png",
+      byteSize: 3,
+      sha256: "b".repeat(64),
+      storagePath: userImagePath,
+      createdAt: "2026-08-25T00:00:00.000Z",
+    })
 
     const createZipArchive = vi.fn(async (sourceDirectoryPath: string) => {
       const artifactsText = await readFile(path.join(sourceDirectoryPath, "agent-artifacts.json"), "utf8")
@@ -349,6 +366,8 @@ describe("AgentConversationExportService", () => {
       })])
       await expect(readFile(path.join(sourceDirectoryPath, "artifacts", "artifact-1.png")))
         .resolves.toEqual(Buffer.from([137, 80, 78, 71]))
+      await expect(readFile(path.join(sourceDirectoryPath, "artifacts", "user-image-1.png")))
+        .rejects.toMatchObject({ code: "ENOENT" })
     })
 
     const service = new AgentConversationExportService({

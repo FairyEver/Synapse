@@ -42,6 +42,7 @@ export interface QueuedTurn {
   readonly conversationId: string
   readonly turnId: string
   readonly lifecycle: TurnLifecycle
+  readonly userHistoryMetadata?: Record<string, unknown>
   readonly abortSignal?: AbortSignal
   readonly liveEventTimeoutMs?: number
   readonly onResponseStarted?: () => void

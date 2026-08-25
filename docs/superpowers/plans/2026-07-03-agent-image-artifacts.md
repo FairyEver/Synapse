@@ -17,6 +17,7 @@
 - Creating an image file without a tool returning an image block does not produce a displayable image event.
 - Markdown image syntax in assistant text is text unless Synapse explicitly renders it from a trusted artifact path.
 - User input attachments and SDK output artifacts have different semantics; do not merge SDK output artifacts into `attachments.json`.
+- The shared artifact root distinguishes those semantics with `origin`: user inputs are `user-message`, tool outputs are `tool-result`, and legacy rows without an origin remain tool outputs.
 
 ## File Structure
 
@@ -74,6 +75,8 @@ export interface AgentArtifactEntryV1 extends Record<string, unknown> {
   turnId: string
   toolUseId?: string
   toolName?: string
+  origin?: "user-message" | "tool-result"
+  originalName?: string
   kind: "image"
   mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp"
   byteSize: number
@@ -82,6 +85,8 @@ export interface AgentArtifactEntryV1 extends Record<string, unknown> {
   createdAt: string
 }
 ```
+
+User-message images may reuse this controlled byte store, but their bytes are never copied into conversation debug bundles. `attachments.json`, versioned user presentation metadata and transcript text may contain safe metadata only. Tool-result export continues to copy `tool-result` rows, including legacy rows without `origin`. Conversation deletion cleans both origins; failed cleanup retains metadata for initialization-time orphan retry.
 
 Runtime-only SDK image block shape:
 

@@ -18,6 +18,14 @@ import { createImageAttachment, createPathAttachment } from "../../attachments"
 import type { AgentProjectScope } from "../../project-resolution"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+Object.defineProperty(URL, "createObjectURL", {
+  configurable: true,
+  value: vi.fn(() => "blob:optimistic-agent-image"),
+})
+Object.defineProperty(URL, "revokeObjectURL", {
+  configurable: true,
+  value: vi.fn(),
+})
 
 const rendererLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -811,7 +819,7 @@ describe("useAgentChat", () => {
     )
   })
 
-  it("sends attachment-only images with readable optimistic content and binary payload", async () => {
+  it("shows attachment-only images optimistically while preserving readable model content", async () => {
     const bridge = (window as unknown as {
       synapse: {
         agent: {
@@ -858,13 +866,19 @@ describe("useAgentChat", () => {
     expect(chat?.timeline.at(-1)).toMatchObject({
       kind: "message",
       role: "user",
-      content: "[Image #1]",
+      content: "",
+      attachments: [expect.objectContaining({
+        kind: "image",
+        name: "screen.png",
+        url: "blob:optimistic-agent-image",
+      })],
     })
     expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({
       projectId: session.projectId,
       conversationId: session.id,
       sessionKey: session.sessionKey,
       content: "[Image #1]",
+      displayContent: "",
       attachments: [{
         kind: "image",
         mimeType: "image/png",
@@ -874,6 +888,9 @@ describe("useAgentChat", () => {
       }],
     }))
     expect(JSON.stringify(bridge.send.mock.calls)).not.toContain("base64")
+    await act(async () => root.unmount())
+    roots = roots.filter((candidate) => candidate !== root)
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:optimistic-agent-image")
   })
 
   it("sends path attachments as readable path context and path payload entries", async () => {
@@ -934,10 +951,15 @@ describe("useAgentChat", () => {
     expect(chat?.timeline.at(-1)).toMatchObject({
       kind: "message",
       role: "user",
-      content: expectedContent,
+      content: "请分析",
+      attachments: [
+        expect.objectContaining({ kind: "path", name: "brief.md" }),
+        expect.objectContaining({ kind: "path", name: "materials" }),
+      ],
     })
     expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({
       content: expectedContent,
+      displayContent: "请分析",
       attachments: [
         {
           kind: "path",

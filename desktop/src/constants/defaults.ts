@@ -98,6 +98,7 @@ export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
 export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {
   defaultPermissionMode: "default",
   defaultProviderModel: null,
+  recentSlashSkills: [],
 }
 
 export const DEFAULT_CONFIG: SynapseConfig = {

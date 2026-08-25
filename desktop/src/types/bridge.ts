@@ -766,6 +766,7 @@ export type SynapseAgentBridgePathAttachment = {
   readonly path: string
   readonly entryType: "file" | "directory"
   readonly name?: string
+  readonly size?: number
 }
 
 export type SynapseAgentBridgeAttachment =
@@ -1747,6 +1748,7 @@ export type SynapseBridge = {
         sessionKey?: string
         conversationId?: string
         content: string
+        displayContent?: string
         attachments?: readonly SynapseAgentBridgeAttachment[]
         clientSubmittedAt?: string
         providerId?: string

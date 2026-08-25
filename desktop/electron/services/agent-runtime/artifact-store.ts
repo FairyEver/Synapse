@@ -1,14 +1,22 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { AgentArtifactEntryV1, DataNamespace } from "../../runtime/data-repo"
-import type { AgentArtifactImageMimeType, AgentImageArtifact, AgentToolResultImageBlock } from "./types"
+import type { StructuredLogger } from "../../runtime/service-registry"
+import type {
+  AgentArtifactImageMimeType,
+  AgentImageArtifact,
+  AgentImageAttachment,
+  AgentToolResultImageBlock,
+  AgentUserMessageImageArtifact,
+} from "./types"
 import { agentArtifactUrlForRelativePath } from "./artifact-url"
 
 interface AgentArtifactStoreDeps {
   readonly rootDirectory: string
   readonly artifacts: DataNamespace<AgentArtifactEntryV1>
+  readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly randomId?: () => string
 }
@@ -20,6 +28,13 @@ interface MaterializeToolResultImagesInput {
   readonly toolUseId?: string
   readonly toolName?: string
   readonly imageBlocks?: readonly AgentToolResultImageBlock[]
+}
+
+interface MaterializeUserMessageImagesInput {
+  readonly projectId: string
+  readonly conversationId: string
+  readonly turnId: string
+  readonly images: readonly AgentImageAttachment[]
 }
 
 export class AgentArtifactStore {
@@ -38,18 +53,135 @@ export class AgentArtifactStore {
       const bytes = Buffer.from(block.base64, "base64")
       if (bytes.length === 0) continue
 
-      const id = this.deps.randomId?.() ?? randomUUID()
-      const extension = extensionForMimeType(block.mimeType)
-      const relativePath = path.join(
-        safePathSegment(input.projectId),
-        safePathSegment(input.conversationId),
-        `${safePathSegment(id)}.${extension}`,
-      )
-      const storagePath = path.join(this.deps.rootDirectory, relativePath)
-      const sha256 = createHash("sha256").update(bytes).digest("hex")
+      artifacts.push(await this.persistImage({
+        projectId: input.projectId,
+        conversationId: input.conversationId,
+        turnId: input.turnId,
+        ...(input.toolUseId ? { toolUseId: input.toolUseId } : {}),
+        ...(input.toolName ? { toolName: input.toolName } : {}),
+        origin: "tool-result",
+        mimeType: block.mimeType,
+        bytes,
+      }))
+    }
+    return artifacts
+  }
 
-      await mkdir(path.dirname(storagePath), { recursive: true })
-      await writeFile(storagePath, bytes)
+  async materializeUserMessageImages(
+    input: MaterializeUserMessageImagesInput,
+  ): Promise<readonly AgentUserMessageImageArtifact[]> {
+    const artifacts: AgentUserMessageImageArtifact[] = []
+    try {
+      for (const image of input.images) {
+        const bytes = Buffer.from(image.data instanceof ArrayBuffer ? new Uint8Array(image.data) : image.data)
+        if (bytes.length === 0) throw new Error("User message image is empty")
+        artifacts.push(await this.persistImage({
+          projectId: input.projectId,
+          conversationId: input.conversationId,
+          turnId: input.turnId,
+          origin: "user-message",
+          ...(image.name ? { originalName: image.name } : {}),
+          mimeType: image.mimeType,
+          bytes,
+        }))
+      }
+      return artifacts
+    } catch (error) {
+      await this.removeUserMessageArtifactsForTurn(input.conversationId, input.turnId)
+      throw error
+    }
+  }
+
+  async removeConversationArtifacts(conversationId: string): Promise<void> {
+    let artifacts: AgentArtifactEntryV1[]
+    try {
+      artifacts = await this.deps.artifacts.list({ conversationId } as Partial<AgentArtifactEntryV1>)
+    } catch (error) {
+      this.deps.logger?.warn("Agent artifact cleanup metadata read failed.", {
+        boundary: "agent-runtime.artifact.cleanup",
+        conversationId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+      return
+    }
+    for (const artifact of artifacts) {
+      try {
+        await this.removeArtifact(artifact)
+      } catch (error) {
+        this.deps.logger?.warn("Agent artifact cleanup failed.", {
+          boundary: "agent-runtime.artifact.cleanup",
+          conversationId,
+          artifactId: artifact.id,
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      }
+    }
+  }
+
+  async removeUserMessageArtifactsForTurn(conversationId: string, turnId: string): Promise<void> {
+    let artifacts: AgentArtifactEntryV1[]
+    try {
+      artifacts = await this.deps.artifacts.list({ conversationId, turnId } as Partial<AgentArtifactEntryV1>)
+    } catch (error) {
+      this.deps.logger?.warn("Agent user attachment rollback metadata read failed.", {
+        boundary: "agent-runtime.artifact.rollback",
+        conversationId,
+        turnId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+      return
+    }
+    for (const artifact of artifacts.filter((item) => item.origin === "user-message")) {
+      try {
+        await this.removeArtifact(artifact)
+      } catch (error) {
+        this.deps.logger?.warn("Agent user attachment rollback failed.", {
+          boundary: "agent-runtime.artifact.rollback",
+          conversationId,
+          turnId,
+          artifactId: artifact.id,
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      }
+    }
+  }
+
+  async retryOrphanCleanup(existingConversationIds: ReadonlySet<string>): Promise<void> {
+    const artifacts = await this.deps.artifacts.list()
+    const orphanConversationIds = new Set(
+      artifacts
+        .map((artifact) => artifact.conversationId)
+        .filter((conversationId) => !existingConversationIds.has(conversationId)),
+    )
+    for (const conversationId of orphanConversationIds) {
+      await this.removeConversationArtifacts(conversationId)
+    }
+  }
+
+  private async persistImage(input: {
+    readonly projectId: string
+    readonly conversationId: string
+    readonly turnId: string
+    readonly toolUseId?: string
+    readonly toolName?: string
+    readonly origin: "user-message" | "tool-result"
+    readonly originalName?: string
+    readonly mimeType: AgentArtifactImageMimeType
+    readonly bytes: Buffer
+  }): Promise<AgentUserMessageImageArtifact> {
+    const id = this.deps.randomId?.() ?? randomUUID()
+    const extension = extensionForMimeType(input.mimeType)
+    const relativePath = path.join(
+      safePathSegment(input.projectId),
+      safePathSegment(input.conversationId),
+      `${safePathSegment(id)}.${extension}`,
+    )
+    const storagePath = path.join(this.deps.rootDirectory, relativePath)
+    const sha256 = createHash("sha256").update(input.bytes).digest("hex")
+
+    await mkdir(path.dirname(storagePath), { recursive: true })
+    await writeFile(storagePath, input.bytes)
+    try {
       await this.deps.artifacts.upsert({
         id,
         schemaVersion: 1,
@@ -58,24 +190,49 @@ export class AgentArtifactStore {
         turnId: input.turnId,
         ...(input.toolUseId ? { toolUseId: input.toolUseId } : {}),
         ...(input.toolName ? { toolName: input.toolName } : {}),
+        origin: input.origin,
+        ...(input.originalName ? { originalName: input.originalName } : {}),
         kind: "image",
-        mimeType: block.mimeType,
-        byteSize: bytes.length,
+        mimeType: input.mimeType,
+        byteSize: input.bytes.length,
         sha256,
         storagePath,
         createdAt: (this.deps.now?.() ?? new Date()).toISOString(),
       })
-      artifacts.push({
-        id,
-        kind: "image",
-        mimeType: block.mimeType,
-        byteSize: bytes.length,
-        url: agentArtifactUrlForRelativePath(relativePath),
-        sha256,
-      })
+    } catch (error) {
+      await unlink(storagePath).catch(() => undefined)
+      throw error
     }
-    return artifacts
+    return {
+      id,
+      kind: "image",
+      ...(input.originalName ? { name: input.originalName } : {}),
+      mimeType: input.mimeType,
+      byteSize: input.bytes.length,
+      url: agentArtifactUrlForRelativePath(relativePath),
+      sha256,
+    }
   }
+
+  private async removeArtifact(artifact: AgentArtifactEntryV1): Promise<void> {
+    if (!isPathInsideRoot(this.deps.rootDirectory, artifact.storagePath)) {
+      throw new Error("Agent artifact path is outside the controlled root")
+    }
+    try {
+      await unlink(artifact.storagePath)
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error
+    }
+    await this.deps.artifacts.remove(artifact.id)
+  }
+}
+
+function isPathInsideRoot(rootDirectory: string, targetPath: string): boolean {
+  const relativePath = path.relative(path.resolve(rootDirectory), path.resolve(targetPath))
+  return relativePath.length > 0
+    && relativePath !== ".."
+    && !relativePath.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relativePath)
 }
 
 function extensionForMimeType(mimeType: AgentArtifactImageMimeType): string {

@@ -38,6 +38,39 @@ describe("SkillRegistry", () => {
       .toContain("## User Arguments:\nsrc/app.ts")
   })
 
+  it("classifies only valid Synapse-installed skills as user installed", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const skillsRoot = path.join(workspace, ".agents", "skills")
+    const fixtures = [
+      { name: "mine", identity: { id: "skill-1" }, expected: "synapse-installed" },
+      { name: "external", expected: "other" },
+      { name: "broken", identity: "not-json", expected: "other" },
+      {
+        name: "cloud",
+        identity: { id: "repo-skill", kind: "cloud-skill-repository" },
+        expected: "other",
+      },
+    ] as const
+
+    for (const fixture of fixtures) {
+      const skillDir = path.join(skillsRoot, fixture.name)
+      await fs.mkdir(skillDir, { recursive: true })
+      await fs.writeFile(path.join(skillDir, "SKILL.md"), `# ${fixture.name}`)
+      if ("identity" in fixture) {
+        await fs.writeFile(
+          path.join(skillDir, ".synapse.json"),
+          typeof fixture.identity === "string" ? fixture.identity : JSON.stringify(fixture.identity),
+        )
+      }
+    }
+
+    const published = await new SkillRegistry({ workspacePath: workspace }).listPublished()
+
+    expect(Object.fromEntries(published.map((skill) => [skill.name, skill.skillOrigin]))).toMatchObject(
+      Object.fromEntries(fixtures.map((fixture) => [fixture.name, fixture.expected])),
+    )
+  })
+
   it("reuses cached skill metadata for repeated resolves", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
     const skillDir = path.join(workspace, ".agents", "skills", "reviewer")

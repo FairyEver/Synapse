@@ -645,12 +645,15 @@ function validateAgentConfig(
     return null
   }
   const normalizedPermissionMode = defaultPermissionMode as SynapseAgentGlobalConfig["defaultPermissionMode"]
+  const recentSlashSkills = validateRecentSlashSkills(rawValue.recentSlashSkills, errors)
+  if (!recentSlashSkills) return null
 
   const providerModel = rawValue.defaultProviderModel
   if (providerModel === undefined || providerModel === null) {
     return {
       defaultPermissionMode: normalizedPermissionMode,
       defaultProviderModel: null,
+      recentSlashSkills,
     }
   }
 
@@ -678,7 +681,19 @@ function validateAgentConfig(
       providerId: providerId.trim(),
       modelTier: modelTier as ModelTier,
     },
+    recentSlashSkills,
   }
+}
+
+function validateRecentSlashSkills(rawValue: unknown, errors: string[]): string[] | null {
+  if (rawValue === undefined) return []
+  if (!Array.isArray(rawValue) || !rawValue.every((item) => typeof item === "string")) {
+    errors.push("config.agent.recentSlashSkills 必须是字符串数组。")
+    return null
+  }
+  return [...new Set(rawValue
+    .map((item) => item.trim().replace(/^\/+/, "").toLowerCase())
+    .filter(Boolean))].slice(0, 3)
 }
 
 function validateConfig(

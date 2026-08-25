@@ -36,6 +36,7 @@ export interface PublishedAgentCommand {
   readonly description?: string
   readonly source: PublishedCommandSource
   readonly kind: PublishedCommandKind
+  readonly skillOrigin?: "synapse-installed" | "other"
   readonly adminOnly: boolean
   readonly allowedPlatforms?: readonly string[]
   readonly ui?: PublishedAgentCommandUi

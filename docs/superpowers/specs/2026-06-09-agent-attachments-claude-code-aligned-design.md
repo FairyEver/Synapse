@@ -24,7 +24,7 @@ This design focuses on the renderer Agent conversation path backed by the Claude
 
 - Let users paste or select images in the Agent composer and send them directly to the Claude model.
 - Let users paste or select files and folders and send them as path context.
-- Preserve Claude Code's message model: images use `[Image #N]` in sent content and history, while draft attachments use compact file items in the composer.
+- Preserve Claude Code's model input semantics: images still use `[Image #N]` in model-visible content, while the timeline stores a separate structured presentation.
 - Support multiple images, files, and folders in one user turn.
 - Preserve normal text prompts and quick-input behavior.
 - Keep attachments scoped to the current draft until the user sends or removes them.
@@ -99,7 +99,7 @@ Image items:
 
 - use the original image file name when available, falling back to `[Image #N]`;
 - derive the visible format from the supported image MIME type and show the byte size;
-- continue using `[Image #N]` in sent content and conversation history.
+- continue using `[Image #N]` in model-visible sent content; new conversation history renders the persisted image instead of the generated placeholder.
 
 Path items:
 
@@ -120,6 +120,15 @@ Input methods:
 The `+` button opens a two-item menu with `附加文件` and `附加文件夹`. Both native pickers allow multiple selections, and repeated selections accumulate in the current draft. Electron cannot present one native dialog as both a file and directory selector on Windows and Linux, so the two-item menu is consistent across platforms. The main process resolves selected, pasted, and dropped paths with `lstat`; Renderer does not infer directory type from file size or MIME metadata. Supported selected images remain direct model image content.
 
 Use existing shadcn/Radix components, lucide icons, and theme token classes. Do not add custom colors, gradients, glow, page-specific CSS, nested cards, or marketing copy.
+
+Sent user messages keep the existing right-aligned bubble and render structured attachments before the user's actual text:
+
+- one image uses a wide preview; two images use two columns; three to four images use a two-column grid; five to eight images use a three-column grid;
+- thumbnails use cropped browsing previews and open the existing `ImageLightbox` for full-size viewing and multi-image navigation;
+- file and folder attachments use compact focusable rows and the existing local-reference open action; full paths remain available only as hover titles and open targets;
+- attachment-only messages do not render an empty text node or copy action;
+- image load failures show the original name and `图片无法加载`;
+- Assistant Markdown and tool-result image rendering remain unchanged.
 
 ## Data Model
 
@@ -145,6 +154,8 @@ type AgentDraftAttachment =
 ```
 
 Bridge payload should avoid ambiguous generic `kind: string` where possible. Electron-side runtime types can keep the existing `AgentAttachment` shape for compatibility, but should normalize into stricter internal unions before building SDK input.
+
+The bridge also carries `displayContent`, which contains only the user's actual input. `content` remains the model-visible text with image labels and path context. `SynapseAgentMessageTimelineItem.attachments` is a structured image/path union and never contains bytes, `ArrayBuffer`, or base64.
 
 ## SDK Message Construction
 
@@ -220,15 +231,17 @@ Size limits should be explicit constants in implementation. If placed in `deskto
 
 ## Persistence And History
 
-Conversation history should preserve what the user sent in a readable way:
+Conversation history separates model input from user-visible presentation:
 
-- text prompt remains visible as before;
-- image attachments are represented by chips such as `[Image #1]`, not raw base64;
-- file and folder attachments show their paths;
-- transcript export should include the same concise representation;
-- usage analysis and raw event display must not expose image base64.
-
-The system does not need to persist image bytes for replay in this iteration unless existing conversation persistence requires exact SDK replay. If exact replay is required later, store image bytes in a controlled attachment store and never in display text.
+- the stored history `content` retains the model-visible `[Image #N]` and path context so SDK behavior does not change;
+- new records add versioned `userMessagePresentation` metadata containing only the user's actual input;
+- new records add structured `attachments` metadata containing image name, MIME, size, hash and safe artifact URL, or path name, trusted entry type and trusted size;
+- only records with the version marker use structured timeline rendering; older records keep their original visible content so unrecoverable image placeholders are not hidden or duplicated;
+- user image bytes are written before model execution to the controlled Agent artifact root and never stored in history, timeline IPC, events, logs or JSON export;
+- artifact metadata uses `origin: "user-message" | "tool-result"` plus an optional original name. Missing `origin` on older rows is treated as `tool-result`;
+- optimistic Renderer messages use temporary Blob URLs. Persisted timeline replacement or unmount releases those URLs;
+- deleting a conversation removes both user-message and tool-result artifacts. Failed cleanup keeps metadata, writes a structured warning and is retried for orphaned conversations when the service initializes;
+- transcript and `attachments.json` export concise user attachment metadata, while debug bundle artifact copying excludes `origin: "user-message"` image files.
 
 ## Error Handling
 
@@ -237,6 +250,7 @@ The system does not need to persist image bytes for replay in this iteration unl
 - If a folder path cannot be granted to the SDK, block send rather than silently sending an unreadable path.
 - If `additionalDirectories` update fails for an existing session, surface a concise failure and do not enqueue the turn.
 - If image conversion fails, do not send a partial turn.
+- If user image persistence fails, reject the send before model execution and leave the draft available for retry.
 - If only attachments are present and text is empty, allow sending when at least one image or path attachment exists.
 
 ## Testing
@@ -259,7 +273,10 @@ Add focused tests for:
 - copied and dropped folders are classified by main-process path metadata;
 - files and folders dropped anywhere in the conversation workspace reach the composer;
 - invalid image and missing path block send;
-- history and transcript show `[Image #N]` and paths but not base64;
+- new history shows structured images, files and folders without generated placeholders, while legacy history remains unchanged;
+- optimistic Blob URLs are released after replacement, failure or unmount;
+- conversation deletion and initialization retry clean controlled artifacts without dropping metadata on cleanup failure;
+- transcript and debug exports contain user attachment metadata but do not copy user image bytes;
 - permission and tool event redaction still preserves normal paths while hiding secrets.
 
 ## Release Note

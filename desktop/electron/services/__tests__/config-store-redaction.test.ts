@@ -87,4 +87,23 @@ describe("ConfigStore log redaction", () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it("summarizes recent Slash Skills without logging their names", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-redaction-"))
+    mocks.userDataPath = dir
+
+    try {
+      await configStore.update({
+        agent: { recentSlashSkills: ["private-client-skill", "review-code"] },
+      })
+
+      const updatingCall = mocks.logger.info.mock.calls.find(([message]) => message === "Updating config.")
+      const loggedPatch = JSON.stringify(updatingCall?.[1])
+      expect(loggedPatch).toContain("recentSlashSkillCount")
+      expect(loggedPatch).not.toContain("private-client-skill")
+      expect(loggedPatch).not.toContain("review-code")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

@@ -22,6 +22,7 @@ import type { AgentReferenceActions } from "../hooks/use-agent-reference-actions
 import { AgentMessageHeader } from "./agent-message-header"
 import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
+import { AgentMessageAttachments } from "./agent-message-attachments"
 import { AgentUsageCard } from "./agent-usage-card"
 import {
   createAgentLocalReferenceLink,
@@ -90,13 +91,27 @@ function AgentMessageEvent({
     return (
       <article className="group/message flex min-w-0 flex-col items-end">
         <AgentMessageBubble role="user">
-          <span data-allow-select="true">{item.content}</span>
+          {item.attachments && item.attachments.length > 0 ? (
+            <AgentMessageAttachments
+              attachments={item.attachments}
+              onOpenReference={onOpenReference}
+            />
+          ) : null}
+          {item.content.trim() ? (
+            <span
+              data-allow-select="true"
+              className={item.attachments?.length ? "mt-3 block" : undefined}
+            >
+              {item.content}
+            </span>
+          ) : null}
         </AgentMessageBubble>
         <AgentMessageToolbar
           timestamp={item.timestamp}
           content={item.content}
           messageId={item.id}
           role={item.role}
+          showCopy={item.content.trim().length > 0}
           className="mt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
         />
       </article>

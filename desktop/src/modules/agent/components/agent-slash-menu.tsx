@@ -10,6 +10,7 @@ import {
 
 type AgentSlashMenuProps = {
   readonly candidates: readonly AgentSlashCandidate[]
+  readonly recentSkillNames?: readonly string[]
   readonly highlightedIndex: number
   readonly onHighlight: (index: number) => void
   readonly onSelect: (candidate: AgentSlashCandidate) => void
@@ -24,11 +25,12 @@ function AgentSlashCandidateIcon({ kind }: { readonly kind: AgentSlashCandidate[
 
 function AgentSlashMenu({
   candidates,
+  recentSkillNames = [],
   highlightedIndex,
   onHighlight,
   onSelect,
 }: AgentSlashMenuProps) {
-  const groups = groupAgentSlashCandidates(candidates)
+  const groups = groupAgentSlashCandidates(candidates, recentSkillNames)
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([])
   let visibleIndex = 0
 

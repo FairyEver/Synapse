@@ -13,6 +13,36 @@ import { messageMethods } from "../ipc-messages"
 import { sessionMethods } from "../ipc-sessions"
 
 describe("agent IPC schemas", () => {
+  it("preserves structured user message attachments on timeline IPC", () => {
+    expect(timelineItemSchema.parse({
+      id: "conv-1:history:0",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      kind: "message",
+      role: "user",
+      content: "请分析",
+      attachments: [{
+        kind: "image",
+        id: "image-1",
+        name: "screen.png",
+        mimeType: "image/png",
+        byteSize: 3,
+        url: "synapse-agent-artifact://local/project/conv/image-1.png",
+      }, {
+        kind: "path",
+        path: "/tmp/report.pdf",
+        entryType: "file",
+        name: "report.pdf",
+        byteSize: 42,
+      }],
+    })).toMatchObject({
+      content: "请分析",
+      attachments: [
+        expect.objectContaining({ kind: "image", name: "screen.png" }),
+        expect.objectContaining({ kind: "path", byteSize: 42 }),
+      ],
+    })
+  })
+
   it("accepts session-scoped directory permission responses", () => {
     expect(messageMethods.respondPermission.request.parse({
       projectId: "project-1",

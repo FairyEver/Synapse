@@ -59,6 +59,7 @@ const configSchema = z.object({
   agent: z.object({
     defaultPermissionMode: permissionModeSchema,
     defaultProviderModel: providerModelSchema,
+    recentSlashSkills: z.array(z.string()),
   }),
 })
 

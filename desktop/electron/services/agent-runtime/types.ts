@@ -17,6 +17,7 @@ export type AgentPathAttachment = {
   readonly path: string
   readonly entryType: "file" | "directory"
   readonly name?: string
+  readonly size?: number
 }
 
 export type AgentAttachment =
@@ -44,6 +45,10 @@ export interface AgentImageArtifact {
   readonly sha256?: string
 }
 
+export interface AgentUserMessageImageArtifact extends AgentImageArtifact {
+  readonly name?: string
+}
+
 export interface AgentMessage {
   readonly projectId: string
   readonly sessionKey: string
@@ -60,6 +65,7 @@ export interface AgentMessage {
   readonly mentions?: readonly string[]
   readonly createdAt?: string
   readonly content: string
+  readonly displayContent?: string
   readonly attachments?: readonly AgentAttachment[]
   readonly replyCtx?: unknown
   readonly modeOverride?: string

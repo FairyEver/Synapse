@@ -17,8 +17,11 @@ type SanitizedGlobalPatchForLog = Omit<
   quickInputCount?: number
 }
 
-export type SanitizedConfigPatchForLog = Omit<SynapseConfigPatch, "global"> & {
+export type SanitizedConfigPatchForLog = Omit<SynapseConfigPatch, "global" | "agent"> & {
   global?: SanitizedGlobalPatchForLog
+  agent?: Omit<NonNullable<SynapseConfigPatch["agent"]>, "recentSlashSkills"> & {
+    recentSlashSkillCount?: number
+  }
 }
 
 function sanitizeVariableForLog(variable: SynapseVariable): SanitizedVariableForLog {
@@ -37,25 +40,31 @@ function summarizeQuickInputForLog(quickInput: SynapseQuickInput): SanitizedQuic
 }
 
 export function sanitizeConfigPatchForLog(patch: SynapseConfigPatch): SanitizedConfigPatchForLog {
-  if (!patch.global) {
-    const { global: _global, ...patchRest } = patch
-    return patchRest
+  const { global: globalPatch, agent: agentPatch, ...patchRest } = patch
+  const sanitized: SanitizedConfigPatchForLog = { ...patchRest }
+
+  if (globalPatch) {
+    const { variables, quickInputs, ...globalRest } = globalPatch
+    const global: SanitizedGlobalPatchForLog = { ...globalRest }
+
+    if (variables) {
+      global.variables = variables.map(sanitizeVariableForLog)
+    }
+
+    if (quickInputs) {
+      global.quickInputs = quickInputs.map(summarizeQuickInputForLog)
+      global.quickInputCount = quickInputs.length
+    }
+    sanitized.global = global
   }
 
-  const { variables, quickInputs, ...globalRest } = patch.global
-  const global: SanitizedGlobalPatchForLog = { ...globalRest }
-
-  if (variables) {
-    global.variables = variables.map(sanitizeVariableForLog)
+  if (agentPatch) {
+    const { recentSlashSkills, ...agentRest } = agentPatch
+    sanitized.agent = {
+      ...agentRest,
+      ...(recentSlashSkills ? { recentSlashSkillCount: recentSlashSkills.length } : {}),
+    }
   }
 
-  if (quickInputs) {
-    global.quickInputs = quickInputs.map(summarizeQuickInputForLog)
-    global.quickInputCount = quickInputs.length
-  }
-
-  return {
-    ...patch,
-    global,
-  }
+  return sanitized
 }

@@ -192,10 +192,23 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         logger: ctx.logger,
       })
       const isManagedKnowledgeBase = ctx.projectMeta.managedKnowledgeBase === true
+      const conversations = ctx.dataRepo.namespace<ConversationEntryV1>("conversations")
       const agentArtifactStore = new AgentArtifactStore({
         rootDirectory: path.join(app.getPath("userData"), "agent-artifacts"),
         artifacts: ctx.dataRepo.namespace<AgentArtifactEntryV1>("agent.artifacts"),
+        logger: ctx.logger,
       })
+      try {
+        await agentArtifactStore.retryOrphanCleanup(
+          new Set((await conversations.list()).map((conversation) => conversation.id)),
+        )
+      } catch (error) {
+        ctx.logger.warn("Agent orphan artifact cleanup retry failed.", {
+          boundary: "agent-runtime.artifact.orphan-retry",
+          projectId: ctx.projectId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      }
       const hasManagedKnowledgeBaseWorkspace =
         isManagedKnowledgeBase
         && typeof ctx.projectMeta.workspacePath === "string"
@@ -214,7 +227,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workDir: ctx.projectMeta.workspacePath,
         managedKnowledgeBase: isManagedKnowledgeBase,
         validateWorkspacePath: validateWorkspaceDirectory,
-        conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
+        conversations,
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: ctx.dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
