@@ -76,7 +76,7 @@ describe('Drive Markdown projection', () => {
   })
 
   it('keeps block identity restoration bounded for long flat documents', async () => {
-    const paragraphCount = 4_000
+    const paragraphCount = 8_000
     const previousSource = Array.from({ length: paragraphCount }, (_, index) => (
       `## Heading ${index}\n\nParagraph ${index}.`
     )).join('\n\n')
@@ -90,7 +90,7 @@ describe('Drive Markdown projection', () => {
     const retainedCount = next.projection.blocks.filter((block) => previousIds.has(block.blockId)).length
 
     expect(retainedCount).toBe(previous.projection.blocks.length)
-    expect(elapsedMs).toBeLessThan(3_000)
+    expect(elapsedMs).toBeLessThan(6_000)
   }, 15_000)
 
   it('uses Unicode code point offsets for CJK, emoji and combining text', async () => {
