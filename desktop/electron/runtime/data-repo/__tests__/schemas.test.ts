@@ -624,6 +624,32 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     ).toBe(true)
     expect(
       conversationsSchema.validate({
+        id: "conv-router-enabled",
+        schemaVersion: 1,
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        agentConfig: { experimentalSynapseToolRouterEnabled: true },
+        history: [],
+        active: true,
+        createdAt: "2026-08-25T00:00:00.000Z",
+        updatedAt: "2026-08-25T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(
+      conversationsSchema.validate({
+        id: "conv-router-invalid",
+        schemaVersion: 1,
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        agentConfig: { experimentalSynapseToolRouterEnabled: "true" },
+        history: [],
+        active: true,
+        createdAt: "2026-08-25T00:00:00.000Z",
+        updatedAt: "2026-08-25T00:00:00.000Z",
+      }),
+    ).toBe(false)
+    expect(
+      conversationsSchema.validate({
         id: "conv-1",
         schemaVersion: 1,
         projectId: "project-1",
@@ -683,6 +709,27 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         createdAt: "2026-07-03T00:00:00.000Z",
       }),
     ).toBe(false)
+    expect(agentArtifactsSchema.currentVersion).toBe(2)
+    expect(
+      agentArtifactsSchema.validate({
+        id: "attachment-1",
+        schemaVersion: 2,
+        projectId: "project-1",
+        draftScopeId: "draft-1",
+        lifecycle: "staged",
+        kind: "image",
+        originalName: "screen.png",
+        mimeType: "image/png",
+        byteSize: 68,
+        sha256: "b".repeat(64),
+        storagePath: "/tmp/synapse/agent-artifacts/staged/attachment-1/original.png",
+        previewStoragePath: "/tmp/synapse/agent-artifacts/staged/attachment-1/preview.png",
+        thumbnailStoragePath: "/tmp/synapse/agent-artifacts/staged/attachment-1/thumbnail.png",
+        createdAt: "2026-08-25T00:00:00.000Z",
+        updatedAt: "2026-08-25T00:00:00.000Z",
+        expiresAt: "2026-08-26T00:00:00.000Z",
+      }),
+    ).toBe(true)
     expect(
       auditSchema.validate({
         id: "evt-1",

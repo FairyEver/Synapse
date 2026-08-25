@@ -97,6 +97,7 @@ describe("AgentMessageEvent", () => {
     [4, "2"],
     [5, "3"],
     [8, "3"],
+    [9, "3"],
   ])("renders %i user images with the expected grid columns", (count, columns) => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent
@@ -119,6 +120,44 @@ describe("AgentMessageEvent", () => {
 
     expect(html).toContain(`data-image-count="${count}"`)
     expect(html).toContain(`data-grid-columns="${columns}"`)
+  })
+
+  it("renders a compact nine-image preview for 50 message images and keeps all images in the lightbox", async () => {
+    const item = {
+      ...baseEntry,
+      role: "user" as const,
+      attachments: Array.from({ length: 50 }, (_, index) => ({
+        kind: "image" as const,
+        id: `image-${index}`,
+        name: `image-${index}.png`,
+        mimeType: "image/png" as const,
+        byteSize: 3,
+        url: `synapse-agent-artifact://local/project/conversation/image-${index}.png`,
+      })),
+    }
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={item}
+        profile={mockProfile}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain('data-image-count="50"')
+    expect(html.match(/<img/g)).toHaveLength(9)
+    expect(html).toContain("max-w-sm")
+    expect(html).toContain("+41")
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<AgentMessageEvent item={item} profile={mockProfile} onOpenReference={vi.fn()} />)
+    })
+    const previewButtons = container.querySelectorAll<HTMLButtonElement>('button[aria-label^="预览"]')
+    await act(async () => previewButtons[8]?.click())
+    expect(document.querySelector("[data-image-lightbox]")?.textContent).toContain("9 / 50")
   })
 
   it("renders attachment-only messages without placeholder text or copy action", () => {

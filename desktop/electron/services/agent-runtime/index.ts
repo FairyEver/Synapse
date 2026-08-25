@@ -1,5 +1,5 @@
 import type {
-  AgentArtifactEntryV1,
+  AgentArtifactEntry,
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
   AgentEventEntryV1,
@@ -8,7 +8,7 @@ import type {
   DataRepository,
   OutboxEntryV1,
 } from "../../runtime/data-repo"
-import { app } from "electron"
+import { app, nativeImage, type NativeImage } from "electron"
 import path from "node:path"
 import type { ProjectScopedService } from "../../runtime/project-container"
 import {
@@ -30,6 +30,19 @@ import {
 } from "../agent-conversation-window-service"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { AgentArtifactStore } from "./artifact-store"
+import {
+  AttachmentStagingService,
+  type AgentAttachmentMetadataEntry,
+  type AgentImageDerivativeResult,
+} from "./attachment-staging-service"
+import type { AgentAttachmentImageMimeType } from "../../../src/types/agent-attachment"
+import type { SynapseConfig } from "../../../src/types/config"
+import {
+  MCP_TOOL_ACTIONS,
+  getMcpToolDomainId,
+} from "../../../synapse-capabilities/shared/registry"
+import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
+import type { SynapseActionRouter } from "../../capabilities/action-router"
 import type { AgentPersonaService } from "../../../app-capabilities/agent-personas/main/service"
 import { CustomCommandRegistry } from "./command-registry"
 import { createAgentPersonaRuntimeResolver } from "./persona-runtime"
@@ -108,6 +121,10 @@ export {
   AgentArtifactStore,
 } from "./artifact-store"
 export {
+  AttachmentStagingService,
+  type AgentAttachmentMetadataEntry,
+} from "./attachment-staging-service"
+export {
   SkillRegistry,
   buildSkillInvocationPrompt,
   type AgentSkill,
@@ -125,6 +142,7 @@ export {
 export {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentAttachment,
+  type AgentContextUsage,
   type AgentEvent,
   type AgentLiveSession,
   type AgentMessage,
@@ -195,8 +213,23 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       const conversations = ctx.dataRepo.namespace<ConversationEntryV1>("conversations")
       const agentArtifactStore = new AgentArtifactStore({
         rootDirectory: path.join(app.getPath("userData"), "agent-artifacts"),
-        artifacts: ctx.dataRepo.namespace<AgentArtifactEntryV1>("agent.artifacts"),
+        artifacts: ctx.dataRepo.namespace<AgentArtifactEntry>("agent.artifacts"),
         logger: ctx.logger,
+      })
+      const attachmentStagingService = new AttachmentStagingService({
+        rootDirectory: path.join(app.getPath("userData"), "agent-artifacts"),
+        metadata: ctx.dataRepo.namespace<AgentAttachmentMetadataEntry>("agent.artifacts"),
+        permissionGuard,
+        auditSink,
+        logger: ctx.logger,
+        createImageDerivatives: createAgentImageDerivatives,
+      })
+      void attachmentStagingService.cleanupExpired().catch((error) => {
+        ctx.logger.warn("Agent staged attachment cleanup failed.", {
+          boundary: "agent-runtime.attachment-staging.cleanup",
+          projectId: ctx.projectId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
       })
       try {
         await agentArtifactStore.retryOrphanCleanup(
@@ -232,7 +265,45 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: ctx.dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
         agentArtifactStore,
+        attachmentStagingService,
         getUsagePriceRules: () => listModelPriceRules(getUsageAnalysisDb()),
+        loadExperimentalSynapseToolRouterEnabled: async () => (
+          await ctx.globalRegistry.get<{ load(): Promise<SynapseConfig> }>("core.config").load()
+        ).agent.experimentalSynapseToolRouterEnabled,
+        executeSynapseTool: async (toolName, args, context) => {
+          const action = MCP_TOOL_ACTIONS[toolName]
+          const domain = getMcpToolDomainId(toolName)
+          const startedAt = Date.now()
+          if (!action || !domain) throw new Error(`Unknown Synapse MCP tool: ${toolName}`)
+          try {
+            const result = await ctx.globalRegistry
+              .get<{ readonly actionRouter: SynapseActionRouter }>("core.database")
+              .actionRouter.dispatch(action, args, {
+                source: "mcp-http",
+                actor: mcpClientActorForSource("mcp-http"),
+                clientId: "synapse-agent-tool-router",
+                controllerInstanceId: `agent:${context.conversationId}`,
+                abortSignal: context.abortSignal,
+              })
+            ctx.logger.info("Synapse tool router invocation completed.", {
+              boundary: "agent-runtime.synapse-tool-router.invoke",
+              toolName,
+              domain,
+              status: result.ok ? "success" : "failed",
+              durationMs: Date.now() - startedAt,
+            })
+            return result
+          } catch (error) {
+            ctx.logger.warn("Synapse tool router invocation failed.", {
+              boundary: "agent-runtime.synapse-tool-router.invoke",
+              toolName,
+              domain,
+              status: "error",
+              durationMs: Date.now() - startedAt,
+            })
+            throw error
+          }
+        },
         providerService,
         agentType: "claude-code",
         eventBus: ctx.eventBus,
@@ -299,4 +370,46 @@ function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T 
     }
     return undefined
   }
+}
+
+const AGENT_IMAGE_PREVIEW_MAX_SIDE = 1568
+const AGENT_IMAGE_THUMBNAIL_MAX_SIDE = 256
+
+async function createAgentImageDerivatives(
+  bytes: Uint8Array,
+  mimeType: AgentAttachmentImageMimeType,
+): Promise<AgentImageDerivativeResult> {
+  const source = nativeImage.createFromBuffer(Buffer.from(bytes))
+  if (source.isEmpty()) throw new Error("无法解码图片附件。")
+  const sourceSize = source.getSize()
+  if (sourceSize.width <= 0 || sourceSize.height <= 0) throw new Error("无法读取图片尺寸。")
+  const preview = resizeImageToFit(source, AGENT_IMAGE_PREVIEW_MAX_SIDE)
+  const thumbnail = resizeImageToFit(source, AGENT_IMAGE_THUMBNAIL_MAX_SIDE)
+  const previewSize = preview.getSize()
+  const previewMimeType: AgentAttachmentImageMimeType = mimeType === "image/jpeg"
+    ? "image/jpeg"
+    : "image/png"
+  return {
+    preview: previewMimeType === "image/jpeg"
+      ? new Uint8Array(preview.toJPEG(85))
+      : new Uint8Array(preview.toPNG()),
+    thumbnail: new Uint8Array(thumbnail.toPNG()),
+    previewMimeType,
+    thumbnailMimeType: "image/png",
+    width: sourceSize.width,
+    height: sourceSize.height,
+    previewWidth: previewSize.width,
+    previewHeight: previewSize.height,
+  }
+}
+
+function resizeImageToFit(image: NativeImage, maxSide: number): NativeImage {
+  const size = image.getSize()
+  const scale = Math.min(1, maxSide / Math.max(size.width, size.height))
+  if (scale === 1) return image
+  return image.resize({
+    width: Math.max(1, Math.round(size.width * scale)),
+    height: Math.max(1, Math.round(size.height * scale)),
+    quality: "best",
+  })
 }

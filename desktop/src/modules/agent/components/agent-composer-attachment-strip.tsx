@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { formatBytes } from "@synapse/shared"
 
 import { Button } from "@/components/ui/button"
 import { ImageLightbox, type ImageLightboxPreview } from "@/components/image-lightbox"
@@ -28,7 +29,15 @@ function AgentComposerAttachmentStrip({
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [preview, setPreview] = useState<ImageLightboxPreview | null>(null)
-  const imageUrls = useAttachmentImageUrls(attachments)
+  const imageCount = attachments.filter((attachment) => attachment.kind === "image").length
+  const totalBytes = attachments.reduce((total, attachment) => total + attachment.byteSize, 0)
+  const imageBytes = attachments.reduce(
+    (total, attachment) => total + (attachment.kind === "image" ? attachment.byteSize : 0),
+    0,
+  )
+  const summary = imageCount > 0
+    ? `${imageCount} 张图片 · ${formatBytes(imageBytes)}`
+    : `${attachments.length} 个附件 · ${formatBytes(totalBytes)}`
 
   const updateScrollControls = useCallback(() => {
     const viewport = viewportRef.current
@@ -66,17 +75,15 @@ function AgentComposerAttachmentStrip({
   ) => {
     const images = attachments.flatMap((candidate, index) => {
       if (candidate.kind !== "image") return []
-      const src = imageUrls.get(candidate.id)
-      if (!src) return []
       return [{
-        attachmentId: candidate.id,
+        attachmentId: candidate.attachmentId,
         image: {
           alt: attachmentDisplayName(attachments, candidate, index),
-          src,
+          src: candidate.previewUrl,
         },
       }]
     })
-    const initialIndex = images.findIndex((item) => item.attachmentId === attachment.id)
+    const initialIndex = images.findIndex((item) => item.attachmentId === attachment.attachmentId)
     if (initialIndex < 0) return
     setPreview({
       images: images.map((item) => item.image),
@@ -92,6 +99,7 @@ function AgentComposerAttachmentStrip({
         role="list"
         aria-label="附件"
       >
+        <p className="mb-1 px-0.5 text-xs tabular-nums text-muted-foreground">{summary}</p>
         <div
           ref={viewportRef}
           className="agent-composer-attachment-strip__viewport min-w-0 overflow-x-hidden"
@@ -100,10 +108,10 @@ function AgentComposerAttachmentStrip({
           <div ref={contentRef} className="flex w-max min-w-full flex-nowrap gap-2">
             {attachments.map((attachment, index) => {
               const displayName = attachmentDisplayName(attachments, attachment, index)
-              const title = attachment.kind === "path" ? attachment.path : attachment.name ?? displayName
+              const title = attachment.kind === "directory" ? attachment.path : attachment.name
               return (
                 <div
-                  key={attachment.id}
+                  key={attachment.attachmentId}
                   className={cn(
                     "group relative flex h-14 shrink-0 rounded-lg bg-muted/60 text-left transition-colors duration-150 ease-out hover:bg-muted focus-within:bg-muted",
                     attachment.kind === "image"
@@ -116,7 +124,7 @@ function AgentComposerAttachmentStrip({
                   {attachment.kind === "image" ? (
                     <AgentComposerImageThumbnail
                       displayName={displayName}
-                      imageUrl={imageUrls.get(attachment.id)}
+                      imageUrl={attachment.thumbnailUrl}
                       onOpen={(trigger) => openImagePreview(attachment, trigger)}
                     />
                   ) : null}
@@ -136,7 +144,7 @@ function AgentComposerAttachmentStrip({
                     )}
                     aria-label={`删除附件 ${displayName}`}
                     data-track="agent-attachment-remove"
-                    onClick={() => onRemove(attachment.id)}
+                    onClick={() => onRemove(attachment.attachmentId)}
                   >
                     <X />
                   </Button>
@@ -189,33 +197,6 @@ function AgentComposerAttachmentStrip({
       ) : null}
     </>
   )
-}
-
-function useAttachmentImageUrls(
-  attachments: readonly AgentDraftAttachment[],
-): ReadonlyMap<string, string> {
-  const [imageUrls, setImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
-
-  useEffect(() => {
-    if (typeof URL.createObjectURL !== "function") {
-      setImageUrls(new Map())
-      return undefined
-    }
-    const next = new Map<string, string>()
-    for (const attachment of attachments) {
-      if (attachment.kind !== "image") continue
-      next.set(
-        attachment.id,
-        URL.createObjectURL(new Blob([attachment.bytes], { type: attachment.mimeType })),
-      )
-    }
-    setImageUrls(next)
-    return () => {
-      for (const url of next.values()) URL.revokeObjectURL(url)
-    }
-  }, [attachments])
-
-  return imageUrls
 }
 
 export { AgentComposerAttachmentStrip }

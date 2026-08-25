@@ -21,6 +21,7 @@ import type {
   SynapseAccountStateChangedEvent,
 } from "./account"
 import type { SynapseAppUpdateOpenRequest, SynapseAppUpdateState } from "./update"
+import type { AgentAttachmentRef } from "./agent-attachment"
 import type {
   GenerateDocxInput,
   GenerateDocxResult,
@@ -753,43 +754,15 @@ export type SynapseProviderPackageExportResult = {
   readonly filePath: string
 }
 
-export type SynapseAgentBridgeImageAttachment = {
-  readonly kind: "image"
-  readonly mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"
-  readonly data: ArrayBuffer
-  readonly name?: string
-  readonly size: number
+export type SynapseAgentBridgeAttachment = {
+  readonly attachmentId: string
+  readonly order: number
 }
 
-export type SynapseAgentBridgePathAttachment = {
-  readonly kind: "path"
-  readonly path: string
-  readonly entryType: "file" | "directory"
-  readonly name?: string
-  readonly size?: number
+export type SynapseAgentAttachmentCandidate = {
+  readonly sourceIndex: number
+  readonly ref: AgentAttachmentRef
 }
-
-export type SynapseAgentBridgeAttachment =
-  | SynapseAgentBridgeImageAttachment
-  | SynapseAgentBridgePathAttachment
-
-export type SynapseAgentAttachmentCandidate =
-  | {
-      readonly kind: "image"
-      readonly sourceIndex: number
-      readonly mimeType: SynapseAgentBridgeImageAttachment["mimeType"]
-      readonly data: ArrayBuffer
-      readonly name: string
-      readonly size: number
-    }
-  | {
-      readonly kind: "path"
-      readonly sourceIndex: number
-      readonly path: string
-      readonly entryType: "file" | "directory"
-      readonly name: string
-      readonly size?: number
-    }
 
 export type SynapseAgentAttachmentSelectionResult = {
   readonly attachments: readonly SynapseAgentAttachmentCandidate[]
@@ -1749,17 +1722,24 @@ export type SynapseBridge = {
         conversationId?: string
         content: string
         displayContent?: string
+        draftScopeId?: string
         attachments?: readonly SynapseAgentBridgeAttachment[]
         clientSubmittedAt?: string
         providerId?: string
       },
     ) => Promise<SynapseAgentSendResult>
     chooseAttachments: (
-      args: { kind: "file" | "directory" },
+      args: { projectId: string; draftScopeId: string; kind: "file" | "directory" },
     ) => Promise<SynapseAgentAttachmentSelectionResult>
     resolveAttachmentPaths: (
-      args: { paths: readonly string[] },
+      args: { projectId: string; draftScopeId: string; paths: readonly string[] },
     ) => Promise<SynapseAgentAttachmentSelectionResult>
+    stageClipboardImage: (
+      args: { projectId: string; draftScopeId: string; name?: string },
+    ) => Promise<SynapseAgentAttachmentSelectionResult>
+    releaseAttachments: (
+      args: { projectId: string; draftScopeId: string; attachmentIds: readonly string[] },
+    ) => Promise<{ releasedCount: number }>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
     respondPermission: (
       args: {

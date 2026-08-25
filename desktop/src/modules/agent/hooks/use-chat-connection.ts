@@ -22,7 +22,6 @@ import {
   shouldApplyTimelineSnapshot,
 } from "../live-sync"
 import type { AgentDraftAttachment } from "../attachments"
-import { formatDraftAttachmentsForMessage } from "../attachments"
 import type { ChatAction, ChatState } from "./use-chat-reducer"
 
 const logger = createRendererLogger("agent")
@@ -111,7 +110,6 @@ function useChatConnection(
   const respondingPermissionKeysRef = useRef(new Set<string>())
   const timelineLoadRequestIdRef = useRef(0)
   const olderTimelineRequestRef = useRef<Promise<void> | null>(null)
-  const optimisticBlobUrlsRef = useRef(new Map<string, readonly string[]>())
   const timelinePaginationRef = useRef({
     startIndex: state.timelineStartIndex,
     total: state.timelineTotal,
@@ -123,23 +121,10 @@ function useChatConnection(
     hasMore: state.timelineHasMore,
   }
 
-  const releaseOptimisticBlobUrls = useCallback((messageId?: string) => {
-    const entries = messageId
-      ? [[messageId, optimisticBlobUrlsRef.current.get(messageId) ?? []] as const]
-      : [...optimisticBlobUrlsRef.current.entries()]
-    for (const [id, urls] of entries) {
-      for (const url of urls) URL.revokeObjectURL(url)
-      optimisticBlobUrlsRef.current.delete(id)
-    }
-  }, [])
-
-  useEffect(() => () => releaseOptimisticBlobUrls(), [releaseOptimisticBlobUrls])
-
   const replaceTimeline = useCallback((entries: SynapseAgentTimelineItem[]) => {
-    releaseOptimisticBlobUrls()
     timelineVersionRef.current += 1
     dispatch({ type: "SET_TIMELINE", timeline: entries })
-  }, [dispatch, releaseOptimisticBlobUrls, timelineVersionRef])
+  }, [dispatch, timelineVersionRef])
 
   const updateTimeline = useCallback((
     updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[],
@@ -149,7 +134,6 @@ function useChatConnection(
   }, [dispatch, timelineVersionRef])
 
   const clearTimeline = useCallback(() => {
-    releaseOptimisticBlobUrls()
     timelineLoadRequestIdRef.current += 1
     timelinePaginationRef.current = { startIndex: 0, total: 0, hasMore: false }
     timelineVersionRef.current += 1
@@ -160,7 +144,7 @@ function useChatConnection(
       total: 0,
       hasMore: false,
     })
-  }, [dispatch, releaseOptimisticBlobUrls, timelineVersionRef])
+  }, [dispatch, timelineVersionRef])
 
   const getDefaultProjectId = useCallback(() => (
     selectedProjectIdRef.current
@@ -208,7 +192,6 @@ function useChatConnection(
       return
     }
     const dbEntries = filterPersistedTimelineEntries(result.entries)
-    releaseOptimisticBlobUrls()
     timelineVersionRef.current += 1
     if (mode === "replace") {
       timelinePaginationRef.current = {
@@ -238,7 +221,6 @@ function useChatConnection(
     })
   }, [
     dispatch,
-    releaseOptimisticBlobUrls,
     selectedConversationIdRef,
     selectedProjectIdRef,
     selectedSessionKeyRef,
@@ -594,6 +576,7 @@ function useChatConnection(
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     dispatch({ type: "SET_ERROR", error: null })
+    dispatch({ type: "SET_CONTEXT_USAGE", contextUsage: undefined })
     try {
       const switched = await bridge.agent.switchSession({
         projectId: target.projectId,
@@ -671,8 +654,7 @@ function useChatConnection(
   ) => {
     const attachments = options.attachments ?? []
     const displayContent = content.trim()
-    const readableContent = formatDraftAttachmentsForMessage(content, attachments).trim()
-    if (!readableContent) return false
+    if (!displayContent && attachments.length === 0) return false
     const selected = target
       ? findSessionByRef(state.sessions, target.projectId, target.conversationId)
       : findSessionByRef(
@@ -704,15 +686,6 @@ function useChatConnection(
         optimisticMessageAttachments(attachments),
       ) as SynapseAgentMessageTimelineItem
       optimisticItem = nextOptimisticItem
-      optimisticBlobUrlsRef.current.set(
-        nextOptimisticItem.id,
-        nextOptimisticItem.attachments
-          ?.flatMap((attachment) => (
-            attachment.kind === "image" && attachment.url.startsWith("blob:")
-              ? [attachment.url]
-              : []
-          )) ?? [],
-      )
       updateTimeline((current) => [...current, nextOptimisticItem])
     }
     if (conversationId) {
@@ -722,15 +695,16 @@ function useChatConnection(
     dispatch({ type: "SET_ERROR", error: null })
     try {
       const bridge = requireSynapseBridge()
-      await bridge.agent.send({
+      const result = await bridge.agent.send({
         projectId,
         sessionKey,
         conversationId,
-        content: readableContent,
+        content: displayContent,
         displayContent,
         attachments: serializeDraftAttachments(attachments),
         clientSubmittedAt: now,
       })
+      if (result?.error) throw new Error(result.error)
       // NOTE: send() resolves when the message is enqueued, NOT when the turn
       // completes.  REMOVE_SENDING_CONVERSATION is handled by the terminal
       // phase event handler in use-chat-events (cancelled / completed / failed)
@@ -741,14 +715,13 @@ function useChatConnection(
         projectId,
         conversationId,
         sessionKey,
-        messageLength: readableContent.length,
+        messageLength: displayContent.length,
         boundary: "renderer.agent.send",
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
       dispatch({ type: "SET_ERROR", error: sendFailureDisplayMessage(rawError) })
       if (didAppendOptimisticItem && optimisticItem) {
-        releaseOptimisticBlobUrls(optimisticItem.id)
         updateTimeline((current) => current.filter((item) => item.id !== optimisticItem.id))
       }
       // Only remove on enqueue failure — the turn never started, so no phase
@@ -760,7 +733,7 @@ function useChatConnection(
       return false
     }
     return true
-  }, [dispatch, getDefaultProjectId, releaseOptimisticBlobUrls, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, state.sessions, state.timeline.length, updateTimeline])
+  }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, state.sessions, state.timeline.length, updateTimeline])
 
   const deleteSession = useCallback(async (target: SynapseAgentSessionSummary) => {
     const requestId = selectRequestIdRef.current + 1
@@ -1255,24 +1228,10 @@ function serializeDraftAttachments(
   attachments: readonly AgentDraftAttachment[],
 ): SynapseAgentBridgeAttachment[] | undefined {
   if (attachments.length === 0) return undefined
-  return attachments.map((attachment) => {
-    if (attachment.kind === "image") {
-      return {
-        kind: "image",
-        mimeType: attachment.mimeType,
-        data: attachment.bytes,
-        name: attachment.name,
-        size: attachment.size,
-      }
-    }
-    return {
-      kind: "path",
-      path: attachment.path,
-      entryType: attachment.entryType,
-      name: attachment.name,
-      ...(attachment.size !== undefined ? { size: attachment.size } : {}),
-    }
-  })
+  return attachments.map((attachment, order) => ({
+    attachmentId: attachment.attachmentId,
+    order,
+  }))
 }
 
 function optimisticMessageAttachments(
@@ -1280,22 +1239,22 @@ function optimisticMessageAttachments(
 ): readonly SynapseAgentMessageAttachment[] | undefined {
   if (attachments.length === 0) return undefined
   return attachments.map((attachment) => {
-    if (attachment.kind === "path") {
+    if (attachment.kind !== "image") {
       return {
         kind: "path",
-        path: attachment.path,
-        entryType: attachment.entryType,
+        path: attachment.kind === "directory" ? attachment.path : attachment.name,
+        entryType: attachment.kind,
         name: attachment.name,
-        ...(attachment.size !== undefined ? { byteSize: attachment.size } : {}),
+        byteSize: attachment.byteSize,
       }
     }
     return {
       kind: "image",
-      id: attachment.id,
-      ...(attachment.name ? { name: attachment.name } : {}),
+      id: attachment.attachmentId,
+      name: attachment.name,
       mimeType: attachment.mimeType,
-      byteSize: attachment.size,
-      url: URL.createObjectURL(new Blob([attachment.bytes], { type: attachment.mimeType })),
+      byteSize: attachment.byteSize,
+      url: attachment.previewUrl,
     }
   })
 }

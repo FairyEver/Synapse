@@ -49,7 +49,6 @@ export interface AgentCommandRouterDeps {
     args: readonly string[],
     message: AgentMessage,
   ): Promise<string>
-  compressSession?(message: AgentMessage, conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult>
   resetSession(message: AgentMessage): Promise<ConversationEntryV1 | null>
   setPermissionMode?(
     message: AgentMessage,
@@ -150,8 +149,8 @@ export class AgentCommandRouter {
         return this.handleNew(message, conversation)
       case "/show":
         return this.handleShow(message, conversation, parsed.args)
-      case "/compress":
-        return this.handleCompress(message, conversation)
+      case "/compact":
+        return { kind: "nativeSlash", name: "compact" }
       case "/commands":
         return this.handleCommands(message, conversation, parsed.args)
       case "/skills":
@@ -465,16 +464,6 @@ export class AgentCommandRouter {
         true,
       )
     }
-  }
-
-  private async handleCompress(
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-  ): Promise<AgentRuntimeTurnResult> {
-    if (!this.deps.compressSession) {
-      return commandResult(conversation.id, "/compress is unavailable.", true)
-    }
-    return this.deps.compressSession(message, conversation)
   }
 
   private async listCommandsForMessage(

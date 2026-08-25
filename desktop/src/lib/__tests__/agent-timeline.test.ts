@@ -481,6 +481,38 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("keeps the tool-router fallback visible before and after history restore", () => {
+    const live = agentEventToTimelineItem({
+      type: "sdkEvent",
+      sdkType: "synapseToolRouterFallback",
+      payload: { reason: "discovery-failed" },
+      sdkSessionId: "sdk-router",
+    }, {
+      id: "live:router-fallback",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      agentType: "claude",
+    })
+    const restored = historyRecordToTimelineItem("session-1", {
+      role: "system",
+      content: "Synapse MCP 工具按需加载不可用，本次对话已回退完整工具。",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      metadata: {
+        agentEventType: "sdkEvent",
+        sdkType: "synapseToolRouterFallback",
+        sdkSessionId: "sdk-router",
+      },
+    }, 1, "claude")
+
+    for (const item of [live, restored]) {
+      expect(item).toMatchObject({
+        kind: "sdkEvent",
+        sdkType: "synapseToolRouterFallback",
+        label: "工具按需加载已回退",
+        summary: "本次对话继续使用完整 Synapse MCP 工具。",
+      })
+    }
+  })
+
   it("falls back to legacy message items when metadata is missing", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "tool",
@@ -544,6 +576,47 @@ describe("agent timeline conversion", () => {
         estimatedCost: true,
       },
     }))
+  })
+
+  it("restores persisted context usage metadata", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "assistant",
+      content: "done",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      metadata: {
+        contextUsage: {
+          usedTokens: 58_000,
+          contextWindowTokens: 200_000,
+          model: "claude-sonnet-4-5",
+          contextWindowConfigurationSource: "catalog",
+          modelContext: {
+            providerScopeId: "anthropic-official",
+            modelId: "claude-sonnet-5",
+            contextWindowTokens: 1_000_000,
+            maxOutputTokens: 128_000,
+            sourceLabel: "Anthropic",
+            sourceUrl: "https://platform.claude.com/docs/en/about-claude/models/overview",
+            verifiedAt: "2026-08-25T00:00:00.000Z",
+          },
+        },
+      },
+    }, 5, "claude")).toMatchObject({
+      kind: "message",
+      metadata: {
+        contextUsage: {
+          usedTokens: 58_000,
+          contextWindowTokens: 200_000,
+          model: "claude-sonnet-4-5",
+          contextWindowConfigurationSource: "catalog",
+          modelContext: {
+            providerScopeId: "anthropic-official",
+            modelId: "claude-sonnet-5",
+            contextWindowTokens: 1_000_000,
+            maxOutputTokens: 128_000,
+          },
+        },
+      },
+    })
   })
 
   it("merges assistant text deltas but keeps tool events separate", () => {

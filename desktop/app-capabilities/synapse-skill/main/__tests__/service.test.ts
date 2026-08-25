@@ -240,6 +240,9 @@ describe("SynapseSkillService", () => {
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("workflow/index.md")
     expect(detail.content).toContain("static site publishing or republishing")
+    expect(detail.content).toContain("mcp__synapse-tool-router__search")
+    expect(detail.content).toContain("mcp__synapse-tool-router__invoke")
+    expect(detail.content).toContain("exact original `app_*` name")
     expect(attachmentNames).toEqual([
       "app/api-reference.md",
       "app/index.md",

@@ -1,235 +1,176 @@
-# 任务计划：Agent 大批量图片与附件稳定处理
+# Agent 图片附件路径化重构
 
 ## 目标
 
-让 Synapse Agent 对话稳定支持单轮选择、粘贴或拖入最多 50 张普通图片，并正确处理文件与文件夹；图片不再以完整字节贯穿 Renderer、IPC、历史和日志，而是在受控存储中暂存，由运行时根据 Provider 能力以内联、总览图或按需读取方式交给模型。
+所有 Provider 使用同一条“受控原图路径 + Read”链路。删除图片 Base64、派发计划、隐藏批次 query 和摘要回灌；不维护模型白名单或能力判断。
 
-## 当前阶段
+## 当前状态
 
-阶段 1：契约冻结与基线测试（待执行）
+- 当前阶段：22 / 22
+- 状态：complete
+- 最后更新：2026-08-25
 
-## 产品成功标准
+## 成功标准
 
-- 单轮允许选择最多 50 张图片；图片数量限制和字节配额分别校验。
-- 选择、粘贴、拖拽和系统文件选择器使用同一套附件规则。
-- Renderer 草稿、发送 IPC、会话历史、导出和日志均不保存图片原始字节或 Base64。
-- 发送前完成 MIME、大小、Provider 视觉能力和请求体预算预检，不再出现可预判的 0 秒发送失败。
-- 小批量图片保持低延迟；大批量图片不会一次性进入模型请求，而是通过总览与按需读取完成分析。
-- 用户要求检查全部图片时，Agent 能分批读取并核对全部附件，而不是只分析前几张。
-- 重启应用后附件预览、继续对话、导出隔离和会话删除均正常。
-- 单个文件不会导致 Agent 获得其整个父目录权限；只有用户明确选择的文件夹才授权该精确目录。
-- Anthropic 官方端点、百炼兼容端点和自定义 Anthropic-compatible 端点均有明确能力画像、兼容行为和失败提示。
-- 新链路可以通过功能开关退回现有最多 8 张的直接内联模式。
+- Renderer 只发送用户原文和有序 `attachmentId`。
+- 主进程只解析路径和目录，不读取图片字节。
+- 一次用户发送只投递一次既有主 query。
+- 1、4、20、50 张图片使用相同有序路径清单。
+- Kimi、Qwen、自定义 Provider 没有分支、画像或白名单。
+- 历史、时间线、日志、导出、Renderer IPC 不出现受控路径、Base64 或原图字节。
+- 既有 50 图 UI、灯箱、暂存、清理和旧历史兼容能力保持通过。
 
-## 非目标
+## 十一阶段执行
 
-- 不自动把用户附件上传到 OSS、CDN 或第三方文件服务。
-- 不把内部 artifact 目录作为普通文件夹整体授权给 Agent。
-- 不依赖某一家 Provider 专有的 Files API 作为基础能力。
-- 不在本任务中重构无关的 Agent、Drive、MDXEditor 或 Provider 代码。
-- 未经用户明确批准不新增图片处理依赖；优先使用 Electron nativeImage 和现有能力。
+- [x] 1. 重写附件设计文档和规划文件，废止 inline、batch 和 Provider 能力判断。
+- [x] 2. 保留附件选择、粘贴、拖拽、50 图、缩略图、灯箱、暂存、清理和历史恢复。
+- [x] 3. Renderer `content` 只保存用户实际输入，IPC 继续只传有序引用。
+- [x] 4. 新增主进程路径型运行时附件，校验所有权并返回原图路径及受控根目录。
+- [x] 5. 精确授权草稿受控根目录；明确文件夹授权原路径，文件和图片不授权原父目录。
+- [x] 6. 主 query 接收运行时专用路径清单和不可信附件说明，历史不保存清单。
+- [x] 7. 删除 DispatchPlan、Base64、批次阈值、BatchLoader、隔离 query、摘要和批次状态。
+- [x] 8. 历史只保存正文和附件元数据；对受控 Read 路径做时间线与事件投影。
+- [x] 9. 更新并运行全部回归、类型、硬约束和打包边界门禁。
+- [x] 10. 将消息内多图预览收敛为紧凑九宫格，最多渲染 9 个缩略图，灯箱继续包含全部图片。
+- [x] 11. 统一用户消息气泡四边内边距，并同步气泡视觉规范与回归测试。
+- [x] 12. 在 Agent 顶栏增加主线程实时上下文占用，覆盖 SDK 聚合、历史恢复、双窗口展示、文档与完整验证。
+- [x] 13. 真实验证百炼是否支持 Claude Code MCP Tool Search，并比较开启前后的工具调用与上下文用量。
+- [x] 14. 修复 `/compact` 后顶栏把摘要 token 当成完整上下文的问题，改用 SDK 权威上下文统计。
+- [x] 15. 审计并真实回归 2026-08-25 全部代码变化，运行不少于 200 项自动化用例和本地桌面关键路径，发现问题即补回归并修复。
+- [x] 16. 实现默认关闭的 Synapse MCP 工具按需加载实验功能，覆盖设置、新对话快照、第三方 Provider 路由、权限与事件投影、降级、文档和完整验证。
+- [x] 17. 根据真实百炼日志优化 Synapse MCP 工具搜索排序，覆盖中英文自然语言、通用与具体工具消歧及完整验证。
+- [x] 18. 获取并固化百炼全部文本生成模型与主流官方直连模型能力目录，建立确定性校验和更新入口。
+- [x] 19. 实现 Provider Base URL + 模型精确匹配、用户环境变量优先和 Agent SDK 窗口配置。
+- [x] 20. 扩展上下文事件与顶栏 Tooltip，严格区分 SDK 实际窗口和目录官方上限。
+- [x] 21. 同步 AGENTS 路由、维护说明、上下文设计边界和发布说明。
+- [x] 22. 完成专项、全量、类型、硬约束、构建与打包边界验证，并在可用开发版上做百炼冒烟。
 
-## 目标架构
+## 阶段 18–22 验收标准
 
-选择、粘贴或拖入
-→ 主进程流式校验并受控暂存
-→ Renderer 和 IPC 只持有 attachmentId 与缩略图 URL
-→ 发送前能力预检
-→ AttachmentDispatchPlanner
-→ 小批量直接内联 / 大批量总览图加按需读取 / 不兼容时发送前阻止
-→ 发送成功后从 staged 原子转为 committed
+- [x] 单一 JSON 目录覆盖百炼 TG 与 Anthropic、Gemini、DeepSeek、Kimi、GLM、MiniMax、StepFun、MiMo 官方直连代表模型，并保留可追溯官方来源。
+- [x] 更新脚本支持 `--check`、百炼分组响应展开、稳定排序、别名冲突与数量骤降门禁，不保存凭据或账户数据。
+- [x] 只有 Base URL 与模型精确命中时注入上下文窗口；显式 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 优先，目录变化使 live session 重建。
+- [x] 顶栏分母只使用 SDK 实际 `contextWindowTokens`；目录上限只作为配置与 Tooltip 参考，差异同时展示。
+- [x] `qwen3.7-plus` 固定为 1,000,000 总窗口与 991,808 最大输入，避免把两个概念混淆。
+- [x] Agent 专项、Desktop 全量、typecheck、hard constraints、production build、packaged-asar 可用边界与 `git diff --check` 完成并如实记录。
 
-## 各阶段
+## 阶段 17 验收标准
 
-### 阶段 0：规划状态重置与方案建立
+- [x] `list files drive` 将 `app_drive_item_list` 从第 3 提升到第 1。
+- [x] “查看云盘文件列表”同样优先返回 `app_drive_item_list`，不依赖模型或 Provider 特判。
+- [x] 精确名称、中文 domain、schema 字段、稳定排序、空结果和 limit 校验保持通过。
+- [x] 专项测试、Desktop typecheck、hard constraints 与 `git diff --check` 通过。
 
-- [x] 复核已完成的聊天气泡附件任务及其验证结果
-- [x] 审计当前选择、IPC、artifact、历史、Claude SDK 和 Provider 链路
-- [x] 确认 Base64 的问题边界和 50 图目标架构
-- [x] 重置 task_plan.md、findings.md 和 progress.md
-- [x] 写入完整实施计划、研究结论和验收门禁
-- **状态：** complete
+## 阶段 16 验收标准
 
-### 阶段 1：契约冻结与基线测试
+- [x] 系统设置新增“实验功能”分类，开关默认关闭且只固化到新建对话。
+- [x] 第三方 Anthropic-compatible Provider 的实验对话只向模型暴露 `search`、`invoke` 和其它非 Synapse MCP；Anthropic 官方 Provider 保持现状。
+- [x] 搜索覆盖完整 Synapse MCP 注册表，执行复用现有 action router、PermissionGuard、AuditSink 和公共 MCP 结果语义。
+- [x] Persona、权限请求、时间线、历史和导出投影为真实 Synapse 工具；无法保持配置或权限语义时整会话回退完整 MCP并只提示一次。
+- [x] 设置、会话、路由、权限、事件专项测试、typecheck、hard constraints、IPC codegen、production build 与 diff 检查通过；packaged-asar 已执行，因工作区没有现成 `release/app.asar` 按脚本设计退出，未擅自生成安装包。
 
-- [ ] 更新附件设计文档，修订当前“图片全部直接 SDK image block”和“最多 8 张”的硬规则
-- [ ] 定义 AttachmentRef、StagedAttachment、CommittedAttachment 和 DispatchPlan 的版本化契约
-- [ ] 明确图片、单文件和文件夹三种不同的权限与生命周期
-- [ ] 核实当前 Anthropic、百炼 Kimi 和自定义 Provider 的官方限制，不凭经验硬编码
-- [ ] 采集 1、8、20、50 张典型图片的 Renderer、主进程和请求体内存基线
-- [ ] 先补充红灯测试，锁定“发送 IPC 不含图片字节”和“50 张可暂存”的目标行为
-- [ ] 更新 Agent runtime/security 文档中的长期边界
-- **退出条件：** 契约、限制来源、失败行为、迁移方式和红灯测试全部明确
-- **状态：** pending
+## 阶段 15 测试任务
 
-### 阶段 2：附件暂存与生命周期
+- [x] 建立今日 5 个提交与当前未提交改动的生产代码、测试和风险清单。
+- [x] Drive 生命周期：大目录移入回收站、事务边界、失败与审计回归。
+- [x] Git 工作台：工作区/历史 diff、统一/分栏、换行、重命名、二进制、空/截断/解析失败、主题和键盘交互。
+- [x] Agent 附件：选择/粘贴/拖放、1/4/9/20/50 图、文件/文件夹、配额/格式/权限/生命周期、IPC、历史/导出脱敏、灯箱与失败降级。
+- [x] Agent 上下文：SDK 聚合、历史恢复、双窗口、窄宽顶栏、`/compact` 成功和统计失败降级。
+- [x] Drive Markdown：MDX/CommonMark 多级列表、评论 projection、Mermaid 横向布局与编辑/预览一致性。
+- [x] 运行受影响源码的类型检查、硬约束、IPC codegen 和 diff 检查。
+- [x] 通过 Computer Use 操作已运行的 Synapse 开发版，不启动或重启服务。
+- [x] 对每个真实缺陷先记录复现，再补自动化回归、聚焦修复并复测。
 
-- [ ] 新增 AttachmentStagingService，通过主进程统一处理选择、粘贴和拖拽图片
-- [ ] 使用临时文件加原子 rename 落盘，完成魔数 MIME 检查、大小检查和 SHA-256
-- [ ] 保存原始文件，并生成模型预览衍生图和 UI 缩略图；不覆盖原件
-- [ ] Artifact schema 升级为版本 2，记录 draftScopeId、状态、尺寸、衍生物和引用关系
-- [ ] 实现 staged → committed 原子提交、移除引用、废弃草稿 TTL、崩溃恢复和孤儿重试
-- [ ] 设置每张、每轮、每会话和全局磁盘配额；初始产品上限保持单张 10 MiB、最多 50 张，单轮总量需覆盖 50 张上限
-- [ ] 所有外部文件读取、受控写入和清理接入 PermissionGuard 与 AuditSink
-- **退出条件：** 暂存链路可独立通过并发、崩溃、配额和清理测试
-- **状态：** pending
+## 阶段 15 验收标准
 
-### 阶段 3：Renderer 与 IPC 引用化
+- [x] 自动化实际通过数量不少于 200，且覆盖今日六个功能主题。
+- [x] 真实桌面交互覆盖 Agent、Git 和可到达的 Drive 页面；不可到达项以同层组件/服务自动化证据替代并明确记录。
+- [x] 不产生付费 Agent 调用，不改 Provider 凭据，不破坏用户现有会话或数据。
+- [x] 最终所有新增回归、受影响专项、typecheck、hard constraints 与 `git diff --check` 通过。
 
-- [ ] Composer draft 从 ArrayBuffer 改为稳定 AttachmentRef
-- [ ] 文件选择器只返回引用和预览元数据，不把完整图片返回 Renderer
-- [ ] 粘贴和拖拽通过窄而类型化的 preload bridge 调用暂存服务
-- [ ] 发送 IPC 只传 attachmentId、顺序和用户可见元数据
-- [ ] 乐观消息直接使用受控缩略图 URL，持久化后复用同一附件身份
-- [ ] 删除附件、取消发送和暂存失败时正确释放引用并保留正文
-- [ ] 保持旧历史和已经完成的结构化附件气泡兼容
-- **退出条件：** Renderer 和发送 IPC 中不存在原图 ArrayBuffer、Uint8Array、data URL 或 Base64
-- **状态：** pending
+## 阶段 14 验收标准
 
-### 阶段 4：Provider 能力画像与发送前预检
+- [x] `compact_boundary.post_tokens` 不再直接更新顶栏。
+- [x] 压缩完成后通过当前 SDK Query 的 `getContextUsage()` 刷新 `totalTokens/maxTokens/model`。
+- [x] SDK 上下文查询失败时不影响 `/compact` 完成，顶栏清空为未知且不保留 416 或旧快照。
+- [x] ClaudeSDKSession、context usage、Renderer 事件链专项测试与 Desktop typecheck、硬约束、diff 检查通过。
 
-- [ ] 新增版本化 ProviderAttachmentCapabilities
-- [ ] 描述 vision、inline image、tool image result、URL/file ID、图片数、单图大小和请求体预算
-- [ ] 为内置 Anthropic 与百炼预设提供经官方资料和契约测试确认的能力画像
-- [ ] 自定义 Provider 使用保守默认值；必要时提供高级覆盖项并进行边界校验
-- [ ] 新增 AttachmentDispatchPlanner，根据图片数量、预览大小、Provider 和模型生成不可变派发计划
-- [ ] 把 Base64 编码限制在最终 SDK 组包阶段，并在请求完成或失败后立即释放
-- [ ] 统一 payload_too_large、vision_not_supported、unsupported_media 和 tool_image_unsupported 错误
-- [ ] 只有能确认请求未被 Provider 接收时才允许自动重新规划一次，避免重复用户消息
-- **退出条件：** 所有可预判不兼容在入队前返回稳定错误，草稿保持可重试
-- **状态：** pending
+## 阶段 13 验收标准
 
-### 阶段 5：大批量图片按需读取
+- [x] 百炼 Provider 显式设置 `ENABLE_TOOL_SEARCH=true` 后完成真实新会话测试，并确定当前 Qwen 模型被 Claude Code 模型门禁禁用 Tool Search。
+- [x] SDK 调试包证明 ToolSearch/tool_reference 事件为 0，目标 MCP 工具调用 1 次且成功，不只依据最终回答推断。
+- [x] 记录开启后的上下文与 Usage，并与既有全量加载基线区分。
+- [x] 测试后恢复 Provider 原配置，不泄露 API 密钥，不修改产品代码。
 
-- [ ] 使用 Claude Agent SDK createSdkMcpServer 创建进程内只读附件服务
-- [ ] 实现 attachment_list，返回本轮可信 manifest
-- [ ] 实现 attachment_read，按 ID 返回预览或原图视觉内容
-- [ ] 每次读取限制图片数量、解码后字节、像素和总响应体，默认小批次读取
-- [ ] 工具严格校验会话、conversation、turn、attachmentId、MIME、哈希和所有权
-- [ ] 禁止路径参数、路径穿越、符号链接逃逸和跨会话读取
-- [ ] 将工具定义为用户明确附加内容的内部传输能力，不暴露一般文件系统读取
-- [ ] 为大批量生成一个或多个带编号的本地总览图，帮助模型建立全局索引
-- [ ] 在系统上下文中明确：用户要求“全部检查”时必须按 manifest 读取全部图片
-- [ ] Provider 不支持图片工具结果时，根据能力画像改用安全内联或在发送前明确拒绝
-- **退出条件：** 50 图请求的初始模型请求体保持有界，模型仍能逐批访问全部原图
-- **状态：** pending
+## 阶段 13 结论
 
-### 阶段 6：文件与文件夹最小权限
+- 当前百炼 `qwen3.7-plus` + Claude Code 2.1.138 不能实际开启 MCP Tool Search。
+- `ENABLE_TOOL_SEARCH=true` 已持久化并进入新会话配置，但运行时因模型不属于 Sonnet 4+/Opus 4+ 而禁用 `tool_reference`；目标 MCP 工具仍从全量 Schema 直接调用。
+- 开启前上下文 90.2K，测试会话结束 91.6K；不存在预期的 token 降幅。
+- 百炼 Provider 已恢复到不含 `ENABLE_TOOL_SEARCH` 的原始配置。
 
-- [ ] 单独选择的文件复制到受控附件目录，Agent 读取受控副本
-- [ ] 保留原始名称、来源和大小用于 UI，但内部路径不进入日志和导出
-- [ ] 用户明确选择文件夹时只把该精确目录加入 additionalDirectories
-- [ ] 对文件夹执行真实路径、符号链接和权限检查，不扩大到父目录
-- [ ] 文件与文件夹继续优先使用 Claude Read、Glob 和 Grep，不把任意文件全部 Base64 化
-- [ ] 明确超大文件、不可读文件、包目录和权限撤销的错误行为
-- **退出条件：** 选一个文件无法读取其相邻文件；选定文件夹能正常搜索和读取
-- **状态：** pending
+## 阶段 11 验证进度
 
-### 阶段 7：50 图交互与性能
+- [x] 用户消息气泡由 `px-5 py-3` 改为四边统一的 `p-4`。
+- [x] 两份 Agent 气泡设计规范同步为四边 16px。
+- [x] 气泡、消息行与时间线回归：3 个测试文件、86 项通过。
+- [x] Desktop typecheck。
+- [x] `git diff --check`。
 
-- [ ] Composer 图片数量上限提升到 50，三个入口共用限制与错误文案
-- [ ] 只渲染缩略图引用，避免同时解码原图
-- [ ] 发送前显示图片数量和总大小，不展示实现细节
-- [ ] 超过 8 张时气泡显示前 8 张和剩余数量
-- [ ] 灯箱和附件列表使用懒加载或虚拟化，避免同时挂载 50 张原图
-- [ ] 保持现有 shadcn/Radix、主题 token 和单层视觉结构，不新增自定义颜色或依赖
-- [ ] 保持 attachment-only、失败回退、文件打开和旧历史行为
-- **退出条件：** 50 图选择、移除、发送、历史恢复和灯箱操作流畅且内存有界
-- **状态：** pending
+## 阶段 12 验收标准
 
-### 阶段 8：故障恢复、迁移与可观测性
+- [x] 只按主线程 SDK 事件计算当前上下文，流式输出和压缩边界可实时增减。
+- [x] `result.metadata.contextUsage` 可持久化，切换会话时清空并从最近结果恢复。
+- [x] 主界面与独立窗口共用同一顶栏指示器；未知窗口不猜测上限。
+- [x] 累计 Usage 卡口径与展示保持不变。
+- [x] Agent 专项、Desktop 全量、typecheck、production build、硬约束与 diff 检查通过。
 
-- [ ] 兼容 schema v1 artifact 和现有历史元数据
-- [ ] 应用启动时恢复或清理未完成 staged 记录，不阻塞主窗口
-- [ ] 会话删除、历史清理和存储配额淘汰保持引用一致
-- [ ] 日志与遥测只记录计数、字节数、策略、耗时和错误类别
-- [ ] 对附件 ID、路径、文件名和工具结果执行现有敏感信息脱敏
-- [ ] 增加新链路功能开关和旧 8 图 inline 回退开关
-- [ ] 设计灰度启用和回滚流程，不迁移或重写用户原始附件
-- **退出条件：** 崩溃、重启、回滚和旧数据场景均有自动化验证
-- **状态：** pending
+## 阶段 10 验证进度
 
-### 阶段 9：全链路验证与发布准备
+- [x] 50 张图片只渲染 9 个消息缩略图，第 9 格显示剩余 41 张。
+- [x] 第 9 格可打开完整灯箱并定位到 `9 / 50`。
+- [x] Agent 消息与时间线回归：2 个测试文件、84 项通过。
+- [x] Desktop typecheck。
+- [x] `git diff --check`。
 
-- [ ] 覆盖 1、4、8、9、20、50 张图片及不同总字节场景
-- [ ] 覆盖选择、粘贴、拖拽、删除、取消、重试、断网和 Provider 拒绝
-- [ ] 覆盖 JPEG、PNG、WebP、GIF、伪造扩展名、损坏文件和不可解码图片
-- [ ] 覆盖路径穿越、符号链接、TOCTOU、跨会话读取和越权 attachmentId
-- [ ] 验证历史、日志、导出、配置备份和错误报告不含原始字节/Base64
-- [ ] 使用假 Provider 端点做能力契约测试，不依赖付费调用作为自动化门禁
-- [ ] 对官方 Anthropic 和百炼各做一次受控人工验收
-- [ ] 运行 Agent 专项测试、desktop typecheck、check:hard-constraints 和 git diff --check
-- [ ] 涉及打包资源时额外运行 check:packaged-asar
-- [ ] 更新设计文档、Agent 指南、必要的 capability 说明和 RELEASE_NOTES_PENDING.md
-- **退出条件：** 所有自动化门禁通过，50 图真实验收成功，回退开关验证有效
-- **状态：** pending
+## 阶段 9 验证进度
 
-## 测试矩阵
+- [x] 核心 runtime 附件回归：202 项。
+- [x] Renderer 附件与会话回归：134 项。
+- [x] 路径清单覆盖 1、4、20、50 图及混合附件顺序。
+- [x] 主会话复用、动态目录授权、单 query 与取消语义。
+- [x] 受控路径 tool use 和流式输入投影。
+- [x] Desktop 全量测试：857 个测试文件、7969 项通过。
+- [x] Desktop typecheck。
+- [x] `check:hard-constraints`。
+- [x] 最小打包边界检查：生产 build 通过；`release/` 无现成 `app.asar`，检查脚本已明确报告无可检查产物。
+- [x] 最终旧符号、路径泄露和 diff 审计。
 
-| 维度 | 必测场景 |
-|------|----------|
-| 数量 | 0、1、4、8、9、20、50、51 张 |
-| 体积 | 小图、单张临界值、单轮临界值、超过配额 |
-| 入口 | 文件选择器、粘贴、拖拽、混合附件 |
-| Provider | Anthropic、百炼 Kimi、自定义兼容端点、无视觉模型 |
-| 策略 | 直接内联、总览加按需读取、预检拒绝、旧链路回退 |
-| 生命周期 | 暂存、移除、发送、失败、重启、删除会话、孤儿清理 |
-| 安全 | MIME 欺骗、路径穿越、符号链接、跨会话 ID、日志脱敏 |
-| UI | 乐观消息、历史恢复、超过 8 张、灯箱懒加载、图片失败 |
+## 锁定决策
 
-## 已做决策
+| 决策 | 原因 |
+|---|---|
+| 原图路径是唯一图片输入 | Read 已能把本地图片结果交给兼容模型，避免二次派发体系 |
+| 不判断模型能力 | 模型由用户选择，Provider 的能力和限制不应由 Synapse 白名单定义 |
+| 不追踪是否读完 | 读取顺序和次数属于模型行为，不是宿主完成条件 |
+| 只保留一个主 query | 工具往返由 SDK 自然产生，无需隐藏会话和摘要回灌 |
+| 受控路径仅运行时存在 | 历史和导出只需要用户正文与结构化附件元数据 |
+| Persona 策略优先 | 用户显式禁用 Read 时 Synapse 不越权开启 |
 
-| 决策 | 理由 |
-|------|------|
-| 不简单把 8 改成 50 | 当前链路会制造多份字节和 Base64 副本，稳定性不可接受 |
-| 选择时落盘，业务链路只传引用 | 控制内存、统一入口、支持恢复和清理 |
-| Base64 只存在于最终 SDK 边界 | Base64 本身是合法传输格式，问题在于范围和批量 |
-| 小批量内联，大批量总览加按需读取 | 兼顾延迟、兼容性、细节能力和请求体上限 |
-| 使用进程内只读附件 MCP | 不依赖公开 URL，不开放内部目录，可做精确授权和审计 |
-| 单文件受控复制，文件夹精确授权 | 避免因一个文件放开整个父目录 |
-| Provider 能力画像必须版本化 | 不同兼容端点的限制和支持范围不同 |
-| 先保持旧 8 图模式作为回退 | 便于分阶段交付和快速止损 |
+## 错误记录
 
-## 主要代码范围
-
-- desktop/electron/modules/agent/ipc-messages.ts
-- desktop/electron/modules/agent/ipc-shared.ts
-- desktop/electron/modules/agent/ipc-tools.ts
-- desktop/src/types/bridge.ts
-- desktop/src/types/agent.ts
-- desktop/src/modules/agent/components/agent-composer.tsx
-- desktop/src/modules/agent/components/agent-message-attachments.tsx
-- desktop/src/modules/agent/hooks/use-chat-connection.ts
-- desktop/electron/services/agent-runtime/artifact-store.ts
-- desktop/electron/services/agent-runtime/attachments.ts
-- desktop/electron/services/agent-runtime/claude-sdk-session.ts
-- desktop/electron/services/agent-runtime/conversation-router.ts
-- desktop/electron/services/agent-runtime/types.ts
-- Provider preset、store、schema 与测试
-- DataRepository artifact schema、迁移与测试
-- Agent 附件、安全、能力和发布说明文档
-
-## 风险与控制
-
-| 风险 | 控制 |
-|------|------|
-| 第三方 Provider 声称兼容但不支持图片工具结果 | 能力画像、假端点契约测试、发送前预检和旧模式回退 |
-| 50 张原图造成内存峰值 | 流式落盘、引用化、缩略图、批次读取和像素预算 |
-| Agent 未读取全部图片 | manifest、编号总览、系统规则和已读数量验证 |
-| 草稿或崩溃留下大量文件 | staged TTL、引用计数、启动恢复、配额和孤儿重试 |
-| 单文件授权扩大目录权限 | 复制受控副本，不授权原父目录 |
-| 自动重试产生重复用户轮次 | 仅在确认请求未被接收时重规划一次 |
-| 与当前未提交附件 UI 改动冲突 | 以现有 artifact 与历史实现为基线，逐阶段小 diff，不覆盖无关改动 |
-
-## 遇到的错误
-
-| 错误 | 尝试次数 | 解决方案 |
-|------|----------|----------|
-| 暂无 | 0 | 后续发生时立即记录 |
-
-## 备注
-
-- 每完成一个阶段同步更新 task_plan.md 与 progress.md。
-- 每两次查看、浏览器或搜索操作后，把可信结论写入 findings.md。
-- 重大决策前重新读取本计划。
-- 当前只完成计划编写，尚未授权实施产品代码。
+| 时间 | 问题 | 处理 |
+|---|---|---|
+| 2026-08-25 | 首次 typecheck 仍有契约测试导入已删除的 DispatchPlan 常量 | 改为仅验证保留的 AttachmentRef v2 |
+| 2026-08-25 | 首轮核心回归 6 个旧派发/路径断言失败 | 修正测试，并移除附件诊断中的受控路径 |
+| 2026-08-25 | Renderer 两个测试仍期望自动生成图片标签和路径正文 | 改为断言只发送用户原文与 attachmentId |
+| 2026-08-25 | 首次全量 typecheck 读取到并发时间线改动的中间状态 | 未覆盖该改动；待其配套签名落盘后复跑，全量 typecheck 通过 |
+| 2026-08-25 | `check:packaged-asar` 找不到 `release/app.asar` | 未伪造打包产物；改跑完整 Desktop production build，构建通过并记录环境限制 |
+| 2026-08-25 | 阶段 14 红灯测试仍收到 compact `post_tokens` | 回归准确复现顶栏误报，继续改用 SDK `getContextUsage()` |
+| 2026-08-25 | 阶段 14 首次 typecheck 缺少 `AgentContextUsage` 类型导入 | 补充现有 runtime 类型导入后复跑，不改变行为 |
+| 2026-08-25 | 最终行号检索的双引号命令包含反引号，shell 尝试执行 `/compact` | 未修改文件；改用不含反引号的安全检索表达式，不重复该命令 |
+| 2026-08-25 | 阶段 10 新回归首次运行仍只渲染 8 个缩略图 | 已确认测试准确复现旧行为，继续修改消息附件组件 |
+| 2026-08-25 | 阶段 11 新回归确认气泡仍输出 `px-5 py-3` | 已复现非等距内边距，继续替换为统一 `p-4` |
+| 2026-08-25 | 首次通过 Computer Use 写入 Provider JSON 时应用状态被外部刷新 | 未发生写入；重新获取完整 AX 树后使用新元素索引继续 |
+| 2026-08-25 | 恢复配置时首次设置页点击也遇到界面状态刷新 | 未发生点击；重新获取完整 AX 树后进入设置 |
+| 2026-08-25 | 调试包 `shasum` 受继承的无效 `C.UTF-8` locale 影响而失败 | 其它 JSON 证据与 diff 检查已完成；改用显式 `LC_ALL=C LANG=C` 计算摘要 |

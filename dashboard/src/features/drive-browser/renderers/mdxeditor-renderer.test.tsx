@@ -566,6 +566,41 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().dataset.contentEditableClass?.split(' ')).toContain('pb-12')
   })
 
+  it('restores ordered, unordered, and nested list markers inside the editor', () => {
+    renderRenderer({ edit: editable() })
+
+    const contentClasses = editor().dataset.contentEditableClass?.split(' ') ?? []
+    expect(contentClasses).toEqual(expect.arrayContaining([
+      '[&_ul]:list-disc',
+      '[&_ol]:list-decimal',
+      '[&_ul]:pl-6',
+      '[&_ol]:pl-6',
+    ]))
+  })
+
+  it('saves and reloads nested list Markdown without flattening its hierarchy', async () => {
+    const markdown = '1. 一级\n   * 二级\n      1. 三级'
+    const editContext = createEditContext()
+    const { rerender } = renderRenderer({ edit: editable(), editContext })
+
+    await inputValue(editor(), markdown)
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: markdown,
+      baseVersionId: 'version-1',
+    })
+
+    rerender({
+      preview: { ...basePreview(), text: markdown },
+      edit: { ...editable(), currentVersionId: 'version-2' },
+      editContext,
+    })
+
+    expect(editor().value).toBe(markdown)
+    expect(document.body.textContent).toContain('已同步')
+  })
+
   it('disables image source import while markdown has unsaved edits', async () => {
     const scanImages = vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
       canImport: true,

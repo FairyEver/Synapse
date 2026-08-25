@@ -49,6 +49,28 @@ export const SYNAPSE_AGENT_PERMISSION_MODES = [
 export type SynapseAgentPermissionMode = typeof SYNAPSE_AGENT_PERMISSION_MODES[number]
 export type SynapseAgentPermissionScope = "once" | "session"
 
+export interface SynapseAgentModelContextReference {
+  readonly providerScopeId: string
+  readonly modelId: string
+  readonly contextWindowTokens: number
+  readonly maxInputTokens?: number
+  readonly maxOutputTokens?: number
+  readonly reasoningMaxInputTokens?: number
+  readonly reasoningMaxOutputTokens?: number
+  readonly maxReasoningTokens?: number
+  readonly sourceLabel: string
+  readonly sourceUrl: string
+  readonly verifiedAt: string
+}
+
+export interface SynapseAgentContextUsage {
+  readonly usedTokens: number
+  readonly contextWindowTokens?: number
+  readonly model?: string
+  readonly modelContext?: SynapseAgentModelContextReference
+  readonly contextWindowConfigurationSource?: "catalog" | "provider-env"
+}
+
 export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
       type: "text"
@@ -95,6 +117,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
         model?: string
         effort?: string
         contextRemainingPercent?: number
+        contextUsage?: SynapseAgentContextUsage
         workDir?: string
         cancelled?: boolean
         turnOutcome?: SynapseAgentTurnOutcome
@@ -134,6 +157,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       contentBlocks?: unknown[]
       content?: string
       message?: Record<string, unknown>
+      contextUsage?: SynapseAgentContextUsage
     }
   | {
       type: "stream"
@@ -146,6 +170,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       toolUseId?: string
       toolName?: string
       event?: Record<string, unknown>
+      contextUsage?: SynapseAgentContextUsage
     }
   | {
       type: "sessionInit"
@@ -160,6 +185,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
     }
   | {
       type: "compactBoundary"
+      contextUsage?: SynapseAgentContextUsage
     }
   | {
       type: "sdkEvent"
@@ -251,6 +277,7 @@ export interface SynapseAgentResultMetadata {
   readonly model?: string
   readonly effort?: string
   readonly contextRemainingPercent?: number
+  readonly contextUsage?: SynapseAgentContextUsage
   readonly workDir?: string
   readonly cancelled?: boolean
   readonly turnOutcome?: SynapseAgentTurnOutcome

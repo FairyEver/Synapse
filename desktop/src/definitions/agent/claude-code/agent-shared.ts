@@ -23,7 +23,7 @@ export const agentBaseDefinition = {
     { name: "new", description: "Start a new session" },
     { name: "status", description: "Show agent status" },
     { name: "show", description: "Show a workspace reference" },
-    { name: "compress", description: "Compact the current agent context" },
+    { name: "compact", description: "Compact the current agent context" },
     { name: "commands", description: "Manage commands" },
     { name: "skills", description: "List skills" },
   ],

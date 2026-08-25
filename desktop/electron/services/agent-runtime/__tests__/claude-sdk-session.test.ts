@@ -38,17 +38,17 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
-  it("send encodes image attachments as SDK image content blocks only", async () => {
+  it("send exposes image attachments as ordered Read paths", async () => {
     const { factory, getPrompt } = createQueryFactory()
     const session = createSession(factory)
 
     const input = getPrompt()[Symbol.asyncIterator]().next()
     await session.send({
-      ...message("[Image #1]"),
+      ...message("分析图片"),
       attachments: [{
-        kind: "image",
-        mimeType: "image/png",
-        data: new Uint8Array([1, 2, 3]),
+        kind: "path",
+        path: "/controlled/draft/image-1/original.png",
+        entryType: "image",
         name: "pixel.png",
         size: 3,
       }],
@@ -60,24 +60,47 @@ describe("ClaudeSDKSession", () => {
         type: "user",
         message: {
           role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/png",
-                data: "AQID",
-              },
-            },
-            { type: "text", text: "[Image #1]" },
-          ],
+          content: expect.stringContaining(
+            '[Image #1] name="pixel.png" path="/controlled/draft/image-1/original.png"',
+          ),
         },
         parent_tool_use_id: null,
       },
     })
   })
 
-  it("send keeps path-only attachment messages as readable text", async () => {
+  it("uses identical attachment messages and directory settings for every provider", async () => {
+    const providers = ["bailian-kimi", "bailian-qwen", "custom-compatible"]
+    const runs = providers.map((providerId) => {
+      const query = createQueryFactory()
+      const session = createSession(query.factory, {
+        providerId,
+        additionalDirectories: ["/controlled/draft"],
+      })
+      return { query, session }
+    })
+    const inputs = runs.map(({ query }) => query.getPrompt()[Symbol.asyncIterator]().next())
+    const attachmentMessage: AgentMessage = {
+      ...message("分析全部图片"),
+      attachments: [{
+        kind: "path",
+        path: "/controlled/draft/image-1/original.png",
+        entryType: "image",
+        name: "pixel.png",
+      }],
+    }
+
+    await Promise.all(runs.map(({ session }) => session.send(attachmentMessage)))
+    const contents = await Promise.all(inputs.map(async (input) =>
+      (await input).value?.message.content as string))
+
+    expect(new Set(contents)).toHaveProperty("size", 1)
+    for (const { query } of runs) {
+      expect(query.getOptions().additionalDirectories).toEqual(["/controlled/draft"])
+    }
+  })
+
+  it("send combines path attachments with the actual user text", async () => {
     const { factory, getPrompt } = createQueryFactory()
     const session = createSession(factory)
 
@@ -92,14 +115,49 @@ describe("ClaudeSDKSession", () => {
       }],
     })
 
-    await expect(input).resolves.toMatchObject({
+    const result = await input
+    expect(result).toMatchObject({
       done: false,
       value: {
         message: {
-          content: "Attached file: /tmp/project/report.md",
+          content: expect.stringContaining("Attached file: /tmp/project/report.md"),
         },
       },
     })
+    expect((result.value?.message.content as string)).toContain(
+      '[File #1] name="report.md" path="/tmp/project/report.md"',
+    )
+  })
+
+  it("sends fifty image paths through the only main query", async () => {
+    const { factory, getPrompt } = createQueryFactory()
+    const factorySpy = vi.fn(factory)
+    const session = createSession(factorySpy, { model: "qwen3.5-plus" })
+    const input = getPrompt()[Symbol.asyncIterator]().next()
+
+    await expect(session.send({
+      ...message("比较全部图片"),
+      attachments: Array.from({ length: 50 }, (_, index) => ({
+        kind: "path" as const,
+        path: `/controlled/draft/image-${index + 1}/original.png`,
+        entryType: "image" as const,
+        name: `image-${index + 1}.png`,
+      })),
+    })).resolves.toBe(true)
+
+    const result = await input
+    const content = result.value?.message.content as string
+    expect(content).toContain("[Image #1]")
+    expect(content).toContain("[Image #50]")
+    expect(factorySpy).toHaveBeenCalledOnce()
+  })
+
+  it("interrupts only the main query", async () => {
+    const mainQuery = new FakeQuery()
+    const session = createSession(() => mainQuery)
+
+    await expect(session.cancelCurrentTurn()).resolves.toBe(true)
+    expect(mainQuery.interrupt).toHaveBeenCalledOnce()
   })
 
   it("requests partial SDK messages so renderer can stream tokens", () => {
@@ -705,6 +763,183 @@ describe("ClaudeSDKSession", () => {
     expect(session.currentSessionId()).toBe("sdk-1")
   })
 
+  it("publishes realtime main-thread context snapshots and persists the final snapshot", async () => {
+    const getContextUsage = vi.fn(async () => ({
+      totalTokens: 87_400,
+      maxTokens: 200_000,
+      model: "claude-sonnet-4-5",
+    }))
+    const { factory, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
+    const session = createSession(factory)
+
+    const assistantEvent = session.nextEvent()
+    query.push({
+      type: "assistant",
+      session_id: "sdk-context",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        model: "claude-sonnet-4-5",
+        content: [],
+        usage: {
+          input_tokens: 100,
+          cache_read_input_tokens: 20,
+          cache_creation_input_tokens: 10,
+          output_tokens: 5,
+        },
+      },
+    } as unknown as SDKMessage)
+    await expect(assistantEvent).resolves.toMatchObject({
+      type: "assistant",
+      contextUsage: { usedTokens: 135, model: "claude-sonnet-4-5" },
+    })
+
+    const deltaEvent = session.nextEvent()
+    query.push({
+      type: "stream_event",
+      session_id: "sdk-context",
+      parent_tool_use_id: null,
+      event: {
+        type: "message_delta",
+        usage: { output_tokens: 25 },
+      },
+    } as unknown as SDKMessage)
+    await expect(deltaEvent).resolves.toMatchObject({
+      type: "stream",
+      contextUsage: { usedTokens: 155, model: "claude-sonnet-4-5" },
+    })
+
+    const compactEvent = session.nextEvent()
+    query.push({
+      type: "system",
+      subtype: "compact_boundary",
+      session_id: "sdk-context",
+      compact_metadata: { pre_tokens: 155, post_tokens: 60 },
+    } as unknown as SDKMessage)
+    await expect(compactEvent).resolves.toMatchObject({
+      type: "compactBoundary",
+      contextUsage: {
+        usedTokens: 87_400,
+        contextWindowTokens: 200_000,
+        model: "claude-sonnet-4-5",
+      },
+    })
+    expect(getContextUsage).toHaveBeenCalledOnce()
+
+    const resultEvent = session.nextEvent()
+    query.push({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-context",
+      result: "done",
+      modelUsage: {
+        "claude-sonnet-4-5": { contextWindow: 200_000 },
+      },
+    } as unknown as SDKMessage)
+    await expect(resultEvent).resolves.toMatchObject({
+      type: "result",
+      metadata: {
+        contextUsage: {
+          usedTokens: 87_400,
+          contextWindowTokens: 200_000,
+          model: "claude-sonnet-4-5",
+        },
+      },
+    })
+  })
+
+  it("projects catalog reference metadata without replacing the SDK runtime window", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory, {
+      contextWindowConfigurationSource: "catalog",
+      modelContext: {
+        providerScopeId: "bailian-cn",
+        modelId: "qwen3.7-plus",
+        contextWindowTokens: 1_000_000,
+        maxInputTokens: 991_808,
+        sourceLabel: "Alibaba Cloud Model Studio",
+        sourceUrl: "https://help.aliyun.com/zh/model-studio/qwen3-7-plus",
+        verifiedAt: "2026-08-25T00:00:00.000Z",
+      },
+    })
+
+    const assistantEvent = session.nextEvent()
+    query.push({
+      type: "assistant",
+      session_id: "sdk-context-reference",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        model: "qwen3.7-plus",
+        content: [],
+        usage: { input_tokens: 35_000, output_tokens: 333 },
+      },
+    } as unknown as SDKMessage)
+    await expect(assistantEvent).resolves.toMatchObject({
+      contextUsage: {
+        usedTokens: 35_333,
+        contextWindowConfigurationSource: "catalog",
+        modelContext: { contextWindowTokens: 1_000_000 },
+      },
+    })
+
+    const resultEvent = session.nextEvent()
+    query.push({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-context-reference",
+      result: "done",
+      modelUsage: { "qwen3.7-plus": { contextWindow: 200_000 } },
+    } as unknown as SDKMessage)
+    await expect(resultEvent).resolves.toMatchObject({
+      metadata: {
+        contextUsage: {
+          contextWindowTokens: 200_000,
+          modelContext: { contextWindowTokens: 1_000_000 },
+        },
+      },
+    })
+  })
+
+  it("does not expose compact summary tokens when the SDK context refresh fails", async () => {
+    const logger = { warn: vi.fn() }
+    const getContextUsage = vi.fn(async () => {
+      throw new Error("context usage unavailable")
+    })
+    const { factory, query } = createQueryFactory({ getContextUsage })
+    const session = createSession(factory, { logger })
+
+    const assistantEvent = session.nextEvent()
+    query.push({
+      type: "assistant",
+      session_id: "sdk-context-fallback",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        model: "qwen3.7-plus",
+        content: [],
+        usage: { input_tokens: 90_000, output_tokens: 848 },
+      },
+    } as unknown as SDKMessage)
+    await expect(assistantEvent).resolves.toMatchObject({
+      contextUsage: { usedTokens: 90_848 },
+    })
+
+    const compactEvent = session.nextEvent()
+    query.push({
+      type: "system",
+      subtype: "compact_boundary",
+      session_id: "sdk-context-fallback",
+      compact_metadata: { pre_tokens: 90_848, post_tokens: 416 },
+    } as unknown as SDKMessage)
+    await expect(compactEvent).resolves.not.toHaveProperty("contextUsage")
+    expect(getContextUsage).toHaveBeenCalledOnce()
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Claude SDK context usage refresh failed after compaction.",
+      expect.objectContaining({ boundary: "claude-sdk-context-usage" }),
+    )
+  })
+
   it("maps SDK tool result ids back to the tool name for timeline display", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory)
@@ -756,6 +991,164 @@ describe("ClaudeSDKSession", () => {
       toolName: "Read",
       content: "file contents",
     })
+  })
+
+  it("projects routed invoke tool use and result events to the original Synapse tool", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory, { synapseToolRouter: toolRouterOptions() })
+    query.push({
+      type: "assistant",
+      session_id: "sdk-router",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        content: [{
+          type: "tool_use",
+          id: "tool-router-1",
+          name: "mcp__synapse-tool-router__invoke",
+          input: {
+            toolName: "app_database_table_list",
+            arguments: { includeSystem: false },
+          },
+        }],
+      },
+    } as unknown as SDKMessage)
+
+    await expect(session.nextEvent()).resolves.toMatchObject({
+      type: "assistant",
+      message: {
+        content: [{
+          name: "mcp__synapse-mcp__app_database_table_list",
+          input: { includeSystem: false },
+        }],
+      },
+    })
+    await expect(session.nextEvent()).resolves.toMatchObject({
+      type: "toolUse",
+      toolUseId: "tool-router-1",
+      toolName: "mcp__synapse-mcp__app_database_table_list",
+      toolInputRaw: { includeSystem: false },
+    })
+
+    query.push({
+      type: "user",
+      session_id: "sdk-router",
+      parent_tool_use_id: null,
+      message: {
+        role: "user",
+        content: [{
+          type: "tool_result",
+          tool_use_id: "tool-router-1",
+          content: "[]",
+        }],
+      },
+    } as unknown as SDKMessage)
+    await expect(session.nextEvent()).resolves.toMatchObject({
+      type: "toolResult",
+      toolUseId: "tool-router-1",
+      toolName: "mcp__synapse-mcp__app_database_table_list",
+    })
+  })
+
+  it("emits one visible fallback event without exposing discovery configuration", async () => {
+    const { factory, getSynapseToolRouter } = createQueryFactory()
+    const session = createSession(factory, { synapseToolRouter: toolRouterOptions() })
+
+    getSynapseToolRouter().onFallback?.("unsupported-server-config")
+    getSynapseToolRouter().onFallback?.("discovery-failed")
+
+    await expect(session.nextEvent()).resolves.toEqual(expect.objectContaining({
+      type: "sdkEvent",
+      sdkType: "synapseToolRouterFallback",
+      payload: { reason: "unsupported-server-config" },
+    }))
+    await expect(resolveSoon(session.nextEvent())).resolves.toBe("timeout")
+  })
+
+  it("projects controlled attachment paths out of SDK tool events", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+    const controlledPath = "/controlled/draft/image-1/original.png"
+    await session.send({
+      ...message("分析图片"),
+      runtimeAttachmentDirectories: ["/controlled/draft"],
+      attachments: [{
+        kind: "path",
+        path: controlledPath,
+        entryType: "image",
+        name: "screen.png",
+      }],
+    })
+
+    const assistantEvent = session.nextEvent()
+    query.push({
+      type: "assistant",
+      session_id: "sdk-tools",
+      message: {
+        role: "assistant",
+        content: [{
+          type: "tool_use",
+          id: "toolu-read-attachment",
+          name: "Read",
+          input: { file_path: controlledPath },
+        }],
+      },
+    } as unknown as SDKMessage)
+
+    expect(JSON.stringify(await assistantEvent)).not.toContain(controlledPath)
+    const toolEvent = await session.nextEvent()
+    expect(toolEvent).toMatchObject({
+      type: "toolUse",
+      toolName: "Read",
+      toolInputRaw: { file_path: "[Synapse attachment: screen.png]" },
+    })
+    expect(JSON.stringify(toolEvent)).not.toContain(controlledPath)
+
+    const rootAssistantEvent = session.nextEvent()
+    query.push({
+      type: "assistant",
+      session_id: "sdk-tools",
+      message: {
+        role: "assistant",
+        content: [{
+          type: "tool_use",
+          id: "toolu-glob-attachment-root",
+          name: "Glob",
+          input: { path: "/controlled/draft", pattern: "**/*" },
+        }],
+      },
+    } as unknown as SDKMessage)
+
+    expect(JSON.stringify(await rootAssistantEvent)).not.toContain("/controlled/draft")
+    const rootToolEvent = await session.nextEvent()
+    expect(rootToolEvent).toMatchObject({
+      type: "toolUse",
+      toolName: "Glob",
+      toolInputRaw: { path: "[Synapse attachment root]", pattern: "**/*" },
+    })
+    expect(JSON.stringify(rootToolEvent)).not.toContain("/controlled/draft")
+
+    const streamEvent = session.nextEvent()
+    query.push({
+      type: "stream_event",
+      session_id: "sdk-tools",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: {
+          type: "input_json_delta",
+          partial_json: `{\"file_path\":\"${controlledPath}\"}`,
+        },
+      },
+    } as unknown as SDKMessage)
+
+    const streamed = await streamEvent
+    expect(streamed).toMatchObject({
+      type: "stream",
+      deltaType: "input_json_delta",
+    })
+    expect(streamed).not.toHaveProperty("partialJson")
+    expect(JSON.stringify(streamed)).not.toContain(controlledPath)
   })
 
   it("cancelCurrentTurn interrupts an alive query", async () => {
@@ -856,6 +1249,90 @@ describe("ClaudeSDKSession", () => {
       behavior: "allow",
       updatedInput: input,
     })
+  })
+
+  it("projects routed invoke permissions to the original Synapse tool and wraps edited input", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { synapseToolRouter: toolRouterOptions() })
+    const permission = canUseTool(getOptions())("mcp__synapse-tool-router__invoke", {
+      toolName: "app_database_table_list",
+      arguments: { includeSystem: false },
+    }, { signal: new AbortController().signal })
+    const event = await session.nextEvent()
+
+    expect(event).toMatchObject({
+      type: "permissionRequest",
+      toolName: "mcp__synapse-mcp__app_database_table_list",
+      toolInputRaw: { includeSystem: false },
+    })
+    if (event?.type !== "permissionRequest") throw new Error("expected permission request")
+    await session.respondPermission(event.requestId, {
+      behavior: "allow",
+      updatedInput: { includeSystem: true },
+    })
+
+    await expect(permission).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: {
+        toolName: "app_database_table_list",
+        arguments: { includeSystem: true },
+      },
+    })
+  })
+
+  it("enforces routed invoke permission modes against original action mutability", async () => {
+    const signal = new AbortController().signal
+    const plan = createQueryFactory()
+    const planSession = createSession(plan.factory, { mode: "plan", synapseToolRouter: toolRouterOptions() })
+    await expect(canUseTool(plan.getOptions())("mcp__synapse-tool-router__search", {
+      query: "database",
+    }, { signal })).resolves.toMatchObject({ behavior: "allow" })
+    await expect(canUseTool(plan.getOptions())("mcp__synapse-tool-router__invoke", {
+      toolName: "app_database_table_list",
+      arguments: {},
+    }, { signal })).resolves.toMatchObject({ behavior: "allow" })
+    await expect(canUseTool(plan.getOptions())("mcp__synapse-tool-router__invoke", {
+      toolName: "app_database_row_create",
+      arguments: {},
+    }, { signal })).resolves.toMatchObject({ behavior: "deny" })
+    await expect(resolveSoon(planSession.nextEvent())).resolves.toBe("timeout")
+
+    const dontAsk = createQueryFactory()
+    createSession(dontAsk.factory, { mode: "dontAsk", synapseToolRouter: toolRouterOptions() })
+    await expect(canUseTool(dontAsk.getOptions())("mcp__synapse-tool-router__invoke", {
+      toolName: "app_database_table_list",
+      arguments: {},
+    }, { signal })).resolves.toMatchObject({ behavior: "deny" })
+
+    const bypass = createQueryFactory()
+    createSession(bypass.factory, { mode: "bypassPermissions", synapseToolRouter: toolRouterOptions() })
+    await expect(canUseTool(bypass.getOptions())("mcp__synapse-tool-router__invoke", {
+      toolName: "app_database_row_create",
+      arguments: { tableName: "items" },
+    }, { signal })).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: {
+        toolName: "app_database_row_create",
+        arguments: { tableName: "items" },
+      },
+    })
+  })
+
+  it("enforces the original persona allowlist for routed invokes", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, {
+      synapseToolRouter: toolRouterOptions(),
+      personaToolPolicy: {
+        mode: "allowlist",
+        allowedTools: ["mcp__synapse-mcp__app_database_table_list"],
+      },
+    })
+
+    await expect(canUseTool(getOptions())("mcp__synapse-tool-router__invoke", {
+      toolName: "app_database_row_create",
+      arguments: {},
+    }, { signal: new AbortController().signal })).resolves.toMatchObject({ behavior: "deny" })
+    await expect(resolveSoon(session.nextEvent())).resolves.toBe("timeout")
   })
 
   it("returns only SDK-suggested directory updates for session permission scope", async () => {
@@ -1600,13 +2077,16 @@ function createQueryFactory(overrides: Partial<QueryLike> = {}): {
   readonly query: FakeQuery
   getPrompt(): AsyncIterable<SDKUserMessage>
   getOptions(): Record<string, unknown>
+  getSynapseToolRouter(): NonNullable<Parameters<QueryFactory>[0]["synapseToolRouter"]>
 } {
   const query = Object.assign(new FakeQuery(), overrides)
   let prompt: AsyncIterable<SDKUserMessage> | undefined
   let options: Record<string, unknown> | undefined
+  let synapseToolRouter: Parameters<QueryFactory>[0]["synapseToolRouter"]
   const factory: QueryFactory = (input) => {
     prompt = input.prompt
     options = input.options
+    synapseToolRouter = input.synapseToolRouter
     return query
   }
 
@@ -1621,6 +2101,18 @@ function createQueryFactory(overrides: Partial<QueryLike> = {}): {
       if (!options) throw new Error("queryFactory was not called")
       return options
     },
+    getSynapseToolRouter() {
+      if (!synapseToolRouter) throw new Error("queryFactory was not called with a Synapse tool router")
+      return synapseToolRouter
+    },
+  }
+}
+
+function toolRouterOptions(): NonNullable<ConstructorParameters<typeof ClaudeSDKSession>[0]["synapseToolRouter"]> {
+  return {
+    cwd: "/tmp/project",
+    settingSources: ["user", "project", "local"],
+    executeTool: vi.fn(),
   }
 }
 

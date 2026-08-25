@@ -23,6 +23,12 @@ const electronMock = vi.hoisted(() => ({
     showOpenDialog: vi.fn(),
     showSaveDialog: vi.fn(),
   },
+  clipboard: {
+    readImage: vi.fn<() => { isEmpty: () => boolean; toPNG: () => Buffer }>(() => ({
+      isEmpty: () => true,
+      toPNG: () => Buffer.alloc(0),
+    })),
+  },
 }))
 
 import { createInMemoryHarness } from "../../../runtime/ipc"
@@ -66,6 +72,11 @@ describe("agentIpcModule", () => {
     electronMock.BrowserWindow.getFocusedWindow.mockReturnValue(undefined)
     electronMock.dialog.showOpenDialog.mockReset()
     electronMock.dialog.showSaveDialog.mockReset()
+    electronMock.clipboard.readImage.mockReset()
+    electronMock.clipboard.readImage.mockReturnValue({
+      isEmpty: () => true,
+      toPNG: () => Buffer.alloc(0),
+    })
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -100,7 +111,7 @@ describe("agentIpcModule", () => {
     try {
       const result = await createHarness({}).invoke(
         "synapse:app:agent:operation:choose_attachments",
-        { kind: "file" },
+        { projectId: "project-1", draftScopeId: "draft-1", kind: "file" },
       ) as SynapseAgentAttachmentSelectionResult
 
       expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith({
@@ -111,26 +122,18 @@ describe("agentIpcModule", () => {
         rejectedCount: 0,
         attachments: [
           {
-            kind: "image",
             sourceIndex: 0,
-            mimeType: "image/png",
-            name: "screen.png",
-            size: 3,
+            ref: expect.objectContaining({ kind: "image", name: "screen.png" }),
           },
           {
-            kind: "path",
             sourceIndex: 1,
-            path: filePath,
-            entryType: "file",
-            name: "brief.md",
-            size: 7,
+            ref: expect.objectContaining({ kind: "file", name: "brief.md" }),
           },
         ],
       })
       const imageAttachment = result.attachments[0]
-      expect(imageAttachment?.kind).toBe("image")
-      if (imageAttachment?.kind !== "image") throw new Error("Expected an image attachment")
-      expect(imageAttachment.data).toBeInstanceOf(ArrayBuffer)
+      expect(imageAttachment?.ref.kind).toBe("image")
+      expect(JSON.stringify(result)).not.toMatch(/"(?:data|bytes|base64)":/)
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
@@ -152,7 +155,7 @@ describe("agentIpcModule", () => {
     try {
       const result = await createHarness({}).invoke(
         "synapse:app:agent:operation:choose_attachments",
-        { kind: "directory" },
+        { projectId: "project-1", draftScopeId: "draft-1", kind: "directory" },
       ) as SynapseAgentAttachmentSelectionResult
 
       expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(focusedWindow, {
@@ -160,8 +163,8 @@ describe("agentIpcModule", () => {
         properties: ["openDirectory", "multiSelections"],
       })
       expect(result.attachments).toEqual([
-        expect.objectContaining({ sourceIndex: 0, path: first, entryType: "directory" }),
-        expect.objectContaining({ sourceIndex: 1, path: second, entryType: "directory" }),
+        expect.objectContaining({ sourceIndex: 0, ref: expect.objectContaining({ kind: "directory", path: first }) }),
+        expect.objectContaining({ sourceIndex: 1, ref: expect.objectContaining({ kind: "directory", path: second }) }),
       ])
     } finally {
       await fs.rm(root, { recursive: true, force: true })
@@ -176,7 +179,7 @@ describe("agentIpcModule", () => {
 
     await expect(createHarness({}).invoke(
       "synapse:app:agent:operation:choose_attachments",
-      { kind: "file" },
+      { projectId: "project-1", draftScopeId: "draft-1", kind: "file" },
     )).resolves.toEqual({ attachments: [], rejectedCount: 0 })
   })
 
@@ -194,19 +197,77 @@ describe("agentIpcModule", () => {
     try {
       const result = await createHarness({}).invoke(
         "synapse:app:agent:operation:resolve_attachment_paths",
-        { paths: [emptyFile, path.join(root, "missing"), directory, link, emptyImage] },
+        { projectId: "project-1", draftScopeId: "draft-1", paths: [emptyFile, path.join(root, "missing"), directory, link, emptyImage] },
       )
 
       expect(result).toEqual({
         attachments: [
-          expect.objectContaining({ sourceIndex: 0, path: emptyFile, entryType: "file", size: 0 }),
-          expect.objectContaining({ sourceIndex: 2, path: directory, entryType: "directory" }),
+          expect.objectContaining({ sourceIndex: 0, ref: expect.objectContaining({ kind: "file" }) }),
+          expect.objectContaining({ sourceIndex: 2, ref: expect.objectContaining({ kind: "directory", path: directory }) }),
         ],
         rejectedCount: 3,
       })
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
+  })
+
+  it("stages a clipboard image through the Agent attachment service", async () => {
+    const ref = testImageRef("clipboard-1", "paste.png")
+    const stageAttachmentBytes = vi.fn().mockResolvedValue([{ ref }])
+    electronMock.clipboard.readImage.mockReturnValueOnce({
+      isEmpty: () => false,
+      toPNG: () => Buffer.from([1, 2, 3]),
+    })
+
+    await expect(createHarness({ agent: { stageAttachmentBytes } }).invoke(
+      "synapse:app:agent:operation:stage_clipboard_image",
+      { projectId: "project-1", draftScopeId: "draft-1", name: "paste.png" },
+    )).resolves.toEqual({
+      attachments: [{ sourceIndex: 0, ref }],
+      rejectedCount: 0,
+    })
+    expect(stageAttachmentBytes).toHaveBeenCalledWith(expect.objectContaining({
+      draftScopeId: "draft-1",
+      attachments: [expect.objectContaining({ name: "paste.png", mimeType: "image/png" })],
+    }))
+  })
+
+  it("rejects empty clipboard images and invalid staging requests", async () => {
+    const stageAttachmentBytes = vi.fn()
+    const harness = createHarness({ agent: { stageAttachmentBytes } })
+
+    await expect(harness.invoke(
+      "synapse:app:agent:operation:stage_clipboard_image",
+      { projectId: "project-1", draftScopeId: "draft-1" },
+    )).resolves.toEqual({ attachments: [], rejectedCount: 1 })
+    expect(stageAttachmentBytes).not.toHaveBeenCalled()
+    await expect(harness.invoke(
+      "synapse:app:agent:operation:stage_clipboard_image",
+      { projectId: "project-1", draftScopeId: "" },
+    )).rejects.toThrow()
+  })
+
+  it("propagates clipboard staging and attachment release failures", async () => {
+    electronMock.clipboard.readImage.mockReturnValueOnce({
+      isEmpty: () => false,
+      toPNG: () => Buffer.from([1, 2, 3]),
+    })
+    const stagingFailure = new Error("staging failed")
+    await expect(createHarness({
+      agent: { stageAttachmentBytes: vi.fn().mockRejectedValue(stagingFailure) },
+    }).invoke(
+      "synapse:app:agent:operation:stage_clipboard_image",
+      { projectId: "project-1", draftScopeId: "draft-1" },
+    )).rejects.toThrow(stagingFailure)
+
+    const releaseFailure = new Error("release failed")
+    await expect(createHarness({
+      agent: { releaseAttachments: vi.fn().mockRejectedValue(releaseFailure) },
+    }).invoke(
+      "synapse:app:agent:operation:release_attachments",
+      { projectId: "project-1", draftScopeId: "draft-1", attachmentIds: ["attachment-1"] },
+    )).rejects.toThrow(releaseFailure)
   })
 
   it("opens the project container and sends local renderer messages through AgentRuntime", async () => {
@@ -463,11 +524,16 @@ describe("agentIpcModule", () => {
     }))
   })
 
-  it("forwards normalized attachments through local renderer sends", async () => {
-    const root = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), "synapse-agent-attachments-"))
-    const filePath = path.join(root, "report.md")
-    await fs.writeFile(filePath, "report")
-    const imageData = new Uint8Array([1, 2, 3])
+  it("resolves ordered attachment ids before forwarding trusted refs", async () => {
+    const imageRef = testImageRef("image-1", "chart.png")
+    const fileRef = {
+      version: 2 as const,
+      attachmentId: "file-1",
+      kind: "file" as const,
+      name: "report.md",
+      byteSize: 6,
+      sha256: "1".repeat(64),
+    }
     const send = vi.fn().mockResolvedValue({
       conversationId: "conv-1",
       resultText: "done",
@@ -476,52 +542,29 @@ describe("agentIpcModule", () => {
     const harness = createHarness({
       agent: {
         send,
+        resolveStagedAttachments: vi.fn().mockResolvedValue({
+          draftScopeId: "draft-1",
+          refs: [imageRef, fileRef],
+        }),
       },
     })
 
-    try {
-      await harness.invoke("synapse:app:agent:operation:send", {
-        projectId: "project-1",
-        content: "hello",
-        displayContent: "hello",
-        attachments: [
-          {
-            kind: "image",
-            mimeType: "image/png",
-            data: imageData,
-            name: "chart.png",
-            size: 3,
-          },
-          {
-            kind: "path",
-            path: filePath,
-            entryType: "directory",
-          },
-        ],
-      })
-    } finally {
-      await fs.rm(root, { recursive: true, force: true })
-    }
+    await harness.invoke("synapse:app:agent:operation:send", {
+      projectId: "project-1",
+      content: "hello",
+      displayContent: "hello",
+      attachments: [
+        { attachmentId: "file-1", order: 1 },
+        { attachmentId: "image-1", order: 0 },
+      ],
+    })
 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      attachments: [
-        expect.objectContaining({
-          kind: "image",
-          mimeType: "image/png",
-          data: imageData,
-          name: "chart.png",
-          size: 3,
-        }),
-        expect.objectContaining({
-          kind: "path",
-          path: filePath,
-          entryType: "file",
-          name: "report.md",
-          size: 6,
-        }),
-      ],
+      attachmentRefs: [imageRef, fileRef],
+      attachmentDraftScopeId: "draft-1",
       displayContent: "hello",
     }))
+    expect(JSON.stringify(send.mock.calls)).not.toMatch(/"(?:data|bytes|base64)":/)
   })
 
   it("blocks missing path attachments before sending to AgentRuntime", async () => {
@@ -544,7 +587,7 @@ describe("agentIpcModule", () => {
         path: path.join(await fs.realpath(tmpdir()), "synapse-agent-missing-attachment.md"),
         entryType: "file",
       }],
-    })).rejects.toThrow("附件路径不存在。")
+    })).rejects.toThrow("Validation failed")
 
     expect(send).not.toHaveBeenCalled()
   })
@@ -575,7 +618,7 @@ describe("agentIpcModule", () => {
           path: linkPath,
           entryType: "file",
         }],
-      })).rejects.toThrow("附件路径不能是符号链接。")
+      })).rejects.toThrow("Validation failed")
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
@@ -611,7 +654,7 @@ describe("agentIpcModule", () => {
           path: path.join(linkDirectoryPath, "secret.md"),
           entryType: "file",
         }],
-      })).rejects.toThrow("附件路径不能是符号链接。")
+      })).rejects.toThrow("Validation failed")
     } finally {
       await fs.rm(root, { recursive: true, force: true })
       await fs.rm(outside, { recursive: true, force: true })
@@ -649,7 +692,7 @@ describe("agentIpcModule", () => {
           path: root,
           entryType: "directory",
         }],
-      })).rejects.toThrow("文件夹附件不能包含符号链接。")
+      })).rejects.toThrow("Validation failed")
     } finally {
       await fs.rm(root, { recursive: true, force: true })
       await fs.rm(outside, { recursive: true, force: true })
@@ -687,7 +730,7 @@ describe("agentIpcModule", () => {
           path: root,
           entryType: "directory",
         }],
-      })).rejects.toThrow("文件夹附件不能包含符号链接。")
+      })).rejects.toThrow("Validation failed")
     } finally {
       await fs.rm(root, { recursive: true, force: true })
       await fs.rm(outside, { recursive: true, force: true })
@@ -712,7 +755,7 @@ describe("agentIpcModule", () => {
         path: `/missing-${index}`,
         entryType: "file",
       })),
-    })).rejects.toThrow("路径附件最多 20 个。")
+    })).rejects.toThrow("Validation failed")
 
     expect(send).not.toHaveBeenCalled()
   })
@@ -735,7 +778,7 @@ describe("agentIpcModule", () => {
         projectId: "project-1",
         content: "read this directory",
         attachments: [{ kind: "path", path: root, entryType: "directory" }],
-      })).rejects.toThrow("文件夹附件内容过多，请缩小范围后重试。")
+      })).rejects.toThrow("Validation failed")
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
@@ -760,7 +803,7 @@ describe("agentIpcModule", () => {
         projectId: "project-1",
         content: "read this directory",
         attachments: [{ kind: "path", path: root, entryType: "directory" }],
-      })).rejects.toThrow("文件夹附件目录层级过深，请缩小范围后重试。")
+      })).rejects.toThrow("Validation failed")
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
@@ -788,7 +831,7 @@ describe("agentIpcModule", () => {
         mimeType: "image/png",
         data: new Uint8Array((10 * 1024 * 1024) + 1),
       }],
-    })).rejects.toThrow("图片附件过大。")
+    })).rejects.toThrow("Validation failed")
 
     expect(send).not.toHaveBeenCalled()
   })
@@ -813,7 +856,7 @@ describe("agentIpcModule", () => {
         mimeType: "image/png",
         data: new Uint8Array([1]),
       })),
-    })).rejects.toThrow("图片附件最多 8 张。")
+    })).rejects.toThrow("Validation failed")
 
     expect(send).not.toHaveBeenCalled()
   })
@@ -850,12 +893,12 @@ describe("agentIpcModule", () => {
           data: new Uint8Array([1]),
         },
       ],
-    })).rejects.toThrow("图片附件总大小过大。")
+    })).rejects.toThrow("Validation failed")
 
     expect(send).not.toHaveBeenCalled()
   })
 
-  it("allows image attachments at the count and aggregate size boundary", async () => {
+  it("allows 50 ordered attachment references without raw image bytes", async () => {
     const send = vi.fn().mockResolvedValue({
       conversationId: "conv-1",
       resultText: "done",
@@ -870,16 +913,15 @@ describe("agentIpcModule", () => {
     await harness.invoke("synapse:app:agent:operation:send", {
       projectId: "project-1",
       content: "",
-      attachments: Array.from({ length: 8 }, () => ({
-        kind: "image",
-        mimeType: "image/png",
-        data: new Uint8Array(1),
+      attachments: Array.from({ length: 50 }, (_, order) => ({
+        attachmentId: `image-${order}`,
+        order,
       })),
     })
 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      attachments: expect.arrayContaining([
-        expect.objectContaining({ kind: "image", size: 1 }),
+      attachmentRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: "image", attachmentId: "image-49" }),
       ]),
     }))
   })
@@ -2383,6 +2425,18 @@ function createHarness(overrides: {
     deleteSession: vi.fn(),
     send: vi.fn(),
     sendToConversation: vi.fn(),
+    stageAttachmentPaths: vi.fn(async ({ paths }: { readonly paths: readonly string[] }) => Promise.all(paths.map(async (sourcePath) => {
+      const stat = await fs.lstat(sourcePath)
+      if (stat.isSymbolicLink()) throw new Error("symbolic link")
+      if (path.extname(sourcePath).toLowerCase() === ".png" && stat.size === 0) throw new Error("empty image")
+      return { ref: testAttachmentRefForPath(sourcePath, stat.isDirectory(), stat.size) }
+    }))),
+    stageAttachmentBytes: vi.fn(),
+    releaseAttachments: vi.fn().mockResolvedValue(undefined),
+    resolveStagedAttachments: vi.fn(async (attachmentIds: readonly string[]) => ({
+      draftScopeId: "draft-1",
+      refs: attachmentIds.map((attachmentId) => testImageRef(attachmentId)),
+    })),
     listPendingPermissions: vi.fn().mockReturnValue([]),
     respondPermission: vi.fn().mockResolvedValue(undefined),
     ...overrides.agent,
@@ -2471,4 +2525,28 @@ function createHarness(overrides: {
     auditSink,
     conversationWindowService,
   })
+}
+
+function testAttachmentRefForPath(sourcePath: string, isDirectory = false, byteSize = 7) {
+  const attachmentId = `attachment-${path.basename(sourcePath)}`
+  const name = path.basename(sourcePath)
+  if (path.extname(sourcePath).toLowerCase() === ".png") return testImageRef(attachmentId, name)
+  if (isDirectory) {
+    return { version: 2 as const, attachmentId, kind: "directory" as const, name, byteSize: 0, path: sourcePath }
+  }
+  return { version: 2 as const, attachmentId, kind: "file" as const, name, byteSize, sha256: "1".repeat(64) }
+}
+
+function testImageRef(attachmentId: string, name = "screen.png") {
+  return {
+    version: 2 as const,
+    attachmentId,
+    kind: "image" as const,
+    name,
+    byteSize: 3,
+    mimeType: "image/png" as const,
+    previewUrl: `synapse-agent-artifact://local/${attachmentId}/preview.png`,
+    thumbnailUrl: `synapse-agent-artifact://local/${attachmentId}/thumbnail.png`,
+    sha256: "1".repeat(64),
+  }
 }

@@ -658,6 +658,7 @@ function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
   return {
     defaultPermissionMode,
     defaultProviderModel,
+    experimentalSynapseToolRouterEnabled: value.experimentalSynapseToolRouterEnabled === true,
     recentSlashSkills,
   }
 }

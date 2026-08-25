@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type {
   AgentEventEntryV1,
-  AgentArtifactEntryV1,
+  AgentArtifactEntry,
   AgentUsageEntryV1,
   ConversationEntryV1,
   DataChangeEvent,
@@ -23,6 +23,7 @@ import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
 import type { ConversationRouterDeps } from "../conversation-router"
 import { AgentArtifactStore } from "../artifact-store"
+import type { AttachmentStagingService } from "../attachment-staging-service"
 import { AgentGovernanceService } from "../governance"
 import { AgentSessionRepository, conversationId } from "../session-repository"
 import { SessionManager } from "../session-manager"
@@ -311,6 +312,110 @@ describe("ConversationRouter", () => {
     ]))
   })
 
+  it("sends /compact through the current SDK session and emits each event once", async () => {
+    const commandRouter = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService: {} as ProviderService,
+      resetSession: async () => conversation(),
+    })
+    const session = new ScriptedSession([
+      {
+        type: "compactBoundary",
+        payload: {
+          type: "system",
+          subtype: "compact_boundary",
+          compact_metadata: { trigger: "manual", pre_tokens: 91_600, post_tokens: 24_000 },
+        },
+        contextUsage: {
+          usedTokens: 24_000,
+          contextWindowTokens: 200_000,
+          model: "qwen3.7-plus",
+        },
+        sdkSessionId: "sdk-1",
+      },
+      { type: "result", content: "Context compacted.", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const { eventBus, events: emittedEvents } = createEventBusRecorder()
+    const { conversations, router } = createRouter({ commandRouter, eventBus, session })
+
+    const result = await router.send(baseMessage("/compact"))
+    const saved = await conversations.get(result.conversationId)
+    const emittedCompactEventTypes = emittedEvents
+      .map((event) => event.type)
+      .filter((type) => type === "sdkEvent" || type === "compactBoundary" || type === "result")
+
+    expect(session.sent).toEqual(["/compact"])
+    expect(result.events.map((event) => event.type)).toEqual([
+      "sdkEvent",
+      "compactBoundary",
+      "result",
+    ])
+    expect(emittedCompactEventTypes).toEqual([
+      "sdkEvent",
+      "compactBoundary",
+      "result",
+    ])
+    expect(result.events[1]).toEqual(expect.objectContaining({
+      type: "compactBoundary",
+      contextUsage: expect.objectContaining({ usedTokens: 24_000 }),
+    }))
+    expect(saved?.history).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "user", content: "/compact" }),
+      expect.objectContaining({
+        role: "system",
+        content: "SDK nativeSlashPassthrough /compact",
+      }),
+    ]))
+    expect(JSON.stringify(saved?.history)).not.toContain("compact_summary")
+  })
+
+  it("emits one SDK error when /compact fails", async () => {
+    const commandRouter = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService: {} as ProviderService,
+      resetSession: async () => conversation(),
+    })
+    const session = new ScriptedSession([
+      { type: "error", message: "SDK compact failed", sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const { eventBus, events: emittedEvents } = createEventBusRecorder()
+    const { router } = createRouter({ commandRouter, eventBus, session })
+
+    const result = await router.send(baseMessage("/compact"))
+
+    expect(result.error).toBe("SDK compact failed")
+    expect(result.events.filter((event) => event.type === "error")).toEqual([
+      expect.objectContaining({ type: "error", message: "SDK compact failed" }),
+    ])
+    expect(emittedEvents.filter((event) => event.type === "error")).toHaveLength(1)
+    expect(session.sent).toEqual(["/compact"])
+  })
+
+  it("rejects removed /compress with one error event and without starting the SDK session", async () => {
+    const commandRouter = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService: {} as ProviderService,
+      resetSession: async () => conversation(),
+    })
+    const session = new ScriptedSession([
+      { type: "result", content: "unexpected", done: true },
+    ])
+    const { eventBus, events: emittedEvents } = createEventBusRecorder()
+    const { router } = createRouter({ commandRouter, eventBus, session })
+
+    const result = await router.send(baseMessage("/compress"))
+
+    expect(result.error).toBe("不支持的命令：/compress")
+    expect(result.events).toEqual([
+      { type: "error", message: "不支持的命令：/compress" },
+    ])
+    expect(emittedEvents.map((event) => event.type)).toEqual(["error"])
+    expect(session.sent).toEqual([])
+  })
+
   it("does not annotate native slash passthrough when SDK send fails", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const commandRouter = {
@@ -393,7 +498,7 @@ describe("ConversationRouter", () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-artifacts-"))
     try {
       const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
-      const agentArtifacts = new MemoryNamespace<AgentArtifactEntryV1>("agent.artifacts")
+      const agentArtifacts = new MemoryNamespace<AgentArtifactEntry>("agent.artifacts")
       const { eventBus, events: emittedEvents } = createEventBusRecorder()
       const { conversations, router } = createRouter({
         agentEvents,
@@ -680,7 +785,14 @@ describe("ConversationRouter", () => {
           type: "result",
           content: "你好可以你的?",
           done: true,
-          metadata: { model: "claude-sonnet-4-5" },
+          metadata: {
+            model: "claude-sonnet-4-5",
+            contextUsage: {
+              usedTokens: 58_000,
+              contextWindowTokens: 200_000,
+              model: "claude-sonnet-4-5",
+            },
+          },
           sdkSessionId: "sdk-1",
         },
       ], "sdk-1"),
@@ -691,7 +803,16 @@ describe("ConversationRouter", () => {
 
     expect(result.resultText).toBe("你好！有什么可以帮助你的吗？")
     expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
-      expect.objectContaining({ content: "你好！有什么可以帮助你的吗？" }),
+      expect.objectContaining({
+        content: "你好！有什么可以帮助你的吗？",
+        metadata: expect.objectContaining({
+          contextUsage: {
+            usedTokens: 58_000,
+            contextWindowTokens: 200_000,
+            model: "claude-sonnet-4-5",
+          },
+        }),
+      }),
     ])
   })
 
@@ -1837,7 +1958,7 @@ describe("ConversationRouter", () => {
     ])
   })
 
-  it("adds readable path attachment context when content is blank", async () => {
+  it("keeps attachment paths out of persisted user content", async () => {
     const session = new ScriptedSession([
       { type: "result", content: "read paths", done: true, sdkSessionId: "sdk-1" },
     ], "sdk-1")
@@ -1860,33 +1981,75 @@ describe("ConversationRouter", () => {
     })
     const savedConversation = await conversations.get(result.conversationId)
 
-    const readableContent = [
-      "粘贴文件:",
-      "/Users/liyang/Desktop/report.pdf",
-      "",
-      "粘贴文件夹:",
-      "/Users/liyang/Downloads/sources",
-    ].join("\n")
-    expect(session.sent).toEqual([readableContent])
+    expect(session.sent).toEqual([""])
     expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([
-      expect.objectContaining({ content: readableContent }),
+      expect.objectContaining({ content: "" }),
     ])
+    expect(JSON.stringify(savedConversation?.history)).not.toContain("/Users/liyang/Desktop/report.pdf")
   })
 
-  it("persists attachment diagnostics on user history without storing image bytes", async () => {
+  it("rolls committed attachments back when the turn fails", async () => {
+    const ref = {
+      version: 2 as const,
+      attachmentId: "attachment-1",
+      kind: "image" as const,
+      name: "screen.png",
+      byteSize: 3,
+      mimeType: "image/png" as const,
+      previewUrl: "synapse-agent-artifact://local/attachment-1/preview",
+      thumbnailUrl: "synapse-agent-artifact://local/attachment-1/thumbnail",
+      sha256: "a".repeat(64),
+    }
+    const rollbackCommit = vi.fn().mockResolvedValue(undefined)
+    const attachmentStagingService = {
+      commit: vi.fn().mockResolvedValue([{ ref }]),
+      resolveCommittedForRuntime: vi.fn().mockResolvedValue({
+        attachments: [{
+          kind: "path",
+          path: "/controlled/draft/attachment-1/original.png",
+          entryType: "image",
+          name: "screen.png",
+        }],
+        controlledDirectories: ["/controlled/draft"],
+      }),
+      rollbackCommit,
+    } as unknown as AttachmentStagingService
+    const { router } = createRouter({
+      attachmentStagingService,
+      session: new ScriptedSession([
+        { type: "error", message: "SDK failed", sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send({
+      ...baseMessage("分析图片"),
+      attachmentDraftScopeId: "draft-1",
+      attachmentRefs: [ref],
+    })
+
+    expect(result.error).toBe("SDK failed")
+    expect(rollbackCommit).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      draftScopeId: "draft-1",
+      attachmentIds: ["attachment-1"],
+      conversationId: result.conversationId,
+    }))
+  })
+
+  it("persists path-only image diagnostics without image bytes", async () => {
     const session = new ScriptedSession([
       { type: "result", content: "read image", done: true, sdkSessionId: "sdk-1" },
     ], "sdk-1")
     const { conversations, router } = createRouter({ session })
 
     const result = await router.send({
-      ...baseMessage("[Image #1]\n\n你可以看到图片吗"),
+      ...baseMessage("你可以看到图片吗"),
       attachments: [{
-        kind: "image",
-        mimeType: "image/png",
+        kind: "path",
+        path: "/controlled/draft/image/original.png",
+        entryType: "image",
         name: "chart_watermark.png",
         size: 3,
-        data: new Uint8Array([1, 2, 3]),
       }],
     })
     const savedConversation = await conversations.get(result.conversationId)
@@ -1894,27 +2057,23 @@ describe("ConversationRouter", () => {
 
     expect(userEntry?.metadata).toEqual({
       attachments: [{
-        kind: "image",
-        mimeType: "image/png",
+        kind: "path",
+        entryType: "image",
         name: "chart_watermark.png",
-        size: 3,
-        sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
-        preparedForSdk: true,
+        preparedForSdk: false,
+        includedInReadableContent: false,
       }],
     })
-    expect(JSON.stringify(userEntry)).not.toContain("AQID")
-    expect(
-      (userEntry?.metadata?.attachments as Array<Record<string, unknown>> | undefined)?.[0],
-    ).not.toHaveProperty("data")
+    expect(JSON.stringify(userEntry)).not.toMatch(/AQID|base64|\"data\":/)
   })
 
-  it("persists versioned user message presentation without changing model-visible content", async () => {
+  it("does not persist runtime path bytes for legacy direct attachments", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-user-message-artifacts-"))
     try {
       const session = new ScriptedSession([
         { type: "result", content: "read image", done: true, sdkSessionId: "sdk-1" },
       ], "sdk-1")
-      const artifactRows = new MemoryNamespace<AgentArtifactEntryV1>("agent.artifacts")
+      const artifactRows = new MemoryNamespace<AgentArtifactEntry>("agent.artifacts")
       const agentArtifactStore = new AgentArtifactStore({
         rootDirectory: root,
         artifacts: artifactRows,
@@ -1927,11 +2086,11 @@ describe("ConversationRouter", () => {
         ...baseMessage("[Image #1]\n\n请分析"),
         displayContent: "请分析",
         attachments: [{
-          kind: "image",
-          mimeType: "image/png",
+          kind: "path",
+          path: "/controlled/draft/image/original.png",
+          entryType: "image",
           name: "screen.png",
           size: 3,
-          data: new Uint8Array([1, 2, 3]),
         }, {
           kind: "path",
           path: "/Users/liyang/Desktop/report.pdf",
@@ -1945,55 +2104,14 @@ describe("ConversationRouter", () => {
 
       expect(session.sent).toEqual(["[Image #1]\n\n请分析"])
       expect(userEntry?.content).toBe("[Image #1]\n\n请分析")
-      expect(userEntry?.metadata).toEqual({
+      expect(userEntry?.metadata).toEqual(expect.objectContaining({
         userMessagePresentation: { version: 1, content: "请分析" },
-        attachments: [{
-          kind: "image",
-          id: "user-image-1",
-          name: "screen.png",
-          mimeType: "image/png",
-          byteSize: 3,
-          url: expect.stringContaining("/user-image-1.png"),
-          sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
-        }, {
-          kind: "path",
-          path: "/Users/liyang/Desktop/report.pdf",
-          entryType: "file",
-          name: "report.pdf",
-          byteSize: 2048,
-        }],
-      })
-      expect(JSON.stringify(userEntry)).not.toContain("AQID")
-      expect(await artifactRows.list()).toEqual([
-        expect.objectContaining({ origin: "user-message", originalName: "screen.png" }),
-      ])
+      }))
+      expect(JSON.stringify(userEntry)).not.toMatch(/AQID|base64|\"data\":/)
+      expect(await artifactRows.list()).toEqual([])
     } finally {
       await rm(root, { recursive: true, force: true })
     }
-  })
-
-  it("rejects the send before model execution when user image persistence fails", async () => {
-    const session = new ScriptedSession([
-      { type: "result", content: "unexpected", done: true, sdkSessionId: "sdk-1" },
-    ], "sdk-1")
-    const agentArtifactStore = {
-      materializeUserMessageImages: vi.fn().mockRejectedValue(new Error("disk full")),
-    } as unknown as AgentArtifactStore
-    const { conversations, router } = createRouter({ session, agentArtifactStore })
-
-    await expect(router.send({
-      ...baseMessage("[Image #1]"),
-      displayContent: "",
-      attachments: [{
-        kind: "image",
-        mimeType: "image/png",
-        size: 3,
-        data: new Uint8Array([1, 2, 3]),
-      }],
-    })).rejects.toThrow("disk full")
-
-    expect(session.sent).toEqual([])
-    expect((await conversations.list())[0]?.history).toEqual([])
   })
 
   it("persists active main-thread persona metadata with user and assistant history", async () => {
@@ -2387,6 +2505,26 @@ describe("ConversationRouter", () => {
       sdkSessionId: "sdk-1",
       resumePolicy: "fresh",
     })
+  })
+
+  it("snapshots the experimental tool router setting for new conversations only", async () => {
+    let enabled = true
+    const { conversations, router } = createRouter({
+      loadExperimentalSynapseToolRouterEnabled: () => enabled,
+      sessions: [
+        new ScriptedSession([{ type: "result", content: "first", done: true }]),
+        new ScriptedSession([{ type: "result", content: "second", done: true }]),
+        new ScriptedSession([{ type: "result", content: "third", done: true }]),
+      ],
+    })
+
+    const first = await router.send(baseMessage("first"))
+    enabled = false
+    await router.send(baseMessage("same conversation"))
+    const second = await router.sendNewSession(baseMessage("new conversation"), "New")
+
+    expect((await conversations.get(first.conversationId))?.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(true)
+    expect((await conversations.get(second.conversationId))?.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(false)
   })
 
   it("emits background phase events with conversation scope", async () => {
@@ -2840,6 +2978,41 @@ describe("ConversationRouter", () => {
     expect(persistedPayload).toContain("C:\\\\Users\\\\liyang\\\\secret\\\\out.txt")
     expect(JSON.stringify(persisted[0]?.payload).length).toBeLessThan(12_000)
   })
+
+  it("persists one safe tool-router fallback status for history restore", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { conversations, router } = createRouter({
+      agentEvents,
+      session: new ScriptedSession([
+        {
+          type: "sdkEvent",
+          sdkType: "synapseToolRouterFallback",
+          payload: { reason: "unsupported-server-config" },
+          sdkSessionId: "sdk-router",
+        },
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-router" },
+      ], "sdk-router"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const saved = await conversations.get(result.conversationId)
+    const fallbackEntries = saved?.history.filter(
+      (entry) => entry.metadata?.sdkType === "synapseToolRouterFallback",
+    )
+
+    expect(fallbackEntries).toEqual([
+      expect.objectContaining({
+        role: "system",
+        content: "Synapse MCP 工具按需加载不可用，本次对话已回退完整工具。",
+        metadata: expect.objectContaining({
+          agentEventType: "sdkEvent",
+          sdkSessionId: "sdk-router",
+        }),
+      }),
+    ])
+    expect(JSON.stringify(fallbackEntries)).not.toContain("unsupported-server-config")
+    expect((await agentEvents.list()).filter((entry) => entry.eventType === "sdkEvent")).toHaveLength(1)
+  })
 })
 
 function createRouter(input: {
@@ -2859,10 +3032,12 @@ function createRouter(input: {
   readonly outbox?: ConversationRouterDeps["outbox"]
   readonly replyTargets?: ConversationRouterDeps["replyTargets"]
   readonly agentArtifactStore?: ConversationRouterDeps["agentArtifactStore"]
+  readonly attachmentStagingService?: ConversationRouterDeps["attachmentStagingService"]
   readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
   readonly afterTurn?: ConversationRouterDeps["afterTurn"]
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
+  readonly loadExperimentalSynapseToolRouterEnabled?: ConversationRouterDeps["loadExperimentalSynapseToolRouterEnabled"]
 } = {}) {
   const conversations = input.conversations ?? new MemoryNamespace<ConversationEntryV1>("conversations")
   const providerService = new FakeProviderService(input.activeProviderId ?? "anthropic", input.env ?? {})
@@ -2913,12 +3088,14 @@ function createRouter(input: {
       outbox: input.outbox,
       replyTargets: input.replyTargets,
       agentArtifactStore: input.agentArtifactStore,
+      attachmentStagingService: input.attachmentStagingService,
       now: fixedNow,
       permissionGuard: input.permissionGuard,
       auditSink: input.auditSink,
       prepareMessage: input.prepareMessage,
       afterTurn: input.afterTurn,
       getUsagePriceRules: () => input.priceRules ?? [],
+      loadExperimentalSynapseToolRouterEnabled: input.loadExperimentalSynapseToolRouterEnabled,
     },
     repository,
     sessionManager,

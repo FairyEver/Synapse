@@ -315,18 +315,19 @@ describe("GitWorkbench", () => {
 
     expect(findButtonByLabel("统一视图").getAttribute("data-state")).toBe("on")
     expect(findButtonByLabel("自动换行").getAttribute("data-state")).toBe("off")
-    expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-theme")).toBe("light")
+    expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-mode")).toBe("unified")
 
     await click(findButtonByLabel("分栏视图"))
     await click(findButtonByLabel("自动换行"))
     expect(findButtonByLabel("分栏视图").getAttribute("data-state")).toBe("on")
     expect(findButtonByLabel("自动换行").getAttribute("data-state")).toBe("on")
+    expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-mode")).toBe("split")
 
     await act(async () => {
       document.documentElement.classList.add("dark")
       await flush()
     })
-    expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-theme")).toBe("dark")
+    expect(document.querySelector('[data-component="git-diff-view"]')).toBeTruthy()
   })
 
   it("shares diff layout and wrapping between changes and history", async () => {

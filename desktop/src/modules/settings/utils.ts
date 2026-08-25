@@ -41,6 +41,10 @@ function getSettingValue(item: SettingItem, context: SettingsContext): unknown {
     return getGlobalSettingValue(item.key.slice("global.".length), context, item.defaultValue)
   }
 
+  if (item.key === "agent.experimentalSynapseToolRouterEnabled") {
+    return context.config.agent.experimentalSynapseToolRouterEnabled
+  }
+
   return item.defaultValue
 }
 
@@ -59,6 +63,10 @@ function createSettingPatch(item: SettingItem, value: unknown, context: Settings
 
   if (item.key.startsWith("global.")) {
     return createGlobalSettingPatch(item.key.slice("global.".length), value)
+  }
+
+  if (item.key === "agent.experimentalSynapseToolRouterEnabled") {
+    return { agent: { experimentalSynapseToolRouterEnabled: value === true } }
   }
 
   return null

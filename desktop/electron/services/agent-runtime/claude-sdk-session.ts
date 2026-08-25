@@ -7,6 +7,7 @@ import type {
   PermissionResult,
   PermissionUpdate,
   Query,
+  SDKControlGetContextUsageResponse,
   SDKMessage,
   SessionStore,
   SDKUserMessage,
@@ -19,6 +20,10 @@ import {
   resolveCachedLoginShellPath,
 } from "../../runtime/process"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import type {
+  AgentContextWindowConfigurationSource,
+  AgentModelContextReference,
+} from "../model-capability/catalog"
 import type {
   AgentSdkAgentDefinitions,
   AgentSdkPluginSpec,
@@ -38,12 +43,14 @@ import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
 import { errorLogMeta as baseErrorLogMeta } from "../error-sanitize"
 import { agentRuntimeErrorMessage } from "./error-message"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
+import { AgentContextUsageTracker } from "./context-usage"
 import {
-  buildClaudeUserMessageContent,
+  buildAgentRuntimeUserContent,
   mergeAdditionalDirectories,
   normalizeAgentAttachments,
 } from "./attachments"
 import type {
+  AgentContextUsage,
   AgentEvent,
   AgentLiveSession,
   AgentMessage,
@@ -57,6 +64,18 @@ import {
   type PackagedClaudeRuntimeStatus,
 } from "./claude-runtime-binary"
 import { DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./turn-limits"
+import {
+  SYNAPSE_MCP_TOOL_PREFIX,
+  SYNAPSE_TOOL_ROUTER_INVOKE_TOOL,
+  SYNAPSE_TOOL_ROUTER_SEARCH_TOOL,
+  isSynapseToolReadOnly,
+  originalSynapseSdkToolName,
+  parseSynapseToolRouterInvoke,
+} from "./synapse-tool-router"
+import {
+  SynapseToolRouterQuery,
+  type SynapseToolRouterQueryOptions,
+} from "./synapse-tool-router-query"
 
 export interface QueryLike {
   next(): Promise<IteratorResult<SDKMessage, void>>
@@ -65,12 +84,14 @@ export interface QueryLike {
   streamInput?(stream: AsyncIterable<SDKUserMessage>): Promise<void>
   setPermissionMode?(mode: PermissionMode): Promise<void>
   grantAdditionalDirectories?(directories: readonly string[]): Promise<void>
+  getContextUsage?(): Promise<SDKControlGetContextUsageResponse>
 }
 
 export type QueryFactory = (input: {
   prompt: AsyncIterable<SDKUserMessage>
   options: Record<string, unknown>
   logger?: Pick<StructuredLogger, "warn">
+  synapseToolRouter?: SynapseToolRouterQueryOptions
 }) => QueryLike
 
 export interface ClaudeSDKSessionOptions {
@@ -85,6 +106,8 @@ export interface ClaudeSDKSessionOptions {
   readonly nodeRuntimeBinPath?: string
   readonly mode?: string
   readonly model?: string
+  readonly modelContext?: AgentModelContextReference
+  readonly contextWindowConfigurationSource?: AgentContextWindowConfigurationSource
   readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
   readonly allowPluginHooks?: boolean
@@ -102,6 +125,11 @@ export interface ClaudeSDKSessionOptions {
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly onConversationTitle?: (title: string) => void | Promise<void>
   readonly queryFactory?: QueryFactory
+  readonly synapseToolRouter?: SynapseToolRouterQueryOptions
+  readonly routerSubagentToolAccess?: Readonly<Record<string, {
+    readonly allowedTools?: readonly string[]
+    readonly disallowedTools?: readonly string[]
+  }>>
   readonly logger?: Pick<StructuredLogger, "warn">
   readonly now?: () => Date
 }
@@ -115,6 +143,7 @@ interface PendingPermission {
   readonly sessionDirectoryUpdates: readonly SessionDirectoryPermissionUpdate[]
   readonly resolve: (decision: PermissionResult) => void
   readonly cleanup: () => void
+  readonly projectUpdatedInput?: (input: Record<string, unknown>) => Record<string, unknown>
 }
 
 type SessionDirectoryPermissionUpdate = Extract<PermissionUpdate, { type: "addDirectories" }>
@@ -169,17 +198,27 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly subagentToolPolicies: AgentSdkSubagentToolPolicies
   private readonly personaToolPolicy: ClaudeSDKPersonaToolPolicy | undefined
   private readonly toolPolicy: ClaudeSDKToolPolicy | undefined
+  private readonly synapseToolRouterEnabled: boolean
+  private readonly routerSubagentToolAccess: NonNullable<ClaudeSDKSessionOptions["routerSubagentToolAccess"]>
   private readonly query: QueryLike
   private additionalDirectories: readonly string[]
   private readonly abortController: AbortController | undefined
   private readonly abortCleanup: (() => void) | undefined
   private readonly pumpPromise: Promise<void>
   private readonly toolNamesByUseId = new Map<string, string>()
+  private readonly routerInvocationsByUseId = new Map<string, {
+    readonly toolName: string
+    readonly arguments: Record<string, unknown>
+  }>()
   private readonly subagentTypesById = new Map<string, string>()
+  private readonly attachmentPathLabels = new Map<string, string>()
+  private readonly contextUsageTracker: AgentContextUsageTracker
   private lastTodoWriteSignature: string | undefined
   private repeatedTodoWriteCount = 0
   private closed = false
   private queryFinished = false
+  private permissionMode: PermissionMode | undefined
+  private synapseToolRouterFallbackEmitted = false
   mainThreadAgentName: string | undefined
   readonly agentDefinitionsHash: string | undefined
   get finished(): boolean {
@@ -193,11 +232,18 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.projectId = options.projectId
     this.conversationId = options.conversationId
     this.providerId = options.providerId
+    this.contextUsageTracker = new AgentContextUsageTracker({
+      modelContext: options.modelContext,
+      contextWindowConfigurationSource: options.contextWindowConfigurationSource,
+    })
     this.sdkSessionId = options.sdkSessionId
     this.logger = options.logger
     this.subagentToolPolicies = options.subagentToolPolicies ?? {}
     this.personaToolPolicy = options.personaToolPolicy
     this.toolPolicy = options.toolPolicy
+    this.synapseToolRouterEnabled = Boolean(options.synapseToolRouter)
+    this.routerSubagentToolAccess = options.routerSubagentToolAccess ?? {}
+    this.permissionMode = parsePermissionMode(options.mode)
     this.now = options.now ?? (() => new Date())
     this.mainThreadAgentName = options.agent
     this.agentDefinitionsHash = options.agentDefinitionsHash
@@ -211,10 +257,21 @@ export class ClaudeSDKSession implements AgentLiveSession {
       this.query = new FailedQuery(createMissingPackagedClaudeRuntimeError(packagedRuntime))
     } else {
       const queryFactory = options.queryFactory ?? defaultQueryFactory
+      const queryOptions = this.buildQueryOptions(options, packagedRuntime)
+      const synapseToolRouter = options.synapseToolRouter
+        ? {
+            ...options.synapseToolRouter,
+            onFallback: (reason: Parameters<NonNullable<SynapseToolRouterQueryOptions["onFallback"]>>[0]) => {
+              options.synapseToolRouter?.onFallback?.(reason)
+              this.notifySynapseToolRouterFallback(reason)
+            },
+          }
+        : undefined
       this.query = queryFactory({
         prompt: this.inputQueue,
-        options: this.buildQueryOptions(options, packagedRuntime),
+        options: queryOptions,
         logger: this.logger,
+        synapseToolRouter,
       })
     }
     this.pumpPromise = this.pumpQueryEvents()
@@ -233,11 +290,18 @@ export class ClaudeSDKSession implements AgentLiveSession {
       return false
     }
     const attachments = normalizeAgentAttachments(message.attachments)
+    for (const attachment of attachments) {
+      const name = attachment.name ?? path.basename(attachment.path)
+      this.attachmentPathLabels.set(attachment.path, `[Synapse attachment: ${name}]`)
+    }
+    for (const directory of message.runtimeAttachmentDirectories ?? []) {
+      this.attachmentPathLabels.set(directory, "[Synapse attachment root]")
+    }
     this.inputQueue.push({
       type: "user",
       message: {
         role: "user",
-        content: buildClaudeUserMessageContent(message.content, attachments),
+        content: buildAgentRuntimeUserContent(message.content, attachments),
       },
       parent_tool_use_id: null,
     })
@@ -276,7 +340,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
         pending.sessionDirectoryUpdates.flatMap((update) => update.directories),
       )
     }
-    pending.resolve(toPermissionResult(decision, pending.input, pending.sessionDirectoryUpdates))
+    pending.resolve(toPermissionResult(
+      decision,
+      pending.input,
+      pending.sessionDirectoryUpdates,
+      pending.projectUpdatedInput,
+    ))
   }
 
   nextEvent(): Promise<AgentEvent | null> {
@@ -311,6 +380,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       throw new Error("当前会话不支持切换权限模式")
     }
     await this.query.setPermissionMode(permissionMode)
+    this.permissionMode = permissionMode
   }
 
   async grantAdditionalDirectories(directories: readonly string[]): Promise<void> {
@@ -429,7 +499,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
       })
     }
 
-    if (Object.keys(this.subagentToolPolicies).length > 0) {
+    if (Object.keys(this.subagentToolPolicies).length > 0
+      || Object.keys(this.routerSubagentToolAccess).length > 0) {
       Object.assign(hooks, this.subagentTrackingHooks())
     }
 
@@ -445,6 +516,17 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (!policy || policy.mode === "all") return {}
     if (policy.mode === "disabled") {
       return denyToolUse("当前智能体未启用工具。")
+    }
+    if (toolName === SYNAPSE_TOOL_ROUTER_SEARCH_TOOL) {
+      return policy.allowedTools.some((allowed) => allowed.startsWith(SYNAPSE_MCP_TOOL_PREFIX))
+        ? {}
+        : denyToolUse("当前智能体未允许使用 Synapse 工具。")
+    }
+    if (toolName === SYNAPSE_TOOL_ROUTER_INVOKE_TOOL) {
+      const routed = parseSynapseToolRouterInvoke(record.tool_input)
+      return routed && policy.allowedTools.includes(originalSynapseSdkToolName(routed.toolName))
+        ? {}
+        : denyToolUse("当前智能体未允许使用该 Synapse 工具。")
     }
     if (policy.allowedTools.includes(toolName)) return {}
     return denyToolUse("当前智能体未允许使用该工具。")
@@ -496,26 +578,75 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (toolName === ASK_USER_QUESTION_TOOL_NAME) {
       return this.requestUserQuestion(input, context)
     }
-    const toolPolicyResult = this.toolPolicy?.(toolName, input)
-    if (toolPolicyResult) return toolPolicyResult
-    const policyResult = this.evaluateSubagentToolPolicy(toolName, input, context)
+    if (toolName === SYNAPSE_TOOL_ROUTER_SEARCH_TOOL) {
+      const policy = this.personaToolPolicy
+      if (policy?.mode === "disabled") {
+        return { behavior: "deny", message: "当前智能体未启用工具。" }
+      }
+      if (policy?.mode === "allowlist"
+        && !policy.allowedTools.some((allowed) => allowed.startsWith(SYNAPSE_MCP_TOOL_PREFIX))) {
+        return { behavior: "deny", message: "当前智能体未允许使用 Synapse 工具。" }
+      }
+      return { behavior: "allow", updatedInput: input }
+    }
+    const routedInvoke = toolName === SYNAPSE_TOOL_ROUTER_INVOKE_TOOL
+      ? parseSynapseToolRouterInvoke(input)
+      : null
+    if (toolName === SYNAPSE_TOOL_ROUTER_INVOKE_TOOL && !routedInvoke) {
+      return { behavior: "deny", message: "Unknown or invalid Synapse MCP tool invocation." }
+    }
+    const effectiveToolName = routedInvoke
+      ? originalSynapseSdkToolName(routedInvoke.toolName)
+      : toolName
+    const effectiveInput = routedInvoke?.arguments ?? input
+    const personaPolicyResult = this.evaluatePersonaToolPolicy(effectiveToolName)
+    if (personaPolicyResult) return personaPolicyResult
+    const routerSubagentPolicyResult = this.evaluateRouterSubagentToolAccess(effectiveToolName, context)
+    if (routerSubagentPolicyResult) return routerSubagentPolicyResult
+    if (routedInvoke) {
+      if (this.permissionMode === "dontAsk") {
+        return { behavior: "deny", message: "Synapse tool invocation is disabled in dontAsk mode." }
+      }
+      if (this.permissionMode === "plan" && !isSynapseToolReadOnly(routedInvoke.toolName)) {
+        return { behavior: "deny", message: "Only read-only Synapse tools are available in plan mode." }
+      }
+      if (this.permissionMode === "plan" || this.permissionMode === "bypassPermissions") {
+        return { behavior: "allow", updatedInput: input }
+      }
+    }
+    const toolPolicyResult = this.toolPolicy?.(effectiveToolName, effectiveInput)
+    if (toolPolicyResult) {
+      return routedInvoke && toolPolicyResult.behavior === "allow"
+        ? {
+            ...toolPolicyResult,
+            updatedInput: {
+              toolName: routedInvoke.toolName,
+              arguments: toolPolicyResult.updatedInput,
+            },
+          }
+        : toolPolicyResult
+    }
+    const policyResult = this.evaluateSubagentToolPolicy(effectiveToolName, effectiveInput, context)
     if (policyResult) return policyResult
 
     const requestId = this.nextPermissionRequestId()
     const timestamp = this.now().toISOString()
     const sessionDirectoryUpdates = sessionDirectoryPermissionUpdates(context.suggestions)
+    const displayInput = projectAttachmentPaths(effectiveInput, this.attachmentPathLabels) as Record<string, unknown>
     const event: AgentEvent = {
       type: "permissionRequest",
       requestId,
-      toolName,
-      toolInput: summarizeToolInput(toolName, input),
-      toolInputRaw: sanitizeToolInputRecord(input),
+      toolName: effectiveToolName,
+      toolInput: summarizeToolInput(effectiveToolName, displayInput),
+      toolInputRaw: sanitizeToolInputRecord(displayInput),
       conversationId: this.conversationId,
       providerId: this.providerId,
       projectId: this.projectId,
       sdkSessionId: this.sdkSessionId,
       timestamp,
-      ...(context.blockedPath ? { blockedPath: context.blockedPath } : {}),
+      ...(context.blockedPath
+        ? { blockedPath: projectAttachmentPathText(context.blockedPath, this.attachmentPathLabels) }
+        : {}),
       ...(sessionDirectoryUpdates.length > 0
         ? { sessionDirectoryGrantAvailable: true }
         : {}),
@@ -523,7 +654,45 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
     this.eventQueue.push(event)
 
-    return this.awaitPermissionResponse(requestId, input, context, sessionDirectoryUpdates)
+    return this.awaitPermissionResponse(
+      requestId,
+      input,
+      context,
+      sessionDirectoryUpdates,
+      routedInvoke
+        ? (updatedInput) => ({ toolName: routedInvoke.toolName, arguments: updatedInput })
+        : undefined,
+    )
+  }
+
+  private evaluatePersonaToolPolicy(toolName: string): PermissionResult | undefined {
+    const policy = this.personaToolPolicy
+    if (!policy || policy.mode === "all") return undefined
+    if (policy.mode === "disabled") {
+      return { behavior: "deny", message: "当前智能体未启用工具。" }
+    }
+    if (!policy.allowedTools.includes(toolName)) {
+      return { behavior: "deny", message: "当前智能体未允许使用该工具。" }
+    }
+    return undefined
+  }
+
+  private evaluateRouterSubagentToolAccess(
+    toolName: string,
+    context: CanUseToolContext,
+  ): PermissionResult | undefined {
+    if (!toolName.startsWith(SYNAPSE_MCP_TOOL_PREFIX) || !context.agentID) return undefined
+    const agentType = this.subagentTypesById.get(context.agentID)
+    if (!agentType) return { behavior: "deny", message: "Subagent identity could not be verified." }
+    const access = this.routerSubagentToolAccess[agentType]
+    if (!access) return undefined
+    if (access.allowedTools && !access.allowedTools.includes(toolName)) {
+      return { behavior: "deny", message: `Subagent ${agentType} is not allowed to use this Synapse tool.` }
+    }
+    if (access.disallowedTools?.includes(toolName)) {
+      return { behavior: "deny", message: `Subagent ${agentType} is not allowed to use this Synapse tool.` }
+    }
+    return undefined
   }
 
   private async requestUserQuestion(
@@ -561,6 +730,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     input: Record<string, unknown>,
     context: CanUseToolContext,
     sessionDirectoryUpdates: readonly SessionDirectoryPermissionUpdate[],
+    projectUpdatedInput?: (input: Record<string, unknown>) => Record<string, unknown>,
   ): Promise<PermissionResult> {
     return new Promise<PermissionResult>((resolve) => {
       const abort = (): void => {
@@ -573,6 +743,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         sessionDirectoryUpdates,
         resolve,
         cleanup: () => context.signal.removeEventListener("abort", abort),
+        projectUpdatedInput,
       })
       if (context.signal.aborted) abort()
     })
@@ -644,7 +815,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       while (!this.closed) {
         const result = await this.query.next()
         if (result.done) break
-        for (const event of this.bridgeMessage(result.value)) {
+        for (const event of await this.bridgeMessage(result.value)) {
           this.eventQueue.push(event)
         }
       }
@@ -683,7 +854,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
   }
 
-  private bridgeMessage(message: SDKMessage): readonly AgentEvent[] {
+  private async bridgeMessage(message: SDKMessage): Promise<readonly AgentEvent[]> {
     const raw = message as unknown as Record<string, unknown>
     const messageSessionId = typeof raw.session_id === "string" ? raw.session_id : undefined
     if (messageSessionId) this.sdkSessionId = messageSessionId
@@ -695,9 +866,72 @@ export class ClaudeSDKSession implements AgentLiveSession {
       timestamp: this.now().toISOString(),
     }
     this.rememberToolUseNames(raw)
+    let contextUsage = this.contextUsageTracker.update(raw)
+    if (raw.type === "system" && raw.subtype === "compact_boundary") {
+      contextUsage = await this.refreshContextUsageAfterCompaction()
+    }
     const bridged = bridgeSdkMessage(message, envelope)
     const events = Array.isArray(bridged) ? bridged : [bridged as AgentEvent]
-    return events.map((event) => this.resolveToolResultName(event))
+    return events.map((event) => {
+      const enriched = contextUsage && event.type === "result"
+        ? { ...event, metadata: { ...(event.metadata ?? {}), contextUsage } }
+        : contextUsage && (
+          event.type === "assistant"
+          || event.type === "stream"
+          || event.type === "compactBoundary"
+        )
+          ? { ...event, contextUsage }
+          : event
+      return this.projectAttachmentEvent(
+        this.projectSynapseToolRouterEvent(this.resolveToolResultName(enriched)),
+      )
+    })
+  }
+
+  private async refreshContextUsageAfterCompaction(): Promise<AgentContextUsage | undefined> {
+    if (!this.query.getContextUsage) return undefined
+    try {
+      return this.contextUsageTracker.replaceFromContextUsage(await this.query.getContextUsage())
+    } catch (error) {
+      this.logger?.warn("Claude SDK context usage refresh failed after compaction.", {
+        boundary: "claude-sdk-context-usage",
+        projectId: this.projectId,
+        conversationId: this.conversationId,
+        providerId: this.providerId,
+        sdkSessionId: this.sdkSessionId,
+        ...errorLogMeta(error),
+      })
+      return undefined
+    }
+  }
+
+  private projectAttachmentEvent(event: AgentEvent): AgentEvent {
+    const projected = projectAttachmentPaths(event, this.attachmentPathLabels) as AgentEvent
+    if (projected.type !== "stream"
+      || projected.deltaType !== "input_json_delta") {
+      return projected
+    }
+    if (this.attachmentPathLabels.size === 0 && !this.synapseToolRouterEnabled) return projected
+    return stripStreamInputJson(projected)
+  }
+
+  private projectSynapseToolRouterEvent(event: AgentEvent): AgentEvent {
+    if (!this.synapseToolRouterEnabled) return event
+    if (event.type === "toolUse" && event.toolUseId) {
+      const routed = this.routerInvocationsByUseId.get(event.toolUseId)
+      if (!routed) return event
+      const toolName = originalSynapseSdkToolName(routed.toolName)
+      return {
+        ...event,
+        toolName,
+        toolInput: summarizeToolInput(toolName, routed.arguments),
+        toolInputRaw: sanitizeToolInputRecord(routed.arguments),
+      }
+    }
+    if (event.type === "assistant") {
+      return projectRouterAssistantEvent(event)
+    }
+    return event
   }
 
   private rememberToolUseNames(raw: Record<string, unknown>): void {
@@ -708,9 +942,33 @@ export class ClaudeSDKSession implements AgentLiveSession {
       const id = typeof record?.id === "string" ? record.id : undefined
       const name = typeof record?.name === "string" ? record.name : undefined
       if (record?.type === "tool_use" && id && name) {
-        this.toolNamesByUseId.set(id, name)
+        const routed = name === SYNAPSE_TOOL_ROUTER_INVOKE_TOOL
+          ? parseSynapseToolRouterInvoke(record.input)
+          : null
+        if (routed) {
+          const projectedName = originalSynapseSdkToolName(routed.toolName)
+          this.routerInvocationsByUseId.set(id, routed)
+          this.toolNamesByUseId.set(id, projectedName)
+        } else {
+          this.toolNamesByUseId.set(id, name)
+        }
       }
     }
+  }
+
+  private notifySynapseToolRouterFallback(reason: string): void {
+    if (this.synapseToolRouterFallbackEmitted || this.closed) return
+    this.synapseToolRouterFallbackEmitted = true
+    this.eventQueue.push({
+      type: "sdkEvent",
+      sdkType: "synapseToolRouterFallback",
+      payload: { reason },
+      conversationId: this.conversationId,
+      providerId: this.providerId,
+      projectId: this.projectId,
+      sdkSessionId: this.sdkSessionId,
+      timestamp: this.now().toISOString(),
+    })
   }
 
   private resolveToolResultName(event: AgentEvent): AgentEvent {
@@ -774,11 +1032,97 @@ function conversationTitleFromTranscriptEntry(entry: { readonly type: string, re
   return entry.aiTitle.trim() || undefined
 }
 
+function projectAttachmentPaths(
+  value: unknown,
+  labels: ReadonlyMap<string, string>,
+): unknown {
+  if (typeof value === "string") return projectAttachmentPathText(value, labels)
+  if (Array.isArray(value)) return value.map((item) => projectAttachmentPaths(item, labels))
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => [key, projectAttachmentPaths(item, labels)]),
+  )
+}
+
+function projectAttachmentPathText(
+  value: string,
+  labels: ReadonlyMap<string, string>,
+): string {
+  let projected = value
+  const entries = [...labels.entries()].sort(([left], [right]) => right.length - left.length)
+  for (const [attachmentPath, label] of entries) {
+    projected = projected.split(attachmentPath).join(label)
+  }
+  return projected
+}
+
+function stripStreamInputJson(event: Extract<AgentEvent, { readonly type: "stream" }>): AgentEvent {
+  const { partialJson: _partialJson, ...rest } = event
+  return {
+    ...rest,
+    event: removePartialJsonFields(event.event) as Record<string, unknown>,
+    ...(event.payload
+      ? { payload: removePartialJsonFields(event.payload) as Record<string, unknown> }
+      : {}),
+  }
+}
+
+function removePartialJsonFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(removePartialJsonFields)
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== "partial_json" && key !== "partialJson")
+      .map(([key, item]) => [key, removePartialJsonFields(item)]),
+  )
+}
+
+function projectRouterAssistantEvent(
+  event: Extract<AgentEvent, { readonly type: "assistant" }>,
+): Extract<AgentEvent, { readonly type: "assistant" }> {
+  return {
+    ...event,
+    message: projectRouterToolBlocks(event.message) as Record<string, unknown>,
+    ...(event.contentBlocks
+      ? { contentBlocks: projectRouterToolBlocks(event.contentBlocks) as readonly unknown[] }
+      : {}),
+  }
+}
+
+function projectRouterToolBlocks(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(projectRouterToolBlocks)
+  if (!value || typeof value !== "object") return value
+  const record = value as Record<string, unknown>
+  if (record.type === "tool_use" && record.name === SYNAPSE_TOOL_ROUTER_INVOKE_TOOL) {
+    const routed = parseSynapseToolRouterInvoke(record.input)
+    if (routed) {
+      return {
+        ...record,
+        name: originalSynapseSdkToolName(routed.toolName),
+        input: routed.arguments,
+      }
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(record).map(([key, item]) => [key, projectRouterToolBlocks(item)]),
+  )
+}
+
 function defaultQueryFactory(input: {
   prompt: AsyncIterable<SDKUserMessage>
   options: Record<string, unknown>
   logger?: Pick<StructuredLogger, "warn">
+  synapseToolRouter?: SynapseToolRouterQueryOptions
 }): QueryLike {
+  if (input.synapseToolRouter) {
+    return new SynapseToolRouterQuery({
+      prompt: input.prompt,
+      options: input.options,
+      logger: input.logger,
+      router: input.synapseToolRouter,
+    })
+  }
   return new LazyQuery(input)
 }
 
@@ -840,6 +1184,11 @@ class LazyQuery implements QueryLike {
     })
   }
 
+  async getContextUsage(): Promise<SDKControlGetContextUsageResponse> {
+    this.throwIfFailed()
+    return (await this.query).getContextUsage()
+  }
+
   private throwIfFailed(): void {
     if (this.failed) throw this.failure
   }
@@ -877,11 +1226,15 @@ function toPermissionResult(
   decision: AgentPermissionDecision,
   originalInput: Record<string, unknown>,
   sessionDirectoryUpdates: readonly SessionDirectoryPermissionUpdate[],
+  projectUpdatedInput?: (input: Record<string, unknown>) => Record<string, unknown>,
 ): PermissionResult {
   if (decision.behavior === "allow") {
+    const updatedInput = decision.updatedInput && projectUpdatedInput
+      ? projectUpdatedInput(decision.updatedInput)
+      : decision.updatedInput ?? originalInput
     return {
       behavior: "allow",
-      updatedInput: decision.updatedInput ?? originalInput,
+      updatedInput,
       ...(decision.scope === "session"
         ? { updatedPermissions: [...sessionDirectoryUpdates] }
         : {}),

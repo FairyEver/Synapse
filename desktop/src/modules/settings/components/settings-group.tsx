@@ -18,7 +18,7 @@ function SettingsGroup({ children, className, sectionClassName }: SettingsGroupP
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-lg bg-card text-card-foreground ring-1 ring-foreground/10",
+        "@container/field-group overflow-hidden rounded-lg bg-card text-card-foreground ring-1 ring-foreground/10",
         className,
       )}
     >

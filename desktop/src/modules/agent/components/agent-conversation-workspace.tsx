@@ -12,6 +12,7 @@ import { redactSessionKey } from "@/lib/agent-redaction"
 import { track } from "@/lib/ui-tracking"
 import type {
   SynapseAgentDisplayProfile,
+  SynapseAgentContextUsage,
   SynapseAgentPendingPermission,
   SynapseAgentPermissionMode,
   SynapseAgentPermissionScope,
@@ -69,6 +70,7 @@ import { useAgentReferenceActions } from "../hooks/use-agent-reference-actions"
 import { useProjectGitActions } from "../hooks/use-project-git-actions"
 import { latestTimelineContentSignal, useStickToBottom } from "../hooks/use-stick-to-bottom"
 import { AgentComposer } from "./agent-composer"
+import { AgentContextUsageIndicator } from "./agent-context-usage-indicator"
 import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
 import { AgentSessionCreateDialog } from "./agent-session-create-dialog"
 import { AgentTimeline } from "./agent-timeline"
@@ -119,6 +121,7 @@ export type AgentConversationWorkspaceController = {
   readonly loadOlderTimeline: () => Promise<void>
   readonly personas: readonly SynapseAgentPersona[]
   readonly personasLoaded: boolean
+  readonly contextUsage: SynapseAgentContextUsage | undefined
 }
 
 type AgentConversationWorkspaceProps = {
@@ -320,7 +323,7 @@ function AgentConversationWorkspace({
     } = {},
   ): Promise<boolean> => {
     const attachments = options.attachments ?? []
-    if (!formatDraftAttachmentsForMessage(content, attachments).trim()) return false
+    if (!content.trim() && attachments.length === 0) return false
     const preserveDraft = options.preserveDraft === true
     if (options.trackSource === "quick-input-direct") {
       trackDirectAgentSend({
@@ -578,7 +581,7 @@ function AgentConversationWorkspace({
       data-agent-conversation-workspace
     >
       <TooltipProvider>
-        <div className="flex items-center justify-between gap-2 px-0 py-0">
+        <div className="@container/agent-header flex items-center justify-between gap-2 px-0 py-0">
           <div className="flex min-w-0 items-center gap-2">
             <h2
               className="truncate text-sm font-medium"
@@ -609,6 +612,8 @@ function AgentConversationWorkspace({
                 {headerModelLabel}
               </span>
             ) : null}
+
+            <AgentContextUsageIndicator contextUsage={chat.contextUsage} />
 
             {pendingQuestionCount > 0 ? (
               <Button
@@ -730,6 +735,7 @@ function AgentConversationWorkspace({
       />
 
       <AgentComposer
+        projectId={target.projectId}
         focusInputKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         dropTargetRef={workspaceRef}
         draft={draft}

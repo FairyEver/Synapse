@@ -100,7 +100,7 @@ Placement:
 
 - Keep it below the assistant response body so it represents the cumulative snapshot at that turn.
 - Keep the copy button available in the same footer area, but do not make token usage look like a hover-only toolbar detail.
-- Do not move the primary display to the page header or composer, because those locations only communicate the latest session total and lose the per-turn historical snapshot meaning.
+- Do not move this cumulative billing display to the page header or composer. The header may separately show the SDK-reported current context occupancy, but it is a different metric and does not replace the per-turn historical snapshot.
 
 Visual treatment:
 
@@ -117,6 +117,10 @@ Implementation shape:
 - Workflow, scheduler, and Action result callers keep the current display without the cumulative label.
 
 No custom colors, inline styles, or visual redesign are needed.
+
+### Current context is a separate metric
+
+The Agent header also shows the current main-thread context occupancy. It updates during streaming and can decrease after SDK compaction. The usage display below each reply remains the cumulative billing-token snapshot and never derives its values from the header. See `2026-08-25-agent-context-usage-header-design.md`.
 
 ## Testing
 

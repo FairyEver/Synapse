@@ -282,8 +282,11 @@ importers:
   desktop:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.138
-        version: 0.2.138(zod@4.3.6)
+        specifier: 0.3.245
+        version: 0.3.245(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)
+      '@anthropic-ai/sdk':
+        specifier: 0.93.0
+        version: 0.93.0(zod@4.3.6)
       '@codemirror/autocomplete':
         specifier: ^6.20.2
         version: 6.20.2
@@ -308,9 +311,6 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8
-      '@git-diff-view/react':
-        specifier: ^0.1.7
-        version: 0.1.7(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@synapse/shared':
         specifier: workspace:*
         version: link:../shared
@@ -561,6 +561,12 @@ importers:
       wait-on:
         specifier: 9.0.5
         version: 9.0.5
+
+  document:
+    devDependencies:
+      vitepress:
+        specifier: ^1.5.0
+        version: 1.6.4(@algolia/client-search@5.51.0)(@types/node@25.9.1)(async-validator@4.2.5)(axios@1.15.2)(fuse.js@7.3.0)(idb-keyval@6.2.4)(less@4.6.4)(lightningcss@1.32.0)(postcss@8.5.10)(qrcode@1.5.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.54.0)(search-insights@2.17.3)(terser@5.46.2)(typescript@6.0.3)
 
   server:
     dependencies:
@@ -981,12 +987,6 @@ importers:
         specifier: 4.1.5
         version: 4.1.5(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(@vitest/coverage-v8@4.1.5)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.13.4(@types/node@25.9.1)(typescript@6.0.2))(vite@8.0.8(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(less@4.6.4)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
 
-  document:
-    devDependencies:
-      vitepress:
-        specifier: ^1.5.0
-        version: 1.6.4(@algolia/client-search@5.51.0)(@types/node@25.9.1)(async-validator@4.2.5)(axios@1.15.2)(fuse.js@7.3.0)(idb-keyval@6.2.4)(less@4.6.4)(lightningcss@1.32.0)(postcss@8.5.10)(qrcode@1.5.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.54.0)(search-insights@2.17.3)(terser@5.46.2)(typescript@6.0.3)
-
 packages:
 
   2@1.0.2:
@@ -1100,54 +1100,56 @@ packages:
   '@antfu/install-pkg@1.1.0':
     resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.2.138':
-    resolution: {integrity: sha512-aObxJ/GeJ5UxT9N8XypUHPYQKpwYsRT5THiJl5E2pKEUk/Xt42gT55N5GV0TOjtgxVAnDMWjxTAgGCGoDzjgpg==}
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.245':
+    resolution: {integrity: sha512-oH1R4yxVKR8oSYMqKHb5NaAPYq8+/enKR0qZKi+lKm6ru64onCmoujT3ilD9rz6TYALCYp2L8Jl2zwOerKSpug==}
     cpu: [arm64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.2.138':
-    resolution: {integrity: sha512-ou3i1/gAf2PEgVl2WYJb7ZdE+KGwoB1I46JRhWHSC3uD6lb9HMZam233T/rlKCVX9e5dzfkujUOnmCkmXjgVGQ==}
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.245':
+    resolution: {integrity: sha512-VtK8dfnF0GhVzJgVylZxPdGRZb21DhOpd04WWefKRfnWVbgjdOtEGpafyMi4ZaND/ftYpc2PB2P7IX8OkIj5iA==}
     cpu: [x64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.2.138':
-    resolution: {integrity: sha512-uZaEFND1pl7KD9tdYqj2hd6ktjlYizVmkHRgU2Aj/P1CC6WMDsKG+rqPP7dsVXO77gMXhL4xjjwwqMjxx83HkA==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.245':
+    resolution: {integrity: sha512-81QcZcFL5YcLLdvw2AXBq8Bxs/Fcq4qkq5dqUkjEEIi6jI2+WTk5gCjLsUg9zVaHG1yoVN3HKBFJss+sI+evHA==}
     cpu: [arm64]
     os: [linux]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.2.138':
-    resolution: {integrity: sha512-jp8lmAVe9uI9X5o+IYWFajLbN+Z80XogVX7NeyaenLHdpHkxg29Yf8pb6Os4OvHMjJOAdwDhPpXajf6RtBeEDA==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.245':
+    resolution: {integrity: sha512-qIi1grLff5a3Z6K9dUsWKrFKcjUuOGErX89DHC9m0UBfGN6swOs6cFj9zvFYhJhLBJeZu0JKyz18BHSXfeu3PA==}
     cpu: [arm64]
     os: [linux]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.2.138':
-    resolution: {integrity: sha512-T16F8Vkikb98E781ZM6Cx84yEBk+loSCqAObjaZ1hzQ1eKcpnxzSTF4rH2bz6N91dhFuCfIjFaBfNYg+oQA+yQ==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.245':
+    resolution: {integrity: sha512-3Uxl7YDnqpQHbSpEOYCPytcbcuo1PcdYHDXDpoSotBPlvFOJEiLGCGhwWfEbTO/9RGdp94Qm0T2gGtPNE6QpFg==}
     cpu: [x64]
     os: [linux]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.2.138':
-    resolution: {integrity: sha512-SLuUmu/nH1Wh0wnoXj/Bwh0nbDfEn9PgXqMsZHEUk3x1zxeR+6aRqFLjKZ8TawBey7xod7nfYUIjPnQx6IWDzg==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.245':
+    resolution: {integrity: sha512-fvPtGYI61pGRP2rmaYskyLE83PytLLMV/NzDunmDlIRvqkzgQrxDBeOistt6mc29uAlI70EbaKW4zsSft6IhBQ==}
     cpu: [x64]
     os: [linux]
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.2.138':
-    resolution: {integrity: sha512-H/sD25fmMyEeJWamYmBKRS3E7jaIrg2S8KWxyR37P+xTZgkLe19sDTp7gYYywMXf1X9CJZJ8jJZ93qxINZoCeA==}
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.245':
+    resolution: {integrity: sha512-N8JTt+DuX2xwbbnLMLDUgmnbtz3VKSGI07WV4WjCEBeb6Olt2KJHDksnJzknrbFBapJz915Vbv2fO+izJcRI1g==}
     cpu: [arm64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.2.138':
-    resolution: {integrity: sha512-cSOdTH1OfIamVdJit9laWZiXne81ewgdP8MGh5HzLLLci0NGHkME7YxCWd0lYkCNkfiOEcToKU9axaZ+84jGiw==}
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.245':
+    resolution: {integrity: sha512-C8PHrQBPgExO6sr5bwG+IW7cTR2KDmvAUj9By++u+IiTFEAtPCEjOQ3CFgfPc5wTuGD26SrzWUbdEom5TQp1Dg==}
     cpu: [x64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk@0.2.138':
-    resolution: {integrity: sha512-rH6dFI3DBBsPBPcHTBdTZCHA14OCt2t4+6XYi2MJB/GlFrnZvlWmMIk2z9uxAiZ05Txg8YbftgSuE5A1qpAXwg==}
+  '@anthropic-ai/claude-agent-sdk@0.3.245':
+    resolution: {integrity: sha512-b/SXCxBxZfN4ItHFDUS1uJ3xhI5fOSv3/VxyZvekYmlsbSwZi/75UqKhVlT7qbB1LDJOB48ZmQdCTxWhJWjObA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
+      '@anthropic-ai/sdk': '>=0.93.0'
+      '@modelcontextprotocol/sdk': ^1.29.0
       zod: ^4.0.0
 
-  '@anthropic-ai/sdk@0.81.0':
-    resolution: {integrity: sha512-D4K5PvEV6wPiRtVlVsJHIUhHAmOZ6IT/I9rKlTf84gR7GyyAurPJK7z9BOf/AZqC5d1DhYQGJNKRmV+q8dGhgw==}
+  '@anthropic-ai/sdk@0.93.0':
+    resolution: {integrity: sha512-q9vaSZQVFx6B/gPxetGYfLXSJD5v0sOmh0OpZDq7yCrTSA+Rscvrtyol7JJTW40wEpQB4U1B4JXzxQitbQ3CAA==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -2290,18 +2292,6 @@ packages:
 
   '@fontsource-variable/manrope@5.2.8':
     resolution: {integrity: sha512-nc9lOuCRz73UHnovDE2bwXUdghE2SEOc7Aii0qGe3CLyE03W1a7VnY5Z6euRiapiKbCkGS+eXbY3s/kvWeGeSw==}
-
-  '@git-diff-view/core@0.1.7':
-    resolution: {integrity: sha512-ZW/kumNoUQ8+DgawYhcrABa7TOALYzn3pe723uTHSy6/r35qAwgswJxF1bkdV9Zr+KHuhlFeRLiVhjij59qdIA==}
-
-  '@git-diff-view/lowlight@0.1.7':
-    resolution: {integrity: sha512-Rkv2ERr83xTSsjlrJxjYVWndREEARG11viTrJ7qyUU+lnPPmSNF1aemp1lKiOLs6sNCeJJdIMhxLFJtKfmRIZw==}
-
-  '@git-diff-view/react@0.1.7':
-    resolution: {integrity: sha512-EMBFgeSpP3nF8hJwy/3bz8sZpxmyuWV20925oTGhslWXpIgg6AZg+KMRmQkz/WjX0D/2LrC3gQZJLE/5x6mfnw==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   '@hapi/address@5.1.1':
     resolution: {integrity: sha512-A+po2d/dVoY7cYajycYI43ZbYMXukuopIsqCjh5QzsBCipDtdofHntljDlpccMjIfTy6UOkg+5KPriwYch2bXA==}
@@ -6667,9 +6657,6 @@ packages:
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
 
-  fast-diff@1.3.0:
-    resolution: {integrity: sha512-VxPP4NqbUjj6MaAOafWeUn2cXWLcCtljklUtZf0Ind4XQ+QPtmA0b18zZy0jIQx+ExRVCR/ZQpBmik5lXshNsw==}
-
   fast-fifo@1.3.2:
     resolution: {integrity: sha512-/d9sfos4yxzpwkDkuN7k2SqFKtYNmCTzgfEpz82x34IM9/zc8KGxQoXg1liNC/izpRM/MBdt44Nmx41ZWqk+FQ==}
 
@@ -7783,9 +7770,6 @@ packages:
   lowercase-keys@2.0.0:
     resolution: {integrity: sha512-tqNXrS78oMOE73NMxK4EMLQsQowWf8jKooH9g7xPavRT706R6bkQJ6DY2Te7QukaZsulxa30wQ7bk0pm4XiHmA==}
     engines: {node: '>=8'}
-
-  lowlight@3.3.0:
-    resolution: {integrity: sha512-0JNhgFoPvP6U6lE/UdVsSq99tn6DhjjpAj5MxG49ewd2mOBVtwWYIT8ClyABhq198aXXODMU6Ox8DrGy/CpTZQ==}
 
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
@@ -9067,11 +9051,6 @@ packages:
   react@19.2.5:
     resolution: {integrity: sha512-llUJLzz1zTUBrskt2pwZgLq59AemifIftw4aB7JxOqf1HY2FDaGDxgwpAPVzHU1kdWabH7FauP4i1oEeer2WCA==}
     engines: {node: '>=0.10.0'}
-
-  reactivity-store@0.4.0:
-    resolution: {integrity: sha512-uL9uoREOBg2o4zUa8vMU0AbvAOk0osPloizscmyZqMvJzcuuKX3ELFYYr1DX8gAcfvlhPduz4QuLZn1eChCu4Q==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   read-binary-file-arch@1.0.6:
     resolution: {integrity: sha512-BNg9EN3DD3GsDXX7Aa8O4p92sryjkmzYYgmgTAc6CA4uGLEDzFfxOxugu21akOxpcXHiEgsYkC6nPsQvLLLmEg==}
@@ -10791,49 +10770,46 @@ snapshots:
       package-manager-detector: 1.6.0
       tinyexec: 1.1.1
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.2.138':
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.245':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.2.138(zod@4.3.6)':
+  '@anthropic-ai/claude-agent-sdk@0.3.245(@anthropic-ai/sdk@0.93.0(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)':
     dependencies:
-      '@anthropic-ai/sdk': 0.81.0(zod@4.3.6)
+      '@anthropic-ai/sdk': 0.93.0(zod@4.3.6)
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
       zod: 4.3.6
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.2.138
-      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.2.138
-      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.2.138
-      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.2.138
-      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.2.138
-      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.2.138
-      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.2.138
-      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.2.138
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - supports-color
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.245
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.245
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.245
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.245
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.245
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.245
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.245
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.245
 
-  '@anthropic-ai/sdk@0.81.0(zod@4.3.6)':
+  '@anthropic-ai/sdk@0.93.0(zod@4.3.6)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
@@ -11946,31 +11922,6 @@ snapshots:
   '@fontsource-variable/inter@5.2.8': {}
 
   '@fontsource-variable/manrope@5.2.8': {}
-
-  '@git-diff-view/core@0.1.7':
-    dependencies:
-      '@git-diff-view/lowlight': 0.1.7
-      fast-diff: 1.3.0
-      highlight.js: 11.11.1
-      lowlight: 3.3.0
-
-  '@git-diff-view/lowlight@0.1.7':
-    dependencies:
-      '@types/hast': 3.0.4
-      highlight.js: 11.11.1
-      lowlight: 3.3.0
-
-  '@git-diff-view/react@0.1.7(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
-    dependencies:
-      '@git-diff-view/core': 0.1.7
-      '@types/hast': 3.0.4
-      fast-diff: 1.3.0
-      highlight.js: 11.11.1
-      lowlight: 3.3.0
-      react: 19.2.5
-      react-dom: 19.2.5(react@19.2.5)
-      reactivity-store: 0.4.0(react@19.2.5)
-      use-sync-external-store: 1.6.0(react@19.2.5)
 
   '@hapi/address@5.1.1':
     dependencies:
@@ -17193,8 +17144,6 @@ snapshots:
 
   fast-deep-equal@3.1.3: {}
 
-  fast-diff@1.3.0: {}
-
   fast-fifo@1.3.2: {}
 
   fast-glob@3.3.3:
@@ -18336,12 +18285,6 @@ snapshots:
       underscore: 1.13.8
 
   lowercase-keys@2.0.0: {}
-
-  lowlight@3.3.0:
-    dependencies:
-      '@types/hast': 3.0.4
-      devlop: 1.1.0
-      highlight.js: 11.11.1
 
   lru-cache@10.4.3: {}
 
@@ -20053,13 +19996,6 @@ snapshots:
 
   react@19.2.5: {}
 
-  reactivity-store@0.4.0(react@19.2.5):
-    dependencies:
-      '@vue/reactivity': 3.5.33
-      '@vue/shared': 3.5.33
-      react: 19.2.5
-      use-sync-external-store: 1.6.0(react@19.2.5)
-
   read-binary-file-arch@1.0.6:
     dependencies:
       debug: 4.4.3(supports-color@5.5.0)
@@ -21466,7 +21402,7 @@ snapshots:
     dependencies:
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
-      vitest: 4.1.5(@types/node@25.6.0)(@vitest/browser-playwright@4.1.5)(@vitest/coverage-v8@4.1.5)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.13.4(@types/node@25.6.0)(typescript@6.0.3))(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.7.0)(less@4.6.4)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
+      vitest: 4.1.5(@types/node@25.9.1)(@vitest/browser-playwright@4.1.7)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.7)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.13.4(@types/node@25.9.1)(typescript@6.0.3))(vite@8.0.8(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.7.0)(less@4.6.4)(terser@5.46.2)(tsx@4.21.0)(yaml@2.9.0))
     optionalDependencies:
       '@types/react': 19.2.14
       '@types/react-dom': 19.2.3(@types/react@19.2.14)

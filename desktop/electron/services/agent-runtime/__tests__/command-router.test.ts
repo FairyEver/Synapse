@@ -704,23 +704,22 @@ describe("AgentCommandRouter", () => {
     }))
   })
 
-  it("routes builtin /compress to the runtime callback", async () => {
+  it("routes builtin /compact to the SDK-native slash path and rejects removed /compress", async () => {
     const { providerService } = makeProviderService()
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
       providerService,
       resetSession: async () => baseConversation(),
-      compressSession: async (_message, conversation) => ({
-        conversationId: conversation.id,
-        events: [{ type: "result", content: "Context compressed.", done: true }],
-        resultText: "Context compressed.",
-      }),
     })
 
-    const result = expectRuntimeResult(await router.handle(baseMessage("/compress"), baseConversation()))
+    const compact = await router.handle(baseMessage("/compact"), baseConversation())
+    const compress = expectRuntimeResult(
+      await router.handle(baseMessage("/compress"), baseConversation()),
+    )
 
-    expect(result.resultText).toBe("Context compressed.")
+    expect(compact).toEqual({ kind: "nativeSlash", name: "compact" })
+    expect(compress.error).toBe("不支持的命令：/compress")
   })
 
   it("redacts raw /show command failure text before returning it", async () => {

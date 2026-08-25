@@ -21,7 +21,6 @@ import {
 } from "../model-price"
 import {
   AGENT_CANCELLED_MESSAGE,
-  AGENT_COMPRESSION_UNSUPPORTED_MESSAGE,
   AGENT_MESSAGE_BLOCKED_MESSAGE,
   AGENT_NO_ACTIVE_PROVIDER_MESSAGE,
   AGENT_PERMISSION_TIMEOUT_MESSAGE,
@@ -53,7 +52,7 @@ import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput } from "./
 import {
   attachmentHistoryMetadata,
   userMessagePresentationHistoryMetadata,
-  withReadablePathAttachmentContent,
+  userMessagePresentationHistoryMetadataFromRefs,
 } from "./attachments"
 import type {
   PendingPermissionState,
@@ -86,6 +85,7 @@ import {
   type StreamDiagnosticChunkPayload,
 } from "./stream-diagnostics"
 import { agentConversationDeliveryOptions } from "./event-delivery"
+import type { AttachmentStagingService } from "./attachment-staging-service"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -102,7 +102,9 @@ export interface ConversationRouterDeps {
   }
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly agentArtifactStore?: AgentArtifactStore
+  readonly attachmentStagingService?: AttachmentStagingService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
+  readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
   readonly permissionGuard?: PermissionGuard
@@ -217,6 +219,7 @@ export class ConversationRouter {
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const providerId = await this.resolveNewConversationProviderId(message)
+    const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
       platform: message.platform,
@@ -227,6 +230,7 @@ export class ConversationRouter {
       providerId,
       mode: message.modeOverride,
       modelTier: message.modelTier,
+      experimentalSynapseToolRouterEnabled,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
@@ -241,7 +245,6 @@ export class ConversationRouter {
     timeoutMs: number,
   ): Promise<AgentRuntimeRelayResult> {
     this.assertProject(message)
-    message = withReadablePathAttachmentContent(message)
 
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
@@ -253,6 +256,7 @@ export class ConversationRouter {
 
     const ac = new AbortController()
     const providerId = await this.resolveNewConversationProviderId(message)
+    const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
       platform: message.platform,
@@ -263,6 +267,7 @@ export class ConversationRouter {
       providerId,
       mode: message.modeOverride,
       modelTier: message.modelTier,
+      experimentalSynapseToolRouterEnabled,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
@@ -287,13 +292,6 @@ export class ConversationRouter {
     } finally {
       clearTimeout(timeout)
     }
-  }
-
-  async compressSession(
-    message: AgentMessage,
-    conversation: ConversationEntryV1,
-  ): Promise<AgentRuntimeTurnResult> {
-    return this.finishWithError(message, conversation.id, AGENT_COMPRESSION_UNSUPPORTED_MESSAGE)
   }
 
   clearCancelState(state: RuntimeSessionState): void {
@@ -331,7 +329,6 @@ export class ConversationRouter {
     conversation: ConversationEntryV1,
     options: ConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
-    message = withReadablePathAttachmentContent(message)
     this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
@@ -345,10 +342,11 @@ export class ConversationRouter {
       now: () => this.isoNow(),
     })
     let liveMessage = message
+    let liveContentOverride: string | undefined
     let nativeSlashPassthrough: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> | undefined
     const commandResult = await this.commandRouter?.handle(message, conversation, { turnId })
     if (commandResult && isPromptCommandRoute(commandResult)) {
-      liveMessage = { ...message, content: commandResult.content }
+      liveContentOverride = commandResult.content
     } else if (commandResult && isNativeSlashRoute(commandResult)) {
       nativeSlashPassthrough = commandResult
     } else if (commandResult) {
@@ -364,7 +362,11 @@ export class ConversationRouter {
     if (state.busy && state.queue.length >= this.queueLimit()) {
       return this.finishWithError(message, conversation.id, AGENT_QUEUE_FULL_MESSAGE)
     }
-    const userHistoryMetadata = await this.prepareUserMessageHistory(message, conversation.id, turnId)
+    message = await this.prepareStagedAttachmentMessage(message, conversation, turnId)
+    liveMessage = liveContentOverride === undefined
+      ? message
+      : { ...message, content: liveContentOverride }
+    const userHistoryMetadata = await this.prepareUserMessageHistory(message)
 
     return new Promise<AgentRuntimeTurnResult>((resolve) => {
       const turn = {
@@ -391,11 +393,14 @@ export class ConversationRouter {
           const idx = state.queue.indexOf(turn)
           if (idx >= 0) {
             state.queue.splice(idx, 1)
-            void this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(
-              conversation.id,
-              turnId,
-            )
-            resolve(this.buildCancelledResult(message, conversation.id))
+            void (async () => {
+              await this.rollbackStagedAttachmentMessage(message, conversation.id, turnId)
+              await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(
+                conversation.id,
+                turnId,
+              )
+              resolve(this.buildCancelledResult(message, conversation.id))
+            })()
           }
         }
         if (options.abortSignal.aborted) {
@@ -424,6 +429,7 @@ export class ConversationRouter {
         try {
           if (externalSignal?.aborted) ac.abort(externalSignal.reason)
           if (state.closing || ac.signal.aborted) {
+            await this.rollbackStagedAttachmentMessage(turn.message, turn.conversationId, turn.turnId)
             await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(
               turn.conversationId,
               turn.turnId,
@@ -444,11 +450,16 @@ export class ConversationRouter {
             turn.onResponseStarted,
           )
           if (ac.signal.aborted) {
+            await this.rollbackStagedAttachmentMessage(turn.message, turn.conversationId, turn.turnId)
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
           } else {
+            if (result.error) {
+              await this.rollbackStagedAttachmentMessage(turn.message, turn.conversationId, turn.turnId)
+            }
             turn.resolve(result)
           }
         } catch (error) {
+          await this.rollbackStagedAttachmentMessage(turn.message, turn.conversationId, turn.turnId)
           if (ac.signal.aborted) {
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
           } else {
@@ -998,7 +1009,8 @@ export class ConversationRouter {
     let assistantHistoryPersisted = false
     let error: string | undefined
     try {
-      const userHistoryMetadata = await this.prepareUserMessageHistory(message, conversation.id, turnId)
+      message = await this.prepareStagedAttachmentMessage(message, conversation, turnId)
+      const userHistoryMetadata = await this.prepareUserMessageHistory(message)
       const savedConversation = await this.appendUserMessageHistory(
         conversation,
         message,
@@ -1299,27 +1311,91 @@ export class ConversationRouter {
 
   private async prepareUserMessageHistory(
     message: AgentMessage,
-    conversationId: string,
-    turnId: string,
   ): Promise<Record<string, unknown> | undefined> {
+    if (message.attachmentRefs && message.attachmentRefs.length > 0) {
+      return userMessagePresentationHistoryMetadataFromRefs(message, message.attachmentRefs)
+    }
     if (message.displayContent === undefined) {
       return attachmentHistoryMetadata(message.attachments)
     }
-    const images = (message.attachments ?? []).filter(
-      (attachment) => attachment.kind === "image",
-    )
-    if (images.length === 0) {
-      return userMessagePresentationHistoryMetadata(message, [])
+    return userMessagePresentationHistoryMetadata(message)
+  }
+
+  private async prepareStagedAttachmentMessage(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    turnId: string,
+  ): Promise<AgentMessage> {
+    const refs = message.attachmentRefs ?? []
+    if (refs.length === 0) return message
+    const service = this.deps.attachmentStagingService
+    if (!service || !message.attachmentDraftScopeId) {
+      throw new Error("Agent attachment staging is unavailable")
     }
-    const store = this.deps.agentArtifactStore
-    if (!store) throw new Error("Agent artifact storage is unavailable")
-    const persistedImages = await store.materializeUserMessageImages({
+    const attachmentIds = refs.map((ref) => ref.attachmentId)
+    const committed = await service.commit({
+      actor: rendererAgentActor(message),
       projectId: message.projectId,
-      conversationId,
+      draftScopeId: message.attachmentDraftScopeId,
+      attachmentIds,
+      conversationId: conversation.id,
       turnId,
-      images,
     })
-    return userMessagePresentationHistoryMetadata(message, persistedImages)
+    let runtime
+    try {
+      runtime = await service.resolveCommittedForRuntime({
+        projectId: message.projectId,
+        conversationId: conversation.id,
+        turnId,
+        attachmentIds,
+      })
+    } catch (error) {
+      await service.rollbackCommit({
+        actor: rendererAgentActor(message),
+        projectId: message.projectId,
+        draftScopeId: message.attachmentDraftScopeId,
+        attachmentIds,
+        conversationId: conversation.id,
+        turnId,
+      })
+      throw error
+    }
+    const committedRefs = committed.map((item) => item.ref)
+    return {
+      ...message,
+      attachmentRefs: committedRefs,
+      attachments: runtime.attachments,
+      runtimeAttachmentDirectories: runtime.controlledDirectories,
+      attachmentTurnId: turnId,
+    }
+  }
+
+  private async rollbackStagedAttachmentMessage(
+    message: AgentMessage,
+    conversationId: string,
+    turnId: string,
+  ): Promise<void> {
+    const refs = message.attachmentRefs ?? []
+    const service = this.deps.attachmentStagingService
+    if (refs.length === 0 || !service || !message.attachmentDraftScopeId) return
+    try {
+      await service.rollbackCommit({
+        actor: rendererAgentActor(message),
+        projectId: message.projectId,
+        draftScopeId: message.attachmentDraftScopeId,
+        attachmentIds: refs.map((ref) => ref.attachmentId),
+        conversationId,
+        turnId,
+      })
+    } catch (error) {
+      this.deps.logger?.warn("Agent attachment commit rollback failed.", {
+        boundary: "agent-runtime.attachment.rollback",
+        projectId: message.projectId,
+        conversationId,
+        turnId,
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+    }
   }
 
   private async appendUserMessageHistory(
@@ -1351,7 +1427,15 @@ export class ConversationRouter {
       return this.repository.getOrCreateActive(message)
     }
     const providerId = await this.resolveNewConversationProviderId(message)
-    return this.repository.getOrCreateActive({ ...message, providerId })
+    const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
+    return this.repository.getOrCreateActive(
+      { ...message, providerId },
+      { experimentalSynapseToolRouterEnabled },
+    )
+  }
+
+  private async loadExperimentalSynapseToolRouterEnabled(): Promise<boolean> {
+    return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) === true
   }
 
   private async resolveNewConversationProviderId(message: AgentMessage): Promise<string> {
@@ -2331,6 +2415,17 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
             sdkSessionId: event.sdkSessionId,
             sdkType: event.sdkType,
             sdkSubtype: command,
+          }),
+        }
+      }
+      if (event.sdkType === "synapseToolRouterFallback") {
+        return {
+          role: "system",
+          content: "Synapse MCP 工具按需加载不可用，本次对话已回退完整工具。",
+          metadata: compactMetadata({
+            agentEventType: event.type,
+            sdkSessionId: event.sdkSessionId,
+            sdkType: event.sdkType,
           }),
         }
       }

@@ -68,7 +68,7 @@ export const BUILTIN_COMMANDS: readonly PublishedAgentCommand[] = [
   { name: "new", description: "Start a new session", source: "builtin", kind: "builtin", adminOnly: false },
   { name: "status", description: "Show agent status", source: "builtin", kind: "builtin", adminOnly: false },
   { name: "show", description: "Show a workspace reference", source: "builtin", kind: "builtin", adminOnly: false },
-  { name: "compress", description: "Compact the current agent context", source: "builtin", kind: "builtin", adminOnly: false },
+  { name: "compact", description: "Compact the current agent context", source: "builtin", kind: "builtin", adminOnly: false },
   { name: "commands", description: "Manage commands", source: "builtin", kind: "builtin", adminOnly: false },
   { name: "skills", description: "List skills", source: "builtin", kind: "builtin", adminOnly: false },
 ]

@@ -1,6 +1,7 @@
 import type {
   SynapseAgentEvent,
   SynapseAgentErrorKind,
+  SynapseAgentContextUsage,
   SynapseAgentImageArtifact,
   SynapseAgentMainThreadPersonaMetadata,
   SynapseAgentMessageAttachment,
@@ -150,6 +151,15 @@ export function agentEventToTimelineItem(
           summary: event.sdkSubtype,
         }
       }
+      if (event.sdkType === "synapseToolRouterFallback") {
+        return {
+          ...base,
+          kind: "sdkEvent",
+          sdkType: event.sdkType,
+          label: "工具按需加载已回退",
+          summary: "本次对话继续使用完整 Synapse MCP 工具。",
+        }
+      }
       return {
         ...base,
         kind: "sdkEvent",
@@ -237,6 +247,15 @@ export function historyRecordToTimelineItem(
         metadata: storedMetadata,
       }
     case "sdkEvent":
+      if (stringMetadata(metadata, "sdkType") === "synapseToolRouterFallback") {
+        return {
+          ...base,
+          kind: "sdkEvent",
+          sdkType: "synapseToolRouterFallback",
+          label: "工具按需加载已回退",
+          summary: "本次对话继续使用完整 Synapse MCP 工具。",
+        }
+      }
       return {
         ...base,
         kind: "sdkEvent",
@@ -821,6 +840,7 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     model: stringMetadata(metadata, "model"),
     effort: stringMetadata(metadata, "effort"),
     contextRemainingPercent: numberMetadata(metadata, "contextRemainingPercent"),
+    contextUsage: contextUsageMetadata(metadata),
     workDir: stringMetadata(metadata, "workDir"),
     cancelled: booleanMetadata(metadata, "cancelled"),
     turnOutcome: turnOutcomeMetadata(metadata, "turnOutcome"),
@@ -838,6 +858,87 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     estimatedCost: booleanMetadata(metadata, "estimatedCost"),
   }
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
+}
+
+function contextUsageMetadata(
+  metadata: Record<string, unknown> | undefined,
+): SynapseAgentContextUsage | undefined {
+  const value = metadata?.contextUsage
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  if (!Number.isSafeInteger(record.usedTokens) || (record.usedTokens as number) < 0) return undefined
+  const contextWindowTokens = record.contextWindowTokens
+  if (contextWindowTokens !== undefined
+    && (!Number.isSafeInteger(contextWindowTokens) || (contextWindowTokens as number) <= 0)) {
+    return undefined
+  }
+  const model = record.model
+  if (model !== undefined && (typeof model !== "string" || model.length === 0)) return undefined
+  const modelContext = modelContextMetadata(record.modelContext)
+  if (record.modelContext !== undefined && !modelContext) return undefined
+  const contextWindowConfigurationSource = record.contextWindowConfigurationSource
+  if (contextWindowConfigurationSource !== undefined
+    && contextWindowConfigurationSource !== "catalog"
+    && contextWindowConfigurationSource !== "provider-env") return undefined
+  return {
+    usedTokens: record.usedTokens as number,
+    ...(contextWindowTokens === undefined ? {} : { contextWindowTokens: contextWindowTokens as number }),
+    ...(model === undefined ? {} : { model }),
+    ...(modelContext ? { modelContext } : {}),
+    ...(contextWindowConfigurationSource === undefined
+      ? {}
+      : { contextWindowConfigurationSource }),
+  }
+}
+
+function modelContextMetadata(
+  value: unknown,
+): SynapseAgentContextUsage["modelContext"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const positiveFields = [
+    "contextWindowTokens",
+    "maxInputTokens",
+    "maxOutputTokens",
+    "reasoningMaxInputTokens",
+    "reasoningMaxOutputTokens",
+    "maxReasoningTokens",
+  ] as const
+  if (!Number.isSafeInteger(record.contextWindowTokens) || (record.contextWindowTokens as number) <= 0) {
+    return undefined
+  }
+  for (const field of positiveFields.slice(1)) {
+    const tokenLimit = record[field]
+    if (tokenLimit !== undefined && (!Number.isSafeInteger(tokenLimit) || (tokenLimit as number) <= 0)) {
+      return undefined
+    }
+  }
+  if (
+    typeof record.providerScopeId !== "string"
+    || typeof record.modelId !== "string"
+    || typeof record.sourceLabel !== "string"
+    || typeof record.sourceUrl !== "string"
+    || typeof record.verifiedAt !== "string"
+  ) return undefined
+  return {
+    providerScopeId: record.providerScopeId,
+    modelId: record.modelId,
+    contextWindowTokens: record.contextWindowTokens as number,
+    ...(record.maxInputTokens === undefined ? {} : { maxInputTokens: record.maxInputTokens as number }),
+    ...(record.maxOutputTokens === undefined ? {} : { maxOutputTokens: record.maxOutputTokens as number }),
+    ...(record.reasoningMaxInputTokens === undefined
+      ? {}
+      : { reasoningMaxInputTokens: record.reasoningMaxInputTokens as number }),
+    ...(record.reasoningMaxOutputTokens === undefined
+      ? {}
+      : { reasoningMaxOutputTokens: record.reasoningMaxOutputTokens as number }),
+    ...(record.maxReasoningTokens === undefined
+      ? {}
+      : { maxReasoningTokens: record.maxReasoningTokens as number }),
+    sourceLabel: record.sourceLabel,
+    sourceUrl: record.sourceUrl,
+    verifiedAt: record.verifiedAt,
+  }
 }
 
 function mainThreadPersonaMetadata(

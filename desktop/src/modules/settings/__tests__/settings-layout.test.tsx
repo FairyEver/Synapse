@@ -178,6 +178,25 @@ describe("SettingsModule layout", () => {
 
     expect(container.textContent).toContain("MCP 注册面板")
   })
+
+  it("shows and saves the experimental Synapse MCP tool router setting", async () => {
+    requestedSettingsCategory.current = "experimental"
+    const container = await renderSettingsModule()
+    const toggle = container.querySelector<HTMLButtonElement>("button[role='switch']")
+
+    expect(container.textContent).toContain("Synapse MCP 工具按需加载")
+    expect(container.textContent).toContain("只在需要时加载 Synapse MCP 工具，减少上下文占用；新会话启动会稍慢。")
+    expect(toggle?.getAttribute("aria-checked")).toBe("false")
+
+    await act(async () => {
+      toggle?.click()
+      await Promise.resolve()
+    })
+
+    expect(updateConfig).toHaveBeenCalledWith({
+      agent: { experimentalSynapseToolRouterEnabled: true },
+    }, false)
+  })
 })
 
 async function renderSettingsModule() {

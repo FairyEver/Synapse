@@ -583,6 +583,23 @@ describe('DriveMarkdownRenderer', () => {
     expect(body?.className).toContain('[&_h6]:text-base!')
   })
 
+  it('restores ordered, unordered, and nested list markers in rendered markdown', () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<ol><li>一级<ul><li>二级</li></ul></li></ol>',
+      }),
+    })
+
+    const bodyClasses = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+      ?.className.split(/\s+/u) ?? []
+    expect(bodyClasses).toEqual(expect.arrayContaining([
+      '[&_ul]:list-disc',
+      '[&_ol]:list-decimal',
+      '[&_ul]:pl-6',
+      '[&_ol]:pl-6',
+    ]))
+  })
+
   it('keeps wide markdown tables scrollable inside the reader column', () => {
     renderMarkdown({
       previewData: preview({
@@ -1230,6 +1247,36 @@ describe('DriveMarkdownRenderer', () => {
     expect(windowAddEventListener).not.toHaveBeenCalledWith('resize', expect.any(Function))
 
     windowAddEventListener.mockRestore()
+  })
+
+  it('keeps nested-list highlights, comment cards, and navigation aligned after list text reflows', async () => {
+    annotationsMock.threads = [thread()]
+    renderMarkdown({
+      previewData: preview({
+        html: '<ol><li>这是 <strong>重点</strong> 内容<ul><li>一段会在列表缩进后换行的较长文字</li></ul></li></ol>',
+      }),
+    })
+
+    await act(async () => undefined)
+
+    expect(markdownBody().className).toContain('[&_ol]:pl-6')
+    expect(markdownBody().className).toContain('[&_ul]:pl-6')
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('top: 120px')
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
+
+    rangeRects = [domRect({ left: 136, top: 260, width: 120, height: 42 })]
+    triggerMarkdownResize()
+    await flushAnimationFrames()
+
+    const overlayStyle = threadOverlay('thread-1')?.getAttribute('style') ?? ''
+    expect(overlayStyle).toContain('top: 260px')
+    expect(overlayStyle).toContain('left: 136px')
+    expect(overlayStyle).toContain('height: 42px')
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 220px')
+
+    await click(elementWithText('Comment body'))
+
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 236, behavior: 'smooth' })
   })
 
   it('moves and clips table comment overlays when a rerendered table scrolls horizontally', async () => {

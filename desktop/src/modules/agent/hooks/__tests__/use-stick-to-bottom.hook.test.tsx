@@ -78,6 +78,23 @@ describe("useStickToBottom", () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
   })
 
+  it("does not scroll again when presentation state changes without a timeline content change", async () => {
+    const { rerender, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:12",
+      latestEntryId: "assistant-1",
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
+    scrollTo.mockClear()
+
+    await act(async () => {
+      rerender({ signal: "message:assistant:12", latestEntryId: "assistant-1" })
+    })
+
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
   it("keeps following when streamed content grows after the viewport was already at bottom", async () => {
     const { rerender, scrollTo } = await renderStickHarness({
       signal: "message:assistant:4",

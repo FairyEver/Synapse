@@ -60,6 +60,31 @@ describe("AgentSessionRepository", () => {
     )
   })
 
+  it("persists the experimental tool router snapshot only when creating a conversation", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+    const message = {
+      projectId: "project-1",
+      sessionKey: "local:user-1",
+      platform: "local",
+      content: "hello",
+    }
+
+    const created = await repository.getOrCreateActive(message, {
+      experimentalSynapseToolRouterEnabled: true,
+    })
+    const restored = await repository.getOrCreateActive(message, {
+      experimentalSynapseToolRouterEnabled: false,
+    })
+
+    expect(created.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(true)
+    expect(restored.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(true)
+  })
+
   it("keeps active conversations isolated by platform", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({

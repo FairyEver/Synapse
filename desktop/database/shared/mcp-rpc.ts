@@ -30,6 +30,11 @@ type McpServerIdentity = {
 
 type ToolExecutor = (toolName: string, args: Record<string, unknown>) => unknown | Promise<unknown>
 
+type McpToolCallResult = {
+  content: Array<{ type: "text"; text: string }>
+  isError?: true
+}
+
 const PROTOCOL_VERSION = "2024-11-05"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,6 +126,34 @@ function sanitizeMcpErrorMessage(error: unknown): string {
   return sanitizeError(errorMessage(error)) || "unknown error"
 }
 
+async function executeMcpToolCall(
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  executeTool: ToolExecutor,
+): Promise<McpToolCallResult> {
+  if (!(toolName in MCP_TOOL_ACTIONS)) {
+    return {
+      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
+      isError: true,
+    }
+  }
+
+  try {
+    const result = await executeTool(toolName, toolArgs)
+    const payload = normalizeToolResult(MCP_TOOL_ACTIONS[toolName] ?? toolName, result)
+    return {
+      content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+      ...(isFailedDispatchResult(result) ? { isError: true as const } : {}),
+    }
+  } catch (error) {
+    const message = sanitizeMcpErrorMessage(error)
+    return {
+      content: [{ type: "text", text: `Error: ${message}` }],
+      isError: true,
+    }
+  }
+}
+
 async function processMcpRequest(
   req: JsonRpcRequest,
   identity: McpServerIdentity,
@@ -166,36 +199,7 @@ async function processMcpRequest(
     const toolName = (params as { name: string }).name
     const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {}
 
-    if (!(toolName in MCP_TOOL_ACTIONS)) {
-      return {
-        kind: "result",
-        id,
-        result: { content: [{ type: "text", text: `Unknown tool: ${toolName}` }], isError: true },
-      }
-    }
-
-    try {
-      const result = await executeTool(toolName, toolArgs)
-      const payload = normalizeToolResult(MCP_TOOL_ACTIONS[toolName] ?? toolName, result)
-      return {
-        kind: "result",
-        id,
-        result: {
-          content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
-          ...(isFailedDispatchResult(result) ? { isError: true } : {}),
-        },
-      }
-    } catch (error) {
-      const message = sanitizeMcpErrorMessage(error)
-      return {
-        kind: "result",
-        id,
-        result: {
-          content: [{ type: "text", text: `Error: ${message}` }],
-          isError: true,
-        },
-      }
-    }
+    return { kind: "result", id, result: await executeMcpToolCall(toolName, toolArgs, executeTool) }
   }
 
   return { kind: "error", id, code: -32601, message: `Method not found: ${method}` }
@@ -209,5 +213,5 @@ function serializeJsonRpcPayload(response: McpRpcResponse): string | null {
   return JSON.stringify({ jsonrpc: "2.0", id: response.id, error: { code: response.code, message: response.message } })
 }
 
-export { processMcpRequest, sanitizeMcpErrorMessage, serializeJsonRpcPayload, PROTOCOL_VERSION }
-export type { JsonRpcId, JsonRpcRequest, McpRpcResponse, McpServerIdentity, ToolExecutor }
+export { executeMcpToolCall, processMcpRequest, sanitizeMcpErrorMessage, serializeJsonRpcPayload, PROTOCOL_VERSION }
+export type { JsonRpcId, JsonRpcRequest, McpRpcResponse, McpServerIdentity, McpToolCallResult, ToolExecutor }

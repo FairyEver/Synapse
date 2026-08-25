@@ -12,7 +12,6 @@ import { ArrowUp, ChevronDown, CornerDownRight, RotateCcw, Square, Trash2 } from
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
 import {
   Dialog,
   DialogContent,
@@ -24,23 +23,13 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
-import type {
-  SynapseAgentAttachmentCandidate,
-  SynapseAgentAttachmentSelectionResult,
-} from "@/types/bridge"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
 import { insertTextAtComposerSelection } from "../composer-insert"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
-import {
-  createImageAttachment,
-  createPathAttachment,
-  formatDraftAttachmentsForMessage,
-  type AgentDraftAttachment,
-  type AgentDraftImageAttachment,
-} from "../attachments"
+import { formatDraftAttachmentsForMessage, type AgentDraftAttachment } from "../attachments"
 import { AgentComposerInputBox } from "./agent-composer-input-box"
 import { AgentAttachmentMenu } from "./agent-attachment-menu"
 import { AgentComposerAttachmentStrip } from "./agent-composer-attachment-strip"
@@ -54,6 +43,7 @@ import { AgentPermissionModeMenu } from "./permission-mode-menu"
 import { AgentSlashMenu } from "./agent-slash-menu"
 import { AgentGitActionMenu } from "./agent-git-action-menu"
 import type { AgentGitAction } from "../hooks/use-project-git-actions"
+import { useAgentAttachmentActions, type DraftAttachmentResult } from "../hooks/use-agent-attachment-actions"
 import {
   filterAgentSlashCandidates,
   findAgentSlashFragment,
@@ -66,12 +56,6 @@ import {
 const SINGLE_LINE_HEIGHT = 36
 const MAX_TEXTAREA_HEIGHT = 160
 const logger = createRendererLogger("agent")
-const SUPPORTED_IMAGE_MIME_TYPES = new Set<AgentDraftImageAttachment["mimeType"]>([
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-])
 type RestoreAttachments = () => void
 type AcceptAttachments = () => RestoreAttachments
 
@@ -114,6 +98,7 @@ function AgentComposer({
   onOpenGit,
   dropTargetRef,
   focusInputKey,
+  projectId,
 }: {
   readonly draft: string
   readonly disabled: boolean
@@ -161,6 +146,7 @@ function AgentComposer({
   readonly onOpenGit?: () => void
   readonly dropTargetRef?: RefObject<HTMLElement | null>
   readonly focusInputKey?: string
+  readonly projectId?: string
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -173,6 +159,17 @@ function AgentComposer({
   const [attachments, setAttachments] = useState<AgentDraftAttachment[]>([])
   const [dropActive, setDropActive] = useState(false)
   const [choosingAttachments, setChoosingAttachments] = useState(false)
+  const draftScopeIdRef = useRef(createDraftScopeId())
+  const attachmentActions = useAgentAttachmentActions(projectId)
+  const attachmentsRef = useRef<readonly AgentDraftAttachment[]>([])
+  attachmentsRef.current = attachments
+
+  useEffect(() => () => {
+    void attachmentActions.release(
+      draftScopeIdRef.current,
+      attachmentsRef.current.map((attachment) => attachment.attachmentId),
+    )
+  }, [attachmentActions])
   const activeSlashFragment = useMemo(
     () => findAgentSlashFragment(draft, selectionStart),
     [draft, selectionStart],
@@ -203,19 +200,20 @@ function AgentComposer({
   }
 
   const removeAttachment = (id: string) => {
-    setAttachments((current) => current.filter((attachment) => attachment.id !== id))
+    setAttachments((current) => current.filter((attachment) => attachment.attachmentId !== id))
+    void attachmentActions.release(draftScopeIdRef.current, [id])
   }
 
   const acceptSubmittedAttachments = (submittedAttachments: readonly AgentDraftAttachment[]) => {
-    const submittedIds = new Set(submittedAttachments.map((attachment) => attachment.id))
-    setAttachments((current) => current.filter((attachment) => !submittedIds.has(attachment.id)))
+    const submittedIds = new Set(submittedAttachments.map((attachment) => attachment.attachmentId))
+    setAttachments((current) => current.filter((attachment) => !submittedIds.has(attachment.attachmentId)))
     let restored = false
     return () => {
       if (restored) return
       restored = true
       setAttachments((current) => {
-        const currentIds = new Set(current.map((attachment) => attachment.id))
-        const missing = submittedAttachments.filter((attachment) => !currentIds.has(attachment.id))
+        const currentIds = new Set(current.map((attachment) => attachment.attachmentId))
+        const missing = submittedAttachments.filter((attachment) => !currentIds.has(attachment.attachmentId))
         return missing.length === 0 ? current : [...current, ...missing]
       })
     }
@@ -276,7 +274,7 @@ function AgentComposer({
     if (!target) return undefined
 
     const attachFiles = (files: readonly File[]) => {
-      void draftAttachmentsFromFiles(files).then((result) => {
+      void attachmentActions.stageFiles(files, draftScopeIdRef.current).then((result) => {
         if (result.attachments.length > 0) {
           setAttachments((current) => [...current, ...result.attachments])
         }
@@ -314,14 +312,14 @@ function AgentComposer({
       target.removeEventListener("dragleave", handleDragLeave)
       target.removeEventListener("drop", handleDrop)
     }
-  }, [disabled, dropTargetRef])
+  }, [attachmentActions, disabled, dropTargetRef])
 
   const chooseAttachments = async (kind: "file" | "directory") => {
     if (choosingAttachments) return
     setChoosingAttachments(true)
     try {
-      const result = await requireSynapseBridge().agent.chooseAttachments({ kind })
-      addAttachments(result.attachments.map(draftAttachmentFromCandidate))
+      const result = await attachmentActions.choose(draftScopeIdRef.current, kind)
+      addAttachments(result.attachments)
       showAttachmentRejections(result)
     } catch (error) {
       logger.warn("Agent attachment selection failed.", errorDiagnostic(error))
@@ -457,7 +455,12 @@ function AgentComposer({
 
     if (files.length > 0) {
       event.preventDefault()
-      void draftAttachmentsFromFiles(files).then((result) => {
+      const hasPath = files.some(attachmentActions.hasDroppedFilePath)
+      const hasClipboardImage = files.some((file) => file.type.startsWith("image/"))
+      const resultPromise = hasPath || !hasClipboardImage
+        ? attachmentActions.stageFiles(files, draftScopeIdRef.current)
+        : attachmentActions.stageClipboardImage(draftScopeIdRef.current, files[0]?.name)
+      void resultPromise.then((result) => {
         addAttachments(result.attachments)
         showAttachmentRejections(result)
       }).catch((error) => {
@@ -732,124 +735,11 @@ function AgentComposer({
   )
 }
 
-function isSupportedImageMimeType(type: string): type is AgentDraftImageAttachment["mimeType"] {
-  return SUPPORTED_IMAGE_MIME_TYPES.has(type as AgentDraftImageAttachment["mimeType"])
-}
-
-type DraftAttachmentResult = {
-  readonly attachments: readonly AgentDraftAttachment[]
-  readonly rejectedCount: number
-}
-
-async function draftAttachmentsFromFiles(files: readonly File[]): Promise<DraftAttachmentResult> {
-  const indexedAttachments: Array<{
-    readonly sourceIndex: number
-    readonly attachment: AgentDraftAttachment
-  }> = []
-  const pathSources: Array<{ readonly sourceIndex: number; readonly path: string }> = []
-  let rejectedCount = 0
-
-  for (const [sourceIndex, file] of files.entries()) {
-    if (isSupportedImageMimeType(file.type)) {
-      try {
-        indexedAttachments.push({
-          sourceIndex,
-          attachment: await createImageAttachmentFromFile(file),
-        })
-      } catch {
-        rejectedCount += 1
-      }
-      continue
-    }
-    const path = droppedFilePath(file)
-    if (!path || !isAbsolutePathLine(path)) {
-      rejectedCount += 1
-      continue
-    }
-    pathSources.push({ sourceIndex, path })
-  }
-
-  if (pathSources.length > 0) {
-    const result = await requireSynapseBridge().agent.resolveAttachmentPaths({
-      paths: pathSources.map((item) => item.path),
-    })
-    rejectedCount += result.rejectedCount
-    for (const candidate of result.attachments) {
-      const source = pathSources[candidate.sourceIndex]
-      if (!source) {
-        rejectedCount += 1
-        continue
-      }
-      indexedAttachments.push({
-        sourceIndex: source.sourceIndex,
-        attachment: draftAttachmentFromCandidate(candidate),
-      })
-    }
-  }
-
-  indexedAttachments.sort((left, right) => left.sourceIndex - right.sourceIndex)
-  return {
-    attachments: indexedAttachments.map((item) => item.attachment),
-    rejectedCount,
-  }
-}
-
-function draftAttachmentFromCandidate(candidate: SynapseAgentAttachmentCandidate): AgentDraftAttachment {
-  if (candidate.kind === "image") {
-    return createImageAttachment({
-      id: createDraftAttachmentId(),
-      name: candidate.name,
-      mimeType: candidate.mimeType,
-      size: candidate.size,
-      bytes: candidate.data,
-    })
-  }
-  return createPathAttachment({
-    id: createDraftAttachmentId(),
-    path: candidate.path,
-    entryType: candidate.entryType,
-    name: candidate.name,
-    size: candidate.size,
-  })
-}
-
 function showAttachmentRejections(
-  result: Pick<SynapseAgentAttachmentSelectionResult, "rejectedCount"> & {
-    readonly attachments: readonly unknown[]
-  },
+  result: DraftAttachmentResult,
 ): void {
   if (result.rejectedCount === 0) return
   toast(result.attachments.length > 0 ? "部分附件无法添加" : "无法添加附件")
-}
-
-async function createImageAttachmentFromFile(file: File): Promise<AgentDraftImageAttachment> {
-  return createImageAttachment({
-    id: createDraftAttachmentId(),
-    name: file.name || undefined,
-    mimeType: file.type as AgentDraftImageAttachment["mimeType"],
-    size: file.size,
-    bytes: await file.arrayBuffer(),
-  })
-}
-
-function droppedFilePath(file: File): string | null {
-  return requireSynapseBridge().shell.filePathForDroppedFile(file) || legacyFilePath(file)
-}
-
-function legacyFilePath(file: File): string | null {
-  return (file as File & { readonly path?: string }).path || null
-}
-
-function isAbsolutePathLine(value: string): boolean {
-  return (
-    value.startsWith("/")
-    || /^[A-Za-z]:[\\/]/.test(value)
-    || isWindowsUncAbsolutePath(value)
-  )
-}
-
-function isWindowsUncAbsolutePath(value: string): boolean {
-  return /^\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value)
 }
 
 function hasFileTransfer(dataTransfer: DataTransfer | null): boolean {
@@ -863,8 +753,8 @@ function errorDiagnostic(error: unknown): Record<string, unknown> {
   }
 }
 
-function createDraftAttachmentId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
+function createDraftScopeId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 export { AgentComposer }

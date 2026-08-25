@@ -286,7 +286,14 @@ describe("useAgentChat", () => {
           projectId: session.projectId,
           sessionKey: session.sessionKey,
           platform: "local-renderer",
-          event: { type: "compactBoundary" },
+          event: {
+            type: "compactBoundary",
+            contextUsage: {
+              usedTokens: 12_000,
+              contextWindowTokens: 200_000,
+              model: "claude-sonnet-4-5",
+            },
+          },
         },
       })
       emitAgentEvent?.({
@@ -305,6 +312,11 @@ describe("useAgentChat", () => {
       })
     })
     expect(chat?.timeline.some((item) => item.kind === "sdkEvent" && item.sdkType === "compactBoundary")).toBe(true)
+    expect(chat?.contextUsage).toEqual({
+      usedTokens: 12_000,
+      contextWindowTokens: 200_000,
+      model: "claude-sonnet-4-5",
+    })
     expect(chat?.timeline.some((item) => item.id.startsWith("local:"))).toBe(true)
 
     latest = true
@@ -332,7 +344,24 @@ describe("useAgentChat", () => {
     expect(chat?.timeline.some((item) => item.id.startsWith("local:"))).toBe(false)
     expect(chat?.timeline.filter((item) => item.kind === "message" && item.content === "persist me")).toHaveLength(1)
     expect(chat?.timeline.some((item) => item.kind === "sdkEvent" && item.sdkType === "compactBoundary")).toBe(false)
+    expect(chat?.contextUsage?.usedTokens).toBe(12_000)
     expect(chat?.timelineHasMore).toBe(false)
+
+    await act(async () => {
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "stream",
+        timestamp: "2026-08-03T00:01:03.000Z",
+        scope: { projectId: session.projectId, sessionId: session.id },
+        payload: {
+          projectId: session.projectId,
+          sessionKey: session.sessionKey,
+          platform: "local-renderer",
+          event: { type: "compactBoundary" },
+        },
+      })
+    })
+    expect(chat?.contextUsage).toBeUndefined()
   })
 
   it("does not let a stale tail refresh overwrite a newer live event", async () => {
@@ -714,6 +743,38 @@ describe("useAgentChat", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt=secret")
   })
 
+  it("treats a resolved send result with an error as a failed send", async () => {
+    const bridge = (window as unknown as {
+      synapse: { agent: { send: ReturnType<typeof vi.fn> } }
+    }).synapse.agent
+    bridge.send.mockResolvedValue({
+      conversationId: session.id,
+      resultText: "",
+      events: [],
+      error: "SDK 发送失败",
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    const sent = await act(async () => chat?.sendMessage("/review-code", {
+      projectId: session.projectId,
+      conversationId: session.id,
+      sessionKey: session.sessionKey,
+    }))
+
+    expect(sent).toBe(false)
+    expect(chat?.error).toBe("发送失败")
+    expect(chat?.timeline).toEqual([])
+  })
+
   it("shows safe attachment send errors without keeping the optimistic message", async () => {
     const bridge = (window as unknown as {
       synapse: {
@@ -819,7 +880,7 @@ describe("useAgentChat", () => {
     )
   })
 
-  it("shows attachment-only images optimistically while preserving readable model content", async () => {
+  it("shows attachment-only images optimistically while sending only attachment refs", async () => {
     const bridge = (window as unknown as {
       synapse: {
         agent: {
@@ -844,7 +905,6 @@ describe("useAgentChat", () => {
     })
     await waitFor(() => chat?.selectedConversationId === session.id)
 
-    const imageData = new Uint8Array([1, 2, 3]).buffer
     const sent = await act(async () =>
       chat?.sendMessage("", {
         projectId: session.projectId,
@@ -857,7 +917,8 @@ describe("useAgentChat", () => {
             mimeType: "image/png",
             name: "screen.png",
             size: 3,
-            bytes: imageData,
+            previewUrl: "synapse-agent-artifact://local/img-1/preview",
+            thumbnailUrl: "synapse-agent-artifact://local/img-1/thumbnail",
           }),
         ],
       }))
@@ -870,30 +931,26 @@ describe("useAgentChat", () => {
       attachments: [expect.objectContaining({
         kind: "image",
         name: "screen.png",
-        url: "blob:optimistic-agent-image",
+        url: "synapse-agent-artifact://local/img-1/preview",
       })],
     })
     expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({
       projectId: session.projectId,
       conversationId: session.id,
       sessionKey: session.sessionKey,
-      content: "[Image #1]",
+      content: "",
       displayContent: "",
       attachments: [{
-        kind: "image",
-        mimeType: "image/png",
-        name: "screen.png",
-        size: 3,
-        data: imageData,
+        attachmentId: "img-1",
+        order: 0,
       }],
     }))
     expect(JSON.stringify(bridge.send.mock.calls)).not.toContain("base64")
     await act(async () => root.unmount())
     roots = roots.filter((candidate) => candidate !== root)
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:optimistic-agent-image")
   })
 
-  it("sends path attachments as readable path context and path payload entries", async () => {
+  it("sends path attachments as refs without rewriting the user content", async () => {
     const bridge = (window as unknown as {
       synapse: {
         agent: {
@@ -938,15 +995,6 @@ describe("useAgentChat", () => {
         ],
       }))
 
-    const expectedContent = [
-      "粘贴文件:",
-      "/Users/liyang/Desktop/brief.md",
-      "",
-      "粘贴文件夹:",
-      "/Users/liyang/Downloads/materials",
-      "",
-      "请分析",
-    ].join("\n")
     expect(sent).toBe(true)
     expect(chat?.timeline.at(-1)).toMatchObject({
       kind: "message",
@@ -958,20 +1006,16 @@ describe("useAgentChat", () => {
       ],
     })
     expect(bridge.send).toHaveBeenCalledWith(expect.objectContaining({
-      content: expectedContent,
+      content: "请分析",
       displayContent: "请分析",
       attachments: [
         {
-          kind: "path",
-          path: "/Users/liyang/Desktop/brief.md",
-          entryType: "file",
-          name: "brief.md",
+          attachmentId: "file-1",
+          order: 0,
         },
         {
-          kind: "path",
-          path: "/Users/liyang/Downloads/materials",
-          entryType: "directory",
-          name: "materials",
+          attachmentId: "dir-1",
+          order: 1,
         },
       ],
     }))

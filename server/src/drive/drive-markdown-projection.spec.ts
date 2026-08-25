@@ -14,6 +14,54 @@ describe('Drive Markdown projection', () => {
     expect(rendered.projection.segments.some((segment) => segment.mapping === 'markdown_syntax')).toBe(true)
   })
 
+  it('keeps nested list items addressable for comment anchors', async () => {
+    const source = [
+      '1. 一级有序项',
+      '   - 二级无序项',
+      '     1. 三级有序项',
+    ].join('\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const listBlocks = rendered.projection.blocks.filter((block) => block.type === 'list')
+    const itemBlocks = rendered.projection.blocks.filter((block) => block.type === 'listItem')
+    const exact = '三级有序项'
+    const sourceStart = source.indexOf(exact)
+    const renderedStart = rendered.renderedText.indexOf(exact)
+    const targetBlock = itemBlocks.find((block) => (
+      block.renderedStart <= renderedStart
+      && block.renderedEnd >= renderedStart + exact.length
+    ))
+    if (!targetBlock) throw new Error('Missing nested list item projection')
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: sourceStart, end: sourceStart + exact.length },
+        renderedPosition: { start: renderedStart, end: renderedStart + exact.length },
+        semantic: {
+          blockId: targetBlock.blockId,
+          start: renderedStart,
+          end: renderedStart + exact.length,
+          headingPath: [],
+        },
+        quote: { exact, prefix: '二级无序项', suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+    })
+
+    expect(listBlocks).toHaveLength(3)
+    expect(itemBlocks).toHaveLength(3)
+    expect(itemBlocks.every((block) => block.parentBlockId !== null)).toBe(true)
+    expect(rendered.html).toMatch(/<ol data-drive-markdown-block-id="[^"]+">[\s\S]*<ul data-drive-markdown-block-id="[^"]+">[\s\S]*<ol data-drive-markdown-block-id="[^"]+">/u)
+    expect(rendered.html.match(/<li data-drive-markdown-block-id="[^"]+">/gu)).toHaveLength(3)
+    expect(rendered.renderedText).toContain('一级有序项二级无序项三级有序项')
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      renderedRange: { start: renderedStart, end: renderedStart + exact.length },
+    })
+  })
+
   it('inherits an unchanged paragraph block id after content is inserted before it', async () => {
     const previousSource = '# 标题\n\n保留这一段。'
     const previous = await renderDriveMarkdownFragment(previousSource)

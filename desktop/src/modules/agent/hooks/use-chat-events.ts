@@ -3,7 +3,12 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
 import { redactSessionKey } from "@/lib/agent-redaction"
-import type { SynapseAgentDomainEvent, SynapseAgentEvent, SynapseAgentStreamDomainEvent } from "@/types/agent"
+import type {
+  SynapseAgentContextUsage,
+  SynapseAgentDomainEvent,
+  SynapseAgentEvent,
+  SynapseAgentStreamDomainEvent,
+} from "@/types/agent"
 import { reducePhaseEvent } from "../utils/phase-reducer"
 import {
   clearConversationUnread,
@@ -257,6 +262,10 @@ function useChatEvents(
           dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: activeConversationId })
         }
       }
+      const contextUsage = contextUsageFromEvent(domainEvent.payload.event)
+      if (contextUsage || domainEvent.payload.event.type === "compactBoundary") {
+        dispatch({ type: "SET_CONTEXT_USAGE", contextUsage })
+      }
       if (isSdkStreamDeltaEvent(domainEvent)) {
         streamEventsRef.current.push(domainEvent)
         scheduleStreamFlush()
@@ -340,6 +349,14 @@ function useChatEvents(
     selectedSessionKeyRef,
     updateTimeline,
   ])
+}
+
+function contextUsageFromEvent(event: SynapseAgentEvent): SynapseAgentContextUsage | undefined {
+  if (event.type === "result") return event.metadata?.contextUsage
+  if (event.type === "assistant" || event.type === "stream" || event.type === "compactBoundary") {
+    return event.contextUsage
+  }
+  return undefined
 }
 
 export { useChatEvents }

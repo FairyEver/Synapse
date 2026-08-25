@@ -1,12 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type Ref, useRef } from "react"
+import { act, type ComponentProps, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type Ref, useRef } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { AgentComposer } from "../components/agent-composer"
+import { AgentComposer as AgentComposerImpl } from "../components/agent-composer"
 import type { AgentDraftAttachment } from "../attachments"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 
@@ -33,6 +33,14 @@ const logger = vi.hoisted(() => ({
   info: vi.fn(),
   warn: vi.fn(),
 }))
+
+function AgentComposer(props: ComponentProps<typeof AgentComposerImpl>) {
+  return <AgentComposerImpl projectId="project-1" {...props} />
+}
+
+beforeEach(() => {
+  installShellBridge()
+})
 
 vi.mock("@/lib/ui-tracking", () => ({
   extractLabel: () => "button",
@@ -170,11 +178,15 @@ describe("AgentComposer", () => {
   it("opens the attachment menu from the leftmost toolbar action and adds selected folders", async () => {
     const chooseAttachments = vi.fn(async () => ({
       attachments: [{
-        kind: "path" as const,
         sourceIndex: 0,
-        path: "/Users/liyang/Downloads/materials",
-        entryType: "directory" as const,
-        name: "materials",
+        ref: {
+          version: 2 as const,
+          attachmentId: "directory-1",
+          kind: "directory" as const,
+          path: "/Users/liyang/Downloads/materials",
+          name: "materials",
+          byteSize: 0,
+        },
       }],
       rejectedCount: 0,
     }))
@@ -223,7 +235,11 @@ describe("AgentComposer", () => {
       await wait(20)
     })
 
-    expect(chooseAttachments).toHaveBeenCalledWith({ kind: "directory" })
+    expect(chooseAttachments).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      kind: "directory",
+      draftScopeId: expect.any(String),
+    }))
     expect(container.textContent).toContain("materials")
     expect(container.textContent).toContain("文件夹")
     expect(container.querySelector("textarea")).toBe(document.activeElement)
@@ -730,13 +746,13 @@ describe("AgentComposer", () => {
       'button[aria-label="预览图片 screen.png"]',
     )
     expect(previewButton).toBeTruthy()
-    expect(previewButton?.querySelector("img")?.getAttribute("src")).toBe("blob:agent-composer-image")
+    expect(previewButton?.querySelector("img")?.getAttribute("src")).toBe("synapse-agent-artifact://local/clipboard/thumbnail.png")
     expect(container.querySelector('button[aria-label^="删除附件"]')).toBeTruthy()
 
     await act(async () => previewButton?.click())
     expect(document.querySelector("[data-image-lightbox]")).toBeTruthy()
     expect(document.querySelector("[data-image-lightbox-active]")?.getAttribute("src"))
-      .toBe("blob:agent-composer-image")
+      .toBe("synapse-agent-artifact://local/clipboard/preview.png")
 
     await act(async () => {
       container.querySelector('button[aria-label^="删除附件"]')
@@ -843,7 +859,7 @@ describe("AgentComposer", () => {
     expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
     expect(container.textContent).toContain("课堂内容.md")
     expect(container.textContent).toContain("Markdown · 7 B")
-    expect(container.querySelector('[title="/Users/liyang/Desktop/课堂内容.md"]')).toBeTruthy()
+    expect(container.querySelector('[title="课堂内容.md"]')).toBeTruthy()
     expect(container.textContent).not.toContain("课堂内容.md片段")
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(1)
   })
@@ -902,9 +918,7 @@ describe("AgentComposer", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit.mock.calls[0]?.[1]).toEqual([
       expect.objectContaining({
-        kind: "path",
-        path: "/Users/liyang/Desktop/课堂内容.md",
-        entryType: "file",
+        kind: "file",
         name: "课堂内容.md",
       }),
     ])
@@ -916,19 +930,26 @@ describe("AgentComposer", () => {
     const resolveAttachmentPaths = vi.fn(async () => ({
       attachments: [
         {
-          kind: "path" as const,
           sourceIndex: 0,
-          path: emptyPath,
-          entryType: "file" as const,
-          name: "empty",
-          size: 0,
+          ref: {
+            version: 2 as const,
+            attachmentId: "file-empty",
+            kind: "file" as const,
+            name: "empty",
+            byteSize: 0,
+            sha256: "1".repeat(64),
+          },
         },
         {
-          kind: "path" as const,
           sourceIndex: 1,
-          path: folderPath,
-          entryType: "directory" as const,
-          name: "materials",
+          ref: {
+            version: 2 as const,
+            attachmentId: "directory-materials",
+            kind: "directory" as const,
+            path: folderPath,
+            name: "materials",
+            byteSize: 0,
+          },
         },
       ],
       rejectedCount: 0,
@@ -973,8 +994,12 @@ describe("AgentComposer", () => {
       await wait(0)
     })
 
-    expect(resolveAttachmentPaths).toHaveBeenCalledWith({ paths: [emptyPath, folderPath] })
-    expect(container.querySelector('[title="/Users/liyang/Desktop/empty"]')).toBeTruthy()
+    expect(resolveAttachmentPaths).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      draftScopeId: expect.any(String),
+      paths: [emptyPath, folderPath],
+    }))
+    expect(container.querySelector('[title="empty"]')).toBeTruthy()
     expect(container.querySelector('[title="/Users/liyang/Desktop/materials"]')).toBeTruthy()
     expect(container.textContent).toContain("文件 · 0 B")
     expect(container.textContent).toContain("文件夹")
@@ -1071,7 +1096,7 @@ describe("AgentComposer", () => {
     expect(container.textContent).toContain("Markdown · 7 B")
     expect(container.textContent).toContain("materials")
     expect(container.textContent).toContain("文件夹")
-    expect(container.querySelector('[title="/Users/liyang/Desktop/brief.md"]')).toBeTruthy()
+    expect(container.querySelector('[title="brief.md"]')).toBeTruthy()
     expect(container.querySelector('[title="/Users/liyang/Downloads/materials"]')).toBeTruthy()
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(2)
     expect(filePathForDroppedFile).toHaveBeenCalledTimes(2)
@@ -1216,7 +1241,7 @@ describe("AgentComposer", () => {
 
     expect(filePathForDroppedFile).toHaveBeenCalledWith(file)
     expect(container.textContent).toContain("bridge.md")
-    expect(container.querySelector('[title="/Users/liyang/Bridge/bridge.md"]')).toBeTruthy()
+    expect(container.querySelector('[title="bridge.md"]')).toBeTruthy()
     expect(container.querySelector('[title="/legacy/bridge.md"]')).toBeNull()
   })
 
@@ -1594,7 +1619,7 @@ describe("AgentComposer", () => {
       kind: "image",
       name: "enter.png",
       mimeType: "image/png",
-      size: 2,
+      byteSize: 3,
     })
   })
 
@@ -3106,12 +3131,23 @@ function installShellBridge(
       const file = filesByPath.get(path)
       const directory = file?.size === 0 && !file.type
       return {
-        kind: "path" as const,
         sourceIndex,
-        path,
-        entryType: directory ? "directory" as const : "file" as const,
-        name: file?.name ?? path.split("/").at(-1) ?? path,
-        ...(directory ? {} : { size: file?.size ?? 0 }),
+        ref: directory ? {
+          version: 2 as const,
+          attachmentId: `directory-${sourceIndex}`,
+          kind: "directory" as const,
+          path,
+          name: file?.name ?? path.split("/").at(-1) ?? path,
+          byteSize: 0,
+        } : {
+          version: 2 as const,
+          attachmentId: `file-${sourceIndex}`,
+          kind: "file" as const,
+          name: file?.name ?? path.split("/").at(-1) ?? path,
+          byteSize: file?.size ?? 0,
+          mimeType: file?.type || undefined,
+          sha256: "1".repeat(64),
+        },
       }
     }),
     rejectedCount: 0,
@@ -3120,6 +3156,24 @@ function installShellBridge(
     attachments: [],
     rejectedCount: 0,
   }))
+  const stageClipboardImage = vi.fn(async ({ name }: { readonly name?: string }) => ({
+    attachments: [{
+      sourceIndex: 0,
+      ref: {
+        version: 2 as const,
+        attachmentId: `clipboard-${name ?? "image"}`,
+        kind: "image" as const,
+        name: name ?? "clipboard.png",
+        byteSize: 3,
+        mimeType: "image/png" as const,
+        previewUrl: "synapse-agent-artifact://local/clipboard/preview.png",
+        thumbnailUrl: "synapse-agent-artifact://local/clipboard/thumbnail.png",
+        sha256: "1".repeat(64),
+      },
+    }],
+    rejectedCount: 0,
+  }))
+  const releaseAttachments = vi.fn().mockResolvedValue({ releasedCount: 1 })
   ;(window as unknown as {
     synapse?: {
       shell: {
@@ -3128,6 +3182,8 @@ function installShellBridge(
       agent: {
         chooseAttachments: typeof chooseAttachments
         resolveAttachmentPaths: typeof resolveAttachmentPaths
+        stageClipboardImage: typeof stageClipboardImage
+        releaseAttachments: typeof releaseAttachments
       }
     }
   }).synapse = {
@@ -3137,6 +3193,8 @@ function installShellBridge(
     agent: {
       chooseAttachments,
       resolveAttachmentPaths,
+      stageClipboardImage,
+      releaseAttachments,
     },
   }
   return filePathForDroppedFileMock

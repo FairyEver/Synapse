@@ -24,7 +24,7 @@ function AppResetPanel() {
         <SettingsFieldRow
           label="重置应用"
           description="清除所有本地数据，恢复到初始状态。"
-          controlClassName="flex w-full justify-start md:w-fit"
+          controlClassName="flex w-full justify-end"
         >
           <Button
             type="button"

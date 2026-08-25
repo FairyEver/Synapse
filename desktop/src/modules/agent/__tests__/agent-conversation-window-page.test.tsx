@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   workspaceProps: null as {
     readonly mode?: string
     readonly session: SynapseAgentSessionSummary
+    readonly chat?: unknown
     readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
     readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   } | null,
@@ -38,6 +39,7 @@ vi.mock("../components/agent-conversation-workspace", () => ({
   AgentConversationWorkspace: (props: {
     readonly mode: string
     readonly session: SynapseAgentSessionSummary
+    readonly chat?: unknown
     readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
     readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   }) => {
@@ -115,6 +117,17 @@ describe("AgentConversationWindowPage", () => {
     expect(container.querySelector('button[aria-label="新窗口打开"]')).toBeNull()
     expect(mocks.workspaceProps?.mode).toBe("window")
     expect(mocks.workspaceProps?.onRename).toBe((mocks.chat as { renameSession: unknown }).renameSession)
+  })
+
+  it("passes the independent window realtime context state to the shared workspace", () => {
+    const contextUsage = {
+      usedTokens: 58_000,
+      contextWindowTokens: 200_000,
+      model: "claude-sonnet-4-5",
+    }
+    renderPage("conversation-1", { contextUsage })
+
+    expect(mocks.workspaceProps?.chat).toMatchObject({ contextUsage })
   })
 
   it("shows missing conversation state", () => {
@@ -207,6 +220,7 @@ function createChatState(overrides: Record<string, unknown> = {}) {
     providers: null,
     commands: [],
     currentConversationModel: undefined,
+    contextUsage: undefined,
     selectedProjectId: "project-1",
     selectedConversationId: "conversation-1",
     selectedSessionKey: "local:renderer",

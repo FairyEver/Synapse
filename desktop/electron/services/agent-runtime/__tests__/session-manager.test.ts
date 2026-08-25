@@ -31,7 +31,7 @@ vi.mock("../claude-sdk-session", () => ({
 describe("SessionManager", () => {
   it("rejects unavailable workspace paths before creating live sessions", async () => {
     const states = new Map<string, RuntimeSessionState>()
-    const createSession = vi.fn(() => new FakeLiveSession())
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
     const validateWorkspacePath = vi.fn(async () => {
       throw new Error("项目路径不存在或不可访问：/missing-workspace。请在设置中修改项目路径后重试。")
     })
@@ -197,6 +197,7 @@ describe("SessionManager", () => {
       personaToolPolicyMode: "all",
       personaAllowedToolCount: 0,
       hasPersonaSystemPrompt: false,
+      synapseToolRouterEnabled: false,
     })
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("/Users/liyang")
   })
@@ -633,6 +634,148 @@ describe("SessionManager", () => {
     }))
   })
 
+  it("injects the catalog context window after resolving the requested model tier", async () => {
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic/",
+          ANTHROPIC_MODEL: "qwen3.7-flash",
+          ANTHROPIC_DEFAULT_SONNET_MODEL: "qwen3.7-plus",
+        })),
+        getProvider: vi.fn(async () => ({ id: "bailian", settingsConfig: {} })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+    })
+
+    await manager.getOrCreateSession({
+      state: manager.stateForConversation("conversation-1", baseMessage("default")),
+      conversation: { ...baseConversation(), providerId: "bailian", agentConfig: { modelTier: "sonnet" } },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      model: "qwen3.7-plus",
+      env: expect.objectContaining({
+        CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1000000",
+      }),
+      contextWindowConfigurationSource: "catalog",
+      modelContext: expect.objectContaining({
+        modelId: "qwen3.7-plus",
+        contextWindowTokens: 1_000_000,
+        maxInputTokens: 991_808,
+      }),
+    }))
+  })
+
+  it("preserves an explicit Provider context window while still attaching the official reference", async () => {
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
+          ANTHROPIC_MODEL: "qwen3.7-plus",
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: "200000",
+        })),
+        getProvider: vi.fn(async () => ({ id: "bailian", settingsConfig: {} })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+    })
+
+    await manager.getOrCreateSession({
+      state: manager.stateForConversation("conversation-1", baseMessage("default")),
+      conversation: { ...baseConversation(), providerId: "bailian" },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({ CLAUDE_CODE_MAX_CONTEXT_TOKENS: "200000" }),
+      contextWindowConfigurationSource: "provider-env",
+      modelContext: expect.objectContaining({ contextWindowTokens: 1_000_000 }),
+    }))
+  })
+
+  it("does not inject a window for unknown models or non-target aggregators", async () => {
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://proxy.example.com/anthropic",
+          ANTHROPIC_MODEL: "qwen3.7-plus",
+        })),
+        getProvider: vi.fn(async () => ({ id: "aggregator", category: "aggregator", settingsConfig: {} })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+    })
+
+    await manager.getOrCreateSession({
+      state: manager.stateForConversation("conversation-1", baseMessage("default")),
+      conversation: { ...baseConversation(), providerId: "aggregator" },
+      message: baseMessage("default"),
+    })
+
+    const created = createSession.mock.calls[0]?.[0]
+    expect(created?.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBeUndefined()
+    expect(created?.modelContext).toBeUndefined()
+    expect(created?.contextWindowConfigurationSource).toBeUndefined()
+  })
+
+  it("recreates the SDK session when the effective context configuration changes", async () => {
+    let explicitWindow: string | undefined
+    const sessions: FakeLiveSession[] = []
+    const createSession = vi.fn(() => {
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
+          ANTHROPIC_MODEL: "qwen3.7-plus",
+          ...(explicitWindow ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: explicitWindow } : {}),
+        })),
+        getProvider: vi.fn(async () => ({ id: "bailian", settingsConfig: {} })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    const conversation = { ...baseConversation(), providerId: "bailian" }
+
+    const first = await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
+    explicitWindow = "200000"
+    const second = await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
+  })
+
   it("enables WebFetch preflight skip by default for third-party Anthropic-compatible providers", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())
@@ -668,6 +811,218 @@ describe("SessionManager", () => {
         skipWebFetchPreflight: true,
       },
     }))
+  })
+
+  it("enables the tool router only for snapshotted third-party conversations", async () => {
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const executeSynapseTool = vi.fn()
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({
+          ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
+          ANTHROPIC_AUTH_TOKEN: "sk-test",
+        })),
+        getProvider: vi.fn(async () => ({ id: "bailian", settingsConfig: {} })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+      executeSynapseTool,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: {
+        ...baseConversation(),
+        providerId: "bailian",
+        agentConfig: { experimentalSynapseToolRouterEnabled: true },
+      },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      synapseToolRouter: expect.any(Function),
+    }))
+    expect(state.synapseToolRouterEnabled).toBe(true)
+  })
+
+  it("exposes router wrappers while preserving original persona and subagent allowlists", async () => {
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2" })),
+        getProvider: vi.fn(async () => ({ id: "bailian", category: "cloud_provider", settingsConfig: {} })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+      executeSynapseTool: vi.fn(),
+      sdkPersonaConfig: async () => ({
+        activePersonaId: "database-reader",
+        activeAgentName: "synapse-persona__database-reader",
+        providerModel: null,
+        toolPolicy: {
+          mode: "allowlist",
+          allowedTools: ["Read", "mcp__synapse-mcp__app_database_table_list"],
+        },
+        agents: {
+          "synapse-persona__database-reader": {
+            description: "Reads database metadata.",
+            prompt: "Read database metadata.",
+            tools: ["Read", "mcp__synapse-mcp__app_database_table_list"],
+            disallowedTools: ["mcp__synapse-mcp__app_database_row_create"],
+          },
+        },
+        definitionsHash: "database-reader-v1",
+      }),
+    })
+    const conversation = {
+      ...baseConversation(),
+      providerId: "bailian",
+      agentConfig: { experimentalSynapseToolRouterEnabled: true },
+    }
+
+    await manager.getOrCreateSession({
+      state: manager.stateForConversation("conversation-1", baseMessage("default")),
+      conversation,
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      tools: [
+        "Read",
+        "mcp__synapse-tool-router__search",
+        "mcp__synapse-tool-router__invoke",
+      ],
+      agents: {
+        "synapse-persona__database-reader": expect.objectContaining({
+          tools: [
+            "Read",
+            "mcp__synapse-tool-router__search",
+            "mcp__synapse-tool-router__invoke",
+          ],
+          disallowedTools: [],
+        }),
+      },
+      routerSubagentToolAccess: {
+        "synapse-persona__database-reader": {
+          allowedTools: ["Read", "mcp__synapse-mcp__app_database_table_list"],
+          disallowedTools: ["mcp__synapse-mcp__app_database_row_create"],
+        },
+      },
+    }))
+  })
+
+  it("keeps the router off for old conversations, official endpoints, and official providers", async () => {
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
+    const executeSynapseTool = vi.fn()
+    const baseDeps = {
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      states: new Map<string, RuntimeSessionState>(),
+      pendingPermissions: new Map<string, PendingPermissionState>(),
+      createSession,
+      executeSynapseTool,
+    }
+    const oldManager = new SessionManager({
+      ...baseDeps,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2" })),
+        getProvider: vi.fn(),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+    })
+    await oldManager.getOrCreateSession({
+      state: oldManager.stateForConversation("old", baseMessage("default")),
+      conversation: { ...baseConversation(), id: "old" },
+      message: baseMessage("default"),
+    })
+
+    const officialManager = new SessionManager({
+      ...baseDeps,
+      states: new Map(),
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_BASE_URL: "https://api.anthropic.com" })),
+        getProvider: vi.fn(),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+    })
+    await officialManager.getOrCreateSession({
+      state: officialManager.stateForConversation("official", baseMessage("default")),
+      conversation: {
+        ...baseConversation(),
+        id: "official",
+        agentConfig: { experimentalSynapseToolRouterEnabled: true },
+      },
+      message: baseMessage("default"),
+    })
+
+    const officialProviderManager = new SessionManager({
+      ...baseDeps,
+      states: new Map(),
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_BASE_URL: "https://proxy.example.com/anthropic" })),
+        getProvider: vi.fn(async () => ({ id: "anthropic", category: "official", settingsConfig: {} })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+    })
+    await officialProviderManager.getOrCreateSession({
+      state: officialProviderManager.stateForConversation("official-provider", baseMessage("default")),
+      conversation: {
+        ...baseConversation(),
+        id: "official-provider",
+        agentConfig: { experimentalSynapseToolRouterEnabled: true },
+      },
+      message: baseMessage("default"),
+    })
+
+    expect(createSession.mock.calls.map(([input]) => input.synapseToolRouter)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ])
+  })
+
+  it("recomputes the effective router mode when a conversation changes endpoint", async () => {
+    let baseUrl = "https://dashscope.aliyuncs.com/api/v2"
+    const sessions = [new FakeLiveSession(), new FakeLiveSession()]
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => sessions.shift() ?? new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_BASE_URL: baseUrl })),
+        getProvider: vi.fn(),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+      executeSynapseTool: vi.fn(),
+    })
+    const conversation = {
+      ...baseConversation(),
+      agentConfig: { experimentalSynapseToolRouterEnabled: true },
+    }
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
+    baseUrl = "https://api.anthropic.com"
+    await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
+
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(createSession.mock.calls.map(([input]) => Boolean(input.synapseToolRouter))).toEqual([true, false])
   })
 
   it("honors explicit WebFetch preflight settings from provider config", async () => {
@@ -1553,6 +1908,74 @@ describe("SessionManager", () => {
     expect(createSessionInputs.map((input) => input.model)).toEqual(["qwen-max", "deepseek-chat"])
     expect(createSessionInputs.map((input) => input.sdkSessionId)).toEqual(["sdk-1", undefined])
     expect(sessions[0]?.close).toHaveBeenCalledOnce()
+  })
+
+  it("reuses the main session across attachment path turns and later plain turns", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const sessions: FakeLiveSession[] = []
+    const createSessionInputs: CreateAgentLiveSessionInput[] = []
+    const createSession = vi.fn((input: CreateAgentLiveSessionInput) => {
+      createSessionInputs.push(input)
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    const attachmentMessage = (turnId: string): AgentMessage => ({
+      ...baseMessage("default"),
+      attachmentTurnId: turnId,
+      attachments: [{
+        kind: "path",
+        path: `/tmp/agent-attachments/${turnId}/attachment_1/original.png`,
+        entryType: "image",
+        name: "image.png",
+      }],
+      runtimeAttachmentDirectories: [`/tmp/agent-attachments/${turnId}`],
+    })
+
+    const first = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: attachmentMessage("turn_1"),
+    })
+    const reused = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: attachmentMessage("turn_1"),
+    })
+    const secondTurn = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: attachmentMessage("turn_2"),
+    })
+    const plainTurn = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect([first.created, reused.created, secondTurn.created, plainTurn.created])
+      .toEqual([true, false, false, false])
+    expect(createSessionInputs).toHaveLength(1)
+    expect(createSessionInputs[0]?.additionalDirectories).toEqual([
+      "/tmp/agent-attachments/turn_1",
+    ])
+    expect(sessions[0]?.grantAdditionalDirectories).toHaveBeenCalledWith([
+      "/tmp/agent-attachments/turn_2",
+    ])
+    expect(sessions[0]?.close).not.toHaveBeenCalled()
   })
 })
 

@@ -17,7 +17,7 @@ export function AgentMessageBubble({
       className={cn(
         "min-w-0 whitespace-pre-wrap break-words text-sm leading-7 text-foreground",
         role === "user"
-          ? "group/message max-w-lg rounded-2xl bg-muted px-5 py-3"
+          ? "group/message max-w-lg rounded-2xl bg-muted p-4"
           : "max-w-prose px-1 py-2",
         className
       )}

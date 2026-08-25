@@ -228,12 +228,13 @@ describe("ConfigBackupService quick inputs", () => {
           contentSortOrder: "name-asc",
           defaultQuickInputsSeededVersion: "0.2.238",
         }),
-      agent: {
-        defaultPermissionMode: "bypassPermissions",
-        defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
-        recentSlashSkills: ["review-code", "openai-docs", "third"],
-      },
-    }))
+        agent: {
+          defaultPermissionMode: "bypassPermissions",
+          defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+          experimentalSynapseToolRouterEnabled: false,
+          recentSlashSkills: ["review-code", "openai-docs", "third"],
+        },
+      }))
       const importedConfig = vi.mocked(configStore.replace).mock.calls[0]?.[0] as SynapseConfig | undefined
       expect(importedConfig?.repositories[0]).not.toHaveProperty("variables")
     } finally {
@@ -290,6 +291,7 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
+          experimentalSynapseToolRouterEnabled: false,
           recentSlashSkills: [],
         },
       }))
@@ -317,6 +319,7 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
+          experimentalSynapseToolRouterEnabled: false,
           recentSlashSkills: [],
         },
       }))

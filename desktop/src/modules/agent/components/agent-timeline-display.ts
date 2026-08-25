@@ -66,6 +66,7 @@ export type AgentTimelineDisplayNode =
   | {
       readonly kind: "processGroup"
       readonly id: string
+      readonly lifecycle: ProcessGroupLifecycle
       readonly entries: readonly TimelineDisplayEntry[]
       readonly itemCount: number
       readonly summary: string
@@ -74,17 +75,19 @@ export type AgentTimelineDisplayNode =
       readonly state: ProcessGroupState
     }
 
+export type ProcessGroupLifecycle = "active" | "completed"
+
 export type ProcessGroupState = {
   readonly active: boolean
   readonly failed: boolean
   readonly denied: boolean
   readonly pendingPermission: boolean
-  readonly hasImageArtifacts: boolean
 }
 
 export type GroupTimelineDisplayContext = {
   readonly pendingPermissionRequestIds: ReadonlySet<string>
   readonly nowMs?: number
+  readonly sending?: boolean
 }
 
 export function groupTimelineDisplayEntries(
@@ -92,55 +95,125 @@ export function groupTimelineDisplayEntries(
   context: GroupTimelineDisplayContext,
 ): readonly AgentTimelineDisplayNode[] {
   const nodes: AgentTimelineDisplayNode[] = []
+  const turns = timelineTurns(entries)
+
+  for (let index = 0; index < turns.length; index += 1) {
+    appendTurnNodes(nodes, turns[index] ?? [], {
+      ...context,
+      lifecycle: context.sending === true && index === turns.length - 1 ? "active" : "completed",
+    })
+  }
+  return nodes
+}
+
+function timelineTurns(entries: readonly TimelineDisplayEntry[]): readonly (readonly TimelineDisplayEntry[])[] {
+  const turns: TimelineDisplayEntry[][] = []
+  let current: TimelineDisplayEntry[] = []
+  for (const entry of entries) {
+    if (isUserMessage(entry) && current.length > 0) {
+      turns.push(current)
+      current = []
+    }
+    current.push(entry)
+  }
+  if (current.length > 0) turns.push(current)
+  return turns
+}
+
+function appendTurnNodes(
+  nodes: AgentTimelineDisplayNode[],
+  entries: readonly TimelineDisplayEntry[],
+  context: GroupTimelineDisplayContext & { readonly lifecycle: ProcessGroupLifecycle },
+): void {
+  const first = entries[0]
+  const hasUserAnchor = first ? isUserMessage(first) : false
+  let anchorId = hasUserAnchor && first ? first.item.id : "root"
   let pendingProcessEntries: TimelineDisplayEntry[] = []
+  const finalAssistantIndex = context.lifecycle === "completed" && !turnDidNotComplete(entries)
+    ? findLastAssistantIndex(entries)
+    : -1
 
   const flushProcessEntries = () => {
     if (pendingProcessEntries.length === 0) return
-    nodes.push(createProcessGroup(pendingProcessEntries, context.nowMs))
+    nodes.push(createProcessGroup(pendingProcessEntries, anchorId, context))
     pendingProcessEntries = []
   }
 
-  for (const entry of entries) {
-    if (isMainlineEntry(entry, context)) {
+  if (hasUserAnchor && first) {
+    nodes.push({ kind: "item", entry: first })
+  }
+
+  for (let index = hasUserAnchor ? 1 : 0; index < entries.length; index += 1) {
+    const entry = entries[index]
+    if (!entry || index === finalAssistantIndex) continue
+    if (isRequiredMainlineEntry(entry, context)) {
       flushProcessEntries()
       nodes.push({ kind: "item", entry })
+      anchorId = entry.item.id
       continue
     }
     pendingProcessEntries.push(entry)
   }
 
   flushProcessEntries()
-  return nodes
+  const finalAssistant = finalAssistantIndex >= 0 ? entries[finalAssistantIndex] : undefined
+  if (finalAssistant) nodes.push({ kind: "item", entry: finalAssistant })
 }
 
-function isMainlineEntry(
+function isUserMessage(entry: TimelineDisplayEntry): boolean {
+  return entry.item.kind === "message" && entry.item.role === "user"
+}
+
+function findLastAssistantIndex(entries: readonly TimelineDisplayEntry[]): number {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const item = entries[index]?.item
+    if (item?.kind === "message" && item.role === "assistant") return index
+  }
+  return -1
+}
+
+function turnDidNotComplete(entries: readonly TimelineDisplayEntry[]): boolean {
+  return entries.some((entry) => {
+    const item = entry.item
+    if (item.kind === "error") {
+      const status = item.turnOutcome?.status
+      return status !== undefined ? status !== "completed" : !item.recoverable
+    }
+    if (item.kind !== "result") return false
+    const status = item.metadata?.turnOutcome?.status
+    return status !== undefined && status !== "completed"
+  })
+}
+
+function isRequiredMainlineEntry(
   entry: TimelineDisplayEntry,
   context: GroupTimelineDisplayContext,
 ): boolean {
   const item = entry.item
-  if (entryHasImageArtifacts(entry)) return true
-  if (item.kind === "message" && (item.role === "user" || item.role === "assistant")) return true
+  if (isUserMessage(entry)) return true
   if (item.kind === "permissionRequest" && context.pendingPermissionRequestIds.has(item.requestId)) return true
-  if (item.kind === "error" && !item.recoverable) return true
+  if (item.kind === "error") {
+    return !item.recoverable || (item.turnOutcome !== undefined && item.turnOutcome.status !== "completed")
+  }
   if (item.kind === "result") {
     const status = item.metadata?.turnOutcome?.status
-    return status === "cancelled" || status === "failed" || status === "timed_out"
+    return status === "cancelled" || status === "failed" || status === "timed_out" || status === "interrupted"
   }
   return false
 }
 
-function entryHasImageArtifacts(entry: TimelineDisplayEntry): boolean {
-  const result = entry.result ?? (entry.item.kind === "toolResult" ? entry.item : undefined)
-  return (result?.imageArtifacts?.length ?? 0) > 0
-}
-
-function createProcessGroup(entries: readonly TimelineDisplayEntry[], nowMs: number | undefined): AgentTimelineDisplayNode {
-  const state = processGroupState(entries)
+function createProcessGroup(
+  entries: readonly TimelineDisplayEntry[],
+  anchorId: string,
+  context: GroupTimelineDisplayContext & { readonly lifecycle: ProcessGroupLifecycle },
+): AgentTimelineDisplayNode {
+  const state = processGroupState(entries, context)
   const label = processGroupLabel(state)
-  const durationLabel = processGroupDurationLabel(entries, state, nowMs)
+  const durationLabel = processGroupDurationLabel(entries, state, context.nowMs)
   return {
     kind: "processGroup",
-    id: processGroupId(entries),
+    id: `process:${anchorId}`,
+    lifecycle: context.lifecycle,
     entries,
     itemCount: entries.length,
     summary: processGroupSummary(label, durationLabel),
@@ -148,12 +221,6 @@ function createProcessGroup(entries: readonly TimelineDisplayEntry[], nowMs: num
     ...(durationLabel ? { durationLabel } : {}),
     state,
   }
-}
-
-function processGroupId(entries: readonly TimelineDisplayEntry[]): string {
-  const first = entries[0]?.item.id ?? "empty"
-  const last = entries[entries.length - 1]?.item.id ?? first
-  return `process:${first}:${last}`
 }
 
 function processGroupLabel(state: ProcessGroupState): string {
@@ -259,23 +326,22 @@ function formatProcessGroupDuration(durationMs: number): string | undefined {
   return `${seconds}s`
 }
 
-function processGroupState(entries: readonly TimelineDisplayEntry[]): ProcessGroupState {
-  let active = false
+function processGroupState(
+  entries: readonly TimelineDisplayEntry[],
+  context: GroupTimelineDisplayContext & { readonly lifecycle: ProcessGroupLifecycle },
+): ProcessGroupState {
+  const active = context.lifecycle === "active"
   let failed = false
   let denied = false
   let pendingPermission = false
-  let hasImageArtifacts = false
 
   for (const entry of entries) {
     const item = entry.item
     const result = entry.result ?? (item.kind === "toolResult" ? item : undefined)
-    if (item.kind === "toolCall" && !result) active = true
-    if (item.kind === "toolProgress" && item.status === "preparing") active = true
-    if (item.kind === "thinking" && item.streaming === true) active = true
-    if (item.kind === "phase" && item.status === "in-progress") active = true
-    if (item.kind === "permissionRequest") pendingPermission = true
+    if (item.kind === "permissionRequest" && context.pendingPermissionRequestIds.has(item.requestId)) {
+      pendingPermission = true
+    }
     if (result) {
-      if ((result.imageArtifacts?.length ?? 0) > 0) hasImageArtifacts = true
       if (isDeniedToolResult(result)) denied = true
       if (isFailedToolResult(result)) failed = true
     }
@@ -283,7 +349,7 @@ function processGroupState(entries: readonly TimelineDisplayEntry[]): ProcessGro
     if (item.kind === "error") failed = true
   }
 
-  return { active, failed, denied, pendingPermission, hasImageArtifacts }
+  return { active, failed, denied, pendingPermission }
 }
 
 function isDeniedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
@@ -299,11 +365,8 @@ function isFailedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
 
 export function defaultProcessGroupOpen(
   group: Extract<AgentTimelineDisplayNode, { kind: "processGroup" }>,
-  context: { readonly sending: boolean },
 ): boolean {
   if (group.state.pendingPermission) return true
   if (group.state.active) return true
-  if (group.state.hasImageArtifacts) return true
-  if (context.sending && group.state.active) return true
   return false
 }

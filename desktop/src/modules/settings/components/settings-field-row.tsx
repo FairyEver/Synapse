@@ -8,7 +8,7 @@ import {
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
-const SETTINGS_FIELD_CONTROL_CLASSNAME = "w-full md:w-full md:max-w-sm"
+const SETTINGS_FIELD_CONTROL_CLASSNAME = "w-full"
 
 type SettingsFieldRowProps = {
   children: ReactNode
@@ -35,10 +35,14 @@ function SettingsFieldRow({
       data-invalid={error ? true : undefined}
       className={className}
     >
-      <FieldTitle>{label}</FieldTitle>
-      <FieldContent className={cn("w-full md:max-w-sm", contentClassName)}>
+      <FieldTitle className="min-w-0 flex-col items-start gap-0.5">
+        <span className="text-balance">{label}</span>
+        {description ? (
+          <FieldDescription className="text-pretty">{description}</FieldDescription>
+        ) : null}
+      </FieldTitle>
+      <FieldContent className={cn("w-full @md/field-group:max-w-sm", contentClassName)}>
         <div className={cn("w-full", controlClassName)}>{children}</div>
-        {description ? <FieldDescription>{description}</FieldDescription> : null}
         <FieldError>{error}</FieldError>
       </FieldContent>
     </Field>

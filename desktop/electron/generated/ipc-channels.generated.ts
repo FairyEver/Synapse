@@ -248,6 +248,8 @@ export const IPC_CHANNELS = {
     "exportConversationBundle": "synapse:app:agent:operation:export_conversation_bundle",
     "chooseAttachments": "synapse:app:agent:operation:choose_attachments",
     "resolveAttachmentPaths": "synapse:app:agent:operation:resolve_attachment_paths",
+    "stageClipboardImage": "synapse:app:agent:operation:stage_clipboard_image",
+    "releaseAttachments": "synapse:app:agent:operation:release_attachments",
     "send": "synapse:app:agent:operation:send",
     "listPendingPermissions": "synapse:app:agent:operation:list_pending_permissions",
     "respondPermission": "synapse:app:agent:operation:respond_permission",

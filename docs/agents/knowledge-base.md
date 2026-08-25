@@ -28,6 +28,7 @@
 - 普通项目不得加载 Knowledge Base plugin、skill、hook、prompt 或快捷动作。Scheduler、Workflow 等非 renderer Agent 入口也不默认获得该 runtime；只有明确绑定托管 Knowledge Base 且策略允许时才加载。
 - `settingSources` 必须包含 `['user', 'project', 'local']`，以保持与用户本机 Claude Code 的 MCP 可见性一致。不得因启用 plugin hooks 删除 `user` settings。
 - 不得通过 SDK `mcpServers` 程序化注入“修复”知识库 MCP。Synapse MCP 从用户 Claude Code 配置 `~/.claude.json` 读取，server 名为 `synapse-mcp`。
+- 唯一例外是默认关闭的“Synapse MCP 工具按需加载”实验：仅对创建时固化开启的第三方 Anthropic-compatible 对话，先按正常 `settingSources` discovery，再以 strict MCP 配置保留其它可重建 MCP，并用进程内 router 替代模型可见的 `synapse-mcp`。该例外不改变 Knowledge Base 存储或 plugin 加载；无法证明 MCP 与权限语义等价时必须回退完整 MCP。
 - Knowledge Base 不做 MCP 隔离；是否允许工具仍走现有权限流程。
 - Agent composer slash menu 只插入 `/<name>`，不自动执行/发送，也不在 renderer 侧扫描目录替代后端解析。
 

@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef } from "react"
 import type {
   SynapseAgentPendingPermission,
+  SynapseAgentContextUsage,
   SynapseAgentPermissionMode,
   SynapseAgentPermissionScope,
   SynapseAgentPublishedCommand,
@@ -47,6 +48,7 @@ type UseAgentChatState = {
   cancelPhase: ChatState["cancelPhase"]
   error: string | null
   currentConversationModel: string | undefined
+  contextUsage: SynapseAgentContextUsage | undefined
   createSession: (
     projectId: string,
     providerId?: string,
@@ -101,6 +103,7 @@ function useAgentChat(
     cancelPhase,
     error,
     currentConversationModel,
+    contextUsage,
   } = state
 
   const projectIdsRef = useRef(projectScope.projectIds)
@@ -176,6 +179,7 @@ function useAgentChat(
     cancelPhase,
     error,
     currentConversationModel,
+    contextUsage,
     createSession: connection.createSession,
     selectSession: connection.selectSession,
     deleteSession: connection.deleteSession,

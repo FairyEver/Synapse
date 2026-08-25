@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { stat } from "node:fs/promises"
+import { AGENT_ATTACHMENT_IMAGE_MIME_TYPES } from "../../../src/types/agent-attachment"
 
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
@@ -125,12 +126,7 @@ const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
     diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
   }),
 ])
-const agentArtifactImageMimeTypeSchema = z.enum([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-])
+const agentArtifactImageMimeTypeSchema = z.enum(AGENT_ATTACHMENT_IMAGE_MIME_TYPES)
 export const agentImageArtifactSchema = z.object({
   id: z.string(),
   kind: z.literal("image"),
@@ -165,6 +161,26 @@ const agentToolResultContentDiagnosticsSchema = z.object({
   imageCount: z.number().int().nonnegative(),
   images: z.array(agentToolResultImageDiagnosticSchema),
 })
+const agentModelContextReferenceSchema = z.object({
+  providerScopeId: z.string().min(1),
+  modelId: z.string().min(1),
+  contextWindowTokens: z.number().int().positive(),
+  maxInputTokens: z.number().int().positive().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+  reasoningMaxInputTokens: z.number().int().positive().optional(),
+  reasoningMaxOutputTokens: z.number().int().positive().optional(),
+  maxReasoningTokens: z.number().int().positive().optional(),
+  sourceLabel: z.string().min(1),
+  sourceUrl: z.string().url(),
+  verifiedAt: z.string().datetime(),
+})
+export const agentContextUsageSchema = z.object({
+  usedTokens: z.number().int().nonnegative(),
+  contextWindowTokens: z.number().int().positive().optional(),
+  model: z.string().min(1).optional(),
+  modelContext: agentModelContextReferenceSchema.optional(),
+  contextWindowConfigurationSource: z.enum(["catalog", "provider-env"]).optional(),
+})
 export const agentUserQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string().optional(),
@@ -195,6 +211,7 @@ const resultMetadataSchema = z.object({
   model: z.string().optional(),
   effort: z.string().optional(),
   contextRemainingPercent: z.number().optional(),
+  contextUsage: agentContextUsageSchema.optional(),
   workDir: z.string().optional(),
   cancelled: z.boolean().optional(),
   turnOutcome: agentTurnOutcomeSchema.optional(),
@@ -677,6 +694,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     contentBlocks: z.array(z.unknown()).optional(),
     content: z.string().optional(),
     message: jsonRecordSchema.optional(),
+    contextUsage: agentContextUsageSchema.optional(),
   }),
   z.object({
     ...agentEventBaseSchema,
@@ -690,6 +708,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     toolUseId: z.string().optional(),
     toolName: z.string().optional(),
     event: jsonRecordSchema.optional(),
+    contextUsage: agentContextUsageSchema.optional(),
   }),
   z.object({
     ...agentEventBaseSchema,
@@ -700,6 +719,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("compactBoundary"),
+    contextUsage: agentContextUsageSchema.optional(),
   }),
   z.object({
     ...agentEventBaseSchema,

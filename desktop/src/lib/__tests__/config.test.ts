@@ -12,6 +12,7 @@ import {
 describe("Synapse config Agent defaults", () => {
   it("defaults new Agent conversations to default permission mode", () => {
     expect(createDefaultConfig().agent.defaultPermissionMode).toBe("default")
+    expect(createDefaultConfig().agent.experimentalSynapseToolRouterEnabled).toBe(false)
     expect(createDefaultConfig().agent.recentSlashSkills).toEqual([])
   })
 
@@ -23,6 +24,25 @@ describe("Synapse config Agent defaults", () => {
     })
 
     expect(config.agent.defaultPermissionMode).toBe("default")
+    expect(config.agent.experimentalSynapseToolRouterEnabled).toBe(false)
+  })
+
+  it("only enables the experimental Synapse tool router for an explicit boolean true", () => {
+    const enabled = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: { experimentalSynapseToolRouterEnabled: true },
+    })
+    const invalid = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: { experimentalSynapseToolRouterEnabled: "true" },
+    })
+
+    expect(enabled.agent.experimentalSynapseToolRouterEnabled).toBe(true)
+    expect(invalid.agent.experimentalSynapseToolRouterEnabled).toBe(false)
   })
 
   it("normalizes Agent defaultPermissionMode only when it is supported", () => {

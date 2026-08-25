@@ -10,7 +10,6 @@ export const AGENT_RELAY_TIMED_OUT_MESSAGE = "Agent 中继执行超时，任务�
 export const AGENT_RELAY_BUSY_MESSAGE = "Agent 中继会话正在执行中，请稍后再试。"
 export const AGENT_QUEUE_FULL_MESSAGE = "当前会话仍在执行，待发送队列已满；请稍后再试。"
 export const AGENT_MESSAGE_BLOCKED_MESSAGE = "消息被策略拦截，未开始执行。"
-export const AGENT_COMPRESSION_UNSUPPORTED_MESSAGE = "当前 Agent 会话暂不支持压缩上下文。"
 export const AGENT_TURN_FAILED_MESSAGE = "Agent 本轮执行失败。"
 export const AGENT_SPAWN_DENIED_MESSAGE = "Agent 启动被权限策略拒绝。"
 export const AGENT_SPAWN_PERMISSION_CHECK_FAILED_MESSAGE = "Agent 启动权限检查失败。"

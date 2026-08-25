@@ -1,21 +1,24 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, unlink, writeFile } from "node:fs/promises"
+import { mkdir, rm, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 
-import type { AgentArtifactEntryV1, DataNamespace } from "../../runtime/data-repo"
+import type {
+  AgentArtifactEntry,
+  AgentArtifactEntryV1,
+  AgentArtifactEntryV2,
+  DataNamespace,
+} from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type {
   AgentArtifactImageMimeType,
   AgentImageArtifact,
-  AgentImageAttachment,
   AgentToolResultImageBlock,
-  AgentUserMessageImageArtifact,
 } from "./types"
 import { agentArtifactUrlForRelativePath } from "./artifact-url"
 
 interface AgentArtifactStoreDeps {
   readonly rootDirectory: string
-  readonly artifacts: DataNamespace<AgentArtifactEntryV1>
+  readonly artifacts: DataNamespace<AgentArtifactEntry>
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly randomId?: () => string
@@ -28,13 +31,6 @@ interface MaterializeToolResultImagesInput {
   readonly toolUseId?: string
   readonly toolName?: string
   readonly imageBlocks?: readonly AgentToolResultImageBlock[]
-}
-
-interface MaterializeUserMessageImagesInput {
-  readonly projectId: string
-  readonly conversationId: string
-  readonly turnId: string
-  readonly images: readonly AgentImageAttachment[]
 }
 
 export class AgentArtifactStore {
@@ -67,33 +63,8 @@ export class AgentArtifactStore {
     return artifacts
   }
 
-  async materializeUserMessageImages(
-    input: MaterializeUserMessageImagesInput,
-  ): Promise<readonly AgentUserMessageImageArtifact[]> {
-    const artifacts: AgentUserMessageImageArtifact[] = []
-    try {
-      for (const image of input.images) {
-        const bytes = Buffer.from(image.data instanceof ArrayBuffer ? new Uint8Array(image.data) : image.data)
-        if (bytes.length === 0) throw new Error("User message image is empty")
-        artifacts.push(await this.persistImage({
-          projectId: input.projectId,
-          conversationId: input.conversationId,
-          turnId: input.turnId,
-          origin: "user-message",
-          ...(image.name ? { originalName: image.name } : {}),
-          mimeType: image.mimeType,
-          bytes,
-        }))
-      }
-      return artifacts
-    } catch (error) {
-      await this.removeUserMessageArtifactsForTurn(input.conversationId, input.turnId)
-      throw error
-    }
-  }
-
   async removeConversationArtifacts(conversationId: string): Promise<void> {
-    let artifacts: AgentArtifactEntryV1[]
+    let artifacts: AgentArtifactEntry[]
     try {
       artifacts = await this.deps.artifacts.list({ conversationId } as Partial<AgentArtifactEntryV1>)
     } catch (error) {
@@ -111,7 +82,8 @@ export class AgentArtifactStore {
         this.deps.logger?.warn("Agent artifact cleanup failed.", {
           boundary: "agent-runtime.artifact.cleanup",
           conversationId,
-          artifactId: artifact.id,
+          artifactSchemaVersion: artifact.schemaVersion,
+          artifactKind: artifact.schemaVersion === 2 ? artifact.kind : artifact.origin,
           errorName: error instanceof Error ? error.name : typeof error,
         })
       }
@@ -119,7 +91,7 @@ export class AgentArtifactStore {
   }
 
   async removeUserMessageArtifactsForTurn(conversationId: string, turnId: string): Promise<void> {
-    let artifacts: AgentArtifactEntryV1[]
+    let artifacts: AgentArtifactEntry[]
     try {
       artifacts = await this.deps.artifacts.list({ conversationId, turnId } as Partial<AgentArtifactEntryV1>)
     } catch (error) {
@@ -131,7 +103,7 @@ export class AgentArtifactStore {
       })
       return
     }
-    for (const artifact of artifacts.filter((item) => item.origin === "user-message")) {
+    for (const artifact of artifacts.filter(isLegacyUserMessageArtifact)) {
       try {
         await this.removeArtifact(artifact)
       } catch (error) {
@@ -139,7 +111,8 @@ export class AgentArtifactStore {
           boundary: "agent-runtime.artifact.rollback",
           conversationId,
           turnId,
-          artifactId: artifact.id,
+          artifactSchemaVersion: artifact.schemaVersion,
+          artifactKind: artifact.origin,
           errorName: error instanceof Error ? error.name : typeof error,
         })
       }
@@ -150,6 +123,7 @@ export class AgentArtifactStore {
     const artifacts = await this.deps.artifacts.list()
     const orphanConversationIds = new Set(
       artifacts
+        .filter(hasCommittedConversation)
         .map((artifact) => artifact.conversationId)
         .filter((conversationId) => !existingConversationIds.has(conversationId)),
     )
@@ -168,7 +142,7 @@ export class AgentArtifactStore {
     readonly originalName?: string
     readonly mimeType: AgentArtifactImageMimeType
     readonly bytes: Buffer
-  }): Promise<AgentUserMessageImageArtifact> {
+  }): Promise<AgentImageArtifact> {
     const id = this.deps.randomId?.() ?? randomUUID()
     const extension = extensionForMimeType(input.mimeType)
     const relativePath = path.join(
@@ -200,7 +174,16 @@ export class AgentArtifactStore {
         createdAt: (this.deps.now?.() ?? new Date()).toISOString(),
       })
     } catch (error) {
-      await unlink(storagePath).catch(() => undefined)
+      try {
+        await unlink(storagePath)
+      } catch (cleanupError) {
+        this.deps.logger?.warn("Agent artifact rollback file cleanup failed.", {
+          boundary: "agent-runtime.artifact.persist.rollback",
+          projectId: input.projectId,
+          conversationId: input.conversationId,
+          errorName: cleanupError instanceof Error ? cleanupError.name : typeof cleanupError,
+        })
+      }
       throw error
     }
     return {
@@ -214,7 +197,12 @@ export class AgentArtifactStore {
     }
   }
 
-  private async removeArtifact(artifact: AgentArtifactEntryV1): Promise<void> {
+  private async removeArtifact(artifact: AgentArtifactEntry): Promise<void> {
+    if (artifact.schemaVersion === 2) {
+      await this.removeV2ArtifactFiles(artifact)
+      await this.deps.artifacts.remove(artifact.id)
+      return
+    }
     if (!isPathInsideRoot(this.deps.rootDirectory, artifact.storagePath)) {
       throw new Error("Agent artifact path is outside the controlled root")
     }
@@ -225,6 +213,30 @@ export class AgentArtifactStore {
     }
     await this.deps.artifacts.remove(artifact.id)
   }
+
+  private async removeV2ArtifactFiles(artifact: AgentArtifactEntryV2): Promise<void> {
+    if (artifact.kind === "directory") return
+    if (!artifact.storagePath || !isPathInsideRoot(this.deps.rootDirectory, artifact.storagePath)) {
+      throw new Error("Agent artifact path is outside the controlled root")
+    }
+    for (const storagePath of [artifact.previewStoragePath, artifact.thumbnailStoragePath]) {
+      if (storagePath && !isPathInsideRoot(this.deps.rootDirectory, storagePath)) {
+        throw new Error("Agent artifact path is outside the controlled root")
+      }
+    }
+    await rm(path.dirname(artifact.storagePath), { recursive: true, force: true })
+  }
+}
+
+function isLegacyUserMessageArtifact(artifact: AgentArtifactEntry): artifact is AgentArtifactEntryV1 {
+  return artifact.schemaVersion === 1 && artifact.origin === "user-message"
+}
+
+function hasCommittedConversation(
+  artifact: AgentArtifactEntry,
+): artifact is AgentArtifactEntryV1 | (AgentArtifactEntryV2 & { conversationId: string }) {
+  return artifact.schemaVersion === 1
+    || (artifact.lifecycle === "committed" && typeof artifact.conversationId === "string")
 }
 
 function isPathInsideRoot(rootDirectory: string, targetPath: string): boolean {

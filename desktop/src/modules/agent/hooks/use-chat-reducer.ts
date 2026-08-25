@@ -1,5 +1,6 @@
 import type {
   SynapseAgentPendingPermission,
+  SynapseAgentContextUsage,
   SynapseAgentPublishedCommand,
   SynapseAgentProviderState,
   SynapseAgentSessionSummary,
@@ -34,6 +35,7 @@ type ChatState = {
   cancelPhase: "idle" | "cancel_pending" | "cancelled"
   error: string | null
   currentConversationModel: string | undefined
+  contextUsage: SynapseAgentContextUsage | undefined
 }
 
 type ChatAction =
@@ -75,6 +77,7 @@ type ChatAction =
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_CANCEL_PHASE"; cancelPhase: ChatState["cancelPhase"] }
   | { type: "SET_CURRENT_CONVERSATION_MODEL"; model: string | undefined }
+  | { type: "SET_CONTEXT_USAGE"; contextUsage: SynapseAgentContextUsage | undefined }
   | { type: "CANCEL_REQUESTED" }
   | { type: "CANCEL_RESET" }
   | { type: "RESET" }
@@ -103,6 +106,7 @@ const initialChatState: ChatState = {
   cancelPhase: "idle",
   error: null,
   currentConversationModel: undefined,
+  contextUsage: undefined,
 }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
@@ -120,6 +124,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ...state,
         timeline: action.timeline,
         currentConversationModel: latestResultModel(action.timeline),
+        contextUsage: latestResultContextUsage(action.timeline),
       }
     case "SET_TIMELINE_PAGE":
       return {
@@ -131,6 +136,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         loadingOlder: false,
         timelineHistoryError: null,
         currentConversationModel: latestResultModel(action.timeline),
+        contextUsage: latestResultContextUsage(action.timeline),
       }
     case "UPDATE_TIMELINE_PAGE": {
       const timeline = action.updater(state.timeline)
@@ -194,6 +200,8 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "SET_CURRENT_CONVERSATION_MODEL":
       return { ...state, currentConversationModel: action.model }
+    case "SET_CONTEXT_USAGE":
+      return { ...state, contextUsage: action.contextUsage }
     case "SET_ERROR":
       return { ...state, error: action.error }
     case "SET_CANCEL_PHASE":
@@ -213,6 +221,17 @@ function latestResultModel(timeline: readonly SynapseAgentTimelineItem[]): strin
     if (item?.kind !== "result" && !(item?.kind === "message" && item.role === "assistant")) continue
     const model = item.metadata?.model
     if (typeof model === "string" && model.length > 0) return model
+  }
+  return undefined
+}
+
+function latestResultContextUsage(
+  timeline: readonly SynapseAgentTimelineItem[],
+): SynapseAgentContextUsage | undefined {
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    const item = timeline[index]
+    if (item?.kind !== "result" && !(item?.kind === "message" && item.role === "assistant")) continue
+    if (item.metadata?.contextUsage) return item.metadata.contextUsage
   }
   return undefined
 }

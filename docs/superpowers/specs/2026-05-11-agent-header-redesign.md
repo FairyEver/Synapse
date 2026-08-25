@@ -111,3 +111,7 @@ scheduled session：
 4. `pendingPermissions.length > 0` 时，权限按钮使用 `Button` + `ShieldAlert` 显示
 5. 复制 / 命令改为 ghost icon 按钮，Tooltip 可见
 6. 无 session 时保持 "Agent" fallback，界面不崩溃
+
+## 7. 实时上下文占用补充（2026-08-25）
+
+模型信息与待回答/权限状态之间增加当前主线程上下文指示器。完整宽度显示 token、窗口、百分比和短进度条；窄宽度只保留“上下文 + 百分比 + 进度条”。无可靠窗口时只显示已用 token，无快照时不渲染。该指标由 SDK 实时事件驱动，自动压缩后允许下降；详细口径见 `2026-08-25-agent-context-usage-header-design.md`。

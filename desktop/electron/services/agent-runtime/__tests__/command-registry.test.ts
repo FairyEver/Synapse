@@ -26,6 +26,13 @@ describe("CustomCommandRegistry", () => {
     )
   })
 
+  it("publishes the SDK-native /compact command without the removed /compress alias", () => {
+    expect(BUILTIN_COMMANDS).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "compact" }),
+    ]))
+    expect(BUILTIN_COMMANDS.some((command) => command.name === "compress")).toBe(false)
+  })
+
   it("stores prompt and exec commands", async () => {
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
     const registry = new CustomCommandRegistry({

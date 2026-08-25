@@ -28,7 +28,9 @@ function AgentComposerImageThumbnail({
           src={imageUrl}
           alt=""
           className="size-full object-cover"
+          decoding="async"
           draggable={false}
+          loading="lazy"
         />
       ) : null}
     </Button>

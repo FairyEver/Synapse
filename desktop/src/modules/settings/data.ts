@@ -5,6 +5,7 @@ import {
   FolderOpen,
   Info,
   CircleUserRound,
+  FlaskConical,
   Network,
   PanelBottom,
   Settings2,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react"
 import {
   DEFAULT_GLOBAL_CONFIG,
+  DEFAULT_AGENT_GLOBAL_CONFIG,
 } from "@/constants/defaults"
 import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
@@ -58,6 +60,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: Bot,
     label: "模型与供应商",
     description: "模型供应商和默认模型。",
+  },
+  {
+    id: "experimental",
+    icon: FlaskConical,
+    label: "实验功能",
+    description: "尚在验证的功能。",
   },
   {
     id: "troubleshooting",
@@ -111,6 +119,15 @@ const settingsItems: SettingItem[] = [
     category: "projects",
     type: "list",
     defaultValue: DEFAULT_GLOBAL_CONFIG.projects,
+    scope: "global",
+  },
+  {
+    key: "agent.experimentalSynapseToolRouterEnabled",
+    label: "Synapse MCP 工具按需加载",
+    description: "只在需要时加载 Synapse MCP 工具，减少上下文占用；新会话启动会稍慢。",
+    category: "experimental",
+    type: "toggle",
+    defaultValue: DEFAULT_AGENT_GLOBAL_CONFIG.experimentalSynapseToolRouterEnabled,
     scope: "global",
   },
 ]

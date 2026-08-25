@@ -13,8 +13,12 @@ interface AgentMessageAttachmentsProps {
   readonly onOpenReference: (reference: string) => void
 }
 
+const MAX_VISIBLE_MESSAGE_IMAGES = 9
+
 function AgentMessageAttachments({ attachments, onOpenReference }: AgentMessageAttachmentsProps) {
   const images = attachments.filter((attachment) => attachment.kind === "image")
+  const visibleImages = images.slice(0, MAX_VISIBLE_MESSAGE_IMAGES)
+  const remainingImageCount = images.length - visibleImages.length
   const paths = attachments.filter((attachment) => attachment.kind === "path")
   const [preview, setPreview] = useState<ImageLightboxPreview | null>(null)
   const [failedImageIds, setFailedImageIds] = useState<ReadonlySet<string>>(new Set())
@@ -28,13 +32,18 @@ function AgentMessageAttachments({ attachments, onOpenReference }: AgentMessageA
       <div className="space-y-3" data-agent-message-attachments="true">
         {images.length > 0 ? (
           <div
-            className={cn("grid gap-1.5 overflow-hidden rounded-lg", imageGridClassName(images.length))}
+            className={cn(
+              "grid gap-1.5 overflow-hidden rounded-lg",
+              visibleImages.length > 1 && "max-w-sm",
+              imageGridClassName(visibleImages.length),
+            )}
             data-image-count={images.length}
-            data-grid-columns={imageGridColumns(images.length)}
+            data-grid-columns={imageGridColumns(visibleImages.length)}
           >
-            {images.map((image, index) => {
+            {visibleImages.map((image, index) => {
               const failed = failedImageIds.has(image.id)
               const previewImage = lightboxImages[index]
+              const showsRemainingCount = index === visibleImages.length - 1 && remainingImageCount > 0
               if (!previewImage) return null
               return (
                 <Button
@@ -42,8 +51,8 @@ function AgentMessageAttachments({ attachments, onOpenReference }: AgentMessageA
                   type="button"
                   variant="ghost"
                   className={cn(
-                    "block h-auto min-w-0 overflow-hidden rounded-lg p-0",
-                    images.length === 1 ? "w-full" : "aspect-square w-full",
+                    "relative block h-auto min-w-0 overflow-hidden rounded-lg p-0",
+                    visibleImages.length === 1 ? "w-full" : "aspect-square w-full",
                   )}
                   aria-label={`预览${previewImage.alt}`}
                   disabled={failed}
@@ -62,7 +71,7 @@ function AgentMessageAttachments({ attachments, onOpenReference }: AgentMessageA
                       alt={previewImage.alt}
                       className={cn(
                         "w-full object-cover",
-                        images.length === 1 ? "aspect-video max-h-72" : "size-full",
+                        visibleImages.length === 1 ? "aspect-video max-h-72" : "size-full",
                       )}
                       loading="lazy"
                       onError={() => {
@@ -70,6 +79,11 @@ function AgentMessageAttachments({ attachments, onOpenReference }: AgentMessageA
                       }}
                     />
                   )}
+                  {showsRemainingCount ? (
+                    <span className="absolute inset-0 flex items-center justify-center bg-background/80 text-sm font-medium text-foreground">
+                      +{remainingImageCount}
+                    </span>
+                  ) : null}
                 </Button>
               )
             })}

@@ -20,7 +20,6 @@ describe("agent attachment helpers", () => {
       id: "img-1",
       mimeType: "image/png",
       size: 10,
-      bytes: new ArrayBuffer(3),
     })
     const file = createPathAttachment({
       id: "path-1",
@@ -36,7 +35,7 @@ describe("agent attachment helpers", () => {
     expect(formatDraftAttachmentsForMessage("请分析", [image, file, folder])).toBe([
       "[Image #1]",
       "粘贴文件:",
-      "/Users/liyang/Desktop/课堂内容.md",
+      "课堂内容.md",
       "",
       "粘贴文件夹:",
       "/Users/liyang/Downloads/作业范文",
@@ -50,7 +49,6 @@ describe("agent attachment helpers", () => {
       id: "img-1",
       mimeType: "image/webp",
       size: 10,
-      bytes: new ArrayBuffer(3),
     })
 
     expect(formatDraftAttachmentsForMessage("", [image])).toBe("[Image #1]")
@@ -85,19 +83,17 @@ describe("agent attachment helpers", () => {
       name: "screen.webp",
       mimeType: "image/webp",
       size: 3,
-      bytes: new ArrayBuffer(3),
     })
     const unnamedImage = createImageAttachment({
       id: "img-2",
       mimeType: "image/png",
       size: 0,
-      bytes: new ArrayBuffer(0),
     })
     const attachments = [spreadsheet, markdown, unknown, folder, image, unnamedImage]
 
     expect(attachmentDisplayName(attachments, spreadsheet, 0)).toBe("薪资等级.xlsx")
     expect(attachmentMetadata(spreadsheet)).toBe("Excel · 10 KB")
-    expect(attachmentMetadata(markdown)).toBe("Markdown")
+    expect(attachmentMetadata(markdown)).toBe("Markdown · 0 B")
     expect(attachmentMetadata(unknown)).toBe("SQLITE · 1.5 KB")
     expect(attachmentMetadata(folder)).toBe("文件夹")
     expect(attachmentDisplayName(attachments, image, 4)).toBe("screen.webp")

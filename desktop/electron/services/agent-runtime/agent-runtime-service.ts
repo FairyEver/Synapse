@@ -72,7 +72,11 @@ import {
   AgentSessionRepository,
   conversationId,
 } from "./session-repository"
-import { SessionManager, type AgentLiveSessionFactory } from "./session-manager"
+import {
+  SessionManager,
+  type AgentLiveSessionFactory,
+  type SessionManagerDeps,
+} from "./session-manager"
 import { SessionLifecycleManager } from "./session-lifecycle"
 import type {
   RuntimeSessionState,
@@ -80,6 +84,13 @@ import type {
 } from "./session-lifecycle"
 import { ConversationRouter } from "./conversation-router"
 import type { AgentArtifactStore } from "./artifact-store"
+import type {
+  AttachmentStagingService,
+  CommitInput as AttachmentCommitInput,
+  ReleaseInput as AttachmentReleaseInput,
+  StageBytesInput as AttachmentStageBytesInput,
+  StagePathsInput as AttachmentStagePathsInput,
+} from "./attachment-staging-service"
 import type {
   AgentEvent,
   AgentMessage,
@@ -129,7 +140,10 @@ export interface AgentRuntimeServiceDeps {
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
   readonly agentArtifactStore?: AgentArtifactStore
+  readonly attachmentStagingService?: AttachmentStagingService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
+  readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
+  readonly executeSynapseTool?: SessionManagerDeps["executeSynapseTool"]
   readonly eventBus?: ScopedEventBus
   readonly onConversationRenamed?: (conversation: ConversationEntryV1) => void
   readonly logger?: StructuredLogger
@@ -232,6 +246,7 @@ export class AgentRuntimeService {
       sdkAgents: deps.sdkAgents,
       sdkPersonaConfig: deps.sdkPersonaConfig,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
+      executeSynapseTool: deps.executeSynapseTool,
       onConversationTitle: (conversationId, title) =>
         this.applyGeneratedConversationTitle(conversationId, title),
       onConversationUpdated: (conversation) => this.emitConversationUpdated(conversation),
@@ -270,8 +285,6 @@ export class AgentRuntimeService {
         this.runCustomCommand(command, args, message),
       buildSkillPromptAppendix: (input) =>
         this.buildSkillPromptAppendix(input.name),
-      compressSession: (message, conversation) =>
-        this.conversationRouter.compressSession(message, conversation),
     })
     this.conversationRouter = new ConversationRouter({
       deps: {
@@ -287,7 +300,9 @@ export class AgentRuntimeService {
         replyTargets: deps.replyTargets,
         agentEvents: deps.agentEvents,
         agentArtifactStore: deps.agentArtifactStore,
+        attachmentStagingService: deps.attachmentStagingService,
         getUsagePriceRules: deps.getUsagePriceRules,
+        loadExperimentalSynapseToolRouterEnabled: () => this.loadExperimentalSynapseToolRouterEnabled(),
         now: deps.now,
         permissionGuard: deps.permissionGuard,
         auditSink: deps.auditSink,
@@ -310,6 +325,41 @@ export class AgentRuntimeService {
     conversationId: string,
   ): Promise<AgentRuntimeTurnResult> {
     return this.conversationRouter.sendToConversation(message, conversationId)
+  }
+
+  async stageAttachmentBytes(
+    input: Omit<AttachmentStageBytesInput, "projectId">,
+  ) {
+    const service = this.requireAttachmentStagingService()
+    return service.stageBytes({ ...input, projectId: this.deps.projectId })
+  }
+
+  async stageAttachmentPaths(
+    input: Omit<AttachmentStagePathsInput, "projectId">,
+  ) {
+    const service = this.requireAttachmentStagingService()
+    return service.stagePaths({ ...input, projectId: this.deps.projectId })
+  }
+
+  async commitAttachments(
+    input: Omit<AttachmentCommitInput, "projectId">,
+  ) {
+    const service = this.requireAttachmentStagingService()
+    return service.commit({ ...input, projectId: this.deps.projectId })
+  }
+
+  async releaseAttachments(
+    input: Omit<AttachmentReleaseInput, "projectId">,
+  ): Promise<void> {
+    const service = this.requireAttachmentStagingService()
+    await service.release({ ...input, projectId: this.deps.projectId })
+  }
+
+  async resolveStagedAttachments(attachmentIds: readonly string[]) {
+    return this.requireAttachmentStagingService().resolveStaged({
+      projectId: this.deps.projectId,
+      attachmentIds,
+    })
   }
 
   async sendNewSession(
@@ -1096,8 +1146,21 @@ export class AgentRuntimeService {
       ...input,
       providerId,
       modelTier,
+      experimentalSynapseToolRouterEnabled: await this.loadExperimentalSynapseToolRouterEnabled(),
       mainThreadPersonaSnapshot,
     })
+  }
+
+  private async loadExperimentalSynapseToolRouterEnabled(): Promise<boolean> {
+    try {
+      return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) === true
+    } catch (error) {
+      this.deps.logger?.warn("Failed to load the experimental Synapse tool router setting; using the safe default.", {
+        projectId: this.deps.projectId,
+        ...errorLogMeta(error),
+      })
+      return false
+    }
   }
 
   async switchSession(
@@ -1139,6 +1202,13 @@ export class AgentRuntimeService {
       await this.deps.agentArtifactStore?.removeConversationArtifacts(conversationIdValue)
     }
     return deleted
+  }
+
+  private requireAttachmentStagingService(): AttachmentStagingService {
+    if (!this.deps.attachmentStagingService) {
+      throw new Error("Agent attachment staging is unavailable")
+    }
+    return this.deps.attachmentStagingService
   }
 
   private recordPermissionAudit(

@@ -24,7 +24,9 @@ export interface RuntimeSessionState {
   turnAbortController?: AbortController
   providerId?: string
   effectiveModel?: string
+  modelContextConfigurationKey?: string
   sdkSettings?: ClaudeSDKRuntimeSettings
+  synapseToolRouterEnabled?: boolean
   additionalDirectories?: readonly string[]
   modeOverride?: string
   mainThreadAgentName?: string
@@ -93,6 +95,7 @@ export class SessionLifecycleManager {
     readonly providerId?: string
     readonly mode?: string
     readonly modelTier?: string
+    readonly experimentalSynapseToolRouterEnabled?: boolean
     readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }): Promise<ConversationEntryV1> {
     return this.deps.repository.createSession({
@@ -105,6 +108,7 @@ export class SessionLifecycleManager {
       providerId: input.providerId,
       mode: input.mode,
       modelTier: input.modelTier,
+      experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled,
       mainThreadPersonaSnapshot: input.mainThreadPersonaSnapshot,
       resumePolicy: "resume",
     })

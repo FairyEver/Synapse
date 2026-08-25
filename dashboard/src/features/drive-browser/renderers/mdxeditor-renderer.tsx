@@ -585,7 +585,7 @@ export function DriveMDXeditorRenderer({
             plugins={plugins}
             translation={mdxEditorZhCnTranslation}
             className='min-h-full'
-            contentEditableClassName='mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6'
+            contentEditableClassName='mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6'
           />
         )}
       </div>

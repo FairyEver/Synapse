@@ -214,6 +214,25 @@ describe("AgentConversationWorkspace", () => {
     expect(container.querySelector('button[aria-label="新窗口打开"]')).toBeNull()
   })
 
+  it.each(["embedded", "window"] as const)(
+    "shows the shared context indicator in %s mode",
+    (mode) => {
+      const container = renderWorkspace({
+        mode,
+        chat: createController({
+          contextUsage: {
+            usedTokens: 58_000,
+            contextWindowTokens: 200_000,
+            model: "glm-5.1",
+          },
+        }),
+      })
+
+      expect(container.textContent).toContain("上下文 58K / 200K · 29%")
+      expect(container.querySelector("[data-agent-context-usage]")).not.toBeNull()
+    },
+  )
+
   it("does not render a source manager button in the conversation header", () => {
     const container = renderWorkspace({
       mode: "embedded",
@@ -553,6 +572,7 @@ function createController(
     loadOlderTimeline: vi.fn(async () => undefined),
     personas: [],
     personasLoaded: true,
+    contextUsage: undefined,
     ...overrides,
   }
 }

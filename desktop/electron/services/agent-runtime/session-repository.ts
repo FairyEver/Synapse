@@ -35,6 +35,7 @@ export interface CreateAgentSessionInput {
   readonly providerId?: string
   readonly mode?: string
   readonly modelTier?: string
+  readonly experimentalSynapseToolRouterEnabled?: boolean
   readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   readonly sdkSessionId?: string
   readonly usage?: ConversationEntryV1["usage"]
@@ -74,7 +75,10 @@ export class AgentSessionRepository {
     this.logger = options.logger
   }
 
-  async getOrCreateActive(message: AgentMessage): Promise<ConversationEntryV1> {
+  async getOrCreateActive(
+    message: AgentMessage,
+    creationConfig?: { readonly experimentalSynapseToolRouterEnabled: boolean },
+  ): Promise<ConversationEntryV1> {
     const existing = await this.getActive(
       message.sessionKey,
       message.platform,
@@ -107,6 +111,7 @@ export class AgentSessionRepository {
       resumePolicy: "resume",
       agentType: message.agentType,
       providerId: message.providerId,
+      experimentalSynapseToolRouterEnabled: creationConfig?.experimentalSynapseToolRouterEnabled,
     })
   }
 
@@ -146,7 +151,10 @@ export class AgentSessionRepository {
       workspacePath: input.workspacePath,
       agentType: input.agentType,
       providerId: input.providerId,
-      agentConfig: input.mode || input.modelTier || input.mainThreadPersonaSnapshot
+      agentConfig: input.mode
+        || input.modelTier
+        || input.mainThreadPersonaSnapshot
+        || input.experimentalSynapseToolRouterEnabled !== undefined
         ? {
             ...(input.mode ? { mode: input.mode } : {}),
             ...(input.modelTier ? { modelTier: input.modelTier } : {}),
@@ -155,6 +163,9 @@ export class AgentSessionRepository {
                   activeMainThreadPersonaId: input.mainThreadPersonaSnapshot.id,
                   activeMainThreadPersonaSnapshot: input.mainThreadPersonaSnapshot,
                 }
+              : {}),
+            ...(input.experimentalSynapseToolRouterEnabled !== undefined
+              ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
               : {}),
           }
         : undefined,
@@ -236,8 +247,14 @@ export class AgentSessionRepository {
       workspacePath: input.workspacePath,
       agentType: input.agentType,
       providerId: input.providerId,
-      agentConfig: input.mode || input.modelTier
-        ? { ...(input.mode ? { mode: input.mode } : {}), ...(input.modelTier ? { modelTier: input.modelTier } : {}) }
+      agentConfig: input.mode || input.modelTier || input.experimentalSynapseToolRouterEnabled !== undefined
+        ? {
+            ...(input.mode ? { mode: input.mode } : {}),
+            ...(input.modelTier ? { modelTier: input.modelTier } : {}),
+            ...(input.experimentalSynapseToolRouterEnabled !== undefined
+              ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
+              : {}),
+          }
         : undefined,
       sdkSessionId: input.sdkSessionId,
       usage: input.usage,

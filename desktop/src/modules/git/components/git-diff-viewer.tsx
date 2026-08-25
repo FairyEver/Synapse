@@ -1,12 +1,10 @@
-import { Component, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from "react"
-import { DiffModeEnum, DiffView } from "@git-diff-view/react"
+import { useMemo } from "react"
 import { WrapText } from "lucide-react"
-import "@git-diff-view/react/styles/diff-view-pure.css"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { createRendererLogger } from "@/app-shell/logging"
+import { cn } from "@/lib/utils"
 import { isBinaryGitDiff } from "../lib/git-diff-sections"
 
 export type GitDiffViewMode = "unified" | "split"
@@ -24,7 +22,17 @@ type GitDiffViewerProps = {
   readonly onWrapChange: (wrap: boolean) => void
 }
 
-const logger = createRendererLogger("git.diff-viewer")
+type DiffLineKind = "meta" | "hunk" | "context" | "addition" | "deletion"
+type ParsedDiffLine = {
+  readonly key: string
+  readonly kind: DiffLineKind
+  readonly content: string
+  readonly oldNumber?: number
+  readonly newNumber?: number
+}
+type SplitDiffRow =
+  | { readonly kind: "full"; readonly line: ParsedDiffLine }
+  | { readonly kind: "pair"; readonly left?: ParsedDiffLine; readonly right?: ParsedDiffLine }
 
 export function GitDiffViewer({
   path,
@@ -38,14 +46,7 @@ export function GitDiffViewer({
   onModeChange,
   onWrapChange,
 }: GitDiffViewerProps) {
-  const theme = useDocumentTheme()
-  const data = useMemo(() => ({
-    oldFile: { fileName: originalPath ?? path },
-    newFile: { fileName: path },
-    hunks: [text],
-  }), [originalPath, path, text])
-  const fallbackKey = `${path}:${originalPath ?? ""}:${text.length}`
-
+  const lines = useMemo(() => parseUnifiedDiff(text), [text])
   return (
     <div className="grid min-w-0 bg-background">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
@@ -92,23 +93,249 @@ export function GitDiffViewer({
       {binary || isBinaryGitDiff(text) ? (
         <div className="p-4 text-sm text-muted-foreground">文件已变更。</div>
       ) : text ? (
-        <GitDiffRenderBoundary key={fallbackKey} text={text}>
-          <div className="min-w-0 overflow-x-auto" data-allow-select="true">
-            <DiffView
-              data={data}
-              diffViewMode={mode === "split" ? DiffModeEnum.Split : DiffModeEnum.Unified}
-              diffViewTheme={theme}
-              diffViewWrap={wrap}
-              diffViewHighlight
-              diffViewFontSize={12}
-            />
+        <div className="min-w-0 overflow-x-auto" data-allow-select="true">
+          <div
+            role="table"
+            aria-label={`${originalPath ?? path} 与 ${path} 的差异`}
+            className="min-w-full font-mono text-xs leading-5 text-foreground"
+            data-component="git-diff-view"
+            data-mode={mode}
+          >
+            {mode === "split"
+              ? <SplitDiff lines={lines} wrap={wrap} />
+              : <UnifiedDiff lines={lines} wrap={wrap} />}
           </div>
-        </GitDiffRenderBoundary>
+        </div>
       ) : (
         <div className="p-4 text-sm text-muted-foreground">没有文本差异。</div>
       )}
     </div>
   )
+}
+
+function UnifiedDiff({ lines, wrap }: { readonly lines: readonly ParsedDiffLine[]; readonly wrap: boolean }) {
+  return lines.map((line) => (
+    <div
+      key={line.key}
+      role="row"
+      className={cn(
+        "grid min-w-full grid-cols-[3.25rem_3.25rem_minmax(max-content,1fr)] border-b last:border-b-0",
+        diffLineBackground(line.kind),
+      )}
+    >
+      <LineNumber value={line.oldNumber} />
+      <LineNumber value={line.newNumber} />
+      <DiffCode line={line} wrap={wrap} />
+    </div>
+  ))
+}
+
+function SplitDiff({ lines, wrap }: { readonly lines: readonly ParsedDiffLine[]; readonly wrap: boolean }) {
+  return splitDiffRows(lines).map((row, index) => {
+    if (row.kind === "full") {
+      return (
+        <div
+          key={row.line.key}
+          role="row"
+          className={cn("grid min-w-full grid-cols-[3.25rem_minmax(max-content,1fr)] border-b", diffLineBackground(row.line.kind))}
+        >
+          <LineNumber value={row.line.oldNumber ?? row.line.newNumber} />
+          <DiffCode line={row.line} wrap={wrap} />
+        </div>
+      )
+    }
+    return (
+      <div key={`pair:${index}`} role="row" className="grid min-w-full grid-cols-2 border-b last:border-b-0">
+        <SplitPane line={row.left} pairedLine={row.right} wrap={wrap} />
+        <SplitPane line={row.right} pairedLine={row.left} wrap={wrap} right />
+      </div>
+    )
+  })
+}
+
+function SplitPane({
+  line,
+  pairedLine,
+  wrap,
+  right = false,
+}: {
+  readonly line?: ParsedDiffLine
+  readonly pairedLine?: ParsedDiffLine
+  readonly wrap: boolean
+  readonly right?: boolean
+}) {
+  return (
+    <div className={cn("grid min-w-0 grid-cols-[3.25rem_minmax(max-content,1fr)]", right && "border-l", line && diffLineBackground(line.kind))}>
+      <LineNumber value={right ? line?.newNumber : line?.oldNumber} />
+      {line
+        ? <DiffCode line={line} pairedLine={pairedLine} wrap={wrap} />
+        : <span aria-hidden="true" className="bg-muted/30" />}
+    </div>
+  )
+}
+
+function LineNumber({ value }: { readonly value?: number }) {
+  return (
+    <span role="cell" className="select-none border-r bg-muted/50 px-2 text-right tabular-nums text-muted-foreground">
+      {value ?? ""}
+    </span>
+  )
+}
+
+function DiffCode({
+  line,
+  pairedLine,
+  wrap,
+}: {
+  readonly line: ParsedDiffLine
+  readonly pairedLine?: ParsedDiffLine
+  readonly wrap: boolean
+}) {
+  const marker = line.kind === "addition" ? "+" : line.kind === "deletion" ? "-" : " "
+  return (
+    <span
+      role="cell"
+      className={cn(
+        "min-w-0 px-2",
+        wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
+        line.kind === "meta" && "text-muted-foreground",
+        line.kind === "hunk" && "font-medium text-foreground",
+      )}
+    >
+      {line.kind === "meta" || line.kind === "hunk"
+        ? line.content
+        : <>{marker}{renderIntralineChange(line, pairedLine)}</>}
+    </span>
+  )
+}
+
+function renderIntralineChange(line: ParsedDiffLine, pairedLine: ParsedDiffLine | undefined) {
+  if (!pairedLine || !isChangedLinePair(line, pairedLine)) return line.content
+  const [prefix, changed, suffix] = changedSegments(line.content, pairedLine.content)
+  if (!changed) return line.content
+  return (
+    <>
+      {prefix}
+      <mark className={cn("text-inherit", line.kind === "addition" ? "bg-primary/15" : "bg-destructive/20")}>{changed}</mark>
+      {suffix}
+    </>
+  )
+}
+
+function isChangedLinePair(line: ParsedDiffLine, pairedLine: ParsedDiffLine): boolean {
+  return (line.kind === "addition" && pairedLine.kind === "deletion")
+    || (line.kind === "deletion" && pairedLine.kind === "addition")
+}
+
+function changedSegments(value: string, counterpart: string): readonly [string, string, string] {
+  let prefixLength = 0
+  const prefixLimit = Math.min(value.length, counterpart.length)
+  while (prefixLength < prefixLimit && value[prefixLength] === counterpart[prefixLength]) prefixLength += 1
+  let suffixLength = 0
+  const suffixLimit = Math.min(value.length - prefixLength, counterpart.length - prefixLength)
+  while (
+    suffixLength < suffixLimit
+    && value[value.length - suffixLength - 1] === counterpart[counterpart.length - suffixLength - 1]
+  ) suffixLength += 1
+  return [
+    value.slice(0, prefixLength),
+    value.slice(prefixLength, suffixLength === 0 ? value.length : value.length - suffixLength),
+    suffixLength === 0 ? "" : value.slice(value.length - suffixLength),
+  ]
+}
+
+function diffLineBackground(kind: DiffLineKind): string {
+  if (kind === "addition") return "bg-primary/5"
+  if (kind === "deletion") return "bg-destructive/10"
+  if (kind === "hunk") return "bg-muted"
+  return "bg-background"
+}
+
+function parseUnifiedDiff(text: string): readonly ParsedDiffLine[] {
+  const lines = text.replace(/\n$/, "").split("\n")
+  let oldNumber: number | undefined
+  let newNumber: number | undefined
+  return lines.map((rawLine, index) => {
+    const key = `${index}:${rawLine}`
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(rawLine)
+    if (hunk) {
+      oldNumber = Number(hunk[1])
+      newNumber = Number(hunk[2])
+      return { key, kind: "hunk", content: rawLine }
+    }
+    if (oldNumber === undefined || newNumber === undefined || isDiffMetadataLine(rawLine)) {
+      return { key, kind: "meta", content: rawLine }
+    }
+    if (rawLine.startsWith("+")) {
+      const line = { key, kind: "addition" as const, content: rawLine.slice(1), newNumber }
+      newNumber += 1
+      return line
+    }
+    if (rawLine.startsWith("-")) {
+      const line = { key, kind: "deletion" as const, content: rawLine.slice(1), oldNumber }
+      oldNumber += 1
+      return line
+    }
+    if (rawLine.startsWith(" ")) {
+      const line = { key, kind: "context" as const, content: rawLine.slice(1), oldNumber, newNumber }
+      oldNumber += 1
+      newNumber += 1
+      return line
+    }
+    return { key, kind: "meta", content: rawLine }
+  })
+}
+
+function isDiffMetadataLine(line: string): boolean {
+  return line.startsWith("diff --git ")
+    || line.startsWith("index ")
+    || line.startsWith("--- ")
+    || line.startsWith("+++ ")
+    || line.startsWith("new file mode ")
+    || line.startsWith("deleted file mode ")
+    || line.startsWith("similarity index ")
+    || line.startsWith("rename from ")
+    || line.startsWith("rename to ")
+    || line === "\\ No newline at end of file"
+}
+
+function splitDiffRows(lines: readonly ParsedDiffLine[]): readonly SplitDiffRow[] {
+  const rows: SplitDiffRow[] = []
+  let index = 0
+  while (index < lines.length) {
+    const line = lines[index]
+    if (!line) break
+    if (line.kind === "meta" || line.kind === "hunk") {
+      rows.push({ kind: "full", line })
+      index += 1
+      continue
+    }
+    if (line.kind === "context") {
+      rows.push({ kind: "pair", left: line, right: line })
+      index += 1
+      continue
+    }
+    const deletions: ParsedDiffLine[] = []
+    while (lines[index]?.kind === "deletion") {
+      deletions.push(lines[index]!)
+      index += 1
+    }
+    const additions: ParsedDiffLine[] = []
+    while (lines[index]?.kind === "addition") {
+      additions.push(lines[index]!)
+      index += 1
+    }
+    if (deletions.length === 0 && additions.length === 0) {
+      rows.push({ kind: "full", line })
+      index += 1
+      continue
+    }
+    const pairCount = Math.max(deletions.length, additions.length)
+    for (let pairIndex = 0; pairIndex < pairCount; pairIndex += 1) {
+      rows.push({ kind: "pair", left: deletions[pairIndex], right: additions[pairIndex] })
+    }
+  }
+  return rows
 }
 
 export function GitRawDiff({ text, parseFailed = false }: { readonly text: string; readonly parseFailed?: boolean }) {
@@ -125,40 +352,4 @@ export function GitRawDiff({ text, parseFailed = false }: { readonly text: strin
       </pre>
     </div>
   )
-}
-
-class GitDiffRenderBoundary extends Component<{
-  readonly children: ReactNode
-  readonly text: string
-}, { readonly failed: boolean }> {
-  state = { failed: false }
-
-  static getDerivedStateFromError() {
-    return { failed: true }
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    logger.warn("Git diff renderer failed; using raw text fallback.", {
-      errorName: error.name,
-      componentStackAvailable: Boolean(info.componentStack),
-    })
-  }
-
-  render() {
-    if (this.state.failed) return <GitRawDiff text={this.props.text} parseFailed />
-    return this.props.children
-  }
-}
-
-function useDocumentTheme(): "light" | "dark" {
-  const readTheme = () => document.documentElement.classList.contains("dark") ? "dark" : "light"
-  const [theme, setTheme] = useState<"light" | "dark">(readTheme)
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => setTheme(readTheme()))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
-    return () => observer.disconnect()
-  }, [])
-
-  return theme
 }

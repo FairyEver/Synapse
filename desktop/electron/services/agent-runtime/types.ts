@@ -1,28 +1,23 @@
 import type { ActorIdentity } from "../../runtime/security"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 import type { AgentTurnOutcome } from "./turn-outcome"
+import type { AgentAttachmentRef } from "../../../src/types/agent-attachment"
+import type {
+  AgentContextWindowConfigurationSource,
+  AgentModelContextReference,
+} from "../model-capability/catalog"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
-export type AgentImageAttachment = {
-  readonly kind: "image"
-  readonly mimeType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"
-  readonly data: ArrayBuffer | Uint8Array
-  readonly name?: string
-  readonly size?: number
-}
-
-export type AgentPathAttachment = {
+export type AgentRuntimeAttachment = {
   readonly kind: "path"
   readonly path: string
-  readonly entryType: "file" | "directory"
+  readonly entryType: "image" | "file" | "directory"
   readonly name?: string
   readonly size?: number
 }
 
-export type AgentAttachment =
-  | AgentImageAttachment
-  | AgentPathAttachment
+export type AgentAttachment = AgentRuntimeAttachment
 
 export type AgentArtifactImageMimeType =
   | "image/png"
@@ -45,10 +40,6 @@ export interface AgentImageArtifact {
   readonly sha256?: string
 }
 
-export interface AgentUserMessageImageArtifact extends AgentImageArtifact {
-  readonly name?: string
-}
-
 export interface AgentMessage {
   readonly projectId: string
   readonly sessionKey: string
@@ -67,6 +58,10 @@ export interface AgentMessage {
   readonly content: string
   readonly displayContent?: string
   readonly attachments?: readonly AgentAttachment[]
+  readonly attachmentRefs?: readonly AgentAttachmentRef[]
+  readonly attachmentDraftScopeId?: string
+  readonly runtimeAttachmentDirectories?: readonly string[]
+  readonly attachmentTurnId?: string
   readonly replyCtx?: unknown
   readonly modeOverride?: string
   readonly agentType?: string
@@ -189,10 +184,19 @@ export interface AgentPermissionRequestEvent extends AgentEventBase {
   readonly sessionDirectoryGrantAvailable?: boolean
 }
 
+export interface AgentContextUsage {
+  readonly usedTokens: number
+  readonly contextWindowTokens?: number
+  readonly model?: string
+  readonly modelContext?: AgentModelContextReference
+  readonly contextWindowConfigurationSource?: AgentContextWindowConfigurationSource
+}
+
 export interface AgentResultMetadata {
   readonly model?: string
   readonly effort?: string
   readonly contextRemainingPercent?: number
+  readonly contextUsage?: AgentContextUsage
   readonly workDir?: string
   readonly cancelled?: boolean
   readonly turnOutcome?: AgentTurnOutcome
@@ -258,6 +262,7 @@ export interface AgentAssistantEvent extends AgentEventBase {
   readonly contentBlocks?: readonly unknown[]
   readonly content?: string
   readonly payload?: Record<string, unknown>
+  readonly contextUsage?: AgentContextUsage
 }
 
 export interface AgentStreamEvent extends AgentEventBase {
@@ -269,6 +274,7 @@ export interface AgentStreamEvent extends AgentEventBase {
   readonly thinking?: string
   readonly partialJson?: string
   readonly payload?: Record<string, unknown>
+  readonly contextUsage?: AgentContextUsage
 }
 
 export interface AgentStatusEvent extends AgentEventBase {
@@ -280,6 +286,7 @@ export interface AgentStatusEvent extends AgentEventBase {
 export interface AgentCompactBoundaryEvent extends AgentEventBase {
   readonly type: "compactBoundary"
   readonly payload: Record<string, unknown>
+  readonly contextUsage?: AgentContextUsage
 }
 
 export interface AgentSdkEvent extends AgentEventBase {

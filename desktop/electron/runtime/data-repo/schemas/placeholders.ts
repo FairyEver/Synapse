@@ -11,6 +11,7 @@ import type { Migration, NamespaceSchema } from "../types"
 import type { JsonFileEnvelope } from "../backends/json"
 import { migration } from "../migrations"
 import { WORKFLOW_MULTI_RESOURCE_PARAM_MAX_ITEMS } from "../../../../config"
+import { AGENT_ATTACHMENT_IMAGE_MIME_TYPES } from "../../../../src/types/agent-attachment"
 import {
   isOptionalValidWebhookPort,
   isValidWebhookMaxBodyBytes,
@@ -227,6 +228,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
     mode?: string
     modelTier?: string
     env?: Record<string, string>
+    experimentalSynapseToolRouterEnabled?: boolean
     activeMainThreadPersonaId?: string | null
     activeMainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }
@@ -301,12 +303,7 @@ export const agentEventsSchema: NamespaceSchema<AgentEventEntryV1> = {
     && typeof (v as AgentEventEntryV1).createdAt === "string",
 }
 
-const supportedAgentArtifactImageMimeTypes = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-])
+const supportedAgentArtifactImageMimeTypes = new Set<string>(AGENT_ATTACHMENT_IMAGE_MIME_TYPES)
 
 const isSha256Hex = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/i.test(value)
@@ -332,13 +329,53 @@ export interface AgentArtifactEntryV1 extends Record<string, unknown> {
   createdAt: string
 }
 
-export const agentArtifactsSchema: NamespaceSchema<AgentArtifactEntryV1> = {
+export interface AgentArtifactEntryV2 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 2
+  projectId: string
+  draftScopeId: string
+  lifecycle: "staged" | "committed" | "orphaned"
+  kind: "image" | "file" | "directory"
+  originalName: string
+  mimeType?: string
+  byteSize: number
+  sha256?: string
+  storagePath?: string
+  previewStoragePath?: string
+  thumbnailStoragePath?: string
+  previewMimeType?: string
+  previewSha256?: string
+  previewByteSize?: number
+  sourcePath?: string
+  width?: number
+  height?: number
+  previewWidth?: number
+  previewHeight?: number
+  conversationId?: string
+  turnId?: string
+  committedAt?: string
+  createdAt: string
+  updatedAt: string
+  expiresAt: string
+  lastError?: string
+}
+
+export type AgentArtifactEntry = AgentArtifactEntryV1 | AgentArtifactEntryV2
+
+const agentArtifactMigrations: readonly Migration[] = [
+  migration<unknown, unknown>(1, 2, (data) => data),
+]
+
+export const agentArtifactsSchema: NamespaceSchema<AgentArtifactEntry> = {
   name: "agent.artifacts",
   backend: "sqlite",
-  currentVersion: 1,
-  migrations: noMigrations,
-  validate: (v): v is AgentArtifactEntryV1 =>
-    isAnyRecord<AgentArtifactEntryV1>(v)
+  currentVersion: 2,
+  migrations: agentArtifactMigrations,
+  validate: (v): v is AgentArtifactEntry => isAgentArtifactEntryV1(v) || isAgentArtifactEntryV2(v),
+}
+
+function isAgentArtifactEntryV1(v: unknown): v is AgentArtifactEntryV1 {
+  return isAnyRecord<AgentArtifactEntryV1>(v)
     && (v as AgentArtifactEntryV1).schemaVersion === 1
     && typeof (v as AgentArtifactEntryV1).id === "string"
     && typeof (v as AgentArtifactEntryV1).projectId === "string"
@@ -358,7 +395,62 @@ export const agentArtifactsSchema: NamespaceSchema<AgentArtifactEntryV1> = {
     && isSha256Hex((v as AgentArtifactEntryV1).sha256)
     && typeof (v as AgentArtifactEntryV1).storagePath === "string"
     && typeof (v as AgentArtifactEntryV1).createdAt === "string"
-    && hasNoArtifactBytes(v as Record<string, unknown>),
+    && hasNoArtifactBytes(v as Record<string, unknown>)
+}
+
+function isAgentArtifactEntryV2(v: unknown): v is AgentArtifactEntryV2 {
+  if (!isAnyRecord<AgentArtifactEntryV2>(v) || v.schemaVersion !== 2) return false
+  if (
+    typeof v.id !== "string"
+    || typeof v.projectId !== "string"
+    || typeof v.draftScopeId !== "string"
+    || !["staged", "committed", "orphaned"].includes(v.lifecycle)
+    || !["image", "file", "directory"].includes(v.kind)
+    || typeof v.originalName !== "string"
+    || !Number.isInteger(v.byteSize)
+    || v.byteSize < 0
+    || typeof v.createdAt !== "string"
+    || typeof v.updatedAt !== "string"
+    || typeof v.expiresAt !== "string"
+    || !isOptionalString(v.conversationId)
+    || !isOptionalString(v.turnId)
+    || !isOptionalString(v.committedAt)
+    || !isOptionalString(v.lastError)
+    || !hasNoArtifactBytes(v)
+  ) return false
+  if (v.lifecycle === "committed" && (
+    typeof v.conversationId !== "string"
+    || typeof v.turnId !== "string"
+    || typeof v.committedAt !== "string"
+  )) return false
+  if (v.kind === "directory") return v.byteSize === 0 && typeof v.sourcePath === "string"
+  if (
+    !isSha256Hex(v.sha256)
+    || typeof v.storagePath !== "string"
+    || !isOptionalString(v.mimeType)
+  ) return false
+  if (v.kind === "image") {
+    return typeof v.mimeType === "string"
+      && supportedAgentArtifactImageMimeTypes.has(v.mimeType)
+      && typeof v.previewStoragePath === "string"
+      && typeof v.thumbnailStoragePath === "string"
+      && isOptionalString(v.previewMimeType)
+      && (
+        v.previewMimeType === undefined
+        || (typeof v.previewMimeType === "string" && supportedAgentArtifactImageMimeTypes.has(v.previewMimeType))
+      )
+      && (v.previewSha256 === undefined || isSha256Hex(v.previewSha256))
+      && isOptionalPositiveInteger(v.previewByteSize)
+      && isOptionalPositiveInteger(v.width)
+      && isOptionalPositiveInteger(v.height)
+      && isOptionalPositiveInteger(v.previewWidth)
+      && isOptionalPositiveInteger(v.previewHeight)
+  }
+  return true
+}
+
+function isOptionalPositiveInteger(value: unknown): boolean {
+  return value === undefined || (Number.isInteger(value) && Number(value) > 0)
 }
 
 export interface AgentUsageSummaryV1 extends Record<string, unknown> {
@@ -1284,6 +1376,8 @@ function isConversationAgentConfig(value: unknown): value is NonNullable<Convers
     && isOptionalString(value.mode)
     && isOptionalString(value.modelTier)
     && (value.env === undefined || isStringRecord(value.env))
+    && (value.experimentalSynapseToolRouterEnabled === undefined
+      || typeof value.experimentalSynapseToolRouterEnabled === "boolean")
     && (value.activeMainThreadPersonaId === undefined
       || value.activeMainThreadPersonaId === null
       || typeof value.activeMainThreadPersonaId === "string")

@@ -60,25 +60,76 @@ describe("chatReducer", () => {
 
     expect(next.currentConversationModel).toBe("claude-opus-4")
   })
+
+  it("restores the latest persisted context snapshot", () => {
+    const next = chatReducer(initialChatState, {
+      type: "SET_TIMELINE",
+      timeline: [
+        resultItem("result-1", "claude-sonnet-4-5", 40_000),
+        assistantMessageItem("assistant-2", "claude-opus-4", 58_000),
+      ],
+    })
+
+    expect(next.contextUsage).toEqual({
+      usedTokens: 58_000,
+      contextWindowTokens: 200_000,
+      model: "claude-opus-4",
+    })
+  })
+
+  it("clears context on conversation timeline reset", () => {
+    const next = chatReducer({
+      ...initialChatState,
+      contextUsage: { usedTokens: 58_000, contextWindowTokens: 200_000 },
+    }, {
+      type: "SET_TIMELINE",
+      timeline: [],
+    })
+
+    expect(next.contextUsage).toBeUndefined()
+  })
+
+  it("applies live context decreases without timeline batching overwriting them", () => {
+    const compacted = chatReducer(initialChatState, {
+      type: "SET_CONTEXT_USAGE",
+      contextUsage: { usedTokens: 12_000, contextWindowTokens: 200_000 },
+    })
+    const afterTimelineUpdate = chatReducer(compacted, {
+      type: "UPDATE_TIMELINE",
+      updater: (current) => current,
+    })
+
+    expect(afterTimelineUpdate.contextUsage?.usedTokens).toBe(12_000)
+  })
 })
 
-function resultItem(id: string, model: string): SynapseAgentTimelineItem {
+function resultItem(id: string, model: string, usedTokens?: number): SynapseAgentTimelineItem {
   return {
     id,
     kind: "result",
     timestamp: "2026-05-14T00:00:00.000Z",
     content: "",
-    metadata: { model },
+    metadata: {
+      model,
+      ...(usedTokens === undefined ? {} : {
+        contextUsage: { usedTokens, contextWindowTokens: 200_000, model },
+      }),
+    },
   }
 }
 
-function assistantMessageItem(id: string, model: string): SynapseAgentTimelineItem {
+function assistantMessageItem(id: string, model: string, usedTokens?: number): SynapseAgentTimelineItem {
   return {
     id,
     kind: "message",
     role: "assistant",
     timestamp: "2026-05-14T00:00:00.000Z",
     content: "Done",
-    metadata: { model },
+    metadata: {
+      model,
+      ...(usedTokens === undefined ? {} : {
+        contextUsage: { usedTokens, contextWindowTokens: 200_000, model },
+      }),
+    },
   }
 }

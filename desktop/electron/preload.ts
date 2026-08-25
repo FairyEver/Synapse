@@ -1164,6 +1164,8 @@ const synapseBridge: SynapseBridge = {
     send: (args) => invoke(IPC_CHANNELS.agent.send)(args),
     chooseAttachments: (args) => invoke(IPC_CHANNELS.agent.chooseAttachments)(args),
     resolveAttachmentPaths: (args) => invoke(IPC_CHANNELS.agent.resolveAttachmentPaths)(args),
+    stageClipboardImage: (args) => invoke(IPC_CHANNELS.agent.stageClipboardImage)(args),
+    releaseAttachments: (args) => invoke(IPC_CHANNELS.agent.releaseAttachments)(args),
     listPendingPermissions: (projectId) =>
       invoke(IPC_CHANNELS.agent.listPendingPermissions)({ projectId }),
     respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),

@@ -106,6 +106,53 @@ describe("agent IPC schemas", () => {
     })
   })
 
+  it("preserves realtime and persisted context usage snapshots", () => {
+    const contextUsage = {
+      usedTokens: 58_000,
+      contextWindowTokens: 200_000,
+      model: "claude-sonnet-4-5",
+      contextWindowConfigurationSource: "catalog" as const,
+      modelContext: {
+        providerScopeId: "anthropic-official",
+        modelId: "claude-sonnet-5",
+        contextWindowTokens: 1_000_000,
+        maxOutputTokens: 128_000,
+        sourceLabel: "Anthropic",
+        sourceUrl: "https://platform.claude.com/docs/en/about-claude/models/overview",
+        verifiedAt: "2026-08-25T00:00:00.000Z",
+      },
+    }
+
+    for (const event of [
+      { type: "assistant", message: {}, contextUsage },
+      { type: "stream", event: { type: "message_delta" }, contextUsage },
+      { type: "compactBoundary", contextUsage },
+    ]) {
+      expect(agentEventSchema.parse(event)).toMatchObject({ contextUsage })
+    }
+    expect(agentEventSchema.parse({
+      type: "result",
+      content: "done",
+      done: true,
+      metadata: { contextUsage },
+    })).toMatchObject({ metadata: { contextUsage } })
+    expect(timelineItemSchema.parse({
+      id: "conv-1:history:context",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      kind: "result",
+      content: "done",
+      metadata: { contextUsage },
+    })).toMatchObject({ metadata: { contextUsage } })
+  })
+
+  it("rejects invalid context usage numbers", () => {
+    expect(agentEventSchema.safeParse({
+      type: "stream",
+      event: {},
+      contextUsage: { usedTokens: -1, contextWindowTokens: 0 },
+    }).success).toBe(false)
+  })
+
   it("preserves tool use ids on agent tool events and timeline items", () => {
     expect(agentEventSchema.parse({
       type: "toolUse",
@@ -376,46 +423,26 @@ describe("agent IPC schemas", () => {
     })).toThrow()
   })
 
-  it("accepts normalized image and path attachments on send requests", () => {
-    const imageData = new Uint8Array([1, 2, 3])
+  it("accepts ordered staged attachment references on send requests", () => {
     const parsed = messageMethods.send.request.parse({
       projectId: "project-1",
       content: "hello",
       attachments: [
         {
-          kind: "image",
-          mimeType: "image/png",
-          data: imageData,
-          name: "chart.png",
-          size: 3,
+          attachmentId: "image-1",
+          order: 0,
         },
         {
-          kind: "path",
-          path: "/Users/example/report.md",
-          entryType: "file",
-          name: "report.md",
+          attachmentId: "file-1",
+          order: 1,
         },
       ],
-    }) as {
-      readonly attachments?: readonly [
-        { readonly kind: "image"; readonly data: Uint8Array },
-        { readonly kind: "path"; readonly path: string },
-      ]
-    }
+    }) as { readonly attachments?: readonly { readonly attachmentId: string; readonly order: number }[] }
 
-    expect(parsed.attachments?.[0]).toEqual(expect.objectContaining({
-      kind: "image",
-      mimeType: "image/png",
-      data: imageData,
-      name: "chart.png",
-      size: 3,
-    }))
-    expect(parsed.attachments?.[1]).toEqual(expect.objectContaining({
-      kind: "path",
-      path: "/Users/example/report.md",
-      entryType: "file",
-      name: "report.md",
-    }))
+    expect(parsed.attachments).toEqual([
+      { attachmentId: "image-1", order: 0 },
+      { attachmentId: "file-1", order: 1 },
+    ])
   })
 
   it("strips legacy per-message persona fields from send requests", () => {
@@ -435,14 +462,12 @@ describe("agent IPC schemas", () => {
       projectId: "project-1",
       content: "",
       attachments: [{
-        kind: "image",
-        mimeType: "image/png",
-        data: new Uint8Array([1]),
-        size: 1,
+        attachmentId: "image-1",
+        order: 0,
       }],
     })).toMatchObject({
       content: "",
-      attachments: [expect.objectContaining({ kind: "image" })],
+      attachments: [{ attachmentId: "image-1", order: 0 }],
     })
 
     expect(() => messageMethods.send.request.parse({
@@ -456,13 +481,13 @@ describe("agent IPC schemas", () => {
     })).toThrow()
   })
 
-  it("accepts cross-realm binary image data and Buffer image data", () => {
+  it("rejects raw binary image data from every JavaScript realm", () => {
     const crossRealmArrayBuffer = vm.runInNewContext("new ArrayBuffer(3)") as ArrayBuffer
     const crossRealmUint8Array = vm.runInNewContext("new Uint8Array([1, 2, 3])") as Uint8Array
     const bufferData = Buffer.from([1, 2, 3])
 
     for (const data of [crossRealmArrayBuffer, crossRealmUint8Array, bufferData]) {
-      expect(messageMethods.send.request.parse({
+      expect(() => messageMethods.send.request.parse({
         projectId: "project-1",
         content: "",
         attachments: [{
@@ -470,48 +495,24 @@ describe("agent IPC schemas", () => {
           mimeType: "image/png",
           data,
         }],
-      })).toMatchObject({
-        attachments: [expect.objectContaining({ data })],
-      })
+      })).toThrow()
     }
   })
 
-  it("accepts POSIX and Windows absolute path attachments", () => {
-    expect(messageMethods.send.request.parse({
-      projectId: "project-1",
-      content: "",
-      attachments: [{ kind: "path", path: "/Users/example/report.md", entryType: "file" }],
-    })).toMatchObject({
-      attachments: [expect.objectContaining({ path: "/Users/example/report.md" })],
-    })
-    expect(messageMethods.send.request.parse({
-      projectId: "project-1",
-      content: "",
-      attachments: [{ kind: "path", path: "C:\\Users\\example\\report.md", entryType: "file" }],
-    })).toMatchObject({
-      attachments: [expect.objectContaining({ path: "C:\\Users\\example\\report.md" })],
-    })
-    expect(messageMethods.send.request.parse({
-      projectId: "project-1",
-      content: "",
-      attachments: [{ kind: "path", path: "C:/Users/example/report.md", entryType: "file" }],
-    })).toMatchObject({
-      attachments: [expect.objectContaining({ path: "C:/Users/example/report.md" })],
-    })
-    expect(messageMethods.send.request.parse({
-      projectId: "project-1",
-      content: "",
-      attachments: [{ kind: "path", path: "\\\\server\\share\\report.md", entryType: "file" }],
-    })).toMatchObject({
-      attachments: [expect.objectContaining({ path: "\\\\server\\share\\report.md" })],
-    })
-    expect(messageMethods.send.request.parse({
-      projectId: "project-1",
-      content: "",
-      attachments: [{ kind: "path", path: "//server/share/report.md", entryType: "file" }],
-    })).toMatchObject({
-      attachments: [expect.objectContaining({ path: "//server/share/report.md" })],
-    })
+  it("rejects raw POSIX and Windows paths on send requests", () => {
+    for (const path of [
+      "/Users/example/report.md",
+      "C:\\Users\\example\\report.md",
+      "C:/Users/example/report.md",
+      "\\\\server\\share\\report.md",
+      "//server/share/report.md",
+    ]) {
+      expect(() => messageMethods.send.request.parse({
+        projectId: "project-1",
+        content: "",
+        attachments: [{ kind: "path", path, entryType: "file" }],
+      })).toThrow()
+    }
   })
 
   it("rejects malformed send attachments", () => {

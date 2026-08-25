@@ -43,6 +43,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 | Workflow 数据、分享包、App Capability Package、DataRepository | `docs/agents/workflow-and-capabilities.md` |
 | 具体业务模块长期边界 | `docs/agents/module-boundaries.md` |
 | Knowledge Base、Agent Runtime、Claude SDK、MCP 诊断 | `docs/agents/knowledge-base.md`、`docs/agents/agent-runtime-security.md` |
+| 模型上下文、Provider 模型匹配、模型能力目录更新 | `docs/agents/model-capability-catalog.md` |
 | macOS 自动更新、ShipIt/Squirrel、`quitAndInstall`、更新退出与恢复 | `docs/superpowers/specs/2026-07-21-desktop-update-handoff-design.md` |
 | UI、样式、交互、产品文案 | `docs/agents/ui-and-product.md`、`.claude/rules/design.md`、`.claude/rules/ui-rules.md` |
 | 后续规划 | `docs/agents/future-plans.md` |

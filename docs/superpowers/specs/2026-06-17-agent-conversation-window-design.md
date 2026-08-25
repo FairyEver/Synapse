@@ -35,7 +35,7 @@ Agent 对话页当前由 `desktop/src/modules/agent/index.tsx` 同时承担侧�
 
 `AgentConversationWorkspace` 负责红框内全部工作区：
 
-- 顶栏：会话标题、模型文本、待回答/权限按钮、资料管理、复制、导出、新窗口入口。
+- 顶栏：会话标题、模型文本、实时上下文占用、待回答/权限按钮、资料管理、复制、导出、新窗口入口。
 - 内容：错误提示、空状态、`AgentTimeline`。
 - 输入：`AgentComposer`、权限模式切换、取消/强制停止、快捷片段、知识库动作。
 - 局部 UI 状态：draft、待发送队列、滚动 pin、导出 loading、idle rollover timer。

@@ -2,9 +2,10 @@
  * @vitest-environment jsdom
  */
 import type { ComponentProps } from "react"
-import { createRef } from "react"
+import { act, createRef } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   appendAgentTimelineEvent,
@@ -27,6 +28,16 @@ vi.mock("@/lib/ui-tracking", () => ({
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => root.unmount())
+  }
+  roots.length = 0
+  document.body.innerHTML = ""
+})
 
 const profile: SynapseAgentDisplayProfile = {
   agentLabel: "Codex",
@@ -65,6 +76,39 @@ function textFromMarkup(html: string): string {
   const container = document.createElement("div")
   container.innerHTML = html
   return container.textContent ?? ""
+}
+
+function renderInteractiveTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>>) {
+  const container = document.createElement("div")
+  document.body.append(container)
+  const root = createRoot(container)
+  roots.push(root)
+
+  const render = (nextOverrides: Partial<ComponentProps<typeof AgentTimeline>>) => {
+    act(() => {
+      root.render(
+        <AgentTimeline
+          items={[]}
+          profile={profile}
+          sending={false}
+          pendingPermissions={[]}
+          onOpenReference={vi.fn()}
+          onRespondPermission={vi.fn()}
+          viewportRef={createRef<HTMLDivElement>()}
+          loadingOlder={false}
+          historyError={null}
+          onRetryHistory={vi.fn()}
+          {...nextOverrides}
+        />,
+      )
+    })
+  }
+
+  render(overrides)
+  return {
+    container,
+    rerender: render,
+  }
 }
 
 describe("AgentTimeline", () => {
@@ -134,7 +178,7 @@ describe("AgentTimeline", () => {
         startedAt: "2026-05-10T00:00:00.000Z",
       },
     ]
-    const html = renderTimeline({ items })
+    const html = renderTimeline({ items, sending: true })
     // AgentPhaseRow uses tabular-nums for elapsed time and aria-live for in-progress.
     expect(html).toContain("tabular-nums")
     expect(html).toContain('aria-live="polite"')
@@ -155,7 +199,7 @@ describe("AgentTimeline", () => {
         status: "preparing",
       },
     ]
-    const text = textFromMarkup(renderTimeline({ items }))
+    const text = textFromMarkup(renderTimeline({ items, sending: true }))
 
     expect(text).toContain("正在准备 Write")
     expect(text).toContain("40 KB")
@@ -496,7 +540,7 @@ describe("AgentTimeline", () => {
       payload: { cwd: "/tmp/project" },
     }, "2026-05-12T00:00:00.000Z", "claude")
 
-    const html = renderTimeline({ items })
+    const html = renderTimeline({ items, sending: true })
 
     expect(html).toContain("SDK event")
     expect(html).toContain("system")
@@ -511,7 +555,7 @@ describe("AgentTimeline", () => {
       payload: { command: "/wiki-ingest" },
     }, "2026-05-31T00:00:00.000Z", "claude")
 
-    const html = renderTimeline({ items })
+    const html = renderTimeline({ items, sending: true })
 
     expect(html).toContain("Native slash")
     expect(html).toContain("/wiki-ingest")
@@ -542,6 +586,7 @@ describe("AgentTimeline", () => {
 
     const html = renderTimeline({
       items,
+      sending: true,
       profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
     })
     const text = textFromMarkup(html)
@@ -549,7 +594,7 @@ describe("AgentTimeline", () => {
     expect(html.match(/Glob/g)).toHaveLength(1)
     expect(html).toContain("Done")
     expect(html).not.toContain("Running")
-    expect(text).toContain("已处理1s")
+    expect(text).toContain("处理中")
     expect(text).not.toContain("过程详情")
     expect(text).toContain("GlobDone")
     expect(html).toContain("data-state=\"closed\"")
@@ -584,7 +629,7 @@ describe("AgentTimeline", () => {
     ])
   })
 
-  it("groups process entries before an assistant message", () => {
+  it("groups process entries before the final assistant message", () => {
     const entries = timelineDisplayEntries([
       {
         id: "thinking-1",
@@ -617,9 +662,10 @@ describe("AgentTimeline", () => {
     expect(nodes[0]).toEqual(expect.objectContaining({
       kind: "processGroup",
       itemCount: 2,
-      summary: "处理中 1s",
-      label: "处理中",
+      summary: "已处理 1s",
+      label: "已处理",
       durationLabel: "1s",
+      lifecycle: "completed",
     }))
     expect(nodes[1]).toEqual(expect.objectContaining({
       kind: "item",
@@ -629,41 +675,48 @@ describe("AgentTimeline", () => {
     }))
   })
 
-  it("creates separate process groups between multiple assistant messages", () => {
+  it("folds intermediate assistant messages and keeps only the final answer on the mainline", () => {
     const entries = timelineDisplayEntries([
+      {
+        id: "user-a",
+        kind: "message",
+        role: "user",
+        content: "Question",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
       {
         id: "answer-a",
         kind: "message",
         role: "assistant",
         content: "A",
-        timestamp: "2026-06-27T00:00:00.000Z",
+        timestamp: "2026-06-27T00:00:01.000Z",
       },
       {
         id: "thinking-b",
         kind: "thinking",
         content: "B process",
-        timestamp: "2026-06-27T00:00:01.000Z",
+        timestamp: "2026-06-27T00:00:02.000Z",
       },
       {
         id: "answer-b",
         kind: "message",
         role: "assistant",
         content: "B",
-        timestamp: "2026-06-27T00:00:02.000Z",
+        timestamp: "2026-06-27T00:00:03.000Z",
       },
       {
         id: "tool-c",
         kind: "toolCall",
         toolName: "Bash",
         toolInput: "pnpm test",
-        timestamp: "2026-06-27T00:00:03.000Z",
+        timestamp: "2026-06-27T00:00:04.000Z",
       },
       {
         id: "answer-c",
         kind: "message",
         role: "assistant",
         content: "C",
-        timestamp: "2026-06-27T00:00:04.000Z",
+        timestamp: "2026-06-27T00:00:05.000Z",
       },
     ])
 
@@ -671,18 +724,274 @@ describe("AgentTimeline", () => {
       pendingPermissionRequestIds: new Set(),
     })
 
-    expect(nodes.map((node) => node.kind)).toEqual([
-      "item",
-      "processGroup",
-      "item",
-      "processGroup",
-      "item",
-    ])
+    expect(nodes.map((node) => node.kind)).toEqual(["item", "processGroup", "item"])
     expect(nodes.filter((node) => node.kind === "item").map((node) => node.entry.item.id)).toEqual([
-      "answer-a",
-      "answer-b",
+      "user-a",
       "answer-c",
     ])
+    expect(nodes.find((node) => node.kind === "processGroup")).toEqual(expect.objectContaining({
+      id: "process:user-a",
+      itemCount: 4,
+      lifecycle: "completed",
+    }))
+  })
+
+  it("keeps completed turns separate at user-message boundaries", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-a",
+        kind: "message",
+        role: "user",
+        content: "Question A",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "progress-a",
+        kind: "message",
+        role: "assistant",
+        content: "Working on A",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "final-a",
+        kind: "message",
+        role: "assistant",
+        content: "Answer A",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "user-b",
+        kind: "message",
+        role: "user",
+        content: "Question B",
+        timestamp: "2026-06-27T00:00:03.000Z",
+      },
+      {
+        id: "thinking-b",
+        kind: "thinking",
+        content: "Working on B",
+        timestamp: "2026-06-27T00:00:04.000Z",
+      },
+      {
+        id: "final-b",
+        kind: "message",
+        role: "assistant",
+        content: "Answer B",
+        timestamp: "2026-06-27T00:00:05.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    expect(nodes.map((node) => node.kind === "item" ? node.entry.item.id : node.id)).toEqual([
+      "user-a",
+      "process:user-a",
+      "final-a",
+      "user-b",
+      "process:user-b",
+      "final-b",
+    ])
+  })
+
+  it("does not create an empty process group for a direct final answer", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        content: "Hello",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "final-1",
+        kind: "message",
+        role: "assistant",
+        content: "Hello back",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    expect(nodes.map((node) => node.kind === "item" ? node.entry.item.id : node.id)).toEqual([
+      "user-1",
+      "final-1",
+    ])
+  })
+
+  it("keeps one stable active process group while the turn grows", () => {
+    const initialEntries = timelineDisplayEntries([
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        content: "Inspect it",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "thinking-1",
+        kind: "thinking",
+        content: "Inspecting",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ])
+    const appendedEntries = timelineDisplayEntries([
+      ...initialEntries.map((entry) => entry.item),
+      {
+        id: "tool-1",
+        kind: "toolCall",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        toolInput: "package.json",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "tool-result-1",
+        kind: "toolResult",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        content: "package contents",
+        success: true,
+        timestamp: "2026-06-27T00:00:03.000Z",
+      },
+      {
+        id: "progress-answer",
+        kind: "message",
+        role: "assistant",
+        content: "I found the package manager.",
+        timestamp: "2026-06-27T00:00:04.000Z",
+      },
+    ])
+
+    const initialGroup = groupTimelineDisplayEntries(initialEntries, {
+      pendingPermissionRequestIds: new Set(),
+      sending: true,
+    }).find((node) => node.kind === "processGroup")
+    const appendedGroup = groupTimelineDisplayEntries(appendedEntries, {
+      pendingPermissionRequestIds: new Set(),
+      sending: true,
+    }).find((node) => node.kind === "processGroup")
+
+    expect(initialGroup).toEqual(expect.objectContaining({
+      id: "process:user-1",
+      lifecycle: "active",
+      label: "处理中",
+    }))
+    expect(appendedGroup).toEqual(expect.objectContaining({
+      id: "process:user-1",
+      lifecycle: "active",
+      label: "处理中",
+      itemCount: 3,
+    }))
+    expect(initialGroup?.kind === "processGroup" ? defaultProcessGroupOpen(initialGroup) : false).toBe(true)
+  })
+
+  it.each(["cancelled", "failed", "timed_out"] as const)(
+    "does not promote partial assistant text after a %s turn",
+    (status) => {
+      const turnOutcome = status === "cancelled"
+        ? { status, mode: "graceful" as const, reason: "user_cancelled" as const, message: "Stopped" }
+        : { status, reason: status, message: "Stopped" }
+      const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+        {
+          id: "user-1",
+          kind: "message",
+          role: "user",
+          content: "Inspect it",
+          timestamp: "2026-06-27T00:00:00.000Z",
+        },
+        {
+          id: "partial-answer",
+          kind: "message",
+          role: "assistant",
+          content: "Partial answer",
+          timestamp: "2026-06-27T00:00:01.000Z",
+        },
+        {
+          id: "turn-result",
+          kind: "result",
+          content: "Stopped",
+          metadata: { turnOutcome },
+          timestamp: "2026-06-27T00:00:02.000Z",
+        },
+      ]), { pendingPermissionRequestIds: new Set() })
+
+      expect(nodes.filter((node) => node.kind === "item").map((node) => node.entry.item.id)).toEqual([
+        "user-1",
+        "turn-result",
+      ])
+      expect(nodes.find((node) => node.kind === "processGroup")).toEqual(expect.objectContaining({
+        entries: [expect.objectContaining({ item: expect.objectContaining({ id: "partial-answer" }) })],
+        lifecycle: "completed",
+      }))
+    },
+  )
+
+  it("keeps an interrupted terminal error visible without promoting partial text", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        content: "Inspect it",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "partial-answer",
+        kind: "message",
+        role: "assistant",
+        content: "Partial answer",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "interrupted-error",
+        kind: "error",
+        message: "Send continue to resume.",
+        recoverable: true,
+        turnOutcome: {
+          status: "interrupted",
+          reason: "tool_use_interrupted",
+          recoverable: true,
+          message: "Send continue to resume.",
+        },
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    expect(nodes.filter((node) => node.kind === "item").map((node) => node.entry.item.id)).toEqual([
+      "user-1",
+      "interrupted-error",
+    ])
+    expect(nodes.find((node) => node.kind === "processGroup")).toEqual(expect.objectContaining({
+      entries: [expect.objectContaining({ item: expect.objectContaining({ id: "partial-answer" }) })],
+    }))
+  })
+
+  it("still promotes a final answer after a recoverable non-terminal error", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        content: "Inspect it",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "recoverable-error",
+        kind: "error",
+        message: "The first lookup failed.",
+        recoverable: true,
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "final-answer",
+        kind: "message",
+        role: "assistant",
+        content: "Final answer",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    expect(nodes.at(-1)).toEqual(expect.objectContaining({
+      kind: "item",
+      entry: expect.objectContaining({ item: expect.objectContaining({ id: "final-answer" }) }),
+    }))
   })
 
   it("keeps pending permissions outside process groups", () => {
@@ -740,10 +1049,10 @@ describe("AgentTimeline", () => {
 
     const group = nodes.find((node) => node.kind === "processGroup")
     expect(group?.kind).toBe("processGroup")
-    expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group, { sending: false }) : true).toBe(false)
+    expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group) : true).toBe(false)
   })
 
-  it("keeps completed image artifact tool results outside collapsed process groups", () => {
+  it("folds completed image artifact tool results with the rest of the process", () => {
     const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
       {
         id: "tool-call",
@@ -772,14 +1081,12 @@ describe("AgentTimeline", () => {
 
     expect(nodes).toHaveLength(1)
     expect(nodes[0]).toEqual(expect.objectContaining({
-      kind: "item",
-      entry: expect.objectContaining({
+      kind: "processGroup",
+      entries: [expect.objectContaining({
         item: expect.objectContaining({ id: "tool-call" }),
-        result: expect.objectContaining({
-          id: "tool-result",
-          imageArtifacts: [expect.objectContaining({ id: "artifact-image" })],
-        }),
-      }),
+        result: expect.objectContaining({ id: "tool-result" }),
+      })],
+      lifecycle: "completed",
     }))
   })
 
@@ -813,12 +1120,11 @@ describe("AgentTimeline", () => {
         toolInput: "pnpm test",
         timestamp: "2026-06-27T00:00:02.000Z",
       },
-    ]), { pendingPermissionRequestIds: new Set() })
+    ]), { pendingPermissionRequestIds: new Set(), sending: true })
     const activeGroup = activeNodes.find((node) => node.kind === "processGroup")
 
-    expect(failedGroup?.kind === "processGroup" ? defaultProcessGroupOpen(failedGroup, { sending: false }) : true).toBe(false)
-    expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: false }) : false).toBe(true)
-    expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup, { sending: true }) : false).toBe(true)
+    expect(failedGroup?.kind === "processGroup" ? defaultProcessGroupOpen(failedGroup) : true).toBe(false)
+    expect(activeGroup?.kind === "processGroup" ? defaultProcessGroupOpen(activeGroup) : false).toBe(true)
   })
 
   it("treats streaming thinking as an active process", () => {
@@ -830,7 +1136,7 @@ describe("AgentTimeline", () => {
       streamBlockIndex: 0,
       startedAt: "2026-08-11T00:00:00.000Z",
       timestamp: "2026-08-11T00:00:02.000Z",
-    }]), { pendingPermissionRequestIds: new Set() })
+    }]), { pendingPermissionRequestIds: new Set(), sending: true })
     const group = nodes.find((node) => node.kind === "processGroup")
 
     expect(group).toEqual(expect.objectContaining({
@@ -838,10 +1144,10 @@ describe("AgentTimeline", () => {
       label: "处理中",
       state: expect.objectContaining({ active: true }),
     }))
-    expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group, { sending: false }) : false).toBe(true)
+    expect(group?.kind === "processGroup" ? defaultProcessGroupOpen(group) : false).toBe(true)
   })
 
-  it("summarizes active and pending process groups with Codex-style labels", () => {
+  it("summarizes active and completed process groups with Codex-style labels", () => {
     const activeNodes = groupTimelineDisplayEntries(timelineDisplayEntries([
       {
         id: "tool-running",
@@ -853,6 +1159,7 @@ describe("AgentTimeline", () => {
     ]), {
       pendingPermissionRequestIds: new Set(),
       nowMs: Date.parse("2026-06-27T00:00:14.000Z"),
+      sending: true,
     })
     const pendingNodes = groupTimelineDisplayEntries(timelineDisplayEntries([
       {
@@ -879,9 +1186,9 @@ describe("AgentTimeline", () => {
     }))
     expect(pendingGroup).toEqual(expect.objectContaining({
       kind: "processGroup",
-      label: "等待处理",
-      durationLabel: "12s",
-      summary: "等待处理 12s",
+      label: "已处理",
+      durationLabel: "0s",
+      summary: "已处理 0s",
     }))
   })
 
@@ -1127,21 +1434,28 @@ describe("AgentTimeline", () => {
     expect(text).not.toContain("过程详情")
   })
 
-  it("keeps multiple assistant answers visible between process groups", () => {
+  it("keeps only the final assistant answer visible after a completed turn", () => {
     const html = renderTimeline({
       items: [
+        {
+          id: "user",
+          kind: "message",
+          role: "user",
+          content: "Question",
+          timestamp: "2026-06-27T00:00:00.000Z",
+        },
         {
           id: "answer-a",
           kind: "message",
           role: "assistant",
           content: "First answer.",
-          timestamp: "2026-06-27T00:00:00.000Z",
+          timestamp: "2026-06-27T00:00:01.000Z",
         },
         {
           id: "thinking-b",
           kind: "thinking",
           content: "Inspecting.",
-          timestamp: "2026-06-27T00:00:01.000Z",
+          timestamp: "2026-06-27T00:00:02.000Z",
         },
         {
           id: "tool-b",
@@ -1149,7 +1463,7 @@ describe("AgentTimeline", () => {
           toolUseId: "toolu-b",
           toolName: "Read",
           toolInput: "package.json",
-          timestamp: "2026-06-27T00:00:02.000Z",
+          timestamp: "2026-06-27T00:00:03.000Z",
         },
         {
           id: "tool-b-result",
@@ -1158,43 +1472,43 @@ describe("AgentTimeline", () => {
           toolName: "Read",
           content: "package contents",
           success: true,
-          timestamp: "2026-06-27T00:00:03.000Z",
+          timestamp: "2026-06-27T00:00:04.000Z",
         },
         {
           id: "answer-b",
           kind: "message",
           role: "assistant",
           content: "Second answer.",
-          timestamp: "2026-06-27T00:00:04.000Z",
+          timestamp: "2026-06-27T00:00:05.000Z",
         },
         {
           id: "thinking-c",
           kind: "thinking",
           content: "Checking tests.",
-          timestamp: "2026-06-27T00:00:05.000Z",
+          timestamp: "2026-06-27T00:00:06.000Z",
         },
         {
           id: "answer-c",
           kind: "message",
           role: "assistant",
           content: "Third answer.",
-          timestamp: "2026-06-27T00:00:06.000Z",
+          timestamp: "2026-06-27T00:00:07.000Z",
         },
       ],
     })
     const text = textFromMarkup(html)
 
-    expect(text).toContain("First answer.")
-    expect(text).toContain("Second answer.")
+    expect(text).toContain("Question")
     expect(text).toContain("Third answer.")
-    expect(text.indexOf("First answer.")).toBeLessThan(text.indexOf("已处理"))
-    expect(text.indexOf("已处理")).toBeLessThan(text.indexOf("Second answer."))
-    expect(html.match(/已处理/g)).toHaveLength(2)
+    expect(text).not.toContain("First answer.")
+    expect(text).not.toContain("Second answer.")
+    expect(text.indexOf("已处理")).toBeLessThan(text.indexOf("Third answer."))
+    expect(html.match(/已处理/g)).toHaveLength(1)
     expect(html).not.toContain("过程详情")
     expect(text).not.toContain("package contents")
   })
 
-  it("keeps result text visible after a tool boundary while grouping the tool", () => {
+  it("folds streamed progress text after a tool boundary and keeps the final result visible", () => {
     const streamed = appendAgentTimelineEvent([], {
       type: "stream",
       deltaType: "text_delta",
@@ -1215,12 +1529,95 @@ describe("AgentTimeline", () => {
     const html = renderTimeline({ items })
     const text = textFromMarkup(html)
 
-    expect(text).toContain("I will inspect it.")
     expect(text).toContain("Final answer.")
-    expect(text.indexOf("I will inspect it.")).toBeLessThan(text.indexOf("已处理"))
+    expect(text).not.toContain("I will inspect it.")
     expect(text.indexOf("已处理")).toBeLessThan(text.indexOf("Final answer."))
     expect(html).not.toContain("过程详情")
     expect(text).not.toContain("package contents")
+  })
+
+  it("respects manual collapse while an active turn grows and resets to collapsed when it completes", () => {
+    const initialItems: SynapseAgentTimelineItem[] = [
+      {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        content: "Inspect it",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "progress-answer-1",
+        kind: "message",
+        role: "assistant",
+        content: "Inspecting",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ]
+    const { container, rerender } = renderInteractiveTimeline({ items: initialItems, sending: true })
+    const processButton = () => [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.includes("处理中") || button.textContent?.includes("已处理"))
+
+    expect(processButton()?.getAttribute("aria-expanded")).toBe("true")
+    expect(container.textContent).toContain("Inspecting")
+
+    act(() => processButton()?.click())
+    expect(processButton()?.getAttribute("aria-expanded")).toBe("false")
+    expect(container.textContent).not.toContain("Inspecting")
+
+    const growingItems: SynapseAgentTimelineItem[] = [
+      ...initialItems,
+      {
+        id: "tool-1",
+        kind: "toolCall",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        toolInput: "package.json",
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "tool-result-1",
+        kind: "toolResult",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        content: "package contents",
+        success: true,
+        timestamp: "2026-06-27T00:00:03.000Z",
+      },
+      {
+        id: "progress-answer",
+        kind: "message",
+        role: "assistant",
+        content: "I found something.",
+        timestamp: "2026-06-27T00:00:04.000Z",
+      },
+    ]
+    rerender({ items: growingItems, sending: true })
+
+    expect(processButton()?.getAttribute("aria-expanded")).toBe("false")
+    expect(container.textContent).not.toContain("I found something.")
+
+    const completedItems: SynapseAgentTimelineItem[] = [
+      ...growingItems,
+      {
+        id: "final-answer",
+        kind: "message",
+        role: "assistant",
+        content: "Final answer.",
+        timestamp: "2026-06-27T00:00:05.000Z",
+      },
+    ]
+    rerender({ items: completedItems, sending: false })
+
+    expect(processButton()?.getAttribute("aria-expanded")).toBe("false")
+    expect(container.textContent).toContain("Final answer.")
+    expect(container.textContent).not.toContain("I found something.")
+
+    act(() => processButton()?.click())
+    expect(processButton()?.getAttribute("aria-expanded")).toBe("true")
+    expect(container.textContent).toContain("I found something.")
+
+    rerender({ items: [...completedItems], sending: false })
+    expect(processButton()?.getAttribute("aria-expanded")).toBe("true")
   })
 
   it("matches concurrent same-name tool results by tool use id", () => {
@@ -1312,6 +1709,7 @@ describe("AgentTimeline", () => {
 
     const html = renderTimeline({
       items,
+      sending: true,
       profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
     })
 
@@ -1432,7 +1830,7 @@ describe("AgentTimeline", () => {
       },
     }, "2026-05-12T00:00:00.000Z", "claude")
 
-    const html = renderTimeline({ items })
+    const html = renderTimeline({ items, sending: true })
 
     expect(html).toContain("SDK event")
     expect(html).toContain("system")

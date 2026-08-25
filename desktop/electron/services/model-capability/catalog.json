@@ -1,0 +1,3234 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-25T00:00:00.000Z",
+  "sources": [
+    {
+      "id": "aliyun-model-api",
+      "provider": "Alibaba Cloud Model Studio",
+      "kind": "official-doc",
+      "url": "https://help.aliyun.com/zh/model-studio/list-models",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "aliyun-model-list",
+      "provider": "Alibaba Cloud Model Studio",
+      "kind": "official-doc",
+      "url": "https://help.aliyun.com/zh/model-studio/model-list-text-generation/",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "aliyun-qwen3-7-plus",
+      "provider": "Alibaba Cloud Model Studio",
+      "kind": "official-doc",
+      "url": "https://help.aliyun.com/zh/model-studio/qwen3-7-plus",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "aliyun-text-generation",
+      "provider": "Alibaba Cloud Model Studio",
+      "kind": "official-doc",
+      "url": "https://help.aliyun.com/zh/model-studio/text-generation-model",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "anthropic-models",
+      "provider": "Anthropic",
+      "kind": "official-doc",
+      "url": "https://platform.claude.com/docs/en/about-claude/models/overview",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "deepseek-v4",
+      "provider": "DeepSeek",
+      "kind": "official-doc",
+      "url": "https://api-docs.deepseek.com/news/news260424/",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "gemini-models",
+      "provider": "Google",
+      "kind": "official-doc",
+      "url": "https://ai.google.dev/gemini-api/docs/gemini-3",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "kimi-code-models",
+      "provider": "Moonshot AI",
+      "kind": "official-doc",
+      "url": "https://www.kimi.com/code/docs/en/kimi-code/models.html",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "minimax-models",
+      "provider": "MiniMax",
+      "kind": "official-doc",
+      "url": "https://platform.minimaxi.com/docs/guides/text-generation",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "stepfun-models",
+      "provider": "StepFun",
+      "kind": "official-doc",
+      "url": "https://platform.stepfun.com/docs/zh/guides/models/overview",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "xiaomi-mimo-models",
+      "provider": "Xiaomi",
+      "kind": "official-doc",
+      "url": "https://mimo.mi.com/docs/zh-CN/quick-start/summary/model",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "id": "zhipu-glm-5-2",
+      "provider": "Zhipu AI",
+      "kind": "official-doc",
+      "url": "https://docs.bigmodel.cn/cn/guide/models/text/glm-5.2",
+      "retrievedAt": "2026-08-25T00:00:00.000Z"
+    }
+  ],
+  "providerScopes": [
+    {
+      "id": "anthropic-official",
+      "label": "Anthropic",
+      "baseUrls": [
+        "https://api.anthropic.com"
+      ],
+      "sourceIds": [
+        "anthropic-models"
+      ]
+    },
+    {
+      "id": "bailian-cn",
+      "label": "Alibaba Cloud Model Studio (China)",
+      "baseUrls": [
+        "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+        "https://dashscope.aliyuncs.com/apps/anthropic"
+      ],
+      "sourceIds": [
+        "aliyun-model-api",
+        "aliyun-model-list",
+        "aliyun-qwen3-7-plus",
+        "aliyun-text-generation"
+      ]
+    },
+    {
+      "id": "deepseek-official",
+      "label": "DeepSeek",
+      "baseUrls": [
+        "https://api.deepseek.com/anthropic"
+      ],
+      "sourceIds": [
+        "deepseek-v4"
+      ]
+    },
+    {
+      "id": "gemini-official",
+      "label": "Google Gemini Native",
+      "baseUrls": [
+        "https://generativelanguage.googleapis.com"
+      ],
+      "sourceIds": [
+        "gemini-models"
+      ]
+    },
+    {
+      "id": "kimi-code-official",
+      "label": "Kimi Code",
+      "baseUrls": [
+        "https://api.kimi.com/coding"
+      ],
+      "sourceIds": [
+        "kimi-code-models"
+      ]
+    },
+    {
+      "id": "minimax-official",
+      "label": "MiniMax",
+      "baseUrls": [
+        "https://api.minimax.io/anthropic",
+        "https://api.minimaxi.com/anthropic"
+      ],
+      "sourceIds": [
+        "minimax-models"
+      ]
+    },
+    {
+      "id": "moonshot-official",
+      "label": "Moonshot AI",
+      "baseUrls": [
+        "https://api.moonshot.cn/anthropic"
+      ],
+      "sourceIds": [
+        "kimi-code-models"
+      ]
+    },
+    {
+      "id": "stepfun-official",
+      "label": "StepFun",
+      "baseUrls": [
+        "https://api.stepfun.ai/step_plan",
+        "https://api.stepfun.com/step_plan"
+      ],
+      "sourceIds": [
+        "stepfun-models"
+      ]
+    },
+    {
+      "id": "xiaomi-mimo-official",
+      "label": "Xiaomi MiMo",
+      "baseUrls": [
+        "https://api.xiaomimimo.com/anthropic"
+      ],
+      "sourceIds": [
+        "xiaomi-mimo-models"
+      ]
+    },
+    {
+      "id": "zhipu-official",
+      "label": "Zhipu GLM",
+      "baseUrls": [
+        "https://api.z.ai/api/anthropic",
+        "https://open.bigmodel.cn/api/anthropic"
+      ],
+      "sourceIds": [
+        "zhipu-glm-5-2"
+      ]
+    }
+  ],
+  "models": [
+    {
+      "providerScopeId": "anthropic-official",
+      "modelId": "claude-fable-5",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Anthropic",
+      "inferenceProvider": "Anthropic",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "anthropic-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxOutputTokens": 128000
+    },
+    {
+      "providerScopeId": "anthropic-official",
+      "modelId": "claude-haiku-4-5-20251001",
+      "aliases": [],
+      "contextWindowTokens": 200000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Anthropic",
+      "inferenceProvider": "Anthropic",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "anthropic-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxOutputTokens": 64000
+    },
+    {
+      "providerScopeId": "anthropic-official",
+      "modelId": "claude-opus-4-8",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Anthropic",
+      "inferenceProvider": "Anthropic",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "anthropic-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxOutputTokens": 128000
+    },
+    {
+      "providerScopeId": "anthropic-official",
+      "modelId": "claude-sonnet-5",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Anthropic",
+      "inferenceProvider": "Anthropic",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "anthropic-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxOutputTokens": 128000
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1-0528",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1-distill-llama-70b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1-distill-llama-8b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1-distill-qwen-1.5b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1-distill-qwen-14b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1-distill-qwen-32b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-r1-distill-qwen-7b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v3",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v3.1",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v3.2",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v3.2-exp",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v4-flash",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "deepseek-v4-pro",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "glm-4.5",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Zhipu AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "glm-4.5-air",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Zhipu AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "glm-4.7",
+      "aliases": [],
+      "contextWindowTokens": 198000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Zhipu AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "glm-5",
+      "aliases": [],
+      "contextWindowTokens": 198000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Zhipu AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "glm-5.1",
+      "aliases": [],
+      "contextWindowTokens": 198000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Zhipu AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "glm-5.2",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Zhipu AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "kimi-k2-thinking",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "kimi-k2.5",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "kimi-k2.7-code",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "mimo-v2.5-pro",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Xiaomi",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "MiniMax-M2.1",
+      "aliases": [],
+      "contextWindowTokens": 200000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "MiniMax-M2.5",
+      "aliases": [],
+      "contextWindowTokens": 192000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "MiniMax-M2.7",
+      "aliases": [],
+      "contextWindowTokens": 192000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "MiniMax-M3",
+      "aliases": [],
+      "contextWindowTokens": 192000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "Moonshot-Kimi-K2-Instruct",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qvq-max",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-flash",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-flash-character",
+      "aliases": [],
+      "contextWindowTokens": 8000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-long",
+      "aliases": [],
+      "contextWindowTokens": 10000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen-long-2025-01-25",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-long-2025-01-25",
+      "aliases": [],
+      "contextWindowTokens": 10000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-long-latest",
+      "aliases": [],
+      "contextWindowTokens": 10000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-max",
+      "aliases": [],
+      "contextWindowTokens": 32000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-mt-flash",
+      "aliases": [],
+      "contextWindowTokens": 16000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-mt-lite",
+      "aliases": [],
+      "contextWindowTokens": 16000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-mt-plus",
+      "aliases": [],
+      "contextWindowTokens": 16000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-mt-turbo",
+      "aliases": [],
+      "contextWindowTokens": 16000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-omni-turbo",
+      "aliases": [],
+      "contextWindowTokens": 32000,
+      "inputModalities": [
+        "audio",
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-plus",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-plus-character",
+      "aliases": [],
+      "contextWindowTokens": 32000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-plus-character-ja",
+      "aliases": [],
+      "contextWindowTokens": 32000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen-turbo",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen2.5-omni-7b",
+      "aliases": [],
+      "contextWindowTokens": 32000,
+      "inputModalities": [
+        "audio",
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-14b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-235b-a22b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-235b-a22b-instruct-2507",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-235b-a22b-thinking-2507",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-30b-a3b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-30b-a3b-instruct-2507",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-30b-a3b-thinking-2507",
+      "aliases": [],
+      "contextWindowTokens": 80000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-32b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-8b",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-30b-a3b-instruct",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-480b-a35b-instruct",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-flash",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3-coder-flash-2025-07-28",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-flash-2025-07-28",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-next",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-plus",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3-coder-plus-2025-09-23",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-plus-2025-07-22",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-coder-plus-2025-09-23",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-max",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3-max-2026-01-23",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-max-2025-09-23",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-max-2026-01-23",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-max-preview",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-next-80b-a3b-instruct",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3-next-80b-a3b-thinking",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-122b-a10b",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-27b",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-35b-a3b",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-397b-a17b",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-flash",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3.5-flash-2026-02-23",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-flash-2026-02-23",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-plus",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3.5-plus-2026-02-15",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.5-plus-2026-02-15",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.6-flash",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3.6-flash-2026-04-16",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.6-flash-2026-04-16",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.6-max-preview",
+      "aliases": [],
+      "contextWindowTokens": 256000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.6-plus",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3.6-plus-2026-04-02",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.6-plus-2026-04-02",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-flash",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3.7-flash-2026-07-15",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-flash-2026-07-15",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-max",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3.7-max-preview",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-max-2026-05-17",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-max-2026-05-20",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-max-2026-06-08",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-max-preview",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-plus",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "maxInputTokens": 991808,
+      "maxOutputTokens": 131072,
+      "reasoningMaxInputTokens": 983616,
+      "reasoningMaxOutputTokens": 131072,
+      "maxReasoningTokens": 262144,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "equivalentSnapshot": "qwen3.7-plus-2026-05-26",
+      "sourceId": "aliyun-qwen3-7-plus",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.7-plus-2026-05-26",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "maxInputTokens": 991808,
+      "maxOutputTokens": 131072,
+      "reasoningMaxInputTokens": 983616,
+      "reasoningMaxOutputTokens": 131072,
+      "maxReasoningTokens": 262144,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-qwen3-7-plus",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwen3.8-max",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [
+        "built-in-tools"
+      ],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "bailian-cn",
+      "modelId": "qwq-plus",
+      "aliases": [],
+      "contextWindowTokens": 128000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Alibaba Cloud",
+      "inferenceProvider": "Alibaba Cloud Model Studio",
+      "serviceRegions": [
+        "cn-beijing"
+      ],
+      "status": "online",
+      "sourceId": "aliyun-text-generation",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "deepseek-official",
+      "modelId": "deepseek-v4-flash",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "DeepSeek",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "deepseek-v4",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "deepseek-official",
+      "modelId": "deepseek-v4-pro",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "DeepSeek",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "deepseek-v4",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "gemini-official",
+      "modelId": "gemini-3-flash-preview",
+      "aliases": [
+        "gemini-3-flash"
+      ],
+      "contextWindowTokens": 1048576,
+      "inputModalities": [
+        "audio",
+        "image",
+        "pdf",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "code-execution",
+        "function-calling",
+        "reasoning",
+        "structured-output"
+      ],
+      "features": [],
+      "author": "Google",
+      "inferenceProvider": "Google",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "gemini-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxInputTokens": 1048576,
+      "maxOutputTokens": 65536
+    },
+    {
+      "providerScopeId": "gemini-official",
+      "modelId": "gemini-3.1-pro-preview",
+      "aliases": [
+        "gemini-3.1-pro",
+        "gemini-3.1-pro-preview-customtools"
+      ],
+      "contextWindowTokens": 1048576,
+      "inputModalities": [
+        "audio",
+        "image",
+        "pdf",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "code-execution",
+        "function-calling",
+        "reasoning",
+        "structured-output"
+      ],
+      "features": [],
+      "author": "Google",
+      "inferenceProvider": "Google",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "gemini-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxInputTokens": 1048576,
+      "maxOutputTokens": 65536
+    },
+    {
+      "providerScopeId": "kimi-code-official",
+      "modelId": "k3",
+      "aliases": [
+        "k3[1m]"
+      ],
+      "contextWindowTokens": 1048576,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Moonshot AI",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "kimi-code-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "kimi-code-official",
+      "modelId": "k3-256k",
+      "aliases": [],
+      "contextWindowTokens": 262144,
+      "inputModalities": [
+        "image",
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Moonshot AI",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "kimi-code-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "kimi-code-official",
+      "modelId": "kimi-for-coding",
+      "aliases": [],
+      "contextWindowTokens": 262144,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Moonshot AI",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "kimi-code-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "kimi-code-official",
+      "modelId": "kimi-for-coding-highspeed",
+      "aliases": [],
+      "contextWindowTokens": 262144,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Moonshot AI",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "kimi-code-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "minimax-official",
+      "modelId": "MiniMax-M2.1",
+      "aliases": [],
+      "contextWindowTokens": 204800,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "MiniMax",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "minimax-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "minimax-official",
+      "modelId": "MiniMax-M2.5",
+      "aliases": [],
+      "contextWindowTokens": 204800,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "MiniMax",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "minimax-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "minimax-official",
+      "modelId": "MiniMax-M2.5-highspeed",
+      "aliases": [],
+      "contextWindowTokens": 204800,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "MiniMax",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "minimax-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "minimax-official",
+      "modelId": "MiniMax-M2.7",
+      "aliases": [],
+      "contextWindowTokens": 204800,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "MiniMax",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "minimax-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "minimax-official",
+      "modelId": "MiniMax-M2.7-highspeed",
+      "aliases": [],
+      "contextWindowTokens": 204800,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "MiniMax",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "minimax-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "minimax-official",
+      "modelId": "MiniMax-M3",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "image",
+        "text",
+        "video"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "MiniMax",
+      "inferenceProvider": "MiniMax",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "minimax-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "moonshot-official",
+      "modelId": "kimi-k2.6",
+      "aliases": [],
+      "contextWindowTokens": 262144,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Moonshot AI",
+      "inferenceProvider": "Moonshot AI",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "kimi-code-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "stepfun-official",
+      "modelId": "step-3.5-flash",
+      "aliases": [],
+      "contextWindowTokens": 262144,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "StepFun",
+      "inferenceProvider": "StepFun",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "stepfun-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "stepfun-official",
+      "modelId": "step-3.5-flash-2603",
+      "aliases": [],
+      "contextWindowTokens": 262144,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "StepFun",
+      "inferenceProvider": "StepFun",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "stepfun-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "xiaomi-mimo-official",
+      "modelId": "mimo-v2.5-pro",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Xiaomi",
+      "inferenceProvider": "Xiaomi",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "xiaomi-mimo-models",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxOutputTokens": 131072
+    },
+    {
+      "providerScopeId": "zhipu-official",
+      "modelId": "glm-5.2",
+      "aliases": [],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "structured-output",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "Zhipu AI",
+      "inferenceProvider": "Zhipu AI",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "zhipu-glm-5-2",
+      "verifiedAt": "2026-08-25T00:00:00.000Z",
+      "maxOutputTokens": 128000
+    }
+  ]
+}

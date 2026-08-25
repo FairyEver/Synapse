@@ -35,10 +35,10 @@ function LiveConnectionPanel({ initialState = DEFAULT_LIVE_STATE }: LiveConnecti
   return (
     <SettingsFieldRow
       label="服务器连接"
-      contentClassName="md:max-w-md"
-      controlClassName="w-full md:max-w-md"
+      contentClassName="@md/field-group:max-w-md"
+      controlClassName="w-full"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-end gap-3">
         <div className="flex min-w-0 items-center gap-3" aria-live="polite">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
             <Icon className="size-4" aria-hidden="true" />

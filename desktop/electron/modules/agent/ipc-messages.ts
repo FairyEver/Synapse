@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { lstat, opendir, readFile } from "node:fs/promises"
-import path from "node:path"
-import { BrowserWindow, dialog, type OpenDialogOptions } from "electron"
+import { BrowserWindow, clipboard, dialog, type OpenDialogOptions } from "electron"
 import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
@@ -16,11 +14,12 @@ import type {
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createZipArchive } from "../../runtime/archive"
 import { createControlledProcessRunner } from "../../runtime/process"
-import type { AgentAttachment, AgentEvent, AgentMessage } from "../../services/agent-runtime"
+import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../services/agent-runtime"
 import { AgentConversationExportService } from "../../services/agent-runtime/conversation-export-service"
 import { REDACTED } from "../../services/agent-runtime/redaction"
 import { agentConversationDeliveryOptions } from "../../services/agent-runtime/event-delivery"
 import type { EventBus } from "../../runtime/event-bus"
+import { AGENT_ATTACHMENT_IMAGE_MIME_TYPES } from "../../../src/types/agent-attachment"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import {
@@ -39,21 +38,13 @@ import {
   InvalidConversationHistoryBoundaryError,
   assertKnowledgeBaseStorageMigrationInactive,
 } from "./ipc-shared"
+import { AgentClipboardAttachmentService } from "./clipboard-attachment-service"
 
 const MAX_CLIENT_SKEW_MS = 60_000
-const MAX_AGENT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
-const MAX_AGENT_IMAGE_ATTACHMENTS = 8
-const MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024
-const MAX_AGENT_PATH_ATTACHMENTS = 20
-const MAX_AGENT_DIRECTORY_SCAN_DEPTH = 64
-const MAX_AGENT_DIRECTORY_SCAN_ENTRIES = 4_096
 const MAX_AGENT_ATTACHMENT_RESOLUTION_PATHS = 256
 const logger = createMainLogger("agent.ipc")
-const agentImageMimeTypeSchema = z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"])
-const binaryAttachmentDataSchema = z.custom<ArrayBuffer | Uint8Array>(
-  isNonEmptyBinaryAttachmentData,
-  "data must be a non-empty ArrayBuffer or Uint8Array",
-)
+const clipboardAttachmentService = new AgentClipboardAttachmentService(() => clipboard.readImage())
+const agentImageMimeTypeSchema = z.enum(AGENT_ATTACHMENT_IMAGE_MIME_TYPES)
 const attachmentPathSchema = z.string()
   .trim()
   .refine(isAbsoluteAttachmentPath, "path must be an absolute POSIX or Windows path")
@@ -69,275 +60,88 @@ function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string):
   return clientIso
 }
 
-function isNonEmptyBinaryAttachmentData(value: unknown): value is ArrayBuffer | Uint8Array {
-  if (isArrayBufferLike(value)) return value.byteLength > 0
-  if (isUint8ArrayLike(value)) return value.byteLength > 0
-  return false
-}
-
-function isArrayBufferLike(value: unknown): value is ArrayBuffer {
-  return Object.prototype.toString.call(value) === "[object ArrayBuffer]"
-}
-
-function isUint8ArrayLike(value: unknown): value is Uint8Array {
-  return Object.prototype.toString.call(value) === "[object Uint8Array]"
-}
-
 function isAbsoluteAttachmentPath(value: string): boolean {
   if (/^([\\/])\1[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value)) return true
   if (/^[A-Za-z]:[\\/]/.test(value)) return true
   return value.startsWith("/") && !value.startsWith("//")
 }
 
-function binaryAttachmentByteLength(data: ArrayBuffer | Uint8Array): number {
-  return data.byteLength
-}
-
-function normalizeAbsoluteAttachmentPath(value: string): string {
-  return attachmentPathOps(value).normalize(value)
-}
-
-function attachmentBasename(value: string): string {
-  return attachmentPathOps(value).basename(value)
-}
-
-function attachmentPathOps(value: string): typeof path.posix | typeof path.win32 {
-  return (/^[A-Za-z]:[\\/]/.test(value) || /^([\\/])\1[^\\/]+[\\/][^\\/]+(?:[\\/]|$)/.test(value))
-    ? path.win32
-    : path.posix
-}
-
-const imageMimeTypeByExtension: Readonly<Record<string, z.infer<typeof agentImageMimeTypeSchema>>> = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp",
-}
-
-const attachmentCandidateSchema = z.discriminatedUnion("kind", [
+const attachmentRefSchema = z.discriminatedUnion("kind", [
   z.object({
-    kind: z.literal("image"),
-    sourceIndex: z.number().int().nonnegative(),
-    mimeType: agentImageMimeTypeSchema,
-    data: binaryAttachmentDataSchema,
-    name: z.string(),
-    size: z.number().int().nonnegative(),
+    version: z.literal(2), attachmentId: z.string().min(1), kind: z.literal("image"), name: z.string(),
+    byteSize: z.number().int().nonnegative(), mimeType: agentImageMimeTypeSchema,
+    previewUrl: z.string(), thumbnailUrl: z.string(), previewByteSize: z.number().int().positive().optional(),
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(), sha256: z.string().length(64),
   }),
   z.object({
-    kind: z.literal("path"),
-    sourceIndex: z.number().int().nonnegative(),
-    path: attachmentPathSchema,
-    entryType: z.enum(["file", "directory"]),
-    name: z.string(),
-    size: z.number().int().nonnegative().optional(),
+    version: z.literal(2), attachmentId: z.string().min(1), kind: z.literal("file"), name: z.string(),
+    byteSize: z.number().int().nonnegative(), mimeType: z.string().optional(), sha256: z.string().length(64),
+  }),
+  z.object({
+    version: z.literal(2), attachmentId: z.string().min(1), kind: z.literal("directory"), name: z.string(),
+    byteSize: z.number().int().nonnegative(), path: attachmentPathSchema,
   }),
 ])
+
+const attachmentCandidateSchema = z.object({
+  sourceIndex: z.number().int().nonnegative(),
+  ref: attachmentRefSchema,
+})
 
 const attachmentSelectionResultSchema = z.object({
   attachments: z.array(attachmentCandidateSchema),
   rejectedCount: z.number().int().nonnegative(),
 })
 
-const chooseAttachmentsRequestSchema = z.object({
+const attachmentContextRequestSchema = projectRequestSchema.extend({
+  draftScopeId: z.string().min(1),
+})
+
+const stageClipboardImageRequestSchema = attachmentContextRequestSchema.extend({
+  name: z.string().trim().min(1).max(255).optional(),
+})
+
+const chooseAttachmentsRequestSchema = attachmentContextRequestSchema.extend({
   kind: attachmentSelectionKindSchema,
 })
 
-const resolveAttachmentPathsRequestSchema = z.object({
+const resolveAttachmentPathsRequestSchema = attachmentContextRequestSchema.extend({
   paths: z.array(attachmentPathSchema).max(MAX_AGENT_ATTACHMENT_RESOLUTION_PATHS),
 })
 
-type AttachmentCandidate = z.infer<typeof attachmentCandidateSchema>
-type AttachmentSelectionResult = z.infer<typeof attachmentSelectionResultSchema>
+const releaseAttachmentsRequestSchema = attachmentContextRequestSchema.extend({
+  attachmentIds: z.array(z.string().min(1)).max(50),
+})
 
-async function attachmentCandidatesFromPaths(
-  paths: readonly string[],
-): Promise<AttachmentSelectionResult> {
-  const attachments: AttachmentCandidate[] = []
+const releaseAttachmentsResultSchema = z.object({
+  releasedCount: z.number().int().nonnegative(),
+})
+
+async function stagePathsForRenderer(
+  agent: AgentRuntimeService,
+  input: { readonly draftScopeId: string; readonly paths: readonly string[] },
+): Promise<z.infer<typeof attachmentSelectionResultSchema>> {
+  const attachments: z.infer<typeof attachmentCandidateSchema>[] = []
   let rejectedCount = 0
-  let imageCount = 0
-  let totalImageBytes = 0
-  let pathCount = 0
-
-  for (const [sourceIndex, rawPath] of paths.entries()) {
+  for (const [sourceIndex, attachmentPath] of input.paths.entries()) {
     try {
-      const normalizedPath = normalizeAbsoluteAttachmentPath(rawPath)
-      const stat = await lstatAttachmentPath(normalizedPath)
-      if (!stat.isFile() && !stat.isDirectory()) {
-        rejectedCount += 1
-        continue
-      }
-      const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
-      const name = attachmentBasename(normalizedPath) || normalizedPath
-      const imageMimeType = stat.isFile()
-        ? imageMimeTypeByExtension[path.extname(normalizedPath).toLowerCase()]
-        : undefined
-      if (imageMimeType) {
-        if (
-          imageCount >= MAX_AGENT_IMAGE_ATTACHMENTS
-          || size <= 0
-          || size > MAX_AGENT_IMAGE_ATTACHMENT_BYTES
-          || totalImageBytes + size > MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES
-        ) {
-          rejectedCount += 1
-          continue
-        }
-        const bytes = await readFile(normalizedPath)
-        if (
-          bytes.byteLength === 0
-          || bytes.byteLength > MAX_AGENT_IMAGE_ATTACHMENT_BYTES
-          || totalImageBytes + bytes.byteLength > MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES
-        ) {
-          rejectedCount += 1
-          continue
-        }
-        const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-        attachments.push({
-          kind: "image",
-          sourceIndex,
-          mimeType: imageMimeType,
-          data,
-          name,
-          size: bytes.byteLength,
-        })
-        imageCount += 1
-        totalImageBytes += bytes.byteLength
-        continue
-      }
-      if (pathCount >= MAX_AGENT_PATH_ATTACHMENTS) {
-        rejectedCount += 1
-        continue
-      }
-      attachments.push({
-        kind: "path",
-        sourceIndex,
-        path: normalizedPath,
-        entryType: stat.isDirectory() ? "directory" : "file",
-        name,
-        ...(stat.isFile() ? { size } : {}),
+      const staged = await agent.stageAttachmentPaths({
+        actor: { kind: "user", id: "renderer" },
+        draftScopeId: input.draftScopeId,
+        paths: [attachmentPath],
       })
-      pathCount += 1
+      const attachment = staged[0]
+      if (!attachment) {
+        rejectedCount += 1
+        continue
+      }
+      attachments.push({ sourceIndex, ref: attachment.ref })
     } catch {
       rejectedCount += 1
     }
   }
-
   return { attachments, rejectedCount }
-}
-
-async function normalizeSendAttachments(
-  attachments: SendRequest["attachments"],
-): Promise<AgentMessage["attachments"]> {
-  if (!attachments || attachments.length === 0) return undefined
-  const pathAttachmentCount = attachments.filter((attachment) => attachment.kind === "path").length
-  if (pathAttachmentCount > MAX_AGENT_PATH_ATTACHMENTS) {
-    throw new Error(`路径附件最多 ${MAX_AGENT_PATH_ATTACHMENTS} 个。`)
-  }
-  const normalized: AgentAttachment[] = []
-  const directoryScanBudget = { remainingEntries: MAX_AGENT_DIRECTORY_SCAN_ENTRIES }
-  let imageCount = 0
-  let totalImageBytes = 0
-  for (const attachment of attachments) {
-    if (attachment.kind === "image") {
-      imageCount += 1
-      if (imageCount > MAX_AGENT_IMAGE_ATTACHMENTS) {
-        throw new Error(`图片附件最多 ${MAX_AGENT_IMAGE_ATTACHMENTS} 张。`)
-      }
-      const byteLength = binaryAttachmentByteLength(attachment.data)
-      if (byteLength > MAX_AGENT_IMAGE_ATTACHMENT_BYTES) {
-        throw new Error("图片附件过大。")
-      }
-      totalImageBytes += byteLength
-      if (totalImageBytes > MAX_AGENT_IMAGE_ATTACHMENT_TOTAL_BYTES) {
-        throw new Error("图片附件总大小过大。")
-      }
-      normalized.push({
-        ...attachment,
-        size: attachment.size ?? byteLength,
-      })
-      continue
-    }
-    const normalizedPath = normalizeAbsoluteAttachmentPath(attachment.path)
-    const stat = await lstatAttachmentPath(normalizedPath)
-    if (stat.isSymbolicLink()) {
-      throw new Error("附件路径不能是符号链接。")
-    }
-    if (!stat.isFile() && !stat.isDirectory()) {
-      throw new Error("附件路径必须是文件或文件夹。")
-    }
-    if (stat.isDirectory()) {
-      await assertDirectoryAttachmentHasNoSymlinks(normalizedPath, directoryScanBudget)
-    }
-    normalized.push({
-      ...attachment,
-      path: normalizedPath,
-      entryType: stat.isDirectory() ? "directory" : "file",
-      name: attachment.name ?? attachmentBasename(normalizedPath),
-      ...(stat.isFile() ? { size: typeof stat.size === "bigint" ? Number(stat.size) : stat.size } : {}),
-    })
-  }
-  return normalized
-}
-
-async function lstatAttachmentPath(attachmentPath: string): Promise<Awaited<ReturnType<typeof lstat>>> {
-  let finalStat: Awaited<ReturnType<typeof lstat>> | undefined
-  for (const currentPath of attachmentPathPrefixes(attachmentPath)) {
-    try {
-      finalStat = await lstat(currentPath)
-    } catch (error) {
-      throw new Error("附件路径不存在。", { cause: error })
-    }
-    if (finalStat.isSymbolicLink()) {
-      throw new Error("附件路径不能是符号链接。")
-    }
-  }
-  if (!finalStat) {
-    throw new Error("附件路径不存在。")
-  }
-  return finalStat
-}
-
-async function assertDirectoryAttachmentHasNoSymlinks(
-  directoryPath: string,
-  budget: { remainingEntries: number },
-): Promise<void> {
-  const pending = [{ directoryPath, depth: 0 }]
-  while (pending.length > 0) {
-    const current = pending.pop()
-    if (!current) continue
-    const entries = await opendir(current.directoryPath)
-    for await (const entry of entries) {
-      if (budget.remainingEntries <= 0) {
-        throw new Error("文件夹附件内容过多，请缩小范围后重试。")
-      }
-      budget.remainingEntries -= 1
-      const entryPath = path.join(current.directoryPath, entry.name)
-      const entryStat = await lstat(entryPath)
-      if (entryStat.isSymbolicLink()) {
-        throw new Error("文件夹附件不能包含符号链接。")
-      }
-      if (entryStat.isDirectory()) {
-        if (current.depth >= MAX_AGENT_DIRECTORY_SCAN_DEPTH) {
-          throw new Error("文件夹附件目录层级过深，请缩小范围后重试。")
-        }
-        pending.push({ directoryPath: entryPath, depth: current.depth + 1 })
-      }
-    }
-  }
-}
-
-function attachmentPathPrefixes(attachmentPath: string): readonly string[] {
-  const ops = attachmentPathOps(attachmentPath)
-  const parsed = ops.parse(attachmentPath)
-  const relative = ops.relative(parsed.root, attachmentPath)
-  if (!relative) return [attachmentPath]
-  const prefixes: string[] = []
-  let currentPath = parsed.root
-  for (const segment of relative.split(/[\\/]+/).filter(Boolean)) {
-    currentPath = currentPath ? ops.join(currentPath, segment) : segment
-    prefixes.push(currentPath)
-  }
-  return prefixes
 }
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
@@ -349,22 +153,10 @@ const sendRequestSchema = projectRequestSchema.extend({
   displayContent: z.string().optional(),
   clientSubmittedAt: z.string().optional(),
   providerId: z.string().min(1).optional(),
-  attachments: z.array(z.discriminatedUnion("kind", [
-    z.object({
-      kind: z.literal("image"),
-      mimeType: agentImageMimeTypeSchema,
-      data: binaryAttachmentDataSchema,
-      name: z.string().optional(),
-      size: z.number().int().nonnegative().optional(),
-    }),
-    z.object({
-      kind: z.literal("path"),
-      path: attachmentPathSchema,
-      entryType: z.enum(["file", "directory"]),
-      name: z.string().optional(),
-      size: z.number().int().nonnegative().optional(),
-    }),
-  ])).optional(),
+  attachments: z.array(z.object({
+    attachmentId: z.string().min(1),
+    order: z.number().int().nonnegative(),
+  })).max(50).optional(),
 }).superRefine((request, ctx) => {
   if (request.content.trim().length > 0) return
   if ((request.attachments?.length ?? 0) > 0) return
@@ -573,7 +365,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
     operationId: "app.agent.operation.choose_attachments",
     request: chooseAttachmentsRequestSchema,
     response: attachmentSelectionResultSchema,
-    handler: async (_ctx, request: z.infer<typeof chooseAttachmentsRequestSchema>) => {
+    handler: async (ctx, request: z.infer<typeof chooseAttachmentsRequestSchema>) => {
       const options: OpenDialogOptions = {
         title: request.kind === "file" ? "添加文件" : "添加文件夹",
         properties: request.kind === "file"
@@ -587,7 +379,11 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       if (result.canceled || result.filePaths.length === 0) {
         return { attachments: [], rejectedCount: 0 }
       }
-      return attachmentCandidatesFromPaths(result.filePaths)
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return stagePathsForRenderer(agent, {
+        draftScopeId: request.draftScopeId,
+        paths: result.filePaths,
+      })
     },
   },
   resolveAttachmentPaths: {
@@ -595,8 +391,38 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
     operationId: "app.agent.operation.resolve_attachment_paths",
     request: resolveAttachmentPathsRequestSchema,
     response: attachmentSelectionResultSchema,
-    handler: async (_ctx, request: z.infer<typeof resolveAttachmentPathsRequestSchema>) =>
-      attachmentCandidatesFromPaths(request.paths),
+    handler: async (ctx, request: z.infer<typeof resolveAttachmentPathsRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return stagePathsForRenderer(agent, request)
+    },
+  },
+  stageClipboardImage: {
+    kind: "invoke",
+    operationId: "app.agent.operation.stage_clipboard_image",
+    request: stageClipboardImageRequestSchema,
+    response: attachmentSelectionResultSchema,
+    handler: async (ctx, request: z.infer<typeof stageClipboardImageRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return clipboardAttachmentService.stage(agent, {
+        draftScopeId: request.draftScopeId,
+        name: request.name,
+      })
+    },
+  },
+  releaseAttachments: {
+    kind: "invoke",
+    operationId: "app.agent.operation.release_attachments",
+    request: releaseAttachmentsRequestSchema,
+    response: releaseAttachmentsResultSchema,
+    handler: async (ctx, request: z.infer<typeof releaseAttachmentsRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      await agent.releaseAttachments({
+        actor: { kind: "user", id: "renderer" },
+        draftScopeId: request.draftScopeId,
+        attachmentIds: request.attachmentIds,
+      })
+      return { releasedCount: request.attachmentIds.length }
+    },
   },
   send: {
     kind: "invoke",
@@ -648,7 +474,12 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           timestamp: t_recv,
         }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
 
-        const attachments = await normalizeSendAttachments(request.attachments)
+        const attachmentIds = [...(request.attachments ?? [])]
+          .sort((left, right) => left.order - right.order)
+          .map((attachment) => attachment.attachmentId)
+        const stagedAttachments = attachmentIds.length > 0
+          ? await agent.resolveStagedAttachments(attachmentIds)
+          : undefined
         const message: AgentMessage = {
           projectId: request.projectId,
           sessionKey,
@@ -658,7 +489,8 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           content: request.content,
           displayContent: request.displayContent,
           providerId: request.providerId,
-          attachments,
+          attachmentRefs: stagedAttachments?.refs,
+          attachmentDraftScopeId: stagedAttachments?.draftScopeId,
           replyCtx: {
             kind: LOCAL_RENDERER_PLATFORM,
             projectId: request.projectId,

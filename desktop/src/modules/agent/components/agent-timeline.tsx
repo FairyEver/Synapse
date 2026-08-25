@@ -57,7 +57,11 @@ function AgentTimeline({
   const latestPendingItemIds = latestPendingTimelineItemIds(items, pendingPermissions)
   const pendingPermissionRequestIds = new Set(pendingPermissions.map((permission) => permission.requestId))
   const displayEntries = timelineDisplayEntries(items)
-  const displayNodes = groupTimelineDisplayEntries(displayEntries, { pendingPermissionRequestIds, nowMs: now })
+  const displayNodes = groupTimelineDisplayEntries(displayEntries, {
+    pendingPermissionRequestIds,
+    nowMs: now,
+    sending,
+  })
   const [processGroupOpenOverrides, setProcessGroupOpenOverrides] = useState<Record<string, boolean>>({})
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
@@ -83,8 +87,8 @@ function AgentTimeline({
             ) : null}
             {displayNodes.map((node) => {
               if (node.kind === "processGroup") {
-                const defaultOpen = displayNodes.length === 1 || defaultProcessGroupOpen(node, { sending })
-                const open = processGroupOpenOverrides[node.id] ?? defaultOpen
+                const overrideKey = `${node.id}:${node.lifecycle}`
+                const open = processGroupOpenOverrides[overrideKey] ?? defaultProcessGroupOpen(node)
                 return (
                   <AgentProcessGroup
                     key={node.id}
@@ -94,7 +98,7 @@ function AgentTimeline({
                     onOpenChange={(nextOpen) =>
                       setProcessGroupOpenOverrides((current) => ({
                         ...current,
-                        [node.id]: nextOpen,
+                        [overrideKey]: nextOpen,
                       }))}
                   >
                     {node.entries.map((entry) => (

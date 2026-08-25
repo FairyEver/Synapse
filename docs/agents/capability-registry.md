@@ -90,6 +90,8 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 | `drive` | 63 | 63 |
 | 合计 | 225 | 223 |
 
+Agent 实验功能可在第三方 Anthropic-compatible 新对话中向 SDK 临时注入进程内 `synapse-tool-router`，其 `search`、`invoke` 仅用于按需发现和调用上表已有的 223 个工具。它们不通过 `/mcp`、Claude Code 注册、capability catalog 或 `tools/list` 公开，因此不计入 capability 或 MCP Tool 数量；公开工具名、schema、URL 和数量均不变。
+
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
 - `app.javascript.script.execute`

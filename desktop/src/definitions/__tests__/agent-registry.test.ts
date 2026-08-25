@@ -24,4 +24,12 @@ describe("agent definition registry", () => {
     ])
     expect(claude?.commands.find((command) => command.name === "mode")?.description).toBe("List modes")
   })
+
+  it("publishes /compact without the removed /compress command", () => {
+    const claude = agentDefinitions.find((definition) => definition.id === "claude-code")
+    const commandNames = claude?.commands.map((command) => command.name) ?? []
+
+    expect(commandNames).toContain("compact")
+    expect(commandNames).not.toContain("compress")
+  })
 })

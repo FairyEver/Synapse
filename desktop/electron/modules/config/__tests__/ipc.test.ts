@@ -580,6 +580,7 @@ function configFixture(agent: Partial<SynapseConfig["agent"]>): SynapseConfig {
     agent: {
       defaultPermissionMode: "default",
       defaultProviderModel: null,
+      experimentalSynapseToolRouterEnabled: false,
       recentSlashSkills: [],
       ...agent,
     },

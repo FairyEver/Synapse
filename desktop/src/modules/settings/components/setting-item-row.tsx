@@ -157,7 +157,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
       label={item.label}
       description={item.description}
       error={validationMessage}
-      controlClassName={item.type === "toggle" ? "flex w-full justify-end md:w-[200px]" : undefined}
+      controlClassName={item.type === "toggle" ? "flex w-full justify-end" : undefined}
     >
       {item.type === "select" ? (
         <Select

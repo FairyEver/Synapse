@@ -100,3 +100,13 @@ export function getMcpToolDomainId(toolName: string): string | null {
   const action = MCP_TOOL_ACTIONS[toolName]
   return action ? getActionDomainId(action) : null
 }
+
+export function getMcpToolCapability(toolName: string) {
+  const action = MCP_TOOL_ACTIONS[toolName]
+  if (!action) return null
+  for (const domain of CAPABILITY_DOMAINS) {
+    const capability = domain.capabilities.find((item) => item.id === action)
+    if (capability) return capability
+  }
+  return null
+}

@@ -52,6 +52,9 @@ describe("LiveConnectionPanel", () => {
     expect(document.body.textContent).toContain("服务器连接")
     expect(document.body.textContent).toContain("已连接")
     expect(findButton("立即重试")).toBeUndefined()
+    const statusRow = document.body.querySelector("[aria-live='polite']")?.parentElement
+    expect(statusRow?.classList.contains("justify-end")).toBe(true)
+    expect(statusRow?.classList.contains("justify-between")).toBe(false)
   })
 
   it("renders reconnecting details without marking the whole field invalid", async () => {

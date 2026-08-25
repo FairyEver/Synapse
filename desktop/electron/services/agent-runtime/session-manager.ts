@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises"
 
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import { resolveModelContextConfiguration } from "../model-capability/catalog"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID, type CCProvider, type ProviderService } from "../provider"
 import {
   AGENT_CANCELLED_MESSAGE,
@@ -21,6 +22,7 @@ import {
   DEFAULT_CLAUDE_SDK_MAX_TURNS,
   type ClaudeSDKPersonaToolPolicy,
   type ClaudeSDKRuntimeSettings,
+  type ClaudeSDKSessionOptions,
 } from "./claude-sdk-session"
 import type {
   AgentSdkAgentDefinitions,
@@ -29,6 +31,12 @@ import type {
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
 import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
+import {
+  SYNAPSE_MCP_TOOL_PREFIX,
+  SYNAPSE_TOOL_ROUTER_INVOKE_TOOL,
+  SYNAPSE_TOOL_ROUTER_SEARCH_TOOL,
+  type SynapseToolRouterExecutor,
+} from "./synapse-tool-router"
 import type { AgentSessionRepository } from "./session-repository"
 import type {
   PendingPermissionState,
@@ -49,6 +57,8 @@ export interface CreateAgentLiveSessionInput {
   readonly sdkSessionId?: string
   readonly env: Record<string, string>
   readonly model?: string
+  readonly modelContext?: ClaudeSDKSessionOptions["modelContext"]
+  readonly contextWindowConfigurationSource?: ClaudeSDKSessionOptions["contextWindowConfigurationSource"]
   readonly mode?: string
   readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
@@ -65,6 +75,8 @@ export interface CreateAgentLiveSessionInput {
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly abortSignal?: AbortSignal
   readonly onConversationTitle?: (title: string) => void | Promise<void>
+  readonly synapseToolRouter?: SynapseToolRouterExecutor
+  readonly routerSubagentToolAccess?: ClaudeSDKSessionOptions["routerSubagentToolAccess"]
 }
 
 export type AgentLiveSessionFactory = (
@@ -103,6 +115,11 @@ export interface SessionManagerDeps {
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
   readonly onConversationTitle?: (conversationId: string, title: string) => void | Promise<void>
   readonly onConversationUpdated?: (conversation: ConversationEntryV1) => void
+  readonly executeSynapseTool?: (
+    toolName: string,
+    args: Record<string, unknown>,
+    context: { readonly conversationId: string; readonly abortSignal?: AbortSignal },
+  ) => unknown | Promise<unknown>
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
@@ -131,6 +148,8 @@ export class SessionManager {
         sdkSessionId: input.sdkSessionId,
         env: input.env,
         model: input.model,
+        modelContext: input.modelContext,
+        contextWindowConfigurationSource: input.contextWindowConfigurationSource,
         mode: input.mode,
         maxTurns: input.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS,
         plugins: input.plugins,
@@ -145,6 +164,14 @@ export class SessionManager {
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
         sdkSettings: input.sdkSettings,
+        synapseToolRouter: input.synapseToolRouter
+          ? {
+              cwd: input.cwd,
+              settingSources: ["user", "project", "local"],
+              executeTool: input.synapseToolRouter,
+            }
+          : undefined,
+        routerSubagentToolAccess: input.routerSubagentToolAccess,
         onConversationTitle: input.onConversationTitle,
         abortSignal: input.abortSignal,
         logger: deps.logger,
@@ -209,10 +236,10 @@ export class SessionManager {
     }
     await this.deps.validateWorkspacePath?.(cwd)
     const attachments = normalizeAgentAttachments(input.message.attachments)
-    const additionalDirectories = directoriesForPathAttachments({
-      cwd,
-      attachments,
-    })
+    const additionalDirectories = mergeAdditionalDirectories(
+      input.message.runtimeAttachmentDirectories ?? [],
+      directoriesForPathAttachments({ cwd, attachments }),
+    )
 
     const modeOverride = input.message.modeOverride ?? input.conversation.agentConfig?.mode
     const providerMatches = input.state.providerId === providerId
@@ -238,14 +265,34 @@ export class SessionManager {
         throw new Error(AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE)
       }
     }
+    const provider = await this.getProviderSafe(providerId)
+    const modelContextConfiguration = resolveModelContextConfiguration({
+      baseUrl: env.ANTHROPIC_BASE_URL
+        ?? (provider?.category === "official" ? "https://api.anthropic.com" : undefined),
+      modelId: env.ANTHROPIC_MODEL,
+      configuredContextWindow: env.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
+    })
+    if (modelContextConfiguration.contextWindowTokens !== undefined) {
+      env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(modelContextConfiguration.contextWindowTokens)
+    }
     const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL
-    const sdkSettings = await this.resolveSdkSettings(providerId, env)
+    const modelContextMatches = input.state.modelContextConfigurationKey
+      === modelContextConfiguration.configurationKey
+    const synapseToolRouterEnabled = input.conversation.agentConfig?.experimentalSynapseToolRouterEnabled === true
+      && isThirdPartyAnthropicCompatibleProvider(provider, env.ANTHROPIC_BASE_URL)
+      && Boolean(this.deps.executeSynapseTool)
+    const synapseToolRouterMatches = input.state.synapseToolRouterEnabled === synapseToolRouterEnabled
+    const sdkSettings = resolveProviderSdkSettings(provider, env)
     const sdkSettingsMatch = sdkSettingsEqual(input.state.sdkSettings, sdkSettings)
     const contributionAgents = await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {})
     const agents = { ...contributionAgents, ...personaConfig.agents }
+    const routedAgents = synapseToolRouterEnabled ? routeAgentDefinitions(agents) : agents
     const activeAgentName = personaConfig.activeAgentName
     const agentDefinitionsHash = personaConfig.definitionsHash
-    const personaSdkToolOptions = sdkToolOptionsForPersonaPolicy(personaConfig.toolPolicy)
+    const personaSdkToolOptions = sdkToolOptionsForPersonaPolicy(
+      personaConfig.toolPolicy,
+      synapseToolRouterEnabled,
+    )
     const personaDefinitionsMatch = (input.state.agentDefinitionsHash ?? "") === agentDefinitionsHash
     const activeAgentMatches = input.state.mainThreadAgentName === activeAgentName
     const canReuseBaseSession =
@@ -255,6 +302,8 @@ export class SessionManager {
       && providerMatches
       && modeMatches
       && modelMatches
+      && modelContextMatches
+      && synapseToolRouterMatches
       && sdkSettingsMatch
     const reusableLiveSession = input.state.liveSession
     if (canReuseBaseSession && personaDefinitionsMatch && activeAgentMatches && reusableLiveSession) {
@@ -293,6 +342,8 @@ export class SessionManager {
         !activeAgentMatches
         || !providerMatches
         || !modelMatches
+        || !modelContextMatches
+        || !synapseToolRouterMatches
         || !sdkSettingsMatch
         || !personaDefinitionsMatch
       ),
@@ -301,13 +352,23 @@ export class SessionManager {
     if (input.state.liveSession) {
       if (
         input.state.liveSession.alive()
-        && (!providerMatches || !modeMatches || !modelMatches || !sdkSettingsMatch || !personaDefinitionsMatch)
+        && (
+          !providerMatches
+          || !modeMatches
+          || !modelMatches
+          || !modelContextMatches
+          || !synapseToolRouterMatches
+          || !sdkSettingsMatch
+          || !personaDefinitionsMatch
+        )
       ) {
         this.deps.logger?.info("Recreating agent live session.", {
           conversationId: input.conversation.id,
           providerChanged: !providerMatches,
           modeChanged: !modeMatches,
           modelChanged: !modelMatches,
+          modelContextChanged: !modelContextMatches,
+          synapseToolRouterChanged: !synapseToolRouterMatches,
           sdkSettingsChanged: !sdkSettingsMatch,
           agentDefinitionsChanged: !personaDefinitionsMatch,
           previousProviderId: input.state.providerId,
@@ -334,6 +395,8 @@ export class SessionManager {
       sdkSessionId,
       env,
       model: env.ANTHROPIC_MODEL,
+      modelContext: modelContextConfiguration.modelContext,
+      contextWindowConfigurationSource: modelContextConfiguration.configurationSource,
       mode: modeOverride,
       maxTurns: DEFAULT_CLAUDE_SDK_MAX_TURNS,
       plugins: await Promise.resolve(this.deps.sdkPlugins?.(input.message, input.conversation) ?? []),
@@ -342,7 +405,7 @@ export class SessionManager {
       ),
       agent: activeAgentName,
       agentDefinitionsHash,
-      agents,
+      agents: routedAgents,
       systemPrompt: personaConfig.systemPrompt,
       ...personaSdkToolOptions,
       personaToolPolicy: personaConfig.toolPolicy,
@@ -351,6 +414,16 @@ export class SessionManager {
       ),
       additionalDirectories,
       sdkSettings,
+      synapseToolRouter: synapseToolRouterEnabled && this.deps.executeSynapseTool
+        ? (toolName, args, abortSignal) => this.deps.executeSynapseTool?.(
+            toolName,
+            args,
+            { conversationId: input.conversation.id, abortSignal },
+          )
+        : undefined,
+      routerSubagentToolAccess: synapseToolRouterEnabled
+        ? subagentToolAccess(agents)
+        : undefined,
       abortSignal: input.abortSignal,
       onConversationTitle: this.deps.onConversationTitle
         ? (title) => this.deps.onConversationTitle?.(input.conversation.id, title)
@@ -359,7 +432,9 @@ export class SessionManager {
     input.state.liveSession = liveSession
     input.state.providerId = providerId
     input.state.effectiveModel = env.ANTHROPIC_MODEL
+    input.state.modelContextConfigurationKey = modelContextConfiguration.configurationKey
     input.state.sdkSettings = sdkSettings
+    input.state.synapseToolRouterEnabled = synapseToolRouterEnabled
     input.state.modeOverride = modeOverride
     input.state.mainThreadAgentName = activeAgentName
     input.state.agentDefinitionsHash = agentDefinitionsHash
@@ -381,20 +456,13 @@ export class SessionManager {
       personaToolPolicyMode: personaConfig.toolPolicy?.mode ?? "all",
       personaAllowedToolCount: personaConfig.toolPolicy?.allowedTools.length ?? 0,
       hasPersonaSystemPrompt: Boolean(personaConfig.systemPrompt),
+      synapseToolRouterEnabled,
     })
     return { liveSession, created: true }
   }
 
   async getActiveProviderId(): Promise<string | undefined> {
     return (await this.deps.providerService.getActiveProvider())?.id
-  }
-
-  private async resolveSdkSettings(
-    providerId: string,
-    env: Record<string, string>,
-  ): Promise<ClaudeSDKRuntimeSettings | undefined> {
-    const provider = await this.getProviderSafe(providerId)
-    return resolveProviderSdkSettings(provider, env)
   }
 
   private async getProviderSafe(providerId: string): Promise<CCProvider | undefined> {
@@ -469,6 +537,7 @@ export class SessionManager {
     state.providerId = undefined
     state.effectiveModel = undefined
     state.modeOverride = undefined
+    state.synapseToolRouterEnabled = undefined
     state.mainThreadAgentName = undefined
     state.agentDefinitionsHash = undefined
     state.additionalDirectories = undefined
@@ -643,7 +712,7 @@ function resolveProviderSdkSettings(
   return undefined
 }
 
-function isThirdPartyAnthropicCompatibleBaseUrl(baseUrl: string | undefined): boolean {
+export function isThirdPartyAnthropicCompatibleBaseUrl(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false
   try {
     const host = new URL(baseUrl).hostname.toLowerCase()
@@ -651,6 +720,14 @@ function isThirdPartyAnthropicCompatibleBaseUrl(baseUrl: string | undefined): bo
   } catch {
     return true
   }
+}
+
+function isThirdPartyAnthropicCompatibleProvider(
+  provider: CCProvider | undefined,
+  baseUrl: string | undefined,
+): boolean {
+  return provider?.category !== "official"
+    && isThirdPartyAnthropicCompatibleBaseUrl(baseUrl)
 }
 
 function isAnthropicFirstPartyHost(host: string): boolean {
@@ -679,10 +756,52 @@ function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {
 
 function sdkToolOptionsForPersonaPolicy(
   policy: ResolvedPersonaSdkConfig["toolPolicy"],
+  synapseToolRouterEnabled = false,
 ): { readonly tools?: string[], readonly disallowedTools?: readonly string[] } {
   if (!policy || policy.mode === "all") return {}
   if (policy.mode === "disabled") return { tools: [], disallowedTools: ["*"] }
-  return { tools: [...policy.allowedTools] }
+  return {
+    tools: synapseToolRouterEnabled
+      ? routeToolAllowlist(policy.allowedTools)
+      : [...policy.allowedTools],
+  }
+}
+
+function routeAgentDefinitions(agents: AgentSdkAgentDefinitions): AgentSdkAgentDefinitions {
+  return Object.fromEntries(Object.entries(agents).map(([name, definition]) => [
+    name,
+    {
+      ...definition,
+      ...(definition.tools ? { tools: routeToolAllowlist(definition.tools) } : {}),
+      ...(definition.disallowedTools
+        ? {
+            disallowedTools: definition.disallowedTools.filter(
+              (toolName) => !toolName.startsWith(SYNAPSE_MCP_TOOL_PREFIX),
+            ),
+          }
+        : {}),
+    },
+  ]))
+}
+
+function routeToolAllowlist(tools: readonly string[]): string[] {
+  const routed = tools.filter((toolName) => !toolName.startsWith(SYNAPSE_MCP_TOOL_PREFIX))
+  if (tools.some((toolName) => toolName.startsWith(SYNAPSE_MCP_TOOL_PREFIX))) {
+    routed.push(SYNAPSE_TOOL_ROUTER_SEARCH_TOOL, SYNAPSE_TOOL_ROUTER_INVOKE_TOOL)
+  }
+  return [...new Set(routed)]
+}
+
+function subagentToolAccess(
+  agents: AgentSdkAgentDefinitions,
+): NonNullable<ClaudeSDKSessionOptions["routerSubagentToolAccess"]> {
+  return Object.fromEntries(Object.entries(agents).map(([name, definition]) => [
+    name,
+    {
+      ...(definition.tools ? { allowedTools: [...definition.tools] } : {}),
+      ...(definition.disallowedTools ? { disallowedTools: [...definition.disallowedTools] } : {}),
+    },
+  ]))
 }
 
 function errorDiagnostic(error: unknown): {

@@ -1,29 +1,42 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  buildClaudeUserMessageContent,
+  buildAgentRuntimeUserContent,
   directoriesForPathAttachments,
   hasUnconfiguredAttachmentDirectories,
 } from "../attachments"
 import type { AgentAttachment } from "../types"
 
 describe("agent runtime attachments", () => {
-  it("builds SDK image blocks before readable text", () => {
-    expect(buildClaudeUserMessageContent("[Image #1]\nhello", [{
-      kind: "image",
-      mimeType: "image/png",
-      data: new Uint8Array([1, 2, 3]),
-    }])).toEqual([
-      {
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: "image/png",
-          data: "AQID",
-        },
-      },
-      { type: "text", text: "[Image #1]\nhello" },
+  it.each([1, 4, 20, 50])("builds an ordered runtime path manifest for %i images", (count) => {
+    const attachments = Array.from({ length: count }, (_, index) => ({
+      kind: "path" as const,
+      path: `/controlled/draft/image-${index + 1}/original.png`,
+      entryType: "image" as const,
+      name: `image-${index + 1}.png`,
+    }))
+
+    const content = buildAgentRuntimeUserContent("分析全部图片", attachments)
+
+    expect(content).toContain("[Image #1]")
+    expect(content).toContain(`[Image #${count}]`)
+    if (count > 1) {
+      expect(content.indexOf("[Image #1]")).toBeLessThan(content.indexOf(`[Image #${count}]`))
+    }
+    expect(content).toContain("分析全部图片")
+    expect(content).not.toContain("base64")
+  })
+
+  it("keeps mixed attachment order and emits paths only in runtime content", () => {
+    const content = buildAgentRuntimeUserContent("请处理", [
+      pathAttachment("/controlled/draft/image/original.png", "image"),
+      pathAttachment("/controlled/draft/report/original.md", "file"),
+      pathAttachment("/Users/liyang/Downloads/sources", "directory"),
     ])
+
+    expect(content).toContain("1. [Image #1]")
+    expect(content).toContain("2. [File #1]")
+    expect(content).toContain("3. [Directory #1]")
   })
 
   it("skips POSIX cwd-internal path attachments", () => {
@@ -131,7 +144,7 @@ describe("agent runtime attachments", () => {
 
 function pathAttachment(
   path: string,
-  entryType: "file" | "directory",
+  entryType: "image" | "file" | "directory",
 ): AgentAttachment {
   return {
     kind: "path",

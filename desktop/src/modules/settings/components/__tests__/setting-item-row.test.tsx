@@ -30,6 +30,24 @@ afterEach(() => {
 })
 
 describe("SettingItemRow", () => {
+  it("aligns toggle controls to the right edge of the control column", () => {
+    const item = createToggleSettingItem()
+    const context = createSettingsContext()
+
+    renderSettingItemRow({
+      item,
+      context,
+      onSave: vi.fn(async () => true),
+      value: false,
+    })
+
+    const toggle = document.body.querySelector("[role='switch']")
+    const control = toggle?.parentElement
+
+    expect(control?.classList.contains("justify-end")).toBe(true)
+    expect(control?.classList.contains("md:w-[200px]")).toBe(false)
+  })
+
   it("rolls draft input back to the current value when save fails", async () => {
     const item = createTextSettingItem()
     const context = createSettingsContext()
@@ -71,6 +89,18 @@ function renderSettingItemRow(props: {
   act(() => {
     root.render(<SettingItemRow {...props} />)
   })
+}
+
+function createToggleSettingItem(): SettingItem {
+  return {
+    key: "agent.experimentalSynapseToolRouterEnabled",
+    label: "Synapse MCP 工具按需加载",
+    description: "只在需要时加载 Synapse MCP 工具。",
+    category: "experimental",
+    type: "toggle",
+    defaultValue: false,
+    scope: "global",
+  }
 }
 
 function createTextSettingItem(): SettingItem {

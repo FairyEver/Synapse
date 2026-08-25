@@ -71,7 +71,8 @@ describe("AgentComposerAttachmentStrip", () => {
     expect(html).toContain('role="listitem"')
     expect(html).toContain("薪资等级.xlsx")
     expect(html).toContain("Excel · 10 KB")
-    expect(html).toContain('title="/Users/liyang/Desktop/薪资等级.xlsx"')
+    expect(html).toContain("1 个附件 · 10 KB")
+    expect(html).toContain('title="薪资等级.xlsx"')
     expect(html).toContain("flex-nowrap")
     expect(html).toContain("w-44")
     expect(html).not.toContain("w-52")
@@ -96,24 +97,22 @@ describe("AgentComposerAttachmentStrip", () => {
   })
 
   it("renders image thumbnails on the left and opens an ordered lightbox group", async () => {
-    const createObjectURL = vi.mocked(URL.createObjectURL)
-      .mockReturnValueOnce("blob:first")
-      .mockReturnValueOnce("blob:screen")
-    const revokeObjectURL = vi.mocked(URL.revokeObjectURL).mockImplementation(() => undefined)
     const onRemove = vi.fn()
     const firstImage = createImageAttachment({
       id: "image-0",
       name: "first.png",
       mimeType: "image/png",
       size: 2,
-      bytes: Uint8Array.from([8, 9]).buffer,
+      previewUrl: "synapse-agent-artifact://local/image-0/preview",
+      thumbnailUrl: "synapse-agent-artifact://local/image-0/thumbnail",
     })
     const image = createImageAttachment({
       id: "image-1",
       name: "screen.png",
       mimeType: "image/png",
       size: 3,
-      bytes: Uint8Array.from([1, 2, 3]).buffer,
+      previewUrl: "synapse-agent-artifact://local/image-1/preview",
+      thumbnailUrl: "synapse-agent-artifact://local/image-1/thumbnail",
     })
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -137,11 +136,13 @@ describe("AgentComposerAttachmentStrip", () => {
     )
     const card = previewButton?.closest('[role="listitem"]')
     const thumbnail = previewButton?.querySelector("img")
-    expect(createObjectURL).toHaveBeenCalledTimes(2)
     expect(card?.className).toContain("w-52")
     expect(previewButton?.className).toContain("size-10")
-    expect(thumbnail?.getAttribute("src")).toBe("blob:screen")
+    expect(thumbnail?.getAttribute("src")).toBe("synapse-agent-artifact://local/image-1/thumbnail")
     expect(thumbnail?.className).toContain("object-cover")
+    expect(thumbnail?.getAttribute("loading")).toBe("lazy")
+    expect(thumbnail?.getAttribute("decoding")).toBe("async")
+    expect(container.textContent).toContain("2 张图片 · 5 B")
 
     await act(async () => previewButton?.click())
     expect(track).toHaveBeenCalledWith({
@@ -150,7 +151,7 @@ describe("AgentComposerAttachmentStrip", () => {
       action: "click",
     })
     expect(document.querySelector("[data-image-lightbox]")?.textContent).toContain("2 / 2")
-    expect(document.querySelector("[data-image-lightbox-active]")?.getAttribute("src")).toBe("blob:screen")
+    expect(document.querySelector("[data-image-lightbox-active]")?.getAttribute("src")).toBe("synapse-agent-artifact://local/image-1/preview")
     expect(previewButton?.disabled).toBe(false)
 
     await act(async () => removeButton?.click())
@@ -164,8 +165,24 @@ describe("AgentComposerAttachmentStrip", () => {
         />,
       )
     })
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:first")
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:screen")
+  })
+
+  it("summarizes 50 image references without rendering original image URLs", () => {
+    const attachments = Array.from({ length: 50 }, (_, index) => createImageAttachment({
+      id: `image-${index}`,
+      name: `image-${index}.png`,
+      mimeType: "image/png",
+      size: 1024,
+      previewUrl: `synapse-agent-artifact://local/image-${index}/preview`,
+      thumbnailUrl: `synapse-agent-artifact://local/image-${index}/thumbnail`,
+    }))
+    const html = renderToStaticMarkup(
+      <AgentComposerAttachmentStrip attachments={attachments} onRemove={vi.fn()} />,
+    )
+
+    expect(html).toContain("50 张图片 · 50 KB")
+    expect(html.match(/loading="lazy"/g)).toHaveLength(50)
+    expect(html).not.toContain("/preview")
   })
 
   it("shows directional controls only while more attachments remain", async () => {
