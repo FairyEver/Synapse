@@ -1,5 +1,50 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 2 轮审查发现
+
+- 基线为 `d779bee0d90c252a904e4d7eb076835795584060`，工作树干净；固定比较范围 `db189074...HEAD`。
+- 附件主链已确认 Renderer send 只提交正文、`displayContent` 和有序 `{ attachmentId, order }`；主进程由 metadata 解析受控路径，Claude SDK 仅收到一次 `inputQueue.push` 主消息，没有 Base64 图片块、隐藏 query、Provider/模型附件分支。
+- 确定缺陷 1（红绿灯完成）：`AgentComposer` 原先在组件生命周期内复用同一 draft scope，SDK live session 又累积该根授权；现已在每个提交批次立即轮换 scope，失败恢复原 scope，附件轮结束后关闭当前 live session 并按 SDK session id 恢复。
+- 确定缺陷 2（红绿灯完成）：目录 v2 ref 原本携带真实 `sourcePath`，会经选择 IPC、草稿 title、history、timeline 和 export 暴露；现仅主进程 metadata 保存真实目录，Renderer/旧历史投影和导出只保留名称。
+- 确定缺陷 3（红绿灯完成）：`AgentArtifactStore.retryOrphanCleanup` 原先拿当前项目会话集合清理全局 artifact 行，初始化其它项目服务会误删仍有会话归属的 committed 附件。50 图实机会话的元数据与受控文件被稳定误删，数据库仍保留会话，是直接现场证据；现先按 `projectId` 过滤再回收。修复后另发 1 图，切换其它项目再返回，历史缩略图与灯箱仍可用。
+- 确定缺陷 4（红绿灯完成）：IPC 对选择路径逐项暂存，后项触发配额时会保留本次前项。现使用明确 quota error，配额失败会释放本次调用已经暂存的全部 id；普通坏路径仍保持逐项拒绝。
+- 目录符号链接检查在选择和运行时各执行一次，并对最终文件使用 `O_NOFOLLOW`；仍存在目录验证完成到 SDK Read 之间无法持有目录句柄的外部替换窗口，这是路径授权模型的剩余平台风险，需要结合修复方案避免扩大授权面。
+- Slash 路由审查暂未发现误匹配：只发布 `/compact`，旧 `/compress` 进入未知命令错误；MRU 只在 `chat.sendMessage` 返回成功且无 `result.error` 后更新，失败队列保留原消息。
+- 本轮剩余风险有四项：macOS AX/sky 未能完成 Finder 拖放；目录在验证后到 SDK Read 前仍有外部替换窗口；当前项目没有知识库 Slash 候选；未实际执行付费 `/compact`。另因旧跨项目清理已删除首轮 50 图受控文件，修复后的跨项目历史恢复只用 1 图实证，不把旧 50 图历史宣称为通过。
+
+### 第 2 轮附件与 Slash 修改点矩阵（26 项）
+
+固定提交范围为 `a41ba9a8`、`5c2ac491`、`d779bee0` 与本轮未提交修复；下表覆盖该范围内全部附件/Slash 生产改动，测试文件不重复列入“代码”列。
+
+| # | 修改点 | 代码 / 提交 | 用户行为 | 自动化 | 实机 | 结论 |
+|---:|---|---|---|---|---|---|
+| 1 | v2 引用、bridge 与 preload | `agent-attachment.ts`、`agent.ts`、`bridge.ts`、`preload.ts`；`5c2ac491` | Renderer 仅拿 metadata/id | type、preload、IPC schema | 选择 1/4/9/20/50 图 | 通过；目录 path 本轮移除 |
+| 2 | 选择/拖放路径 IPC | `ipc-messages.ts`、`ipc-shared.ts`、`ipc-tools.ts`；两提交 | 有序返回、坏路径逐项拒绝 | IPC 59 项相关覆盖 | 文件/文件夹/选择/拖放 | 拖放受 AX 限制；其余通过 |
+| 3 | 系统剪贴板图片 | `clipboard-attachment-service.ts`；`5c2ac491` | 粘贴图片进入暂存 | IPC/Composer | Finder 复制 9/20/50 图后粘贴 | 通过 |
+| 4 | 魔数、MIME、尺寸与原子写 | `attachment-staging-service.ts`；`5c2ac491` | 伪造或空图不入草稿 | staging | PNG 数字素材；JPEG 未单独实机选择 | 自动化通过 |
+| 5 | 50 图/字节/项目/全局配额 | 同上；`5c2ac491`、本轮 | 超限整批拒绝 | staging + 新 IPC quota 红灯 | 50 图完整添加 | 本轮修复部分提交 |
+| 6 | 文件受控副本 | 同上 | 文件只授权自身副本 | staging/runtime | TXT 32 B 添加并清除 | 通过 |
+| 7 | 文件夹精确授权与 symlink | 同上 | 只授权所选目录 | staging/runtime | 文件夹 picker | 安全校验通过；TOCTOU 留平台风险 |
+| 8 | draft/commit/rollback/release | `attachment-staging-service.ts`、`agent-runtime-service.ts` | 失败可重试、取消可回滚 | staging/router | 草稿逐组清空 | 通过 |
+| 9 | 每批 scope 与授权撤销 | `agent-composer.tsx`、`agent-conversation-workspace.tsx`、`conversation-router.ts`；本轮 | 后轮不能访问旧草稿根 | Composer/router 红绿灯 | 1 图修复后真实发送 | 本轮修复 |
+| 10 | 跨项目孤儿回收 | `artifact-store.ts`、`index.ts`；`a41ba9a8`/本轮 | 切项目不丢历史图 | artifact-store 红绿灯 | Projects_Js↔Synapse 后仍可预览 | 本轮修复 |
+| 11 | 路径型 runtime 清单 | `attachments.ts`、`types.ts`；`5c2ac491` | 原图由 Read 按需读 | attachments/session | 工具输入显示附件标签 | 通过 |
+| 12 | 单主 query、Provider 中立 | `claude-sdk-session.ts`、`session-manager.ts`；`5c2ac491` | Kimi/Qwen/自定义同链 | provider 参数化/session | 百炼 qwen3.7-plus 两次 | 通过；无白名单/附件分支 |
+| 13 | 发送路由与顺序 | `conversation-router.ts`；两提交 | 一次发送一次 query，保持 order | router | 50 图第 1 张读出 01 | 通过 |
+| 14 | 会话创建/恢复生命周期 | `session-lifecycle.ts`、`session-repository.ts` | 新旧会话一致恢复 | repository/router | 切换历史会话 | 修复后新附件恢复通过 |
+| 15 | history 附件 metadata | `attachments.ts`、`conversation-router.ts` | 正文与附件分离 | router/timeline | 正文无占位/路径 | 通过 |
+| 16 | timeline/transcript 投影 | `agent-timeline.ts`、`agent-transcript.ts` | Read 路径显示稳定标签 | timeline/transcript | `Read {file_path:[Synapse attachment…]}` | 通过 |
+| 17 | 导出与脱敏 | `conversation-export-service.ts`、`ipc-messages.ts` | ZIP 无 OS path/Base64/原图 | export/IPC | 导出 23 文件并全文检索 | 通过：原路径/Base64 0 文件 |
+| 18 | Composer 添加/粘贴/删除 | `agent-composer.tsx`、`agent-composer-input-box.tsx`、`use-agent-attachment-actions.ts` | 文件/目录/图片可管理 | Composer | 各组添加后删除草稿 | 通过 |
+| 19 | 乐观消息与失败队列 | `use-chat-connection.ts`、`use-agent-chat.ts` | 失败不吞消息/附件 | workspace/pending/chat | 未制造真实付费失败 | 自动化通过 |
+| 20 | 附件条布局 | `agent-composer-attachment-strip.tsx`、`agent-composer-image-thumbnail.tsx` | 顶部/左右留白一致 | strip/Composer | 各数量草稿观察 | 通过 |
+| 21 | 消息气泡与附件内容 | `agent-message-attachments.tsx`、`agent-message-bubble.tsx`、`agent-message-event.tsx`、`agent-message-toolbar.tsx` | 正文无自动清单，附件独立显示 | row/bubble/timeline | 50 图消息正文与附件分离 | 通过 |
+| 22 | 九宫格与灯箱 | `agent-message-attachments.tsx`、`agent-tool-image-artifacts.tsx` | 最多 9 缩略图，可看全部 | row/timeline | `+41`、9/50、50/50 | 通过；原 50 图后来被红灯误删 |
+| 23 | Slash 数据源与去重 | `command-registry.ts`、`skill-registry.ts`、`slash-menu.ts` | Synapse Skill/其它 Skill/KB/命令分组 | registry/slash | 当前项目显示三类；无 KB 候选 | 通过；KB 当前项目不适用 |
+| 24 | `/compact` 与 `/compress` | `command-router.ts`、`command-registry.ts`、`conversation-router.ts` | 仅 `/compact` 可路由 | command/router | `/compact` 唯一，`/compress` 0 | 通过；未执行付费 compact |
+| 25 | Slash 搜索、键盘、鼠标与关闭 | `agent-slash-menu.tsx`、`agent-composer.tsx` | 上下选择/确认/Escape/点击 | composer/slash menu | Down/Return、Escape、鼠标点击 | 通过 |
+| 26 | 最近使用成功门禁 | `agent-conversation-workspace.tsx` | 成功后更新；失败保留队列 | workspace/MRU/pending | 未实际发送 Skill，配置未改 | 自动化通过；实机验证无副作用 |
+
 ## 2026-08-26 阶段 23 第 1 轮现场
 
 - 起始时间 `2026-08-26 01:10:00 CST`；HEAD `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`；当前分支 `main`，相对 `origin/main` ahead 6。

@@ -108,7 +108,7 @@ function AgentComposerAttachmentStrip({
           <div ref={contentRef} className="flex w-max min-w-full flex-nowrap gap-2">
             {attachments.map((attachment, index) => {
               const displayName = attachmentDisplayName(attachments, attachment, index)
-              const title = attachment.kind === "directory" ? attachment.path : attachment.name
+              const title = attachment.name
               return (
                 <div
                   key={attachment.attachmentId}

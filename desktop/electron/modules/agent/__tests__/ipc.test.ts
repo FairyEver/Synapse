@@ -35,6 +35,7 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
+import { AgentAttachmentQuotaError } from "../../../services/agent-runtime/attachment-staging-service"
 import { AGENT_CONVERSATION_WINDOW_SERVICE_ID } from "../../../services/agent-conversation-window-service"
 import { defaultKnowledgeBaseUserDataPath } from "../../../services/knowledge-base/managed-path"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
@@ -163,9 +164,10 @@ describe("agentIpcModule", () => {
         properties: ["openDirectory", "multiSelections"],
       })
       expect(result.attachments).toEqual([
-        expect.objectContaining({ sourceIndex: 0, ref: expect.objectContaining({ kind: "directory", path: first }) }),
-        expect.objectContaining({ sourceIndex: 1, ref: expect.objectContaining({ kind: "directory", path: second }) }),
+        expect.objectContaining({ sourceIndex: 0, ref: expect.objectContaining({ kind: "directory", name: "first" }) }),
+        expect.objectContaining({ sourceIndex: 1, ref: expect.objectContaining({ kind: "directory", name: "second" }) }),
       ])
+      expect(JSON.stringify(result)).not.toContain(root)
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
@@ -203,13 +205,38 @@ describe("agentIpcModule", () => {
       expect(result).toEqual({
         attachments: [
           expect.objectContaining({ sourceIndex: 0, ref: expect.objectContaining({ kind: "file" }) }),
-          expect.objectContaining({ sourceIndex: 2, ref: expect.objectContaining({ kind: "directory", path: directory }) }),
+          expect.objectContaining({ sourceIndex: 2, ref: expect.objectContaining({ kind: "directory", name: "materials" }) }),
         ],
         rejectedCount: 3,
       })
+      expect(JSON.stringify(result)).not.toContain(directory)
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }
+  })
+
+  it("rolls back attachments staged by one path request when that request exceeds quota", async () => {
+    const firstRef = testImageRef("image-1", "image-1.png")
+    const stageAttachmentPaths = vi.fn()
+      .mockResolvedValueOnce([{ ref: firstRef }])
+      .mockRejectedValueOnce(new AgentAttachmentQuotaError("图片附件最多 50 张。"))
+    const releaseAttachments = vi.fn().mockResolvedValue(undefined)
+
+    await expect(createHarness({
+      agent: { releaseAttachments, stageAttachmentPaths },
+    }).invoke(
+      "synapse:app:agent:operation:resolve_attachment_paths",
+      {
+        projectId: "project-1",
+        draftScopeId: "draft-1",
+        paths: ["/tmp/image-1.png", "/tmp/image-2.png"],
+      },
+    )).resolves.toEqual({ attachments: [], rejectedCount: 2 })
+    expect(releaseAttachments).toHaveBeenCalledWith({
+      actor: { kind: "user", id: "renderer" },
+      draftScopeId: "draft-1",
+      attachmentIds: ["image-1"],
+    })
   })
 
   it("stages a clipboard image through the Agent attachment service", async () => {

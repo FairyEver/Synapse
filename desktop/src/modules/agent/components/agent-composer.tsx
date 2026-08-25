@@ -56,7 +56,7 @@ import {
 const SINGLE_LINE_HEIGHT = 36
 const MAX_TEXTAREA_HEIGHT = 160
 const logger = createRendererLogger("agent")
-type RestoreAttachments = () => void
+type RestoreAttachments = (() => void) & { complete?: () => void }
 type AcceptAttachments = () => RestoreAttachments
 
 function AgentComposer({
@@ -159,6 +159,8 @@ function AgentComposer({
   const [attachments, setAttachments] = useState<AgentDraftAttachment[]>([])
   const [dropActive, setDropActive] = useState(false)
   const [choosingAttachments, setChoosingAttachments] = useState(false)
+  const [attachmentSubmissionPending, setAttachmentSubmissionPending] = useState(false)
+  const attachmentSubmissionPendingRef = useRef(false)
   const draftScopeIdRef = useRef(createDraftScopeId())
   const attachmentActions = useAgentAttachmentActions(projectId)
   const attachmentsRef = useRef<readonly AgentDraftAttachment[]>([])
@@ -205,18 +207,39 @@ function AgentComposer({
   }
 
   const acceptSubmittedAttachments = (submittedAttachments: readonly AgentDraftAttachment[]) => {
+    if (submittedAttachments.length === 0) {
+      const restore = (() => undefined) as RestoreAttachments
+      restore.complete = () => undefined
+      return restore
+    }
+    const submittedDraftScopeId = draftScopeIdRef.current
+    draftScopeIdRef.current = createDraftScopeId()
+    attachmentSubmissionPendingRef.current = true
+    setAttachmentSubmissionPending(true)
     const submittedIds = new Set(submittedAttachments.map((attachment) => attachment.attachmentId))
     setAttachments((current) => current.filter((attachment) => !submittedIds.has(attachment.attachmentId)))
-    let restored = false
-    return () => {
-      if (restored) return
-      restored = true
+    let completed = false
+    const finish = () => {
+      attachmentSubmissionPendingRef.current = false
+      setAttachmentSubmissionPending(false)
+    }
+    const restore = (() => {
+      if (completed) return
+      completed = true
+      draftScopeIdRef.current = submittedDraftScopeId
       setAttachments((current) => {
         const currentIds = new Set(current.map((attachment) => attachment.attachmentId))
         const missing = submittedAttachments.filter((attachment) => !currentIds.has(attachment.attachmentId))
         return missing.length === 0 ? current : [...current, ...missing]
       })
+      finish()
+    }) as RestoreAttachments
+    restore.complete = () => {
+      if (completed) return
+      completed = true
+      finish()
     }
+    return restore
   }
 
   const selectPermissionMode = (mode: SynapseAgentPermissionMode) => {
@@ -285,7 +308,7 @@ function AgentComposer({
       })
     }
     const handleDragOver = (event: globalThis.DragEvent) => {
-      if (disabled || !hasFileTransfer(event.dataTransfer)) return
+      if (disabled || attachmentSubmissionPendingRef.current || !hasFileTransfer(event.dataTransfer)) return
       event.preventDefault()
       event.dataTransfer!.dropEffect = "copy"
       setDropActive(true)
@@ -296,7 +319,7 @@ function AgentComposer({
       setDropActive(false)
     }
     const handleDrop = (event: globalThis.DragEvent) => {
-      if (disabled || !hasFileTransfer(event.dataTransfer)) return
+      if (disabled || attachmentSubmissionPendingRef.current || !hasFileTransfer(event.dataTransfer)) return
       const files = Array.from(event.dataTransfer?.files ?? [])
       if (files.length === 0) return
       event.preventDefault()
@@ -315,7 +338,7 @@ function AgentComposer({
   }, [attachmentActions, disabled, dropTargetRef])
 
   const chooseAttachments = async (kind: "file" | "directory") => {
-    if (choosingAttachments) return
+    if (choosingAttachments || attachmentSubmissionPendingRef.current) return
     setChoosingAttachments(true)
     try {
       const result = await attachmentActions.choose(draftScopeIdRef.current, kind)
@@ -455,6 +478,7 @@ function AgentComposer({
 
     if (files.length > 0) {
       event.preventDefault()
+      if (disabled || attachmentSubmissionPendingRef.current) return
       const hasPath = files.some(attachmentActions.hasDroppedFilePath)
       const hasClipboardImage = files.some((file) => file.type.startsWith("image/"))
       const resultPromise = hasPath || !hasClipboardImage
@@ -607,7 +631,7 @@ function AgentComposer({
           leadingActions={(
             <>
               <AgentAttachmentMenu
-                disabled={disabled || choosingAttachments}
+                disabled={disabled || choosingAttachments || attachmentSubmissionPending}
                 onChoose={(kind) => void chooseAttachments(kind)}
               />
               <QuickInputMenu

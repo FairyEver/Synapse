@@ -2021,11 +2021,12 @@ describe("ConversationRouter", () => {
       }),
       rollbackCommit,
     } as unknown as AttachmentStagingService
+    const session = new ScriptedSession([
+      { type: "error", message: "SDK failed", sdkSessionId: "sdk-1" },
+    ], "sdk-1")
     const { router } = createRouter({
       attachmentStagingService,
-      session: new ScriptedSession([
-        { type: "error", message: "SDK failed", sdkSessionId: "sdk-1" },
-      ], "sdk-1"),
+      session,
     })
 
     const result = await router.send({
@@ -2041,6 +2042,7 @@ describe("ConversationRouter", () => {
       attachmentIds: ["attachment-1"],
       conversationId: result.conversationId,
     }))
+    expect(session.isClosed).toBe(true)
   })
 
   it("persists path-only image diagnostics without image bytes", async () => {
@@ -3256,6 +3258,10 @@ class ScriptedSession implements AgentLiveSession {
 
   alive(): boolean {
     return !this.closed && this.events.length > 0
+  }
+
+  get isClosed(): boolean {
+    return this.closed
   }
 
   async close(): Promise<void> {

@@ -412,8 +412,9 @@ describe("AttachmentStagingService", () => {
       expect(staged[0]?.ref).not.toHaveProperty("path")
       expect(staged[1]?.ref).toEqual(expect.objectContaining({
         kind: "directory",
-        path: sourceDirectory,
+        name: "materials",
       }))
+      expect(staged[1]?.ref).not.toHaveProperty("path")
       const fileRow = await metadata.get("attachment_1")
       if (!fileRow || fileRow.kind === "directory") throw new Error("Expected a stored file attachment")
       expect(await readFile(fileRow.storagePath, "utf8")).toBe("report")

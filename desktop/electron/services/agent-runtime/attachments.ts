@@ -122,7 +122,7 @@ export function userMessagePresentationHistoryMetadataFromRefs(
     }
     return {
       kind: "path",
-      path: attachment.kind === "directory" ? attachment.path : attachment.name,
+      path: attachment.name,
       entryType: attachment.kind,
       name: attachment.name,
       byteSize: attachment.byteSize,

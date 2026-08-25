@@ -719,7 +719,7 @@ function messageAttachmentsMetadata(
     ) {
       attachments.push({
         kind: "path",
-        path: record.path,
+        path: record.name,
         entryType: record.entryType,
         name: record.name,
         ...(typeof record.byteSize === "number" ? { byteSize: record.byteSize } : {}),

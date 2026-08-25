@@ -233,6 +233,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       })
       try {
         await agentArtifactStore.retryOrphanCleanup(
+          ctx.projectId,
           new Set((await conversations.list()).map((conversation) => conversation.id)),
         )
       } catch (error) {

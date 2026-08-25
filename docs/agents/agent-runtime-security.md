@@ -12,8 +12,10 @@
 - Agent 用户附件只在主进程受控目录暂存；Renderer 与发送 IPC 只携带版本化 attachment id/metadata，history 只保存用户正文与结构化附件元数据，不得携带原始字节、Base64、data URL 或受控绝对路径。
 - 图片只通过“受控原图路径 + Read”进入既有主 query。不得创建图片 content block、附件子 query、隐藏批次会话、摘要回灌、附件 MCP 或读取完整性循环。
 - 附件处理不得读取 Provider 类别、模型名称、base URL 或自定义能力覆盖，不按白名单启停。百炼 Kimi、Qwen 和自定义兼容模型使用同一路径清单；模型或 Provider 拒绝时保留原生错误。
-- 发送时只接受本轮有序 attachmentId，并同时校验 project、draft、conversation、turn 和所有权；不得接受 Renderer 提供的路径或字节。路径解析不得读取图片原始字节。
-- 同一草稿下的受控附件根目录作为一个精确 `additionalDirectories` 授权。单独选择的图片和文件不得授权原始父目录；只有用户明确选择的文件夹才可授权该精确真实路径。
+- 发送时只接受本轮有序 attachmentId，并同时校验 project、draft、conversation、turn 和所有权；不得接受 Renderer 提供的路径或字节。文件夹选择结果只向 Renderer 返回名称和 attachmentId，真实目录只保存在主进程元数据中；旧历史路径在投影到 Renderer 和导出前收敛为显示名称。路径解析不得读取图片原始字节。
+- 同一草稿下的受控附件根目录作为一个精确 `additionalDirectories` 授权。每个已提交附件批次必须轮换草稿范围；附件轮结束后必须关闭对应 live session，下一轮按 SDK session id 恢复，避免旧草稿目录继续留在进程授权中。单独选择的图片和文件不得授权原始父目录；只有用户明确选择的文件夹才可授权该精确真实路径。
+- 同一次选择或拖放遇到图片数量、单轮、项目或全局空间配额时，必须释放该次调用已经暂存的全部附件，不得向 Renderer 返回部分批次。其它无效路径仍可按项拒绝，不能破坏同批次有效项。
+- 附件孤儿回收必须按当前 `projectId` 过滤后再比较会话集合；任何项目服务都不得用本项目会话列表清理其它项目的 committed 附件。
 - Persona 显式禁用 Read 时继续禁用；runtime 不强制启用工具，也不以此判断模型能力。模型是否调用 Read、调用次数和是否读完不属于 Synapse 的完成条件。
 - 运行时附件清单不写入 history。timeline、权限卡片、工具事件、日志和导出必须把受控附件路径投影为稳定附件标签；存在附件上下文时不得持久化可能拆分路径的流式 `input_json_delta` 正文。
 - 附件诊断只允许记录类型和计数；不得记录 attachmentId、名称、路径、哈希、运行时清单、工具输入或模型输出。路径链路不登记为公开 capability/MCP。

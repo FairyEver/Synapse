@@ -529,6 +529,34 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("projects stored attachment paths to display names before renderer history", () => {
+    const restored = historyRecordToTimelineItem("session-1", {
+      role: "user",
+      content: "分析资料",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      metadata: {
+        userMessagePresentation: { version: 1, content: "分析资料" },
+        attachments: [{
+          kind: "path",
+          path: "/Users/liyang/Downloads/private-materials",
+          entryType: "directory",
+          name: "private-materials",
+          byteSize: 0,
+        }],
+      },
+    }, 0, "claude")
+
+    expect(restored).toEqual(expect.objectContaining({
+      kind: "message",
+      attachments: [expect.objectContaining({
+        kind: "path",
+        path: "private-materials",
+        name: "private-materials",
+      })],
+    }))
+    expect(JSON.stringify(restored)).not.toContain("/Users/liyang/Downloads")
+  })
+
   it("preserves stored assistant usage metadata", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "assistant",

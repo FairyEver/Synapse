@@ -67,7 +67,6 @@ export function createPathAttachment(input: {
       version: AGENT_ATTACHMENT_CONTRACT_VERSION,
       kind: "directory",
       attachmentId,
-      path: input.path,
       name,
       byteSize: input.byteSize ?? input.size ?? 0,
     }
@@ -100,7 +99,7 @@ export function formatDraftAttachmentsForMessage(
   if (files.length > 0) lines.push("粘贴文件:", ...files.map((item) => item.name))
   if (folders.length > 0) {
     if (lines.length > 0) lines.push("")
-    lines.push("粘贴文件夹:", ...folders.map((item) => item.path))
+    lines.push("粘贴文件夹:", ...folders.map((item) => item.name))
   }
   const trimmed = text.trim()
   if (trimmed) {

@@ -1242,7 +1242,7 @@ function optimisticMessageAttachments(
     if (attachment.kind !== "image") {
       return {
         kind: "path",
-        path: attachment.kind === "directory" ? attachment.path : attachment.name,
+        path: attachment.name,
         entryType: attachment.kind,
         name: attachment.name,
         byteSize: attachment.byteSize,

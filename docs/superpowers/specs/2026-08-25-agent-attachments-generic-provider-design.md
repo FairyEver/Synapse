@@ -43,11 +43,11 @@ Renderer 仅持有并发送 attachmentId
 
 ## 硬性规则
 
-- 发送 IPC 只接受有序 `attachmentId`，不接受 Renderer 提供的路径或字节。
+- 发送 IPC 只接受有序 `attachmentId`，不接受 Renderer 提供的路径或字节；文件夹选择响应也只返回 attachmentId、名称和展示元数据，真实目录只留在主进程。
 - `content` 和 `displayContent` 都只表达用户实际输入，不生成 `[Image #N]` 或路径正文。
 - 主进程必须一次性校验附件的 project、draft、conversation、turn 和所有权，再解析运行时路径。
 - 图片和普通文件只使用受控副本；不得授权其原始父目录。
-- 同一草稿的受控附件根目录作为一个精确 `additionalDirectories` 授权。
+- 同一草稿的受控附件根目录作为一个精确 `additionalDirectories` 授权；每个已提交批次使用独立草稿范围。
 - 用户明确选择的文件夹仍授权该文件夹的真实路径；普通消息文本不能产生目录授权。
 - 路径清单只发送给既有主 query；每个用户轮次不得创建附件专用 query。
 - Persona 显式禁用 Read 时继续禁用；Synapse 不强制开启工具，也不据此判断模型能力。
@@ -108,7 +108,7 @@ interface AgentRuntimeAttachment {
 - 项目内部路径：沿用 SDK 已有工作目录权限。
 - 多个目录按现有规范去重并折叠被父目录覆盖的子目录。
 
-新建 SDK 会话在 query options 中获得完整目录集合；复用会话在发送前动态追加本轮缺失目录。只有 SDK 授权成功后才能投递消息。
+新建 SDK 会话在 query options 中获得完整目录集合；复用会话在发送前动态追加本轮缺失目录。只有 SDK 授权成功后才能投递消息。附件轮结束后关闭当前 live session，下一轮通过 SDK session id 恢复，使本轮临时目录授权不会保留到后续轮次。
 
 ### 4. 主会话消息
 
@@ -138,6 +138,7 @@ SDK 收到一个字符串消息。路径清单放在运行时专用区块中，�
 - 旧历史不迁移；现有兼容读取和旧 artifact 清理继续保留。
 - 时间线继续用结构化附件渲染缩略图、灯箱、文件名和用户明确选择的文件夹。多图消息使用紧凑九宫格，最多渲染 9 个缩略图；灯箱仍包含全部图片。
 - 受控绝对路径不得写入 history metadata、附件诊断、日志或导出。
+- 用户选择的真实文件夹路径不得返回 Renderer；旧历史中的路径在 history/timeline/export 投影前只保留显示名称。
 - SDK 的 Read 权限卡片、tool use、tool result、assistant payload 和 stream event 在进入时间线前，将受控路径投影为 `[Synapse attachment: <name>]`。
 - 流式 `input_json_delta` 可能拆分路径，存在附件上下文时不持久化其 partial JSON；完整 tool-use 输入到达后再输出投影结果。
 - 实际传给 SDK 权限决策和工具执行的 input 保持原始路径，展示投影不得回流成运行参数。
@@ -153,9 +154,12 @@ SDK 收到一个字符串消息。路径清单放在运行时专用区块中，�
 ## 生命周期
 
 - 草稿移除附件时释放对应暂存数据。
+- 附件批次提交后立即轮换草稿范围；发送失败恢复原范围与附件，期间不接受新的附件选择、粘贴或拖入，避免跨范围混合。
 - 发送成功后附件与 conversation/turn 绑定，供历史预览和后续清理。
 - 会话删除时清理其受控附件和 artifact。
 - 超时草稿、孤儿文件和旧历史 artifact 使用现有恢复与垃圾回收逻辑。
+- 孤儿回收先限定当前项目，再与该项目会话集合比较；不得跨项目删除仍有会话归属的 committed 附件。
+- 单次选择或拖放触发任一配额失败时原子回滚该次已暂存项，不返回部分附件；无效路径的逐项拒绝语义保持不变。
 
 ## 验收
 

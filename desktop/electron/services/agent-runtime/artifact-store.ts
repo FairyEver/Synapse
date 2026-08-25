@@ -119,8 +119,11 @@ export class AgentArtifactStore {
     }
   }
 
-  async retryOrphanCleanup(existingConversationIds: ReadonlySet<string>): Promise<void> {
-    const artifacts = await this.deps.artifacts.list()
+  async retryOrphanCleanup(
+    projectId: string,
+    existingConversationIds: ReadonlySet<string>,
+  ): Promise<void> {
+    const artifacts = await this.deps.artifacts.list({ projectId } as Partial<AgentArtifactEntryV1>)
     const orphanConversationIds = new Set(
       artifacts
         .filter(hasCommittedConversation)

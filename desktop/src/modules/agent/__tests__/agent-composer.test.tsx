@@ -242,7 +242,77 @@ describe("AgentComposer", () => {
     }))
     expect(container.textContent).toContain("materials")
     expect(container.textContent).toContain("文件夹")
+    expect(container.innerHTML).not.toContain("/Users/liyang/Downloads/materials")
     expect(container.querySelector("textarea")).toBe(document.activeElement)
+  })
+
+  it("rotates the draft attachment scope after a submitted attachment batch is accepted", async () => {
+    let attachmentSequence = 0
+    const chooseAttachments = vi.fn(async (_request: { readonly draftScopeId: string }) => {
+      attachmentSequence += 1
+      return {
+        attachments: [{
+          sourceIndex: 0,
+          ref: {
+            version: 2 as const,
+            attachmentId: `file-${attachmentSequence}`,
+            kind: "file" as const,
+            name: `file-${attachmentSequence}.txt`,
+            byteSize: attachmentSequence,
+            sha256: String(attachmentSequence).repeat(64),
+          },
+        }],
+        rejectedCount: 0,
+      }
+    })
+    installShellBridge(undefined, { chooseAttachments })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="发送附件"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={(_event, _attachments, acceptAttachments) => {
+            acceptAttachments().complete?.()
+          }}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openAttachmentMenu(container)
+    await act(async () => {
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent?.trim() === "附加文件")
+        ?.click()
+      await wait(20)
+    })
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')?.click()
+      await wait(0)
+    })
+    openAttachmentMenu(container)
+    await act(async () => {
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent?.trim() === "附加文件")
+        ?.click()
+      await wait(20)
+    })
+
+    expect(chooseAttachments).toHaveBeenCalledTimes(2)
+    expect(chooseAttachments.mock.calls[0]?.[0].draftScopeId).not.toBe(
+      chooseAttachments.mock.calls[1]?.[0].draftScopeId,
+    )
   })
 
   it("does not render a persona selector in the composer", () => {
@@ -1000,7 +1070,8 @@ describe("AgentComposer", () => {
       paths: [emptyPath, folderPath],
     }))
     expect(container.querySelector('[title="empty"]')).toBeTruthy()
-    expect(container.querySelector('[title="/Users/liyang/Desktop/materials"]')).toBeTruthy()
+    expect(container.querySelector('[title="materials"]')).toBeTruthy()
+    expect(container.innerHTML).not.toContain("/Users/liyang/Desktop/materials")
     expect(container.textContent).toContain("文件 · 0 B")
     expect(container.textContent).toContain("文件夹")
   })
@@ -1097,7 +1168,8 @@ describe("AgentComposer", () => {
     expect(container.textContent).toContain("materials")
     expect(container.textContent).toContain("文件夹")
     expect(container.querySelector('[title="brief.md"]')).toBeTruthy()
-    expect(container.querySelector('[title="/Users/liyang/Downloads/materials"]')).toBeTruthy()
+    expect(container.querySelector('[title="materials"]')).toBeTruthy()
+    expect(container.innerHTML).not.toContain("/Users/liyang/Downloads/materials")
     expect(container.querySelectorAll('button[aria-label^="删除附件"]')).toHaveLength(2)
     expect(filePathForDroppedFile).toHaveBeenCalledTimes(2)
   })

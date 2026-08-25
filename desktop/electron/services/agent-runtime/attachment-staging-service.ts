@@ -42,6 +42,10 @@ export const AGENT_STAGED_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_AGENT_ATTACHMENT_DIRECTORY_ENTRIES = 50_000
 const MAX_AGENT_ATTACHMENT_DIRECTORY_DEPTH = 64
 
+export class AgentAttachmentQuotaError extends Error {
+  override readonly name = "AgentAttachmentQuotaError"
+}
+
 interface AgentAttachmentMetadataBase extends Record<string, unknown> {
   readonly id: string
   readonly schemaVersion: 2
@@ -801,13 +805,15 @@ export class AttachmentStagingService {
     const draftEntries = active.filter((entry) => entry.projectId === projectId && entry.draftScopeId === draftScopeId)
     const imageCount = draftEntries.filter((entry) => entry.kind === "image").length + addedImageCount
     if (imageCount > MAX_AGENT_STAGED_IMAGES) {
-      throw new Error(`图片附件最多 ${MAX_AGENT_STAGED_IMAGES} 张。`)
+      throw new AgentAttachmentQuotaError(`图片附件最多 ${MAX_AGENT_STAGED_IMAGES} 张。`)
     }
     const draftBytes = sumBytes(draftEntries) + addedBytes
-    if (draftBytes > MAX_AGENT_STAGED_TURN_BYTES) throw new Error("本轮附件总大小过大。")
+    if (draftBytes > MAX_AGENT_STAGED_TURN_BYTES) throw new AgentAttachmentQuotaError("本轮附件总大小过大。")
     const projectBytes = sumBytes(active.filter((entry) => entry.projectId === projectId)) + addedBytes
-    if (projectBytes > MAX_AGENT_STAGED_PROJECT_BYTES) throw new Error("当前项目附件空间不足。")
-    if (sumBytes(active) + addedBytes > MAX_AGENT_STAGED_GLOBAL_BYTES) throw new Error("附件存储空间不足。")
+    if (projectBytes > MAX_AGENT_STAGED_PROJECT_BYTES) throw new AgentAttachmentQuotaError("当前项目附件空间不足。")
+    if (sumBytes(active) + addedBytes > MAX_AGENT_STAGED_GLOBAL_BYTES) {
+      throw new AgentAttachmentQuotaError("附件存储空间不足。")
+    }
   }
 
   private toStagedAttachment(entry: AgentAttachmentMetadataEntry): StagedAttachment {
@@ -829,7 +835,6 @@ export class AttachmentStagingService {
         kind: "directory",
         name: entry.originalName,
         byteSize: 0,
-        path: entry.sourcePath,
       }
       return ref
     }

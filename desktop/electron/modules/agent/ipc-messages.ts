@@ -16,6 +16,7 @@ import { createZipArchive } from "../../runtime/archive"
 import { createControlledProcessRunner } from "../../runtime/process"
 import type { AgentEvent, AgentMessage, AgentRuntimeService } from "../../services/agent-runtime"
 import { AgentConversationExportService } from "../../services/agent-runtime/conversation-export-service"
+import { AgentAttachmentQuotaError } from "../../services/agent-runtime/attachment-staging-service"
 import { REDACTED } from "../../services/agent-runtime/redaction"
 import { agentConversationDeliveryOptions } from "../../services/agent-runtime/event-delivery"
 import type { EventBus } from "../../runtime/event-bus"
@@ -80,7 +81,7 @@ const attachmentRefSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     version: z.literal(2), attachmentId: z.string().min(1), kind: z.literal("directory"), name: z.string(),
-    byteSize: z.number().int().nonnegative(), path: attachmentPathSchema,
+    byteSize: z.number().int().nonnegative(),
   }),
 ])
 
@@ -137,7 +138,15 @@ async function stagePathsForRenderer(
         continue
       }
       attachments.push({ sourceIndex, ref: attachment.ref })
-    } catch {
+    } catch (error) {
+      if (error instanceof AgentAttachmentQuotaError) {
+        await agent.releaseAttachments({
+          actor: { kind: "user", id: "renderer" },
+          draftScopeId: input.draftScopeId,
+          attachmentIds: attachments.map((attachment) => attachment.ref.attachmentId),
+        })
+        return { attachments: [], rejectedCount: input.paths.length }
+      }
       rejectedCount += 1
     }
   }

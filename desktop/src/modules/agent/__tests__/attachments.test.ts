@@ -38,7 +38,7 @@ describe("agent attachment helpers", () => {
       "课堂内容.md",
       "",
       "粘贴文件夹:",
-      "/Users/liyang/Downloads/作业范文",
+      "作业范文",
       "",
       "请分析",
     ].join("\n"))

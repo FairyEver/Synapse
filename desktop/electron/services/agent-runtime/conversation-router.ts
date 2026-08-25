@@ -481,6 +481,9 @@ export class ConversationRouter {
             turn.resolve(result)
           }
         } finally {
+          if ((turn.message.attachmentRefs?.length ?? 0) > 0) {
+            await this.sessionManager.closeCurrentTurn(turn.conversationId)
+          }
           externalSignal?.removeEventListener("abort", abort)
           this.nativeSlashPassthroughs.delete(turn)
           state.turnAbortController = undefined

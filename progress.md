@@ -1,5 +1,33 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 2 轮持续复审
+
+- **状态：** complete
+- **启动时间：** 2026-08-26 01:42:11 CST
+- **启动 HEAD：** `d779bee0d90c252a904e4d7eb076835795584060`
+- **启动工作树：** `main...origin/main [ahead 7]`，无未提交文件；HEAD 与主任务指定的第 1 轮提交一致。
+- 已完整读取 `AGENTS.md`、三份活动规划文件、planning-with-files-zh 与 computer-use 技能，并运行 session catch-up；没有额外未同步上下文。
+- 已完整读取执行、测试、Renderer、主进程、Agent Runtime 安全、Knowledge Base、UI、design、ui-rules 规则，以及附件、Agent timeline、Slash/Skill、Knowledge Base slash 与 Claude SDK slash/skill 文档。
+- 本轮固定使用当前 `main`，不创建任务、子任务、分支或 worktree，不启停开发服务和 Electron；所有真实界面操作只用 `node_repl + @oai/sky`。
+- 已从 `db189074...` 到当前 HEAD 初步锁定附件/Slash 相关生产文件，下一步逐文件审查并建立“修改点 → 文件/提交 → 用户行为 → 自动化 → 实机 → 结论”矩阵。
+- 第一组红灯已完成：Composer 草稿目录轮换定向用例稳定失败（两次附件选择得到相同 `draftScopeId`）；Runtime 附件错误回滚用例稳定失败（失败后 live SDK session 仍未关闭）。组合首跑 2 个文件、139 项中 137 通过、2 失败；其中 Composer 测试最初因新测试辅助函数名错误额外失败，修正测试本身后已确认真实产品红灯，不把测试代码错误计入缺陷证据。
+- 第一组修复后 Composer、ConversationRouter、失败恢复 3 个文件、167/167 通过。
+- 实机选择文件夹时发现草稿可访问树直接含真实绝对路径；进一步确认目录 ref 会通过选择 IPC 返回 Renderer，并写入 history metadata。第二组新增 IPC、Composer、history projection 三条公共行为回归，165 项中 162 通过、3 条红灯稳定失败；移除目录 ref 的 path、主进程独占 sourcePath、旧历史按名称投影后同组 165/165 通过。
+- 第三组跨项目孤儿回收红灯：artifact-store 5 项中 1 项稳定失败，证明项目 1 的回收会删除项目 2 的 committed artifact；按 `projectId` 限定后 5/5 通过。现场同时确认测试会话仍在 SQLite，但首轮 50 图的 50 条 artifact metadata 已清零、受控目录为空，解释了历史图片失效。
+- 第四组超配额部分提交红灯：IPC 59 项中新增 1 项稳定失败，旧行为返回前一张并只拒绝后一张；引入 quota error 并释放本次已暂存 id 后 IPC + staging 2 文件 78/78 通过，普通坏路径逐项拒绝不变。
+- 真实附件素材位于安全临时目录，仅含可辨识数字图片与测试 TXT/文件夹。1 图 native picker、4 图 native multi-select、9/20/50 图 Finder 复制粘贴均显示正确数量和顺序；每组结束清空草稿。50 图消息九宫格仅 9 个按钮，第 9 格 `+41`，灯箱从 `9 / 50` 导航到 `50 / 50` 且下一张禁用。
+- Finder + `sky.drag` 在调整 Finder 后两次从已选 `image-01.png` 拖到 Composer（目标 y=600 与 y=720），每次动作后重新读取应用状态，均未生成 drop；记录为 macOS AX/sky 拖放限制，不用单测冒充实机通过。
+- 文件 picker 显示 `test-file.txt / TXT / 32 B`；文件夹 picker 的初始 AX 暴露绝对路径并触发第二组修复。粘贴链路通过真实 Finder 剪贴板完成，未读取或上传用户私有文件。
+- 百炼 `qwen3.7-plus` 首次用 50 图发送“只读取第 1 张”，仅有一个处理组、一次 Read，工具输入投影为 `[Synapse attachment: image-01.png]`，回复 `01`；修复跨项目回收后再发 1 图，仍为一次 Read，回复 `16`。切到 Projects_Js 会话再返回，第二张历史缩略图与灯箱可打开，证明修复后留存通过。
+- 首轮 50 图在跨项目回收红灯阶段已被旧逻辑真实误删，不能恢复或宣称修复后 50 图历史通过；保留发送当时九宫格/灯箱/Read/回复证据，并用修复后 1 图完成跨项目历史恢复验证。
+- 导出 `/tmp/.../round2-export.zip` 共 23 个条目；解包全文检索用户原目录（POSIX 两种形式）、`data:image`、Base64 canary、PNG Base64 前缀和 `original.png` 均为 0 个文件，Read 标签出现在 4 个投影文件。协议 artifact URL 属于渲染引用，不是 OS 路径或原图字节。
+- Slash 实机：菜单显示“我的 Skills / 其它 Skills / 其它命令”，当前 Synapse 项目无知识库候选；`/compact` 1 项、`/compress` 0 项。Down 后高亮移动、Return 只插入不发送、搜索精确收敛、Escape 保留草稿并关闭、鼠标点击只插入；新会话与历史会话一致，未实际执行 `/compact`，未改变最近使用。
+- 首轮组合专项 31 文件 768 项中 766 通过、2 个旧断言失败，均是本轮目录 path 收敛后的测试期望遗漏；更新公共行为期望后定向 23/23 通过。增加超配额 IPC 回归后，最终组合专项为 31 文件、769/769 通过。
+- 最终 Composer 复核 69/69 通过；首次误带 `desktop/` 路径导致 Vitest 未找到文件，改用 workspace 内相对路径后通过，该命令错误未掩盖任何产品失败。
+- Desktop typecheck 首次只命中新测试 mock 的零参数推断错误，补齐公开请求参数类型后复跑通过；IPC codegen、`check:hard-constraints`、renderer production build、Electron/preload production build与 `git diff --check` 全部通过。构建仅有既有大 chunk 警告；本轮未改变打包边界，因此不运行 `check:packaged-asar`。
+- 已精确删除本轮 `/tmp/synapse-round2-*` 测试图片、解包目录和其中的导出 ZIP；这些临时数据不可恢复。保留应用内测试会话及其受控历史副本供主任务验收，Composer 无残留草稿。
+- **结束时间：** 2026-08-26 02:28:25 CST。第 2 轮完成，等待主任务验收；阶段 23 总体仍按串行协议继续。
+
 ## 2026-08-26 阶段 23 第 1 轮持续复审
 
 - **状态：** complete

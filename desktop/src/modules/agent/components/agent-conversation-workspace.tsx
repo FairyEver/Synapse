@@ -364,26 +364,28 @@ function AgentConversationWorkspace({
   const handleSubmit = (
     event: FormEvent,
     attachments: readonly AgentDraftAttachment[],
-    acceptAttachments: () => () => void,
+    acceptAttachments: () => (() => void) & { complete?: () => void },
   ) => {
     event.preventDefault()
     const restoreAttachments = acceptAttachments()
     void submitDraft(attachments).then((accepted) => {
-      if (!accepted) restoreAttachments()
+      if (accepted) restoreAttachments.complete?.()
+      else restoreAttachments()
     })
   }
 
   const handleInputKeyDown = (
     event: KeyboardEvent<HTMLTextAreaElement>,
     attachments: readonly AgentDraftAttachment[] = [],
-    acceptAttachments: () => () => void = () => () => undefined,
+    acceptAttachments: () => (() => void) & { complete?: () => void } = () => () => undefined,
   ) => {
     if (event.key !== "Enter" || event.shiftKey) return
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     event.preventDefault()
     const restoreAttachments = acceptAttachments()
     void submitDraft(attachments).then((accepted) => {
-      if (!accepted) restoreAttachments()
+      if (accepted) restoreAttachments.complete?.()
+      else restoreAttachments()
     })
   }
 

@@ -198,13 +198,32 @@ describe("AgentArtifactStore", () => {
           createdAt: "2026-08-25T00:00:00.000Z",
         })
       }
+      const otherProjectStoragePath = path.join(root, "project_2", "other-conversation", "image_other.png")
+      await mkdir(path.dirname(otherProjectStoragePath), { recursive: true })
+      await writeFile(otherProjectStoragePath, Buffer.from([4, 5, 6]))
+      await namespace.upsert({
+        id: "image_other",
+        schemaVersion: 1,
+        projectId: "project_2",
+        conversationId: "other-conversation",
+        turnId: "turn-other",
+        origin: "user-message",
+        kind: "image",
+        mimeType: "image/png",
+        byteSize: 3,
+        sha256: "b".repeat(64),
+        storagePath: otherProjectStoragePath,
+        createdAt: "2026-08-25T00:00:00.000Z",
+      })
       const orphan = (await namespace.list()).find((row) => row.conversationId === "orphan-conversation")
 
-      await store.retryOrphanCleanup(new Set(["kept-conversation"]))
+      await store.retryOrphanCleanup("project_1", new Set(["kept-conversation"]))
 
-      expect(await namespace.list()).toEqual([
+      expect(await namespace.list()).toEqual(expect.arrayContaining([
         expect.objectContaining({ conversationId: "kept-conversation" }),
-      ])
+        expect.objectContaining({ projectId: "project_2", conversationId: "other-conversation" }),
+      ]))
+      await expect(stat(otherProjectStoragePath)).resolves.toMatchObject({ size: 3 })
       await expect(stat(orphan?.storagePath ?? "")).rejects.toMatchObject({ code: "ENOENT" })
     } finally {
       await rm(root, { recursive: true, force: true })

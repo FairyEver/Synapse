@@ -35,7 +35,6 @@ export interface AgentFileAttachmentRef extends AgentAttachmentRefBase {
 
 export interface AgentDirectoryAttachmentRef extends AgentAttachmentRefBase {
   readonly kind: "directory"
-  readonly path: string
 }
 
 export type AgentAttachmentRef =
