@@ -192,8 +192,14 @@ describe("AgentConversationExportService", () => {
           size: 3,
           sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
           preparedForSdk: true,
+        }, {
+          kind: "path",
+          path: "private-sources",
+          entryType: "directory",
+          name: "private-sources",
         }],
       }])
+      expect(packageText).not.toContain("/Users/liyang/Documents/private-sources")
       expect(eventsText).toContain("toolu-read-1")
       expect(eventsText).toContain("/Users/liyang/project/file.ts")
       expect(eventsText).not.toContain("sk-secret")
@@ -752,6 +758,11 @@ function createConversation(): ConversationEntryV1 {
             size: 3,
             sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
             preparedForSdk: true,
+          }, {
+            kind: "path",
+            path: "/Users/liyang/Documents/private-sources",
+            entryType: "directory",
+            name: "private-sources",
           }],
         },
       },

@@ -1,5 +1,51 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 6 轮全量覆盖缺口审计
+
+- 起始 HEAD 为 `ddd80213d2ff936b13951ddc012d5ce8de146611`，`main` 相对 `origin/main` ahead 11，工作树干净；全程未创建或切换分支/worktree，未 pull/push/reset/stash，未启停开发服务。
+- 精确提交口径分三层：2026-08-25 00:00–23:59 CST 共有 5 个提交；当日工作连续结果包含 2026-08-26 01:02 的 1 个主提交；阶段 23 前五轮另有 5 个修复提交。固定基线 `db1890741738f5d9a7e93ab8b940a0a0887f9832` 到起始 HEAD 共 11 个提交、181 个唯一文件、18,994 行新增、4,639 行删除。
+- 前五轮矩阵逐项合计 84 个用户可感知或高风险证据点：第 1 轮 19、第 2 轮 26、第 3 轮 15、第 4 轮 12、第 5 轮 12。下表是提交级索引；每项的 Standards / Spec、自动化、实机与结论仍以对应轮次的 84 行矩阵为准，本轮没有凭提交标题推断文件或功能。
+- 记录审计发现两处证据错误并已更正：第 1 轮曾记录 5 个不存在的“完整 SHA”；`dfcf00abf` 大提交的真实文件数为 154，不是 161。数量由 `git diff-tree -M`、`git show --name-only` 与当前 Git UI 的 `showing 0-100 of 154 items` 三方核对。
+
+### 当日提交、连续成果与审查提交总表
+
+| # | 完整 SHA / CST / 文件数 | 用户可感知修改点 | 已审查轮次 / 逐项范围 | 自动化证据 | 真实用户操作证据 / 缺口结论 |
+|---:|---|---|---|---|---|
+| 1 | `dd38e75625ce89f491ffe26bd3234540dee64079` · 08-25 08:11 · 6 | Drive 大目录 trash 事务时限 | 第 5 轮 #1–12 | 生命周期专项 28 项；本轮 Server Drive 89 项 | 1000 文件树 trash/restore/trash、窄窗键盘；本轮确认保留回收站根和恢复入口 |
+| 2 | `876e2223c2a71d10f469b4cfc7ffdb7e26605449` · 08-25 08:15 · 2 | 部署步骤与健康检查记录，无产品代码 | 第 5 轮 #1 | 提交文件逐项核对 | 与第 5 轮真实生命周期验收绑定；不把部署成功冒充功能验收 |
+| 3 | `7b474594f41fbea0c12cca18c0de0539f3b82c68` · 08-25 09:07 · 12 | Git worktree/history diff、统一/分栏、换行、多文件 | 第 3 轮 #1–15 | Git 36 文件 410 项；Desktop 全量 | 本轮再次验证 split/wrap 跨 Tab、Space 选择、154 文件独立滚动和切文件无旧帧 |
+| 4 | `a41ba9a8dc83f195d6933524045efc938e651882` · 08-25 12:39 · 66 | Agent 附件展示/Slash；Drive CommonMark 与目录投影 | 第 2 轮 #1–26；第 4 轮 #4–11 | Agent 523 项、Drive 533 项及后续全量 | 本轮 TXT 附件、Slash/Escape、历史恢复、评论锚点；本地 Drive 登录仍阻塞修复后 UI |
+| 5 | `f937c5e73c3ee3525eddcaa820287eac461d9d7f` · 08-25 13:40 · 3 | Mermaid 横向边界 | 第 4 轮 #1–3 | Dashboard 精确 12 文件 235 项 | 第 4 轮合法/非法图；本轮保留的畸形测试文档继续显示源码 fallback，不冒充合法渲染 |
+| 6 | `5c2ac491b16f0507a3409731733e1a1c4c87f6c7` · 08-26 01:02 · 138 | 附件路径化、MCP router、模型目录/窗口、上下文、Git renderer、Drive MD/MDX | 第 1 轮 #1–19；第 2 轮 #1–26；第 3 轮 #2–14；第 4 轮 #4–12 | Desktop/Agent/Drive/Git 专项及全量；模型目录检查 | 本轮新对话快照、router 回退、真实只读 MCP、Tooltip、附件 Read/恢复、Git、Drive 生产旧版边界均重验 |
+| 7 | `d779bee0d90c252a904e4d7eb076835795584060` · 08-26 01:40 · 12 | router 风险注解、回退脱敏、上下文键盘、思考块恢复 | 第 1 轮 #9、#12、#19 及现场缺陷 | 红灯后 523 项；Desktop 全量 | 本轮恢复会话仍显示通用回退、真实工具和键盘 Tooltip；内部 reason 不在 UI |
+| 8 | `2cdd8a39370dd26d73b4fa77b9fce3c0add0630a` · 08-26 02:29 · 25 | 附件 scope、失败回滚、路径 IPC、跨项目清理、配额 | 第 2 轮 #1–22、#26 | 红绿灯与 Agent 全专项；本轮新增 history/export 脱敏回归 | 本轮受控 TXT 一轮发送、Read 标签、历史恢复；新增兼容旧目录附件泄漏缺陷并修复 |
+| 9 | `dca057a0f0d3deb16c32d7622f5a114160d23bc3` · 08-26 03:28 · 8 | Git 错误态、窄窗换行、原生键盘、竞态、大列表 | 第 3 轮 #6、#8–10、#14–15 | 红绿灯后 Git 410 项；Desktop 全量 | 本轮 split/wrap/Space/Tab、154 文件滚动、路径切换无旧 diff |
+| 10 | `a600cd88cd0efbd3c4acb4eb27f37077a6264db4` · 08-26 04:32 · 19 | Markdown `<=`、严格 MDX、列表 start、评论格式 | 第 4 轮 #3–12 | Dashboard 235、Server/Shared 专项 | 生产账号仍是部署旧版：MDX JSX 纯文本、旧列表/heading 行为；本地热更新登录阻塞，明确不算修复后实机 |
+| 11 | `ddd80213d2ff936b13951ddc012d5ce8de146611` · 08-26 05:01 · 5 | Drive restore/hide 超时、循环/越权/late child/回滚 | 第 5 轮 #3–12 | 生命周期 28 项；Server Drive 89 项 | 第 5 轮真实恢复与二次 trash；本轮只读确认测试根仍可恢复，未永久删除 |
+
+### 第 6 轮新增真实证据与覆盖结论
+
+- Agent：在全局实验开关开启时新建 `Synapse 自动化触发器类型`，随后立即把全局值恢复关闭；该新会话仍按创建快照进入 router 安全回退，证明设置快照不随全局值漂移。附加 44 B TXT，UI 仅显示名称、类型和大小；一次最小百炼请求读取测试码并调用真实 `app_automation_trigger_type_list`，返回 3 个触发器。切到其它历史再返回后，附件、回答、Read、真实 MCP、回退状态与 97.2K/1M 上下文均恢复。
+- Agent 隐私：工具详情只显示 `[Synapse attachment: synapse-round6-attachment.txt]`，没有受控 OS 路径。静态缺口审计进一步发现兼容旧直接目录附件仍把绝对路径写入 history/export；两个定向红灯分别固定 history 与旧导出泄漏，修复后结构化 path 附件统一只保留名称，循环对象导出兼容保持通过。
+- Agent 键盘与上下文：真实键入 `/` 后显示三类 Slash 分组，`Escape` 删除整个菜单且焦点留在输入框；先前直接 `set_value` 的异常被排除为辅助工具注入方式。通过 Tab/Shift+Tab 打开上下文 Tooltip，确认已用 97,197、剩余 902,803、运行窗口 1,000,000、最大输入 991,808、最大输出 131,072、官方来源与 2026-08-25 日期。
+- Git：创建后精确删除一个无敏感临时文件；工作区在 split + wrap 下用 Space 切换选择，切到 history 后偏好仍保持。打开 `dfcf00abf`，UI 明确显示 154 items；文件区独立滚动到中段时下方 diff 保持同视野，切到 preload 后标题与内容同步更新，没有旧帧。未执行 commit/push/pull/sync。
+- Drive：只操作阶段测试数据。生产 Chrome 的 `Codex Round 4 Markdown Test 2026-08-26` 中，普通 Markdown 预览保留 `a <= b`、混合列表、任务项、Unicode、Mermaid 错误源码和 `projection` 评论线程；合法 MDX 在线上旧版仍把 JSX 片段显示为纯文本，非法 MDX 的比较正文可见。回收站保留 `codex-round5-drive-trash-tdX0XU` 和“恢复”入口，配额仍为 111.0 MB / 5.0 GB；未点恢复或永久删除。
+- 无法在本轮转成“当前修复后真实 UI”的项目只有第 4 轮已列明的本地 Drive Markdown/MDX 修复：Electron Drive 和本地 Dashboard 均无登录态，生产 Chrome 又是旧部署。没有迁移凭据或把生产旧行为冒充当前代码；同层 Dashboard/Server/Shared 自动化与 build/typecheck 作为替代证据。官方 Anthropic endpoint、未知模型、用户 env 优先、子 Agent、真实失败队列、symlink/TOCTOU、损坏 Git 响应和 `/compact` 仍按无侵入、避免付费或不可安全制造原则保留自动化证据，不为追求“实机”改用户配置或制造破坏。
+
+### 第 6 轮 Standards / Spec 结论
+
+- Standards：基线到起始 HEAD 的新增行扫描未发现 `console.log`、空 catch、自定义颜色、任意 Tailwind 色或新增普通内联 style；未新增依赖、IPC、capability、网络或样式。本轮修复只触及附件历史投影、导出脱敏、两条回归和现有发布/审查记录。
+- Spec：v2 Renderer 继续只传有序 attachmentId；运行时绝对路径仍只进入主 query 和 SDK 授权。新修复把兼容旧 path 附件的 history 和 export 收敛为名称，同时保留真实 Read 工具输入、循环诊断和现有结构化脱敏 helper，符合附件设计与 Agent Runtime 安全规则。
+- 其余 84 个矩阵项没有发现新的错误处理、竞态、权限、数据泄漏或兼容性偏差；本轮新增产品缺陷为 1 个（兼容旧目录附件 history/export 路径泄漏），记录准确性缺陷为 2 个（5 个完整 SHA、154 文件计数）。
+
+### 第 6 轮自动化与门禁
+
+- 红灯 1：ConversationRouter 定向 1 项稳定失败，history metadata 收到 `/Users/liyang/Documents/private-sources`；红灯 2：导出服务定向 1 项稳定失败，`attachments.json` 保留同一绝对路径。修复后两个定向用例通过。
+- 第一版递归导出脱敏让循环对象导出回落到 history，Desktop 全量为 865 文件中 864 通过、1 失败，8,072/8,073 项；改用 WeakMap 保留循环图后，受影响 3 文件 92/92，Desktop 全量 865 文件、8,073/8,073 项通过。
+- Dashboard Markdown/MDX/Mermaid 精确 12 文件 235/235；Server Drive 精确 5 文件 89/89；Shared 全量 12 文件 139/139。一次宽泛 Dashboard renderer 命令为 249 项通过但 1 个既有 mock suite 导入失败，精确影响集随后全绿。
+- Desktop、Dashboard、Server typecheck；Desktop hard constraints、IPC codegen、116 条模型目录检查；Desktop renderer 5,021 modules + Electron/preload、Dashboard 6,801 modules、Server production build；`git diff --check` 全部通过。构建只有既有大 chunk 警告。
+- 聚焦 ESLint 额外命中 5 个既有文件级告警：测试中的正则转义和安全文件名 control-regex，均非本轮新增行；没有为可选诊断顺手改写相邻代码。
+
 ## 2026-08-26 阶段 23 第 5 轮 Drive 大目录回收站审查
 
 - 起始 HEAD 为 `a600cd88cd0efbd3c4acb4eb27f37077a6264db4`，`main` 相对 `origin/main` ahead 10，工作树干净；与主任务指定值一致。
@@ -99,7 +145,7 @@
 - 确定缺陷 2：统一与分栏的代码列使用 `minmax(max-content,1fr)`；即使换行开关改为 `whitespace-pre-wrap break-words`，grid 最小轨道仍会被长行固有宽度撑开，不能实现真正的窄窗自动换行。
 - 确定缺陷 3：工作区文件行使用 `role="button"` 的容器包住复选框，只手写 Enter 键行为；形成嵌套交互控件且 Space 键不能按原生按钮语义预览文件。
 - 确定缺陷 4：历史文件选择只在 `useEffect([selectedCommit.hash])` 中把 index 重置为 0；Profiler 稳定记录到提交切换先提交旧索引文件、再回到首文件的两次 React commit，形成可见旧 diff 闪回。
-- 确定缺陷 5：历史详情直接展开提交的全部文件且没有高度上限；真实 `dfcf00abf` 提交的 161 文件列表把 diff 推到长页下方，文件选择与差异阅读不能在同一视野内完成。
+- 确定缺陷 5：历史详情直接展开提交的全部文件且没有高度上限；真实 `dfcf00abf` 提交的 154 文件列表把 diff 推到长页下方，文件选择与差异阅读不能在同一视野内完成。
 
 ### 第 3 轮 Git diff 修改点矩阵（完成 15 项）
 
@@ -116,10 +162,10 @@
 | 9 | 历史延迟加载与请求代次 | history hook/tab | 进入历史、提交切换 | hook 竞态覆盖 | 改动→历史，切 `7b474594f`/`f937c5e73` | 通过 |
 | 10 | 历史多文件映射与选中项 | history/sections | 每文件对应 patch，无旧帧 | Profiler 旧帧红灯 | `7b474594f` 12 文件逐项与跨提交切换 | 修复并通过 |
 | 11 | 解析失败 raw fallback | sections/`GitRawDiff` | 不安全映射显示原文 | section/workbench | 未伪造损坏的生产响应 | 自动化通过；实机不构造 |
-| 12 | binary/empty/no-newline/truncated/大提交 | viewer/service | 明确区分状态 | viewer/service + 新无换行覆盖 | `dfcf00abf` 161 文件、PNG 不可预览 | 通过；空/截断由自动化覆盖 |
+| 12 | binary/empty/no-newline/truncated/大提交 | viewer/service | 明确区分状态 | viewer/service + 新无换行覆盖 | `dfcf00abf` 154 文件、PNG 不可预览 | 通过；空/截断由自动化覆盖 |
 | 13 | 特殊字符/Unicode/pathspec/rename | service/sections | 文件名不串位 | parser/integration/pathspec | 中文路径可见；rename 旧/新名一致 | 通过 |
 | 14 | 主题、滚动、窄宽、键盘焦点 | viewer/changes/history | 双主题与可达性 | 布局/原生按钮覆盖 | 滚动、宽窄、Tab/Space、主题恢复 | 通过 |
-| 15 | 大提交文件列表高度 | history/workbench | 文件列表独立滚动，diff 不被推离 | 161 行列表红灯/绿灯 | `dfcf00abf` 首批→中段独立滚动 | 修复并通过 |
+| 15 | 大提交文件列表高度 | history/workbench | 文件列表独立滚动，diff 不被推离 | 154 行列表红灯/绿灯 | `dfcf00abf` 首批→中段独立滚动 | 修复并通过 |
 
 ### 第 3 轮红绿灯记录
 
@@ -127,7 +173,7 @@
 - 绿灯：最小修改 viewer grid、changes 主视图和 worktree hook 后，`git-workbench.test.tsx` 与 `use-git-worktree-status.test.tsx` 共 2 文件 40/40 通过。
 - 修复范围：换行开启时使用可收缩 `minmax(0,1fr)`，关闭时保留横向滚动；读取失败显示 destructive Alert，并在新请求/成功响应时清除旧错误；复选框与原生预览按钮成为同级控件。
 - 第二个红灯：Profiler 专项 38 项中 37 通过、1 失败，稳定记录到提交切换先提交旧索引文件 `docs/d.md`；以 `{ commitHash, index }` 键控选择后，history/worktree 三文件 43/43 通过，最终 workbench 39/39 通过。
-- 第三个红灯：161 行历史文件列表专项 40 项中 39 通过、1 失败，稳定证明容器没有高度上限和纵向滚动；仅为该容器增加 `max-h-80` 与独立纵向滚动后 workbench 40/40 通过。
+- 第三个红灯：154 行历史文件列表专项 40 项中 39 通过、1 失败，稳定证明容器没有高度上限和纵向滚动；仅为该容器增加 `max-h-80` 与独立纵向滚动后 workbench 40/40 通过。
 
 ### 第 3 轮实机证据与双轴结论
 
@@ -135,7 +181,7 @@
 - 多文件从 `progress.md` 切到 viewer/hook 源码，标题和内容同步更新，没有旧请求覆盖；Tab 顺序为复选框→预览按钮，Space 可预览，也可切换勾选并恢复 7/7。
 - 窗口从约 1180 px 收窄到 960 px，开启换行后长代码真实折行且详情未横向撑破；恢复宽窗后布局正常。
 - 工作区切到历史后，点击 `7b474594f` 可见 12 个对应文件；新增 viewer 文件显示 `new file mode`，再切单一 Drive 提交显示其首文件，没有最终串位。
-- `dfcf00abf` 的 161 文件提交完成真实滚动；重命名显示 `.claude/rules/website-copy.md` → `.claude/rules/document-copy.md`，删除文本显示旧侧行号，`website/public/icon.png` 显示“文件已变更。”而不误解析二进制。
+- `dfcf00abf` 的 154 文件提交完成真实滚动；重命名显示 `.claude/rules/website-copy.md` → `.claude/rules/document-copy.md`，删除文本显示旧侧行号，`website/public/icon.png` 显示“文件已变更。”而不误解析二进制。
 - 长列表修复后再次打开 `dfcf00abf`：文件区先显示首批路径，向下滚动后显示中段路径，提交标题与下方 diff 同时保留在详情布局中，独立滚动通过。
 - 初始主题为“跟随系统”浅色；切到深色后复查增删背景、文字和行号均可读，随后恢复“跟随系统”，设置保存提示可见。
 - 只检查提交/推送/拉取/同步入口可见性，未执行任何会改远端或历史的动作；未启停开发服务。
@@ -204,7 +250,7 @@
 
 ### 提交与基准盘点
 
-- 2026-08-25 00:00–23:59 CST 共 5 个提交：`dd38e75625ce03243568d6c9e20cebc812c6adf9`（Drive 大目录回收站）、`876e2223c6a8c8c5555cc4b1a45670df9d83d9b7`（部署维护）、`7b474594f7ba2115d3403b6b47c48b2f467a489e`（Git diff）、`a41ba9a887118f0c51dd11dd7e10045862e2c12e`（Agent 附件与 Slash）、`f937c5e73b8a29c845fae73f539a44fd9d32dff4`（Drive Markdown/Mermaid）。
+- 2026-08-25 00:00–23:59 CST 共 5 个提交：`dd38e75625ce89f491ffe26bd3234540dee64079`（Drive 大目录回收站）、`876e2223c2a71d10f469b4cfc7ffdb7e26605449`（部署维护）、`7b474594f41fbea0c12cca18c0de0539f3b82c68`（Git diff）、`a41ba9a8dc83f195d6933524045efc938e651882`（Agent 附件与 Slash）、`f937c5e73c3ee3525eddcaa820287eac461d9d7f`（Drive Markdown/Mermaid）。
 - 当日直接形成、午夜后连续提交的是 `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`（2026-08-26 01:02:27 CST，Agent 附件链路、MCP router、模型目录与上下文能力）；本轮主范围均位于该提交，纳入当日连续变更。
 - 用户指定基准 `db1890741738f5d9a7e93ab8b940a0a0887f9832` 与当前 HEAD 的 merge-base 相同；区间共 173 个文件、17,354 行新增、4,522 行删除。第 1 轮深入 Agent/MCP/模型/上下文及其 IPC、history、export、规则，Drive/Git 仅完成提交与边界盘点，留给后续轮次深入。
 

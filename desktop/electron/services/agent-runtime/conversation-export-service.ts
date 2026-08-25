@@ -802,7 +802,34 @@ function createSafeFileNameSegment(rawName: string): string {
 }
 
 function sanitizeExportValue<T>(value: T): unknown {
-  return normalizeExportMarkers(redactSensitiveValue(value))
+  return normalizeExportMarkers(redactSensitiveValue(sanitizeAttachmentPaths(value)))
+}
+
+function sanitizeAttachmentPaths(
+  value: unknown,
+  seen: WeakMap<object, unknown> = new WeakMap(),
+): unknown {
+  if (!value || typeof value !== "object") return value
+  const cached = seen.get(value)
+  if (cached) return cached
+  if (Array.isArray(value)) {
+    const sanitized: unknown[] = []
+    seen.set(value, sanitized)
+    value.forEach((item) => sanitized.push(sanitizeAttachmentPaths(item, seen)))
+    return sanitized
+  }
+  if (!isRecord(value)) return value
+  const sanitized: Record<string, unknown> = {}
+  seen.set(value, sanitized)
+  Object.entries(value).forEach(([key, item]) => {
+    sanitized[key] = sanitizeAttachmentPaths(item, seen)
+  })
+  if (value.kind !== "path" || typeof value.path !== "string") return sanitized
+  const name = typeof value.name === "string" && value.name.trim().length > 0
+    ? value.name
+    : path.posix.basename(value.path.replaceAll("\\", "/"))
+  sanitized.path = name
+  return sanitized
 }
 
 function normalizeExportMarkers(value: unknown): unknown {

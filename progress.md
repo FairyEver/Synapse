@@ -1,5 +1,20 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 6 轮全量覆盖缺口审计
+
+- **状态：** complete（阶段 23 总体仍为 `in_progress`）
+- **启动 HEAD：** `ddd80213d2ff936b13951ddc012d5ce8de146611`
+- **启动工作树：** `main...origin/main [ahead 11]`，无未提交文件；与主任务指定值一致。
+- 精确盘点为 2026-08-25 日历内 5 个提交、当日连续成果 1 个、前五轮修复 5 个，共 11 个跟踪提交；基线至启动 HEAD 为 181 个唯一文件、18,994 行新增、4,639 行删除。前五轮 19 + 26 + 15 + 12 + 12 = 84 个逐项证据点均已汇入 `findings.md` 总表。
+- 修正审查记录：第 1 轮的 5 个完整 SHA 全部改为真实对象；`dfcf00abf` 同时由 Git CLI 和当前 UI 确认为 154 文件，不再沿用 161 的错误计数。
+- Computer Use 仅通过持久 `node_repl + @oai/sky` 复用现有 Electron/Chrome，不重启应用。Agent 完成新会话快照、44 B TXT、一次最小百炼、Read、真实 Synapse MCP、历史恢复、Slash/Escape、Tooltip；Git 完成 split/wrap、Space、跨 Tab、154 文件独立滚动；Drive 完成 Markdown/MDX/列表/Mermaid fallback/评论、配额与大目录回收站恢复入口只读检查。
+- 新发现 1 个产品缺陷：兼容旧直接目录附件在带 `displayContent` 时仍把绝对路径写入 history，旧 history 的导出也会继承。两个稳定红灯后，history/export 都只保留显示名称；Runtime 路径、Read 输入和授权不变。第一次实现破坏循环对象导出回归，Desktop 全量 8072/8073；改成 WeakMap 保留循环图后，受影响 3 文件 92/92、Desktop 全量 865 文件 8,073/8,073 通过。
+- Dashboard 精确 Markdown/MDX/Mermaid 12 文件 235/235、Server Drive 5 文件 89/89、Shared 12 文件 139/139 通过。一次宽泛 Dashboard renderer 命令为 249 项通过但 `drive-renderer-shell` 因既有 mock 缺少 `GenericJsxEditor` 导入失败；随后按真实影响文件精确重跑通过，不计为产品失败。
+- 本地 Drive 与本地 Dashboard 无登录态，生产 Chrome 是旧部署，因此第 4 轮 Markdown/MDX 本地修复仍不能声称“修复后实机通过”；没有迁移凭据。官方端点、未知模型、用户 env、子 Agent、真实失败、symlink/TOCTOU、损坏 Git 响应和 `/compact` 保持自动化证据，未为补证改用户配置、制造破坏或增加付费调用。
+- 保留测试数据：Agent 会话 `Synapse 自动化触发器类型`；Drive 目录 `Codex Round 4 Markdown Test 2026-08-26` 及三份文档/评论；回收站根 `codex-round5-drive-trash-tdX0XU`。本轮 repo 临时文件和 `/tmp/synapse-round6-attachment.txt` 已精确删除。
+- 最终门禁：Desktop、Dashboard、Server typecheck 通过；Desktop hard constraints、IPC codegen、116 条模型目录检查通过；Desktop renderer + Electron/preload、Dashboard（6,801 modules）、Server production build 通过；`git diff --check` 通过。Desktop/Dashboard build 仅有既有大 chunk 警告。
+- 额外聚焦 ESLint 命令命中 5 个既有文件级告警：ConversationRouter 测试既有两处正则转义（行号因本轮插入而移动）和导出文件既有安全文件名 control-regex；均不在本轮新增行，未为通过非要求门禁顺手改写相邻代码。最终受影响测试、类型、全量、构建和仓库规定门禁均通过。
+
 ## 2026-08-26 阶段 23 第 5 轮持续复审
 
 - **状态：** complete
@@ -59,10 +74,10 @@
 - 实现修复：自动换行时 unified/split 代码轨道改为 `minmax(0,1fr)`；读取失败在主详情显示明确 Alert，且新请求/成功响应清除旧错误；复选框与原生预览按钮拆成同级控件，补齐 Space/Enter 与焦点语义。
 - 执行记录：一次包含不存在 package 残留删除的组合补丁因上下文不匹配而原子失败，无部分修改；一次从 `desktop/` 执行 `rg desktop/src/modules/git` 使用了错误相对路径，随后改为 `src/modules/git` 重跑。两项均未污染产物或仓库状态。
 - 第四个红灯使用 React Profiler 捕获每次 commit：workbench 38 项中 37 通过、1 失败，提交切换先渲染旧 index 对应的 `docs/d.md` 再归零。改用 `{ commitHash, index }` 键控后，history/worktree 三文件 43/43，最终 workbench 39/39 通过。
-- Computer Use 仅通过持久化 `node_repl + @oai/sky` 操作当前 Electron 开发版；完成统一/分栏、换行、多文件、工作区/历史、提交切换、滚动、窄/宽、Tab/Space、浅色/深色，以及修改/新增/删除/重命名/161 文件大型提交/二进制不可预览。主题已恢复“跟随系统”，文件选择恢复 7/7，未执行 commit/push/pull/sync。
+- Computer Use 仅通过持久化 `node_repl + @oai/sky` 操作当前 Electron 开发版；完成统一/分栏、换行、多文件、工作区/历史、提交切换、滚动、窄/宽、Tab/Space、浅色/深色，以及修改/新增/删除/重命名/154 文件大型提交/二进制不可预览。主题已恢复“跟随系统”，文件选择恢复 7/7，未执行 commit/push/pull/sync。
 - Git 主进程 service/IPC/parser、Renderer hooks/workbench/diff viewer 全专项 36 文件、410/410 通过；新增不等长 split 与 no-newline 定向覆盖后 workbench 39/39 通过。
 - Desktop typecheck、IPC codegen、`check:hard-constraints`、renderer production build（5,021 modules）、Electron/preload production build 已通过；renderer 仅有既有大 chunk 警告。当前未改 IPC 契约或打包边界。
-- 补充确认第 5 个现场缺陷：`dfcf00abf` 的 161 文件列表没有高度上限，把 diff 推到长页下方。新增 161 行红灯后 workbench 40 项中 39 通过、1 失败；仅限制文件区高度并启用独立纵向滚动后 40/40 通过。
+- 补充确认第 5 个现场缺陷：`dfcf00abf` 的 154 文件列表没有高度上限，把 diff 推到长页下方。新增 154 行红灯后 workbench 40 项中 39 通过、1 失败；仅限制文件区高度并启用独立纵向滚动后 40/40 通过。
 - Computer Use 热更新复验同一提交：修复前首批文件占据长页，修复后文件区固定为独立滚动容器；滚动后可见中段路径，提交标题与下方 diff 未被列表无限推离。未启停 Electron 或开发服务。
 - 最终影响面门禁复跑：Desktop typecheck、hard constraints、renderer production build 与 `git diff --check` 通过；renderer 仍为 5,021 modules，仅有既有大 chunk 警告。此前完成且本次未受影响的 IPC codegen、Electron/preload production build 保持通过。
 - 聚焦 diff 最终为 8 个预期文件；静态纪律扫描未发现自定义颜色、内联样式、渐变、`console.log` 或第三方 diff 依赖，未生成需提交的构建产物。

@@ -2106,6 +2106,11 @@ describe("ConversationRouter", () => {
           entryType: "file",
           name: "report.pdf",
           size: 2048,
+        }, {
+          kind: "path",
+          path: "/Users/liyang/Documents/private-sources",
+          entryType: "directory",
+          name: "private-sources",
         }],
       })
       const savedConversation = await conversations.get(result.conversationId)
@@ -2117,6 +2122,7 @@ describe("ConversationRouter", () => {
         userMessagePresentation: { version: 1, content: "请分析" },
       }))
       expect(JSON.stringify(userEntry)).not.toMatch(/AQID|base64|\"data\":/)
+      expect(JSON.stringify(userEntry)).not.toContain("/Users/liyang/Documents/private-sources")
       expect(await artifactRows.list()).toEqual([])
     } finally {
       await rm(root, { recursive: true, force: true })

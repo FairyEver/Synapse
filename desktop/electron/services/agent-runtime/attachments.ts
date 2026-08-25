@@ -88,9 +88,7 @@ export function userMessagePresentationHistoryMetadata(
 ): Record<string, unknown> {
   const attachments = normalizeAgentAttachments(message.attachments).map((attachment) => ({
     kind: "path",
-    path: attachment.entryType === "directory"
-      ? attachment.path
-      : attachment.name ?? path.basename(attachment.path),
+    path: attachment.name ?? path.basename(attachment.path),
     entryType: attachment.entryType,
     name: attachment.name ?? path.basename(attachment.path),
     ...(attachment.size !== undefined ? { byteSize: attachment.size } : {}),
