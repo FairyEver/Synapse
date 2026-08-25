@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, useState } from "react"
+import { act, Profiler, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -330,6 +330,68 @@ describe("GitWorkbench", () => {
     expect(document.querySelector('[data-component="git-diff-view"]')).toBeTruthy()
   })
 
+  it("uses shrinkable code tracks when automatic wrapping is enabled", () => {
+    const unified = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/long-line.md"
+        text={createPatch("docs/long-line.md", "x".repeat(400))}
+        mode="unified"
+        wrap
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+    const split = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/long-line.md"
+        text={createPatch("docs/long-line.md", "x".repeat(400))}
+        mode="split"
+        wrap
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+
+    expect(unified).toContain("grid-cols-[3.25rem_3.25rem_minmax(0,1fr)]")
+    expect(split).toContain("grid-cols-[3.25rem_minmax(0,1fr)]")
+  })
+
+  it("keeps split line numbers aligned through uneven blocks and no-newline markers", () => {
+    const patch = [
+      "diff --git a/docs/a.md b/docs/a.md",
+      "--- a/docs/a.md",
+      "+++ b/docs/a.md",
+      "@@ -7,3 +11,2 @@",
+      " same",
+      "-old one",
+      "-old two",
+      "+new one",
+      "\\ No newline at end of file",
+      "",
+    ].join("\n")
+    const html = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/a.md"
+        text={patch}
+        mode="split"
+        wrap={false}
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+    const container = document.createElement("div")
+    container.innerHTML = html
+    const rows = Array.from(container.querySelectorAll('[role="row"]'))
+    const changed = rows.find((row) => row.textContent?.includes("old one") && row.textContent.includes("new one"))
+    const deletionOnly = rows.find((row) => row.textContent?.includes("old two"))
+    const noNewline = rows.find((row) => row.textContent?.includes("No newline at end of file"))
+
+    expect(changed?.textContent).toContain("8-old one12+new one")
+    expect(deletionOnly?.textContent).toContain("9-old two")
+    expect(noNewline?.querySelectorAll('[role="cell"]')).toHaveLength(2)
+    expect(noNewline?.textContent).not.toMatch(/^\d/)
+  })
+
   it("shares diff layout and wrapping between changes and history", async () => {
     await renderWorkbench(roots)
 
@@ -405,6 +467,71 @@ describe("GitWorkbench", () => {
     expect(findButton("docs/c.md").getAttribute("data-active")).toBe("true")
   })
 
+  it("never commits a stale history file while switching commits", async () => {
+    const firstCommit = createCommitDetail({
+      hash: "first",
+      files: [
+        { path: "docs/a.md", originalPath: null, status: "modified" },
+        { path: "docs/b.md", originalPath: null, status: "modified" },
+      ],
+      diff: createPatch("docs/a.md", "first") + createPatch("docs/b.md", "second"),
+    })
+    const nextCommit = createCommitDetail({
+      hash: "next",
+      files: [
+        { path: "docs/c.md", originalPath: null, status: "modified" },
+        { path: "docs/d.md", originalPath: null, status: "modified" },
+      ],
+      diff: createPatch("docs/c.md", "third") + createPatch("docs/d.md", "fourth"),
+    })
+    const committedDiffs: string[] = []
+    let showNextCommit: (() => void) | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    function HistoryHarness() {
+      const [selectedCommit, setSelectedCommit] = useState(firstCommit)
+      showNextCommit = () => setSelectedCommit(nextCommit)
+      return (
+        <Profiler id="history-diff" onRender={() => committedDiffs.push(diffViewerText())}>
+          <GitHistoryTab
+            {...defaultDiffViewProps}
+            history={{
+              commits: [],
+              selectedCommit,
+              loading: false,
+              detailLoading: false,
+              error: null,
+              hasLoaded: true,
+              hasMore: false,
+              loadingMore: false,
+              refresh: vi.fn(async () => undefined),
+              loadMore: vi.fn(async () => undefined),
+              loadCommit: vi.fn(async () => undefined),
+            }}
+          />
+        </Profiler>
+      )
+    }
+
+    await act(async () => {
+      root.render(<HistoryHarness />)
+      await flush()
+    })
+    await click(findButton("docs/b.md"))
+    committedDiffs.length = 0
+
+    await act(async () => {
+      showNextCommit?.()
+      await flush()
+    })
+
+    expect(committedDiffs.some((text) => text.includes("docs/d.md"))).toBe(false)
+    expect(diffViewerText()).toContain("docs/c.md")
+  })
+
   it("falls back to copyable raw text when history patches cannot be mapped safely", () => {
     const html = renderToStaticMarkup(
       <GitHistoryTab
@@ -455,6 +582,50 @@ describe("GitWorkbench", () => {
 
     expect(html).toContain("差异内容已截断")
     expect(html).toContain("文件已变更")
+  })
+
+  it("shows worktree diff failures instead of the unselected empty state", () => {
+    const html = renderToStaticMarkup(
+      <GitChangesTab
+        {...defaultDiffViewProps}
+        repository={repository}
+        status={createStatus({
+          selectedFile: {
+            path: "docs/a.md",
+            originalPath: null,
+            status: "modified",
+            indexStatus: "unchanged",
+            worktreeStatus: "modified",
+          },
+          diff: null,
+          error: "读取文件差异失败。",
+        })}
+        commitDialogOpen={false}
+        onCommitDialogOpenChange={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("读取文件差异失败。")
+    expect(html).not.toContain("选择文件查看差异")
+  })
+
+  it("uses a native file-preview button without nesting the selection checkbox", () => {
+    const html = renderToStaticMarkup(
+      <GitChangesTab
+        {...defaultDiffViewProps}
+        repository={repository}
+        status={createStatus()}
+        commitDialogOpen={false}
+        onCommitDialogOpenChange={vi.fn()}
+      />,
+    )
+    const container = document.createElement("div")
+    container.innerHTML = html
+    const path = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("docs/a.md"))
+
+    expect(path).toBeTruthy()
+    expect(path?.querySelector('[role="checkbox"]')).toBeNull()
   })
 
   it("does not leave a surface gap between tabs and content", () => {
@@ -769,13 +940,15 @@ describe("GitWorkbench", () => {
     const container = document.createElement("div")
     container.innerHTML = html
 
-    const row = container.querySelector('[role="button"]')
-    const indicator = row?.querySelector('[data-slot="tooltip-trigger"]')
-    const path = Array.from(row?.querySelectorAll("span") ?? [])
+    const previewButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes(longPath))
+    const row = previewButton?.parentElement
+    const indicator = previewButton?.querySelector('[data-slot="tooltip-trigger"]')
+    const path = Array.from(previewButton?.querySelectorAll("span") ?? [])
       .find((element) => element.textContent === longPath)
 
-    expect(row?.className).toContain("grid-cols-[auto_auto_minmax(0,1fr)]")
-    expect(row?.className).toContain("py-1.5")
+    expect(row?.className).toContain("grid-cols-[auto_minmax(0,1fr)]")
+    expect(previewButton?.className).toContain("py-1.5")
     expect(indicator?.textContent).toBe("U")
     expect(indicator?.getAttribute("aria-label")).toBe("未跟踪")
     expect(indicator?.className).toContain("text-chart-2")
@@ -862,6 +1035,50 @@ describe("GitWorkbench", () => {
     expect(diffScroller?.className).toContain("min-w-0")
     expect(diffScroller?.className).toContain("overflow-x-auto")
     expect(diffScroller?.getAttribute("data-allow-select")).toBe("true")
+  })
+
+  it("keeps large history file lists independently scrollable", () => {
+    const files = Array.from({ length: 161 }, (_, index) => ({
+      path: `docs/history/file-${String(index + 1).padStart(3, "0")}.md`,
+      originalPath: null,
+      status: "modified" as const,
+    }))
+    const html = renderToStaticMarkup(<GitHistoryTab
+      {...defaultDiffViewProps}
+      history={{
+        commits: [],
+        selectedCommit: {
+          hash: "large-commit",
+          shortHash: "large",
+          subject: "large history commit",
+          authorName: "wangl",
+          authorEmail: "wangl@example.com",
+          committedAt: "2026-06-15T16:21:42+08:00",
+          files,
+          diff: "",
+          filesTruncated: false,
+          diffTruncated: false,
+          truncated: false,
+        },
+        loading: false,
+        detailLoading: false,
+        error: null,
+        hasLoaded: true,
+        hasMore: false,
+        loadingMore: false,
+        refresh: vi.fn(async () => undefined),
+        loadMore: vi.fn(async () => undefined),
+        loadCommit: vi.fn(async () => undefined),
+      }}
+    />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const fileList = container.querySelector('[data-git-history-file-list="true"]')
+
+    expect(fileList?.children).toHaveLength(161)
+    expect(fileList?.className).toContain("max-h-80")
+    expect(fileList?.className).toContain("overflow-y-auto")
   })
 
   it("keeps long worktree diffs inside the right pane", () => {

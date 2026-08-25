@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,8 +38,9 @@ export function GitHistoryTab({
   onDiffViewModeChange,
   onDiffWrapChange,
 }: GitHistoryTabProps) {
-  const [selectedFileIndex, setSelectedFileIndex] = useState(0)
   const selectedCommit = history.selectedCommit
+  const [selectedFile, setSelectedFile] = useState<{ readonly commitHash: string; readonly index: number } | null>(null)
+  const selectedFileIndex = selectedFile && selectedFile.commitHash === selectedCommit?.hash ? selectedFile.index : 0
   const diffSections = useMemo(() => (
     selectedCommit ? mapCommitDiffSections(selectedCommit.diff, selectedCommit.files) : null
   ), [selectedCommit])
@@ -50,10 +51,6 @@ export function GitHistoryTab({
     && diffSections,
   )
   const selectedSection = canUseFormattedDiff ? diffSections?.[selectedFileIndex] : undefined
-
-  useEffect(() => {
-    setSelectedFileIndex(0)
-  }, [selectedCommit?.hash])
 
   return (
     <div className="grid h-full min-h-0 min-w-0 bg-background md:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
@@ -126,7 +123,7 @@ export function GitHistoryTab({
                   </div>
                 </div>
                 {selectedCommit.files.length > 0 ? (
-                  <div className="max-w-full divide-y divide-border overflow-hidden rounded-lg border" data-git-history-file-list="true">
+                  <div className="max-h-80 max-w-full divide-y divide-border overflow-x-hidden overflow-y-auto rounded-lg border" data-git-history-file-list="true">
                     {selectedCommit.files.map((file, index) => {
                       const content = (
                         <>
@@ -140,7 +137,7 @@ export function GitHistoryTab({
                           type="button"
                           data-active={selectedFileIndex === index ? "true" : undefined}
                           className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
-                          onClick={() => setSelectedFileIndex(index)}
+                          onClick={() => setSelectedFile({ commitHash: selectedCommit.hash, index })}
                         >
                           {content}
                         </button>

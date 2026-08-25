@@ -1,5 +1,28 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 3 轮持续复审
+
+- **状态：** complete
+- **启动时间：** 2026-08-26 02:32:12 CST
+- **启动 HEAD：** `2cdd8a39370dd26d73b4fa77b9fce3c0add0630a`
+- **启动工作树：** `main...origin/main [ahead 8]`，无未提交文件；HEAD 与主任务指定值一致。
+- 已完整读取 planning-with-files-zh、computer-use、code-review、karpathy-guidelines 与 impeccable 技能；code-review 的并行代理流程被用户“不得创建其它任务或子任务”明确覆盖，保留 Standards / Spec 双轴并在本任务串行执行。
+- 已运行 planning session catch-up，并读取活动规划、执行/仓库/测试/Renderer/主进程/UI/产品规则、shadcn 配置、全局主题、模块边界、Git 模块设计和 Git 可靠性复盘。
+- 已锁定 Git 直接范围：`7b474594f` 的 12 个文件，以及 `5c2ac491` 对本地主题 diff 渲染器的后续替换；当前直接生产/测试/依赖范围为 Git history service、diff viewer、changes/history/workbench、diff sections、专项测试、`desktop/package.json`、`pnpm-lock.yaml` 和发布说明。Agent 导致的 preload/bridge 差异不计入本轮 Git 修改点。
+- 初步 Standards/Spec 审查确认：工作区 diff 读取失败没有主视图错误态而回落为选择提示；自动换行仍使用 `max-content` grid 最小轨道；工作区文件行嵌套复选框且仅手写 Enter 行为。`@git-diff-view/react` 依赖残留候选经 package/lock 精确复查后排除，`5c2ac491` 已完整移除源码、样式与依赖。
+- 已先补 3 个稳定红灯：workbench 专项 37 项中 34 通过、3 失败，精确覆盖自动换行可收缩轨道、读取错误态、原生文件预览按钮。最小修复后联合 workbench/hook 专项 2 文件 40/40 通过。
+- 实现修复：自动换行时 unified/split 代码轨道改为 `minmax(0,1fr)`；读取失败在主详情显示明确 Alert，且新请求/成功响应清除旧错误；复选框与原生预览按钮拆成同级控件，补齐 Space/Enter 与焦点语义。
+- 执行记录：一次包含不存在 package 残留删除的组合补丁因上下文不匹配而原子失败，无部分修改；一次从 `desktop/` 执行 `rg desktop/src/modules/git` 使用了错误相对路径，随后改为 `src/modules/git` 重跑。两项均未污染产物或仓库状态。
+- 第四个红灯使用 React Profiler 捕获每次 commit：workbench 38 项中 37 通过、1 失败，提交切换先渲染旧 index 对应的 `docs/d.md` 再归零。改用 `{ commitHash, index }` 键控后，history/worktree 三文件 43/43，最终 workbench 39/39 通过。
+- Computer Use 仅通过持久化 `node_repl + @oai/sky` 操作当前 Electron 开发版；完成统一/分栏、换行、多文件、工作区/历史、提交切换、滚动、窄/宽、Tab/Space、浅色/深色，以及修改/新增/删除/重命名/161 文件大型提交/二进制不可预览。主题已恢复“跟随系统”，文件选择恢复 7/7，未执行 commit/push/pull/sync。
+- Git 主进程 service/IPC/parser、Renderer hooks/workbench/diff viewer 全专项 36 文件、410/410 通过；新增不等长 split 与 no-newline 定向覆盖后 workbench 39/39 通过。
+- Desktop typecheck、IPC codegen、`check:hard-constraints`、renderer production build（5,021 modules）、Electron/preload production build 已通过；renderer 仅有既有大 chunk 警告。当前未改 IPC 契约或打包边界。
+- 补充确认第 5 个现场缺陷：`dfcf00abf` 的 161 文件列表没有高度上限，把 diff 推到长页下方。新增 161 行红灯后 workbench 40 项中 39 通过、1 失败；仅限制文件区高度并启用独立纵向滚动后 40/40 通过。
+- Computer Use 热更新复验同一提交：修复前首批文件占据长页，修复后文件区固定为独立滚动容器；滚动后可见中段路径，提交标题与下方 diff 未被列表无限推离。未启停 Electron 或开发服务。
+- 最终影响面门禁复跑：Desktop typecheck、hard constraints、renderer production build 与 `git diff --check` 通过；renderer 仍为 5,021 modules，仅有既有大 chunk 警告。此前完成且本次未受影响的 IPC codegen、Electron/preload production build 保持通过。
+- 聚焦 diff 最终为 8 个预期文件；静态纪律扫描未发现自定义颜色、内联样式、渐变、`console.log` 或第三方 diff 依赖，未生成需提交的构建产物。
+- **结束时间：** 2026-08-26 03:26:38 CST。第 3 轮完成，待提交当前 `main` 并交由主任务验收。
+
 ## 2026-08-26 阶段 23 第 2 轮持续复审
 
 - **状态：** complete

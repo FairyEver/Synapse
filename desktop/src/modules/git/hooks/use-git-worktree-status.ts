@@ -37,7 +37,10 @@ export function useGitWorktreeStatus(
     const requestId = diffRequestIdRef.current + 1
     diffRequestIdRef.current = requestId
     setSelectedFile(file)
-    if (!loadOptions.background) setDiff(null)
+    if (!loadOptions.background) {
+      setDiff(null)
+      setError(null)
+    }
     if (!file) {
       setDiffLoading(false)
       return
@@ -50,6 +53,7 @@ export function useGitWorktreeStatus(
       })
       if (diffRequestIdRef.current === requestId) {
         setDiff(nextDiff)
+        setError(null)
       }
     } catch (err) {
       if (diffRequestIdRef.current === requestId) {

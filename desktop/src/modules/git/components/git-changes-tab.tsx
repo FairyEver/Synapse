@@ -190,33 +190,34 @@ export function GitChangesTab({
                   return (
                     <div
                       key={`${change.path}:${change.originalPath ?? ""}`}
-                      role="button"
-                      tabIndex={0}
                       data-active={active ? "true" : undefined}
-                      className="grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2 px-3 py-1.5 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
-                      onClick={() => void status.loadDiff(change)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void status.loadDiff(change)
-                      }}
+                      className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center data-[active=true]:bg-muted"
                     >
-                      <Checkbox
-                        aria-label={`选择 ${change.path}`}
-                        checked={checked}
-                        onClick={(event) => event.stopPropagation()}
-                        onCheckedChange={() => status.togglePath(change.path)}
-                      />
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span
-                            aria-label={indicator.label}
-                            className={`inline-flex size-4 shrink-0 items-center justify-center text-sm font-bold ${indicator.className}`}
-                          >
-                            {indicator.letter}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">{indicator.label}</TooltipContent>
-                      </Tooltip>
-                      <span className="min-w-0 truncate text-sm font-normal">{change.path}</span>
+                      <span className="flex items-center pl-3">
+                        <Checkbox
+                          aria-label={`选择 ${change.path}`}
+                          checked={checked}
+                          onCheckedChange={() => status.togglePath(change.path)}
+                        />
+                      </span>
+                      <button
+                        type="button"
+                        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 py-1.5 pr-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                        onClick={() => void status.loadDiff(change)}
+                      >
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              aria-label={indicator.label}
+                              className={`inline-flex size-4 shrink-0 items-center justify-center text-sm font-bold ${indicator.className}`}
+                            >
+                              {indicator.letter}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">{indicator.label}</TooltipContent>
+                        </Tooltip>
+                        <span className="min-w-0 truncate text-sm font-normal">{change.path}</span>
+                      </button>
                     </div>
                   )
                 })}
@@ -230,7 +231,14 @@ export function GitChangesTab({
           viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
         >
           <div className="min-w-0 max-w-full overflow-hidden" data-git-changes-detail-content="true">
-            {status.diffLoading ? (
+            {status.error ? (
+              <div className="p-4">
+                <Alert variant="destructive">
+                  <AlertTitle>读取失败</AlertTitle>
+                  <AlertDescription>{status.error}</AlertDescription>
+                </Alert>
+              </div>
+            ) : status.diffLoading ? (
               <div className="p-4"><GitDiffSkeleton /></div>
             ) : status.diff ? (
               <GitDiffViewer

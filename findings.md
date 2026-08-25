@@ -1,5 +1,59 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 3 轮 Git diff 工作台审查
+
+- 基线为 `2cdd8a39370dd26d73b4fa77b9fce3c0add0630a`，起始工作树干净；固定代码比较范围 `db189074...HEAD`，本轮产品主题固定为 `7b474594f` 及其在 `5c2ac491` 中的 Git diff 直接后续变化。
+- 权威 Spec 为 `docs/superpowers/specs/2026-06-17-git-module-design.md`，并结合 `docs/superpowers/plans/2026-07-31-git-reliability-remediation-review.md` 的竞态、截断、特殊路径、merge/root、二进制和主进程信任边界结论。
+- 当前直接文件范围共 12 个 Git/发布文件，并追踪 `desktop/package.json` 与 `pnpm-lock.yaml` 的依赖变化；preload/bridge 在基准区间的变化仅属于 Agent 附件契约，不算 Git diff 生产变化。
+- 已排除依赖残留候选：`5c2ac491` 已同时删除 `@git-diff-view/react` 源码、CSS、package 与 lockfile 条目；当前 `rg` 无任何引用，前两轮“已移除依赖”的验收记录正确。
+- 确定缺陷 1：`useGitWorktreeStatus.loadDiff()` 把失败写入共享 `status.error`，但 `GitChangesTab` 主详情只判断 loading/diff/空状态；普通查看失败会被误呈现为“选择文件查看差异”，混淆错误与未选择。
+- 确定缺陷 2：统一与分栏的代码列使用 `minmax(max-content,1fr)`；即使换行开关改为 `whitespace-pre-wrap break-words`，grid 最小轨道仍会被长行固有宽度撑开，不能实现真正的窄窗自动换行。
+- 确定缺陷 3：工作区文件行使用 `role="button"` 的容器包住复选框，只手写 Enter 键行为；形成嵌套交互控件且 Space 键不能按原生按钮语义预览文件。
+- 确定缺陷 4：历史文件选择只在 `useEffect([selectedCommit.hash])` 中把 index 重置为 0；Profiler 稳定记录到提交切换先提交旧索引文件、再回到首文件的两次 React commit，形成可见旧 diff 闪回。
+- 确定缺陷 5：历史详情直接展开提交的全部文件且没有高度上限；真实 `dfcf00abf` 提交的 161 文件列表把 diff 推到长页下方，文件选择与差异阅读不能在同一视野内完成。
+
+### 第 3 轮 Git diff 修改点矩阵（完成 15 项）
+
+| # | 修改点 | 文件 / 提交 | 用户行为 | 自动化 | 实机 | 当前结论 |
+|---:|---|---|---|---|---|---|
+| 1 | 历史 rename patch 检测 | `git-history-service.ts`; `7b474594f` | 历史重命名按旧/新路径展示 | 410 项 Git 全专项 | `dfcf00abf` 显示 rename from/to | 通过 |
+| 2 | 第三方 renderer 替换 | package、lock、viewer；`5c2ac491` | 主题一致的差异查看 | workbench + 静态扫描 | 跟随系统浅色、深色各查看一次 | 通过；源码/依赖均移除 |
+| 3 | unified 行号与增删背景 | viewer；`5c2ac491` | 查看新旧行号/增删 | workbench | 当前工作区修改文件 | 通过 |
+| 4 | split 左右行号配对 | viewer | 左旧右新、复杂增删块 | 新增不等长块/无换行覆盖 | 当前工作区分栏逐行查看 | 通过 |
+| 5 | 行内差异 | viewer | 修改片段高亮 | workbench | changes tab 源码在浅/深色查看 | 通过 |
+| 6 | 自动换行 | viewer/workbench | 窄窗长行换行 | shrinkable grid 红灯 | 1180→960 宽，长行真实折行 | 修复并通过 |
+| 7 | 统一/分栏偏好跨 Tab | workbench | 工作区与历史共用设置 | workbench | 分栏+换行后切历史仍保持 | 通过 |
+| 8 | 工作区文件列表与 diff | changes/hook | 多文件、选择、错误、键盘 | 错误态/原生按钮红灯 | 多文件切换；Tab/Space 预览与勾选 | 修复并通过 |
+| 9 | 历史延迟加载与请求代次 | history hook/tab | 进入历史、提交切换 | hook 竞态覆盖 | 改动→历史，切 `7b474594f`/`f937c5e73` | 通过 |
+| 10 | 历史多文件映射与选中项 | history/sections | 每文件对应 patch，无旧帧 | Profiler 旧帧红灯 | `7b474594f` 12 文件逐项与跨提交切换 | 修复并通过 |
+| 11 | 解析失败 raw fallback | sections/`GitRawDiff` | 不安全映射显示原文 | section/workbench | 未伪造损坏的生产响应 | 自动化通过；实机不构造 |
+| 12 | binary/empty/no-newline/truncated/大提交 | viewer/service | 明确区分状态 | viewer/service + 新无换行覆盖 | `dfcf00abf` 161 文件、PNG 不可预览 | 通过；空/截断由自动化覆盖 |
+| 13 | 特殊字符/Unicode/pathspec/rename | service/sections | 文件名不串位 | parser/integration/pathspec | 中文路径可见；rename 旧/新名一致 | 通过 |
+| 14 | 主题、滚动、窄宽、键盘焦点 | viewer/changes/history | 双主题与可达性 | 布局/原生按钮覆盖 | 滚动、宽窄、Tab/Space、主题恢复 | 通过 |
+| 15 | 大提交文件列表高度 | history/workbench | 文件列表独立滚动，diff 不被推离 | 161 行列表红灯/绿灯 | `dfcf00abf` 首批→中段独立滚动 | 修复并通过 |
+
+### 第 3 轮红绿灯记录
+
+- 红灯：`git-workbench.test.tsx` 37 项中 34 通过、3 失败；失败精确命中自动换行轨道、读取错误误呈现为空状态、文件行嵌套交互且非原生按钮。
+- 绿灯：最小修改 viewer grid、changes 主视图和 worktree hook 后，`git-workbench.test.tsx` 与 `use-git-worktree-status.test.tsx` 共 2 文件 40/40 通过。
+- 修复范围：换行开启时使用可收缩 `minmax(0,1fr)`，关闭时保留横向滚动；读取失败显示 destructive Alert，并在新请求/成功响应时清除旧错误；复选框与原生预览按钮成为同级控件。
+- 第二个红灯：Profiler 专项 38 项中 37 通过、1 失败，稳定记录到提交切换先提交旧索引文件 `docs/d.md`；以 `{ commitHash, index }` 键控选择后，history/worktree 三文件 43/43 通过，最终 workbench 39/39 通过。
+- 第三个红灯：161 行历史文件列表专项 40 项中 39 通过、1 失败，稳定证明容器没有高度上限和纵向滚动；仅为该容器增加 `max-h-80` 与独立纵向滚动后 workbench 40/40 通过。
+
+### 第 3 轮实机证据与双轴结论
+
+- 当前工作区前置为 7 个真实修改；统一→分栏、换行关闭→开启后，行号、左右配对、增删和行内标记均可见，控制状态正确。
+- 多文件从 `progress.md` 切到 viewer/hook 源码，标题和内容同步更新，没有旧请求覆盖；Tab 顺序为复选框→预览按钮，Space 可预览，也可切换勾选并恢复 7/7。
+- 窗口从约 1180 px 收窄到 960 px，开启换行后长代码真实折行且详情未横向撑破；恢复宽窗后布局正常。
+- 工作区切到历史后，点击 `7b474594f` 可见 12 个对应文件；新增 viewer 文件显示 `new file mode`，再切单一 Drive 提交显示其首文件，没有最终串位。
+- `dfcf00abf` 的 161 文件提交完成真实滚动；重命名显示 `.claude/rules/website-copy.md` → `.claude/rules/document-copy.md`，删除文本显示旧侧行号，`website/public/icon.png` 显示“文件已变更。”而不误解析二进制。
+- 长列表修复后再次打开 `dfcf00abf`：文件区先显示首批路径，向下滚动后显示中段路径，提交标题与下方 diff 同时保留在详情布局中，独立滚动通过。
+- 初始主题为“跟随系统”浅色；切到深色后复查增删背景、文字和行号均可读，随后恢复“跟随系统”，设置保存提示可见。
+- 只检查提交/推送/拉取/同步入口可见性，未执行任何会改远端或历史的动作；未启停开发服务。
+- Standards：变更只用现有 shadcn/Radix 与主题 token；聚焦静态扫描无自定义色、字面颜色、内联样式、`console.log` 或第三方 diff 依赖，未新增依赖和跨模块耦合。
+- Spec：主进程 `--find-renames` 与 status/file patch 对齐；path/pathspec、Unicode、rename、binary、truncation、权限/审计由 service/parser/integration 覆盖；hook 请求代次阻止旧异步响应，历史选择键控消除旧 diff 首帧。
+- 最终 Git 全专项为 36 文件、410/410；新增不等长 split/无换行与大提交文件列表覆盖后 workbench 定向 40/40。Desktop typecheck、IPC codegen、hard constraints、renderer/electron production build 与 `git diff --check` 均通过。
+
 ## 2026-08-26 阶段 23 第 2 轮审查发现
 
 - 基线为 `d779bee0d90c252a904e4d7eb076835795584060`，工作树干净；固定比较范围 `db189074...HEAD`。

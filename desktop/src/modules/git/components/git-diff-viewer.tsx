@@ -119,7 +119,10 @@ function UnifiedDiff({ lines, wrap }: { readonly lines: readonly ParsedDiffLine[
       key={line.key}
       role="row"
       className={cn(
-        "grid min-w-full grid-cols-[3.25rem_3.25rem_minmax(max-content,1fr)] border-b last:border-b-0",
+        "grid min-w-full border-b last:border-b-0",
+        wrap
+          ? "grid-cols-[3.25rem_3.25rem_minmax(0,1fr)]"
+          : "grid-cols-[3.25rem_3.25rem_minmax(max-content,1fr)]",
         diffLineBackground(line.kind),
       )}
     >
@@ -137,7 +140,11 @@ function SplitDiff({ lines, wrap }: { readonly lines: readonly ParsedDiffLine[];
         <div
           key={row.line.key}
           role="row"
-          className={cn("grid min-w-full grid-cols-[3.25rem_minmax(max-content,1fr)] border-b", diffLineBackground(row.line.kind))}
+          className={cn(
+            "grid min-w-full border-b",
+            wrap ? "grid-cols-[3.25rem_minmax(0,1fr)]" : "grid-cols-[3.25rem_minmax(max-content,1fr)]",
+            diffLineBackground(row.line.kind),
+          )}
         >
           <LineNumber value={row.line.oldNumber ?? row.line.newNumber} />
           <DiffCode line={row.line} wrap={wrap} />
@@ -165,7 +172,12 @@ function SplitPane({
   readonly right?: boolean
 }) {
   return (
-    <div className={cn("grid min-w-0 grid-cols-[3.25rem_minmax(max-content,1fr)]", right && "border-l", line && diffLineBackground(line.kind))}>
+    <div className={cn(
+      "grid min-w-0",
+      wrap ? "grid-cols-[3.25rem_minmax(0,1fr)]" : "grid-cols-[3.25rem_minmax(max-content,1fr)]",
+      right && "border-l",
+      line && diffLineBackground(line.kind),
+    )}>
       <LineNumber value={right ? line?.newNumber : line?.oldNumber} />
       {line
         ? <DiffCode line={line} pairedLine={pairedLine} wrap={wrap} />
