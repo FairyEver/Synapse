@@ -217,7 +217,7 @@ function replaceMermaidSourceWithDiagram(pre: HTMLElement, svgMarkup: string): v
 
   const diagram = document.createElement('figure')
   diagram.dataset.driveMermaidDiagram = 'true'
-  diagram.className = 'my-4 max-w-full overflow-x-auto rounded-md bg-muted/40 p-4'
+  diagram.className = 'mx-0 my-4 max-w-full overflow-x-auto rounded-md bg-muted/40 p-4'
   const rendered = document.createElement('div')
   rendered.dataset.driveMermaidRendered = 'true'
   rendered.className = 'min-w-fit'
