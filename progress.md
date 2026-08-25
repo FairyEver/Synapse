@@ -1,5 +1,21 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 8 轮并发与稳定性审查
+
+- **状态：** complete（阶段 23 总体仍为 `in_progress`）
+- 开始前已确认 HEAD 为 `6931b013f30cd5aecc2ce113b812e8aa67f2376d`，工作树干净，`main` ahead 13。
+- 已读取 AGENTS.md、活动计划、planning-with-files-zh、code-review、computer-use 与 karpathy-guidelines；会话恢复脚本未报告未同步上下文。
+- 已读取命中领域专题规则和设计文档，锁定固定 diff/提交清单，并完成并发、复杂度、跨平台、序列化与长时稳定性测试矩阵。
+- 首次 Markdown 合成基准使用 `tsx -e` 顶层 `await`，被 CJS 输出模式拒绝并在测试前退出；这是工具调用错误，未触及产品。改用 async IIFE，不重复原命令。
+- 已完成静态矩阵与红绿修复：Agent 循环/深层 SDK metadata、Git CRLF patch、Drive 4,000 段增量 projection 三个稳定红灯均以最小改动转绿；8,000 段基准由约 9.34s 降至约 1.99s。
+- Computer Use 仅通过持久 `node_repl + @oai/sky` 完成。Agent 多历史 + 滚动、Git 宽/窄窗 + 文件/历史/Tab + wrap/split + 键盘、Drive 预览/代码/回收站 + 键盘只读回切均通过；Git 窗口恢复宽窗后又确认 wrap 已恢复关闭并关闭临时窗口，Drive 返回文件标签，无用户数据写入。
+- Computer Use 的一次参数名误用、一次应用名定位超时和一次 JavaScript 过滤表达式括号错误均在产品动作前失败；随后按技能要求改用 `app`、已运行 Electron 完整路径和修正表达式完成验证。这些是工具调用错误，不计作产品失败。
+- 发布说明已记录三项用户可感知修复。Desktop focused 14 文件 301/301、Server Drive 5 文件 203/203、Dashboard 受影响 9 文件 225/225、Desktop 全量 865 文件 8,075/8,075 全绿；Desktop/Dashboard/Server typecheck 与 production build、hard constraints、IPC codegen、116 模型目录检查均通过。构建只出现既有大 chunk 警告。
+- Dashboard 首次组合专项在收集阶段命中既有 `drive-renderer-shell.test.tsx` mock 缺少 `GenericJsxEditor`，与本轮生产改动无关；排除该旧 mock 后按真实受影响文件重跑 9 文件 225/225。测试中的预期 warning/error 日志与工具失败均未计作产品失败。
+- Standards / Spec 已在当前任务串行复核；无新增依赖、样式越界、裸 IPC、空 catch 或生产 `console.log`。阶段 23 按主任务协议继续保持 `in_progress`。
+- 精确清理轮次临时文件 `/tmp/synapse-round8-files.txt`，未产生附件或导出文件。保留的均为既有数据：Agent 会话 `只回复 OK`、`图片数字提取`、`Synapse 自动化触发器类型`，Drive 目录 `Codex Round 4 Markdown Test 2026-08-26` 和回收站根 `codex-round5-drive-trash-tdX0XU`。
+- **结束时间：** 2026-08-26 06:16:23 CST。
+
 ## 2026-08-26 阶段 23 第 7 轮负路径矩阵审查
 
 - **状态：** complete（阶段 23 总体仍为 `in_progress`）

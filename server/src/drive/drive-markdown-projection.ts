@@ -338,7 +338,27 @@ function inheritBlockIds(
 ): void {
   const used = new Set<string>()
   const mappedPreviousRanges = previous ? mapPreviousBlockRanges(previous.source, markdown, previous.projection.blocks) : []
+  const exactRangeCandidates = new Map<string, typeof mappedPreviousRanges>()
+  for (const candidate of mappedPreviousRanges) {
+    const key = blockRangeKey(candidate.block.type, candidate.sourceStart, candidate.sourceEnd)
+    exactRangeCandidates.set(key, [...(exactRangeCandidates.get(key) ?? []), candidate])
+  }
+  const fingerprintCandidates = new Map<string, DriveMarkdownProjectionBlockDto[]>()
+  for (const candidate of previous?.projection.blocks ?? []) {
+    const key = blockFingerprintKey(candidate)
+    fingerprintCandidates.set(key, [...(fingerprintCandidates.get(key) ?? []), candidate])
+  }
   for (const [index, block] of blocks.entries()) {
+    const exactCandidates = (exactRangeCandidates.get(blockRangeKey(
+      block.type,
+      block.sourceStart,
+      block.sourceEnd,
+    )) ?? []).filter((candidate) => !used.has(candidate.block.blockId))
+    if (exactCandidates.length === 1) {
+      block.blockId = exactCandidates[0].block.blockId
+      used.add(block.blockId)
+      continue
+    }
     const overlapCandidates = mappedPreviousRanges
       .filter((candidate) => candidate.block.type === block.type && !used.has(candidate.block.blockId))
       .map((candidate) => ({ candidate, overlap: overlapRatio(block, candidate) }))
@@ -351,13 +371,10 @@ function inheritBlockIds(
       continue
     }
 
-    const fingerprintCandidates = previous?.projection.blocks.filter((candidate) =>
-      candidate.type === block.type
-      && candidate.textFingerprint === block.textFingerprint
-      && sameHeadingPath(candidate.headingPath, block.headingPath)
-      && !used.has(candidate.blockId)) ?? []
-    if (fingerprintCandidates.length === 1) {
-      block.blockId = fingerprintCandidates[0].blockId
+    const matchingFingerprints = (fingerprintCandidates.get(blockFingerprintKey(block)) ?? [])
+      .filter((candidate) => !used.has(candidate.blockId))
+    if (matchingFingerprints.length === 1) {
+      block.blockId = matchingFingerprints[0].blockId
       used.add(block.blockId)
       continue
     }
@@ -365,6 +382,17 @@ function inheritBlockIds(
     block.blockId = `mdb_${sha256(`${block.type}\0${block.textFingerprint}\0${block.sourceStart}\0${index}`).slice(0, 20)}`
     used.add(block.blockId)
   }
+}
+
+function blockRangeKey(type: string, sourceStart: number, sourceEnd: number): string {
+  return `${type}\0${sourceStart}\0${sourceEnd}`
+}
+
+function blockFingerprintKey(block: Pick<
+  DriveMarkdownProjectionBlockDto,
+  "type" | "textFingerprint" | "headingPath"
+>): string {
+  return `${block.type}\0${block.textFingerprint}\0${block.headingPath.join("\0")}`
 }
 
 function mapPreviousBlockRanges(

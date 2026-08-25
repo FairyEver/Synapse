@@ -1,4 +1,5 @@
 import { resolveDriveAnnotationAnchor, sliceByCodePoints } from '@synapse/shared'
+import { performance } from 'node:perf_hooks'
 import { describe, expect, it } from 'vitest'
 import { renderDriveMarkdownFragment } from './drive-markdown-renderer'
 import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRange, mapDriveMarkdownSourceRanges } from './drive-markdown-projection'
@@ -73,6 +74,24 @@ describe('Drive Markdown projection', () => {
 
     expect(nextParagraph?.blockId).toBe(previousParagraph?.blockId)
   })
+
+  it('keeps block identity restoration bounded for long flat documents', async () => {
+    const paragraphCount = 4_000
+    const previousSource = Array.from({ length: paragraphCount }, (_, index) => (
+      `## Heading ${index}\n\nParagraph ${index}.`
+    )).join('\n\n')
+    const previous = await renderDriveMarkdownFragment(previousSource)
+    const startedAt = performance.now()
+    const next = await renderDriveMarkdownFragment(`Inserted.\n\n${previousSource}`, {
+      previousProjection: { source: previousSource, projection: previous.projection },
+    })
+    const elapsedMs = performance.now() - startedAt
+    const previousIds = new Set(previous.projection.blocks.map((block) => block.blockId))
+    const retainedCount = next.projection.blocks.filter((block) => previousIds.has(block.blockId)).length
+
+    expect(retainedCount).toBe(previous.projection.blocks.length)
+    expect(elapsedMs).toBeLessThan(1_800)
+  }, 15_000)
 
   it('uses Unicode code point offsets for CJK, emoji and combining text', async () => {
     const rendered = await renderDriveMarkdownFragment('甲🙂e\u0301乙')

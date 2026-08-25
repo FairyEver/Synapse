@@ -264,7 +264,7 @@ function diffLineBackground(kind: DiffLineKind): string {
 }
 
 function parseUnifiedDiff(text: string): readonly ParsedDiffLine[] {
-  const lines = text.replace(/\n$/, "").split("\n")
+  const lines = text.replaceAll("\r\n", "\n").replace(/\n$/, "").split("\n")
   let oldNumber: number | undefined
   let newNumber: number | undefined
   return lines.map((rawLine, index) => {

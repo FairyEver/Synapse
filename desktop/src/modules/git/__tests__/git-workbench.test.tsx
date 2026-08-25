@@ -392,6 +392,23 @@ describe("GitWorkbench", () => {
     expect(noNewline?.textContent).not.toMatch(/^\d/)
   })
 
+  it("normalizes CRLF patches without rendering carriage-return characters", () => {
+    const patch = createPatch("docs/windows.md", "windows line").replaceAll("\n", "\r\n")
+    const html = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/windows.md"
+        text={patch}
+        mode="unified"
+        wrap
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+
+    expect(html).not.toContain("\r")
+    expect(html).toContain("windows line")
+  })
+
   it("shares diff layout and wrapping between changes and history", async () => {
     await renderWorkbench(roots)
 

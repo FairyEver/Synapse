@@ -1,5 +1,39 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 8 轮并发与稳定性审查
+
+- 起始 HEAD 精确为 `6931b013f30cd5aecc2ce113b812e8aa67f2376d`，`main` 相对 `origin/main` ahead 13，工作树干净；禁止分支/worktree、pull/push/reset/stash、开发服务启停和子代理。
+- 固定比较范围沿用 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD`；本轮独立聚焦并发、性能、跨平台路径、序列化鲁棒性与长时间运行稳定性，不重复前 7 轮幸福/负路径矩阵。
+- `code-review` 的 Standards / Spec 双轴在当前任务内串行执行；用户禁止子代理，因此不执行该技能默认的并行委派步骤。
+- 真实 UI 只通过持久 `node_repl + @oai/sky` 复用现有应用，不启动或重启服务；Drive 只读切换，不保存、恢复或删除。
+
+### 缺陷、红灯与修复
+
+| 领域 | 稳定红灯 | 外科手术式修复 | 绿色证据 |
+|---|---|---|---|
+| Agent 序列化 | 循环引用的 SDK event 被整个丢弃，深层对象无法留下可诊断边界 | `sanitizeValue` 增加祖先 `WeakSet`、64 层深度上限，并保留既有数组 20 项、敏感键和总 payload 大小限制；共享引用不会误判为循环 | `conversation-router` 新性质测试验证 `[Circular]`、`[truncated]`、正文路径清洗与 turn 正常完成；Focused 112/112 |
+| Git 跨平台换行 | CRLF patch 的每个可见 diff 行末残留 `\r` | 解析前只规范化 `\r\n` 为 `\n`，不改变独立 `\r` 内容 | `git-workbench` 新回归验证 header/context/add/delete 均无回车；Focused 112/112 |
+| Drive 长文档 | 4,000 段落前插后的块身份继承约 2.62s，性能门禁 1.8s 红灯；8,000 段实测约 9.34s | 为映射后的精确 range 和 type/fingerprint/headingPath 建索引；不变块走 O(1) 候选查找，原 overlap 逻辑只作为变化/歧义 fallback | 4,000 段性能性质测试转绿；8,000 段约 1.99s，较基线下降约 79%；projection 12/12 |
+
+### 稳定性覆盖与复杂度结论
+
+- **Agent：** 1/4/20/50 附件、连续批次、失败回退、scope 撤销/轮换、session 复用键、POSIX/Windows drive/UNC、目录 path 脱敏、history/timeline/export 日志 redaction、MCP discovery fallback/权限、乱序/子智能体/compact/超上限上下文和设置快照并发均有专项或既有性质测试。附件运行时处理为 O(n)，且单轮硬上限 50；事件清洗为 O(受限节点数)，深度 64、数组每层 20、最终 payload 大小继续受限，循环不再导致递归失控。
+- **Git：** CRLF、超长行、无末尾换行、rename+modify、binary、2 MiB 提交预览上限、文件切换请求代次、读取失败、历史每页最多 100、文件列表虚拟滚动、split/wrap 组合与偏好持久化均已覆盖。patch 解析为 O(字符数)；展示按行构建，超大提交由主进程 buffer 上限与 UI 虚拟列表共同收敛，不把截断或 binary 冒充文本差异。
+- **Drive 生命周期：** 1,000 文件与 128 层树、late child、循环、跨用户、配额、share/change/session 回滚继续通过。树收集使用 visited + 分层查询，CPU/内存为 O(items)，数据库往返为 O(depth)，事务 `maxWait=10s`、`timeout=30s`；逐项 change append 仍是 O(items) 串行写入，但处于同一事务并由 1,000 文件测试证明当前上限可接受。
+- **Drive Markdown/MDX：** 超长文档、HTML/ESM/JSX/`<=`、非 1 列表、Mermaid 多图重绘、评论扩展边界已有自动化。主流唯一 range/fingerprint 分布下，块 identity 的不变路径由逐块全表扫描收敛为索引查找；大量重复 key 的候选数组聚合与模糊 overlap fallback 最坏仍可能 O(blocks²)。4,000 组重复 heading + paragraph（8,000 blocks）实测约 674ms；diff 本身另有 75ms/8192 edit 上限，因此未用无证据重构替换保守匹配逻辑。
+- **保留风险：** Drive restore 的冲突命名在进入事务前解析，schema 也没有同父级名称唯一约束；并发 restore/create/move 理论上仍可能得到同名兄弟。局部给 restore 加锁不能覆盖其它写入口，因此本轮不做虚假修复，保留为需要统一命名约束/事务设计的后续架构项。
+
+### 真实 UI 持续切换证据
+
+- Agent：在既有 `只回复 OK`、`图片数字提取`、`Synapse 自动化触发器类型` 会话间连续切换，标题、正文、附件数量与上下文统计同步更新，无旧帧或会话串台；50 图历史向上滚动后出现“滚动到底部”，滚动仍可用。
+- Git：复用当前 Electron Git 工作台，在 1,180×760 宽窗与 960×652 窄窗间切换；连续切换 8 个工作树文件、两个历史提交及 changes/history，详情首帧始终对应当前选择。wrap=1 跨文件、提交和 Tab 保留；分栏后用键盘 Left + Space 回到统一视图，差异区仍可滚动。窗口最终恢复约 1,179×760；收尾确认自动换行已恢复测试前的关闭状态（`Value: 0`）并关闭临时 Git 窗口，未执行 commit/push/pull/sync/discard。
+- Drive：复用已登录生产 Chrome，只读打开 `Codex Round 4 Markdown Test 2026-08-26`，在 Markdown 预览与代码视图往返，再查看回收站 `codex-round5-drive-trash-tdX0XU`，最后用键盘 Left 返回文件标签。未编辑、保存、恢复、删除或修改分享；生产部署只作为 UI 稳定性证据，当前源码修复仍由同层自动化证明。
+
+### Standards / Spec 串行结论
+
+- **Standards：** 本轮新增代码未引入依赖、自定义样式/颜色、renderer 裸 IPC、主进程裸持久化、空 catch 或生产 `console.log`；三处改动复用现有 parser、redaction 和 projection 边界，测试先红后绿。固定 diff 的既有轻微 smell 不为本轮稳定性目标顺手重构。
+- **Spec：** 附件仍为单 query、Provider 中立的有序路径清单；历史/时间线/导出不持久化受控路径或字节。MCP 权限不因 fallback 降级；上下文只聚合主线程。Git 新修复只统一跨平台换行，不改变 binary/rename/truncation 语义；Drive 优化保持 block ID 选择优先级和事务边界。
+
 ## 2026-08-26 阶段 23 第 7 轮负路径矩阵审查
 
 - 起始 HEAD 为 `17f2f1711427be2abf3e1e32a30f6afc8a236878`，`main` 相对 `origin/main` ahead 12，工作树干净；固定比较范围为 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD`，共 12 个提交、181 个唯一文件。

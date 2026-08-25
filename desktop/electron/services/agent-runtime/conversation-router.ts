@@ -2774,30 +2774,46 @@ function sanitizeEventPayload(event: AgentEvent): Record<string, unknown> {
   })
 }
 
-function sanitizeValue(value: unknown): unknown {
+const MAX_SANITIZED_EVENT_DEPTH = 64
+
+function sanitizeValue(
+  value: unknown,
+  ancestors: WeakSet<object> = new WeakSet(),
+  depth = 0,
+): unknown {
   if (typeof value === "string") return sanitizeErrorText(value)
-  if (Array.isArray(value)) return value.slice(0, 20).map(sanitizeValue)
-  if (!isRecord(value)) return value
-  const output: Record<string, unknown> = {}
-  for (const [key, entry] of Object.entries(value)) {
-    const lower = key.toLowerCase()
-    if (key === "imageBlocks") continue
-    if (lower.includes("raw")) continue
-    if (
-      lower.includes("secret")
-      || lower.includes("token")
-      || lower.includes("password")
-      || lower.includes("apikey")
-      || lower.includes("authorization")
-      || lower.includes("cookie")
-      || lower.includes("credential")
-    ) {
-      output[key] = "[redacted]"
-      continue
+  if (!value || typeof value !== "object") return value
+  if (ancestors.has(value)) return "[Circular]"
+  if (depth >= MAX_SANITIZED_EVENT_DEPTH) return "[truncated]"
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      return value.slice(0, 20).map((entry) => sanitizeValue(entry, ancestors, depth + 1))
     }
-    output[key] = sanitizeValue(entry)
+    if (!isRecord(value)) return value
+    const output: Record<string, unknown> = {}
+    for (const [key, entry] of Object.entries(value)) {
+      const lower = key.toLowerCase()
+      if (key === "imageBlocks") continue
+      if (lower.includes("raw")) continue
+      if (
+        lower.includes("secret")
+        || lower.includes("token")
+        || lower.includes("password")
+        || lower.includes("apikey")
+        || lower.includes("authorization")
+        || lower.includes("cookie")
+        || lower.includes("credential")
+      ) {
+        output[key] = "[redacted]"
+        continue
+      }
+      output[key] = sanitizeValue(entry, ancestors, depth + 1)
+    }
+    return output
+  } finally {
+    ancestors.delete(value)
   }
-  return output
 }
 
 function stripTransientImageBlocks<T extends AgentEvent>(event: T): T {

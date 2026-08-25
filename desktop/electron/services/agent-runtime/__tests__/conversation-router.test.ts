@@ -2994,6 +2994,32 @@ describe("ConversationRouter", () => {
     expect(JSON.stringify(persisted[0]?.payload).length).toBeLessThan(12_000)
   })
 
+  it("sanitizes cyclic and deeply nested SDK event metadata without aborting the turn", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const cyclicPayload: Record<string, unknown> = { workspacePath: "/Users/liyang/project" }
+    cyclicPayload.self = cyclicPayload
+    let deepPayload: Record<string, unknown> = { value: "leaf" }
+    for (let depth = 0; depth < 200; depth += 1) deepPayload = { child: deepPayload }
+    const { router } = createRouter({
+      agentEvents,
+      session: new ScriptedSession([
+        {
+          type: "sdkEvent",
+          sdkType: "future_message",
+          payload: { cyclicPayload, deepPayload },
+          sdkSessionId: "sdk-1",
+        },
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    await expect(router.send(baseMessage("hello"))).resolves.toMatchObject({ resultText: "done" })
+    const serialized = JSON.stringify((await agentEvents.list()).map((entry) => entry.payload))
+    expect(serialized).toContain("[Circular]")
+    expect(serialized).toContain("[truncated]")
+    expect(serialized).toContain("/Users/liyang/project")
+  })
+
   it("persists one safe tool-router fallback status for history restore", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const { conversations, router } = createRouter({
