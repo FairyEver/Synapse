@@ -12,6 +12,12 @@
 - 提交前门禁通过：共享包构建、Server typecheck、Server 生产构建，以及 Server 全量 96 个测试文件、1166/1166。
 - 部署脚本会同步工作树而非 Git 提交；由于当前另有未提交的 Server Markdown renderer 改动，部署将从本次提交创建的临时干净 worktree 执行，避免将用户既有改动带入生产。
 - 已精确暂存本次 6 个文件；`RELEASE_NOTES_PENDING.md` 只暂存大目录删除说明，用户既有两条 Markdown 修复说明仍保持未暂存。
+- 已创建提交 `dd38e7562 fix(drive): prevent large folder trash timeout`；原工作区其它未提交修改完整保留。
+- 首次准备临时 worktree 时误从尚未注册的空目录执行 Git 命令，命令在部署前退出且无写入；改为从原仓库注册 detached worktree 后继续。
+- 从提交 `dd38e7562` 的干净 worktree 执行正式部署，部署 ID `20260825_081210`，19/19 步完成，总耗时 122 秒。
+- 生产迁移门禁通过：57 个远端已应用记录核对、无待执行 migration、临时库预演、最终备份与恢复验证全部成功；Drive 使用 COS，按脚本跳过本地对象备份。
+- 生产容器运行镜像 `synapse-server:deploy-20260825_081210`，状态 `running healthy`；公开 `/healthz` 返回 `{"status":"ok"}`，远端源码已核对包含 10 秒 maxWait 和 30 秒 timeout。
+- 本地临时部署 worktree 与其中的 `.env.server` 副本已精确清理。
 
 ## 会话：2026-08-23
 
