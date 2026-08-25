@@ -1060,7 +1060,7 @@ describe("ClaudeSDKSession", () => {
     await expect(session.nextEvent()).resolves.toEqual(expect.objectContaining({
       type: "sdkEvent",
       sdkType: "synapseToolRouterFallback",
-      payload: { reason: "unsupported-server-config" },
+      payload: {},
     }))
     await expect(resolveSoon(session.nextEvent())).resolves.toBe("timeout")
   })

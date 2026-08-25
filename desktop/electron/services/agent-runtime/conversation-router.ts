@@ -753,7 +753,7 @@ export class ConversationRouter {
       if (thinkingDelta) {
         streamedThinkingStartedAt ??= event.timestamp ?? this.isoNow()
         streamedThinking = `${streamedThinking}${thinkingDelta}`
-      } else {
+      } else if (event.type !== "sdkEvent") {
         await flushStreamedThinkingHistory()
       }
 

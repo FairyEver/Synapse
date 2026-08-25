@@ -956,13 +956,13 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
   }
 
-  private notifySynapseToolRouterFallback(reason: string): void {
+  private notifySynapseToolRouterFallback(_reason: string): void {
     if (this.synapseToolRouterFallbackEmitted || this.closed) return
     this.synapseToolRouterFallbackEmitted = true
     this.eventQueue.push({
       type: "sdkEvent",
       sdkType: "synapseToolRouterFallback",
-      payload: { reason },
+      payload: {},
       conversationId: this.conversationId,
       providerId: this.providerId,
       projectId: this.projectId,

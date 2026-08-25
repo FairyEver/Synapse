@@ -1,5 +1,80 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 1 轮现场
+
+- 起始时间 `2026-08-26 01:10:00 CST`；HEAD `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`；当前分支 `main`，相对 `origin/main` ahead 6。
+- 起始未提交文件只有 `task_plan.md`、`progress.md`、`findings.md`，均为主任务刚追加的阶段 23 编排记录；本轮不得覆盖或拆分为其它任务。
+- 固定审查基准为用户指定的 `db1890741738f5d9a7e93ab8b940a0a0887f9832`，同时另行盘点 2026-08-25 00:00–23:59 CST 提交及当日形成、午夜后连续提交的直接变更。
+- 审查方法保留 code-review 的 Standards / Spec 双轴，但因用户禁止子任务而在当前任务内串行完成。
+- 真实 UI 证据必须通过 computer-use 技能的 `node_repl + @oai/sky`，每次动作后重新获取应用状态；不使用 AppleScript、System Events、浏览器自动化或 Playwright。
+- 权威产品边界：实验 router 默认关闭，只在对话创建时固化；第三方端点才启用，Anthropic 官方端点保持原生，Provider 切换时按快照和端点重建并重新计算。
+- 任何 discovery、其它 MCP 重建、显式 Synapse 权限规则、policy helper 或 server 工具策略无法无损保持时，必须整会话回退完整 MCP；回退提示至多一次，配置/header/env/secret/reason 不得进入 history 或导出。
+- `invoke` 必须把真实 `mcp__synapse-mcp__<tool>` 名称、参数和 `toolUseId` 端到端投影回 Persona、子 Agent、权限、事件、history 与导出；底层继续经过 action router、PermissionGuard、AuditSink。
+- 模型目录只允许用规范化 Base URL + 精确模型 ID/官方别名配置新 SDK 会话及 Tooltip 参考；显式 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 优先，未知端点/模型不注入，目录变化必须进入 session 复用键。
+- 顶栏百分比与分母只能来自 SDK 实际 `contextWindowTokens`；`/compact` 后只接受当前 Query `getContextUsage()`，查询失败即清空旧快照。目录上限仅作为 Tooltip 参考，不得伪造运行窗口。
+- 设置与顶栏 UI 必须复用 radix-nova/shadcn、主题 token、现有 Field/Progress/Tooltip 与 container query，不新增颜色、CSS、层级或解释性文案；宽窄窗口和键盘/Tooltip 可访问性均属于验收范围。
+
+### 提交与基准盘点
+
+- 2026-08-25 00:00–23:59 CST 共 5 个提交：`dd38e75625ce03243568d6c9e20cebc812c6adf9`（Drive 大目录回收站）、`876e2223c6a8c8c5555cc4b1a45670df9d83d9b7`（部署维护）、`7b474594f7ba2115d3403b6b47c48b2f467a489e`（Git diff）、`a41ba9a887118f0c51dd11dd7e10045862e2c12e`（Agent 附件与 Slash）、`f937c5e73b8a29c845fae73f539a44fd9d32dff4`（Drive Markdown/Mermaid）。
+- 当日直接形成、午夜后连续提交的是 `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`（2026-08-26 01:02:27 CST，Agent 附件链路、MCP router、模型目录与上下文能力）；本轮主范围均位于该提交，纳入当日连续变更。
+- 用户指定基准 `db1890741738f5d9a7e93ab8b940a0a0887f9832` 与当前 HEAD 的 merge-base 相同；区间共 173 个文件、17,354 行新增、4,522 行删除。第 1 轮深入 Agent/MCP/模型/上下文及其 IPC、history、export、规则，Drive/Git 仅完成提交与边界盘点，留给后续轮次深入。
+
+### 第 1 轮修改点矩阵（19 项）
+
+| # | 修改点 | 代码 / 提交 | 用户可感知行为 | 自动化测试 | 实机用例 | 本轮状态 |
+|---:|---|---|---|---|---|---|
+| 1 | 实验开关默认值、非法值迁移、备份/IPC | config types/default/normalizer/backup；`5c2ac491` | 升级或缺字段时保持关闭 | config/backup/IPC 专项 | 设置初始关闭，结束恢复关闭 | 通过 |
+| 2 | 设置“实验功能”分组与开关 | settings data/category；`5c2ac491` | 可保存开关，不增加解释层级 | settings data/category | 宽屏及主窗口最小宽度切换 | 通过 |
+| 3 | 设置行响应式与右缘对齐 | SettingsGroup/SettingsFieldRow；`5c2ac491` | 开关、重置、服务器状态右缘一致 | settings layout | 账号/基础/实验三页宽窄观察 | 通过 |
+| 4 | 新会话快照与旧会话兼容 | ConversationRouter/SessionRepository/runtime service；`5c2ac491` | 仅新会话采用创建时开关，旧会话不漂移 | router/repository/config | 关闭旧会话→开启→旧会话无路由、新会话进入路由/回退 | 通过；旧会话测试轮已取消 |
+| 5 | 第三方 Provider scope 与 Anthropic 官方排除 | provider helpers/session manager；`5c2ac491` | 仅第三方兼容端点进入实验路由 | provider/session manager | 百炼 qwen3.7-plus 新会话 | 通过；官方端点只做自动化 |
+| 6 | discovery、其它 MCP 严格重建与整会话回退 | synapse-tool-router-query；`5c2ac491` | 无法等价重建时恢复完整 MCP并提示一次 | router query | 项目会话安全回退；本地会话正常路由 | 通过 |
+| 7 | 223 工具目录与中英文搜索排序 | synapse-tool-router；`5c2ac491` | 中英文通用文件列表优先正确工具 | router catalog/ranking | 中文请求搜索到自动化触发器工具 | 通过 |
+| 8 | invoke 包络、取消、结果归一化 | synapse-tool-router；`5c2ac491` | 精确名称调用并保持原结果/取消语义 | router invocation | router search→真实只读工具→3 个类型 | 通过 |
+| 9 | invoke MCP 风险注解 | synapse-tool-router；本轮修复 | 模型不再把可写统一入口误认为只读/封闭世界 | 新增注册元数据回归 | 真实只读调用冒烟 | 红灯命中并修复，实机通过 |
+| 10 | Persona、permission mode、tool policy | ClaudeSDKSession/session manager；`5c2ac491` | 路由调用仍按原工具权限审批/拒绝 | session permission/persona | 当前“跳过权限确认”模式只读调用 | 自动化通过；未改用户权限模式 |
+| 11 | 子 Agent、真实工具名、toolUseId、事件投影 | ClaudeSDKSession/history mapper；`5c2ac491` | 时间线/权限卡显示真实 Synapse 工具 | session/timeline/history | 恢复后显示真实 `app_automation_trigger_type_list` | 通过；子 Agent 只做自动化 |
+| 12 | 回退提示及内部原因脱敏 | ClaudeSDKSession/events/history/export；本轮修复 | 只显示通用回退状态，内部原因不进入持久事件/导出 | 新增 fallback payload 回归 | 项目会话回退 + 调试包全文检索 | 红灯命中并修复，实机/导出通过 |
+| 13 | 模型目录 schema、来源、更新门禁 | model-capability catalog/updater；`5c2ac491` | 打包快照可校验、异常下降拒绝 | catalog/check | Tooltip 显示 Alibaba Cloud 与 2026-08-25 | 通过；更新时戳语义列风险 |
+| 14 | Base URL + 精确模型/别名匹配与未知降级 | model-capability catalog；`5c2ac491` | 仅已知精确端点/模型配置窗口 | catalog exact-match | 百炼 qwen3.7-plus 显示 1M | 通过；未知模型只做自动化 |
+| 15 | 用户环境变量优先与 SDK session 复用键 | catalog/session manager；`5c2ac491` | 显式窗口不覆盖，派生配置变化重建 | catalog/session manager | 不读取/不改凭据与 env | 自动化通过，实机无侵入核验 |
+| 16 | 主线程上下文聚合与子线程隔离 | context-usage/ClaudeSDKSession；`5c2ac491` | 顶栏实时显示主线程实际占用 | context/session | 历史 96.8K、新会话 39.7K、主/独立窗口 | 通过 |
+| 17 | `/compact` 后权威刷新与失败清空 | context-usage/ClaudeSDKSession；`5c2ac491` | 压缩后不显示摘要 token 或旧值 | context/session | Slash 菜单出现 `/compact`，未触发计费压缩 | 自动化通过；实机仅菜单边界 |
+| 18 | 上下文 IPC、history metadata、export 投影 | ipc-shared/timeline/export；`5c2ac491` | 恢复实际窗口与官方参考，不泄露内部字段 | IPC/history/timeline/export | 切换恢复 + 两份 ZIP 脱敏检索 | 通过 |
+| 19 | 主/独立窗口宽窄顶栏与 Tooltip 可访问性 | AgentContextUsageIndicator/workspace；本轮修复 | 两种窗口响应式一致，键盘可打开详情 | 新增键盘焦点回归 + UI 专项 | 主窗口支持最小宽度、独立窗 700→430px、键盘 Tooltip | 红灯命中并修复，实机通过 |
+
+### 首轮代码审查发现
+
+- **缺陷：** `synapseToolRouterFallback` 把内部安全原因枚举写入通用 `sdkEvent.payload`；事件先于 history projection 持久化，违反设计中“reason 不进入 events/history/export”的边界。回归从期望空载荷稳定失败，修复后只保留一次通用事件；诊断原因仍由 router query 的结构化日志记录。
+- **缺陷：** 统一 `invoke` 能调用可写、破坏性和外部世界工具，却声明 `readOnlyHint: true / destructiveHint: false / openWorldHint: false`。这不会绕过宿主 PermissionGuard，但会误导模型规划。按可调用能力上界改为 `false / true / true`，`search` 保持只读。
+- **缺陷：** 顶栏 Tooltip trigger 是不可聚焦的普通 `span`，键盘用户无法触达模型上限和来源详情。新增焦点回归后补 `tabIndex=0` 与主题 token 焦点环。
+- **缺陷：** SDK 会在连续 `thinking_delta` 之间插入 `system/thinking_tokens` 元数据事件，ConversationRouter 原先把任何非思考事件都当成过程边界，导致历史恢复后每个词组成为独立“思考过程”。实机复现后新增交错元数据回归，修复为仅忽略不改变内容边界的 `sdkEvent`；工具、文本和结果仍会刷新思考块。
+- **无问题：** 新会话快照不在旧会话恢复时重读全局值；第三方 scope、Provider 变化重建、精确模型匹配、用户 env 优先、SDK 配置复用键、主/子线程上下文隔离、compact 失败清空、真实工具权限投影均未发现契约偏差。
+- **待后续风险：** 更新脚本把 `GENERATED_AT` 固定为首版日期；`generatedAt` 语义与刷新命令可能不一致，但脚本并未逐一重新抓取直连来源，不能把全部 `verifiedAt/retrievedAt` 简单刷成当前时间。本轮不制造虚假核验，建议下一轮把“快照生成时间、实际抓取时间、人工核验时间”拆开设计并补命令级回归。
+
+### 第 1 轮实机证据
+
+- **设置宽屏：** 前置为主窗口正常宽度；依次进入账号、基础设置、实验功能；服务器状态、重置按钮、实验开关均贴右缘且无多余层级。结果通过。
+- **设置窄屏：** 将主窗口拖至应用允许的最小宽度（代码下限 880px）；三处右侧动作仍对齐且无截断。结果通过。
+- **默认关闭与快照：** 前置为开关关闭并已有百炼会话；开启后旧会话请求未获得 router 工具并取消，新建项目会话触发一次安全回退，新建本地会话实际执行 router search→invoke；结束时开关恢复关闭。快照边界通过，旧会话取消轮保留。
+- **路由正常路径：** 新建本地会话，发送无敏感请求“列出自动化触发器类型”；过程调用 router search 后投影真实 `app_automation_trigger_type_list`，返回 `builtin.cron/interval/webhook`，上下文 39.7K/1M。结果通过。
+- **路由回退路径：** 新建项目会话发送同一只读请求；UI 只显示通用回退提示，完整 MCP 调用成功。结构化日志内部原因为 `explicit-permission-rule`，没有出现在 UI。结果通过。
+- **历史恢复：** 新会话首段连续思考夹有 20 个 `thinking_tokens` 元数据事件；切换到另一会话再返回后仍为一个完整思考块，工具边界后的思考另行分段。结果通过。
+- **导出脱敏：** 通过 UI 分别导出正常 router 与回退会话，ZIP 全内容检索 `explicit-permission-rule`、fallbackReason 及常见 API key 字段均无命中。结果通过；测试包保留在 Downloads 供主任务复核。
+- **上下文与 Tooltip：** 主窗口历史会话显示 96.8K/1M·10%，新会话显示 39.7K/1M·4%；键盘能打开已用/剩余、运行窗口/模型上限、最大输入/输出、官方来源与日期。结果通过。
+- **独立窗口宽窄：** 700px 宽显示 96.8K/1M·10%；缩至约 430px 后收敛为“上下文 10%”，标题、操作和用量区无横向溢出；Shift+Tab 打开完整 Tooltip。结果通过，随后关闭独立窗口。
+- **Slash：** 输入 `/` 后原生命令区出现 `/compact — Compact the current agent context`；未执行压缩，避免不必要模型调用。结果通过到菜单边界。
+- 本轮共发起 4 次最小百炼调用：旧快照会话 1 次取消、项目回退会话 1 次成功、本地 router 会话 2 次成功；请求均只查询内置触发器类型，不含用户数据或凭据。
+
+### 第 1 轮自动化与门禁
+
+- 初始三缺陷红灯：3 个文件、93 项中 90 通过/3 失败；修复后 93/93 通过。
+- 历史碎片红灯：ConversationRouter 定向 1 项稳定失败；修复后定向 1/1、整文件 70/70 通过。
+- 最终组合专项：24 个文件、523/523 通过，覆盖配置、目录、Runtime、router、session、IPC、history/export、timeline、设置和顶栏 UI。
+- `model-capabilities:check`：116 条通过；Desktop typecheck、IPC codegen、hard constraints、renderer production build、Electron/preload production build、`git diff --check` 全部通过。
+- 测试期间出现既有的 Electron mock `app.getPath/getAppPath` 兼容日志，所有测试仍通过；renderer build 只有既有大 chunk 警告。本轮未修改打包结构，因此没有重做 macOS 安装包或 `check:packaged-asar`。
+
 ## 阶段 18：主流模型能力目录
 
 - 阿里云帮助中心把完整正文放在 `window.__ICE_PAGE_PROPS__` 的结构化 JSON 中；更新器可稳定解析其中表格，无需依赖页面视觉抄录。当前公开文本生成能力表得到 93 个带上下文值的百炼模型 ID。
@@ -704,3 +779,17 @@
 - 完整 Desktop 串行复跑 1420/1420；此前并发构建负载下唯一一次 5 秒测试超时单独与全组复跑均通过，归类为资源竞争型 flake。
 - Computer Use 复验热更新后的 Git 本地主题渲染器：统一/分栏、自动换行、行号、增删与行内差异均正常。Agent 顶栏、Slash、图片/文件夹附件、灯箱、独立窗口和历史 Git 路径此前均已实机通过。
 - 本地 Drive 受登录门槛限制，未输入或迁移生产凭据；对应风险由 Dashboard 119 项最终回归和 Server 45 项回归覆盖。
+# 2026-08-26 持续复审编排约束
+
+- 当前时间 2026-08-26 01:08 CST，距离用户指定停止时刻约 5 小时 52 分钟。
+- Synapse 保存项目 ID 为 `local-ccdce33f42886d88206d465d33094f50`，是 Git 仓库；用户明确要求直接使用现有项目，因此新任务必须选择 `environment.type=local`，不得使用默认 worktree。
+- 当前主分支 `main` 相对 `origin/main` ahead 6，启动时工作树无未提交文件；每轮应在开始和结束都记录 HEAD 与 `git status`，避免跨轮覆盖。
+- 2026-08-25 提交日志显示 5 个当日提交：`dd38e7562`、`876e2223c`、`7b474594f`、`a41ba9a8d`、`f937c5e73`。此前活动记录还包含当日后续已提交的 Agent 路径化、上下文、MCP 搜索与模型目录能力，需要按提交时间、基准 `db189074...` 和最终 diff 重新核定完整范围，不能只复查这 5 个摘要。
+- Computer Use 必须使用 `node_repl` + `@oai/sky`；当前仓库 Electron 开发版此前可通过仓库内 Electron.app 的绝对路径访问，不能因为 `Synapse` 名称或 bundle id 冲突失败就宣称界面不可测。
+# 2026-08-26 阶段 23 第 1 轮现场
+
+- 起始时间 `2026-08-26 01:10:00 CST`；HEAD `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`；当前分支 `main`，相对 `origin/main` ahead 6。
+- 起始未提交文件只有 `task_plan.md`、`progress.md`、`findings.md`，均为主任务刚追加的阶段 23 编排记录；本轮不得覆盖或拆分为其它任务。
+- 固定审查基准为用户指定的 `db1890741738f5d9a7e93ab8b940a0a0887f9832`，同时另行盘点 2026-08-25 00:00–23:59 CST 提交及当日形成、午夜后连续提交的直接变更。
+- 审查方法保留 code-review 的 Standards / Spec 双轴，但因用户禁止子任务而在当前任务内串行完成。
+- 真实 UI 证据必须通过 computer-use 技能的 `node_repl + @oai/sky`，每次动作后重新获取应用状态；不使用 AppleScript、System Events、浏览器自动化或 Playwright。

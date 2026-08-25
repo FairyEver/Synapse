@@ -1,5 +1,38 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 1 轮持续复审
+
+- **状态：** complete
+- **启动时间：** 2026-08-26 01:10:00 CST
+- **启动 HEAD：** `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`
+- **启动工作树：** `main...origin/main [ahead 6]`；仅 `task_plan.md`、`progress.md`、`findings.md` 为主任务编排改动，必须保留。
+- 已完整读取 planning-with-files-zh、code-review 与 computer-use 技能。code-review 默认要求并行子代理，但本轮用户明确禁止创建其它任务或子任务，因此保留 Standards / Spec 双轴方法并在当前任务内串行执行。
+- 已执行 planning-with-files 会话恢复脚本，未报告额外未同步上下文。
+- 本轮禁止分支、worktree、pull、push、reset、stash 和开发服务启停；真实界面只使用 `node_repl + @oai/sky` 操作现有 Electron 开发版。
+- 下一步完整读取三份规划文件剩余内容、必读专题规则和相关设计文档，再建立逐修改点矩阵。
+- 已完整读取用户指定的执行、测试、UI、design、ui-rules、frontend、模型目录、Knowledge Base、Agent Runtime 安全文档，以及主进程、仓库、能力注册、产品上下文、shadcn 配置、全局样式和两份 2026-08-25 权威设计。
+- 已锁定本轮 Spec/Standards 判据：新会话快照、第三方端点、fail-safe 回退、真实工具权限投影、精确模型匹配、用户 env 优先、SDK 实际窗口、历史/导出脱敏和宽窄 UI 可访问性。
+- 已精确盘点 2026-08-25 的 5 个提交、基准到 HEAD 的 173 个文件，以及 2026-08-26 01:02 连续提交的 Agent 主范围；findings 建立 19 项“代码→行为→自动化→实机→状态”矩阵。
+- Standards/Spec 逐文件审查定位 3 个确定缺陷：fallback 内部原因进入通用持久事件、invoke wrapper 风险注解误标只读、上下文 Tooltip 无法键盘聚焦；模型目录固定时间另列为需要先拆分时间语义的后续风险。
+- 三条测试先行回归首跑 93 项中 90 通过、3 失败，分别精确命中上述三处旧行为；最小生产修复后同组 3 个文件、93 项全部通过。
+- 已同步 pending release notes；没有修改模型目录时间戳，避免在未重新抓取九类直连来源时伪造全部来源核验时间。
+- 实机恢复旧项目会话时发现连续思考被 `thinking_tokens` 元数据拆成碎片；新增交错事件回归定向 1/1 稳定失败，最小修复后定向 1/1 与 ConversationRouter 70/70 通过。
+- Computer Use 复用用户已运行开发版完成设置宽窄、默认关闭/开关恢复、新会话快照、router 正常与安全回退、真实只读调用、历史恢复、两份导出、Slash 菜单、主/独立窗口及键盘 Tooltip；每个动作后均重新读取应用状态。
+- 已把实验开关恢复为关闭并关闭独立测试窗口；未重启应用或开发服务，未读取或修改 Provider 凭据。共 4 次最小百炼调用，其中 1 次旧快照轮取消、3 次成功，内容仅查询内置触发器类型。
+- 组合专项覆盖配置、模型目录、Runtime、router、session、IPC、history/export、timeline、设置与顶栏 UI：24 个文件、523 项全部通过。
+- 模型目录离线校验通过（116 条）；Desktop typecheck、IPC codegen、hard constraints、renderer production build、Electron/preload production build 和 `git diff --check` 全部通过。Renderer 构建只有既有大 chunk 警告。
+
+## 2026-08-26 阶段 23 第 1 轮持续复审
+
+- **状态：** in_progress
+- **启动时间：** 2026-08-26 01:10:00 CST
+- **启动 HEAD：** `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`
+- **启动工作树：** `main...origin/main [ahead 6]`；仅 `task_plan.md`、`progress.md`、`findings.md` 为主任务编排改动，必须保留。
+- 已完整读取 planning-with-files-zh、code-review 与 computer-use 技能。code-review 默认要求并行子代理，但本轮用户明确禁止创建其它任务或子任务，因此保留 Standards / Spec 双轴方法并在当前任务内串行执行。
+- 已执行 planning-with-files 会话恢复脚本，未报告额外未同步上下文。
+- 本轮禁止分支、worktree、pull、push、reset、stash 和开发服务启停；真实界面只使用 `node_repl + @oai/sky` 操作现有 Electron 开发版。
+- 下一步完整读取三份规划文件剩余内容、必读专题规则和相关设计文档，再建立逐修改点矩阵。
+
 ## 2026-08-25 阶段 18：主流模型能力目录与真实上下文窗口
 
 - **状态：** in_progress
@@ -543,3 +576,10 @@
 - Desktop typecheck、hard constraints、IPC codegen、renderer/electron production build、目录离线检查与 `git diff --check` 全部通过；Electron 构建产物包含目录 JSON。
 - 生成并签名本地 macOS arm64 正式包；`check:packaged-asar`、packaged script runtime、深度 codesign 均通过，实物为 26,913 个 packed、1,591 个 unpacked 文件。包内目录仍为 116 条，当前平台 Claude 二进制可执行；本地环境缺少 notarize 选项，因此构建明确跳过公证，未发布任何产物。
 - Computer Use 复用用户已运行的 Synapse 开发版，新建最小百炼 `qwen3.7-plus` 会话并发送“只回复 OK”；返回 OK 后顶栏实际显示 `93.3K / 1M · 9%`，真实配置链路通过。未重启应用、未修改 Provider 凭据；保留该最小测试会话，未擅自永久删除。
+### 2026-08-26 阶段 23 持续全量代码审查与实机回归
+
+- **状态：** in_progress
+- 01:08 CST 启动持续目标；当前 `main` 相对 `origin/main` ahead 6，工作树在编排前干净。
+- 已确认 2026-08-25 当日提交至少包括 Drive 大目录回收站、Git diff、Agent 附件与 Slash、Drive Mermaid/Markdown 等主题；未提交产品改动已在此前轮次提交，后续以精确时间范围和基准提交重新盘点。
+- 采用严格串行的新任务协议：主任务生成提示词并创建 `local` 项目任务，执行任务直接使用当前工作区、禁止分支/worktree、禁止重启 dev 服务，完成审查/Computer Use/修复/验证/提交后由主任务验收，再开启下一轮。
+- 截止条件为北京时间 2026-08-26 07:00 之后，并且当时正在执行的一轮已经完成与验收。

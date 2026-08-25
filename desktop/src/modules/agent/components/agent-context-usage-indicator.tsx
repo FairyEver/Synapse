@@ -31,8 +31,9 @@ function AgentContextUsageIndicator({ contextUsage }: AgentContextUsageIndicator
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="flex shrink-0 items-center gap-2 px-2 text-xs text-muted-foreground"
+          className="flex shrink-0 items-center gap-2 rounded-sm px-2 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-agent-context-usage
+          tabIndex={0}
         >
           {hasWindow ? (
             <>

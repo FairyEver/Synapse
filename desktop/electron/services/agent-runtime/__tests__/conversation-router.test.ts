@@ -667,7 +667,7 @@ describe("ConversationRouter", () => {
     })
   })
 
-  it("persists streamed thinking as process history after the turn completes", async () => {
+  it("persists one thinking process when SDK metadata events interleave its deltas", async () => {
     const { conversations, router } = createRouter({
       session: new ScriptedSession([
         {
@@ -676,6 +676,13 @@ describe("ConversationRouter", () => {
           deltaType: "thinking_delta",
           sdkSessionId: "sdk-1",
           event: { type: "content_block_delta" },
+        },
+        {
+          type: "sdkEvent",
+          sdkType: "system",
+          sdkSubtype: "thinking_tokens",
+          payload: {},
+          sdkSessionId: "sdk-1",
         },
         {
           type: "stream",

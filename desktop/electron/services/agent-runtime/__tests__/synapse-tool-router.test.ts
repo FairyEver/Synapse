@@ -85,6 +85,14 @@ describe("Synapse tool router catalog", () => {
     const routerBytes = Buffer.byteLength(JSON.stringify(registeredTools))
 
     expect(Object.keys(registeredTools)).toEqual(["search", "invoke"])
+    expect(registeredTools).toMatchObject({
+      search: {
+        annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      },
+      invoke: {
+        annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+      },
+    })
     expect(routerBytes).toBeLessThanOrEqual(fullBytes * 0.1)
   })
 })

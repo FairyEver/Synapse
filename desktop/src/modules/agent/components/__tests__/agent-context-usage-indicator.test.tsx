@@ -72,6 +72,19 @@ describe("AgentContextUsageIndicator", () => {
     expect(container.querySelector('[role="progressbar"]')).toBeNull()
   })
 
+  it("lets keyboard users focus the usage summary and open its details", async () => {
+    const container = await renderIndicator({ usedTokens: 12_400, contextWindowTokens: 200_000 })
+    const trigger = container.querySelector<HTMLElement>("[data-agent-context-usage]")
+
+    await act(async () => {
+      trigger?.focus()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+
+    expect(document.activeElement).toBe(trigger)
+    expect(document.body.textContent).toContain("已用 12,400 token")
+  })
+
   it("does not render without a snapshot", async () => {
     const container = await renderIndicator()
     expect(container.innerHTML).toBe("")

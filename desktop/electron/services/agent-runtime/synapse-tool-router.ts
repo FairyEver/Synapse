@@ -258,7 +258,7 @@ export function createSynapseToolRouterServer(
         },
         async (args, extra) => invokeSynapseTool(args, executeTool, abortSignalFromExtra(extra)),
         {
-          annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+          annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
           alwaysLoad: true,
         },
       ),
