@@ -57,6 +57,13 @@
 - 有文件变化时在本轮内提交，提交前确保工作树只包含本轮或已确认的编排记录；轮末回报提交号、测试数量、实机覆盖、缺陷与剩余风险。
 - 主任务验收一轮后才创建下一轮；到 2026-08-26 07:00 之后仍需完成当时正在执行的一轮并验收，才能结束目标。
 
+## 阶段 23 第 7 轮验证进度
+
+- [x] 对 84 个修改点逐项完成负路径适用性、证据或不适用理由矩阵；83 项完整适用，1 项部分适用。
+- [x] 串行完成 Standards / Spec 双轴审查，并通过现有 Electron/Chrome 补充 Agent、Git、Drive 可安全构造的真实负路径证据。
+- [x] Desktop 全量、Dashboard/Server/Shared 专项、三端 typecheck、Desktop hard constraints/IPC/model catalog 和三端 production build 全部通过。
+- [x] 未发现新产品缺陷；记录矩阵、真实 UI 阻塞、门禁和保留测试数据。本轮完成后阶段 23 仍保持 `in_progress`。
+
 ## 阶段 18–22 验收标准
 
 - [x] 单一 JSON 目录覆盖百炼 TG 与 Anthropic、Gemini、DeepSeek、Kimi、GLM、MiniMax、StepFun、MiMo 官方直连代表模型，并保留可追溯官方来源。

@@ -1,5 +1,135 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 7 轮负路径矩阵审查
+
+- 起始 HEAD 为 `17f2f1711427be2abf3e1e32a30f6afc8a236878`，`main` 相对 `origin/main` ahead 12，工作树干净；固定比较范围为 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD`，共 12 个提交、181 个唯一文件。
+- 本轮把前五轮 19 + 26 + 15 + 12 + 12 = 84 个修改点逐项转为负路径矩阵：83 项完整适用，1 项部分适用（部署记录本身没有运行时负路径，但其绑定的大目录 trash 有）；没有用提交标题、幸福路径或生产旧部署替代负路径证据。
+- `code-review` 的 Standards / Spec 双轴在当前任务内串行执行；用户明确禁止子任务，因此未使用该技能默认的并行子代理步骤。真实 UI 只通过持久 `node_repl + @oai/sky` 复用现有 Electron 与 Chrome，未重启服务。
+
+### 84 点负路径覆盖矩阵
+
+#### 第 1 轮：Agent router、模型目录与上下文（19 / 19）
+
+| 点 | 修改点 | 负路径 | 证据与结论 |
+|---:|---|---|---|
+| 1-1 | 实验开关默认/迁移/备份 | 适用 | 缺字段、非法值、旧备份恢复由 config/backup/IPC 回归固定为关闭；旧配置不被静默开启。 |
+| 1-2 | 实验功能设置开关 | 适用 | 保存失败和配置写入失败由设置组件/配置 IPC 回归覆盖；本轮不改用户开关。 |
+| 1-3 | 设置响应式对齐 | 适用 | 最小宽度、长状态和控件右缘由布局回归；本轮未重复改设置。 |
+| 1-4 | 新旧会话开关快照 | 适用 | 缺快照旧历史按关闭兼容，新会话固化创建值；第 6 轮实机证明全局值恢复关闭后新会话仍用创建快照。 |
+| 1-5 | 第三方 Provider scope | 适用 | 官方 Anthropic、未知端点、Provider 切换和第三方端点由 provider/session-manager 回归；不修改真实凭据制造失败。 |
+| 1-6 | MCP discovery 与整会话回退 | 适用 | discovery 失败、不可序列化配置、显式权限规则均回退完整 MCP；UI 只显示通用提示。 |
+| 1-7 | 工具搜索排序 | 适用 | 空 query、无命中、中英文歧义、通用/具体工具消歧由 router 回归；本轮 Slash 实机也验证 `No matches`。 |
+| 1-8 | invoke 包络/取消/归一化 | 适用 | 非法工具、坏参数、AbortSignal、MCP error/result 归一化由 router 回归；取消不改写原工具语义。 |
+| 1-9 | invoke 风险注解 | 适用 | 可写/破坏性/open-world 上界由注册元数据回归；权限不能因统一入口被降级为只读。 |
+| 1-10 | Persona/permission/tool policy | 适用 | plan、deny、dontAsk、bypass 与 Persona deny 由 Claude SDK session 回归；本轮未改真实权限模式。 |
+| 1-11 | 子 Agent/真实工具名/toolUseId | 适用 | 子线程不污染主上下文、重复工具按 toolUseId 关联、缺 id 才兼容旧 fallback；历史实机恢复真实工具名。 |
+| 1-12 | 回退提示脱敏 | 适用 | 内部 reason/header/env/canary 不进入 event/history/export；旧会话 UI 未见 `explicit-permission-rule` 等内部 reason。 |
+| 1-13 | 模型目录 schema/更新门禁 | 适用 | 重复别名、坏日期、非正整数、窗口关系、异常下降和不稳定排序均拒绝；离线 `--check` 为门禁证据。 |
+| 1-14 | Base URL + 精确模型匹配 | 适用 | 未知 URL、未知模型、协议异常、模糊家族名不注入；Windows/POSIX URL 规范化由 catalog 回归。 |
+| 1-15 | 用户 env 优先与会话复用键 | 适用 | 显式 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 不被目录覆盖，派生配置变化重建；不读取真实 env 值。 |
+| 1-16 | 主上下文聚合/子线程隔离 | 适用 | invalid usage、子 Agent result、跨轮累计和历史恢复由 context/session 回归；主顶栏不会被子线程覆盖。 |
+| 1-17 | `/compact` 权威刷新 | 适用 | control request 缺失、失败、无效数字时清空旧快照；不把 `post_tokens` 当完整窗口，本轮不做额外付费压缩。 |
+| 1-18 | 上下文 IPC/history/export | 适用 | 旧 metadata、缺字段、非法窗口和导出脱敏由 IPC/timeline/export 回归；历史实机成功恢复。 |
+| 1-19 | 顶栏 Tooltip/超限/键盘 | 适用 | 超限剩余量 clamp 为 0、未知窗口不算百分比、键盘可聚焦；本轮 Shift+Tab 实机显示 97,197 已用、902,803 剩余。 |
+
+#### 第 2 轮：附件与 Slash（26 / 26）
+
+| 点 | 修改点 | 负路径 | 证据与结论 |
+|---:|---|---|---|
+| 2-1 | v2 引用/bridge/preload | 适用 | 缺 id、重复 id、错误 order、跨项目/草稿引用由 schema/IPC/runtime 拒绝；Renderer 不接收路径或字节。 |
+| 2-2 | 选择/拖放路径 IPC | 适用 | 用户取消实机后草稿为空；坏路径逐项拒绝，配额类错误整批回滚。 |
+| 2-3 | 系统剪贴板图片 | 适用 | 空剪贴板、非图片、读取/释放失败由 clipboard/IPC 回归；失败不留下草稿附件。 |
+| 2-4 | 魔数/MIME/尺寸/原子写 | 适用 | 空文件、伪扩展、魔数不符、解码失败、写入失败均回滚；不信任 Renderer MIME。 |
+| 2-5 | 50 图与空间配额 | 适用 | 单轮/项目/全局、并发 30+30、后项超限整批释放由 staging/IPC 回归。 |
+| 2-6 | 文件受控副本 | 适用 | 源文件消失、非普通文件、过大、复制失败由 staging/runtime 回归；不授权原父目录。 |
+| 2-7 | 文件夹授权/symlink | 适用 | 祖先 symlink、嵌套 symlink、深层/过多内容和运行时替换均 fail closed；TOCTOU 平台窗口保留为已知风险。 |
+| 2-8 | draft/commit/rollback/release | 适用 | 发送失败、取消、清理失败、重试恢复均有 staging/router 回归；清理失败结构化记录。 |
+| 2-9 | 每批 scope 与授权撤销 | 适用 | 后轮不能继承旧草稿根；失败恢复原 scope，附件轮关闭 live session 后按 SDK id 恢复。 |
+| 2-10 | 跨项目孤儿回收 | 适用 | 其它项目 committed 附件不能被当前项目 session 集合误删；projectId 过滤有红绿灯。 |
+| 2-11 | 路径型 runtime 清单 | 适用 | 失效文件、越界路径、目录类型漂移和重复引用被拒绝；主进程不读取图片字节。 |
+| 2-12 | 单 query/Provider 中立 | 适用 | Provider 原生拒绝只返回原生错误，不启动隐藏 query/batch/摘要；Qwen/Kimi/自定义无分支。 |
+| 2-13 | 发送顺序 | 适用 | 乱序、重复和跨 turn ref 被拒绝；1/4/20/50 图使用同一有序 manifest。 |
+| 2-14 | 会话创建/恢复 | 适用 | 旧 history 缺字段、会话删除时排队、恢复后路径失效由 repository/router 回归；失败不吞消息。 |
+| 2-15 | history 附件 metadata | 适用 | 受控路径、Base64/data URL、旧目录 path 在持久化前投影为名称；第 6 轮泄漏红灯已修复。 |
+| 2-16 | timeline/transcript 投影 | 适用 | 流式 path 分片、tool input/result 和旧 metadata 均投影稳定附件标签；不存在绝对路径。 |
+| 2-17 | 导出脱敏 | 适用 | 旧 path 附件、循环/深层对象、Base64 和内部 router reason 不进入 ZIP；WeakMap 保留循环图兼容。 |
+| 2-18 | Composer 添加/删除 | 适用 | 本轮文件 picker 取消后无附件、发送禁用；删除/卸载、选择失败和 IPC 失败由组件回归。 |
+| 2-19 | 乐观消息/失败队列 | 适用 | enqueue reject、`result.error`、取消和重试会撤销乐观项、恢复正文/附件；不把失败当成功。 |
+| 2-20 | 附件条布局 | 适用 | 0/1/9/50、长名、窄窗与错误项由 strip/composer 回归；无卡片套卡片或路径 tooltip。 |
+| 2-21 | 消息气泡附件 | 适用 | 旧 path、缺预览、正文为空/失败结果由 row/timeline 回归；正文不生成隐藏清单。 |
+| 2-22 | 九宫格/灯箱 | 适用 | 缺失 artifact、超过 9、50 图索引和跨项目清理由 row/artifact 回归；缺图不破坏正文。 |
+| 2-23 | Slash 数据源/去重 | 适用 | 重名、空目录、无 KB、无结果由 registry/slash 回归；本轮真实显示 `No matches`。 |
+| 2-24 | `/compact`/旧 `/compress` | 适用 | 旧命令只返回一次不支持错误，`/compact` SDK error 不双发；未为实机补证触发计费。 |
+| 2-25 | Slash 键盘/关闭 | 适用 | 本轮真实输入无结果后 Escape 关闭、焦点留在输入框且未发送；键盘/鼠标边界由组件回归。 |
+| 2-26 | 最近 Skill 成功门禁 | 适用 | 仅 `sendMessage=true` 后更新 MRU；enqueue failure、`result.error`、队列重试均不错误记录。 |
+
+#### 第 3 轮：Git diff（15 / 15）
+
+| 点 | 修改点 | 负路径 | 证据与结论 |
+|---:|---|---|---|
+| 3-1 | rename patch | 适用 | rename old/new、无 patch、路径特殊字符由 service/parser 回归；实机显示 rename from/to。 |
+| 3-2 | 本地主题 renderer | 适用 | 第三方依赖/CSS 已无残留；未知行、raw header 不套硬编码色。 |
+| 3-3 | unified 行号/增删 | 适用 | empty、no-newline、纯新增/删除、行号缺侧由 viewer 回归。 |
+| 3-4 | split 配对 | 适用 | 不等长块、单边空行和 no-newline 由 viewer 回归；本轮实机切分栏。 |
+| 3-5 | 行内差异 | 适用 | 大段替换、Unicode 和无法细分时保守显示；不丢整行内容。 |
+| 3-6 | 自动换行 | 适用 | 长行与窄轨道不再撑破，关闭时保留横向滚动；本轮实机 wrap=1。 |
+| 3-7 | 偏好跨 Tab | 适用 | unified/split 与 wrap 跨 changes/history 保留；提交切换不重置。 |
+| 3-8 | 工作区列表/diff | 适用 | 干净工作树实机显示“暂无改动”；读取失败、文件消失、刷新成功后清错由 hook/workbench 回归。 |
+| 3-9 | 历史延迟/请求代次 | 适用 | 慢旧请求、切 commit、组件卸载和错误后重试由 hook 回归；旧响应不能覆盖新选择。 |
+| 3-10 | 历史多文件选中 | 适用 | commitHash+index 键控消除旧文件首帧；空提交和 index 越界归零。 |
+| 3-11 | 解析失败 fallback | 适用 | 损坏 patch/raw diff 不冒充结构化差异；同层 parser/workbench 回归，未篡改 Git 对象实机制造。 |
+| 3-12 | binary/empty/truncated/大提交 | 适用 | 本轮实机 154 项滚动并打开 PNG，明确显示“文件已变更。”；空/截断由 service 回归。 |
+| 3-13 | 特殊路径/pathspec | 适用 | 空格、Unicode、leading dash、Windows/POSIX 分隔和 rename 由 service/pathspec 回归。 |
+| 3-14 | 主题/滚动/键盘/窄窗 | 适用 | 键盘原生按钮、焦点、独立滚动和窄窗由 workbench 回归；本轮未重复改主题或窗口尺寸。 |
+| 3-15 | 154 文件列表高度 | 适用 | 本轮虚拟列表从 0–100 滚到 54–154，diff 仍留在详情区；没有整页无限增长。 |
+
+#### 第 4 轮：Drive Markdown / MDX / Mermaid（12 / 12）
+
+| 点 | 修改点 | 负路径 | 证据与结论 |
+|---:|---|---|---|
+| 4-1 | Mermaid figure margin | 适用 | 空图/超宽图/上游内联宽度由 renderer 布局回归；无页面级 margin 回流。 |
+| 4-2 | Mermaid 多图/错误/取消 | 适用 | 语法错误保留源码、取消旧 render、主题重绘和多图互不覆盖；生产旧版实机仍显示源码 fallback。 |
+| 4-3 | Mermaid 宽度/滚动 | 适用 | 1200px SVG、max-width 清理与图内滚动由 renderer 回归；窄窗不撑破页面。 |
+| 4-4 | CommonMark `<=` | 适用 | 转义、代码块/行内代码、保存往返由真实 MDXEditor 回归；生产旧部署只作旧失败复现。 |
+| 4-5 | `.md` HTML/注释边界 | 适用 | JSX-like、HTML 注释、代码 fence、无法无损 AST 时进入源码模式；不静默丢内容。 |
+| 4-6 | `.mdx` 严格解析 | 适用 | 合法 JSX、非法 MDX、顶层 ESM、解析失败恢复源码由 renderer 回归；旧部署不能冒充当前通过。 |
+| 4-7 | 混合列表 | 适用 | 深层/空项/任务项/marker 与编辑往返由 MDXEditor 集成回归。 |
+| 4-8 | 非 1 起始列表 | 适用 | start、空项、任务列表、重开保存由 list plugin 回归；无法识别节点不强行改写。 |
+| 4-9 | 空 heading | 适用 | 空/仅格式 heading 不进入 TOC/projection；生产旧部署出现占位仅记录为旧行为。 |
+| 4-10 | 重复/Unicode heading | 适用 | 重复 id、Unicode、显式文本和顺序由 renderer/projection 回归；循环/深层 AST 有边界。 |
+| 4-11 | 评论 projection | 适用 | `.mdx`、`.markdown`、MIME-only 均拒绝评论；旧锚点失配保守失败，不由 Renderer 猜测重挂。 |
+| 4-12 | 保存/竞态/XSS | 适用 | 版本冲突、保存失败、快速切文档、XSS 和读取失败由 Dashboard/Server 回归；本轮源码模式只读进入并恢复预览，未保存。 |
+
+#### 第 5 轮：Drive 大目录生命周期（12 / 12）
+
+| 点 | 修改点 | 负路径 | 证据与结论 |
+|---:|---|---|---|
+| 5-1 | 提交/部署记录 | 部分适用 | 部署记录本身无运行时负路径；绑定的 1000 文件 trash 超时、回滚和源码版本由生命周期测试覆盖。 |
+| 5-2 | 宽目录 trash | 适用 | 1000 文件、跨页/宽树、事务等待/超时和 change append 失败整树回滚由生命周期回归。 |
+| 5-3 | restore/hide 时限 | 适用 | 1000 文件 restore/hide 统一 10s/30s；配额、revision/session 任一步失败保持事务原子。 |
+| 5-4 | 深树/循环 | 适用 | 128 层成功，子树/祖先循环 fail closed；visited 避免无限循环和栈递归。 |
+| 5-5 | 并发/late child | 适用 | 收集后新增 child、状态漂移、重复操作和 change failure 均回滚；不留下半迁移树。 |
+| 5-6 | 父子可见性 | 适用 | 回收站只列 root，恢复清空整树 metadata；本轮只读实机仍只见测试根与恢复入口。 |
+| 5-7 | 再次删除/admin restore | 适用 | 普通用户不能恢复 child/hidden，admin 可恢复 hidden；本轮未点永久删除。 |
+| 5-8 | quota/storage/orphan | 适用 | trash 保留容量，hide 原子释放，物理清理失败保留元数据；实机配额为 111.0 MB / 5.0 GB。 |
+| 5-9 | share/comment/change | 适用 | share 恢复范围、manual disable、逐项 trashed/restored change 与评论可见性由 service 回归。 |
+| 5-10 | 权限/审计/错误 | 适用 | 跨用户 child/ancestor、audit failure、忙状态和层级异常均明确拒绝且脱敏。 |
+| 5-11 | Web/Desktop/MCP/Sync 复用 | 适用 | 四入口最终进入同一生命周期 service；未登录/权限拒绝不各自降级为部分成功。 |
+| 5-12 | Standards/发布范围 | 适用 | 无裸 fs/network、空 catch、console 日志或范围外依赖；失败证据不通过吞错换绿。 |
+
+### 第 7 轮 Standards / Spec 结论
+
+- **Standards：** 基线新增行复核未发现空 catch、生产 `console.log`、自定义颜色、任意 Tailwind 色、普通内联 style、裸 renderer IPC 或新增跨模块内部导入。`processQueue` 有一处相邻重复的 abort 判断，属于无行为影响的轻微 Duplicated Code 判断项，不为本轮负路径审查制造无意义产品改动；其它 smell baseline 未形成可行动缺陷。
+- **Spec：** 84 点均能落到失败、取消、恢复、权限、兼容、竞态或受限状态证据。附件正文/history/export 继续不含受控路径、Base64 或原图字节；router fallback reason 仅进结构化诊断；Git 失败与二进制有独立状态；Drive Markdown 失败保留源码，生命周期失败保持事务原子。
+- 本轮没有发现新的产品缺陷；因此没有改生产代码或 `RELEASE_NOTES_PENDING.md`。负路径矩阵、实机证据和最终门禁作为本轮提交内容。
+
+### 第 7 轮真实 UI 证据与阻塞
+
+- Agent：Slash 无命中真实显示 `No matches`，Escape 关闭且不发送；文件选择器取消后草稿为空、发送禁用。恢复既有附件会话后名称/大小、正文、真实工具结果和 97.2K/1M 上下文均在；键盘 Tooltip 显示已用 97,197、剩余 902,803。导出打开系统保存面板后取消，未生成文件。
+- Git：干净工作树显示“暂无改动”；历史 `dfcf00abf` 显示 154 项，文件虚拟列表滚到 54–154；rename、modified/new/deleted 标签可见，split 和 wrap 生效；PNG 二进制显示“文件已变更。”。未执行 commit/push/pull/sync。
+- Drive：生产旧部署只用于复现/只读。普通 Markdown 可进源码模式并恢复预览，错误 Mermaid 保留源码；回收站测试根 `codex-round5-drive-trash-tdX0XU` 仍只有恢复/删除入口，配额 111.0 MB / 5.0 GB。未保存、恢复或永久删除。
+- 当前源码 Drive 修复后的真实 UI 仍被本地 Electron/Dashboard 无登录态阻塞；生产 Chrome 是旧部署。评论拒绝、保存错误、恢复冲突、事务失败和循环/越权均以同层 Dashboard/Server/Shared 自动化为当前证据，不把旧部署或单测冒充修复后实机。
+
 ## 2026-08-26 阶段 23 第 6 轮全量覆盖缺口审计
 
 - 起始 HEAD 为 `ddd80213d2ff936b13951ddc012d5ce8de146611`，`main` 相对 `origin/main` ahead 11，工作树干净；全程未创建或切换分支/worktree，未 pull/push/reset/stash，未启停开发服务。
