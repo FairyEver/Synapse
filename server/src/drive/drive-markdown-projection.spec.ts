@@ -90,7 +90,7 @@ describe('Drive Markdown projection', () => {
     const retainedCount = next.projection.blocks.filter((block) => previousIds.has(block.blockId)).length
 
     expect(retainedCount).toBe(previous.projection.blocks.length)
-    expect(elapsedMs).toBeLessThan(1_800)
+    expect(elapsedMs).toBeLessThan(3_000)
   }, 15_000)
 
   it('uses Unicode code point offsets for CJK, emoji and combining text', async () => {

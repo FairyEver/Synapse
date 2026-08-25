@@ -2939,6 +2939,7 @@ describe("AgentComposer", () => {
     })
 
     expect(onDraftChange).not.toHaveBeenCalled()
+    expect(container.querySelector('[aria-label="Agent slash menu"]')).toBeNull()
   })
 
   it("keeps normal Enter submission when no slash menu is active", async () => {

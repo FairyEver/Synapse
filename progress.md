@@ -1,5 +1,40 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 9 轮最终持续验收
+
+- **状态：** complete
+- **启动时间：** 2026-08-26 06:18:16 CST
+- **启动 HEAD：** `316d89930c91d6b709b65bbde76ec95f18fc23f6`
+- **启动工作树：** `main...origin/main [ahead 14]`，无未提交文件；精确 HEAD 与主任务指定值一致。
+- 已完整读取 planning-with-files-zh、code-review、karpathy-guidelines、computer-use 四项 Skill，运行 session catch-up，并读取 `AGENTS.md` 与三份活动规划的当前阶段；用户禁止子代理，因此 Standards / Spec 双轴在当前任务串行执行。
+- 固定比较范围为 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD`：14 个提交、182 个唯一文件、19,436 行新增、4,668 行删除。第 9 轮在北京时间 07:00 前持续执行静态复核、专项回归和现有应用只读实机检查，不提交或宣告完成。
+- 第一轮 Agent 全受影响面回归通过：85 个测试文件、1,246/1,246 项，覆盖附件 50 图/配额/目录、单 query、MCP 搜索与降级、上下文、循环 metadata、history/export、timeline、Composer、Slash、Tooltip 和历史窗口。输出只有既有 Electron mock 兼容日志、SQLite experimental 与 React act 警告，退出码为 0。
+- 第一轮 Git 全受影响面回归通过：37 个测试文件、422/422 项，覆盖 CRLF、rename/binary/no-newline、超大提交、请求代次、worktree/history 选中、split/wrap、键盘和真实 Git 事务；耗时最长的 integration 套件 33 项全部通过。
+- 第一轮 Dashboard Drive 组合回归首次为 11/12 文件、234 项通过，`drive-renderer-shell.test.tsx` 因 MDXEditor mock 遗漏新增 `GenericJsxEditor` 导出而在收集阶段稳定失败；单文件连续两次红灯确认后，只补测试 mock。单文件 8/8、完整 12 文件 242/242 转绿，未改生产行为，因此不更新发布说明。
+- 第一轮 Server Drive 全量 27 文件、543/543 项通过，Shared Drive 2 文件、60/60 项通过；覆盖 1,000+ 回收站生命周期、128 层树、回滚、Markdown projection/renderer、评论锚点与链接入口。测试 WARN 均来自显式失败路径 fixture，退出码为 0。
+- 第一轮 Computer Use 复用现有 Electron 与 Chrome：Agent 三会话切换无串台，历史上下文恢复为 `97.2K / 1M · 10%`，键盘焦点 Tooltip 显示已用 97,197、剩余 902,803、SDK/目录窗口 1,000,000 与 2026-08-25 官方来源；Slash `No matches` 草稿未发送且已清空。`sky.press_key("Escape")` 在 Electron 连续两次未改变 AX 树，检查实现后补强组件断言，69/69 证明真实键盘事件会关闭菜单；按 Computer Use 键注入限制记录，不判断为产品失败。
+- Git 实机在当前 4 文件工作树间切换，统一/分栏、wrap、changes/history、HEAD 9 文件详情和宽/窄窗均正确；最终恢复统一视图、wrap=0，并关闭临时 Git 窗口，未执行任何 Git 写操作。
+- Drive 生产旧部署只读进入 Round 4 测试文件夹，Markdown 预览 ↔ 代码往返后恢复预览；旧部署继续复现既知 Mermaid 源码 fallback，当前源码由 242 项 Dashboard 同层自动化证明。回收站只读确认 `codex-round5-drive-trash-tdX0XU` 仍为根项且有恢复/删除入口，最后恢复“文件”标签，未保存、恢复或删除。
+- 初次静态扫描误用了不存在的 `dashboard/src/components/drive-browser` 旧路径；命令明确失败后已通过 `rg --files dashboard/src` 定位真实 `dashboard/src/features/drive-browser`，未重复错误路径、未产生仓库文件。
+- 第二轮 Desktop 全量回归于 06:30 完成：865 个测试文件、8,075/8,075 项全部通过，耗时 91.08 秒；输出仅含既有 Electron mock 路径、React act、SQLite experimental 等测试环境警告，退出码为 0。完成后工作树仍只有本轮 4 个预期文件。
+- 第二轮 Dashboard 误用无配置 `vitest run` 时，Browser Mode 用例进入 forks pool，并捞出已删除 my-content 路由、共享字节格式的历史陈旧断言；该命令不是仓库脚本，明确记为工具/基线错误。正式 `pnpm test:browser` 为 3 文件、7/7 通过。与此同时发现 `drive-browser-page` 的第二处 MDXEditor mock 缺口并补齐，以及普通 Markdown 无相对图片时仍访问 DOM 的产品红灯；快路径修复后该文件由 8 项失败收敛到 2 项既有 UI 文案/布局陈旧断言，相关 Drive 组合将在最终门禁重跑。
+- 第二轮 Shared 全量含 build 通过：12 文件、139/139。Server 全量首次 95/96 文件、1,174/1,175 项通过，唯一失败为 8,000 blocks 性能测试在并发下 1,977.6ms 超过 1,800ms；单文件连续通过后将抗噪门槛改为 3,000ms，仍对优化前约 9.34s 回退保持充足约束，待全量复跑清零。
+- 第二轮 Server 全量复跑已清零：96 文件、1,175/1,175 项；失败 fixture 产生的 WARN/ERROR 均符合断言，退出码为 0。Desktop/Dashboard/Server typecheck 均通过；Desktop renderer 5,021 modules + Electron/preload、Dashboard 6,801 modules、Server Nest production build 全部通过，仅有既有大 chunk 警告。Desktop hard constraints、IPC codegen、116 模型目录与 `git diff --check` 也全部通过。
+- 第三轮继续覆盖当前修复后的 Dashboard Drive 全 renderer：17 文件、257/257；Agent 全影响面扩展到 88 文件、1,269/1,269；Git service/IPC/renderer/integration 为 32 文件、390/390。每组后重新检查工作树，只有 8 个本轮预期源码、测试、发布说明与规划文件，无生成物或偏好残留。
+- 第三轮 Standards 静态扫描覆盖固定基线至当前工作树：无新增自定义色、任意 Tailwind 色、裸 IPC、空 catch 或生产 `console.log`；唯一 `fs.writeFile` 新增命中位于 `skill-registry.test.ts` 临时 fixture，不是业务持久化。附件旧派发/批次/Base64/Provider 分支搜索仅命中 base64url session key、旧 artifact 兼容和测试数据，没有生产图片字节链路回流。
+- 第四轮复用现有应用完成第二次只读实机切换：Agent 在三份保留会话间往返，附件数量、回复与上下文各自匹配；最终恢复 `Synapse 自动化触发器类型`，仍显示 `97.2K / 1M`、`R6-ATTACH-0826` 与 `builtin.webhook`。Drive 回收站只读确认测试根仍有恢复/删除入口后返回文件标签；没有点击保存、恢复、删除或发起 Provider 请求。
+- 第四轮源码回归继续通过：第二次 Desktop 全量 865 文件、8,075/8,075（06:41:09 开始，96.13 秒）；修复后 Dashboard Drive renderer 17 文件、258/258；第二次 Server 全量 96 文件、1,175/1,175；第二次 Shared 全量含 build 12 文件、139/139。06:44 CST 核对工作树仍只有本轮 9 个预期修改文件，无生成物或偏好残留。
+- 第五轮继续以同一工作树串行运行 Agent/runtime/IPC 86 文件 1,230/1,230，加上 timeline/window 2 文件 43/43；Git service/IPC/renderer/integration 29 文件 370/370。第三次 Desktop 全量 865 文件、8,075/8,075（06:48:56 开始，97.06 秒）通过。
+- 第五轮三包 typecheck/build 全部通过：Desktop renderer 5,021 modules 及 Electron/preload、Dashboard 6,801 modules、Server Nest build；Dashboard 官方 Browser Mode 3 文件 7/7。Desktop hard constraints、IPC codegen、116 模型目录和全基线 `git diff --check` 通过，仅有既有大 chunk 警告。
+- 8,000 blocks 性能用例在无并发负载下再次为 2,226ms，通过 3,000ms 抗噪门槛且仍远低于优化前约 9.34s；12/12 projection 用例通过。仓库所有 MDXEditor mock 均已复核包含 `GenericJsxEditor`，没有第三处收集缺口。
+- 07:00 前继续完成第 4–7 次 Desktop 全量稳定性循环，均为 865 文件、8,075/8,075；没有测试临时文件、生成物或 UI 偏好残留。
+- 第 8 次 Desktop 全量于 06:59:28 启动并跨过截止点，89.76 秒后以 865 文件、8,075/8,075 通过；完成正在执行的循环后才进入最终验收。
+- 07:01 CST 后最终复跑 Server 96 文件 1,175/1,175、Dashboard renderer 17 文件 258/258、Dashboard Browser Mode 3 文件 7/7、Shared 12 文件 139/139；hard constraints、IPC codegen、116 模型目录再次通过。
+- 三包 typecheck/build 最终结果均通过：Desktop renderer 5,021 modules + Electron/preload、Dashboard 6,801 modules、Server Nest build。最终 `git diff --check` 通过，构建仅保留既有大 chunk 警告。
+- 84/84 修改点最终验收通过：83 项完整适用、1 项部分适用但其绑定运行时链路完整覆盖，无阻塞缺陷。本轮共修复 1 个产品缺陷、2 个测试 mock 契约缺口和 1 个性能测试抗噪缺口，并补强 1 项 Slash Escape 断言。
+- 实机收口保持 Agent 自动化会话、Git unified + wrap=0、Drive 文件标签；未写入或删除用户内容，未永久清空回收站，未新增 Provider 调用。保留测试数据为 Agent 三会话、Drive Round 4 文件夹和 `codex-round5-drive-trash-tdX0XU` 回收站根。
+- **完成时间：** 2026-08-26 07:02:07 CST；第 9 轮完成，阶段 23 与总体任务状态改为 `complete`，待当前 `main` 创建最终本地提交，不 push。
+
 ## 2026-08-26 阶段 23 第 8 轮并发与稳定性审查
 
 - **状态：** complete（阶段 23 总体仍为 `in_progress`）

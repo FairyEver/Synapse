@@ -1,5 +1,27 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 9 轮最终持续验收
+
+- 06:18:16 CST 起始 HEAD 精确为 `316d89930c91d6b709b65bbde76ec95f18fc23f6`，工作树干净；固定比较范围 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD` 共 14 个提交、182 个唯一文件。
+- Standards / Spec 继续在当前任务串行执行；截至第一轮静态扫描未发现新增裸 IPC、空 catch、生产 `console.log`、自定义颜色或附件 Provider 分支。
+- 第一处红灯是 Dashboard 测试契约漂移：MDXEditor 新增通用 JSX descriptor 后，`drive-renderer-shell` 的隔离 mock 未导出 `GenericJsxEditor`，导致该套件在模块收集时稳定失败。最小修复仅补同名空组件 mock，单文件 8/8、Drive 组合 242/242；运行时代码不受影响。
+- Agent 实机恢复的附件测试会话显示 `R6-ATTACH-0826` 与三种 Automation trigger，顶栏 `97.2K / 1M · 10%`；键盘 Tooltip 精确显示 97,197 已用、902,803 剩余、SDK/目录 1,000,000、最大输入 991,808、最大输出 131,072。Slash 无结果菜单可见、草稿未发送并已清理；Computer Use 的 Escape 注入未改变 AX 树，但补强后的组件断言明确验证真实 `KeyboardEvent("keydown", { key: "Escape" })` 会卸载菜单，69/69 通过，未发现产品逻辑缺陷。
+- Git 实机当前工作树、HEAD history、文件详情在窄窗与 zoom 宽窗均稳定；split/wrap 跨 changes/history 保留，最终恢复 unified + wrap=0 并关闭临时窗口。Drive 只读预览/源码往返、回收站测试根项和恢复/删除入口均可达，未触发任何数据写入。
+- 第二处产品红灯来自 Markdown 阅读渲染：不含相对图片标记的普通 HTML 仍无条件创建 DOM `template`，使非 DOM 渲染进入 `document is not defined`。最小修复只在不存在 `data-drive-markdown-relative-src` 时直接返回原 HTML；相对图片分支、评论、协作和内容净化不变，发布说明已同步。
+- Server 全量的 8,000 blocks 性能性质测试在并发负载下实测 1,977.6ms，超过 1,800ms 绝对墙钟阈值；单文件连续复跑均保持行为正确，其中 verbose 用例总耗时 2,246ms 而内部计时仍通过，确认门槛受调度噪声影响。门槛收敛为 3,000ms，仍远低于优化前约 9.34s，保留完整 4,000 组 heading + paragraph、全部 ID 继承和 15s 用例超时，不改变生产算法。
+
+### 第 9 轮最终结论
+
+- **完成时间：** 2026-08-26 07:02:07 CST。06:59:28 启动的最后一轮 Desktop 全量跨过 07:00，并在 89.76 秒后以 865 文件、8,075/8,075 完整结束；随后才执行最终跨包门禁，因此满足“07:00 后完成当时正在执行的一轮”。
+- **持续循环：** 第 9 轮以 Desktop 全量为锚完成 8 次持续验收循环；循环之间串行穿插 Agent/Git/Drive 专项、Server/Shared/Dashboard 全量或同层回归、静态双轴审查和两次现有应用只读实机切换。8 次 Desktop 全量均为 865 文件、8,075/8,075，无随机红灯。
+- **84 / 84：** 前 7 轮矩阵的 83 项完整适用 + 1 项部分适用结论保持成立；部分适用项是“部署记录”本身没有运行时负路径，其绑定的 1,000 文件 trash/restore/hide、回滚与版本链路已完整覆盖。结合第 8 轮并发/复杂度与本轮持续稳定性复验，84 个修改点全部验收通过，无阻塞缺陷。
+- **本轮缺陷总览：** 新发现并修复 1 个产品缺陷（普通 Markdown 在无相对图片时仍依赖 DOM）、2 个 MDXEditor 隔离 mock 契约缺口，以及 1 个 8,000 blocks 墙钟性能门槛抗噪缺口；另补强 Slash Escape 可见状态断言。所有红灯均先稳定复现再做最小修复，无新增依赖或范围外重构。
+- **Standards：** 固定基线到最终工作树的新增行没有自定义色/任意 Tailwind 色、裸 IPC、空 catch、生产 `console.log` 或普通内联样式；唯一新增 `fs.writeFile` 命中仍是测试 fixture。Markdown 快路径只复用已有 marker 边界，测试 mock 与性能门槛只修契约/抗噪，没有改变产品边界。
+- **Spec：** 附件继续保持 Provider 中立的单 query 有序路径清单，1/4/20/50 图走同一链路；历史、时间线、日志和导出不保存受控路径、Base64 或图片字节。MCP 搜索/完整降级、SDK 主线程上下文、Git CRLF/大提交/竞态/视图、Drive Markdown/MDX/Mermaid/评论和大目录生命周期均在最终工作树上保持通过。
+- **实机证据：** Electron 中三份 Agent 会话、附件/Tooltip/Slash、Git changes/history/diff、宽窄窗和键盘切换均稳定，最终恢复自动化会话、unified 与 wrap=0 并关闭临时 Git 窗口；Chrome Drive 只读往返预览/源码/回收站后恢复文件标签。生产旧部署只作 Mermaid 旧行为复现，当前源码由同层自动化验收；未保存、恢复、删除或永久清空用户内容，未增加 Provider 计费调用。
+- **最终门禁：** Desktop 865 文件 8,075/8,075；Server 96 文件 1,175/1,175；Dashboard renderer 17 文件 258/258、官方 Browser Mode 3 文件 7/7；Shared 12 文件 139/139。Desktop/Dashboard/Server typecheck，Desktop renderer 5,021 modules + Electron/preload、Dashboard 6,801 modules、Server production build，Desktop hard constraints、IPC codegen、116 模型目录和 `git diff --check` 全部通过；仅有既有大 chunk、Electron mock、React act 与 SQLite experimental 警告。
+- **保留测试数据：** Agent 会话 `只回复 OK`、`图片数字提取`、`Synapse 自动化触发器类型`；Drive 文件夹 `Codex Round 4 Markdown Test 2026-08-26`；回收站根 `codex-round5-drive-trash-tdX0XU`。本轮未新建附件、导出文件或 Drive 数据，也未永久清空回收站。
+
 ## 2026-08-26 阶段 23 第 8 轮并发与稳定性审查
 
 - 起始 HEAD 精确为 `6931b013f30cd5aecc2ce113b812e8aa67f2376d`，`main` 相对 `origin/main` ahead 13，工作树干净；禁止分支/worktree、pull/push/reset/stash、开发服务启停和子代理。
@@ -33,6 +55,8 @@
 
 - **Standards：** 本轮新增代码未引入依赖、自定义样式/颜色、renderer 裸 IPC、主进程裸持久化、空 catch 或生产 `console.log`；三处改动复用现有 parser、redaction 和 projection 边界，测试先红后绿。固定 diff 的既有轻微 smell 不为本轮稳定性目标顺手重构。
 - **Spec：** 附件仍为单 query、Provider 中立的有序路径清单；历史/时间线/导出不持久化受控路径或字节。MCP 权限不因 fallback 降级；上下文只聚合主线程。Git 新修复只统一跨平台换行，不改变 binary/rename/truncation 语义；Drive 优化保持 block ID 选择优先级和事务边界。
+- 第 9 轮第二次实机切换继续证明会话隔离：`图片数字提取` 的早期 50 图缺图兼容态与后期 `image-16.png` / 回复 `16` 同时可恢复，`只回复 OK` 保持最小回复，切回自动化会话后上下文、附件码和触发器结果均恢复正确；没有新调用或草稿。
+- 第 9 轮第二次全量/专项循环为 Desktop 8,075/8,075、Dashboard renderer 258/258、Server 1,175/1,175、Shared 139/139，均在修复后的同一工作树上通过。
 
 ## 2026-08-26 阶段 23 第 7 轮负路径矩阵审查
 

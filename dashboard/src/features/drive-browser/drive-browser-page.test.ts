@@ -67,6 +67,7 @@ vi.mock('@mdxeditor/editor', async () => {
     BlockTypeSelect: () => null,
     BoldItalicUnderlineToggles: () => null,
     CreateLink: () => null,
+    GenericJsxEditor: () => null,
     InsertTable: () => null,
     InsertThematicBreak: () => null,
     ListsToggle: () => null,

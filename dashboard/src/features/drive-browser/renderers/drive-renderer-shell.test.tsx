@@ -68,6 +68,7 @@ vi.mock('@mdxeditor/editor', async () => {
     linkPlugin: () => ({ name: 'linkPlugin' }),
     listsPlugin: () => ({ name: 'listsPlugin' }),
     markdownShortcutPlugin: () => ({ name: 'markdownShortcutPlugin' }),
+    GenericJsxEditor: () => null,
     quotePlugin: () => ({ name: 'quotePlugin' }),
     realmPlugin: () => () => ({ name: 'realmPlugin' }),
     createActiveEditorSubscription$: Symbol('createActiveEditorSubscription$'),

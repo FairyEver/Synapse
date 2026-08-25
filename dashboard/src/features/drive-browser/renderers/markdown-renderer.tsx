@@ -1098,6 +1098,7 @@ function restoreDriveMarkdownRelativeImageSources(
   html: string,
   relativeImages: readonly { readonly src: string; readonly resolvedUrl: string | null }[],
 ): string {
+  if (!html.includes('data-drive-markdown-relative-src')) return html
   const template = document.createElement('template')
   template.innerHTML = html
   const resolvedUrls = new Map(relativeImages.map((image) => [relativeImageSourceKey(image.src), image.resolvedUrl]))

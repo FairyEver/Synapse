@@ -137,6 +137,14 @@ afterEach(() => {
 })
 
 describe('DriveMarkdownRenderer', () => {
+  it('does not parse plain markdown html through the relative image rewriter', () => {
+    const createElement = vi.spyOn(document, 'createElement')
+
+    renderMarkdown({ previewData: preview({ html: '<p>Plain text</p>' }) })
+
+    expect(createElement.mock.calls.some(([tagName]) => tagName === 'template')).toBe(false)
+  })
+
   it('restores mapped relative image sources after collaboration replaces the preview html', () => {
     collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="./images/team%20photo.png" alt="diagram"></p>'
     renderMarkdown({
