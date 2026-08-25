@@ -56,8 +56,8 @@ type DriveTrashRootQueryRecord = Omit<DriveLifecycleItemRecord, "publicAsset" | 
 
 const DRIVE_TRASH_DEFAULT_LIMIT = 50
 const DRIVE_TRASH_MAX_LIMIT = 200
-const DRIVE_TRASH_TRANSACTION_MAX_WAIT_MS = 10_000
-const DRIVE_TRASH_TRANSACTION_TIMEOUT_MS = 30_000
+const DRIVE_LIFECYCLE_TRANSACTION_MAX_WAIT_MS = 10_000
+const DRIVE_LIFECYCLE_TRANSACTION_TIMEOUT_MS = 30_000
 
 @Injectable()
 export class DriveLifecycleService {
@@ -97,7 +97,7 @@ export class DriveLifecycleService {
   async trashItem(input: DriveLifecycleInput): Promise<DriveItemDto> {
     void this.storage
     const root = await this.requireLifecycleItem(input.userId, input.itemId, DRIVE_ITEM_LIFECYCLE_STATUS.active, input.allowPublicAsset)
-    const items = await this.collectSubtree(root.id, isActiveLifecycleItem)
+    const items = await this.collectSubtree(root.id, root.userId, isActiveLifecycleItem)
     const itemIds = items.map((item) => item.id)
     const trashedAt = new Date()
     const restorePath = await this.buildRestorePath(root)
@@ -117,6 +117,7 @@ export class DriveLifecycleService {
         },
       })
       assertLifecycleTransitionCount(updatedItems.count, itemIds.length)
+      await assertNoUntransitionedChildren(tx, root.userId, itemIds, DRIVE_ITEM_LIFECYCLE_STATUS.active)
       await disableDriveSharesForItems(tx, itemIds, trashedAt)
       await updatePublicAssetLifecycle(tx, itemIds, {
         lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
@@ -136,8 +137,8 @@ export class DriveLifecycleService {
         }, tx)
       }
     }, {
-      maxWait: DRIVE_TRASH_TRANSACTION_MAX_WAIT_MS,
-      timeout: DRIVE_TRASH_TRANSACTION_TIMEOUT_MS,
+      maxWait: DRIVE_LIFECYCLE_TRANSACTION_MAX_WAIT_MS,
+      timeout: DRIVE_LIFECYCLE_TRANSACTION_TIMEOUT_MS,
     })
     await this.recordLifecycleAuditSafely({
       actorId: input.actorId,
@@ -152,7 +153,7 @@ export class DriveLifecycleService {
   async hideTrashedItem(input: DriveLifecycleInput): Promise<{ readonly ok: true }> {
     const root = await this.requireLifecycleItem(input.userId, input.itemId, DRIVE_ITEM_LIFECYCLE_STATUS.trashed, input.allowPublicAsset)
     if (root.deleteRootId !== root.id) throw new NotFoundException("文件不存在。")
-    const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, DRIVE_ITEM_LIFECYCLE_STATUS.trashed))
+    const items = await this.collectSubtree(root.id, root.userId, belongsToDeletedTree(root.id, DRIVE_ITEM_LIFECYCLE_STATUS.trashed))
     const itemIds = items.map((item) => item.id)
     let releasedBytes = currentFileBytes(items)
     const hiddenAt = new Date()
@@ -182,6 +183,13 @@ export class DriveLifecycleService {
         },
       })
       assertLifecycleTransitionCount(updatedItems.count, itemIds.length)
+      await assertNoUntransitionedChildren(
+        tx,
+        root.userId,
+        itemIds,
+        DRIVE_ITEM_LIFECYCLE_STATUS.trashed,
+        root.id,
+      )
       await disableDriveSharesForItems(tx, itemIds, hiddenAt)
       await updatePublicAssetLifecycle(tx, itemIds, {
         lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.hidden,
@@ -213,6 +221,9 @@ export class DriveLifecycleService {
       }
       cancelledUploadSessions = pendingSessions.length
       releasedReservedBytes = pendingReservedBytes
+    }, {
+      maxWait: DRIVE_LIFECYCLE_TRANSACTION_MAX_WAIT_MS,
+      timeout: DRIVE_LIFECYCLE_TRANSACTION_TIMEOUT_MS,
     })
     await this.recordLifecycleAuditSafely({
       actorId: input.actorId,
@@ -256,7 +267,7 @@ export class DriveLifecycleService {
     if (root.deleteRootId !== root.id) throw new NotFoundException("文件不存在。")
 
     const restoringHidden = root.lifecycleStatus === DRIVE_ITEM_LIFECYCLE_STATUS.hidden
-    const items = await this.collectSubtree(root.id, belongsToDeletedTree(root.id, root.lifecycleStatus))
+    const items = await this.collectSubtree(root.id, root.userId, belongsToDeletedTree(root.id, root.lifecycleStatus))
     const itemIds = items.map((item) => item.id)
     let restoredBytes = restoringHidden ? currentFileBytes(items) : 0n
     if (restoringHidden) assertHiddenTreeCanRestore(items)
@@ -301,6 +312,7 @@ export class DriveLifecycleService {
         },
       })
       assertLifecycleTransitionCount(updatedItems.count, itemIds.length)
+      await assertNoUntransitionedChildren(tx, root.userId, itemIds, root.lifecycleStatus, root.id)
       await updatePublicAssetLifecycle(tx, itemIds, {
         lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
         trashedAt: null,
@@ -325,6 +337,9 @@ export class DriveLifecycleService {
         }, tx)
       }
       return restoredRoot
+    }, {
+      maxWait: DRIVE_LIFECYCLE_TRANSACTION_MAX_WAIT_MS,
+      timeout: DRIVE_LIFECYCLE_TRANSACTION_TIMEOUT_MS,
     })
     await this.recordLifecycleAuditSafely({
       actorId: input.actorId,
@@ -403,14 +418,18 @@ export class DriveLifecycleService {
 
   private async collectSubtree(
     rootId: string,
+    userId: string,
     includeItem: (item: DriveLifecycleItemRecord) => boolean,
   ): Promise<DriveLifecycleItemRecord[]> {
     const result: DriveLifecycleItemRecord[] = []
     const queue = [rootId]
+    const visited = new Set<string>()
     while (queue.length > 0) {
       const ids = queue.splice(0, queue.length)
+      if (ids.some((id) => visited.has(id))) throw invalidDriveHierarchy()
+      ids.forEach((id) => visited.add(id))
       const batch = await this.prisma.driveItem.findMany({
-        where: { id: { in: ids } },
+        where: { id: { in: ids }, userId },
       }) as DriveLifecycleItemRecord[]
       const included = batch.filter(includeItem)
       result.push(...included)
@@ -418,8 +437,9 @@ export class DriveLifecycleService {
       if (parentIds.length === 0) continue
       const children = await this.prisma.driveItem.findMany({
         where: { parentId: { in: parentIds } },
-        select: { id: true },
+        select: { id: true, userId: true },
       })
+      if (children.some((child) => child.userId !== userId)) throw invalidDriveHierarchy()
       queue.push(...children.map((child) => child.id))
     }
     return result
@@ -428,12 +448,16 @@ export class DriveLifecycleService {
   private async buildRestorePath(item: DriveLifecycleItemRecord): Promise<string> {
     const names = [item.name]
     let parentId = item.parentId
+    const visited = new Set([item.id])
     while (parentId) {
+      if (visited.has(parentId)) throw invalidDriveHierarchy()
+      visited.add(parentId)
       const parent = await this.prisma.driveItem.findUnique({
         where: { id: parentId },
-        select: { id: true, parentId: true, name: true },
+        select: { id: true, userId: true, parentId: true, name: true },
       })
       if (!parent) break
+      if (parent.userId !== item.userId) throw invalidDriveHierarchy()
       names.unshift(parent.name)
       parentId = parent.parentId
     }
@@ -567,6 +591,29 @@ function belongsToDeletedTree(rootId: string, lifecycleStatus: string): (item: D
 
 function assertLifecycleTransitionCount(actual: number, expected: number): void {
   if (actual !== expected) throw new NotFoundException("文件不存在。")
+}
+
+function invalidDriveHierarchy(): BadRequestException {
+  return new BadRequestException("文件夹层级异常，请刷新后重试。")
+}
+
+async function assertNoUntransitionedChildren(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  parentIds: readonly string[],
+  lifecycleStatus: string,
+  deleteRootId?: string,
+): Promise<void> {
+  const child = await tx.driveItem.findFirst({
+    where: {
+      userId,
+      parentId: { in: [...parentIds] },
+      lifecycleStatus,
+      ...(deleteRootId ? { deleteRootId } : {}),
+    },
+    select: { id: true },
+  })
+  if (child) throw new BadRequestException("文件夹内容已发生变化，请刷新后重试。")
 }
 
 async function disableDriveSharesForItems(

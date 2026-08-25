@@ -1,5 +1,45 @@
 # 发现与决策
 
+## 2026-08-26 阶段 23 第 5 轮 Drive 大目录回收站审查
+
+- 起始 HEAD 为 `a600cd88cd0efbd3c4acb4eb27f37077a6264db4`，`main` 相对 `origin/main` ahead 10，工作树干净；与主任务指定值一致。
+- 本轮固定提交为 `dd38e75625ce89f491ffe26bd3234540dee64079`（大目录事务修复）与 `876e2223c2a71d10f469b4cfc7ffdb7e26605449`（部署记录）。直接产品 diff 只有 `DriveLifecycleService.trashItem` 的 Prisma 交互事务新增 `maxWait: 10_000`、`timeout: 30_000`，以及 1000 文件目录仍写 1001 条 change 的回归。
+- Spec 来源固定为该提交中的 `findings.md`、`task_plan.md` 与 `RELEASE_NOTES_PENDING.md`：必须保留整棵目录迁移、同步 change 和失败回滚的原子性，不通过跳过 change、可见部分删除或吞错规避。
+- 已完整读取 planning-with-files、code-review、computer-use 技能，以及仓库 Server/API/测试/Drive 核心设计与 Web Console/Local Sync 生命周期边界；code-review 的并行子代理步骤被本轮“不得创建任务或子代理”明确覆盖，Standards / Spec 双轴改为当前任务内串行执行。
+- 初步确定两项高风险候选：`restoreItemForStatuses` 对 1000+ 条目同样逐条 append change，但仍使用 Prisma 默认交互事务超时；`collectSubtree` 与 `buildRestorePath` 没有 visited/cycle 防护，坏 parent 链可能让删除无限循环。两项都必须先补稳定红灯再决定是否修改。
+- `collectSubtree` 按层批量查询，因此宽目录没有应用层 200/1000 分页截断；但极深目录会产生逐层往返。当前 move 会阻止正常 API 制造父子循环，生命周期代码仍需对数据库异常、遗留数据和并发竞态 fail closed。
+- 红灯首跑固定为 25 项中 20 通过、5 失败：1000 文件 restore/hide 缺少长事务配置；收集后新子项被遗漏；跨用户子项被一并迁移；子树循环和恢复祖先循环只能由测试护栏中断。失败均命中旧实现，不含测试自身错误。
+- 最小修复将同一 10 秒 `maxWait` / 30 秒 `timeout` 用于 trash、restore、hide；每次批量状态迁移后在事务内检查仍处于来源状态的新子项；子树按归属遍历并拒绝跨用户边；子树和恢复路径均用 visited 集合拒绝循环。变更日志 append 仍逐项留在同一事务，未跳过同步事件。
+- 补齐 128 层深目录成功 trash/restore、change log 中途失败整树回滚、跨用户祖先拒绝；专项现为 28/28，Server typecheck 已通过。
+- 实机环境边界：Electron/MCP 均未登录，生产 Chrome 已登录。UI 文件夹上传入口对 1001 文件给出“一次最多上传 1000 个文件”的受限错误；随后使用恰好 1000 文件、4 个子目录的本轮临时夹从生产 UI 上传，当前仍在进行中。该上传只负责建立测试数据，不作为删除修复证据。
+
+### 第 5 轮覆盖矩阵（完成 12 项）
+
+| # | 修改点 / 风险 | Standards / Spec 证据 | 自动化 / 实机证据 | 结论 |
+|---:|---|---|---|---|
+| 1 | 精确提交与部署记录 | `dd38e756...` 只给 trash 增加 10s/30s；`876e2223...` 只记录 19/19 部署步骤、健康检查和源码校验 | 当前实现逐行复核；部署记录没有功能性删除/恢复验收 | 部署成功不等于链路验收，本轮补齐 |
+| 2 | 1000+ 宽目录整棵 trash | 子树按层查询，无 200/1000 截断；所有 item 与 change 同事务 | 1000 文件生命周期测试；生产 UI 1000 文件 + 4 子目录，首次 trash 约 9.9s | 通过 |
+| 3 | 大目录 restore / hide 时限 | restore 同样逐项 append change，hide 还处理 revision/session/quota；旧实现仍用 Prisma 默认时限 | 红灯固定缺失配置；统一 10s/30s 后 1000 文件 trash→restore→trash→hide 通过；UI restore 约 11.3s | 修复 |
+| 4 | 宽/深遍历、循环防护 | BFS 保留宽目录批量；visited 对子树和祖先路径 fail closed，不设置武断深度上限 | 128 层 trash/restore 通过；子树循环与祖先循环旧实现被护栏中断、修复后均明确报层级异常 | 修复 |
+| 5 | 并发与事务回滚 | updateMany count 保留；迁移后在同事务查询仍处于来源状态的新子项；change append 不移出事务 | 既有三类状态漂移回滚 + 新增 late child + change-log 中途失败整树回滚；UI 请求中取消/删除按钮禁用 | 修复并通过 |
+| 6 | 父子可见性、回收站根与恢复 | active 列表按 lifecycle 过滤；trash 只列 `deleteRootId = id` 根；恢复清空整树 metadata | UI 原位置消失、回收站仅见根；恢复后原 root/file ID、两级目录、空目录和 46 B 哨兵内容保持 | 通过 |
+| 7 | 回收站再次删除与管理员恢复 | hide 只隐藏并释放用户 quota，不删对象；管理员仍可恢复 hidden；普通用户不能恢复 child/hidden | 生命周期 pending upload、public asset revision、hidden admin restore 专项通过；按要求未点“永久删除/隐藏”，第二次 trash 后留在可恢复回收站 | 通过，保留安全边界 |
+| 8 | 容量、对象存储与孤儿清理 | trash 保留 used/reserved 与 storage；hide 原子释放 current/revision/reserved、取消 pending session，不物理删对象 | Server Drive 全专项覆盖 quota、storage metadata、临时对象/版本清理失败和管理员统计 | 通过 |
+| 9 | 分享、评论、同步引用 | trash 同事务禁用整树 share；restore 只重启同一 trash 时间禁用的 share；每项写 `trashed/restored` change；评论随 item 可见性受保护 | DriveService share 恢复/manual disable/change tests 与 annotation/collaboration/change-log 全专项纳入 542 项 | 通过 |
+| 10 | 权限、审计与错误提示 | root 先按 userId 授权；本轮扩展到所有子边和祖先；成功后 best-effort audit 结构化记录且脱敏 | 跨用户 child/ancestor 红灯后拒绝；controller owner routing、audit failure/redaction tests 通过；busy 状态和层级/内容变化错误明确 | 修复并通过 |
+| 11 | Web / Desktop / MCP / Sync 复用 | Controller、Dashboard、Desktop dispatcher、MCP `app_drive_item_delete/restore/trash_delete` 与 sync executor 最终进入同一生命周期服务 | Dashboard 56、Desktop/dispatcher 224、Shared 43；生产 Chrome 实机；Electron/MCP 未登录边界如实记录 | 通过，无分叉实现 |
+| 12 | Standards、发布说明与范围 | 无依赖、IPC、样式、裸 fs/network、空 catch 或 console 日志；只改生命周期服务/测试/记录 | Server typecheck/build、静态扫描、`git diff --check` 通过；发布说明同步 | 通过 |
+
+### 第 5 轮实机证据与边界
+
+- 仅用持久 `node_repl + @oai/sky` 操作已有登录态 Chrome；Electron 底部仍显示“登录”，Synapse MCP 的文件夹上传返回“账号未登录”，没有迁移或读取用户凭据。
+- 本地测试夹原有 1006 个文件，受控 API 先返回“一次最多上传 1000 个文件”；精确移除 6 个空测试文件后，从生产 UI 选择并允许上传恰好 1000 个文件、4 个子目录，约 5 分钟完成。目录名 `codex-round5-drive-trash-tdX0XU`，root `cmt94ynt805n5l828rsr70zcg`，宽目录 `cmt94ynuv05ndl8280mtwa5pz`，哨兵文件 `cmt94ynv405nfl8286mzrl4wh`。
+- 上传完成后先进入宽目录和两级窄目录，哨兵显示 46 B、正文 `Codex Round 5 Drive trash sentinel 2026-08-26`；未打开、移动、删除或修改任何既有文件。一次地址栏导航被 Chrome 恢复为已有文档预览，只读后立即用“网盘”导航返回，没有保存或其它操作。
+- 首次 UI trash 约 9.9 秒：确认后按钮禁用，完成后根列表消失；回收站显示测试根及原路径，不展开子项，符合 root-only 产品设计。UI restore 约 11.3 秒；回收站根消失，原位置恢复，同一 root/子目录/file ID、层级、空目录、文件大小和内容保持。
+- 窗口从约 1325×768 收窄到 850×768，工具栏和表格保持可操作、没有页面级横向破坏；删除确认默认聚焦“取消”，Tab 后聚焦“删除”，Return 完成第二次 trash，约 9.5 秒。随后恢复宽窗，测试根再次出现在回收站。
+- 未点击回收站“删除”、未清空回收站。生产测试数据保留为可恢复回收站根 `codex-round5-drive-trash-tdX0XU`；本地 `/tmp/codex-round5-drive-trash-tdX0XU` 的 1000 个上传源文件已精确删除且不可恢复。
+
+
 ## 2026-08-26 阶段 23 第 4 轮 Drive Markdown / MDX / Mermaid 审查
 
 - 起始基线为 `dca057a0f0d3deb16c32d7622f5a114160d23bc3`，工作树在本轮记录前干净；固定比较范围为 `db189074...HEAD`。

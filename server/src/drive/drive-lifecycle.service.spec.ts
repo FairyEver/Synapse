@@ -40,7 +40,7 @@ describe("DriveLifecycleService", () => {
     expect(await usedBytes(prisma, "user-1")).toBe(10n)
   })
 
-  it("uses a bounded long-running transaction when trashing a 1000-file folder", async () => {
+  it("uses bounded long-running transactions across a 1000-file folder lifecycle", async () => {
     const prisma = createLifecyclePrismaMemory()
     const transaction = vi.spyOn(prisma, "$transaction")
     const changes = { append: vi.fn(async () => undefined) }
@@ -55,11 +55,18 @@ describe("DriveLifecycleService", () => {
 
     await lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" })
 
-    expect(changes.append).toHaveBeenCalledTimes(1_001)
-    expect(transaction).toHaveBeenCalledWith(expect.any(Function), {
-      maxWait: 10_000,
-      timeout: 30_000,
-    })
+    await lifecycle.restoreItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" })
+    await lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" })
+    await lifecycle.hideTrashedItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" })
+
+    expect(changes.append).toHaveBeenCalledTimes(3_003)
+    expect(transaction).toHaveBeenCalledTimes(4)
+    for (const call of transaction.mock.calls) {
+      expect(call).toEqual([
+        expect.any(Function),
+        { maxWait: 10_000, timeout: 30_000 },
+      ])
+    }
   })
 
   it("stores trash metadata without setting deletedAt", async () => {
@@ -399,6 +406,130 @@ describe("DriveLifecycleService", () => {
     expect(await readDriveItem(prisma, folder.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
     expect(await readDriveItem(prisma, child.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
     expect(await usedBytes(prisma, "user-1")).toBe(10n)
+  })
+
+  it("rolls back trash when a matching child appears after subtree collection", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: null, name: "Docs" })
+    const child = await seedActiveDriveFile(prisma, { userId: "user-1", parentId: folder.id, name: "a.png", size: 10n })
+    prisma.__beforeNextDriveItemUpdateMany(async () => {
+      await seedActiveDriveFile(prisma, { userId: "user-1", parentId: folder.id, name: "late.png", size: 1n })
+    })
+
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" }))
+      .rejects.toThrow("文件夹内容已发生变化，请刷新后重试。")
+
+    expect(await readDriveItem(prisma, folder.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+    expect(await readDriveItem(prisma, child.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+    expect(await usedBytes(prisma, "user-1")).toBe(10n)
+  })
+
+  it("rejects a malformed subtree that crosses user ownership", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: null, name: "Docs" })
+    const foreignChild = await seedActiveDriveFile(prisma, { userId: "user-2", parentId: folder.id, name: "foreign.png", size: 1n })
+
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" }))
+      .rejects.toBeInstanceOf(BadRequestException)
+
+    expect(await readDriveItem(prisma, folder.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+    expect(await readDriveItem(prisma, foreignChild.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+  })
+
+  it("rejects a restore path that crosses user ownership", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const foreignFolder = await seedActiveDriveFolder(prisma, { userId: "user-2", parentId: null, name: "Foreign" })
+    const file = await seedActiveDriveFile(prisma, { userId: "user-1", parentId: foreignFolder.id, name: "a.png", size: 1n })
+
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: file.id, actorId: "user-1", ipAddress: "127.0.0.1" }))
+      .rejects.toBeInstanceOf(BadRequestException)
+
+    expect(await readDriveItem(prisma, file.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+  })
+
+  it("rejects cyclic folder descendants without looping", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: null, name: "Docs" })
+    const child = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: folder.id, name: "Nested" })
+    await prisma.driveItem.update({ where: { id: folder.id }, data: { parentId: child.id } })
+    const findMany = prisma.driveItem.findMany
+    let findManyCalls = 0
+    vi.spyOn(prisma.driveItem, "findMany").mockImplementation(async (args: unknown) => {
+      findManyCalls += 1
+      if (findManyCalls > 8) throw new Error("subtree traversal did not terminate")
+      return findMany(args)
+    })
+
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" }))
+      .rejects.toBeInstanceOf(BadRequestException)
+
+    expect(findManyCalls).toBeLessThanOrEqual(4)
+    expect(await readDriveItem(prisma, folder.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+    expect(await readDriveItem(prisma, child.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+  })
+
+  it("rejects cyclic restore ancestry without looping", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage)
+    const first = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: null, name: "First" })
+    const second = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: first.id, name: "Second" })
+    const file = await seedActiveDriveFile(prisma, { userId: "user-1", parentId: first.id, name: "a.png", size: 1n })
+    await prisma.driveItem.update({ where: { id: first.id }, data: { parentId: second.id } })
+    const findUnique = prisma.driveItem.findUnique
+    let findUniqueCalls = 0
+    vi.spyOn(prisma.driveItem, "findUnique").mockImplementation(async (args: unknown) => {
+      findUniqueCalls += 1
+      if (findUniqueCalls > 8) throw new Error("restore path traversal did not terminate")
+      return findUnique(args)
+    })
+
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: file.id, actorId: "user-1", ipAddress: "127.0.0.1" }))
+      .rejects.toBeInstanceOf(BadRequestException)
+
+    expect(findUniqueCalls).toBeLessThanOrEqual(3)
+    expect(await readDriveItem(prisma, file.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+  })
+
+  it("trashes and restores a 128-level folder tree without recursive stack growth", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const changes = { append: vi.fn(async () => undefined) }
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage, undefined, changes as never)
+    const root = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: null, name: "Level 0" })
+    let parentId = root.id
+    for (let index = 1; index < 128; index += 1) {
+      const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId, name: `Level ${index}` })
+      parentId = folder.id
+    }
+    const file = await seedActiveDriveFile(prisma, { userId: "user-1", parentId, name: "sentinel.txt", size: 1n })
+
+    await lifecycle.trashItem({ userId: "user-1", itemId: root.id, actorId: "user-1", ipAddress: "127.0.0.1" })
+    await lifecycle.restoreItem({ userId: "user-1", itemId: root.id, actorId: "user-1", ipAddress: "127.0.0.1" })
+
+    expect(changes.append).toHaveBeenCalledTimes(258)
+    expect(await readDriveItem(prisma, root.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+    expect(await readDriveItem(prisma, file.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+  })
+
+  it("rolls back the whole subtree when change-log persistence fails", async () => {
+    const prisma = createLifecyclePrismaMemory()
+    const changes = {
+      append: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error("change log unavailable")),
+    }
+    const lifecycle = new DriveLifecycleService(prisma as unknown as PrismaService, storage, undefined, changes as never)
+    const folder = await seedActiveDriveFolder(prisma, { userId: "user-1", parentId: null, name: "Docs" })
+    const child = await seedActiveDriveFile(prisma, { userId: "user-1", parentId: folder.id, name: "a.png", size: 1n })
+
+    await expect(lifecycle.trashItem({ userId: "user-1", itemId: folder.id, actorId: "user-1", ipAddress: "127.0.0.1" }))
+      .rejects.toThrow("change log unavailable")
+
+    expect(await readDriveItem(prisma, folder.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
+    expect(await readDriveItem(prisma, child.id)).toMatchObject({ lifecycleStatus: "active", deleteRootId: null })
   })
 
   it("rolls back hide and quota release when a trashed descendant changes during update", async () => {

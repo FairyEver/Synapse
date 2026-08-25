@@ -1,5 +1,25 @@
 # 进度日志
 
+## 2026-08-26 阶段 23 第 5 轮持续复审
+
+- **状态：** complete
+- **启动 HEAD：** `a600cd88cd0efbd3c4acb4eb27f37077a6264db4`
+- **启动工作树：** `main...origin/main [ahead 10]`，无未提交文件；前置条件通过。
+- 已完整读取 planning-with-files-zh、code-review、computer-use 技能并执行 session catch-up；没有额外未同步上下文。用户禁止子代理，因此双轴审查在当前任务串行执行。
+- 已固定 `dd38e75625ce89f491ffe26bd3234540dee64079` 与 `876e2223c2a71d10f469b4cfc7ffdb7e26605449`，读取提交原始 Spec、仓库 API/测试/UI/模块规则、Drive 核心设计、Web Console 与 Local Sync 设计，并建立首批 8 项矩阵。
+- 初步发现恢复大目录仍走默认事务超时、生命周期遍历无循环防护两项候选；下一步先补稳定红灯，再做外科手术式修复。
+- 一次检索命令使用不存在的顶层 `server/prisma/migrations/*.sql` glob，被 zsh 在执行前拒绝；未修改文件。后续只通过 `rg --files server/prisma/migrations` 获取真实迁移路径，不重复该命令。
+- 第二次检索命令包含不存在的 `server/src/drive/*.integration.spec.ts` glob，同样被 zsh 在执行前拒绝且无副作用；随后只用 `rg --files` 解析真实专项文件。
+- 生命周期红灯首跑 25 项中 20 通过、5 失败，确认 1000 文件 restore/hide 缺少长事务配置、收集后新 active child 遗漏、跨账号子项被迁移、子树与恢复路径循环无法终止。没有把测试护栏错误计入产品通过。
+- 最小修复统一 trash/restore/hide 的 10s `maxWait` 与 30s `timeout`，在事务内检查未迁移子项，所有层级查询绑定 userId，子树/祖先均检测循环；保留逐项同步 change、share/public asset/quota/session 与状态迁移的原子事务。
+- 新增 1000 文件完整生命周期、128 层深目录、late child、跨账号 child/ancestor、两个循环和 change-log 失败回滚覆盖；生命周期专项最终 28/28。
+- Computer Use 只复用生产 Chrome 登录态。受控 MCP 因 Electron 未登录而不能建数据；UI 文件夹上传完成 1000 文件 + 4 子目录测试夹，上传约 5 分钟。初次 1006 文件受控调用返回 1000 文件上限，属于预期受限状态。
+- 生产 UI 完成进入/返回、多级目录、哨兵内容、首次 trash、回收站、restore、层级/ID/内容复核、第二次 trash。首次 trash 约 9.9s、restore 约 11.3s、第二次 trash 约 9.5s；窄窗 850×768 与宽窗 1325×768 均可用，第二次确认用 Tab + Return 完成。
+- 只操作 `codex-round5-drive-trash-tdX0XU`；未修改任何既有文件。测试根 `cmt94ynt805n5l828rsr70zcg` 当前保留在可恢复回收站；未点击回收站删除/清空。本地 1000 个上传源文件已用精确 `find -depth -delete` 清理。首次尝试 `rm -rf` 被命令安全门禁拒绝，未删除任何内容。
+- 验证完成：Server Drive 27 文件 542/542；Dashboard Drive Console 4 文件 56/56；Desktop Drive/dispatcher 4 文件 224/224；Shared Drive 43/43，合计 36 文件 865/865。Server typecheck、Server build、静态纪律扫描与 `git diff --check` 通过；未触及 Desktop，按规则不运行 Desktop hard constraints。
+- **结束时间：** 2026-08-26 05:01:22 CST。第 5 轮完成，待在当前 `main` 提交并交由主任务验收；阶段 23 总体仍由主任务按串行协议推进。
+
+
 ## 2026-08-26 阶段 23 第 4 轮持续复审
 
 - **状态：** complete
