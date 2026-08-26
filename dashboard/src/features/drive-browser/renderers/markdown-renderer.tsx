@@ -31,6 +31,10 @@ import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { useDriveAnnotations } from '../use-drive-annotations'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { DriveCodeRenderer } from './code-renderer'
+import {
+  DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
+  syncDriveHierarchicalListMarkers,
+} from './drive-hierarchical-list-markers'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
@@ -47,7 +51,10 @@ import {
 } from './markdown-rendered-text'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
-const MARKDOWN_BODY_CLASSNAME = 'markdown-body max-w-full [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:max-w-none [&_td:first-child]:whitespace-nowrap [&_th:first-child]:whitespace-nowrap [&_td:not(:first-child)]:min-w-56 [&_th:not(:first-child)]:min-w-56 [&_h4]:text-base! [&_h4]:leading-tight! [&_h5]:text-base! [&_h5]:leading-tight! [&_h6]:text-base! [&_h6]:leading-tight! [&_img[role="button"]]:cursor-zoom-in [&_img[role="button"]]:focus-visible:outline-none [&_img[role="button"]]:focus-visible:ring-2 [&_img[role="button"]]:focus-visible:ring-ring [&_img[role="button"]]:focus-visible:ring-offset-2'
+const MARKDOWN_BODY_CLASSNAME = cn(
+  'markdown-body max-w-full [&_ul]:list-disc [&_ol]:list-decimal! [&_ul]:pl-6 [&_ol]:pl-6 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:max-w-none [&_td:first-child]:whitespace-nowrap [&_th:first-child]:whitespace-nowrap [&_td:not(:first-child)]:min-w-56 [&_th:not(:first-child)]:min-w-56 [&_h4]:text-base! [&_h4]:leading-tight! [&_h5]:text-base! [&_h5]:leading-tight! [&_h6]:text-base! [&_h6]:leading-tight! [&_img[role="button"]]:cursor-zoom-in [&_img[role="button"]]:focus-visible:outline-none [&_img[role="button"]]:focus-visible:ring-2 [&_img[role="button"]]:focus-visible:ring-ring [&_img[role="button"]]:focus-visible:ring-offset-2',
+  DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
+)
 const MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE = 16
 const MARKDOWN_OUTLINE_PANEL_MIN_SIZE = 12
 const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = 22
@@ -225,6 +232,11 @@ function DriveMarkdownBody({
     () => ({ __html: annotated.html }),
     [annotated.html]
   )
+
+  useLayoutEffect(() => {
+    const root = bodyRef.current
+    if (root) syncDriveHierarchicalListMarkers(root)
+  }, [annotated.html])
 
   useEffect(() => {
     const root = bodyRef.current

@@ -583,6 +583,7 @@ describe('DriveMDXeditorRenderer', () => {
     expect(contentClasses).toEqual(expect.arrayContaining([
       '[&_ul]:list-disc',
       '[&_ol]:list-decimal',
+      '[&_ol>li::marker]:content-[attr(data-drive-list-marker)_"_"]!',
       '[&_ul]:pl-6',
       '[&_ol]:pl-6',
     ]))

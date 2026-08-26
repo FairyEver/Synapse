@@ -102,6 +102,10 @@ function useChatEvents(
         })
         return
       }
+      if (isThinkingTokenTelemetryEvent(domainEvent)) {
+        acceptSequencedAgentEvent(domainEvent, latestDeliverySequencesRef.current)
+        return
+      }
       if (!isSdkStreamDeltaEvent(domainEvent)) {
         flushStreamEvents()
       }
@@ -365,6 +369,16 @@ function isSdkStreamDeltaEvent(
   event: SynapseAgentDomainEvent,
 ): event is SynapseAgentStreamDomainEvent & { readonly type: "stream" } {
   return event.type === "stream" && event.payload.event.type === "stream"
+}
+
+function isThinkingTokenTelemetryEvent(
+  event: SynapseAgentDomainEvent,
+): event is SynapseAgentStreamDomainEvent & { readonly type: "sdkEvent" } {
+  if (event.type !== "sdkEvent") return false
+  const sdkEvent = event.payload.event
+  return sdkEvent.type === "sdkEvent"
+    && sdkEvent.sdkType === "system"
+    && sdkEvent.sdkSubtype === "thinking_tokens"
 }
 export type { ChatEventRefs }
 

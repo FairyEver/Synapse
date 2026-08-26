@@ -9,6 +9,10 @@ const MAX_CONTENT_BYTES = 4096
 const UPDATE_URL = "https://synapse.d2.pub/desktop/update"
 const UPDATE_LINK = `[一键更新](${UPDATE_URL})`
 const SECTION_TITLES = ["新增功能", "功能优化", "问题修复", "技术调整"]
+const WEBHOOK_ENV_KEYS = [
+  "SYNAPSE_RELEASE_WECOM_WEBHOOK_URL",
+  "SYNAPSE_RELEASE_WECOM_SECONDARY_WEBHOOK_URL",
+]
 const scriptPath = fileURLToPath(import.meta.url)
 const scriptDirectory = path.dirname(scriptPath)
 const skillDirectory = path.dirname(scriptDirectory)
@@ -252,13 +256,21 @@ function readReleaseNotes(notesFile) {
   return fs.readFileSync(notesFile, "utf8")
 }
 
-function readConfiguredWebhook() {
-  if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
-  const webhook = process.env.SYNAPSE_RELEASE_WECOM_WEBHOOK_URL?.trim()
-  if (!webhook) {
-    throw new Error("缺少必需配置：SYNAPSE_RELEASE_WECOM_WEBHOOK_URL。")
+export function configuredWebhooksFromEnv(environment) {
+  const webhooks = WEBHOOK_ENV_KEYS.map(key => environment[key]?.trim())
+  const missingKeys = WEBHOOK_ENV_KEYS.filter((_, index) => !webhooks[index])
+  if (missingKeys.length > 0) {
+    throw new Error(`缺少必需配置：${missingKeys.join("、")}。`)
   }
-  return webhook
+  if (new Set(webhooks).size !== webhooks.length) {
+    throw new Error("两个企业微信发版通知目标必须不同。")
+  }
+  return webhooks
+}
+
+function readConfiguredWebhooks() {
+  if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
+  return configuredWebhooksFromEnv(process.env)
 }
 
 function runNotificationHelper(content, { mode, webhook }) {
@@ -290,14 +302,20 @@ function runNotificationHelper(content, { mode, webhook }) {
 
 export async function deliverNotificationMessages(
   messages,
-  { mode, webhook, runner = runNotificationHelper },
+  { mode, webhooks, runner = runNotificationHelper },
 ) {
-  for (let index = 0; index < messages.length; index += 1) {
-    const exitCode = await runner(messages[index], { mode, webhook })
-    if (exitCode !== 0) {
-      throw new Error(
-        `企业微信发版通知发送失败：第 ${index + 1}/${messages.length} 条未成功，已停止后续发送。`,
-      )
+  for (let destinationIndex = 0; destinationIndex < webhooks.length; destinationIndex += 1) {
+    for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
+      const exitCode = await runner(messages[messageIndex], {
+        mode,
+        webhook: webhooks[destinationIndex],
+      })
+      if (exitCode !== 0) {
+        throw new Error(
+          `企业微信发版通知发送失败：第 ${destinationIndex + 1}/${webhooks.length} 个机器人` +
+          `的第 ${messageIndex + 1}/${messages.length} 条未成功，已停止后续发送。`,
+        )
+      }
     }
   }
 }
@@ -309,8 +327,8 @@ async function main() {
     version: options.version,
     markdown,
   })
-  const webhook = options.mode === "dry-run" ? null : readConfiguredWebhook()
-  await deliverNotificationMessages(messages, { mode: options.mode, webhook })
+  const webhooks = options.mode === "dry-run" ? [null] : readConfiguredWebhooks()
+  await deliverNotificationMessages(messages, { mode: options.mode, webhooks })
 }
 
 if (path.resolve(process.argv[1] ?? "") === path.resolve(scriptPath)) {

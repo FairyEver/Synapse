@@ -25,6 +25,7 @@ This is an adapter for the current Drive render pipeline. It is not a new deskto
 - `.mdx` files with JSX, attributes, expressions, and MDX comments may use rich mode. Files with top-level MDX ESM `import` or `export` stay in source mode because MDXEditor does not round-trip arbitrary ESM declarations.
 - CommonMark files containing HTML comments outside code spans or fenced code stay in source mode because MDXEditor does not round-trip those comments.
 - Ordered lists must preserve their explicit starting number across rich editing and source serialization.
+- Ordered lists must use structure-derived hierarchical decimal markers in both rich editing and rendered preview: top-level items render as `1.`, `2.`, while nested ordered items render as `2.1`, `2.2`, `2.2.1`. Unordered ancestors do not add a numbering level, explicit `start` values remain authoritative, and generated markers must never enter Markdown serialization.
 - In MDXEditor tables, `Enter` keeps the existing next-row cell navigation and `Shift + Enter` inserts an inline `<br />` break in the current cell.
 
 ## Non-Goals

@@ -6,6 +6,7 @@ import type {
 } from "@/types/editor-scan"
 import type { SynapseEditorId } from "@/types/editor"
 import { ScanItemCard } from "./scan-item-card"
+import { prioritizeSynapseSkills } from "../lib/skill-order"
 
 type GlobalOverviewProps = {
   result: EditorScanGlobalResult
@@ -41,6 +42,8 @@ function GlobalOverview({
   onSkillSelectionChange,
 }: GlobalOverviewProps) {
   if (contentTab === "skill") {
+    const skills = prioritizeSynapseSkills(result.skills)
+
     if (result.skillScanError) {
       return (
         <p className="text-sm text-destructive">
@@ -65,7 +68,7 @@ function GlobalOverview({
           </p>
         )}
         <div className="grid grid-cols-2 gap-2">
-          {result.skills.map((skill) => {
+          {skills.map((skill) => {
             const key = buildSkillKey?.({ path: skill.path, scope: "global" }) ?? skill.path
 
             return (

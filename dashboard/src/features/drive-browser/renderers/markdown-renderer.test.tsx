@@ -578,21 +578,26 @@ describe('DriveMarkdownRenderer', () => {
     expect(body?.className).toContain('[&_h6]:text-base!')
   })
 
-  it('restores ordered, unordered, and nested list markers in rendered markdown', () => {
+  it('renders nested ordered lists with hierarchical markers', () => {
     renderMarkdown({
       previewData: preview({
-        html: '<ol><li>一级<ul><li>二级</li></ul></li></ol>',
+        html: '<ol><li>一级一</li><li>一级二<ol><li>二级一</li><li>二级二<ol><li>三级一</li></ol></li></ol></li><li>一级三</li></ol>',
       }),
     })
 
-    const bodyClasses = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+    const bodyClasses = body
       ?.className.split(/\s+/u) ?? []
     expect(bodyClasses).toEqual(expect.arrayContaining([
       '[&_ul]:list-disc',
-      '[&_ol]:list-decimal',
+      '[&_ol]:list-decimal!',
       '[&_ul]:pl-6',
       '[&_ol]:pl-6',
     ]))
+    expect(body?.querySelectorAll('ol ol')).toHaveLength(2)
+    expect(Array.from(body?.querySelectorAll('ol > li') ?? [], (item) => (
+      item.getAttribute('data-drive-list-marker')
+    ))).toEqual(['1.', '2.', '2.1', '2.2', '2.2.1', '3.'])
   })
 
   it('keeps wide markdown tables scrollable inside the reader column', () => {

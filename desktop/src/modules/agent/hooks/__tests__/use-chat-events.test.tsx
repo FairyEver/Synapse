@@ -480,6 +480,44 @@ describe("useChatEvents", () => {
     })
   })
 
+  it("keeps high-frequency thinking token telemetry out of the live timeline", async () => {
+    const updateTimeline = vi.fn()
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} updateTimeline={updateTimeline} />)
+    })
+
+    const telemetryEvent: SynapseAgentDomainEvent = {
+      domain: "agent",
+      type: "sdkEvent",
+      timestamp: "2026-08-26T01:07:50.486Z",
+      scope: { sessionId: "conversation-1" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        event: {
+          type: "sdkEvent",
+          sdkType: "system",
+          sdkSubtype: "thinking_tokens",
+          payload: { estimated_tokens: 1 },
+        },
+      },
+    }
+
+    await act(async () => {
+      for (let index = 0; index < 1_000; index += 1) {
+        bridgeState.listener?.(telemetryEvent)
+      }
+    })
+
+    expect(updateTimeline).not.toHaveBeenCalled()
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
   it("batches rapid SDK stream deltas before updating the timeline", async () => {
     vi.useFakeTimers()
     const updateTimeline = vi.fn()

@@ -19,12 +19,17 @@ import {
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
 } from './mdxeditor-commonmark-compatibility-plugin'
+import {
+  DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
+  observeDriveHierarchicalListMarkers,
+} from './drive-hierarchical-list-markers'
 import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let host: HTMLDivElement | null = null
 let root: Root | null = null
+let stopObservingListMarkers: (() => void) | null = null
 
 beforeEach(() => {
   Range.prototype.getBoundingClientRect = vi.fn(() => new DOMRect())
@@ -47,6 +52,8 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  stopObservingListMarkers?.()
+  stopObservingListMarkers = null
   if (root) {
     act(() => {
       root?.unmount()
@@ -223,7 +230,7 @@ describe('MDXEditor list integration', () => {
             toolbarPlugin({ toolbarContents: () => <ListsToggle options={['bullet', 'number']} /> }),
             listsPlugin(),
           ]}
-          contentEditableClassName='[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6'
+          contentEditableClassName={`[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
         />
       )
       await Promise.resolve()
@@ -232,19 +239,24 @@ describe('MDXEditor list integration', () => {
     const contentEditable = document.querySelector<HTMLElement>('[contenteditable="true"]')
     const paragraphText = contentEditable?.querySelector('p')?.firstChild
     if (!contentEditable || !paragraphText) throw new Error('MDXEditor did not render the paragraph')
+    stopObservingListMarkers = observeDriveHierarchicalListMarkers(contentEditable)
 
     await setCollapsedSelection(contentEditable, paragraphText)
     await clickToolbarButton('Numbered list')
+    await flushListMarkerObserver()
 
     expect(contentEditable.querySelector('ol')?.textContent).toBe('普通段落')
+    expect(orderedMarkers(contentEditable)).toEqual(['1.'])
     expect(editorRef.current?.getMarkdown()).toBe('1. 普通段落')
 
     const orderedText = contentEditable.querySelector('ol li')?.firstChild
     if (!orderedText) throw new Error('MDXEditor did not render the ordered list')
     await setCollapsedSelection(contentEditable, orderedText)
     await clickToolbarButton('Bulleted list')
+    await flushListMarkerObserver()
 
     expect(contentEditable.querySelector('ul')?.textContent).toBe('普通段落')
+    expect(orderedMarkers(contentEditable)).toEqual([])
     expect(editorRef.current?.getMarkdown()).toBe('* 普通段落')
   })
 
@@ -261,7 +273,7 @@ describe('MDXEditor list integration', () => {
           ref={editorRef}
           markdown={markdown}
           plugins={[listsPlugin(), orderedListStartPlugin()]}
-          contentEditableClassName='[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6'
+          contentEditableClassName={`[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
         />
       )
       await Promise.resolve()
@@ -276,22 +288,38 @@ describe('MDXEditor list integration', () => {
     }
 
     expect(contentEditable.className).toContain('[&_ol]:list-decimal')
+    expect(contentEditable.className).toContain(DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME)
     expect(contentEditable.className).toContain('[&_ul]:list-disc')
     expect(contentEditable.querySelector('ul')?.textContent).toBe('无序')
     expect(orderedList.children).toHaveLength(2)
+    stopObservingListMarkers = observeDriveHierarchicalListMarkers(contentEditable)
+    expect(orderedMarkers(contentEditable)).toEqual(['1.', '2.'])
     await setCollapsedSelection(contentEditable, secondText)
     await dispatchTab(contentEditable)
+    await flushListMarkerObserver()
 
     const nestedOrderedList = orderedList.querySelector('li ol')
     expect(nestedOrderedList?.textContent).toBe('二级')
+    expect(orderedMarkers(contentEditable)).toEqual(['1.', '1.1'])
     expect(editorRef.current?.getMarkdown()).toContain('   1. 二级')
+    expect(editorRef.current?.getMarkdown()).not.toContain('data-drive-list-marker')
+
+    await dispatchHistoryShortcut(contentEditable)
+    await flushListMarkerObserver()
+    expect(orderedMarkers(contentEditable)).toEqual(['1.', '2.'])
+
+    await dispatchHistoryShortcut(contentEditable, true)
+    await flushListMarkerObserver()
+    expect(orderedMarkers(contentEditable)).toEqual(['1.', '1.1'])
 
     const nestedText = nestedOrderedList?.querySelector('li')?.firstChild
     if (!nestedText) throw new Error('MDXEditor did not indent the second list item')
     await setCollapsedSelection(contentEditable, nestedText)
     await dispatchTab(contentEditable, true)
+    await flushListMarkerObserver()
 
     expect(orderedList.children).toHaveLength(2)
+    expect(orderedMarkers(contentEditable)).toEqual(['1.', '2.'])
     expect(editorRef.current?.getMarkdown()).toBe(markdown)
   })
 
@@ -317,20 +345,23 @@ describe('MDXEditor list integration', () => {
           ref={editorRef}
           markdown={markdown}
           plugins={[listsPlugin(), orderedListStartPlugin()]}
-          contentEditableClassName='[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6'
+          contentEditableClassName={`[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
         />
       )
       await Promise.resolve()
     })
 
     const contentEditable = document.querySelector<HTMLElement>('[contenteditable="true"]')
+    if (!contentEditable) throw new Error('MDXEditor did not render the content editable')
+    stopObservingListMarkers = observeDriveHierarchicalListMarkers(contentEditable)
     const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
     expect(savedMarkdown).toMatch(/^3\. 起始第三项\n4\. 第二项/u)
     expect(savedMarkdown).toMatch(/\n {3}[*-] 二级无序\n {5}1\. 三级有序/u)
     expect(savedMarkdown).toMatch(/\n[*-] \[x\] 已完成\n[*-] \[ \] 未完成\n[*-]$/u)
-    expect(contentEditable?.querySelector('ol')?.getAttribute('start')).toBe('3')
-    expect(contentEditable?.querySelectorAll('ol ul ol')).toHaveLength(1)
-    const taskItems = contentEditable?.querySelectorAll('li[role="checkbox"]') ?? []
+    expect(contentEditable.querySelector('ol')?.getAttribute('start')).toBe('3')
+    expect(contentEditable.querySelectorAll('ol ul ol')).toHaveLength(1)
+    expect(orderedMarkers(contentEditable)).toEqual(['3.', '4.', '4.1'])
+    const taskItems = contentEditable.querySelectorAll('li[role="checkbox"]')
     expect(taskItems).toHaveLength(3)
     expect(Array.from(taskItems, (item) => item.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false'])
   })
@@ -350,11 +381,36 @@ async function setCollapsedSelection(contentEditable: HTMLElement, node: Node) {
   })
 }
 
+function orderedMarkers(container: ParentNode) {
+  return Array.from(container.querySelectorAll('ol > li'), (item) => (
+    item.getAttribute('data-drive-list-marker')
+  )).filter((marker): marker is string => marker !== null)
+}
+
+async function flushListMarkerObserver() {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 async function dispatchTab(target: HTMLElement, shiftKey = false) {
   await act(async () => {
     target.dispatchEvent(new KeyboardEvent('keydown', {
       key: 'Tab',
       code: 'Tab',
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    }))
+    await Promise.resolve()
+  })
+}
+
+async function dispatchHistoryShortcut(target: HTMLElement, shiftKey = false) {
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'z',
+      code: 'KeyZ',
+      ctrlKey: true,
       shiftKey,
       bubbles: true,
       cancelable: true,

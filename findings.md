@@ -1,5 +1,28 @@
 # 发现与决策
 
+## 2026-08-26 阶段 26 Drive Markdown 层级自动编号
+
+- 标准 Markdown 只表达列表层级和每层起始编号，不保存 `2.1` 复合 marker；层级编号必须是编辑/浏览 DOM 的派生展示，不能写进正文。
+- 用户锁定全局默认行为：一级 `1.`、`2.`，二级起 `2.1`、`2.2.1` 且不加末尾句点；无序列表不占编号层级，`2 → 无序 → 有序` 显示为 `2.1`。
+- Chromium 验证表明原生 `::marker` 支持层级 marker；为精确保留混合列表语义和 `<ol start>`，实现应在 DOM 中计算有序祖先路径，再由 `::marker` 读取数据属性。
+- MDXEditor 的 Markdown 导出来自编辑器模型而非 DOM，受控 `data-*` marker 可用于展示；仍需以真实集成回归证明 Tab/Shift+Tab 和保存不会序列化该属性。
+- MDXEditor 缩进时会生成只承载子列表的结构性 `<li>`，并带一个连续 `value`；这不是用户可见条目。编号同步必须跳过该容器，并让子列表继承前一个真实兄弟条目的路径，否则 `1 → Tab` 会误显示为 `2.1`。
+- 最终实现只观察 `childList` 与 `start`/`value` 属性，微任务内批量重算；自身写入的 marker 属性不在观察范围内，不会形成观察循环。无序祖先不进入路径，真实空列表项仍会正常占号。
+- 真实 MDXEditor 回归已覆盖列表类型转换、Tab、Shift+Tab、撤销、重做、显式起始值、混合列表、任务项、空项与保存序列化；Chromium 直接验证了实际 `::marker` 内容，而不只检查 class 字符串。
+- 生产部署 `20260826_092228` 完成后，运行镜像和容器内 Dashboard 产物均确认包含 marker 数据属性与 `content: attr(...)` 规则；容器健康且公开健康检查全绿。
+
+## 2026-08-26 阶段 24 Drive Markdown 列表浏览/编辑一致性
+
+- 用户截图显示同一份 Drive Markdown：MDXEditor 编辑态的嵌套有序列表使用十进制数字，浏览态相同层级显示为小写字母。
+- `synapse-skill` Drive MCP 对私有 item `cmszv0ir1040rnx28fwmxrekn` 的 metadata、preview 和 content 读取均返回“账号未登录”；按仓库链接规则未改用浏览器或通用抓取，也未修改该 Drive 文件。
+- 浏览态 `DriveMarkdownRenderer` 引入 `github-markdown-css`。该样式会按嵌套深度重设 `ol` 的 marker；现有 `[&_ol]:list-decimal` 没有足够优先级，截图证明实际被覆盖。
+- MDXEditor 已使用 `[&_ol]:list-decimal`，编辑态数字编号正确；本次只需收紧浏览态样式，不应改 Markdown 源文、server renderer 或保存序列化。
+- 目标修复：浏览态所有后代 `ol` 强制使用十进制 marker，同时保留 HTML `start` 属性和现有列表层级缩进。
+- 单元红灯证明组件原来只有普通 `list-decimal`；首次 Browser Mode 红灯进一步得到真实计算样式 `none / lower-roman / lower-alpha`，直接复现第三方嵌套 marker 级联。
+- Tailwind 4 生产构建已生成 `.[&_ol]:list-decimal! ol { list-style-type: decimal !important; }`。Browser Mode 原配置遗漏 `@tailwindcss/vite`，导致测试页未生成工具类；补齐与生产 Vite 相同的插件后，Chromium 三级列表计算样式均为 `decimal`，现有 4 个 Browser 文件、8 项全部通过。
+- 修复只改变阅读预览的 marker 样式，不触碰 Markdown 内容、列表序列化或显式 `start` 值；保存后的源文不会被转换成字母序号。
+- 用户随后明确授权生产部署。正式流程以 `synapse-server:deploy-20260826_085504` 完成切换，容器 healthy，远端与公开健康检查全绿；运行容器的 Dashboard CSS 已确认包含十进制 marker 的 `!important` 规则。
+
 ## 2026-08-26 阶段 23 最终验收修正
 
 - 主任务拒绝第 9 轮把 4,000 组 heading+paragraph（8,000 blocks）墙钟门槛从 1,800ms 放宽到 3,000ms，原因成立：旧实现该负载约 2.62s，会被错误放行。

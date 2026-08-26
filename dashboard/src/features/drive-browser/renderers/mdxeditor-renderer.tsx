@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -51,6 +51,10 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ApiError, driveApi, driveBrowserApi } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
+import {
+  DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
+  observeDriveHierarchicalListMarkers,
+} from './drive-hierarchical-list-markers'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import {
@@ -110,6 +114,7 @@ export function DriveMDXeditorRenderer({
 }) {
   const initialText = normalizeMdxEditorBreakTags(preview.text ?? '')
   const editorRef = useRef<MDXEditorMethods | null>(null)
+  const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
@@ -378,6 +383,12 @@ export function DriveMDXeditorRenderer({
     clearDraftPublicImages()
   }, [clearDraftPublicImages, clearExternalMarkdownSync])
 
+  useLayoutEffect(() => {
+    const root = editorContainerRef.current
+    if (!root) return
+    return observeDriveHierarchicalListMarkers(root)
+  }, [])
+
   const handleSave = useCallback(async () => {
     if (!canSave || saveInFlightRef.current || !edit?.currentVersionId || !editContext) return
     saveInFlightRef.current = true
@@ -557,7 +568,7 @@ export function DriveMDXeditorRenderer({
         disabled={!canEdit || uploadingImage}
         onChange={(event) => { void handleImageSelected(event) }}
       />
-      <div className='min-h-0 flex-1 overflow-auto'>
+      <div ref={editorContainerRef} className='min-h-0 flex-1 overflow-auto'>
         {parseError || requiresSourceMode ? (
           <div className='mx-auto flex min-h-full max-w-4xl flex-col gap-3 px-4 py-6 md:px-6'>
             <div className='flex items-center justify-between gap-2'>
@@ -601,7 +612,7 @@ export function DriveMDXeditorRenderer({
             plugins={plugins}
             translation={mdxEditorZhCnTranslation}
             className='min-h-full'
-            contentEditableClassName='mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6'
+            contentEditableClassName={`mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
           />
         )}
       </div>

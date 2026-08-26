@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url"
 
 import {
   buildNotificationMessages,
+  configuredWebhooksFromEnv,
   deliverNotificationMessages,
   parseArgs,
   parseReleaseNotes,
@@ -91,6 +92,26 @@ test("requires version and notes file arguments", () => {
   )
 })
 
+test("requires two distinct configured robots", () => {
+  assert.deepEqual(configuredWebhooksFromEnv({
+    SYNAPSE_RELEASE_WECOM_WEBHOOK_URL: " primary ",
+    SYNAPSE_RELEASE_WECOM_SECONDARY_WEBHOOK_URL: " secondary ",
+  }), ["primary", "secondary"])
+  assert.throws(
+    () => configuredWebhooksFromEnv({
+      SYNAPSE_RELEASE_WECOM_WEBHOOK_URL: "primary",
+    }),
+    /SYNAPSE_RELEASE_WECOM_SECONDARY_WEBHOOK_URL/,
+  )
+  assert.throws(
+    () => configuredWebhooksFromEnv({
+      SYNAPSE_RELEASE_WECOM_WEBHOOK_URL: "same",
+      SYNAPSE_RELEASE_WECOM_SECONDARY_WEBHOOK_URL: "same",
+    }),
+    /必须不同/,
+  )
+})
+
 test("missing notes file fails before notification delivery", async () => {
   const testRoot = await mkdtemp(path.join(os.tmpdir(), "release-notes-missing-"))
   const missingFile = path.join(testRoot, "missing.md")
@@ -122,37 +143,86 @@ test("dry-run and check modes are passed to the notification runner", async () =
 
   await deliverNotificationMessages(["第一条"], {
     mode: "dry-run",
-    webhook: null,
+    webhooks: [null],
     runner,
   })
   await deliverNotificationMessages(["第二条"], {
     mode: "check",
-    webhook: "test-webhook",
+    webhooks: ["test-webhook-1", "test-webhook-2"],
     runner,
   })
 
   assert.deepEqual(calls, [
     { content: "第一条", mode: "dry-run", webhook: null },
-    { content: "第二条", mode: "check", webhook: "test-webhook" },
+    { content: "第二条", mode: "check", webhook: "test-webhook-1" },
+    { content: "第二条", mode: "check", webhook: "test-webhook-2" },
   ])
 })
 
-test("stops after the first failed notification chunk", async () => {
+test("delivers every chunk to both robots in destination order", async () => {
   const delivered = []
-  const runner = async content => {
-    delivered.push(content)
+  const runner = async (content, { webhook }) => {
+    delivered.push([webhook, content])
+    return 0
+  }
+
+  await deliverNotificationMessages(["第一条", "第二条"], {
+    mode: "send",
+    webhooks: ["test-webhook-1", "test-webhook-2"],
+    runner,
+  })
+
+  assert.deepEqual(delivered, [
+    ["test-webhook-1", "第一条"],
+    ["test-webhook-1", "第二条"],
+    ["test-webhook-2", "第一条"],
+    ["test-webhook-2", "第二条"],
+  ])
+})
+
+test("stops after the first failed robot and notification chunk", async () => {
+  const delivered = []
+  const runner = async (content, { webhook }) => {
+    delivered.push([webhook, content])
+    return webhook === "test-webhook-2" && content === "第二条" ? 3 : 0
+  }
+
+  await assert.rejects(
+    deliverNotificationMessages(["第一条", "第二条", "第三条"], {
+      mode: "send",
+      webhooks: ["test-webhook-1", "test-webhook-2"],
+      runner,
+    }),
+    /第 2\/2 个机器人的第 2\/3 条未成功/,
+  )
+  assert.deepEqual(delivered, [
+    ["test-webhook-1", "第一条"],
+    ["test-webhook-1", "第二条"],
+    ["test-webhook-1", "第三条"],
+    ["test-webhook-2", "第一条"],
+    ["test-webhook-2", "第二条"],
+  ])
+})
+
+test("stops before the next robot when a chunk fails", async () => {
+  const delivered = []
+  const runner = async (content, { webhook }) => {
+    delivered.push([webhook, content])
     return content === "第二条" ? 3 : 0
   }
 
   await assert.rejects(
     deliverNotificationMessages(["第一条", "第二条", "第三条"], {
       mode: "send",
-      webhook: "test-webhook",
+      webhooks: ["test-webhook-1", "test-webhook-2"],
       runner,
     }),
-    /第 2\/3 条未成功/,
+    /第 1\/2 个机器人的第 2\/3 条未成功/,
   )
-  assert.deepEqual(delivered, ["第一条", "第二条"])
+  assert.deepEqual(delivered, [
+    ["test-webhook-1", "第一条"],
+    ["test-webhook-1", "第二条"],
+  ])
 })
 
 test("dry-run CLI does not require webhook configuration", async () => {
@@ -186,6 +256,7 @@ console.log(JSON.stringify({ dryRun: true, content: args[contentIndex + 1] }))
         ...process.env,
         HOME: testRoot,
         SYNAPSE_RELEASE_WECOM_WEBHOOK_URL: "",
+        SYNAPSE_RELEASE_WECOM_SECONDARY_WEBHOOK_URL: "",
       },
     })
 

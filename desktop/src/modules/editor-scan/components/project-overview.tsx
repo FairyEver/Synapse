@@ -9,6 +9,7 @@ import type {
   EditorScanSkillItem,
 } from "@/types/editor-scan"
 import { ScanItemCard } from "./scan-item-card"
+import { prioritizeSynapseSkills } from "../lib/skill-order"
 
 type ProjectOverviewProps = {
   projects: EditorScanProjectResult[]
@@ -84,7 +85,7 @@ function ProjectOverview({
     <div className="flex flex-col gap-2">
       {filteredProjects.map(({ project, editorEntry }) => {
         const items = contentTab === "skill"
-          ? editorEntry?.skills ?? []
+          ? prioritizeSynapseSkills(editorEntry?.skills ?? [])
           : editorEntry?.rules ?? []
 
         const label = contentTab === "skill" ? "Skill" : "规则"

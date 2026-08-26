@@ -768,3 +768,36 @@
 - 已确认 2026-08-25 当日提交至少包括 Drive 大目录回收站、Git diff、Agent 附件与 Slash、Drive Mermaid/Markdown 等主题；未提交产品改动已在此前轮次提交，后续以精确时间范围和基准提交重新盘点。
 - 采用严格串行的新任务协议：主任务生成提示词并创建 `local` 项目任务，执行任务直接使用当前工作区、禁止分支/worktree、禁止重启 dev 服务，完成审查/Computer Use/修复/验证/提交后由主任务验收，再开启下一轮。
 - 截止条件为北京时间 2026-08-26 07:00 之后，并且当时正在执行的一轮已经完成与验收。
+
+# 2026-08-26 阶段 24 Drive Markdown 列表浏览/编辑一致性
+
+- **状态：** complete
+- 已读取 Synapse Drive、UI/产品、Frontend、MDXEditor 设计和编辑器集成规则，并对照两张用户截图。
+- Drive MCP 因当前 Synapse 账号未登录无法读取私有文件；未使用浏览器绕过，也未修改用户文档。
+- 已定位浏览态嵌套有序列表受 `github-markdown-css` marker 规则覆盖，编辑态数字 marker 正常；下一步先补红灯回归，再做单点样式修复。
+- 首次误用不存在的 Dashboard `test` script，未执行测试；改用已安装的 `pnpm exec vitest run` 后，新增回归稳定红灯：73 项中 1 项失败，实际类仍为普通 `list-decimal`。
+- 已将浏览态有序列表收敛为 Tailwind `list-decimal!`，仅提高 marker 声明优先级；没有新增 CSS、颜色、依赖或内容转换。
+- 定向单元回归：Markdown renderer、MDXEditor renderer 和真实列表集成 3 个文件、131/131 通过。
+- 首次 Chromium 计算样式回归失败为 `none / lower-roman / lower-alpha`，发现 Browser Mode 未加载 Tailwind Vite 插件；补齐测试配置后，4 个 Browser 文件、8/8 通过，三级有序列表均为 `decimal`。
+- Drive renderer 聚焦回归 17 个文件、258/258 通过；官方 Browser Mode 4 个文件、8/8 通过，三级有序列表的 Chromium 计算样式均为 `decimal`。
+- Server Markdown 渲染专项 13/13、Dashboard typecheck 与 production build（6,801 modules）通过；完整 Drive 目录回归 365 项通过，另有 2 个与本次无关的既有旧文案/旧容器 class 断言失败，未越界修改。
+- 最终产物包含带 `!important` 的十进制列表规则；失败截图附件已移至废纸篓，用户 Drive 文档未修改。本次未获生产部署授权，因此没有部署生产环境。
+
+# 2026-08-26 阶段 25 生产部署
+
+- **状态：** complete
+- 用户已明确授权部署生产环境；采用仓库根目录 `deploy.sh` 正式流程，包含环境同步与校验、数据库/Drive 备份、迁移风险扫描、临时库预演、镜像回滚点、服务切换和健康检查。
+- 部署同步范围内只有本次 Dashboard 列表修复；其它未提交改动位于不会被脚本同步的 Desktop、Skill 与任务记录目录。
+- 部署标识 `20260826_085504`，新镜像 `synapse-server:deploy-20260826_085504`；回滚镜像 `synapse-server:rollback-20260826_085504`。环境变量、Postgres globals、在线数据库和最终切换前数据库备份均已生成并验证；Drive 使用 COS，因此本地 Drive 目录备份按设计跳过。
+- 新服务已运行且容器状态为 healthy。健康检查首次遇到启动阶段连接重置、第二次短暂 502，第三次全绿；healthz、console、admin、admin 深路由、桌面更新页、document、dashboard redirect、webhook、Drive share、更新凭证服务和两个公开稳定地址全部通过。
+- 线上容器 Dashboard 产物已确认包含 `list-style-type:decimal!important`，对应本次嵌套有序列表修复。部署总耗时 135 秒，未触发回滚，未修改用户 Drive 文档。
+
+# 2026-08-26 阶段 26 Drive Markdown 层级自动编号
+
+- **状态：** complete
+- 用户确认所有 Drive Markdown/MDX 默认启用，编辑和浏览均显示层级编号；一级保留 `1.`，二级及以下显示 `2.1`、`2.2.1`，无序列表不占编号层级。
+- 已新增共享 DOM marker 同步逻辑；浏览态在 HTML 刷新后同步，编辑态通过受限 MutationObserver 跟随缩进、取消缩进、列表转换、撤销重做和外部 DOM 更新。MDXEditor 的结构性嵌套容器不会占号，显式 `start` 与混合有序/无序层级保持正确。
+- 编号只写入临时 `data-drive-list-marker` 并由原生 `::marker` 展示；真实 MDXEditor 回归确认 `getMarkdown()` 不包含该属性，用户 Drive 文档正文未改写。
+- Drive Renderer 回归 18 个文件、262/262；Chromium Browser Mode 4 个文件、8/8；Dashboard typecheck、production build（6,802 modules）和 `git diff --check` 全部通过。生产构建产物包含 `content:attr(data-drive-list-marker)`。
+- 正式部署标识 `20260826_092228`，新镜像 `synapse-server:deploy-20260826_092228`，回滚镜像 `synapse-server:rollback-20260826_092228`。环境变量、Postgres globals、在线数据库和最终切换前数据库备份完成；无待发布迁移，临时数据库预演与最终备份恢复验证通过，COS Drive 备份按设计跳过。
+- 新容器为 healthy。健康检查在启动预热后第三轮全绿；线上容器 CSS 与 Drive JS 均确认包含层级 marker 规则。部署总耗时 114 秒，未触发回滚。
