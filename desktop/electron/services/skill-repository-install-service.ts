@@ -7,6 +7,7 @@ import { z } from "zod"
 import type { SkillRepositoryInstallManifest } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseContentDetail } from "../../src/types/content"
+import { parseSkillFrontmatter } from "../../src/definitions/editor/shared-skill-frontmatter"
 import { SKILL_ENV_EXAMPLE_PATH } from "../../src/lib/content-attachments"
 import type {
   SynapseSkillRepositoryInstallPrepareResult,
@@ -210,11 +211,14 @@ export class SkillRepositoryInstallService implements PreparedContentInstallSour
 
   async readPreparedSkill(sourceId: string, contentId: string): Promise<SynapseContentDetail<"skill">> {
     const prepared = this.requirePrepared(sourceId, contentId)
+    const mainFile = parseSkillFrontmatter(
+      await readFile(path.join(prepared.directoryPath, prepared.manifest.mainFile), "utf8"),
+    )
     return {
       id: prepared.source.repositoryId,
       type: "skill",
       title: prepared.source.title,
-      description: "",
+      description: mainFile.metadata.description?.trim() ?? "",
       category: "skill-repository",
       icon: "",
       iconBg: "",
@@ -227,7 +231,7 @@ export class SkillRepositoryInstallService implements PreparedContentInstallSour
       deleted: false,
       latestHistoryDirname: prepared.sessionId,
       attachmentCount: prepared.manifest.files.filter((file) => file.path !== prepared.manifest.mainFile).length,
-      content: await readFile(path.join(prepared.directoryPath, prepared.manifest.mainFile), "utf8"),
+      content: mainFile.body,
       attachments: prepared.manifest.files
         .filter((file) => file.path !== prepared.manifest.mainFile)
         .map((file) => ({

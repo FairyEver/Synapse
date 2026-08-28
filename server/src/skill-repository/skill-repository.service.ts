@@ -351,21 +351,24 @@ export class SkillRepositoryService {
     await this.requireOwnedActiveRepository(userId, repositoryId)
     const staleStorageKeys: string[] = []
 
-    const repository = await this.prisma.$transaction(async (tx) => {
+    const deletedRepositoryId = await this.prisma.$transaction(async (tx) => {
       const oldFiles = await tx.skillRepositoryFile.findMany({
         where: { repositoryId },
         select: { storageKey: true },
       }) as SkillRepositoryStorageKeyRow[]
       staleStorageKeys.push(...oldFiles.map((file) => file.storageKey).filter((key): key is string => Boolean(key)))
+      const installSessions = await tx.skillRepositoryInstallSession.findMany({
+        where: { repositoryId },
+        select: { packageStorageKey: true },
+      }) as Array<{ readonly packageStorageKey: string }>
+      staleStorageKeys.push(...installSessions.map((session) => session.packageStorageKey))
       await this.createCleanupTasks(tx, repositoryId, staleStorageKeys, "skill-repository-removed")
-      return tx.skillRepository.update({
-        where: { id: repositoryId },
-        data: { status: "removed" },
-      }) as Promise<SkillRepositoryRow>
+      await tx.skillRepository.delete({ where: { id: repositoryId } })
+      return repositoryId
     })
 
     await this.cleanupStaleObjects(staleStorageKeys)
-    return { id: repository.id, status: toStatus(repository.status) }
+    return { id: deletedRepositoryId, status: "removed" }
   }
 
   async getFileContent(userId: string, repositoryId: string, path: string): Promise<SkillRepositoryFileContentDto> {
@@ -569,7 +572,15 @@ export class SkillRepositoryService {
     const session = await this.resolveInstallSessionForPackage(userId, sessionId)
     return {
       id: session.id,
-      repository: repositoryItemDto(session.repository),
+      repository: {
+        id: session.repository.id,
+        name: session.repository.name,
+        title: session.repository.title,
+        owner: {
+          id: session.repository.owner?.id ?? session.repository.ownerUserId,
+          handle: session.repository.owner?.handle ?? session.repository.ownerUserId,
+        },
+      },
       packageSha256: session.packageSha256,
       packageSize: numberFromSize(session.packageSize),
       expiresAt: session.expiresAt.toISOString(),

@@ -42,6 +42,8 @@ Cloud repository identity is stable by repository id. Do not infer updates from 
 
 If a create upload conflicts by name, tell the user a repository with that name already exists. To update it, they must confirm the target repository id and use `app_skill_repository_update_local`; to create a separate repository, choose a different name.
 
+When an owner deletes their own repository in the web console, the deletion is permanent and the name becomes available for that owner immediately. An administrator removing a public repository is a reversible moderation action, so that repository keeps its name reserved until it is restored or otherwise permanently removed.
+
 Repository names use lowercase letters, numbers, and hyphens. They must start and end with a letter or number, cannot contain dots, and cannot use Windows reserved names such as `con`, `aux`, `nul`, `com1`, or `lpt1`.
 
 If the server returns `USER_HANDLE_REQUIRED`, ask the user to set a username in the Synapse console. Do not generate, set, or change the username automatically.

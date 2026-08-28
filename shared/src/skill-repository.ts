@@ -161,7 +161,12 @@ export interface SkillRepositoryInstallSessionDto {
 
 export interface SkillRepositoryResolvedInstallSessionDto {
   readonly id: string
-  readonly repository: SkillRepositoryItemDto
+  readonly repository: {
+    readonly id: string
+    readonly name: string
+    readonly title: string
+    readonly owner: SkillRepositoryOwnerDto
+  }
   readonly packageSha256: string
   readonly packageSize: number
   readonly expiresAt: string

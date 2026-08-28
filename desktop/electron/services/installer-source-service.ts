@@ -6,8 +6,7 @@ import {
   INSTALLER_SOURCE_LOCAL_SKILL_CACHE_MAX_ENTRIES,
   INSTALLER_SOURCE_TTL_MS,
 } from "../../config"
-import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
-import { slugifySkillName } from "../../src/definitions/editor/shared-skill-frontmatter"
+import { parseSkillFrontmatter, slugifySkillName } from "../../src/definitions/editor/shared-skill-frontmatter"
 import { normalizeContentNameInput, validateContentNameInput } from "../../src/lib/content-name-input"
 import { normalizeSkillNameInput, validateSkillNameInput } from "../../src/lib/skill-name-input"
 import { SKILL_ENV_EXAMPLE_PATH } from "../../src/lib/content-attachments"
@@ -51,16 +50,6 @@ type InstallerSourceServiceOptions = {
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
-}
-
-function parseSkillContent(text: string): string {
-  if (!text.startsWith("---")) return text.trim()
-
-  const endIndex = text.indexOf("\n---", 3)
-  if (endIndex === -1) return text.trim()
-
-  parseFrontmatterBlock(text.slice(4, endIndex))
-  return text.slice(endIndex + 4).trim()
 }
 
 class InstallerSourceService {
@@ -232,7 +221,7 @@ class InstallerSourceService {
         size: file.size,
       })),
       category: "installer",
-      content: parseSkillContent(stored.draft.content),
+      content: parseSkillFrontmatter(stored.draft.content).body,
       createdAt: now,
       createdBy: "installer",
       createdByDisplayName: "Installer",

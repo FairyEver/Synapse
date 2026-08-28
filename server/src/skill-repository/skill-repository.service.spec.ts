@@ -130,7 +130,7 @@ describe("SkillRepositoryService", () => {
     expect(prisma.skillRepository.create).not.toHaveBeenCalled()
   })
 
-  it("checks same-name conflicts against removed repositories before create", async () => {
+  it("keeps names reserved for repositories removed by an administrator", async () => {
     prisma.skillRepository.findFirst.mockResolvedValue(repositoryRow({
       id: "repo-removed",
       name: "demo-skill",
@@ -516,6 +516,38 @@ describe("SkillRepositoryService", () => {
     expect(storage.getObjectStream).toHaveBeenCalledWith({ key: "skill-repositories/repo-1/files/file-3/readme-sha" })
   })
 
+  it("resolves install sessions with only the repository fields supported by Desktop", async () => {
+    prisma.skillRepositoryInstallSession.findFirst.mockResolvedValue({
+      id: "session-1",
+      userId: "user-1",
+      repositoryId: "repo-1",
+      packageStorageKey: "skill-repositories/repo-1/install/session-1.zip",
+      packageSha256: "a".repeat(64),
+      packageSize: BigInt(1024),
+      expiresAt: new Date("2099-06-02T00:00:00.000Z"),
+      consumedAt: null,
+      repository: repositoryRow({
+        id: "repo-1",
+        description: "Must not leak into the install-session repository shape.",
+      }),
+    })
+
+    const result = await service.resolveInstallSession("user-1", "session-1")
+
+    expect(result).toEqual({
+      id: "session-1",
+      repository: {
+        id: "repo-1",
+        name: "demo-skill",
+        title: "Demo Skill",
+        owner: { id: "user-1", handle: "alice" },
+      },
+      packageSha256: "a".repeat(64),
+      packageSize: 1024,
+      expiresAt: "2099-06-02T00:00:00.000Z",
+    })
+  })
+
   it("rejects private repository file downloads for non-owners", async () => {
     prisma.skillRepository.findFirst.mockResolvedValueOnce(null)
 
@@ -642,7 +674,7 @@ describe("SkillRepositoryService", () => {
     expect(storage.deleteObject).toHaveBeenCalledWith("skill-repositories/repo-1/files/file-2/readme-sha")
   })
 
-  it("updates repository metadata, records name redirects, and soft deletes repositories", async () => {
+  it("updates repository metadata, records name redirects, and permanently deletes owned repositories", async () => {
     prisma.skillRepository.findFirst.mockResolvedValueOnce(repositoryRow({ id: "repo-1", name: "old-name" }))
     prisma.skillRepository.findFirst.mockResolvedValueOnce(null)
     prisma.skillRepositoryNameRedirect.findUnique.mockResolvedValueOnce(null)
@@ -663,15 +695,26 @@ describe("SkillRepositoryService", () => {
     prisma.skillRepositoryFile.findMany.mockResolvedValueOnce([
       { storageKey: "skill-repositories/repo-1/files/file-1/sha" },
     ])
-    prisma.skillRepository.update.mockResolvedValueOnce(repositoryRow({ id: "repo-1", status: "removed" }))
+    prisma.skillRepositoryInstallSession.findMany.mockResolvedValueOnce([
+      { packageStorageKey: "skill-repositories/repo-1/exports/session-1.zip" },
+    ])
+    prisma.skillRepository.delete.mockResolvedValueOnce(repositoryRow({ id: "repo-1" }))
 
     const result = await service.deleteMine("user-1", "repo-1")
 
     expect(result).toEqual({ id: "repo-1", status: "removed" })
+    expect(prisma.skillRepository.delete).toHaveBeenCalledWith({ where: { id: "repo-1" } })
+    expect(prisma.skillRepository.update).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: { status: "removed" },
+    }))
     expect(prisma.skillRepositoryObjectCleanupTask.createMany).toHaveBeenCalledWith({
       data: [{
         repositoryId: "repo-1",
         storageKey: "skill-repositories/repo-1/files/file-1/sha",
+        reason: "skill-repository-removed",
+      }, {
+        repositoryId: "repo-1",
+        storageKey: "skill-repositories/repo-1/exports/session-1.zip",
         reason: "skill-repository-removed",
       }],
       skipDuplicates: true,
@@ -692,6 +735,7 @@ interface PrismaMock {
   $transaction: MockFn
   skillRepository: {
     create: MockFn
+    delete: MockFn
     update: MockFn
     findFirst: MockFn
     findMany: MockFn
@@ -712,6 +756,10 @@ interface PrismaMock {
     deleteMany: MockFn
     updateMany: MockFn
   }
+  skillRepositoryInstallSession: {
+    findFirst: MockFn
+    findMany: MockFn
+  }
 }
 
 interface StorageMock {
@@ -725,6 +773,7 @@ function createPrismaMock(): PrismaMock {
     $transaction: vi.fn(),
     skillRepository: {
       create: vi.fn(),
+      delete: vi.fn(),
       update: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -744,6 +793,10 @@ function createPrismaMock(): PrismaMock {
       createMany: vi.fn(),
       deleteMany: vi.fn(),
       updateMany: vi.fn(),
+    },
+    skillRepositoryInstallSession: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
   }
 }
