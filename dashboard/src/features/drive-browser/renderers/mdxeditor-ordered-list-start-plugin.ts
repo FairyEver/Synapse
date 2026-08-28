@@ -60,11 +60,11 @@ export const orderedListStartPlugin = realmPlugin({
       priority: LIST_VISITOR_PRIORITY,
       testLexicalNode: isLexicalListItemNode,
       visitLexicalNode({ lexicalNode, mdastParent, actions }) {
-        const preserveNestedStartBoundary = containsNonOneOrderedList(lexicalNode)
+        const preserveNestedStartBoundary = containsNonOneOrderedList(lexicalNode as lexical.ElementNode)
         actions.nextVisitor()
         if (!preserveNestedStartBoundary) return
 
-        const exportedListItem = mdastParent.children.at(-1)
+        const exportedListItem = mdastParent.children[mdastParent.children.length - 1]
         if (exportedListItem?.type === 'listItem') exportedListItem.spread = true
       },
     })

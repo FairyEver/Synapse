@@ -12,8 +12,8 @@ function RouteComponent() {
   const { view } = Route.useSearch()
   const navigate = Route.useNavigate()
   const handleDriveNavigate = useCallback((href: string) => {
-    void navigate({ href })
-  }, [navigate])
+    void navigate({ href, search: { view } })
+  }, [navigate, view])
   const handleViewChange = useCallback((nextView: DriveConsoleSystemView) => {
     void navigate({ search: { view: nextView } })
   }, [navigate])
