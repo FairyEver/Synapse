@@ -196,6 +196,16 @@ describe("server deployment configuration", () => {
     expect(location).not.toContain("limit_req")
   })
 
+  it("accepts cloud Skill imports up to the server JSON limit", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const location = nginx.match(/location = \/api\/skill-repositories\/import \{([\s\S]*?)\n  \}/u)?.[1]
+
+    expect(location).toBeDefined()
+    expect(location).toContain("client_max_body_size 80m")
+    expect(location).toContain("proxy_request_buffering off")
+    expect(location).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
   it("uses the configured postgres identity in compose", () => {
     const compose = readRepoFile("server/compose.yml")
     const envExample = readRepoFile("server/.env.example")
