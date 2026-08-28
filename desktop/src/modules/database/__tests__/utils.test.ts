@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  formatDatabaseFolderOperationError,
   formatCreateTableSubmitError,
   getCurrentDatabaseError,
   getCurrentDatabaseQueryResult,
@@ -48,5 +49,12 @@ describe("database utils", () => {
       .toBe('列 "tags" 应使用多选并填写选项')
     expect(formatCreateTableSubmitError(new Error('Duplicate column name "email"')))
       .toBe('列名 "email" 重复')
+  })
+
+  it("maps technical folder errors to user-facing messages", () => {
+    expect(formatDatabaseFolderOperationError(
+      "create",
+      new Error("Error invoking remote method 'synapse:app:database:folder:create': Error: UNIQUE constraint failed: _table_folders.name"),
+    )).toBe("文件夹名称已存在")
   })
 })

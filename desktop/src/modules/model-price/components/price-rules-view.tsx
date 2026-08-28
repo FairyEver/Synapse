@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { ModuleContentPanel } from "@/components/module-page"
@@ -75,8 +75,11 @@ const PRICE_COLUMNS: { readonly key: PriceField; readonly label: string }[] = [
 
 export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: PriceRulesViewProps) {
   const { error: showError, success: showSuccess } = useAppNotifications()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const addButtonRef = useRef<HTMLButtonElement>(null)
   const [rows, setRows] = useState<EditablePriceRule[]>([])
   const [saving, setSaving] = useState(false)
+  const [focusErrorMessage, setFocusErrorMessage] = useState<string | null>(null)
   const [clearing, setClearing] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -108,6 +111,12 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
     })
   }, [importDialogOpen, presetState.data])
 
+  useEffect(() => {
+    if (saving || !focusErrorMessage) return
+    focusInvalidRuleField(rootRef.current, focusErrorMessage)
+    setFocusErrorMessage(null)
+  }, [focusErrorMessage, saving])
+
   const togglePresetSelection = (presetId: ModelPricePresetId, checked: boolean) => {
     setSelectedPresetIds((current) => {
       if (checked) {
@@ -130,7 +139,11 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   }
 
   const removeRow = (clientId: string) => {
+    const removingOnlyRow = rows.length === 1
     setRows((current) => current.filter((row) => row.clientId !== clientId))
+    if (removingOnlyRow) {
+      setTimeout(() => addButtonRef.current?.focus(), 0)
+    }
   }
 
   const addRow = () => {
@@ -145,7 +158,9 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
       onSaved()
       showSuccess("已保存")
     } catch (error) {
-      showError(error instanceof Error ? error.message : "保存失败")
+      const message = error instanceof Error ? error.message : "保存失败"
+      showError(message)
+      setFocusErrorMessage(message)
     } finally {
       setSaving(false)
     }
@@ -206,7 +221,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   }
 
   return (
-    <div data-price-rules-root className="flex min-h-0 min-w-0 max-w-full flex-col gap-2 overflow-hidden">
+    <div ref={rootRef} data-price-rules-root className="flex min-h-0 min-w-0 max-w-full flex-col gap-2 overflow-hidden">
       <div data-price-rules-toolbar className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
         <div className="text-sm text-muted-foreground">人民币 / 1M token</div>
         <div data-price-rules-actions className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:justify-end">
@@ -265,7 +280,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={busy}>
+          <Button ref={addButtonRef} type="button" variant="outline" size="sm" onClick={addRow} disabled={busy}>
             <Plus data-icon="inline-start" />
             添加
           </Button>
@@ -341,6 +356,15 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
       </ModuleContentPanel>
     </div>
   )
+}
+
+function focusInvalidRuleField(root: HTMLDivElement | null, message: string): void {
+  if (!root) return
+  const rowNumber = Number(message.match(/第\s*(\d+)\s*行/)?.[1])
+  if (!Number.isInteger(rowNumber) || rowNumber < 1) return
+  const column = PRICE_COLUMNS.find(({ key, label }) => message.includes(key) || message.includes(label))
+  if (!column) return
+  root.querySelectorAll<HTMLInputElement>(`input[aria-label="${column.label}"]`)[rowNumber - 1]?.focus()
 }
 
 function toEditableRule(rule: ModelPriceRule): EditablePriceRule {

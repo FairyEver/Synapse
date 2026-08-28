@@ -55,9 +55,35 @@ export const orderedListStartPlugin = realmPlugin({
         })
       },
     })
+
+    realm.pub(addExportVisitor$, {
+      priority: LIST_VISITOR_PRIORITY,
+      testLexicalNode: isLexicalListItemNode,
+      visitLexicalNode({ lexicalNode, mdastParent, actions }) {
+        const preserveNestedStartBoundary = containsNonOneOrderedList(lexicalNode)
+        actions.nextVisitor()
+        if (!preserveNestedStartBoundary) return
+
+        const exportedListItem = mdastParent.children.at(-1)
+        if (exportedListItem?.type === 'listItem') exportedListItem.spread = true
+      },
+    })
   },
 })
 
 function isLexicalListNode(node: lexical.LexicalNode | null | undefined): node is lexical.ElementNode & LexicalListNode {
   return Boolean(node && lexical.$isElementNode(node) && node.getType() === 'list')
+}
+
+function isLexicalListItemNode(node: lexical.LexicalNode): node is lexical.ElementNode {
+  return lexical.$isElementNode(node) && node.getType() === 'listitem'
+}
+
+function containsNonOneOrderedList(node: lexical.ElementNode): boolean {
+  return node.getChildren().some((child) => {
+    if (isLexicalListNode(child)) {
+      return child.getListType() === 'number' && child.getStart() !== 1
+    }
+    return isLexicalListItemNode(child) && containsNonOneOrderedList(child)
+  })
 }

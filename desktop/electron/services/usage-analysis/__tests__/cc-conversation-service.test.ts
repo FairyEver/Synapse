@@ -69,8 +69,8 @@ function setupFixture(): Fixture {
     INSERT INTO cc_usage_events (
       id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
       input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,
-      priced_tokens, unpriced_tokens, total_cost
-    ) VALUES (?, ?, ?, '2026-05-27', '2026-05-27 09', ?, ?, ?, 'anthropic', 10, 5, 0, 0, 0, 15, 0, 0.01)
+      priced_tokens, unpriced_tokens, total_cost, price_known
+    ) VALUES (?, ?, ?, '2026-05-27', '2026-05-27 09', ?, ?, ?, 'anthropic', 10, 5, 0, 0, 0, 15, 0, 0.01, 1)
   `).run(
     "usage-1",
     "session-1",
@@ -197,6 +197,32 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
       sessionId: "session-1",
       requestCount: 2,
       tokens: 40,
+    }))
+  })
+
+  it("returns record-level pricing coverage", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
+    const { db } = setupFixture()
+    db.prepare(`
+      UPDATE cc_usage_events
+      SET priced_tokens = 0, unpriced_tokens = 0, total_cost = 0, price_known = 0
+      WHERE id = 'usage-1'
+    `).run()
+    const service = new CcConversationService({ db, logger })
+
+    const result = service.listRecords({ preset: "all", limit: 20 })
+
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      tokens: 15,
+      pricedTokens: 0,
+      unpricedTokens: 15,
+      estimatedCost: 0,
+    }))
+
+    expect(service.listRecordDetails({ sessionId: "session-1" }).rows[0]).toEqual(expect.objectContaining({
+      tokens: 15,
+      pricedTokens: 0,
+      unpricedTokens: 15,
+      estimatedCost: 0,
     }))
   })
 
@@ -355,6 +381,8 @@ describe("CcConversationService", { timeout: WINDOWS_CI_TEST_TIMEOUT }, () => {
     expect(result.items[0]).toEqual(expect.objectContaining({
       sessionId: "session-1",
       requestCount: 1,
+      pricedTokens: 15,
+      unpricedTokens: 0,
     }))
   })
 

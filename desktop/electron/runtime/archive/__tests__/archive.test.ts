@@ -65,6 +65,21 @@ describe("createZipArchive", () => {
     }))
   })
 
+  it("omits macOS resource metadata from zip archives", async () => {
+    const processRunner = createProcessRunner()
+
+    await createZipArchive("/tmp/synapse package", "/tmp/export.zip", {
+      actor: { kind: "user" },
+      platform: "darwin",
+      processRunner,
+    })
+
+    expect(processRunner.run).toHaveBeenCalledWith(expect.objectContaining({
+      command: "ditto",
+      args: expect.arrayContaining(["--norsrc"]),
+    }))
+  })
+
   it("redacts process output before including it in archive failure errors", async () => {
     const processRunner = createProcessRunner({
       exitCode: 1,

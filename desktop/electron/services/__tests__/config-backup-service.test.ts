@@ -363,7 +363,11 @@ describe("ConfigBackupService quick inputs", () => {
   })
 
   it("exports DataRepository namespaces without secret values", async () => {
-    const exportAll = vi.fn(async (options?: { includeSecrets?: boolean }) => ({
+    const exportAll = vi.fn(async (options?: {
+      includeSecrets?: boolean
+      excludeNamespaces?: readonly string[]
+      emptyNamespaces?: readonly string[]
+    }) => ({
       format: "synapse-backup-v1" as const,
       exportedAt: "2026-06-25T00:00:00.000Z",
       namespaces: [
@@ -409,7 +413,28 @@ describe("ConfigBackupService quick inputs", () => {
 
     const backup = await createConfigBackupPayload(new Date("2026-06-25T00:00:00.000Z"))
 
-    expect(exportAll).toHaveBeenCalledWith({ includeSecrets: false })
+    expect(exportAll).toHaveBeenCalledWith({
+      includeSecrets: false,
+      excludeNamespaces: [
+        "core.config",
+        "agent.events",
+        "agent.artifacts",
+        "agent.usage",
+        "conversations",
+        "outbox",
+        "audit",
+      ],
+      emptyNamespaces: [
+        "app.terminal.command-bodies",
+        "app.terminal.global-launch-bodies",
+        "app.terminal.group-launch-bodies",
+        "app.terminal.launch-bodies",
+        "app.terminal.blocks",
+        "app.terminal.delete-intents",
+        "app.terminal.idempotency",
+        "agent.file-checkpoints",
+      ],
+    })
     expect(backup.dataRepository?.namespaces.map((namespace) => namespace.name))
       .toContain("app.quick-input.items")
     expect(backup.dataRepository?.namespaces.map((namespace) => namespace.name))

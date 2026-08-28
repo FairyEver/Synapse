@@ -84,6 +84,10 @@
 - Quick Input 是独立 System App。Agent 只消费其文本并默认直接发送；不得恢复“直接发送”开关或塞回 slash menu。
 - Agent 项目路径与 Git System App 已登记仓库根路径精确匹配时，可在 composer 复用窄类型化 Git IPC；该入口不得经过 Agent 消息、slash command、MCP 或任意 Git 命令，提交仍必须使用仓库绑定的选择令牌。
 - Agent 已配置项目可通过窄类型化 Terminal IPC 以项目目录新建 UI 终端会话，再通过仅含 `sessionId` 的 System App 打开请求定位该会话；虚拟本地对话工作区不提供该入口，也不扩展为 MCP 或 Deep Link。
+- 工作区辅助面板属于 Agent 工作区壳，不属于消息组件、全局 App shell 或 `SidebarContentLayout`。宽屏使用会话与辅助面板分栏，窄屏切换为详情视图；面板状态按会话隔离，文件 Diff 只是首个面板描述符。
+- 共享只读 Diff renderer 位于 `desktop/src/components/diff/`，Git 通过模块内 adapter 消费，Agent 不得跨模块导入 Git 内部实现。patch 生成与解析复用 desktop 直接生产依赖 `diff`。
+- Agent 文件检查点摘要是 turn postlude 与 append-only history 事件；完整 sidecar 存在项目级 `agent.file-checkpoints` DataRepository。四个详情/撤销 IPC 仅供 Agent UI 使用，不扩张公开 Capability、MCP、Workflow、Deep Link、File Opener 或 Git 边界。
+- 文件撤销只面向 SDK 支持的当前会话最新检查点，并采用两阶段校验；不等同于 Git discard、Drive Checkpoint、对话回退或模型上下文回退。安全细则见 `docs/agents/agent-runtime-security.md`。
 - 其它 Knowledge Base 规则见 `docs/agents/knowledge-base.md`。
 
 ## Workflow 与 Automation

@@ -14,6 +14,8 @@ const WINDOW_BOUNDS = {
   minHeight: DEFAULT_WINDOW_BOUNDS.minHeight,
 }
 
+const WINDOW_TITLE = "Synapse AI Studio CC 对话详情"
+
 type Logger = {
   info: (message: string, meta?: unknown) => void
   warn: (message: string, meta?: unknown) => void
@@ -86,7 +88,7 @@ export function createCcConversationWindowService(deps: Deps) {
       const window = deps.createWindow({
         ...WINDOW_BOUNDS,
         show: false,
-        title: payload.title || "对话",
+        title: WINDOW_TITLE,
         ...(icon ? { icon } : {}),
         webPreferences: {
           preload: deps.getPreloadPath(),
@@ -108,6 +110,10 @@ export function createCcConversationWindowService(deps: Deps) {
 
       window.webContents.on("preload-error", (_event, _preloadPath, error) => {
         deps.logger.error("CC conversation window preload script failed.", { error })
+      })
+
+      window.on("page-title-updated", (event) => {
+        event.preventDefault()
       })
 
       window.once("ready-to-show", () => {

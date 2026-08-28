@@ -202,6 +202,18 @@ const exportConversationBundleRequestSchema = projectRequestSchema.extend({
   conversationId: z.string().min(1),
 })
 
+const fileCheckpointRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  checkpointId: z.string().min(1),
+})
+const fileCheckpointDiffRequestSchema = fileCheckpointRequestSchema.extend({
+  fileId: z.string().min(1),
+})
+const confirmFileCheckpointRewindRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  operationId: z.string().min(1),
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const sendResultSchema = z.object({
@@ -249,6 +261,49 @@ const exportConversationBundleResultSchema = z.object({
   fileCount: z.number().optional(),
 })
 
+const fileCheckpointStatusSchema = z.enum(["available", "superseded", "rewound", "partial", "unavailable"])
+const fileCheckpointFileSchema = z.object({
+  id: z.string(),
+  path: z.string(),
+  kind: z.enum(["added", "modified", "deleted"]),
+  insertions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  binary: z.boolean(),
+  truncated: z.boolean(),
+})
+const fileCheckpointDetailSchema = z.object({
+  id: z.string(),
+  conversationId: z.string(),
+  status: fileCheckpointStatusSchema,
+  insertions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  fileCount: z.number().int().nonnegative(),
+  files: z.array(fileCheckpointFileSchema),
+})
+const fileCheckpointDiffSchema = z.object({
+  checkpointId: z.string(),
+  fileId: z.string(),
+  path: z.string(),
+  kind: z.enum(["added", "modified", "deleted"]),
+  patch: z.string().optional(),
+  binary: z.boolean(),
+  truncated: z.boolean(),
+  diffCleared: z.boolean().optional(),
+})
+const fileCheckpointPrepareSchema = z.object({
+  operationId: z.string(),
+  expiresAt: z.string(),
+  filesChanged: z.array(z.string()),
+  insertions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  coverageWarning: z.boolean(),
+})
+const fileCheckpointRewindSchema = z.object({
+  checkpointId: z.string(),
+  status: z.enum(["rewound", "partial"]),
+  skippedLinks: z.number().int().nonnegative(),
+})
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
@@ -260,6 +315,58 @@ type ExportConversationBundleRequest = z.infer<typeof exportConversationBundleRe
 // ─── Message method descriptors ───────────────────────────────────────────────
 
 export const messageMethods: Record<string, IpcMethodDescriptor> = {
+  getFileCheckpoint: {
+    kind: "invoke",
+    operationId: "app.agent.operation.get_file_checkpoint",
+    request: fileCheckpointRequestSchema,
+    response: fileCheckpointDetailSchema,
+    handler: async (ctx, request: z.infer<typeof fileCheckpointRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return agent.getFileCheckpointDetail(request.conversationId, request.checkpointId)
+    },
+  },
+  getFileCheckpointDiff: {
+    kind: "invoke",
+    operationId: "app.agent.operation.get_file_checkpoint_diff",
+    request: fileCheckpointDiffRequestSchema,
+    response: fileCheckpointDiffSchema,
+    handler: async (ctx, request: z.infer<typeof fileCheckpointDiffRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return agent.getFileCheckpointDiff(request.conversationId, request.checkpointId, request.fileId)
+    },
+  },
+  prepareFileCheckpointRewind: {
+    kind: "invoke",
+    operationId: "app.agent.operation.prepare_file_checkpoint_rewind",
+    request: fileCheckpointRequestSchema,
+    response: fileCheckpointPrepareSchema,
+    handler: async (ctx, request: z.infer<typeof fileCheckpointRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      return agent.prepareFileCheckpointRewind({
+        conversationId: request.conversationId,
+        checkpointId: request.checkpointId,
+        actor: { kind: "user", id: "renderer" },
+      })
+    },
+  },
+  confirmFileCheckpointRewind: {
+    kind: "invoke",
+    operationId: "app.agent.operation.confirm_file_checkpoint_rewind",
+    request: confirmFileCheckpointRewindRequestSchema,
+    response: fileCheckpointRewindSchema,
+    handler: async (ctx, request: z.infer<typeof confirmFileCheckpointRewindRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const result = await agent.confirmFileCheckpointRewind({
+        conversationId: request.conversationId,
+        operationId: request.operationId,
+      })
+      return {
+        checkpointId: result.checkpointId,
+        status: result.status,
+        skippedLinks: result.skippedLinks,
+      }
+    },
+  },
   getTimeline: {
     kind: "invoke",
     operationId: "app.agent.operation.get_timeline",
@@ -511,6 +618,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           : await agent.send(message)
         const t_done = new Date().toISOString()
         const errorEvent = latestAgentErrorEvent(result.events as AgentEvent[])
+        const cancelled = isCancelledAgentResult(result.events as AgentEvent[])
         eventBus.emit({
           domain: "agent",
           type: "phase.update",
@@ -535,11 +643,11 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             projectId: request.projectId,
             sessionKey,
             conversationId: result.conversationId,
-            phase: result.error ? "failed" : "completed",
-            status: result.error ? "failed" : "done",
+            phase: cancelled ? "cancelled" : result.error ? "failed" : "completed",
+            status: cancelled ? "done" : result.error ? "failed" : "done",
             startedAt: t_recv,
             completedAt: t_done,
-            errorMessage: result.error,
+            errorMessage: cancelled ? undefined : result.error,
             errorKind: errorEvent?.errorKind,
             recoverable: errorEvent?.recoverable,
           },
@@ -658,6 +766,13 @@ function latestAgentErrorEvent(events: readonly AgentEvent[]): Extract<AgentEven
     if (event?.type === "error") return event
   }
   return undefined
+}
+
+function isCancelledAgentResult(events: readonly AgentEvent[]): boolean {
+  return events.some((event) => event.type === "result" && (
+    event.metadata?.cancelled === true
+    || event.metadata?.turnOutcome?.status === "cancelled"
+  ))
 }
 
 function timelineLookupErrorMeta(rawError: unknown): {

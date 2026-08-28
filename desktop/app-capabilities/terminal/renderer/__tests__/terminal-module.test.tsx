@@ -667,6 +667,18 @@ describe("TerminalModule", () => {
     expect(xtermState.instances).toHaveLength(1)
   })
 
+  it("marks the discard action for unsaved terminal settings as destructive", async () => {
+    await renderEmbeddedModule()
+
+    await clickButton("终端设置")
+    await changeInput("工作目录", "/repo/global")
+    await clickButton("取消")
+
+    expect(document.body.textContent).toContain("放弃未保存的更改？")
+    expect(buttonForText("放弃更改")?.dataset.variant).toBe("destructive")
+    await clickButton("继续编辑")
+  })
+
   it("keeps lost sessions read-only without terminal-pane actions", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({
@@ -871,6 +883,12 @@ describe("TerminalModule", () => {
       title: "  构建日志  ",
     })
     expect(document.body.textContent).toContain("构建日志")
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    const renamedRow = Array.from(document.body.querySelectorAll<HTMLElement>('[role="button"][data-track="terminal-session-select"]'))
+      .find((element) => element.textContent?.includes("构建日志"))
+    expect(document.activeElement).toBe(renamedRow)
   })
 
   it("renders a direct delete button instead of a session menu", async () => {
@@ -1144,6 +1162,16 @@ describe("TerminalModule", () => {
     await renderModule()
     await clickGroupMenu("构建")
     await clickMenuItem("删除")
+    expect(buttonForText("删除分组")?.dataset.variant).toBe("destructive")
+
+    await clickButton("取消")
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(document.body.querySelector('[aria-label="终端分组操作：构建"]'))
+
+    await clickGroupMenu("构建")
+    await clickMenuItem("删除")
     await clickButton("删除分组")
 
     expect(terminalBridge.deleteGroup).toHaveBeenCalledWith({ groupId: "group-build" })
@@ -1151,7 +1179,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
   })
 
-  it("deletes the active terminal session and selects the next session", async () => {
+  it("confirms before deleting the active terminal session and selects the next session", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
       createSession({ id: "session-1", groupId: "group-1", title: "一号终端", status: "ended", updatedAt: "2026-06-24T00:02:00.000Z" }),
@@ -1161,10 +1189,29 @@ describe("TerminalModule", () => {
     await renderModule()
     await clickSessionDelete("一号终端")
 
+    expect(document.body.textContent).toContain("删除终端")
+    expect(document.body.textContent).toContain("将删除「一号终端」及其保留输出。此操作无法撤销。")
+    expect(buttonForText("删除终端")?.dataset.variant).toBe("destructive")
+    expect(terminalBridge.deleteSession).not.toHaveBeenCalled()
+
+    await clickButton("取消")
+    expect(terminalBridge.deleteSession).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("一号终端")
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(document.body.querySelector('[aria-label="删除终端会话：一号终端"]'))
+
+    await clickSessionDelete("一号终端")
+    await clickButton("删除终端")
+
     expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
-    expect(document.body.textContent).not.toContain("会停止该终端并删除保留输出")
     expect(document.body.textContent).not.toContain("一号终端")
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(document.body.querySelector('[data-track="terminal-session-select"][aria-current="page"]'))
   })
 
   it("deletes the last terminal session and returns to the empty state", async () => {
@@ -1173,9 +1220,14 @@ describe("TerminalModule", () => {
 
     await renderModule()
     await clickSessionDelete("临时终端")
+    await clickButton("删除终端")
 
     expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
     expect(document.body.textContent).toContain("新建终端")
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(document.body.querySelector("[data-system-app-top-bar-actions] button"))
   })
 
   it("shows a user-visible error when creating a terminal fails", async () => {

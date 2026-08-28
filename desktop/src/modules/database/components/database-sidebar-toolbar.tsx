@@ -1,3 +1,4 @@
+import type { Ref } from "react"
 import { FileInput, FolderPlus, AlignLeft, Type, Text } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -21,6 +22,7 @@ type DatabaseSidebarToolbarProps = {
   onDisplayModeChange: (mode: DisplayMode) => void
   onImportTable: () => void
   onCreateFolder: () => void
+  createFolderButtonRef?: Ref<HTMLButtonElement>
 }
 
 function DatabaseSidebarToolbar({
@@ -28,6 +30,7 @@ function DatabaseSidebarToolbar({
   onDisplayModeChange,
   onImportTable,
   onCreateFolder,
+  createFolderButtonRef,
 }: DatabaseSidebarToolbarProps) {
   const DisplayModeIcon = DISPLAY_MODE_ICONS[displayMode]
 
@@ -58,6 +61,7 @@ function DatabaseSidebarToolbar({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            ref={createFolderButtonRef}
             variant="ghost"
             size="icon"
             className="size-7"

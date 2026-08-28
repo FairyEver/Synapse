@@ -44,6 +44,7 @@ function AlertDialogPortal({
 
 function AlertDialogOverlay({
   className,
+  onPointerDown,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
   return (
@@ -53,6 +54,10 @@ function AlertDialogOverlay({
         "fixed inset-0 isolate z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:duration-200 data-open:ease-out data-open:fade-in-0 data-closed:animate-out data-closed:duration-150 data-closed:ease-in data-closed:fade-out-0",
         className,
       )}
+      onPointerDown={(event) => {
+        onPointerDown?.(event)
+        event.preventDefault()
+      }}
       {...props}
     />
   )

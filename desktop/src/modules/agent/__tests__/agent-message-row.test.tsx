@@ -220,6 +220,29 @@ describe("AgentMessageEvent", () => {
     expect(onOpenReference).toHaveBeenCalledWith("/Users/liyang/Desktop/report.pdf")
   })
 
+  it("renders legacy redacted attachment names without a broken open action", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={{
+          ...baseEntry,
+          role: "user",
+          attachments: [{
+            kind: "path",
+            path: "report.pdf",
+            entryType: "file",
+            name: "report.pdf",
+            byteSize: 2048,
+          }],
+        }}
+        profile={mockProfile}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("report.pdf")
+    expect(html).not.toContain('title="report.pdf"')
+  })
+
   it("opens user images in the existing lightbox at the selected image", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

@@ -67,6 +67,16 @@ function parseInitialTerminalOpenRequest(): SynapseSystemAppTerminalOpenRequest 
   }
 }
 
+function replaceOpenRequestInUrl(name: string, request: unknown): void {
+  const url = new URL(window.location.href)
+  url.searchParams.set(name, JSON.stringify(request))
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  )
+}
+
 export function SystemAppWindowApp() {
   const appId = useMemo(
     () => parseSystemAppId(new URLSearchParams(window.location.search).get("appId")),
@@ -83,6 +93,7 @@ export function SystemAppWindowApp() {
     const bridge = getAppsBridge()
     if (!bridge) return undefined
     return bridge.onContentOpenRequest((request) => {
+      replaceOpenRequestInUrl("contentOpenRequest", request)
       setPendingContentOpenRequest(request)
     })
   }, [])
@@ -91,6 +102,7 @@ export function SystemAppWindowApp() {
     const bridge = getAppsBridge()
     if (!bridge) return undefined
     return bridge.onTerminalOpenRequest((request) => {
+      replaceOpenRequestInUrl("terminalOpenRequest", request)
       setPendingTerminalOpenRequest(request)
     })
   }, [])
@@ -99,6 +111,7 @@ export function SystemAppWindowApp() {
     const bridge = getAppsBridge()
     if (!bridge) return undefined
     return bridge.onGitOpenRequest((request) => {
+      replaceOpenRequestInUrl("gitOpenRequest", request)
       setPendingGitOpenRequest(request)
     })
   }, [])

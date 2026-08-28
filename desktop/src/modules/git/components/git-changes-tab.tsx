@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type RefObject } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -23,7 +23,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseGitRepository, SynapseGitWorkingTreeChange } from "@/types/git"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { getGitActionPlan } from "../lib/git-status-view"
-import { GitDiffViewer, type GitDiffViewMode } from "./git-diff-viewer"
+import { GitDiffViewer, type GitDiffViewMode } from "./git-diff-viewer-adapter"
 
 type GitChangesTabProps = {
   readonly repository: SynapseGitRepository
@@ -37,6 +37,7 @@ type GitChangesTabProps = {
   readonly diffWrap: boolean
   readonly onDiffViewModeChange: (mode: GitDiffViewMode) => void
   readonly onDiffWrapChange: (wrap: boolean) => void
+  readonly returnFocusRef?: RefObject<HTMLButtonElement | null>
 }
 
 type CommitNotice = {
@@ -71,6 +72,7 @@ export function GitChangesTab({
   diffWrap,
   onDiffViewModeChange,
   onDiffWrapChange,
+  returnFocusRef,
 }: GitChangesTabProps) {
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
@@ -84,6 +86,12 @@ export function GitChangesTab({
   const worktreeMutationBlocked = Boolean(status.snapshot && status.snapshot.repositoryOperationState !== "normal")
   const selectedPathsKey = JSON.stringify(status.selectedPaths)
   const commitDisabled = busy || preparing || !preparedSelectionId || hasConflicts || worktreeMutationBlocked || status.selectedPaths.length === 0 || !message.trim()
+
+  useEffect(() => {
+    if (!commitDialogOpen) return
+    setError(null)
+    setCommitNotice(null)
+  }, [commitDialogOpen])
 
   useEffect(() => {
     if (!commitDialogOpen) {
@@ -270,7 +278,16 @@ export function GitChangesTab({
         onOpenChange={handleCommitDialogOpenChange}
         data-track="git-commit-dialog"
       >
-        <DialogContent className="sm:max-w-lg" showCloseButton={!busy} aria-describedby={undefined}>
+        <DialogContent
+          className="sm:max-w-lg"
+          showCloseButton={!busy}
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            if (!returnFocusRef?.current) return
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>提交改动</DialogTitle>
           </DialogHeader>

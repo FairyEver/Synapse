@@ -313,6 +313,10 @@ function DriveModuleContent() {
   const [moveTarget, setMoveTarget] = useState<DriveItemDto | null>(null)
   const [moveParentId, setMoveParentId] = useState<string>("root")
   const [deleteTarget, setDeleteTarget] = useState<DriveItemDto | null>(null)
+  const deleteTriggerRef = useRef<HTMLElement | null>(null)
+  const deleteFallbackRef = useRef<HTMLElement | null>(null)
+  const deleteFallbackItemIdRef = useRef<string | null>(null)
+  const [deleteFocusTargetId, setDeleteFocusTargetId] = useState<string | null>(null)
   const [publicLinksOpen, setPublicLinksOpen] = useState(false)
   const [siteCreateTarget, setSiteCreateTarget] = useState<DriveItemDto | null>(null)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
@@ -340,6 +344,16 @@ function DriveModuleContent() {
   const [syncSnapshotError, setSyncSnapshotError] = useState<string | null>(null)
   const [syncSnapshotLoading, setSyncSnapshotLoading] = useState(true)
   const [syncDialog, setSyncDialog] = useState<DriveSyncDialogState | null>(null)
+
+  useEffect(() => {
+    if (!deleteFocusTargetId) return
+    const target = Array.from(document.querySelectorAll<HTMLElement>("[data-drive-delete-action]"))
+      .find((action) => action.dataset.driveItemId === deleteFocusTargetId)
+    if (!target) return
+    target.focus()
+    setDeleteFocusTargetId(null)
+  }, [deleteFocusTargetId, items])
+
   const [publicAssetActionState, setPublicAssetActionState] = useState<DrivePublicAssetsViewActionState>({ loading: true, uploading: false })
   const [trashActionState, setTrashActionState] = useState<DriveTrashViewActionState>({ loading: true })
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -768,11 +782,22 @@ function DriveModuleContent() {
     }
   }, [deletingItemIdsRef, loadDriveUsage, loadItems, setDeletingItemId])
 
-  const handleDelete = useCallback((item: DriveItemDto, event?: Pick<MouseEvent<HTMLElement>, "altKey">) => {
+  const handleDelete = useCallback((item: DriveItemDto, event?: Pick<MouseEvent<HTMLElement>, "altKey" | "currentTarget">) => {
     if (event && shouldBypassDeleteConfirm(event)) {
       void deleteDriveItem(item)
       return
     }
+    const trigger = event?.currentTarget ?? null
+    deleteTriggerRef.current = trigger
+    const deleteActions = trigger
+      ? Array.from(trigger.closest("tbody")?.querySelectorAll<HTMLElement>("[data-drive-delete-action]") ?? [])
+      : []
+    const triggerIndex = trigger ? deleteActions.indexOf(trigger) : -1
+    const fallback = triggerIndex >= 0
+      ? deleteActions[triggerIndex + 1] ?? deleteActions[triggerIndex - 1] ?? null
+      : null
+    deleteFallbackRef.current = fallback
+    deleteFallbackItemIdRef.current = fallback?.dataset.driveItemId ?? null
     setDeleteTarget(item)
   }, [deleteDriveItem])
 
@@ -1132,7 +1157,22 @@ function DriveModuleContent() {
                 setDeleteTarget(null)
               }
             }}>
-              <AlertDialogContent>
+              <AlertDialogContent onCloseAutoFocus={(event) => {
+                event.preventDefault()
+                const returnTarget = deleteTriggerRef.current?.isConnected
+                  ? deleteTriggerRef.current
+                  : deleteFallbackRef.current?.isConnected
+                    ? deleteFallbackRef.current
+                    : null
+                if (returnTarget) {
+                  returnTarget.focus()
+                } else {
+                  setDeleteFocusTargetId(deleteFallbackItemIdRef.current)
+                }
+                deleteTriggerRef.current = null
+                deleteFallbackRef.current = null
+                deleteFallbackItemIdRef.current = null
+              }}>
                 <AlertDialogHeader>
                   <AlertDialogTitle>确认删除</AlertDialogTitle>
                   <AlertDialogDescription asChild>
@@ -2136,7 +2176,7 @@ function DriveFileListRow({
           <Button type="button" variant="ghost" size="xs" disabled={!canOpen} onClick={() => onOpenItem(item)}>
             预览
           </Button>
-          <Button type="button" variant="ghost" size="xs" disabled={deleting} onClick={(event) => onDelete(item, event)}>
+          <Button data-drive-delete-action data-drive-item-id={item.id} type="button" variant="ghost" size="xs" disabled={deleting} onClick={(event) => onDelete(item, event)}>
             删除
           </Button>
           <DriveItemMenu

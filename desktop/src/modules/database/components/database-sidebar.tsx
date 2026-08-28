@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from "react"
+import { useMemo, useRef, useState, type MouseEvent, type Ref } from "react"
 import { Input } from "@/components/ui/input"
 import {
   ContextMenu,
@@ -39,6 +39,7 @@ type DatabaseSidebarProps = {
   onDisplayModeChange: (mode: DisplayMode) => void
   onTableSelect: (name: string) => void
   onCreateTable: () => void
+  createTableButtonRef?: Ref<HTMLButtonElement>
   onImportTable: () => void
   onCreateFolder: (name: string) => Promise<unknown> | void
   onRenameFolder: (id: number, name: string) => Promise<unknown> | void
@@ -70,6 +71,7 @@ function DatabaseSidebar({
   onDisplayModeChange,
   onTableSelect,
   onCreateTable,
+  createTableButtonRef,
   onImportTable,
   onCreateFolder,
   onRenameFolder,
@@ -84,6 +86,8 @@ function DatabaseSidebar({
   const [renameValue, setRenameValue] = useState("")
   const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string; memberCount: number } | null>(null)
   const [pendingFolderAction, setPendingFolderAction] = useState<DatabaseFolderOperationAction | null>(null)
+  const createFolderButtonRef = useRef<HTMLButtonElement>(null)
+  const newFolderInputRef = useRef<HTMLInputElement>(null)
   const normalizedSearchQuery = searchQuery.trim()
 
   const filteredTables = useMemo(
@@ -119,6 +123,10 @@ function DatabaseSidebar({
     setNewFolderName("")
   }
 
+  function restoreCreateFolderButtonFocus() {
+    window.setTimeout(() => createFolderButtonRef.current?.focus())
+  }
+
   async function runFolderOperation(
     action: DatabaseFolderOperationAction,
     operation: () => Promise<unknown> | void,
@@ -136,21 +144,26 @@ function DatabaseSidebar({
     }
   }
 
-  async function handleCreateFolderConfirm() {
+  async function handleCreateFolderConfirm(restoreFocus = true) {
     const trimmed = newFolderName.trim()
     if (!trimmed) {
       setCreatingFolder(false)
+      if (restoreFocus) restoreCreateFolderButtonFocus()
       return
     }
     const succeeded = await runFolderOperation("create", () => onCreateFolder(trimmed))
     if (succeeded) {
       setCreatingFolder(false)
       setNewFolderName("")
+      if (restoreFocus) restoreCreateFolderButtonFocus()
+    } else {
+      window.setTimeout(() => newFolderInputRef.current?.focus())
     }
   }
 
   function handleCreateFolderCancel() {
     setCreatingFolder(false)
+    restoreCreateFolderButtonFocus()
   }
 
   function handleRenameFolderStart(id: number) {
@@ -184,7 +197,11 @@ function DatabaseSidebar({
   }
 
   async function handleDeleteFolder(id: number): Promise<boolean> {
-    return runFolderOperation("delete", () => onDeleteFolder(id))
+    const succeeded = await runFolderOperation("delete", () => onDeleteFolder(id))
+    if (succeeded) {
+      restoreCreateFolderButtonFocus()
+    }
+    return succeeded
   }
 
   async function handleDeleteFolderConfirm() {
@@ -288,24 +305,27 @@ function DatabaseSidebar({
         onAddClick={onCreateTable}
         addTrackName="database-create-table-open"
         addTitle="新建表"
+        addButtonRef={createTableButtonRef}
       />
       <DatabaseSidebarToolbar
         displayMode={displayMode}
         onDisplayModeChange={onDisplayModeChange}
         onImportTable={onImportTable}
         onCreateFolder={handleCreateFolderStart}
+        createFolderButtonRef={createFolderButtonRef}
       />
       <ModuleSidebarList data-track="database-table-list">
         {creatingFolder && (
           <div className="px-1.5 py-0.5">
             <Input
+              ref={newFolderInputRef}
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void handleCreateFolderConfirm()
+                if (e.key === "Enter") void handleCreateFolderConfirm(true)
                 if (e.key === "Escape") handleCreateFolderCancel()
               }}
-              onBlur={() => { void handleCreateFolderConfirm() }}
+              onBlur={() => { void handleCreateFolderConfirm(false) }}
               placeholder="文件夹名称"
               className="h-8 text-sm"
               disabled={pendingFolderAction === "create"}

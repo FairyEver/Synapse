@@ -4,6 +4,7 @@ import {
   addLexicalNode$,
   createActiveEditorSubscription$,
   lexical,
+  NESTED_EDITOR_UPDATED_COMMAND,
   realmPlugin,
 } from '@mdxeditor/editor'
 import type {
@@ -70,6 +71,9 @@ export function registerTableCellLineBreak(editor: LexicalEditor): () => void {
 
       event.preventDefault()
       editor.update(insertTableCellLineBreak, { discrete: true })
+      queueMicrotask(() => {
+        editor.dispatchCommand(NESTED_EDITOR_UPDATED_COMMAND, undefined)
+      })
       return true
     },
     lexical.COMMAND_PRIORITY_CRITICAL,

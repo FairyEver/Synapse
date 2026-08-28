@@ -1,1248 +1,1958 @@
 # 发现与决策
 
-## 2026-08-26 阶段 26 Drive Markdown 层级自动编号
-
-- 标准 Markdown 只表达列表层级和每层起始编号，不保存 `2.1` 复合 marker；层级编号必须是编辑/浏览 DOM 的派生展示，不能写进正文。
-- 用户锁定全局默认行为：一级 `1.`、`2.`，二级起 `2.1`、`2.2.1` 且不加末尾句点；无序列表不占编号层级，`2 → 无序 → 有序` 显示为 `2.1`。
-- Chromium 验证表明原生 `::marker` 支持层级 marker；为精确保留混合列表语义和 `<ol start>`，实现应在 DOM 中计算有序祖先路径，再由 `::marker` 读取数据属性。
-- MDXEditor 的 Markdown 导出来自编辑器模型而非 DOM，受控 `data-*` marker 可用于展示；仍需以真实集成回归证明 Tab/Shift+Tab 和保存不会序列化该属性。
-- MDXEditor 缩进时会生成只承载子列表的结构性 `<li>`，并带一个连续 `value`；这不是用户可见条目。编号同步必须跳过该容器，并让子列表继承前一个真实兄弟条目的路径，否则 `1 → Tab` 会误显示为 `2.1`。
-- 最终实现只观察 `childList` 与 `start`/`value` 属性，微任务内批量重算；自身写入的 marker 属性不在观察范围内，不会形成观察循环。无序祖先不进入路径，真实空列表项仍会正常占号。
-- 真实 MDXEditor 回归已覆盖列表类型转换、Tab、Shift+Tab、撤销、重做、显式起始值、混合列表、任务项、空项与保存序列化；Chromium 直接验证了实际 `::marker` 内容，而不只检查 class 字符串。
-- 生产部署 `20260826_092228` 完成后，运行镜像和容器内 Dashboard 产物均确认包含 marker 数据属性与 `content: attr(...)` 规则；容器健康且公开健康检查全绿。
-
-## 2026-08-26 阶段 24 Drive Markdown 列表浏览/编辑一致性
-
-- 用户截图显示同一份 Drive Markdown：MDXEditor 编辑态的嵌套有序列表使用十进制数字，浏览态相同层级显示为小写字母。
-- `synapse-skill` Drive MCP 对私有 item `cmszv0ir1040rnx28fwmxrekn` 的 metadata、preview 和 content 读取均返回“账号未登录”；按仓库链接规则未改用浏览器或通用抓取，也未修改该 Drive 文件。
-- 浏览态 `DriveMarkdownRenderer` 引入 `github-markdown-css`。该样式会按嵌套深度重设 `ol` 的 marker；现有 `[&_ol]:list-decimal` 没有足够优先级，截图证明实际被覆盖。
-- MDXEditor 已使用 `[&_ol]:list-decimal`，编辑态数字编号正确；本次只需收紧浏览态样式，不应改 Markdown 源文、server renderer 或保存序列化。
-- 目标修复：浏览态所有后代 `ol` 强制使用十进制 marker，同时保留 HTML `start` 属性和现有列表层级缩进。
-- 单元红灯证明组件原来只有普通 `list-decimal`；首次 Browser Mode 红灯进一步得到真实计算样式 `none / lower-roman / lower-alpha`，直接复现第三方嵌套 marker 级联。
-- Tailwind 4 生产构建已生成 `.[&_ol]:list-decimal! ol { list-style-type: decimal !important; }`。Browser Mode 原配置遗漏 `@tailwindcss/vite`，导致测试页未生成工具类；补齐与生产 Vite 相同的插件后，Chromium 三级列表计算样式均为 `decimal`，现有 4 个 Browser 文件、8 项全部通过。
-- 修复只改变阅读预览的 marker 样式，不触碰 Markdown 内容、列表序列化或显式 `start` 值；保存后的源文不会被转换成字母序号。
-- 用户随后明确授权生产部署。正式流程以 `synapse-server:deploy-20260826_085504` 完成切换，容器 healthy，远端与公开健康检查全绿；运行容器的 Dashboard CSS 已确认包含十进制 marker 的 `!important` 规则。
-
-## 2026-08-26 阶段 23 最终验收修正
-
-- 主任务拒绝第 9 轮把 4,000 组 heading+paragraph（8,000 blocks）墙钟门槛从 1,800ms 放宽到 3,000ms，原因成立：旧实现该负载约 2.62s，会被错误放行。
-- 最终回归使用 8,000 组 heading+paragraph，即 16,000 projection blocks，并继续通过公共 `renderDriveMarkdownFragment` 验证完整 ID 继承与耗时。当前索引实现独立连续三次为 1,848.97ms、1,948.75ms、2,000.97ms；6,000ms 门槛提供约 3 倍当前余量。
-- 受控临时还原 `316d89930` 之前的逐块全表扫描后，同一正式用例内部计时为 9,304.8965ms，并稳定失败于 `< 6,000ms`；随后恢复索引实现，源码与提交版本无差异。该证据直接证明旧 O(n²) 退化不能通过新门禁。
-- 当前实现正式单文件连续四次 12/12，最终 Server 全量 96 文件、1,175/1,175，Server typecheck/build 与 `git diff --check` 通过。北京时间 07:00 后完成状态不变，84/84 最终结论和其它门禁数字不变。
-- **验收修正完成时间：** 2026-08-26 07:09:45 CST。
-
-## 2026-08-26 阶段 23 第 9 轮最终持续验收
-
-- 06:18:16 CST 起始 HEAD 精确为 `316d89930c91d6b709b65bbde76ec95f18fc23f6`，工作树干净；固定比较范围 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD` 共 14 个提交、182 个唯一文件。
-- Standards / Spec 继续在当前任务串行执行；截至第一轮静态扫描未发现新增裸 IPC、空 catch、生产 `console.log`、自定义颜色或附件 Provider 分支。
-- 第一处红灯是 Dashboard 测试契约漂移：MDXEditor 新增通用 JSX descriptor 后，`drive-renderer-shell` 的隔离 mock 未导出 `GenericJsxEditor`，导致该套件在模块收集时稳定失败。最小修复仅补同名空组件 mock，单文件 8/8、Drive 组合 242/242；运行时代码不受影响。
-- Agent 实机恢复的附件测试会话显示 `R6-ATTACH-0826` 与三种 Automation trigger，顶栏 `97.2K / 1M · 10%`；键盘 Tooltip 精确显示 97,197 已用、902,803 剩余、SDK/目录 1,000,000、最大输入 991,808、最大输出 131,072。Slash 无结果菜单可见、草稿未发送并已清理；Computer Use 的 Escape 注入未改变 AX 树，但补强后的组件断言明确验证真实 `KeyboardEvent("keydown", { key: "Escape" })` 会卸载菜单，69/69 通过，未发现产品逻辑缺陷。
-- Git 实机当前工作树、HEAD history、文件详情在窄窗与 zoom 宽窗均稳定；split/wrap 跨 changes/history 保留，最终恢复 unified + wrap=0 并关闭临时窗口。Drive 只读预览/源码往返、回收站测试根项和恢复/删除入口均可达，未触发任何数据写入。
-- 第二处产品红灯来自 Markdown 阅读渲染：不含相对图片标记的普通 HTML 仍无条件创建 DOM `template`，使非 DOM 渲染进入 `document is not defined`。最小修复只在不存在 `data-drive-markdown-relative-src` 时直接返回原 HTML；相对图片分支、评论、协作和内容净化不变，发布说明已同步。
-- Server 全量的 8,000 blocks 性能性质测试曾在并发负载下实测 1,977.6ms，超过 1,800ms 绝对墙钟阈值；第 9 轮临时改为 3,000ms 虽使全量清零，但会放过旧实现约 2.62s，最终验收不接受。最终门禁改为 16,000 blocks、6,000ms，当前约 1.85–2.00s，旧实现 9.30s 稳定红灯，且继续校验全部 ID 继承。
-
-### 第 9 轮最终结论
-
-- **完成时间：** 2026-08-26 07:02:07 CST。06:59:28 启动的最后一轮 Desktop 全量跨过 07:00，并在 89.76 秒后以 865 文件、8,075/8,075 完整结束；随后才执行最终跨包门禁，因此满足“07:00 后完成当时正在执行的一轮”。
-- **持续循环：** 第 9 轮以 Desktop 全量为锚完成 8 次持续验收循环；循环之间串行穿插 Agent/Git/Drive 专项、Server/Shared/Dashboard 全量或同层回归、静态双轴审查和两次现有应用只读实机切换。8 次 Desktop 全量均为 865 文件、8,075/8,075，无随机红灯。
-- **84 / 84：** 前 7 轮矩阵的 83 项完整适用 + 1 项部分适用结论保持成立；部分适用项是“部署记录”本身没有运行时负路径，其绑定的 1,000 文件 trash/restore/hide、回滚与版本链路已完整覆盖。结合第 8 轮并发/复杂度与本轮持续稳定性复验，84 个修改点全部验收通过，无阻塞缺陷。
-- **本轮缺陷总览：** 新发现并修复 1 个产品缺陷（普通 Markdown 在无相对图片时仍依赖 DOM）、2 个 MDXEditor 隔离 mock 契约缺口，以及 1 个 8,000 blocks 墙钟性能门槛抗噪缺口；另补强 Slash Escape 可见状态断言。所有红灯均先稳定复现再做最小修复，无新增依赖或范围外重构。
-- **Standards：** 固定基线到最终工作树的新增行没有自定义色/任意 Tailwind 色、裸 IPC、空 catch、生产 `console.log` 或普通内联样式；唯一新增 `fs.writeFile` 命中仍是测试 fixture。Markdown 快路径只复用已有 marker 边界，测试 mock 与性能门槛只修契约/抗噪，没有改变产品边界。
-- **Spec：** 附件继续保持 Provider 中立的单 query 有序路径清单，1/4/20/50 图走同一链路；历史、时间线、日志和导出不保存受控路径、Base64 或图片字节。MCP 搜索/完整降级、SDK 主线程上下文、Git CRLF/大提交/竞态/视图、Drive Markdown/MDX/Mermaid/评论和大目录生命周期均在最终工作树上保持通过。
-- **实机证据：** Electron 中三份 Agent 会话、附件/Tooltip/Slash、Git changes/history/diff、宽窄窗和键盘切换均稳定，最终恢复自动化会话、unified 与 wrap=0 并关闭临时 Git 窗口；Chrome Drive 只读往返预览/源码/回收站后恢复文件标签。生产旧部署只作 Mermaid 旧行为复现，当前源码由同层自动化验收；未保存、恢复、删除或永久清空用户内容，未增加 Provider 计费调用。
-- **最终门禁：** Desktop 865 文件 8,075/8,075；Server 96 文件 1,175/1,175；Dashboard renderer 17 文件 258/258、官方 Browser Mode 3 文件 7/7；Shared 12 文件 139/139。Desktop/Dashboard/Server typecheck，Desktop renderer 5,021 modules + Electron/preload、Dashboard 6,801 modules、Server production build，Desktop hard constraints、IPC codegen、116 模型目录和 `git diff --check` 全部通过；仅有既有大 chunk、Electron mock、React act 与 SQLite experimental 警告。
-- **保留测试数据：** Agent 会话 `只回复 OK`、`图片数字提取`、`Synapse 自动化触发器类型`；Drive 文件夹 `Codex Round 4 Markdown Test 2026-08-26`；回收站根 `codex-round5-drive-trash-tdX0XU`。本轮未新建附件、导出文件或 Drive 数据，也未永久清空回收站。
-
-## 2026-08-26 阶段 23 第 8 轮并发与稳定性审查
-
-- 起始 HEAD 精确为 `6931b013f30cd5aecc2ce113b812e8aa67f2376d`，`main` 相对 `origin/main` ahead 13，工作树干净；禁止分支/worktree、pull/push/reset/stash、开发服务启停和子代理。
-- 固定比较范围沿用 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD`；本轮独立聚焦并发、性能、跨平台路径、序列化鲁棒性与长时间运行稳定性，不重复前 7 轮幸福/负路径矩阵。
-- `code-review` 的 Standards / Spec 双轴在当前任务内串行执行；用户禁止子代理，因此不执行该技能默认的并行委派步骤。
-- 真实 UI 只通过持久 `node_repl + @oai/sky` 复用现有应用，不启动或重启服务；Drive 只读切换，不保存、恢复或删除。
-
-### 缺陷、红灯与修复
-
-| 领域 | 稳定红灯 | 外科手术式修复 | 绿色证据 |
-|---|---|---|---|
-| Agent 序列化 | 循环引用的 SDK event 被整个丢弃，深层对象无法留下可诊断边界 | `sanitizeValue` 增加祖先 `WeakSet`、64 层深度上限，并保留既有数组 20 项、敏感键和总 payload 大小限制；共享引用不会误判为循环 | `conversation-router` 新性质测试验证 `[Circular]`、`[truncated]`、正文路径清洗与 turn 正常完成；Focused 112/112 |
-| Git 跨平台换行 | CRLF patch 的每个可见 diff 行末残留 `\r` | 解析前只规范化 `\r\n` 为 `\n`，不改变独立 `\r` 内容 | `git-workbench` 新回归验证 header/context/add/delete 均无回车；Focused 112/112 |
-| Drive 长文档 | 4,000 段落前插后的块身份继承约 2.62s，性能门禁 1.8s 红灯；8,000 段实测约 9.34s | 为映射后的精确 range 和 type/fingerprint/headingPath 建索引；不变块走 O(1) 候选查找，原 overlap 逻辑只作为变化/歧义 fallback | 4,000 段性能性质测试转绿；8,000 段约 1.99s，较基线下降约 79%；projection 12/12 |
-
-### 稳定性覆盖与复杂度结论
-
-- **Agent：** 1/4/20/50 附件、连续批次、失败回退、scope 撤销/轮换、session 复用键、POSIX/Windows drive/UNC、目录 path 脱敏、history/timeline/export 日志 redaction、MCP discovery fallback/权限、乱序/子智能体/compact/超上限上下文和设置快照并发均有专项或既有性质测试。附件运行时处理为 O(n)，且单轮硬上限 50；事件清洗为 O(受限节点数)，深度 64、数组每层 20、最终 payload 大小继续受限，循环不再导致递归失控。
-- **Git：** CRLF、超长行、无末尾换行、rename+modify、binary、2 MiB 提交预览上限、文件切换请求代次、读取失败、历史每页最多 100、文件列表虚拟滚动、split/wrap 组合与偏好持久化均已覆盖。patch 解析为 O(字符数)；展示按行构建，超大提交由主进程 buffer 上限与 UI 虚拟列表共同收敛，不把截断或 binary 冒充文本差异。
-- **Drive 生命周期：** 1,000 文件与 128 层树、late child、循环、跨用户、配额、share/change/session 回滚继续通过。树收集使用 visited + 分层查询，CPU/内存为 O(items)，数据库往返为 O(depth)，事务 `maxWait=10s`、`timeout=30s`；逐项 change append 仍是 O(items) 串行写入，但处于同一事务并由 1,000 文件测试证明当前上限可接受。
-- **Drive Markdown/MDX：** 超长文档、HTML/ESM/JSX/`<=`、非 1 列表、Mermaid 多图重绘、评论扩展边界已有自动化。主流唯一 range/fingerprint 分布下，块 identity 的不变路径由逐块全表扫描收敛为索引查找；大量重复 key 的候选数组聚合与模糊 overlap fallback 最坏仍可能 O(blocks²)。4,000 组重复 heading + paragraph（8,000 blocks）实测约 674ms；diff 本身另有 75ms/8192 edit 上限，因此未用无证据重构替换保守匹配逻辑。
-- **保留风险：** Drive restore 的冲突命名在进入事务前解析，schema 也没有同父级名称唯一约束；并发 restore/create/move 理论上仍可能得到同名兄弟。局部给 restore 加锁不能覆盖其它写入口，因此本轮不做虚假修复，保留为需要统一命名约束/事务设计的后续架构项。
-
-### 真实 UI 持续切换证据
-
-- Agent：在既有 `只回复 OK`、`图片数字提取`、`Synapse 自动化触发器类型` 会话间连续切换，标题、正文、附件数量与上下文统计同步更新，无旧帧或会话串台；50 图历史向上滚动后出现“滚动到底部”，滚动仍可用。
-- Git：复用当前 Electron Git 工作台，在 1,180×760 宽窗与 960×652 窄窗间切换；连续切换 8 个工作树文件、两个历史提交及 changes/history，详情首帧始终对应当前选择。wrap=1 跨文件、提交和 Tab 保留；分栏后用键盘 Left + Space 回到统一视图，差异区仍可滚动。窗口最终恢复约 1,179×760；收尾确认自动换行已恢复测试前的关闭状态（`Value: 0`）并关闭临时 Git 窗口，未执行 commit/push/pull/sync/discard。
-- Drive：复用已登录生产 Chrome，只读打开 `Codex Round 4 Markdown Test 2026-08-26`，在 Markdown 预览与代码视图往返，再查看回收站 `codex-round5-drive-trash-tdX0XU`，最后用键盘 Left 返回文件标签。未编辑、保存、恢复、删除或修改分享；生产部署只作为 UI 稳定性证据，当前源码修复仍由同层自动化证明。
-
-### Standards / Spec 串行结论
-
-- **Standards：** 本轮新增代码未引入依赖、自定义样式/颜色、renderer 裸 IPC、主进程裸持久化、空 catch 或生产 `console.log`；三处改动复用现有 parser、redaction 和 projection 边界，测试先红后绿。固定 diff 的既有轻微 smell 不为本轮稳定性目标顺手重构。
-- **Spec：** 附件仍为单 query、Provider 中立的有序路径清单；历史/时间线/导出不持久化受控路径或字节。MCP 权限不因 fallback 降级；上下文只聚合主线程。Git 新修复只统一跨平台换行，不改变 binary/rename/truncation 语义；Drive 优化保持 block ID 选择优先级和事务边界。
-- 第 9 轮第二次实机切换继续证明会话隔离：`图片数字提取` 的早期 50 图缺图兼容态与后期 `image-16.png` / 回复 `16` 同时可恢复，`只回复 OK` 保持最小回复，切回自动化会话后上下文、附件码和触发器结果均恢复正确；没有新调用或草稿。
-- 第 9 轮第二次全量/专项循环为 Desktop 8,075/8,075、Dashboard renderer 258/258、Server 1,175/1,175、Shared 139/139，均在修复后的同一工作树上通过。
-
-## 2026-08-26 阶段 23 第 7 轮负路径矩阵审查
-
-- 起始 HEAD 为 `17f2f1711427be2abf3e1e32a30f6afc8a236878`，`main` 相对 `origin/main` ahead 12，工作树干净；固定比较范围为 `db1890741738f5d9a7e93ab8b940a0a0887f9832...HEAD`，共 12 个提交、181 个唯一文件。
-- 本轮把前五轮 19 + 26 + 15 + 12 + 12 = 84 个修改点逐项转为负路径矩阵：83 项完整适用，1 项部分适用（部署记录本身没有运行时负路径，但其绑定的大目录 trash 有）；没有用提交标题、幸福路径或生产旧部署替代负路径证据。
-- `code-review` 的 Standards / Spec 双轴在当前任务内串行执行；用户明确禁止子任务，因此未使用该技能默认的并行子代理步骤。真实 UI 只通过持久 `node_repl + @oai/sky` 复用现有 Electron 与 Chrome，未重启服务。
-
-### 84 点负路径覆盖矩阵
-
-#### 第 1 轮：Agent router、模型目录与上下文（19 / 19）
-
-| 点 | 修改点 | 负路径 | 证据与结论 |
-|---:|---|---|---|
-| 1-1 | 实验开关默认/迁移/备份 | 适用 | 缺字段、非法值、旧备份恢复由 config/backup/IPC 回归固定为关闭；旧配置不被静默开启。 |
-| 1-2 | 实验功能设置开关 | 适用 | 保存失败和配置写入失败由设置组件/配置 IPC 回归覆盖；本轮不改用户开关。 |
-| 1-3 | 设置响应式对齐 | 适用 | 最小宽度、长状态和控件右缘由布局回归；本轮未重复改设置。 |
-| 1-4 | 新旧会话开关快照 | 适用 | 缺快照旧历史按关闭兼容，新会话固化创建值；第 6 轮实机证明全局值恢复关闭后新会话仍用创建快照。 |
-| 1-5 | 第三方 Provider scope | 适用 | 官方 Anthropic、未知端点、Provider 切换和第三方端点由 provider/session-manager 回归；不修改真实凭据制造失败。 |
-| 1-6 | MCP discovery 与整会话回退 | 适用 | discovery 失败、不可序列化配置、显式权限规则均回退完整 MCP；UI 只显示通用提示。 |
-| 1-7 | 工具搜索排序 | 适用 | 空 query、无命中、中英文歧义、通用/具体工具消歧由 router 回归；本轮 Slash 实机也验证 `No matches`。 |
-| 1-8 | invoke 包络/取消/归一化 | 适用 | 非法工具、坏参数、AbortSignal、MCP error/result 归一化由 router 回归；取消不改写原工具语义。 |
-| 1-9 | invoke 风险注解 | 适用 | 可写/破坏性/open-world 上界由注册元数据回归；权限不能因统一入口被降级为只读。 |
-| 1-10 | Persona/permission/tool policy | 适用 | plan、deny、dontAsk、bypass 与 Persona deny 由 Claude SDK session 回归；本轮未改真实权限模式。 |
-| 1-11 | 子 Agent/真实工具名/toolUseId | 适用 | 子线程不污染主上下文、重复工具按 toolUseId 关联、缺 id 才兼容旧 fallback；历史实机恢复真实工具名。 |
-| 1-12 | 回退提示脱敏 | 适用 | 内部 reason/header/env/canary 不进入 event/history/export；旧会话 UI 未见 `explicit-permission-rule` 等内部 reason。 |
-| 1-13 | 模型目录 schema/更新门禁 | 适用 | 重复别名、坏日期、非正整数、窗口关系、异常下降和不稳定排序均拒绝；离线 `--check` 为门禁证据。 |
-| 1-14 | Base URL + 精确模型匹配 | 适用 | 未知 URL、未知模型、协议异常、模糊家族名不注入；Windows/POSIX URL 规范化由 catalog 回归。 |
-| 1-15 | 用户 env 优先与会话复用键 | 适用 | 显式 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 不被目录覆盖，派生配置变化重建；不读取真实 env 值。 |
-| 1-16 | 主上下文聚合/子线程隔离 | 适用 | invalid usage、子 Agent result、跨轮累计和历史恢复由 context/session 回归；主顶栏不会被子线程覆盖。 |
-| 1-17 | `/compact` 权威刷新 | 适用 | control request 缺失、失败、无效数字时清空旧快照；不把 `post_tokens` 当完整窗口，本轮不做额外付费压缩。 |
-| 1-18 | 上下文 IPC/history/export | 适用 | 旧 metadata、缺字段、非法窗口和导出脱敏由 IPC/timeline/export 回归；历史实机成功恢复。 |
-| 1-19 | 顶栏 Tooltip/超限/键盘 | 适用 | 超限剩余量 clamp 为 0、未知窗口不算百分比、键盘可聚焦；本轮 Shift+Tab 实机显示 97,197 已用、902,803 剩余。 |
-
-#### 第 2 轮：附件与 Slash（26 / 26）
-
-| 点 | 修改点 | 负路径 | 证据与结论 |
-|---:|---|---|---|
-| 2-1 | v2 引用/bridge/preload | 适用 | 缺 id、重复 id、错误 order、跨项目/草稿引用由 schema/IPC/runtime 拒绝；Renderer 不接收路径或字节。 |
-| 2-2 | 选择/拖放路径 IPC | 适用 | 用户取消实机后草稿为空；坏路径逐项拒绝，配额类错误整批回滚。 |
-| 2-3 | 系统剪贴板图片 | 适用 | 空剪贴板、非图片、读取/释放失败由 clipboard/IPC 回归；失败不留下草稿附件。 |
-| 2-4 | 魔数/MIME/尺寸/原子写 | 适用 | 空文件、伪扩展、魔数不符、解码失败、写入失败均回滚；不信任 Renderer MIME。 |
-| 2-5 | 50 图与空间配额 | 适用 | 单轮/项目/全局、并发 30+30、后项超限整批释放由 staging/IPC 回归。 |
-| 2-6 | 文件受控副本 | 适用 | 源文件消失、非普通文件、过大、复制失败由 staging/runtime 回归；不授权原父目录。 |
-| 2-7 | 文件夹授权/symlink | 适用 | 祖先 symlink、嵌套 symlink、深层/过多内容和运行时替换均 fail closed；TOCTOU 平台窗口保留为已知风险。 |
-| 2-8 | draft/commit/rollback/release | 适用 | 发送失败、取消、清理失败、重试恢复均有 staging/router 回归；清理失败结构化记录。 |
-| 2-9 | 每批 scope 与授权撤销 | 适用 | 后轮不能继承旧草稿根；失败恢复原 scope，附件轮关闭 live session 后按 SDK id 恢复。 |
-| 2-10 | 跨项目孤儿回收 | 适用 | 其它项目 committed 附件不能被当前项目 session 集合误删；projectId 过滤有红绿灯。 |
-| 2-11 | 路径型 runtime 清单 | 适用 | 失效文件、越界路径、目录类型漂移和重复引用被拒绝；主进程不读取图片字节。 |
-| 2-12 | 单 query/Provider 中立 | 适用 | Provider 原生拒绝只返回原生错误，不启动隐藏 query/batch/摘要；Qwen/Kimi/自定义无分支。 |
-| 2-13 | 发送顺序 | 适用 | 乱序、重复和跨 turn ref 被拒绝；1/4/20/50 图使用同一有序 manifest。 |
-| 2-14 | 会话创建/恢复 | 适用 | 旧 history 缺字段、会话删除时排队、恢复后路径失效由 repository/router 回归；失败不吞消息。 |
-| 2-15 | history 附件 metadata | 适用 | 受控路径、Base64/data URL、旧目录 path 在持久化前投影为名称；第 6 轮泄漏红灯已修复。 |
-| 2-16 | timeline/transcript 投影 | 适用 | 流式 path 分片、tool input/result 和旧 metadata 均投影稳定附件标签；不存在绝对路径。 |
-| 2-17 | 导出脱敏 | 适用 | 旧 path 附件、循环/深层对象、Base64 和内部 router reason 不进入 ZIP；WeakMap 保留循环图兼容。 |
-| 2-18 | Composer 添加/删除 | 适用 | 本轮文件 picker 取消后无附件、发送禁用；删除/卸载、选择失败和 IPC 失败由组件回归。 |
-| 2-19 | 乐观消息/失败队列 | 适用 | enqueue reject、`result.error`、取消和重试会撤销乐观项、恢复正文/附件；不把失败当成功。 |
-| 2-20 | 附件条布局 | 适用 | 0/1/9/50、长名、窄窗与错误项由 strip/composer 回归；无卡片套卡片或路径 tooltip。 |
-| 2-21 | 消息气泡附件 | 适用 | 旧 path、缺预览、正文为空/失败结果由 row/timeline 回归；正文不生成隐藏清单。 |
-| 2-22 | 九宫格/灯箱 | 适用 | 缺失 artifact、超过 9、50 图索引和跨项目清理由 row/artifact 回归；缺图不破坏正文。 |
-| 2-23 | Slash 数据源/去重 | 适用 | 重名、空目录、无 KB、无结果由 registry/slash 回归；本轮真实显示 `No matches`。 |
-| 2-24 | `/compact`/旧 `/compress` | 适用 | 旧命令只返回一次不支持错误，`/compact` SDK error 不双发；未为实机补证触发计费。 |
-| 2-25 | Slash 键盘/关闭 | 适用 | 本轮真实输入无结果后 Escape 关闭、焦点留在输入框且未发送；键盘/鼠标边界由组件回归。 |
-| 2-26 | 最近 Skill 成功门禁 | 适用 | 仅 `sendMessage=true` 后更新 MRU；enqueue failure、`result.error`、队列重试均不错误记录。 |
-
-#### 第 3 轮：Git diff（15 / 15）
-
-| 点 | 修改点 | 负路径 | 证据与结论 |
-|---:|---|---|---|
-| 3-1 | rename patch | 适用 | rename old/new、无 patch、路径特殊字符由 service/parser 回归；实机显示 rename from/to。 |
-| 3-2 | 本地主题 renderer | 适用 | 第三方依赖/CSS 已无残留；未知行、raw header 不套硬编码色。 |
-| 3-3 | unified 行号/增删 | 适用 | empty、no-newline、纯新增/删除、行号缺侧由 viewer 回归。 |
-| 3-4 | split 配对 | 适用 | 不等长块、单边空行和 no-newline 由 viewer 回归；本轮实机切分栏。 |
-| 3-5 | 行内差异 | 适用 | 大段替换、Unicode 和无法细分时保守显示；不丢整行内容。 |
-| 3-6 | 自动换行 | 适用 | 长行与窄轨道不再撑破，关闭时保留横向滚动；本轮实机 wrap=1。 |
-| 3-7 | 偏好跨 Tab | 适用 | unified/split 与 wrap 跨 changes/history 保留；提交切换不重置。 |
-| 3-8 | 工作区列表/diff | 适用 | 干净工作树实机显示“暂无改动”；读取失败、文件消失、刷新成功后清错由 hook/workbench 回归。 |
-| 3-9 | 历史延迟/请求代次 | 适用 | 慢旧请求、切 commit、组件卸载和错误后重试由 hook 回归；旧响应不能覆盖新选择。 |
-| 3-10 | 历史多文件选中 | 适用 | commitHash+index 键控消除旧文件首帧；空提交和 index 越界归零。 |
-| 3-11 | 解析失败 fallback | 适用 | 损坏 patch/raw diff 不冒充结构化差异；同层 parser/workbench 回归，未篡改 Git 对象实机制造。 |
-| 3-12 | binary/empty/truncated/大提交 | 适用 | 本轮实机 154 项滚动并打开 PNG，明确显示“文件已变更。”；空/截断由 service 回归。 |
-| 3-13 | 特殊路径/pathspec | 适用 | 空格、Unicode、leading dash、Windows/POSIX 分隔和 rename 由 service/pathspec 回归。 |
-| 3-14 | 主题/滚动/键盘/窄窗 | 适用 | 键盘原生按钮、焦点、独立滚动和窄窗由 workbench 回归；本轮未重复改主题或窗口尺寸。 |
-| 3-15 | 154 文件列表高度 | 适用 | 本轮虚拟列表从 0–100 滚到 54–154，diff 仍留在详情区；没有整页无限增长。 |
-
-#### 第 4 轮：Drive Markdown / MDX / Mermaid（12 / 12）
-
-| 点 | 修改点 | 负路径 | 证据与结论 |
-|---:|---|---|---|
-| 4-1 | Mermaid figure margin | 适用 | 空图/超宽图/上游内联宽度由 renderer 布局回归；无页面级 margin 回流。 |
-| 4-2 | Mermaid 多图/错误/取消 | 适用 | 语法错误保留源码、取消旧 render、主题重绘和多图互不覆盖；生产旧版实机仍显示源码 fallback。 |
-| 4-3 | Mermaid 宽度/滚动 | 适用 | 1200px SVG、max-width 清理与图内滚动由 renderer 回归；窄窗不撑破页面。 |
-| 4-4 | CommonMark `<=` | 适用 | 转义、代码块/行内代码、保存往返由真实 MDXEditor 回归；生产旧部署只作旧失败复现。 |
-| 4-5 | `.md` HTML/注释边界 | 适用 | JSX-like、HTML 注释、代码 fence、无法无损 AST 时进入源码模式；不静默丢内容。 |
-| 4-6 | `.mdx` 严格解析 | 适用 | 合法 JSX、非法 MDX、顶层 ESM、解析失败恢复源码由 renderer 回归；旧部署不能冒充当前通过。 |
-| 4-7 | 混合列表 | 适用 | 深层/空项/任务项/marker 与编辑往返由 MDXEditor 集成回归。 |
-| 4-8 | 非 1 起始列表 | 适用 | start、空项、任务列表、重开保存由 list plugin 回归；无法识别节点不强行改写。 |
-| 4-9 | 空 heading | 适用 | 空/仅格式 heading 不进入 TOC/projection；生产旧部署出现占位仅记录为旧行为。 |
-| 4-10 | 重复/Unicode heading | 适用 | 重复 id、Unicode、显式文本和顺序由 renderer/projection 回归；循环/深层 AST 有边界。 |
-| 4-11 | 评论 projection | 适用 | `.mdx`、`.markdown`、MIME-only 均拒绝评论；旧锚点失配保守失败，不由 Renderer 猜测重挂。 |
-| 4-12 | 保存/竞态/XSS | 适用 | 版本冲突、保存失败、快速切文档、XSS 和读取失败由 Dashboard/Server 回归；本轮源码模式只读进入并恢复预览，未保存。 |
-
-#### 第 5 轮：Drive 大目录生命周期（12 / 12）
-
-| 点 | 修改点 | 负路径 | 证据与结论 |
-|---:|---|---|---|
-| 5-1 | 提交/部署记录 | 部分适用 | 部署记录本身无运行时负路径；绑定的 1000 文件 trash 超时、回滚和源码版本由生命周期测试覆盖。 |
-| 5-2 | 宽目录 trash | 适用 | 1000 文件、跨页/宽树、事务等待/超时和 change append 失败整树回滚由生命周期回归。 |
-| 5-3 | restore/hide 时限 | 适用 | 1000 文件 restore/hide 统一 10s/30s；配额、revision/session 任一步失败保持事务原子。 |
-| 5-4 | 深树/循环 | 适用 | 128 层成功，子树/祖先循环 fail closed；visited 避免无限循环和栈递归。 |
-| 5-5 | 并发/late child | 适用 | 收集后新增 child、状态漂移、重复操作和 change failure 均回滚；不留下半迁移树。 |
-| 5-6 | 父子可见性 | 适用 | 回收站只列 root，恢复清空整树 metadata；本轮只读实机仍只见测试根与恢复入口。 |
-| 5-7 | 再次删除/admin restore | 适用 | 普通用户不能恢复 child/hidden，admin 可恢复 hidden；本轮未点永久删除。 |
-| 5-8 | quota/storage/orphan | 适用 | trash 保留容量，hide 原子释放，物理清理失败保留元数据；实机配额为 111.0 MB / 5.0 GB。 |
-| 5-9 | share/comment/change | 适用 | share 恢复范围、manual disable、逐项 trashed/restored change 与评论可见性由 service 回归。 |
-| 5-10 | 权限/审计/错误 | 适用 | 跨用户 child/ancestor、audit failure、忙状态和层级异常均明确拒绝且脱敏。 |
-| 5-11 | Web/Desktop/MCP/Sync 复用 | 适用 | 四入口最终进入同一生命周期 service；未登录/权限拒绝不各自降级为部分成功。 |
-| 5-12 | Standards/发布范围 | 适用 | 无裸 fs/network、空 catch、console 日志或范围外依赖；失败证据不通过吞错换绿。 |
-
-### 第 7 轮 Standards / Spec 结论
-
-- **Standards：** 基线新增行复核未发现空 catch、生产 `console.log`、自定义颜色、任意 Tailwind 色、普通内联 style、裸 renderer IPC 或新增跨模块内部导入。`processQueue` 有一处相邻重复的 abort 判断，属于无行为影响的轻微 Duplicated Code 判断项，不为本轮负路径审查制造无意义产品改动；其它 smell baseline 未形成可行动缺陷。
-- **Spec：** 84 点均能落到失败、取消、恢复、权限、兼容、竞态或受限状态证据。附件正文/history/export 继续不含受控路径、Base64 或原图字节；router fallback reason 仅进结构化诊断；Git 失败与二进制有独立状态；Drive Markdown 失败保留源码，生命周期失败保持事务原子。
-- 本轮没有发现新的产品缺陷；因此没有改生产代码或 `RELEASE_NOTES_PENDING.md`。负路径矩阵、实机证据和最终门禁作为本轮提交内容。
-
-### 第 7 轮真实 UI 证据与阻塞
-
-- Agent：Slash 无命中真实显示 `No matches`，Escape 关闭且不发送；文件选择器取消后草稿为空、发送禁用。恢复既有附件会话后名称/大小、正文、真实工具结果和 97.2K/1M 上下文均在；键盘 Tooltip 显示已用 97,197、剩余 902,803。导出打开系统保存面板后取消，未生成文件。
-- Git：干净工作树显示“暂无改动”；历史 `dfcf00abf` 显示 154 项，文件虚拟列表滚到 54–154；rename、modified/new/deleted 标签可见，split 和 wrap 生效；PNG 二进制显示“文件已变更。”。未执行 commit/push/pull/sync。
-- Drive：生产旧部署只用于复现/只读。普通 Markdown 可进源码模式并恢复预览，错误 Mermaid 保留源码；回收站测试根 `codex-round5-drive-trash-tdX0XU` 仍只有恢复/删除入口，配额 111.0 MB / 5.0 GB。未保存、恢复或永久删除。
-- 当前源码 Drive 修复后的真实 UI 仍被本地 Electron/Dashboard 无登录态阻塞；生产 Chrome 是旧部署。评论拒绝、保存错误、恢复冲突、事务失败和循环/越权均以同层 Dashboard/Server/Shared 自动化为当前证据，不把旧部署或单测冒充修复后实机。
-
-## 2026-08-26 阶段 23 第 6 轮全量覆盖缺口审计
-
-- 起始 HEAD 为 `ddd80213d2ff936b13951ddc012d5ce8de146611`，`main` 相对 `origin/main` ahead 11，工作树干净；全程未创建或切换分支/worktree，未 pull/push/reset/stash，未启停开发服务。
-- 精确提交口径分三层：2026-08-25 00:00–23:59 CST 共有 5 个提交；当日工作连续结果包含 2026-08-26 01:02 的 1 个主提交；阶段 23 前五轮另有 5 个修复提交。固定基线 `db1890741738f5d9a7e93ab8b940a0a0887f9832` 到起始 HEAD 共 11 个提交、181 个唯一文件、18,994 行新增、4,639 行删除。
-- 前五轮矩阵逐项合计 84 个用户可感知或高风险证据点：第 1 轮 19、第 2 轮 26、第 3 轮 15、第 4 轮 12、第 5 轮 12。下表是提交级索引；每项的 Standards / Spec、自动化、实机与结论仍以对应轮次的 84 行矩阵为准，本轮没有凭提交标题推断文件或功能。
-- 记录审计发现两处证据错误并已更正：第 1 轮曾记录 5 个不存在的“完整 SHA”；`dfcf00abf` 大提交的真实文件数为 154，不是 161。数量由 `git diff-tree -M`、`git show --name-only` 与当前 Git UI 的 `showing 0-100 of 154 items` 三方核对。
-
-### 当日提交、连续成果与审查提交总表
-
-| # | 完整 SHA / CST / 文件数 | 用户可感知修改点 | 已审查轮次 / 逐项范围 | 自动化证据 | 真实用户操作证据 / 缺口结论 |
-|---:|---|---|---|---|---|
-| 1 | `dd38e75625ce89f491ffe26bd3234540dee64079` · 08-25 08:11 · 6 | Drive 大目录 trash 事务时限 | 第 5 轮 #1–12 | 生命周期专项 28 项；本轮 Server Drive 89 项 | 1000 文件树 trash/restore/trash、窄窗键盘；本轮确认保留回收站根和恢复入口 |
-| 2 | `876e2223c2a71d10f469b4cfc7ffdb7e26605449` · 08-25 08:15 · 2 | 部署步骤与健康检查记录，无产品代码 | 第 5 轮 #1 | 提交文件逐项核对 | 与第 5 轮真实生命周期验收绑定；不把部署成功冒充功能验收 |
-| 3 | `7b474594f41fbea0c12cca18c0de0539f3b82c68` · 08-25 09:07 · 12 | Git worktree/history diff、统一/分栏、换行、多文件 | 第 3 轮 #1–15 | Git 36 文件 410 项；Desktop 全量 | 本轮再次验证 split/wrap 跨 Tab、Space 选择、154 文件独立滚动和切文件无旧帧 |
-| 4 | `a41ba9a8dc83f195d6933524045efc938e651882` · 08-25 12:39 · 66 | Agent 附件展示/Slash；Drive CommonMark 与目录投影 | 第 2 轮 #1–26；第 4 轮 #4–11 | Agent 523 项、Drive 533 项及后续全量 | 本轮 TXT 附件、Slash/Escape、历史恢复、评论锚点；本地 Drive 登录仍阻塞修复后 UI |
-| 5 | `f937c5e73c3ee3525eddcaa820287eac461d9d7f` · 08-25 13:40 · 3 | Mermaid 横向边界 | 第 4 轮 #1–3 | Dashboard 精确 12 文件 235 项 | 第 4 轮合法/非法图；本轮保留的畸形测试文档继续显示源码 fallback，不冒充合法渲染 |
-| 6 | `5c2ac491b16f0507a3409731733e1a1c4c87f6c7` · 08-26 01:02 · 138 | 附件路径化、MCP router、模型目录/窗口、上下文、Git renderer、Drive MD/MDX | 第 1 轮 #1–19；第 2 轮 #1–26；第 3 轮 #2–14；第 4 轮 #4–12 | Desktop/Agent/Drive/Git 专项及全量；模型目录检查 | 本轮新对话快照、router 回退、真实只读 MCP、Tooltip、附件 Read/恢复、Git、Drive 生产旧版边界均重验 |
-| 7 | `d779bee0d90c252a904e4d7eb076835795584060` · 08-26 01:40 · 12 | router 风险注解、回退脱敏、上下文键盘、思考块恢复 | 第 1 轮 #9、#12、#19 及现场缺陷 | 红灯后 523 项；Desktop 全量 | 本轮恢复会话仍显示通用回退、真实工具和键盘 Tooltip；内部 reason 不在 UI |
-| 8 | `2cdd8a39370dd26d73b4fa77b9fce3c0add0630a` · 08-26 02:29 · 25 | 附件 scope、失败回滚、路径 IPC、跨项目清理、配额 | 第 2 轮 #1–22、#26 | 红绿灯与 Agent 全专项；本轮新增 history/export 脱敏回归 | 本轮受控 TXT 一轮发送、Read 标签、历史恢复；新增兼容旧目录附件泄漏缺陷并修复 |
-| 9 | `dca057a0f0d3deb16c32d7622f5a114160d23bc3` · 08-26 03:28 · 8 | Git 错误态、窄窗换行、原生键盘、竞态、大列表 | 第 3 轮 #6、#8–10、#14–15 | 红绿灯后 Git 410 项；Desktop 全量 | 本轮 split/wrap/Space/Tab、154 文件滚动、路径切换无旧 diff |
-| 10 | `a600cd88cd0efbd3c4acb4eb27f37077a6264db4` · 08-26 04:32 · 19 | Markdown `<=`、严格 MDX、列表 start、评论格式 | 第 4 轮 #3–12 | Dashboard 235、Server/Shared 专项 | 生产账号仍是部署旧版：MDX JSX 纯文本、旧列表/heading 行为；本地热更新登录阻塞，明确不算修复后实机 |
-| 11 | `ddd80213d2ff936b13951ddc012d5ce8de146611` · 08-26 05:01 · 5 | Drive restore/hide 超时、循环/越权/late child/回滚 | 第 5 轮 #3–12 | 生命周期 28 项；Server Drive 89 项 | 第 5 轮真实恢复与二次 trash；本轮只读确认测试根仍可恢复，未永久删除 |
-
-### 第 6 轮新增真实证据与覆盖结论
-
-- Agent：在全局实验开关开启时新建 `Synapse 自动化触发器类型`，随后立即把全局值恢复关闭；该新会话仍按创建快照进入 router 安全回退，证明设置快照不随全局值漂移。附加 44 B TXT，UI 仅显示名称、类型和大小；一次最小百炼请求读取测试码并调用真实 `app_automation_trigger_type_list`，返回 3 个触发器。切到其它历史再返回后，附件、回答、Read、真实 MCP、回退状态与 97.2K/1M 上下文均恢复。
-- Agent 隐私：工具详情只显示 `[Synapse attachment: synapse-round6-attachment.txt]`，没有受控 OS 路径。静态缺口审计进一步发现兼容旧直接目录附件仍把绝对路径写入 history/export；两个定向红灯分别固定 history 与旧导出泄漏，修复后结构化 path 附件统一只保留名称，循环对象导出兼容保持通过。
-- Agent 键盘与上下文：真实键入 `/` 后显示三类 Slash 分组，`Escape` 删除整个菜单且焦点留在输入框；先前直接 `set_value` 的异常被排除为辅助工具注入方式。通过 Tab/Shift+Tab 打开上下文 Tooltip，确认已用 97,197、剩余 902,803、运行窗口 1,000,000、最大输入 991,808、最大输出 131,072、官方来源与 2026-08-25 日期。
-- Git：创建后精确删除一个无敏感临时文件；工作区在 split + wrap 下用 Space 切换选择，切到 history 后偏好仍保持。打开 `dfcf00abf`，UI 明确显示 154 items；文件区独立滚动到中段时下方 diff 保持同视野，切到 preload 后标题与内容同步更新，没有旧帧。未执行 commit/push/pull/sync。
-- Drive：只操作阶段测试数据。生产 Chrome 的 `Codex Round 4 Markdown Test 2026-08-26` 中，普通 Markdown 预览保留 `a <= b`、混合列表、任务项、Unicode、Mermaid 错误源码和 `projection` 评论线程；合法 MDX 在线上旧版仍把 JSX 片段显示为纯文本，非法 MDX 的比较正文可见。回收站保留 `codex-round5-drive-trash-tdX0XU` 和“恢复”入口，配额仍为 111.0 MB / 5.0 GB；未点恢复或永久删除。
-- 无法在本轮转成“当前修复后真实 UI”的项目只有第 4 轮已列明的本地 Drive Markdown/MDX 修复：Electron Drive 和本地 Dashboard 均无登录态，生产 Chrome 又是旧部署。没有迁移凭据或把生产旧行为冒充当前代码；同层 Dashboard/Server/Shared 自动化与 build/typecheck 作为替代证据。官方 Anthropic endpoint、未知模型、用户 env 优先、子 Agent、真实失败队列、symlink/TOCTOU、损坏 Git 响应和 `/compact` 仍按无侵入、避免付费或不可安全制造原则保留自动化证据，不为追求“实机”改用户配置或制造破坏。
-
-### 第 6 轮 Standards / Spec 结论
-
-- Standards：基线到起始 HEAD 的新增行扫描未发现 `console.log`、空 catch、自定义颜色、任意 Tailwind 色或新增普通内联 style；未新增依赖、IPC、capability、网络或样式。本轮修复只触及附件历史投影、导出脱敏、两条回归和现有发布/审查记录。
-- Spec：v2 Renderer 继续只传有序 attachmentId；运行时绝对路径仍只进入主 query 和 SDK 授权。新修复把兼容旧 path 附件的 history 和 export 收敛为名称，同时保留真实 Read 工具输入、循环诊断和现有结构化脱敏 helper，符合附件设计与 Agent Runtime 安全规则。
-- 其余 84 个矩阵项没有发现新的错误处理、竞态、权限、数据泄漏或兼容性偏差；本轮新增产品缺陷为 1 个（兼容旧目录附件 history/export 路径泄漏），记录准确性缺陷为 2 个（5 个完整 SHA、154 文件计数）。
-
-### 第 6 轮自动化与门禁
-
-- 红灯 1：ConversationRouter 定向 1 项稳定失败，history metadata 收到 `/Users/liyang/Documents/private-sources`；红灯 2：导出服务定向 1 项稳定失败，`attachments.json` 保留同一绝对路径。修复后两个定向用例通过。
-- 第一版递归导出脱敏让循环对象导出回落到 history，Desktop 全量为 865 文件中 864 通过、1 失败，8,072/8,073 项；改用 WeakMap 保留循环图后，受影响 3 文件 92/92，Desktop 全量 865 文件、8,073/8,073 项通过。
-- Dashboard Markdown/MDX/Mermaid 精确 12 文件 235/235；Server Drive 精确 5 文件 89/89；Shared 全量 12 文件 139/139。一次宽泛 Dashboard renderer 命令为 249 项通过但 1 个既有 mock suite 导入失败，精确影响集随后全绿。
-- Desktop、Dashboard、Server typecheck；Desktop hard constraints、IPC codegen、116 条模型目录检查；Desktop renderer 5,021 modules + Electron/preload、Dashboard 6,801 modules、Server production build；`git diff --check` 全部通过。构建只有既有大 chunk 警告。
-- 聚焦 ESLint 额外命中 5 个既有文件级告警：测试中的正则转义和安全文件名 control-regex，均非本轮新增行；没有为可选诊断顺手改写相邻代码。
-
-## 2026-08-26 阶段 23 第 5 轮 Drive 大目录回收站审查
-
-- 起始 HEAD 为 `a600cd88cd0efbd3c4acb4eb27f37077a6264db4`，`main` 相对 `origin/main` ahead 10，工作树干净；与主任务指定值一致。
-- 本轮固定提交为 `dd38e75625ce89f491ffe26bd3234540dee64079`（大目录事务修复）与 `876e2223c2a71d10f469b4cfc7ffdb7e26605449`（部署记录）。直接产品 diff 只有 `DriveLifecycleService.trashItem` 的 Prisma 交互事务新增 `maxWait: 10_000`、`timeout: 30_000`，以及 1000 文件目录仍写 1001 条 change 的回归。
-- Spec 来源固定为该提交中的 `findings.md`、`task_plan.md` 与 `RELEASE_NOTES_PENDING.md`：必须保留整棵目录迁移、同步 change 和失败回滚的原子性，不通过跳过 change、可见部分删除或吞错规避。
-- 已完整读取 planning-with-files、code-review、computer-use 技能，以及仓库 Server/API/测试/Drive 核心设计与 Web Console/Local Sync 生命周期边界；code-review 的并行子代理步骤被本轮“不得创建任务或子代理”明确覆盖，Standards / Spec 双轴改为当前任务内串行执行。
-- 初步确定两项高风险候选：`restoreItemForStatuses` 对 1000+ 条目同样逐条 append change，但仍使用 Prisma 默认交互事务超时；`collectSubtree` 与 `buildRestorePath` 没有 visited/cycle 防护，坏 parent 链可能让删除无限循环。两项都必须先补稳定红灯再决定是否修改。
-- `collectSubtree` 按层批量查询，因此宽目录没有应用层 200/1000 分页截断；但极深目录会产生逐层往返。当前 move 会阻止正常 API 制造父子循环，生命周期代码仍需对数据库异常、遗留数据和并发竞态 fail closed。
-- 红灯首跑固定为 25 项中 20 通过、5 失败：1000 文件 restore/hide 缺少长事务配置；收集后新子项被遗漏；跨用户子项被一并迁移；子树循环和恢复祖先循环只能由测试护栏中断。失败均命中旧实现，不含测试自身错误。
-- 最小修复将同一 10 秒 `maxWait` / 30 秒 `timeout` 用于 trash、restore、hide；每次批量状态迁移后在事务内检查仍处于来源状态的新子项；子树按归属遍历并拒绝跨用户边；子树和恢复路径均用 visited 集合拒绝循环。变更日志 append 仍逐项留在同一事务，未跳过同步事件。
-- 补齐 128 层深目录成功 trash/restore、change log 中途失败整树回滚、跨用户祖先拒绝；专项现为 28/28，Server typecheck 已通过。
-- 实机环境边界：Electron/MCP 均未登录，生产 Chrome 已登录。UI 文件夹上传入口对 1001 文件给出“一次最多上传 1000 个文件”的受限错误；随后使用恰好 1000 文件、4 个子目录的本轮临时夹从生产 UI 上传，当前仍在进行中。该上传只负责建立测试数据，不作为删除修复证据。
-
-### 第 5 轮覆盖矩阵（完成 12 项）
-
-| # | 修改点 / 风险 | Standards / Spec 证据 | 自动化 / 实机证据 | 结论 |
-|---:|---|---|---|---|
-| 1 | 精确提交与部署记录 | `dd38e756...` 只给 trash 增加 10s/30s；`876e2223...` 只记录 19/19 部署步骤、健康检查和源码校验 | 当前实现逐行复核；部署记录没有功能性删除/恢复验收 | 部署成功不等于链路验收，本轮补齐 |
-| 2 | 1000+ 宽目录整棵 trash | 子树按层查询，无 200/1000 截断；所有 item 与 change 同事务 | 1000 文件生命周期测试；生产 UI 1000 文件 + 4 子目录，首次 trash 约 9.9s | 通过 |
-| 3 | 大目录 restore / hide 时限 | restore 同样逐项 append change，hide 还处理 revision/session/quota；旧实现仍用 Prisma 默认时限 | 红灯固定缺失配置；统一 10s/30s 后 1000 文件 trash→restore→trash→hide 通过；UI restore 约 11.3s | 修复 |
-| 4 | 宽/深遍历、循环防护 | BFS 保留宽目录批量；visited 对子树和祖先路径 fail closed，不设置武断深度上限 | 128 层 trash/restore 通过；子树循环与祖先循环旧实现被护栏中断、修复后均明确报层级异常 | 修复 |
-| 5 | 并发与事务回滚 | updateMany count 保留；迁移后在同事务查询仍处于来源状态的新子项；change append 不移出事务 | 既有三类状态漂移回滚 + 新增 late child + change-log 中途失败整树回滚；UI 请求中取消/删除按钮禁用 | 修复并通过 |
-| 6 | 父子可见性、回收站根与恢复 | active 列表按 lifecycle 过滤；trash 只列 `deleteRootId = id` 根；恢复清空整树 metadata | UI 原位置消失、回收站仅见根；恢复后原 root/file ID、两级目录、空目录和 46 B 哨兵内容保持 | 通过 |
-| 7 | 回收站再次删除与管理员恢复 | hide 只隐藏并释放用户 quota，不删对象；管理员仍可恢复 hidden；普通用户不能恢复 child/hidden | 生命周期 pending upload、public asset revision、hidden admin restore 专项通过；按要求未点“永久删除/隐藏”，第二次 trash 后留在可恢复回收站 | 通过，保留安全边界 |
-| 8 | 容量、对象存储与孤儿清理 | trash 保留 used/reserved 与 storage；hide 原子释放 current/revision/reserved、取消 pending session，不物理删对象 | Server Drive 全专项覆盖 quota、storage metadata、临时对象/版本清理失败和管理员统计 | 通过 |
-| 9 | 分享、评论、同步引用 | trash 同事务禁用整树 share；restore 只重启同一 trash 时间禁用的 share；每项写 `trashed/restored` change；评论随 item 可见性受保护 | DriveService share 恢复/manual disable/change tests 与 annotation/collaboration/change-log 全专项纳入 542 项 | 通过 |
-| 10 | 权限、审计与错误提示 | root 先按 userId 授权；本轮扩展到所有子边和祖先；成功后 best-effort audit 结构化记录且脱敏 | 跨用户 child/ancestor 红灯后拒绝；controller owner routing、audit failure/redaction tests 通过；busy 状态和层级/内容变化错误明确 | 修复并通过 |
-| 11 | Web / Desktop / MCP / Sync 复用 | Controller、Dashboard、Desktop dispatcher、MCP `app_drive_item_delete/restore/trash_delete` 与 sync executor 最终进入同一生命周期服务 | Dashboard 56、Desktop/dispatcher 224、Shared 43；生产 Chrome 实机；Electron/MCP 未登录边界如实记录 | 通过，无分叉实现 |
-| 12 | Standards、发布说明与范围 | 无依赖、IPC、样式、裸 fs/network、空 catch 或 console 日志；只改生命周期服务/测试/记录 | Server typecheck/build、静态扫描、`git diff --check` 通过；发布说明同步 | 通过 |
-
-### 第 5 轮实机证据与边界
-
-- 仅用持久 `node_repl + @oai/sky` 操作已有登录态 Chrome；Electron 底部仍显示“登录”，Synapse MCP 的文件夹上传返回“账号未登录”，没有迁移或读取用户凭据。
-- 本地测试夹原有 1006 个文件，受控 API 先返回“一次最多上传 1000 个文件”；精确移除 6 个空测试文件后，从生产 UI 选择并允许上传恰好 1000 个文件、4 个子目录，约 5 分钟完成。目录名 `codex-round5-drive-trash-tdX0XU`，root `cmt94ynt805n5l828rsr70zcg`，宽目录 `cmt94ynuv05ndl8280mtwa5pz`，哨兵文件 `cmt94ynv405nfl8286mzrl4wh`。
-- 上传完成后先进入宽目录和两级窄目录，哨兵显示 46 B、正文 `Codex Round 5 Drive trash sentinel 2026-08-26`；未打开、移动、删除或修改任何既有文件。一次地址栏导航被 Chrome 恢复为已有文档预览，只读后立即用“网盘”导航返回，没有保存或其它操作。
-- 首次 UI trash 约 9.9 秒：确认后按钮禁用，完成后根列表消失；回收站显示测试根及原路径，不展开子项，符合 root-only 产品设计。UI restore 约 11.3 秒；回收站根消失，原位置恢复，同一 root/子目录/file ID、层级、空目录、文件大小和内容保持。
-- 窗口从约 1325×768 收窄到 850×768，工具栏和表格保持可操作、没有页面级横向破坏；删除确认默认聚焦“取消”，Tab 后聚焦“删除”，Return 完成第二次 trash，约 9.5 秒。随后恢复宽窗，测试根再次出现在回收站。
-- 未点击回收站“删除”、未清空回收站。生产测试数据保留为可恢复回收站根 `codex-round5-drive-trash-tdX0XU`；本地 `/tmp/codex-round5-drive-trash-tdX0XU` 的 1000 个上传源文件已精确删除且不可恢复。
-
-
-## 2026-08-26 阶段 23 第 4 轮 Drive Markdown / MDX / Mermaid 审查
-
-- 起始基线为 `dca057a0f0d3deb16c32d7622f5a114160d23bc3`，工作树在本轮记录前干净；固定比较范围为 `db189074...HEAD`。
-- 主任务给出的 `f937c5e73b8a29c845fae73f539a44fd9d32dff4` 不是现有对象；同前缀真实 Mermaid 提交为 `f937c5e73c3ee3525eddcaa820287eac461d9d7f`。
-- 权威边界：Markdown 源文本始终是协同和版本历史的权威；普通 `.md/.markdown` 需要兼容 CommonMark 文本，`.mdx` 保持严格解析；评论锚点只接受服务端 projection 的保守解析，Renderer 不猜测重挂；MDXEditor 保存继续复用现有版本冲突与失败保留链路。
-
-### 第 4 轮修改点矩阵（完成 12 项）
-
-| # | 修改点 | 文件 / 提交 | 用户行为 | 自动化 | 实机 | 结论 |
-|---:|---|---|---|---|---|---|
-| 1 | Mermaid figure 取消默认横向 margin | Mermaid renderer；`f937c5e73` | 宽图与正文、表格共用内容边界 | Mermaid renderer 专项通过 | 合法宽图完成渲染并与正文/表格对比 | 通过 |
-| 2 | Mermaid 多图、错误、取消、主题重绘 | Mermaid renderer/test；`f937c5e73` | 多图独立，异常保留源码，旧渲染不回写 | 多图、异常、取消、重绘均通过 | 合法图可见；编辑损坏后的非法图保留源码 | 通过；多图竞态由同层自动化覆盖 |
-| 3 | Mermaid 内容宽度与横向滚动 | Mermaid renderer/test；本轮补回归 | SVG 保留固有宽度，窄窗在图内滚动 | 新增 `1200px` SVG 宽度、`max-width` 清除、scroller 断言通过 | 1325/1063/768 px 检查无页面级横向溢出；合法宽图在编辑前可见 | 通过；图内滚动行为由布局专项补证 |
-| 4 | 普通 Markdown `<=` 兼容 | CommonMark plugin；`5c2ac491` + 本轮修复 | `a <= b` 可进入富文本且保存不加反斜杠 | 真实 MDXEditor 比较、代码、转义往返通过 | 线上旧版本富文本报严格 MDX 错误；源码编辑、同步、重开可持久化 | 红灯后修复；本地热更新 UI 受登录阻塞，不能声称修复后实机通过 |
-| 5 | `.md` HTML/JSX/表达式/代码/转义/注释边界 | CommonMark plugin / renderer；本轮修复 | 普通 HTML 与代码示例不误判，HTML 注释不丢失 | HTML、属性、代码块、行内代码、转义、注释边界通过 | 普通正文/代码路径可达；生产测试文档未构造全部语法组合 | 通过；HTML 注释保守进入源码模式 |
-| 6 | `.mdx` 严格解析与恢复编辑 | MDXEditor renderer；`5c2ac491` + 本轮修复 | 合法 JSX 可编辑；非法 MDX 显示源码；ESM 不静默丢失 | 真实 MDXEditor 覆盖属性、表达式、嵌套组件、注释；ESM/非法专项通过 | 线上合法 MDX 仍报 `mdxJsxTextElement`，非法 MDX 正确报错 | 红灯后修复；部署版验证了旧失败与严格错误，本地 UI 登录受阻 |
-| 7 | 有序/无序/三级混合列表 marker 与缩进 | MDXEditor/reader；`5c2ac491` + 本轮修复 | 编辑与阅读 marker、层级一致 | 真实编辑器三级混合列表往返通过 | 预览显示三层混合与任务项；线上编辑批量输入后缩进变形 | 当前代码通过；部署版旧行为失败，修复后实机受登录阻塞 |
-| 8 | 列表编号起始、任务列表、空项与保存重开 | 新 ordered-list start plugin；本轮修复 | 非 1 起始、任务/空项不变形 | 真实编辑器 `3.` 起始、混合嵌套、任务、空项 7/7 通过 | 测试文档同步并重开成功，但线上编辑已把编号/缩进规范化 | 红灯后修复；持久化通过，修复后格式实机受环境阻塞 |
-| 9 | 空 heading 不进入目录 | server markdown renderer；`5c2ac491` | 空标题无目录占位项 | Server renderer/projection 专项通过 | 线上目录仍出现 `heading 2` | 当前 main 已有修复且自动化通过；部署版落后，未把线上失败算作修复后通过 |
-| 10 | 重复/Unicode/显式 ID 与目录顺序 | server markdown renderer | 重复标题唯一 ID，Unicode 与顺序稳定 | renderer/projection 专项通过 | 重复标题生成 `-2`，Unicode 标题稳定；CommonMark `{#id}` 按正文显示 | 通过；显式 ID 不是当前 CommonMark 产品契约 |
-| 11 | heading/list projection 与评论定位 | server projection + dashboard annotation；本轮收紧评论格式 | 选文评论保存后仍对准正文，非 `.md` 不开放评论 | projection、annotation、link intake、`.md` 边界专项通过 | 对 `projection` 建评论，刷新后正文与评论锚点仍在 | 通过 |
-| 12 | 保存/读取/竞态/XSS、错误状态与样式纪律 | Drive save、server renderer、MDXEditor；本轮审查 | 失败保留源码，内容安全，无新增自定义视觉 | Server/Dashboard/Shared 20 文件 533 项；build/typecheck/hard constraints 通过 | `.md` 保存显示“已同步”且刷新持久；非法 `.mdx` 错误可见；本地两入口均受登录阻塞 | 通过；本轮未新增颜色、内联样式、依赖或吞错 |
-
-### 第 4 轮红绿灯与代码审查结论
-
-- 红灯 1：真实 MDXEditor 将普通 Markdown 的 `a <= b` 序列化为带额外转义的源码；兼容 serializer 同时归一 `\\<\\=` 与 `\\<=` 后，正文、行内代码、代码块和显式转义往返通过。
-- 红灯 2：`.mdx` 没有 JSX descriptor，合法组件在真实 UI/真实编辑器中报 `mdxJsxTextElement`；仅对 `.mdx` 注册通用 JSX editor，属性、表达式、嵌套组件和 MDX 注释均保留，非法 MDX 继续严格报错。
-- 红灯 3：MDXEditor 对顶层 `import`/`export` 和 CommonMark HTML 注释不能无损往返；检测 fenced code 之外的对应源码并进入现有 Textarea 源码模式，不引入新的保存链路。
-- 红灯 4：MDXEditor 默认丢失有序列表非 1 起始值；新增窄插件只在 list import/export 补 `start`，三级混合、任务列表与空项继续走上游 list visitor。
-- 红灯 5：评论格式边界在 Renderer、服务端 target 和链接 intake 不一致，曾允许 `.markdown`、`.mdx` 或仅 MIME 命中的文件；提取共享 `.md` 判定并在三层统一。
-- Mermaid 生产代码本轮未再改动；新增布局回归固定 SVG 原始宽度、清理上游内联 `max-width`、内容 `min-w-fit` 与 figure 横向滚动约束。空 heading、重复/Unicode 标题、projection 顺序、异常 Mermaid、XSS、保存冲突与错误保留均复核既有实现及专项，未发现需要扩大修改范围的问题。
-- Standards：diff 只使用现有 MDXEditor、Textarea、主题 token 和 utility class；聚焦扫描命中的两处 inline style 是既有评论浮层动态坐标/高度，不是本轮新增。无自定义颜色、渐变、`console.log`、新依赖或跨模块内部导入。
-- Spec：Markdown 源码仍是版本与协作权威；`.md` 使用 CommonMark 兼容链，`.mdx` 保持严格语法；评论只支持 `.md`；保存、冲突和失败恢复继续复用既有 Drive text save flow。
-
-### 第 4 轮实机证据与环境边界
-
-- Electron Drive 停在“需要登录账号”，本地 Dashboard `127.0.0.1:3000` 同样重定向登录；未输入或迁移生产凭据。随后只用 Computer Use 的持久 `node_repl + @oai/sky` 操作已有登录态的 `synapse.d2.pub`，每次动作后重新读取应用状态。
-- 新建无敏感目录 `Codex Round 4 Markdown Test 2026-08-26`，保留 `.md`、合法 `.mdx`、非法 `.mdx` 三份测试文档供验收。`.md` 完成正文、三级混合列表、任务项、比较表达式、空/重复/Unicode heading、Mermaid、表格和评论操作；`.mdx` 分别覆盖合法组件与严格错误。
-- `.md` 先在阅读预览确认宽 Mermaid、正文、表格、列表、TOC，再切编辑。线上部署版暴露 `<=` 误报、列表缩进往返、空 heading 占位三项旧失败；源码模式编辑后显示“已同步”，刷新确认持久化。
-- Computer Use 对代码编辑器执行批量 `type_text` 时丢失了部分中文和 Markdown 缩进，测试专用 `.md` 因而保留为可识别但部分畸形的 545 B 内容；未修改用户重要文档，也不把该次畸形保存解释为产品通过。
-- 选中正文 `projection` 后创建评论 `Round 4 projection 定位测试`，刷新后评论与正文锚点仍在。合法 `.mdx` 在部署版进入编辑时复现缺 descriptor 的解析错误，非法 `.mdx` 复现严格错误状态。
-- 窗口依次检查约 1325×768、1063×768、768×775；紧凑工具栏可用且没有页面级横向溢出。由于当前运行页面是未包含本轮本地修复的部署版、两个本地入口又受登录阻塞，所有“修复后实机”缺口均明确标为环境阻塞，并由真实组件/服务同层专项覆盖，未声称实机通过。
-
-### 第 4 轮最终验证
-
-- Dashboard Markdown/MDX/Mermaid/editor/preview/comment/TOC：12 文件、235/235。
-- Server Drive 保存、Markdown renderer/projection、annotation 与 link intake：7 文件、255/255；Shared Drive 契约：1 文件、43/43。合计 20 文件、533/533。
-- Dashboard production build（6,801 modules）、Server typecheck/build、Desktop typecheck、`check:hard-constraints`、`git diff --check` 均通过；构建只有既有大 chunk 警告。本轮未改变 IPC 或打包边界，不运行 IPC codegen / `check:packaged-asar`。
-
-## 2026-08-26 阶段 23 第 3 轮 Git diff 工作台审查
-
-- 基线为 `2cdd8a39370dd26d73b4fa77b9fce3c0add0630a`，起始工作树干净；固定代码比较范围 `db189074...HEAD`，本轮产品主题固定为 `7b474594f` 及其在 `5c2ac491` 中的 Git diff 直接后续变化。
-- 权威 Spec 为 `docs/superpowers/specs/2026-06-17-git-module-design.md`，并结合 `docs/superpowers/plans/2026-07-31-git-reliability-remediation-review.md` 的竞态、截断、特殊路径、merge/root、二进制和主进程信任边界结论。
-- 当前直接文件范围共 12 个 Git/发布文件，并追踪 `desktop/package.json` 与 `pnpm-lock.yaml` 的依赖变化；preload/bridge 在基准区间的变化仅属于 Agent 附件契约，不算 Git diff 生产变化。
-- 已排除依赖残留候选：`5c2ac491` 已同时删除 `@git-diff-view/react` 源码、CSS、package 与 lockfile 条目；当前 `rg` 无任何引用，前两轮“已移除依赖”的验收记录正确。
-- 确定缺陷 1：`useGitWorktreeStatus.loadDiff()` 把失败写入共享 `status.error`，但 `GitChangesTab` 主详情只判断 loading/diff/空状态；普通查看失败会被误呈现为“选择文件查看差异”，混淆错误与未选择。
-- 确定缺陷 2：统一与分栏的代码列使用 `minmax(max-content,1fr)`；即使换行开关改为 `whitespace-pre-wrap break-words`，grid 最小轨道仍会被长行固有宽度撑开，不能实现真正的窄窗自动换行。
-- 确定缺陷 3：工作区文件行使用 `role="button"` 的容器包住复选框，只手写 Enter 键行为；形成嵌套交互控件且 Space 键不能按原生按钮语义预览文件。
-- 确定缺陷 4：历史文件选择只在 `useEffect([selectedCommit.hash])` 中把 index 重置为 0；Profiler 稳定记录到提交切换先提交旧索引文件、再回到首文件的两次 React commit，形成可见旧 diff 闪回。
-- 确定缺陷 5：历史详情直接展开提交的全部文件且没有高度上限；真实 `dfcf00abf` 提交的 154 文件列表把 diff 推到长页下方，文件选择与差异阅读不能在同一视野内完成。
-
-### 第 3 轮 Git diff 修改点矩阵（完成 15 项）
-
-| # | 修改点 | 文件 / 提交 | 用户行为 | 自动化 | 实机 | 当前结论 |
-|---:|---|---|---|---|---|---|
-| 1 | 历史 rename patch 检测 | `git-history-service.ts`; `7b474594f` | 历史重命名按旧/新路径展示 | 410 项 Git 全专项 | `dfcf00abf` 显示 rename from/to | 通过 |
-| 2 | 第三方 renderer 替换 | package、lock、viewer；`5c2ac491` | 主题一致的差异查看 | workbench + 静态扫描 | 跟随系统浅色、深色各查看一次 | 通过；源码/依赖均移除 |
-| 3 | unified 行号与增删背景 | viewer；`5c2ac491` | 查看新旧行号/增删 | workbench | 当前工作区修改文件 | 通过 |
-| 4 | split 左右行号配对 | viewer | 左旧右新、复杂增删块 | 新增不等长块/无换行覆盖 | 当前工作区分栏逐行查看 | 通过 |
-| 5 | 行内差异 | viewer | 修改片段高亮 | workbench | changes tab 源码在浅/深色查看 | 通过 |
-| 6 | 自动换行 | viewer/workbench | 窄窗长行换行 | shrinkable grid 红灯 | 1180→960 宽，长行真实折行 | 修复并通过 |
-| 7 | 统一/分栏偏好跨 Tab | workbench | 工作区与历史共用设置 | workbench | 分栏+换行后切历史仍保持 | 通过 |
-| 8 | 工作区文件列表与 diff | changes/hook | 多文件、选择、错误、键盘 | 错误态/原生按钮红灯 | 多文件切换；Tab/Space 预览与勾选 | 修复并通过 |
-| 9 | 历史延迟加载与请求代次 | history hook/tab | 进入历史、提交切换 | hook 竞态覆盖 | 改动→历史，切 `7b474594f`/`f937c5e73` | 通过 |
-| 10 | 历史多文件映射与选中项 | history/sections | 每文件对应 patch，无旧帧 | Profiler 旧帧红灯 | `7b474594f` 12 文件逐项与跨提交切换 | 修复并通过 |
-| 11 | 解析失败 raw fallback | sections/`GitRawDiff` | 不安全映射显示原文 | section/workbench | 未伪造损坏的生产响应 | 自动化通过；实机不构造 |
-| 12 | binary/empty/no-newline/truncated/大提交 | viewer/service | 明确区分状态 | viewer/service + 新无换行覆盖 | `dfcf00abf` 154 文件、PNG 不可预览 | 通过；空/截断由自动化覆盖 |
-| 13 | 特殊字符/Unicode/pathspec/rename | service/sections | 文件名不串位 | parser/integration/pathspec | 中文路径可见；rename 旧/新名一致 | 通过 |
-| 14 | 主题、滚动、窄宽、键盘焦点 | viewer/changes/history | 双主题与可达性 | 布局/原生按钮覆盖 | 滚动、宽窄、Tab/Space、主题恢复 | 通过 |
-| 15 | 大提交文件列表高度 | history/workbench | 文件列表独立滚动，diff 不被推离 | 154 行列表红灯/绿灯 | `dfcf00abf` 首批→中段独立滚动 | 修复并通过 |
-
-### 第 3 轮红绿灯记录
-
-- 红灯：`git-workbench.test.tsx` 37 项中 34 通过、3 失败；失败精确命中自动换行轨道、读取错误误呈现为空状态、文件行嵌套交互且非原生按钮。
-- 绿灯：最小修改 viewer grid、changes 主视图和 worktree hook 后，`git-workbench.test.tsx` 与 `use-git-worktree-status.test.tsx` 共 2 文件 40/40 通过。
-- 修复范围：换行开启时使用可收缩 `minmax(0,1fr)`，关闭时保留横向滚动；读取失败显示 destructive Alert，并在新请求/成功响应时清除旧错误；复选框与原生预览按钮成为同级控件。
-- 第二个红灯：Profiler 专项 38 项中 37 通过、1 失败，稳定记录到提交切换先提交旧索引文件 `docs/d.md`；以 `{ commitHash, index }` 键控选择后，history/worktree 三文件 43/43 通过，最终 workbench 39/39 通过。
-- 第三个红灯：154 行历史文件列表专项 40 项中 39 通过、1 失败，稳定证明容器没有高度上限和纵向滚动；仅为该容器增加 `max-h-80` 与独立纵向滚动后 workbench 40/40 通过。
-
-### 第 3 轮实机证据与双轴结论
-
-- 当前工作区前置为 7 个真实修改；统一→分栏、换行关闭→开启后，行号、左右配对、增删和行内标记均可见，控制状态正确。
-- 多文件从 `progress.md` 切到 viewer/hook 源码，标题和内容同步更新，没有旧请求覆盖；Tab 顺序为复选框→预览按钮，Space 可预览，也可切换勾选并恢复 7/7。
-- 窗口从约 1180 px 收窄到 960 px，开启换行后长代码真实折行且详情未横向撑破；恢复宽窗后布局正常。
-- 工作区切到历史后，点击 `7b474594f` 可见 12 个对应文件；新增 viewer 文件显示 `new file mode`，再切单一 Drive 提交显示其首文件，没有最终串位。
-- `dfcf00abf` 的 154 文件提交完成真实滚动；重命名显示 `.claude/rules/website-copy.md` → `.claude/rules/document-copy.md`，删除文本显示旧侧行号，`website/public/icon.png` 显示“文件已变更。”而不误解析二进制。
-- 长列表修复后再次打开 `dfcf00abf`：文件区先显示首批路径，向下滚动后显示中段路径，提交标题与下方 diff 同时保留在详情布局中，独立滚动通过。
-- 初始主题为“跟随系统”浅色；切到深色后复查增删背景、文字和行号均可读，随后恢复“跟随系统”，设置保存提示可见。
-- 只检查提交/推送/拉取/同步入口可见性，未执行任何会改远端或历史的动作；未启停开发服务。
-- Standards：变更只用现有 shadcn/Radix 与主题 token；聚焦静态扫描无自定义色、字面颜色、内联样式、`console.log` 或第三方 diff 依赖，未新增依赖和跨模块耦合。
-- Spec：主进程 `--find-renames` 与 status/file patch 对齐；path/pathspec、Unicode、rename、binary、truncation、权限/审计由 service/parser/integration 覆盖；hook 请求代次阻止旧异步响应，历史选择键控消除旧 diff 首帧。
-- 最终 Git 全专项为 36 文件、410/410；新增不等长 split/无换行与大提交文件列表覆盖后 workbench 定向 40/40。Desktop typecheck、IPC codegen、hard constraints、renderer/electron production build 与 `git diff --check` 均通过。
-
-## 2026-08-26 阶段 23 第 2 轮审查发现
-
-- 基线为 `d779bee0d90c252a904e4d7eb076835795584060`，工作树干净；固定比较范围 `db189074...HEAD`。
-- 附件主链已确认 Renderer send 只提交正文、`displayContent` 和有序 `{ attachmentId, order }`；主进程由 metadata 解析受控路径，Claude SDK 仅收到一次 `inputQueue.push` 主消息，没有 Base64 图片块、隐藏 query、Provider/模型附件分支。
-- 确定缺陷 1（红绿灯完成）：`AgentComposer` 原先在组件生命周期内复用同一 draft scope，SDK live session 又累积该根授权；现已在每个提交批次立即轮换 scope，失败恢复原 scope，附件轮结束后关闭当前 live session 并按 SDK session id 恢复。
-- 确定缺陷 2（红绿灯完成）：目录 v2 ref 原本携带真实 `sourcePath`，会经选择 IPC、草稿 title、history、timeline 和 export 暴露；现仅主进程 metadata 保存真实目录，Renderer/旧历史投影和导出只保留名称。
-- 确定缺陷 3（红绿灯完成）：`AgentArtifactStore.retryOrphanCleanup` 原先拿当前项目会话集合清理全局 artifact 行，初始化其它项目服务会误删仍有会话归属的 committed 附件。50 图实机会话的元数据与受控文件被稳定误删，数据库仍保留会话，是直接现场证据；现先按 `projectId` 过滤再回收。修复后另发 1 图，切换其它项目再返回，历史缩略图与灯箱仍可用。
-- 确定缺陷 4（红绿灯完成）：IPC 对选择路径逐项暂存，后项触发配额时会保留本次前项。现使用明确 quota error，配额失败会释放本次调用已经暂存的全部 id；普通坏路径仍保持逐项拒绝。
-- 目录符号链接检查在选择和运行时各执行一次，并对最终文件使用 `O_NOFOLLOW`；仍存在目录验证完成到 SDK Read 之间无法持有目录句柄的外部替换窗口，这是路径授权模型的剩余平台风险，需要结合修复方案避免扩大授权面。
-- Slash 路由审查暂未发现误匹配：只发布 `/compact`，旧 `/compress` 进入未知命令错误；MRU 只在 `chat.sendMessage` 返回成功且无 `result.error` 后更新，失败队列保留原消息。
-- 本轮剩余风险有四项：macOS AX/sky 未能完成 Finder 拖放；目录在验证后到 SDK Read 前仍有外部替换窗口；当前项目没有知识库 Slash 候选；未实际执行付费 `/compact`。另因旧跨项目清理已删除首轮 50 图受控文件，修复后的跨项目历史恢复只用 1 图实证，不把旧 50 图历史宣称为通过。
-
-### 第 2 轮附件与 Slash 修改点矩阵（26 项）
-
-固定提交范围为 `a41ba9a8`、`5c2ac491`、`d779bee0` 与本轮未提交修复；下表覆盖该范围内全部附件/Slash 生产改动，测试文件不重复列入“代码”列。
-
-| # | 修改点 | 代码 / 提交 | 用户行为 | 自动化 | 实机 | 结论 |
-|---:|---|---|---|---|---|---|
-| 1 | v2 引用、bridge 与 preload | `agent-attachment.ts`、`agent.ts`、`bridge.ts`、`preload.ts`；`5c2ac491` | Renderer 仅拿 metadata/id | type、preload、IPC schema | 选择 1/4/9/20/50 图 | 通过；目录 path 本轮移除 |
-| 2 | 选择/拖放路径 IPC | `ipc-messages.ts`、`ipc-shared.ts`、`ipc-tools.ts`；两提交 | 有序返回、坏路径逐项拒绝 | IPC 59 项相关覆盖 | 文件/文件夹/选择/拖放 | 拖放受 AX 限制；其余通过 |
-| 3 | 系统剪贴板图片 | `clipboard-attachment-service.ts`；`5c2ac491` | 粘贴图片进入暂存 | IPC/Composer | Finder 复制 9/20/50 图后粘贴 | 通过 |
-| 4 | 魔数、MIME、尺寸与原子写 | `attachment-staging-service.ts`；`5c2ac491` | 伪造或空图不入草稿 | staging | PNG 数字素材；JPEG 未单独实机选择 | 自动化通过 |
-| 5 | 50 图/字节/项目/全局配额 | 同上；`5c2ac491`、本轮 | 超限整批拒绝 | staging + 新 IPC quota 红灯 | 50 图完整添加 | 本轮修复部分提交 |
-| 6 | 文件受控副本 | 同上 | 文件只授权自身副本 | staging/runtime | TXT 32 B 添加并清除 | 通过 |
-| 7 | 文件夹精确授权与 symlink | 同上 | 只授权所选目录 | staging/runtime | 文件夹 picker | 安全校验通过；TOCTOU 留平台风险 |
-| 8 | draft/commit/rollback/release | `attachment-staging-service.ts`、`agent-runtime-service.ts` | 失败可重试、取消可回滚 | staging/router | 草稿逐组清空 | 通过 |
-| 9 | 每批 scope 与授权撤销 | `agent-composer.tsx`、`agent-conversation-workspace.tsx`、`conversation-router.ts`；本轮 | 后轮不能访问旧草稿根 | Composer/router 红绿灯 | 1 图修复后真实发送 | 本轮修复 |
-| 10 | 跨项目孤儿回收 | `artifact-store.ts`、`index.ts`；`a41ba9a8`/本轮 | 切项目不丢历史图 | artifact-store 红绿灯 | Projects_Js↔Synapse 后仍可预览 | 本轮修复 |
-| 11 | 路径型 runtime 清单 | `attachments.ts`、`types.ts`；`5c2ac491` | 原图由 Read 按需读 | attachments/session | 工具输入显示附件标签 | 通过 |
-| 12 | 单主 query、Provider 中立 | `claude-sdk-session.ts`、`session-manager.ts`；`5c2ac491` | Kimi/Qwen/自定义同链 | provider 参数化/session | 百炼 qwen3.7-plus 两次 | 通过；无白名单/附件分支 |
-| 13 | 发送路由与顺序 | `conversation-router.ts`；两提交 | 一次发送一次 query，保持 order | router | 50 图第 1 张读出 01 | 通过 |
-| 14 | 会话创建/恢复生命周期 | `session-lifecycle.ts`、`session-repository.ts` | 新旧会话一致恢复 | repository/router | 切换历史会话 | 修复后新附件恢复通过 |
-| 15 | history 附件 metadata | `attachments.ts`、`conversation-router.ts` | 正文与附件分离 | router/timeline | 正文无占位/路径 | 通过 |
-| 16 | timeline/transcript 投影 | `agent-timeline.ts`、`agent-transcript.ts` | Read 路径显示稳定标签 | timeline/transcript | `Read {file_path:[Synapse attachment…]}` | 通过 |
-| 17 | 导出与脱敏 | `conversation-export-service.ts`、`ipc-messages.ts` | ZIP 无 OS path/Base64/原图 | export/IPC | 导出 23 文件并全文检索 | 通过：原路径/Base64 0 文件 |
-| 18 | Composer 添加/粘贴/删除 | `agent-composer.tsx`、`agent-composer-input-box.tsx`、`use-agent-attachment-actions.ts` | 文件/目录/图片可管理 | Composer | 各组添加后删除草稿 | 通过 |
-| 19 | 乐观消息与失败队列 | `use-chat-connection.ts`、`use-agent-chat.ts` | 失败不吞消息/附件 | workspace/pending/chat | 未制造真实付费失败 | 自动化通过 |
-| 20 | 附件条布局 | `agent-composer-attachment-strip.tsx`、`agent-composer-image-thumbnail.tsx` | 顶部/左右留白一致 | strip/Composer | 各数量草稿观察 | 通过 |
-| 21 | 消息气泡与附件内容 | `agent-message-attachments.tsx`、`agent-message-bubble.tsx`、`agent-message-event.tsx`、`agent-message-toolbar.tsx` | 正文无自动清单，附件独立显示 | row/bubble/timeline | 50 图消息正文与附件分离 | 通过 |
-| 22 | 九宫格与灯箱 | `agent-message-attachments.tsx`、`agent-tool-image-artifacts.tsx` | 最多 9 缩略图，可看全部 | row/timeline | `+41`、9/50、50/50 | 通过；原 50 图后来被红灯误删 |
-| 23 | Slash 数据源与去重 | `command-registry.ts`、`skill-registry.ts`、`slash-menu.ts` | Synapse Skill/其它 Skill/KB/命令分组 | registry/slash | 当前项目显示三类；无 KB 候选 | 通过；KB 当前项目不适用 |
-| 24 | `/compact` 与 `/compress` | `command-router.ts`、`command-registry.ts`、`conversation-router.ts` | 仅 `/compact` 可路由 | command/router | `/compact` 唯一，`/compress` 0 | 通过；未执行付费 compact |
-| 25 | Slash 搜索、键盘、鼠标与关闭 | `agent-slash-menu.tsx`、`agent-composer.tsx` | 上下选择/确认/Escape/点击 | composer/slash menu | Down/Return、Escape、鼠标点击 | 通过 |
-| 26 | 最近使用成功门禁 | `agent-conversation-workspace.tsx` | 成功后更新；失败保留队列 | workspace/MRU/pending | 未实际发送 Skill，配置未改 | 自动化通过；实机验证无副作用 |
-
-## 2026-08-26 阶段 23 第 1 轮现场
-
-- 起始时间 `2026-08-26 01:10:00 CST`；HEAD `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`；当前分支 `main`，相对 `origin/main` ahead 6。
-- 起始未提交文件只有 `task_plan.md`、`progress.md`、`findings.md`，均为主任务刚追加的阶段 23 编排记录；本轮不得覆盖或拆分为其它任务。
-- 固定审查基准为用户指定的 `db1890741738f5d9a7e93ab8b940a0a0887f9832`，同时另行盘点 2026-08-25 00:00–23:59 CST 提交及当日形成、午夜后连续提交的直接变更。
-- 审查方法保留 code-review 的 Standards / Spec 双轴，但因用户禁止子任务而在当前任务内串行完成。
-- 真实 UI 证据必须通过 computer-use 技能的 `node_repl + @oai/sky`，每次动作后重新获取应用状态；不使用 AppleScript、System Events、浏览器自动化或 Playwright。
-- 权威产品边界：实验 router 默认关闭，只在对话创建时固化；第三方端点才启用，Anthropic 官方端点保持原生，Provider 切换时按快照和端点重建并重新计算。
-- 任何 discovery、其它 MCP 重建、显式 Synapse 权限规则、policy helper 或 server 工具策略无法无损保持时，必须整会话回退完整 MCP；回退提示至多一次，配置/header/env/secret/reason 不得进入 history 或导出。
-- `invoke` 必须把真实 `mcp__synapse-mcp__<tool>` 名称、参数和 `toolUseId` 端到端投影回 Persona、子 Agent、权限、事件、history 与导出；底层继续经过 action router、PermissionGuard、AuditSink。
-- 模型目录只允许用规范化 Base URL + 精确模型 ID/官方别名配置新 SDK 会话及 Tooltip 参考；显式 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 优先，未知端点/模型不注入，目录变化必须进入 session 复用键。
-- 顶栏百分比与分母只能来自 SDK 实际 `contextWindowTokens`；`/compact` 后只接受当前 Query `getContextUsage()`，查询失败即清空旧快照。目录上限仅作为 Tooltip 参考，不得伪造运行窗口。
-- 设置与顶栏 UI 必须复用 radix-nova/shadcn、主题 token、现有 Field/Progress/Tooltip 与 container query，不新增颜色、CSS、层级或解释性文案；宽窄窗口和键盘/Tooltip 可访问性均属于验收范围。
-
-### 提交与基准盘点
-
-- 2026-08-25 00:00–23:59 CST 共 5 个提交：`dd38e75625ce89f491ffe26bd3234540dee64079`（Drive 大目录回收站）、`876e2223c2a71d10f469b4cfc7ffdb7e26605449`（部署维护）、`7b474594f41fbea0c12cca18c0de0539f3b82c68`（Git diff）、`a41ba9a8dc83f195d6933524045efc938e651882`（Agent 附件与 Slash）、`f937c5e73c3ee3525eddcaa820287eac461d9d7f`（Drive Markdown/Mermaid）。
-- 当日直接形成、午夜后连续提交的是 `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`（2026-08-26 01:02:27 CST，Agent 附件链路、MCP router、模型目录与上下文能力）；本轮主范围均位于该提交，纳入当日连续变更。
-- 用户指定基准 `db1890741738f5d9a7e93ab8b940a0a0887f9832` 与当前 HEAD 的 merge-base 相同；区间共 173 个文件、17,354 行新增、4,522 行删除。第 1 轮深入 Agent/MCP/模型/上下文及其 IPC、history、export、规则，Drive/Git 仅完成提交与边界盘点，留给后续轮次深入。
-
-### 第 1 轮修改点矩阵（19 项）
-
-| # | 修改点 | 代码 / 提交 | 用户可感知行为 | 自动化测试 | 实机用例 | 本轮状态 |
-|---:|---|---|---|---|---|---|
-| 1 | 实验开关默认值、非法值迁移、备份/IPC | config types/default/normalizer/backup；`5c2ac491` | 升级或缺字段时保持关闭 | config/backup/IPC 专项 | 设置初始关闭，结束恢复关闭 | 通过 |
-| 2 | 设置“实验功能”分组与开关 | settings data/category；`5c2ac491` | 可保存开关，不增加解释层级 | settings data/category | 宽屏及主窗口最小宽度切换 | 通过 |
-| 3 | 设置行响应式与右缘对齐 | SettingsGroup/SettingsFieldRow；`5c2ac491` | 开关、重置、服务器状态右缘一致 | settings layout | 账号/基础/实验三页宽窄观察 | 通过 |
-| 4 | 新会话快照与旧会话兼容 | ConversationRouter/SessionRepository/runtime service；`5c2ac491` | 仅新会话采用创建时开关，旧会话不漂移 | router/repository/config | 关闭旧会话→开启→旧会话无路由、新会话进入路由/回退 | 通过；旧会话测试轮已取消 |
-| 5 | 第三方 Provider scope 与 Anthropic 官方排除 | provider helpers/session manager；`5c2ac491` | 仅第三方兼容端点进入实验路由 | provider/session manager | 百炼 qwen3.7-plus 新会话 | 通过；官方端点只做自动化 |
-| 6 | discovery、其它 MCP 严格重建与整会话回退 | synapse-tool-router-query；`5c2ac491` | 无法等价重建时恢复完整 MCP并提示一次 | router query | 项目会话安全回退；本地会话正常路由 | 通过 |
-| 7 | 223 工具目录与中英文搜索排序 | synapse-tool-router；`5c2ac491` | 中英文通用文件列表优先正确工具 | router catalog/ranking | 中文请求搜索到自动化触发器工具 | 通过 |
-| 8 | invoke 包络、取消、结果归一化 | synapse-tool-router；`5c2ac491` | 精确名称调用并保持原结果/取消语义 | router invocation | router search→真实只读工具→3 个类型 | 通过 |
-| 9 | invoke MCP 风险注解 | synapse-tool-router；本轮修复 | 模型不再把可写统一入口误认为只读/封闭世界 | 新增注册元数据回归 | 真实只读调用冒烟 | 红灯命中并修复，实机通过 |
-| 10 | Persona、permission mode、tool policy | ClaudeSDKSession/session manager；`5c2ac491` | 路由调用仍按原工具权限审批/拒绝 | session permission/persona | 当前“跳过权限确认”模式只读调用 | 自动化通过；未改用户权限模式 |
-| 11 | 子 Agent、真实工具名、toolUseId、事件投影 | ClaudeSDKSession/history mapper；`5c2ac491` | 时间线/权限卡显示真实 Synapse 工具 | session/timeline/history | 恢复后显示真实 `app_automation_trigger_type_list` | 通过；子 Agent 只做自动化 |
-| 12 | 回退提示及内部原因脱敏 | ClaudeSDKSession/events/history/export；本轮修复 | 只显示通用回退状态，内部原因不进入持久事件/导出 | 新增 fallback payload 回归 | 项目会话回退 + 调试包全文检索 | 红灯命中并修复，实机/导出通过 |
-| 13 | 模型目录 schema、来源、更新门禁 | model-capability catalog/updater；`5c2ac491` | 打包快照可校验、异常下降拒绝 | catalog/check | Tooltip 显示 Alibaba Cloud 与 2026-08-25 | 通过；更新时戳语义列风险 |
-| 14 | Base URL + 精确模型/别名匹配与未知降级 | model-capability catalog；`5c2ac491` | 仅已知精确端点/模型配置窗口 | catalog exact-match | 百炼 qwen3.7-plus 显示 1M | 通过；未知模型只做自动化 |
-| 15 | 用户环境变量优先与 SDK session 复用键 | catalog/session manager；`5c2ac491` | 显式窗口不覆盖，派生配置变化重建 | catalog/session manager | 不读取/不改凭据与 env | 自动化通过，实机无侵入核验 |
-| 16 | 主线程上下文聚合与子线程隔离 | context-usage/ClaudeSDKSession；`5c2ac491` | 顶栏实时显示主线程实际占用 | context/session | 历史 96.8K、新会话 39.7K、主/独立窗口 | 通过 |
-| 17 | `/compact` 后权威刷新与失败清空 | context-usage/ClaudeSDKSession；`5c2ac491` | 压缩后不显示摘要 token 或旧值 | context/session | Slash 菜单出现 `/compact`，未触发计费压缩 | 自动化通过；实机仅菜单边界 |
-| 18 | 上下文 IPC、history metadata、export 投影 | ipc-shared/timeline/export；`5c2ac491` | 恢复实际窗口与官方参考，不泄露内部字段 | IPC/history/timeline/export | 切换恢复 + 两份 ZIP 脱敏检索 | 通过 |
-| 19 | 主/独立窗口宽窄顶栏与 Tooltip 可访问性 | AgentContextUsageIndicator/workspace；本轮修复 | 两种窗口响应式一致，键盘可打开详情 | 新增键盘焦点回归 + UI 专项 | 主窗口支持最小宽度、独立窗 700→430px、键盘 Tooltip | 红灯命中并修复，实机通过 |
-
-### 首轮代码审查发现
-
-- **缺陷：** `synapseToolRouterFallback` 把内部安全原因枚举写入通用 `sdkEvent.payload`；事件先于 history projection 持久化，违反设计中“reason 不进入 events/history/export”的边界。回归从期望空载荷稳定失败，修复后只保留一次通用事件；诊断原因仍由 router query 的结构化日志记录。
-- **缺陷：** 统一 `invoke` 能调用可写、破坏性和外部世界工具，却声明 `readOnlyHint: true / destructiveHint: false / openWorldHint: false`。这不会绕过宿主 PermissionGuard，但会误导模型规划。按可调用能力上界改为 `false / true / true`，`search` 保持只读。
-- **缺陷：** 顶栏 Tooltip trigger 是不可聚焦的普通 `span`，键盘用户无法触达模型上限和来源详情。新增焦点回归后补 `tabIndex=0` 与主题 token 焦点环。
-- **缺陷：** SDK 会在连续 `thinking_delta` 之间插入 `system/thinking_tokens` 元数据事件，ConversationRouter 原先把任何非思考事件都当成过程边界，导致历史恢复后每个词组成为独立“思考过程”。实机复现后新增交错元数据回归，修复为仅忽略不改变内容边界的 `sdkEvent`；工具、文本和结果仍会刷新思考块。
-- **无问题：** 新会话快照不在旧会话恢复时重读全局值；第三方 scope、Provider 变化重建、精确模型匹配、用户 env 优先、SDK 配置复用键、主/子线程上下文隔离、compact 失败清空、真实工具权限投影均未发现契约偏差。
-- **待后续风险：** 更新脚本把 `GENERATED_AT` 固定为首版日期；`generatedAt` 语义与刷新命令可能不一致，但脚本并未逐一重新抓取直连来源，不能把全部 `verifiedAt/retrievedAt` 简单刷成当前时间。本轮不制造虚假核验，建议下一轮把“快照生成时间、实际抓取时间、人工核验时间”拆开设计并补命令级回归。
-
-### 第 1 轮实机证据
-
-- **设置宽屏：** 前置为主窗口正常宽度；依次进入账号、基础设置、实验功能；服务器状态、重置按钮、实验开关均贴右缘且无多余层级。结果通过。
-- **设置窄屏：** 将主窗口拖至应用允许的最小宽度（代码下限 880px）；三处右侧动作仍对齐且无截断。结果通过。
-- **默认关闭与快照：** 前置为开关关闭并已有百炼会话；开启后旧会话请求未获得 router 工具并取消，新建项目会话触发一次安全回退，新建本地会话实际执行 router search→invoke；结束时开关恢复关闭。快照边界通过，旧会话取消轮保留。
-- **路由正常路径：** 新建本地会话，发送无敏感请求“列出自动化触发器类型”；过程调用 router search 后投影真实 `app_automation_trigger_type_list`，返回 `builtin.cron/interval/webhook`，上下文 39.7K/1M。结果通过。
-- **路由回退路径：** 新建项目会话发送同一只读请求；UI 只显示通用回退提示，完整 MCP 调用成功。结构化日志内部原因为 `explicit-permission-rule`，没有出现在 UI。结果通过。
-- **历史恢复：** 新会话首段连续思考夹有 20 个 `thinking_tokens` 元数据事件；切换到另一会话再返回后仍为一个完整思考块，工具边界后的思考另行分段。结果通过。
-- **导出脱敏：** 通过 UI 分别导出正常 router 与回退会话，ZIP 全内容检索 `explicit-permission-rule`、fallbackReason 及常见 API key 字段均无命中。结果通过；测试包保留在 Downloads 供主任务复核。
-- **上下文与 Tooltip：** 主窗口历史会话显示 96.8K/1M·10%，新会话显示 39.7K/1M·4%；键盘能打开已用/剩余、运行窗口/模型上限、最大输入/输出、官方来源与日期。结果通过。
-- **独立窗口宽窄：** 700px 宽显示 96.8K/1M·10%；缩至约 430px 后收敛为“上下文 10%”，标题、操作和用量区无横向溢出；Shift+Tab 打开完整 Tooltip。结果通过，随后关闭独立窗口。
-- **Slash：** 输入 `/` 后原生命令区出现 `/compact — Compact the current agent context`；未执行压缩，避免不必要模型调用。结果通过到菜单边界。
-- 本轮共发起 4 次最小百炼调用：旧快照会话 1 次取消、项目回退会话 1 次成功、本地 router 会话 2 次成功；请求均只查询内置触发器类型，不含用户数据或凭据。
-
-### 第 1 轮自动化与门禁
-
-- 初始三缺陷红灯：3 个文件、93 项中 90 通过/3 失败；修复后 93/93 通过。
-- 历史碎片红灯：ConversationRouter 定向 1 项稳定失败；修复后定向 1/1、整文件 70/70 通过。
-- 最终组合专项：24 个文件、523/523 通过，覆盖配置、目录、Runtime、router、session、IPC、history/export、timeline、设置和顶栏 UI。
-- `model-capabilities:check`：116 条通过；Desktop typecheck、IPC codegen、hard constraints、renderer production build、Electron/preload production build、`git diff --check` 全部通过。
-- 测试期间出现既有的 Electron mock `app.getPath/getAppPath` 兼容日志，所有测试仍通过；renderer build 只有既有大 chunk 警告。本轮未修改打包结构，因此没有重做 macOS 安装包或 `check:packaged-asar`。
-
-## 阶段 18：主流模型能力目录
-
-- 阿里云帮助中心把完整正文放在 `window.__ICE_PAGE_PROPS__` 的结构化 JSON 中；更新器可稳定解析其中表格，无需依赖页面视觉抄录。当前公开文本生成能力表得到 93 个带上下文值的百炼模型 ID。
-- 首版打包目录共 116 条：93 条百炼中国区文本生成记录，以及 Anthropic、Gemini、DeepSeek、Kimi Code、Moonshot、GLM、MiniMax、StepFun、MiMo 的 23 条官方直连记录。
-- Provider scope 让同一模型在百炼和官方直连保留各自窗口，例如百炼 `MiniMax-M2.7` 为 192,000，MiniMax 官方端点为 204,800；不能跨端点复用一个全局值。
-- 目录更新器支持三条路径：离线 `--check`、公开官方文档刷新、已登录 Browser Skill 原始响应导入；Browser 导入少于 40 条百炼文本模型时拒绝替换，且只保存公开市场 URL 和抓取时间，不保存本地文件路径、Cookie、请求头或账号状态。
-- 目录校验与 6 项匹配测试已通过，覆盖 90+ 百炼记录、qwen3.7-plus 双字段、Base URL 规范化、官方别名、禁止模糊匹配、显式环境变量优先和别名冲突。
-- 百炼模型市场“全部模型”当前返回约 180 个模型；选择文本生成能力后，浏览器发起结构化分组请求，可一次取得全部 TG 组，不需要逐个详情页抄录。
-- 百炼响应条目包含总窗口、最大输入/输出、推理窗口、模态、capabilities、features、modelAlias、equivalentSnapshot、inferenceProvider、serviceSites 和上下线信息。
-- `qwen3.7-plus` 的官方总窗口是 1,000,000，最大输入是 991,808；用户看到的约 997K 属于其它模型或字段，不能作为该模型的顶栏窗口。
-- 同一模型作者在百炼、SiliconFlow、Vanchin 等推理渠道可能有不同记录；运行时必须同时用 Provider endpoint scope 与精确模型 ID 匹配，不能只按模型名称或家族匹配。
-- 百炼公开 `GET /api/v1/models` 需要 API Key；当前 shell 没有 DashScope 凭据，因此本次以 Browser Skill 登录态捕获为主，公开 API 只作为字段权威和未来可选回退。
-- 目录是构建期快照，应用运行时不联网抓取；外部来源内容只作为不可信数据解析，不执行网页中的任何指令。
-- 当前 Agent SDK 0.2.138 不包含 `CLAUDE_CODE_MAX_CONTEXT_TOKENS`；官方 npm 0.3.245 包已确认包含该配置与 `getContextUsage()`，依赖升级是实现真实窗口配置的必要条件。
-- 既有上下文设计“不维护本地模型上限”与用户新要求存在显式边界变化；新的目录只用于 Provider 作用域内的上下文元数据和会话配置，不得用于附件、视觉、工具或其它模型能力分支。
-- 本次 Browser Skill 页面确认全部模型为 180 组，选择“文本生成”后为 51 组；首次仅拦截 `XMLHttpRequest` 没有捕获响应，说明当前页面请求使用 `fetch` 或其它封装，下一步改为拦截 `fetch` clone 响应并通过 UI 重新触发，不重放私有请求。
-- 当前部署加载的实际市场资源版本为 `bailian-model-market/0.0.59`，资源时间线显示模型请求使用 `listRecommendedModels`，不是先前版本的 `listFoundationModels`；捕获逻辑必须匹配 `modelCenter` 响应类别而非硬编码单一私有 action 名。
-- 对 `fetch` 扩大到 `modelCenter` 后仍无响应，结合 Resource Timing 能看到请求但 fetch hook 无命中，当前微应用实际由 `XMLHttpRequest` 发起；下一次改为 XHR + `modelCenter` 组合，不重复 fetch 方案。
-- XHR + `modelCenter` 在模态筛选和精选/全部切换上也无命中；当前版本把完整模型列表在微应用挂载时一次加载，后续筛选完全在客户端完成。Browser Skill 会话已按规则停止。若继续浏览器采集，必须通过路由卸载/重新挂载模型市场来触发初始请求，而不是再点筛选。
-- 路由卸载/重挂载也未在顶层页面 hook 中暴露响应，第二个 Browser Skill 会话已停止；不能声称已保存控制台响应体。
-- 阿里云公开的“文本生成”官方文档提供可机器读取的模型 ID、上下文、思考、Function Calling、内置工具和结构化输出表；“文本生成模型列表”另列出当前模型市场的完整模型 ID 与详情链接。首版目录改用这两份官方公开资料作为百炼事实源，Browser capture 作为后续可选补充而非阻塞条件。
-- 官方公开表确认当前代表值：Qwen3.7 Plus/Flash 1M、DeepSeek V4 Pro/Flash 1M、GLM-5.2 1M、Kimi K2.7 Code 256K、MiniMax M3 192K、MiMo v2.5 Pro 1M；旧版和第三方常用条目也有上下文表。
-- 运行时链路最终确认：tier/Persona 模型解析完成后，用规范化 Base URL 与精确模型 ID/官方别名匹配；显式 Provider 环境变量不被覆盖，目录派生窗口参与 live session 复用键。
-- SDK 实际窗口与目录官方上限保持双字段：顶栏只使用 `getContextUsage()` 的实际窗口，目录上限、最大输入/输出和核验日期只进入 Tooltip 与历史 metadata。
-- SDK 0.3.245 随包 Claude Code 二进制版本为 2.1.245；正式 arm64 包内已确认存在当前平台二进制和完整 116 条目录 JSON。
-- 真实百炼新会话最终返回 `93.3K / 1M · 9%`，证明 `qwen3.7-plus` 的 1,000,000 配置已被 SDK 接受；旧会话仍显示 200K 符合“配置只作用于新会话”的边界。
-
-## 阶段 17：Synapse MCP 搜索排序优化
-
-- 真实百炼日志确认 router 主链路生效，但 `list files drive` 的初始 Fuse 排序依次为站点启用、回收站列表、普通文件列表；目标工具虽然被模型正确选中，排序本身不符合通用意图优先原则。
-- 根因是 Fuse 对整句做模糊匹配，缺少分词后的命中覆盖、规范 action 精确度和同一语义文本内的词距信号。
-- 优化继续保留 Fuse 处理拼写容错和候选召回，在其上按 capability title、名称、action、描述、schema 和 domain alias 做词法重排；同等覆盖时优先规范 action 更短、更精确的通用工具，再比较词距、Fuse score 和名称。
-- 中文自然表达额外把云盘、文件/文件夹、列表/列出/清单映射为规范索引词；这是本地领域检索词汇，不依赖 Provider 或模型白名单。
-- 回归锁定 `list files drive` 与“查看云盘文件列表”均把 `app_drive_item_list` 排在第 1，同时保留精确名称、中文 domain、schema、稳定排序、空结果和 1–5 限制。
-
-## 阶段 16：Synapse MCP 工具按需加载
-
-- Claude Agent SDK 0.2.138 的 `disallowedTools`、运行时 MCP toggle 和同名 programmatic server 覆盖都不能可靠移除原 `synapse-mcp` schema。
-- 已验证的可行链路是：无模型请求的 SDK discovery 读取有效 MCP 配置，排除 `synapse-mcp`，再以 `strictMcpConfig: true` 保留其它 MCP 并注入独立的 `synapse-tool-router`。
-- 实验只适用于新对话固化开启且使用第三方 Anthropic-compatible 端点的场景；Anthropic 官方端点保持原生 Tool Search。
-- 任何 discovery 配置无法安全重建、重复 server 名冲突或显式权限规则引用 `mcp__synapse-mcp__*` 时，必须回退完整 MCP，不能牺牲其它工具或权限语义换取 token 节省。
-- `docs/agents/knowledge-base.md` 的“不得程序化注入 MCP”需要增加上述显式实验的窄例外；默认路径、知识库专用能力和公开 `/mcp` 均保持不变。
-- 当前工作区包含附件、上下文统计、Git 和 Drive 的大量用户改动；阶段 16 只增量修改命中的设置、Agent Runtime、能力文档和测试，不覆盖既有工作。
-- Settings 的通用数据模型支持 item 自定义 `getValue/createPatch`，Agent 开关可直接写入现有 `config.agent`，无需新增 IPC 或跨模块状态。
-- Settings 主页面会自动渲染普通 `toggle` item；新增分类、data item 和现有 category/layout 测试即可，不需要新面板或样式。
-- 新对话由 `ConversationRouter` 与 `SessionRepository` 创建并持久化 provider/agent/persona 快照；实验开关必须在这条主进程创建链固化，而不是由 Renderer send payload 决定。
-- Provider 判定已有 `isThirdPartyAnthropicCompatibleBaseUrl()`：无 base URL 或 Anthropic 官方 host 不启用；其它/非法自定义 URL 视为第三方。该逻辑可直接复用并导出测试，不增加模型白名单。
-- Claude SDK 当前类型确认 `Query.initializationResult()`、`mcpServerStatus()`、`resolveSettings()`、`createSdkMcpServer()`、`tool()` 和 `strictMcpConfig` 均存在；`McpServerStatus.config` 可返回 stdio/SSE/HTTP/sdk 描述，`claudeai-proxy` 不能作为 programmatic `mcpServers` 直接重建，必须回退。
-- 有效权限规则位于 `resolveSettings().effective.permissions.allow/deny/ask`；只要任一规则引用 `mcp__synapse-mcp__` 就回退完整 MCP，避免泛化 invoke 改变语义。
-- 最终实现中的 `strictMcpConfig` 不是直接开启：它只在 discovery 已取得所有有效 server 配置、逐项确认可安全重建并显式保留其它 MCP 后用于正式 query。早期“直接开启会隐藏其它 MCP”的结论仍成立，但不适用于这条先发现、后完整重建的受控路径。
-- Provider 判定同时检查元数据与端点：`category: official` 无论代理 URL 如何都保持原生模式；无 base URL、Anthropic 官方 host 也不启用。其它非官方端点不维护模型名白名单。
-- Router `invoke` 的 SDK 表面是 wrapper，但 canUseTool、Persona、子 Agent、permission card、toolUse/toolResult 和 history 全部恢复为规范 `mcp__synapse-mcp__<app_*>`；底层 action dispatcher 继续执行权限与审计。
-- 公开能力注册没有变化：内部 `search/invoke` 不进入 capability catalog、`/mcp tools/list` 或 Claude Code 注册，225 capability / 223 MCP tool 数量保持不变。
-
-## 需求
-
-- Synapse Agent 对话需要稳定支持用户一次选择、粘贴或拖入最多 50 张图片。
-- 同一能力还要正确处理普通文件和文件夹。
-- 方案以稳定可用、功能正常和多 Provider 兼容为优先，不以改动最少为目标。
-- 用户认为全量 Base64 方案不合理，需要结合 Claude Agent SDK、Codex 行为和当前代码重新设计。
-- 用户已在后续消息中明确授权全自主逐阶段实施阶段 1–9，包括产品代码、测试和必要文档更新。
-
-## 当前实现
-
-- 当前 Composer 会把粘贴或拖入的图片 File 转成 ArrayBuffer 并保存在草稿中。
-- 系统文件选择器会在主进程读取图片字节，再把 ArrayBuffer 返回 Renderer。
-- 发送 IPC 再把完整图片字节传回主进程。
-- Agent runtime 的 buildClaudeUserMessageContent 会把本轮每张图片转换成 Claude SDK Base64 image block。
-- 当前限制为最多 8 张、单张 10 MiB、图片总量 20 MiB。
-- 文件和文件夹不作为字节块发送，而是加入路径上下文并通过 additionalDirectories 授权。
-- 对单个外部文件，当前实现会授权它的父目录，权限范围大于用户明确选择的文件。
-- 当前 `AgentImageAttachment` 仍直接携带 `ArrayBuffer | Uint8Array`，`buildClaudeUserMessageContent` 对每张图片同步转 Base64；这是阶段 2–4 要替换的精确边界。
-- 当前用户消息展示元数据版本为 1，图片依赖发送前持久化得到的 artifact，路径附件仍保存绝对路径。
-- 当前 `directoriesForPathAttachments` 对外部单文件返回其父目录，确认阶段 6 的最小权限问题在现有实现中真实存在。
-- 桌面端使用 `@anthropic-ai/claude-agent-sdk ^0.2.138`；阶段 5 必须以实际安装类型验证进程内 MCP 图片结果支持，不能仅依赖旧计划示例。
-
-## 已完成任务的影响
-
-- “增强聊天气泡图片显示”任务已经完成，并通过 250 项附件专项测试、desktop typecheck、hard constraints 和 diff 检查。
-- 它已经实现用户图片持久化、结构化历史附件、1–8 图宫格、灯箱、失败回退、文件与文件夹打开、删除清理和孤儿重试。
-- 历史中只保存图片 artifact 元数据和安全 URL，不保存 Base64 或原始字节。
-- 这项修改是新方案的基础，不需要重新建设聊天气泡和持久化展示。
-- 它没有修改 Claude SDK 模型输入方式，因此不解决 50 图的请求体、内存和 Provider 兼容问题。
-- 现有 `AgentArtifactStore` 已提供受控根目录、SHA-256、DataRepository 元数据、会话删除与孤儿会话清理，可直接演进为暂存服务，避免另建并行存储。
-- 现有 artifact 写入使用 `writeFile` 直接落最终路径，schema 为 v1 且强制 conversation/turn；尚无 draft scope、staged/committed 状态、原子 rename、缩略图/预览衍生物或配额。
-- `agent.artifacts` 已有 conversation/turn SQLite 索引，升级 v2 时应保留 v1 验证兼容，并新增 draft/status/过期查询所需索引。
-
-## 为什么不能直接提高到 50 张
-
-- 原始字节在 File、ArrayBuffer、IPC 序列化、主进程对象和 Base64 字符串之间可能同时存在。
-- Base64 通常会比原始二进制增加约三分之一体积，还会产生额外字符串内存。
-- 50 张图片会把 Renderer 和主进程内存峰值、IPC 拷贝和模型请求体同时放大。
-- Anthropic 官方、百炼兼容端点和自定义兼容端点的图片数量与请求体限制并不一致。
-- 单纯依赖发送失败后重试，会出现 0 秒失败、草稿丢失或不确定请求是否已被接收的问题。
-
-## Base64 的正确边界
-
-- Base64 不是错误格式；对于本地图片直接进入 Claude 消息，它仍是通用且合法的最终传输格式。
-- 错误的是让 Base64 或完整图片字节贯穿 UI、IPC、历史和大批量单次请求。
-- 正确做法是选择时受控落盘，内部只流转附件引用，只在最终 SDK 组包时为小批量或单个工具结果临时编码。
-- URL 和 Provider Files API 可以作为未来的可选策略，但不适合作为多 Provider 基础架构。
-
-## Claude Agent SDK 相关能力
-
-- SDK 支持在用户消息内容中传入 Base64 image blocks。
-- SDK 支持 additionalDirectories，使 Claude 内置 Read、Glob 和 Grep 可以访问额外路径。
-- SDK 支持 createSdkMcpServer 和进程内工具，MCP 工具结果可以返回图片内容。
-- 因此可以建立只读、会话绑定的附件服务，让模型按 attachmentId 分批取图。
-- 需要用当前安装版本的类型与集成测试再次确认图片型工具结果在各 Provider 下的真实兼容性。
-- 已核对本地 `@anthropic-ai/claude-agent-sdk` 类型：`createSdkMcpServer({ name, version, tools, alwaysLoad })` 返回带进程内 `McpServer` 实例的 `McpSdkServerConfigWithInstance`，可直接放入 SDK `mcpServers`；工具 handler 返回 MCP content block，因此实现进程内只读附件工具在 SDK 契约上可行。
-- SDK 类型只证明本地 Anthropic Agent SDK 可以承载 MCP 图片 content；不证明所有自定义/百炼兼容端点都接受图片型 tool result，能力画像仍需保守区分。
-
-## 当前 IPC 精确边界
-
-- 主进程选择器 `attachmentCandidatesFromPaths` 读取图片完整文件并把 `ArrayBuffer` 返回 Renderer；发送 schema 又接收完整字节，构成明确的双向 IPC 字节链路。
-- 现有限制定义在 `desktop/electron/modules/agent/ipc-messages.ts`：8 张、单张 10 MiB、合计 20 MiB；Renderer 草稿 `AgentDraftImageAttachment` 也直接保存 `bytes: ArrayBuffer`。
-- 路径选择会递归扫描文件夹并拒绝其中任一符号链接；这会让大目录选择成本与目录规模绑定，阶段 6 应改为只验证精确根目录与读取时边界，而不是预扫描整个树。
-- Agent IPC 的实际回归测试文件是 `desktop/electron/modules/agent/__tests__/ipc.test.ts`，不是旧计划中的 `ipc-messages.test.ts`。
-
-## 推荐架构
-
-### 1. 受控暂存
-
-- 选择、粘贴和拖拽统一进入主进程 AttachmentStagingService。
-- 主进程流式读取、校验、原子写入，并生成 SHA-256、缩略图和模型预览图。
-- Renderer 只拿 AttachmentRef 和受控预览 URL。
-- 原始图片不进入会话历史、日志、导出或配置备份。
-
-### 2. 生命周期
-
-- staged：属于草稿，可移除、可超时清理。
-- committed：消息成功入队和历史提交后归属于 conversation/turn。
-- orphaned：提交中断或删除失败，进入可重试清理。
-- 应用启动时进行有界恢复，不阻塞主窗口。
-
-### 3. 自适应派发
-
-- 小批量：根据 Provider 安全预算直接 inline。
-- 大批量：发送编号总览图与 manifest，模型通过 attachment_read 分批获取预览或原图。
-- 不支持视觉或工具图片结果：在发送前降级或拒绝，保留草稿。
-- Base64 只在最终组包或单次工具结果中短暂出现。
-
-### 4. 总览图
-
-- 使用 Electron nativeImage 或已有能力在本地生成一个或多个编号总览图。
-- 总览图只用于定位和全局理解，不能替代原图细节分析。
-- 每张原图都有稳定编号，manifest、总览图和 attachmentId 一一对应。
-- 用户要求检查全部时，系统提示 Agent 必须按批次读取全部编号。
-
-### 5. 内部附件工具
-
-- attachment_list 只返回当前用户轮次的可信 manifest。
-- attachment_read 只接收 attachmentId、detail 和有界 ID 列表。
-- 工具不接受任意本地路径。
-- 每次调用限制图片数、像素、解码后字节和响应体。
-- 会话、conversation、turn、MIME、哈希和所有权全部由主进程校验。
-
-### 6. 文件与文件夹
-
-- 单文件复制到受控存储后再让 Agent 读取，避免授权原父目录。
-- 明确选择的文件夹继续走精确 additionalDirectories。
-- 文件夹不递归复制，避免大目录磁盘和耗时风险。
-- 普通文件优先交给 Claude Read 等工具，不统一转 Base64。
-
-## Provider 能力画像
-
-建议字段：
-
-- vision
-- inlineImage
-- imageToolResult
-- urlImage
-- providerFileId
-- maxInlineImages
-- maxInlineImageBytes
-- maxRequestBytes
-- preferredBatchImages
-- preferredPreviewPixels
-- verifiedAt
-- source
-
-未知或自定义 Provider 使用允许图片内联的保守预算，不按模型名称设置白名单。能力画像仍区分“文档声明”“保守默认”和“用户手动覆盖”。
-
-## 配额建议
-
-- 产品数量上限：50 张。
-- 初始单张上限：沿用现有 10 MiB。
-- 单轮暂存总量必须允许 50 张达到单张上限，即至少 500 MiB 级别，但实现必须流式处理，不能一次载入内存。
-- 单次模型读取批次远小于单轮存储配额，具体值由 Provider 契约和压测确定。
-- 还需要会话级和全局磁盘配额、LRU 或过期清理以及清晰的用户错误。
-- 数量上限与字节上限同时生效；“支持 50 张”不代表支持任意尺寸或 RAW 格式。
-
-## 安全结论
-
-- 用户明确附加某个文件，等价于授权读取该附件本身，不等价于授权其父目录。
-- 内部附件读取是消息输入基础设施，不应成为任意文件系统工具。
-- 内部 artifact 路径不进入模型提示、日志、历史或导出。
-- 必须防御路径穿越、符号链接逃逸、TOCTOU、伪造 MIME、跨会话 attachmentId 和已删除附件复用。
-- 外部读取、受控写入、删除和工具访问均需经过 PermissionGuard 与 AuditSink。
-
-## 失败与重试
-
-- 预检失败：不入队、不创建模型轮次、保留草稿。
-- 暂存失败：只标记失败附件，允许移除或重新选择。
-- Provider 明确拒绝且可确认未接收：允许重新规划一次。
-- Provider 状态不确定：禁止自动重发，避免重复用户轮次。
-- 工具读取失败：返回结构化错误和失败 ID，不把路径或二进制写入日志。
-
-## 代码范围
-
-- Renderer：Agent composer、连接 hook、消息附件和类型。
-- IPC：Agent message schema、shared contract、tools 与 preload bridge。
-- Runtime：artifact store、attachments、conversation router、Claude SDK session、session manager。
-- Provider：preset、store、schema、能力画像和错误归一化。
-- Persistence：Agent artifact schema v2、迁移、引用和清理。
-- Docs：附件设计、runtime security、knowledge base、Agent 指南、必要的 capability 说明和发布说明。
-
-## 当前工作区注意事项
-
-- 2026-08-25 恢复时 `git status --short` 仅显示三份规划文件有修改；先前记录的产品代码改动当前已不在未提交工作树中。
-- 后续实现仍以当前已落入仓库的附件能力为基线，逐阶段做聚焦 diff。
-- 不得覆盖或回退用户及其它 Codex 任务的现有修改。
-- 当前规划文件已按用户要求重置，旧规划历史不再保留在这三份活动文件中。
-
-## 阶段 1 规则发现
-
-- 当前附件设计的 Hard Rules 明确要求所有图片直接成为 SDK `image` block；这与 50 图有界请求目标冲突，必须先修订设计文档再改变实现。
-- Renderer 必须只通过类型化 preload bridge 访问暂存能力；主进程 handler 只校验和调度，文件系统、原子写入、权限与审计下沉到 service。
-- 用户可感知附件行为必须同步更新 `RELEASE_NOTES_PENDING.md`；新增运行时工具若进入能力注册面，还需同步 capability registry、系统 Skill 和 Agent 指南。
-- UI 改动继续使用现有 shadcn/Radix 组件、主题 token 和布局 utility，不新增颜色、样式层或解释性文案。
-- 验证采用专项 Vitest、desktop typecheck、hard constraints 和 diff check，不启动应用或开发服务器。
-
-## 待验证问题
-
-- 百炼当前所选 Kimi 模型对图片数量、单图大小、总请求体和图片型 tool result 的官方限制。
-- 自定义 Anthropic-compatible 端点能否可靠处理 MCP 图片工具结果。
-- Electron nativeImage 对项目需要支持的 HEIC、GIF 和超大图片的解码行为。
-- 50 张典型手机照片暂存、生成缩略图和恢复历史时的实际内存峰值。
-- 内部 MCP 工具是否需要在现有 Persona 工具策略中单独声明基础设施豁免。
-
-## 2026-08-25 官方限制核实
-
-- Anthropic 官方 Vision 文档当前声明：API 每个请求在 200k context 模型上最多 100 张、其他模型最多 600 张；单图最大 8000×8000，超过 20 个图片/文档 block 时应用更严格的单图尺寸限制，跨平台安全做法是边长不超过 2000 px。
-- Anthropic 直连 API 的 Base64 编码后单图上限为 10 MB，Messages API 请求体上限为 32 MB；因此产品“单张原始文件 10 MiB”和“50 张均直接内联”不能同时成立，必须区分存储配额与派发预算。
-- Anthropic 官方支持 JPEG、PNG、GIF、WebP，GIF 只使用首帧；支持 Base64、URL 和 Files API `file_id` 三种图像来源，但伙伴平台能力可能更窄。
-- 阿里云百炼官方 `kimi-k2.5` 页面明确它是原生多模态，输入支持 Text/Image/Video；搜索摘要未给出图片数量、单图字节、Anthropic-compatible 图片工具结果等边界，未声明项必须使用保守能力画像和假端点契约测试，不能沿用 Anthropic 数值。
-- 官方来源：`https://platform.claude.com/docs/en/build-with-claude/vision`、`https://platform.claude.com/docs/en/api/errors`、`https://help.aliyun.com/zh/model-studio/kimi-k2-5`。
-
-## 阶段 1 合成内存基线
-
-- 使用 Node 进程模拟每张 1 MiB 图片在 Renderer Uint8Array、IPC 主进程副本和最终 Base64 请求三层同时存在；该测量用于比较链路放大，不代表 Electron GUI 的绝对 RSS。
-- 1 张：外部内存约从 1.3 MiB 增至 4.6 MiB，请求 Base64 约 1.33 MiB。
-- 8 张：外部内存约从 1.5 MiB 增至 28.2 MiB，请求 Base64 约 10.67 MiB。
-- 20 张：外部内存约从 1.5 MiB 增至 68.2 MiB，请求 Base64 约 26.67 MiB，已接近 Anthropic 32 MB 请求上限且尚未计算 JSON/文本开销。
-- 50 张：外部内存约从 1.5 MiB 增至 168.2 MiB，请求 Base64 约 66.67 MiB，必然超过 Anthropic 32 MB 请求上限。
-- 结论：引用化能移除前两层长期副本，大批量仍必须使用有界 overview/tool 分批读取，不能仅把 Base64 延迟到发送瞬间。
-
-## 安全接入发现
-
-- `PermissionGuard.check` 与 `AuditSink.record` 已是仓库统一边界；附件暂存、受控复制、删除和读取应复用现有 actor/action/resource 结构，审计 metadata 只记录计数、字节、状态和 attachmentId，不记录原始路径或正文。
-- 受控 `userData` 内写入使用现有 `fs.write`；读取外部用户选择源文件使用 `fs.read.outside-userdata`。拒绝时先写 denied 审计，成功/失败分别记录 allowed/failed。
-- DataRepository 的 namespace 泛型不做运行时事务；staged → committed 需要通过单条 metadata `upsert` 变更实现原子状态切换，文件在同一受控根目录中保持稳定身份，避免多文件搬移事务。
-- 现有 migration 框架按 namespace envelope 版本迁移；`agent.artifacts` 当前每条记录已有 `schemaVersion`，升级时需要同时保证旧 v1 行可读取和新 v2 行验证，不能只改常量而让已有行失效。
-
-## 阶段 2 实施发现
-
-- 新暂存服务通过串行 mutation lock 避免并发暂存绕过计数/字节配额；50 张 1 个小 PNG 的测试可稳定通过。
-- 每个受控文件写入临时文件、fsync 后 rename；图片原件、模型预览和 UI 缩略图使用独立路径，默认衍生器保留原字节，后续可从主进程注入 Electron `nativeImage` 缩放而不改变契约。
-- 多附件 commit 先验证全部引用的 project/draft/lifecycle，再逐行 upsert；中途失败会补偿回滚已更新行。DataRepository 当前没有公开事务接口，这是现有边界内最强一致性方案。
-- 单文件 `stagePaths` 使用流式复制到受控目录；文件夹只记录用户明确选择的精确真实路径，不递归扫描也不扩大到父目录。
-- `AgentRuntimeService` 是项目级长生命周期对象，适合作为 staging service 的所有者并向 UI IPC 暴露窄方法；这样同一项目的选择、粘贴、发送和清理共享并发锁与配额视图。
-- 当前 ConversationRouter 在 turnId 创建后才持久化用户图片；引用化后应在同一位置把 staged 元数据 commit 到 conversation/turn，并直接复用受控预览 URL，不再复制一份 user-message artifact。
-- SQLite namespace 构造只更新 meta schema version，不会自动逐行重写 JSON；`agent.artifacts` v2 validator 必须同时接受 v1 与 v2 行，迁移声明保持兼容而不能假定已有行已改写。
-
-## 阶段 3 接入点
-
-- Agent UI IPC descriptor 直接来自 `ipc-messages.ts` 的 `messageMethods`，新增 UI-only operation 后由现有 definitions registry 生成 channel；preload 必须同步提供窄 bridge 方法。
-- 现有 IPC 测试明确断言文件选择返回图片 `ArrayBuffer`，阶段 3 需要把这些测试翻转为返回 staged reference，并给请求增加 `projectId + draftScopeId`。
-- `AgentRuntimeService` 已是项目容器解析出的对象，IPC 可调用其 staging wrapper；不应在每个 IPC handler 临时 new 服务，否则会绕过项目级 mutation lock。
-- Composer 现有单测和附件 strip 依赖 `URL.createObjectURL(bytes)`；引用化后应直接使用受控 `thumbnailUrl/previewUrl`，并删除 Renderer 对 Blob URL 的生命周期管理。
-- 当前 Composer 草稿仍保存 `ArrayBuffer`，发送时再次转换成 bridge `data`；文件选择器也在主进程先读取图片再回传字节。这两段都必须改为项目级暂存服务只返回 ref。
-- 新发送契约只携带 `draftScopeId` 和有序 `attachmentId`；主进程在生成 turnId 后 commit，并只在最终 provider 边界读取受控文件。旧字节结构仅保留在 runtime/旧历史兼容层。
-- `AgentComposer` 当前没有 `projectId` / draft scope 入参，附件选择与拖放也只调用无项目上下文的 bridge；阶段 3 必须由上层会话把当前项目和稳定的 composer draft scope 传入，不能在 picker 内猜测默认项目。
-- `useChatConnection` 还维护 optimistic Blob URL map 和全局 revoke 生命周期；ref 草稿可直接复用受控 `previewUrl`，删除该内存与清理分支后，optimistic timeline 仍能立即显示缩略图。
-- 旧 IPC 除图片字节外还在发送时递归扫描文件夹并重新 `lstat` 路径；引用化后这些校验应只发生在 staging service，发送 handler 不再接受 Renderer 提供的路径或执行第二次目录扩张扫描。
-- ConversationRouter 有两个 turnId 生成/用户历史入口（常规队列与生命周期流），都调用同一个 `prepareUserMessageHistory`；commit/ref 历史逻辑必须落在共享入口或共享预处理方法，避免只修一条发送路径。
-- 粘贴板图片若从 DOM `File.arrayBuffer()` 送 IPC，仍违反阶段 3 的退出条件；应让 Renderer 只发“暂存当前剪贴板图片”命令，由主进程 `clipboard.readImage()` 读取并调用同一 staging service。拖放/文件选择则只传 Electron 提供的绝对路径。
-- `prepareUserMessageHistory` 目前会把 runtime image 再物化为一份 v1 artifact；v2 committed refs 应直接生成现有气泡 metadata，避免受控附件重复复制，同时保留 v1 `attachments` 分支供旧调用者使用。
-- `AgentRuntimeService` 已暴露 stage/commit/release wrapper，且构造 ConversationRouter 时能直接追加同一 staging service 依赖；无需让 IPC 或 router 再访问 DataRepository 内部 namespace。
-- 受控预览 URL 已由 `agentArtifactUrlForRelativePath` 生成并沿用现有 `synapse-agent-artifact://` 协议，因此 Renderer 可直接展示 ref URL，不需要新增协议、file URL 或数据 URL。
-- staging commit 的现有所有权校验要求 draftScopeId；发送 IPC 可以只传 ID/order，由主进程先按 project+ID 解析可信 staged metadata，并从记录中恢复唯一 draftScopeId，再交给 router commit。
-- 当前 staging service 已能读取 committed 受控文件字节，但只返回裸字节；阶段 3 可在 router 最终旧 SDK 边界临时组装 legacy runtime attachment，同时 ref 历史直接复用 v2 URL，下一阶段再把读取纳入 dispatch planner。
-- Renderer 首次引用化 typecheck 只剩测试 fixture 与一个 hook 依赖数组残留，说明生产 Renderer 的 ArrayBuffer/Blob URL 主链已被类型系统切断；测试需同步断言 ref URL 和 ID/order payload。
-- 文件 ref 不再暴露源路径，因此可读正文和乐观气泡只能显示文件名；文件实际受控副本路径仅在主进程临时 runtime attachment 中出现，满足阶段 6 的父目录隔离目标。
-- IPC codegen 可由仓库现有 `pnpm --filter @synapse/desktop run generate:ipc` 生成新增 channel；无需手改 generated 文件。
-- 剩余失败均是测试继续期待 `blob:` 和旧 `{kind,data}` payload，而非生产类型错误；新预期应直接检查受控缩略图/预览 URL 及 `{attachmentId, order}`。
-- 完整 desktop typecheck 已在 Renderer/bridge 初步引用化后通过；下一步专项测试会暴露行为断言和主进程流程问题。
-- `stagePaths` 当前把所有普通文件（包括图片路径）当作 file ref 复制，只有 `stageBytes(kind:image)` 生成 image ref/衍生图；文件选择与拖放图片必须在 staging service 内按扩展候选+魔数识别后走图片持久化，不能在 IPC 重新读字节。
-- 图片路径识别应只把 JPEG/PNG/GIF/WebP 扩展作为“需要视觉校验”的候选，最终仍由魔数决定；扩展伪造必须拒绝而不是静默降级成普通文件。
-- 阶段 3 首轮综合专项 120 tests 中 116 通过；staging 8 项和 conversation-router 65 项全绿，4 项失败均为旧 UI/发送断言，未发现新的 runtime 回归。
-- Agent IPC 测试 harness 使用轻量 agent mock；引用化选择测试应在 mock 中提供 `stageAttachmentPaths`，发送附件测试应提供 `resolveStagedAttachments`，不需要在 IPC 测试里重建真实 staging 文件系统。
-- IPC 专项 55 项中 41 已通过；14 项失败由旧测试仍向 send 提交 path/data 结构导致。新 IPC 的职责是拒绝这些 legacy payload，并把最多 50 个有序 ID 解析为主进程可信 refs；路径/MIME/配额细节已由 staging 专项覆盖。
-- 更新 IPC 契约测试后阶段 3 六组专项已达 175/175；额外 Composer 全量回归暴露测试环境没有 projectId 且统一 bridge fixture 仍返回旧 candidate，生产组件的严格项目上下文不应因此放宽。
-- Clipboard 主进程读取无法恢复 DOM File 原名；Renderer 可以随“暂存当前剪贴板图片”命令附带 name/size 作为纯显示提示，但主进程必须以 `clipboard.readImage()` 的实际 PNG 字节和魔数为准，不能信任提示 MIME/大小。
-- Composer fixture 第一轮升级后已有 55/68 通过；剩余集中在旧 Blob URL、文件源路径 title、path-kind 断言以及少数测试未安装 bridge，均应更新为 ref 身份和最小路径暴露。
-- Composer 全量 68/68 已通过；生产 Agent Renderer 搜索已无 ArrayBuffer、Uint8Array、File.arrayBuffer、Blob URL、data URL 或 Base64 附件链路（bridge.ts 的其它模块二进制接口不属于 Agent）。
-- 常规 router 当前在 queue-limit 和本地 command 路由前 commit，会让被本地处理或因队列已满拒绝的附件变成无历史 committed 记录；commit 必须下移到命令确定需要模型且队列有容量之后。
-- commit 已下移到本地 command 已处理且 queue 有容量之后；普通 legacy 空正文路径附件仍由 `withReadablePathAttachmentContent` 生成模型正文，prompt command 才覆盖 live content。相关 router 65/65 与完整 typecheck 通过。
-
-## 阶段 4 实施发现
-
-- Provider 实体已有 `settingsConfig` 扩展面，能力高级覆盖可存放在 `settingsConfig.attachmentCapabilities`，无需升级 provider schema 或新增 UI 字段；解析器仅接受完整 version 1 且所有预算为非负整数的结构。
-- Anthropic 官方画像使用已核实的 10 MiB 单图、32 MiB 请求体和工具图片能力；初始内联上限主动收紧到 20 张，超过预算转 overview-and-tools。
-- 用户选择的百炼或其它模型不再按名称白名单判断视觉能力；非 Anthropic 官方端点统一允许最多 8 图、20 MiB 的保守内联，图片型工具结果仍按未证实处理。
-- 自定义端点默认允许保守内联；完整高级覆盖可显式关闭视觉或调整预算。Planner 返回冻结的 inline、overview-and-tools 或 reject 计划。
-- 2026-08-25 按用户要求移除模型名白名单：能力解析类型不再接收 `model` 字段；Anthropic 官方以外统一使用 8 图、单图 10 MiB、请求 20 MiB 的保守内联画像，Provider 自行确认所选模型是否支持图片。
-- 阶段 4 专项 68 tests 与完整 desktop typecheck 通过；未实现自动重试，因而天然满足“无法确认未接收时不重试”的去重约束。
-
-## 阶段 5 接入发现
-
-- Claude Agent SDK `Options` 原生支持 `mcpServers: Record<string, McpServerConfig>`，`createSdkMcpServer` 返回带实例的 in-process config，`tool` handler 可返回 MCP image content；无需端口或子进程。
-- `ClaudeSDKSession` 当前在构造时冻结 query options，因此附件 MCP 必须在 SessionManager 创建/恢复 live session 时根据已预检的 message 注入；不能在 `send()` 后再修改 mcpServers。
-- live session 可能跨 turn 复用，附件 MCP 又必须绑定单一 conversation/turn；SessionManager 需要用 attachment transport key 参与复用判断，使带不同附件或下一轮无附件时重建/关闭旧 server，避免工具继续暴露前一轮 manifest。
-- overview-and-tools 计划不能继续 `materializeCommitted` 全部图片；初始 SDK message 只读取 overview IDs，剩余图片仅由 MCP `attachment_read` 在每批上限内读取。
-- 上一轮被截断的路由补丁只落入了“commit 后仍物化全部附件”的中间态，尚未加入 overview ID 选择、turn 绑定和 runtime appendix；继续实现前必须先补齐这三个字段，避免阶段 5 以半成品进入测试。
-- SessionManager 的 session state 已集中保存 provider/model/sdk settings/additional directories，适合新增单一 `attachmentTransportKey`；ClaudeSDKSession 的构造输入则可直接扩展 `mcpServers`，不需要改变通用 AgentLiveSession 接口。
-- SessionManager 复用判定发生在 provider 环境、persona 与 SDK settings 全部解析之后；附件 transport key 应在同一区域提前解析并加入 `canReuseBaseSession`，重建分支也要把 key 变化写入结构化日志和 state reset。
-- ClaudeSDKSession 的用户消息内容仅在 `send()` 通过 `buildClaudeUserMessageContent` 构造；阶段 5 的运行时指令可以只拼到这一次 SDK 输入，不进入持久化的 `message.content`，从而避免内部工具提示污染对话历史。
-- Staging service 已具备 turn/project/conversation 四重所有权校验、批次数量和累计字节预算，MCP 层只需再用本轮 manifest 白名单约束 ID 并把结果转换成 image content；工具层不应重新接触存储路径。
-- 本地 Claude Agent SDK 类型声明确认 `createSdkMcpServer` 与 `tool` 可直接导入，`Options.mcpServers` 接受 in-process config；实现应只扫描 `.d.ts`，避免对压缩后的浏览器 bundle 做宽泛搜索造成无效大输出。
-- 路由概览策略已改为只物化 `overviewAttachmentIds` 与非图片附件；完整 committed refs、turnId 和内部读取指令仍随运行时消息传递，用户历史继续只保存原正文与引用元数据。
-- 阶段 5 接线后的完整 desktop typecheck 已通过；附件工具测试可直接复用 staging 专项的内存 namespace，SessionManager 现有 FakeLiveSession/createSession input harness 可验证 transport key 导致跨轮重建。
-- 阶段 5 的 168 项专项已全绿，覆盖 MCP 注入、运行时 appendix、跨 turn session 重建、plain turn 移除服务、manifest 无路径与批量/所有权拒绝。
-- 生产 `AttachmentStagingService` 尚未注入 `createImageDerivatives`，默认 preview/thumbnail 仍复用原字节且缺尺寸；完成阶段 5/7 前必须用 Electron nativeImage 在主进程生成有界衍生图，并让工具像素预算基于可信尺寸生效。
-- 衍生图可能改变编码格式（GIF/WebP 缩放后统一 PNG），因此 v2 元数据需要可选保存 preview MIME、preview SHA 与 preview 尺寸；旧 v2 行继续由可选字段兼容，工具对新记录执行像素和完整性校验。
-- 阶段 5 最终 193 项专项与完整 desktop typecheck 全绿；初始请求仅包含最多 4 张编号预览，其余图片只通过 turn 绑定的进程内 MCP 分批读取，下一普通轮会销毁旧 manifest transport。
-
-## 阶段 6 接入发现
-
-- 单文件已经复制进每个 attachmentId 独占的受控目录，SessionManager 即使授权 `dirname(storagePath)` 也只能看到该附件的原件/衍生物，无法读取原文件相邻项。
-- 文件夹当前只对最终路径执行 `lstat`，未检查祖先 symlink 或目录内部 symlink；旧 IPC 的 raw path 安全测试已因新 schema 只验证 legacy payload 被拒绝，必须把真实检查迁到 staging service 并新增对应测试。
-- `directoriesForPathAttachments` 对 directory 使用精确选择路径，对 file 使用受控副本的独占父目录；无需改变 SDK additionalDirectories 算法。
-- 新 ref 历史分支对单文件只保存显示名，不保存受控 storagePath；legacy `attachmentDiagnostics` 仅服务无 ref 的旧消息。文件夹路径仍是用户明确选择且 SDK 必需的精确授权对象。
-- 目录在暂存后仍可能被替换或撤销权限，`materializeCommitted` 应在每次发送前重新执行路径/树安全检查；普通文件则从已提交的受控副本读取。
-
-## 阶段 7 接入发现
-
-- Impeccable 的 Synapse 产品 register 要求保持 Precision Workbench：固定紧凑字号、token-only、标准 Button/Dialog、无装饰动效或新增视觉层，和仓库 UI 硬规则一致。
-- 当前消息附件组件会为全部 images 构建并渲染网格与 lightbox manifest；50 张虽用了 lazy `<img>`，仍会挂载 50 个按钮/图片节点。应把气泡网格限制为前 8 张，并用第 8 格的剩余数量作为打开完整灯箱入口。
-- 预期的 `agent-attachment-strip.tsx` 文件不存在，需要用 `rg --files` 定位 Composer 实际附件条组件，不猜路径。
-- 实际 Composer 组件为 `agent-composer-attachment-strip.tsx`；它横向渲染 ref 缩略图并已有 scroll controls，可在同一单层容器上方增加一行必要的“图片数 · 总大小”摘要，无需新卡片或样式文件。
-- 共享 ImageLightbox 只挂载当前 active `<img>`，其余 49 张只是 URL manifest，已经满足灯箱按需解码；气泡只需把初始网格节点裁到 8 个并保留完整 lightbox manifest。
-- Composer 已显示必要的图片数/附件数与总字节摘要，缩略图增加浏览器 lazy/async 解码；消息气泡只挂载前 8 个缩略图，第 8 格显示剩余数量，点击仍以 8/50 打开完整灯箱。
-- 阶段 7 的 98 项 UI 专项与完整 desktop typecheck 通过；实现只复用既有 Button、Dialog、主题 token 和 utility class，没有新增颜色、CSS 文件、依赖或说明性废话。
-
-## 阶段 8 接入发现
-
-- AgentArtifactStore 与 AttachmentStagingService 共用 `agent.artifacts` namespace，现有 `removeConversationArtifacts` 已识别 schema v2、删除 attachmentId 独占目录再移除 metadata；会话删除无需再做第二套清理服务。
-- Artifact cleanup 失败日志仍包含 `artifactId`，阶段 8 应改为 schemaVersion/kind 等无身份元数据，避免 committed attachmentId 进入诊断日志。
-- 回退不应恢复 Renderer raw bytes IPC。安全做法是保留引用暂存链路，只把 dispatch 能力收紧为“最多 8 张直接内联、禁用工具图片”，同时支持 references 总开关与显式 legacy-inline 开关。
-- Planner 是记录 count/bytes/strategy/error category 的最窄可观测点；结构化日志不需要 attachmentId、名称、路径或工具返回内容。
-- ArtifactStore 现有删除测试主要覆盖 v1 user-message，需新增 committed v2 独占目录删除用例，并把失败日志断言翻转为“不包含 artifactId”。
-- 功能开关测试可直接作用于纯函数：默认 references 开启；`SYNAPSE_AGENT_ATTACHMENT_REFERENCES=0` 或 `SYNAPSE_AGENT_ATTACHMENT_LEGACY_INLINE=1` 都把 Anthropic 9 图计划从 overview-and-tools 收紧为发送前 payload_too_large。
-- Conversation export 的 artifact 依赖仍明确为 v1 tool/user image rows，v2 staging metadata 与受控附件文件不会进入导出复制；Agent Renderer 生产链搜索只剩主进程最终 SDK/MCP 边界的 Uint8Array/Base64，未重新引入 Renderer bytes。
-- 阶段 8 首轮 87 项 lifecycle/flags/artifact/router 专项全绿。
-- 阶段 8 完整 desktop typecheck 通过；默认 reference transport、两个安全回退开关、v1/v2 删除、启动后台清理、无附件身份日志和灰度/回滚文档均已落地。
-
-## 阶段 9 审计发现
-
-- 最终 diff 审计发现 overview 计划虽然只选前 4 张，但 Router 仍物化原图，且 planner 用原图大小估算后没有确保 overview 自身落在请求体预算内；4×10 MiB 会超过 Anthropic 32 MiB。必须把 previewByteSize 纳入 ref/metadata，overview 只物化受控 1568 预览，并按实际预览估算逐张截断或拒绝。
-- 工作区变更均属于本 9 阶段附件任务及三份规划文件，未发现并行无关产品代码；`git diff --check` 当前通过，发布说明尚未增加本任务条目。
-- overview 已改为物化 preview 变体，ref/schema 携带可选 previewByteSize；planner 逐张纳入 32 MiB 请求预算，10 MiB 旧预览最多选 2 张，新 1568 预览通常仍选 4 张。
-- 阶段 9 已补 1/4/8/9/20/50 策略矩阵、51 图原子拒绝、JPEG/PNG/GIF/WebP 魔数、伪造 MIME、衍生解码失败回滚，以及 preview/original 物化差异测试。
-
-## Drive MDXeditor 列表修复发现
-
-- 用户测试条目 `2026_08_19_流程设计与开发规范讨论会.md` 的权威源码已正确保存无序列表 `*` 和有序列表 `1.`；问题不是保存或序列化丢失。
-- Owner preview 的服务端 HTML 已正确生成 `ul`、`ol`、`li`；列表容器和每个列表项都保留 `data-drive-markdown-block-id`，评论投影与 block identity 未丢失。
-- 截图中切换列表后仅行距变化，与 Tailwind preflight 清除浏览器默认 `ul/ol` marker 的表现一致；MDXeditor 的 `contentEditableClassName` 当前只有布局类，没有显式 `list-disc` / `list-decimal` 和层级缩进。
-- 阅读态通过 `github-markdown-css` 恢复列表样式，但应增加本模块的显式回归契约，避免 CSS 导入顺序变化再次清除 marker。
-- 修复应限制在编辑器/阅读正文的 `ul`、`ol` 选择器，不改 Markdown 源文本、MDX/CommonMark 插件、服务端 projection、annotation selectors 或评论定位算法。
-- 最终实现仅向两个正文容器增加 Tailwind 内置 `list-disc`、`list-decimal` 和 `pl-6` utility；MDXEditor 的结构性 nested/task list item 仍可用自身 `list-style: none`，不会额外显示 marker。
-- 生产构建产物已生成作用于正文后代 `ul/ol` 的 marker 与 padding 规则，Dashboard 构建和 Server typecheck 通过。
-- 三层嵌套列表投影测试不仅验证 block id，还用 V2 semantic/position/quote selectors 实际解析最深层文本评论，结果保持 `attached` 与 `exact`。
-- Dashboard 全量当前有 10 项既有失败：路由生成快照 1、字节格式化 1、旧页面文案 1、SSR 中访问 `document` 7；失败文件与新增列表样式/测试无交集，相关专项 115/115 通过。
-
-## 本次新增问题
-
-- 搜索 MDXEditor 安装样式时，zsh 对不存在的 glob 先行展开并报 `no matches found`；后续改用 `rg --files -uu` 定位依赖文件，不重复该 glob。
-
-## 阶段 10 通用 Provider 重构发现
-
-- 用户明确否定以 Anthropic 官方能力为主、百炼为降级的架构；Kimi、Qwen 等百炼模型必须走通用主路径。
-- 通用主路径只能依赖图片作为 user message inline content；URL/File API、Anthropic 32 MiB/20 图预算和 MCP 图片 tool result 都不能作为基础假设。
-- 受控暂存、引用 IPC、预览衍生物、生命周期、安全校验和 50 图 UI 与 Provider 无关，可保留；需要推翻的是派发契约、运行时组包与图片 MCP 会话逻辑。
-- 当前 Claude Agent SDK 已使用 `AsyncIterable<SDKUserMessage>` streaming input，`ClaudeSDKSession` 内部有长期 `AsyncQueue`；SDK 类型同时暴露 `streamInput`/`send`，说明通用多批 user-message 输入无需图片型 MCP，但仍需核实一轮逻辑事件和最终回答的编排语义。
-- 现有 Anthropic 耦合点集中在 `overview-and-tools` 计划、Router 只物化预览、SessionManager 的 attachmentTransportKey/MCP 注入和 AgentRuntime 的 turn-scoped server factory，删除范围明确。
-- SDK `SDKUserMessage.shouldQuery=false` 会把消息合并进下一条查询，因此不能用它实现请求体分批；它仍可能把 50 图合并到同一 Provider 请求。
-- `shouldQuery=true` 可触发多个模型轮次，但当前 `ClaudeSDKSession` 的统一事件泵会把每个中间 assistant 输出送入同一用户可见会话。通用方案需要隔离的批次分析调用，或显式抑制中间事件，不能简单向现有 input queue 连续塞批次。
-- 本地 SDK 没有说明 `isSynthetic` 会抑制 assistant 事件，不能依赖未文档化行为。现有 AgentLiveSession 只有 send/nextEvent，主 SessionManager 又负责 Provider env、模型、settings、Persona 与权限组装；通用批次分析应复用这套 session factory 输入，但使用隔离的短生命周期会话收集 resultText，不污染主会话事件流。
-- SessionManager 当前因为 attachment MCP transport key 在附件轮次间强制重建会话；移除图片 MCP 后该重建条件与 `mcpServers` 注入可删除，主会话可按 Provider/模型/settings 正常复用。
-- 百炼官方文档确认其 Anthropic-compatible 端点可供 Claude Code 使用；Kimi K2.5/K2.6/K2.7/K3 支持文本与图片输入，Qwen 3.x 多个模型也可在 Claude Code 中直接粘贴/拖拽图片。百炼主路径的共同基础是 user message 图片输入，而不是图片型 tool result。
-- 百炼官方没有给 Kimi、Qwen 提供统一的图片数量/请求字节上限；通用实现不能把 Anthropic 的 20 图、32 MiB 或 Files/URL 能力套用为 Provider 限制。批次上限应定义为 Synapse 自身的内存/稳定性预算，并允许 Provider 在模型不兼容时返回错误。
-- 官方资料来源：`https://help.aliyun.com/zh/model-studio/kimi-api`、`https://help.aliyun.com/zh/model-studio/add-vision-skill`、`https://help.aliyun.com/zh/model-studio/more-tools`。
-- Kimi 官方多图示例把多张图片作为同一 user message 的 `image_url` content；这与 Claude SDK 当前 `image` content block 的最小语义一致。Qwen 在 Claude Code 中也以粘贴/拖拽直接引用图片，证明 inline user input 是百炼兼容面的正确基础。
-- 百炼还存在把图片列表编码为 video 的 Kimi 专有接口，但 Qwen/其他 Provider 不共享该协议，不能作为 Synapse 通用层。
-- `ClaudeSDKSession.buildQueryOptions` 已集中生成 Provider env/model/cwd/abort 等 SDK 配置。通用批次分析可以从同一基础 options 派生隔离 query，但必须关闭 tools、plugins、MCP、hooks、resume、sessionStore 与项目 settings 副作用，只保留 Provider/model/网络和 abort。
-- AgentLiveSession 的公开接口无需暴露批次细节；可在 ClaudeSDKSession 内完成“按批加载受控原图 → 独立单轮 query 得到 result → 汇总注入主会话”，主 Router 只传版本化计划和可信 loader。
-- SDK 结果已由现有 bridge 统一从 `SDKResultMessage.result` 映射为 `AgentResultEvent.content`；隔离批次 query 可直接读取原始 result 字符串，不需要复用或污染主 event bridge。
-
-## 资料
-
-- Claude Agent SDK streaming input：https://code.claude.com/docs/en/agent-sdk/streaming-vs-single-mode
-- Claude Agent SDK TypeScript：https://code.claude.com/docs/en/agent-sdk/typescript
-- Claude Code tools reference：https://code.claude.com/docs/en/tools-reference
-- Claude vision：https://platform.claude.com/docs/en/build-with-claude/vision
-- 本地附件设计：docs/superpowers/specs/2026-08-25-agent-attachments-generic-provider-design.md
-- 图片 artifact 计划：docs/superpowers/plans/2026-07-03-agent-image-artifacts.md
-
-## 遇到的问题
-
-| 问题 | 解决方案 |
-|------|----------|
-| 旧规划文件混入多个已结束任务 | 按用户要求重置三份活动规划文件，只保留本任务 |
-| 当前任务尚未核实百炼最新限制 | 在阶段 1 使用官方资料与契约测试确认，不在计划中编造数值 |
-| 阶段 3 findings 补丁锚点与现有标题不一致 | 搜索实际章节后，将发现追加到既有“阶段 3 接入点” |
-| 搜索 SDK 工具导出时命中压缩 browser bundle，输出被截断 | 缩小到 `sdk.d.ts` 精确行范围，后续不再扫描编译产物 |
-| 阶段 7 预期附件条文件名不存在 | 用 `rg --files desktop/src/modules/agent` 定位实际组件 |
-| 阶段 8 导出搜索包含一个不存在的旧服务路径 | 以实际 `agent-runtime/conversation-export-service.ts` 为准，未改动导出边界 |
-| 阶段 8 typecheck：legacy rollback 循环已窄化为 schema v1 后仍比较 v2 | 该日志直接使用 v1 `origin`，仅通用 conversation cleanup 分支判断 v2 kind |
-| 阶段 9 专项 198 项中 1 项失败：解码回滚保留了空的 `staged/project/draft` 祖先目录 | 元数据和 attachmentId 文件目录已正确清除；测试改为断言 draft 目录为空，不要求删除共享祖先结构 |
-| 阶段 5 首次 typecheck：`fs.read` 不属于现有 `PermissionAction` | 受控附件属于内容读取，复用现有 `content.read`，不为内部 userData 读取误用 outside-userdata 或擅自扩展权限枚举 |
-| 阶段 5 首轮 168 项专项有 2 项失败：Buffer/Uint8Array 断言差异；plain turn 仍调用通用 MCP factory | 测试按字节数组比较；SessionManager 仅在存在 attachment transport key 时解析附件 MCP，确保下一普通轮构造时配置为空 |
-| 注入 nativeImage 衍生器的补丁命中相邻 Provider factory | 立即移除误加参数并把 callback 精确放入 `new AttachmentStagingService` 配置，不改 Provider 边界 |
-| 阶段 6 首轮 55 项专项有 2 项失败：macOS 临时目录路径经过系统级 `/var` symlink | 只豁免 macOS 固定根级别 `/var`、`/tmp`、`/etc` 别名；继续拒绝用户路径中的任意其它 symlink segment |
-| 超大文件稀疏测试直接对不存在路径调用 `truncate` | 先创建空文件再扩展为稀疏文件，保持测试不实际写入 500 MiB |
-| 阶段 6 typecheck 将 `Stats.size` 推断为 `number | bigint` | 在配额边界显式 `Number(sourceStat.size)`，项目未使用 bigint stat 选项且配额本身是 number |
-| 阶段 9 全量测试调用输出超过当前上下文而未保留退出码 | 检查进程确认测试已结束；改用 Vitest `dot` reporter 重跑以保留明确结果，不把截断当作通过 |
-| 阶段 9 全量测试 7971 项中 4 项失败：旧 IPC schema 测试仍发送 `Uint8Array`/`Buffer`/绝对路径 | 生产 schema 已只接受引用；将正向测试迁移为最小 `{ attachmentId, order }` 引用，把原始字节、跨 realm Buffer 和绝对路径收拢为负向测试 |
-| 阶段 9 修复后全量测试 | 859 个测试文件、7971 项全部通过；引用正向契约与 raw bytes/raw path 负向契约均纳入全量验证 |
-| 阶段 9 最终 typecheck 发现 3 个测试类型错误 | IPC schema parse 结果在测试中声明最小结构；materialize 测试通过局部 `toBytes` helper 将 `ArrayBuffer | Uint8Array` 统一后比较，不放宽生产 API |
-| IPC 测试窄化补丁首次命中同文件更早的 `}).toMatchObject` | 立即移除误加断言，并用 `const parsed = ...` 邻接块作为唯一锚点重新应用 |
-| 最终规划补丁未命中且发现 `task_plan.md` 被并发任务切换为 Drive MDXEditor 插入修复 | 不覆盖共享规划文件的当前阶段；只在附件阶段 9 自身区块记录已完成的自动化门禁，保留真实 Provider 人工验收状态 |
-| 真实 Provider 验收边界复核 | 现有自动化已覆盖 Anthropic 与百炼能力契约和 SDK mock；真实端点需要本机 SecretStore 凭据并产生外部付费调用，不能把 mock 结果冒充人工验收 |
-| 真实 Provider 凭据可用性 | 当前 shell 未配置 Anthropic/百炼环境变量；Provider 凭据由 DataRepository 的 secret namespace 以 `provider:<id>:api-key` 管理，不能从源码测试上下文无凭据调用真实端点 |
-| 本机 DataRepository 定位 | 应用数据位于 `~/Library/Application Support/Synapse/data-v1/runtime.sqlite`；可只读检查 Provider/secret 记录是否存在，但不得在日志中输出 secret value |
-| Provider/secret 后端实际分布 | `providers` 使用明文 JSON 元数据，`secrets` 使用 Electron safeStorage 加密的 `secrets.bin`；可以安全检查 provider 类型与 secretRef 是否存在，但真实密钥只能由 Electron 主进程解密 |
-| 本机 Provider 元数据检查 | 存在两个带 secretRef 的 Provider，其中一个指向 `dashscope.aliyuncs.com`；另一个没有可识别的官方 Anthropic base URL。凭据存在性不等于可在非 Electron 测试进程中解密或完成真实双端验收 |
-| Computer Use 只读检查 | 当前运行的是 `/Applications/Synapse.app` 的已打包 `app.asar`，不是本工作树未提交代码；用它做图片发送不能验收本次实现。仓库规则又禁止未经明确要求启动开发应用，因此不执行会产生费用但无效的真实发送 |
-| 阶段 9 收口策略 | 将已证实完成的自动化、文档和 N/A 打包项勾选；真实 Anthropic/百炼人工验收保持未勾选，阶段状态继续 `in_progress`，避免虚报 9 阶段完成 |
-| 最终静态泄漏/UI 审计 | 新增 diff 无 `console.log`、内联 style、自定义色或 data URL；Agent bridge 已移除 image `ArrayBuffer`，搜索残留的 bridge `ArrayBuffer` 仅属于既有 Drive 上传和通用 HTTP PUT |
-| 最终工作树审计 | `git diff --check` 通过；检测到并发任务新增 `server/src/drive/drive-markdown-projection.spec.ts` 改动，未读取或修改其内容 |
-
----
-
-每执行两次查看、浏览器或搜索操作后更新本文件。
-
-## 2026-08-25：SDK/runtime 客户端自动压缩实施分析
-
-- 当前安装的 `@anthropic-ai/claude-agent-sdk` 为 0.2.138，内置 Claude Code runtime 为 2.1.138。SDK `Settings` 已公开 `autoCompactEnabled?: boolean` 与 `autoCompactWindow?: number`，运行中 streaming query 还公开 `applyFlagSettings()`；因此不需要在 Synapse 另写摘要器。
-- `ClaudeSDKSession.buildQueryOptions()` 已把 `sdkSettings` 展开到 `Options.settings`，并继续把 Provider `ANTHROPIC_*` 同时写入 `Options.env` 与 `Options.settings.env`。压缩摘要请求会沿当前百炼 base URL、凭据和模型映射发出，不应增加 Anthropic beta header 或 `context_management`。
-- 当前缺口集中在两处：`ClaudeSDKRuntimeSettings` 只声明 `skipWebFetchPreflight`；`resolveProviderSdkSettings()` 与 `sdkSettingsEqual()` 也只处理该字段。第一版应增加 `autoCompactEnabled`，显式默认为 `true`；先不设置 `autoCompactWindow`，让 runtime 使用自身 auto window，避免按百炼模型名猜窗口。
-- 如果以后开放自定义窗口，本地 0.2.138 设置 schema 只接受 100,000–1,000,000 的整数；应作为 Provider/会话显式配置传入，窗口变化必须进入 `sdkSettingsEqual()`。首版最稳妥的生效方式是关闭 live query 后以原 `sdkSessionId` resume，新配置作用于既有 transcript；不必立即扩展运行中热更新。
-- runtime 还识别 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`、`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` 与 `DISABLE_AUTO_COMPACT`；其中窗口环境变量明确高于 settings。由于 `buildQueryOptions()` 会继承 host env，产品必须明确权威来源：建议由 Synapse inline settings 决定正式行为，并在子进程环境中移除这些隐藏 override；若保留为高级逃生口，则要在诊断中仅报告“存在覆盖”并加入回归，不能出现 UI 显示已开启而 runtime 实际被环境变量关闭。
-- SDK `Query` 没有独立 `compact()` 方法。用户手动压缩只能显式放行 runtime 原生 `/compact`，或以后提供调用该 native slash 的宿主操作；这不是自动压缩 MVP 的前置条件。
-- 现有 `compact_boundary` 已通过 event bridge 暴露，`context-usage.ts` 已用 `post_tokens` 降低顶栏占用，最终 `result.metadata.contextUsage` 也会持久化。第一版无需新 IPC、无需把摘要写进 Synapse history，也不应记录 `PostCompact.compact_summary`，避免正文、路径与敏感信息进入日志或导出。
-- 当前恢复依赖 `conversation.sdkSessionId -> Options.resume` 和 SDK 本地 JSONL transcript。单机常规恢复足够；但 SDK transcript 被清理、应用迁移或跨设备时，Synapse 的完整可见历史不能直接重建 runtime 的压缩状态。若产品要求 Synapse 自主管理耐久恢复，需要第二阶段实现完整 `SessionStore.append/load` 镜像；当前仅用于标题的 store 不具备该能力，且 SDK 将此接口标为 alpha。
-- `PreCompact`/`PostCompact` hooks 与 `compact_boundary` 都存在。自动压缩 MVP 以 boundary 作为成功事实源即可；只有需要审计阻塞/失败时再加脱敏 hook，禁止持久化 `compact_summary`。开启插件 hooks 的知识库会话还需验证自定义 `PreCompact` 不会意外阻断压缩。
-- 压缩是有损摘要，并会产生额外一次模型采样、token、延迟与费用；不能宣传成 Codex opaque compaction 的等价无损能力。精确依赖早期逐字内容的任务应允许用户新建会话、手动重述或关闭自动压缩。
-- 自动化验收至少覆盖：新建/恢复会话设置透传、配置变化后同 session resume、boundary 的 auto trigger 与 pre/post token、结果快照持久化/恢复、摘要不进入 history/log/export、插件 hook 边界、压缩失败不自动重发用户轮次。
-- 百炼真实验收分两档：先用原生 `/compact` 做低成本的摘要与 resume 闭环；发布前再做一次超过自动阈值的长上下文验收，证明 runtime 真正自动触发。不能只用伪造 `compact_boundary` 单测宣称端到端完成。
-- 文档依据：Anthropic 官方说明客户端 compaction 会在阈值后注入摘要请求、以摘要替换活动历史并继续执行；百炼官方兼容面只承诺 `/v1/messages`，并明确 Claude Code 通过该端点工作。阿里云也直接建议第三方工具使用 `/compact` 减少历史上下文。
-
-## 2026-08-25：`/compress` 报错诊断
-
-- 截图错误由 Synapse 主进程固定文案产生，不是百炼或 Claude Agent SDK 返回。`AgentCommandRouter` 把 `/compress` 路由到 `ConversationRouter.compressSession()`，而该方法当前无条件调用 `finishWithError(..., AGENT_COMPRESSION_UNSUPPORTED_MESSAGE)`。
-- Claude Agent SDK 0.2.138 的原生手动命令是 `/compact`，不是 `/compress`。普通项目当前没有把 `/compact` 加入 `agentNativeSlashAllowlist`，`allowAgentNativeSlash` 又只放行受管知识库命令，因此两个命令没有接通。
-- 现有 `agent.compress_state`、`getCompressionState()`、`updateCompressionState()` 是未完成的宿主压缩脚手架：默认 `enabled: false`、`maxTokens: 60_000`，但没有实际执行器；`markCompressionState()` 也没有调用点。
-- 截图出现两条相同错误是事件双发：`finishWithError()` 内部先 `emitEvent()`，随后 `enqueueTurn()` 收到命令结果后再次遍历 `commandResult.events` 并 `emitEvent()`。这不是 Provider 重试或两次压缩请求。
-- 顶栏 `91.6K / 200K` 只是上下文观测结果，不代表手动压缩能力已经接通；自动压缩与 `/compress` 宿主命令也是两条独立路径。
-## 2026-08-25：阶段 10 补充发现
-
-- Claude Agent SDK 的成功结果事件包含最终 `result` 文本，可以用短生命周期、无工具、无会话恢复的独立查询收集每批图片摘要，再把摘要交给主会话完成用户任务。
-- 现有 Anthropic 特化链路分散在 Provider 能力解析、`overview-and-tools` 规划、附件 MCP、会话按 turn 重建和运行时提示词中；通用化需要同时移除这些耦合，不能只删模型白名单。
-- 为避免 50 张图片在 Router 中一次性解码，批次应只携带附件 ID；SDK 会话在处理每批前通过受信任的、带 project/conversation/turn 所有权校验的加载器按需物化原图。
-- 当前 Provider 能力对象不仅保存“是否支持图片”，还编码了 Anthropic 的 20 张/32 MiB、工具图片结果和 URL/File API 等假设；这些字段及用户覆盖入口都应从派发契约删除。
-- Router 当前仅为 `overview-and-tools` 物化预览图并注入附件 MCP 提示词；改成通用批次后，Router 可只给普通 inline 方案物化图片，批次方案仅提交引用并保留 turn 所有权信息。
-- SessionManager 当前因附件 MCP 的 turn 级配置而比较 `attachmentTransportKey` 并重建主会话；通用批次加载器与会话无关，可删除这条重建条件，避免每个大图 turn 丢失连续会话。
-- `AttachmentStagingService.materializeCommitted` 已按 project/conversation/turn/attachmentId 校验所有权并支持只加载指定原图，足以直接作为 SDK 批次加载器，不需要公开图片读取 MCP。
-- 主会话的 SDK 事件由后台 pump 持续转发到 UI，不能直接拿主会话逐批发图而隐藏中间回答；独立 query 才能隔离批次分析事件并只保留最终结果。
-- 测试已有可控 `QueryFactory`/`FakeQuery`，可以扩展为主 query 与批次 query 序列，验证批次输入、无工具配置、摘要注入和失败传播，而不连接真实 Provider。
-- 通用 planner 已不再接收 Provider/model，v2 计划只区分 `inline` 与 `inline-batches`；4 张/16 MiB 是 Synapse 单进程内存批次预算，不能作为模型能力声明或发送前兼容性判定。
-- SessionManager 的附件 transport 状态还有一处 close 清理残留；ClaudeSDKSession 的批次 query 还需补齐独立 options/prompt helper，并将关闭异常显式记录，才能通过硬约束与类型检查。
-- 附件 MCP 是 `readToolImages` 和 `AttachmentToolImage` 的唯一消费者；删除 MCP 后可同步移除这组公开读取 API，批次加载只保留带 turn 所有权校验的 `materializeCommitted`。
-- 现有 SessionManager 回归测试明确要求大图 turn 重建会话并注入 MCP；通用设计应反转该断言：不同图片 turn 和后续纯文本 turn都复用同一主会话，批次加载器仅在首次创建时注入。
-- 附件契约单测仍固定 dispatch v1，需随 `inline-batches` 契约升级为 v2；安全与设计文档仍包含 Anthropic 官方画像、能力覆盖和 overview/MCP 描述，必须整体重写对应章节。
-- 活跃设计文档的标题、目标、Hard Rules、派发步骤、SDK 构造、错误处理、回滚和测试仍以 Claude/Anthropic 专属能力为中心；仅局部改字会留下冲突，应将其改名为通用 Provider 设计并替换整个派发章节。
-- 历史 implementation plan 文件没有被运行时或规则文档引用，可保留为历史记录；当前 `task_plan.md` 的阶段 4/5/8 和风险表则是活动计划，需明确标为已由阶段 10 取代或直接改写为最终通用决策。
-- 进一步检查发现旧 implementation plan 不只是历史命名，还包含 Renderer 原始 `ArrayBuffer`、Claude 专属 chip 和旧 IPC 步骤，与当前安全边界冲突；应删除该可执行旧计划并以简短的通用 Provider 实施计划替代，防止后续 Agent 按错误步骤执行。
-- `task_plan.md` 顶部目标、成功标准和目标架构仍是“Provider 能力预检/总览按需读取/8 图回退”，与已完成的阶段 10 冲突；这些总纲必须改成无能力判断的 inline/inline-batches，阶段 1 的研究项也只保留“最小共同输入面”结论。
-- 代码搜索确认旧 Provider capability、overview、附件 MCP、工具读取 API、legacy flags 和会话 transport key 已全部清除；ClaudeSDKSession 之前为附件 MCP 新增的通用 `mcpServers` 构造参数也已移除，隔离批次只保留空 MCP 配置以阻止项目 MCP 加载。
-- 最终实现用全局 `[Image #N]` 标签连接批次观察与原始用户消息，不向模型暴露内部 attachmentId；批次输出在主会话中被明确标记为不可信数据，降低图片内提示注入被当成新指令的风险。
-- 最终代码与活动设计搜索无旧 capability/MCP/legacy flag 引用；仅 findings/progress 保留被阶段 10 推翻的历史研究记录，便于解释迁移原因。
-
-## 2026-08-25：阶段 11 Read 图片契约实测
-
-- 用户已明确授权使用本机百炼配置进行 Kimi、Qwen 两次真实端到端调用，会产生少量百炼用量。
-- 测试不使用业务截图，改用无敏感信息且视觉答案唯一的本地图片夹具。
-- 成功必须同时满足：SDK 事件中存在 Read 工具调用；Read 没有返回不支持图片或权限错误；所选模型正确回答图片中的颜色、形状与测试码。
-- 仅把绝对路径写入提示词，不通过 Composer 图片附件入口发送，从而隔离验证“路径 → Claude Agent SDK Read → 百炼模型”这一条链路。
-- 已生成并人工核对 `/tmp/synapse-read-tool-test.png`：960×640、31,381 字节，红色背景、黑色三角形、黄色圆形、白色测试码 `READ-824`；文件名不包含颜色或形状答案。
-- Computer Use 后端已可用；应用注册名不是窗口标题 `Synapse AI Studio`，需用实际进程应用名继续读取界面。
-- 进程核对确认当前工作树开发版已在运行：Electron 主进程工作目录为仓库 `desktop`，userData 为 `~/Library/Application Support/Synapse`；不是旧 `/Applications/Synapse.app`。
-- Computer Use 已成功连接 `Electron` 并识别窗口 `Synapse AI Studio`；当前界面显示此前 49 图 Kimi 会话，右上角模型为百炼 `kimi-k2.6`。
-- 应用列表确认开发版注册为运行中的 `Electron`，正式安装版 `Synapse` 当前未运行；后续测试不会误连正式包。
-- `com.github.Electron` bundle id 在本机有多个开发应用而产生歧义；Computer Use 必须使用当前仓库 Electron.app 的完整路径，并在需要时用 `disableDiff: true` 获取完整可访问性树。
-- Synapse 项目“新建对话”已进入空白草稿并聚焦输入框；当前继承所选模型百炼 `kimi-k2.6`。
-- 为排除工作目录授权对 Read 的干扰，夹具已复制到当前项目根目录 `/Users/liyang/Documents/code/github/Synapse/synapse-read-tool-test.png`；仍只通过提示词传路径，不作为附件发送。
-- 新建动作最终创建了 `Synapse` 项目会话“新对话 16:02”，模型确认为百炼 `kimi-k2.6`，消息区为空。
-- Kimi 实测已获得中间证据：提示只含绝对路径，SDK 事件显示 `Read Done`，参数为精确 PNG 路径，工具输出呈现 `Read image 1` 图片预览；说明本地 Read 已成功把图片型工具结果送入当前百炼 Kimi 会话。
-- Kimi 最终成功：`kimi-k2.6` 正确回答红色背景、黑色等边三角形内有黄色圆形、测试码 `READ-824`；总处理约 15 秒，Usage 显示新增输入 304、输出 315、缓存读 77,150、缓存写 78,142 token。
-- 已建立第二个完全空白的 `Synapse` 项目对话用于 Qwen；模型初始继承 `kimi-k2.6`，需在发送前切换。
-- 代码确认项目行“+”是快速创建并直接使用默认模型；模型标签本身不可切换。要选 Qwen，必须从项目“更多操作”进入自定义“新建对话”对话框的 ProviderModelPicker。
-- 自定义对话框已打开，但本机百炼四个已配置槽位当前是 `glm-5.1`、`deepseek-v4-pro`、`kimi-k2.6`、`deepseek-v4-flash`，没有 Qwen；Qwen 实测需要选择一个准确的百炼 Qwen 视觉模型 ID并临时配置，测试后恢复原槽位。
-- 仓库价格预设、SDK 测试与百炼官方文档一致支持 `qwen3.5-plus`；官方当前明确其输入模态含 Text/Image/Video，并给出 Claude Code `/model qwen3.5-plus` 的视觉用法，因此选它作为 Qwen 实测型号。
-- 模型与供应商设置确认百炼配置可编辑，原四槽位值已记录；计划只临时替换 #2 `deepseek-v4-pro`，不触碰当前 Kimi #3、API 密钥或默认供应商。
-- 百炼 #2 已临时从 `deepseek-v4-pro` 改为 `qwen3.5-plus` 并出现“Provider 已保存”；配置 JSON 同步只改变 `ANTHROPIC_DEFAULT_OPUS_MODEL`，其余字段与密钥保持不变。
-- 返回对话后重新打开自定义新建对话，模型选择器已显示百炼 #2 `qwen3.5-plus`，当前仍选中 Kimi #3；尚未创建或发送 Qwen 会话。
-- 已创建独立空白会话“新对话 16:08”，会话头明确显示百炼 `qwen3.5-plus`；未继承 Kimi 内容，输入区为空。
-- Qwen 实测同样出现 `Read Done`、精确路径参数和 `Read image 1` 预览，证明图片型工具结果已送入百炼 `qwen3.5-plus`。
-- Qwen 正确识别红色背景、黑色三角形和黄色圆形，但把清晰的 `READ-824` 误读成 `READ-0824`；这是模型视觉/OCR 误差，不是 Read 传输失败。总处理约 17 秒，Usage 显示新增输入 308、输出 424、缓存读 89,713、缓存写 90,397 token。
-- Qwen 对话调试包已导出到 `/Users/liyang/Downloads/synapse-agent-conversation-Read and analyze local PNG image-20260825-081028Z.zip`，保留模型名、Read 事件、工具图片结果、最终答案和 Usage 证据。
-- 调试包复核进一步确认：runtime `models` 为 `qwen3.5-plus`，42/42 SDK stream events 全部导出、`toolCallCount=1`、`toolResultCount=1`、`failedToolCount=0`，事件流明确包含 `tool_use` 名称 `Read`；该轮汇总成本为 $0.621978。
-- 百炼 #2 已恢复为原值 `deepseek-v4-pro` 并再次显示“Provider 已保存”；Kimi #3、默认模型和其它配置未改变。
-- 契约结论：当前 Claude Agent SDK 的 Read 图片工具结果可以被百炼 `kimi-k2.6` 与 `qwen3.5-plus` 正常接收；两者都完成了真实 tool_use → image tool_result → 第二次模型响应闭环。
-- 质量结论：Kimi 本轮答案全对；Qwen 明确收到图片但有一次字符级 OCR 误差。因此“能接收图片”已证实，“每张图都识别完全正确”不能由传输层保证。
-- 架构结论：路径 + Read 可以替代当前额外隔离模型查询作为更直接的主路径，但本轮只验证 1 图。要承诺大量图片全部读取，仍需保留有序 manifest、精确文件授权、数量/磁盘配额和完成性核对，并追加 20/50 路径压力测试；不需要 Provider/模型白名单。
-- 测试夹具源文件已从仓库根目录删除，未留下未跟踪图片；Qwen 导出包内保留同一 31,381 字节 PNG，可复核且可恢复。
-- Synapse 开发进程在测试完成后已不再运行；Computer Use 的后续状态读取误启动了一个 Electron 默认页，已按精确 PID 关闭，未重启 Synapse 或触碰其它服务。
-# 2026-08-25 路径化重构新增结论
-
-- 百炼 `kimi-k2.6` 与 `qwen3.5-plus` 的真实测试均证明：Claude Agent SDK `Read` 返回的图片工具结果能够到达当前百炼模型；Qwen 的一次 OCR 偏差属于模型识别质量，不是传输失败。
-- 当前图片派发复杂度集中在 `AttachmentDispatchPlan`、`attachment-dispatch.ts`、`ClaudeSDKSession` 隔离 query 和批次摘要回灌；这些均可删除。
-- 每个受控文件位于 `staged/<projectId>/<draftScopeId>/<attachmentId>/original.*`；同一草稿根目录只包含本轮显式添加的受控文件，适合作为一个精确 `additionalDirectories` 授权范围。
-- 新链路应让 Renderer 只发送实际用户正文和 attachmentId；主进程临时构造有序路径清单，Synapse 历史继续只保存用户正文与结构化附件元数据。
-- 用户明确选择“仅路径提示”和“原图”：Synapse 不追踪模型是否读完，也不使用 1568 预览图替代模型输入。
-- 运行时 manifest 只需要字符串路径，不需要 SDK 图片 content block；同一个 `ClaudeSDKSession.send()` 可对 Kimi、Qwen 和自定义 Provider 生成完全相同的附件内容。
-- 动态授权必须以草稿受控根目录为单位。只授权各文件父目录会扩大状态数量，授权原始父目录则会扩大权限范围。
-- SDK 的 `input_json_delta` 可能把绝对路径拆成多个字符串片段，逐字符串替换无法可靠脱敏；存在附件上下文时应省略该流式 partial JSON，等待完整 tool-use 输入后再做路径投影。
-- 完整生产 build 不执行 Renderer TypeScript 语义检查，不能替代 `typecheck`；本次两者分别运行并通过。
-
-## 2026-08-25：阶段 10 多图消息缩略图密度
-
-- 当前消息附件组件只渲染前 8 个图片格，最后一格覆盖剩余数量；全部图片仍进入灯箱。
-- 用户截图中的多图区域需要稳定的 3×3 结构，因此消息内可见格数量应改为 9，超过 9 张时由第 9 格显示剩余数量。
-- 单张消息气泡宽度上限为 `max-w-lg`；多图网格使用现有 Tailwind 尺寸类收窄即可，不需要新增 CSS、颜色或布局 primitive。
-- 本次只改变时间线展示密度，不改变最多 50 张的选择、发送、历史元数据或灯箱图片集合。
-
-## 2026-08-25：阶段 11 用户消息气泡内边距
-
-- 当前用户消息气泡使用 `px-5 py-3`，即水平 20px、垂直 12px，截图中的四边视觉差异来自这一既有规则。
-- `docs/superpowers/specs/2026-05-09-agent-timeline-ui-polish-design.md` 与 `docs/superpowers/specs/2025-05-08-agent-timeline-elegant-redesign.md` 都显式保留该非等距值；用户最新要求取代旧基线，需要同步更新两份设计说明。
-- 使用现有 Tailwind `p-4` 可把四边统一为 16px，不新增 CSS、任意值或运行时几何常量。
-- 图片与正文之间的 `mt-3` 属于内容分组间距，不是气泡外层内边距，本次保持不变。
-
-## 2026-08-25：阶段 12 Agent 顶栏实时上下文占用
-
-- Claude Agent SDK `usage.iterations` 的最后一项可表达当前迭代真实上下文；无该字段时才使用输入、缓存读、缓存写和输出 token 求和。
-- `message_delta.usage` 的输入与缓存字段可能为空，运行时需要保留上一份分项并用累计输出更新，不能把空值当成上下文归零。
-- `modelUsage.*.contextWindow` 是窗口上限的可靠来源；只允许当前主线程模型精确匹配，或唯一有效候选回退，不维护本地模型上限表。
-- 当前上下文占用与回复下方的会话累计计费 token 是两个独立口径，后者不改动。
-- 实时快照必须独立于 50ms 文本流批次更新；时间线增量 reducer 保留当前快照，完整会话加载才从最近 result metadata 恢复或清空。
-- 主界面和独立窗口已经共享 `AgentConversationWorkspace`，因此指标放在该组件内即可覆盖两种窗口，不需要新增同步通道。
-
-## 2026-08-25：百炼模型上下文压缩可行性
-
-- 结论是可实现，而且当前 `@anthropic-ai/claude-agent-sdk 0.2.138` 内置的 Claude Code 2.1.138 runtime 已包含客户端自动压缩能力；不需要、也不应依赖 Anthropic Messages API 的 Claude 服务端 compaction。
-- 本地 SDK 类型公开 `Settings.autoCompactEnabled`、`Settings.autoCompactWindow`、`PreCompact`、`PostCompact`、`SDKCompactBoundaryMessage`、`Query.getContextUsage()` 和 `Options.resume`。runtime 还明确说明实际自动压缩阈值取配置窗口与模型最大上下文的较小值。
-- runtime 的客户端压缩会调用模型生成结构化续写摘要，以压缩摘要和 `compact_boundary` 替换旧活动上下文，再继续同一 SDK session。摘要请求走当前 `ANTHROPIC_BASE_URL` 和当前模型，因此百炼 Qwen/Kimi 只需继续满足现有 Anthropic Messages 兼容链路。
-- 阿里云官方文档确认百炼提供 Anthropic 兼容 `/v1/messages`，支持 Claude Code、流式响应、思考和工具调用；未声明支持 Anthropic 专用 `context_management` 服务端压缩。百炼链路应使用 SDK/runtime 客户端压缩，不透传 Claude beta compaction 参数。
-- Synapse 已保存 `sdkSessionId` 并通过 `Options.resume` 恢复会话；SDK transcript 会保存压缩摘要和边界，恢复时加载压缩后的活动链。Synapse 自己的可见 history 可以继续保留完整消息，两者不应互相覆盖。
-- 当前实现已桥接 `compact_boundary`，并用 `post_tokens` 实时降低顶栏上下文占用；但 `ClaudeSDKRuntimeSettings` 目前只承载 `skipWebFetchPreflight`，尚未显式锁定或配置自动压缩策略，也没有对百炼真实长上下文压缩做端到端验收。
-- 若只要自动压缩，推荐显式设置 `autoCompactEnabled: true` 并优先保留 `autoCompactWindow` 的 SDK `auto` 行为；不要按模型名维护上下文白名单。若产品要求自定义阈值，应把窗口作为 Provider/会话显式配置或使用 SDK 确认的模型窗口，未知窗口不猜测。
-- 若要用户手动触发，SDK `Query` 没有独立 `compact()` 控制方法；可把 runtime 原生 `/compact` 作为明确 allowlist 的 native slash 透传。自行另起摘要 query、重建 session 只应作为 SDK 压缩不可用时的后备方案。
-- 与 Codex 的差异：OpenAI Responses compaction 返回服务端生成的加密 opaque compaction item；这里是当前百炼模型生成的可见客户端摘要。两者都能缩小活动上下文并延长任务，但客户端摘要更依赖模型总结质量，不能宣称语义等价或无损。
-
-## 2026-08-25：百炼 MCP Tool Search 实测
-
-- 当前运行中的开发版会话使用百炼 `qwen3.7-plus`，未显式开启 Tool Search 的一轮简单问答后，顶栏显示当前上下文 `90.2K / 200K`；Usage 为新增输入 237、输出 1,789、缓存读 88,530、缓存写 89,139。
-- 当前 Synapse MCP `tools/list` 实测为 223 个工具、完整定义 JSON 203,397 字符；这解释了自定义端点回退到全量 Schema 时的高基线上下文。
-- 后续必须用独立空白会话显式设置 `ENABLE_TOOL_SEARCH=true`，并以 ToolSearch 事件和实际 MCP 调用共同判断百炼是否兼容 `tool_reference`，不能只看最终回答。
-- 百炼 Provider 当前配置确认未设置 `ENABLE_TOOL_SEARCH`；请求地址是 `https://dashscope.aliyuncs.com/apps/anthropic`，主模型映射为 `qwen3.7-plus`。测试只在既有 `env` 增加该布尔开关，其余模型、插件、Hook、权限与密钥保持不变。
-- 显式开启后的第一轮真实调用没有协议错误，`app_automation_trigger_type_list` 返回 `builtin.cron`、`builtin.interval`、`builtin.webhook`；但空白会话结束时上下文仍为 `91.6K / 200K`，Usage 为输入 266、输出 390、缓存读 89,672、缓存写 91,472。仅凭调用成功不能证明 Tool Search 生效，反而与全量工具上下文基线接近。
-- 调试包完整保存 71/71 个 SDK stream events 和 24 个 Agent events：Tool Search 相关字符串命中 0，唯一 `tool_use` 是目标 Synapse MCP 工具；`sessionInit.tools` 也不包含 `ToolSearch`。
-- 本地 Agent SDK 0.2.138 内置 Claude Code 2.1.138 runtime 明确包含门禁文案：非 Sonnet 4+/Opus 4+ 模型会因不支持 `tool_reference` 被禁用 Tool Search。`ENABLE_TOOL_SEARCH=true` 只覆盖非第一方 Base URL/Vertex 回退，不覆盖模型兼容门禁。
-- 官方 `_SUPPORTED_CAPABILITIES` 只允许声明 effort、thinking、adaptive/interleaved thinking 等能力，没有 `tool_reference` 或 Tool Search 能力值，因此不能用百炼 Provider 环境变量合法声明 Qwen 支持该协议。
-- 结论：当前百炼 `qwen3.7-plus` + Claude Code 2.1.138 不能实际开启 MCP Tool Search；保留开关只会造成“配置看似开启、运行时仍全量加载”的假象。
-
-## 2026-08-25：GitHub 相关 Issue 复核
-
-- `anthropics/claude-code#77928` 中，Claude Code 协作者明确确认：非 Anthropic `ANTHROPIC_BASE_URL` 默认不启用 Tool Search；显式设置 `ENABLE_TOOL_SEARCH=true` 等于声明该端点支持 `defer_loading`、`tool_reference` 和对应 beta 请求形态。后端不支持时应取消该变量或设为 `false`，这不是普通 tool calling 能力可以替代的。
-- `anthropics/claude-code#89211` 仍为 open，复现了非 Anthropic 模型通过自定义 `ANTHROPIC_BASE_URL` 时，deferred tools 被后端拒绝并返回 400；建议客户端能力探测、自动回退或启动警告。
-- `anthropics/claude-code#16925` 的调试日志与本地 runtime 字符串一致：Tool Search 的模型门禁只认可 Sonnet 4+/Opus 4+ 及更新模型；这支持“百炼 Qwen 在 Claude Code 2.1.138 先被客户端门禁禁用”的实测结论。
-- `MoonshotAI/kimi-cli#2223` 与 `farion1231/cc-switch#2941` 均复现 Kimi Anthropic-compatible 端点收到 `tool_reference` 后持续 400；`cc-switch#6681` 进一步用 A/B 说明把 `ENABLE_TOOL_SEARCH=true` 注入第三方 Provider 会触发同类失败。
-- `sgl-project/sglang#35692` 和 `vllm-project/vllm#52489` 均复现 Qwen chat template 无法处理 `tool_reference`，说明“兼容 Anthropic Messages/普通工具调用”不等于实现 deferred-tool 协议。
-- `QwenLM/qwen-code#6721` 展示 Qwen Code 自己的渐进工具发现实现：通过稳定的应用层 meta-tool/代理调用加载工具，而不是证明 Qwen 支持 Claude Code 的 Anthropic `tool_reference` 协议。若 Synapse 要跨 Provider 降低 Schema token，应优先考虑这种客户端级工具目录与加载器。
-
-## 2026-08-25：OpenCode MCP 工具压缩方案复核
-
-- OpenCode 旧/稳定路径仍把连接的 MCP 工具完整转换为 Provider tools；官方 MCP 文档也明确提醒每个 MCP server 都会增加上下文。
-- OpenCode 没有采用 Anthropic `defer_loading` / `tool_reference`。维护者在 `anomalyco/opencode#9461` 明确选择 Code Mode，核心实现由 PR `#34677`、`#35185` 合并。
-- Code Mode 开启时，`SessionTools.resolve()` 在注册内置工具与 MCP resource helper 后提前返回，不再把每个 MCP action 加入顶层 Provider tool 列表；Provider 只看到一个普通 `execute({ code })` 工具来访问 MCP actions。
-- `execute` 的 description 附带受预算约束的 MCP catalog：所有 namespace 与工具数量常驻，完整签名按 namespace 轮询装入，默认 catalog entry 预算约 2,000 token；目录不完整时，模型可在受限脚本内调用 `tools.$codemode.search({ query, namespace, limit, offset })`，搜索结果直接返回路径、描述和 TypeScript 风格签名。
-- 同一次 `execute` 可通过受限 JavaScript 调用、串联、分支或 `Promise.all` 并行执行多个 MCP 工具，并只把需要的聚合结果返回模型；运行时不提供文件系统、进程、网络、模块或环境变量等 ambient authority，实际 MCP 权限继续由 OpenCode 宿主检查。
-- 该方案只要求 Provider 支持普通 function/tool calling，不依赖 Anthropic 专有 content block，因此天然适用于 Qwen、Kimi 和其它 Provider；代价是模型必须可靠地产生受限脚本，目录搜索与执行 UI/错误处理更复杂，当前 v1 仍通过 `OPENCODE_EXPERIMENTAL_CODE_MODE=true` 开启。
-- `anomalyco/opencode#35376` 的协作者说明：OpenCode v2 默认使用 Code Mode，但文档仍在完善且存在少量缺口。当前 dev 源码继续保留 v1 实验开关，不能把 v2 默认行为表述为所有 OpenCode 发行渠道均已默认开启。
-- 对 Synapse 的直接启示：223 个 MCP 工具可以收敛为一个稳定的 `execute` schema + 受预算目录，规避 Claude Code 的模型名门禁与 `tool_reference` 兼容问题；这比简单的 search-then-load 更进一步，但实施复杂度和模型脚本可靠性风险也更高。
-
-## 2026-08-25：Claude Agent SDK 客户端 Tool Search / Invoke 方案评估
-
-- 当前项目实际使用 `@anthropic-ai/claude-agent-sdk 0.2.138`。官方文档与本地类型都确认可用 `tool()` + `createSdkMcpServer()` 注册进程内自定义工具，并通过 `Options.mcpServers` 交给同一条 `query()`；工具全名为 `mcp__<server>__<tool>`。
-- 已用当前安装依赖完成无模型调用的最小原型：`tool_search(query, limit)` 与 `tool_invoke(tool_name, arguments)` 能被进程内 MCP client 列出和调用；`arguments: z.record(z.string(), z.unknown())` 被转换为标准对象 schema，嵌套数字和布尔值原样到达 handler。SDK 传输层可实现，不需要百炼支持 `tool_reference`。
-- 阿里云 Anthropic-compatible Messages 官方文档明确支持普通 `tools[].input_schema`、模型返回 `tool_use.input` 对象和客户端回传 `tool_result`；文档没有声明 `defer_loading` 或 `tool_reference`。这与百炼 Qwen 已成功调用普通 Synapse MCP 工具、但 Tool Search 事件为 0 的实测一致。
-- 只新增两个包装工具没有 token 价值：Synapse 当前 `ClaudeSDKSession.buildQueryOptions()` 固定加载 `settingSources: ['user','project','local']`，用户配置中的原 `synapse-mcp` 仍会列出 223 个工具。必须同时传 `disallowedTools: ['mcp__synapse-mcp__*']`；Agent SDK 官方权限文档确认这种 bare tool-name glob 会把匹配定义从模型请求中移除，而不是只在执行时拒绝。
-- 不应使用 `strictMcpConfig: true`：当前随包 Claude Code 2.1.138 的实际 `--help` 语义是只保留 `--mcp-config`、忽略其它 MCP，会同时隐藏用户的 Chrome、shadcn 等服务器。本地 SDK 类型注释把它描述成“严格校验”，与随包二进制真实行为不一致，方案不能依赖该字段。
-- 最安全的接入形态是会话级进程内 router：保留公开 loopback `/mcp` 的完整 223-tool 契约给 Claude Code/Codex/OpenCode 等外部客户端；仅在 Synapse Agent query 中隐藏 `mcp__synapse-mcp__*`，新增不同 server 名的 always-loaded `search/invoke`。不得把公开 `/mcp` 的 `tools/list` 改成两个 meta-tool，否则会破坏能力注册表和外部编辑器兼容。
-- 当前能力注册表已经提供 `buildAllMcpTools()`、`MCP_TOOL_ACTIONS` 和统一 `SynapseActionRouter`；router 的检索应复用前者，invoke 应复用既有 HTTP MCP `tools/call` 或 action router，不能复制 223 个 dispatcher。通过现有 HTTP MCP 转发可原样保留 `PermissionGuard`、`AuditSink`、abort 和统一结果归一化边界。
-- 真实目录为 223 个定义、203,397 字符，其中 description 46,952、schema 140,330；单工具定义中位数 624 字符、P95 2,157、最大 14,428。两个建议包装 schema 合计约 913 字符；一次典型 top-5 搜索结果约数千字符，即使退化为全部 name+description 目录也只有 59,722 字符，仍明显小于全量 schema。
-- 按字符/4 只能粗估：全量定义约 50.8K token、固定包装约 0.23K；结合百炼空白会话 91.6K/200K 的实测，潜在首轮上下文降幅很大，但不能在集成 A/B 前宣称会精确降到某个数。官方对原生 Tool Search 的经验值是工具定义通常减少 85% 以上，本方案目标可参考但不能直接继承其结果。
-- 价值是真实的：223 已远超 Anthropic 提醒的 30–50 工具选择准确率退化区间；无工具任务可避免每轮携带全量 schema，有工具任务通常用一次额外搜索 round-trip 换取更小上下文。Prompt cache 只能降低重复输入价格，不能释放上下文窗口，因此不能替代此方案。
-- 主要风险不在 SDK，而在产品语义：`tool_invoke` 会把 223 个底层工具统一成一个模型可见名字。若直接实现，Persona/子代理 allowlist 可能被绕过，权限卡片和 timeline 只显示 generic invoke，底层参数 schema 也不再由模型 tool schema 强约束。必须在 search 结果、PreToolUse/canUseTool、handler 与事件投影中把 `tool_name` 映射回原 `mcp__synapse-mcp__<name>`，并由 dispatcher 再次校验参数。
-- 检索质量仍需真实验证：工具名、description 和参数说明主要为英文，而用户提示可能是中文；朴素 substring 不足以发布。建议对规范 name/description/property names 做本地 BM25/关键词排序，提供 domain/resource/action 过滤与无命中浏览回退，返回最多 5 个完整 schema；不为搜索另接远程 embedding 服务。
-- 当前长期规则与方案存在明确产品边界冲突：`docs/agents/knowledge-base.md` 要求 Knowledge Base 不做 MCP 隔离，并禁止通过 SDK `mcpServers` 注入“修复”知识库 MCP。会话级 router 虽不改用户配置、也不隐藏其它 MCP，但会替换 Knowledge Base 会话中的 Synapse MCP 暴露方式；正式实施前必须由用户批准这一边界并同步规则文档，不能静默绕过。
-- 结论：方案在 SDK 与当前代码结构上可实现，且 token/上下文价值很可能显著；但“只写两个工具”不是完整实现。建议先做显式实验开关下的 fresh-session A/B，覆盖 Qwen/Kimi、无工具、简单读取、相似工具消歧、复杂 schema、写操作、Persona 和子代理；通过上下文、任务成功率、参数错误、权限一致性和延迟指标后再决定默认启用。
-
-## 2026-08-25：`/compact` 手动压缩修复
-
-- 内置命令目录只发布 SDK 官方 `/compact`；旧 `/compress` 已删除且不保留别名。
-- Command Router 对 `/compact` 直接返回 native slash 路由，不经过普通项目 allowlist；Conversation Router 沿用既有 live session 创建/复用、原样发送和终态等待链路。
-- 已删除 `compressSession` 依赖、硬编码“不支持压缩”的占位实现和对应错误常量，因此请求会真正进入当前 Claude Code runtime 与百炼 Provider。
-- `compact_boundary` 继续透传 `trigger`、`pre_tokens/post_tokens` 与实时上下文占用；用户历史保留 `/compact`，没有新增隐藏摘要 query 或 Synapse 摘要历史。
-- 成功、SDK error 和旧 `/compress` 均覆盖单一结果/错误事件回归；专项 286 项、Desktop typecheck、hard constraints 与 `git diff --check` 全部通过。
-- 后续截图发现 Renderer 的 Claude Code 静态定义仍发布 `/compress`，与 runtime 的 `/compact` 被菜单合并后同时显示；现已同步改为 `/compact`，两个来源会按同名去重为一项。
-
-## 2026-08-25：`/compact` 真实结果与 416 上下文诊断
-
-- 调试包与 SDK transcript 确认手动压缩成功：同一 `sdkSessionId`、`compact_result: success`、`trigger: manual`，耗时 15,513 ms，并写入 `isCompactSummary: true` 的续写摘要。
-- 原始 transcript 的边界值为 `preTokens: 90,848`、`postTokens: 416`；416 对应压缩摘要侧 token，不是下一轮完整模型请求上下文。
-- 压缩边界后 SDK 重新发出 init，仍加载 20 个内置工具、4 个 MCP server 和完整 Skills/规则；这些固定前缀会在下一轮重新进入上下文，不能被 416 代表。
-- Synapse 当前 `AgentContextUsageTracker` 在 compact boundary 上直接执行 `usedTokens = post_tokens`，因此把摘要 token 错标成顶栏完整“上下文”占用；下一次普通模型轮次到来后预计会重新跳回约 86K–90K。
-- SDK `Query.getContextUsage()` 已提供按 system prompt、tools、messages、MCP tools、memory files 分类的 `totalTokens/maxTokens`；正确修复应在压缩完成后读取该权威总量，或在下一次真实 usage 前显示未知，不能继续把 `post_tokens` 当完整上下文。
-- 修复采用现有 SDK control request，不新增 IPC：`compact_boundary` 先使旧快照失效，再由同一 Query 的 `getContextUsage()` 用完整 `totalTokens/maxTokens/model` 重建；control request 失败只记录结构化警告并让顶栏保持未知。
-# 2026-08-25 全量回归审计
-
-## 今日变更边界
-
-- 基准提交：`db1890741738f5d9a7e93ab8b940a0a0887f9832`，范围为当日 00:00 至当前工作树。
-- 已提交主题：Drive 1000 文件目录回收站事务、Git diff 浏览器、Agent 附件展示与斜杠菜单、Drive MDX/CommonMark 兼容、Mermaid 横向边距。
-- 未提交主题：Agent 附件路径化、受控暂存、上下文占用与 `/compact` 统计修复、Drive 多级列表编辑/预览一致性。
-- 最终差异共 125 个文件、6509 行新增、4331 行删除；生产风险集中在 Agent runtime/IPC/Renderer、Git diff 渲染、Drive Markdown 和大目录事务。
-
-## 自动化测试预算
-
-| 主题 | 目标用例 | 重点边界 |
-|---|---:|---|
-| Drive 生命周期 | 30+ | 1000 文件、事务 maxWait/timeout、审计、失败与容量 |
-| Git diff | 50+ | 工作区/历史、重命名、二进制、截断、解析失败、布局/换行/主题 |
-| Agent runtime 与 IPC | 120+ | 1/4/20/50 图、顺序、权限、配额、生命周期、脱敏、单 query |
-| Agent Renderer | 80+ | 选择/粘贴/拖放、九宫格、灯箱、气泡、历史恢复、双窗口 |
-| Context 与 compact | 40+ | 聚合、上限、无效 usage、压缩刷新、失败清空 |
-| Drive Markdown/MDX/Mermaid | 50+ | 多级列表、comment projection、CommonMark、横向滚动 |
-
-自动化目标合计 370+，高于用户提出的一两百项；真实 UI 作为端到端证据，不替代可重复测试。
-
-## 首轮自动化结果
-
-| 范围 | 文件 | 用例 | 结果 |
-|---|---:|---:|---|
-| Desktop Agent + Git | 103 | 1413 | passed |
-| Server Drive | 3 | 45 | passed |
-| Dashboard Markdown/MDX/Mermaid | 5 | 129 | passed |
-| 合计 | 111 | 1587 | passed |
-
-现有测试已经覆盖 50 图并发配额、单 query 路径清单、九宫格与完整灯箱、上下文 SDK 统计、`/compact` 刷新、Git 重命名/二进制/截断/解析失败、1000 文件目录事务和多级列表 projection。
-
-## 双轴审查与修复
-
-- Spec：子智能体 `result` 曾在主线程过滤前更新窗口，失败发送的 `result.error` 曾被 Renderer 当成功，附件 commit 曾在失败/取消后保持永久状态，受控草稿根目录曾只授权不投影。四项均以失败回归复现并修复。
-- Standards：移除 `@git-diff-view/react` 的硬编码 GitHub 色板，改用应用主题 token 渲染统一/分栏差异；Renderer 附件 IPC 调用集中到 hook，主进程剪贴板物化集中到服务；临时文件与句柄清理失败不再静默吞没。
-- 修复后的功能专项为 204/204，通过；Git/Composer/IPC/附件清理组合专项为 184/184，通过。
-
-## 最终验收
-
-| 范围 | 文件 | 用例 | 结果 |
-|---|---:|---:|---|
-| Desktop Agent + Git | 103 | 1420 | passed |
-| Server Drive | 3 | 45 | passed |
-| Dashboard Markdown/MDX/Mermaid | 3 | 119 | passed |
-| 合计 | 109 | 1584 | passed |
-
-- Desktop、Server、Dashboard 类型检查通过；Desktop hard constraints 与 IPC codegen 通过；Desktop renderer 和 Dashboard production build 通过。
-- 完整 Desktop 串行复跑 1420/1420；此前并发构建负载下唯一一次 5 秒测试超时单独与全组复跑均通过，归类为资源竞争型 flake。
-- Computer Use 复验热更新后的 Git 本地主题渲染器：统一/分栏、自动换行、行号、增删与行内差异均正常。Agent 顶栏、Slash、图片/文件夹附件、灯箱、独立窗口和历史 Git 路径此前均已实机通过。
-- 本地 Drive 受登录门槛限制，未输入或迁移生产凭据；对应风险由 Dashboard 119 项最终回归和 Server 45 项回归覆盖。
-# 2026-08-26 持续复审编排约束
-
-- 当前时间 2026-08-26 01:08 CST，距离用户指定停止时刻约 5 小时 52 分钟。
-- Synapse 保存项目 ID 为 `local-ccdce33f42886d88206d465d33094f50`，是 Git 仓库；用户明确要求直接使用现有项目，因此新任务必须选择 `environment.type=local`，不得使用默认 worktree。
-- 当前主分支 `main` 相对 `origin/main` ahead 6，启动时工作树无未提交文件；每轮应在开始和结束都记录 HEAD 与 `git status`，避免跨轮覆盖。
-- 2026-08-25 提交日志显示 5 个当日提交：`dd38e7562`、`876e2223c`、`7b474594f`、`a41ba9a8d`、`f937c5e73`。此前活动记录还包含当日后续已提交的 Agent 路径化、上下文、MCP 搜索与模型目录能力，需要按提交时间、基准 `db189074...` 和最终 diff 重新核定完整范围，不能只复查这 5 个摘要。
-- Computer Use 必须使用 `node_repl` + `@oai/sky`；当前仓库 Electron 开发版此前可通过仓库内 Electron.app 的绝对路径访问，不能因为 `Synapse` 名称或 bundle id 冲突失败就宣称界面不可测。
-# 2026-08-26 阶段 23 第 1 轮现场
-
-- 起始时间 `2026-08-26 01:10:00 CST`；HEAD `5c2ac491b16f0507a3409731733e1a1c4c87f6c7`；当前分支 `main`，相对 `origin/main` ahead 6。
-- 起始未提交文件只有 `task_plan.md`、`progress.md`、`findings.md`，均为主任务刚追加的阶段 23 编排记录；本轮不得覆盖或拆分为其它任务。
-- 固定审查基准为用户指定的 `db1890741738f5d9a7e93ab8b940a0a0887f9832`，同时另行盘点 2026-08-25 00:00–23:59 CST 提交及当日形成、午夜后连续提交的直接变更。
-- 审查方法保留 code-review 的 Standards / Spec 双轴，但因用户禁止子任务而在当前任务内串行完成。
-- 真实 UI 证据必须通过 computer-use 技能的 `node_repl + @oai/sky`，每次动作后重新获取应用状态；不使用 AppleScript、System Events、浏览器自动化或 Playwright。
+## 2026-08-28 两日全量修复 Code Review 基线
+
+- 用户所说“周四和周五”按当前 Asia/Shanghai 日期解释为 2026-08-27 与 2026-08-28。
+- 这两日没有 Git commit；全部自动化修复仍在唯一 main worktree 中，固定比较点为 HEAD `a473f7ce5b6b264a6bba1432871080b82e6237cc`，审查命令采用 `git diff HEAD`，并单独从规划记录重建分轮意图。
+- 当前变更横跨 Dashboard、Desktop Agent/Runtime、DataRepository、System Apps、Database、Workflow、Git、Usage、文档站与共享 UI，必须同时审查规范合规、规格匹配、跨修复冲突和回归测试充分性。
+
+## 2026-08-28 两日全量修复 Code Review 结论
+
+- Standards Review 确认并修复：Checkpoint 指纹缺少文件身份与父目录真实路径、撤销确认未绑定原会话、成功权限检查与逐文件结果缺少审计、文件审查面板直接承载 IPC/状态逻辑。
+- Spec Review 确认并修复：真实撤销抛错后仍显示可撤销、Bash/子智能体覆盖缺口无提示、右侧工作面板硬编码文件 Diff、单轮超过 1000 个文件时静默丢弃状态。
+- 全量回归进一步确认并修复：路径末段含凭据字样时日志路径未完整脱敏、slash command 被误识别为绝对路径、Codex 工作流调试路径被共享脱敏误删、Drive 删除后邻项回焦依赖定时器、建表服务端拒绝后的字段回焦依赖定时器。
+- 最终不存在未修复的高/中优先级审查项。desktop 1850 个测试套件、8239/8239 测试通过；typecheck、hard constraints、diff check 均通过。
+- Git 仍为 `main`，HEAD 与 `origin/main` 同为 `a473f7ce5b6b264a6bba1432871080b82e6237cc`；两日工作和本次续修均尚未提交或推送。
+
+## 2026-08-28 C-to-C 第 41 轮：用量监控与价格下游只读审查
+
+- 11:26 最终验证全绿：用量 renderer、主进程聚合/刷新/IPC 与两类窗口共 35 个测试文件、212/212 测试通过；desktop typecheck、`check:hard-constraints`、`git diff --check` 均通过。第一次 typecheck 准确发现原文搜索支路漏映射价格覆盖，已改为与普通列表共享批量聚合并补回归，最终无 N+1。HMR 后主窗曾自然回 Agent，已通过真实“应用”入口恢复启动台；原生 Window 菜单仅剩一个主窗，焦点在应用入口，宽度保持 960、主题保持跟随系统。
+- 11:17 刷新收敛：约 11:07 Return 触发后，连续 fresh 观察至少 52 秒仍为 busy；期间没有重复触发，并转去完成不依赖刷新完成的主题/窗口验证。11:17:52 再次 fresh 进入 CC 今日时已恢复可用刷新按钮、`刷新中` 消失且无错误，实际可观测完成区间为 52 秒至约 10 分钟。刷新 worker 使用 single-flight 且 promise settle 后清理，但没有超时或取消；因本次自然完成，未把它判为稳定挂死，也不扩大修复范围。
+- 11:16 独立 System App 路径通过：首帧原生标题已是 `Synapse AI Studio 用量监控`，稳定帧为 CC 今日且无错误；Window 菜单只列主窗与一个用量监控窗。主窗再次“新窗口打开”聚焦同一 URL/同一标题，菜单仍各 1 项；关闭后主窗回应用启动台并精确回焦用量监控卡片。随后重复进入已为非 busy 稳定态、刷新按钮恢复可用、未定价状态保持；返回后恢复单主窗 960×768 启动台基线。
+- 11:12 Codex 概览完成 960×768 ↔ 1357×768 往返；来源、概览、30 天选择保持，指标卡由窄屏三列自然展开为宽屏六列，图表、legend、范围与刷新控件无横向溢出或截断。深色与浅色主题分别在 CC 今日稳定帧检查，文本、图表、legend、选中态和未定价文案均有足够辨识度；已恢复原“跟随系统”。
+- 11:07 键盘路径通过：记录 tab 获焦后 Escape 不退出或改选，Tab 精确进入已选 30 天范围，再 Tab 到刷新；Return 触发当前 CC 刷新，真实捕获到刷新按钮 disabled 与“刷新中”，记录/30 天选择、展开态和未定价展示均保持。
+- 11:06 第二次 HMR 原路径闭环：30 天记录稳定帧无服务错误，当前未定价汇总显示“未定价”且不再出现 `¥0.00`；展开同一条记录后未定价计数由 1 增至 2，汇总与请求明细均正确，零费用误导为 0 处。
+- 11:04 首次 HMR 原路径复测时，记录汇总已从 `¥0.00` 改为“未定价”，但展开请求仍稳定显示零费用；真实旧索引的价格状态有效而分类 Token 列尚未回填。新增旧索引聚焦回归精确红灯后，详情映射在分类完整时保留原值、缺失时按权威价格状态推导，24/24 再次全绿；未迁移或重写用户统计数据。
+- 10:59 第二个稳定缺陷已由真实 UI 与源码交叉确认：当前无价格规则时，同一 CC 请求在今日/概览显示“未定价”，但记录汇总和展开明细显示 `¥0.00`，混淆“无匹配价格”与“已计价零费用”。记录渲染与服务聚合两条聚焦回归修改前 2/24 红；最小修复补齐记录级已/未计价 Token 聚合，并统一显示未定价、部分定价或实际费用，修复后 24/24 绿。
+- 11:15 Codex 项目/工具页首帧仅显示壳层，稳定后分别为 258/167 条数据加表头，没有闪现错误空态。明细为固定“最近 200 条”的七列表格，无搜索、排序、分页或打开详情入口；最新记录均显示未定价。未记录会话标识、项目名或路径。
+- 11:12 详情窗关闭后主窗精确回焦原“打开对话”，关闭生命周期通过。切到 Codex 时真实捕获自动刷新首帧：只禁用当前“刷新今日”并显示“刷新中”，CC 内容立即卸载，没有旧来源数据串入；稳定帧恢复按钮并显示 Codex 今日有数据、整体未定价。
+- 11:12 Codex 概览默认独立保持 30 天，而 CC 离开前为全部，证明跨来源范围隔离；7 天与全部切换稳定、费用继续未定价。Codex 时间稳定为 84 个数据行加表头，模型为 10 个数据行加表头，切页在 1.5 秒内完成且没有错误空态闪烁。
+- 11:09 主进程 HMR 后旧详情窗自然关闭、主窗回 Agent；未 reload/restart。经启动台重进 CC 记录，30 天状态恢复为 22 条完整结果，说明来源/view/range 在模块重建时按各自默认隔离。重新打开同一详情后原生标题精确为 `Synapse AI Studio CC 对话详情`；Window 菜单现在清楚区分主窗与详情窗，实机转绿。
+- 11:05 CC 详情窗稳定为 11 个事件，三栏结构为事件索引/结构化事件流/字段检查器；同一事件可选择，长内容可滚动，所有投影由共享脱敏 helper 处理。重复从同一记录打开只聚焦原窗口，窗口总数保持主窗+1；未复制、导出或修改内容，也未在持久记录中转录正文。
+- 11:05 稳定缺陷（P2 多窗口可辨识性）：主窗和 CC 详情窗在 macOS Window 菜单均显示通用 `Synapse AI Studio`，两项无法区分；独立窗内部结构和路由正确。源码根因是 CC 专用 service 仍允许共享 renderer 静态 title 覆盖 BrowserWindow 标题，未复用 detached window 的 title guard。
+- 11:06 已补精确回归：旧实现 1/5 红，证明构造标题会直接采用传入的潜在路径且没有 `page-title-updated` guard。最小修复改用固定、无私密内容的 `Synapse AI Studio CC 对话详情`，并阻止 renderer 覆盖；5/5 转绿，发布说明已同步，不改变窗口单例、路由或详情数据契约。
+- 11:02 CC 工具页首帧保留壳层，稳定为 100 项长表，列为工具/类型/调用/失败率/平均耗时；失败图表在当前数据下显示必要空态，长表首屏与读取无卡死。未把真实工具名称/调用量写入记录。
+- 11:02 CC 记录页在一次自然稳定帧内展示 50 / 42k+ 的加载计数、明确搜索范围、原文开关和 10 列表格；首行展开后只增加结构化用量明细与“定位到对话”，没有改动记录。展开/折叠按钮和“打开对话”均为独立可聚焦控件；未记录任何标题、项目路径、Session ID 或会话正文。
+- 10:59 CC 时间首帧只保留壳层/筛选，约 2.4 秒稳定为长表；加载期间没有短暂“暂无数据”或错误文案。稳定表含时间、Token、估算费用、请求、工具、主要模型，未计价与已固化历史费用可混合出现，0/大数格式清晰；长表读取和 tab 切换未卡死。
+- 10:59 CC 模型表按 Token 降序展示 13 个脱敏模型项，列为模型/Provider/Token/费用/请求；模型和项目表都没有用户可见排序按钮或分页器，当前是固定排行/完整列表语义。项目表展示项目标识与路径，但按本轮隐私约束不在记录中抄录任何项目名、路径或文件标识；数字列在可访问树和截图结构中保持独立列。
+- 10:56 CC 概览范围覆盖：90 天与全部均有大数，全部范围达到百亿级 Token/十万级请求仍使用千分位、无指数或裁切；90 天与全部切换不闪错误空态，最终全部数据自然更新。按小时/按天粒度与全部/新增/输入/输出/缓存读/缓存写图表筛选均为可聚焦 tab，当前实测按小时与输出切换保持页面和范围，不触发刷新或窗口重建。
+- 10:56 图表在 AX 中暴露为 image，并有相邻可读标题/legend tabs；Computer Use 无 hover API，不能可靠制造 ECharts tooltip，后续只以截图检查可见 legend/布局，不用坐标猜 tooltip。
+- 10:53 CC 今日稳定帧有 1 个请求，金额显示“未定价”，0 值小时明确为 `¥0.00`；手动“刷新今日”完成后数据与选择均保持，刷新过快未稳定捕获 disabled 首帧，不能据此否定 busy 状态。
+- 10:53 CC 概览默认 30 天有数据且显示“部分定价”与人民币估算值；切到 7 天后同一页面变为 1 会话/1 请求且明确“未定价”，费用图表显示必要空态。当前 0 条规则并不抹除历史记录已经固化的费用快照，7 天新记录则诚实未计价；这与“规则只影响未来新记录、不历史重定价”的既有契约一致，不是价格集漂移。
+- 10:50 真实入口基线：当前仅一个 `Synapse AI Studio` 主窗，价格规则表为 0 行，焦点在“价格规则”，符合第 40 轮清理终态；从“返回应用列表”进入启动台后焦点精确回“价格管理”卡片，16 个 System App 均可见。
+- 10:50 首次点击启动台“用量监控”后的自动读取仍停在启动台且焦点暂落 HTML 根；这是异步过渡帧，尚未判为打开失败或焦点缺陷。下一步 fresh 读取稳定帧，不复用启动台旧索引。
+- 10:48 已恢复根规则、三份规划文件、planning/computer-use/impeccable product/audit，以及 UI/frontend/testing/model-capability/repository/execution/Agent Runtime 脱敏规则；共享脏工作区全部视为前 40 轮只读基线，不回退、不覆盖。
+- 10:48 权威实现边界：用量监控顶层 CC/Codex 各自持有 view、range、trend bucket、refreshKey 与 refreshing；切来源不会共享筛选，刷新只调用当前来源。CC 记录可打开专属会话详情窗，详情按事件流/字段检查器展示且统一脱敏；本轮只记录结构、计数与状态，不转录正文、路径或文件名。
+- 10:48 当前价格规则真实基线已在第 40 轮恢复为 0 条；本轮不创建规则，真实用量应诚实显示未计价或 0 费用，不能为了覆盖匹配态改动现用模型规则。下一步用 Computer Use 读取现有 Synapse 窗口，从 Dock/启动台进入用量监控，捕获首帧与稳定帧并开始 CC/Codex 全 tab 只读覆盖。
+
+## 2026-08-28 C-to-C 第 40 轮：价格管理 System App 隔离生命周期
+
+- 10:13 HMR 实机：主窗一度被 Computer Use 截成原生壳白屏且 AX 仅含窗口按钮；只读检查确认 Vite/renderer 进程存活，打开现有 DevTools 后控制台无产品错误、底层 Agent UI 完整，关闭后 AX/截图恢复，归因为 Computer Use/AX 刷新时序而非产品白屏。没有 Reload、Force Reload、重启或服务操作。
+- 10:13 删除回焦转绿：HMR 把未保存草稿按预期清掉，规则真实存储仍为 0。重新从 Dock/应用启动台进入价格管理，添加唯一空草稿后点击行内删除，行卸载且焦点精确回到“添加”；补丁真实路径通过。
+- 10:14 空模型回焦转绿：再次添加唯一草稿并直接保存，pending 帧所有工具栏/行控件 disabled 且按钮显示“保存中”；稳定帧仍收到精确第 1 行空模型错误，焦点已从页面根改为第 1 行“模型匹配”。未保存成功，存储基线仍为空。
+- 10:15 负价格回焦转绿：草稿模式为唯一 `sy-c2c-r40-price`、input=-1；保存再次显示全控件 disabled 的 pending 帧，稳定错误为第 1 行 `inputPer1M` 非负校验，焦点精确回“输入”。IPC 拒绝发生在 service 前，0 条存储基线未变。
+- 10:16 数值边界草稿：对 `step=0.0001` 的原生 number 输入尝试 19 位高精度小数后，AX/控件保持原 -1；尝试 30 位极大整数后控件变回空值。两次均未点击保存，说明 Computer Use/原生 stepper 会先归一化或拒绝这些注入值，不能据此伪造 service 结论；非法文本同样不能通过该真实控件注入。权威 IPC 测试另有 NaN/Infinity 拒绝，产品契约只规定 finite 且 >=0，没有最大值/精度限制，本轮不扩大语义。
+- 10:18 首次合法保存：保存前 fresh 唯一行精确为 enabled=true、`sy-c2c-r40-price`、1.25 / 2.5 / 0.25 / 0.5 / 3.75，初始 0 条基线没有任何既有行可漂移。单击保存一次后 toast“已保存”，随后自动刷新进入 disabled“刷新中”；未重复点击。UI 不展示内部 `mpr_<12 hex>` ID，生成 ID 只能由已读 service 契约与专项测试验证，不用 DOM/数据库绕过真实 UI。
+- 10:19 持久化：保存后的自动刷新完成、手动刷新完成、返回应用启动台再进入三条路径均只显示同一专用首行，enabled 与五项价格精确不变，没有重复行。AX 对顶部返回/应用入口的 click 偶发无动作，截图坐标点击正常；该差异不影响业务状态。
+- 10:20 专用行编辑保存：只关闭 enabled 并编辑 input；Computer Use 键入延迟使实际保存值为 1.55（非计划的 1.5），稳定帧确认其余模式与 2.5/0.25/0.5/3.75 完全不变。该偏差仍局限于可恢复专用行，不涉及既有数据；下一次保存将恢复预定 enabled=true/input=1.25。
+- 10:21 最终值保存前核对：重新启用后，1.55 全选状态下 paste 因剪贴板冲突被工具安全中止且值未变；随后一次 type_text 替换并等待 1.2 秒，连续两次 fresh 都精确显示 enabled=true、input=1.25、其余 2.5/0.25/0.5/3.75，不再有尾字符漂移。当前尚未保存恢复值。
+- 10:22 专用最终值已保存：enabled=true、1.25/2.5/0.25/0.5/3.75 经 toast 与自动刷新帧保持。模型覆盖默认“全部 / 30 天”有 4 行：`gpt-5.6-sol Codex`、`deepseek-v4-flash CC`、`glm-5.1 CC`、`kimi-k2.6 CC`；各行都显示“无匹配规则”，Tokens/请求/未计价/已计费用为右侧 tabular 数字区。专用 `sy-c2c-r40-*` 不匹配这些真实模型，不能为制造“匹配”而改成现用模型并影响后续计价；匹配态保留 renderer/service 专项覆盖并在最终说明安全原因。
+- 10:24 来源筛选：CC / 30 天精确为 3 行 deepseek/glm/kimi；Codex / 30 天精确为 1 行 gpt-5.6-sol。来源 Select 可通过聚焦后 Space 展开，弹层含全部/CC/Codex；Computer Use 对 option 首次 click 偶发只定位、第二次才选择，产品筛选结果稳定。普通按钮 Return 与 Select Space/Return 的键盘覆盖已交叉完成。
+- 10:29 范围筛选：Codex / 7 天显示必要空态“暂无覆盖数据 / 刷新后查看 CC 或 Codex 使用记录”；Codex / 90 天恢复 5 行有数据，新增可见长名 `gpt-5.3-codex-spark`，数字区仍右对齐；Codex / 全部为 7 行有数据。范围 Select 的 Return→Down→Return 键盘路径稳定，覆盖 7/30/90/全部四态。
+- 10:29 输入路径收敛：按主线程提醒停止所有 AX `set_value`、paste 与追加精确数值变体。专用持久行已在上一阶段用连续 fresh 确认恢复为 enabled、`sy-c2c-r40-price`、1.25/2.5/0.25/0.5/3.75；后续只读核对并最终删除，不再冒险整表编辑保存。
+- 10:31 宽屏与深色主题：主窗由 960×768 原生 zoom 到截图精确 1357×768，Codex/全部 7 行表格、长名与四组右对齐数字均保持完整；跟随系统基线切到深色后，从应用启动台重进价格管理，唯一专用行和全部 8 列在深色 token 下边界、文本、输入与控件清晰，无自定义亮色、溢出或层级反模式。主题切换后规则自动回默认 tab，但持久数据准确不丢。
+- 10:33 主题/尺寸恢复与独立窗首帧：主题已恢复原“跟随系统”，主窗原生 zoom 回截图精确 960×768。主窗先停在“模型覆盖 / 全部 / 30 天”，点击“新窗口打开”后立即捕获到仅原生壳的中性首帧，标题已是可辨识的 `Synapse AI Studio 价格管理`；1.2 秒稳定帧加载 `?window=system-app&appId=model-price`，默认价格规则 tab 精确显示唯一专用行及全部价格，无错误或闪现空态文案。
+- 10:34 独立窗单例与产品边界冲突：窗口菜单始终只有 `Synapse AI Studio` 与 `Synapse AI Studio 价格管理` 两项；主窗第二次进入价格管理、停在模型覆盖后再次点“新窗口打开”，只聚焦既有独立窗，没有第三窗。两次切回主窗均回到应用启动台，内嵌 tab/filter 状态被卸载；实现 `openAppWindow()`、renderer 既有测试与权威 `2026-06-16-system-app-launcher-design.md` 第 77 行都明确要求成功后返回启动台，避免主/子窗同时显示同一 App。因此这不是偏离现有规格的 bug，而是本轮“主窗内嵌状态不丢”与权威产品边界冲突；未获产品决策前不改写通用 System App 语义。
+- 10:35 独立窗关闭：从窗口菜单聚焦既有价格管理窗并用原生关闭按钮关闭；主窗被系统重新激活，焦点精确回应用启动台的“价格管理”卡片，窗口菜单不再需要额外选择。关闭前独立窗仍准确显示唯一专用规则，未改草稿或保存。
+- 10:37 HMR 持久化：desktop typecheck 的生成步骤触发既有 dev HMR，主窗按开发态惯例回 Agent；没有 reload/restart。重新从 Dock/应用启动台进入价格管理后，唯一持久行仍精确为 enabled、`sy-c2c-r40-price`、1.25/2.5/0.25/0.5/3.75，无重复或字段漂移，补齐保存后 HMR 路径。
+- 10:38 验证：model-price renderer/service/IPC/覆盖/匹配及 System App 窗口共 9 个测试文件、67/67 通过；desktop typecheck 第二次完整等待到 exit 0；`check:hard-constraints` exit 0；阶段性 `git diff --check` exit 0。测试未启动、停止或重启服务/应用。
+- 10:39 最终提交前状态：第二次 typecheck HMR 后再次从 Agent→应用→价格管理，fresh 仍只有唯一专用行，字段精确为 enabled、`sy-c2c-r40-price`、1.25/2.5/0.25/0.5/3.75。点击该行“删除”只改可恢复未保存草稿，当前表为 0 行且焦点精确回“添加”；尚未点击“保存”，持久存储仍可通过刷新恢复专用行。
+- 10:40 最终永久清理：再次 fresh 确认草稿表为 0 行，删除前连续刷新/HMR 只存在 `sy-c2c-r40-price`，初始基线为 0 条；获得动作时确认后只点击一次“保存”，出现“已保存”。稳定帧、可见刷新路径与返回启动台→重进三次都只有表头、0 行，全文无 `sy-c2c-r40-*`；原空规则集精确恢复。最终焦点显式置于选中的“价格规则”tab，键盘上下文明确。
+- 10:42 组合验证 failed 原因：第一次并行封装同时启动 typecheck、hard constraints、diff check；后两项各 exit 0，但 typecheck 超过 `exec_command` 30 秒 yield，只返回 `session_id` 和阶段输出，没有 `exit_code`，组合结果因此被上层标为未完成/failed，并非测试断言失败或路径错误。随后把 typecheck 改为独立命令并用同一 session 等到 exit 0；model-price 9 文件/67 测试也由独立 Vitest 命令真实执行，最终 `git diff --check` 再次 exit 0。
+- 10:08 聚焦红灯：强化删除测试，使真实聚焦的行内删除按钮卸载后必须精确落到存活的“添加”；与空模型、负输入两条保存拒绝用例合跑，旧实现稳定 3/8 红、其余 5 条通过，证明不是宽泛测试或异步噪声。修复范围限定为 renderer 焦点恢复，不改保存数组、服务校验、排序或匹配。
+- 稳定缺陷 1（P2 可访问性）：鼠标删除唯一未保存行后，触发按钮随行卸载，焦点稳定落到 HTML 根，而不是存活的“添加”。该路径纯 renderer 草稿操作，没有保存/服务写入；后续补测试并修为行删除后回焦“添加”。
+- 稳定缺陷 2（P1 表单可访问性）：空模式与负价格两条不同服务拒绝路径后，焦点都因“保存中”禁用当前按钮而落到 HTML 根，没有回到对应行/字段。错误 toast 内有精确行号和字段，但键盘用户需从头重新 Tab。后续优先按错误内容聚焦该行“模型匹配”或相应价格字段，不改服务契约。
+- 非法草稿证据：空 `modelPattern` 收到“第 1 行：模型匹配不能为空”；`inputPer1M=-1` 收到“第 1 行：inputPer1M 必须是大于等于 0 的数字”。两次都只经过 IPC 校验，service 没有接收非法数组，空基线未变。HTML number input 可接受负号但由服务拒绝；Computer Use 无法向 stepper 注入空字符串/非数字，未用 DOM 绕过原生控件。
+- 新行与响应式：960×768 实机上新行从左到右全部可见，默认启用复选框为 on，模式和全部数字为空，删除图标在右端；表头数字列与输入数字右对齐，表格未突破页面宽度。稳定行内 Tab 顺序与视觉顺序一致，没有键盘陷阱。
+- 工具时序说明：通过鼠标点击“添加”后，第一次 Tab 的 AX 读取仍报“添加”，之后直接进新行“启用”；这是鼠标 AX 焦点与浏览器 DOM tab 起点的差异，因源码中“保存”为普通可聚焦 Button，暂不判为产品跳过。行内连续 Tab 证据稳定。
+- 导入预设安全路径：对话框稳定后默认选 OpenAI，五个预设为 OpenAI 4 / Anthropic 19 / DeepSeek 官方 2 / 阿里云百炼 98 / 其他 3 条。用户取消 OpenAI 后五项均未选，稳定帧“导入”disabled；Escape 与可见“取消”都精确回到原“导入预设”，重开又恢复默认 OpenAI。未点击导入。
+- 清空安全路径：弹窗标题“清空价格规则”、范围提示“当前规则会被删除。”，初始焦点为安全“取消”；Escape 与可见“取消”都精确回“清空”。未点击“确认清空”。
+- 刷新状态：点击后按钮立即变为 disabled + `aria-busy` 对应的“刷新中”，数秒后回“刷新”；空基线没有被生成预设或其它规则。
+- Return 边界观察：Computer Use 把 Dialog/AlertDialog trigger 暴露为 macOS `pop up button`；当焦点在“导入预设”时发送 Return 和 `space` 均未打开，AX 直接 click 可正常打开。由于标准 React/Radix Button 浏览器语义应支持 Enter，暂视为 Computer Use 按键注入层/AX 差异，不直接判产品缺陷；后续在普通按钮与 tab 上交叉验证。
+- 规则精确基线：初次稳定帧为 0 条规则，表中只有“启用 / 模型匹配 / 输入 / 输出 / 缓存读 / 缓存写 / 推理 / 操作”列头，没有任何既有行。所以最终恢复判定为：保存后仍为 0 行、全文无 `sy-c2c-r40-*`。
+- 状态帧：打开后可见首帧“刷新中”且内容区空白，稳定帧切回“刷新”并呈现空表。现有实现对 0 规则没有单独的“暂无价格规则”文案，而是保留表头，不阻碍直接点击“添加”。
+- 真实入口基线：当前客户端仅有一个 `Synapse AI Studio` 主窗，960×768，无弹层与独立窗。从 Workflow 的 Dock “应用”进入启动台成功，列表含“价格管理”可见按钮，焦点保留在 Dock “应用”；未启动/停止/重启应用或服务。
+- 权威契约：价格规则是 `CNY / 1M token`，匹配只取启用规则；含 `*` 时为不区分大小写的全模式匹配，不含时为不区分大小写的子串匹配，精确/更长模式优先。价格修改只影响未来新记录，不自动历史重定价；模型覆盖只读索引数据，不刷新 CC/Codex 日志。
+- 保存安全：Renderer 把全部行 `rows.map(toRuleInput)` 交给 `rule.save`；IPC 先记录行号并验证数组、非空 `modelPattern`、所有价格为有限且 `>= 0`，只在全部通过后调用 service；service 用 `BEGIN IMMEDIATE` + `DELETE` + 全量插入 + `COMMIT`，异常则 `ROLLBACK`，因此本轮必须在每次合法保存前 fresh 比较所有既有行。
+- 草稿语义：新行默认 enabled=true，模式与 5 个价格字段均为空；空价格在 Renderer 转为 0，已存 0 价格重载后也显示为空。`type=number` 有 `min=0` / `step=0.0001`，但服务仍是最终信任边界。新 ID 由保存后生成 `mpr_<12 hex>`，用户界面不显示 ID。
+- 预设/清空：导入默认选中第一个预设，允许多选，后选预设覆盖同 `modelPattern` 项；清空硬删全部价格规则。两者均是写操作，本轮只测弹窗、全不选/禁用、Escape/取消/回焦，绝不调用导入或确认清空。
+- 安全边界：既有价格规则只读，先从真实 UI 记录数量、顺序、模式、启用状态和全部价格数值；只新增、编辑、删除 `sy-c2c-r40-*` 唯一专用行。每次数组保存前 fresh 核对既有行，最终保存后必须与初始基线精确一致。
+- 禁止边界：只打开“导入预设”和“清空”作取消/Escape/回焦审查，不点击导入或确认清空；不打开 Agent/Provider，不触发外部请求，不启动、停止或重启客户端/服务。
+- 仓库已有 PRODUCT/DESIGN，且权威主题使用 shadcn/Radix、Geist 与 OKLCH token；因此 impeccable audit 只按 product 界面检查可访问性、性能、响应式、主题和反模式，不生成新配色或新设计语言。
+
+## 2026-08-28 C-to-C 第 39 轮：Dashboard API 密钥完整生命周期
+
+- 真实创建已按动作时授权只提交一次：服务端把带前后空白的名称规范化为精确 `sy-c2c-r39-api-key`，列表由 1 条变为 2 条。一次性界面包含“关闭后无法再次查看”警告、复制与完成操作；全程只读取布尔/控件状态，未输出、解析、截图或记录明文。
+- 产品“复制秘钥”只点击一次并得到“已复制”反馈；未读取系统剪贴板。一次性界面随后通过“完成”关闭，专用条目已出现在列表首位，既有条目未操作。
+- 系统剪贴板已由 Chrome 地址栏中的普通固定文本覆盖；没有读取或回显剪贴板，也没有提交该地址栏文本。随后显式刷新本地 API 密钥页，专用项仍在、共 2 条，一次性创建界面无法重新打开，列表没有明文输入，仅保留可识别的前缀展示。
+- 稳定缺陷 2：专用条目的重命名弹窗通过可见“取消”和 Escape 两条路径关闭后，焦点都落到页面根而非原“重命名”按钮；名称与对象未变化。旧实现新增回焦用例精确 1/10 红，最小修复只记录实际触发按钮并在 Dialog close-auto-focus 恢复；专项 1/1 绿，发布说明已同步。HMR 原路径可见取消后焦点精确回专用“重命名”，实机转绿。
+- 专用重命名校验通过：初始同名、空名和前后空白 trim 后同名均禁用保存；81 字符输入受同一原生 80 字符上限约束，AX 对长值本身会截断展示，未用剪贴板读取规避安全边界。带空白的临时名称保存后被 trim，再真实改回精确 `sy-c2c-r39-api-key`；两次均只作用于专用首项，原 1 条基线未触碰。服务端当前允许重名，因既有名称不可安全复用且会制造对象歧义，本轮不做真实重名保存。
+- 稳定缺陷 3：专用权限弹窗取消已移除 scope 的草稿、以及 Escape 关闭时，原 scope 均正确保留但焦点都落页面根。回归在旧实现精确 1/11 红；最小修复只记录对应“编辑权限”按钮并在关闭时回焦，专项 1/1 绿、发布说明同步，HMR 可见取消实机精确回专用触发器。
+- 权限保存语义已只对专用项真实覆盖：先保存空数组，列表明确显示“无开放接口权限”且无需新 secret；随后立刻重开并恢复唯一 `获取公共链接文件` scope，最终列表再次显示该安全权限。两次成功关闭均回专用“编辑权限”，既有项未操作。
+- 专用使用记录真实返回“暂无使用记录”，符合从未调用密钥、未创建 grant、未访问 Drive 的安全边界。稳定缺陷 4：产品右上 Close 与 Escape 两条正确关闭路径都未回原“使用记录”按钮；旧实现回归精确 1/12 红。最小修复在父列表记录实际触发器并把 close-auto-focus 透传到记录弹窗，专项 1/1 绿、发布说明同步；HMR Escape 原路径精确回专用按钮。
+- 两条列表在真实 958×768 下再次视觉检查：80 字符专用名称以单行省略号截断，四个操作自然换成两行且仍全部可见，权限 badge、前缀、最后使用与创建时间无横向溢出/遮挡；专用名称随后真实恢复原名。窗口再扩回约 1357×768，2 条 × 4 个操作全部保持可达。
+- 撤销确认安全语义正确：标题“撤销秘钥”、对象精确为专用 `sy-c2c-r39-api-key`、明确不可恢复，默认焦点为安全“取消”。稳定缺陷 5：可见取消与 Escape 后都丢焦；同时成功后原行消失需要稳定 fallback。旧实现取消+成功 2/13 红，最小修复按触发按钮是否仍连接决定回专用“撤销”或页面“创建秘钥”，2/2 绿、发布说明同步；HMR 可见取消实机回焦通过。尚未执行最终撤销。
+- 最终撤销已按预授权只点击唯一专用确认一次：toast“已撤销”，`sy-c2c-r39-api-key` 行消失，成功焦点精确落“创建秘钥”。浏览器刷新后仍仅 1 条既有记录、全文无 `sy-c2c-r39`、无一次性界面；内存脱敏比较确认既有名称/前缀行以及操作、scope、最后使用、创建时间字段与撤销前基线一致。
+- 剪贴板最终状态仍为本轮先前复制的普通固定文本；覆盖后未再执行任何复制。全程没有用专用密钥调用受保护接口、创建下载 grant、访问 Drive 或发送网络业务请求，专用使用记录在撤销前始终为空。
+- 已完整恢复仓库规则、三份规划文件与第 13/18 轮 API 密钥只读证据；当前共享工作区含前 38 轮大量未提交改动，全部视为只读基线，不回退、不整理、不覆盖。
+- 用户心智：我只创建并最终撤销唯一 `sy-c2c-r39-api-key` 专用密钥；通过名称、前缀、权限、最后使用、创建时间和明确确认范围判断操作对象，不打开、复制、编辑、查看记录或撤销任何既有密钥。
+- 安全边界：明文只允许停留在产品一次性展示界面；可点击产品复制验证反馈，但绝不读取系统剪贴板、截图 OCR、写入 shell/源码/计划/日志或用于任何请求；最终以普通固定文本覆盖剪贴板。专用密钥不调用受保护接口、不创建下载 grant、不访问 Drive，使用记录必须为空。
+- 现有规划证据表明第 13/18 轮基线为 1 条既有记录，创建表单曾修复 Escape 回触发器；第 39 轮将重新从真实 Chrome fresh UI 记录数量和安全可见字段，不沿用旧索引或假设。
+- 真实 Chrome 初始为唯一已登录 `localhost:3000/console/drive?view=files` 标签、1350 左右宽屏、无弹层；通过公开侧栏“设置”进入 `/console/settings`，个人资料与“API 秘钥”两个子入口完整，历史返回可用。本轮未读取或修改个人资料内容。
+- API 秘钥真实宽屏有数据基线为 1 条既有记录；只记录安全可见结构：名称、截断前缀、1 项“获取公共链接文件”权限、最后使用为空、创建时间，以及重命名/编辑权限/使用记录/撤销四个操作。未点击任何既有行操作，也未把既有名称或前缀写入计划。
+- 从子导航“API 秘钥”开始的真实 Tab 顺序为：创建秘钥 → 既有行重命名 → 编辑权限 → 使用记录 → 撤销 → 浏览器 chrome；图标均有可见文字，顺序与视觉排列一致。没有额外搜索/筛选/分页入口。
+- 浏览器真实刷新后同一 1 条既有记录与权限/时间字段完整恢复，无重复项或明文；加载帧短于 Computer Use 捕获周期，未伪造中间状态。浏览器后退回个人资料、前进回 API 秘钥均成功，URL、列表数量与安全字段一致。
+- 创建弹窗真实自动聚焦名称输入；显示一次性明文提示、名称、单一权限选项及其文档链接、取消/创建和右上关闭。空名称+空权限时创建 disabled。Chrome 自动填充层会随首焦点出现，第一次 Escape 只关闭浏览器层、第二次 Escape 才关闭产品弹窗；产品关闭后焦点精确回“创建秘钥”，与既有修复一致。
+- 可见“取消”和右上 Close 两条关闭路径也都精确回“创建秘钥”，没有创建记录或保留草稿；三种关闭方式的焦点语义一致。
+- 名称输入真实接收 81 个字符时被原生 `maxlength` 截断为 80；前后空白草稿可输入，scope 未选时创建 disabled，选择唯一“获取公共链接文件”后创建才 enabled。当前草稿为带前后空白的专用名称，尚未提交；服务端 trim 只会在最终创建时验证。
+- 创建弹窗 Tab 顺序为名称 → 权限复选框 → 权限文档 → 取消 → 创建 → Close → 回名称，焦点陷阱完整；权限文档在新标签打开本地权威“获取公共链接文件”页面，原创建弹窗与草稿保持，关闭文档标签后能回原任务上下文。
+- 稳定缺陷 1：带名称+scope 草稿点击“取消”后关闭但再次打开仍完整保留；随后用 Escape 关闭并再次打开仍保留，连续两条关闭路径复现。普通用户心智中“取消创建”应丢弃未提交草稿，当前行为可能导致稍后误创建旧权限；尚未提交凭据。
+- 缺陷 1 已闭环：新增“取消后重开为空”回归在旧实现精确 1/9 红灯；最小修复只用单一关闭函数清空名称/scope 并关闭弹窗，创建成功的一次性展示语义不变。专项 9/9 绿，发布说明已同步。HMR 原路径输入专用草稿+选 scope→取消→重开，名称为空、scope off、创建 disabled、名称 autoFocus，真实转绿。
+- Chrome 通过真实窗口右边缘拖拽从 1357×768 调至 958×768。窄屏截图确认侧栏、设置子导航、标题/创建按钮、单层密钥卡、四个操作、权限 badge 与两项时间均在容器内，无水平溢出、重叠或裁切；既有长截断前缀仍只显示前缀。页面保持 restrained 主题、单层 card、无自定义装饰色或嵌套卡片。
+- 原主题偏好为“跟随系统”且当前呈浅色。通过公开主题设置切到深色后，958×768 截图确认正文/次要文字、卡片边界、按钮、badge 与选中导航均有清楚对比，未出现硬编码浅色表面或消失操作；随后精确恢复“跟随系统”，关闭主题面板并用公开窗口 zoom 恢复 1357×768。
+- 最终创建表单已在 1357×768 真实 UI 中准备完成：名称为带前后空白的唯一专用名，唯一安全 scope 已选，创建按钮 enabled；尚未点击提交。按 Computer Use 强制策略，创建 API 密钥会建立持续访问凭据，必须在点击“创建”的动作时再次确认。
+
+## 2026-08-28 C-to-C 第 37 轮：Automation/Scheduler System App
+
+- 第 37 轮完成：Automation/Scheduler 相关 16 文件 172/172、desktop typecheck、`check:hard-constraints`、`git diff --check` 全绿；聚焦 diff 未改变 action/capability/MCP 表面，故无需同步能力注册表、系统 Skill/Agent 指南或 API。最终 HMR 自然回 Agent，仍是单一 960×768 主窗、无弹层/独立窗、输入框聚焦。
+- 剩余证据边界：真实 refresh/save loading 过快未稳定截帧；按禁止故障注入没有制造列表 error；列表本身无筛选；重复名仅验证未保存草稿与安全放弃，未判定服务端重复名规则；成功删除回焦修复因夹具已按授权永久删除一次，只做自动回归、没有重建夹具重复破坏性复测。
+- 新增成功删除回焦回归后，全文件并跑暴露测试隔离缺口：旧 afterEach 直接清空 body、没有卸载 createRoot/portal，异步关闭在下一测试清理时报 NotFound。只在该测试文件集中跟踪 React roots 并在清空前 unmount；产品代码不受影响，模块 23/23 恢复稳定。
+- 最终 HMR 后只读重进 Automation：fresh 表格仅 3 项，`自动化 #BRJG` 仍启用，另两项仍停用，全文无 r37；唯一启用项的下次运行因时钟跨过当日计划而自然滚到 2026-08-31 08:00，本轮从未触碰它。随后返回应用启动台，最终只有一个 `Synapse AI Studio` 主窗、960×768、无弹层/独立窗，“应用”入口获焦。
+- 最终第三次确认只点击了一次“删除”；toast“自动化已删除。”，列表立即从 4 项回基线 3 项，全文无 r37，既有名称/启停状态不变。专用行与其空历史一并消失，没有运行/通知外发/其它副作用。成功后焦点仍落 HTML 根，自动回归精确复现；根因是 Radix Action 在异步删除完成前先关闭弹层，先回焦的删除按钮随后随刷新卸载。最小修复让确认弹层等待删除结果，并在原生 close-autofocus 阶段按取消/成功分别回原按钮或稳定“新建”入口；取消+成功专项 2/2 绿。夹具不可重建，因此不重复真实删除，成功回焦以回归验证收口。
+- 删除确认的两种取消路径均已 HMR 实机通过：Escape 与可见“取消”按钮关闭后都精确回专用删除入口，专用项保留、默认安全焦点与不可恢复文案一致。用户已在本轮任务明确授权最终永久删除该唯一专用夹具，无需再次询问；下一步只执行一次。
+- 删除取消回焦 HMR 实机 Escape 路径通过：确认仍以“取消”为默认焦点；Escape 后 focused element 精确回专用行“删除自动化”，专用项保持。下一步再走可见“取消”按钮路径后才最终删除。
+- 删除取消回焦在旧实现精确 1/22 红（received body）。修复只记录打开确认的删除按钮，并在 deleteTarget 从有→无后回原按钮；确认删除成功后回稳定“新建”入口。既有 Alt bypass 与删除服务不变，发布说明已同步。
+- 专用删除确认范围正确，标题“删除自动化”、文案“删除后无法恢复。”，默认焦点为安全“取消”；未显示敏感参数。第一次 Escape 取消后专用项保留，但焦点落 HTML 根而非其删除按钮，记为候选缺陷；最终删除尚未执行。
+- 关闭独立 Automation 窗后只剩 960×768 主窗，启动台“自动化” tile 精确获焦，标题恢复 `Synapse AI Studio`；无弹层或第三窗。独立窗打开/复用/关闭回焦链闭环。
+- 从主窗再次进入 tile 并点“新窗口打开”后，直接聚焦原 `Synapse AI Studio 自动化`，列表状态连续；Window 菜单复核仍只列主窗+这一个独立窗，没有第三窗，复用契约通过。测试期间既有已启用项的下次运行从“即将 08:00”自然滚动到下周一，名称与启用状态未变，未由本轮触发。
+- macOS Window 菜单明确只列主窗与唯一 `Synapse AI Studio 自动化` 两窗；选择主窗后安全回启动台，焦点精确落在“自动化” tile，说明第一次独立打开已正确完成主入口回焦。
+- “新窗口打开”先呈现标题准确的中性独立空壳，随后稳定为 `Synapse AI Studio 自动化`，URL `?window=system-app&appId=automation`；四项列表、专用停用/运行 disabled 与既有基线一致，独立窗没有再显示“新窗口打开”，符合单应用窗口壳。
+- 主窗公开 zoom 已从 1357×768 精确恢复 960×768，表格/状态/焦点均保持。启动台 16 个 System App 中实际名称为“自动化”；从 tile 进入应用级页面后可见返回应用列表、刷新、新建与新窗口打开，专用项与 3 项基线保持。
+- 主窗通过公开 zoom action 从 960×768 放宽到精确 1357×768；自动化表格四行、列头、状态、开关和操作均在网格内，无横向溢出/截断/弹层，专用项停用视觉清楚。尝试用 `sharp` 读截图尺寸因 node_repl 不支持其 package.json 导入而在 UI 动作完成后报工具错误；随后直接解析 JPEG SOF 得到尺寸，未产生额外 UI 副作用。
+- 列表“刷新”本地完成过快，fresh tree 未稳定捕获中间 loading，但刷新后焦点保持在刷新按钮、4 项顺序/状态不变；代码与既有模块测试覆盖 loading/error/empty，遵守禁止故障注入后不人为制造 error，真实 empty 用专用运行历史“暂无运行记录”覆盖。列表没有筛选控件，故不存在可执行的筛选路径。
+- 自动化→Agent→自动化导航往返通过：专用项仍第一行且停用，既有 3 项不变，返回焦点在 Dock 自动化；此前多次 HMR 重进结果也一致，配置与历史未丢失。
+- 运行历史回焦 HMR 实机复测通过：HMR 后重进自动化，专用历史仍为空；Escape 后 focused element 精确回专用行“查看运行历史”。专用项仍停用，未产生任何 run。
+- 运行历史关闭回焦回归在旧实现精确 1/22 红（received body）。列表事件现只把当前历史按钮写入 ref，运行历史弹层在 open→closed 提交后恢复；初版 Radix close autofocus 未通过同一测试，已收窄为和 Cron 一致的状态 effect。补齐测试所需 ResizeObserver mock 后专项 1/1 绿，发布说明已同步；运行/停止/重试逻辑未改。
+- 重复名草稿通过原生关闭进入同一安全确认，默认焦点“继续编辑”；点击“放弃”后 edit 窗关闭，主列表专用项仍准确为 `sy_c2c_r37_automation`，证明重复名未写入。主窗焦点恢复到专用行“编辑自动化”，既有 3 项不变。
+- 重开 edit 的中性首帧→稳定帧再次通过，timeout 61 已持久化，安全 Cron/时区/七天/空 JavaScript 仍准确。重复名路径按安全边界只在本地草稿测试：重命名输入既有 `自动化 #BRJG` 后 Return 可确认，界面没有重复名即时校验；未点击任何保存，因此不能据此判定服务端是否允许重复，下一步用“放弃”丢弃这份草稿并核对专用持久名称不变。
+- 编辑后的“仅保存”成功关闭 edit 窗并回到主窗；重新从 Dock 自动化进入，专用项仍为第一行、已停用/停用中/switch off/运行 disabled，既有 3 项名称与状态不变。保存很快，真实 UI 未能稳定捕获瞬态 loading；源码现有 `saving` 同时禁用两个保存按钮，后续以回归覆盖为准。
+- 未保存关闭取消回焦 HMR 实机复测通过：重建 61 秒草稿，原生关闭后安全默认焦点仍是“继续编辑”，Escape 关闭确认后 focused element 精确恢复为值 61 的超时输入。HMR 自身曾把未保存 61 回载为持久 60，符合热重载不承诺草稿持久化；重建后未丢其它字段。
+- 未保存关闭取消回焦回归在旧实现精确 1/24 红（received body）。修复仅在收到 `beforeunload` 且确有 dirty 时记住当时 `document.activeElement`，并在 AlertDialog 取消关闭的 `onCloseAutoFocus` 恢复；不改变关闭拦截或放弃语义。专项转为 1/1 绿，发布说明已同步。
+- 编辑保存前把纯内部 JavaScript 的超时从 60 改为 61；Computer Use 对 number stepper 的首次 `set_value("61")` 被控件解析成 0，未保存，随后用点击→全选→键入得到准确 61。点击原生关闭后“未保存的更改”确认出现，默认焦点为安全“继续编辑”，文案明确关闭会丢失修改；Escape 取消后草稿 61 保留，但焦点落 HTML 根而非关闭前的 61 输入，记为候选回焦缺陷。
+- Cron 回焦修复已依赖现有 dev HMR 实机闭环：HMR 的未保存保护先安全选择“继续编辑”，随后 fresh 打开 Cron，点击“取消”关闭后 focused element 精确为主表单“编辑”按钮；七个活跃日、表达式、时区与动作均未改变。
+- Cron 回焦回归在旧实现精确 1/7 红（received body）。最小实现未扩大共享 `FormDialog` API：`CronInput` 保存“编辑”按钮 ref，`CronEditorDialog` 只在自身从 open→closed 的 commit 后恢复该 ref；取消、应用和 Escape 共用同一状态边界，专项转为 1/1 绿。发布说明已同步。
+- Cron 编辑器“应用”与“取消”两条关闭路径均稳定把焦点落到 HTML 根，而非原“编辑”按钮；第二次复测严格等待 fresh accessibility tree 确认 Dialog 已打开后才取消，排除了旧索引误点。源码根因是 `CronInput` 用受控 `open` 单独渲染 `CronEditorDialog`，没有 `DialogTrigger` 或返回焦点 ref；共享 `FormDialog` 也未暴露 `DialogContent.onCloseAutoFocus`。拟只新增可选 close-autofocus 透传与触发器 ref，不改变 Cron 业务语义。
+- 源码路由确认：Renderer 在 `desktop/src/modules/automation/`，主进程服务在 `desktop/electron/services/automation/`，内建触发器包为 cron/interval/webhook，编辑器实际测试为 `editor-app.test.tsx`，系统窗口服务为 `automation-window-service.ts`。权威设计优先读取 2026-06-03 Automation module/editor 与 2026-06-04 extension platform，再用当前实现/测试交叉确认默认状态。
+- 安全创建结论已由规格+当前实现交叉确认：新建草稿 `enabled=false`；“仅保存”对新项明确传 `false`，“保存并启用”才传 `true`；主进程创建后只在 `started && item.enabled && valid` 时建立调度。因此本轮只能点击“仅保存”，不会建立定时器或执行。
+- 当前用户可见触发器至少为 Cron、固定间隔，实现还注册 Webhook；动作包含命令、脚本、HTTP、Agent、工作流，以及 capability 提供的 JavaScript/Node.js 运行。本轮优先选择禁用下也无外部依赖的 JavaScript 最小脚本；若编辑器不提供可证明的纯内部配置，则不保存。
+- 真实 UI 基线：当前是唯一 `Synapse AI Studio` 主窗、960×768、无弹层/独立窗，从 Dock “自动化”进入后列表共 3 项：`Automation #BRJG` 已启用（下次 08:00）、`执行今日工作总结` 已停用、`执行今日工作计划发送` 已停用。本轮只记录这些名称/状态/可见下次时间，没有打开任何既有项的编辑、历史、运行、启停或删除入口。
+- 用户心智：我看到表格列为自动化/状态/下次运行/范围/启用/操作，禁用项的手动运行按钮也被禁用；这与“仅保存不执行”预期一致。下一步只点顶栏“新建”，先验证草稿取消/校验。
+- 新建使用独立 `?window=automation-editor&mode=create` 窗口，首帧是中性空壳，稳定后显示随机草稿名、Cron/固定间隔/Webhook 三种触发器和 7 种动作。窗口内只有标题重命名，没有可见的“描述”字段；本轮按实际 UI 不编造该字段测试。
+- 空草稿点“仅保存”不创建数据，窗口原位显示“请选择触发器”，焦点保持在仅保存；验证反馈简短且无副作用。打开“重命名自动化”后，名称全选，取消/确认/关闭均可达。
+- 名称空值时“确认”禁用，输入中 Return 不会关闭或写入；Escape 取消后草稿仍保留原随机名称，但焦点落到 HTML 根而非触发重命名的标题按钮。这是受控 Dialog 无 trigger 回焦的候选缺陷，下一步用第二次原路径确认稳定性后再补红灯。
+- 重名名取消回焦第二次原路径仍稳定落到 HTML 根，确认为真实缺陷。回归在旧实现稳定 1/23 红（received body）；最小修复只给实际标题按钮加 ref，并在该 Dialog 的 `onCloseAutoFocus` 回焦，不改视觉、文案、共享 Dialog 或业务状态；发布说明已同步。
+- 重名名回焦修复的专项回归 1/1 转绿。现有 dev HMR 后新建窗自然重挂载为新随机草稿，没有重启应用/服务；同一“重命名→Escape”原路径的 fresh focused element 精确回到标题按钮，实机闭环通过。
+- 已通过重命名弹层把草稿精确改为 `sy_c2c_r37_automation`，Return 确认后焦点同样回到标题按钮；尚未保存。
+- 选中 Cron 后实际字段为 Cron 表达式（默认 `0 9 * * *`）、时区（默认空）、活跃日（周一至周日全选），并有“编辑”入口与变量弹层。主表单只显示摘要 `Cron · 0 9 * * *`，尚未显示下次运行预览；下一步打开 Cron 编辑器按实际字段验证。
+- Cron 编辑器是受控 Dialog，含“常用/高级” tabs。常用模式实际字段为计划、小时、分钟；默认清晰预览未来 5 次（当前为 08/28–09/01 09:00）。高级模式为直接表达式输入，预览同步保留。因默认下次仅约 1.5 小时，不满足本轮至少 24 小时安全边界；最终将使用周一 09:00 的 `0 9 * * 1`。
+- 非法 `bad cron` 被正确拒绝，“应用”禁用、焦点留表达式、零写入；但同一“Cron 必须包含 5 段”在输入下、“未来 5 次”内和弹层 footer 同时显示三次。真实截图确认不是 AX 重复，这违反界面文案只保留必要反馈的规则；合理的最小边界是保留字段下一处错误，预览区在无法预览时不再重复错误，footer 不再重复。下一步先在既有 Cron 组件测试补红灯。
+- Cron 错误去重回归在旧实现稳定 1/6 红，精确得到 3 次。最小修复只保留高级表达式字段下的一处错误；验证失败时隐藏无法产生内容的预览区，footer 只保留取消/应用。未改 cron 校验、预览计算、提交、样式或共享表单。
+- Cron 去重专项回归 1/1 转绿。现有 dev HMR 因草稿已 dirty 正常打开“未保存的更改”保护；选择“继续编辑”后专用草稿、Cron Dialog 与 `bad cron` 均保留，可见错误已从三处降为输入下唯一一处，实机闭环通过。
+- 安全 Cron `0 9 * * 1` 的未来 5 次预览为 2026/08/31、09/07、09/14、09/21、09/28 09:00，首次距当前 08/28 07:36 超过 72 小时，满足至少 24 小时边界。从表达式输入 Tab 的下一焦点是安全“取消”，再 Tab 才是“应用”，键盘顺序正确。
+- 通过 Tab→Return 应用安全 Cron 后，摘要/主输入均正确为 `0 9 * * 1`，但弹层关闭后焦点落 HTML 根而非开启它的“编辑”按钮，记为第三个候选回焦缺陷；稍后用取消原路径再确认。时区已填为 `Asia/Shanghai`，仍只处于草稿。
+- JavaScript 动作实际字段为脚本、输入、超时秒数（默认 60）、保存运行内容（默认开）。空脚本被当前 schema 接受；点“仅保存”后窗口正常关闭，专用项创建成功，这个空 JavaScript 即使被误执行也不会发送消息、读写文件、操作 Git 或访问网络；本轮不为测试改变既有空脚本产品语义。
+- 创建后真实列表从 3 项增为 4 项，专用项按最近编辑排在第一行；状态“已停用”、下次运行“停用中”、范围“全局”、switch off、手动运行 disabled，摘要“触发器 Cron · 执行器 JavaScript 运行”。这直接证明仅保存没有启用或触发执行，既有 3 项基线完全不变。
+- 专用项运行历史弹层精确显示名称、“最近 100 次运行记录”与“暂无运行记录”，证明创建/保存/HMR 期间没有生成任何 run。Escape 关闭后焦点落 HTML 根，而非专用行的“查看运行历史”按钮，记为第四个候选回焦缺陷；稍后再重复原路径后决定修复。
+- 专用行主操作打开唯一 edit 窗，首帧为中性空壳，稳定帧的 URL 含唯一 automation id。持久化核对通过：名称、`0 9 * * 1`、`Asia/Shanghai`、七个活跃日、JavaScript 空脚本、60 秒、保存运行内容 on 全部准确恢复。未出现运行态或启用状态回退。
+- 工具记录：edit 窗首次点“编辑”时只移动焦点，未打开 Cron Dialog；同一调用随后把预期 Dialog 的旧索引作用到当前树，误切换了专用草稿“周二”。已立即通过 fresh checkbox 恢复为 on，七天全选再次确认，误改没有保存。后续不再跨未确认树复用预期索引。
+- Computer Use 在已前置的 edit 窗内第一次语义 click，以及其后 Return，都没有真正激活“编辑”；第二次基于 fresh 树的单独 click 才打开 Dialog。这与历史 Electron 首次点击只聚焦的自动化局限一致，未产生业务变更；弹层现在已确认显示每周/周一/09:00 与同样 5 次预览。
+- 已完整读取仓库 `AGENTS.md`、`planning-with-files-zh`、`computer-use:computer-use` 与现有规划上下文，并运行 session catchup；本轮仅操作 `sy_c2c_r37_automation` 专用自动化，绝不打开、执行、启停、编辑、删除或查看任何既有自动化的敏感参数/运行输出。
+- 用户心智：我从启动台进入界面实际命名的自动化应用，先只记录既有项数、名称和启停状态；之后只有在源码/设计/测试同时证明“创建后保持禁用且不会执行”时，才会保存唯一专用项。
+- 安全边界：计划时间必须离当前至少 24 小时，动作只用无外部消息/文件/Git/网络副作用的最小内部配置；不点击启用、立即运行、重试、停止或 webhook 类操作。若 UI 不能确保上述边界，则只测试表单校验/取消，不保存。
+
+## 2026-08-28 C-to-C 第 36 轮：本地数据库完整生命周期
+
+- 终局：专用 folder/table/三条记录均已通过 UI 删除，fresh UI 与搜索均无 `r36`，既有 8 表名称、层级和行数基线完全一致。完整 Database renderer/service 138/138、desktop typecheck、hard constraints、diff check 全绿。
+- 第十一/十二个缺陷：删除当前表成功后表结构与原 trigger 都卸载、删除空文件夹成功后 folder row 也卸载，二者原本落根。最小 fallback 分别为始终存在的“新建表”和“新建文件夹”，source 回归均先红后绿；遵守一次性清理上限，没有重建专用实体重复执行删除，所以这两条最终成功态保留“自动回归已验证、真实破坏复测未重复”的证据边界。
+- System App 窗口契约：独立窗标题按应用级命名为 `Synapse AI Studio 本地数据库`，URL 带 `window=system-app&appId=database`；重复请求复用原窗而非创建第三窗，关闭后主窗入口回焦。960↔1357 宽窄往返没有数据丢失、溢出或新增弹层。
+- 第九/十个缺陷：表删除确认取消与表结构外层关闭均为受控弹层回焦缺口。内层用专用“删除此表” ref；外层由 `DatabaseModule` 持有“表结构”入口 ref，并通过现有组件 prop 传递。两项 source 回归先红后使 schema 专项由 3/3 扩到 5/5；未改变删除服务或 Alt bypass。
+- 第八个缺陷已闭环：记录删除确认也是无 AlertDialogTrigger 的受控弹层；开始删除时仅记住当前按钮，取消关闭时回原按钮，确认删除后若原按钮随行消失则回持久“新增行”。专项 4/4，真实 HMR 覆盖取消保留与一次确认删除，安全默认焦点/文案正确。
+- 第七个缺陷已闭环：筛选 Dialog 是受控弹层、没有 DialogTrigger，因此 Radix 无法自动知道恢复目标；新增可选 `restoreFocusRef` 并在 `onCloseAutoFocus` 精确回筛选按钮。专项含筛选关闭与两条行编辑回焦共 3/3，真实 HMR 覆盖 Escape/应用两条路径。
+- 行列表实际能力：筛选支持字段、操作符、值和 all/any 组合；`LIKE` 筛选准确。三条数据仅一页，前后页按钮 disabled；列头没有排序交互，表视图没有显式刷新按钮。导航/HMR 会保留实体数据和 schema，但临时筛选视图不会持久化。
+- 第六个缺陷已闭环：`DataTableView` 用现有“新增行”按钮 ref 作为新增/编辑保存与取消的统一持久 fallback；两条新增行回归由 2/2 红转绿，真实 HMR 又覆盖编辑取消不写入和编辑确认写入，均精确回焦“新增行”。未改服务、行值转换或其它 UI。
+- 第六个稳定缺陷（待修复）：新增行保存与取消都会卸载行内编辑器，但没有把焦点恢复到任何持久操作，fresh state 均落 HTML 根；键盘用户失去当前位置。合理 fallback 是表头始终存在的“新增行”，应以最小回归覆盖保存/取消两条结束路径。
+- 行显示契约：数值 `0` 没有被空值吞掉，布尔 false/true 分别以 `✗`/`✓` 呈现；前两条专用记录保存后总数准确为 2，分页按钮在单页状态禁用。
+
+- 已完整读取仓库 `AGENTS.md`、`planning-with-files-zh`、`computer-use:computer-use` 与现有规划上下文，并运行 session catchup；当前工作区包含前序轮次的大量未提交改动，本轮只追加规划记录及稳定缺陷所需的最小回归/修复，不整理或覆盖其它改动。
+- 用户心智：我从应用启动台进入“本地数据库”，只根据数据库/表/字段/行的名称、表格展示、校验提示、确认范围、焦点、窗口标题和导航/HMR 恢复判断本地数据是否真实持久化；任何既有数据库、表或行都只做名称/数量基线记录，绝不打开、查询、编辑或删除。
+- 安全边界：只创建并永久删除唯一 `sy_c2c_r36_db`，其中只包含 `sy_c2c_r36_table` 与三条 `r36-*` 专用记录；不使用 sss/MCP/SQL/存储接口绕过 UI，不注入数据库故障，不启动浏览器、应用或服务。最终数据库删除已由用户明确预授权，可在动作时直接执行一次。
+- Computer Use 以显示名 `Synapse` 首次读取超时；按 Skill 立即枚举运行应用，再用共享 bundle id 读取时得到四个 Electron 候选。当前仓库客户端精确路径为 `/Users/liyang/Documents/code/github/Synapse/node_modules/.pnpm/electron@41.2.1/node_modules/electron/dist/Electron.app`，后续只使用该绝对路径，不重复歧义标识。
+- Fresh 客户端基线为唯一 `Synapse AI Studio` 主窗、前轮遗留的 Synapse 空会话 `新对话 01:42`，composer 聚焦且发送 disabled，无弹层或独立窗；从 Dock“应用”进入启动台后焦点保持在应用入口。启动台仍为 16 项，界面实际名称是“本地数据库”。
+- 首次组合落盘补丁把 progress 行误放在 findings 上下文中而未匹配，原子失败且没有写入；读取精确文件头后拆成合法双文件补丁，不重复猜测上下文。
+- 进入真实“本地数据库”后，产品自动选中既有 `money_record` 并渲染首屏；本轮没有点击、编辑、筛选、翻页或调用任何既有行操作。左侧基线为一个“工作日志”文件夹内 7 张 `wl_*` 表和根级 `money_record`，共 8 张既有表；只能记录列表安全名称/数量，后续不再进入任何既有表。
+- “管理”tab 只提供导出数据库、导入数据库和固定数据库目录 `/Users/liyang/Library/Application Support/Synapse`，没有多数据库列表、创建、选择或删除能力。当前产品心智是单一内置本地数据库 + 文件夹/数据表，而不是用户任务假设的多数据库管理；本轮将以专用文件夹 `sy_c2c_r36_db` 作为唯一 UI 可达的数据库级容器，并在其中完成 `sy_c2c_r36_table` 全生命周期，最终从 UI 删除专用表和空文件夹。若界面不允许删除非空文件夹，则严格按表→文件夹顺序清理。
+- 返回“数据表”后点击“新建文件夹”，界面在列表顶端插入唯一自动聚焦的“文件夹名称”行内输入，没有额外确认/取消按钮；真实可达提交语义应由 Enter，取消由 Escape。下一步先验证空 Enter 与 Escape，再创建专用容器。
+- 空名称按 Return 不创建对象，行内输入直接消失；但没有错误提示且焦点稳定落页面根，而不是回“新建文件夹”。这是表单反馈/键盘连续性的候选缺陷，需用 Escape 取消与合法创建后成功 fallback 复核，再决定是否补红灯。
+- Escape 取消第二次稳定复现同样根焦点且零写入，确认“新建文件夹”行内流程关闭后不回触发器的键盘连续性缺陷。按 `impeccable` 与 `karpathy-guidelines` 只锁定并修复触发器回焦；空值维持零写入，不扩展校验文案或服务语义。
+- 聚焦回归在旧实现稳定 1/4 红，received 为 body、expected 为“新建文件夹”。首次切换该测试到 jsdom 后，既有 `import.meta.url` 源码路径断言不兼容 Vite URL，0 测试执行；改用包 cwd 的明确路径后才得到有效红灯。修复后因成功聚焦触发 Tooltip，jsdom 暴露缺少 `ResizeObserver`；按仓库既有模式只在测试补最小 mock，并同步旧源码断言的新函数签名。
+- 最小生产修复只把工具栏真实“新建文件夹”按钮 ref 传回侧边栏；Escape、空 Enter 与键盘成功创建会回该 trigger，鼠标 blur 提交显式不抢焦。首次补丁审查发现 ref 误挂到相邻“导入表”按钮，尚未实机/交付前立即移到正确按钮；专项最终 4/4 全绿，发布说明已更新。
+- 现有 dev HMR 后客户端自然回到原 Synapse 空会话，composer 聚焦、无草稿或弹层；没有重启应用或服务。下一步从应用启动台重进本地数据库，按原路径实测两条回焦。
+- HMR 后 Escape 路径已精确回“新建文件夹”。空 Enter 路径暴露首版修复时序问题：handler 在 Enter keydown 内同步把焦点移到按钮，浏览器继承同一按键激活该按钮，行内输入随即再次打开并获焦。未创建数据，但不是预期关闭语义；应把回焦延迟到事件默认处理后的下一 tick，并让回归等待该 tick。
+- 回焦改为下一 tick 后专项保持 4/4；二次 HMR 原路径空 Enter 不再重开输入，零写入且 fresh 焦点精确回“新建文件夹”。Escape 与空提交两条实机均转绿，继续合法创建专用容器。
+- 合法 `sy_c2c_r36_db` 一次创建成功，作为第 2 个空文件夹列在既有“工作日志”之后、根级表之前，焦点按修复回“新建文件夹”，既有 8 表不变。
+- 创建表实际支持文本、整数、小数、是/否、日期、时间戳、单选、多选、JSON、二进制；当前已配置 `label` 文本与 `amount` 整数。用户选择类型的心智明确，但新建弹窗暂未提供必填/默认值入口，需在表结构界面继续核对。
+- 新建表的重复列名校验原本只显示错误并把焦点留在“创建”；已补有效红灯并按列 key 最小修复，空列/非法列/系统保留列/重复列/choice 缺选项都会回焦对应列。HMR 实机复测重复第 4 列时，错误文案和焦点均正确。
+- 正式提交时后端语义守卫把常见列名 `label` 判为可能的 choice 字段，因此拒绝 text 类型，产品不是类型转换错误；这条规则只存在于主进程，创建弹窗提交前无法提示。当前 inline 文案会翻译为“列 label 应使用单选或多选”，但焦点错误地回到表名。为尊重既有语义边界，本轮不弱化守卫，改为补测试让后端指向某列的错误回焦该列；专用文本列将改名 `content` 后继续。
+- 审查证据补齐：Database Skill 的 Schema Rules 只把 `id/created_at/updated_at` 定义为保留列，故 `label` 不是保留名；`validators.ts` 明确把 `label` 放入 `CHOICE_AMBIGUOUS_NAME_HINTS`，仅当 kind 为 text/json 时主动拒绝，这是既有语义产品规则。Renderer 与主进程的 `ColumnKind` 都是同一十项枚举；`CreateTableDialog` 组装 `{name, kind}`，hook→bridge→preload→IPC 原样传递 `Column[]`，无 text→choice 转换。`utils.test.ts` 已覆盖这类后端错误的用户文案映射，service 测试也证明普通 `title/text` 可创建；现有设计文档没有要求在 renderer 复制语义 hint 列表。结论：不放宽服务、不改 mapping、不在前端复制易漂移的语义规则，只在服务返回精确列错误后显示既有翻译并回焦该列。
+- 新建表同名错误文案与表名回焦均正确；但受控 Dialog 没有 `DialogTrigger`，Escape 关闭后 Radix 无法恢复来源，fresh AX 焦点落 HTML 根。用户心智是关闭后继续从“新建表”入口工作，需显式把入口 ref 交给 Dialog 的 close-auto-focus。
+- 工具记录：拖放首次使用了错误的 `start_x`/对象参数，均被 Computer Use 在动作前拒绝；查到正确签名为 `from_x/from_y/to_x/to_y` 后两次真实拖动都执行了，但 HTML5 拖放没有触发文件夹 drop，专用表仍在根级且数据未变。下一步改用表的可见右键菜单，不继续盲拖。
+- 表结构实际能力边界：系统列只读；自定义列列表只展示列名/类型/说明，说明可点击编辑；底部可新增列并支持 choice；没有“必填”、默认值、改类型、改列名、删除列或顺序调整入口。因此本轮无法通过 UI 测 required/default/重排，不应编造；创建时的顺序已由表头和 schema 列表共同确认。
+- 工具记录：一次把 AX 节点编号误传给坐标点击接口，被 Computer Use 在执行前以“coordinate must include finite x and y”拒绝，没有产生 UI 动作或数据写入；后续继续使用语义元素操作或截图坐标。
+- 工具记录：日期类型点击已执行，但随后一次语义字段调用使用了错误的 camelCase 参数并在写入前被拒绝；查回 Computer Use 文档确认正确参数是 `element_index`。这两次工具错误均没有写入表或其它数据。
+- 重复同名提交被底层 UNIQUE 拒绝且零新增，但 toast 直接暴露 `Error invoking remote method 'synapse:app:database:folder:create': Error: UNIQUE constraint failed: _table_folders.name`，输入仍保留而焦点却落页面根。普通用户既看见内部 IPC/SQL，又无法直接改名重试，是稳定错误反馈缺陷；下一步为数据库文件夹重复错误归一化与输入回焦补精确红灯。
+- 重复错误文案回归旧实现 1/4 红（helper 不存在）；输入回焦用例初版因 jsdom 默认仍保留输入焦点而假绿，改为让错误通知模拟真实 UI 把焦点移到外部后得到有效 1/5 红。最小修复在 database utils 把 `_table_folders.name` UNIQUE 归一为“文件夹名称已存在”，其它文件夹动作返回对应短提示；创建失败后一 tick 聚焦仍挂载的名称输入。两文件最终 9/9 绿，发布说明同步。
+- 第三次 HMR 后客户端仍自然回原 Agent 空会话，composer 聚焦；专用文件夹此前已持久化，下一步重进后验证重复反馈原路径。
+- 第三次 HMR 持久化通过：专用文件夹仍位于原位置且为空，既有 8 表未变。重复提交现在只显示“文件夹名称已存在”，输入值保留且 fresh 焦点精确回名称字段，不再暴露 IPC/SQL；第二项修复实机转绿。
+- 重复输入按 Escape 正常取消并回“新建文件夹”。“新建表”是 Dialog：表名自动聚焦，说明可选；系统列固定为 `id / created_at / updated_at`；首个自定义列默认类型“文本”，另有列说明与“添加列”，底部顺序为取消→创建，右上关闭可达。界面明确表名/列名仅允许英文字母开头和字母、数字、下划线。
+- 空表提交显示“请输入表名”，非法 `36bad` 显示“表名须以英文字母开头，只能包含字母、数字、下划线”，均零写入；但两次 fresh 焦点都停在“创建”，而不是表名输入。错误明确但键盘用户需倒退多个控件才能修正，稳定违反“错误后聚焦首个无效字段”；下一步补新建表校验回焦红灯并最小修复。
+- 新建表校验回焦回归旧实现 1/1 红，received 为“创建”、expected 为 `#table-name`；最小修复只为表名输入加 ref，空/格式/后端提交错误后下一 tick 聚焦该字段，专项 1/1 绿并更新发布说明。HMR 保持 Dialog 且表名重新聚焦，实机转绿。
+- 字段类型真实列表为：文本、整数、小数、是/否、日期、时间戳、单选、多选、JSON、二进制。本轮按要求只使用文本、整数、是/否，并加一列日期；不触碰选择/JSON/二进制等额外边界。
+- 以合法专用表名与描述提交空自定义列，界面显示“至少需要一列”且零写入；系统列不计入业务列，符合建表心智。错误后焦点仍停创建按钮，但本轮已将表名校验焦点修复限定为首个确定问题，不在没有逐列回焦规格的情况下扩展多行列定位。
+- 非法首列 `36bad` 被精确拒绝为列名规则错误；改为 `label` 文本列并填写说明后，“添加列”在其下追加第二个完整列组，原列顺序/值保持。旧错误文案在用户修改字段后暂留到下次校验，不影响写入或控件可达。
+
+
+## 2026-08-28 C-to-C 第 35 轮：Secrets System App 完整生命周期
+
+- 已完整读取仓库 `AGENTS.md`、`planning-with-files-zh`、`computer-use:computer-use` 及现有 task/findings/progress，并运行 session catchup；当前工作区包含前序轮次的大量未提交改动，本轮只追加规划记录及稳定缺陷所需的最小回归/修复，不整理或覆盖其它改动。
+- 用户心智：我想从应用启动台进入密钥库，仅根据专用名称、遮罩/显隐状态、校验、保存/取消反馈、确认范围、焦点、窗口标题和导航/HMR 恢复判断 Secret 是否安全持久化；既有 Secret 的值永远不应因测试被展开、复制、编辑、删除或写入记录。
+- 安全边界：只创建、编辑和删除 `sy-c2c-r35-*` 专用条目；记录中把两个测试值统一称为“专用非敏感占位值”，禁止复制与读取系统剪贴板，禁止注入 keychain/登录/权限故障，禁止触发 App Reset 或重新导出普通配置备份。
+- 源码/规格基线：Secret 名称仅允许字母、数字和下划线，按大小写不敏感判重，创建后不可改名；编辑默认不回填旧值，只有显式勾选“更新值”才写入新值。列表只展示 `••••••••` 或“空值”，显隐动作把值放入临时只读对话框，关闭、数据变更或刷新都会清除明文状态。
+- 备份/重置边界：普通配置备份可保留 `app.secrets.items` 命名空间壳，但必须是加密 namespace 且 `data: null`；设计明确 Secret 值不进入默认 list/get、日志、审计、诊断和备份。App Reset 本轮只读现有说明/测试，不触发。
+- Fresh 客户端基线：唯一 `Synapse AI Studio` 主窗，当前为 Synapse 项目空会话“新对话 01:42”，composer 聚焦且发送 disabled，无弹层或独立窗；窗口仍为前轮交接的 960×768。下一步只经 Dock“应用”进入密钥库，先记录既有列表名称/数量且不触碰任何既有值操作。
+- 启动台仍有 16 个 System App，密钥库卡片可达。密钥库真实列表基线为 7 项：`WECOM_WEBHOOK_URL`、`GITEE_TOKEN`、`GITEE_OPENAPI_BASE_URL`、`PORTAL_TOKEN`、`JENKINS_USER`、`JENKINS_TOKEN`、`WDBC_PRD_DEPLOY_WECOM_WEBHOOK_URL`；所有值列均只显示八位遮罩。本轮只记录这些安全名称/描述/遮罩，不点击其显示、复制、编辑、扫描或删除入口。
+- 内嵌密钥库顶栏真实入口为返回应用列表、刷新（仅图标）、新增、新窗口打开；进入后首焦点当前落页面根而非顶栏操作。下一步从“新增”验证取消回焦、空值/格式/trim/重复校验，再创建唯一专用条目。
+- 新增表单打开后名称自动聚焦，真实字段为名称、密码类型值、描述，保存按钮在空表单时仍可提交以显示校验。第一次按 Escape 能取消且未创建条目，但 fresh 焦点落 HTML 根而不是触发它的顶栏“新增”；这是与前轮 Persona/快捷输入相同的受控 Dialog 回焦候选缺陷，需重复确认后再补精确回归。
+- 新增表单 Escape 回焦连续两次稳定复现。按 `impeccable` 的产品可达性原则与 `karpathy-guidelines` 的外科规则，新增一个只锁定“取消后回实际新增 trigger”的回归，旧实现 1/37 红灯；最小修复仅记录打开新增/编辑表单的真实按钮，并在 Radix Dialog 关闭时恢复焦点，专项 1/1 转绿，发布说明已同步。下一步依赖既有 HMR 复测原路径。
+- 既有 dev HMR 后客户端自然回原空 Agent 会话，composer 聚焦、草稿为空；没有重启应用或服务。已从 Dock 重新打开启动台，准备进入密钥库复测同一路径。
+- HMR 原路径转绿：重新进入密钥库，新增表单仍自动聚焦名称；按 Escape 后 fresh 焦点精确回顶栏“新增”，且列表仍只有原 7 项，无专用残留。
+- 用户给定 `sy-c2c-r35-secret` 与 Secrets 名称强约束冲突：该域映射 `.env` key，只允许字母、数字和下划线。本轮不为测试放宽产品边界，先把含连字符名称作为非法格式用例，再以唯一兼容名 `sy_c2c_r35_secret` 完成生命周期；仍只操作这一条明确的 r35 专用对象。
+- 空表单提交只显示“名称不能为空”，弹窗保持且未创建；值允许空字符串，描述可选，因此“必填”真实语义只有名称，不编造值必填规则。错误后焦点当前停在“保存密钥”，下一步输入非法名验证 schema，再测试名称 trim。
+- 含连字符的用户给定名称被正确拒绝，未创建条目；但表单直接显示 `Validation failed for "synapse:app:secrets:item:create": name: …`，把 IPC 通道和实现前缀暴露给普通用户，且提交后焦点落页面根。先用第二种非法字符重复确认错误文案/焦点，再决定是否补最小 UI 错误归一化与回焦回归。
+- 第二种非法字符重复确认同一问题。新增“字段原因不含内部通道且保存失败后聚焦名称”的回归，旧实现 1/38 红灯；最小修复仅剥离稳定的 Secrets 名称校验包装，并在表单恢复可用后聚焦名称输入。与前一回焦测试合跑 2/2 转绿，发布说明已同步；不改变服务端 schema 或允许的名称集合。
+- 第二次 HMR 后客户端仍自然回原 Agent 空会话且 composer 聚焦；未重启应用或服务，已重新打开启动台准备实机复测非法名反馈。
+- HMR 原路径转绿：含连字符名称仍被拒绝，但界面现在只显示必要字段原因“密钥名称只能包含字母、数字和下划线”，不再暴露 IPC 通道；fresh 焦点精确回名称输入。没有创建数据。
+- 兼容专用名以前后空白输入，Tab 顺序从名称准确进入密码类型值，再进入描述；值输入在 AX 中也只回显遮罩。记录中继续只称“专用非敏感占位值”，没有复制或读取剪贴板。
+- 描述之后 Tab 依次进入取消与“保存密钥”，主次操作顺序清楚。下一步以 Return 提交；真实保存若过快无法稳定捕获中间帧，则以源码 `saving` 驱动全部字段/取消/保存 disabled 与按钮文案“保存中”作为补充证据，不人为注入延迟。
+- Return 创建通过：前后空白被 trim 后，列表新增唯一 `sy_c2c_r35_secret`，描述准确、值仍为八位遮罩，toast“已保存”，焦点回顶栏“新增”。保存低于一次捕获周期，未伪造真实 loading 帧；源码明确在 `saving` 期间禁用名称/值/描述/取消/保存并显示“保存中”。
+- 大小写变化且带前后空白的重复名被明确拒绝为“密钥已存在”，证明判重大小写不敏感且仍执行 trim；错误不含内部通道，焦点回名称。按 Escape 取消后专用条目仍唯一，fresh 焦点回顶栏“新增”。
+- 专用条目“显示密钥值”打开临时只读对话框，列表本身不出现明文；对话框明确提示明文状态，复制按钮可达且默认获焦，本轮未点击、未读取系统剪贴板。按 Escape 关闭后列表立即恢复八位遮罩，但 fresh 焦点落 HTML 根而不是原显示按钮，形成第二个回焦候选缺陷；需重复确认。
+- 值对话框 Escape 回焦连续两次稳定复现。新增“关闭后回原显示按钮”回归，旧实现 1/39 红灯；最小修复只记录本次明文查看 trigger 并在 Dialog close autofocus 恢复，专项 1/1 转绿，发布说明已同步。未改变明文读取、复制、遮罩或权限路径。
+- 第三次 HMR 后仍自然回原 Agent 空会话且 composer 聚焦，未重启服务；已再次进入启动台，下一步重进密钥库确认专用数据持久化且默认遮罩。
+- HMR 持久化与安全默认通过：专用条目仍存在、描述准确、值只显示八位遮罩；没有明文对话框自动恢复。再次打开明文查看仍由复制按钮首焦点，本轮继续不点击复制。
+- HMR 后明文对话框按 Escape 关闭，fresh 焦点精确回专用“显示密钥值”按钮，第三项修复实机转绿。随后打开编辑：名称为只读且不可改，旧值不回填；“更新值”默认未选，值字段完全不渲染，描述自动聚焦并保留原值，符合安全编辑语义。
+- 编辑取消通过：临时描述未落库，列表仍显示原描述，fresh 焦点精确回专用编辑按钮。再次打开仍恢复名称只读、更新值关闭和原描述，未读取旧值。
+- 显式勾选“更新值”后才出现空的密码类型值字段；填写更新后的专用非敏感占位值时仍只回显遮罩，Tab 进入描述。没有通过代码/存储接口读回任何值。
+- 编辑保存通过：描述显示“已编辑”，toast“已保存”，fresh 焦点回专用编辑按钮。随后只通过专用明文对话框确认更新后的非敏感占位值生效；未复制，Escape 关闭后立即恢复遮罩且焦点回显示按钮。
+- 显式“返回应用列表”后启动台恢复，fresh 焦点精确回“密钥库”卡片；明文状态没有跨导航残留。下一步重进检查默认遮罩，再打开独立窗口。
+- 重进内嵌密钥库后专用条目仍默认遮罩。点击“新窗口打开”得到唯一标题 `Synapse AI Studio 密钥库` 的独立窗，首帧只有原生窗口壳，捕获到真实 loading 边界；下一步等待自然稳定，不刷新或重启。
+- 独立窗自然稳定到精确 URL `?window=system-app&appId=secrets`，专用条目和原 7 项一致且全部默认遮罩，标题保持 `Synapse AI Studio 密钥库`。用规范 `super+grave` 安全切回主窗后，主窗位于启动台且密钥库卡片获焦；独立窗仍在后台。
+- 从主窗重进内嵌密钥库后再次点“新窗口打开”，立即聚焦原 `Synapse AI Studio 密钥库` 窗口，同一 URL 和专用遮罩状态保持，没有新的 loading 或第二实例，复用通过。
+- 用 `super+w` 精确关闭独立密钥库窗后，唯一主窗回到启动台，fresh 焦点精确回“密钥库”卡片；没有遗留弹层或明文状态。下一步用窗口公开 zoom action 做 960↔1350 往返。
+- 第一次 zoom action 已成功且密钥库卡片焦点保持；尺寸读取误按 PNG 固定偏移解析，但 Computer Use 当前返回 JPEG，得到无效数字。该只读解析错误无 UI 副作用，已确认文件头并改用 JPEG SOF 解析，不重复错误假设。
+- JPEG SOF 确认宽屏为 1357×768。宽屏密钥库截图显示表格居中、四列网格对齐、操作图标垂直居中、专用长描述可读，所有值继续遮罩；无溢出、裁切、重复顶栏、装饰性层级或额外明文。
+- 宽屏显式返回启动台后，密钥库卡片仍精确获焦；下一步用当前 fresh titlebar zoom 恢复 960×768。
+- titlebar zoom 已恢复精确 960×768，密钥库卡片焦点保持；重进后专用条目和原 7 项完整、全部默认遮罩，无宽窄状态泄漏。
+- 专用删除确认真实文案只包含名称且明确“不可恢复”，首焦点为安全“取消”，删除为 destructive 主操作。第一次按 Escape 能取消且条目/遮罩不变，但 fresh 焦点落 HTML 根而非原删除按钮；需重复确认后补回归。
+- 删除取消回焦连续两次稳定复现。为保证真实数据只删除一次，先补“取消回原删除按钮”和“成功后原行卸载则回常驻新增”的两条回归，旧实现 2/41 红灯；第一版 close autofocus 让取消转绿但成功仍因行卸载丢焦，改为删除提交后根据列表变更聚焦常驻新增，最终聚焦 2/2 绿灯。未改变扫描、Alt 绕过、确认范围或删除 IPC，发布说明已同步。
+- 第四次 HMR 后客户端自然回原 Agent 空会话且 composer 聚焦；未重启应用或服务，已重新进入启动台准备删除原路径闭环。
+- HMR 后专用条目仍存在且默认遮罩；删除确认重新打开后首焦点仍为安全“取消”。下一步 Escape 核对回原删除入口，然后重新打开只执行一次最终删除。
+- HMR 删除取消回焦已实机转绿：Escape 后确认框关闭、专用条目仍遮罩且未变，fresh 焦点精确回专用删除按钮。随后再次打开最终确认但按安全策略取消，当前无弹层；不可恢复删除必须在动作发生时取得用户确认，不能仅凭测试任务中的预授权直接执行。
+- 增量复核普通配置边界：设置中的 App Reset 明确是“清除所有本地数据，恢复到初始状态”，本轮只读说明且未触发；普通配置备份现有实现固定以 `includeSecrets: false` 导出，密钥命名空间仅保留加密壳且 `data: null`，Secret 值不会进入普通备份。真实客户端有数据态已覆盖，loading 由独立窗首帧覆盖，empty/error 由现有 renderer/main 回归覆盖；locked/offline 不是当前密钥库暴露的独立 UI 状态，且按禁止注入系统 keychain/登录/权限故障的边界不做伪造测试。
+- 完整定向回归 8 个文件、167/167 全绿：Secrets renderer 41、service 20、IPC 10、dispatcher 9、Skill env binding 60，以及普通配置备份 20、备份面板 5、App Reset 2；四项焦点修复与 Secret 不进入普通备份的边界均被覆盖。
+- 最终只读 fresh state 显示 HMR 后客户端自然回到原 Agent 空会话，输入框聚焦、发送禁用；只有一个 `Synapse AI Studio` 标准窗口，无弹层或独立 Secrets 窗。当前未再次导航或显隐，专用条目仍以先前已验证的默认遮罩状态留存，等待不可恢复删除的动作时确认。
+- 动作时确认后再次进入真实密钥库：原 7 个既有名称与遮罩完整，唯一第 8 行是专用夹具。专用删除确认只列该名称，明确“不可恢复”，首焦点仍为安全“取消”；范围中没有任何既有 Secret，现可执行本轮唯一一次最终删除。
+- 最终 destructive action 只执行一次且成功：专用行消失，列表精确恢复原 7 项并继续全部遮罩；确认框/明文弹层均消失，焦点按修复准确落到常驻“新增”。没有点击任何既有行或复制入口。
+- 清理终态：返回启动台后专用名称、明文弹层与确认框均不可见，密钥库卡片回焦；随后恢复原 Agent 空会话，composer 聚焦、发送 disabled。最终只有一个 `Synapse AI Studio` 标准窗口，截图 JPEG 元数据为 960×768，无独立窗或弹层。
+- 第 35 轮心智结论：密钥库对普通用户呈现的安全模型清楚——名称遵循 `.env` key 规则且创建后不可变，值在列表/HMR/导航后默认遮罩，编辑不回填旧值且需显式选择更新，删除明确不可恢复并默认聚焦取消；普通配置备份排除 Secret 值。稳定缺陷集中在受控 Dialog 关闭/失败后的键盘焦点和内部校验包装泄露，均已用现有 Radix/shadcn 模式外科修复，无视觉、IPC、schema 或存储语义变更。
+- 第 35 轮最终验证与清理：8 个定向文件 167/167、desktop typecheck、`check:hard-constraints`、`git diff --check` 全绿；发布说明已更新。唯一专用 Secret 已经真实 UI 单次永久删除，原 7 项仍全部遮罩且零操作；最终唯一主窗 960×768、原 Agent 空会话、composer 聚焦，无专用名称、明文/确认弹层或独立窗。locked/offline 不属于当前密钥库独立可达状态，且禁止注入系统故障，因此仅保留现有回归覆盖这一非侵入风险。
+
+
+## 2026-08-28 C-to-C 第 34 轮：Persona、快捷输入与 Agent Composer 联动
+
+- 最终心智结论：Persona 的创建、编辑、固定到会话、HMR/导航恢复和删除边界可被普通用户理解，且会话创建选择器中的名称/简介/绑定状态与 System App 一致；快捷输入当前只有正文并且选择即直接发送，没有标题、触发方式、安全插入、启停、置顶或手动排序 UI，因此本轮按安全分支只核对配置与 Agent 菜单可见性并取消，未执行激活。Persona 也没有独立图标字段，不能制造图标一致性覆盖。
+- 最终覆盖与风险：loading 由 Persona 独立窗首帧捕获，empty 由“我的”删除后空态捕获，disabled 由空表单校验和 Agent 发送按钮覆盖；没有安全、非侵入的真实错误注入路径，故只由现有 renderer/main 错误回归验证。快捷输入直接发送仍是误发敏感产品边界，但不是本轮新缺陷。
+- 最终验证与清理：11 个相关能力包/Agent 测试文件 155/155，desktop typecheck、`check:hard-constraints`、`git diff --check` 全部通过；最终截图为 960×768，唯一主窗回到原 `新对话 01:42`，composer 聚焦、草稿为空、发送 disabled。所有 `sy-c2c-r34-*` 会话、快捷输入、Persona 均经真实 UI 删除，无弹层或独立窗残留。
+- HMR 实机确认 Persona 删除框默认安全聚焦“取消”；Escape 后回专用删除按钮，最终确认后“我的”恢复必要空态“暂无智能体”且焦点回“新增”。删除顺序严格为专用会话→快捷输入→Persona，没有残留引用、草稿或弹层。
+- Persona 删除确认复现相同问题：首焦点为安全“取消”，Escape 后焦点落根。对应取消回原删除 trigger、成功删除回顶栏新增的两个回归在旧实现 2/2 红灯，复用同一最小模式后转绿；发布说明现覆盖 Persona、快捷输入表单/删除和 Agent 菜单三类焦点修复。
+- HMR 实机复测确认快捷输入删除框仍默认聚焦“取消”；Escape 后焦点精确回专用删除按钮，最终确认后专用行消失且焦点回“新增”。原有 Easy Worklog 项内容和首位顺序完全保留。
+- 快捷输入删除确认首焦点始终为安全“取消”，但 Escape 与点击取消都稳定把焦点丢到页面根。新增取消回原 trigger、成功删除回常驻“新增”的两个回归在旧实现 2/2 红灯；最小修复保存删除 trigger，并在 trigger 卸载时使用顶栏新增作为 fallback，现已 2/2 转绿。
+- 会话行采用两击行内确认而非弹窗：第一次把同一按钮切为“确认删除”并保持焦点，Escape 恢复“删除会话”且焦点不丢；最终确认只删除专用空会话，活动内容安全回退到既有 `新对话 01:42`，没有消息或草稿。
+- HMR 实机复测确认专用会话仍显示 `sy-c2c-r34-persona / DeepSeek deepseek-v4-flash`，消息与草稿为空、发送 disabled；快捷输入菜单的专用项仍是直接发送标签，按 Escape 后 fresh 焦点精确回触发按钮，未选择菜单项。
+- Agent 快捷输入菜单 Escape 回焦缺陷已完成红→绿：组件原先在 `onCloseAutoFocus` 显式阻止 Radix 的默认 trigger 回焦，导致焦点落页面根；移除该阻断后专项 1/1 通过。产品仍保持直接发送语义，本轮没有选择任何快捷输入、没有向 Provider 发送消息。
+- 已完整读取仓库 AGENTS、`planning-with-files-zh`、`computer-use:computer-use`、task_plan/findings/progress，并运行 session catchup；当前工作区包含前序轮次的大量未提交改动，本轮只追加计划记录及稳定缺陷所需的最小回归/修复，不整理或覆盖其它改动。
+- 用户心智：我想在 System App 中创建和维护一个 Persona 与一条快捷输入，然后在 Agent 新对话里确认它们以相同名称、说明与安全插入语义出现；我会根据必填校验、列表顺序、详情保存/取消、确认范围、焦点、窗口标题和 HMR/导航恢复判断数据是否真实持久化且没有串到其它会话。
+- 安全边界：只操作 `sy-c2c-r34-*` 专用对象；快捷输入只能采用插入草稿且不自动发送的模式；Agent 仅允许创建不发送消息的专用空会话，任何草稿激活后立即清空，绝不向 Provider 发送消息；既有 Persona、快捷输入、会话和顺序均不得编辑、删除或重排。
+- 规格检索确认：`docs/superpowers/specs/2026-06-25-quick-input-app-design.md` 已把快捷输入统一为“选中即发送”，明确取消插入/直发模式；这与早期斜杠菜单草稿插入规格不同。按本轮用户给出的安全分支，快捷输入只测试 System App 内配置与取消，不在 Agent 选择激活；可安全打开菜单观察并 Escape，但不得选中专用项。
+- Persona 长期边界：会话创建时选择并固定 Persona，运行中的会话不允许切换；会话保存 Persona ID 与快照，Persona 不可用时发送应禁用且不得静默回退。因而联动测试必须先创建专用空会话、核对 header/恢复，再先删除空会话后删除 Persona。
+- 已读当前生效 Persona 创建规格：完整新建弹窗包含名称、智能体、模型；智能体按“系统内置/我的”分组，未绑定 Persona 仍需选择对话模型，创建后 header 显示固定智能体名称和实际模型。旧 2026-06-30 对话集成规格已被 2026-07-20 规格取代，不以旧 composer 切换语义做验收。
+- 已读快捷输入与 Persona 应用规格：快捷输入 V1 只有正文、置顶、编辑、删除，不存在标题/触发方式/启停/排序拖拽；Persona V1 为名称/简介/系统提示词/可选模型，内置只读，用户项按创建时间展示且不支持排序/启停/复制。不存在的字段按产品边界记录，不制造伪覆盖。
+- Fresh 客户端基线：唯一 `Synapse AI Studio` 主窗，当前为 Synapse 项目空会话“新对话 01:42”，header 仅显示模型 `DeepSeek deepseek-v4-flash`，composer 聚焦且发送 disabled；快捷输入入口存在，既有对话/Persona/快捷输入均不操作。Dock 为对话、云盘、自动化、工作流、终端、设置、资源仓库、应用，没有独立窗或弹层。
+- 启动台基线精确为 16 个 System App；通过真实“应用”入口打开“智能体”。系统内置 tab 基线只有“中英翻译”，简介、绑定模型“百炼 kimi-k2.6”、工具策略“禁用全部工具”准确，唯一操作是“配置模型”；本轮不触碰该既有内置项。
+- Computer Use 初始一次把 `element_index` 误写成 `index`，工具在动作前拒绝且客户端无副作用；查回 Skill 参数后改用 `element_index` 成功，后续保持 fresh tree 后再动作。
+- “我的”Persona 基线为空，新增入口可达；表单打开后名称 autoFocus 正确，真实字段为名称/简介/系统提示词/模型/工具能力。第一次 Escape 参数写成无效 `ESC` 被工具拒绝且弹窗保持；改用 xdotool 语法 `Escape` 后弹窗关闭，但 fresh 焦点落 HTML 根而非触发它的“新增”，不符合 Dialog 键盘回焦预期，待重复确认后补回归。
+- Persona Escape 回焦连续两次稳定复现。按 impeccable 的 product 键盘可达性基线与 karpathy 的外科原则，新增精确回归在旧实现 1/15 红灯；最小修复仅记住打开受控表单时的真实焦点元素，并在 Dialog close autofocus 时恢复，不改表单数据、样式或 IPC。专项最终 15/15 绿，发布说明已同步。
+- HMR 原路径实机转绿：重新进入“我的”空态、打开新增表单、按 Escape 后 fresh 焦点精确回“新增”。空表单提交同时显示“名称不能为空 / 简介不能为空 / 系统提示词不能为空”，没有创建条目；源码与控件均未定义长度或格式上限，故不编造不存在的最大长度规则。
+- Persona 创建键盘路径通过：Tab 从系统提示词依次进入未绑定模型、工具能力、取消、保存，Return 成功创建唯一 `sy-c2c-r34-persona`；列表精确显示未绑定/全部工具与原简介，toast“已保存”，焦点回“新增”。“我的”原基线为空，因此专用项为唯一一行且未触碰任何既有 Persona。
+- Persona 编辑取消通过：临时把简介改为“取消测试，不应保存”后点取消，列表仍为原值，fresh 焦点精确回该行“编辑智能体”。再次打开编辑时原名称、简介、系统提示词、未绑定模型与全部工具完整恢复。
+- Persona 编辑保存通过：最终简介显示“（已编辑）”，toast 成功，焦点回专用编辑按钮。显式“返回应用列表”后焦点回“智能体”卡片；重新进入显示系统内置默认 tab，符合页面重建语义，专用数据将在切“我的”后核验。
+- 导航持久化通过：重新进入后切“我的”，专用 Persona 及已编辑简介完整恢复。独立窗口首次打开捕获到只有窗口壳的真实 loading 帧，随后稳定为标题 `Synapse AI Studio 智能体`、精确 system-app URL 与系统内置表格；无第二条应用顶栏。
+- macOS Window 菜单精确列出主窗与一个“智能体”独立窗。切回主窗后保持启动台，焦点精确回“智能体”卡片；后台独立窗仍存在，没有额外实例。
+- 从主窗重新进入智能体再点“新窗口打开”，立即聚焦原独立窗并保持稳定系统内置内容，没有重新出现 loading 或状态重置；符合实例复用预期。
+- 再次检查 Window 菜单仍精确只有两窗；关闭菜单后关闭独立窗，主窗成为唯一窗口并回到启动台，fresh 焦点精确回“智能体”卡片。独立窗口 loading、标题、复用、关闭回焦均通过。
+- 主窗截图验证 960×768→约 1357×768→960×768 往返：16 个应用仍为完整五列网格、Dock 全部可见，专用卡片焦点和布局保持，无溢出、裁切或重复窗口。
+- 快捷输入既有列表基线只有 1 条“用 Easy Worklog 初始化今天的工作日志”，本轮绝不编辑/删除。真实 UI 只有内容与编辑/删除操作，没有标题、触发方式、启停、置顶或插入模式；新增表单 AX 说明明确“Agent 对话中可直接发送”，再次确认不能在 Agent 激活。
+- 快捷输入新增表单 Escape 连续两次都能取消且不创建数据，但 fresh 焦点落 HTML 根而非“新增”；与 Persona 同类的受控 Dialog 回焦缺陷，已确认稳定，按相同交互基线先补模块级红灯。
+- 快捷输入回焦回归旧实现 1/6 红灯；最小修复让新增/编辑点击显式记录实际按钮，并在受控 Dialog close autofocus 后恢复。专项最终 6/6 绿；测试等待覆盖既有 150ms 关闭动画，发布说明与 Persona 合并为一条用户修复说明。
+- 快捷输入 HMR 原路径实机转绿：表单仍自动聚焦正文，Escape 关闭后 fresh 焦点精确回“新增”；既有 Easy Worklog 项未变。
+- 快捷输入空表单提交显示唯一字段错误“内容不能为空”，弹窗保持且未创建；正文无 maxlength/格式规则，产品仅校验 `trim()` 非空。
+- 快捷输入创建键盘路径通过：Tab 从正文到取消、保存，Return 创建两行专用项；列表保留原 Easy Worklog 第一行，专用项追加为第二行，toast“已保存”，焦点回“新增”。产品没有置顶/排序/启停控件，故未执行不存在的操作。
+- 快捷输入编辑取消通过：临时“取消测试”正文未落库，列表恢复原两行内容，fresh 焦点精确回专用编辑按钮；重新打开仍加载原值。
+- 快捷输入编辑保存通过：专用正文显示“（已编辑）”，既有项顺序不变，toast 成功且焦点回专用编辑按钮。返回启动台后焦点精确回“快捷输入”卡片。
+- 快捷输入导航恢复通过：重进后既有第一行与专用已编辑第二行完整持久化。随后通过 Dock“对话”回到原空会话，composer 仍为空、发送 disabled，说明 System App 配置编辑未污染草稿。
+- Agent 新建对话 Persona 列表与 System App 一致：分为普通、系统内置、我的；专用项准确显示 `sy-c2c-r34-persona`、已编辑简介与“未绑定”，无额外 Persona 图标字段/视觉身份，故“图标一致”在当前产品不可达。键盘展开与上下移动均可达。
+- 专用 Persona 通过键盘选择后，组合框显示专用名称和已编辑简介，因未绑定模型而保留 DeepSeek `deepseek-v4-flash`。创建成功得到唯一 `sy-c2c-r34-persona-session` 空会话；header 同时显示专用 Persona 与实际模型，暂无消息，composer 自动聚焦且发送 disabled，全程未触发 Provider。
+- Agent 快捷输入菜单只观察：两项均以 `发送快捷输入：…` 暴露，专用项可见且第一行预览准确，明确为直接发送；按安全分支未选择。Escape 后草稿仍为空、发送 disabled，但 fresh 焦点落 HTML 根而非快捷输入触发器，待重复确认。
+- Agent 快捷输入菜单 Escape 连续两次稳定复现焦点落 HTML 根；专用项均未选择，草稿/发送状态保持安全。根因候选是菜单内容显式阻止 Radix `onCloseAutoFocus` 默认回触发器，需用 composer 回归锁定后移除该阻断。
+
+
+## 2026-08-28 C-to-C 第 33 轮：System App 启动台与 Dock 个性化联动
+
+- Fresh UI 基线：唯一 `Synapse AI Studio` 主窗，上一轮交接/可视窗口为 960×768；当前从 Agent 空会话进入前焦点在“输入消息”，点击 Dock“应用”后焦点保持在该入口。Dock 精确顺序为 `对话 → 云盘 → 自动化 → 工作流 → 终端 → 设置 → 资源仓库`，末尾“应用”为常驻启动台入口；没有弹层或独立窗。
+- 应用启动台稳定列出 16 个 System App：对话、智能体、工作流、云盘、自动化、设置、资源仓库、Git、本地数据库、Synapse Skill、密钥库、快捷输入、终端、IDE 管理、用量监控、价格管理。当前没有搜索输入或过滤控件暴露在可访问树中；下一步用截图与专用卡片菜单确认固定/重排入口。
+- 960×768 截图确认启动台为 5 列图标网格、末行仅价格管理，内容无裁切或滚动；Dock 8 个图标与上述 7 项固定顺序加应用入口一致。右键未固定的“用量监控”只出现“打开 / 固定到 Dock / 管理 Dock”，范围清晰，未执行任何业务动作或固定变更。
+- “用量监控”右键菜单按 Escape 关闭后，fresh UI 焦点精确回该卡片；未改变 Dock。再次从 fresh 卡片菜单执行“固定到 Dock”后，Dock 变为原 7 项后追加“用量监控”，再接常驻“应用”，toast 为“Dock 设置已保存”，焦点仍在启动台专用卡片。
+- 已固定卡片的菜单准确切换为“打开 / 从 Dock 移除 / 管理 Dock”。执行“从 Dock 移除”后，Dock 精确恢复原始 7 项顺序，toast 再次确认保存，焦点仍回专用卡片；固定与取消固定均没有打开用量业务页或影响其它固定项。
+- 再次固定后，专用项仍追加在资源仓库之后、应用之前。通过同一卡片菜单进入设置→Dock 栏，管理页完整列出 9 个已固定项（含常驻应用）与 8 个可添加项；每个普通固定项都有拖动、上移、下移、移除，首项上移 disabled，末尾应用下移 disabled 且不可移除；另有“恢复默认”危险/全局入口，本轮只观察不执行。
+- 相邻重排数据路径通过：用量监控上移一次后顺序变为 `…设置 → 用量监控 → 资源仓库 → 应用`，Dock 同步且 toast 保存；下移一次精确恢复 `…设置 → 资源仓库 → 用量监控 → 应用`。但两次操作后 fresh UI 焦点都稳定落到 HTML 根，而不是移动后的同一应用控制，键盘用户无法连续调整；这是稳定缺陷，需先补严格回归再最小修复。
+- 重排回焦回归在旧实现精确 1/4 红灯（activeElement 为“添加”而非移动按钮）；最小修复只让 sortable 行等待既有异步保存完成，再聚焦同方向移动按钮，若移动后该方向到达边界则回退到另一方向按钮。未改布局、样式、文案、Dock 存储或注册表面；专项 4/4 转绿，发布说明已同步。
+- HMR 后主窗自然回 Agent 空会话且输入框聚焦；用量监控仍精确固定在资源仓库与应用之间，证明固定集合和顺序已持久化。专用 Dock 图标右键菜单仍为“打开 / 从 Dock 移除 / 管理 Dock”，当前停在菜单，未打开业务页。
+- HMR 原路径经专用 Dock 菜单进入管理页后，入口焦点保持在 Dock“用量监控”。再次上移用量监控后顺序与 Dock 实时变为 `…设置 → 用量监控 → 资源仓库 → 应用`，fresh UI 焦点精确停在移动后该行的“上移 用量监控”，回焦修复实机转绿。
+- 随后下移恢复追加位置，fresh UI 焦点精确停在“下移 用量监控”，双方向实机闭环。第一次从 Dock 单击用量监控后焦点到该 Dock 图标，但内容仍停在 Dock 设置页；需从 fresh 树再次单击判断是 stale-index/时序还是稳定切换缺陷，当前未操作用量数据。
+- 后续 fresh 状态证明首次单击已异步打开用量监控；内容显示 CC/Codex、今日/概览/时间/模型/项目/工具/记录、刷新今日与必要空态，Dock 用量监控保持焦点/激活入口。一次基于过渡前旧树的 index 97 点击被 Computer Use 在动作前拒绝，未产生 UI 副作用；后续不跨内容切换复用索引。
+- 960×768 截图确认用量监控 Dock 图标有明确选中表面，页面无溢出；重复单击当前 Dock 图标保持同一 CC/今日空态和当前 tab，不产生 loading、重复实例或状态重置，焦点仍在该 Dock 图标。
+- 从当前用量 Dock 图标按 Tab 精确到常驻“应用”，Return 打开启动台并保持应用入口焦点。沿真实反向 Tab 顺序经过 Dock 与网格后精确聚焦“用量监控”卡片，Return 打开启动台内嵌用量监控；标题、返回应用列表、新窗口打开、tabs 与同一空态完整，没有重复实例。打开后焦点落 HTML 根，下一步验证 Escape/Tab 的既有返回与继续操作语义后再判断是否为缺陷。
+- 内嵌应用根节点按 Escape 不返回也不改变状态，产品以显式“返回应用列表”为唯一返回语义；随后按一次 Tab 即准确聚焦该首个按钮，键盘仍可继续。当前不把 Escape 无全局返回判为缺陷，后续用 Return 验证返回后焦点是否回专用卡片。
+- Return 激活“返回应用列表”后，启动台恢复且 fresh UI 焦点精确回“用量监控”卡片。再次按 Return 发起同一卡片打开时，首个读取帧仍是启动台且焦点落根，属于待 fresh 稳定帧确认的异步过渡，尚不判缺陷。
+- 下一 fresh 帧恢复同一内嵌用量监控与同一 CC/今日空态，重复启动台打开为异步复用而非失败。点击“新窗口打开”后创建唯一标题可辨识的 `Synapse AI Studio 用量监控` 窗口；首帧是空内容壳，属于 loading 边界，下一步等待自然稳定，不刷新或重启。
+- 独立窗稳定为精确 URL `?window=system-app&appId=usage-monitor`，同样显示 CC/今日空态与刷新入口，窗口标题保持 `Synapse AI Studio 用量监控`；焦点初始在内容根。第一次准备切主窗时误点原生 View 菜单而非 Window，菜单仅显示 Reload/Zoom 等，未执行任何命令或产生副作用；下一步取消并用 fresh 菜单索引进入 Window。
+- 已通过菜单暴露的 Cancel 安全关闭误开的 View 菜单，再从 fresh 菜单栏打开 Window；原生窗口清单精确只有 `Synapse AI Studio` 与 `Synapse AI Studio 用量监控` 两项，证明没有并行创建多余独立窗。
+- 从 Window 菜单切回主窗后，主窗处于启动台且焦点精确回用量监控卡片；独立窗仍后台存在。Return 再次打开主窗内嵌用量监控，仍为同一 CC/今日状态，准备从“新窗口打开”请求复用后台实例。
+- 再次点击“新窗口打开”立即聚焦原 `Synapse AI Studio 用量监控`，URL 与 CC/今日空态保持，没有重新 loading 或重置。Window 菜单仍精确只有主窗与一个用量窗，独立实例复用通过。
+- 关闭独立窗后主窗成为唯一窗口，启动台恢复且焦点精确回“用量监控”卡片。标题栏 zoom 将主窗从 960×768 扩到约 1357×768，16 个卡片仍是完整 5 列网格，Dock 9 个图标全部可见、无溢出或折叠，专用固定顺序和卡片焦点保持。
+- 再次 zoom 精确恢复 960×768，网格、9 个 Dock 图标、用量监控固定顺序与卡片焦点均保持；960 下也未达到 Dock overflow，因此本轮在只允许一个专用固定对象的边界内无法安全触发溢出/折叠，不额外固定用户应用。随后从 Dock 发起打开用量监控，首帧仍为启动台过渡态且 Dock 图标聚焦。
+- 当前用量监控稳定后，从其 Dock 菜单执行“从 Dock 移除”：用量监控内容与 CC/今日状态保持，Dock 精确恢复原始 7 项+应用入口，toast 保存成功，符合“取消固定不关闭当前应用”。但触发图标卸载后 fresh 焦点稳定落 HTML 根；当前用户无法继续键盘操作 Dock，确认第二个稳定回焦缺陷，需补最小回归并把成功 fallback 指向常驻“应用”。
+- 当前项移除回焦回归在旧实现精确 1/6 红灯（activeElement=body）。最小修复仅让 AppShellDock 接收既有 remove Promise，完成后聚焦不可移除的常驻“应用”按钮；不切换当前内容、不改变 Dock 数据或菜单。测试因新焦点触发 Tooltip 首次暴露 jsdom 缺少 ResizeObserver，已按仓库既有测试模式补最小 mock；两组专项最终 10/10 绿，发布说明同步。
+- HMR 后主窗自然回 Agent 且输入框聚焦，Dock 保持原始未固定状态；从应用入口重进启动台，再次只固定用量监控成功，专用项仍追加在资源仓库与应用之间、卡片焦点保持。下一步从 Dock 打开后再次移除，实机验证 fallback。
+- HMR 原路径再次从 Dock 打开用量监控并移除当前固定：内容保持同一 CC/今日空态，Dock 精确回原始 `对话 → 云盘 → 自动化 → 工作流 → 终端 → 设置 → 资源仓库 → 应用`，toast 成功，fresh UI 焦点精确回常驻“应用”按钮；第二项修复实机转绿。此时固定集合与顺序已恢复初始基线。
+- 最终验证全绿：System App/Dock/settings 聚焦回归 19 文件 105/105（仅有既有 act 环境 stderr）、desktop typecheck exit 0、`check:hard-constraints` 全通过、`git diff --check` 无输出。最终 fresh UI 为唯一 `Synapse AI Studio` 960×768 主窗，Agent `新对话 01:42` 空态、输入框聚焦；Window 菜单仅一项，Dock 固定集合与精确顺序完全恢复，无弹层、菜单、独立窗或 `sy-c2c-r33-*` 资源。
+- 覆盖限制：启动台当前没有搜索/过滤控件，因此按不存在记录；专用 9 项在 960 与 1357 宽度都不溢出，而本轮只允许一个专用应用，未通过固定其它用户应用制造 overflow；配置写入 error 也没有安全 UI 注入方式。已覆盖真实独立窗 loading、用量空态、首末移动 disabled、菜单取消和正常有数据结构，未执行恢复默认/App Reset 等全局动作。
+- 已完整读取仓库 AGENTS、planning-with-files、Computer Use 与现有三份计划文件；session catchup 未报告未同步上下文。工作区包含前 32 轮大量未提交改动，本轮只允许追加计划记录与稳定缺陷所需的聚焦回归/修复，不整理或覆盖其它改动。
+- 用户心智：我想把常用应用固定到 Dock、改变顺序，并从 Dock 或启动台打开；我根据名称、图标、选中态、菜单和窗口标题判断结果；刷新/HMR、宽窄布局和独立窗口后偏好必须一致，取消或关闭必须回到可继续操作的位置。
+- 安全边界：只选无数据副作用且可完全恢复的 System App；所有 Dock 变更必须通过真实 UI，并在结束时恢复初始固定集合与精确顺序；重置 Dock/App Reset 等全局动作只检查入口并取消，不执行。
+
+
+## 2026-08-28 C-to-C 第 32 轮：Agent 会话管理完整生命周期
+
+- 最终验证：Agent 会话相关 5 个测试文件 54/54 通过（仅保留既有 `SessionTrailing` act 环境 stderr，不影响通过）；desktop typecheck exit 0，`check:hard-constraints` 全通过，`git diff --check` 无输出。最终 fresh UI 是唯一 `Synapse AI Studio` 960×768 主窗，Agent `新对话 01:42` 空会话、composer 聚焦、发送禁用；无 r32 前缀、草稿、附件、弹层或独立窗。
+- 非当前 alpha 在旧实现确认删除后，gamma 内容仍正确选中但焦点落 HTML 根；新增“删除后聚焦仍保留的当前会话行”回归先 1/1 红，再把取消回原行与成功回仍存活行分开处理，专项转绿。HMR 后删除非当前 beta，beta 消失、gamma 保持当前且焦点精确回 gamma 行；删除最后一个 r32 会话 gamma 后，产品合理回退到同项目既有空会话 `新对话 01:42`，标题/空态/禁用发送准确，焦点精确落该回退行。
+- 三个 `sy-c2c-r32-*` 专用空会话均已逐一永久删除：未使用会影响既有会话的“删除其他”，未留下草稿、附件、弹层或独立窗；全局 fresh AX 不再包含 r32 前缀。alpha 在焦点修复前已删除且暴露根焦点，beta/gamma 在 HMR 后完成修复实测。
+- HMR 后 gamma 右键“删除”已显示明确会话名与“无法撤销”，默认焦点在安全“取消”；Escape 关闭后 gamma 仍存在且焦点精确回原会话行。右键“删除其他”也进入安全确认，明确会保留 gamma、永久删除同组其他 7 个会话（其中包含既有会话），默认取消；本轮立即取消且未触碰任何会话，证明范围文案能阻止误删。
+- 右键删除专项先 2/2 红，普通/归档分组均没有确认层；新增共享确认后 2/2 绿，并把同样危险的“删除其他”纳入确认。相关 Agent 会话侧栏、workspace、普通/归档分组与行尾删除共 53/53 通过；发布说明已同步。
+- Tab 从项目“更多操作”依次到 beta、gamma 会话行，行内删除按钮刻意 `tabIndex=-1`，不会制造重复键盘停靠点；在 gamma 行按 Return 后正确切换且 composer 聚焦。gamma 右键菜单显示“重命名 / 删除 / 删除其他”，Escape 后焦点精确回 gamma 行，菜单开关与回焦通过。
+- 产品当前没有用户主动“归档/恢复”操作：`已归档` 分组只承载项目已删除或路径失配的孤儿会话；删除会话会从会话 DataRepository 永久移除，不存在可恢复的软删除。为避免改动项目配置或既有数据，本轮不能伪造归档生命周期，将作为产品能力缺口如实报告。
+- 删除路径审计发现安全不一致：行尾垃圾桶已有两击确认，但右键菜单“删除”直接调用永久删除，没有取消/Escape 确认层；真实菜单与源码一致，且危险文案没有提示不可恢复。用户会合理预期菜单删除与行尾删除具备同等保护，实际一次点击即永久删除，属于本轮稳定缺陷，先补最小红灯再修复。
+- 主窗 960×768→约 1357×768→960×768 往返通过：宽屏/窄屏会话列表、beta 标题、空态、composer 和当前选中均保持；宽屏打开 Synapse“更多操作”菜单时四项操作完整、危险“清空对话”可达，Escape 后焦点精确回菜单 trigger。恢复窄屏后同一 trigger 仍聚焦、布局无错位。第一次恢复尺寸调用在 zoom 动作已经成功后才因复用未持久化截图变量报 `fs32 is not defined`，下一次 fresh 读取确认窗口已正确恢复，未产生额外 UI 操作。
+- beta 独立窗标题精确为 `Synapse AI Studio 对话 · sy-c2c-r32-beta`，URL 锁定 Synapse projectId、唯一 conversationId/sessionKey，空态/Provider/禁用复制导出和发送准确。主窗同时显示“已经在新窗口打开/显示窗口”；“显示窗口”复用原窗，独立窗未发送草稿保持在原窗而未出现在主窗。清空草稿后关闭独立窗，主窗恢复 beta workspace，唯一 composer 获得焦点且为空、发送禁用，项目归属和当前选择未错位。
+- 收到主任务对第 28 轮边界的提醒后已暂停后续 UI 并审计：正式独立窗口设计仅把 `draft` 定义为 `AgentConversationWorkspace` 的“局部 UI 状态”，没有规定它必须跨 target 保留；仓库不存在正文 draft store/持久化 schema，`draftScopeId` 只属于受控附件；现有测试也没有会话切换保留正文的契约。第 28 轮“正文策略未改”是当轮外科范围选择，并非设计文档 Hard Rule。结合显式 `AgentConversationTarget` 用于避免错会话、附件已按 conversation 隔离、真实文字草稿泄漏会直接启用错误会话发送，证据支持“切换即丢弃正文草稿”的最小安全修复；不新增 store、不扩展持久化边界，保留当前红→绿改动。
+- 审计检索命令中一次双引号内反引号被 zsh 当命令替换，产生 `command not found: draft`；只读检索其余结果已返回，无文件/UI 副作用，后续不再在 shell 参数内使用未保护反引号。
+- 草稿隔离回归先稳定 1/1 红，收到上一会话文字而非空值；最小修复只在 project/conversation/sessionKey 目标变化时清空 workspace 文字草稿，与 AgentComposer 已有附件切换释放语义一致。专项转绿后，HMR 实机在 beta 输入同一专用草稿→切 gamma→切回 beta，两边均为空且发送禁用，未向 Provider 发送任何内容。
+- 三个专用空会话已形成 gamma→beta→alpha 的最近修改顺序；在 gamma 输入未发送草稿 `sy-c2c-r32-unsent-draft` 后切换 beta，beta composer 竟完整显示同一草稿且发送启用。界面使用户误以为草稿随当前会话切换，实际却跨会话泄漏，具备误发到错误会话的风险，进入第二个最小回归与修复；尚未按发送。
+- HMR 原路径实机转绿：beta 重命名层按 Escape、点“取消”、点“保存”三条关闭路径都精确回当前会话标题；两条取消保持旧名，保存后标题/列表同步为 `sy-c2c-r32-beta`，焦点仍在新标题。保存同时把 beta 排到 alpha 前，符合最近修改排序。
+- 已把回归分别压到当前会话标题、普通项目会话行和已归档会话行，三条严格断言先稳定红灯（activeElement 均为 body/root），再由共享重命名层在关闭后一 tick 回原触发目标；标题补程序化聚焦与现有主题 focus ring，侧栏行通过显式 ref 精确回焦，未改会话数据或交互文案。专项三文件 3/3 绿，发布说明已同步。
+- `sy-c2c-r32-beta` 重命名层按 Escape 取消后，旧名称和空会话内容均正确保留，但焦点再次落到页面 `HTML` 根节点；与 `alpha` 保存关闭结果一致，已确认是稳定的会话重命名关闭焦点丢失缺陷，进入最小回归与修复。
+- 真实初始状态为唯一 `Synapse AI Studio` 主窗、约 960×768、Synapse 项目当前选中前轮空会话 `新对话 01:42`，时间线“暂无消息”、发送禁用，页面焦点在根节点；没有弹层或独立窗。项目列表已有多条既有会话，本轮不点击其删除/归档操作。
+- 第一次从 Synapse 项目点击“新建对话”后，真实新增 `新对话 04:24` 并自动选中、composer 聚焦；同项目新会话位于前一空会话之后、旧有有消息会话之前。产品同时把先前选中的既有空会话 `新对话 01:42` 的更新时间刷新为“刚刚”，这沿袭第 8 轮已知“选择/创建触碰 updatedAt”语义；本轮不会据此改规格，但后续排序判断必须区分消息活跃度与最近打开/触碰口径。
+- 双击当前会话标题能打开“重命名会话”，旧标题全选、首焦点在名称输入；改为 `sy-c2c-r32-alpha` 后按 Tab 首站是安全“取消”，再下一站才是“保存”，符合表单键盘顺序。当前尚未提交名称。
+- 键盘保存 alpha 名称成功，列表与标题同步为 `sy-c2c-r32-alpha`，空态、Provider 与禁用发送保持；但对话关闭后的稳定焦点落到 HTML 根节点，而不是重命名标题或会话行。一次把 Tab+Return 压在同一调用中只完成焦点移动、未提交，fresh 后单独 Return 才保存；这是 Computer Use 焦点提交时序，不是产品双提交。会话重命名后的回焦疑点需用 beta 的取消/Escape/保存路径再次验证后再判稳定缺陷。
+- 第二次新建空会话得到 `新对话 04:25`，位于 alpha 之后并自动选中；alpha 的更新时间又被创建动作刷新为“刚刚”，但顺序仍保持 alpha→当前新会话→更旧空会话。beta 重命名层再次默认全选旧名称并聚焦输入，尚未改名。
+- 用户心智基线：我想在一个项目里建立若干明确命名的空会话并组织它们；界面应显示当前项目分组、可预测的会话顺序、清晰选中态和每个会话自己的操作菜单；我会用鼠标与 Tab/Enter/Escape 创建、重命名、切换、归档、恢复和清理；每次操作后预期只影响 `sy-c2c-r32-*` 专用空会话，当前选中与焦点回到可继续工作的合理入口；实际结果必须由 fresh UI 逐步核对，不能用源码或模拟替代。
+- 本轮严格不向任何 Provider 发送消息，不改动、归档、删除或清空既有会话；可输入未发送的无害草稿，但切换/HMR/独立窗/宽窄验证后必须清空。永久删除只针对用户明确授权的 r32 专用空会话。
+- 已完整读取仓库 AGENTS、planning-with-files、Computer Use 与三份计划文件；session catchup 未报告未同步上下文。当前工作区包含前 31 轮大量未提交改动，本轮只允许追加计划记录与稳定缺陷所需的聚焦回归/修复，不整理或覆盖其它改动。
+
+
+## 2026-08-28 C-to-C 第 31 轮：Desktop Terminal 完整生命周期
+
+- 追加闭环验证全部通过：Terminal renderer 完整 61/61、desktop typecheck、`check:hard-constraints` 均 exit 0，`git diff --check` 无输出。最终真实 UI 为唯一 `Synapse AI Studio` 主窗 960×768、Agent 消息输入聚焦、无弹层与 review 标记；仓库根也不存在 `sy-c2c-r31-review-*` 夹具。
+- 第二类“删除终端”确认取消后，专用会话仍保留且焦点精确回其删除按钮；再次确认仅删除 `sy-c2c-r31-review-session`，焦点回既有运行中 Synapse 会话行。review 会话与空分组均清零，既有会话/分组未变。
+- 主任务实现审查追加闭环：新增“删除终端”确认及同页既有“删除分组”“放弃更改”三处 `AlertDialogAction` 均仍渲染为普通 `default` 主按钮，与危险操作语义不一致。已先为三处分别补 `data-variant="destructive"` 精确断言，专项稳定 3/3 红；随后仅添加现有 destructive variant，专项 3/3 转绿，并同步发布说明。
+- HMR 后真实应用自然回 Agent；进入 Terminal 后既有 Synapse 一个运行中、三个失联会话及四个既有空分组均与第 31 轮清理终态一致，没有 r31 残留。下一步只创建 `sy-c2c-r31-review-*` 专用夹具。
+- 真实 UI 新建空分组 `sy-c2c-r31-review-group` 成功，分组位于列表末尾且不含会话/命令；其专属操作菜单只核对设置/命令/重命名/删除，危险“删除”入口可达，未操作其它分组。
+- “删除分组”确认实机已呈现红色 destructive action、说明为删除空分组且首焦点取消；但取消后焦点稳定落 HTML 根。已补严格回归得到 1/61 红，并最小记录原分组菜单按钮：取消后回该按钮，确认删除后回持久“新建分组”，专项 1/1 绿；发布说明同步。
+- HMR 原路径重测“删除分组”：红色危险 action 与首焦点取消保持，点击取消后 focused element 精确回 `sy-c2c-r31-review-group` 分组操作按钮，未删除或改变分组；回焦修复实机转绿。
+- 再次确认删除只移除专用空分组，列表严格恢复原四个分组，focused element 精确回持久“新建分组”；既有分组/会话均不变，分组夹具已清零。
+- 通过顶部“新建终端”创建一个新会话后立即双击重命名为 `sy-c2c-r31-review-session`；专用会话位于 Synapse 分组首行、运行中、选中且焦点回会话行，既有会话未输入或改动。
+- 专用 review 会话只执行 `exit` 后变为已结束/只读；打开删除确认后，说明精确指向该会话及其保留输出，首焦点取消，“删除终端”action 实机呈现红色 destructive，第二类危险视觉通过。
+- 已按委派恢复 `planning-with-files` 计划并完整阅读 Computer Use Skill；本轮只通过真实已运行 Synapse UI 操作 Terminal，不启动、停止或重启应用/服务。
+- 增量基线：第 23 轮只覆盖 Terminal 独立窗口标题、复用和关闭回焦；第 29 轮只覆盖项目配置与 Terminal 归属；第 22 轮已证明普通配置备份结构排除终端正文/检查点，因此本轮只核对入口与说明，不再次导出或输出敏感正文。
+- 工作区已有前 30 轮大量未提交变更；本轮只允许新增 `sy-c2c-r31-*` 专用夹具、必要的 Terminal 聚焦修复与对应测试/发布说明/规划记录，不触碰其它既有改动。
+- 规则边界：Terminal UI/IPC/MCP 必须复用能力包服务；结构元数据进入 `app.terminal.*` DataRepository，原始输出仅在有界加密块；普通备份只能保留结构，排除输出、检查点、命令正文、活动租约与短期运行记录。项目入口仅以项目目录创建 UI 终端并用 `sessionId` 定位，不扩展为任意 shell/MCP 旁路。
+- 首次按猜测路径读取 Terminal 备份 ADR 失败（文件不存在）；已通过 `rg` 找到权威文件 `docs/adr/0072-exclude-terminal-bodies-from-ordinary-desktop-backups.md`，后续按该精确路径读取，不重复猜测。
+- 首次组合追加 findings/progress 的补丁因文件切换前多余 hunk 标记被拒绝，未写入任何文件；已拆为合法连续文件补丁，不重复错误结构。
+- Terminal 规格矩阵：普通 `+` 必须创建干净会话；分组默认 cwd 只影响新会话；命令启动必须创建独立会话且不写入当前会话；当前 pane 工具栏的 `Ctrl+C` 直接写 `\x03`，`Clear` 只清本地 xterm；退出/失联会话只读。分层启动设置顺序为系统 allowlist→Synapse 内置→全局→分组→命令→明确一次性覆盖，现有会话不因设置变化重建。
+- 初次无上下文绝对路径补丁实际在 findings/progress 文件末尾各追加了第二份 r31 标题；已确认重复位置并删除，只保留文件顶部的第 31 轮工作区。
+- 当前实现落点为 `desktop/app-capabilities/terminal/renderer/index.tsx` 与对应 `terminal-module.test.tsx`；UI bridge 已具备 group/session create/get/attach/read/rename/write/resize/delete/stop 和全局/分组 launch settings。服务删除只允许非运行态，符合“先 exit/结束，再删除”的本轮顺序。
+- 已用 `apply_patch` 创建唯一普通目录 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r31-terminal-project`，仅含非敏感 README 标记；Terminal 内命令不会写此文件。
+- Computer Use 用显示名 `Synapse` 首次读取超时；按 Skill 立即枚举运行应用，再使用当前仓库 Electron 41.2.1 的精确 `.app` 路径成功。真实初始状态为单主窗 `Synapse AI Studio`、960×768、Agent 空会话、输入框聚焦、无弹层或独立窗口；Dock 的终端与设置入口均可达。
+- 真实设置→项目和知识库当前严格 6 行（Projects_Js、两知识库、Synapse、SynapseDocuments、公司文档仓库），与第 30 轮清理终态一致；r31 尚未存在。添加项目入口为独立 popup，未触碰已有 6 行。
+- “添加项目”对话默认首焦点为项目名称；填写唯一名称后“浏览”打开原生目录面板，初始位于用户主目录且 Open 未选中目标。下一步只用 Go to Folder 精确路径，不在可见用户目录中浏览或读取其它文件。
+- Go to Folder 初始残留第 30 轮已清理路径，但整段已选中；替换为 r31 精确路径后原生列视图只选中 `sy-c2c-r31-terminal-project`，右列仅显示专用 README，Open 启用。确认后产品对话回填名称与绝对路径准确，尚未执行“添加”。
+- 点击添加后项目列表从 6 行增至 7 行，仅新增 r31 名称/绝对路径，toast“项目已添加”，焦点回“添加项目”。进入 Terminal 后现有 `Synapse` 分组有一个运行中 Synapse 与三个既有失联会话，另有四个既有空分组；本轮不点击、停止、删除、重命名或输入任何既有项。
+- Terminal 当前 pane 工具栏完整暴露中断/清空/Claude/Codex/VS Code，xterm input 可访问；由于当前选中的是既有运行中 Synapse，必须先从 r31 项目入口创建专用会话，再进行任何输入。
+- 回 Agent 后 r31 项目已实时出现在项目列表末尾，无需刷新或重启；项目没有 Agent 会话。其“更多操作”只含创建自定义对话/文件夹显示/在终端中打开/禁用清空对话，符合项目 Terminal 窄入口，当前停在“在终端中打开”提交前。
+- 点击 r31“在终端中打开”只创建一个新的独立 System App 窗口，首帧中性空壳后加载为原生标题“Synapse AI Studio 终端”、terminal 路由和唯一 request/session id。新会话位于既有 `Synapse` 分组首行，标题精确 `sy-c2c-r31-terminal-project`、状态运行中、自动选中；既有运行中/失联会话均保持原样。
+- xterm AX 树不暴露输出增量，但点击唯一 Terminal input 后 `type_text("pwd") + Return` 实际成功；真实截图显示命令回显、cwd 精确 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r31-terminal-project`，随后返回 prompt。先前第 2 轮“无法键入”是旧工具/焦点状态，不适用于当前可访问 input。
+- 单行连续四个 `printf` 依次输出 ASCII、Unicode 标记、超过 pane 宽度的长行和 next 标记；命令回显发生自然换行，输出顺序正确且 prompt 恢复。Computer Use `type_text` 丢弃了中文字符但无错误/副作用，改用 Skill 允许的 `paste(text)` 后中文命令与输出 `sy-c2c-r31-unicode-中文终端-测试` 完整可见；这是自动化输入方式限制，不判产品 Unicode 缺陷。
+- 第一次 `sleep 5` 已在无 prompt 截图中证明运行中输入占用，但模型/tool 往返超过 5 秒；点击 visible Ctrl+C 时进程已自然结束，按钮向空 prompt 写入 Ctrl+C 并产生失败提示，未触碰文件或其它会话。这不能作为中断证据；改用 `sleep 10` 并在同一 Computer Use 调用 fresh 读取后立即点击，避免重复相同时序错误。
+- `sleep 10` 的同调用运行中帧后立即点击 toolbar `中断当前进程`，截图出现 `^C` 和新的失败态 prompt，证明语义 Ctrl+C 实际进入前台进程而不是停止整个会话；会话列表仍为运行中。随后 `printf 'sy-c2c-r31-after-interrupt\n'` 成功回显/输出，证明中断后仍可继续输入。
+- 双击专用会话行打开“重命名终端”，输入框自动选中当前名称；改为 `sy-c2c-r31-terminal-session` 后 Tab 首站是安全“取消”，符合表单顺序。下一步用 Shift+Tab 返回输入，再 Tab×2/Return 保存。
+- Shift+Tab 从取消准确返回输入选区，随后 Tab×2/Return 保存成功，列表名称实时更新且会话仍选中/运行、正文保留；但对话关闭后的焦点稳定落到 HTML 根节点，而不是被重命名的会话行。这是本轮首个确定键盘连续性缺陷，需先补 renderer 红灯，再最小恢复触发行焦点。
+- 首次回归断言只检查 `document.activeElement.textContent` 含新名称，因 activeElement 是 body 而误绿；测试设计不足但未改生产代码。已收紧为 activeElement 必须严格等于重命名后的 Terminal row，下一次运行应精确红灯。
+- 严格断言得到 1/60 聚焦红灯，received 为 body、expected 为重命名 row，与实机一致。首个生产补丁因猜错发布说明标题“修复”而原子失败、未写入；按实际“问题修复”拆补丁后，最小实现仅让共享 row 的双击回调暴露 currentTarget，并在 Terminal 对话关闭后一 tick 回焦该元素。
+- 聚焦用例修复后 1/1 转绿。HMR 未重启应用/服务，独立 Terminal 窗标题、路由、r31 会话 id/名称/运行态和既有会话均保持；xterm 重新挂载后当前页面根聚焦属 HMR 基线。已重新从 r31 row 打开重命名，输入自动聚焦，准备原路径保存回焦。
+- HMR 原路径保存把名称更新为 `sy-c2c-r31-terminal-session-focus`，对话关闭后 AX focused element 精确为该运行中 row；再次打开后点“取消”也回同一 row，名称/正文/运行态不变。保存与按钮取消均实机转绿，继续补 Escape。
+- 第三次从 row 打开重命名后按 Escape，focused element 同样精确回 r31 row；保存/取消/Escape 三条关闭路径全部 HMR 实机转绿，修复没有改名称、会话或 xterm 状态。
+- macOS Window 菜单当前严格只有“Synapse AI Studio”与“Synapse AI Studio 终端”两项，标题可辨；选择主窗成功，主窗仍在原 Agent 空会话，r31 项目实时保留，composer 聚焦。独立 Terminal 在后台保持，不创建第二实例。
+- 主窗从 Agent→设置→Terminal 普通导航均即时完成，设置账号仍已连接；返回内嵌 Terminal 后 r31 会话仍置顶、运行中、名称保持，toolbar/xterm 可用，既有会话无变化。Dock 焦点停在 Terminal，独立窗仍后台存在。
+- 内嵌 Terminal 截图确认 HMR、跨应用导航后完整正文、cwd、Unicode、长行、两次 sleep、`^C` 与 after-interrupt 标记均从权威画面恢复，输入 prompt 可用。随后进入应用启动台，16 个入口正常且 Terminal tile 可达，焦点在“应用”。
+- 从 Launcher Terminal tile 进入单顶栏 embedded shell，返回/应用名/新建终端/终端设置/“新窗口打开”均可达；点击“新窗口打开”立即聚焦原有 `Synapse AI Studio 终端`，保持原 route/requestId/sessionId、r31 当前会话和正文，没有中性重载或新建会话。focused element 仍为 r31 row。
+- 复用后 macOS Window 菜单仍严格只有主窗与一个 Terminal 窗，总数 2；没有重复实例。Native Window 菜单对 Escape 无响应（已在前轮出现），UI 未变化；将选择当前 Terminal 菜单项安全收起后再关闭窗口，不重复 Escape。
+- 选择当前 Terminal 菜单项安全收起后点击标题栏 close，独立窗关闭且主窗自动前置；主窗回应用启动台，focused element 精确为 Terminal tile。无关闭 toast、会话停止或正文丢失，说明关闭窗口只结束宿主，不结束 r31 PTY。
+- 主窗标题栏 zoom 完成 960×768→1357×768→960×768 往返；Launcher 网格在宽屏居中、窄屏保持完整，无溢出/错位/弹层，Terminal tile 焦点全程保持。窗口最终恢复 960×768。
+- 重进 embedded Terminal 后 r31 会话/正文继续保持。当前全部输出仍不足一页，首次向上 scroll 截图未产生可见位置变化；不重复空滚动，将用一条允许的 `printf` 输出 30 个 r31 标记行后再验证上下滚动。
+- 一次 `printf` 输出 30 个 `sy-c2c-r31-scroll-*` 标记后，pane 出现真实滚动历史；向上一页可回到最早的 `pwd`、Unicode、长行与中断记录，向下一页恢复 30 行末尾及可用 prompt，Terminal input 焦点全程保持。当前 toolbar/页面没有可见搜索或复制入口，因此只完成可见入口核对，未把终端正文复制到外部。
+- 设置→基础设置的普通“配置”区只暴露导入/导出入口，界面原文明确“不包含 Agent 对话、终端输出、检查点和已保存命令正文”。这与第 22 轮结构排除结论及 ADR 一致；本轮未触发导入、导出或恢复，也没有创建或读取任何备份正文。
+- 返回 r31 后执行本会话最后命令 `exit`，列表状态立即从“运行中”变为“已结束”，Ctrl+C/Claude/Codex/VS Code 与 Terminal input 均禁用，退出正文保持只读。点击 r31 专属删除图标却立即删除会话并切换到既有 Synapse 会话，没有确认层，无法满足 destructive delete 的“先取消再执行”；只删除了 r31，会话之外的既有项未改动。这是第二个稳定缺陷，需先补确认红灯再修复。
+- 删除确认精确测试先稳定 1/60 红：点击删除后会话已消失且无确认文案。ADR 的 direct session delete 约束单一 `sessionId` 协议及不可隐式终止，并不禁止 renderer 提交前确认；最小修复新增现有 AlertDialog，取消后回原删除按钮，确认后才调用既有 delete，成功后回焦新的活动会话，若为空则回焦持久“新建终端”。专项现 1/1 绿，发布说明已同步。
+- HMR 后主窗自然回 Agent 且 r31 项目仍存在；从同一项目入口创建唯一替代会话，独立 Terminal 获得新 request/session id，仍位于 Synapse 分组首行且不影响既有项。仅执行 `printf 'sy-c2c-r31-delete-confirm-retest\n'` 后最终 `exit`，截图确认 cwd 正确、标记输出和“已结束”只读态。
+- 修复后的真实删除确认首焦点为“取消”，说明精确指向 `sy-c2c-r31-terminal-project` 及其保留输出且声明不可撤销；点击取消后专用会话/正文/已结束状态均保留，focused element 精确回同一删除按钮。取消路径 HMR 实机通过。
+- 再次打开同一确认并执行后，仅 r31 会话消失；Synapse 分组的一个既有运行中与三个既有失联会话完全保留，活动会话回到原运行中 Synapse，焦点精确落在其选中行。由于用户既有会话不可触碰，不能安全制造全局“暂无会话”空态；以 r31 专用范围归零、列表无 r31 和稳定 fallback 焦点作为本轮空范围证据。
+- 关闭已清理的 Terminal 独立窗后只剩主窗，Agent 中 focused element 回到 r31 项目“更多操作”；项目仍无 Agent 会话。已从主窗进入设置，准备只移除第 7 行 r31 配置。
+- 设置→项目和知识库再次显示严格 7 行，r31 是唯一末行且路径准确；点击其专属删除后立即保存，列表恢复原有 6 行并出现“设置已保存”提示，没有改动其它项目或知识库。
+- Finder Go to Folder 精确定位 r31 路径后，分栏视图只选中 `sy-c2c-r31-terminal-project`，右栏仅为专用 README；toolbar 删除语义明确为“将所选项移到废纸篓”。执行后 r31 行消失、相邻 `templates` 被选中；精确只读核对得到原路径不存在且 `/Users/liyang/.Trash/sy-c2c-r31-terminal-project` 存在，未清空 Trash，可恢复。
+- 聚焦 diff 审查通过；Terminal renderer 完整测试 60/60、desktop typecheck、`check:hard-constraints` 全部 exit 0，`git diff --check` 无输出。最终 fresh UI 为唯一 `Synapse AI Studio` 主窗 960×768、Agent 输入框聚焦、无 toast/弹层/独立窗，Agent 项目列表无 r31；工作区无 `sy-c2c-r31-*` fixture，原路径 absent、精确 Trash 项 present。第 31 轮完成。
+
+## 2026-08-28 C-to-C 第 27 轮：Dashboard Drive 大目录、系统视图与浏览器连续性
+
+- 覆盖缺口矩阵：第 3/14 轮已分别证明网页与桌面大目录初始 100 项、点击“加载更多”后合并至 120/105 项，也修复过 Dashboard 未接分页与已删除公开素材幽灵项；第 26 轮只在网页 Drive 验证专用资源的删除确认、Escape/取消回焦、软删除后相邻行回焦与回收站可恢复。本轮不重复这些孤立冒烟，而要用真实已登录 Chrome 串联：大目录首次/继续加载后的列表连续性，文件/回收站/公开素材等系统视图，浏览器 Back/Forward/刷新/深链恢复，行内按钮的 Tab/Shift+Tab/Return/space，创建或软删除后的当前视图/分页连续性，错误/空/加载态，以及 955↔1357 宽窄布局。
+- 数据与安全矩阵：只允许新建、重命名、移动、软删除或恢复唯一 `sy-c2c-r27-*` 资源；不永久删除、不清空回收站、不操作既有资源。公开/分享仅做只读或在确认前取消；没有可同轮撤销公开状态的 r27 资源时不执行。浏览器全程使用 `node_repl + @oai/sky`，不启动、停止或重启现有服务。
+- Chrome 初始状态是已登录的唯一 Synapse 标签 `localhost:3000/console/drive`，宽屏截图约 1357×768；文件 tab、公开素材/回收站系统行、上传文件/文件夹、新建文件夹、分享管理与刷新均可见，无弹层、toast、错误或加载残留。AX 中行本体为 link，分享/预览/删除/更多是独立 button；初始焦点在网页根，未对任何既有行执行动作。
+- 已通过 `apply_patch` 在工作区 `.c2c-fixtures/sy-c2c-r27-large-20260828/` 准备 105 个小文本文件，仅用于真实“上传文件夹”UI 的分页夹具；没有产生远端状态。点击网页“上传文件夹”后出现 macOS 原生目录授权面板，文案明确“选择允许此网站查看的文件夹”，且选择按钮在未选目录时禁用；`super+shift+g` 已打开精确路径输入，尚未提交或上传。
+- Go to Folder 精确定位后，原生分栏视图显示所选 r27 目录与 105 个文件，选择按钮启用；提交后 Chrome 进一步明确询问 `localhost:3000` 可查看并复制该目录文件，按用户已授权的上传范围点击“允许”。回到 Drive 时“上传文件/上传文件夹”暂时 disabled，说明上传生命周期已开始；没有选中或传输任何其它目录。
+- 上传开始后首个即时帧与 5 秒稳定帧均保持上传按钮 disabled，根列表尚未出现专用目录，且没有错误、toast 或浏览器权限弹层。普通用户此时只能从按钮禁用推断仍在处理，AX 未暴露当前进度；先继续等待现有上传而不刷新或重复提交。
+- 截图确认上传中的工具栏仅把两个上传按钮置灰，列表仍可读、刷新/新建等操作未被遮罩；约 20 秒后按钮恢复、根列表新增 `sy-c2c-r27-large-20260828`，更新时间“刚刚”，且分享/预览/删除/更多分别可访问。上传生命周期成功，无失败提示、重复目录或既有行变动；本轮远端夹具创建完成。
+- 点击专用目录真实导航到 `/console/drive/folders/<id>?surface=console`，浏览器前进禁用、返回可用，证明产生真实 history entry。首批表格 AX 摘要为 100 items 且显示“加载更多”；宽屏截图实际可见多条 `item-*.txt` 及分享/预览/删除/更多，但当前 AX 树只展开表头和两个系统行，没有展开可见文件行。需用真实 Tab 链判断这是 Chrome AX 摘要压缩还是文件行不可键盘访问，暂不判缺陷。
+- 从网页根开始按 Tab，首个焦点为应用 `Toggle Sidebar`，第二个为主题按钮；焦点顺序与宽屏顶栏视觉结构一致，说明键盘事件已进入页面而非浏览器 chrome。继续逐步前进到文件表格，不跳读或坐标替代。
+- 接着 Tab 到“打开主题设置”后进入“上传文件”，顺序与可见顶栏从右侧设置到 Drive 操作栏一致；未出现隐藏焦点或焦点丢失。
+- 操作栏下一站依次为“上传文件夹”“新建文件夹”；按钮均由普通 Tab 可达，当前只移动焦点未激活，未产生资源或弹层。
+- 继续为“分享管理”“刷新”，两者同样按视觉顺序可达；未打开分享或触发刷新。
+- 从刷新后 Tab 到选中的“文件”tab，再到名为“文件”的 tabpanel container；由于当前 tablist 采用 roving tabindex，公开素材/回收站 tabs 不在普通 Tab 序列是合理基线，应使用方向键/激活测试。下一站将决定可见文件行是否进入键盘链。
+- 从 tabpanel 再按一次 Tab 后，增量状态没有焦点说明；完整 AX 树仍只包含表头、两个系统行和“加载更多”，且不报告任何 focused element。当前需要截图确认焦点是否落在 AX 不描述的可见文件行，再用 Shift+Tab/Tab 往返与源码判断，暂不把 Chrome AX 缺失直接等同产品缺陷。
+- 同一焦点帧截图清楚显示 `item-034.txt` 整行具有主题 focus ring，证明文件主操作确实由 Tab 可达；Chrome AX 只是压缩/遗漏虚拟化文件行，不是行不可访问。再按 Tab 后完整 AX 仍不报 focused element，下一步用截图确认是否按预期进入该行“分享”按钮，并用 Shift+Tab 往返验证。
+- 下一焦点截图明确落在同一 `item-034.txt` 行的“分享”按钮，未打开分享；`Shift+Tab` 后又回到 AX 未描述的文件主操作节点，页面/URL/列表均未变化。至此行主操作与首个行内按钮双向键盘顺序符合预期，继续用 Return 打开该专用文本并通过浏览器 Back 验证历史恢复。
+- 文件主操作上按 Return 成功打开 `item-034.txt` 的真实 item 深链，标题/24 B/文本/已同步/重新加载/保存/历史/更多/editor 均正常；没有触发分享或修改。点击 Chrome 返回按钮恢复原 folder 深链，前进按钮随即启用，首帧明确显示“用量加载中”同时表格已有 100 items 和“加载更多”，属于可理解的局部加载态。
+- 返回后下一稳定帧把“用量加载中”替换为 `41.8 MB / 5.0 GB`，无错误或表格重置；点击 Chrome 前进又准确恢复同一 `item-034.txt` item 深链与已同步只读内容。浏览器双向 history 基线通过。
+- 再次 Back 回 folder 首批状态后点击“加载更多”；按钮在请求完成后消失、用量保持稳定、无 spinner 卡死/错误/重复入口。Chrome AX 表格摘要仍固定为 100，和第 14 轮已记录的虚拟表格摘要限制一致；需滚到底部用截图确认后续 5 项已合并。
+- 真实页面滚动 6 屏后截图显示表格连续呈现更多 `item-*.txt` 行，固定操作列仍在右侧且没有横向撑破；页面确实不是停留在首屏。由于服务排序不是文件名顺序，当前中后段可见 099/072 等不能单凭编号证明追加页，继续滚到物理末端检查按钮缺失与末端连续性。
+- 再向下滚动后页面已到物理末端（后续相同滚动不再移动），末端仍是连续文件行、无空白断层或第二个“加载更多”，右侧操作列完整；最后一行编号因同时间上传的服务排序而不是 105。下一步用 Chrome Find 的真实 UI 查找 `item-105.txt`，避免从排序位置做错误推断。
+- Chrome Find 对当前已加载页面搜索 `item-105.txt` 返回“第 1 条结果，共 1 条”，明确证明加载更多后的 5 项已并入同一长列表；Escape 关闭查找栏后 URL 与目录状态保持，无页面副作用。大目录 100→105 真实链通过。
+- Chrome Reload 保持 folder 深链；首帧明确显示“用量加载中”和列表“加载中”，随后自然恢复用量、首批 100 items 与“加载更多”。刷新不会保留已追加到 105 的瞬时客户端页，而是按设计从首批重新建立分页入口；无错误、空白卡死或跳回根目录。
+- 在当前大目录点击“新建文件夹”出现小表单，焦点自动进“文件夹名称”，空值时“新建”禁用；填写唯一 `sy-c2c-r27-child-20260828` 后按钮启用。表单状态与普通用户预期一致，下一步直接在输入框按 Return 验证提交语义。
+- 名称输入框中按 Return 没有提交，表单保持原值与启用的新建按钮；本轮指定的 Return/space 重点是行内按钮，创建表单并未声明 Enter 快捷提交，因此先记录为现状、不扩展判缺陷。随后 Tab 准确到“取消”，下一步再 Tab 到“新建”并用 space 激活。
+- 再 Tab 到“新建”后按小写 xdotool `space`，表单关闭并保持当前 folder 深链；首批仍为 100 items 且“加载更多”继续存在，未跳根目录或清空列表。按钮 Space 语义通过；下一步查找新名称确认创建结果和分页连续性。
+- 创建后在当前首批页面用 Chrome Find 查 `sy-c2c-r27-child-20260828` 显示“找不到结果”；这不能证明失败，因为 106 项的服务 cursor/同秒排序可能把新项放到后续页。Escape 关闭查找后目录仍稳定，下一步只点击一次“加载更多”再查，不重复创建同名资源。
+- 加载更多后按钮消失，再用 Chrome Find 查新名称返回“第 1 条结果，共 1 条”，证明 Space 提交创建成功且新项位于后续页；没有重复项。创建后首批 100 没被清空，后续页合并后 106 项连续可查，符合当前 cursor 行为。
+- 关闭查找后页面保持长列表物理末端，截图仍显示连续文件行与固定操作列；虚拟表格没有因查找或创建产生空白、重复入口或横向溢出。新子目录由 Find 1/1 证实，不依赖虚拟化当前可见窗口。
+- 初次尝试在物理末端按旧页面位置聚焦“文件”tab时，Chrome 仍报告刚才 Find 命中的子目录文本处于选中状态，无法证明 tab 已聚焦；没有切换视图或数据副作用。随后真实滚回页面顶部，fresh AX 仍显示文件 tab selected、长列表已全部加载且无“加载更多”。下一步只用顶部 fresh tab 索引继续，不复用末端位置假设。
+- 顶部 fresh “文件”tab 点击后按 Right，Radix roving focus 自动选择“公开素材”，焦点留在 selected tab；真实表格有 4 条既有素材，每行暴露打开/重命名/替换/删除，本轮只读未激活。URL 仍保持当前 folder 深链而未编码 public view，需实测刷新与历史恢复语义。
+- 稳定缺陷候选：公开素材选中态点击 Chrome Reload 后，首帧立即回到“文件”并显示用量/列表加载，稳定帧恢复 folder 首批 100+“加载更多”；URL 从始至终没有记录 public view，无法通过刷新、深链或浏览器 history 恢复。该现象稳定命中本轮系统视图/刷新/深链范围，下一步查现有路由契约与测试后先补红灯。
+- 源码确认根因：`DriveConsoleContent` 把 `activeView` 固定为组件本地 `useState('files')`；root route 没有 `validateSearch`，folder route 只解析 `surface`，因此公开素材/回收站切换既不写 URL 也无法响应 Back/Forward。现有路由已经使用 TanStack `Route.useSearch/useNavigate`，最小方案是让 Console 视图可受控，并由 root/folder route 用 `view` search 参数驱动；文件 item route不承载系统 tabs，无需改变。
+- 回归红灯：新增“路由受控公开素材并上报视图变化”用例，修改前 0 次调用 `listPublicAssets`、1/1 失败。最小实现只让 `DriveConsolePage/ItemPage` 接受受控 `activeView/onViewChange`，root/folder route 校验并推送 `view` search；红灯转为 1/1 通过，Dashboard TypeScript 同步通过。未改视觉、API、item reader 或第 26 轮删除/分页逻辑。
+- HMR 实机首帧自动把当前 folder 状态规范为 `surface=console&view=files`，数据/分页未丢；点击公开素材后 URL 变为 `view=public-assets`，公开素材仍显示同样 4 条既有记录且焦点在 selected tab。说明视图状态已进入真实 history/search，而不是只在组件内切换。
+- 修复后公开素材 Reload 首帧保持 `view=public-assets` 与 selected tab，只显示必要的用量/列表“加载中”；稳定帧恢复同样 4 条素材，未退回文件或出现幽灵记录。刷新/深链恢复实机转绿。
+- Reload 后聚焦公开素材并按 Right，焦点和 selected 状态移到“回收站”，URL 同步变为 `view=trash`；真实回收站首批列出 50 项并有“加载更多”。本轮只读到名称/原路径/恢复/删除，不点击任何既有恢复或永久删除操作；键盘方向切换与回收站分页入口正常。
+- Chrome Back 从 trash 精确恢复 `view=public-assets` 与 4 条素材，Forward 再恢复 `view=trash` 与首批回收站/加载更多；没有额外网络错误、空态闪回或 folder 跳转。Back 时焦点仍留在先前交互的回收站 tab，而 selected 状态正确切到公开素材；Forward 后焦点/selected 再一致到回收站，history 数据状态正确。
+- 回收站 Reload 首帧保持 `view=trash`/selected tab，并以局部“加载中”替换表格；稳定帧恢复同一首批与加载更多。回收站深链刷新转绿，未触碰任何行操作。
+- 通过地址栏真实进入唯一无效 folder 深链 `sy-c2c-r27-missing?surface=console&view=trash`：首帧保留 trash selected 并显示“加载中”，稳定帧用简短“文件不存在。”替换，工具栏和 tabs 仍可用，无崩溃、空白或内部错误泄露。只读错误态符合预期。
+- Chrome Back 从错误态准确恢复有效大目录 `view=trash` 与回收站表格。随后对 Chrome 标题栏绿色按钮执行公开“缩放窗口”，但 fresh screenshot 仍为 1357×768；这次动作没有路由、焦点或数据副作用，也不能作为 955px 证据。后续必须使用工具可验证的精确尺寸接口。
+- 改用 Computer Use 的 `drag` 从 Chrome 右边缘 1355 拖到 954 后，fresh screenshot 精确为 955×768。回收站长表在此宽度仍保留侧栏、工具栏、tabs、名称/原路径/操作列和加载更多，没有遮挡或横向撑破；路由仍为有效 `view=trash`。点击“公开素材”后 URL 切为 `view=public-assets`、tab/焦点一致，4 条现有素材及打开/重命名/替换/删除均完整可见，本轮未激活任何既有素材操作。
+- 公开素材窄屏键盘顺序从 selected tab 先到 tabpanel，再到“上传公开素材”；两站均有可访问焦点且没有误开上传。下一步仅沿 Tab 到首行“打开”并用 Space 进行只读激活，不碰重命名/替换/删除。
+- 继续自然 Tab 后首条素材的“打开”是原生 link，下一站“重命名”是独立 button；键盘没有从行主操作跳过内联操作。为验证 button 的 Space 语义，将只打开重命名表单后 Escape 取消，不输入名称或提交。
+- 公开素材首行“重命名”button 用 Space 正常打开表单，输入框保留原名称 `2313213123.png`，未输入或提交；按 Escape 后表单关闭、4 条素材保持，但 350ms 稳定帧焦点落 `HTML 内容 Synapse`，没有回到原重命名按钮。该问题在 955px 真实键盘路径稳定复现，属于本轮行内按钮焦点连续性缺陷；应补入口级回归并用 trigger ref/close autofocus 最小修复，不修改共享默认或素材 API。
+- 新增“取消公开素材重命名后回到触发按钮”回归，修改前 `document.activeElement` 为 `body` 而非重命名 button，1/1 稳定红灯。最小实现只在打开时捕获当前 `HTMLButtonElement`，在该 Dialog 的 `onCloseAutoFocus` 阻止默认并聚焦原 trigger；没有改共享 Dialog、素材 API、视觉或文案。专项 1/1 转绿，`RELEASE_NOTES_PENDING.md` 已加入用户可感知修复。
+- 现有 HMR 后 Chrome 保持 955×768、folder `view=public-assets` 与 4 条数据；重新点击 selected 公开素材 tab 后 Tab 到 tabpanel，未刷新页面、重启服务或改变素材。
+- HMR 原路径继续经“上传公开素材”到首条素材“打开”link，Tab 顺序未因 trigger ref 修复改变；尚未打开表单。
+- HMR 后同一首行“重命名”button 的 Space 激活仍正常，弹层显示原素材名和取消/保存；触发语义没有因回焦修复回归，且没有编辑既有公开素材。
+- HMR 原路径 Escape 关闭后 350ms fresh AX 的 focused element 精确是同一首行 `按钮 重命名`，第二项缺陷实机转绿；4 条公开素材与 `view=public-assets` 未变。切回 `view=files` 后 955×768 screenshot 显示大目录首批、两个系统行、名称/大小/更新时间和分享/预览/删除/更多均完整，`加载更多` 仍可达，没有窄屏横向撑破。
+- 侧栏“网盘”从 folder 深链返回 root `?view=files`，证明 root route 同样接管 view search；窄屏新建表单自动聚焦“文件夹名称”，空值禁用“新建”。将只创建唯一空目录夹具用于空态后软删除。
+- Computer Use `type_text` 在该输入框只落入 `sy-c2c-r2` 后即停止，Tab 已到取消；表单未提交，没有生成非唯一资源。按数据安全要求不接受残缺名称，改走 Shift+Tab→全选→paste 并读取完整值后再提交。
+- 后续稳定 AX 纠正前一即时 diff：输入最终完整落为 `sy-c2c-r27-empty-20260828`，返回输入框时整段被选中；两次 Tab 后 screenshot 的“新建”有清晰 focus ring。`Shift+Tab` 大写参数曾被工具以 `keyNotFound("Shift")` 在动作前拒绝，使用 Skill/xdo 语法 `shift+Tab` 成功；没有创建残缺名称资源。
+- Space 提交后根列表仅新增一次 `sy-c2c-r27-empty-20260828`；进入其真实 folder 深链后，空文件视图稳定呈现表头和“公开素材/回收站”两个系统行，没有加载残留、错误、空白崩溃或虚假普通文件。界面未另写“暂无文件”，但当前只存在两条明确系统入口，用户仍能判断无普通文件；本轮先记录现状，不扩展文案改动。
+- 返回 root 后专用空目录与大目录相邻且名称唯一；只打开空目录删除确认，标题包含完整目标名、说明明确进入回收站、默认焦点在取消。当前尚未确认，既有资源未触碰。
+- 确认内 Tab 到最终删除后 Return，只执行 `sy-c2c-r27-empty-20260828` 的 recoverable soft delete。800ms 稳定帧空目录行已消失，大目录保留；焦点为相邻大目录上下文中的 `按钮 删除`，第 26 轮成功回焦修复在本轮 955px 创建后连续性路径仍转绿。
+- 从相邻大目录 inline delete 直接按 Return，确认准确打开而 root URL 不变，证明第 26 轮“子操作 Enter 不冒泡到行导航”修复在本轮专用目录继续有效。确认内 Tab+Return 后只把 `sy-c2c-r27-large-20260828`（含 105 文件与同轮子目录）软删除；900ms 稳定帧两个 r27 顶层行均不在文件列表，焦点仍在下一相邻行 delete，而非页面根。
+- root `view=trash` 的 955px 首两行分别是 `sy-c2c-r27-large-20260828` 与 `sy-c2c-r27-empty-20260828`，都只显示可恢复的“恢复/删除”；未点击永久删除。Reload 后两项与 selected trash 保持，证明 root route 深链刷新同样转绿；随后 Chrome Back 恢复 `?view=files`、selected 文件且活动列表无 r27 顶层资源，root history 连续性通过。
+- 右边缘从 954 拖回 1355 后 screenshot 恢复 1357×768；root 文件视图、侧栏、操作栏、系统行和普通列表完整，无弹层/toast，r27 资源不在活动列表。工作区本地夹具目录已用精确路径移动到 `/Users/liyang/.Trash/sy-c2c-r27-large-20260828-local-20260828-0135`，没有 `rm` 或永久删除；远端两个顶层 r27 目录继续留在云盘可恢复回收站。
+- 最终验证：`drive-console.test.tsx` 与 `drive-trash-public-sites.test.tsx` 合计 44/44，通过 Dashboard `tsc` 与 `git diff --check`；聚焦审阅确认本轮只增加路由受控系统视图、公开素材重命名取消回焦及相应回归/发布说明，没有新增样式、颜色、依赖或 desktop 改动，因此 desktop hard constraints 不适用。残留观察仅为空目录文件态不另写“暂无文件”，但表格只保留两个明确系统行且无错误/加载残留，本轮不扩展文案变更。
+
+## 2026-08-27 C-to-C 第 26 轮：危险操作确认与安全焦点
+
+- 本轮覆盖缺口矩阵：第 9 轮已闭环 App Reset 首次打开的取消默认焦点、3 秒禁用与 Escape 回到“重置”；第 21 轮已真实执行 Agent latest-only 撤销并修复取消回焦，本轮只复用已撤销/只读 Checkpoint，绝不再次撤销；第 12/14 轮已覆盖 Drive 协作、版本、下载与专用资源生命周期，但没有把桌面删除、回收站和危险确认的默认焦点/重复打开/宽窄往返作为同一心智链；第 22 轮覆盖 App Reset 与设置组合持久化；第 25 轮只读覆盖 Checkpoint/Git Diff、选择保持和宽窄布局，未打开 Git 丢弃确认。第 26 轮增量因此限定为 App Reset、Git 丢弃、Drive 软删除、Agent 撤销确认的安全默认、禁用/倒计时、Escape/取消回焦、重复打开、范围文案、960↔1350 一致性和误触防护。
+- 源码基线：共享 `DelayedConfirmAlertDialog` 当前只有 App Reset、仓库初始化和仓库目录移除三个消费者；它在每次 `open` 时重置倒计时、确认中禁止取消，并可通过 `returnFocusRef` 显式回焦。Git 丢弃、Drive 删除与 Agent 撤销均使用普通 Radix AlertDialog。App Reset 是本轮真实消费共享 delayed confirm 的入口，另两个消费者只做源码/回归交叉核对，避免扩展到仓库破坏操作。
+- 安全边界：App Reset 只开确认并取消；Agent 只复用已撤销/审查 Checkpoint；Git 不丢弃既有改动，若没有明确 `sy-c2c-r26-*` 可重建夹具则只停在确认/取消；Drive 仅允许对本轮专用资源软删除到可恢复回收站，不永久删除或清空回收站。所有桌面动作只用 `node_repl + @oai/sky`，不启动、停止或重启现有应用。
+- Computer Use 首次只读应用枚举确认 Electron 与 Chrome 均已运行；按 bundle id 读取 Electron 时工具发现本机有四个同 bundle 应用并在任何 UI 动作前拒绝，未启动或聚焦错误应用。后续改用工具返回的仓库精确路径 `/Users/liyang/Documents/code/github/Synapse/node_modules/.pnpm/electron@41.2.1/node_modules/electron/dist/Electron.app`，不重复模糊 bundle id。
+- 精确路径读取到第 25 轮交接基线：唯一主窗、r24 空闲会话、composer 聚焦、无弹层/独立窗/toast。用户心智是从明确 Dock 进入设置，不触碰会话；点击“设置”后账号页与 Live“已连接”正常加载，焦点保持在 Dock 设置入口。下一步进入基础设置，只观察 App Reset 确认。
+- 用户心智：在基础设置找到“重置”，打开确认只为判断能否安全退出。实际弹层首帧默认焦点准确落在“取消”，危险按钮暴露 disabled 语义和“复制 ID 并重置 (3)”倒计时；清空/保留范围及不可撤销/自动重启后果可理解。身份值只在界面做存在性观察，未复制、记录或外发；尚未触发重置。
+- 倒计时自然结束后确认按钮从 disabled 变为可用且文案去掉计数，焦点始终停在“取消”，没有被危险动作抢占。按 Escape 关闭后焦点准确回到基础设置“重置”；没有复制身份、重置、刷新或设置变化。下一步重复打开确认倒计时必须从 3 重新开始。
+- 重复打开首帧再次稳定显示 disabled 的 3 秒倒计时且默认焦点仍为取消，证明关闭后状态重置。完整 AX 还确认弹层位于唯一主窗、窗口公开 `zoom the window` 动作可用于宽窄测试；读取完成时倒计时已自然结束，未因额外状态读取重启或跳过。
+- 第二次 Escape 后仍准确回到“重置”；第三次快速打开又从 disabled `(3)` 开始，取消焦点和同一窗口 zoom 控件同时可达。下一步在该倒计时内执行公开 zoom 并读取计数/焦点，绝不触碰确认按钮。
+- 窗口公开 zoom 后弹层仍挂在同一主窗，焦点保持“取消”；确认按钮随真实经过时间正常变为可用，没有重新出现 `(3)`、跳回 disabled 或抢焦，说明响应式重渲染没有重置/绕过计时器。下一步用截图核对窄宽布局是否溢出，再做连续 Escape/Return 的安全取消。
+- 宽屏截图确认弹层保持居中、内容/按钮均未溢出或被裁切；但危险最终按钮呈普通 primary 黑色，而不是项目普通 AlertDialog 危险操作统一使用的 destructive 语义。源码交叉确认共享 delayed confirm 的三个消费者（App Reset、两处会清空目录内容的初始化）全部是破坏性动作，组件却固定渲染无 variant 的 `Button`。这是共享层稳定视觉语义缺陷，应先补共享红灯并一次修复，不在 App Reset 单独覆写。
+- 在倒计时结束后仍聚焦“取消”时按 Return，弹层安全关闭并回到“重置”，未触发复制或重置。说明 Return 不会因危险按钮变为可用而偷走焦点；下一步补共享 destructive 回归后再继续遮罩/Space 与其它入口。
+- 共享回归修改前精确得到 `data-variant=default`，1/1 红灯；最小增加现有 `variant="destructive"` 后与 App Reset 回焦测试合计 3/3。HMR 后同一基础设置原入口重开，首帧仍为取消聚焦、disabled `(3)`，截图已显示危险动作使用主题 destructive 文本/表面而非普通 primary；倒计时、布局和文案均未回归。
+- 点击弹层外遮罩没有关闭 App Reset 或触发危险动作，但真实焦点立即落到 HTML 根节点；再按一次 Tab 才由 focus trap 回到“取消”。这违反本轮“遮罩点击后焦点不掉根节点”的明确验收，且属于共享 AlertDialog overlay 行为。应补共享 pointer-down 默认阻止回归并在 overlay 一次修复，不为 App Reset/Git/Drive/Agent 分别打补丁。
+- 共享 overlay 回归修改前 1/2，`pointerdown` 未被取消；`AlertDialogOverlay` 最小保留消费者 handler 后统一 `preventDefault()`，与 delayed destructive、App Reset 回焦合计 4/4。HMR 自动把主窗口恢复到原 r24 会话，历史/composer 无损；未手动刷新或重启。已从正常 Dock 返回设置，准备原路径复测遮罩焦点。
+- HMR 后真实遮罩同坐标点击不关闭弹层、不触发重置，焦点继续停在“取消”而非 HTML 根节点，第二项共享缺陷原路径转绿。随后按 Space 激活当前取消，弹层关闭并焦点回“重置”；Return/Space/Escape 三种安全取消均通过。
+- 已通过同一公开 zoom 动作把主窗恢复第 25 轮原始窄宽度；基础设置值、焦点和无弹层状态保持。App Reset 全程未执行、未复制身份、未刷新/重启应用。
+- Agent 真实只读基线：切到保留的 r21 会话后，两张 Checkpoint 均明确显示“已撤销”，只提供“审查”和文件按钮，没有可再次触发的“撤销”。这符合 latest-only/不可重复撤销边界；本轮不为打开普通确认而制造新文件或修改现有文件。源码确认普通确认把“取消”放在 destructive `AlertDialogAction` 前，并用 `onCloseAutoFocus` 回到撤销按钮；第 21 轮已经真实执行/取消并闭环，后续只做定向回归交叉验证。
+- 从 r21 Agent Git 菜单只选择“在 Git 中打开”，没有点击提交、推送、拉取或同步；题名明确的 Git 独立窗进入中性加载首帧。下一步等待现有 renderer 自然加载，不刷新或重启，再只打开丢弃确认。
+- Git 自然加载为 Synapse/main、134 个现有改动且选择计数 134/134；没有改变 checkbox。点击“丢弃改动”只打开准备后的确认：标题精确显示“丢弃 134 个改动？”，列出前 5 条和“另有 129 个文件”，说明 tracked 恢复到 HEAD、untracked/rename 移入系统废纸篓；默认焦点在取消，最终动作使用 destructive。尚未执行丢弃。
+- Git 确认遮罩点击后弹层保持且焦点仍在取消，共享 overlay 修复覆盖普通 AlertDialog。按 Escape 后首个 AX 帧仍处于 Radix 关闭动画，selection token 已清除使“丢弃改动”disabled、取消仍聚焦；需等待下一帧再判断关闭/回焦，不能把动画帧误判为 Escape 失效。
+- 关闭动画结束后弹层消失、选择仍为 134/134，但焦点稳定落到 Git HTML 根节点，而非“丢弃改动”触发器；这是普通受控 AlertDialog 的入口级回焦缺陷。源码确认 `GitWorkbench` 用按钮控制 open、没有 `AlertDialogTrigger` 或显式 return ref。应在 Git 入口补红灯并把触发按钮 ref 传给确认层的 `onCloseAutoFocus`，不修改共享 AlertDialog 的默认 focus 语义。
+- Git 回焦回归修改前精确落在 `body`，0/1；给触发按钮加 ref 并传给确认层 `onCloseAutoFocus` 后 1/1。HMR 后工作台无损更新为 135/135（新增本轮回归文件使计数自然增加），重开确认标题同步为 135、前五条+另 130 条，默认取消焦点与 destructive 动作保持。
+- HMR 后按 Escape 并等待关闭动画，确认层消失、135/135 选择和所有 checkbox 保持，焦点准确回到“丢弃改动”；第三项缺陷实机转绿。全程没有调用 discard、暂存、提交、推拉、同步或分支操作。
+- Git 独立窗已关闭；由于 HMR 曾重建主窗 Agent DOM，来源 trigger 已失效，主窗焦点落 composer，与第 25 轮相同环境边界，不据此重复判缺陷。随后从 Dock 进入桌面云盘：根目录、公开素材、回收站和现有数据正常，只读阶段未点击任何既有资源操作。
+- 从桌面云盘“新建→新建文件夹”打开普通表单，只有名称和取消/新建；空值时新建 disabled。将创建唯一 `sy-c2c-r26-delete-20260828-0009` 专用空文件夹，后续只允许软删除到可恢复回收站。
+- 专用空文件夹已通过真实桌面 UI 创建，列表显示唯一名称与“刚刚”，toast 为“文件夹已创建”；未上传内容、分享或操作其它行。下一步只点击该行 delete（当前新鲜索引 205）并先取消。
+- 专用文件夹删除确认明确显示目标全名，默认焦点为取消，最终删除使用 destructive；点击遮罩后弹层保持且焦点继续停在取消，共享 overlay 修复覆盖 Drive 普通 AlertDialog。尚未删除。
+- Escape 取消 Drive 确认后弹层消失，但焦点稳定落 HTML 根节点；入口回焦回归修改前精确失败、最小捕获实际删除按钮并在 `onCloseAutoFocus` 聚焦后专项 1/1。HMR 自动恢复 r21 Agent 会话，未删除专用资源；已重新定位 Dock 云盘入口，准备原路径复测。
+- HMR 后专用夹具仍存在；Escape 取消稳定关闭后焦点准确回到该行“删除”，第四项缺陷实机转绿。已再次从同一 fresh trigger 打开同名确认，默认仍在取消；下一步只点击当前确认的“删除”，按授权软删除到可恢复回收站。
+- 真实确认后只对 `sy-c2c-r26-delete-20260828-0009` 执行了一次可恢复软删除：toast 显示“已删除”，根目录不再显示该项，未触碰永久删除或既有资源。但触发行从列表移除后，关闭动画结束时焦点稳定落到 HTML 根节点；取消路径已修复而成功路径仍缺少安全落点。新增回归以两行夹具模拟删除首行，修改前明确得到 `body` 而非相邻项“删除”按钮（0/1），下一步只在 Drive 入口记录相邻操作并复用同一 `onCloseAutoFocus` 转移焦点。
+- Drive 成功路径最小修复在打开确认时只记录同一表格中相邻的删除操作；关闭时原按钮仍在则回原按钮，触发行已删除则回相邻按钮。取消与删除专项最终 2/2；取消用例额外等待 Radix 关闭帧后断言，避免在测试中把动画中间帧误判为最终焦点。发布说明已合并描述取消/完成两条路径，准备通过现有 HMR 恢复同一专用夹具并再次软删除实测。
+- Computer Use 恢复时首次误用了不存在的 camelCase 方法，工具在 UI 动作前拒绝；立即改回 Skill 要求的 `get_app_state` 后读取成功。现有 HMR 将主窗自然恢复为 r21 空闲 Agent、composer 聚焦，历史/Checkpoint 完整且无弹层/独立窗；没有重启、刷新或产品数据动作。下一步从 fresh Dock 索引返回云盘回收站，恢复同一专用夹具。
+- 第一次尝试把 AX index 直接传给坐标 click，被工具在动作前以“需要有限 x/y”拒绝，界面未变化；只读枚举确认 Sky 交互 API 仍是 `target`+`click` 分离模型。按“三次失败换路径”约束，本次不重复猜 click 参数，下一步先用 `target` 解析 fresh index 再点击。
+- 进一步核对发现当前 `sky.target` 是平台标识字符串 `mac`，并非 element 解析函数；状态对象只含 AX 文本与 screenshot URL，不含 index 坐标。此前“target→click”判断已纠正。下一步直接查看同一状态截图，以可见坐标点击 Dock“云盘”；不会再猜 AX click API。
+- 当前截图确认 r21 会话、窄窗和无弹层状态；Synapse 内部 Dock 在截图中不可见，不能凭 macOS Dock 图标猜点击。首次以小写 `tab` 发送键盘导航被工具以 `keyNotFound` 在动作前拒绝；按工具的 xdotool 命名规则改用 `Tab`，不把工具参数错误算产品缺陷。
+- 使用大写 `Tab` 后动作实际成功但 API 返回 `undefined`，后续只读 AX diff 确认焦点已从 composer 到“添加附件”；这是预期自然 tab order。后续不读取未定义返回值，按一次键后再看焦点定位，避免误判工具报错为动作失败。
+- 从“添加附件”连续两次 Tab 只经过“快捷输入”和“Git”触发器，没有按 Return/Space/点击，因此没有打开菜单或执行动作。下一步再两次 Tab 到权限/Dock 起点后读焦点。
+- 再两次 Tab 只经过权限模式并到达应用 Dock 的首项预期位置；没有激活权限或导航。下一步单次 Tab 后读取 AX 焦点，如果命中“云盘”再 Return 激活。
+- 单次 Tab + AX diff 精确确认焦点为 `button 云盘`，自然键盘路径可达且未掉根节点。下一步 Return 激活并等待现有 Drive 自然加载。
+- Return 已进入真实桌面 Drive 根目录，容量与现有列表自然加载；`sy-c2c-r26-delete-20260828-0009` 不在根目录，符合前次软删除。焦点仍在 Dock“云盘”。回收站是可点击表格系统行但不是 tab stop，下一步查看当前 Drive screenshot 后只点其可见行。
+- Fresh screenshot 明确显示回收站为第二行，界面未溢出；首次按嵌套 `coordinate:{x,y}` 调用 click 被工具在动作前拒绝，说明当前 API 要求顶层 x/y。没有发生行点击或资源动作，下一步用同一 fresh screenshot 的回收站行坐标按顶层 x/y 调用一次。
+- 顶层 x/y 点击后真实进入回收站；唯一专用 `sy-c2c-r26-delete-20260828-0009` 位于首行，来源普通文件、原路径同名，并同时暴露“恢复/删除”。“删除”是永久路径，绝不点击；下一步只点击该首行“恢复”以复用同一夹具，随后回根目录复测软删除。
+- Fresh screenshot 交叉确认首行名称与右侧“恢复/删除”列；已精确点击首行“恢复”坐标，未触碰同列更右侧的永久“删除”。下一步读取稳定状态确认 toast/首行消失，再用 breadcrumb 返回根目录。
+- 恢复后 AX diff 中专用名称已从回收站消失，其它既有条目仅顺位上移；焦点暂落 HTML 根，恢复本身不属于本轮危险确认修复范围。随后只点击 breadcrumb“根目录”返回，未操作其它回收站条目。下一步确认专用夹具在根列表并打开其桌面删除确认。
+- 根目录 AX 与截图同时确认专用空文件夹已恢复，位于“测试同步.md”之后、其它既有文件夹之前；其操作列清楚显示分享/预览/删除/更多。下一步只点击该行“删除”，先确认默认取消焦点，再执行软删除并检查修复后的相邻回焦。
+- HMR 后原路径重开的桌面删除确认仍完整显示专用全名，首帧焦点明确在“取消”，最终“删除”为独立 destructive action；没有因修复把默认焦点移到危险动作。下一步用一次 Tab 到删除、Return 执行获准软删除，然后等待稳定帧检查列表消失与焦点转移。
+- 已严格在该确认内用 Tab 从取消移到删除并按 Return，只执行专用夹具的 recoverable soft delete；没有鼠标坐标误触其它行。下一步读取稳定 AX，预期专用行消失且焦点落到其后一行“临时网页”的删除操作，而非 HTML 根。
+- 真实稳定帧反证首版成功回焦修复不足：专用行已消失，但立即帧与 500ms 后焦点都仍在 HTML 根。根因线索是 `loadItems()` 在真实网络等待期间把整个表格切到 loading skeleton，打开时保存的相邻 DOM ref 因表格卸载而断开；同步 mock 回归没有经历该加载帧而假绿。下一步先让回归的第二次列表请求真实异步一拍，稳定复现 ref 失效，再以相邻 item id 在重载后的 DOM 中解析 fresh action，不接受当前实机失败。
+- 将第二次列表请求延迟一个真实异步 tick 后，首版成功回焦用例稳定红灯，证明测试已覆盖 loading skeleton 卸载。最终修复同时记录相邻 item id；若旧 DOM ref 断开，则在 close 后下一个 task 从重载表格解析同 item 的 fresh delete action。取消/异步成功专项现 2/2，准备再次恢复同一专用夹具做第二次 HMR 原路径验收。
+- 第二版 HMR 再次自然回到 r21 空闲 Agent、composer 聚焦，无弹层或独立窗；单次 Tab 已到附件入口。下一步沿已验证自然顺序回到云盘，不用坐标猜主导航。
+- 两次纯 Tab 已经过快捷输入/Git，未激活菜单或写操作；继续到权限/Dock 起点。
+- 又两次纯 Tab 已过权限到 Dock 首项，未改变权限模式；下一次 Tab 后读焦点。
+- AX 再次确认焦点为 Dock“云盘”，重复键盘路径稳定。下一步 Return 后直接从 fresh Drive screenshot 进入回收站。
+- 第二次进入 Drive 根目录成功，容量/工具栏/系统行自然加载；状态来自修复后 HMR。布局与前一 fresh screenshot 未变，下一步点击同一可见回收站行，不操作根目录资源。
+- 回收站再次确认专用夹具为首行，删除时间对应上一轮实测；“恢复/删除”位置与前帧一致。下一步只点击首行恢复，然后回根目录做最后一次软删除。
+- 第二次恢复后专用名称再次从回收站 AX 消失，其它条目只顺位上移；永久删除未触碰。下一步 breadcrumb 返回根目录。
+- 已回根目录并确认专用行恢复；顺序与前次相同，下一步用同一可见行删除坐标打开确认。
+- 第二版 HMR 下最后一次确认仍默认焦点取消、目标全名正确；修复未回归安全默认。下一步 Tab+Return 执行最后一次专用软删除。
+- 已用确认内 Tab+Return 执行最后一次专用软删除；下一步等待稳定帧读取焦点，预期落在相邻“临时网页”删除操作。
+- 第二版实机闭环：500ms 稳定帧焦点为 `button 删除`，上下文精确属于专用行之后的“临时网页”；专用行已从根列表消失，焦点不再落 HTML 根。随后只点击系统“回收站”行，准备确认专用资源最终停在可恢复位置。
+- 桌面回收站最终首行再次确认专用名称、删除时间“刚刚”与“恢复/删除”，证明只软删除。现有 Chrome 已停在 `localhost:3000/console/drive` 且登录同一账号，文件列表同步不含专用项；无需新标签或刷新。下一步在网页切到回收站，只恢复同一专用夹具，再验证网页删除确认/取消/软删除。
+- 网页 Drive screenshot 显示 1350px 宽度下工具栏、tab 与表格无溢出；已点击“回收站”tab，不触碰任何文件行。下一步读取网页回收站 fresh AX，定位专用首行恢复。
+- 网页回收站 AX 与 screenshot 一致：专用项为首行，原路径同名，右侧“恢复/删除”；永久删除不会点击。下一步精确点击首行“恢复”，随后切回文件 tab。
+- 网页首行恢复成功，专用名称从回收站 AX 消失，其它既有条目仅上移；恢复后焦点落页面根，非危险确认路径，不扩展修复。下一步点击“文件”tab定位专用行。
+- 网页文件 tab 已选中且专用行同步出现，焦点保持 tab；下一步查看 fresh screenshot 并只点该行删除。
+- Fresh screenshot 显示专用行为当前第 10 个数据行，名称完整、更新时间刚刚；已精确点击该行“删除”，未触碰相邻既有资源。下一步读取网页确认默认焦点/范围文案。
+- 网页确认标题包含专用全名，说明“文件会进入回收站”，首帧默认焦点为取消、最终动作独立；已按 Escape 安全取消。下一步读稳定帧核对专用行仍在和触发器回焦。
+- Escape 取消 350ms 后专用行仍在，但焦点稳定落网页 HTML 根，确认网页入口存在与桌面类似的受控 ConfirmDialog 回焦缺陷。按 `impeccable` 的 product register 约束，本次只复用现有 Radix/按钮与 focus ring，不新增样式或文案；已重新打开同一专用确认，下一步先验证网页 overlay 是否也掉根。
+- 网页确认在 1350px screenshot 中居中、标题/说明/按钮不溢出，取消仍聚焦。下一步点弹层外可见遮罩，预期不关闭且焦点保持取消。
+- 网页 overlay 点击后弹层保持、未删除，但焦点稳定落 HTML 根；与 desktop 相同类别，dashboard 有独立 `AlertDialogOverlay` 实现且未阻止 pointerdown 默认行为。需在 dashboard shared overlay 补红灯并一次修复，同时给 Drive Console 受控 ConfirmDialog 补入口 cancel/success 回焦红灯。
+- Dashboard 回归修改前 overlay 默认未阻止、取消落 body、触发行卸载后无相邻回焦，3/3 红灯。共享 overlay 采用与 desktop 一致的 consumer handler 后 `preventDefault()`；ConfirmDialog 仅新增可选 close-autofocus 钩子，Drive Console 记录原触发器/相邻 item id，并把删除确认保持到 refresh 完成。最终三条专项 3/3，未新增样式/颜色/文案，`impeccable` product 约束落实为熟悉控件与一致焦点行为。
+- Dashboard HMR 自然关闭旧确认并保留专用行，未刷新/重启或改变其它数据；1350px 列表布局仍稳定。下一步从同一行原路径重开确认。
+- HMR 后重开确认仍显示专用全名/回收站语义并默认聚焦取消。下一步以同一弹层外坐标复测 shared overlay。
+- 网页 shared overlay HMR 实机转绿：同一坐标点击不关闭、不删除，焦点仍为取消而非 HTML 根。下一步 Escape 取消并检查回到该专用行删除入口。
+- 网页 Escape 取消 350ms 后焦点精确为专用行 `button 删除`（上下文包含同名行与前后“测试同步.md/临时网页”），列表保持；取消回焦实机闭环。下一步用 Return 从当前 trigger 重开，再 Tab+Return 软删除，检查成功后的相邻回焦。
+- 从专用行已聚焦的“删除”按 Return 时没有打开确认，而是进入该文件夹 URL；未删除资源。源码确认表格行 `onKeyDown` 对所有冒泡 Enter 都执行行导航，子按钮虽在 click 阶段 stopPropagation，却没有隔离 keydown。这是稳定键盘缺陷，需先补“子操作 Enter 不触发行导航”红灯并把行 handler 限定为 `event.target === event.currentTarget`，再回原页继续。
+- 子操作 Enter 回归修改前 onNavigate 1 次，修复后与 overlay/cancel/相邻回焦合计 4/4；行自身 Enter 保持既有导航，只有事件目标是子按钮时不再冒泡触发行导航。已用 Chrome Back 回到原网页 Drive 根列表，专用项仍在且未删除，准备 HMR 原路径复测。
+- HMR 后同一专用删除确认重新打开，URL 保持根列表、默认取消焦点正常。下一步 Escape 回焦后从 trigger 用 Return 重开，直接验证键盘冒泡修复。
+- Escape 再次准确回到专用行 delete button 680。下一步直接按 Return，预期 URL 仍为根列表且确认重新出现。
+- Return 现在直接重开同名删除确认并聚焦取消，没有再切入文件夹；行内键盘冒泡修复实机转绿。下一步 Tab+Return 对专用资源执行最终网页软删除。
+- 已在网页确认内 Tab 到最终“删除”并 Return，只执行专用资源软删除；下一步等待 refresh/关闭稳定帧，核对专用行消失与焦点落下一行“临时网页”操作。
+- 网页 700ms 稳定帧专用行已消失，焦点精确转到下一行“临时网页”的删除按钮；成功回焦实机闭环。已切到网页回收站，下一步只读确认专用资源可恢复，再回到任务初始的文件 tab。
+- 网页回收站确认专用名称与原路径仍存在，未永久删除；随后切回任务初始的“文件”tab。网页 Drive 全链路结束，无弹层、无新增标签、无刷新/重启，Chrome 仍为原 `/console/drive`。
+- 最终验证全绿：dashboard Drive Console 30/30；desktop App Reset 2/2、共享 delayed confirm 2/2、Agent Checkpoint 3/3、Git workbench 45/45、Drive 135/135。desktop 与 dashboard 类型检查、desktop `check:hard-constraints`、`git diff --check` 均通过。
+- 最终 Computer Use 清点：Electron 只有一个 `Synapse AI Studio` 标准主窗口，停在 r21 已撤销 Checkpoint 的空闲 Agent 会话，无确认框、toast 或独立窗；Chrome 仍是唯一 Synapse 标签的 `/console/drive`“文件”页，无弹层。专用 `sy-c2c-r26-delete-20260828-0009` 只保留在可恢复回收站，未永久删除；未执行 App Reset、Agent 撤销、Git 丢弃或其它 Git 写操作。
+- 残留边界：Agent 本轮无可再次撤销的 Checkpoint，按第 21 轮真实闭环和当前源码/回归交叉验证，未为制造确认而修改用户文件；共享 delayed confirm 的两个仓库初始化/清空消费者只做源码与共享回归验证，未打开或执行真实破坏入口。覆盖路径未留稳定产品缺陷。
+
+## 2026-08-27 C-to-C 第 23 轮：多窗口可辨识性与生命周期
+
+- 本轮范围限定为 Agent、Git、Terminal、System App 独立窗口的原生标题、macOS Window 菜单/窗口切换、同工具复用、项目/会话归属、关闭回焦、HMR 与宽窄状态；不重复前轮已闭环的 Checkpoint、Diff、配置备份和业务写操作。
+- 历史实机已经两次留下同一风险证据：第 2 轮 Agent/Git/Terminal 三窗口在 macOS Window 菜单均显示“Synapse AI Studio”，第 21 轮则确认 Git 同 requestId 复用和窗口内部项目状态正确。当前任务要验证标题是否仍为稳定缺陷，而不是把历史记录直接当当前版本结论。
+- 权威设计要求 System App 独立窗口使用包含应用名的原生窗口标题；Agent 对话独立窗口设计要求同会话唯一窗口、重复打开聚焦、关闭后解除主窗口接管，但尚未定义项目/会话级标题模型。若当前 UI 仍通用标题，修复应落在共享 BrowserWindow 标题机制，不为单个 Git/Terminal 入口打补丁。
+- 能力注册表面本轮不预期变化：只改善既有窗口的可辨识标题不会新增/删除/重命名 System App、Dock、Capability、MCP、Deep Link 或可见性；若源码定位证实仅窗口内部实现变化，`docs/agents/capability-registry.md` 数量与表格无需修改。
+- 用户心智基线：想确认当前 Synapse 主窗以及后续独立窗能否从原生标题区分；看到唯一运行中的仓库 Electron 与 Chrome，随后按仓库 Electron.app 精确读取主窗；这样避免把其它 Electron 开发应用混入判断。预期主窗可保持产品通用标题；实际当前主窗原生标题与 AX HTML 标题均为“Synapse AI Studio”，内容停在 `Synapse` 项目的 r21 Agent 会话且输入框聚焦。判断主窗基线正常，后续需比较独立窗口是否仍同名。
+- 用户心智：想从 macOS 自带 Window 菜单确认系统层当前能识别什么；点击 Window 是因为它是用户在多窗口间寻找工具的标准入口；预期单主窗时至少列出一项；实际只列出一项“Synapse AI Studio”，与当前唯一主窗一致。判断基线可信，下一步新增独立窗后同一路径比较菜单条目。
+- Computer Use 对原生 Window 菜单的普通 Escape 没有关闭效果，完整 AX 仍停在菜单；使用菜单暴露的 `Cancel` secondary action 后准确回到 Agent，焦点仍在输入框且“新窗口打开”重新可见。该差异属于 macOS 菜单自动化路径，不是 Synapse 产品缺陷，后续原生菜单统一用其可访问 Cancel 动作退出。
+- 用户心智：想把当前 r21 会话单独打开，以便与 Git/Terminal 并排工作；看到会话顶栏“新窗口打开”，选择它是因为该入口应保留明确会话归属；预期新窗标题至少包含会话或 Agent；实际新窗 URL 已固定正确 projectId/conversationId/sessionKey/title，但原生窗口与 HTML 标题仍都只是“Synapse AI Studio”，焦点落文档根节点。判断当前版本仍存在标题层会话信息丢失；先等待内容恢复并用 Window 菜单确认，不仅依赖 URL。
+- 独立 Agent 内容随后正确恢复会话标题、DeepSeek 模型与 composer，焦点回输入框，证明路由/会话生命周期正常；但 macOS Window 菜单同时出现两个完全相同的“Synapse AI Studio”。用户无法从系统菜单知道哪一个是主窗、哪一个是该会话，历史风险在当前版本稳定复现，已具备可信产品证据。
+- 从 Window 菜单选择第一项后准确回到根路由主窗；主窗对已接管会话显示“已经在新窗口打开 / 显示窗口”，符合单会话唯一窗口设计，但返回时焦点位于 HTML 根节点。此时先验证“显示窗口”是否只聚焦现有会话窗，避免把标题问题和重复窗口问题混在一起。
+- 点击主窗“显示窗口”立即回到相同 Agent URL，完整会话和 composer 焦点保持，没有出现加载态或新 requestId；从用户角度符合“聚焦已有窗口”预期。还需用 Window 菜单条目数确认没有生成第三个同名窗口。
+- 复查 Window 菜单仍只有两个条目，证明“显示窗口”确实复用已有 Agent 独立窗，没有重复创建；但两项继续完全同名，复用正确与可辨识性缺陷可以清楚分开判断。
+- 从 Window 菜单回主窗后，焦点准确落在“显示窗口”，优于第一次由菜单切回时的根节点状态；说明触发器回焦路径存在且可用。接下来从 Dock“应用”进入启动台，不关闭 Agent 独立窗，以建立并发多窗口场景。
+- 主窗从 Dock“应用”进入启动台成功，Git 与终端入口均可见，焦点留在 Dock“应用”；Agent 独立窗仍在后台。选择启动台而非 Agent Git 菜单，是为了同时验证通用 System App 的“内嵌→新窗口”生命周期与标题模型。
+- 内嵌 Git 正确显示仓库列表及 `Synapse / main / origin/main / 121 个改动`，顶栏只有一条应用标题并提供“新窗口打开”；当前内容可以辨认工具与仓库，但主窗原生标题仍保持通用是合理的，因为它仍是多应用主宿主。下一步打开 Git 独立窗，原生标题应承担工具识别。
+- Git 独立窗首帧路由正确为 `?window=system-app&appId=git`，但原生/HTML 标题仍是通用“Synapse AI Studio”，且首个可见状态只是空壳文档根节点。中性空壳本身符合既有窗口加载过渡；需下一帧确认 Git 内容恢复后标题是否更新，避免把过渡标题误判为最终状态。
+- Git 独立窗随后完整加载 121 个改动的真实 Synapse 仓库列表，内部项目归属正确，但最终原生/HTML 标题仍未更新；Window 菜单现在显示三个完全相同的“Synapse AI Studio”（主窗、Agent、Git）。用户即使已看到 Git 内容，也无法从系统切换器凭标题回到它，System App 设计要求的应用名标题在当前实现中没有兑现。
+- 从 Window 菜单切回主窗后，启动台按设计恢复，焦点准确回到 Git 应用入口；Git 独立窗仍在后台。说明 System App 的创建后返回和来源回焦生命周期正常，缺陷集中在窗口标题而不是 Launcher 接管。
+- 内嵌 Terminal 正确显示 `Synapse` 分组及 `Synapse / Projects_Js / documents` 三条“已失联”历史会话，未伪装为运行中；顶栏只有一条“终端”标题与“新窗口打开”。内容层能够辨认工具和项目/会话，本轮不创建、删除或输入终端命令，只验证窗口宿主。
+- Terminal 独立窗直接加载相同分组/会话状态，路由为 `system-app&appId=terminal`，没有创建额外 session 或串到 Git/Agent；但原生与 HTML 标题仍为通用“Synapse AI Studio”。至此 Agent、Git、Terminal 三类独立窗都稳定复现同一标题缺陷，而内部状态隔离均正常。
+- 四窗同时存在时，Window 菜单稳定列出四个完全同名条目。源码定位确认并非各入口忘记传标题：System App 构造参数本已设置 `Synapse AI Studio ${windowTitle}`，Agent 构造参数本已设置会话标题且支持运行时 rename；共同根因是同一 `desktop/index.html` 的静态 `<title>Synapse AI Studio</title>` 在页面加载后通过 Electron `page-title-updated` 覆盖原生 BrowserWindow 标题，而共享 detached window lifecycle 没有保留主进程权威标题。
+- 最小通用模型确定为：共享 detached window 服务阻止 renderer 静态标题覆盖；System App 继续使用既有注册定义的 `Synapse AI Studio Git/终端/...`，Agent 使用 `Synapse AI Studio 对话 · <会话>` 并在 rename/retarget 时同步。它不新增 IPC/能力/注册，也不要求 Git/Terminal 跨模块读取项目状态；工具由原生标题辨认，项目/会话由各自窗口内容辨认。
+- 回归实现已以 25/25 定向测试确认共享标题权威、System App 既有标题与 Agent 初始/重命名/重定向标题一致；Computer Use 热更新复测开始时仅发生一次接口对象判断错误，没有 UI 动作或产品状态变化。
+- Computer Use 状态对象应在同一 `node_repl` 表达式中输出其 `.text`；本轮两次仅查看接口/空返回的调用不构成真实 UI 证据，也没有改变当前四窗或应用状态。
+- 现有开发主进程热更新后旧独立窗已自然关闭，主窗停在原 r21 Agent、完整历史与输入焦点均保留；这为修复后新建窗口提供了干净基线，也说明本轮没有通过人工重启制造结果。
+- 首版共享修复没有通过真实客户端：热更新后全新 Agent 独立窗的内容和路由都正确，原生标题却仍为通用值。最可能原因是回归把 `page-title-updated` 错挂在 `webContents` mock，而 Electron 的窗口标题事件属于 BrowserWindow；必须以真实 API 归属修正测试和实现，不能接受当前 25/25 假绿。
+- 本地 Electron 41 类型同时暴露 BrowserWindow 与 WebContents 同名事件，但只有 BrowserWindow 文档承诺 `event.preventDefault()` 会阻止原生窗口标题变化。将回归事件源改为 BrowserWindow 后准确出现 1 个失败，修正共享监听后 25/25 转绿；首版测试替身问题已被真实 UI 证据反向纠正。
+- 第二版验证基线再次由现有热更新自然关闭旧窗、保留主窗会话形成；新 Agent 独立窗来自修复后新建路径，因此后续标题结果不会混入旧窗口监听器。
+- 第二版共享监听通过真实 Agent 独立窗：macOS 原生标题现在包含“Synapse AI Studio / 对话 / 会话标题”，HTML content 仍显示静态页面标题但不再覆盖原生标题。这个差异正是所需边界——主进程标题权威、renderer 无需为每个宿主维护标题。
+- macOS Window 菜单的直接系统证据也转绿：主窗保留“Synapse AI Studio”，Agent 独立窗显示“Synapse AI Studio 对话 · <会话>”，两项不再同名；用户从菜单即可建立工具/会话心智。
+- 修复没有改变 Agent 单会话接管协议：主窗仍显示“已经在新窗口打开 / 显示窗口”，点击后直接聚焦同一独立窗；系统菜单切换本身不承诺来源触发器回焦，因此回主窗时焦点位于 HTML 根节点不判产品缺陷。
+- Agent 复用后的原生标题没有回退或过时，composer 焦点也保持；这覆盖了“重复打开更新/聚焦时标题不能被后续 renderer 状态重新覆盖”的关键时序。
+- Agent “显示窗口”后的 Window 菜单条目数仍为 2，证明标题修复未破坏同会话唯一窗口，也未因重复聚焦注册第二个条目。
+- 由“显示窗口”返回主窗后来源焦点仍准确恢复，随后可连续键鼠导航到应用启动台；标题修复没有回归 Agent 主窗接管和来源焦点路径。
+- System App 启动台在 Agent 独立窗后台存在时仍可正常进入 Git；本轮继续只观察仓库与窗口宿主，不执行分支、提交、同步或文件操作。
+- Git 内嵌内容能清楚辨认 Synapse/main/origin-main，并显示工作区状态；因此最小标题模型只需在系统层提供“Git”工具身份，项目归属可由窗口内已有内容承担，无需增加新的跨模块动态项目标题耦合。
+- Git 修复后原生标题使用既有注册定义“Synapse AI Studio Git”，而 renderer 路由和 Synapse/main 内容未变；共享修复兑现了 System App 设计中已经存在但此前被覆盖的标题，无需改 capability registry。
+- 三窗口并发时 macOS Window 菜单已形成稳定识别层：产品主窗、具体 Agent 会话、Git 工具分别可辨；用户不需要靠排列顺序或逐窗试错。
+- 从 Git 独立窗经 Window 菜单回主窗时，启动台状态与 Git 来源焦点保持；System App 独立窗不会把主宿主留在错误路由或串到 Agent 会话。
+- Terminal 内嵌内容继续正确投影既有分组和失联会话；本轮不靠创建新会话来验证项目归属，也不向 xterm 输入任何命令，避免业务副作用。
+- Terminal 修复后原生标题为“Synapse AI Studio 终端”，内部会话/项目投影未串到 Git 或 Agent；共享标题机制适用于第二类 System App，不是只修 Git 的入口特例。
+- 四窗口最终系统证据从“4 个 Synapse AI Studio”变为“主窗 / 对话·会话 / 终端 / Git”四种明确条目。修复直接解决用户在 Window 菜单和键盘切换前的定位问题，同时保持各窗口内部项目/会话信息。
+- Window 菜单可辨只是第一层证据；已转用用户常用的 `⌘\`` 键盘切换继续验证，目的是确认每次前台窗口的原生标题与实际路由一致，而不是菜单文本单独正确。
+- 首次键盘轮换命中主窗，标题与根路由一致，未出现终端标题残留到主窗的过时状态。
+- 第二次键盘轮换命中 Git，标题与 Git 路由一致，也没有继承主窗通用标题；多窗切换不会串宿主标题。
+- 第三次轮换命中 Agent，原生标题、URL 会话参数和窗口内容仍对应同一 r21 会话；宽度较窄的 Agent 宿主没有发生标题截断以外的语义丢失，窗口本身由完整系统标题可识别。
+- 完整 `⌘\`` 循环依次得到主窗→Git→Agent→Terminal，四次原生标题都与真实路由/内容匹配；宽/窄默认尺寸与键盘切换均未使标题过时或误导。
+- 键盘回主窗后 Launcher 仍保留 Terminal 来源焦点；再次进入同一 System App 不会串到 Git 或 Agent，复用测试可从真实同入口继续。
+- Terminal 的重复打开动作与首次入口一致，且立即前置已存在的终端窗；标题修复没有改变 System App 每 appId 单实例语义。
+- Terminal 重复聚焦后标题仍由主进程保持，renderer 的静态标题没有在后续 focus/渲染时序中重新覆盖。
+- Terminal 重复打开前后 Window 菜单都只有一个终端条目，证明同 appId 复用正确；标题修复不会为一次聚焦动作派生重复窗口。
+- System App 重复聚焦并从系统菜单返回主窗后，Launcher 的 Terminal 来源焦点仍保持；这为关闭独立窗的回焦检查提供了明确预期。
+- 可辨标题让清理动作本身也更安全：能从原生菜单精确选择终端，而不是依赖四个同名条目的位置猜测。
+- 关闭 Terminal 独立窗后，主窗 Launcher 的 Terminal 入口重新获得焦点，满足来源恢复预期；标题机制修改没有影响窗口关闭回调或焦点管理。
+- Terminal 关闭后原生菜单条目被及时移除，没有留下过时标题或幽灵窗口。
+- Git 也能按修复后原生标题精确选中并关闭，清理过程无需依赖不稳定的窗口排列顺序。
+- Git 在用户后来操作 Terminal 后才通过系统菜单关闭，主窗保留当前 Terminal 焦点而非恢复旧 Git 来源；从用户心智看这是避免后台旧窗抢焦的合理行为。为排除歧义，另做一次 Git 从当前入口打开后立即关闭的原路径测试。
+- Git 明确来源复测已从内嵌 Git 当前“新窗口打开”触发，不经过其它主窗入口；关闭后的焦点结果将可直接判断来源恢复。
+- Git 关闭后重建仍使用同一权威标题，证明监听按每个新 BrowserWindow 正确注册，而非仅首个实例偶然生效。
+- Git 从当前入口打开后立即关闭时，焦点准确回到 Launcher 的 Git 条目；结合后台旧窗关闭保留当前 Terminal 焦点，两种行为都符合“恢复当前来源且不抢用户最新焦点”的心智。
+- Git/Terminal 关闭后 Window 菜单没有残留标题，只剩主窗和 Agent；共享监听不会延长窗口注册生命周期。
+- Agent 在用户已经转去 System App 后关闭时，主窗保留当前 Launcher/Git 焦点，没有强制导航回旧对话；这是与后台 Git 关闭相同的“不要抢最新焦点”语义。最终清理需由用户显式回到对话，再验证接管占位解除。
+- 主窗可从明确的 Dock“对话”入口恢复 Agent；未通过刷新或路由脚本绕过正常生命周期。
+- 所有独立窗关闭后，Agent 主窗解除接管占位并恢复完整会话与 composer 焦点；窗口服务 remove/closed 生命周期没有因标题监听改变而回归。
+- 清理最终证据：macOS Window 菜单只剩主窗一项，Git/Terminal/Agent 独立窗全部关闭；本轮没有创建 `sy-c2c-r23-*` 会话或夹具，因此不存在待确认的永久删除项。
+- 为补足“不同项目再次打开”而不制造数据，本轮复用既有 Projects_Js r8 会话与 Synapse r21 会话，只切换读取并调用 Git 窗口入口；不新建会话、不执行 Git 操作。
+- Projects_Js 现有会话切换恢复正常，没有串入 r21 标题、Provider 或草稿；Git 请求将从明确项目上下文发出。
+- 真实项目 Git 菜单明确区分写操作和只读窗口入口；本轮只点击“在 Git 中打开”，避免任何提交、推送、拉取或同步副作用。
+- 从 Projects_Js Agent 打开的 Git 窗内容归属正确：项目名、真实分支与路径一致，原生标题保持工具级“Synapse AI Studio Git”。同工具只允许一个窗口，因此项目身份由当前内容承担，没有两个同名 Git 窗并存的歧义。
+- 从 Git 窗键盘切回主窗后仍保留 Projects_Js 会话上下文；选择 Synapse r21 是显式用户动作，没有自动串回或错误切换。
+- Synapse r21 切回后标题、历史与 composer 焦点完整，说明跨项目会话切换没有被后台 Git 窗状态污染。
+- 第二个项目请求沿同一只读入口发出；若服务复用正确，应更新既有窗口的 repositoryId/content，而不是创建第二个 Git 窗。
+- 实际复用只完成了一半：窗口内容已变为 Synapse/main，标题仍准确，且没有第二个 Git 窗；但 URL 仍含 Projects_Js 首次请求的 repositoryId。用户当前看内容不会误判，可一旦刷新/HMR就会按陈旧路由回退 Projects_Js，属于多窗口生命周期里真实且稳定的项目归属缺陷，不能只以内容更新判通过。
+- 路由修复放在 System App window renderer 的共享 open-request 接收层：Git、Terminal 和资源详情在复用时都把最新请求写回当前 URL，再更新内容状态；避免为 Git 单独补丁，也不重载窗口、不新增 IPC 或能力注册。回归覆盖 Git/Terminal 后续请求，35/35 转绿。
+- Renderer HMR 没有重建或关闭当前 Git 窗，标题和主窗 r21 状态保持；因此下一次请求能直接验证更新后的 listener，而不是靠窗口重建掩盖 URL 同步问题。
+- HMR 后复测仍沿真实 Agent Git 入口，不调用内部 API；请求由产品正常生成新的 requestId。
+- React Fast Refresh 保留了既有 effect 订阅，导致本次代码热替换后旧 Git 窗的 listener 没有自动换成新实现；这属于 HMR 订阅时序，不代表发布版修复失效。用户要求覆盖刷新，因此用窗口 `⌘R` 重新挂载当前 renderer，再按同一路径验证；刷新会先如实暴露陈旧 URL 的旧项目回退。
+- 刷新实证确认缺陷后果不是理论推断：Git 窗从当前可见 Synapse/main 立即回到 Projects_Js/旧分支，而原生标题仍为 Git。当前 renderer 已通过该刷新加载新逻辑，下一次 open request 才是可信修复验证。
+- Git 独立窗刷新不影响 Agent 主窗 r21 会话；宿主隔离正常，项目回退仅限陈旧 Git 路由。
+- 修复后请求仍复用同一 Git 窗；验证标准提升为“内容、URL、标题三者一致，并经下一次刷新保持”，不能只看当前内容。
+- 修复后 open request 已把 URL 从 Projects_Js 的旧 repositoryId 替换为 Synapse 的新 requestId/repositoryId；当前标题、路由与内容三者一致。
+- 修复后再次刷新仍保持 Synapse/main 和最新 request URL，原先稳定回退 Projects_Js 的缺陷完成实机闭环；同一 Git 窗复用、项目归属与刷新生命周期同时成立。
+- 从 Agent 的 Git 菜单打开独立 Git 并关闭后，主窗内容/会话没有串态，但键盘焦点稳定落到 HTML 根节点；与 Launcher 打开/关闭能回到应用条目不同，Agent Git 入口缺少来源焦点恢复。用户下一次 Tab 会从页面开头而不是继续当前工作，属于同一多窗口生命周期的稳定缺陷。
+- 根因是 Agent Git `DropdownMenuContent` 主动阻止 Radix 的标准 `onCloseAutoFocus`，菜单选项触发新窗口前 activeElement 已退回 body。最小修复仅恢复 DropdownMenu 默认回焦 trigger 行为；测试先红后绿，不改 Git 业务动作或其它 composer 菜单。
+- 回焦修复后的实机路径仍使用同一 Agent Git 菜单和同一 Git 独立窗，不通过手动预设 focus 绕过产品行为。
+- 第三项修复没有回归前两项：复测 Git 窗标题、最新 Synapse URL 与项目内容仍一致。
+- Agent Git 独立窗关闭后 active element 现为“Git”触发器；键盘用户可从原位置继续操作，第三项焦点缺陷完成 HMR 原路径闭环。
+- 最终清理复核仍只有主窗一个 Window 菜单条目；Projects_Js/Synapse 只读会话均未被修改，最终停在 r21 Agent，焦点位于可继续操作的 Git trigger。
+- 最终标题模型保持克制：Agent 原生标题包含产品/工具/会话，System App 原生标题包含产品/工具；Git/Terminal 按 appId 单实例复用，当前项目/会话由同步后的 URL 与窗口内容展示。若未来允许同一 System App 多实例并存，才需要把项目身份加入原生标题；当前不为未存在的能力增加耦合。
+- `impeccable` 与 `karpathy-guidelines` 最终复核确认改动符合既有产品 register：没有新增样式、颜色、层级或冗余文案，焦点恢复复用 Radix 标准行为；所有新增逻辑都直接对应实机缺陷并有红→绿回归。
+
+## 2026-08-27 C-to-C 第 21 轮：桌面主链与跨入口综合回归
+
+- 第 21 轮按用户延长后的阶段 17 启动；已完整读取仓库规则、Computer Use、planning-with-files 与既有三份计划记录。只使用已运行界面，不启动、停止或重启服务，不建 worktree、分支或提交。
+- Computer Use 应用清单显示仓库开发 Electron 仍在运行，Chrome 也在运行；首次按通用 bundle id 读取 Electron 因本机多个开发项目共用 `com.github.Electron` 而歧义失败，没有产生界面或文件副作用。后续固定使用 Synapse 仓库内 Electron.app 完整路径。
+- 第一次以完整路径读取时截图辅助变量未跨 REPL 调用保留，状态读取完成但输出阶段报 `fs21 is not defined`；改为显式 `globalThis` 变量后成功。真实桌面当前并非白屏：Agent 主工作区完整显示，停在已完成的 `sy-c2c-r15-event-main`，侧栏、历史、用量、composer 与 Dock 均正常，无运行中状态或弹层。因此本轮继续桌面优先范围，不执行刷新动作。
+- 用户心智：想在 Synapse 项目新建隔离会话而不碰旧记录；界面在项目行提供“新建对话”，点击后新增 `新对话 20:43` 并自动聚焦空 composer，默认 Provider 为 DeepSeek `deepseek-v4-flash`，复制/导出在空态禁用。实际与预期一致，旧会话未被改动。
+- 无文件变化基线：在空会话输入 `sy-c2c-r21-nofile` 并发送后，用户消息立刻进入时间线、侧栏显示“正在输出”、composer 切换为“停止”，没有草稿残留。运行中工具路由回退被如实展示为状态文本，不影响本轮只回复指令。
+- 无文件轮次 10 秒完成并回复 `R21_NO_FILE_OK`：侧栏移除运行态、处理按钮变“已处理 10s”、composer 恢复禁用发送、用量正常出现，时间线没有 Agent 文件检查点卡片。证明无变化不产生空 Checkpoint，完成后也没有 postlude 误恢复运行状态。
+- 已在同一会话发送混合变更轮次：要求受支持的 Edit 修改、Write 新增，以及已知 SDK 不跟踪的 Bash 删除都限定在 `sy-c2c-r21-*`。发送后旧轮次保持完成态，新轮次进入处理，侧栏与停止入口同步；此路径将同时验证 Checkpoint 只聚合 SDK 支持的文件工具，不把 Bash 删除误报为可撤销。
+- 混合轮次 14 秒完成，时间线严格按“最终回复 `R21_FILES_OK` → 用量 → Checkpoint”形成 postlude；卡片显示“已编辑 2 个文件 / +2 -1 / 可撤销”，逐项为 `sy-c2c-r21-modify.md +1 -1` 与 `sy-c2c-r21-new.md +1 -0`。Bash 删除的 `sy-c2c-r21-delete.md` 未进入卡片，符合 SDK 不跟踪 Bash 写入的已知边界，没有误导为可撤销。postlude 后侧栏退出运行态、发送恢复禁用，没有再次进入“正在输出”。
+- 用户从卡片点击修改文件，当前约 960px 宽度进入“工作区详情”而非继续压窄会话：左侧项目导航保留，会话区被审查详情替换，顶部同时提供“返回对话/关闭面板”，默认焦点在返回按钮。修改 Diff 显示红色删除 `R21_MODIFY_BEFORE`、绿色新增 `R21_MODIFY_AFTER`，统一视图与换行默认开启。
+- 在同一面板点击 `sy-c2c-r21-new.md` 后标题/状态切为“新增”，Diff 从 `/dev/null` 到新文件且只显示绿色 `+ R21_NEW_AFTER`；文件切换保持面板布局和焦点，未关闭或重载会话，符合审查连续性心智。
+- 分栏 radio 从 off→on 后统一 radio 同步 off，新增文件 Diff 内容保持；“自动换行” toggle 从 on→off 后值准确变化且焦点留在开关。两项控制互不干扰，AX 语义可辨识，未出现布局重挂载或文件选择丢失。
+- 在开关聚焦时按 Escape，详情模式立即关闭并恢复完整会话、composer 与 Checkpoint 卡片；焦点准确回到最初打开面板的 `sy-c2c-r21-modify.md` 文件按钮，而不是根节点、关闭按钮或输入框。此前修复的键盘关闭与触发点焦点恢复在真实新会话回归通过。
+- 从卡片的新增文件重新打开时，面板按产品默认值恢复统一视图+自动换行，并直接选中新增文件；随后把窗口从约 960px 扩至约 1352px，布局无重载地切为左侧导航 / 中间会话 / 右侧审查三栏。当前会话、Checkpoint、选中文件与 Diff 保持，composer 宽度仍可用，没有卡片套层或页面级溢出。
+- 宽屏面板开启时恢复约 960px，布局回到详情模式且仍选中新增文件、统一/换行状态与 Diff 不丢；随后切到旧 `sy-c2c-r15-event-main`，工作面板自动关闭并完整恢复旧会话。再返回 r21，会话两轮消息、耗时/用量、2 文件 Checkpoint 与“可撤销”状态从历史恢复，面板保持关闭，符合“面板是会话级临时 UI 状态”边界。
+- 从恢复后的卡片点“撤销”，两阶段确认层准确说明“恢复 2 个文件；对话内容和模型上下文不会回退”，默认焦点在“取消”，且未在确认前写磁盘。第一次按 Escape 后对话确认关闭、审查面板留在详情态并选中修改文件，但焦点落到 HTML 根节点；这可能让键盘用户失去操作位置，需第二次同路径确认稳定性后再判缺陷。
+- 从详情面板“撤销”再次 prepare 后按 Escape，确认层同样关闭且仍无文件写入，但焦点第二次稳定落到 HTML 根节点，而不是面板“撤销”按钮。确定为第 21 轮产品缺陷：撤销确认取消没有恢复实际触发点焦点，键盘用户无法就地再次准备。下一步先补最小回归，再用既有 Radix `onCloseAutoFocus` 模式外科修复。
+- 焦点回归修改前 1/1 红灯，实际 activeElement 为 body；最小修复仅给既有面板撤销按钮加 ref，并在 AlertDialog `onCloseAutoFocus` 阻止默认回根节点后聚焦该按钮。定向回归已 1/1 转绿，发布说明同步。
+- 既有 dev 热更新没有重启服务；HMR 重新挂载后因原请求仍是 rewind 自动重开一次确认层，属于开发期状态重建。沿真实 Escape 原路径关闭后，AX 焦点准确回到面板“撤销”按钮，修复实机闭环，文件仍保持 after 状态。
+- 第三次 prepare 后确认实际撤销：确认前仍准确显示 2 个文件；点击后取消与动作按钮禁用、主动作变“正在撤销”。但同一真实状态帧里文案短暂变成“将恢复 0 个文件”，与刚确认的 2 个文件矛盾。先等待最终状态和磁盘结果；若不是瞬时关闭动画而是在正常撤销等待内可见，将作为第二项稳定缺陷处理。
+- 实际撤销完成后面板移除撤销入口、保留两文件只读 Diff；磁盘确认 `sy-c2c-r21-modify.md` 恢复 `R21_MODIFY_BEFORE`，新增文件被移除。Bash 删除文件仍不存在，准确体现该删除不在 Checkpoint 的能力边界。
+- “正在撤销时显示 0 个文件”由 `prepared` 早于会话刷新被清空且关闭动画继续渲染造成。新增回归保持刷新 promise pending，修改前 1/2 红灯；最小修复在刷新完成前保留 prepared，并用最近一次准备文件数覆盖关闭动画，现 2/2 绿。发布说明已同步。
+- 第二次 HMR 后尝试按旧 AX 索引返回对话失败，工具明确提示 element ID 已失效；重新读取完整树确认面板已由热更新重挂载关闭，会话卡片已恢复为“已撤销”，composer 聚焦。没有触发其它按钮或文件副作用，后续继续只使用新索引。
+- 已在同会话发送第三轮 `sy-c2c-r21-concurrent`，只要求 Edit 把已恢复的修改夹具变为 `R21_CONCURRENT_AFTER`。发送后上一张卡片保持“已撤销/仅审查”，新轮次独立进入运行态，准备用它验证最新可撤销、外部 after 指纹变化拒绝与恢复后再次准备。
+- 第三轮 8 秒完成并生成新的唯一可撤销卡片“已编辑 1 个文件 / +1 -1”；上一张已撤销卡片仍只保留审查，latest-only 状态正确。
+- 用 apply_patch 把同一专用文件从 checkpoint after 值改成 `R21_CONCURRENT_EXTERNAL` 后，从卡片点撤销进入审查详情但不显示确认层，直接给出“操作失败：文件已在检查点后发生变化：sy-c2c-r21-modify.md”。磁盘未被写回，Diff 仍展示 Checkpoint 的 before/after，不把外部内容伪装成该轮差异；两阶段 after 指纹保护真实通过。
+- 把专用文件精确恢复为 checkpoint after 值后，沿面板同一撤销入口再次准备成功，确认层恢复显示 1 个文件，证明失败后可重试且旧 operation 不阻止新 prepare。确认实际撤销时按钮变“正在撤销”，文案仍保持“将恢复 1 个文件”，不再退化为 0；第二项修复实机原路径闭环。
+- 第二次实际撤销完成后磁盘再次恢复 `R21_MODIFY_BEFORE`，面板撤销入口消失、Diff 保留。返回对话后两张历史卡片都显示“已撤销”且只有“审查/文件”入口，第三轮耗时/用量与完整时间线保持，latest-only 与历史恢复最终态一致。
+- Agent composer 的 Git 菜单准确列出提交/推送/拉取/同步和“在 Git 中打开”；本轮只选择只读工作台入口，没有触碰任何仓库动作。点击后出现新的 Synapse 窗口并先呈中性空容器加载态，没有误报无分支、不可访问或空改动；下一帧再判断真实工作台。
+- Git 窗口真实加载为仓库 `Synapse`、路径 `~/Documents/code/github/Synapse`、分支 `main` 与 122 个当前改动，项目归属准确；变化列表默认选中但本轮未提交/丢弃。右侧从 `RELEASE_NOTES_PENDING.md` 显示真实 Diff，统一/分栏与自动换行控件与 Agent 审查同一语义和可访问标签。
+- 在 Git 工作台切到分栏后左右旧/新列准确出现，新增发布说明保持绿色语义；再把自动换行从 off 切到 on，焦点与文件选择保持。共享 Diff 的控制行为、语义色和文本结构与 Agent 面板一致。
+- 使用应用内窗口切换快捷键从 Git 回到原 Agent 主窗口，两张已撤销卡片、会话与 composer 完整保持；这是两个 Synapse 窗口共存，不是 Agent 路由被 Git 覆盖。再次打开 Agent Git 菜单准备验证现有 Git 窗口复用，仍未触发任何写操作。
+- 再次选择“在 Git 中打开”直接聚焦同一个 Git URL（requestId 完全相同），没有再次出现加载态；原选中 `RELEASE_NOTES_PENDING.md`、分栏=on、换行=on 全部保持，证明窗口复用而非新建重复实例。随后切回 Agent，原会话状态继续保持。
+- 从 Agent Dock 打开终端后，主窗口切为终端 System App，已有 `Synapse` 项目分组置顶，同时显示其旧会话“已失联/终端画面无法恢复”；这是真实恢复边界，不伪造活动终端。仅展开“以命令启动：Synapse”看到“管理命令”，没有创建新终端、运行命令、Claude/Codex 或 IDE，也没有删除失联会话。
+- 关闭终端命令菜单后焦点正确回到触发按钮。首次鼠标点击 Dock“对话”只把焦点移到该按钮，AX 内容未导航；这与历史记录中的 Dock 首次点击行为一致，未产生副作用。下一步改用已聚焦按钮 Return，不重复同一鼠标路径。
+- 在已聚焦“对话”上按 Return 成功回到原 r21 Agent，会话/Checkpoint 状态完整且 composer 聚焦；随后点击 Dock“应用”打开 System App 启动台，看到智能体、工作流、云盘、自动化、设置、资源仓库、Git、本地数据库、Synapse Skill、密钥库、快捷输入、终端、IDE 管理、用量与价格入口。没有额外顶栏、重复文案或加载错误。
+
+## 2026-08-27 C-to-C 第 11 轮：Agent attachment 增量边界
+
+- 最终源码验证通过：附件 composer、消息附件、历史解析、暂存生命周期、历史元数据和 IPC 打开链 6 个文件共 182/182；desktop 全量 TypeScript、`check:hard-constraints`、`git diff --check` 均成功。测试只输出既有 SQLite experimental 与 jsdom `requestSubmit` 提示，不影响结果。
+- 通过 UI 精确删除 `sy-c2c-r11-switch` 与 `sy-c2c-r11-main` 后，列表不再包含任何 r11 专用会话；已确认新消息对应的 committed 受控副本随会话删除。唯一夹具目录从工作区精确移出后从唯一 Trash 路径永久清理，工作区、Trash、TextEdit 窗口均无本轮残留；合成夹具不可恢复但可按记录重建，未删除用户数据。
+- 恢复缺口回归修改前稳定把 `synapse-agent-attachment://local/attachment-1` 投影回 `report.pdf`；最小修复只允许通过专用解析器校验的不透明引用进入 Renderer，绝对路径仍投影成文件名。安全脱敏与恢复引用两项回归均转绿。
+- 既有 Renderer 热更新后当前 switch 会话无需重发即重新解析为附件按钮，AX help 仍只有不透明引用；再次点击后 TextEdit 从同一受控副本打开本轮安全内容。由“发送→完成→切走→恢复→再打开”的真实路径确认第三项缺陷最终闭环。
+- 切到修复前 main 历史后，`safe-folder / same-a.txt / same-b.txt` 保持名称、类型、大小信息但不再是按钮，且没有“打开失败”；旧不可恢复记录的只读兼容态实机通过。
+- 再切回修复后 switch 会话时，消息、回复和附件脱敏恢复，但附件在重新加载后同样退化为只读文本，说明刚才成功打开的是发送期乐观投影；持久化恢复链尚未保留不透明引用。第三项缺陷尚未闭环，继续定位历史重建环节，不能把发送期成功误报为恢复成功。
+- 修复后消息在运行中已直接显示历史附件按钮，其 AX help 只有 `synapse-agent-attachment://local/<id>`，没有绝对路径；13 秒完成并只回复 `R11_OPEN_OK`。点击历史附件后系统文本编辑器真实打开受控 `original.txt`，内容精确为本轮安全夹具，Synapse 没有“打开失败”提示。
+- 关闭本轮 TextEdit 预览后返回 Synapse，焦点仍在同一附件按钮；附件名、`TXT · 31 B`、回复和不透明引用保持，证明打开动作没有污染会话历史、输入框或运行状态。第三项缺陷的新消息原路径完成真实闭环。
+- 历史兼容回归先红灯确认旧 `path === name` 记录仍渲染按钮；impeccable 约束下只把这种无法解析的旧记录降级为原样只读附件信息，不新增文案、颜色或层级。新不透明引用和既有绝对/相对可解析引用仍保留打开操作；定向 2/2 转绿。
+- 修复后在 `sy-c2c-r11-switch` 通过原生“附加文件”与 Go to Folder 精确选择恢复为 0644 的本轮 31-byte 文本；Finder 明确显示选中文件名、Plain Text Document 与 31 bytes，提交后 Synapse 草稿显示 `1 个附件 · 31 B / TXT`、无路径，输入框聚焦且发送可用。
+- 第三项缺陷根因已确认：普通文件/文件夹在发送成功后把历史 `path` 持久化成纯文件名以脱敏，但界面仍把这个不可解析值渲染成“可打开”按钮；主进程因而把文件名误当项目相对路径，必然打开失败。图片使用受控副本，未命中同一问题。
+- 新回归先稳定红灯：历史附件元数据仍为 `report.md`，不是受控引用。最小修复让新消息只持久化 `synapse-agent-attachment://local/<id>` 不透明引用，由受权限与审计保护的主进程在点击时解析到已提交受控副本或原文件夹；Renderer 和历史仍不接触绝对路径。附件历史、暂存解析和 IPC 三组定向回归已转绿。
+- 既有热更新后 `sy-c2c-r11-main`、`sy-c2c-r11-switch`、Provider、回复和焦点均保持；修复前已落库的 main 历史仍只有旧文件名，无法凭空恢复附件 ID。已切到空的 switch 会话，准备发送一条修复后附件消息，按同一历史附件点击路径真实复测受控打开。
+- Synapse 由 960px 窄窗用系统 zoom 切到 1360px 宽窗再恢复：侧栏、长回复表格、附件历史和 composer 均保持；宽屏内容居中，窄屏表格在内容列内换行，没有页面级溢出或附件裁切。
+- 恢复会话后历史 `same-a.txt` 仍渲染为可操作按钮；真实点击却立即提示“打开失败”，焦点留在附件按钮。既然 UI 暴露可打开语义，提交刚完成就失败属于第三项确定缺陷，需追查 committed 受控副本的 artifact URL/打开链。
+- `unsafe-folder` 只含本轮安全文本与一个指向同夹具根内文件的 symlink，真实选择后主进程拒绝整目录、草稿保持空并提示“无法添加附件”；拒绝没有把文件夹名或路径残留到 composer。
+- 000 权限的专用文本未进入草稿；恢复为 0644 后沿相同文件路径重试，成功显示 `1 个附件 · 31 B / TXT`，随后可移除。10 MiB+1 byte 的稀疏 PNG 同样被拒绝并提示“无法添加附件”，空草稿和输入焦点保持，覆盖不可读恢复与单图 size 边界。
+- 空文本点击发送成功：草稿附件条清空，历史用户消息只显示 `safe-folder / same-a.txt / same-b.txt` 与类型大小，没有空白气泡或绝对路径；会话进入真实处理中，Provider 读到了隐藏文件、隐藏子目录、嵌套文件和 0-byte 空文件。
+- 运行 17 秒时创建并切到 `sy-c2c-r11-switch`，侧栏持续标记 `sy-c2c-r11-main 正在输出`，新会话为空且全局运行期间发送/附件入口禁用；返回 main 后附件历史完整恢复、名称/类型仍脱敏，随后真实“停止”移除待回答表单并保留已生成回复，状态转为已处理。
+- 原生文件面板用键盘把 `same-a.txt` 的单选扩展为连续双选，Finder 明确显示 `2 items / 58 bytes`；提交后草稿与已有文件夹混合展示为 `3 个附件 · 58 B`，两份内容完全相同但名称不同的 29 B TXT 都被保留，类型/大小/顺序正确。
+- 文件夹与文件混合附件下输入框仍聚焦、发送按钮可用且没有路径文本；同内容不同名称不被误判重复，符合用户按“附件身份/名称”理解的预期。
+- 目录去重两项回归修改前均红灯：主进程二次选择产生 `attachment_2`，renderer 对同一 `directory-1` 渲染两行并触发 React 重复 key 警告；最小修复后定向 2/2 转绿。
+- 既有热更新后重新从空草稿选择 `safe-folder` 两次：首次显示 `1 个附件 · 0 B`，第二次仍保持一行并出现“已忽略重复附件”，焦点留在输入框；绝对路径没有进入 renderer，第二项缺陷实机闭环。
+- 同一草稿通过原生“附加文件夹”连续两次选择完全相同的 `safe-folder`，真实 UI 从 `1 个附件` 变为两个同名 `safe-folder`、总计 `2 个附件 · 0 B`，没有重复提示；这会把同一目录重复提交给 Provider，是第二项确定缺陷。
+- 根因方向与源码审计一致：目录引用为避免绝对路径泄露不带 hash/path，renderer 的附件去重键对目录返回空；主进程每次选择又创建全新 attachmentId，因此现有文件去重链无法识别同一文件夹。
+- 热更新后沿同一原生文件夹选择器重新附加 `safe-folder`，草稿仍显示 `1 个附件 · 0 B` 且输入框自动聚焦；从输入框 `Shift+Tab` 到删除按钮再按 Return，附件移除后焦点准确返回输入框，第一项缺陷实机闭环。
+- 键盘从输入框 `Shift+Tab` 聚焦“删除附件 safe-folder”后按 Return，修复前稳定把焦点落到页面根节点；这是鼠标移除后的同一焦点丢失缺陷，不只是 AX 偶发现象。
+- 焦点修复通过既有 dev 热更新生效，专用会话 `sy-c2c-r11-main`、Provider 与空草稿均保持；页面重新稳定聚焦输入框，待按原附件移除路径复测。
+
+- 上周附件主线提交为 `a41ba9a8d`、`5c2ac491b`、`2cdd8a393`、`17f2f1711`，相邻 `d779bee0d`/`15335f2ac`/`2dc35aad6` 只做运行时或验收补强。前十轮已经实测单文件/图片、重复文件和图片去重、主动停止、不可读文件恢复重试、真实视觉模型、旧历史与导出绝对路径脱敏；本轮不再尝试已知不可预置的图片剪贴板。
+- 当前附件服务对图片限制 10 MiB/张、50 张/草稿，对所有受控副本限制 500 MiB/草稿、2 GiB/项目、5 GiB/全局；文件夹不复制字节，但在选择与发送前递归检查最多 50,000 项/64 层并拒绝任何嵌套 symlink。单文件和图片进入受控副本，用户明确选中的文件夹保留精确真实路径并仅在本轮授权。
+- 草稿去重键当前只覆盖图片/文件的 `kind + name + byteSize + sha256`，同内容不同名称会保留、同名同内容会忽略并释放新暂存项；目录明确返回 `null`，因此重复选择同一文件夹目前没有 renderer 去重。需由真实 UI 确认是否形成重复附件与重复运行时清单，再决定是否为确定缺陷。
+- 第一次精确读取到的当前 Synapse 开发客户端停在基础设置页，窗口为标准宽度、无确认层或文件选择器；设置值只做界面定位，没有复制或记录身份字段内容。首次按旧 AX 索引点击 Dock“对话”后只看到焦点变化，尚不能确认已完成导航，下一次必须重新读取完整树并使用新索引。
+- 重新读取完整树后确认已经进入 Agent：当前恢复的是前轮 `sy-c2c-r8-standard`，DeepSeek/provider、6 秒耗时、上下文/用量、composer 与附件入口完整；焦点在输入框，没有发送中状态或残留弹层。为避免触碰旧会话，本轮从 `Synapse` 项目自身的更多菜单进入“创建自定义对话”，不复用任何既有会话。
+- Synapse 项目菜单展开后只有“创建自定义对话 / 在文件夹中显示 / 在终端中打开 / 清空对话”，当前项目无活跃会话所以清空禁用；本轮只选择自定义对话，不打开文件夹或终端，不创建终端数据。
+- 已通过真实自定义对话弹窗创建 `sy-c2c-r11-main`，保持默认 DeepSeek `deepseek-v4-flash`；新会话为空态、复制/导出禁用、composer 自动聚焦，附件菜单明确分为“附加文件/附加文件夹”。未修改 Provider、模型、Persona、权限或账号配置。
+- 本轮专用夹具根为仓库内 `sy-c2c-r11-fixtures/`：安全文件夹含普通文件、隐藏文件、隐藏子目录、普通子目录与 0-byte 空文件；另有两份同内容不同名称文本、独立不可读文本、10 MiB+1 byte 稀疏 PNG、以及只指向同一专用根内安全文本的 symlink 文件夹。没有引用已有业务文件或外部数据。
+- 真实“附加文件夹”打开 macOS 原生选择器，Open 在未选择目录时不可用；使用系统 Go to Folder 入口后显示上次公开图片路径预填，这是原生面板历史而不是草稿残留。下一步将整段替换为本轮 `safe-folder` 精确路径，不选择或读取列表中的其它文件。
+- Go to Folder 精确定位后原生列视图选中 `safe-folder`，可见层只展示 `empty.txt / nested / visible.txt`，隐藏项按 Finder 默认不显示；这不代表产品忽略隐藏项，实际文件夹作为整体引用，发送前主进程会递归检查所有目录项。Open 提交后草稿显示 `1 个附件 · 0 B / safe-folder / 文件夹`，没有展示绝对路径，空文本下发送按钮启用。
+- 鼠标点击最后一个附件的“删除附件 safe-folder”后，附件条和发送可用态立即消失，说明草稿投影已移除；但焦点落到 HTML 根节点而不是 composer 或“添加附件”。鼠标路径不影响继续使用，键盘路径若同样如此会导致焦点从表单逃到页面开头，需重加后以 Tab→Return 原路径确认再判缺陷。
+- 移除后再次打开附件菜单与文件夹选择器成功，Go to Folder 保留本轮最近选择的 `safe-folder` 并仅额外建议同一夹具根下的 `unsafe-folder`；没有出现已删除附件的草稿条或失效发送状态。重加路径可逆且面板历史没有把绝对路径带回 Synapse renderer。
+- 重加成功后焦点自动回 composer；从输入框按一次 Shift+Tab 精确到“删除附件 safe-folder”，说明移除入口的 DOM 顺序和可访问名称正常。下一步在该焦点上 Return，验证键盘移除后的回焦是否仍逃到页面根部。
+
+
+## 2026-08-27 C-to-C 第 10 轮：文档站与 Open API 公共路径
+
+- 2026-08-20 至 2026-08-26 的本轮直接影响集中在 `dfcf00abf`、`66a7b8243`、`4d95c5857`：旧 `website/` 迁移为独立 `document/` VitePress 站点，新增 Console→Open API 文档入口、canonical `drive.public_link.download` 文档、OpenAPI 3.1 机器契约、部署链接注入、Copy Markdown 与文档站公开地址配置。
+- 前九轮中第 4 轮只覆盖 Console API 文档新标签、Open API 概览、公共链接下载文档、机器契约与返回路径；本轮不重复 API Key 编辑或 Drive 业务数据测试，增量覆盖首页导航、深链/刷新/新标签/前进后退/404/外部部署链接、页内锚点、Copy Markdown、宽窄布局、长代码/URL/JSON、表格、鼠标与键盘焦点。
+- 公开下载需要 API Key 的实际 POST/GET 数据面不会伪造；不读取或复制现有凭据，不创建/修改/撤销密钥。只在已有公开测试资源可无凭据安全完成时下载，并使用 `sy-c2c-r10-*` 可控文件名后精确清理。
+- Chrome 初始仍在 Console API 秘钥页；只读确认现有密钥行与“API 权限 获取公共链接文件”可见，但本轮没有点击重命名、权限、复制或撤销。按浏览器任务规则从地址栏在新标签打开 `http://localhost:19773/document/`，保留 Console 标签作为快速往返基线。
+- 文档站新标签第一次完整 AX 读取只有空内容容器，工具栏 URL 已是 `/document/`，没有错误页或浏览器连接错误。该观察只作为真实加载过渡，需下一次读取确认是否进入首页；不能把单帧空容器直接判为产品空态。
+- 下一次真实读取已正常进入首页：顶栏只有 Synapse、首页、开放接口和主题切换；正文保留 Copy Markdown、产品标题、必要的一句能力概述与“查看开放接口”，页脚无多余导航。加载过渡没有错误提示或错误内容闪烁。
+- 1156×768 视觉下首页左右两列对齐，图标没有变形，顶栏/页脚不重叠；主标题因当前中文字号换成三行，页面中段留白很大，但主入口仍在首屏且没有内容被截断。是否属于设计缺陷要结合窄屏和源码基线判断，暂不直接修改。
+- 首页纯键盘路径首个 Tab 正确出现并聚焦 “Skip to content”；Return 将 URL 更新为 `#VPContent`，随后 Tab 直接进入正文首操作“复制 Markdown”，没有被顶栏导航或装饰图像截断。跳转正文与键盘焦点顺序符合可访问性预期。
+- 首页聚焦“复制 Markdown”按 Return 后按钮即时变为“已复制 Markdown”并保留焦点；但把剪贴板安全粘贴到未提交的浏览器地址栏检查时，内容只有 VitePress `layout: home` / `hero` YAML frontmatter，没有可复用的渲染正文。按钮宣称复制 Markdown，实际暴露页面实现配置，属于确定的用户心智偏差。
+- 检查剪贴板时没有按 Return、没有发起搜索或导航；内容仅进入本机地址栏，下一步先 Escape 恢复页面。修复应在共享 Copy Markdown 提取层排除 frontmatter，并为首页生成有意义的 Markdown，不改页面视觉或文案。
+- 根因确认：VitePress `transformPageData` 将源文件全文原样写入 `rawMarkdown`，Copy 组件不区分用户正文与 frontmatter；首页源文件恰好只有 hero frontmatter。新增纯函数回归在修复前 2/2 红灯，分别稳定复现首页复制配置和普通页面携带 frontmatter。
+- 最小修复把复制文本在构建期生成：普通文档去掉 frontmatter 并保留正文，home 页面从既有 hero 的 name/text/tagline/actions 生成可读 Markdown；组件仍沿用现有按钮、成功/失败反馈、焦点和视觉。回归 2/2 已转绿，发布说明已同步，待既有 VitePress 热更新后真实原路径复测。
+- 不重启文档服务，浏览器刷新后沿首页原路径点击“复制 Markdown”，再安全粘贴到未提交地址栏，真实内容已变为 `# Synapse 跨编辑器 AI 能力管理工具`、能力概述与“查看开放接口”Markdown 链接；不再包含 `layout`、`hero` 或其它 VitePress 配置。按钮仍显示“已复制 Markdown”，真实缺陷闭环。
+- 从首页 CTA 进入 Open API 概览后，宽屏真实页面同时显示左侧文档导航、右侧本页目录、正文 Copy Markdown、版本化 base URL、机器契约、快速开始、认证/集成要求、API 表格与下一篇；部署链接已替换为 `http://localhost:3000`，不是模板占位符。
+- 概览的 AX 树暴露一个新疑点：页面首个 Skip-to-content 链接值为 `http://localhost:19773/document/#VPContent`，而当前页是 `/document/open-api/`。如果键盘激活会跳回首页而非当前正文，属于导航级缺陷；下一步沿纯键盘原路径确认，不能仅凭 AX 属性直接下结论。
+- Skip-to-content 疑点已排除：从当前页根部 Tab 聚焦时，链接按运行时路由更新为 `/document/open-api/#VPContent`；Return 后保持在概览并只追加正确锚点，正文/目录/表格完整保留。初次 AX 值是 VitePress hydration 前的短暂属性，不构成用户可触发错误。
+- 点击右侧“机器可读契约”目录项后，URL 变为正确中文锚点，键盘焦点落到对应 H2；视觉滚动把标题留在固定顶栏下方，左侧章节导航与右侧目录同时保持，活动目录有清晰指示，代码块和后续“快速开始/创建 API 密钥”未被遮挡。
+- 1156×768 概览视觉中三栏各自边界清楚；代码块的长 URL 在正文列内，表格尚在下方但 AX 语义为真实 table/row/header/cell。未发现横向撑破或层级嵌套问题。
+- 概览 Copy Markdown 在修复后真实复制完整用户文档：标题、部署后的 `localhost:3000` URL、代码围栏、列表、表格和内部文档链接均保留；没有 frontmatter，也没有把 `{{APP_PUBLIC_URL}}` 占位符泄漏给用户。剪贴板仍只粘贴到未提交地址栏核对，没有导航或搜索。
+- 使用地址栏 Alt+Return 在第三个新标签打开机器契约，保留文档与 Console 快速往返。真实响应直接显示 OpenAPI `3.1.0`、2020-12 dialect、相对 `/api/open/v1` server、canonical/legacy/download paths、schema 与 `externalDocs` 等 JSON；无需登录，也没有 HTML 错页或重定向。
+- Chrome 默认把契约呈现为一条可横向阅读的原始 JSON，同时提供浏览器原生“美观输出”复选框；这是浏览器 JSON viewer 表面，不是文档站布局。契约本身没有泄露真实密钥，只含固定 `syn_sk_example...` 示例。下一步验证美观输出、刷新和关闭新标签返回文档。
+- “美观输出”鼠标切换后 JSON 立即按多行缩进，checkbox 状态变为 on；刷新同一机器契约深链后响应再次成功加载，Chrome 原生 pretty 偏好重置为 off，但契约内容保持。这是浏览器 viewer 的临时显示偏好，不是 Synapse 状态丢失。
+- 关闭机器契约标签后快速返回概览，原中文锚点、滚动位置、三栏内容均保持，焦点回到概览“复制 Markdown”按钮；新标签往返没有把用户丢回顶部或 Console。
+- 从左侧导航进入“获取公共链接文件”后，真实页面完整呈现 canonical operationId/path/scope、请求/响应示例、支持 URL 表、下载制品、临时地址、安全响应头、错误码和 legacy 兼容说明。所有 `{{APP_PUBLIC_URL}}` 已替换为 `http://localhost:3000`；长 URL、curl、JSON 和大表格在语义树中完整，不读取或复制任何现有密钥，示例只用固定假值。
+- 文档明确实际 POST 需要 API Key，本轮按授权不执行创建 grant 或真实下载；加载/成功由公开文档与契约覆盖，认证失败/权限失败只通过文档和后续无凭据安全请求验证，不伪造凭据或改配置。
+- 1156×768 详情页宽屏视觉通过：标题/摘要与 Copy Markdown 同一内容列，API 表格不挤压左右导航，operationId、path、scope 在单元格内合理换行；代码块保持在正文宽度，无横向撑破或右侧目录遮挡。
+- 点击右侧“临时下载地址”后 URL 生成正确中文深链，焦点落到对应 H2。长页面跨多段表格/代码/JSON 后仍能由目录直接定位，不需要手动滚动搜索。
+- 刷新 `/share-link-download#临时下载地址` 深链后，页面直接恢复到目标标题，固定顶栏没有遮挡 H2；bash 示例、说明与响应头表格在当前视口可读，右侧目录活动项仍指向“临时下载地址”。直接深链刷新通过。
+- Computer Use 的 `alt+Left` 键合成没有触发 Chrome history，页面与 URL 均未变化；改用浏览器真实“返回”按钮后，正确从带锚点详情回到同一详情无锚点，前进按钮变为可用。该失败属于自动化按键路径，不归因于文档站。
+- 点击浏览器“前进”后再次恢复 `/share-link-download#临时下载地址`，前进按钮随即禁用，说明文档锚点已正确进入原生 history，前进/后退闭环通过。
+- 在新标签直达 `/document/sy-c2c-r10-missing`，真实 404 路由和“返回首页”链接存在，但内容仍是 VitePress 默认英文 `PAGE NOT FOUND`、英文格言与 `go to home`。中文文档站出现英文冗余格言，违反 document copy 和 UI 必要文案规则，是确定的本地化/心智缺陷。
+- 本地 VitePress 1.6 类型确认 `themeConfig.notFound` 官方支持 title/quote/linkLabel/linkText，无需自定义 404 组件或样式。新增部署级回归在修复前 4/5，通过项不受影响，新增中文 404 断言稳定红灯。
+- 最小修复只配置“页面不存在 / 请检查地址，或返回首页。 / 返回首页”，不改变默认 404 结构与视觉；发布说明已同步，待既有热更新后真实新标签原路径复测。
+- 既有 VitePress 热更新后刷新同一 404 新标签，真实页面已显示“页面不存在 / 请检查地址，或返回首页。 / 返回首页”，默认英文标题、格言和链接全部消失。纯键盘从页面根部 Tab 可依次经过 skip/nav/theme，并在第六个焦点到达“返回首页”；恢复入口可达且文案独立可理解。
+- 在聚焦“返回首页”时按 Return，404 新标签直接恢复到文档首页；地址、首页内容、Copy Markdown 与 CTA 正常，没有残留 404 文案。恢复路径闭环。
+- 通过 Computer Use 拖动当前 Chrome 右边缘把窗口从约 1156px 收窄到约 760px，未最大化或重启浏览器。首页 AX 已切为窄屏导航：主题控制收进“extra navigation”，Copy/标题/CTA/图像均仍存在；下一步用截图检查是否溢出和顺序。
+- 约 760px 窄屏首页视觉复核通过：顶部导航保留首页/Open API，主题入口收进“更多导航”，Copy Markdown、主标题、插图与主入口均可见，未见页面级横向溢出或内容裁切。
+- 同宽度切回公共下载详情后，右侧页内目录收敛为“本页目录”按钮；侧栏语义、正文、代码块和表格仍完整可达，当前深层锚点保持，准备继续验证目录弹层、长内容与复制按钮。
+- 窄屏“本页目录”鼠标展开后，焦点留在触发按钮，目录完整列出回到顶部、机器契约、创建地址、URL/响应字段、制品、临时地址和错误码；弹层在正文之上但不超出视口，当前表格与代码仍可辨识。
+- 目录展开的视觉层级与现有 VitePress 导航一致，没有新增遮挡、断行或页面级溢出；下一步验证键盘关闭/锚点跳转以及当前代码块复制。
+- 聚焦“本页目录”时按 Escape 可关闭弹层且焦点仍回到触发按钮；随后按 Return 可重新展开，原深层锚点和页面滚动未变化。
+- 键盘展开后触发按钮有清晰焦点环，弹层内容与鼠标展开一致；目录开关的 Escape/Return 循环可逆，未把焦点丢到页面根节点。
+- 从“本页目录”用八次 Tab 可依序到达最后一项“错误码”，焦点没有跳出弹层；Return 后弹层关闭，URL 更新为 `#错误码`，页面滚动到对应标题。
+- 锚点跳转后焦点准确落在“错误码”二级标题，而不是地址栏、目录按钮或文档根节点；窄屏键盘目录完成可发现→定位→跳转闭环。
+- 窄屏错误码深链的完整 AX 仍保留全页表格、代码、长 URL/JSON 与所有 Copy Code 控件；导航、侧栏与内容没有因当前滚动位置被移出可访问树。
+- 使用真实 Chrome 返回按钮后恢复 `#临时下载地址`，前进重新可用；对应代码/响应头区域和全页语义恢复，说明键盘目录跳转也正确进入浏览器历史。
+- 窄屏“临时下载地址”段的 bash 块、长临时 URL、续行参数和响应头表格均完整存在；代码行在块内裁切/滚动，不会把整页或左侧导航横向撑破。
+- 点击该段 Copy Code 后按钮即时变为“已复制”，焦点留在原按钮且 Help 仍标识 Copy Code；下一步只把剪贴板粘贴到地址栏核对，不执行命令或发起下载。
+- 剪贴板安全核对得到完整 `curl --location 'http://localhost:3000/api/open/v1/downloads/dlg_example?token=example' \\ --output download.bin`；示例 token 为公开占位值，没有读取现有凭据，也未按 Return、未执行命令或发起下载。
+- 首次 Escape 只关闭 Chrome 地址栏建议列表并保留未提交文本，这是浏览器原生行为；页面没有导航或请求副作用，继续第二次 Escape 恢复原地址。
+- 第二次 Escape 恢复原 `#临时下载地址`，未提交 curl 完全消失，文档深链与页面状态无变化。
+- 通过同一右边缘拖拽把 Chrome 从约 760px 恢复至约 1156px；宽屏三栏、本页目录、主题切换、侧栏与正文重新出现，未重启/最大化浏览器且页面锚点保持。
+- 用 Chrome `Alt+Return` 新标签打开 `https://synapse.d2.pub/document/`，公开部署无证书/安全拦截；首页标题、必要文案、插图、Copy Markdown、导航和 CTA 全部加载，部署链接均指向同域公开地址。
+- 从公开首页点击“开放接口”进入真实生产文档概览；base URL 与机器契约正确解析为 `https://synapse.d2.pub/api/open/...`，API 表格和详情链接同域。AX 初读的 Skip-to-content 仍显示首页目标，需像本地一样聚焦激活确认 hydration 后实际行为。
+- 公开概览页第一次 Tab 后 Skip-to-content 的真实目标更新为当前 `/document/open-api/#VPContent`，证明初读首页值同样只是 hydration 前 AX 短暂状态，不是稳定错误链接。
+- Return 激活后公开 URL 保持 Open API 路由并增加 `#VPContent`，焦点进入本页目录/正文容器；未误回首页，外部部署的键盘正文跳转通过。
+- 公开详情新标签首次用 Computer Use 直接键入中文 fragment 时 Chrome 只提交了尾部 `#`；页面本身仍正常加载，属于自动化非 ASCII 地址栏输入限制，不判产品缺陷。
+- 改用等价百分号编码后，同一公开详情深链准确恢复 `#临时下载地址`，焦点直接落在对应二级标题；生产代码块中的 URL 解析为 `https://synapse.d2.pub/api/open/v1/downloads/...`，无 localhost 或模板占位符泄漏。
+- 刷新公开 `#临时下载地址` 后，深链 URL、页内目录、生产 URL、代码/表格和当前滚动位置均恢复；直接深链刷新路径通过。
+- 在另一新标签直达公开 `/api/open/openapi.json`，无需登录即可加载 OpenAPI 3.1 原始 JSON；顶层 2020-12 dialect、相对 `/api/open/v1` server、Public links tag 与 canonical POST path 可见，浏览器原生“美观输出”控件存在。
+- 公开契约勾选“美观输出”后 JSON 正常缩进，checkbox 暴露 `Value: 1`，顶层版本、dialect、server、tags 和 canonical path 更易阅读。
+- 刷新公开契约后仍完整加载并恢复浏览器原生 raw 模式（`Value: 0`）；Chrome 额外弹出“翻译此页”属于浏览器 UI，不是 Synapse 内容错误，关闭后继续返回路径与清理。
+- Chrome 原生翻译提示已用其关闭按钮移除，焦点回到契约文档，没有改变契约内容或浏览器设置。
+- 依次关闭本轮 5 个临时文档/契约标签后，Chrome 只保留任务开始时的 Console API 密钥页；窗口已恢复原宽度，未打开弹层，未触发任何凭据操作、请求写入或下载。
+- 源码收尾额外发现“无 frontmatter 且以缩进代码开头”会被复制提取层误删开头缩进；新增回归修改前 2/3 红灯，移除多余的开头 trim 后 3/3，未改变首页或普通 frontmatter 页行为。
+- 最终最小充分验证通过：文档复制/部署/404 回归 8/8，VitePress production build 成功，`git diff --check` 成功；`/Users/liyang/Downloads` 无 `sy-c2c-r10-*`，本轮没有下载产物需要删除。
+- 安全跳过：真实创建下载地址及临时 GET 的成功/认证失败/过期失败需要 API 密钥或现有公开测试资源，本轮没有安全可用 fixture，因此只验证文档、占位 curl 与机器契约，没有伪造凭据或触碰业务文档；文档站无列表型空态，frontmatter-only 首页作为空正文边界已通过真实 Copy Markdown 闭环。
+- 剩余风险：两项修复已在本地既有热更新与 production build 验证，但公开 `synapse.d2.pub` 需后续正常部署才能获得修复；真实凭据数据面仍需独立受控 fixture 验收。
+
+
+## 2026-08-27 C-to-C 第 9 轮：设置与配置恢复
+
+- 上周设置直接影响集中在 `5c2ac491b`：新增“实验功能”分类与 MCP 工具按需加载开关，并把通用字段说明移到左侧 label 列、控制列统一右对齐，使用 `@container/field-group` 在窄宽布局间响应；同一提交把新偏好纳入配置 schema 与备份校验。
+- 当前真实客户端从 Agent 进入设置后，宽屏首屏稳定显示 10 个用户分类；账号页直接呈现已登录账号与 Live“已连接”，没有再次出现第 4 轮已修复的首帧“未登录”。焦点停在 Dock“设置”入口，后续将分别覆盖侧栏键盘路径、字段列与危险操作弹窗焦点。
+- 配置备份实现导出时会把普通变量值清空、DataRepository 使用 `includeSecrets: false`，导入时对空值变量保留当前机器已有值，并保留当前 Knowledge Base 存储位置；导入仍会覆盖其余配置和身份，因此真实恢复只使用同一轮导出的受控 `sy-c2c-r9-*` 文件，且在导入前做不输出内容的凭据值扫描。
+- 宽屏视觉中账号页的身份与 Live 状态落在单层设置组内，label/状态右对齐清晰；基础设置按“外观、身份、配置、重置”从上到下排列，导入/导出与危险重置均可发现。用户 ID 只在 UI 做只读观察，不复制、不记录、不输出。
+- App Reset 真实确认层默认焦点在“取消”，最终动作有 3 秒延迟，清空/保留范围与不可撤销文案清楚；但按 Escape 取消后，AX focused element 稳定落到 HTML 根节点，而非回到“重置”触发按钮。键盘用户下一步会从页面开头重新 Tab，属于明确焦点恢复缺陷。
+- 焦点修复的 Renderer 热更新自动生效且未重启客户端；热更新暂时把主窗口带回原 Agent 会话，但会话 Provider、上下文、回复、用量和 composer 状态均保持，重新进入设置后账号与 Live 状态仍正确。
+- 热更新后的原路径重新打开 App Reset 时仍默认聚焦“取消”，确认按钮保持倒计时禁用，修复没有改变危险动作门槛或确认层内容；下一步只按 Escape 验证返回焦点，仍不会触发最终重置。
+- App Reset 修复后按 Escape 关闭，AX focused element 已准确回到“重置”按钮，原缺陷在真实客户端闭环。普通偏好原值已通过 UI 记录：外观为“跟随系统”，实验性的 Synapse MCP 工具按需加载为开启；后续任何变更都必须恢复这两个原值。
+- 配置导出从基础设置直接打开原生 Save 面板，默认位于 Downloads、文件名带时间戳且限定 JSON；本轮将覆盖默认名称为 `sy-c2c-r9-config-backup.json`，只保存该受控临时文件。
+- 真实导出在确认受控文件名后失败，toast 为 `Data in namespace "core.config" failed validation: singleton failed validate()`，目标文件未落盘。失败发生在 DataRepository `exportAll` 校验阶段，早于普通配置 JSON 写出；不是保存权限或文件名问题，且没有修改任何设置。
+- 排除 `core.config` 后，真实 Save 面板仍在确认保存后超过 20 秒无反馈、目标文件未落盘，随后 Electron 主进程退出；只读体量核对显示运行时库约 6.1 GB，其中 `agent.events` 与 `outbox` 各有约 150 万行，原实现先把所有 namespace 全量读入内存、再过滤终端正文，属于普通配置导出的确定内存耗尽路径。
+- 普通备份的既有产品边界明确排除终端输出、检查点和命令正文。第二层最小修复因此在 DataRepository 读取前跳过服务自有配置、运行事件与 outbox，并为终端正文和 Agent 文件检查点直接生成空 namespace 条目；这样既不物化大正文，又保留恢复时清空不兼容正文的语义。红灯回归覆盖“空条目不能触发底层读取”，专项 37/37 已通过。
+- 本轮源码改动触发既有 nodemon 自动重载；发生导出崩溃后，下一次文件改动让既有 watcher 自动拉起客户端，未手动启动、停止或重启 Synapse。一次用 Electron 可执行路径读取已退出窗口时误开了 Electron 默认示例页，已仅关闭该无业务数据的误开窗口；自动恢复后的 Synapse 会话与设置前状态仍完整。
+- 自动恢复后的原路径再次打开 Save 面板并保存受控文件，主进程保持在线但 toast 报 `Invalid string length`。第二次只读体量核对发现另有约 278 MB 的 append-only `audit.jsonl`；审计历史是运行记录且不应被普通配置恢复，原实现仍把它全量物化并参与漂亮格式 JSON 序列化，构成剩余的字符串上限失败路径，因此将 `audit` 一并在读取前排除。
+- 排除审计后，现有 watcher 再次自动热更新，Computer Use 第三次沿“设置→基础设置→导出→原生 Save”原路径成功生成 `sy-c2c-r9-config-backup.json`；页面无错误 toast、主进程保持在线，文件约 24 MB。
+- 对受控备份做了不输出值的结构扫描：schema 可解析，普通变量值全为空，非正文类加密 namespace 全为 `null`，终端正文与 Agent 文件检查点均为空条目，服务自有配置、运行事件、outbox 与审计均不存在；精确凭据字段的非空字符串计数为 0，可以安全用于本轮普通偏好恢复，不会覆盖现有凭据。
+- 基础设置的外观 Select 用鼠标打开后默认选中“跟随系统”，按 Escape 关闭时焦点回到 Select、值未变化；验证了编辑入口、当前值、键盘取消与焦点恢复。
+- 实验功能页真实显示单个“Synapse MCP 工具按需加载”字段行，宽屏 label/说明左对齐、开关右对齐。原值为开启；本轮点击改为关闭后立即显示“设置已保存”且开关变为 off，作为后续跨分类持久化与备份恢复的唯一普通偏好变化。
+- 快速按“基础设置→实验功能→账号→实验功能”切换后，实验开关持续为 off，账号与 Live 状态没有串入字段行，热更新前的设置保存也没有丢失。
+- 项目编辑表单中只清空“项目名称”、保留有效路径并点保存时，真实 UI 原先误报“项目名称和项目路径都不能为空”；新增字段级红灯后改为精确“项目名称不能为空”，专项 23/23 通过，热更新同路径复测正确且未调用保存。
+- 无效项目编辑按 Escape 取消后，项目原名称/路径确实未变，但焦点与 App Reset 修复前一样落到 HTML 根节点。已补第二条红灯并使用同一 `onCloseAutoFocus` 语义，把焦点返回实际触发该行编辑的“修改”按钮；待热更新实机复测。
+- 受控备份恢复前的“导入配置”确认层默认聚焦“取消”，覆盖当前设置/身份与完成后刷新窗口的影响说明清楚；第一次按 Escape 只取消，没有打开文件选择器或写入数据。
+- 配置导入确认取消后，焦点同样落到 HTML 根节点而不是“导入”按钮。新增红灯后为导入入口增加稳定 ref，并在 AlertDialog 关闭时显式返回焦点；配置备份面板专项 3/3 通过，待热更新实机复测后再执行真实安全恢复。
+- 热更新后，项目编辑按 Escape 已把焦点返回 Synapse 行的“修改”按钮；配置导入确认按 Escape 也已把焦点返回“导入”按钮，两条真实键盘路径均闭环。
+- 选择已完成安全扫描的约 24 MB 受控备份后，导入在读取前以“备份文件超过 2097152 字节上限”安全拒绝，没有写入配置；这说明导出/导入合同仍不一致。追溯显示 DataRepository 接入原意是备份快捷输入，却误把 Agent 对话、用量和产物一并当作配置导出；新增红灯后把这些运行历史在读取前排除，并把 UI 排除说明补充为“Agent 对话”。
+- 旧的 24 MB 受控文件已精确移入废纸篓，可恢复；下一步由热更新后的相同 UI 路径重新导出，目标必须低于既有 2 MB 安全导入上限后才允许恢复。
+- 继续沿真实 UI 原路径导出后，受控 `sy-c2c-r9-config-backup.json` 已缩小为 646,278 bytes，低于既有 2 MB 导入上限。无值结构扫描确认变量脱敏、加密数据为空、运行事件/outbox/审计/Agent 对话/用量/产物均不在包内，终端正文与检查点为空条目，精确凭据字段非空计数为 0；恢复前安全边界成立。
+- 为证明恢复实际生效，先通过 UI 将唯一测试偏好恢复为原始开启，再导入保存了关闭值的小型受控备份。原生文件选择器精确匹配 646 KB 文件，导入后窗口自动刷新，实验偏好真实回到关闭；随后再次通过 UI 恢复用户原始开启值并收到保存成功。外观仍为“跟随系统”，账号 Live 仍显示“已连接”，跨分类及热刷新没有串值。
+- Computer Use 将真实设置窗口从 960×768 收窄到应用最小 845×768，再恢复到 960×768；基础设置的分组、字段行、Select、导入/导出和重置危险区在最窄窗口仍保持可见、对齐、无重叠或截断，宽窄往返后焦点与设置值保持。鼠标 Select、键盘 Tab/Escape、对话确认/取消和触发点焦点已由本轮各原路径共同覆盖。
+- Live 在真实客户端保持“已连接”，连接态按产品设计不提供手动重试。源码与既有专项回归确认只有 `reconnecting`/`disconnected` 或状态读取失败时显示“立即重试”，并覆盖 loading、错误详情、retry 调用；触发真实失败/重试需要断网、停服务或改账号，均超出本轮授权，明确保留为未覆盖而不伪造。
+- 最终 Computer Use 从 Agent 返回设置后再次确认：实验偏好为开启、外观为“跟随系统”、Live 为“已连接”、窗口为 960×768，且没有残留确认层或文件选择器。646,278-byte 本轮备份已从 Downloads 精确移入废纸篓，可恢复；旧 24 MB 受控备份此前也已移入废纸篓。
+- 最终源码验证：设置/配置/DataRepository 六个定向测试文件 70/70，desktop 四套 TypeScript 配置、`check:hard-constraints` 与 `git diff --check` 全部通过。并行回归曾暴露项目回焦断言早于 Radix 异步关闭的测试假阴性，改为复用现有等待断言后同组稳定全绿，不改产品逻辑。
+
+
+## 参考图观察
+
+- 图 1 的核心不是完整审查工具，而是每轮 Agent 回复结束后追加一个紧凑的“已编辑 N 个文件”摘要块；摘要显示总增删行、默认只展开部分文件，并提供“撤销”和“审核”入口。
+- 图 2 表明点击文件或“审核”后，应用主窗口从双栏变成三栏：左侧导航保持不动，中间会话列收窄，右侧出现独立工作面板；面板不是覆盖式抽屉，也不挤占窗口外部。
+- 右侧面板顶部有独立页签/标题和关闭入口；内容区展示整轮文件集合，选中文件后直接定位 Diff。它更像工作区内可切换的检查器，而不是某条消息内部的弹层。
+- 参考图中的“撤销”是整轮修改级动作，“点击文件”是只读审查入口。Synapse 设计必须把两者的权限和失败语义分开。
+- 用户明确要求右侧面板未来承载其它能力，因此设计应采用注册项/面板实例模型，文件 Diff 只提供一种内容类型。
+
+## 初始设计假设
+
+- 面板布局应位于 Agent 工作区页面壳层，而不是消息组件或全局应用根壳层：消息只发出 `openPanel` 意图，页面壳负责三栏布局和生命周期。
+- 文件变化摘要属于会话时间线投影；Diff 内容与可撤销快照属于受权限保护的主进程运行时数据，renderer 不直接读取任意工作区文件。
+- Checkpoint 应按“Agent 轮次”建立基线与结果，而不是按每次工具调用生成用户可见卡片；内部可记录细粒度操作，最终聚合为一轮变更集。
+
+## 待验证
+
+- Agent 页面的实际布局壳层和状态所有者。
+- 现有 Git 内置应用所用 Diff 组件、数据接口和可复用边界。
+- Claude Agent SDK 0.3.245 是否已有文件 checkpoint/rewind API，以及 Synapse 当前是否启用。
+- 会话事件、历史持久化和权限审计模型能否承载 checkpoint 标识及撤销结果。
+
+## 仓库初查
+
+- Agent renderer 集中在 `desktop/src/modules/agent/`，已有独立的 `agent-conversation-workspace.tsx` 与 `agent-conversation-window-page.tsx`，说明右侧面板应优先评估工作区组件，而不是提升到整个桌面 App 根布局。
+- Git 内置应用已有 `git-diff-viewer.tsx`，支持 unified/split、折行、binary/truncated 状态；变更页和历史页均复用它。设计上应先把这一组件从 Git 模块内部抽为共享只读 Diff viewer，再让 Git 与 Agent 面板共同消费，避免 Agent 跨模块导入 `modules/git/internal`。
+- Git 主进程已有 worktree status、diff、discard 以及“预览后内容发生变化则拒绝丢弃”的安全机制。Checkpoint 撤销可借鉴其 compare-before-write/operation token 思路，但不能直接复用 Git discard，因为 Agent 可能运行于非 Git 目录，且只应撤销该轮自己造成的变化。
+- 当前源码检索未发现 Agent 文件 checkpoint/rewind 的现成产品实现；需进一步检查 SDK 类型与 runtime query options。
+
+## 规则与既有设计约束
+
+- 2026-04-28 的 `Agent Right Panel Lightweight Design` 把当时的会话内容列称为 “right panel”。本次新增第三栏必须改用稳定术语，避免与旧文档冲突：`Conversation Pane` 表示现有会话列，`Workspace Auxiliary Panel` 表示新可扩展右侧工作面板。
+- `AgentModule`/Agent 工作区应继续拥有模块内 UI 状态；持久数据经 IPC 进入主进程。跨模块共享的 Diff renderer 必须放在 `desktop/src/components/` 或 `desktop/src/lib/`，不能让 Agent 导入 Git 模块内部文件。
+- 文件系统读取、快照、恢复和 Git 操作都属于主进程；renderer 只持有 checkpoint/file identity、展示元数据和受限 Diff 文本，不持有任意绝对路径读写能力。
+- 撤销是敏感文件写操作，必须经过 `PermissionGuard`、`AuditSink`，并采用“预览/确认后重新校验”的并发保护；不能由 UI 直接调用宽泛文件 API。
+- 产品视觉保持 shadcn `radix-nova` 和中性色 token。新增第三栏使用单一纵向边界表达层级，不增加 shadow/card 套层；窄窗口不能让会话正文或 composer 被压到不可用。
+- 既有 Domain Glossary 中“检查点 Checkpoint”目前专指 Drive Markdown 协同检查点。Agent 新能力若直接叫 `Checkpoint` 会产生领域重名；正式设计需要定义限定词“Agent 文件检查点”，并明确不是 Drive Checkpoint、Git commit 或工作流运行快照。
+- 现有 Agent 本地引用操作与 File Opener Capability 由 ADR-0101 明确分域；Agent 文件 Diff/撤销同样应保持 Agent Runtime 私有 IPC，不应为了复用而扩张公开 File Opener 或 Git Capability。
+
+## SDK 0.3.245 文件检查点事实
+
+- 当前安装包公开 `Options.enableFileCheckpointing?: boolean` 与 `Query.rewindFiles(userMessageId, { dryRun? })`；`RewindFilesResult` 返回 `canRewind`、`error`、`filesChanged`、`insertions`、`deletions`，并在真实 rewind 中返回 `skippedLinks`。
+- 官方要求同时开启 `extraArgs: { "replay-user-messages": null }`，从回放到输出流的 `SDKUserMessage.uuid` 获取 checkpoint UUID。Synapse 当前两项都未启用，且 `QueryLike`/`AgentLiveSession` 未暴露 rewind。
+- 官方明确：文件 rewind 只恢复磁盘文件，不回退会话历史与模型上下文。因此 V1 UI 文案应叫“撤销文件修改”，不能让用户误以为对话也被撤销；撤销完成后继续对话可能带着已经失效的上下文。
+- SDK 只跟踪内置 Write、Edit、NotebookEdit 产生的变化；Bash 写文件、普通 subagent 编辑不跟踪，只有前台 `context: fork` skill 例外。目录创建/移动/删除、远程或网络文件也不恢复。
+- checkpoint 绑定创建它的 SDK session。流结束后连接已关闭，不能直接调用原 Query；需要以同一 `sdkSessionId`、`enableFileCheckpointing: true` 和空 prompt 恢复连接后再执行 rewind。
+- SDK 自 2.1.216 起在 rewind 时跳过符号链接、硬链接、非普通文件、父目录解析发生变化或备份无法安全读取的路径；当前 0.3.245 类型已包含 `skippedLinks`。但 dry-run 不包含这些真实恢复阶段拒绝，确认界面必须提示“预览不保证所有文件最终恢复”。
+- TypeScript SDK 历史上曾有 headless checkpoint 不生成快照的问题（0.2.76/0.2.77 的公开 issue）；尽管当前官方文档已给出 headless 恢复流程，Synapse 上线前仍必须用打包内 0.3.245 做真实 Write/Edit、重启后 dry-run/rewind 冒烟。
+- SDK 0.3.245 还支持会话 fork/`resumeSessionAt`，但 file rewind 不会自动截断对话；本功能 V1 不把“撤销文件”和“回退/分叉对话”合并成一个动作。
+
+## UI 架构审视
+
+- `impeccable` 的产品型 UI 规则与仓库规则一致：界面应保持工作台密度，状态变化使用 150–250ms 的克制过渡，结构依赖 token、单一边界和选中态，不用装饰性阴影或卡片套卡片。
+- 新面板的布局响应必须是结构变化而非缩放字体。宽屏采用会话列与辅助面板并排；窄屏进入“详情视图”，暂时以辅助面板替换会话内容并提供返回/关闭，避免继续压缩会话正文与 composer。
+- V1 内部可以定义可注册的面板描述符与单实例状态，但 UI 不展示没有真实功能的“加号/空标签”；文件 Diff 是首个注册项，未来消费者通过注册扩展，而非修改工作区壳的条件分支。
+
+## 时间线与事件模型审计
+
+- 当前 renderer 时间线是严格判别联合：`SynapseAgentTimelineKind`、`SynapseAgentTimelineItem`、`agentEventToTimelineItem` 和历史恢复转换都需要增加 `fileCheckpoint` 分支，不能把检查点塞进普通 `result.metadata` 后由组件临时猜测。
+- `sdk-event-bridge.ts` 当前会把 SDK `user` 消息仅解释为 tool result；没有 tool result 时落入泛化 `sdkEvent`，不会捕获回放用户消息的 `uuid`。实现时应在主进程桥接层识别 `type=user`、`parent_tool_use_id=null`、带 `uuid` 的 replay 消息，并将 UUID 作为内部控制事件关联到当前 `turnId`，不向用户时间线重复渲染用户消息。
+- `ConversationEntryV1.history` 已是会话恢复的权威历史载体；检查点摘要需要作为版本化 Agent 事件持久化，Diff 载荷则应独立、按需读取，避免把大 patch 混入列表会话与每次历史加载。
+
+## 最终架构结论
+
+- 布局拆成两层：共享的 `WorkspaceAuxiliaryPanelLayout` 只负责主区/辅助区的宽屏分栏和窄屏详情模式；Agent 模块内的 `AgentWorkspaceShell` 负责面板注册、实例状态、焦点恢复和会话切换清理。不要修改全局 App shell，也不要把第三栏塞进通用 `SidebarContentLayout`。
+- 宽屏阈值按可用宽度计算，推荐会话最小 560px、辅助面板最小 400px、默认 480px、最大 720px；不足约 1040px 时，打开面板进入详情模式，不继续挤压 composer。面板宽度按 embedded/window 两种宿主分别持久化，打开状态不跨会话持久化。
+- 时间线检查点是 turn postlude。当前 `agent-timeline-display.ts` 会把最终 assistant 移到尾部，因此实现必须显式识别 `fileCheckpoint` postlude，并在最终 assistant 之后渲染，不能依赖事件自然顺序。
+- 当前 Git Diff renderer 已不再使用 `@git-diff-view/react`。该依赖在历史提交中加入，后续已移除并换成当前自研 unified/split viewer。当前 viewer/parser 应抽到共享目录；用户已确认把现有锁文件中的 `diff@8.0.4` 声明为 desktop 直接生产依赖，用于可靠生成 patch。
+- SDK rewind 是恢复权威，Synapse sidecar 是审查和安全校验权威。SDK 只提供文件集合与总增删数，不提供 patch；Synapse 在首次 Write/Edit/NotebookEdit 前捕获路径状态和摘要，轮末计算有上限的 diff，并以 SDK dry-run 的文件集合做最终交集。
+- 撤销仅允许当前会话“最后一个尚未被后续用户轮次取代”的检查点。旧卡片仍可审核，但不能伪装成单轮撤销；对旧 checkpoint 调 SDK 实际会恢复该点之后的累计文件变化。
+- 撤销采用两阶段协议：prepare 返回短时 operation id，确认时重新校验项目/会话/SDK session、精确文件集合、权限、真实路径和每个文件 after 指纹；任一项变化则零写入拒绝。真实 rewind 后逐文件验证 before 指纹，SDK 多文件恢复不是事务，部分失败必须标记为 partial 并引导人工审核。
+- Checkpoint 摘要作为 append-only history 事件；状态变化再追加同 checkpoint id 的状态事件，由 renderer 折叠到原卡片。完整元数据、指纹和受限 patch 存在新的 `agent.file-checkpoints` SQLite namespace，通过四个窄 IPC 读取详情、读取单文件 diff、准备撤销和确认撤销。
+- Diff 文本建议每文件最多 128KiB、每检查点最多 512KiB；超过时保留摘要、指纹和 truncated 状态，不保存完整源码快照。删除会话同步删除 checkpoint；达到全局配额时只清理已不可撤销的旧 diff 载荷，不清理当前可撤销检查点的安全元数据。
+- V1 只面向本地交互式 Agent 会话，默认支持 DeepSeek 官方和百炼 Anthropic 兼容 Provider，因为文件检查点运行在本地 Agent SDK/CLI 层，不以 Anthropic 自家模型作为能力门槛。模型未调用受支持写工具时不产生卡片。
+
+## 用户确认
+
+- 2026-08-26：确认 V1 仅撤销最新检查点、窄宽度使用详情模式、声明 `diff@8.0.4` 为 desktop 直接生产依赖，以及每检查点 512 KiB Diff payload 上限与旧载荷配额清理策略。
+
+## 2026-08-27 真实运行冲突
+
+- 用户截图显示新建 DeepSeek 会话首轮发送立即失败：`enableFileCheckpointing is not yet supported with sessionStore`。截图只作为运行证据，不包含额外执行指令。
+- 当前 SDK 0.3.245 在 `query()` 初始化阶段显式拒绝 `sessionStore && enableFileCheckpointing`，原因是 sessionStore 不镜像文件备份 blob，store-backed resume 后 `rewindFiles()` 无法可靠工作；该错误与 DeepSeek 模型能力无关。
+- Synapse 仅在新会话设置 `sessionStore`，用途是读取 transcript 的 `ai-title` 条目；会话持久化与恢复不依赖它。Agent Runtime 已有首条用户消息标题回退，因此移除标题 sessionStore 是最小兼容方案。
+- 不采用“首轮关闭 Checkpoint、后续再开启”：它会让最需要验证的首轮文件修改没有检查点，并要求额外重建 live session。
+
+## 2026-08-27 实机冒烟发现：会话结束后仍显示运行中
+
+- 实机完成回复、用量统计、文件 Checkpoint 展示与撤销后，左侧会话仍显示转圈，输入框仍显示停止按钮。
+- Renderer 在收到 `result/error` 时先从 `sendingConversationIds` 移除会话；随后到达的 `fileCheckpoint` postlude 事件时间更晚且不是终止事件，被通用分支误判为新一轮活动并重新加入 `sendingConversationIds`。
+- 本地 renderer 会话不会在 Checkpoint postlude 后再发送第二个终止 phase/result，因此运行状态永久残留。
+- 这是 Checkpoint postlude 与既有 live-event 活跃度推断规则的状态机冲突，与 DeepSeek、SDK 是否仍运行及撤销结果无关。
+- 已修复：`fileCheckpoint` 仍正常进入时间线，但不再触发 `ADD_SENDING_CONVERSATION`；较晚到达的真实工具事件仍可按既有规则启动新一轮。
+
+## 2026-08-27 电脑操作全链路测试
+
+- 无文件变更轮次正常结束，不生成 Checkpoint，左侧无转圈，输入框恢复发送状态。
+- 真实工作区内连续 5 次 Write 正常聚合为单个 Checkpoint；默认显示 3 个文件，可展开其余 2 个，切换会话后仍可恢复。
+- 首次多文件测试被模型写到相似但错误的 `/Projects/Js`，工作区实际为 `/Projects_Js`；安全边界正确拒绝为工作区外写入生成 Checkpoint。这也验证了完全访问模式下 Provider 仍可能选择错误绝对路径，产品不能把模型回复当成文件落点事实。
+- SDK dry-run 的增删统计描述撤销方向：新增 10 行会返回 `insertions=0/deletions=10`。卡片需要显示正向 before/after Diff，现已改为汇总逐文件实际 Diff，实机复测混合变更正确显示 `+4 -2`。
+- 第二轮 `Edit + Write` 正确把上一轮卡片变为“仅可审查”，新卡片成为唯一“可撤销”；修改、新增文件 Diff 均正确。
+- 统一/分栏、自动换行、文件切换、关闭/返回均通过；放大窗口后为会话+右侧面板并排，较窄窗口为独立详情视图。
+- 跨会话修改同一文件后，原 Checkpoint 撤销预检以 after 指纹不匹配拒绝，未进入确认、未改动磁盘。
+- 发现取消撤销确认后 operation token 未释放，导致再次准备被阻止；现改为成功重新 prepare 时替换同 Checkpoint 的旧 operation，并验证旧令牌失效、新令牌可确认。
+- 正常撤销实机通过：文件恢复到 before 内容，卡片变为“已撤销”，撤销入口消失，审查保留，会话未重新进入运行状态。
+- Bash 创建与重命名按 SDK 既有能力边界不生成 Checkpoint；随后用受支持 Edit/Write 修改时正常生成。超过 512 KiB 的文本显示截断摘要，二进制文件显示只读“文件已变更”降级状态。
+
+## 2026-08-27 Diff 新增行呈灰色诊断
+
+- 实机打开纯新增的 `test_1.md`，15 行新增内容均呈中性灰色；打开含一删一增的 `sy-checkpoint-e2e-f.md`，删除行呈浅红色，新增行仍呈灰色。由此排除 Checkpoint patch 缺失或新增文件无法分类。
+- 共享 `DiffViewer` 将 addition 行映射为 `bg-primary/5`、行内 addition 标记映射为 `bg-primary/15`；当前浅色主题的 `primary` 是近黑色，因此透明叠加后视觉结果是灰色。deletion 使用 `bg-destructive/10`，所以删除行能显示红色语义。
+- Agent 文件审查与 Git 工作台当前共同使用这一共享 renderer；抽取前的 Git renderer 也采用相同映射。因此问题不是 Agent 没有复用 Git Diff，而是共享 Diff 的“新增”语义色本身仍使用中性色。
+- 用户持续测试新建文件使现象更明显：新文件只有 addition 行，所以正文几乎全灰。若改为语义配色，预期应为新增绿色、删除红色、上下文中性；二进制与截断摘要仍保持中性。
+- 已修复共享 renderer：新增行改为克制的 emerald 背景，分栏行内新增片段使用更强一档的 emerald 背景；删除、上下文、二进制和截断语义保持不变。Agent 与 Git 因共用 renderer 同步生效。
+- 热更新客户端复测通过：纯新增文件在统一/分栏视图均为绿色；一删一增的修改文件显示红色删除行、绿色新增行，分栏的 `updated`/`concurrent` 片段也能进一步区分。
+
+## 2026-08-27 Agent 核心链路 C-to-C 第 1 轮
+
+- 同一文件在一次发送前可被重复添加，真实发送后 Provider 收到两个同名同内容附件；这是确定 bug，不是单纯显示重复。现按文件类型、名称、大小与 SHA-256 去重，并释放重复暂存对象。
+- 主动停止会返回带 `metadata.cancelled=true` 的 result，同时携带兼容错误文本；IPC 原先仍发布 `failed` phase，Renderer 又把已发送草稿恢复到输入框，形成“发送失败”误报和重复发送风险。现统一发布 `cancelled/done`，Renderer 将取消结果视为已接受发送。
+- 热更新后的真实客户端复测：重复 PNG 仍保持 1 张并提示“已忽略重复附件”；停止后无失败告警、输入框为空、已发送消息保留，展开时间线可见失败的工具、SDK 事件和“已停止”。
+- 运行中切到其它会话时，运行会话在侧栏保留“正在输出”；其它会话历史、附件和上下文用量可恢复，但全局发送/附件入口暂时禁用。切回后运行与停止状态一致，未发现串会话。
+- 附件与文件修改交叉流程通过：附件随用户消息持久化，Read/Edit 工具时间线、用量统计、Checkpoint `+1 -1`、右侧统一 Diff、会话切换自动关闭面板、再次进入恢复以及撤销确认取消均正常。
+- 不可读 `sy-c2c-r1-retry.txt` 首次添加显示“无法添加附件”；恢复权限后同文件可重新添加、发送并收到响应，失败后重试没有残留脏附件。
+- 图片附件选择、预览、空文本发送与重复图片去重已实测；图片剪贴板粘贴未得到可信证据，因为 `@oai/sky` 不能写入系统图片剪贴板，原生文件选择器的 Copy 也不会生成图片剪贴板项。下一轮应在可预置图片剪贴板的 Computer Use 环境补测。
+
+## 2026-08-27 C-to-C 第 2 轮：Git / Terminal / System App
+
+- 启动时当前真实客户端位于 Projects_Js 的既有 Agent 会话。普通用户可见项目标题、项目级“更多操作”、composer 的“Git”弹出入口和 Dock 的“终端”，但项目行上没有直接 Git 图标。
+- 展开 Projects_Js 的项目级“更多操作”后，菜单依次为“创建自定义对话 / 在文件夹中显示 / 在终端中打开 / 清空对话”。从“我正在看这个项目，想进终端”的心智出发入口可发现；同一菜单没有“打开 Git”，Git 入口与项目入口分散，需在后续实测判断是否仍能理解其项目归属。
+- 点击“在终端中打开”后打开独立的 System App 窗口，而不是覆盖 Agent 会话；窗口左侧把新会话显示在 `Synapse` 分组下，名称为 `Projects_Js`，右侧 prompt 的 cwd 也明确位于该项目。用户能从项目名和路径理解“这个终端属于刚才的项目”。
+- 终端 System App 窗口标题仍是通用的“Synapse AI Studio”，不带“终端”或项目名；当多个 Synapse 窗口并存时，macOS 标题层无法区分，需要依赖窗口内容。后续要验证 Git 窗口是否同样如此，以及窗口复用/聚焦是否会串项目。
+- 使用 macOS 同应用窗口切换可从终端无损回到 Agent 主窗口：会话选择、时间线与 composer 状态保持。随后打开空会话项目 `Synapse` 的项目菜单，终端入口仍可用，说明入口归属项目而非依赖已有会话；“清空对话”在无会话时正确禁用。
+- 从第二个项目 `Synapse` 再次执行“在终端中打开”没有新建第二个终端窗口，而是聚焦已有 Terminal System App 并在同一个 `Synapse` 分组中新增/选中 `Synapse` 会话；原 `Projects_Js` 会话保留且可切换。右侧 prompt 显示 `/Documents/code/github/Synapse` 与 `main`，项目/窗口归属准确。
+- System App 的初始 URL 仍保留第一次 `Projects_Js` 的 `terminalOpenRequest`，但运行时事件正确选中了第二个 `Synapse` 会话；说明窗口复用由事件驱动，URL 只承担首次载入。真实 UI 未出现串项目。
+- Agent composer 的“Git”菜单包含“提交全部改动 / 提交并推送 / 拉取 / 推送 / 同步 / 在 Git 中打开”。用户能从当前会话进入工作台，但项目级更多菜单只放终端，Git 与终端入口层级不一致；执行“在 Git 中打开”后会打开独立 Git System App，并显示当前项目名与路径。
+- Git 窗口首次出现时短暂展示“目录不可访问 / 无分支 / 查看状态”；点击“刷新仓库状态”后立即恢复为真实分支 `test/portal/mirror/4.6.2.27` 和 14 个改动。需要用第二个仓库和等待行为区分是异步首屏误导还是稳定缺陷。
+- 刷新后 14 个改动默认全部选中，工作台明确显示“已选 14 / 14”；Round 1 的未跟踪文本、图片、二进制、大文件均按 U 展示。二进制文件被默认选中后右侧降级为“文件已变更”，没有伪造文本 Diff。
+- 点击未跟踪 Markdown 文件后，右侧统一视图正确展示从 `/dev/null` 到新文件的 patch，新增行使用共享 Diff 的绿色语义底色；文件列表选中高亮与 checkbox 提交选择彼此独立。取消该文件 checkbox 后计数从 14/14 变为 13/14，当前 Diff 仍保留，符合“审查不等于提交选择”的用户预期。
+- 同一未跟踪文件切换到分栏视图后，右栏展示新增内容、左栏留空，新增绿色保持；模式控件状态和 checkbox 选择状态都保持。切换到已有大文件后，仍能加载为两行新增 Diff，超长第二行未导致列表或顶部工具栏横向撑破；下一步用折行切换和截图确认长行可读性与是否有明确截断语义。
+- 大文件的超长行在“自动换行”关闭时被视口右缘裁切，顶部与文件列表布局稳定；开启后内容在右侧分栏内逐行折叠，可完整向下阅读，列表宽度不变化。按钮的 AX `Value` 仍显示 0，视觉状态和实际布局已切换，属于辅助功能状态暴露疑点，后续结合 DOM/组件实现判断是否确定缺陷。
+- 历史页首屏按提交标题、短 SHA、作者和相对时间排列，并提供“选择提交查看详情”的明确空状态。点击最新提交后自动选中其唯一文件并直接显示 Diff；分栏与自动换行偏好从“改动”页延续到历史页，避免重复设置。
+- 历史提交的修改文件正确显示上下文、红色删除、绿色新增及分栏行内差异；长变更行在自动换行开启时可读。提交选择不会影响工作区 13/14 的 checkbox 选择，切换到历史后危险的丢弃操作也不再显示。
+- 视觉截图确认历史列表与详情双栏层级清楚，提交标题/作者/时间不会挤压右侧 Diff；返回仓库列表后同时显示仓库名、绝对路径、分支、上游、改动/领先状态与推荐操作。`Synapse` 正确显示 `main / origin/main / 62 个改动`，可直接切换而不回 Agent。
+- 从仓库列表进入 `Synapse` 时再次稳定复现首帧“目录不可访问 / 无分支”，随后无需点击、下一次 UI 读取即自动变为 `main / 62 个改动`。因此不是权限或仓库数据错误，而是仓库切换后异步刷新启动前把 `snapshot=null` 误投影成“目录不可访问”的确定首屏闪烁；用户会被错误状态误导，属于应修复缺陷。
+- `Synapse` 工作区同时正确展示 M（修改）、D（删除）、U（未跟踪）和 62/62 默认选择；共享 Diff 在当前热更新改动上直接生效。工作区实际有 62 项而 AX 虚拟列表标注 124 items（checkbox + 文件按钮各一项），显示层改动计数仍正确。
+- 已修复并实机复测仓库首屏误报：热更新后从列表进入 `Synapse`，第一帧明确显示禁用的“正在读取 / 读取中”，分支、获取远程分支、新建分支和主操作均不可误触；下一次读取平滑过渡到 `main / 65 个改动`，没有再出现“目录不可访问 / 无分支”。
+- 本次 Git renderer 热更新使 Git System App 回到了窗口初始 URL 指向的 `Projects_Js`，并把分栏/折行恢复默认；Terminal System App 的当前 `Synapse` 会话和 `Projects_Js` 会话均仍保留，选中 `Synapse` 未变化。Git 的热更新状态保持不足确定存在，但只影响开发期源码更新；若要修复需明确持久化 active repository/view/file 与 Diff 偏好，范围大于本轮首屏缺陷，先作为剩余风险记录。
+- 尝试通过 xterm AX 输入框的 `sky.paste` 创建本轮文件时，终端树没有输出；只读 `git status` / `wc` 进一步确认四个 `sy-c2c-r2-*` 文件均未产生，Git 工作台不刷新是因为命令未进入终端，不是工作区自动刷新缺陷。后续改用 Computer Use 的 `type_text`，仍不触碰现有业务文件。
+- `sky.paste`、直接 AX `type_text`、坐标聚焦 xterm 后 `type_text` 三种键入路径均未生效且均无文件副作用；按三次失败协议停止重复。随后只用 `apply_patch` 创建两个可重建的 `sy-c2c-r2-*` fixture，并只暂存其中一个，以继续由真实客户端验证 Git 状态。
+- Git System App 在保持打开时自动把 Synapse 从 65 个改动刷新为 67 个：`sy-c2c-r2-added.txt` 显示 A/“新增”，`sy-c2c-r2-untracked.txt` 显示 U/“未跟踪”，两者作为刷新后新出现文件默认不勾选，因此计数为 65/67。点击文件与 checkbox 仍互相独立；勾选 U 后变为 66/67，当前 Diff 不丢失。
+- 专用 A/U 文件在统一与分栏视图都显示 `/dev/null` 到新文件的单行绿色新增 Diff；切到既有 D 文件后显示 `deleted file mode`、`+++ /dev/null` 和完整红色删除大 Diff。已有 M 文件、Round 1 二进制“文件已变更”、超长行折行与历史提交 Diff 的组合覆盖闭环。
+- 进入干净仓库 ProductDocs 时首帧为禁用的“正在读取 / 读取中”，随后过渡到 `main / 已同步 / 暂无改动 / 选择文件查看差异`；修复后的读取态同样适用于有改动和无改动仓库，没有再闪现权限错误。
+- Agent 主窗口、Terminal System App 与 Git System App 依次来回切换后，Agent 会话仍停留在原对话，Terminal 仍选中 Synapse 且保留 Projects_Js 会话，Git 仍停留在 ProductDocs 空状态，窗口内状态没有串联。macOS Window 菜单中的三个标题仍全部是“Synapse AI Studio”，这是用户识别窗口类型的明确心智偏差，但不影响窗口内部项目归属。
+- 测试结束后只对专用已暂存文件执行 index-only 取消暂存，再删除两个可重建 fixture；真实 Git 仓库列表刷新后 Synapse 从 67 恢复到 65 个改动，确认没有残留测试文件或暂存项。
+- 最终验证：Git 工作台/状态投影回归 49/49、desktop typecheck、`check:hard-constraints` 与 `git diff --check` 全部通过。
+
+## 2026-08-27 C-to-C 第 3 轮：Drive / MDXEditor / 下载
+
+- 2026-08-20 至 2026-08-26 相关主线包括：Markdown/MDX 渲染与 `<=` CommonMark 兼容、文本编辑大小限制移除、桌面文件/文件夹下载、表格单元格 `Shift+Enter` 换行、有序列表起始序号、CommonMark/MDX 源码降级、Mermaid 间距、大目录生命周期稳定性和层级列表标记。
+- 权威设计要求桌面 Drive 只负责文件列表与外部预览；实际 Markdown/MDX 阅读编辑在 Dashboard Drive browser。保存必须手动触发，成功产生新版本；保存失败保留本地内容。
+- 桌面客户端初始未登录时，云盘给出“需要登录账号”而不是空数据。点击登录后浏览器复用已有会话并显示“已发送到 Synapse”，桌面自动切换为已登录列表，未要求重复输入凭据。
+- 本轮专用目录 `sy-c2c-r3-drive` 已通过桌面正常产品入口创建。桌面创建成功 toast、根目录新行、目录预览外链和网页空状态均正确；网页目录页提供“下载整个目录”入口。
+- Markdown/MDX 真实网页编辑覆盖预览、源码与富文本切换、手动保存版本、未保存重载确认和并发版本冲突。CommonMark `<=`、无序列表标记、有序列表 7/8、嵌套 3/4 与深层 9、表格换行、MDX JSX/注释、Mermaid 显示及横向边距均按源文档呈现。
+- 确认并修复表格单元格内 `Shift+Enter` 后根编辑器未立即收到嵌套编辑器更新的问题；热更新后的真实 UI 在焦点仍留在单元格时立即从“已同步”变为“未保存”，保存后预览保留三行内容。
+- 确认并修复非 1 起始的嵌套有序列表富文本导出时丢失 CommonMark 空白边界的问题；真实 UI 保存、再次进入编辑及预览均保留嵌套 3/4 和深层 9 起始序号。
+- 通过产品文件选择器插入 `sy-c2c-r3-image.png`，在文末图片后继续输入并保存成功，预览同时显示图片和后续文本；Computer Use 不能预置图片剪贴板，因此“直接粘贴图片”未形成可信证据。
+- 182.8 KB、1800 行 Markdown 在加载态后完整进入预览、源码和富文本，未出现截断；120 文件目录在网页和桌面均先展示首批 100 项，并可通过“加载更多”合并后续 20 项。
+- 确认并修复网页 Drive 文件表没有接入已有目录分页状态的问题；热更新后真实网页出现“加载更多”，点击后可查到第 120 个专用文件，离开再进入仍正确回到首批加入口的状态。
+- 文件下载在 Chrome 下载面板显示 699 B 完成，桌面文件下载显示“已下载”且落盘内容为 699 B；桌面文件夹下载生成可解压 ZIP，包含 120 个条目。文件夹下载完成 toast 未被 Computer Use 及时捕获，保留为反馈证据缺口。
+- 无效专用文件地址先显示“加载中”，随后显示“文件不存在。”；空目录显示“暂无文件”。
+- 清理公开图片时确认删除请求已成功进入回收站，但“公开素材”仍把生命周期为 `trashed` 的记录当作活动项显示，再次删除提示“公共资源不存在”。现活动列表过滤非 active 记录，并在删除成功后立即移除当前行；热更新后的真实 UI 重进公开素材页不再显示幽灵记录。
+- 本轮 `sy-c2c-r3-drive` 与 `sy-c2c-r3-image.png` 已通过产品正常删除入口移入回收站，均可恢复且未永久删除；本地上传夹具与下载产物已精确清理。
+- 最终验证：Drive/MDXEditor/公开素材定向回归 103/103，`use-drive-browser` 20/20，dashboard TypeScript 与 `git diff --check` 全部通过。
+
+## 2026-08-27 C-to-C 第 4 轮：设置、IDE 管理与 Dashboard Console
+
+- 依据 2026-08-20 至 2026-08-26 的相关提交选择未被前三轮覆盖的真实路径，重点核验 Live 连接、设置布局、编辑器扫描稳定性、API Keys 布局和 Open API 文档导航。
+- 桌面设置十个分类均可正常切换；宽屏与约 845 px 最小宽度下的字段、表格操作、滚动和导航未见遮挡或错位。
+- 稳定复现“账号”分类首次进入时在异步状态读取完成前短暂显示“未登录”，随后才变为“已连接”。根因是 Live 状态 hook 以 `unauthenticated` 作为默认首帧，现改为中性“正在读取”状态并增加 pending 回归测试。
+- 热更新后从其它分类重新进入“账号”，首帧直接显示“正在读取”或最终“已连接”，不再出现错误的“未登录”；真实断网、服务重启和账号变更会影响运行环境或安全状态，本轮未主动制造。
+- IDE 管理覆盖 Cursor/Codex、全局/项目、Rule/Skill、刷新反馈、目录视图与 Windsurf 空状态。Codex 全局 Skill 刷新前后首屏顺序一致；项目缺失路径也能明确呈现。
+- 当前 IDE 管理规格只定义 Rule 与 Skill 两类扫描，Prompt 不属于现有产品表面，因此未把缺少 Prompt 列表判为缺陷；扫描服务硬错误未通过破坏本地配置来诱发。
+- Dashboard Console 的 API Keys 列表、使用记录空态、权限弹窗只读布局，以及宽屏/浏览器最小宽度下的操作换行均正常；未创建、删除、复制、展示完整凭据或保存权限变化。
+- 权限弹窗的“文档”在新标签打开公共链接下载文档；概览、页内导航、OpenAPI 机器契约新标签和关闭标签后的 Console 返回路径均正确，未执行实际下载。
+- 定向回归共 33/33 通过，desktop/dashboard TypeScript、desktop 架构硬约束与 `git diff --check` 通过。
+
+## 2026-08-27 C-to-C 第 5 轮：Agent MCP、导出与会话恢复
+
+- 在实验开关已开启的新建第三方 Provider 会话中，真实走通 Synapse MCP router 的发现与只读调用：时间线保留 router `search`，实际调用投影为真实 `mcp__synapse-mcp__app_database_table_list`，只读结果返回 8 项。
+- 固定调用不存在的 `app_sy_c2c_r5_missing` 时，工具时间线明确显示 `Failed`，展开后保留输入与 `Unknown tool` 输出，Assistant 同步给出失败说明；没有重试或调用其它工具。
+- 两轮执行后顶栏上下文从 38.1K 更新到 42K，回复下方累计/本轮用量同步变化；切换旧会话后恢复各自上下文、时间线与用量，未串会话。
+- 同一首轮实时完成时显示“已处理 14s”，切换会话恢复后显示“已处理 7s”。现有设计分别使用实时 phase 与历史过程事件计算，口径可解释但用户看到同一轮耗时收缩；本轮记录为产品心智偏差，未改变既有时间线语义。
+- 新会话与旧附件会话均通过真实保存面板导出成功；旧附件导出中路径附件仍存在但绝对路径计数为 0，界面与包内都只呈现文件名。
+- 两个 macOS 实机导出包分别出现 11 和 13 个 `._*` AppleDouble 条目。根因是共享 `ditto` ZIP 命令默认保留资源数据；现增加 `--norsrc`，不改变顶层目录、正文文件、权限或跨平台命令。
+
+## 2026-08-27 C-to-C 第 6 轮：键盘、布局与窗口焦点
+
+- Agent 文件审查在窄屏详情模式下原先无法用 Escape 返回；打开后焦点落到文档根部，关闭后又被 Composer 自动聚焦覆盖，键盘用户无法回到原“审查”入口。
+- 现由 Agent 工作区壳统一处理面板首焦点、Escape 关闭与原入口恢复，并为 Checkpoint 的撤销、审查和文件入口提供稳定焦点标识。真实客户端窄屏和宽屏均验证：打开后聚焦“返回对话”，Tab 依次到“关闭面板”“撤销”，Escape 返回后聚焦原“审查”按钮。
+- Agent 宽窄窗口往返时，右侧分栏与窄屏详情模式切换正确；统一视图、自动换行、当前文件、会话内容和上下文状态均保持。
+- 设置页通过 Shift+Tab/Return 从“基础设置”回到“账号”，连接状态直接显示“已连接”，未重新出现首帧“未登录”误报。IDE 管理首个 Tab 到“返回应用列表”，方向键可切换“内容/目录”，后续 Tab 顺序进入“刷新/新窗口打开”。
+- IDE 管理独立窗口可用键盘打开并正确加载内容；切回或关闭独立窗口后，主窗口停在应用列表且焦点落到页面根部，下一次 Tab 从第一个应用“对话”开始，而非回到“IDE 管理”入口。该跨 System App 壳层返回焦点缺口留作后续，不在 12:00 前扩成跨模块改造。
+
+## 2026-08-27 C-to-C 第 7 轮：System App 壳层与焦点恢复
+
+- 上周 System App 直接影响提交集中在 `dfcf00abf`：项目 Terminal 请求可打开或复用独立 Terminal 窗口；同一时期 Agent 附件、会话状态和共享 Diff 的改动已由前六轮覆盖。本轮避免重复 Drive、Git Diff、设置账号和 Checkpoint 主链路。
+- 真实客户端初始位于应用列表，AX 焦点落在页面根部；点击“IDE 管理”后当前窗口正确进入内嵌应用，显示“返回应用列表”“新窗口打开”、内容/目录 tabs 与扫描结果。下一步沿“新窗口打开→关闭”原路径验证焦点是否回到 IDE 管理入口。
+- 点击“新窗口打开”后，独立窗口先出现原生空壳，随后加载同一 IDE 管理内容；内容/目录、编辑器、类型、范围与结果状态保持一致。加载完成后的 AX 焦点仍停在独立窗口的 HTML 根部，这是窗口首焦点现状，主问题仍以关闭后的主窗口入口恢复为准。
+- 关闭独立 IDE 管理窗口后，主窗口稳定回到应用列表，但 AX 焦点落在 HTML 根部；按一次 Tab 后进入首个“对话”按钮，而不是原“IDE 管理”入口，完整复现第 6 轮遗留缺陷。
+- 根因位于 Renderer launcher 生命周期：`openAppWindow()` 成功后只把 `activeAppId` 清空，没有为重新挂载的 `AppLauncherGrid` 保存焦点目标；独立窗口关闭不需要新增跨进程事件，只要主窗口在打开独立窗口前把同一应用按钮设为 active element，macOS 返回时即可恢复。
+- 已增加两条 Renderer 回归，分别覆盖主应用 launcher 与 `SystemAppContent` 的实际 Dock launcher 宿主；修改前新增断言失败，最小修复后两文件 16/16 通过。实现仅让重新挂载的应用网格聚焦指定 app，不新增视觉、IPC、依赖或能力注册表面。
+- 热更新自动生效后主窗口保留原 Agent 会话；从 Dock 重新进入“应用”可正常显示 16 个当前可见 System App，准备在同一 IDE 管理原路径复测。
+- 修复后再次从应用列表进入 IDE 管理，内嵌内容、tabs 与扫描结果正常；“新窗口打开”仍立即创建并聚焦独立窗口，没有改变既有窗口行为。下一步在内容加载完成后关闭并读取主窗口 active element。
+- 热更新后的原真实路径闭环：独立 IDE 管理加载完成后关闭，主窗口直接回到应用列表，AX focused element 为“IDE 管理”按钮；无需额外 Tab，修复符合键盘用户心智。
+- 焦点恢复后直接按 Return 可重新进入内嵌 IDE 管理；视图切换后焦点暂落 HTML 根部，但一次 Tab 即到顶栏首项“返回应用列表”，没有跳入扫描内容或 Dock。该既有进入语义可完成纯键盘操作，本轮不把它扩大为额外缺陷。
+- 在“返回应用列表”上按 Return 后，应用列表直接把焦点恢复到“IDE 管理”；再次按 Return 可重进同一应用，键盘往返闭环成立。
+- 再次创建 IDE 管理独立窗口后，用 macOS 同应用窗口切换返回主窗口，主窗口仍停在应用列表且“IDE 管理”为 focused element；独立窗口存在时主窗口状态没有丢失。
+- 在 IDE 独立窗口仍存在时，从主窗口同一入口再次执行“新窗口打开”，前台立即切回已有完整内容窗口，没有出现第二个加载空壳；编辑器/类型/范围选择和 splitter 值保持，符合“一应用一独立窗口”的复用语义。
+- 关闭复用的 IDE 窗口后焦点仍回 IDE 管理；从同一应用列表切到内嵌 Terminal，顶栏、新建终端/设置/新窗口入口、分组和右侧终端区域均完整。既有三个会话明确标为“已失联”，本轮不删除、不重建，也不把开发期既有失联状态当成本轮回归。
+- Terminal 的“新窗口打开”同样先创建原生空壳再加载完整独立 Terminal；分组、三条失联会话和右侧禁用操作与内嵌状态一致，没有误建新会话或执行命令。
+- 关闭 Terminal 独立窗口后，主窗口焦点准确恢复到“终端”应用入口；切回 Agent 后原 Projects_Js 会话、Checkpoint、输入框与用量状态完整保持，跨应用往返未串会话或丢状态。
+- Agent 的 Synapse 项目菜单可正常用鼠标打开并用 Escape 关闭，包含“创建自定义对话 / 在文件夹中显示 / 在终端中打开 / 清空对话”；关闭后焦点回到该项目的“更多操作”。“在终端中打开”会无条件新建项目路径会话且名称不可指定，为遵守 `sy-c2c-r7-*` 数据约束，本轮未点击；该创建/窗口复用真实链路已由第 2 轮覆盖。
+- 从主窗口打开已有 `sy-c2c-r1-checkpoint` Agent 会话独立窗口时，首帧错误显示确定性的“供应商不可用 / 暂无消息”，下一次观察才恢复 DeepSeek、37.6K/1M 上下文、完整历史、用量和 Checkpoint。最终恢复正确，但异步读取前把 pending 投影成 provider error + empty state，属于本轮加载/空/错状态范围内的真实误导。
+- Agent 独立窗口加载态回归修改前 5/6 失败，修复后与两组 launcher 测试合计 22/22 通过；修复仅在独立窗口 `chat.loading` 时显示中性“加载中”，完成后仍按真实状态显示 Provider、空态或错误。
+- 热更新后原已打开的 Agent 独立窗口仍完整显示 DeepSeek、上下文、历史、用量和 Checkpoint；关闭后主窗口原会话与输入焦点保持。
+- 原入口重新打开后的真实首帧现在只显示中性“加载中”，没有再出现“供应商不可用”或“暂无消息”；紧接的一次读取仍保持加载态，说明修复覆盖了真实异步窗口，而非只掩盖单帧。
+- 首版加载态修复真实复测时一度持续“加载中”：页面在 refresh 期间重复 `selectSession`，使原 refresh 请求失效且 loading 无人清除。现进一步禁止加载期重复选择，并在 refresh 已选中目标时跳过切换；专项测试 6/6 通过。
+- 最终真实复测从中性“加载中”正常过渡到 DeepSeek、37.6K/1M 上下文、完整历史、用量和 Checkpoint，既没有无限加载，也没有再闪现错误 Provider/空态。
+- 关闭最终 Agent 独立窗口后，主窗口原会话状态保持且焦点回到 composer；切到应用列表后 16 个可见入口完整，没有残留独立窗口或弹层。本轮未创建任何 `sy-c2c-r7-*` 业务数据，因为全部覆盖均可复用只读状态完成。
+- 最终源码验证通过：System App/Agent 四个定向测试文件 39/39、desktop 全量 TypeScript、`check:hard-constraints` 与 `git diff --check` 均成功。测试环境仍输出既有 React `act(...)` 警告，但未造成失败。
+- 本轮临时 IDE、Terminal、Agent 独立窗口均已关闭，未创建/删除业务数据、终端会话、凭据或配置。未重复拖拽 System App 独立窗口的极窄/极宽尺寸：Computer Use 当前没有可靠、可回滚的窗口尺寸控制；第 6 轮已覆盖 Agent 宽窄状态保持，本轮在标准内嵌/独立窗口尺寸下完成鼠标、键盘、重复打开、窗口切换/关闭和状态保持，此项作为后续手动尺寸边界风险保留。
+
+## 2026-08-27 C-to-C 第 8 轮：Agent 会话创建与配置边界
+
+- 真实客户端初始恢复 `sy-c2c-r1-checkpoint`：DeepSeek `deepseek-v4-flash`、37.6K / 1M 上下文、历史/用量/Checkpoint 均完整，composer 可用；这为本轮旧会话恢复基线。
+- 在 Projects_Js 点击普通“新建对话”后立即创建空会话“新对话 12:26”，默认继承当前已配置 DeepSeek / `deepseek-v4-flash`；空态只显示“暂无消息”，composer 自动获得焦点，上下文分母尚未显示，复制/导出禁用。该入口不要求先选择 Persona、Provider 或模型。
+- 创建空会话后，先前选中的 `sy-c2c-r1-checkpoint` 列表时间戳也刷新为“刚刚”，尽管本轮未向旧会话发送消息。需在后续快速切换和代码定位中判断这是选择/保存触碰 updatedAt 的既有语义还是导致最近会话排序失真的真实缺陷。
+- 普通空会话中输入 `sy-c2c-r8-standard` 提示后发送按钮即时启用；按 Return 发送后列表显示“正在输出”，输入框清空、发送切换为“停止”，时间线先出现用户消息和“处理中/Agent 处理中”状态，没有触发附件、权限或工具界面。
+- 普通会话 6 秒完成，按提示只返回 `STANDARD_OK`；标题自动取首条消息，上下文显示 36K / 1M，回复后出现累计/本轮用量并恢复禁用发送按钮，未产生文件 Checkpoint，符合无工具轮次预期。
+- Projects_Js “更多操作”中的“创建自定义对话”可发现；配置弹窗提供名称、智能体和同屏供应商/模型矩阵。当前本机显示 CC/Synapse、DeepSeek、百炼三组；DeepSeek `deepseek-v4-flash` 默认选中，视觉模型 `deepseek-v4-flash-vision-exp` 与其它 tier 并列可选，未因模型能力目录隐藏或改变附件入口。
+- 自定义对话界面把 Persona 字段标为“智能体”，当前值“普通”；Provider 行用单选、模型 tier 用 toggle button，创建/取消/关闭均可键盘访问。下一步检查 Persona 选项、切换视觉模型、持久化与附件入口一致性。
+- Persona 下拉当前真实可选“普通”和系统内置“中英翻译”；选项直接显示用途以及绑定的百炼 `kimi-k2.6`，用户在选择前即可理解运行模型。
+- 选择“中英翻译”后，通用 Provider/模型矩阵立即收敛为只读“模型 百炼 kimi-k2.6 / 智能体绑定”，避免用户误以为可覆盖 Persona 固定模型；名称输入与创建/取消仍保留，状态变化清晰。
+- 创建 `sy-c2c-r8-persona` 后，列表保留刚完成的普通会话并新增命名会话；顶栏明确显示“中英翻译 百炼 kimi-k2.6”。空态、复制/导出禁用和 composer 焦点与普通会话一致。
+- Persona 会话仍显示“添加附件”“快捷输入”“Git”和权限模式，入口没有被绑定模型或 Persona 隐藏；这与仓库规则一致：附件能力不按模型能力目录做前端白名单，模型不支持时应保留原生拒绝。
+- 在百炼 Persona 空会话输入 `/` 后，slash menu 立即出现并按“我的 Skills / 其它 Skills / 其它命令”分组；系统命令 `/model`、`/mode`、`/new`、`/status`、`/show`、`/compact`、`/commands`、`/skills` 均可发现，说明菜单没有因 Persona 或 Provider 丢失。
+- 连续键入 `status` 后菜单只保留选中的 `/status`，composer 值同步为 `/status`；筛选响应和键盘选中态正常。下一步确认 Enter 只完成插入而不自动执行，再恢复空草稿。
+- 在选中 `/status` 时按 Enter 仅关闭菜单并保留 composer 中的 `/status`，没有新增时间线或发送状态，符合“只插入、不自动执行”的长期边界；随后已清空草稿。
+- Persona 会话“添加附件”菜单明确区分“附加文件/附加文件夹”；选择文件后打开原生“添加文件”面板，Open 在未选文件时禁用。准备通过用户已授权的本地公开 `desktop/src/assets/icon.png` 覆盖图片文件选择，不重复不可控的图片剪贴板路径。
+- 原生 Go to Folder 可精确定位仓库公开 `desktop/src/assets/icon.png`；选择后面板显示 PNG、7 KB、200×200 预览元数据，Open 可用。路径选择过程未访问凭据或业务文件。
+- 返回 Persona 草稿后附件条显示“1 张图片 · 7 KB”、缩略图预览入口、文件名/格式/大小和删除入口；即使 composer 文本为空，发送按钮也会启用。附件 UI 没有展示本地绝对路径，也未因百炼 `kimi-k2.6` 隐藏。
+- Persona 图片提示发送后，草稿附件条被提交为用户消息内的 `icon.png` 预览；列表显示“正在输出”，添加附件在运行期间禁用、停止按钮可用，图片与文字属于同一轮而非隐藏子会话。当前模型是否接受图片由实际 Provider 返回决定。
+- 百炼 `kimi-k2.6` 会话启动后顶栏先显示“上下文 1.7K”而暂未显示窗口分母；SDK sessionInit 明确为 `kimi-k2.6`。模型思考正确识别到图片需要 Read/视觉能力，而测试提示又禁止工具，说明 Synapse 没有伪造模型可直接看图，也没有用模型能力目录提前拦截入口。
+- 响应超过 19 秒仍在处理中，停止入口和运行计时持续更新。下一步利用其运行期切换到另一个专用会话，覆盖快速切换/跨会话状态隔离，再回到 Persona 检查最终结果与用量。
+- Persona 仍运行时，项目“更多操作→创建自定义对话”可正常打开，后台计时从 45 秒继续到 51 秒，说明配置弹窗没有暂停或错误接管当前会话。
+- 新自定义对话仍默认“普通 + DeepSeek `deepseek-v4-flash`”，模型矩阵状态没有被正在运行的百炼 Persona 污染；DeepSeek tier #3 `deepseek-v4-flash-vision-exp` 可直接选择。
+- 选择 `deepseek-v4-flash-vision-exp` 后，DeepSeek #1 取消、#3 选中，Provider 单选仍保持 DeepSeek；命名输入不会重置模型选择。后台 Persona 计时继续到 72 秒，配置与运行状态并行稳定。
+- 创建 `sy-c2c-r8-vision` 后顶栏精确恢复 DeepSeek `deepseek-v4-flash-vision-exp`，不是默认 flash；空态与 composer 正常，证明 Provider/模型作为会话级快照持久化。列表中 Persona 已退出“正在输出”，后台完成没有污染新会话状态。
+- 视觉模型会话仍显示相同“附加文件/附加文件夹”入口；产品没有对视觉模型额外增加或对非视觉模型删减附件入口，符合模型能力目录不得驱动附件 UI 的规则。
+- 第二次原生文件选择中，AX 对 `icon.png` 的单击/双击和当前目录搜索均未可靠提交；退出搜索后用 Go to Folder 精确文件路径成功恢复选中与预览，Open 后视觉会话草稿再次显示稳定附件条。该摩擦属于 Computer Use 与 macOS 文件面板 AX 交互，不是 Synapse 附件产品缺陷。
+- 视觉会话已发送 `icon.png`，提示明确允许只用 Read 查看附件；运行态图片预览、列表“正在输出”、添加附件禁用和停止入口与 Persona 会话一致，等待模型/工具时间线结果。
+- DeepSeek `deepseek-v4-flash-vision-exp` 在 9 秒内准确识别公开图标只含白色 “Sy”、没有完整 “Synapse”；顶栏更新为 35.7K / 200K、18%，用量统计完整，发送后附件入口恢复。视觉模型的真实图片链路成功。
+- 切回 Persona 会话后，顶栏仍精确恢复“中英翻译 百炼 kimi-k2.6”及 3.9K / 200K、2%；后台完成的回复为“无英文文字”，耗时 1m12s，用量累计/本轮均恢复。两会话 Provider、模型、上下文、耗时、回复和用量没有串线。
+- 切回普通 `sy-c2c-r8-standard` 后，Provider、`deepseek-v4-flash`、36K / 1M 上下文、回复和用量均恢复，但同一轮实时显示的“已处理 6s”退化为“已处理 0s”。这是第 5 轮耗时收缩在无工具轮次上的确定性复现，会让用户误以为执行瞬时完成，确认应在本轮修复。
+- 根因是实时 `phase` 带完整开始/结束时间但不进入会话历史；恢复后该轮只剩用户消息、最终回复和单点 `result`，Renderer 只按 process entries 求时间范围，因此开始与结束都落在 `result.timestamp`。已新增恢复历史红灯回归，修改前稳定得到 0s；最小修复仅让成功完成且有最终回复的恢复轮次把用户消息时间纳入过程起点，不改变失败、取消、运行中或无用户锚点的既有语义。
+- 现有 dev 热更新接管后，不重启客户端，从视觉/Persona 会话切回同一 `sy-c2c-r8-standard` 原路径，AX 树已恢复为“已处理 6s”；DeepSeek、36K / 1M、`STANDARD_OK` 与累计/本轮用量同时保持，确认修复覆盖真实历史恢复而不是只让单测变绿。
+- DeepSeek 视觉会话输入 `/status` 后同样只显示一项筛选结果，菜单和百炼 Persona 一致；草稿未发送并已清理。纯键盘 Tab 从 composer 依次经过添加附件、快捷输入、Git、权限模式，再到 Dock“对话”，禁用的发送按钮被正确跳过。
+- 视觉会话独立窗口在 700×820 窄窗和 1360×768 宽窗往返时，Provider/模型、35.7K / 200K 上下文、图片消息、回复、用量和 composer 均可达；恢复原 700×820 后关闭，主窗口仍停在同一视觉会话且 composer 获得焦点。首次打开过渡过快，Computer Use 只捕获到主窗口“已经在新窗口打开”后紧接完整会话，没有出现第 7 轮已修复的供应商/空态误报。
+- 为覆盖真实错误态，在不改任何凭据的情况下使用 UI 中现有 CC/Synapse `claude-opus-4-8` 创建 `sy-c2c-r8-cc` 并发送无敏感测试提示。当前网关返回 HTTP 200 HTML/Cloudflare 中间页，界面在 4 秒后停止运行态、显示明确 API Error、上下文和四类用量均为 0，发送入口恢复；切走再切回后错误、Provider/模型和零用量完整保留。该结果是现有 Provider 外部可用性问题，未修改配置，不作为 Synapse 产品代码缺陷。
+- 快速选择会话会把列表时间戳刷新为“刚刚”，即使没有新消息；本轮多次切换后再次确认该列表使用“最近打开/触碰”而非“最后一条消息”口径。是否应改为消息活跃度属于待产品确认的排序语义，本轮不在没有规格依据时改动持久化规则。
+
+## 2026-08-27 C-to-C 第 12 轮：Drive 协作与历史
+
+- Markdown 形成 v1 上传、v2/v3 编辑、v4/v5 恢复，文本形成 v1 上传、v2/v3 编辑；快速重复保存没有重复版本。历史展示来源、大小与精确时间，支持下载/恢复/保留/删除，但不提供作者、摘要、在线旧版预览或对比。
+- 评论完成空草稿、中文长内容、编辑、回复、刷新、正文位移重定位、恢复旧版未定位、恢复新版重新定位与两步删除；产品设计不支持解决/重新打开。唯一缺陷是 Escape 取消新评论后焦点落到页面根节点，已补红灯、最小修复并由热更新原路径确认焦点回到“刷新评论”。
+- 分享完成永久只读创建、复制链接、未登录访问、深链、刷新、新标签、历史、下载、内容/评论同步与撤销；撤销后旧 URL 明确显示“链接已失效”。桌面“取消分享”为即时动作，没有确认/取消步骤。
+- 1357 px 与 962 px 下长标题、长正文、代码块、表格、目录和评论栏均无重叠或横向溢出。公开评论首次加载时计数会短暂从 0 更新为真实值，属于现有加载呈现；本轮未扩张修改。
+- 源码验证通过：Markdown renderer 74/74、Dashboard TypeScript、`git diff --check`。分享已撤销，评论已删除，两项云盘资源保留在可恢复的产品回收站，唯一下载移入 macOS Trash，工作区夹具与全部 r12 浏览器标签已清理。
+
+## 2026-08-27 C-to-C 第 13 轮：Dashboard API 密钥与 Open API 授权
+
+- 本轮只创建并最终撤销/清理 `sy-c2c-r13-*` 专用密钥、Drive 文件和分享；不得读取或触碰任何既有用户密钥，明文凭据只允许短暂存在于系统剪贴板或受控临时内存且不得回显。
+- 实现基线显示当前可创建字段只有名称与非空 scope，canonical scope 为 `drive.public_link.download`；说明、有效期、搜索/筛选/分页需由真实 UI 判断是否产品已支持，不能假定存在。Open API 仅提供创建公共链接下载授权的 POST 路径，不把 API 密钥放入 URL，临时下载 grant 默认十分钟且会随密钥、scope、用户或源分享失效。
+- 真实宽屏有数据态只显示名称、前缀、权限、最后使用与创建时间；未操作现有用户密钥。页面不提供搜索、筛选或密钥列表分页，当前创建表单也不提供说明和有效期；这些是产品未支持能力，不作为缺陷。768 px 窄屏下标题、操作、权限与时间信息无重叠或横向溢出。
+- 真实键盘发现创建弹窗 Escape 关闭后焦点落到页面根节点。新增焦点回归修改前 7/8，最小修复为关闭时回到“创建秘钥”触发器，专项转为 8/8；既有 Chrome 热更新后原路径第二次 Escape（第一次关闭浏览器自动填充层）已确认焦点准确恢复。
+- 本轮按最终安全指令跳过所有持续凭据动作：未创建 API 密钥、下载授权、Drive 文件或分享，未复制或调用任何密钥，也无需执行撤销。最终只读页面仍只有原有 1 条记录，`sy-c2c-r13-*` 可见数量为 0，无弹窗，焦点停在创建入口；工作区与 Downloads 均无本轮专用资源。
+- 最终源码验证通过：Dashboard API Keys 8/8、服务端 API Key/Open API 安全语义 32/32、Dashboard TypeScript、`git diff --check`。凭据创建/调用/撤销与临时下载 grant 的真实数据面未执行，需用户在目标任务中单独确认。
+# 第 14 轮范围与安全基线（2026-08-27）
+
+- 本轮只创建并操作 `sy-c2c-r14-*` Markdown、文本、目录、分享、下载和本地夹具；不读取用户业务文件、凭据或既有回收站内容，不创建 API key，不改变分享权限。
+- UI 证据以已运行的 Synapse 桌面 Drive 与 Dashboard Drive browser 为准；源码与测试仅在定位稳定缺陷和补红灯时使用。
+- 删除仅使用产品可恢复的回收站；结束时远端专用资源保留在可恢复回收站，本地专用下载移入 macOS Trash，不清空、不永久删除。
+- `impeccable harden` 适用于本轮：重点检查长文本/CJK、错误与加载、并发动作、响应式结构、键盘焦点和恢复路径；保持现有 product register、shadcn/Radix 组件与主题 token。
+- 首次真实 UI 基线：已运行 Electron 窗口为 `Synapse AI Studio`，当前位于桌面 Drive 根目录，容量 41.8 MB / 5 GB，列表与“新建/刷新/更多”入口可用；现有条目均视为用户数据，后续只按 `sy-c2c-r14-*` 名称识别和操作。
+- 当前桌面 Drive 根列表的专用大目录分页入口尚未创建；Dashboard 入口需从专用资源的“预览”按钮进入，避免直接构造 URL 绕过桌面用户路径。
+- 大目录真实上传：从“新建 → 上传文件夹”进入原生面板，Go to Folder 精确选择 `sy-c2c-r14-large`；任务面板显示 108 个上传对象（根目录、子目录、106 文件），先呈现 0/108 与当前文件，再推进到 83/108，最终 108/108、失败 0、跳过 0。关闭后根列表出现同名目录，证明加载、进度、完成与刷新后的状态一致。
+- 上传任务详情使用虚拟化文本时 AX 显示“showing 0-100 of 318 items”，但计数权威仍是 108 个上传对象；这属于一条条目拆为名称/类型/状态三个可访问节点，并非重复上传。
+- 富 Markdown 逐文件上传与编辑通过：桌面“上传文件”选择 1.2 KB Markdown 后 1/1 成功，从该行“预览”真实打开 Dashboard standalone。预览同时正确显示代码块、长表格、表格内两行与 Mermaid SVG；MDXEditor 富文本态同样保留表格换行和 Mermaid 源码。
+- Computer Use `select_text` 在 MDXEditor 源码 textarea 中没有选中目标句，首轮输入误落到 Mermaid 首行；未保存且未产生远端副作用。立即改为对同一可见 textarea 使用完整 `set_value`，校正 Mermaid 并完成第 2 次编辑，状态由“未保存”→保存期间按钮禁用→“已同步”，随后“重新加载”恢复同一文本、表格三行和保存标记。
+- 稳定真实缺陷候选：同一文件从 standalone 点击“在云盘中查看”进入 Console surface 后，Mermaid 退化为普通代码块；等待异步渲染后 AX 与截图均无变化，而 standalone 同一版本已是 `flowchart-v2 Mermaid 流程图`。这与用户对同一 Drive 文档跨入口一致渲染的心智不符，需补红灯定位。
+- 第 14 轮环境限制：Computer Use 的 `paste` 只支持 text/md/html，安全 PNG 经 Finder/Preview 复制路径未能稳定到达编辑器；不应继续在同一点消耗时间，也不能改用接口脚本绕过真实 UI。图片上传中/失败重试/删除生命周期因此保留为工具限制风险。
+- ZIP 只读核对：`sy-c2c-r14-upload.zip` 有 8 个 entry，包含 `.hidden-r14`、`nested-a/same/同名.txt`、`nested-b/same/同名.txt`；中文名按 UTF-8 字节写入，终端 locale 只显示转义，不是压缩包丢名。未发现 macOS 元数据污染。
+- Dashboard 大目录分页真实表现：100 项初始页有“加载更多”；一次点击后控件消失并继续显示追加项，未出现重复请求、超时或空态。AX 的表格摘要仍显示 `showing 0-1 of 100 items`，但截图和按钮消失证明页面追加已完成；此处属于 Chrome AX 摘要限制，不作为产品缺陷。
+- 已确认产品缺陷：Markdown 正文在 `FilePreviewLayout` 从 regular 切为 compact 时会换渲染分支并重挂载 `bodyRef`；Mermaid effect 只依赖 HTML/主题，未随布局模式重跑，导致 Console 窄内容区只剩源码。最小修复为把 `isCompact` 纳入依赖，不改变渲染器、样式或产品边界。
+
+# 第 15 轮范围与安全基线（2026-08-27）
+
+- 只创建并操作 `sy-c2c-r15-*` Drive Markdown、Agent 会话和必要的项目内临时 Skill 夹具；不触碰既有业务文件、会话、全局 Skills、凭据或设置。
+- Drive 删除只进入可恢复回收站，不创建公开分享；本地临时夹具精确移到 Trash 或删除，不清空 Trash。
+- Agent 仅发送安全文本回答或可取消等待提示，不要求改文件、执行命令、调用外部服务或访问用户数据。
+- UI 证据按用户心智记录：目标、当前所见、选择该操作的原因、预期、实际与判断；源码和测试不替代真实用户路径。
+- Drive 初始用户心智：想从上一轮结束位置回到自己的云盘并只创建本轮文件；看到回收站中只有既有与前序 C-to-C 资源，点击“根目录”后看到正常列表及“新建/刷新/更多”；选择返回根目录是为了从公开产品入口上传专用 Markdown；预期根列表可用且不触碰既有文件；实际容量、列表和上传入口均正常，判断环境可继续。
+- Drive 上传用户心智：想把唯一的本轮 Markdown 放进自己的云盘；看到“新建”菜单明确区分上传文件/文件夹，选择“上传文件”并在原生面板用 Go to Folder 精确定位 `sy-c2c-r15-lists.md`；这样可避免浏览或选中其它项目文件；预期面板预览完整源码且 Open 可用；实际 1 KB Markdown 被选中，预览保留非 1 序号、任务项、引用和代码块，Open 已启用，判断可安全提交上传。
+- 上传生命周期：想确认文件不是只在本地选中而是真正进入云盘；提交后看到上传任务从“正在上传 0/1”显示当前文件和 100%，随后变为“上传完成 1/1、已完成 1、失败 0、跳过 0”；预期单文件成功且无失败残留；实际符合，判断上传主链路通过。
+- 预览入口：想像普通用户一样从刚上传的文件检查真实阅读效果；上传面板自动关闭后根列表顶部出现 `sy-c2c-r15-lists.md`，点击该行“预览”在新标签打开 standalone；预期标题、目录、全部列表 marker/编号和任务状态可读；实际顶层 5/6、任务勾选、无序层级、代码块与引用均出现，但第一组二级 `3.`、引用内 `7.`、后段深层 `8/9` 被拼进父项文本，只有 `4.` 形成可访问的有序 marker。该现象与源文件层级心智不符，先标记为稳定缺陷候选，需用截图与源码解析回归确认，不立即改代码。
+- 真实视觉确认：页面截图中 `3.` 贴在第一条无序项正文尾部、`7.` 贴在引用中无序项尾部、`8/9` 贴在顶层 `1.` 正文后；并非 AX 文本合并造成的误判。富文本 MDXEditor 同样把这些数字显示成正文，而 `4.`、5/6、任务框与无序 marker 是结构化控件，说明问题跨预览与富文本共用内容解析/归一化路径。
+- MDXEditor 源码模式显示 `3/7/8/9` 被转义为正文，顶栏仍为“已同步”。源码定位后用与服务端相同的 remark-parse 只读解析原夹具，确认这是 CommonMark 规则：非 1 起始的有序列表不能无空行打断前一个段落；`4.` 之所以成为列表，是前面的任务列表已结束该段落。真实预览、富文本和 remark AST 三者一致，因此撤销“产品缺陷”判断。下一步把夹具改为合法 CommonMark（在非 1 嵌套列表前加入空行）后通过真实 UI 编辑、保存和刷新，验证产品对合法层级的保真。
+- 首次合法源码更新使用 Computer Use `set_value` 后，源码编辑器在保存前已把多行缩进重排，保存后 3/4、任务项和 8/9 被提升或换序；由于 AX `set_value` 可能模拟逐行赋值并触发 CodeMirror 自动缩进，现阶段不能把结果归因于产品。该错误版本只属于本轮专用文件且可由后续版本恢复；下一步改用源码区全选 + `paste(text)` 保留原始空白，再重新保存验证。
+- 源码区全选后 `paste(text)` 仍在保存前把相同多行缩进重排，说明 Computer Use 无法为当前 CodeMirror 源码区形成可信的多行缩进输入；不再重复该路径，也不把远端专用文件的错误版本归因为产品。为继续验证合法 CommonMark，已用 `apply_patch` 创建独立 `sy-c2c-r15-valid-lists.md`，将通过原生上传入口进入产品，再在富文本内只做单点键盘操作。
+- 合法夹具再次从桌面“新建→上传文件”进入原生面板，Go to Folder 精确选中 `sy-c2c-r15-valid-lists.md`；面板确认 1 KB Markdown，提交后上传任务显示当前文件 100%、失败/跳过均 0。该路径没有经过源码编辑器，后续预览可作为合法 CommonMark 的可信输入基线。
+- 合法夹具上传完成 1/1 后在 Drive 根列表顶部出现并从“预览”打开 standalone；真实结果保留二级 3/4、引用内层级 marker `4.7`、顶层 5/6、深层 `1.8/1.9`、两组任务状态、混合无序 marker 的层级、代码块与引用。判断 Dashboard standalone 对合法 CommonMark 的层级、编号续接与任务状态一致性通过；前一文件的正文数字确为输入语义而非渲染回归。
+- 合法夹具进入 MDXEditor 富文本后继续保留 3/4、4.7、5/6、1.8/1.9、任务勾选和全部嵌套结构，初始状态“已同步”。尝试用 Computer Use `select_text` 将光标放到指定无序项末尾后执行 Enter/输入/Tab，实际光标落到另一列表且中文输入只进入 `sy-c2c-r15-`，Tab 成为字符而非缩进；这是工具无法可信控制 contenteditable 精细选区的限制，不判产品缺陷、不保存。连续撤销恢复全部原内容且重做按钮启用，说明撤销栈可用；下一步做一次重做/再撤销后用“重新加载”回到服务端版本。
+- 重做真实恢复一个空列表项，证明 redo 栈生效；再次撤销后点击“重新加载”出现“放弃本地修改？”保护，提供取消、下载本地版本、放弃并重新加载。选择放弃后文件恢复“已同步”，3/4、4.7、1.8/1.9 和任务状态全部回到服务端原样，未保存草稿未污染远端。
+- 编辑器扫描入口基线：想从桌面 UI 查看现有 Skill 顺序而不改任何内容；从 Dock 点击“应用”看到 16 个 System App，`IDE 管理`入口可见；选择它是因为扫描/目录能力集中在该产品入口。预期只读进入且不会触发安装或写文件。
+- IDE 管理真实内容：初始 Cursor 全局 Skill 显示 1 项；切到 Codex 后展示虚拟化的 130 个可访问节点，来源明确分为“Synapse”与“外部”，Synapse 来源连续置顶，外部随后出现。点击刷新后 toast“扫描结果已刷新”，首屏顺序 `sy-worklog / gitee-openapi / gitee-issue-report / winwin-progress-sync / synapse-skill / wecom-notification / wdbc-jenkins-deploy` 完全稳定。源码只读确认产品排序规则是“Synapse 来源优先、组内保留扫描顺序”，不是按名称大小写/数字/中英文自然排序，因此当前 UI 符合规格，不把非字母序判为缺陷。
+- 切到项目范围后，演示知识库/私人知识库明确显示“路径不存在”，Synapse 项目展示 7 个 Skills，首项 `impeccable` 后接 6 个 `synapse-*`，所有来源标为外部且路径属于当前仓库；项目缺失、存在和来源分组都可区分。切到“目录”后显示 Codex 全局规则/全局技能两个目录与“打开”入口；约 962 宽下顶栏、编辑器列表、目录行和 Dock 无遮挡。
+- 用系统窗口 zoom 在约 1357 宽复核“目录”页，返回、tabs、刷新/新窗口、两条目录与 Dock 仍落在同一网格，无重叠或截断；宽窄结构保持。未创建排序夹具，也未修改任何现有 Skill 或全局目录。
+- Agent 事件连续性基线：从 Dock 进入“对话”后无选中会话，选择 Synapse 项目的“新建对话”创建 `新对话 17:00`；DeepSeek `deepseek-v4-flash`、空态、composer、附件/快捷输入/Git/权限入口均可用。该会话仅用于本轮安全文本提示，列表中其它既有会话不操作。
+- 第一专用会话发送只输出 20 行 EVENT 文本、禁止工具/文件/外部服务的提示后，列表立即标为“正在输出”，时间线先出现用户消息，停止按钮可用。运行中从同一 Synapse 项目新建第二个空会话，第一行仍保持“正在输出”，新会话空态和 composer 正常，说明切换/创建没有取消后台运行。
+- 第二会话发送 `sy-c2c-r15-event-switch` 纯文本提示后，两个列表项同时显示“正在输出”；当前时间线顺序为用户消息→“处理中 0s”→过程摘要，其中记录 Synapse 工具路由回退但没有执行工具。判断多会话运行状态隔离与过程事件可见性基线通过，下一步切回第一会话检查迟到事件与完成结果。
+- 切回第一会话时它已在后台完成：标题更新为 `sy-c2c-r15-event-main…`，20 个 EVENT 编号完整且只出现在该会话，耗时 13s、上下文 92.3K/1M、输入/输出用量非零。切到第二会话后只显示 `SWITCH_OK`、耗时 22s、独立上下文 92.1K/1M 和独立用量；没有任何第一会话迟到文本串入。判断后台完成、迟到事件隔离、耗时/用量恢复通过。
+- 在第二会话启动 200 行纯文本回复后 1s 点击“停止”；最终保留 WAIT_001–WAIT_057 的部分文本，耗时 7s，列表退出“正在输出”，composer 恢复，已完成的上一轮 `SWITCH_OK` 与用量不丢失。判断 stop 可取消且保留已流式文本；界面没有提供取消轮次的 retry 按钮，retry 属于失败态能力，本路径不强行制造 Provider 错误。
+- 快速连续消息验证：首条 `FAST_A` 运行时，第二条 `FAST_B` 不会越过运行锁发送，而是完整保留在 composer；首条 2s 完成后发送第二条，同样 2s 完成且回复独立。renderer 刷新后 `SWITCH_OK`、停止保留的 WAIT_001–057、FAST_A/FAST_B、耗时和 94.7K/1M 上下文均恢复；切回第一会话仍只有 EVENT_01–20 与 13s/92.3K，用量和迟到事件未串线。
+- Console 列表一致性出现真实缺陷：同一合法文件在 standalone/MDXEditor 显示 `3/4、4.7、5/6、1.8/1.9`，Console 约 962 宽却隐藏全部有序 marker，截图和 AX 都只剩文本；任务框、引用与缩进仍在。根因为 regular→compact 重挂载正文节点，列表同步 effect 只依赖 HTML，未对新 body 重新写入 marker 属性，和上一轮 Mermaid 的布局重挂载根因同类。
+- 已补紧凑布局重挂载回归，修改前稳定得到 `[null, null]` 而非 `['3.', '4.']`；最小修复仅把 `isCompact` 加入列表同步 effect 依赖。热更新后同一 Console URL 在约 962 与约 1357 宽均恢复全部层级编号，任务状态、目录、评论与正文布局保持，发布说明已同步。
+- 最终清理：两份 Drive Markdown 均从真实网页云盘删除确认中明确显示“文件会进入回收站”，回收站顶部可见两个精确名称与“恢复”，未永久删除；两个 Chrome 临时标签和本地两份夹具已精确清理，未创建 Skill 排序夹具。两个 Agent 专用会话因 UI 删除是永久操作，按安全要求保留并报告。
+- 源码验证通过：Drive/MDXEditor 88/88、Chromium marker 8/8、编辑器扫描 4/4、Agent 事件 42/42、Dashboard TypeScript、desktop 全量 typecheck、`git diff --check` 全部通过。
+
+# 第 16 轮范围与安全基线（2026-08-27）
+
+- 本轮是 18:00 前累计修复综合回归，只验证不同修复的组合路径，不重复所有源码测试；真实 UI 是主要证据。
+- 只创建 `sy-c2c-r16-*` Agent 文本会话、一个安全文本附件与一个合法 Drive Markdown；不触碰既有会话、业务文件、凭据、设置、分享或回收站既有项。
+- 设置只走只读或取消路径；API 密钥弹窗只打开并 Escape，不创建凭据；Drive 不创建分享，评论最终删除，文件只移入可恢复回收站。
+- `impeccable harden` 约束本轮判定：异步读取不得误闪空/错或无限加载；所有弹窗、详情面板与跨窗口关闭都检查焦点恢复；约 962↔1357 的结构切换必须保留 Mermaid、列表编号、会话与操作状态。
+- 当前累计 diff 涵盖 Agent Checkpoint/附件/会话恢复、System App 焦点、设置取消焦点、Drive Markdown/评论、文档 Copy Markdown/404 等 103 个文件；发布说明已有对应用户表面，本轮不整理无关改动。
+- 首次桌面观察：当前仓库 Electron 进程与 renderer 均存在，但唯一 `Synapse AI Studio` 窗口只显示原生空白白屏，Window 菜单也只列出这一窗；这不是产品可判定的空态，不能据此执行 launcher/Agent 路径。未重启或关闭任何服务。
+- 同期 Chrome Console 正常停在 API 密钥只读页，现有 1 条用户记录、创建入口与设置导航完整；未点击、复制或读取既有密钥内容。说明 Dashboard/dev 服务可用，桌面问题限定在当前 renderer 窗口状态。
+- API 密钥取消路径通过：打开“创建秘钥”后名称输入自动聚焦、未填写名称/权限时“创建”禁用，权限文档入口可见；第一次 Escape 只关闭 Chrome 自动填充层，第二次 Escape 关闭产品弹窗并把焦点准确恢复到“创建秘钥”。未输入名称、未勾权限、未创建凭据，既有 1 条记录未操作。
+- 桌面 App Reset、项目校验与配置备份入口因 Electron 白屏无法形成本轮真实 UI 证据；不以源码替代，也不通过重启绕过。此前轮次已有这些路径的独立闭环，本轮只能报告组合回归未覆盖。
+- Drive 综合路径部分通过：唯一 `sy-c2c-r16-composite.md` 经 Console 原生文件选择器上传，Console 真实预览同时保留 Mermaid 流程图与 `5 / 5.3 / 5.3.7 / 5.3.8 / 5.4 / 6` 多层编号；宽屏按钮实际进入页面全屏阅读模式，不是 standalone 入口，已退出。尝试拖动窗口边缘时 Computer Use 只形成正文选择、未调整窗口，按最终指令停止重复，standalone 与 962↔1357 往返未覆盖。
+- 评论组合路径通过：对“第五项”创建并保存唯一 `sy-c2c-r16-comment` 后，再对“第六项”打开新评论草稿；Escape 把草稿计数从 2 恢复为 1，并将焦点精确返回“刷新评论”。随后按用户最终指令完成两步不可恢复评论删除，评论计数回到 0、空态为“暂无评论”。
+- 清理完成：Drive 文件经产品确认进入可恢复回收站，回收站顶部显示精确名称与“恢复”；未清空回收站、未触碰既有项。工作区唯一本地夹具移入 `/Users/liyang/.Trash/sy-c2c-r16-cleanup-20260827-1735/`，工作区与 Downloads 均无 `sy-c2c-r16-*`。本轮没有新标签、分享、下载、凭据或 Agent 会话残留。
+- 最小源码验证通过：Dashboard Markdown renderer、Drive Console、API Keys 三个文件 110/110，`git diff --check` 成功。本轮未确认新产品缺陷，未追加发布说明。
+- 残留风险：Electron 唯一窗口持续白屏且普通刷新无恢复，因禁止重启而无法完成 System App/Agent、桌面设置、standalone 入口及 Agent 附件综合路径；文档站本地/公开抽查也因最终清理优先级停止，不能把前序轮次证据冒充为本轮覆盖。
+
+# 第 17 轮范围与结果（2026-08-27）
+
+- 本轮只操作既有 Chrome，会话开始与结束均停在 `localhost:3000/console/drive` 普通文件页；未触碰 Electron，未启动、停止或重启服务，未创建 worktree、分支、提交、凭据、分享、下载、文件或设置。
+- 本地文档首页 Copy Markdown 通过：按钮反馈“已复制 Markdown”，安全粘贴到未提交地址栏确认内容为 H1、能力概述和“查看开放接口”链接，不含 `layout`、`hero` 或其它 frontmatter。
+- 公开文档首页 Copy Markdown 仍复制完整 VitePress home frontmatter；公开 404 仍显示 `PAGE NOT FOUND / go to home` 英文默认文案，而当前本地中文/英文不存在路径均显示“页面不存在 / 请检查地址，或返回首页”。两项差异与当前本地源码已修复行为一致，判断为公开部署版本漂移，不在本轮擅自部署或重复改源码。
+- 本地中文与英文不存在路径、深链刷新、新标签、浏览器前进/后退和“返回首页”均通过；返回首页后首个 Tab 聚焦当前页正确的 Skip-to-content。站点没有配置搜索入口，因此 404 可见恢复动作只有返回首页。
+- 本地与公开 Open API 概览及 `share-link-download` 文档通过：可见 `drive.public_link.download` scope、POST/GET 两阶段、201 与 400/401/403/404/410/413/422/500/503 错误语义；代码复制显示“已复制”。分别从本地和公开文档可见链接进入的 OpenAPI 契约均显示 3.1.0 与 2020-12 dialect，生产端点为 `synapse.d2.pub/api/open/openapi.json`；pretty/raw 切换和刷新均正常。
+- 明显无效的 `sy-c2c-r17-invalid-00000000` 分享在未登录状态稳定显示“链接已失效 / 请向文件所有者确认最新链接”，刷新保持且浏览器可返回；未产生分享、下载或业务数据。
+- 1357↔955↔1357 响应式通过：窄屏左侧章节导航保持，右侧目录折叠为“本页目录”，表格、代码与长 URL/JSON 无页面级横向溢出；目录点击可开合、焦点可见。Escape 不会关闭该 VitePress 原生目录下拉，只保持焦点在触发器，属于本轮记录的交互残留，未判为新回归。
+- 清理完成：本轮先后创建的 7 个临时标签全部关闭，Chrome 恢复唯一 Console 网盘普通文件页、文件标签与 1357×768；没有本轮文件、下载、分享或凭据残留。
+
+# 第 21 轮补充：System App 组合路径（2026-08-27）
+
+- 从 Agent 的“应用”启动台进入嵌入式 Git，仓库列表真实展示 Synapse/main 与 122 项改动；随后点击顶栏“新窗口打开”，用于验证它是否复用本轮已打开且保留 Diff 视图状态的独立 Git 窗口。
+- 上一次完整 AX 树输出过大被截断，仅属于观测输出限制；后续改用精确筛选的可访问性状态确认窗口与视图，不重复点击或重启应用。
+- 精简 AX 状态确认“新窗口打开”复用了同一 Git `requestId`，仍选中 `RELEASE_NOTES_PENDING.md`，分栏与自动换行均保持开启；窗口复用、项目归属与共享 Diff 状态保持通过。
+- 已用系统关闭快捷键关闭本轮独立 Git 窗口；下一步只检查原主窗口是否回到内嵌 Git 并获得合理焦点，不关闭或重启 Synapse 主窗口。
+- 关闭快捷键后精简状态仍显示同一 Git request URL 与保留的换行焦点；当前不能据此区分“独立窗未关闭”与“主窗返回同路由”，先用窗口清单核对，避免继续盲点关闭。
+- `sky.list_apps` 只能确认开发 Electron 正在运行，未提供其窗口明细；为避免继续关闭未知窗口，改用 Synapse 窗口切换快捷键返回主窗口，再读取路由确认。
+- 窗口切换后仍是无 Dock/应用顶栏的独立 Git 工作台（直接从仓库页开始，只有“返回仓库列表”）；说明当前焦点尚未回到 Agent 主窗口。关闭快捷键可能只关闭了另一同路由窗口，暂不判为复用缺陷，继续通过窗口轮换与窗口尺寸辨别。
+- 复核 Computer Use 键盘语法发现组合键应放在单个 `key` 字符串（如 `super+grave`），此前把 modifier 单独传入实际只按了普通键；因此之前“切换无效/关闭后仍在 Git”是测试操作失误，不是产品证据。
+- 规范 `super+grave` 已准确回到 127.0.0.1:19731 根路由的主窗口应用启动台，焦点回到 Git 应用入口；独立窗口→来源入口焦点恢复通过。
+- 已按规范切回独立 Git 并发送 `super+w` 精确关闭；下一次只读取主窗口状态确认，不再操作窗口关闭。
+- 关闭后仅剩根路由主窗口，启动台 Git 入口仍获焦，证明独立 Git 已清理且返回焦点正确。一次返回“对话”的 click 参数名误写为 `target` 被工具拒绝，界面无变化；改用规范 `element_index`。
+- 主窗口已返回 r21 Agent，会话历史、两张已撤销 Checkpoint 与 composer 状态完整，焦点落输入区；本轮 System App/Terminal/Git 独立窗口均已收拢，无额外窗口残留。
+- 第 21 轮确认两项稳定用户缺陷并闭环：取消撤销确认后焦点丢到页面根节点；撤销执行中“恢复 N 个文件”短暂变成 0。均先补最小回归，再外科修复；热更新后的真实原路径分别验证焦点回到面板撤销按钮、执行中持续显示真实文件数。
+- 最小源码验证通过：Agent Checkpoint/工作区/时间线 3 个测试文件共 67 个用例、desktop typecheck、`check:hard-constraints`、`git diff --check`。隔离组件测试仅有未挂真实 renderer bridge 的既有 tracking stderr，不影响测试结果。
+- 清理确认：根目录 `sy-c2c-r21-modify.md` 已删除，新增和 Bash 删除夹具均不存在；独立 Git 窗口关闭，主窗口停在 r21 Agent 输入区。专用会话保留，因为永久删除会话不在本轮授权安全边界内；没有分支、worktree、提交、凭据、同步或服务操作。
+
+# 第 18 轮范围与结果（2026-08-27）
+
+- 本轮严格只操作既有 Chrome，不再触碰白屏 Electron，也未启动、停止或重启服务；Console 实际侧栏没有独立“概览”项，因此按可见入口覆盖网盘、设置、API 秘钥和从创建弹窗进入的 Open API 文档。
+- 网盘有数据态、个人资料有数据态、API 秘钥有数据态均正常；网盘硬刷新出现极短暂的浏览器内容树清空，下一次读取立即恢复完整数据，没有稳定空态、错误态或无限加载，未判为产品缺陷。
+- API 秘钥创建弹窗在空名称、未选权限时“创建”禁用；两次 Escape 依次关闭 Chrome 自动填充层和产品弹窗，焦点恢复“创建秘钥”。未输入、勾选、创建、编辑、调用或撤销任何凭据。
+- 从弹窗真实文档链接打开新标签成功；Open API 下载文档与概览均可见 canonical POST/GET、scope、认证与错误说明，刷新与同标签导航正常。临时文档标签随后关闭，Console 弹窗也已取消。
+- 浏览器原生后退从网盘回到 API 秘钥，前进回网盘，状态恢复正确。Tab 焦点可从设置侧栏继续进入顶栏控件；API 弹窗关闭后焦点恢复通过。
+- 955×768 下设置/API 秘钥与网盘保持完整侧栏、标题、操作、数据表和键盘焦点，无遮挡或页面级溢出；恢复 1357×768 后网盘列表、当前文件标签和侧栏状态保持。
+- 未构造 Console 深链，因为已有真实可见路径已覆盖时间盒且清理优先；未创建临时业务数据、下载、分享、文件、设置、worktree、分支、提交或源码修改。最终 Chrome 只有一个 Console 网盘普通文件标签，1357×768；本轮未确认稳定新缺陷，未修改发布说明。
+# 2026-08-27 C-to-C 第 22 轮：配置备份、DataRepository 与设置组合持久化
+
+- 覆盖缺口矩阵：第 9 轮已经完成正常配置导出、同包受控实际恢复、导入确认取消、App Reset 取消、普通偏好恢复、Live 已连接与 960↔845 布局；第 21 轮已经完成 Agent/Git/Terminal/System App 多窗口状态保持。本轮不重复这些主链，优先补齐（1）保存/打开文件面板取消与焦点恢复，（2）空文件、损坏 JSON、错误 schema 的导入预检及零写入，（3）同秒/重复导出的默认命名与覆盖心智，（4）设置分类和错误反馈跨应用启动台/System App 往返后的持久性，（5）普通备份只做结构存在性验证，确认不携带终端正文、运行历史、Agent 对话、凭据值或文件 Checkpoint。
+- 安全边界：只创建/选择 `sy-c2c-r22-*` 本地夹具；损坏包只能触发读取前校验，不能进入成功导入或窗口刷新；App Reset 只打开并取消；API Key、OAuth、身份、Live 连接不创建、不更改、不输出；备份内容只检查 key/类型/计数/空值，不读取或汇报任何正文与 secret 值。
+- Computer Use 首次按窗口标题 `Synapse AI Studio` 定位返回 `Invalid app`；这是应用标识解析问题，未启动应用、未产生 UI 动作。随后用于过滤 `list_apps()` 的 JS 少一个右括号并在解析阶段失败，同样无界面副作用；改用更简单的表达式发现 bundle id，不重复原失败代码。
+- 通过正在运行进程的 Electron.app 精确路径读取到真实 Synapse：主窗口停在第 21 轮 Agent 会话、无弹层，输入框获焦。用户从 Dock 点击“设置”后进入账号分类，十个分类完整，Live 直接显示“已连接”，Dock“设置”保持焦点；既有 Agent 会话没有被关闭或重建，满足跨模块进入设置的初始心智。
+- 基础设置真实显示外观、只读身份、配置导入/导出和 App Reset；没有复制或记录身份值。点击“导出”后原生保存面板打开在 Downloads，文件名采用 `synapse-config-backup-YYYYMMDD-HHMMSS.json` 秒级时间戳且名称主体已选中，用户可直接改成 `sy-c2c-r22-*`。此时尚未写文件，先验证取消与回焦。
+- 在原生保存面板点击 Cancel 后没有生成文件或成功提示，但返回设置时焦点落在 HTML 根节点，而不是“导出”触发按钮；同一首帧仍短暂显示“正在导出配置...”通知。先等待 promise 结算并重复一次键盘取消，区分原生面板关闭过渡与稳定键盘回焦缺陷。
+- 等待导出 promise 结算后通知消失，但焦点仍稳定停在 HTML 根节点，排除过渡帧；第二次打开导出面板正常生成新时间戳名称。下一步用 Escape 取消并再次读 active element；若仍回根节点，将确认为配置导出原生面板取消后的键盘焦点缺陷。
+- 第二次用 Escape 取消后焦点仍回 HTML 根节点，缺陷确认。新增组件回归修改前 1/4 红灯，最小修复只为“导出”按钮增加 ref，并在原生保存流程完成后、按钮恢复可用时异步回焦；回归转为 4/4 通过，发布说明已同步。既有 dev HMR 自动回到 Agent 主视图但保留原 r21 会话；重新进入设置后 Live 仍为“已连接”，说明跨热更新的会话/连接投影没有被本修复破坏。
+- 第一次修复的 `setTimeout(0)` 虽通过 jsdom，但真实 HMR 原路径仍回 HTML 根节点：React 的 `isExporting=false` 提交可能晚于计时器，导致当时按钮仍 disabled 而无法聚焦。这是实机否定测试替身时序的有效证据；改为由 `isExporting` 完成渲染后的 effect 恢复焦点，不增加等待常量或猜测时延。
+- 第二版回归通过 4/4，测试现在明确让导出 promise 保持 pending、模拟原生面板导致 blur，再在 promise 返回取消后断言回焦，覆盖 disabled→enabled 提交时序。HMR 后再次保留 r21 Agent 会话；重新进入设置仍直接得到 Live“已连接”，准备第三次走同一导出取消原路径。
+- 第三次已沿真实“设置→基础设置→导出”打开原生保存面板，默认目录与新时间戳命名正常；没有保存或覆盖任何文件。下一步只按 Escape 并读取焦点，作为第二版实现的决定性实机复测。
+- 第二版原路径复测通过：Escape 返回后 active element 精确为“导出”按钮，且无文件副作用。随后再次打开导出面板，把名称改为唯一专用 `sy-c2c-r22-config-backup.json`；下一步才执行首次安全导出并做无值结构检查。
+- 首次专用导出真实成功，文件 639,268 bytes，toast“配置已导出”，焦点仍在“导出”。只读结构检查（不打印任何值）确认 schema v1、`synapse-backup-v1`、53 个 namespace；`core.config`、Agent events/artifacts/usage/conversations、outbox、audit 均不存在；所有配置变量值为空；Secrets/Webhook 加密 namespace 的 data 为 null；Terminal 的 command/launch/body/block/delete/idempotency 与 Agent file-checkpoints 都存在为空条目。普通备份因此没有携带终端正文、运行历史、Agent 对话、Checkpoint 或凭据值。
+- 重复导出默认仍生成新的秒级时间戳名，不会静默覆盖上一份；为验证显式同名心智，已把保存名改为现有专用文件名但尚未点击 Save。预期 macOS 显示覆盖确认，测试只取消，不覆盖已验证备份。
+- 显式同名 Save 触发 macOS 明确的 Replace/Cancel 覆盖确认；点击 Cancel 返回保存面板且文件名保持，随后再 Cancel 才退出导出。原备份未覆盖，返回设置后焦点仍准确回到“导出”。重复命名、覆盖保护和嵌套取消路径均符合用户心智。
+- 已创建 1-byte 空白、2-byte 截断 JSON 和仅错误 schema 的三个 `sy-c2c-r22-*` 夹具。导入入口先展示覆盖设置/身份与刷新窗口的确认层，默认焦点为“取消”；确认后原生 Open 面板仅允许选择 JSON，三种夹具均可见。开始依次选择，错误预检必须留在当前窗口且不刷新/不修改设置。
+- 对 Open 面板 AX 的空白夹具文本做单击、双击均未改变选中态，Open 仍禁用；两次都无文件或产品副作用，属于 macOS 文件面板 AX 限制。按既有记录不做第三次同法尝试，改用 Go to Folder 精确路径键盘路径。
+- Go to Folder 能打开精确路径输入并接受 `/Users/liyang/Downloads/sy-c2c-r22-empty.json`，路径候选已选中；未读取其它文件。下一步 Return 应回到 Open 面板并选中夹具，再由 Open 触发产品预检。
+- Go to Folder 对精确文件路径按 Return 后直接回到设置且没有“正在导入”或错误通知，导入确认也关闭，说明 macOS 把这次路径动作按取消返回而不是选择文件；没有产品写入。已重新打开导入/Open，改用面板 Search + 键盘选择，不把这次工具限制当产品缺陷。
+- Search AX 元素不支持 `set_value`，一次调用在 Computer Use 层失败且无 UI 副作用；改为先点击 Search 再 `type_text`，Finder 的键盘 type-to-select 成功把 1-byte 空白夹具标为 selected，Open 已启用。下一步点击 Open 才进入产品校验。
+- 空白夹具 Open 后真实 toast 为“备份文件不是有效的 JSON。”，窗口没有刷新，导入确认层保持打开，设置值未改变；预检和零写入符合预期。但错误后焦点落在 HTML 根节点而不是“确认导入”，疑似重试焦点缺陷。已从保留的确认层再次点击确认进入 Open，准备以截断 JSON 复现后再判定。
+- 截断 JSON 同样稳定显示“备份文件不是有效的 JSON。”、确认层保持且焦点回 HTML 根节点，第二项缺陷确认。新增 pending/reject/blur 组件回归修改前 1/5 红灯（实际焦点落取消按钮），最小修复仅在 import promise 失败且确认层仍打开时，于 `isImporting=false` 提交后回焦“确认导入”；成功、文件选择取消和实际导入关闭路径不触发。专项已 5/5，通过发布说明同步。HMR 后 r21 会话与 Live 已连接仍保持。
+- 热更新后已回到基础设置并重新打开导入确认；外观仍为“跟随系统”，确认层默认焦点仍在“取消”，修复没有改变初始安全焦点。下一步选择错误 schema 夹具，验证细粒度校验反馈与失败后“确认导入”回焦。
+- 已通过同一键盘 type-to-select 路径选中仅含错误 schema 的 20-byte 夹具，Open 启用。尚未提交；下一步预期返回字段级校验错误而不是通用 JSON 错误，并在确认层聚焦“确认导入”。
+- 错误 schema 提交后 toast 明确列出 schemaVersion 必须为 1 以及 exportedAt/config/identity 缺失等字段级错误；窗口未刷新、确认层保留，active element 精确回到“确认导入”，第二项修复实机闭环。随后再次打开原生 Open 并点 Cancel，确认层关闭、无通知或写入，焦点准确回到设置“导入”入口；文件选择取消路径也通过。
+- 从基础设置切到 System App 启动台，再从启动台打开“设置”，主窗口进入带“返回应用列表/新窗口打开”的内嵌 System App 壳；账号页 Live 仍为“已连接”，说明 Agent/设置/启动台切换未破坏连接投影。System App 新入口按设计从账号默认分类开始，而不是恢复 Dock 设置的基础分类；这是两个入口的既有初始语义，不判缺陷。
+- 内嵌设置的基础分类仍显示“跟随系统”和配置动作；打开 App Reset 后清空/保留范围、不可撤销与自动重启后果完整，默认焦点在取消，最终动作保持 3 秒禁用。只检查结构，不复制或记录身份值，不执行最终重置；下一步 Escape 取消并验证回焦。
+- App Reset 按 Escape 取消后没有重置、复制或重启，active element 精确回“重置”按钮；从内嵌设置点“返回应用列表”后焦点回启动台“设置”入口。既有 App Reset 与 System App 返回焦点修复在配置备份错误/热更新之后仍有效，组合路径没有状态串扰。
+- 第 22 轮最终验证：设置组件/配置备份/DataRepository 6 个文件 63/63；desktop 完整 typecheck（renderer/electron/preload/test）、`check:hard-constraints`、`git diff --check` 全部通过。四个 `sy-c2c-r22-*` 导出/损坏夹具已从 Downloads 精确移入废纸篓，可恢复；Downloads 无本轮残留，所有确认层/文件面板关闭，主窗口回到原 r21 Agent 会话。
+- 残留边界：同一受控备份的实际成功恢复已由第 9 轮完整验证，本轮为避免再次覆盖真实设置不重复执行；Live 失败/重连、真正 App Reset、凭据/API Key/OAuth 创建与恢复、应用/服务冷重启均按安全约束未制造。当前证据覆盖热更新、页面/System App 切换与原生文件面板返回，不等同于冷启动恢复验收。
+
+# 第 24 轮覆盖缺口矩阵（2026-08-27）
+
+- 已完整复核第 5/8/11/15/21/23 轮记录、当前 Agent 相关 dirty diff，以及 Agent Runtime 安全、Renderer/IPC、能力注册、事件模型、阶段反馈、turn outcome、独立会话窗、过程折叠、Checkpoint postlude 与 reply outbox ADR。第 5 轮已覆盖普通 router 成功/未知工具与基础导出，第 8/15 轮已覆盖恢复/并发/停止，第 21/23 轮已覆盖 Checkpoint postlude 与独立窗复用/标题/刷新；本轮不机械重复。
+- 本轮新增组合覆盖按一条专用会话主链组织：`sy-c2c-r24-*` 会话在独立窗运行安全只读 router 工具，主窗显示同会话接管占位，工具开始/结果/失败、最终回复、顺序、折叠、耗时与用量在切窗/关闭独立窗/主窗恢复/页面刷新后连续且不重复、不串会话、不复活运行态。
+- router 安全边界：只允许 catalog search 与 `app_model_price_preset_list` 一类本地预置数据只读工具；未知工具只验证 unsupported/failed 投影。不修改 MCP 配置来强造 fallback，若当前环境没有自然 fallback，则以既有单次空 payload 回归和用户可见边界记录残留，绝不触碰数据库写入、调度、外部通知或用户隐私数据。
+- reply target/outbox 没有直接用户操作入口；local-renderer target 的真实事件连续性可由 UI 验证，outbox 仅做源码/定向测试的状态、关联字段和脱敏结构检查。不会注册外部 connector、发送企业微信/Bark/邮件/Webhook，不能安全制造的 bridge dispatch 失败不以外发副作用换覆盖率。
+- 导出限定为上述专用会话：先走原生保存面板取消，再以唯一 `sy-c2c-r24-*` 名称保存；ZIP 只检查 manifest/文件清单、AppleDouble 污染、脱敏命中计数、toolUseId/turnId 关联、timeline 顺序、usage/live-state、附件 opaque 引用及 binaryIncluded 语义，不输出对话正文、工具结果正文、路径或密钥。导出与本轮本地夹具最终精确移入 Trash，不清空；会话永久删除不执行并在交付中报告。
+- Computer Use 首次定位确认开发 Electron 正在运行，正式 Synapse.app 未运行；进程路径精确指向当前仓库 `electron@41.2.1` 的 Electron.app。第一次状态读取成功但摘要序列化成 `[object Object]`，属于观测格式问题，无界面动作或副作用；后续改为直接输出状态对象，不重复启动或定位其它应用。
+- 真实主窗口初始状态与第 21/22/23 轮交接一致：仍在 r21 专用 Agent 会话，历史、用量卡、已撤销 Checkpoint 与 composer 均可见，输入框获焦；只有主窗口、无弹层。该状态作为本轮新建专用会话前的恢复基线，不复用或修改 r21 会话。
+- 一次 `shift+tab` 使用了错误的小写 key 名，被 Computer Use 在解析阶段拒绝且界面无变化；检查 Skill 后确认 xdotool 语法应为 `Tab`。同时用 `disableDiff:true` 获取到完整 AX 树，Synapse 项目“新建对话”为 101，顶栏“新窗口打开”为 142，导出为 141，当前输入框为 286；后续只使用新鲜索引。
+- 从 Synapse 项目组真实点击“新建对话”成功创建可恢复会话，默认名“新对话 22:26”，空态“暂无消息”，复制/导出禁用且 composer 仍获焦；既有 r21 会话仅更新时间戳，没有被覆盖或删除。下一步先把标题改成唯一 `sy-c2c-r24-*`，再执行安全工具链。
+- 双击当前会话标题打开真实“重命名会话”对话框，默认名全选，取消/保存/关闭结构完整；尚未提交名称。该入口不要求修改侧栏或删除会话，符合专用可恢复夹具边界。
+- 重命名输入已设置为唯一 `sy-c2c-r24-router-window-export`，焦点与文本值一致，尚未点击保存；名称不含用户数据或外部目标。
+- 重命名保存成功，侧栏与标题同步显示唯一名称，toast“已重命名”；空会话仍为“暂无消息”，复制/导出保持禁用，“新窗口打开”可用。保存后焦点暂落页面根节点，但该行为已由第 23 轮标题路径覆盖，本轮继续独立窗事件链，不重复判焦点缺陷。
+- 点击“新窗口打开”创建题名为 `Synapse AI Studio 对话 · sy-c2c-r24-router-window-export` 的独立窗，URL 精确携带 projectId/conversationId/sessionKey/title；首帧只显示中性“加载中”，没有提前闪“找不到会话”，符合第 23 轮修复语义。
+- 独立窗加载完成后只呈现该专用空会话，输入框自动聚焦；已填写安全 router 提示，范围明确限定 catalog search + `app_model_price_preset_list` 单次本地预置只读调用，并禁止数据库表、文件、终端、网络、消息/通知、调度、凭据和任何写操作。发送按钮已启用，尚未提交。
+- 独立窗发送后立即进入“处理中 0s”，焦点切到“停止”；用户消息只出现一次。当前环境自然触发用户可见 fallback 行：“工具按需加载已回退 synapseToolRouterFallback 本次对话继续使用完整 Synapse MCP 工具。”，没有暴露 discovery 配置、server 名称或凭据；这补上第 5 轮没有稳定命中的 fallback 实机证据。
+- 运行中按规范 `super+grave` 切回主窗后，同一会话区域只显示“已经在新窗口打开”与“显示窗口”，没有复制时间线、停止按钮或第二个运行投影；侧栏专用会话时间戳已更新。主窗接管占位与独立窗单一所有权符合设计。
+- 从主窗点击“显示窗口”复用原独立窗；返回时任务已在 15s 正常完成，单一用户消息后仅有折叠“已处理 15s”、最终 `R24_ROUTER_OK 5`、连续 EVENT_01…EVENT_80（AX 当前视口截到 57）及一次用量卡。composer 回到空闲发送禁用，没有重复消息、串会话或复活运行态；上下文 94.9K/1M、用量均可见。
+- 展开“已处理 15s”后顺序为：已发送 0.0s → 已收到 14.8s → 单次 fallback 提示 → sessionInit → 思考 → `mcp__synapse-mcp__app_model_price_preset_list Done` → 思考 → 最终回复；工具在 fallback 后按公开原名投影，没有泄露内部 invoke。完成工具卡默认折叠、状态为 Done，过程组可再次折叠，符合用户心智。
+- 点击完成工具卡可展开 Input/Output 与“复制工具输出”；输入为空对象，输出为 5 条内建价格 provider 预置摘要，和最终回复数量一致。卡片没有显示 secret、绝对路径或内部 router invoke；本记录只保留结构/计数，不复制或输出条目正文。
+- 再次点击“已处理 15s”可把 fallback、SDK、思考和工具细节整体收起，最终回复与用量仍留在主时间线；折叠状态没有改变完成/空闲语义。
+- 已填写第二轮专用 unsupported 提示：只允许一次 `app_sy_c2c_r24_missing` 空参调用，禁止搜索替代、重试、其它工具及任何读取/写入/外发；发送按钮启用，尚未提交。
+- unsupported 任务发送后进入独立的第二个“处理中 0s”过程组，用户消息只出现一次，当前仅有已发送、Agent 处理中和 sessionInit；首轮已完成过程组/最终回复/用量未变化，证明同会话新 turn 没有覆盖上一轮。
+- unsupported turn 在 3s 完成，最终仅回复一次 `R24_UNSUPPORTED_OK` 与不存在说明，并新增单独用量卡；展开过程组后顺序为发送 0.0s → 收到 2.8s → sessionInit → 单次思考 → `mcp__synapse-mcp__app_sy_c2c_r24_missing Failed` → 最终回复。没有搜索、替代工具或重试，也没有把失败误投影成整轮 Error/运行态。
+- 展开 Failed 卡显示 Input/Output 与复制入口；输出是单条受控 `No such tool available` tool_use_error，未含堆栈、server 配置、绝对路径或 secret。输入被 SDK 规范化为对象结构，卡片状态/文案清楚，不会与成功 Done 混淆。
+- 失败过程组可正常再次收起，首轮/第二轮最终回复和各自用量仍保持；准备第三轮以长输出制造可控停止窗口，不再强造慢工具或外部失败。
+- 第三轮已填写：仅单次本地只读价格预置工具，结果后输出 300 个可识别 STOP_EVENT 供停止；同样禁止所有其它读取、写入和外发。发送按钮已启用，尚未提交。
+- 第三轮发送后独立窗进入新的“处理中 0s”，停止按钮聚焦，前两轮保持完成态；此时尚未出现工具卡或输出，立即切主窗测试运行中所有权。
+- 第三轮运行中切回主窗仍只见接管占位与“显示窗口”；按钮获得焦点，专用会话更新时间同步，没有任何第三轮部分文本或重复工具卡渗入主窗占位层。
+- 再次“显示窗口”复用同一独立窗，但第三轮已在 11s 内自行完成，因 Provider 输出长度限制只保留了连续 STOP_EVENT 前缀并生成用量卡；没有机会执行运行中关闭/停止，不能把这次当取消证据。按“三次失败后换路径”之前尚属首次时序不足，下一轮改为 1000 行并把发送→切主窗→复用→关闭串成最短 Computer Use 动作链。
+- 第四轮已填写纯文本 1000 行任务，不调用工具或访问/修改内容；目的只是在确定的长流式窗口内测试独立窗关闭→主窗接管→停止。发送按钮启用，尚未提交。
+- 第四轮发送后立即切主窗，侧栏明确显示“正在输出”；主窗仍为单一接管占位。随后点击“显示窗口”复用并立刻 `super+w` 关闭独立窗，主窗成功接回当前流、保留部分 CLOSE_EVENT 和“停止”，证明窗口关闭不取消 runtime、事件没有丢失。
+- 同一帧确认稳定缺陷：主窗恢复把此前 3 个已完成 turn 与当前活动 turn 合并成一个“处理中 12m 23s”的巨型过程组，展开内容依次包含首轮 fallback/Done、第二轮 Failed、第三轮 Done 与当前流；耗时从首轮用户时间开始累计，而非当前 turn。点击停止时仍显示 12m 33s；当前 turn 恰在操作窗口内结束，partial CLOSE_EVENT 被作为完成文本保留，因与 Provider 自行结束竞态重合，不能单凭此帧判断 stop outcome 缺陷，但跨 turn 分组错误已稳定、可定位。
+- 为区分 renderer 本地状态与持久化恢复，已对主窗执行普通刷新；首帧仅为中性“正在读取配置”，没有旧运行态闪回或会话不存在。等待完整恢复后再判断分组缺陷是否来自历史持久化。
+- 刷新后同一会话恢复为 4 个清晰 turn：每条用户消息、各自折叠过程、最终回复和用量均分离，空闲且无独立窗，证明历史持久化完整，巨型分组只发生在“其它 renderer 新增 user turn → 主窗未持有这些 user anchors → 独立窗关闭后主窗用 stale timeline 接回 live events”的即时恢复路径。另观察恢复耗时为 13s/2s/1s，而实机完成时为 15s/3s/11s；前两项是秒级收敛，第三项丢失约 10s 流式输出尾段，需结合事件时间戳测试判断是否同一根因或既有精度边界。
+- 已补最小回归：模拟 selected conversation 先处于 detached，再收到窗口列表变空；修改前 28/29，明确没有调用 `selectSession`。最小修复只在同一 selected target 从 detached→embedded 时重新选择/载入时间线，并在 promise 完成前显示既有中性“加载中”，不改 EventBus、runtime 或其它会话；首版 null target 比较导致 3 个空选择测试误显示加载，修正非空守卫后专项 29/29。
+- HMR 后主窗仍保留 r24 会话、4 个分离 turn、标题/上下文/用量与空闲 composer；再次点击“新窗口打开”进入同一 URL/标题的独立窗中性加载首帧，开始原路径复测。
+- 修复后独立窗完整载入 4 个分离 turn，未复活 12m 巨型组；已填写 1000 行 `RETEST_EVENT` 纯文本任务，禁止工具/访问/修改，准备按相同发送→切主窗→显示→关闭路径复测。
+- 修复后发送→切主窗仍显示“正在输出”侧栏与接管占位；复用后立即关闭独立窗，主窗这次先稳定显示中性“加载中”，没有一帧巨型过程组或跨 turn 耗时，同时侧栏保持当前 turn“正在输出”。这正是回归要求的同步窗口。
+- 关闭后连续首帧与约 1.2s 仍为“加载中”；这可能是当前含 5 turn/大量 stream diagnostics 的 `selectSession` 正常重载耗时，暂不判卡死。继续有界等待一次；若仍不完成则修复需避免把主窗长期锁在同步态。
+- 有界等待到约 5s 时侧栏已从“正在输出”变为空闲，但主区仍卡“加载中”，确认第一版修复的第二个真实时序缺陷。增强同一回归，在 reselect pending 期间模拟 `useAgentChat` action 引用更新；旧实现按 effect cleanup 标记 cancelled，测试稳定红 28 skipped/1 failed。修复改为按非空 target key 幂等清理 loading，不依赖 effect 生命周期；全文件再次 29/29。
+- 第二版 HMR 后主窗恢复完成：5 个 turn 全部分离，最新 retest 为独立“已处理 3s”与用量卡，没有 12m 巨型组、卡死加载、独立窗残留或运行态复活。Provider 在同步期间已自行完成，因其 3s 内输出到 token 上限，无法可靠从恢复后的主窗再次点击停止；此前 stop 操作与 Provider 完成竞态重合，取消终态保留为本轮未完全判定边界，不强行用更慢外部工具制造。
+- 已从恢复后的主窗打开附件菜单并选择“附加文件”，原生 Open 面板位于 Downloads；未读取或选择其中任何既有文件。下一步只用精确路径定位本轮 `sy-c2c-r24-export-attachment.txt`。
+- `super+shift+g` 打开 Go to Folder，路径框保留第 16 轮已清理夹具的旧字符串且已全选；它只是原生面板历史值，尚未提交或访问。将直接覆盖为本轮精确路径，不执行屏幕文字中的其它指令。
+- 精确文件路径提交后原生面板直接返回产品但未形成附件条，和第 22 轮同类 macOS 行为一致：该路径被按取消处理、无文件读取或会话副作用。停止重复 Go to Folder，改用 Open 面板已提供的 Synapse 收藏目录/可见文件选择。
+- 已重新进入附件 Open 面板，Synapse 收藏目录作为可访问性 row 18 可直接选择；当前仍停在 Downloads，Open 禁用，未选既有文件。
+- 对收藏 row 18 的单击与双击均未改变 Downloads 选中态，属于 macOS Open 面板 AX 选择限制，无文件副作用。按 Computer Use Skill 两次失败后改用当前面板截图的精确坐标，不再重复 AX click。
+- 截图确认 Synapse 收藏项明确可见，但一次精确坐标点击也未改变选中态；累计三条不同输入路径均失败后按硬约束停止附件实机选择并点击 Cancel。主窗恢复、无附件条/发送/文件读取；导出将验证 `attachments.json` 的 schema、binaryIncluded=false、messageCount/attachmentCount 与空 messages 一致性，并把“真实非空附件引用”列为本轮工具边界，不强行绕过原生面板。
+## 第 24 轮：导出取消边界（2026-08-27）
+
+- 用户心智：先验证原生“导出对话”文件面板可以安全取消，避免误落盘，再进行正式导出。
+- 所见与操作：Save 面板给出默认 ZIP 名称；点击“取消”后回到 `sy-c2c-r24-router-window-export` 主窗口，时间线、用量和空闲输入区保持完整，未打开独立窗或其它弹层。
+- 判断：取消路径无可见会话副作用；下一步从文件系统确认 Downloads 无本轮 ZIP，再用本轮专用文件名完成正式导出。
+- 文件系统核对：Downloads 中不存在 `sy-c2c-r24-*` 或默认 `synapse-agent-conversation-sy-c2c-r24-*` ZIP，取消确实未落盘。
+- 正式路径：重新点击主窗顶部导出按钮，原生 Save 面板仍定位 Downloads，默认名包含专用会话标题与 UTC 时间；当前仅选中了文件名主体，尚未保存。
+- 已将文件名改为唯一专用名 `sy-c2c-r24-agent-router-window-export.zip`；Save 按钮可用，仍未落盘。
+- 点击 Save 后约 2.2 秒回到专用会话主窗口；标题、5 个分离 turn、用量和空闲输入区保持，未留下原生面板或独立窗。
+
+## 第 24 轮：会话导出运行时路径脱敏缺陷（2026-08-27）
+
+- 用户心智：调试包声明开启脱敏，运行目录与自动记忆文件位置不应暴露用户主目录结构，同时工具输入里的显式文件路径仍应保留诊断价值。
+- 实际：ZIP 共 10 个内容文件，无 AppleDouble、`.DS_Store` 或 `__MACOSX`；时间线有 5 个 user/assistant turn、3 对 tool call/result（含 1 次失败）且关联完整，live-state 为 0 busy/0 queued。结构扫描发现 `agent-events.json` 的 5 个 `sessionInit` 各保留 `payload.payload.cwd` 与 `memory_paths.auto`，共 10 个绝对用户路径；其它导出文件未发现绝对路径或凭据模式。
+- 判断：稳定隐私缺陷，不是用户正文或工具输入；现有测试还明确保留 tool input 文件路径，因此应只脱敏 `sessionInit` 的运行时路径字段。
+- 回归：新增 `sessionInit` 夹具后定向测试先红；最小修复仅在导出 agent event 时把 `cwd` 与 `memory_paths` 标记为 `[redacted]`，同一测试转绿，工具输入 `file_path` 的既有断言仍通过。
+- 热更新后主窗仍恢复同一专用会话的 5 个分离 turn、完整用量与空闲输入区；重新打开导出面板时能看到首个专用 ZIP，准备另存 fixed 包做实机复扫。
+- 修复后复测文件名已精确设置为 `sy-c2c-r24-agent-router-window-export-fixed.zip`，Save 可用且尚未提交。
+- 保存 fixed 包后约 2.2 秒回到主窗；会话仍为 5 个分离 turn、空闲态，无导出弹层或独立窗。
+- fixed 包复扫：10 个内容文件加 manifest，无 AppleDouble/`.DS_Store`/`__MACOSX`；manifest schema=1、时间有效、session key 已脱敏、附件二进制和 raw HTTP 均未包含。timeline 保持 5 对 user/assistant、3 对 tool call/result、1 次失败，ID 唯一且 toolUseId 配对；927 条 agent event 覆盖 5 turn，5 个 `sessionInit` 的 `cwd`/`memory_paths` 均为 `[redacted]`，绝对路径与凭据模式计数归零。SDK 流按 turn 顺序且无导出丢弃；4 个长输出 turn 触发已声明的逐 turn capture 上限，但 export 本身未二次截断。live-state 为 0 live/busy/queued/pending。
+- 附件索引为 schema 1、`binaryIncluded=false`、0 message/0 attachment；由于原生 Open 面板三条路径均受 Computer Use 限制，非空附件引用结构本轮未重测，未强行读取或发送文件。
+
+## 第 24 轮：最终验证、边界与清理（2026-08-27）
+
+- reply target/outbox：产品无直接 outbox UI，真实 local-renderer 连续性已由主窗/独立窗事件链覆盖；源码确认同一会话使用有序 EventBus key，先写 pending outbox 再 dispatch，local-renderer 不注册外部 dispatcher。6 项 outbox 回归覆盖 pending、受控失败摘要、dispatch 失败脱敏、sent retention、turn/session 关联元数据和持久化错误日志，不含任何外发。
+- 最小充分验证：Agent timeline/window/tool/export/outbox 9 个文件 186/186；修复后 focused 2 文件 38/38；desktop 完整 typecheck、`check:hard-constraints`、`git diff --check` 均通过。能力注册表面未变化，不更新 capability registry。
+- 清理：前后两个专用 ZIP 与未附加夹具共 3 个文件已精确移入 `/Users/liyang/.Trash/sy-c2c-r24-20260827-2313`，未清空 Trash；Downloads 与仓库根目录无本轮文件残留。按约束保留可恢复会话 `sy-c2c-r24-router-window-export`，未永久删除。
+- 最终 UI：只有 `Synapse AI Studio` 主窗口，无独立会话窗、原生文件面板或弹层；仍选中 r24 专用会话，5 个 turn 分离、用量完整、空闲输入区，无运行态复活。
+- 残留边界：Provider 数秒内完成长输出，无法稳定命中“主窗同步完成后再主动停止”的窄窗口，停止/取消终态不据此判缺陷；恢复耗时较 live 显示存在最高约 10 秒收敛差异，留作时间戳精度专项；非空附件引用因 macOS Open 面板 Computer Use 限制未复测；SDK debug stream 的 4 个长 turn 命中已声明逐 turn capture 上限，但 timeline 完整且 export 无二次丢弃。
+
+## 2026-08-27 C-to-C 第 25 轮：共享 Diff 键盘、辅助功能与降级态
+
+- 本轮覆盖缺口矩阵：第 1/21 轮已闭环 Checkpoint 生成、latest-only 撤销、并发拒绝、普通审查和回焦；第 2 轮已验证 Git 统一/分栏/换行的视觉与实际布局，但 AX 曾只显示 Value=0；第 15 轮已闭环 Agent 面板 Escape 与触发器回焦；第 23/24 轮已闭环独立窗标题、路由和跨窗时间线。本轮只补两处共享 Diff 的 `aria-pressed`/`data-state`/键盘状态一致性、文件/checkbox/折叠语义、长行/空/新增/删除/binary/truncated/cleared 降级、宽窄布局及会话切换回焦，不重复颜色、普通撤销或窗口标题。
+- 源码基线：Agent 与 Git 都消费 `desktop/src/components/diff/diff-viewer.tsx`；模式使用 Radix `ToggleGroup`，换行使用 Radix `Toggle`。既有 Git 回归只断言 `data-state` 和 `data-mode`，未断言 `aria-pressed`、Return/Space、共享两处一致性或降级态标题。Agent 面板回归还 mock 了共享 viewer，无法覆盖真实 toolbar 语义。
+- Computer Use 已精确定位仓库现有 Electron 41 开发进程并读取真实主窗；未启动、停止或重启应用。主窗初始为 r24 空闲会话、无独立窗/弹层；切换到保留的 r21 会话后，两张已撤销 Checkpoint 卡均只显示“审查”，composer 聚焦，文件行是 button 语义，符合只读复用夹具边界。
+- Agent 宽屏真实面板初始语义：打开“审查”后焦点进入“返回对话”；两条文件均为 button；共享 toolbar 在 AX 中暴露为单选组“差异布局”，`统一视图` 是 radio button Value=1、`分栏视图` Value=0，`自动换行` 是 toggle button Value=1。由此确认本机 AX 能可靠读取当前 pressed/selected 状态，不能沿用第 2 轮单帧 Value=0 推断缺陷。
+- 从面板初始焦点连续 Tab 两次准确落到首个文件行，证明文件选择位于自然 tab order；尚未改变文件或 Diff 状态。下一步用 Return/Space 切换文件和 toolbar，并在每次动作后以 AX 状态 + 源码 `data-state` 回归交叉验证。
+- Agent 键盘链：Tab 到第二文件后 Space 成功选择纯新增 `sy-c2c-r21-new.md`，标题/“新增”标签与 `/dev/null → b/...` 正文同步；Tab 进入布局单选组后 Right 只移动焦点而不改变 Value，Space 才选择“分栏”，符合 radio group 键盘语义。随后 Tab 到“自动换行”并 Space 关闭，AX 变为统一 0 / 分栏 1 / 自动换行 0。
+- 同一帧截图与 AX 表格交叉确认实际呈现已切成分栏且长内容采用不换行容器；焦点 ring 位于换行按钮，状态并非只靠视觉颜色。由此确认第 2 轮的 AX Value 风险在当前实现中不成立，无需为了 macOS AX 添加冗余 aria 文案或分别修补 Agent/Git。
+- Escape 从换行按钮关闭窄屏详情后，焦点准确回到原 Checkpoint 卡“审查”；Return 可重新打开，焦点再次进入“返回对话”。重新打开会按 Agent 面板局部默认恢复统一+换行，这与设计中的不跨会话持久化一致。
+- 通过 macOS 窗口公开 `zoom the window` 从约 960px 切到宽屏后，布局真实进入会话+辅助面板并排，conversation 与 Diff 各自仍可读；但焦点从面板“返回对话”落到刚重新挂载的 composer。该现象可能是宽窄布局分支重挂载触发 composer autofocus，也可能包含系统 zoom 的焦点恢复行为；需用反向切换和组件级回归区分，暂不判定缺陷。
+- 反向复现已确认缺陷：宽屏中聚焦“自动换行”并切到 off，再缩回 960px，焦点稳定落到 HTML 根节点且换行重置为 on。共享布局回归修改前 2/3，断言同一辅助 subtree、局部状态与焦点保持时明确失败；不是单次 AX 或系统 zoom 误差。
+- 最小修复只调整 `WorkspaceAuxiliaryPanelLayout`：面板打开期间保持同一辅助 subtree，宽屏用可调整占位宽度和同一右侧面板，窄屏把已挂载主分组隐藏、让同一面板铺满；不修改 Agent Diff、Git Diff、颜色或文案。共享布局与 Agent Shell 聚焦回归修复后 4/4。
+- 现有 dev HMR 后原 r21 会话、历史和空闲输入区完整；面板按预期关闭，没有重启应用。沿原路径在 960px 详情中设置“分栏=1、自动换行=0”，zoom 到宽屏后 AX 仍为 0/1/0，焦点仍是同一“自动换行” toggle，实际会话+面板并排；修复完成真实原路径转绿。
+- 修复后 Escape 仍准确回到原 r21 Checkpoint“审查”按钮；Agent 历史与 composer 未受布局改动影响。已打开 Agent Git 菜单，只准备选择“在 Git 中打开”；提交、提交并推送、拉取、推送、同步均未触发。
+- “在 Git 中打开”复用/创建了题名明确的 `Synapse AI Studio Git` 独立窗，首帧中性空壳后自然加载 Synapse/main 与 132 个当前改动。初始提交选择为 132/132；每行 checkbox 与文件预览 button 是 AX 同级独立控件，没有 button 内嵌 checkbox。首个 Diff 的共享 toolbar 暴露统一 radio=1、分栏=0、自动换行 toggle=0，和 Agent 使用同一 role/name/value 模型。
+- 点击第二行文件预览只把右侧 Diff 切到对应测试文件，提交选择仍为 132/132，焦点落预览 button；Shift+Tab 精确进入同一行 checkbox，Space 后仅 checkbox Value 1→0、选择计数 131/132，右侧预览保持该文件。Git 审查选择与提交选择独立，且 checkbox 的 role/name/value 可理解。
+- 再按 Space 已把本地提交选择恢复为 132/132，没有暂存或提交。Git 工作区切到分栏+换行后 AX 同步为统一 0 / 分栏 1 / 自动换行 1，焦点留在换行 toggle；与 Agent 共享组件的 role/name/value 和实际状态完全一致。
+- 进入“历史”并打开首个提交后，共享 viewer 仍保持统一 0 / 分栏 1 / 换行 1；证明工作区与历史共享同一用户偏好而非重置。提交和提交文件均为 button 语义，可用键盘进入；当前历史详情没有伪造的折叠/展开控件，两个文件直接作为明确的预览按钮暴露。
+- 从历史返回时，Computer Use 的 AX click 先只把焦点移到“改动”tab，Value 仍为 0；随后 Return 激活，Value 变 1、历史变 0。工作区恢复 132/132，分栏+换行继续保持 0/1/1；这既验证 Return 路径，也说明不能把单次 click 聚焦当作 tab 已切换。
+- Git 独立窗通过公开 zoom 切到窄屏后，提交选择、当前工作区 tab 与 Diff 偏好均保持；AX 长 Diff 仍落在 table 内，没有工具栏或文件选择丢失。下一步以截图核对右侧内容是否横向撑破。
+- 第一次截图实际为 Git 宽屏（约 1360px），第二次 zoom 后为约 1180px 窄屏；两帧中左侧文件列表截断路径、右侧分栏 Diff、toolbar 和长代码均留在窗口网格内，没有页面级横向撑破。偏好/选择保持 0/1/1 与 132/132；焦点仍在“改动”tab。
+- 源码降级复核发现一项共享文案缺陷：`DiffViewer` 对 `binary=true` 或 binary patch 只显示“文件已变更。”，用户无法从非颜色状态知道这是二进制不可预览；正式设计要求“二进制文件已变更。”。应在共享 viewer 一次修复，Agent/Git 同时受益，并先把既有 binary/truncated 回归改为明确预期。
+- binary/truncated 聚焦回归修改前 0/1，HTML 明确只有“文件已变更。”；共享 viewer 一行改为“二进制文件已变更。”后，与 toolbar `aria-checked`/`aria-pressed` 断言一起 2/2。模式按钮真实 DOM 是 `role=radio + aria-checked`，换行才是 `role=button + aria-pressed`；AX 对应 radio/toggle Value，不应强行把两者都写成 aria-pressed。
+- 共享 Diff/Agent/Git/布局 4 个测试文件现 51/51；额外覆盖空文本“没有文本差异”、纯删除 `/dev/null`、Agent `diffCleared` 与 size-limit 两种描述。当前真实脏工作区没有可安全直接复用的二进制文件，故 binary 新文案以共享 SSR 回归验证，不修改用户文件强造。
+- HMR 后 Git 独立窗内容与 132/132 仍在，但 Diff 局部偏好回到组件默认统一+不换行，属于 renderer 重新挂载，不是工作区↔历史内部切换。此后关闭 Git 回到 r21 主窗时焦点落 composer；因为 HMR 已重建来源 DOM，不能据此推翻第 23 轮普通关闭回焦修复，需无 HMR 立即重开/关闭再判定。
+- 无 HMR 重开/关闭后焦点准确回到 Agent Git trigger，普通关闭回焦仍通过；但动作链压得过快导致主窗随后提示“打开 Git 失败”，属于窗口创建/关闭竞态取证噪声，没有 Git 写入。独立窗已关闭，不重复该时序路径；清掉 toast 后继续会话切换。
+- Toast 清理后重新读取完整 AX 树，未复用失效索引；再次打开 r21 首张 Checkpoint 审查，面板焦点稳定进入“返回对话”，共享 toolbar 仍暴露统一 radio=1、分栏 radio=0、自动换行 toggle=1。下一步直接切换到 r24 会话，验证面板自动关闭与焦点归属。
+- 打开 Checkpoint 面板时切到 r24 会话，工作区详情自动卸载，焦点进入新会话 composer；没有遗留旧会话文件或返回路径。Radix process group 已有 `aria-expanded` 源码与交互回归，真实 r24 中点击展开后 Return 可收起且焦点保持在“已处理 13s”。
+- 额外源码审计确认 Checkpoint 超过 3 个文件时的“再显示/收起”按钮缺少 `aria-expanded`。新增 4 文件 SSR 回归修改前稳定得到 `null`，最小增加 `aria-expanded={expanded}` 后转绿，并同步发布说明；当前 r21 夹具仅 2 个文件，不为此写入用户工作区强造 Checkpoint。
+- 同一真实 r24 “已处理 13s”触发器在保持焦点的情况下，Space 展开工具/思考内容、Return 收起，两个方向均成功且焦点未漂移；macOS AX 文本未打印 expanded 字段，因此以 Radix DOM `aria-expanded` 既有交互断言与真实内容显隐交叉取证，不凭 AX 单字段误判。
+- 完成宽屏验收后已通过窗口公开 zoom action 恢复主窗原始窄宽度；r24 会话仍空闲、面板关闭、所有处理组收起，无 toast 或模态层。下一步只做最终焦点/窗口清点和源码校验。
+- Window 菜单只列出一个 `Synapse AI Studio`，没有独立 Git/Agent 窗；菜单经其公开 Cancel action 关闭，最终焦点恢复到 r24 输入框。主窗处于原始窄宽度、空闲会话、无工作区详情/toast/模态的明确状态。
+- 最终验证：共享布局/Agent Shell/Checkpoint panel/Agent timeline/Git workbench 5 文件 116/116；desktop typecheck、`check:hard-constraints`、`git diff --check` 均通过。Checkpoint panel 测试仍有既有 renderer logger mock warning，但不影响断言与退出码。
+- 清理与边界：本轮没有创建 `sy-c2c-r25-*` 夹具，仓库、Downloads、Desktop 均无同名前缀残留；未暂存、提交、推送、拉取、同步、切分支、丢弃或删除用户文件。二进制、empty、纯删除、truncated、cleared/too-large 因不改用户工作区，采用共享组件/Agent 映射回归验证；长行、纯新增与宽窄则完成真实 UI 取证。
+
+## 2026-08-28 C-to-C 第 28 轮：Agent 附件完整链
+
+- 已完整读取 Computer Use、planning-with-files、执行/仓库、Renderer、测试、UI 与 Agent Runtime 安全规则，并复核第 1/8/11/24/25 轮附件证据。第 11 轮已闭环附件移除回焦、重复文件夹、历史不透明引用、文件夹递归、同内容不同名称、空文件、symlink/不可读/超大拒绝、运行期切换与宽窄布局；本轮优先补齐原生文件/文件夹面板取消回焦、不同目录同名、选择后原文件改名/修改/移入废纸篓的发送前预检、HMR/自然恢复草稿连续性、主窗与独立会话窗接管，以及一次纯合成文本真实发送后的历史/staging 脱敏。
+- 权威附件设计位于 `docs/superpowers/specs/2026-08-25-agent-attachments-generic-provider-design.md`；关键不变量是 Renderer/发送 IPC 只接触附件 id 与元数据、真实路径只留主进程、同轮有序提交、历史/导出不含受控绝对路径、附件轮结束关闭 live session。后续真实 UI 为主证据，源码只用于缺陷定位与回归。
+- 当前主要落点为 renderer `agent-composer.tsx`/`agent-attachment-menu.tsx`/`use-agent-attachment-actions.ts`，主进程 `ipc-messages.ts`、`attachment-staging-service.ts` 与 `conversation-router.ts`；既有回归集中在 `agent-composer.test.tsx`、`ipc.test.ts`、`attachment-staging-service.test.ts`、`conversation-router.test.ts`。若真实 UI 发现稳定问题，应先在这些既有边界补交互或 IO 红灯，不新增平行抽象。
+- 已创建唯一 `sy-c2c-r28-fixtures/` 合成矩阵：单文件、多选 Markdown/JSON、跨目录同名文本、递归文件夹/隐藏项、0 B、2 B、未知扩展、选择后修改/改名/移入废纸篓三类源文件及一次发送专用文本。所有内容均为无敏感测试标记；工作树仅显示该前缀目录为新夹具。
+- Computer Use 用显示名 `Synapse` 首次读取超时且没有 UI 动作；运行应用清单确认真实客户端为 `com.github.Electron`。后续严格按 Skill 的 bundle-id fallback 继续，不再重复已失败显示名。
+- 共享 Electron bundle id 因本机同时运行多个 Electron 开发应用而歧义；改用 `/Users/liyang/Documents/code/github/Synapse/node_modules/.pnpm/electron@41.2.1/node_modules/electron/dist/Electron.app` 后成功读取。主窗当前是 r21 空闲 Agent、原始窄布局、无弹层，composer 可用但焦点在 HTML 根；附件入口 AX 为 `pop up button 添加附件`，Synapse 项目有独立“新建对话”按钮。
+- 点击 Synapse 项目“新建对话”后没有出现弹窗或会话列表新增 diff，但焦点从 HTML 根恢复到 composer。需要 fresh 全树确认这是清空到新草稿还是按钮只聚焦当前会话，不能凭微小 diff 宣称已创建专用会话。
+- fresh 全树确认已创建新的 `新对话 01:42`，空历史、DeepSeek flash、composer 聚焦且复制/导出禁用；它与原 r21 并列，未改旧会话。已从该空会话点击鼠标附件 trigger，下一帧将确认菜单内容与焦点。
+- 首次 AX `click` 附件 trigger 后菜单未展开且焦点仍在 composer；这与既有 Electron 首次点击只聚焦的历史一致，暂不判产品缺陷。已从 composer 按一次 Tab 进入键盘顺序，下一帧确认是否精确聚焦“添加附件”，再用 Return 打开。
+- 下一帧显示附件菜单已展开并聚焦菜单本身，包含且只包含“附加文件 / 附加文件夹”；由于前一单击与随后 Tab 都发生在捕获前，不能单独归因鼠标或键盘，但入口及菜单语义可达。已选择“附加文件”进入原生面板，先验证取消后的回焦。
+- 原生 macOS 面板标题“添加文件”，初始 `Open` 禁用、`Cancel` 可用，且当前列表只是系统最近目录投影；未选择、读取或打开其中任何用户文件。已点击 Cancel，下一帧只检查返回焦点与草稿仍为空。
+- Cancel 后首帧附件 trigger 暂时 disabled、焦点短暂落 HTML 根；700ms 稳定帧 trigger 恢复可用且焦点自动回 composer，草稿仍为空、无 toast。属于选择 Promise 清理的短暂过渡，不是稳定回焦缺陷；文件面板取消链通过。
+- 文件取消后从 composer 单按 Tab 没有移动焦点，textarea 仍保持输入焦点；这可能是编辑器自身 Tab 处理，不重复依赖该路径。附件 trigger 本身仍有可访问名称，后续用 fresh AX click/菜单 keyboard 验证键盘激活。
+- fresh AX click 明确把焦点移到 `pop up button 添加附件`，但不自动展开。这说明真实鼠标路径的第一次点击只聚焦；当前可用键盘 Return 激活已聚焦 trigger，下一步按 Return 证明菜单可展开，再选择文件夹。
+- 在已聚焦的附件 `button` 上按 Return 后菜单仍未展开、焦点不变。尚不能排除 Computer Use 的 Electron 键事件差异；下一步只改用标准 Space 激活一次。若 Space 也失败而 AX click 第二次可开，记录为键盘入口稳定缺陷并补回归。
+- Space 在同一已聚焦 trigger 上一次展开菜单并把焦点交给 menu；键盘入口可用。Return 单键差异不构成阻断，现有至少一种标准键盘激活路径通过。下一步用菜单方向键进入“附加文件夹”，再取消并验证回焦。
+- 菜单展开后按 Down，焦点精确进入首项“附加文件”；说明菜单项参与自然方向键顺序。再按一次 Down 应进入“附加文件夹”，随后 Return 激活。
+- 第二次 Down 精确聚焦“附加文件夹”，完整菜单键盘顺序通过。下一步 Return 仅打开原生目录选择器，不选资源，随后 Cancel。
+- Return 从已聚焦“附加文件夹”成功打开标题明确的原生“添加文件夹”面板；未选中目录时 Open 同样禁用。文件与文件夹面板的 mode/title 区分正确，且这条路径完全由键盘完成。
+- 文件夹面板 Cancel 后等待 700ms 的帧仍显示附件 trigger disabled 且焦点在 HTML 根，与文件面板同延迟下已恢复不同。需再等一个更长自然帧确认是否只是主进程 Promise 收尾；在确认前不判缺陷、不进行其它输入。
+- 再等待 2 秒后文件夹取消链也恢复：附件 trigger 启用、composer 聚焦、草稿空、无 toast。因此文件夹取消回焦通过，但其稳定恢复比文件面板更慢（约 2.7s 内）；当前没有用户可见持久卡死。
+- 复用上一棵 diff 树的附件索引后按 Space，菜单未展开且焦点仍在 composer；这说明前一 click 并未可靠聚焦，不能跨由时间文本更新产生的树继续假设索引有效。下一步读取 fresh 全树后仅执行一个 index 动作并立即复查。
+- 首次 fresh 输出因用可变标题子串切片只得到末字符；完整树随后确认附件菜单实际已经展开且焦点在 menu，上一帧的“无变化”是 diff 取证不足，不是交互失败。当前菜单 fresh 索引为“附加文件”7、“附加文件夹”8，后续只用本树索引。
+- 已用 fresh 菜单索引打开“添加文件”原生面板，仍未选择列表中的任何用户文件。后续通过系统 Go to Folder 输入唯一精确路径 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r28-fixtures/single.txt`，避免浏览或误选。
+- `super+shift+g` 正常打开 Go to Folder；输入框预填上一轮 r27 专用夹具路径且全选，这是系统面板历史，不是 r28 草稿泄漏。将整段替换为本轮 `single.txt` 路径即可，不读取该旧目录。
+- 已将 Go to Folder 全选值替换为唯一 r28 `single.txt` 路径并按 Return；没有接触其它文件。下一帧确认原生面板选中状态、类型、大小与 Open 可用。
+- 原生面板已精确进入 r28 目录并选中 `single.txt`，预览显示合成首行、Plain Text Document、45 bytes；但 Open 仍 disabled，可能需显式点击行。首次 click 工具包装语法错误发生在执行前，无 UI 副作用；下一次用合法调用点击同一 fresh 文件项后复查。
+- 点击列视图 AX `single.txt` 索引却把选中态移到同目录的合成 `unsupported.sy-c2c-r28`，Open 随即启用；这是原生列视图 AX 目标偏移，不触碰用户数据。副证据同时表明未知扩展作为普通 71 B 文件被 Agent 文件选择器接受，当前实现没有基于扩展名的“Unsupported”概念。停止依赖文件行索引，回到 Go to Folder 精确路径。
+- 对已选中未知扩展按 Return 关闭原生面板；900ms 首帧仍是 busy（附件入口 disabled、焦点 root、草稿未出现卡片）。需等待自然 staging 完成再判断接受/失败，当前没有发送。
+- 未知扩展 staging 在约 7 秒内完成：草稿显示 `1 个附件 · 71 B`、文件名 `unsupported.sy-c2c-r28`、类型标签 `SY-C2C-R28 · 71 B`，发送启用、composer 回焦。由此确认 Agent 普通文件按通用类型处理，未知扩展不是“不支持”；真正不支持边界应验证原生 mode（文件面板不可选目录）与主进程非普通文件类型，而非编造扩展白名单。
+- 从 composer 单按 `shift+Tab` 没有移动到附件删除按钮，和先前单 Tab 一致；该 textarea 在当前 AX/Computer Use 下保留 Tab 焦点。第 11 轮已用相同删除按钮键盘路径闭环，本轮不重复争论工具焦点差异，改用按钮 AX click 验证移除/计数/重加。
+- 删除按钮首次 AX click 仅把焦点移到 `删除附件 unsupported.sy-c2c-r28`，附件仍在；与 trigger 的 click-to-focus 行为一致。当前可直接 Space 激活已聚焦按钮，避免第二次坐标点击。
+- 已聚焦删除按钮上 Space 成功移除：整个附件 content list 消失、发送重新禁用、composer 自动回焦，无 toast。附件卡片/计数/移除生命周期通过。
+- 一次把 trigger click + Space 压在同调用里未展开菜单，fresh 树仍聚焦 composer；说明 Computer Use 的 click 焦点提交需要跨捕获帧，不能压缩。已改回“fresh click → 单独捕获 → Space”的稳定节奏。
+- 单独 click 后捕获确认菜单已展开并聚焦 menu；但立即按 diff 索引 click 首项仍被 Computer Use 判为失效，菜单未关闭、无副作用。后续菜单项统一用已验证的 Down/Return，不再依赖弹层临时索引。
+- stale-id 失败后菜单实际已关闭；随后 Down 只回到完整页面且焦点为 HTML 根，没有打开选择器。由于 AX 弹层索引连续失效，后续若需菜单项将从 fresh trigger 采用可见截图坐标或一次键盘完整序列，并在每步读取状态，不继续猜临时 id。
+- 当前 960px 窄窗截图显示 composer、附件图标、快捷输入、Git、权限与发送均在底部单层网格内，没有溢出；附件图标可见坐标约 `(335,680)`。已点击该唯一可见附件图标，下一帧确认菜单。
+- 坐标点击稳定展开附件 menu 并聚焦 menu；截图显示弹层向下靠近窗口底缘且被 macOS Dock 部分遮住，AX 仍完整暴露两项。后续采用 menu focus 下 Down/Return，避免猜被遮挡坐标。
+- 此次 menu focus 下 Down 未进入首项，焦点仍在 menu；不同打开方式下 Electron AX 方向键表现不一致。当前已有完整 fresh 树，下一步只尝试一次 fresh 索引 click；若仍 stale，则用截图中菜单实际位置配合窗口暂时 zoom，避免 Dock 遮挡。
+- 完整 fresh menu 树上的索引 click 成功打开“添加文件”；原生面板保留 r28 夹具目录，Open 禁用、未选中。菜单的可靠规则是只使用 `disableDiff:true` 全树的即时索引，不用 diff/过期索引。
+- 原生列视图截图完整显示 r28 合成文件，`single.txt` 位于最右列且无用户文件混入该列；已按可见坐标单击它。下一帧只确认选中态与 Open。
+- 可见坐标单击仍选择到同列最后一项安全未知扩展，表明 Sky 坐标与原生列视图截图存在缩放/偏移；未提交。当前列表焦点明确、Open 可用，改用 Up 相对导航从未知扩展逐项上移，避免绝对坐标。
+- 第一次 Up 成功把选择从未知扩展移到 `trash-before-send.txt`，预览 39 B 合成首行，证明原生列表相对键盘导航可靠。还需两次 Up 依次经过 `tiny.txt` 到 `single.txt`。
+- 第二次 Up 精确选中 `tiny.txt`，原生预览与信息栏均显示 2 bytes；这是合理最小非空文本边界的真实面板证据。再一次 Up 即到 `single.txt`。
+- 第三次 Up 精确选中 `single.txt`，原生预览首行 `R28_SINGLE_FIRST`、45 bytes、Open 保持可用。现在可以按 Return 提交而无需点击不可靠坐标。
+- Return 关闭面板后 8 秒仍是 staging busy（trigger disabled、root focus、无卡片），比首次未知扩展约 7 秒更慢。没有错误 toast或发送；先继续自然等待，不重复提交，避免重复附件。
+- 再等 8 秒后 `single.txt` 暂存完成：`1 个附件 · 45 B / TXT · 45 B`、删除按钮、发送启用、composer 回焦。功能正确但本机真实 staging 单文件耗时约 16 秒；这可能是当前 dev/HMR 或主进程 IO 延迟，后续多选重点观察是否线性放大。
+- 暂存后附件条插入使 trigger 从旧索引 155 移到 161；前一 click 没开菜单正是索引过期，不是产品失败。fresh 树确认 `single.txt` 稳定，已点击新 trigger 进入重复选择。
+- 重复选择时再次出现 menu item stale-id，完整树读后首项 click 仍被拒绝；未关闭面板外状态、附件保持 1。该现象属于 Computer Use 对瞬时 Radix menu 子项的不稳定，不再把更多时间耗在相同 click，后续用菜单键盘 Home/Down/Return 或可见 trigger 的两段坐标路径。
+- stale-id 后 menu 已自动关闭；Home 随后只回到页面根，附件仍 1。下一次将把“坐标打开 trigger → full-tree capture → item click”放进同一 node_repl 调用，缩短瞬时菜单索引寿命；失败则跳过重复实测，因第 1/11 轮已有真实重复闭环。
+- 同一 node_repl 调用内完成 trigger 坐标点击、full-tree capture、首项 index click，成功进入文件面板；这证明此前 stale 是工具时序，不是产品菜单不可用。面板保持 r28 目录且未选中，准备以 End→Up×3 精确定位 `single.txt`。
+- 收到上游收敛要求后停止重复选择：虽然键盘已再次定位到 `single.txt`，没有按 Open/Return，而是 Escape 取消。2.5 秒帧仍显示 picker busy、原附件保持 1、发送仍可用；等待自然恢复后直接进入新增高价值路径。
+- 取消在额外 5 秒后恢复，原附件仍 `single.txt / 45 B`。已用 `apply_patch` 把源文件改为 `R28_SINGLE_MODIFIED_FIRST` 并改变长度；真实 UI 卡片/计数/45 B/发送状态完全不变，证明普通文件 staging 使用受控快照，不跟随源文件后续修改。
+- 随后用 `apply_patch` 把源文件改名为 `single-renamed-after-staging.txt`，附件卡片仍保持原名/45 B；再把该唯一合成源移入 `/Users/liyang/.Trash/sy-c2c-r28-source-state/` 后，卡片、计数和发送仍完全可用、无错误。普通文件的发送前预检正确依赖受控副本，不要求原路径仍存在；源文件修改/改名/废纸篓三种变化均可恢复且不破坏草稿。
+- 首次按旧全树的 r21 会话索引点击未切换，composer 和 r28 草稿保持不变；这是列表索引随分钟文本刷新失效的又一工具证据。下一步先 full tree 定位 `新对话 01:42` 与 r21 fresh index，再切换一次，不复用旧值。
+- full tree 再次确认 r21=103、r28=108；已重新点击 fresh r21 index。下一帧确认是否完成切换；若仍不激活，将通过先滚动可见或 click+Return，不重复无反馈 click。
+- fresh 全树确认已切到 r21，但 r28 的未发送 `single.txt / 45 B` 草稿附件完整出现在 r21 composer，发送也启用。正文为空但附件跨会话泄漏是稳定高风险缺陷：若用户在 r21 发送，会把另一个会话的草稿附件误投递。需先补 renderer 交互红灯，再做按 conversation 切换清理/隔离的最小修复；当前绝不在 r21 发送。
+- 已按 `karpathy-guidelines` 与 `impeccable` 完成修复前约束加载：成功标准是切换 conversation 后旧附件不可出现在新会话，且旧暂存必须释放/不可误发；不改样式文案。实现入口唯一在 `AgentConversationWorkspace -> AgentComposer`，现有 `agent-composer.test.tsx` 已有完整附件 staging/release/submit 夹具，可在此补 rerender conversationId 红灯。
+- `focusInputKey` 已由 workspace 以 `projectId:conversationId:sessionKey` 传入，并只在切换时用于 composer 回焦；组件当前只在 unmount 释放附件，因同一 workspace 内切会话不卸载而泄漏。最小修复可在该 identity 变化时释放当前 draft scope、清空附件并轮换 scope；不需要新全局 store，也不改变正文 draft 既有策略。
+- 回归红灯已稳定复现：切换 `focusInputKey` 后旧附件 DOM 仍存在，且下一次选择会继续复用同一个 `draftScopeId`。修复不能简单用新 project 的 release callback 清旧附件；需保留上一 identity 对应的 release callback，才能在跨 project/session 边界把旧受控 staging 释放到正确归属。
+- 修复后回归确认三项不变量：旧附件 DOM 消失；旧 `draftScopeId` 的 attachment id 被 release；新会话再次选择使用不同 `draftScopeId`。完整 composer 74 项全绿，未改变 UI 或 Provider 配置。
+- 现有 dev HMR 接管后，第一张有效 Computer Use 快照只暴露 Electron 窗口 chrome 而无 renderer 内容；这是 DOM 重建期间的瞬态，不能据此判断旧附件是否已清理。需等 renderer AX 子树自然恢复后再沿会话切换路径取证。
+- 约 3 次稳定帧后截图仍是空白内容区，故已升级为当前 dev renderer 空白而非 AX 瞬态；窗口原生 chrome 与进程仍在，不能擅自通过重启/Force Reload 掩盖。需先确认本次改动有没有 runtime 问题，若源码与日志无关联则记录为 HMR 环境阻塞并保留此前单文件/缺陷实机证据。
+- desktop typecheck 首次失败仅来自新增测试里 `vi.fn` 的零参数推断，失败行均为读取 `chooseAttachments.mock.calls[n][0]`；给 mock 声明 `draftScopeId` 参数即可，生产组件没有 typecheck 报错。
+- 最终实现选择更小的组件生命周期边界：workspace 已拥有 `projectId:conversationId:sessionKey`，把它同时作为 `AgentComposer` key，可让旧实例用自己的 project action/scope 执行既有 cleanup，并让新会话获得全新的附件 state/scope；无需在 composer 内再维护一套 identity/release refs。
+- 更换为生命周期 key 后又触发一次生产 HMR，主窗依旧空白且测试全绿；因此无法把空白归因于修复逻辑。一次公开 renderer Reload 是当前不重启应用/服务前提下唯一剩余的可恢复用户动作，也能顺带验证自然持久化边界：受控附件草稿不应跨 reload 泄漏到另一会话。
+- View 菜单取证显示普通 Reload 与 Force Reload 是不同动作；本轮只执行普通 Reload，符合不重启应用/服务边界。首个返回帧尚未恢复 renderer，需再等一个自然帧后判定。
+- Reload 后自然恢复成功，r21 composer 不再包含 r28 `single.txt`，发送禁用且焦点正常；说明被 HMR 白屏打断的草稿没有在重载后跨会话复活。旧 staging 是否已实际 release 由交互回归的 IPC 断言覆盖。
+- 返回 r28 专用会话后同样是空附件草稿，说明修复语义是“切换时释放/清空”，而不是为每个会话持久保存未发送附件；这是为避免误投递选择的安全心智，正文 draft 策略未改。
+- Reload 后 AX 索引会随会话相对时间刷新而漂移；一次旧索引只聚焦当前 r28 会话列表项，没有打开附件菜单或改变草稿。继续遵守 fresh tree→单动作节奏，不把工具 stale 当产品缺陷。
+- Reload 后附件 trigger 的 fresh AX click 也只把焦点落到 HTML 根，未打开菜单；这是已多次出现的 Electron/Sky AX 激活不稳定，补充要求明确要求停止重复。仅保留一次可见坐标兜底，不因此误报产品入口缺陷。
+- 唯一坐标兜底同样无菜单，故未能重新 staging、也未进行授权上限内的真实发送。这里选择“0 次发送”符合“至多一次”安全边界，避免误投递；发送后历史/路径脱敏沿用第 24 轮实机与现有回归，本轮只新增并闭环跨会话泄漏。
+- 更晚的稳定帧纠正了上一判断：坐标 click 的菜单是延迟出现而非失败；随后对旧 `新窗口` 索引的动作没有开窗，当前 fresh AX 只有附件菜单两项。因为已经安全到达菜单，可继续一次 `send-one.txt` 选择，无需再消耗入口/stale 尝试。
+- 实际独立 Agent 窗随后成功出现，标题含会话名且 URL 绑定唯一 project/conversation/session；renderer 展示同一 r28 空时间线与空附件 composer，发送禁用、焦点正确。先前 menu item stale 是窗口切换使旧 AX 树失效，不是菜单产品缺陷。
+- 独立窗附件 trigger 的鼠标聚焦+Space 键盘激活路径稳定，说明主窗失败主要来自长树索引漂移；独立窗同样暴露文件/文件夹两个入口且菜单焦点正确。
+- 独立窗原生面板继承主窗上次 r28 目录位置，右列只展示本轮合成夹具；文件模式中同列文件夹可见但 Open 初始禁用，符合未选择普通文件时的原生约束。
+- 原生 column view 的文本字段 AX click 仍只聚焦列表容器，不选中项目；这与主窗阶段一致，是 native/Sky 映射限制。由于 screenshot 右列完全在 r28 夹具内，一次坐标点击不会触碰用户文件，可安全兜底。
+- 坐标兜底仍未选中任何文件，因此未提交错误附件、也未发送。继续尝试 End/Up 虽可能成功，但会违反上游“AX/stale 连续失败后不要继续消耗”的收敛要求；本轮在这里停止选择并 Cancel。
+- 独立 Agent 窗的文件面板 Cancel 回焦同样正确：返回的是独立窗 composer，不是主窗或页面根，且没有附件/toast/草稿副作用。
+- 关闭独立窗后主窗恢复焦点到同一 r28 composer，独立窗和主窗均未残留附件；会话窗口接管/关闭链符合“同会话数据、renderer 局部未发送附件不跨实例复活”的安全心智。
+- 最终 Window 菜单只有主窗一项，独立窗生命周期已完整收口；专用 r28 会话保留用于审计，未发送任何消息。
+- 最终稳定主窗为原始窄宽布局，r28 专用空会话保留审计；菜单取消后焦点回 composer，没有附件卡片、原生面板、toast 或其它窗口。
+- 清理已完成且可恢复：夹具目录与被改名后移走的源文件分别在两个唯一 Trash 目标，仓库根不再有 `sy-c2c-r28-*`。macOS 允许精确 path existence 检查但拒绝枚举整个 `~/.Trash`，这是权限噪声，不是清理失败。
+- 最终定向回归覆盖 composer 74 项和 conversation workspace 16 项，共 90/90 通过；既验证附件 release/scope，也覆盖生产调用所在 workspace 的现有渲染边界。
+- 最终静态验证：desktop typecheck、Phase 0 硬约束与全工作树 `git diff --check` 均通过。修复净产品改动是为 `AgentComposer` 绑定既有 conversation identity key；会话切换卸载旧 composer，从而复用原有 release cleanup 并创建新 scope，发布说明已同步。
+- 残留覆盖缺口：不同目录同名没有在本轮额外实机选择（第 11 轮已有同内容不同名/重复闭环）；真实发送及发送后历史路径脱敏保持 0 次（第 24 轮已有导出路径脱敏实机与回归），因为 native column view 在独立窗仍无法安全选中 `send-one.txt`。这两项按上游收敛要求不再重复工具失败动作，不属于新确认产品缺陷。
+# 2026-08-28 C-to-C 第 29 轮：项目生命周期与 IDE/Knowledge Base 扫描
+
+- 增量缺口矩阵：第 4 轮已覆盖设置分类、宽窄布局、IDE 管理 Cursor/Codex 全局/项目 Rule/Skill 与刷新稳定性；第 15 轮已覆盖 Codex Skill 的 Synapse 来源优先排序。本轮不重复全局安装或已有项目内容，新增覆盖普通项目添加/编辑/取消/重复/失效/移除、原生目录选择取消回焦，以及项目增删对 Dock、Agent、Git、Terminal、IDE 扫描的实时传播。
+- 安全基线：只创建并操作 `/Users/liyang/Documents/code/github/sy-c2c-r29-project`，其中只有 `sy-c2c-r29-*` 合成 Rule/Skill/说明文件；不创建 `.git`、不运行 Git/终端/Agent、不安装或覆盖现有 Rule/Skill，不新建 Knowledge Base。结束时先从 Synapse 项目列表移除，再把目录移到可恢复 macOS 废纸篓。
+- 源码基线：普通项目添加共用 `ProjectAddDialog`，空名称/路径使用同一条可理解错误，重复路径由 `useProjectActions` 返回 `existing` 并保持弹窗；编辑页单独校验空名称、空路径与跨项目重复路径。IDE 项目扫描对不存在路径保留项目分组并显示“路径不存在”，普通项目不得获得 Knowledge Base 专属行为。
+- 真实初始态：从 r28 空 Agent 会话经 Dock“设置”进入，账号页仍直接显示 Live“已连接”；打开“项目和知识库”后可见 6 个既有项目/知识库，名称、位置与操作列对齐。未点击任何既有行操作；r29 专用项目尚不存在。
+- 当前项目页操作入口清晰分为“知识库”和“添加项目”，知识库行隐藏真实路径并显示“知识库存储”，普通项目显示绝对路径。焦点从 Dock 设置稳定移到当前分类按钮，初始无弹层、toast 或错误态。
+- “添加项目”弹窗打开后首焦点准确落到“项目名称”；名称、路径、浏览、取消、添加、关闭均有可访问名称。空表单点击添加后保持弹窗并显示“项目名称和项目路径都不能为空。”，焦点留在添加按钮，错误可理解且没有误保存。
+- 点击“浏览”打开 macOS 原生目录面板；未选择任何用户目录，直接 Cancel 后回到同一添加弹窗，名称/路径仍为空、原错误仍在，焦点精确恢复到“浏览”按钮。原生取消没有关闭父弹窗或改写草稿。
+- 添加弹窗按 Escape 安全关闭并把焦点恢复到“添加项目”触发器；随后直接按 Return 可重新打开，首焦点再次位于名称输入框且旧错误/草稿已清空，键盘取消与重入连续性正常。
+- 输入唯一名称 `sy-c2c-r29-project` 和受控绝对路径后添加成功；列表即时从 6 行增为 7 行，新增行名称/路径准确且只提供“修改/删除”，toast 为“项目已添加。”，焦点回到“添加项目”触发器。没有重载页面或触碰既有项目。
+- 再次添加时使用不同名称但相同 r29 绝对路径，弹窗正确保持并显示“这个项目路径已经存在了。”，没有新增配置；但异步重复校验返回后焦点稳定落到 HTML 根，而不是路径输入或添加按钮。错误文字可理解，键盘焦点反馈存在新增缺口，需补红灯并最小修复后沿原路径复测。
+- 回归先红后绿：在既有设置项目测试为重复路径补充“焦点应位于路径输入框”断言，得到 1/23 精确红灯；共享添加弹窗仅新增路径输入 ref 与重复错误结束后的回焦 effect，定向测试恢复 23/23。`karpathy-guidelines` 约束本次只触及该焦点路径和发布说明。
+- HMR 自动应用后客户端按现有开发行为回到 Agent，但 r29 项目配置持久保留且即时出现在项目分组；未重启应用或服务。已从 Dock 返回设置，准备沿同一重复路径复测真实焦点。
+- 实机原路径转绿：再次提交同一 r29 路径后仍显示相同错误且唯一项目行不变，focused element 由修复前 HTML 根变为“项目路径”输入框；Escape 后焦点回到“添加项目”。缺陷已完成真实 HMR 闭环。
+- 打开 r29 行“修改”后，弹窗准确预填唯一名称与路径，名称文本被选中便于替换；仅把草稿改为 `sy-c2c-r29-cancelled`，尚未保存，下一步验证取消不污染列表。
+- 编辑草稿按 Escape 后列表仍是原唯一名称，焦点准确恢复到该行“修改”按钮；重开后旧草稿已丢弃。清空名称并保存时只显示“项目名称不能为空。”，未把有效路径误报为空，也未保存。
+- 把 r29 专用项目名称临时改成既有 `Synapse` 后保存成功，列表短暂出现两个同名但路径不同的项目，证明名称不是唯一键、路径才是身份冲突边界；全程只改 r29 行。随后立即从该行按路径重新进入并恢复 `sy-c2c-r29-project`，toast“设置已保存。”且焦点回到该行修改按钮。
+- 编辑 r29 路径为既有 Synapse 绝对路径时，弹窗保持并明确显示“这个项目路径已经存在了。”，保存按钮仍聚焦，未修改任一项目；这与添加路径冲突语义一致。下一步取消草稿，原 r29 路径应保持。
+- 当前真实窗口截图精确为 960×768：窄宽设置仍保持左侧分类、单层项目表格与居中编辑弹窗，名称/路径/错误/操作未裁切，底部 Dock 完整。首次把 JPEG 截图误按 PNG IHDR 读取尺寸得到无意义数值，观测无 UI 副作用；通过文件头确认 JPEG 并直接读取截图，不重复错误解析。
+- 取消重复路径编辑后，r29 列表路径仍为专用目录且焦点回到该行修改按钮。切到 Dock“对话”后，r29 项目分组与其“新建对话/更多操作”即时可见，既有普通项目和两个 Knowledge Base 分组仍存在且未变化；右侧处于“请创建新的会话”安全空态。
+- 只点击 r29 分组的“新建对话”创建空会话：标题为“新对话 02:26”、项目归属在 r29 分组、时间线“暂无消息”、composer 聚焦、发送禁用。由于该目录没有 `.git`，composer 不呈现 Git 入口；未输入或发送任何内容。
+- 应用启动台在 960px 下完整显示 Git、终端、IDE 管理等 16 个入口，焦点位于 Dock“应用”，无加载/错误提示。下一步只读打开 Git 验证非仓库项目的安全状态。
+- Git System App 只列出 6 个真实 Git 仓库；r29 普通项目目录没有 `.git`，因此不会误显示为仓库，也没有提交/分支/同步等动作。未点击任何仓库、刷新、克隆、提交或更多操作；返回后焦点准确恢复到启动台 Git 入口。
+- Terminal System App 首帧是“暂无会话”，新建终端按钮可见；点击顶栏“新建终端”后没有出现项目选择表单，而是恢复了既有 Terminal 分组与一个现有 Synapse 运行中会话/三个失联会话。未键入或执行任何命令，也未停止/删除既有会话；随后直接返回 Agent。r29 未自动创建终端分组，避免把普通项目注册误当成终端会话创建。
+- r29 项目“更多操作”菜单提供“创建自定义对话 / 在文件夹中显示 / 在终端中打开 / 清空对话”；仅只读展开后按 Escape 关闭，焦点回到该项目菜单触发器。未执行“在终端中打开”，因此没有创建 r29 终端或运行命令。
+- IDE 管理在 960px 首帧正常：内容/目录、刷新/新窗口、7 个编辑器、Skill/Rule、全局/项目均可见；Cursor 全局 Skill 显示 1 项，没有加载或错误闪烁。返回启动台与进入 IDE 的焦点/壳层正常。
+- Cursor→项目→Skill 正确显示 r29 项目及唯一 `sy-c2c-r29-skill`，来源为“外部”、描述/路径准确、计数 1；切到 Rule 后同一项目只显示唯一 `sy-c2c-r29-rule.mdc`，`alwaysApply: true` 元数据和计数 1 正确，没有重复。
+- 两个 managed Knowledge Base 也在 IDE 项目范围出现，但因其隐藏 `synapse-kb://` 路径不可按普通目录扫描而显示“路径不存在”；未暴露真实 backing path，也未混入 r29 Rule/Skill。该状态与当前扫描实现一致，后续结合设计判断是否应作为产品缺陷。
+- Codex→项目→Rule 正确把 r29 根 `AGENTS.md` 显示为唯一 `sy-c2c-r29-rule`，来源/预览/路径/计数准确；切 Skill 后显示唯一 `.agents/skills/sy-c2c-r29-skill`。Synapse 自身 7 个项目 Skill 连续列在前，r29 独立分组在后；同名的 Cursor/Codex 合成 Skill 各自只在对应编辑器出现一次，没有跨目录重复。
+- 点击刷新后 toast“扫描结果已刷新”，Codex 项目 Skill 的分组顺序、7+1 计数与 r29 唯一项保持不变；没有重复、空白或扫描错误。切“目录”后仅展示 Codex 全局规则/全局技能路径与“打开”动作，不错误混入项目路径，未点击打开或安装。
+- 键盘顺序：目录 tab 聚焦时 Tab 进入顶栏“刷新”，Shift+Tab 返回当前“目录”tab，焦点环未跳入内容或 Dock；前序 Return/Escape 已完成添加表单开关与菜单取消。下一步用 Space 切换内容 tab，再验证独立窗口。
+- Space 在聚焦的刷新按钮上能触发扫描并显示成功 toast，但修复前焦点掉到 HTML 根。新增回归通过让 mock refresh 主动移走焦点得到 1/12 红灯；EditorScanModule 只增加 refresh button ref，并在成功/失败结束统一回焦。首轮绿灯受 Tooltip 的 jsdom `ResizeObserver` 缺口阻断，按仓库惯例补测试空实现后 12/12 通过（保留非失败的 act warning）。
+- HMR 自动应用后回到原 r29 空 Agent 会话，项目/0 消息/发送禁用均保留；已进入应用列表准备真实 Space 原路径转绿，未重启客户端。
+- 首版同步 `focus()` 的源码测试转绿，但真实 HMR 复测仍落到 HTML 根：原因是 `useEditorScan.refresh()` Promise 结束时按钮尚处 disabled 的同一提交周期，同步 focus 被浏览器拒绝。没有重复相同实现；改为下一动画帧回焦，并让回归测试显式推进该帧。
+- 第二版真实鼠标原路径已转绿：刷新完成 toast 出现后 focused element 精确为“刷新”按钮，说明 disabled→enabled 后下一帧回焦有效。下一步直接在当前焦点按 Space 再验键盘原路径。
+- Space 纯键盘复测也转绿：扫描成功后 focused element 仍为“刷新”；随后 Tab 一次准确进入“新窗口打开”。第二个焦点缺陷完成源码与实机闭环。
+- Return 打开 IDE 独立窗口后，原生首帧标题立即为“Synapse AI Studio IDE 管理”，随后完整加载同一编辑器/计数/内容；独立窗口没有返回按钮或重复业务标题，标题可与主窗区分。下一步关闭并核对主窗触发器回焦。
+- 关闭 IDE 独立窗口后主窗回到启动台，focused element 精确为“IDE 管理”。随后从 960px 拖宽，首轮截图经 JPEG SOF 精确解析为 1310×768（不是目标 1350）；布局仍为完整 5 列启动台、Dock 与账号菜单，无裁切。下一步只追加 40px 到精确 1350，不重复首轮坐标假设。
+- 从 1310px 继续拖到屏幕边缘没有变化，确认窗口位置限制而非尺寸算法；改用全屏按钮公开 secondary action“zoom the window”后精确得到 1357×768，满足 1350 宽屏验收。启动台仍 5 列对齐、焦点保持 IDE 管理，未进入 macOS 全屏空间。
+- 1357×768 下进入设置主壳后，左侧十个分类、账号/连接状态、顶栏动作和底部 Dock 同屏完整，布局未塌缩或遮挡；当前焦点位于页面根，下一步进入“项目和知识库”核对宽屏表格。
+- 1357px 项目页完整展示知识库存储、7 行项目/知识库和全部操作列，r29 仍是唯一末行且路径未截断；焦点准确位于当前“项目和知识库”分类。一次 Computer Use 调用误用了坐标参数名并被工具拒绝，未产生任何 UI 状态变化，随即按 Skill 的 `element_index` 接口完成操作。
+- 已将唯一 r29 目录可恢复地暂移至 `/Users/liyang/.Trash/sy-c2c-r29-project-invalid-test`，原路径不存在且 Trash 目标完整；配置仍保留以模拟真实路径失效。宽屏启动台仍完整，进入 IDE 后全局 Skill 正常加载，未因一个失效项目拖垮首屏。
+- 路径失效后 Cursor 项目 Skill 与 Rule 均把 r29 分组稳定显示为“路径不存在”，不再展示缓存的合成项；其它真实项目内容、两条 managed Knowledge Base 失效态和排序未被该错误阻断。Skill/Rule tab 仍可切换，错误文字简短可理解。
+- 将 Trash 中临时目录原样恢复到唯一原路径后点击刷新，toast“扫描结果已刷新”，焦点仍在刷新按钮；r29 Cursor Rule 与 Skill 分别恢复为唯一 1 项，来源/路径/元数据不变，没有失效缓存、重复或顺序漂移。
+- 返回宽屏设置后，项目表仍保持 7 行且 r29 为唯一末行；Dock 设置与当前分类焦点均准确，没有路径失效/恢复造成重复配置。下一步只操作末行删除按钮。
+- r29 删除确认首焦点准确落到“取消”，文案明确说明该项目下 1 条 Agent 对话会移入“已归档”且不会删除；按 Escape 后配置和 7 行列表均保留，但焦点稳定掉到 HTML 根，未回到末行“删除”触发器。该真实键盘缺口需先红灯、最小修复并 HMR 转绿，之后才能确认移除。
+- 删除取消回焦回归先得到 1/24 精确红灯（activeElement 为 body）；最小修复仅记录当前行删除按钮 ref，并在 AlertDialog close autofocus 阶段阻止默认后回焦，发布说明同步。定向测试已恢复 24/24，等待 HMR 原路径实机复测。
+- HMR 应用后客户端按既有开发行为回到 r29 空会话；专用项目、唯一 0 消息会话、发送禁用和非 Git composer 状态全部保留。已从 Dock 返回设置，未发送消息或触碰其它对话。
+- HMR 后项目列表仍为准确 7 行；重新打开唯一 r29 删除确认，1 条对话归档文案与“取消”首焦点保持不变。现在按原路径 Escape 验证回焦。
+- 实机原路径转绿：Escape 关闭后 focused element 精确为 r29 末行“删除”按钮，项目仍在。随后再次打开同一确认并点击“删除项目”，toast“设置已保存。”，列表从 7 行恢复到原 6 行，仅 r29 配置消失；专用目录尚未清理，符合先移除配置再入 Trash 的顺序。
+- Agent 传播符合确认文案：普通项目列表不再有 r29 分组，右侧安全切回既有 Synapse 空会话；展开“已归档”后唯一 r29“新对话 02:26”仍存在且未删除，未点击该会话或其删除动作。现有项目与对话保持原状。
+- 移除后启动台保持宽屏 5 列；Git 仍只列原 6 个真实仓库，r29 未出现、无不可访问残留，也未执行刷新/进入/提交/分支/同步等动作。非 Git 项目的新增与移除没有污染 Git 注册表。
+- 返回 IDE 后编辑器总计立即回到添加前基线（Cursor 18、Codex 55、Antigravity 9），全局 Skill 首屏正常；说明项目配置移除已触发扫描源收敛，而非仅隐藏设置行。
+- Cursor 项目 Skill/Rule 两个范围均已显式检查，完整 AX 文本不含任何 `sy-c2c-r29`；仅原 Projects_Js 与两条 managed Knowledge Base 分组保留，排序和“路径不存在”状态未受影响。r29 扫描项已彻底随项目配置消失。
+- 最终夹具已在项目配置移除之后，从原路径移入可恢复 `/Users/liyang/.Trash/sy-c2c-r29-project-20260828-0245`；原路径不存在、Trash 目标目录完整，未永久删除。公开 zoom action 先恢复到 1310×768，再从右下角拖回精确 960×768；一次误调用不存在的 `sky.get_screenshot` 只发生在 zoom 已完成后的读尺寸步骤，无额外 UI 副作用，随后按 Computer Use Skill 从 state screenshot 读取 JPEG 尺寸。
+- 最终客户端为 960×768 单一主窗口、启动台、无弹层/独立窗口，焦点准确在 IDE 管理入口。最终验证：项目/IDE 扫描 4 文件共 40 tests 全绿（仅保留已有 Tooltip `act(...)` 非失败告警）、desktop typecheck 通过、`check:hard-constraints` 通过、`git diff --check` 通过。
+- 收尾审计确认三项修复、对应测试、发布说明和 `task_plan.md` 17.9 完成标记均在位；r29 原路径仍不存在且最终 Trash 目录仍可恢复。最后一次文档更新后再次执行 whitespace 检查。
+
+# 2026-08-28 C-to-C 第 30 轮：独立普通 Git 仓库工作台
+
+- 覆盖缺口矩阵：第 2 轮已覆盖真实 Synapse 仓库的首帧中性 loading、未跟踪/修改/删除、大 Diff/二进制降级、checkbox 与共享 Diff、干净仓库空态；第 21/23/25 轮已覆盖 Git 独立窗口复用、标题、关闭回焦与共享 Diff 偏好；第 26 轮只检查 Git 丢弃确认的危险按钮、默认安全焦点、遮罩与取消，不对真实仓库执行。本轮新增唯一普通仓库的完整组合链：项目设置添加→Git 注册识别、loading/empty/error/刷新、U/M/D/R 状态、文件预览与全选/全不选、空提交说明与键盘、专用提交、历史详情/文件 Diff、改动与历史 Diff 偏好保持、分支名校验/创建/切换/脏工作区阻止、一次仅限专用改动的真实丢弃、无远端 pull/push/sync 的禁用或可理解错误，以及 960↔1350、独立窗口、Tab/Shift+Tab/Return/Space/Escape。
+- 安全边界：唯一夹具固定为 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r30-git-project`，它是普通独立仓库而非 worktree；所有准备阶段 Git 命令必须显式 `git -C` 指向该完整路径并先验证 top-level，Synapse 根仓库绝不执行 add/commit/branch/reset/checkout。夹具仅含 `sy-c2c-r30-*` 纯合成文件，不配置 remote、hooks、签名、submodule 或 worktree；后续提交、分支与丢弃主要经真实 UI。结束顺序固定为从 Synapse 项目配置移除、只读确认 Git/Agent 传播、再把整个普通仓库移入唯一可恢复 macOS 废纸篓，禁止永久删除。
+- 权威产品语义：工作台状态与 Diff 来自实时 Git；新发现文件默认不勾选；提交和丢弃均需仓库绑定选择令牌并在主进程复核；提交说明为空不可执行；分支名使用 Git 原生校验且脏工作区必须在改变 HEAD 前阻止；历史只显示当前分支；无远端不得猜测或自动添加。所有界面动作通过 `computer-use:computer-use` 的 `node_repl + @oai/sky` 完成，不启动、停止或重启既有应用/服务。
+- Computer Use 初始定位：按显示名 `Synapse` 读取超时且无 UI 动作；按 bundle id `com.github.Electron` 因四个 Electron 安装歧义被安全拒绝。按 Skill 规则改用当前仓库 Electron 41.2.1 的完整 `.app` 路径后成功读取，不再重复前两种标识。真实主窗为 960×768、单一 `Synapse AI Studio`，停在 r28 空会话，0 消息、发送禁用、composer 聚焦、无弹层/toast/独立窗；Dock“应用”和设置均可用。该安全初始态不包含 r30 项目或仓库。
+- 基线夹具已按约束完成：`apply_patch` 只创建 4 个 `sy-c2c-r30-*` 纯文本/Markdown 文件；确认目标目录存在且 `.git` 不存在后，显式 `git -C /Users/liyang/Documents/code/github/Synapse/sy-c2c-r30-git-project init -b main`，随即 `rev-parse --show-toplevel` 精确返回该目录。仓库本地身份为专用无效域邮箱，基线 root commit `5dfaa61` 只含 4 个合成文件；最终状态 `## main` 干净、`remote -v` 为空。没有在 Synapse 根执行 add/commit/branch/reset/checkout，也没有 remote、hooks、签名、submodule 或 worktree。
+- 真实设置基线：从 r28 会话 Dock“设置”进入时账号页 Live 为“已连接”，随后“项目和知识库”显示原 6 行（Projects_Js、两条 Knowledge Base、Synapse、SynapseDocuments、公司文档仓库）与“添加项目”；没有 r30 行、错误或加载残留。两步后焦点分别保持在 Dock 设置与当前分类，未触碰任何既有项目行。
+- 添加项目表单真实打开后首焦点位于“项目名称”，名称/路径/浏览/取消/添加/关闭均可访问；已填写唯一 `sy-c2c-r30-git-project` 和精确绝对路径，字段完整、焦点在路径输入。没有经过原生选择器，也没有触碰其它目录或提交表单外状态。
+- 项目添加成功：表格从 6 行增为 7 行，唯一末行名称/绝对路径准确，只提供修改/删除；toast“项目已添加。”，焦点回“添加项目”，既有 6 行未变。随后从 Dock 进入 960px 应用启动台，16 个 System App 完整，Git 入口可见且焦点仍在 Dock“应用”，无错误/加载残留。
+- Git 入口首帧真实捕获中性 `Loading`，刷新按钮 disabled，未误报不可访问、无分支或空仓库；稳定帧恢复原 6 个已登记仓库及各自真实状态，刷新重新启用。r30 项目没有自动出现在 Git 列表，这符合设计中“项目配置与 Git 注册表身份分离、仅路径精确匹配建立快捷关联”的边界，不判缺陷；下一步先验证列表刷新，再通过真实“添加本地仓库”把同一受控路径登记到 Git。
+- Git 列表手动刷新真实经历同样的中性 `Loading`、禁用刷新按钮，再恢复原 6 行、相同状态/分支/计数与可用按钮；没有短暂空列表、错误提示、重复项或 r30 误注册。列表 loading 与刷新连续性通过。
+- “添加本地仓库”先打开轻量表单，路径只读且通过“选择文件夹”进入 macOS 原生 Open 面板；仓库名称可编辑，取消/添加/关闭均可访问。原生面板当前停在用户主目录、未选目录时 Open disabled；尚未改变 Git 注册表或选择任何现有目录。
+- 原生 Go to Folder 初始记住上轮 r28 文件路径，路径文本被全选；已用精确 r30 绝对目录替换并 Return。面板随后选中唯一 `sy-c2c-r30-git-project`，右列只显示 4 个本轮基线文件、Where 为 r30、Open 启用；未选中 Synapse 根或其它项目目录。
+- 确认原生选择后，父表单自动填入精确 r30 绝对路径和同名仓库名称；点击添加后列表只新增唯一第 7 行，显示 `main / 未设置上游 / 首次推送 / 进入`。原 6 个仓库状态未变，r30 无 remote 时没有伪报“已同步”或 origin；添加链完成且 Git 注册识别正确。
+- 进入 r30 工作台稳定首帧显示 `main / 未设置上游`、精确紧凑路径、改动 tab selected、`暂无改动` 与“选择文件查看差异”；分支、获取远程分支、新建分支、刷新、首次推送入口可访问。没有读取失败、误计改动或旧仓库 Diff 残留。更多菜单仅列拉取/推送/同步，尚未激活；下一步用截图/键盘确认无远端时禁用语义并取消菜单。
+- 截图确认无 remote 时更多菜单的拉取/推送/同步仍以可用文字呈现，而工作台主按钮为“首次推送”；首次在 menu 容器按 Return 没有动作或副作用，随后 Down 准确聚焦“拉取”。为验证“可理解错误”而不添加远端，下一步只激活这一次 pull；若弹窗或错误出现即读取并关闭，不执行 push/sync。
+- 聚焦“拉取”后 Return 仅关闭菜单并把焦点回更多按钮；连续稳定帧没有 busy、错误、toast、状态变化或 Git 进程结果，且外部只读 `remote -v` 仍为空，说明无 remote 的 pull 是不可激活项。按安全边界不再尝试 push/sync，也不打开首次推送选择器；三项远端写链保持 0 次。
+- 已用 `apply_patch` 生成专用修改、删除、同内容重命名候选与未跟踪文件；显式 r30 `status --short` 当前为 D/M/D/U/U，证明普通删+同内容新增尚未被 Git 工作区识别为 rename。为取得权威 R 状态且不执行后续 shell Git 写操作，将改用 `apply_patch` 的文件 Move 语义重新生成重命名，再只读复核。
+- `apply_patch` Move 保持文件字节与路径结果正确，但纯工作区 delete+untracked 仍不会让 porcelain 报 R；为形成专用 staged rename，先再次 `rev-parse --show-toplevel` 精确验证 r30，随后唯一一次显式 `git -C ... add -A -- sy-c2c-r30-renamed-source.txt sy-c2c-r30-renamed-target.txt`。只读结果为 D/M/R100/U，且仅 rename pair 在 index；这属于夹具状态准备，未提交、未改分支、未触碰 Synapse 根。
+- 工作台 5 秒自动刷新无需手动点击即把空态更新为准确 4 个逻辑改动：D 删除、M 修改、R 重命名目标、U 未跟踪；所有 checkbox 初始均为 0、已选 0/4、丢弃 disabled，新发现文件默认不选通过。详情自动预览首个删除文件，统一视图 selected、分栏未选、自动换行 off，patch 正确显示 `/dev/null` 删除。
+- 文件预览真实切换通过：M 文件 patch 从 1 行变 2 行，新增行和行号准确；R 文件详情同时显示 source→target、`similarity index 100%`、rename from/to，标题用目标路径与“重命名”。焦点分别留在刚点击的文件主操作，checkbox 未被误切换，选中计数仍 0/4。
+- U 文件预览正确使用 `/dev/null`、`new file mode` 和单行新增内容，不出现空 Diff。点击“分栏视图”后 radio 从 unified=1/split=0 切为 unified=0/split=1，焦点保持在分栏控件，未改变所选文件或 checkbox。
+- 自动换行 toggle 从 0→1 且焦点保持；点击“全选”后计数准确变 4/4，D/M/R/U 四个 checkbox 全为 1，丢弃按钮从 disabled 变可用，当前 U Diff、分栏和换行偏好均保持。选择状态与审查状态彼此独立。
+- “全不选”准确恢复 0/4、四 checkbox=0、丢弃 disabled；随后单独勾选 M 与 U，计数 2/4，仅对应 checkbox=1、丢弃可用，焦点停在最后勾选的 U checkbox。全选/全不选/部分选择链通过，没有误选 D/R。
+- 主“提交改动”打开对话框后，选择令牌准备已完成、显示 2/4，首焦点在提交说明 textarea；空值时“提交选中文件” disabled。textarea 中按 Return 只插入换行，按钮继续 disabled，没有提交、关闭或丢失 M/U 选择，空说明与键盘安全语义通过。
+- 提交弹窗 Tab 从 textarea 准确到“取消”，`shift+Tab` 返回 textarea；disabled 最终按钮不进入普通 Tab 顺序，焦点环没有逃出弹窗。下一步 Escape 只取消当前确认，不清除外层选择。
+- 稳定缺陷确认：Escape 关闭提交弹窗后，外层 2/4 选择、U Diff、分栏与换行都保留，但焦点落到 HTML 根而不是“提交改动”。回归新增“取消提交确认后回到提交入口”，修改前精确 1/46 红灯（activeElement=body）。impeccable 保持现有 product/shadcn/主题与文案，karpathy-guidelines 限定只加提交 trigger ref 和 Dialog close autofocus；专项转为 1/1 绿，发布说明已同步。
+- HMR 后主窗口回到 Agent 壳而不是保留 Git 子应用；窗口仍是唯一 `Synapse AI Studio`，无独立窗/弹层。r30 配置与文件状态未动，已从 fresh state 精确定位 Dock“应用”入口，按原路径重进 Git 做修复实机复测。
+- HMR 后原路径重进应用启动台→Git 成功；列表仍唯一识别 r30，准确显示 main 与 4 个改动，证明 HMR 未丢注册或污染夹具，现有仓库行保持不动。
+- 重进工作台后 4 个既存改动默认全选，Diff 偏好回到统一/不换行；这与工作台新挂载默认选全部一致，不属于改动↔历史同一实例偏好丢失。已仅取消 D/R，fresh state 精确恢复 M+U 2/4，焦点停在 R checkbox，未误切文件详情。
+- HMR 原路径实机复测通过：提交弹窗打开且 M+U 2/4；Escape 关闭后弹窗消失、选择不变，fresh state 明确 `focused element is 34 button 提交改动`。首次自动化键名误用 `ESC` 被 Computer Use 明确拒绝且未触发 UI，改用受支持 `Escape` 后完成，无产品副作用。
+- r30 首次专用提交完全由真实 UI 键盘完成：说明填入后 Tab 到取消、再 Tab 到“提交选中文件”，Return 提交；弹窗内反馈“已提交 还有 2 个改动”，Escape 关闭后焦点回提交入口。只读 Git 证据：HEAD `1a670da sy-c2c-r30 commit modified and untracked` 只含 M modified 与 A untracked；工作区精确保留 D deleted 与 R100 rename，branch main、remote 为空。
+- 提交后变化列表缩为 2 项，旧 accessibility index 已重排；一次以旧 64/65 点击落到非控件内容、状态完全不变。fresh state 后用当前 54/55 精确切到分栏=1、自动换行=1，证明操作前后状态核对能阻止 stale-index 误操作。
+- 历史列表真实显示两条且顺序正确：新提交 `1a670da` 在 baseline `5dfaa61` 之前，作者与时间可读；默认详情空态为“选择提交查看详情”。打开新提交后文件仅 M modified 与 A untracked，默认预览 M patch 精确，工作区设置的分栏=1/换行=1 在历史详情保持。
+- 历史新增文件切换准确显示 `new file mode`、`--- /dev/null` 与专用内容；改动→历史往返后两侧 fresh state 均为分栏=1、自动换行=1，选中的历史详情与 Diff 偏好没有被 tab 切换清空。
+- 当前仅有 main，分支下拉在脏状态只列本地 main 并正确标 selected；Escape 关闭且焦点返回分支控件。新建分支是独立按钮且脏状态仍显示可用，因此下一步先测名称前置校验，再观察有效创建是否由服务层明确阻止脏工作区。
+- 新建分支弹窗首焦点准确在名称输入，空值时创建 disabled；输入 Git 非法名 `bad..name` 后按钮变可用，说明校验在提交/主进程而非即时前端。下一步用键盘提交并核对错误仍留弹窗、不改变 main。
+- 脏状态用键盘提交 `bad..name` 时，服务层先阻止工作树，稳定文案“请先提交本地改动。”，弹窗保留且 main 未变；但焦点落 HTML 根。新增回归先强制提交按钮获得焦点，修改前精确 1/47 红灯（activeElement=创建按钮）；最小修复仅给本地分支名 Input 加 ref，并在 create 返回 false 时 focus，专项 1/1 绿。发布说明已同步。
+- 第二次 HMR 同样安全回 Agent；原路径重进后 r30 注册仍唯一，main/2 个改动准确，工作台重挂载默认 D+R 2/2 selected。现有仓库与会话未操作。
+- HMR 后用合法名 `sy-c2c-r30-topic` 在 D+R 脏状态键盘提交，仍得到“请先提交本地改动。”且 main 未变；修复后 fresh state 精确 focused=分支名称输入框，错误可直接修改重试，第二个焦点缺陷实机闭环。
+- Escape 关闭新建分支弹窗时又确认焦点落 HTML 根。新增“取消后回新建分支入口”回归，修改前精确 1/48 红灯（activeElement=body）；同一组件只给新建按钮加 ref 与 Dialog close autofocus，专项 1/1 绿，发布说明同步。
+- 第三次 HMR 后沿应用→Git→r30 重进，2 个改动仍准确；打开新建分支后直接 Escape，弹窗关闭、D+R 2/2 不变，fresh state 明确焦点回 `button 新建分支`，第三个焦点缺陷实机闭环。
+- D+R 提交说明已填入并用 Tab 两次到最终按钮。Computer Use 不接受 `Space` 键名，空格字符串又被判缺少 key，两次都在工具层失败且 UI/仓库未变；使用 Return 后成功，弹窗反馈“已提交 已提交。”。这是自动化工具键名限制，不是产品 Space 行为结论。
+- 关闭成功弹窗后 UI 为“暂无改动”，主推荐动作变“首次推送”且获得返回焦点；只读 Git 证据：main clean，HEAD `65e9523 sy-c2c-r30 commit deleted and renamed` 仅含 D deleted 与 R100 source→target，remote 仍为空。
+- main clean 时提交 `bad..name` 才进入真正 ref 校验：弹窗原位显示 `fatal: 'bad..name' is not a valid branch name`，未创建/切换分支；失败焦点修复同时生效，焦点准确回分支名称输入，便于直接更正。
+- Computer Use `type_text` 在非空输入上是追加而非替换，首次形成 `bad..namesy-c2c-r30-topic`，未提交、无副作用；确认 sky 提供 `set_value` 后已准确替换为合法名。旧 fatal 在再次提交前保留，符合错误不被无声清除的当前实现。
+- 合法 `sy-c2c-r30-topic` 通过键盘创建成功并立即成为 current，工作区保持“暂无改动”，关闭后焦点回新建入口；只读 Git branch 显示 main 与 topic 两支、仅 topic 带 `*`。分支下拉同时列两支并正确标 topic selected。
+- clean 从 topic 切回 main 成功且工作区不变，但完成后焦点落 HTML 根。新增回归修改前精确 1/49 红灯；直接在 checkout promise 后 focus 时 trigger 仍受 busy 生命周期影响，专项仍红，随后改为显式 restore 状态并在 busy=false 的 effect 聚焦当前 SelectTrigger，专项 1/1 绿。发布说明同步。
+- 第四次 HMR 后原路径重进显示 main/首次推送；分支下拉列 main+topic。点击 topic 并等待真实 checkout 后，current=topic、暂无改动，fresh state 精确 focused=分支 combo，第四个焦点缺陷实机闭环。
+- topic→main 同样保持 clean 且焦点回分支 combo。随后只用 `apply_patch` 在 r30 根新增唯一 `sy-c2c-r30-discard-me.txt`；5 秒自动刷新准确显示 1 个 U、0/1 未选及 `/dev/null` Diff，未触碰其它路径。
+- main 脏状态尝试切 topic 被明确阻止，current 仍 main、错误“请先提交本地改动。”与 1 个改动并列，但焦点落 HTML 根。新增失败回选择器回归精确 1/50 红灯；把既有 restore 状态从仅成功扩展为 checkout 完成后的成功/失败共用路径，专项 1/1 绿，既有切换焦点发布说明覆盖此修复。
+- 第五次 HMR 后 r30 列表仍 main/1 个改动；重进并再次选 topic，错误与 main/1 change 均保持，fresh state focused=main 分支 combo，第五个焦点缺陷实机闭环。
+- 重挂载后唯一 U 默认 1/1 selected；丢弃确认标题精确“丢弃 1 个改动？”，清单只含 `sy-c2c-r30-discard-me.txt`，文案明确 tracked 回 HEAD、U/rename target 入系统废纸篓，首焦点为取消。范围中没有 Synapse 或其它仓库路径。
+- Escape 取消丢弃后 U 仍 1/1、文件存在、焦点回“丢弃改动”。重开后 Tab 到 destructive 最终按钮并 Return，UI 变“暂无改动”；只读证据 main clean、源文件消失。shell 因 macOS 隐私被拒绝枚举 `~/.Trash`，未改权限或绕过；执行成功因丢弃按钮随 clean unmount，焦点落 HTML 根，确认需要持久主操作 fallback。
+- 为“丢弃最后一项后焦点”新增回归，修改前精确 1/51 红灯。尝试只在 AlertDialog close 时择 fallback 仍受按钮 unmount 时序影响而连续红，最终外科方案是在 `onDiscarded` 完成 `status.refresh()` 后单 tick 聚焦始终存在的“刷新仓库状态”按钮；专项 1/1 绿。未再创建/执行第二次真实丢弃，以遵守本轮只执行一次的安全上限；发布说明同步。
+- 第六次 HMR 后 r30 列表为 main/未设置上游/首次推送，重进工作台 clean；没有重复执行丢弃。独立窗口入口可用，当前主窗口仍唯一且无弹层。
+- “新窗口打开”创建独立 `Synapse AI Studio Git`，URL 为 system-app Git；首帧正确 neutral Loading，稳定后显示同一 7 仓库列表与 r30 main/首次推送。独立窗从列表进入 r30 后保持标题 `Synapse AI Studio Git`、main/暂无改动与精确路径，标题按 System App 级而非仓库级设计。
+- Computer Use 不接受 `CMD+\`` 组合键字符串，未作用 UI；首次以旧 index 23 误点独立窗“改动”tab、状态不变。fresh state 后从 macOS Window 菜单看到精确两项 `Synapse AI Studio` / `Synapse AI Studio Git`，选择主窗成功；主窗回应用启动台且焦点在 Git 入口，独立窗仍存在。
+- 主窗重进 r30 后再次点“新窗口打开”，焦点回现有 `Synapse AI Studio Git` 且仍停在 r30 main/clean，不重置为列表。Window 菜单仍精确只有主窗+一个 Git 窗，证明请求复用而非第三窗口。
+- Native Window 菜单 Escape 未关闭，选择当前 Git 窗条目后菜单安全收起；点标题栏 close 后独立窗关闭，主窗自动成为唯一 focused 窗并回应用启动台，焦点在 Git 入口。截图 JPEG 基线精确 960×768。
+- 标题栏 zoom secondary action 将主窗精确从 960×768 扩到 1357×768，应用启动台未溢出且 Git 焦点保持；再次同动作精确恢复 960×768，焦点仍在 Git。宽窄往返没有弹层或额外窗口。
+- 主窗设置→项目和知识库仍精确 7 行，r30 名称/绝对路径为最后一行，删除入口独立；现有 6 行未操作。准备先移除项目配置，Git 注册暂保留用于最终缺失路径错误态。
+- 点击 r30 行专属“删除”后配置即时移除，没有额外确认或会话归档提示；列表准确回 6 行、r30 名称/路径消失。r30 未创建 Agent 会话，因此无需归档专用会话；其它 6 项不变。
+- 因 shell 无权枚举 macOS Trash，按 computer-use 路径使用正在运行的 Finder。仅导航到 Synapse 根并在 Column View 精确选中 URL=`.../sy-c2c-r30-git-project/`；右列只显示 4 个最终专用文件，toolbar 182 明确为“删除 / 将所选项移到废纸篓”。未选择 Synapse 根或其它行。
+- Finder toolbar“将所选项移到废纸篓”执行后 r30 行消失，选择自然前移到 templates；shell 只读确认原路径 gone。Finder 已恢复原 Downloads 位置。未永久删除、未清空废纸篓，fixture 可恢复。
+- 回 Synapse Git 后 r30 注册行没有消失或误读成 clean，而是稳定显示“目录不可访问 / 无分支 / 查看状态”；进入后工作台显示“Git 操作失败。目录不可访问”、精确路径和可用“刷新仓库状态”。这补齐真实 error state，原 6 仓库行仍正常。
+- 点击 error state 刷新后焦点保持刷新按钮、错误仍可读；但分支控件从“无分支”切为 disabled“正在读取”，2.1 秒仍未恢复。继续长等确认是否稳定卡住，再决定是否立回归修复。
+- 长等 7 秒后 AX combo `Value` 仍报“正在读取”，但其 child text 是“无分支”；按 computer-use 原图复核，真实可视控件稳定显示“无分支”、无 spinner，错误仍“Git 操作失败 / 目录不可访问”，刷新按钮正常。因此这是 macOS accessibility Value 与可视 child 不一致，不是产品 loading 卡死；不改代码。
+- 返回列表后 r30 error 行更多菜单只允许 push 与“移除仓库”，文件夹/设为项目/pull/sync disabled。点击移除先弹确认，文案精确“只会从 Synapse 列表移除，本地目录不会改变”并列出唯一 r30 路径，首焦点取消；没有删除文件副作用入口。
+- Tab 到“移除”并 Return 后 r30 行消失，Git 列表回原 6 仓库；返回应用启动台后单一 `Synapse AI Studio` 为 960×768，无 dialog、无 r30 可视配置，焦点在 Git。项目配置此前已回 6 行，fixture 原路径 gone、Finder 已移 Trash。
+- 最终验证全绿：Git workbench 51/51、desktop typecheck exit 0、check:hard-constraints 全通过、`git diff --check` 无输出。第 30 轮确认并修复 5 类焦点问题：提交取消、分支创建失败、分支创建取消、分支切换成功/失败、丢弃最后一项；发布说明均已同步。
+# 2026-08-28 第 38 轮 C-to-C：Workflow System App
+
+- 08:23 基线恢复：已完整读取根规则、Computer Use 与文件规划 Skill，并恢复 `task_plan.md` / `findings.md` / `progress.md` 当前上下文；计划中已存在阶段 17.18。`git status --short` 显示前 37 轮共享工作区有大量未提交修改与新增文件，本轮全部保留，不回退、不覆盖、不创建/切换分支或 worktree。
+- 08:23 规则审计：Workflow 数据/分享/节点属于 `docs/agents/workflow-and-capabilities.md` 与 `docs/agents/capability-registry.md` 管辖面；只有改变 Workflow Node 或能力注册表面时才同步能力清单。本轮若仅修 UI 交互，不改注册文档；任何用户可感知修复必须同步 `RELEASE_NOTES_PENDING.md`。
+- 08:23 下一步：继续读取 Workflow 编辑器/服务/schema/窗口与删除语义，以及直接相关设计规格和 UI/测试规则；严格证明纯内存节点前不运行任何工作流。
+- 08:31 创建/保存语义：`WorkflowModule.handleCreate` 先调用 `definition.create()`，主进程立即持久化一个名为“新工作流”、仅含不可删除 End 节点的合法定义，再打开每个 workflowId 单例的独立 Editor；因此“新建取消”不是丢弃未创建草稿，而是关闭编辑器后仍会留下已创建对象，最终必须显式删除本轮对象。
+- 08:31 校验边界：保存校验要求名称非空、恰好一个 End、节点/边 ID 唯一且合法、所有多节点图中每个节点有连线、无环、节点 schema 合法；名称没有全局唯一约束，因此重名预计允许，空名应由保存时错误卡阻断。End 不能删除/复制，其他节点支持选择、拖动、连线、Delete/Backspace、⌘C/⌘V、右键复制/删除/断开、画布自动布局/适应。
+- 08:31 安全运行结论：Text 与 End executor 本身仅做字符串模板插值，未访问文件/网络/secret；但所有运行完成/失败都会经 `RunSnapshotService.save()` 使用 `mkdir` + `writeFile` 写入 `workflow-runs/<workflowId>/<runId>.json`，删除时也清理该目录。整条运行生命周期不满足“纯内存/纯计算”，所以本轮明确 0 次运行，只覆盖运行前校验/按钮状态，不打开 Runner。
+- 08:31 独立窗/删除：`WorkflowWindowManager` 对同一 workflowId 只复用一个 Editor；删除 IPC 会取消运行、设置 tombstone、删除工作流及 snapshots，并 force-close editor/runner。列表删除确认明确“不可恢复”，用户已在委派中授权最终只删除本轮唯一专用对象。
+- 08:36 真实客户端基线：当前只有一个标题为 `Synapse AI Studio` 的主窗口，处于 Agent 空会话，焦点在“输入消息”；底部 Dock 的“工作流”可见。无弹层、无 Workflow Editor/Runner 独立窗。共享 Electron bundle id 有多安装歧义，已改用当前 Synapse 仓库 Electron 41.2.1 的精确 `.app` 路径，后续不再使用 bundle id。
+- 08:39 Workflow 列表稳定基线（960×768）：共 3 项，均“未运行”——`写作业V7-无原文参考（最终放行版）` 35 节点、`写作业V6-文字原文增强（最终放行版）` 36 节点、`写作业V5-图片原文增强（最终放行版）` 37 节点。每行提供打开、复制 ID、运行、历史、导出、删除；本轮不会打开既有项或读取其参数。列表从 Agent 进入时直接稳定呈现，未捕捉到中间 loading；当前无刷新按钮（仅错误态提供），也不能安全制造真实存储错误，因此 error/refresh 只做源码覆盖。
+- 08:39 导航焦点：从 Dock 点击“工作流”后，焦点仍在 Dock“工作流”，符合入口保持心智；列表无额外介绍文案，表头与三行在 960px 下完整可读。
+- 08:43 列表键盘：Dock“工作流”获焦后按 Tab 按横向 Dock 顺序移动到“终端”，说明 Dock 本身键盘连续；列表内容的 Tab 顺序将在回到列表后从“导入/新建”继续验证。
+- 08:43 新建真实行为：点击“新建”后首帧只有窗口壳，稳定帧打开 `?window=workflow-editor&workflowId=ac32ac3f-2c79-428b-94c9-5dd93c6a50f5`。默认只有 End 节点；名称“新工作流”、默认 DeepSeek/deepseek-v4-flash、默认项目 Projects_Js、超时 60、左右布局、无参数。节点面板列出 20 类能力，其中包含文件/网络/消息/脚本等高风险节点；本轮仅使用 Text 与 End，不触碰其它节点配置。
+- 08:43 候选缺陷：独立 Workflow Editor 的原生窗口标题实际仍是通用 `Synapse AI Studio`，与设计规格“编辑 - {name}”及多窗口可辨识心智不符。先完成同一路径关闭/重开复现，再决定红灯与最小修复。
+- 08:47 新建取消语义实机确认：无改动关闭 Editor 不弹未保存确认，列表立即多出“新工作流 / 未运行 / 1 个节点”，证明创建已落盘而非可取消草稿。既有 3 项及状态/节点数完全不变。
+- 08:47 两个稳定候选缺陷：关闭无改动 Editor 后焦点落在主窗 HTML 根，而非恢复到刚才打开该工作流的行；从专用行重新打开后原生标题仍为通用 `Synapse AI Studio`。两次打开都经历“空壳首帧→完整稳定帧”，默认设置持久化正确。
+- 08:51 未保存保护：名称改为 `sy_c2c_r38_workflow` 后关闭，出现“未保存的更改 / 工作流已修改，是否保存？”以及“取消/放弃/保存”；Escape 会保留专用名称草稿并留在 Editor，语义正确。
+- 08:51 候选缺陷 3：Escape 取消未保存关闭后，焦点从原名称输入丢到 Editor HTML 根，而不是恢复到触发关闭前的编辑控件。后续用可见“取消”再复现一次，稳定后按用户要求先补聚焦回归再最小修复。
+- 08:58 未保存关闭回焦缺陷已闭环：真实 Escape 与可见“取消”均复现；新增聚焦测试得到 1/11 精确红灯，生产端在 `beforeunload` 保存当前焦点，并在受控 AlertDialog 关闭完成后的下一帧恢复，专项 1/1 绿。HMR 后草稿按预期回到已持久化“新工作流”；重建专用名称后原生关闭→Escape，焦点精确恢复到名称输入，草稿保留。
+- 09:01 空名称保存：Error Card 在画布内显示单一“需要处理 1 处 / 工作流名称不能为空”，保存被阻断，工作流仍是未保存草稿，没有生成新对象或运行。实际焦点落 Editor HTML 根，未回名称输入或保存按钮，记为保存校验回焦候选缺陷；下一步用纯空白名称复现后再决定修复。
+- 09:07 名称校验回焦缺陷已闭环：纯空白名称第二次稳定复现；聚焦测试先得到 1/12 产品红灯（保存 IPC 已调用但焦点在 body），为名称 Label/Input 建立稳定 `workflow-name` 关联，并在空名保存失败后的下一帧聚焦输入，专项 1/1 绿。HMR 被未保存保护正确拦截，取消后再次点击保存，真实焦点精确回到仍为空白的名称输入，错误仍只显示一处。
+- 08:38 重名语义真实确认：把唯一专用对象改为现有基线同名 `写作业V7-无原文参考（最终放行版）` 后点击保存，界面明确提示“已保存”，无重名错误；说明当前产品允许名称重复，名称只做非空校验。既有同名对象未被打开或修改，专用对象仍由唯一 workflow ID 隔离。上一次操作输出仅因工具上下文截断而未知，本次采用 fresh 全量读取确认，未重复点击保存。
+- 08:40 专用名称恢复与持久化：名称输入已改回 `sy_c2c_r38_workflow` 并点击保存，fresh 状态显示输入值正确且再次出现“已保存”；保存后焦点落 Editor HTML 根，后续与图校验保存的焦点行为一并观察，暂不单独判缺陷。
+- 08:42 节点面板可达性缺陷稳定复现：两次从可见“文本”行向画布拖拽均未添加节点，可能含 Computer Use 对 HTML5 DnD 的限制；但可见行点击无效，随后 Tab 仍停在 HTML 根，AX 树把整个节点面板折叠为不可交互文本。权威实现也确认每项只是 `draggable <div>`、无按钮语义/焦点/键盘或点击等价入口，因此“键盘无法添加节点”是独立于 Computer Use 的产品缺陷。
+- 08:44 节点面板缺陷闭环：新增聚焦测试先得到 1/2 红灯（找不到“文本”按钮）；生产端把节点项改为项目 Button，保留 HTML5 拖拽并增加点击/Enter 等价添加，通过 Canvas imperative handle 在画布中心创建并自动选中。节点面板与 Canvas 专项共 16/16 绿。HMR 后真实 AX 树出现 20 个独立按钮；点击“文本”立即新增并选中节点，焦点保留在“文本”按钮，右侧配置显示“文本 · 未连接”。
+- 08:47 最小安全图验证：Text 输出填写 `r38-in-memory`；未连线保存被 Error Card 以“需要处理 2 处”正确阻断，分别指出 End 与 Text 未连接。真实拖动 Text 右侧输出手柄到 End 左侧输入手柄后，AX 明确出现 `Edge from <专用节点> to end`，右侧状态变为“文本 · 1 输出”，错误卡消失；再次保存出现“已保存”。全程未点击运行。
+- 08:50 画布结构操作：点击 Text 节点选中后，⌘C/⌘V 生成一个同配置、未连接且被选中的临时副本；Delete 精确删除该副本，原 Text→End 两节点一边保持。随后 ⌘Z 未恢复副本，和源码只实现复制/粘贴/删除/Escape、没有历史栈一致；本轮按产品当前提供的“复制→删除临时副本”完成等价安全闭环，不将未承诺的撤销能力擅自扩展为缺陷。
+- 08:53 持久化与 HMR：删除临时副本后再次保存净图，关闭 Editor 不再弹未保存确认。后台主窗在本轮生产代码 HMR 后已回到默认 Agent，而非保留 Workflow System App；重新从 Dock 进入后，列表显示专用项 `2 个节点 / 未运行`，既有 35/36/37 三项精确不变。重开专用项仍经历壳首帧→稳定帧，稳定帧恢复名称、Text 的 `r38-in-memory`、Text→End 边和 2 节点图；编辑数据持久化正确。HMR 主窗应用选择重置属于开发态观察，未作为生产缺陷扩展。
+- 08:56 Editor 单例通过：在专用 Editor 已打开时用 Window 菜单切回 Workflow 列表，再次点击同一专用行，既有 Editor 被立即聚焦；Window 菜单前后都只有主窗+一个 Editor 共 2 个窗口，没有第三个窗口。窗口标题缺陷同时第三次确认：两个菜单项都叫通用 `Synapse AI Studio`，无法区分主窗与具体 Workflow，违反已读设计的“编辑 - {name}”可辨识语义，进入聚焦回归与最小修复。
+- 08:59 窗口标题缺陷闭环：聚焦测试得到 1/13 红灯（`document.title` 为空而非 `编辑 - Nightly check`）；Editor 在 definition 名称变化时同步 `document.title`，专项 1/1 绿。HMR 后真实原生标题与 HTML 标题均为 `编辑 - sy_c2c_r38_workflow`，主窗仍为 `Synapse AI Studio`，窗口可辨识。HMR 后重新从 Workflow 列表正常打开并关闭一次，焦点精确恢复到专用行按钮；早先“回到根”的现象没有在稳定、无 HMR 干扰路径复现，不判产品缺陷。
+- 09:02 宽窄与键盘：Workflow 主窗从截图精确 960×768 原生 Zoom 到 1357×768，表头、专用行、既有三行及所有操作在两种宽度都完整保留；专用行焦点跨 resize 保持。Tab 从专用名称按钮按自然行内顺序进入“复制工作流 ID”，恢复 960 后焦点仍在该按钮，键盘顺序与布局状态均符合心智。
+- 09:05 删除取消回焦缺陷稳定复现：专用行删除确认准确显示名称与“此操作不可恢复”，初始焦点在“取消”；可见“取消”和 Escape 两条路径都保留专用对象与既有基线，但关闭后焦点落主窗 HTML 根，未回触发删除按钮。两条真实路径一致，进入 WorkflowList 聚焦回归与最小修复；尚未执行永久删除。
+- 09:11 删除取消回焦缺陷闭环：新增 WorkflowCard 聚焦测试得到 1/11 红灯；首次实现因 ref 误挂到仅运行中出现的“查看进度”按钮而持续红，focus spy 精确定位后将 ref 外科移到删除按钮。专项 1/1 绿。HMR 后真实可见“取消”和 Escape 两条路径都把焦点精确恢复到专用行“删除工作流”，对象仍在且既有基线不变。
+- 09:17 验证基线：Workflow renderer 全目录 42 个测试文件、264/264 测试通过；desktop typecheck 完整命令 exit 0；`check:hard-constraints` 通过；共享工作区全量 `git diff --check` exit 0。测试过程中未启动/停止/重启服务或应用，也未运行 Workflow。
+- 09:20 最终清理：动作时确认后再次 fresh 读取不可恢复确认框，精确核对对象名为 `sy_c2c_r38_workflow`，随后只点击一次“删除”。真实 UI 显示“工作流已删除”，列表只剩原有 3 项：V7/V6/V5 分别仍为 35/36/37 节点且全部“未运行”；专用对象已不存在，既有基线完全不变。专用项删除前始终为“未运行”，本轮运行按钮点击 0 次、运行历史/运行次数均为 0，也没有生成 run snapshot。
+- 09:20 删除成功后的 fresh 状态焦点落在主窗口 HTML 根，而不是持久的“新建”或相邻工作流入口。当时按唯一删除边界暂记观察；后续主线程确认实现必现并授权额外 r38 空对象复测，已在 09:28–09:35 完整闭环，不再属于未覆盖项。
+- 09:28 主线程源码复核把上述观察升级为确定缺陷：成功删除后整张 `WorkflowCard` 卸载，卡片内 `deleteButtonRef` 必然变为 null，原关闭回焦逻辑没有可存活目标。模块级回归修改前精确 1/7 红灯（WorkflowList 没有成功删除回调）；补丁把删除结果显式返回给 Card，成功经列表 refresh 后由顶栏稳定“新建”接管，取消/失败仍回原删除按钮。异步受控关闭最初未稳定经过 Radix close-autofocus，新增成功/失败测试后改为通过现有 Cancel 控件走标准关闭链；Card 13/13、模块+列表+Card 33/33 绿，发布说明已同步。
+- 09:29 HMR 后主窗按开发态惯例回 Agent；从 Dock 真实重进 Workflow，列表仍只含原 V7/V6/V5 三项，35/36/37 节点且全部“未运行”，没有任何旧 r38 对象。下一步创建唯一额外空对象 `sy_c2c_r38_delete_focus`，只用于成功删除回焦实测。
+- 09:31 真实 UI 点击“新建”生成额外专用 workflow id `3aad5e46-7e89-47cb-af10-a084421505b1`，稳定帧只有默认 End 节点、未运行；名称已准确改为 `sy_c2c_r38_delete_focus`，编辑器标题随草稿同步。未添加节点、未点击运行、未打开任何既有项。
+- 09:33 专用空工作流保存出现“已保存”，关闭 Editor 无未保存确认；主列表精确显示 `sy_c2c_r38_delete_focus / 未运行 / 1 个节点`，原三项仍为 35/36/37 节点且未运行。下一步只操作该行删除按钮，核对不可恢复确认名称后执行授权清理。
+- 09:35 HMR 原路径实测闭环：删除确认精确为 `sy_c2c_r38_delete_focus` 且默认焦点在“取消”；仅点击一次“删除”后出现“工作流已删除”，专用对象消失，fresh 状态焦点精确落在顶栏 `button 新建`。列表只剩 V7/V6/V5，35/36/37 节点且全部“未运行”；本轮两个 r38 专用对象均不存在，运行/历史仍为 0。
+- 09:41 最终验证：Workflow 全目录 42 个文件、267/267 测试通过（比上一基线新增成功回“新建”、成功不触碰旧 ref、失败回旧按钮 3 条）；desktop typecheck exit 0；`check:hard-constraints` 通过；最终 `git diff --check` 无输出。最后一次 HMR 后真实重进 Workflow 仍只见原 V7/V6/V5 三项，35/36/37 节点且全部未运行，无任何 `sy_c2c_r38_*` 对象。
+# 2026-08-28 第 42 轮 C-to-C
+
+- 12:25 规则与实现基线：已完整加载 Computer Use、planning-with-files-zh、impeccable audit/product，读取仓库 repository/execution/UI/frontend/testing/API、编辑器兼容矩阵、模块边界、shadcn 配置与全局主题。用户预期仅以已运行客户端真实操作；实际未启动/停止/重启服务或应用，未创建 worktree/分支/提交。
+- 12:25 共享状态：`git status --short` 显示大量前 41 轮既有修改，全部作为只读基线；唯一夹具 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r42-editor-project` 不存在。下一步只用 apply_patch 创建最小普通目录，不初始化 Git。
+- 12:25 兼容与产品边界：权威 matrix 明确 Claude Code/Codex/Cursor/WorkBuddy 的项目 Rule/Skill 落点；当前 IDE 管理 renderer 只提供 Skill/Rule 扫描及全局/项目切换，不提供 Prompt 扫描。资源仓库有 Skill/Rule/Prompt 三类真实 UI。Prompt 安装若受某编辑器支持，将以资源详情安装流和夹具目录只读检查取证，不把它伪造成 IDE 管理扫描能力。
+- 12:32 客户端基线：Computer Use 只读定位到当前仓库 Electron 41.2.1 的唯一已运行 `Synapse AI Studio` 主窗，URL 为现有 `127.0.0.1:19731`；启动台 17 个应用入口完整，焦点在“应用”，无可见弹层或独立窗。未启动新进程。
+- 12:34 设置入口：真实点击启动台“设置”后分类完整，包含“项目和知识库”；导航后旧 tile 卸载，焦点暂落 HTML 根，尚不足以判定本轮目标缺陷。下一步从当前 fresh 树进入该分类，记录表格现有行数与名称，只统计不打开既有项目。
+- 12:36 项目基线：设置表格现有 6 项，普通项目 4、托管知识库 2；名称依次为 Projects_Js、演示知识库、私人知识库、Synapse、SynapseDocuments、公司文档仓库。未点击任何既有行操作。添加项目 Dialog 初始焦点正确在“项目名称”，名称/路径标签、浏览、取消、添加、关闭均可访问。
+- 12:38 必填校验首次证据：空表单点击“添加”得到单一明确错误“项目名称和项目路径都不能为空。”且零写入，但焦点仍停在提交按钮，没有回到首个无效“项目名称”。这与本轮失败回焦要求和常规表单可访问性不符，先记候选稳定缺陷；下一步用“路径有效、名称为空”再复现一次，稳定后补聚焦红灯。
+- 12:40 必填回焦稳定缺陷：填入唯一 r42 有效绝对路径、名称保持空，再点“添加”，错误仍正确阻断且焦点再次停在提交按钮。两次 fresh AX 一致，排除 Computer Use/原生面板限制。下一步在 `ProjectAddDialog` 现有交互测试补“名称为空回名称；路径为空回路径”聚焦红灯，生产最小修复仅添加字段 ref 与失败分支 focus。
+- 12:44 必填回焦修复：首个测试因 jsdom `.click()` 不会像真实指针一样先聚焦按钮而假绿；修正测试让提交按钮先获焦后得到 1/1 精确红灯。生产仅增加名称 ref，并按首个缺失字段聚焦，专项 1/1 绿；发布说明已更新。HMR 按现有客户端行为回到 Agent，未保存的 Dialog 草稿消失、仍零项目写入；下一步从 fresh 设置入口重走原路径实测。
+- 12:47 HMR 复测准备：重新进入“项目和知识库”后仍精确 6 项，确认 HMR 未写入草稿；重开添加 Dialog，初始焦点仍在项目名称。下一步用 r42 路径重走空名提交，核对修复后的焦点，再测试浏览取消。
+- 12:49 必填回焦 HMR 实机闭环：填写 r42 有效路径后空名提交，错误仍正确阻断，fresh AX 焦点从“添加”精确回到“项目名称”。修复与专项绿灯一致。下一步在同一 Dialog 点击“浏览”后只取消原生面板，确认路径草稿和表单保持。
+- 12:52 原生浏览取消：项目目录选择器正常打开在 macOS 原生 sheet；只点击 Cancel，未选任何目录。返回后 r42 路径草稿与错误提示完整保留，焦点精确回“浏览”。这是预期行为，不是 Computer Use 限制。下一步用 Escape 关闭添加 Dialog并确认回“添加项目”，再重开测试重复路径。
+- 12:54 添加 Dialog Escape：关闭后表格仍为 6 项，焦点精确回“添加项目”；再次打开为干净空表单且名称自动获焦，证明取消草稿不持久化。下一步用 `sy-c2c-r42-project-duplicate-path` 名称配既有 Synapse 路径，验证重复路径只阻断新草稿并回焦路径。
+- 12:56 重复路径草稿已准确填入：专用测试名配既有 Synapse 绝对路径，尚未提交。所有输入动作基于 fresh AX，一次一字段，未打开既有 Synapse 项目。下一步只提交一次，预期得到“路径已经存在”且回焦路径、项目仍 6 项。
+- 12:58 重复路径通过：提交一次后提示“这个项目路径已经存在了。”，Dialog 保持、焦点回路径、零写入。随后只把草稿改为既有名称 `Synapse` + 唯一 r42 路径；旧错误提示在再次提交前仍显示，属于当前表单状态策略。下一步提交一次真实验证重复名称；若被接受，它仍是唯一 r42 项目配置，可在同一对象上修正名称，不创建第二项。
+- 13:00 重复名称稳定缺陷：唯一 r42 路径配既有名称 `Synapse` 被真实添加，toast 成功，列表从 6 变 7 且出现两个同名行；既有行未打开/修改。源码 `useProjectActions` 只比较路径，确认不是工具偏差。影响是名称驱动的项目选择、Agent 和安装目标会歧义。下一步补最新配置上的大小写不敏感名称去重红灯，以及 Dialog 重名失败回名称红灯；最小修复后只把当前 r42 行修改为唯一名称。
+- 13:05 重复名称修复：新增动作测试与 Dialog 交互测试均精确红（真实行为分别为保存成功、焦点留提交按钮）。最新配置先判重复路径，再按 trim + 不区分大小写阻止重复名称；Dialog 等提交态解除后回名称。2 文件/2 聚焦测试绿，发布说明已更新。HMR 后 Agent 侧栏真实出现第二个同名 `Synapse`，证明歧义影响；未点击任何会话或项目，现已返回设置准备只改 r42 行。
+- 13:08 专用项目恢复：通过绝对路径精确定位最后一行，只打开该行“修改”，把名称改为 `sy-c2c-r42-editor-project` 并保存；toast 成功、列表 7 项且唯一名称/路径准确，焦点回该行“修改”。原 6 项名称、路径和顺序均不变。下一步进入资源仓库记录三类基线并创建专用资源。
+- 13:11 资源仓库 Skill 基线：入口首帧先保持设置、下一稳定帧进入技能 tab；共 32 项、最近删除 7、默认按最近修改，当前搜索为空。只记录计数与可见卡片数量，不展开任何既有详情/正文。顶栏三类 tab、搜索、分类筛选、排序、同步状态和“新建 技能”均可访问。
+- 13:14 Skill 创建窗口：点击“新建 技能”后真实打开专用创建窗口 URL，首个稳定帧包含中文名称、机器名称、分类、使用说明、简介、外观、主说明和附件；标题为“新建 Skill · 主说明”。未填任何字段。下一步空保存验证必填与回焦，再用 Escape/取消验证关闭回主窗，不保存。
+- 13:16 Skill 空保存：6 个必填错误（中文名称、名称、分类、简介、图标、主说明）均明确且零写入，但焦点仍停“保存”，未回首个错误中文名称。记为共享内容编辑器候选稳定缺陷；下一步先填写除中文名称外的最小合法值再保存复现，避免把多错误并发渲染误判为焦点时序。
+- 13:18 单错误复现准备：机器名已填 `sy-c2c-r42-skill`，简介为无害固定文本；中文名称保持空，错误按字段输入即时减少。下一步选择既有分类、测试图标并填主说明，只留下中文名称错误后保存。
+- 13:20 分类选择：分类下拉通过可访问 listbox 打开，9 个既有分类均可键鼠选择；本轮选“自动化”，选择后回分类控件。未新增分类或改变既有资源。下一步选择“测试”图标并填固定主说明。
+- 13:22 单错误草稿完成：测试图标已选、主说明精确 `R42_SKILL_BODY`，现在仅“中文名称”为空，其余必填均满足。下一步从主说明聚焦态点击保存，若仍停保存则共享内容编辑器回焦缺陷成立。
+- 13:23 内容编辑器校验回焦稳定缺陷：仅中文名称为空时保存仍正确阻断、错误唯一，但焦点确定停“保存”。空表单与单错误两次 real UI 一致，排除多错误时序。下一步读取共享内容编辑器现有 refs/测试，补首个错误回焦红灯并外科修复；不改变资源 schema 或能力表面。
+- 11:43 内容编辑器回焦修复：共享 `useContentCreateForm` 的聚焦回归先精确红灯（提交后活动元素仍为保存按钮）；最小实现只记录当前 form，并在错误渲染后的 effect 中聚焦首个 `aria-invalid=true` 控件。专项 1/1 绿，发布说明已更新；没有改变 Rule/Skill/Prompt schema、安装能力或兼容矩阵。下一步等待现有 HMR 后回同一创建窗实测，再保存专用 Skill。
+- 11:48 HMR 原路径闭环：现有内容窗先进入可恢复错误边界，点击产品“重试”后得到干净 Skill 表单，旧草稿未写库。按相同固定值重建后只清空中文名称并保存，唯一错误出现且焦点从保存精确回中文名称；修复真实通过。专用名称尚未恢复，资源仍未创建。下一步只填中文名称并保存一次。
+- 11:52 Skill 创建与搜索：恢复中文名称并保存后，按钮进入明确“正在保存…”禁用态，约 2.5 秒后创建窗自动关闭；资源仓库总数 32→33，专用项位于最近修改首位。搜索 `sy-c2c-r42-skill` 后明确“显示 1 / 33 项”，唯一卡片标题、简介、作者、自动化分类和测试图标语义准确，既有项未打开。下一步打开唯一详情，覆盖编辑取消/保存和安装入口。
+- 11:58 Skill 详情与编辑取消：详情独立窗标题、标题/名称、简介、分类与 `R42_SKILL_BODY` 全匹配；编辑预填一致。把简介改成取消测试值后，放弃确认文案清楚且 Escape/“继续编辑”都保留草稿，但两条路径焦点均落窗口根，稳定复现。新增聚焦回归精确红灯；确认层只记录打开前活动控件并在 `onCloseAutoFocus` 恢复，两个内容编辑器聚焦专项 2/2 绿，发布说明已更新。当前取消测试草稿未保存。
+- 12:06 Skill 回焦/取消实机闭环：HMR 恢复已保存简介，证明取消测试值未落库；再次修改后打开放弃确认，点击“继续编辑”精确回“取消”按钮。随后再次打开确认并只放弃草稿，编辑窗关闭，资源本体保持原值。Rule 既有基线为 3、最近删除 1。
+- 12:06 Rule 创建：真实创建窗填专用标题、固定简介/正文、质量与规范分类、测试图标；先用 `bad/name` 保存，产品明确提示合法字符规则并由共享修复精确回名称。改为 `sy-c2c-r42-rule` 后只保存一次，列表 3→4，专用项最近修改首位，既有三项未打开。下一步创建 Prompt 并记录其真实安装能力。
+- 12:13 Prompt 创建/重复：既有基线 11、最近删除 0；专用 Prompt 以工作效率分类、测试图标、`R42_PROMPT_BODY` 创建后列表 11→12。第二个同标题完整草稿连续两次被“已存在同名提示词”阻断，零新增，但焦点都落窗口根。异步字段错误聚焦测试先 1/1 红；表单 hook 识别带 `field` 的业务错误并复用首错呈现/聚焦，Prompt 重名标记为 `title`，三个内容聚焦专项 3/3 绿。下一步 HMR 原草稿复测并放弃重复草稿。
+- 12:20 Prompt 重名实机闭环：HMR 清空未保存重复草稿但保留唯一已建资源；按同样固定值重建后，重名错误改为标题字段内联呈现，焦点精确回标题。放弃重复草稿后回主窗，未创建第 13 项。权威 matrix 与真实 Prompt 卡片都只有运行/复制/更多操作，没有安装入口；IDE 管理也仅 Skill/Rule，故 Prompt 项目安装属于明确不支持能力，后续不绕过。
+- 12:20 IDE 扫描基线：真实内容页记录 Cursor 18、Codex 55、CC/Synapse 25、Windsurf 1、Antigravity 9、Hermes 31、WorkBuddy 4；不打开既有详情。Cursor 项目 Skill 为 Projects_Js 3，Rule 为 Projects_Js 14；两个托管知识库路径不存在。新添但完全空的 r42 普通项目不出现在扫描结果中，刷新后仍如此，这是当前产品只显示命中内容项目的空态语义，而非安装失败。
+- 12:20 IDE 交互与窗口：刷新完成后 toast“扫描结果已刷新”且焦点回刷新；Skill/Rule、全局/项目、内容/目录切换均可键鼠访问。目录页显示 Cursor 全局规则不支持、全局技能路径。独立窗首帧空壳，稳定帧标题 `Synapse AI Studio IDE 管理`；重复打开复用同一窗，关闭后焦点回主窗 IDE 管理入口。
+- 12:20 响应式/主题：IDE 管理在 960×768 与原生 Zoom 后约 1357×768 均无横向遮挡，侧栏/类型/范围与内容保留，已恢复窄屏。主题基线“跟随系统”，真实切深色→浅色→跟随系统，控件、正文与布局均保留，最终设置已恢复。
+- 12:10 IDE 卸载取消回焦：Cursor 项目作用域只选专用 `sy-c2c-r42-skill` 后，批量“移到废纸篓”确认用可见取消与 Escape 两条路径都稳定保留文件，但焦点落 HTML 根。聚焦回归先精确红灯；AlertDialog 关闭后优先恢复仍存在的批量删除入口，删除成功导致入口卸载时回退到刷新按钮，专项 5/5 绿。下一步依赖现有 HMR 原路径复测，再按 Cursor→Codex Skill→Codex Rule 顺序最终卸载。
+- 12:17 IDE 最终卸载：Cursor 与 Codex 的专用 Skill 均只选 1 个 r42 项并移入系统废纸篓，两个 Skill 主文件和身份文件均消失；Codex 专用 Rule 确认框精确显示 r42 夹具 `AGENTS.md` 后移入废纸篓，扫描中 r42 Rule 消失。成功卸载 Skill 后焦点第二次落根，定位为 AlertDialog 关闭晚于父层刷新回焦；成功态改为关闭时直接回退刷新按钮，Dialog/模块 12/12 绿。Rule 卸载移除了唯一标记块并遗留空 `AGENTS.md`；该文件随最终夹具目录一起由 Finder 可恢复清理。
+- 12:27 资源清理阻塞：Skill 软删除连续两次、Rule 和 Prompt 各一次均在精确确认唯一 r42 名称后进入真实删除请求，但每次都等待约 60 秒后由主进程报“同步仓库超时，请检查网络后重试”；日志确认请求进入 `content.deleteContent`，没有本地部分删除，三项仍各唯一存在。该流程先拉取资源 Git 仓库以保证冲突检查，不能安全绕过为直接文件修改。IDE/内容/项目/扫描服务相关 17 文件、187/187 测试已通过。下一步清理与资源 Git 无依赖的专用项目配置和 Finder 夹具，三项资源作为唯一外部同步阻塞明确留档。
+- 12:35 最终本地清理与验证：设置 UI 已删除唯一 r42 项目配置，原 6 项逐行精确不变；Finder 只选 `sy-c2c-r42-editor-project` 并用 macOS“移到废纸篓”快捷操作回收，原路径只读检查为不存在，未清空 Trash。IDE 最终扫描无 r42，现有 Cursor/Codex/CC/Windsurf/Antigravity/Hermes/WorkBuddy 数量仍精确为 18/55/25/1/9/31/4。资源仓库精确搜索确认外部同步失败后仍仅各 1 个专用 Skill/Rule/Prompt，没有重复项。最终 17 文件、187/187 测试，desktop typecheck、hard constraints、`git diff --check` 全绿；未启动/停止/重启应用或服务，未创建分支/worktree/commit/push。
+- 12:47 主线程安全复核：Rule 安装解析阶段虽能瞬时得到 `targetExists`，但安装结果不返回该信息；共享区块只记录 Rule ID，扫描结果与安装状态缓存均从当前区块重建，不持久化“安装前文件不存在”。因此无法区分“安装创建的新文件”和“用户预存的空占位文件”。已回退空文件整文件回收逻辑与错误发布说明，安全回归固定为：移除最后一个 Synapse 区块后保留空共享文件，不调用系统废纸篓。遗留空文件明确作为兼容限制，不再声称已修复。
+- 12:50 安全复核验证完成：共享 Rule 区块、安装状态、扫描与复制服务专项共 4 文件、70/70 通过；新增回归从真实零字节 `AGENTS.md` 经区块安装再卸载，确认文件仍存在、内容为空且不会调用系统废纸篓。desktop typecheck、`check:hard-constraints`、`git diff --check` 均通过。没有再操作三个外部同步阻塞资源，也没有启动、停止或重启应用/服务。
+- 2026-08-28 第 43 轮基线：Synapse 根仓库仍在 `main`，HEAD 为 `a473f7ce5b6b264a6bba1432871080b82e6237cc`，唯一远端为既有 `origin`，本地 Git 配置与前轮一致；共享工作区含前 42 轮大量既有改动，全部只读保留。三个 r43 专用夹具路径均确认不存在。Git 设计明确禁止 force push、自动 merge/rebase、可视化冲突解决和远端分支写管理；同步只允许干净工作区上的 fetch + ff-only pull + push，分叉必须安全停止。
+- 13:xx 第 43 轮真实 UI 基线：已运行客户端唯一主窗为 `Synapse AI Studio`，初始停在 Agent 空会话，输入框获焦；进入资源仓库后稳定加载 Skill 33 项，首项精确为唯一 `sy-c2c-r42-skill`，说明第 42 轮删除超时后没有重复项或部分删除。当前尚未触发删除。
+- 13:xx r42 清理外部阻塞：唯一 `sy-c2c-r42-skill` 的删除确认明确为可从“最近删除”恢复；提交一次后真实进入“正在删除...”，30 秒与约 65 秒读数均未完成，最终回详情且主列表仍为 33 项、专用 Skill 仍唯一存在。行为与第 42 轮资源 Git 同步超时一致。按本轮硬约束立即停止全部 r42 删除重试，Rule/Prompt 本轮未触发删除；未绕过冲突保护、未修改资源文件。
+- 13:xx r43 夹具基线：仅在 `sy-c2c-r43-git-local` 中用 apply_patch 创建 3 个文本文件，并把 apply_patch 生成的 2×2 PPM 转为 PNG 后删除中间源；Git ceiling 预检确认 init 前不是独立仓库，随后在精确路径初始化 `main`，仅写 local identity `sy-c2c-r43@example.invalid` / `sy-c2c-r43`，基线提交为 `5559634`，工作区干净。尚未添加 remote/upstream，便于 UI 覆盖无 upstream 状态。
+- 13:xx Git System App 基线：启动台内嵌 Git 首帧显示仓库列表 Loading，稳定帧显示 6 个既有登记仓库；只记录数量和状态，不进入、不刷新、不操作任何既有仓库。顶栏包含仓库/环境/安装 Git/访问、添加本地仓库、克隆仓库和新窗口入口，列表可按全部/需要处理/已同步/不可访问筛选。
+- 13:xx “添加本地仓库”表单：路径为只读选择结果，名称可编辑，初始焦点在本地路径；“选择文件夹”打开 macOS 原生目录面板。将只选 r43 peer 专用路径，不使用真实仓库列表项。
+- 13:xx 原生目录选择：Go to Folder 精确定位 `sy-c2c-r43-git-peer`，列视图仅显示本轮 `nonrepo.txt`；点 Open 后添加表单自动填入完整绝对路径和默认名称，焦点回“选择文件夹”。尚未提交添加。
+- 13:xx 非仓库第一次验证受父仓库语义影响：专用 peer 目录位于 Synapse 根内，标准 Git 会把它解析为父级 Synapse 仓库；提交添加后 Dialog 关闭、列表仍 6 项且没有新增 peer，实际命中“同一真实 Git 根已登记”的去重路径，而不是 non-repository。未打开或修改 Synapse 仓库。为真正覆盖拒绝态，将只在 peer 内用 apply_patch 放置指向不存在路径的 `.git` gitfile，使 Git 在该精确子目录失败关闭且不向上回退；这属于夹具结构，不是产品修复。
+- 13:xx 非仓库拒绝已真实命中：失效 gitfile 使主进程明确显示“所选目录不是 Git 仓库。”，Dialog 保持、列表未新增。错误后焦点落在 HTML 根而非路径/选择按钮，属于键盘可恢复性候选缺陷；本轮先记录一次，不在没有二次真实复现前修复。
+- 13:xx peer 已转换为空 Git 仓库：删除本轮无效 gitfile/占位文件后，在精确 peer 路径初始化 `main`，local identity 正确，状态为 `No commits yet on main`。添加目录面板直接恢复在该空目录，未浏览其它仓库。
+- 13:xx 空仓库列表态通过：登记后列表从 6→7，仅新增 `sy-c2c-r43-git-peer`，明确显示“尚无提交”、分支 `main`、主操作“初始化并推送”和“进入”；既有 6 项顺序/状态未操作。说明产品没有把无提交仓库误报为已同步。
+- 13:xx 空仓库工作台：改动 Tab 正确显示“暂无改动 / 选择文件查看差异”，分支控件禁用，顶部“尚无提交 / 初始化并推送”一致。切到历史 Tab 后同时出现“暂无提交”和“读取失败”，并把 Git 原始英文 `fatal: your current branch 'main' does not have any commits yet` 直接展示给普通用户，构成明显状态矛盾与实现泄漏；下一步切回再进做第二次真实复现，稳定后补精确回归。
+- 13:xx 空历史修复：同一路径二次真实复现后，新增精确测试得到 1/1 红灯（确实调用 `listHistory` 并渲染 fatal）；生产只把 history hook 的 enabled 收紧为“历史 Tab 且快照确认 hasCommits=true”，不改 service、错误分类或同步边界。专项 1/1 绿，发布说明已更新。HMR 按既有行为回 Agent，下一步回 Git 验证空历史只剩空态。
+- 13:xx 有提交无 remote/upstream 列表态：r43 local 真实登记后列表新增第 8 项，显示 `main`、“未设置上游”、主操作“首次推送”和“进入”；与空 peer 的“尚无提交/初始化并推送”明确区分。HMR 后两个专用登记均持久化，既有 6 项保持未操作。
+- 13:xx local 洁净工作台/历史通过：顶部 `main`、未设置上游、首次推送，改动态无文件；历史只列 `R43 baseline`（作者为专用 local identity）。提交详情列出 4 个新增文件，默认选中 `binary.png`，明确降级为“二进制文件已变更”，Diff 布局/自动换行控件可访问，没有把 PNG 当文本展示。
+- 13:xx 工作区状态真实覆盖：apply_patch 制造后 UI 自动刷新为 5 个逻辑改动（2 删除、1 修改、2 未跟踪），未把未暂存删除+同内容新文件自动合并为 rename；默认选中 0，删除文本 Diff 正确显示 `/dev/null` 与删除行。单文件 checkbox 选择/取消从 0→1→0，焦点留 checkbox，等价于产品文件级提交选择；产品设计没有暴露真实 index 暂存/取消暂存按钮。
+- 13:xx 提交确认交互：全选后显示 5/5；Dialog 初始焦点在提交说明，空说明时提交按钮 disabled，无冗余 helper。点击取消后 5 项选择完整保留，焦点精确回工具栏“提交改动”，键盘连续性正确。
+- 13:xx UI 提交成功：固定说明提交后按钮进入“提交中”且取消禁用，完成后 Dialog 保持并显示“已提交。”、选择 0/0、说明清空、提交按钮禁用；没有自动关闭造成状态闪烁。提交过程只作用 r43 local。
+- 13:xx 首次 push/upstream：本地 bare remote 与 local/peer 的 `origin` 仅通过夹具 local config 预置；工作台刷新仍显示未设置上游，点“首次推送”后 UI 直接完成 push + set-upstream，状态变“已同步”，无 remote 歧义 Dialog（唯一 origin）。随后 peer 用 CLI fetch + tracking 分支取得 UI 提交，再只在 peer 修改同一固定 `fixture.txt`、提交 `d3f92cf` 并推到 bare main。工作台“更多 Git 操作”只含拉取/推送/同步，显式 fetch 入口是“获取远程分支”。
+- 13:xx 远端跟踪通过：UI“获取远程分支”执行 fetch 后本地状态从已同步变为 `↓1`，主操作变“拉取远程更新”；点击后 fast-forward 成功回已同步。再次获取远程分支保持已同步且无错误，覆盖 fetch 无变更。所有远端为本机 bare。
+- 13:xx ahead/push 通过：`R43 local ahead` 已由真实 UI 提交；截断后的 fresh 读取只显示一次“已提交 / 可以推送本地提交”，未重复提交。点击成功态“推送”后关闭 Dialog，工作台为洁净且“已同步”，证明普通 ahead push 成功。
+- 13:xx 第二个稳定 bug：提交成功后再选新改动并重开确认，旧“已提交 / 可以推送本地提交”二次稳定残留，提交按钮因此不可用。精确回归先 1/1 红；在 Dialog 从关闭变为打开时只重置 error/commitNotice，1/1 绿。HMR 后同一路径确认旧结果消失、焦点回提交说明、新提交成功，未改 Git 写入或权限边界。
+- 13:xx 分叉安全边界：local 与 peer 从同一远端头各自修改同一固定文本并各提交，peer 普通 push 后，local UI fetch 从 `↑1` 变为“分支已分叉”；主操作“处理分叉”及菜单拉取/推送/同步均禁用，明确要求外部 Git 工具合并或变基。产品未启动 merge/rebase、未写冲突标记、无 abort/continue/可视化解决入口，符合既定安全设计且没有 force push。
+- 13:xx 分支：非法 `bad branch` 与重复 `r43-topic` 均阻断并保持输入焦点，成功创建后自动切换，分支选择器同时列本地 main/r43-topic 与 origin/main，切回 main 后恢复分叉状态。错误文案直接暴露 `fatal:`，且取消重复创建后错误仍挂在工作台；属于普通用户心智偏差。当前产品无分支删除入口，无法覆盖删除取消/成功，属明确能力边界。
+- 13:xx 窗口/响应式/主题：Git 独立窗口首帧即为仓库列表，稳定帧一致，标题仅为 `Synapse AI Studio Git`，URL 只含 system-app/appId，不把当前仓库路径写入窗口标题；关闭后回到主窗应用启动台。主窗实测 960×768，原生 zoom 为 1357×768，再精确恢复 960×768；深色→浅色→跟随系统均即时生效并恢复原值。
+- 13:xx 清理：Git 列表中的 local/peer 均经“移除仓库？”确认删除，确认文案明确不会改本地目录，列表回到原 6 项。Finder 在 Synapse 根列视图中逐项精确选中 local、peer、bare remote，并用“将所选项移到废纸篓”操作移入系统废纸篓；未清空，仍可恢复。
+- 13:xx 验证：Git 模块/服务/IPC/集成共 29 个文件、383 项全部通过。首次全跑发现空历史启用条件对缺省 `hasCommits` 过严并导致 2 个既有 history 测试失败，随即收紧为“只有明确 false 才禁用”，全量复跑 383/383 绿。desktop typecheck、hard constraints、`git diff --check` 均通过。三个夹具原路径不存在；Synapse 根仍为 `main`、HEAD `a473f7ce5b6b264a6bba1432871080b82e6237cc`、唯一 origin 与 local config 均未改变。
+
+# 2026-08-28 第 44 轮 C-to-C
+
+- 开场基线：已读取 AGENTS、三份规划记录当前阶段、planning-with-files-zh、computer-use、impeccable product/audit、karpathy-guidelines，以及 repository/execution/UI/frontend/testing/module-boundaries/agent-runtime-security/knowledge-base 与 Agent Checkpoint 权威设计。会话导出测试明确覆盖取消保存、会话归属预检、附件路径投影、session key/运行时路径脱敏、调试包与最大大小。
+- Git 基线：根仓库仍为 `main`，HEAD `a473f7ce5b6b264a6bba1432871080b82e6237cc`，唯一远端 `origin`，local config 与第 43 轮一致；共享工作区大量前 43 轮改动全部只读保留。唯一 r44 夹具路径预检不存在。
+- 已用 apply_patch 创建唯一普通非 Git 夹具 `sy-c2c-r44-agent-project`，仅含 README 和 `export/.keep`；未初始化 Git、未创建 worktree/分支/提交或 remote。下一步通过已运行 Synapse 设置 UI 添加唯一专用项目，不打开任何既有会话。
+- 13:xx Computer Use 基线：精确定位当前仓库 Electron 41.2.1 的唯一已运行 `Synapse AI Studio` 主窗，为 960 宽窄屏 Agent 空会话，composer 获焦、发送 disabled，无运行中状态/权限请求/独立窗。只读了辅助树结构，未打开任何既有会话，也不在记录中转录既有会话名或正文。
+- 13:xx 项目设置：从 Dock 设置进入“项目和知识库”，稳定帧为 6 个既有配置；只记录数量，未点击其任何修改/删除/导出或会话。顶部的“添加项目”入口可达，下一步打开唯一新增表单。
+- 13:xx 添加项目表单已真实打开，名称自动获焦，名称/路径/浏览/取消/添加/关闭均有可访问语义。已只填唯一专用名称，未提交；下一步填写夹具绝对路径并二次 fresh 核对后才添加。
+- 13:xx 专用项目已仅提交一次，toast 为“项目已添加”，表格从 6 变 7，唯一 r44 名称/路径精确，既有 6 项顺序不变。返回后焦点在存活的“添加项目”，没有重复项。下一步进入 Agent，核对专用项目组与新建会话入口联动。
+- 13:xx Agent 联动通过：返回对话后专用项目组即时出现，唯一“新建对话”入口可达。点击后只在该项目下创建一个空会话，“暂无消息”、composer 自动获焦、发送 disabled，当前模型可见但未修改任何 Provider/模型/权限设置。
+- 13:xx 会话命名路径：双击专用会话标题打开“重命名会话”，原名全选且输入获焦；已替换为唯一 r44 会话名，尚未保存。下一步保存一次并核对侧栏/header 双处一致。
+- 13:xx 命名/草稿：会话名仅保存一次，toast、侧栏与 header 三处一致，保存后焦点在新 header。无害草稿填入后发送变为 enabled，清空后立即恢复 disabled，时间线仍“暂无消息”；证明未触发 Provider、未把草稿当历史。
+- 13:21 第 1 次 Provider 发送：发送前 fresh 核对固定文件任务正文、会话归属和发送 enabled；仅点击一次。立即帧中用户消息只出现一次、composer 已清空、侧栏“正在输出”、时间线“处理中 0s”且输入主操作变为“停止”，没有“发送失败”或草稿恢复。当前不停止这一轮，等待完成以验收 Checkpoint。
+- 13:21 第 1 次完成态：约 10 秒完成，侧栏 spinner 消失、输入恢复 disabled，用户消息与最终回复各一次，无发送失败。展开“已处理”显示前台 `Write Done`，但未出现文件 Checkpoint 卡片。
+- 13:21 候选稳定缺陷（P0 项目隔离/Checkpoint）：会话明确在 `sy-c2c-r44-agent-project` 组，设置路径也是夹具目录；但 Agent 回复和真实文件都显示写入 Synapse 根的 `sy-c2c-r44-note.txt`，夹具内同名文件不存在。根文件为 17 字节且内容精确 `R44_CHECKPOINT_OK`。该路径偏差导致 Checkpoint 卡片/撤销链不可达；暂不修复，先用第 2 次无写入停止任务与源码测试交叉定位，不再发送文件任务制造额外写入。
+- 13:25 现场保持：展开后的 `Write Done` 仍保持焦点，完成态未出现迟到的 Checkpoint；四分钟后界面仅更新时间变化，根误写文件与夹具缺失状态未被后台恢复。下一步读取会话创建与项目工作目录的精确路径，再发送唯一无文件停止任务。
+- 13:3x 隔离链路阶段结论：renderer 新建/发送均携带所选 session 的 projectId；main `resolveProjectAgent` 从该 id 取配置并把 `project.path` 传给 `ProjectContainer.open(...workspacePath)`；Agent Runtime 以 `ctx.projectMeta.workspacePath` 构造 `workDir`，SessionManager 选择 `message.workspacePath ?? workDir`，Claude SDK query 与 Checkpoint tracker 同用该 cwd。专用 SQLite 会话的 `workspacePath` 为 null，按设计必须回退项目 workDir；结构化日志确认实际 live session 的 projectId 与 r44 配置一致，排除 renderer 错分组或发送到 Synapse 项目。
+- 13:3x 配置证据：持久化配置中的 r44 路径精确为夹具，且 config update 在 renderer 建会话前完成；因此当前剩余偏差位于“正确 projectId 对应容器的 workspacePath / SDK cwd”段，而不是 UI 归属。下一步针对嵌套 Git 根场景检查 SDK cwd 语义与 ProjectContainer 元数据不变量，先补可解释真实证据的红灯。
+- 13:32 稳定根因与红绿：SDK query 的 `cwd` 为专用嵌套项目，但其 env 继承 Electron 宿主 `PWD=Synapse 根`。新增嵌套路径测试精确红为 `cwd=/.../nested-project`、`env.PWD=/.../repository`；只在 SDK env 构造处把 PWD 对齐 cwd 后 1/1 绿。未改权限、工具策略、Checkpoint 或持久化边界，发布说明已更新。
+- 13:32 HMR：源码保存后既有 dev watcher 自动重载主进程，生成新日志文件；未手动启动、停止或重启任何服务/应用。主窗恢复同一专用会话、历史完整、composer 获焦且无运行态，说明下一次发送将新建使用修复环境的 live session。
+- 13:33 第 2 次 Provider：发送前固定文件任务正文、专用会话归属与 enabled 状态 fresh 核对；单击一次后用户消息只新增一次、composer 清空、侧栏 spinner、处理中计时和停止按钮正确。SDK 续接了上轮上下文，思考中把请求识别为重复任务；先等待真实结果，不额外点击或假定已写入。
+- 13:34 第 2 次结果：完成态无失败，但续接上下文使 Agent 沿用上轮已记住的 Synapse 绝对路径；展开证据确认第二个 `Write` 仍指向根文件，夹具仍未生成、无 Checkpoint。该结果不能否定新 PWD 修复，因为模型明确以“上一轮已创建”作为路径来源；下一步只检查产品是否有本地 reset/新上下文入口，若可用则作为覆盖恢复链后使用最后一次发送额度。
+- 2026-08-28 13:36：源码确认 `/new` 是 AgentCommandRouter 内建本地命令，调用 `resetSession` 并返回“下一条消息将开启新会话。”，不路由为 Provider prompt；可用于清除第 1 轮错误绝对路径的 SDK resume 上下文，再以最后一次真实 Provider 额度独立验证修复后的 cwd。
+- 2026-08-28 13:36：HMR 后专用会话稳定帧仍只含两次固定文件请求，两次均引用 Synapse 根且无 Checkpoint；composer 为空、发送禁用、无运行态。下一步从 composer 真实执行 `/new`，确认本地 reset 结果后再发送第 3 次固定文件任务。
+- 2026-08-28 13:37：专用会话 UI 执行 `/new` 后 0s 完成，时间线只出现本地固定回复，无 SDK/provider event；随后第 3 次且最后一次真实 Provider 发送同一固定文件任务，立即进入“处理中”、停止按钮与空 composer，未恢复已发送内容。
+- 2026-08-28 13:37：第 3 次在 `/new` 后完成，但时间线没有 Write/任何工具事件，只输出“已完成”文本；只读磁盘核对显示夹具目标仍不存在，Synapse 根现场仍为 18 字节 `R44_CHECKPOINT_OK\\n`。因此无法把这次样本当作 cwd 修复的 UI 成功验收，也无 Checkpoint 可撤销；总计 3 次 Provider 额度已耗尽，不再重试或制造运行态。
+- 2026-08-28 13:37：项目隔离 bug 的源码红绿与 HMR 已成立，但真实 UI 后验被 Provider 未执行工具而非发送失败阻塞；停止任务因发送额度无剩余按用户优先级不执行。下一步覆盖独立窗口、导出、响应式/主题和最终清理。
+- 2026-08-28 13:40：专用会话独立窗口首帧与稳定帧标题均为 `Synapse AI Studio 对话 · sy-c2c-r44-agent-session`，历史三轮与主窗一致、composer 可用；主窗同步显示“已经在新窗口打开/显示窗口”，再次进入复用同一窗口。关闭后自动回到主窗，焦点精确恢复到专用会话 composer。
+- 2026-08-28 13:40：首次导出保存取消后主窗与专用会话保持，但焦点落在页面根而非“导出对话”按钮；成功导出显示“对话调试包已导出”toast。ZIP 135818 字节、11 个预期条目、无 macOS `._`/`__MACOSX`，安全固定文本存在。
+- 2026-08-28 13:41：首次 ZIP 隐私检查稳定命中本机绝对路径：conversation、agent-events、timeline、transcript 四类文件均泄漏；敏感词初筛仅 agent-events 有 3 个字段标记，尚需区分键名与真实凭据。同名再次保存已真实出现系统覆盖确认，文案清楚且默认可取消；下一步先取消，再重复并确认 Replace，形成第二份导出证据。
+- 2026-08-28 13:44：导出隐私红灯精确失败于 packageText 仍含 `/Users/liyang`；现有测试原本还显式允许 tool file path，解释了四类导出泄漏。最小修复仅在最终导出值/文本边界把 POSIX/Windows 绝对路径替换为 `[path]`，不改持久化、运行时工具输入或 artifact 源路径；第一次实现误把内部 artifact storagePath 一并脱敏导致复制测试红，随即把脱敏移到最终序列化边界，专项 9/9 绿。
+- 2026-08-28 13:45：发布说明已增加 Agent 调试包本机路径隐私修复。下一步依赖现有 HMR 同路径重新覆盖导出，确认真实 ZIP 四类文件零绝对路径且安全文本仍在。
+- 2026-08-28 13:47：首次 HMR 实包复扫把泄漏从 58 降到 18，但仍暴露由 Markdown 反引号包裹、含尾斜杠的本机目录；补充同形态红灯后精确扩展 POSIX 绝对路径边界，专项再次 9/9 绿。最终 HMR 覆盖导出 ZIP 为 135524 字节、11 条目，POSIX/Windows 绝对路径、userData/自动记忆路径、已知密钥形态、其它会话标记、`._` 元数据均 0，固定安全文本命中 63 次。
+- 2026-08-28 13:51：主窗 960→1310（当前可用桌面边界下的宽屏稳定值）→960 真实拖拽通过，专用会话、历史与 composer 均保持；一次超出可用坐标的 1350 微调被 Computer Use 在动作前拒绝，无 UI 副作用。深色→浅色→跟随系统三态均真实切换并恢复原值；从设置导航重进 Agent 后仍选中唯一专用会话。
+- 2026-08-28 13:54：清理完成：唯一专用会话永久删除，专用项目配置从 7 项恢复为基线 6 项；Finder 将夹具目录（含 export ZIP）与 Synapse 根误写文件分别移入废纸篓，原路径均不存在，废纸篓未清空。最终 Synapse 仅一个主窗，无运行中 Agent、权限请求或专用资源。
+- 2026-08-28 13:56：验证完成：Checkpoint/timeline/export/window/attachment/runtime 15 文件 280 测试全绿；desktop typecheck exit 0，check:hard-constraints 通过，git diff --check 通过。根分支仍 main，HEAD `a473f7ce5b6b264a6bba1432871080b82e6237cc`、唯一 origin 均不变，共享前 43 轮 dirty baseline 未回退或覆盖。
+- 2026-08-28 14:00：主线程安全复审指出当前 POSIX 正则漏掉 `/tmp`、`/etc`、`/foo`、`file:///...` 与带空格路径，且可能只替换空格前半段。第 44 轮重新进入源码验证阶段；不恢复任何已清理 UI 资源、不进行 Provider 发送或 UI 写入。
+- 2026-08-28 14:05：安全复审红灯稳定复现：旧出口保留顶层 `/tmp`、`/etc`、`/foo` 与 `file:///...`，并把引号内含空格的 POSIX/Windows 路径只替换到空格前。最小修复扩展共享 `error-sanitize` 路径 helper，覆盖顶层/多级 POSIX、file URL、Windows 及引号或反引号包裹的完整路径；`https://`、协议相对 URL、相对路径、`and/or` 与普通 `a/b` 均保持。
+- 2026-08-28 14:06：结构化 `path`、`cwd`、`memory_paths` 及同类明确字段在值为绝对路径时执行字段级整值脱敏，`memory_paths` 容器整体脱敏；未加引号的自由文本路径仍以空白为安全边界，不用猜测正则吞掉 Markdown/自然语言。唯一 Markdown 直写 `transcript.md`、格式化 JSON 与紧凑 JSON 均进入同一 `writeText -> normalizeExportText` 最终出口。
+- 2026-08-28 14:07：最终验证全绿：桌面端全部导出相关专项 6 文件 / 43 测试通过（含会话导出与共享脱敏 28/28），desktop typecheck exit 0，hard constraints 通过，git diff --check 通过；r44 夹具与根误写路径仍不存在，未恢复会话、项目、导出物或执行任何 UI/Provider 写入。
+- 2026-08-28 14:xx：安全泛化续作开始。现有结构化路径字段使用固定枚举，无法覆盖 `projectPath`、`repositoryPath`、`workDir`、`homeDirectory`、`attachmentPath` 等含空格绝对路径；本阶段只以字段名语义判断替换枚举，保留 `isAbsoluteLocalPath` 字符串门槛并排除远端 URL 字段。
+- 2026-08-28 14:11：新增用例产生 1/9 精确红灯：五类新单值字段、绝对路径数组与对象内路径均只替换到空格前，分别留下 `Space/...` 尾部；`remoteUrl`、`httpUrl` 和非绝对 `relativePath` 负例未误杀，证明修复范围仅需结构化字段语义。
+- 2026-08-28 14:12：固定字段枚举已替换为审慎语义：`cwd/workdir/fileurl` 精确命中，单数字段仅匹配 `path/directory/root` 后缀，`paths/directories` 容器递归传递路径语义；所有字符串最终仍须通过 `isAbsoluteLocalPath`。URL 后缀字段（`fileUrl` 除外）显式排除，非绝对 `relativePath` 不脱敏。专项 28/28 绿。
+- 2026-08-28 14:13：最终验证全绿：全部桌面导出相关专项 6 文件 / 43 测试通过，desktop typecheck exit 0，hard constraints 与 git diff --check 通过。r44 夹具和误写文件仍不存在；本续作没有 UI、Provider、会话、项目或导出写入。
+
+# 2026-08-28 第 45 轮 C-to-C
+
+- 开场基线：已恢复 AGENTS、三份规划、planning-with-files-zh、computer-use、impeccable product/audit、karpathy-guidelines、repository/execution/UI/frontend/testing/module-boundaries/agent-runtime-security/knowledge-base 与 Checkpoint 权威规格，并核对第 44 轮 PWD/cwd 和导出脱敏修复。共享工作区已有大量前序未提交改动，全部只读保留。
+- 安全夹具：`/Users/liyang/Documents/code/github/Synapse/sy-c2c-r45-agent-project` 与 Synapse 根 `sy-c2c-r45-note.txt` 开场均不存在；现仅用 apply_patch 创建普通非 Git 夹具及最小 README，未初始化 Git，未启动、停止或重启任何进程。
+- 验收不变量：最多两次 Provider。第一次只有真实 Write/Edit 等文件工具落入夹具、根同名文件不存在且时间线生成 available Checkpoint 才进入停止任务；否则第二次优先重试文件任务。Bash `/bin/sleep 30` 按权威设计不应产生文件 Checkpoint。
+- 14:xx Computer Use fresh 基线：当前仅一个 `Synapse AI Studio` 主窗，无运行中 spinner、停止按钮、权限请求或独立窗；页面处于 Agent 空选择态。首次完整 AX 不可避免暴露了既有会话标题，但未点击、展开、复制、导出或读取任何既有消息正文，也未操作 Provider。已从 Dock 进入设置，焦点精确落“设置”。
+- 14:xx 项目设置稳定显示 6 个既有配置，与第 44 轮清理后的基线一致；只记录数量，未点击任何既有行。打开“添加项目”后焦点自动进入“项目名称”，表单仅含必要名称、路径、浏览、取消、添加，未出现嵌套卡片或冗余说明之外的复杂层级。
+- 14:xx 已按一字段一 fresh 的 Computer Use 节奏填写项目名称与绝对路径；两次稳定树均精确回读目标值，路径未落入名称、没有异步尾字符或其它字段漂移，“添加”可用。尚未提交。
+- 14:xx 只提交一次后 toast“项目已添加”，设置表从 6 增至 7，唯一新增末行为 r45 名称与精确夹具路径；焦点回“添加项目”。返回 Agent 后出现唯一 r45 项目组且无会话，右侧必要空态“请创建新的会话”，既有项目与会话未被选中或修改。
+- 14:xx r45“新建对话”只创建一个空会话：标题为时间占位、DeepSeek/deepseek-v4-flash、复制/导出禁用、无消息、composer 自动聚焦、发送禁用。双击专用会话行打开“重命名会话”，现有标题全选，取消/保存均可达；未读取或切换其它会话。
+- 14:xx 重命名值 `sy-c2c-r45-agent-session` 经 fresh 回读后只保存一次；toast“已重命名”，侧栏与会话标题同步，空历史与发送禁用保持，焦点回专用会话行。会话归属与名称已稳定。
+- 14:22 第一次发送前：composer 精确回读固定 Write 任务，发送按钮 enabled；只读磁盘确认夹具目标与 Synapse 根同名文件均不存在，夹具只有 20 字节 README。只点击一次发送后用户消息只出现一次、composer 清空、侧栏“正在输出”、`处理中 0s`、Agent 计时与“停止”按钮同步出现，焦点在停止，无失败态。
+- 14:23 第一次完成：运行 9 秒、不是发送失败，最终回复声称内置 Write 成功并给出 Synapse 根绝对路径；只读磁盘证实夹具目标缺失、根同名文件存在且为 17 字节精确 `R45_CHECKPOINT_OK`，无尾换行。时间线当前无 Checkpoint。该结果与第 44 轮同类嵌套项目错位一致，证明单纯对齐 SDK `env.PWD` 未闭合真实工具路径解析；根误写现场保持不动，待最终 Finder 清理。
+- 2026-08-28 14:24：展开首轮过程组后看到真实 `Write Done`，且思考文本明确把 `/Users/liyang/Documents/code/github/Synapse` 认作 `current project root`；这排除了“仅最终回复写错路径”的假象，说明 SDK 默认项目发现把嵌套普通目录提升到了外层 Git 根。SDK 主进程实际已同时设置 `cwd` 与 `PWD`，残余边界需由会话级系统上下文显式钉住，不能再靠环境变量猜测。
+- 2026-08-28 14:29：新增“嵌套普通目录必须把配置目录写入 SDK systemPrompt”的精确测试，旧实现 1/1 红；最小实现只在默认提示或现有 Persona 提示后合并工作区边界，不改 tool allowlist、权限模式、settingSources 或文件安全校验。定点红转绿，整文件首次回归仅暴露 Persona 既有精确断言需要同步接受追加边界。
+- 2026-08-28 14:33：安全复核确认 SDK 契约把 `cwd` 作为当前访问目录、`additionalDirectories` 作为超出 cwd 的显式授权；Synapse 的 `PermissionGuard/AuditSink` 覆盖 MCP/系统敏感操作，内置 Write/Edit 走 SDK permission/hook，并不存在普通会话根路径 guard。首轮误写证明祖先 Git 可让 SDK 自身错误放宽边界。已新增 Write/Edit/MultiEdit/NotebookEdit 越出 cwd 的 4 个红灯，并补 PreToolUse 硬拒绝；cwd 内和明确 additional directory 2 个正例保持放行，6/6 绿。Bash/MCP/外部进程不做不可靠字符串路径解析，继续服从 SDK permission mode 与 OS 权限，项目目录明确不是通用 OS 沙箱。
+- 2026-08-28 14:35：HMR 后专用会话 fresh 稳定帧空闲、无权限层/独立窗，权限模式仍是既有“跳过权限确认”；本地 `/new` 由 UI 立即显示“下一条消息将开启新会话”，0 秒完成且未触发 Provider。完整 session 82/82、typecheck、hard constraints 已绿，说明新增 PreToolUse 工作区 guard 即使在 bypass 模式下也不会被权限自动放行绕过。
+- 2026-08-28 14:36：第 2 次且最后一次 Provider 真正调用 `Write Done`，展开思考已把工作目录识别为完整 r45 夹具路径；只读磁盘核对夹具文件存在、17 字节精确 `R45_CHECKPOINT_OK` 无换行，夹具仅 README 与目标文件。Synapse 根同名文件仍是首轮 17 字节误写现场而非本轮新增。UI 完成态有真实 Checkpoint：“已编辑 1 个文件”、`+1 -0`、可撤销，文件行同为 `+1 -0`。
+- 2026-08-28 14:38：点击唯一文件行后右侧工作面板稳定打开，标题/文件数/关闭与返回对话控制齐全；默认统一 Diff + 自动换行，`/dev/null → b/sy-c2c-r45-note.txt`、单行 `+R45_CHECKPOINT_OK` 与无尾换行提示均与磁盘一致。切换到分栏并关闭自动换行后 radio/toggle 状态立即反映；本夹具依规格只能是短行，长行显示不适用。单文件 Checkpoint 按产品设计没有 4+ 文件才出现的折叠 disclosure，因此真实 aria-expanded 不适用，4 文件折叠状态由既有专项测试覆盖。
+- 2026-08-28 14:42：窗口从 960 拖至当前桌面边界可达的 1309，再回 960，右侧面板在窄屏独占/宽屏并列间正确切换，分栏与换行偏好全程保持。键盘两次观察到 Right 后选择值不变，进一步按标准 ToggleGroup 语义验证：Right 只移动 roving focus，Space 才激活目标，随后分栏值变 1；因此不是稳定 bug，不做代码修改。
+- 2026-08-28 14:44：自动换行可由聚焦后 Space 往返切换；Diff 面板 Escape 关闭后 fresh 明确回焦时间线里的唯一文件按钮。撤销确认首次打开默认焦点是安全的“取消”，Escape 后目标文件仍为精确 17 字节且可再次撤销；第二次打开点击“取消”同样保留文件、Checkpoint 与撤销入口。
+- 2026-08-28 14:48：Dock 切到设置再回对话后，专用会话、两条唯一用户消息、完成态与可撤销 Checkpoint 全部持久。独立窗首个可观测帧仅有必要“加载中”，紧接稳定帧完整呈现同一会话；主窗变为“已经在新窗口打开/显示窗口”，再次操作只聚焦已有窗，证明单例。关闭独立窗后主窗恢复且焦点落 composer。
+- 2026-08-28 14:50：基础设置开场外观为“跟随系统”；依次切到深色、浅色再恢复跟随系统，每一步 combo 值和“设置已保存”均稳定，没有修改 Provider、模型、权限或其它设置。
+- 2026-08-28 14:52：最终专项 14 文件 / 389 测试全绿，覆盖 checkpoint service/tracker、SDK workspace guard、runtime cancel/service/state、timeline、composer、独立会话窗口、Checkpoint panel/workspace shell；测试环境已有 Electron app path/log warning 不影响退出码。desktop typecheck 与 hard constraints 均 exit 0。
+- 2026-08-28 14:55：最终动作前 fresh 精确核对唯一 r45 项目、唯一同名会话、1-file Checkpoint、`sy-c2c-r45-note.txt +1 -0`，磁盘夹具恰有 README+目标两文件且夹具/根目标均 17 字节。确认撤销后经历可见“正在撤销”，夹具目标消失、README 保留；时间线仍保留“已编辑 1 个文件”、`+1 -0`、文件行与审查入口，状态改为“已撤销”，撤销按钮消失。
+- 2026-08-28 15:00：会话清理先尝试行内两段式“删除会话 → 确认删除”，Computer Use 对动态按钮的两次点击均未稳定提交且无错误/数据变化；改走同一行标准右键菜单后，确认弹窗精确显示 `sy-c2c-r45-agent-session`，永久删除成功并出现“会话已删除”。这是 Computer Use 动态控件时序差异，不是稳定产品 bug；既有组件测试已覆盖行内确认路径。
+- 2026-08-28 15:02：设置中的唯一 r45 项目已移除，配置数 7→6；Finder 仅将 `sy-c2c-r45-agent-project` 与首轮根误写 `sy-c2c-r45-note.txt` 移入可恢复废纸篓，未清空。最终 fresh 仅一个 Synapse 主窗，项目表无 r45、无 Agent 运行态/权限弹窗/独立窗；两处原路径均缺失、两项均精确存在废纸篓。
+- 2026-08-28 15:03：最终验证保持全绿：14 文件 / 389 专项测试、desktop typecheck、hard constraints、`git diff --check`。第一次路径复核误用 macOS 不存在的 `/usr/bin/test`，其“ABSENT”输出已作废；改用 `/bin/test` 二次核验得到可信缺失/废纸篓结果。共享脏工作树所有既有改动保持原样，未分支、提交、推送或控制任何进程。
+
+# 2026-08-28 第 45 轮 symlink 安全续修
+
+- 主线程审查指出 `guardConfiguredWorkspaceWrite` 当前只做 `path.resolve` + `path.relative`，不能阻止项目内 symlink 指向外部；这与文档所述 bypassPermissions 也不能绕过的直接文件边界不一致。
+- 初步仓库搜索发现 Checkpoint service/tracker 已使用 `realpath(workspacePath)` 与 `realpath(dirname(filePath))` 处理真实父路径；attachment staging、side-channel、agent reference action 也有 symlink/realpath 防护。下一步精读这些局部实现与失败语义，优先复用既有 helper；若没有适合直接复用的公共 helper，则在当前 runtime 文件内做最小单用途实现。
+- PermissionGuard 只负责 actor/action 策略，不解析文件系统路径；Checkpoint 的 `assertSafeWorkspacePath/assertSafeParent` 要求直接父目录已存在，side-channel 的 `isInsideAnyRoot` 要求目标本身已存在，均不能直接覆盖 Agent Write 新建多级路径。可复用的是它们一致的真实路径比较模式，而不是函数本身。
+- 最小设计：先把 cwd 与 additionalDirectories 各自 `realpath` 为授权真实根；目标已存在时取目标 `realpath`，目标不存在时从目标父目录向上寻找最近存在祖先并取 `realpath`，任何非 ENOENT/ENOTDIR 异常或找不到安全祖先都拒绝。该 PreToolUse 只提供调用前校验，不能宣称消除校验与 SDK 实际写入之间的 TOCTOU 竞态。
+- 二次复用审查确认 `desktop/electron/services/fs-utils.ts` 已公开 `isPathInside` 与 `isFileNotFoundError`，适合直接替换当前文件的重复 containment/ENOENT 判断；仓库仍无“最近存在父目录 realpath”公共 helper，因此该部分保持单用途局部实现，避免为一处需求扩张公共 API。
+- 最终实现保留双重约束：请求表面路径必须词法位于配置根之一，解析后的目标或最近存在祖先也必须位于任一授权真实根。已存在 dangling symlink 因 `lstat` 成功但 `realpath` 失败而拒绝；中间 ENOTDIR、授权根不存在、权限或其它解析错误同样拒绝。
+- 保证边界精确限定为 PreToolUse 时点的 fail-closed 检查。SDK 接收 hook 结果后再执行文件写入，当前接口没有把已校验目录文件描述符交给 SDK 的能力，因此不能完全消除攻击者在两阶段之间替换路径组件的 TOCTOU 竞态；文档没有夸大为原子沙箱。
+- 最终验证：session/security 7 文件 / 144 测试通过，desktop typecheck、hard constraints、git diff --check 通过；未恢复 UI、Provider、项目、会话或 r45 夹具。
+# 2026-08-28 第 46 轮 C-to-C
+
+- 开场基线：已完整重读 AGENTS、planning-with-files-zh、computer-use、impeccable product、karpathy-guidelines、第 42–45 轮规划记录、Agent/UI/runtime/testing 规则与 Checkpoint 权威规格。共享工作区保留前序大量未提交改动；根仓库仍为 `main`、HEAD `a473f7ce5b6b264a6bba1432871080b82e6237cc`、唯一远端 `origin`。本轮不创建分支、worktree、新任务，不启停任何应用或服务。
+- 唯一夹具 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r46-agent-stop-project` 开场不存在，现仅通过 apply_patch 创建普通非 Git 目录及无害 README。唯一会话将命名为 `sy-c2c-r46-agent-stop-session`；Provider 发送上限严格为一次，提示只允许 `/bin/sleep 30` 并在完成后回复 `R46_STOP_DONE`，不要求文件、网络或其它子进程。
+- Computer Use 基线：唯一目标是当前仓库 Electron 41.2.1 的已运行 `Synapse AI Studio` 主窗，Agent 空闲、无运行中 spinner/停止按钮/权限层/独立窗；未选择或读取既有会话正文。首次按共享 bundle id 读取被多 Electron 歧义在动作前拒绝，UI 无变化；随后按工具返回的当前仓库精确 `.app` 路径读取成功。已从 Dock 进入设置首页，尚未修改配置。
+- 项目设置基线稳定为 6 项，与第 45 轮清理后一致；仅统计行数，未点击既有项目。打开“添加项目”后焦点自动进入名称，表单只包含名称、路径、浏览、取消、添加和关闭；当前尚未填值或提交。
+- 名称 `sy-c2c-r46-agent-stop-project` 与夹具绝对路径已按一动作一 fresh 填写并分别精确回读；没有字段串位、尾字符重复或其它配置变化，尚未提交。
+- 项目只提交一次即成功，toast 为“项目已添加”，配置数 6→7，唯一新增行为精确 r46 名称与路径；回到 Agent 后出现唯一 r46 项目组且为空，右侧为必要空态“请创建新的会话”。既有项目与会话均未打开或修改。
+- r46 项目下只创建了一个空会话：默认标题为时间占位、DeepSeek/deepseek-v4-flash、无消息、composer 自动聚焦、复制/导出/发送禁用、权限模式保持既有“跳过权限确认”。双击唯一专用会话行打开重命名弹层，旧标题已全选；尚未保存新名称。
+- 会话名已逐值核对并只保存一次，toast“已重命名”，侧栏与标题均为 `sy-c2c-r46-agent-stop-session`；仍为空历史、空闲、发送禁用，焦点回专用会话行。下一步仅填一次停止链提示并在发送前复核夹具仍只有 README。
+- 唯一 Provider 发送成功进入真实运行态：约 1.4 秒时侧栏“正在输出”、`处理中 0s`、Agent 计时和“停止”同步出现，停止按钮自动获焦，composer 已清空且用户消息仅一条。发送后约 10.9 秒点击停止，明显早于 30 秒；约 1 秒后变为“已处理 9s”，运行标记、spinner 与停止按钮全部消失。完成态没有错误 toast、失败态、重复消息、assistant 回复或 `R46_STOP_DONE`，composer 保持空且发送禁用。
+- 展开过程后确认模型已生成唯一精确工具输入 `/bin/sleep 30`，但停止发生在工具执行交接点：工具输出明确为用户拒绝、未执行命令，因此没有实际 sleep 子进程可中断。会话正确显示“已停止 9.2s”，同时工具行却持久标为 `Bash Failed`；没有错误 toast，但该失败标签与用户主动停止心智冲突，记为候选稳定 UI 缺陷，需用导航重进确认持久性后再决定是否最小修复。
+- 只读磁盘/进程核对：夹具仍精确只有 README，`/bin/sleep 30` 精确进程不存在。通过 Dock 导航到设置再回对话后，产品自动重新选中专用会话，composer 聚焦且为空，显示必要终态“已停止本次执行。”，无运行残留。折叠组的“已处理”时长从停止后 9s 变为重进后 4s，且折叠态隐藏工具失败标签；需再次展开确认历史投影，避免按单帧误判。
+# placeholder
+- 停止后的同一专用会话经设置页导航离开再返回，整轮仍明确显示“已停止本次执行。”，但最后一个、紧邻取消终态的工具调用稳定保留 `Bash Failed`；这会让普通用户误以为命令自身失败，而实际是停止在工具交接前取消。源码审计确认 renderer 只按 toolResult 的 `success/status` 投影失败，没有结合同一 turn 的 cancelled terminal outcome。
+- 最小修复边界拟定为 timeline 展示投影：仅当 cancelled terminal outcome 紧跟在该过程组之后时，把该组最后一个失败工具投影为 cancelled；不改 SDK 原始 toolResult、持久化、权限、运行时取消或更早的真实失败工具。另一次只读搜索末尾使用未展开的 `types*` zsh glob，命令在该参数处报 no matches，前序文件读取成功、源码/UI 均无副作用。
+- 回归红灯同时精确复现历史重载后耗时从 9s 缩为 4s：取消轮次旧逻辑不使用用户消息起点，只计算后段过程事件。最小展示修复现仅对 cancelled turn 使用用户消息时间，并只给紧邻取消终态的最后失败工具加临时 cancelled 投影；专项 timeline/tool-event 2 文件 86 项全绿，发布说明已补。
+- 既有 dev 客户端 HMR 后，同一 r46 历史会话无需新 Provider 发送即实机转为稳定 `已处理 9s`；展开后工具行从 `Bash Failed` 变为中性 `Bash Cancelled`，整轮仍显示“已停止本次执行。”，composer 空、发送 disabled，无新 toast、消息或运行态。修复完成真实同路径闭环。
+- 960×768 窄窗下，过程组按钮保持焦点，可用 Return 折叠且焦点留在同一 `已处理 9s` 入口；两次先试全大写/全小写键名被 Computer Use 在动作前报 keyNotFound，按 Skill 规定改用大小写精确 `Return` 后成功，无 UI 副作用或重复动作。
+- 同一焦点上按 Escape 不会删除、导航、恢复草稿或改变停止终态；随后从 960 右边缘拖到当前桌面可达约 1309 宽，专用会话、`已处理 9s`、停止提示与空 composer 全部保持，主内容仅按宽度重排，无裁切或异常层级。
+- 宽窗点击“新窗口打开”后，独立窗标题精确为 `Synapse AI Studio 对话 · sy-c2c-r46-agent-stop-session`，同样显示 `已处理 9s` 与“已停止本次执行。”，composer 空且自动聚焦、发送 disabled；没有重新发送、恢复草稿、失败 toast 或运行态。
+- 通过标准 macOS Cmd+` 切回主窗后，专用会话位置只显示“已经在新窗口打开”和单一“显示窗口”入口，证明主窗没有并行渲染第二份可编辑实例；未出现第二个“新窗口打开”入口或重复会话状态。
+- 点击主窗“显示窗口”只回到同一标题、同一停止历史的独立窗；关闭独立窗后主窗恢复专用会话，composer 自动重新聚焦，9s 停止终态、空草稿和发送 disabled 均保持。独立窗单例与关闭回焦通过。
+- 主题选择器明确提供浅色、深色、跟随系统三项，原值为跟随系统；真实选择深色后控件稳定回读“深色”，无保存按钮、无错误提示或其它设置变化。
+- 深色→浅色真实切换后控件稳定回读“浅色”，设置页结构与键盘焦点保持；主题切换没有影响专用会话数据或生成运行态。
+- 浅色→跟随系统恢复完成，控件稳定回读原值；深/浅/系统三态均未出现布局闪断、错误提示或独立窗残留。
+- 主题往返后返回 Agent，仍自动选中唯一 r46 会话，composer 空且聚焦、`已处理 9s` 与停止提示保持；宽窗再拖回 960×768 后布局和状态不变，窗口尺寸与开场基线恢复。
+- 源码验证通过：timeline/tool-event/timeline-item/conversation-workspace 4 文件 107 项全绿；desktop typecheck exit 0，check:hard-constraints 通过，git diff --check 通过。首次并行 typecheck 超过 30 秒返回 session 而非 exit，确认旧进程结束后单独复跑并等待到 exit 0，没有中止或干预 dev watcher。
+- 最终清理已准备到精确确认层：右键唯一 r46 会话→删除，弹窗正文明确“将永久删除 sy-c2c-r46-agent-stop-session，此操作无法撤销”，安全默认焦点在“取消”。直接点击行内删除图标两次只聚焦未激活，键盘 Return 也无动作；一次更早复用旧 AX 151 被 stale ID 动作前拒绝，均未删除或改动数据。按 Computer Use 规则需在此刻再次取得用户确认后才可点“删除”。
+- 用户动作时确认后，确认层目标仍精确为唯一 `sy-c2c-r46-agent-stop-session`；仅点击一次最终“删除”，会话行消失、r46 项目组回到“请创建新的会话”空态，未触碰任何既有会话。跨回合首次动作因 Computer Use 未 active 被动作前拒绝，fresh 后才执行，无额外副作用。
+- 项目设置中精确定位唯一 r46 末行及夹具绝对路径，点击该行“删除”一次后配置立即从 7 行恢复基线 6 行；产品此处无二次确认，但任务已明确授权移除，既有 6 项名称、路径和顺序未改变。
+- Finder 已精确选中 `sy-c2c-r46-agent-stop-project`，分栏仅显示其唯一 README；工具栏“删除”明确说明“将所选项移到废纸篓”。点击一次后该项从 Synapse 根列表消失，Finder 自动选中相邻 templates；未打开或清空废纸篓，也未移动任何其它文件。
+- 最终只读核对通过：夹具原路径不存在，精确目录已位于未清空的 `~/.Trash/sy-c2c-r46-agent-stop-project` 且可恢复，系统中无精确 `/bin/sleep 30` 进程；Git 仍为 `main`、原 HEAD、唯一远端 `origin`，未创建分支或 worktree。
+- 最终真实 UI 核对通过：项目设置保持基线 6 项，Agent 树无 `sy-c2c-r46-*` 项并回到“请创建新的会话”空态；无 r46 草稿、权限层、运行标记、spinner、停止按钮或独立会话窗口。主窗口恢复 960×768，主题稳定为原值“跟随系统”，最终停留在主窗对话页。
+- 主任务复核指出首版 `markLastFailedToolCancelled` 的邻接条件过宽：取消终态前若最后一个工具已真实失败，也会被展示层误洗为 Cancelled。现有 Synapse `toolResult` 契约仅传递 `status`、`exitCode`、`success`、文本及内容诊断；SDK bridge 把 `is_error` 统一压成 `status: error` / `success: false`，当前未见取消专用字段，需继续检查本地 SDK 原始类型后再选最窄识别。
+- 本地 `@anthropic-ai/claude-agent-sdk` 0.3.245 / Anthropic SDK 契约确认：`ToolResultBlockParam` 只有 `content`、`is_error` 与 `tool_use_id`，没有 cancelled/refused reason；SDK 虽另发 `system.permission_denied` 并在最终 result 保存 `permission_denials`，但两者代表权限拒绝且当前未进入 Synapse toolResult 展示契约，不能拿来推断用户停止。故展示层只能在取消终态相邻条件上，再要求工具结果内容精确匹配 SDK 的用户拒绝句；普通 `exitCode != 0`、failed/error 文本和 `status: denied` 均不得投影为 Cancelled。
+- 红灯精确确认误标：取消终态紧邻普通非零退出、普通 failed、普通 error、denied、嵌入拒绝句的错误文本或只有结构化诊断而无拒绝正文时，旧逻辑均把条目标为 cancelled 并把 process group 的 `failed` 洗成 false。展示层现仅识别 `success === false`、无 exitCode、`status === error` 且正文 trim 后全文等于 SDK 用户拒绝句的结果；正文比较大小写不敏感，SDK 数组内容经既有 bridge 扁平后的精确句同样可识别，其它结构化内容不推断。
+- 安全续修保持纯 renderer 展示投影：未改变 runtime、权限、SDK bridge、IPC schema 或持久化结果。RELEASE_NOTES 已补充“真实失败可能误显示为取消”的用户影响；无需改变 Agent Runtime Security 的长期权限边界说明。
+
+# 2026-08-28 第 47 轮 C-to-C
+
+- 开场已完整恢复 AGENTS、planning-with-files-zh、computer-use、impeccable product、karpathy-guidelines、第 45–46 轮记录、Agent runtime/UI/testing/security 规则、停止设计与 2026-08-26 Checkpoint 权威规格。共享工作区保留前序大量未提交改动；根仓库仍为 `main`、HEAD `a473f7ce5b6b264a6bba1432871080b82e6237cc`、唯一远端 `origin`，唯一现有 worktree 为当前 Synapse 目录。本轮不创建分支、worktree、新任务，不启停应用或服务。
+- 唯一夹具 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r47-agent-running-stop-project` 开场不存在，已仅通过 apply_patch 创建普通非 Git 目录和无害 README。唯一会话将命名为 `sy-c2c-r47-agent-running-stop-session`；Provider 上限严格一次，模型只可调用一次 Bash，精确命令为 `/bin/sh -c 'printf "R47_PROCESS_STARTED\\n"; /bin/sleep 45'`，无文件、网络或其它工具副作用。
+- 成功条件：权限卡只对该精确命令“仅允许一次”；只读进程证据先确认真实 `/bin/sleep 45` 及父 shell 存在，再立即从 UI 停止；随后确认二者消失，时间线呈 Cancelled/明确主动停止而非普通 Failed，且没有 Checkpoint、toast、重复消息、草稿、spinner、停止按钮或权限残留。
+- Computer Use 已接入唯一当前仓库 Electron 41.2.1 主窗。开场 Agent 为空闲空选择态，无 running、停止按钮、权限层或独立窗；完整 AX 不可避免列出了既有会话标题，但未点击、展开、复制或读取任何正文。已从真实 Dock 进入设置首页，焦点落“设置”，尚未修改配置。
+- 项目设置真实基线为 6 项，与第 46 轮清理终态一致；只计数，未点击既有行。已打开“添加项目”，焦点自动进入名称，表单仅包含名称、路径、浏览、取消、添加、关闭；尚未填值或提交。
+- 项目名称与绝对路径已按一动作一 fresh 填写并分别精确回读；没有字段串位、尾字符重复或其它配置变化，“添加”可用。尚未提交。
+- 项目只提交一次即成功，toast“项目已添加”，配置 6→7，唯一新增末行为精确 r47 名称与夹具路径。返回 Agent 后出现唯一 r47 项目组且为空，右侧为必要空态“请创建新的会话”；既有项目和会话均未打开或修改。
+- r47 项目下只创建一个空会话：默认时间标题、DeepSeek/deepseek-v4-flash、零消息、composer 自动聚焦、复制/导出/发送禁用，权限模式开场为“跳过权限确认”。双击唯一专用行后重命名弹层打开并全选旧标题，取消/保存/关闭均可达；尚未保存新名称。
+- 会话名 `sy-c2c-r47-agent-running-stop-session` 经 fresh 精确回读后只保存一次；toast“已重命名”，侧栏与标题同步，仍为零消息、空闲、空 composer、发送禁用，焦点回专用会话行。为覆盖一次性授权，下一步只把此专用空会话的权限模式从继承的“跳过权限确认”改回常规询问模式，不创建任何持久授权。
+- 权限菜单在专用会话中清楚列出“按需询问、自动接受编辑、只读计划、自动判定、不询问并拒绝、跳过权限确认”；只选择一次“按需询问”，控件稳定回读该值。此选择只让逐条工具请求进入确认流程，没有添加会话级、项目级、目录或永久授权。
+- 发送前只读基线确认夹具仍只有 112 字节 README，精确 `/bin/sleep 45` 不存在。composer 已逐字回读固定提示：只允许一次 Bash，命令精确为 `/bin/sh -c 'printf "R47_PROCESS_STARTED\\n"; /bin/sleep 45'`，禁止文件、网络、额外命令和其它工具，命令自然结束后只回复 `R47_WAIT_DONE`；发送按钮 enabled，尚未发送。
+- 唯一 Provider 发送已提交一次：用户消息只出现一次、composer 清空、侧栏“正在输出”、`处理中` 计时和“停止”按钮同步出现，停止自动获焦；5 秒稳定帧仍在正常处理，无 toast、重复消息或权限层。发送额度已耗尽，不会重发；继续等待唯一 Bash 权限请求。
+- 约 23 秒出现唯一 Bash 权限请求。卡片正文和工具 JSON 中的 `command` 均与固定命令逐字一致，只有 SDK 添加的无副作用 description；没有第二个工具。界面只提供“拒绝 / 允许”，无会话或目录授权入口；默认焦点保持在全局“停止”，用户可优先取消。源码只读核对确认此处“允许”调用不带 scope，是该请求的一次性放行；只有 SDK 支持目录 grant 时才会另显“允许一次 / 本会话允许”。
+- “允许”仅点击一次后，权限层立即消失且卡片变“已处理”。只读 `ps` 真实捕获受控父 zsh、PID 97198 的精确 `/bin/sh -c …` 和子 PID 97199 `/bin/sleep 45` 同时存在，证明 marker 后等待进程确已启动。随即只从 Synapse UI 点击一次“停止”，约 2 秒内 UI 回到空闲；停止、spinner、权限层与侧栏运行标记全部消失，没有 toast、重复消息、assistant 回复或 `R47_WAIT_DONE`。首次停止后 ps 只匹配本次诊断 shell/rg，自身 r47 父 shell 与 sleep 均已消失，未使用 kill。
+- 展开停止轮次后，整体终态为明确“已停止 105.8s”，但唯一实际运行过的工具显示 `Bash Failed`，正文只保留精确命令与“Bash 已处理”，没有 `R47_PROCESS_STARTED`、Cancelled 标签或可见失败原因。与第 46 轮“执行前被用户拒绝”不同，本次真实运行中止产生普通失败投影；需经导航重进和独立窗确认是否持久，再结合原始事件契约判断这是合理 Failed 还是缺少明确取消原因的稳定缺陷。无 Checkpoint 卡片。
+- 经真实设置页离开/返回后，同一专用会话自动恢复，耗时稳定为 `1m 46s`，折叠态明确显示“已停止本次执行。”；重新展开仍是 `Bash Failed` 且无工具级原因。空 composer、按需询问、禁用发送、无权限层/运行态/Checkpoint 均稳定，证明并非停止动画或瞬态时序。
+- 独立窗口只创建一个：主窗切成“已经在新窗口打开 / 显示窗口”，窗口菜单仅列主窗和这一专用独立窗；“显示窗口”复用既有窗口。独立窗折叠态、展开后的 `Bash Failed`、`1m 46s` 与“已停止本次执行。”和主窗一致。关闭独立窗后主窗恢复会话并把焦点交回 composer，无残留占位或第二窗口。
+- r47 精确只读事件核对澄清了此前恢复态猜测：唯一 toolResult 为 `status=error`、`success=false`、无 exitCode，正文长度 225 且逐字等于 SDK 完整固定拒绝句；终轮 metadata 为 `cancelled/graceful/user_cancelled`。失败投影并非元数据缺失，而是已处理 permissionRequest 排在 toolResult 之后，旧展示逻辑只检查过程组最后一项，未向后找到最后一个真实工具结果。
+- 最小修复仅在 cancelled terminal outcome 出现时，从过程组末尾向前定位最后一个工具结果；只有该结果正文精确等于 SDK 的短拒绝句或运行中停止完整句才投影 `Cancelled`。若最后工具是普通失败、denied、非零 exit、嵌入拒绝句或其它正文，仍保持原 Failed/Denied；SDK 原始事件、权限、进程取消和持久化均不修改。
+- HMR 同一 r47 会话实测已从 `Bash Failed` 转为 `Bash Cancelled`，整体“已停止本次执行。”与 `1m 46s` 不变；设置页导航重进、独立窗重新打开/展开也都保持 Cancelled、稳定耗时、空 composer、禁用发送和无运行/权限残留。独立窗关闭后主窗回焦 composer，单例行为仍正常。
+- 清理前安全闸门符合用户心智：右键唯一 r47 会话选择“删除”后，确认层逐字显示“将永久删除‘sy-c2c-r47-agent-running-stop-session’。此操作无法撤销。”，仅提供“取消 / 删除”，默认焦点在“取消”。尚未触发最终删除，等待动作时确认。
+- 获得动作时确认后只永久删除该精确会话，toast 为“会话已删除”，项目立即为空；真实设置 UI 只移除唯一 r47 项目，项目数 7→6。Finder 只选中唯一夹具并使用“移到废纸篓”，源路径已不存在，`~/.Trash/sy-c2c-r47-agent-running-stop-project/README.md` 可恢复，废纸篓未清空。
+- 最终基线完整：只读进程列表无精确 `/bin/sleep 45` 或 `R47_PROCESS_STARTED` 父 shell；Synapse 只有一个 960×768 主窗，基础设置为“跟随系统”，Agent 为“请创建新的会话”空选择态；无 r47 项目、会话、草稿、权限层、运行按钮或独立窗。
+
+# 2026-08-28 第 48 轮 C-to-C
+
+- 开场已完整恢复 AGENTS、planning-with-files-zh、computer-use、impeccable product、karpathy-guidelines、第 46–47 轮记录、Agent runtime/UI/testing/security 规则、权限卡/权限模式/停止/生命周期/Checkpoint 权威设计。共享工作区仍为 `main`、HEAD `a473f7ce5b6b264a6bba1432871080b82e6237cc`，只有当前 Synapse worktree；不创建分支、worktree、新任务，不启停应用或服务。
+- 唯一夹具 `/Users/liyang/Documents/code/github/Synapse/sy-c2c-r48-agent-deny-project` 开场不存在，已仅通过 apply_patch 创建普通非 Git 目录和无害 README。Provider 上限严格一次，模型只可调用一次 Bash，精确命令为 `/bin/sh -c 'printf "R48_DENIED_SHOULD_NOT_APPEAR\\n"; /bin/sleep 20'`，不写文件、不联网；执行前后只读 `ps` 必须持续证明精确 shell、marker 与 sleep 从未出现。
+- 成功条件：真实权限卡逐字展示精确命令，拒绝/允许文案与安全焦点、键盘和 Escape 语义清楚；只点一次“拒绝”，工具稳定显示 Denied 而非 Failed/Cancelled，整体回合语义明确，且无 marker、进程、Checkpoint、错误 toast、重复消息、草稿、spinner、停止按钮、权限层或授权扩张。
+- Computer Use 开场确认唯一当前仓库 Synapse 主窗处于 Agent 空选择态，焦点在“对话”，无运行标记、停止按钮、权限卡或独立窗。共享 bundle id 因四个 Electron 安装歧义被动作前拒绝，改用当前仓库 Electron 41.2.1 精确 `.app` 路径后只读成功；没有启动、停止或重启任何应用。
+- 设置 UI 项目基线为 6 项：四个普通项目、两个托管知识库，与前轮清理一致。只统计列表行数，未打开、修改或删除任何既有项目；唯一新增入口为“添加项目”。
+- “添加项目”表单只有必要名称、路径、浏览、取消、添加和关闭；初始焦点自动进入名称。名称 `sy-c2c-r48-agent-deny-project` 已一次设置并稳定回读，尚未填写路径或提交。
+- r48 路径按一动作一 fresh 填写，名称与路径同时精确；表单只提交一次即成功，toast 为“项目已添加”，配置从 6 项变 7 项，唯一新增行精确对应 r48 夹具。既有 6 项名称、路径和顺序未改变。
+- r48 项目组创建前为空，右侧必要空态为“请创建新的会话”。只创建一个空会话后，默认标题“新对话 16:34”、模型 DeepSeek/deepseek-v4-flash、无消息、composer 自动聚焦，复制/导出/发送禁用；当前权限模式继承为“跳过权限确认”，尚未发送或修改权限。
+- 会话重命名弹层仅含单一名称输入和“取消 / 保存 / 关闭”，旧标题已自动全选；`sy-c2c-r48-agent-deny-session` 已稳定回读，尚未提交。
+- 专用名称只保存一次并在侧栏/标题同步，toast“已重命名”；会话仍为零消息、空 composer、发送禁用。权限选择器清楚列出按需询问、自动接受编辑、只读计划、自动判定、不询问并拒绝、跳过权限确认六项及简短说明，当前为继承的跳过权限确认。
+- 权限模式只切换一次为“按需询问”，控件稳定回读该值。此模式只让逐条工具请求进入确认流程；未选择自动接受、自动判定、不询问并拒绝或跳过权限，也没有新增任何 scope 授权。
+- 发送前夹具只含唯一 103 字节 README，进程表中没有精确 marker、父 shell 或 `/bin/sleep 20`。composer 最终值与固定提示逐字一致：只允许一次 Bash，精确命令 `/bin/sh -c 'printf "R48_DENIED_SHOULD_NOT_APPEAR\\n"; /bin/sleep 20'`，禁止写文件、联网和其它工具，结束后只回复执行结果。两次更早的脚本转义错误均在 node_repl 解析阶段中止，未写入 UI；Provider 尚未发送。
+- 唯一发送后 UI 正常进入运行态，用户消息只出现一次，composer 立即清空；发送后首次 ps 仍为空。唯一权限请求约 17 秒出现，工具 JSON 和独立命令行均逐字为目标命令，SDK 只附加 `Run exact test command printing marker and sleeping 20s` 描述；界面只有“拒绝 / 允许”，没有“允许一次 / 本会话允许”或其它持久 scope。默认焦点在全局“停止”，而不是“允许”。
+- Pending 权限卡上的 Escape 是安全 no-op：权限计数仍为 1、卡片仍显示、拒绝/允许仍可达、运行继续等待且焦点留在停止；第三次只读 ps 仍没有 marker/shell/sleep。逆向 Tab 从停止按正常顺序先到权限模式控件，证明键盘焦点没有直接跳到高风险“允许”。
+- 键盘逆向焦点顺序继续为权限模式 → 快捷输入 → 添加附件，均是安全聚焦且未展开菜单或改变权限；等待中的请求没有被 Escape 或焦点遍历误处理。
+- 完整逆向焦点链为停止 → 权限模式 → 快捷输入 → 添加附件 → composer → 允许 → 拒绝；仅移动焦点不会触发任何按钮。“允许”可达但没有被激活，最终明确聚焦“拒绝”；拒绝前最新 ps 仍无精确目标进程。
+- “拒绝”只通过键盘 Return 提交一次，权限卡立即离开 pending，未触发“允许”。拒绝后的首次 ps 仍为空、README 字节与文件集合不变；稳定终态无停止按钮、spinner、权限层、权限计数、错误 toast、重复消息、草稿或 Checkpoint。整体回合中性显示“已处理 2m 28s”，assistant 明确说明 Bash 被用户/权限系统拒绝、命令未执行、无输出且未重试。
+- 展开过程暴露候选稳定缺陷：唯一工具 badge 为 `Bash Failed`，正文仅显示 `Bash 已处理` 与精确命令；后续思考和最终回复却明确收到 `The user denied this tool use`。它不是 Cancelled，也不是命令执行失败，且拒绝后最新 ps 仍为空；预期工具状态应为 Denied。
+- 通过设置页真实离开/返回后，同一专用会话自动恢复；折叠态保持 `已处理 2m 28s` 与明确拒绝回复，composer 空且聚焦、发送禁用、权限模式按需询问，无运行、权限、toast、草稿或 Checkpoint 残留。拒绝语义和耗时不是动画瞬态。
+- 导航返回后展开仍明确 `Bash Failed`，排除单帧时序。打开唯一独立窗口的首帧标题与会话名精确，显示“加载中”而不是空白或错误；待稳定帧继续验证内容一致性。
+- 独立窗稳定后内容、拒绝回复、耗时、权限模式和空 composer 与主窗一致；展开同一过程仍是 `Bash Failed`。因此“明确用户拒绝被显示为 Failed”已跨持久恢复与独立宿主稳定复现，不是 HMR、动画或工具时序问题。
+- 独立窗单例语义正确：主窗不并行渲染会话，只给“显示窗口”；该入口复用同一标题、同一会话状态的已有独立窗，没有创建第二窗口或恢复运行态。
+- 关闭独立窗后主窗恢复同一拒绝会话，composer 自动回焦；没有窗口占位、重复消息或第二实例残留。
+- 稳定缺陷根因位于 renderer 状态投影：SDK bridge 按原始 `is_error` 保存 `status=error/success=false`，权限拒绝默认正文则是精确固定句 `The user denied this tool use. Stop and wait for the user's instructions.`；旧 UI 仅识别显式 `status=denied`，因此把固定拒绝句误标 Failed。无需修改 runtime、SDK bridge、权限或持久化契约。
+- 红灯覆盖精确固定句应为 Denied 且 process group `denied=true/failed=false`；普通 error、非零退出、显式 failed、嵌入固定句的其它错误继续 Failed，显式 `status=denied` 继续 Denied。最小实现对 trim 后全文做大小写不敏感精确匹配，并在失败判定前排除拒绝结果。
+- HMR 在同一 r48 历史上已从 `Bash Failed` 转为 `Bash Denied`；总态、耗时和回复不变，无 marker、停止按钮、权限层、Checkpoint 或草稿，说明只修正展示语义。
+- HMR 后设置页离开/返回仍恢复 Denied；独立窗展开也为 Denied，关闭后主窗恢复并回焦 composer。跨导航、宿主和窗口生命周期的状态一致，未创建第二实例。
+- 最小充分验证全绿：相关 renderer 5 文件 157 项、desktop typecheck、hard constraints、git diff --check；最终只读 ps 仍无精确 shell/sleep，夹具仍只有 103 字节 README。
+- 清理确认层目标精确为 `sy-c2c-r48-agent-deny-session`，文案明确“永久删除 / 此操作无法撤销”，仅有“取消 / 删除”，默认焦点安全地停在“取消”。最终删除尚未执行，项目配置和 Finder 夹具也尚未清理。
+- 动作时确认后只永久删除精确 r48 会话，项目组回到“请创建新的会话”；项目设置只移除唯一 r48 行，列表由 7 恢复 6。Finder 只选中精确夹具，右侧只见 README，并使用明确的“将所选项移到废纸篓”；废纸篓未清空。
+- 最终基线通过：源路径不存在，废纸篓精确 README 存在且可恢复；无目标 shell/sleep；Synapse 仅一个 960×768 主窗，主题“跟随系统”，Agent 空选择态，无 r48 会话、项目、草稿、权限层、停止按钮、Checkpoint 或独立窗。Git 仍为 main、原 HEAD、唯一当前 worktree。

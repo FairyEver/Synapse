@@ -156,6 +156,13 @@ describe("ContentEditorWindowPage", () => {
     expect(source).toContain("已存在同名提示词。")
   })
 
+  it("restores focus after canceling the discard confirmation", async () => {
+    const source = await readFile(editorWindowPageSourcePath, "utf8")
+
+    expect(source).toContain("discardFocusTargetRef")
+    expect(source).toContain("onCloseAutoFocus")
+  })
+
   it("keeps the category select controlled while edit details load", async () => {
     const fieldsSource = await readFile(join(__dirname, "../components/content-editor-fields.tsx"), "utf8")
     const source = await readFile(editorWindowPageSourcePath, "utf8")
@@ -312,5 +319,96 @@ describe("ContentEditorWindowPage", () => {
 
     expect(document.querySelector('[role="alert"]')?.textContent).toBe("保存失败")
     expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it("focuses a field identified by an asynchronous submit error", async () => {
+    function TestForm() {
+      const formState = useContentCreateForm(testFormConfig, {
+        initialValue: {
+          ...emptyTestEditorPayload,
+          title: "Duplicate",
+        },
+        onOpenChange: () => {},
+        onSubmit: () => {
+          throw Object.assign(new Error("已存在同名提示词。"), { field: "title" })
+        },
+        open: true,
+      })
+
+      return (
+        <form onSubmit={formState.handleSubmit}>
+          <input
+            aria-invalid={formState.errors.title ? "true" : undefined}
+            aria-label="标题"
+            value={formState.form.title}
+            onChange={(event) => formState.updateField("title", event.target.value)}
+          />
+          <button type="submit">保存</button>
+        </form>
+      )
+    }
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TestForm />)
+    })
+
+    const saveButton = document.querySelector("button") as HTMLButtonElement
+    saveButton.focus()
+    await act(async () => {
+      saveButton.click()
+      await Promise.resolve()
+    })
+
+    expect(document.activeElement).toBe(document.querySelector('[aria-label="标题"]'))
+    expect(document.querySelector('[aria-label="标题"]')?.getAttribute("aria-invalid")).toBe("true")
+  })
+
+  it("focuses the first invalid field after validation fails", async () => {
+    const validationConfig: ContentCreateFormConfig<TestEditorPayload> = {
+      ...testFormConfig,
+      validate: (payload) => payload.title ? {} : { title: "请输入标题。" },
+    }
+
+    function TestForm() {
+      const formState = useContentCreateForm(validationConfig, {
+        onOpenChange: () => {},
+        onSubmit: () => {},
+        open: true,
+      })
+
+      return (
+        <form onSubmit={formState.handleSubmit}>
+          <input
+            aria-invalid={formState.errors.title ? "true" : undefined}
+            aria-label="标题"
+            value={formState.form.title}
+            onChange={(event) => formState.updateField("title", event.target.value)}
+          />
+          <button type="submit">保存</button>
+        </form>
+      )
+    }
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TestForm />)
+    })
+
+    const saveButton = document.querySelector("button") as HTMLButtonElement
+    saveButton.focus()
+    await act(async () => {
+      saveButton.click()
+    })
+
+    expect(document.activeElement).toBe(document.querySelector('[aria-label="标题"]'))
   })
 })

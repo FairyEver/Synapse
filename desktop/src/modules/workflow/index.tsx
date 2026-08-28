@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -26,6 +26,7 @@ import { errorDiagnostic } from "./lib/error-utils"
 const logger = createRendererLogger("workflow")
 
 export function WorkflowModule() {
+  const createButtonRef = useRef<HTMLButtonElement>(null)
   const [listKey, setListKey] = useState(0)
   const [creating, setCreating] = useState(false)
   const [importPreview, setImportPreview] = useState<WorkflowImportPreview | WorkflowShareImportPreview | null>(null)
@@ -182,7 +183,7 @@ export function WorkflowModule() {
             <Upload data-icon="inline-start" />
             导入
           </SystemAppTopBarActionButton>
-          <SystemAppTopBarActionButton type="button" disabled={creating} onClick={handleCreate}>
+          <SystemAppTopBarActionButton ref={createButtonRef} type="button" disabled={creating} onClick={handleCreate}>
             {creating ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
             新建
           </SystemAppTopBarActionButton>
@@ -209,7 +210,13 @@ export function WorkflowModule() {
         )
       )}
     >
-      <WorkflowList key={listKey} onCreate={handleCreate} />
+      <WorkflowList
+        key={listKey}
+        onCreate={handleCreate}
+        onDeleteSuccess={() => {
+          requestAnimationFrame(() => createButtonRef.current?.focus())
+        }}
+      />
     </ModulePage>
   )
 }

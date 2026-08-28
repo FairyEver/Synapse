@@ -263,6 +263,22 @@ describe("AgentPersonasModule", () => {
     expect(bridge.create).not.toHaveBeenCalled()
   })
 
+  it("returns focus to the add action after cancelling with Escape", async () => {
+    await renderModule()
+
+    await clickButton("我的")
+    const addButton = buttonWithText("新增")
+    addButton?.focus()
+    await clickButton("新增")
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(addButton)
+  })
+
   it("keeps short persona fields in responsive two-column groups", async () => {
     await renderModule()
 
@@ -374,6 +390,37 @@ describe("AgentPersonasModule", () => {
     await clickButton("删除")
 
     expect(bridge.delete).toHaveBeenCalledWith({ id: "persona-1" })
+  })
+
+  it("returns focus to the delete action after cancelling with Escape", async () => {
+    await renderModule()
+
+    await clickButton("我的")
+    const deleteButton = buttonByLabel("删除智能体：产品顾问")
+    deleteButton?.focus()
+    await clickButtonByLabel("删除智能体：产品顾问")
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(deleteButton)
+  })
+
+  it("focuses the add action after deleting a persona", async () => {
+    await renderModule()
+
+    await clickButton("我的")
+    const addButton = buttonWithText("新增")
+    await clickButtonByLabel("删除智能体：产品顾问")
+    await clickButton("删除")
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(addButton)
   })
 
   it("updates the model for a built-in persona without unlocking its text fields", async () => {

@@ -225,8 +225,9 @@ function GlobalSettingsForm({ definition, projects, onChange, onLayoutDirectionC
       <ScrollArea className="flex-1">
         <div className="space-y-4 p-3">
         <div className="space-y-1.5">
-          <Label className="text-xs">名称</Label>
+          <Label htmlFor="workflow-name" className="text-xs">名称</Label>
           <Input
+            id="workflow-name"
             className="h-7 text-sm"
             value={definition.name}
             onChange={(e) => onChange?.({ ...definition, name: e.target.value })}

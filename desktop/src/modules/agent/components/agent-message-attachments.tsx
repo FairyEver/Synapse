@@ -93,6 +93,27 @@ function AgentMessageAttachments({ attachments, onOpenReference }: AgentMessageA
           <div className="space-y-1">
             {paths.map((attachment) => {
               const Icon = attachment.entryType === "directory" ? Folder : File
+              const content = (
+                <>
+                  <Icon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm leading-5">{attachment.name}</span>
+                    <span className="block truncate text-xs font-normal text-muted-foreground">
+                      {pathAttachmentMetadata(attachment)}
+                    </span>
+                  </span>
+                </>
+              )
+              if (attachment.path === attachment.name) {
+                return (
+                  <div
+                    key={`${attachment.entryType}:${attachment.path}`}
+                    className="flex h-auto w-full min-w-0 items-center justify-start gap-2 px-1.5 py-1 text-left"
+                  >
+                    {content}
+                  </div>
+                )
+              }
               return (
                 <Button
                   key={`${attachment.entryType}:${attachment.path}`}
@@ -102,13 +123,7 @@ function AgentMessageAttachments({ attachments, onOpenReference }: AgentMessageA
                   title={attachment.path}
                   onClick={() => onOpenReference(attachment.path)}
                 >
-                  <Icon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm leading-5">{attachment.name}</span>
-                    <span className="block truncate text-xs font-normal text-muted-foreground">
-                      {pathAttachmentMetadata(attachment)}
-                    </span>
-                  </span>
+                  {content}
                 </Button>
               )
             })}

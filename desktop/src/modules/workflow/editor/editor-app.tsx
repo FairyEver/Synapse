@@ -44,6 +44,7 @@ export function WorkflowEditorApp() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
+  const closeReturnFocusRef = useRef<HTMLElement | null>(null)
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const [leftCollapsed, setLeftCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
@@ -60,6 +61,9 @@ export function WorkflowEditorApp() {
   const { runWithScriptConfirmation, scriptConfirmation } = useScriptConfirmationRun()
 
   useWorkflowEditorMutationState(workflowId, dirty, saving)
+  useEffect(() => {
+    document.title = definition ? `编辑 - ${definition.name}` : "Workflow Editor"
+  }, [definition?.name])
   const validationItems = useMemo(
     () => definition ? buildWorkflowValidationDisplayItems(definition, runErrors) : [],
     [definition, runErrors],
@@ -145,6 +149,9 @@ export function WorkflowEditorApp() {
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!isDirtyRef.current) return
+      closeReturnFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
       holdBeforeUnloadForCustomDialog(e)
       setShowCloseDialogRef.current(true)
     }
@@ -230,6 +237,13 @@ export function WorkflowEditorApp() {
     canvasRef.current?.updateLayoutDirection(layoutDirection)
   }, [])
 
+  const handleCloseDialogOpenChange = useCallback((open: boolean) => {
+    setShowCloseDialog(open)
+    if (!open) {
+      requestAnimationFrame(() => closeReturnFocusRef.current?.focus())
+    }
+  }, [])
+
   const handleCloseDiscard = () => {
     isDirtyRef.current = false
     setShowCloseDialog(false)
@@ -291,6 +305,9 @@ export function WorkflowEditorApp() {
       if ("errors" in result) {
         logger.warn("save blocked by validation", { workflowId: def.id, errorCount: result.errors.length })
         setRunErrors(result.errors)
+        if (!def.name.trim()) {
+          requestAnimationFrame(() => document.querySelector<HTMLElement>("#workflow-name")?.focus())
+        }
         return result
       }
       setRunErrors([])
@@ -481,7 +498,10 @@ export function WorkflowEditorApp() {
             setLeftCollapsed(size.inPixels <= 16)
           }}
         >
-          <NodePalette collapsed={leftCollapsed} />
+          <NodePalette
+            collapsed={leftCollapsed}
+            onAddNode={(type) => canvasRef.current?.addNode(type)}
+          />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel>
@@ -522,8 +542,8 @@ export function WorkflowEditorApp() {
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
-    <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
-      <AlertDialogContent>
+    <AlertDialog open={showCloseDialog} onOpenChange={handleCloseDialogOpenChange}>
+      <AlertDialogContent onCloseAutoFocus={(event) => event.preventDefault()}>
         <AlertDialogHeader>
           <AlertDialogTitle>未保存的更改</AlertDialogTitle>
           <AlertDialogDescription>工作流已修改，是否保存？</AlertDialogDescription>

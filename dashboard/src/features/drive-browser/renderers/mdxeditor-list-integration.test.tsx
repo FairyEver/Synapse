@@ -365,6 +365,49 @@ describe('MDXEditor list integration', () => {
     expect(taskItems).toHaveLength(3)
     expect(Array.from(taskItems, (item) => item.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false'])
   })
+
+  it('keeps non-one nested ordered starts parseable after a rich-text round trip', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const markdown = [
+      '7. 从七开始',
+      '8. 第二项',
+      '',
+      '   3. 嵌套从三开始',
+      '   4. 嵌套第二项',
+      '',
+      '      9. 深层从九开始',
+    ].join('\n')
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={markdown}
+          plugins={[listsPlugin(), orderedListStartPlugin()]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    const roundTripped = editorRef.current?.getMarkdown() ?? ''
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          key='round-trip'
+          markdown={roundTripped}
+          plugins={[listsPlugin(), orderedListStartPlugin()]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    const nestedLists = document.querySelectorAll('ol ol')
+    expect(nestedLists).toHaveLength(2)
+    expect(Array.from(nestedLists, (list) => list.getAttribute('start'))).toEqual(['3', '9'])
+  })
 })
 
 async function setCollapsedSelection(contentEditable: HTMLElement, node: Node) {

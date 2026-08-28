@@ -42,6 +42,27 @@ afterEach(() => {
 })
 
 describe("LiveConnectionPanel", () => {
+  it("shows a neutral loading state until the live status is read", async () => {
+    let resolveState: ((state: ReturnType<typeof createLiveState>) => void) | undefined
+    mocks.getState.mockReturnValue(new Promise((resolve) => {
+      resolveState = resolve
+    }))
+
+    renderPanel()
+
+    expect(document.body.textContent).toContain("正在读取")
+    expect(document.body.textContent).not.toContain("未登录")
+    expect(findButton("立即重试")).toBeUndefined()
+
+    await act(async () => {
+      resolveState?.(createLiveState({ status: "connected" }))
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("已连接")
+    expect(document.body.textContent).not.toContain("正在读取")
+  })
+
   it("renders the connected live status without a retry action", async () => {
     const state = createLiveState({ status: "connected" })
     mocks.getState.mockResolvedValue(state)
@@ -108,12 +129,16 @@ function createLiveState(overrides: Partial<{
   }
 }
 
-function renderPanel(initialState: ReturnType<typeof createLiveState>): void {
+function renderPanel(initialState?: ReturnType<typeof createLiveState>): void {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
-  act(() => root.render(<LiveConnectionPanel initialState={initialState} />))
+  act(() => root.render(
+    initialState
+      ? <LiveConnectionPanel initialState={initialState} />
+      : <LiveConnectionPanel />,
+  ))
 }
 
 function findButton(label: string): HTMLButtonElement | undefined {

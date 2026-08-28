@@ -25,7 +25,17 @@ export function getGitActionPlan(snapshot: SynapseGitRepositorySnapshot | null, 
     }
   }
 
-  if (!snapshot?.pathExists) {
+  if (!snapshot) {
+    return {
+      statusText: "正在读取",
+      primaryAction: "none",
+      primaryLabel: "读取中",
+      blockerText: null,
+      recoveryText: null,
+    }
+  }
+
+  if (!snapshot.pathExists) {
     return {
       statusText: "目录不可访问",
       primaryAction: "open",

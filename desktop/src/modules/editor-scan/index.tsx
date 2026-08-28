@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Copy, LoaderCircle, RotateCcw, Trash2, TriangleAlert, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -47,6 +47,8 @@ function EditorScanModule() {
   const [selectedSkillMap, setSelectedSkillMap] = useState<Map<string, EditorScanSkillCopyItem>>(() => new Map())
   const [bulkCopyOpen, setBulkCopyOpen] = useState(false)
   const [bulkTrashOpen, setBulkTrashOpen] = useState(false)
+  const bulkTrashButtonRef = useRef<HTMLButtonElement>(null)
+  const refreshButtonRef = useRef<HTMLButtonElement>(null)
   const { dialog: skillUninstallerDialog, openSkillUninstaller } = useSkillUninstallerDialog()
 
   const selectedSkillKeys = useMemo(() => new Set(selectedSkillMap.keys()), [selectedSkillMap])
@@ -85,6 +87,8 @@ function EditorScanModule() {
       showSuccess("扫描结果已刷新")
     } catch {
       showError("刷新失败，请稍后重试。")
+    } finally {
+      requestAnimationFrame(() => refreshButtonRef.current?.focus())
     }
   }, [clearSkillSelection, refresh, showSuccess, showError])
 
@@ -205,6 +209,7 @@ function EditorScanModule() {
   )
   const headerActions = (
     <SystemAppTopBarActionButton
+      ref={refreshButtonRef}
       iconOnly
       type="button"
       onClick={() => void handleRefresh()}
@@ -266,7 +271,7 @@ function EditorScanModule() {
         <Copy data-icon="inline-start" />
         复制到...
       </Button>
-      <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
+      <Button ref={bulkTrashButtonRef} variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
         <Trash2 data-icon="inline-start" />
         移到废纸篓
       </Button>
@@ -410,13 +415,19 @@ function EditorScanModule() {
         onOpenChange={setBulkCopyOpen}
       />
       <EditorBulkSkillTrashDialog
+        fallbackFocusRef={refreshButtonRef}
         items={selectedSkills}
         onTrashed={async (trashedKeys) => {
           removeSelectedSkills(trashedKeys)
-          await refresh()
+          try {
+            await refresh()
+          } finally {
+            refreshButtonRef.current?.focus()
+          }
         }}
         open={bulkTrashOpen}
         onOpenChange={setBulkTrashOpen}
+        restoreFocusRef={bulkTrashButtonRef}
       />
       {skillUninstallerDialog}
     </SystemAppWindowShell>

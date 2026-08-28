@@ -1,3 +1,4 @@
+import { useRef, type RefObject } from "react"
 import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
@@ -29,7 +30,7 @@ type AppShellDockProps = {
   readonly value: SynapseSystemAppId
   readonly onValueChange: (value: SynapseSystemAppId) => void
   readonly disabled?: boolean
-  readonly onRemoveApp?: (appId: SynapseSystemAppId) => void
+  readonly onRemoveApp?: (appId: SynapseSystemAppId) => Promise<boolean>
   readonly onManageDock?: () => void
 }
 
@@ -41,6 +42,8 @@ export function AppShellDock({
   value,
   onValueChange,
 }: AppShellDockProps) {
+  const launcherButtonRef = useRef<HTMLButtonElement>(null)
+
   return (
     <TooltipProvider>
       <nav
@@ -61,6 +64,7 @@ export function AppShellDock({
                   onManageDock={onManageDock}
                   onRemoveApp={onRemoveApp}
                   onValueChange={onValueChange}
+                  launcherButtonRef={launcherButtonRef}
                 />
               )
             })}
@@ -78,16 +82,19 @@ function DockButton({
   onManageDock,
   onRemoveApp,
   onValueChange,
+  launcherButtonRef,
 }: {
   readonly active: boolean
   readonly app: AppShellDockApp
   readonly disabled: boolean
   readonly onManageDock?: () => void
-  readonly onRemoveApp?: (appId: SynapseSystemAppId) => void
+  readonly onRemoveApp?: (appId: SynapseSystemAppId) => Promise<boolean>
   readonly onValueChange: (value: SynapseSystemAppId) => void
+  readonly launcherButtonRef: RefObject<HTMLButtonElement | null>
 }) {
   const button = (
     <Button
+      ref={app.id === REQUIRED_DOCK_APP_ID ? launcherButtonRef : undefined}
       type="button"
       variant="ghost"
       size="icon"
@@ -140,7 +147,9 @@ function DockButton({
           onPin={ignoreDockPin}
           onUnpin={(appId) => {
             if (!disabled) {
-              onRemoveApp?.(appId)
+              void onRemoveApp?.(appId).finally(() => {
+                setTimeout(() => launcherButtonRef.current?.focus(), 0)
+              })
             }
           }}
           onManageDock={() => {

@@ -43,6 +43,7 @@ import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "..
 import { ProviderReferenceScanner } from "../../services/provider/provider-reference-scanner"
 import { createProviderReferenceScannerDeps } from "../../services/provider/provider-reference-scanner-deps"
 import { normalizeContentFileNameSegment } from "../../../src/lib/content-attachments"
+import { parseAgentAttachmentReference } from "../../../src/types/agent-attachment"
 import { createMainLogger } from "../../services/log-store"
 import { resolveProjectAgent } from "./ipc-shared"
 
@@ -815,10 +816,13 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     response: openReferenceResultSchema,
     handler: async (ctx, request: OpenReferenceRequest) => {
       try {
-        const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
-        const reference = resolveLocalReference(request.reference, project.localPath, {
-          allowOutsideWorkspace: true,
-        })
+        const { agent, project } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const attachmentId = parseAgentAttachmentReference(request.reference)
+        const reference = attachmentId
+          ? { path: await agent.resolveAttachmentOpenPath(attachmentId), line: undefined }
+          : resolveLocalReference(request.reference, project.localPath, {
+              allowOutsideWorkspace: true,
+            })
         if (!reference) throw new Error("Reference is outside the workspace or invalid.")
         const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
         const auditSink = ctx.resolve<AuditSink>("core.audit-sink")

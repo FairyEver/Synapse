@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { LoaderCircle } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -25,19 +25,23 @@ import {
 import type { EditorScanSkillCopyItem } from "@/modules/editor-scan/lib/editor-copy-source"
 
 type EditorBulkSkillTrashDialogProps = {
+  fallbackFocusRef?: RefObject<HTMLElement | null>
   items: EditorScanSkillCopyItem[]
   onOpenChange: (open: boolean) => void
   onTrashed?: (trashedKeys: string[]) => Promise<void> | void
   open: boolean
+  restoreFocusRef?: RefObject<HTMLElement | null>
 }
 
 const logger = createRendererLogger("editor-scan.bulk-trash")
 
 function EditorBulkSkillTrashDialog({
+  fallbackFocusRef,
   items,
   onOpenChange,
   onTrashed,
   open,
+  restoreFocusRef,
 }: EditorBulkSkillTrashDialogProps) {
   const { error: notifyError, success, warning } = useAppNotifications()
   const [results, setResults] = useState<BulkSkillTrashResultItem[]>([])
@@ -46,9 +50,12 @@ function EditorBulkSkillTrashDialog({
   const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null)
   const activeOperationIdRef = useRef<string | null>(null)
   const cancelRequestedRef = useRef(false)
+  const restoreFallbackOnCloseRef = useRef(false)
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      restoreFallbackOnCloseRef.current = false
+    } else {
       setResults([])
       setIsTrashing(false)
       setIsCancelling(false)
@@ -157,6 +164,7 @@ function EditorBulkSkillTrashDialog({
     )))]
 
     if (trashedKeys.length > 0) {
+      restoreFallbackOnCloseRef.current = true
       try {
         await onTrashed?.(trashedKeys)
       } catch (error) {
@@ -200,7 +208,21 @@ function EditorBulkSkillTrashDialog({
       }}
       data-track="editor-scan-bulk-skill-trash-confirm"
     >
-      <AlertDialogContent>
+      <AlertDialogContent
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          if (restoreFallbackOnCloseRef.current) {
+            fallbackFocusRef?.current?.focus()
+            return
+          }
+          const restoreTarget = restoreFocusRef?.current
+          if (restoreTarget?.isConnected) {
+            restoreTarget.focus()
+            return
+          }
+          fallbackFocusRef?.current?.focus()
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
           <AlertDialogDescription aria-live="polite">

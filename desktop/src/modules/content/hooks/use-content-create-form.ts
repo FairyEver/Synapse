@@ -76,6 +76,7 @@ function useContentCreateForm<T extends Record<string, unknown>>(
   const [submitError, setSubmitError] = useState<string | null>(null)
   const previousOpenRef = useRef(open)
   const previousDiscardConfirmOpenRef = useRef(isDiscardConfirmOpen)
+  const validationFormRef = useRef<HTMLFormElement | null>(null)
 
   useEffect(() => {
     setForm(baseline)
@@ -114,6 +115,14 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     logContext?.mode,
     logger,
   ])
+
+  useEffect(() => {
+    const formElement = validationFormRef.current
+    if (!formElement || Object.keys(errors).length === 0) return
+
+    validationFormRef.current = null
+    formElement.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+  }, [errors])
 
   const updateField = <K extends keyof T>(field: K, value: T[K]) => {
     const previousValue = formRef.current[field]
@@ -180,6 +189,7 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     event.preventDefault()
     if (isSubmitting) return
 
+    const formElement = event.currentTarget
     const target = payloadOverride ?? form
     const nextErrors = validate(target)
 
@@ -190,6 +200,7 @@ function useContentCreateForm<T extends Record<string, unknown>>(
         fields: Object.keys(nextErrors),
         mode: logContext?.mode,
       })
+      validationFormRef.current = event.currentTarget
       setErrors(nextErrors)
       return
     }
@@ -202,7 +213,16 @@ function useContentCreateForm<T extends Record<string, unknown>>(
       onOpenChange(false)
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : errorFallbackMessage
-      setSubmitError(message)
+      const field = error instanceof Error && "field" in error && typeof error.field === "string"
+        ? error.field
+        : null
+      if (field) {
+        validationFormRef.current = formElement
+        setErrors({ [field]: message })
+        setSubmitError(null)
+      } else {
+        setSubmitError(message)
+      }
     } finally {
       setIsSubmitting(false)
     }

@@ -130,6 +130,14 @@ describe("AgentConversationWindowPage", () => {
     expect(mocks.workspaceProps?.chat).toMatchObject({ contextUsage })
   })
 
+  it("shows a neutral loading state while an existing conversation is hydrating", () => {
+    const container = renderPage("conversation-1", { loading: true })
+
+    expect(container.textContent).toContain("加载中")
+    expect(mocks.workspaceProps).toBeNull()
+    expect((mocks.chat as { selectSession: ReturnType<typeof vi.fn> }).selectSession).not.toHaveBeenCalled()
+  })
+
   it("shows missing conversation state", () => {
     const container = renderPage("missing")
 

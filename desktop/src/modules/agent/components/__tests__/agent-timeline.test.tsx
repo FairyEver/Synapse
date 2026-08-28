@@ -13,6 +13,7 @@ import {
 } from "@/lib/agent-timeline"
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
+import { AgentWorkspaceShell } from "../agent-workspace-shell"
 import {
   defaultProcessGroupOpen,
   groupTimelineDisplayEntries,
@@ -675,6 +676,102 @@ describe("AgentTimeline", () => {
     }))
   })
 
+  it("keeps a file checkpoint after the final assistant message as a turn postlude", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "tool-call",
+        kind: "toolCall",
+        toolName: "Edit",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "checkpoint",
+        kind: "fileCheckpoint",
+        checkpointId: "checkpoint-1",
+        status: "available",
+        insertions: 1,
+        deletions: 1,
+        files: [{
+          id: "file-1",
+          path: "notes.md",
+          kind: "modified",
+          insertions: 1,
+          deletions: 1,
+          binary: false,
+          truncated: false,
+        }],
+        fileCount: 1,
+        coverageWarning: false,
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "answer",
+        kind: "message",
+        role: "assistant",
+        content: "Done",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+    ]), {
+      pendingPermissionRequestIds: new Set(),
+      nowMs: Date.parse("2026-06-27T00:00:02.000Z"),
+    })
+
+    expect(nodes.map((node) => node.kind)).toEqual(["processGroup", "item", "item"])
+    expect(nodes[1]).toEqual(expect.objectContaining({
+      kind: "item",
+      entry: expect.objectContaining({ item: expect.objectContaining({ id: "answer" }) }),
+    }))
+    expect(nodes[2]).toEqual(expect.objectContaining({
+      kind: "item",
+      entry: expect.objectContaining({ item: expect.objectContaining({ id: "checkpoint" }) }),
+    }))
+  })
+
+  it("exposes the collapsed state of a checkpoint file list", () => {
+    const files = Array.from({ length: 4 }, (_, index) => ({
+      id: `file-${index + 1}`,
+      path: `notes-${index + 1}.md`,
+      kind: "modified" as const,
+      insertions: 1,
+      deletions: 1,
+      binary: false,
+      truncated: false,
+    }))
+    const html = renderToStaticMarkup(
+      <AgentWorkspaceShell conversationKey="conversation-1" mode="embedded" panels={[]}>
+        <AgentTimeline
+          items={[{
+            id: "checkpoint",
+            kind: "fileCheckpoint",
+            checkpointId: "checkpoint-1",
+            status: "available",
+            insertions: 4,
+            deletions: 4,
+            files,
+            fileCount: files.length,
+            coverageWarning: false,
+            timestamp: "2026-06-27T00:00:02.000Z",
+          }]}
+          profile={profile}
+          sending={false}
+          pendingPermissions={[]}
+          onOpenReference={vi.fn()}
+          onRespondPermission={vi.fn()}
+          viewportRef={createRef<HTMLDivElement>()}
+          loadingOlder={false}
+          historyError={null}
+          onRetryHistory={vi.fn()}
+        />
+      </AgentWorkspaceShell>,
+    )
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    expect([...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "再显示 1 个文件")
+      ?.getAttribute("aria-expanded")).toBe("false")
+  })
+
   it("folds intermediate assistant messages and keeps only the final answer on the mainline", () => {
     const entries = timelineDisplayEntries([
       {
@@ -922,6 +1019,329 @@ describe("AgentTimeline", () => {
       }))
     },
   )
+
+  it("projects the last failed tool as cancelled when the user stops the turn", async () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "user-stop",
+        kind: "message",
+        role: "user",
+        content: "Wait",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "thinking-stop",
+        kind: "thinking",
+        content: "Starting the wait.",
+        timestamp: "2026-06-27T00:00:05.000Z",
+      },
+      {
+        id: "tool-stop",
+        kind: "toolCall",
+        toolUseId: "toolu-stop",
+        toolName: "Bash",
+        toolInput: "/bin/sleep 30",
+        timestamp: "2026-06-27T00:00:06.000Z",
+      },
+      {
+        id: "tool-result-stop",
+        kind: "toolResult",
+        toolUseId: "toolu-stop",
+        toolName: "Bash",
+        content: "The user doesn't want to proceed with this tool use.",
+        success: false,
+        timestamp: "2026-06-27T00:00:09.000Z",
+      },
+      {
+        id: "turn-result-stop",
+        kind: "result",
+        content: "Stopped",
+        metadata: {
+          turnOutcome: {
+            status: "cancelled",
+            mode: "graceful",
+            reason: "user_cancelled",
+            message: "Stopped",
+          },
+        },
+        timestamp: "2026-06-27T00:00:09.200Z",
+      },
+    ]
+
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries(items), {
+      pendingPermissionRequestIds: new Set(),
+    })
+    const processGroup = nodes.find((node) => node.kind === "processGroup")
+    expect(processGroup).toEqual(expect.objectContaining({
+      durationLabel: "9s",
+      state: expect.objectContaining({ failed: false }),
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          item: expect.objectContaining({ id: "tool-stop" }),
+          cancelled: true,
+        }),
+      ]),
+    }))
+
+    const { container } = renderInteractiveTimeline({ items })
+    const groupTrigger = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("已处理"))
+    expect(groupTrigger).toBeTruthy()
+    await act(async () => {
+      groupTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(container.textContent).toContain("BashCancelled")
+    expect(container.textContent).not.toContain("BashFailed")
+  })
+
+  it("projects the SDK running-tool stop result as cancelled when the user stops the turn", async () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "user-stop-running-tool",
+        kind: "message",
+        role: "user",
+        content: "Wait",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "tool-stop-running-tool",
+        kind: "toolCall",
+        toolUseId: "toolu-stop-running-tool",
+        toolName: "Bash",
+        toolInput: "/bin/sleep 30",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "tool-result-stop-running-tool",
+        kind: "toolResult",
+        toolUseId: "toolu-stop-running-tool",
+        toolName: "Bash",
+        content: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+        status: "error",
+        success: false,
+        timestamp: "2026-06-27T00:00:03.000Z",
+      },
+      {
+        id: "permission-stop-running-tool",
+        kind: "permissionRequest",
+        requestId: "permission-stop-running-tool",
+        toolName: "Bash",
+        toolInput: "/bin/sleep 30",
+        resolution: {
+          status: "answered",
+          resolvedAt: "2026-06-27T00:00:02.000Z",
+        },
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "turn-result-stop-running-tool",
+        kind: "result",
+        content: "Stopped",
+        metadata: {
+          turnOutcome: {
+            status: "cancelled",
+            mode: "graceful",
+            reason: "user_cancelled",
+            message: "Stopped",
+          },
+        },
+        timestamp: "2026-06-27T00:00:03.200Z",
+      },
+    ]
+
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries(items), {
+      pendingPermissionRequestIds: new Set(),
+    })
+    const processGroup = nodes.find((node) => node.kind === "processGroup")
+    expect(processGroup).toEqual(expect.objectContaining({
+      state: expect.objectContaining({ failed: false }),
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          item: expect.objectContaining({ id: "tool-stop-running-tool" }),
+          cancelled: true,
+        }),
+      ]),
+    }))
+
+    const { container } = renderInteractiveTimeline({ items })
+    const groupTrigger = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("已处理"))
+    await act(async () => {
+      groupTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(container.textContent).toContain("BashCancelled")
+    expect(container.textContent).not.toContain("BashFailed")
+  })
+
+  it.each([
+    {
+      name: "a non-zero exit code",
+      result: { content: "Process exited with code 1", exitCode: 1, status: "error", success: false },
+      expectedLabel: "Failed",
+    },
+    {
+      name: "a plain failed result",
+      result: { content: "Command failed", status: "failed", success: false },
+      expectedLabel: "Failed",
+    },
+    {
+      name: "a plain error result",
+      result: { content: "Error: command failed", status: "error", success: false },
+      expectedLabel: "Failed",
+    },
+    {
+      name: "a denied permission result",
+      result: { content: "permission denied", status: "denied", success: false },
+      expectedLabel: "Denied",
+    },
+    {
+      name: "the refusal sentence embedded in other text",
+      result: {
+        content: "Error: The user doesn't want to proceed with this tool use.",
+        status: "error",
+        success: false,
+      },
+      expectedLabel: "Failed",
+    },
+    {
+      name: "structured diagnostics without refusal text",
+      result: {
+        contentDiagnostics: {
+          kind: "array" as const,
+          itemCount: 1,
+          contentTypes: ["text"],
+          textCharCount: 51,
+          imageCount: 0,
+          images: [],
+        },
+        status: "error",
+        success: false,
+      },
+      expectedLabel: "Failed",
+    },
+  ])("keeps $name distinct when the user later stops the turn", async ({ result, expectedLabel }) => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "user-stop-after-failure",
+        kind: "message",
+        role: "user",
+        content: "Run it",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "tool-stop-after-failure",
+        kind: "toolCall",
+        toolUseId: "toolu-stop-after-failure",
+        toolName: "Bash",
+        toolInput: "exit 1",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "tool-result-stop-after-failure",
+        kind: "toolResult",
+        toolUseId: "toolu-stop-after-failure",
+        toolName: "Bash",
+        ...result,
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "turn-result-stop-after-failure",
+        kind: "result",
+        content: "Stopped",
+        metadata: {
+          turnOutcome: {
+            status: "cancelled",
+            mode: "graceful",
+            reason: "user_cancelled",
+            message: "Stopped",
+          },
+        },
+        timestamp: "2026-06-27T00:00:04.000Z",
+      },
+    ]
+
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries(items), {
+      pendingPermissionRequestIds: new Set(),
+    })
+    const processGroup = nodes.find((node) => node.kind === "processGroup")
+    expect(processGroup).toEqual(expect.objectContaining({
+      state: expect.objectContaining({ failed: expectedLabel === "Failed" }),
+    }))
+    if (!processGroup || processGroup.kind !== "processGroup") throw new Error("Expected process group")
+    const toolEntry = processGroup.entries.find((entry) => entry.item.id === "tool-stop-after-failure")
+    expect(toolEntry).not.toHaveProperty("cancelled")
+
+    const { container } = renderInteractiveTimeline({ items })
+    const groupTrigger = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("已处理"))
+    await act(async () => {
+      groupTrigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(container.textContent).toContain(`Bash${expectedLabel}`)
+    expect(container.textContent).not.toContain("BashCancelled")
+  })
+
+  it("recognizes the exact SDK refusal sentence across casing and structured text content", () => {
+    const refusal = "  THE USER DOESN'T WANT TO PROCEED WITH THIS TOOL USE.  "
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "user-structured-refusal",
+        kind: "message",
+        role: "user",
+        content: "Wait",
+        timestamp: "2026-06-27T00:00:00.000Z",
+      },
+      {
+        id: "tool-structured-refusal",
+        kind: "toolCall",
+        toolUseId: "toolu-structured-refusal",
+        toolName: "Bash",
+        toolInput: "/bin/sleep 30",
+        timestamp: "2026-06-27T00:00:01.000Z",
+      },
+      {
+        id: "tool-result-structured-refusal",
+        kind: "toolResult",
+        toolUseId: "toolu-structured-refusal",
+        toolName: "Bash",
+        content: refusal,
+        contentDiagnostics: {
+          kind: "array",
+          itemCount: 1,
+          contentTypes: ["text"],
+          textCharCount: refusal.length,
+          imageCount: 0,
+          images: [],
+        },
+        status: "error",
+        success: false,
+        timestamp: "2026-06-27T00:00:02.000Z",
+      },
+      {
+        id: "turn-result-structured-refusal",
+        kind: "result",
+        content: "Stopped",
+        metadata: {
+          turnOutcome: {
+            status: "cancelled",
+            mode: "graceful",
+            reason: "user_cancelled",
+            message: "Stopped",
+          },
+        },
+        timestamp: "2026-06-27T00:00:03.000Z",
+      },
+    ]
+
+    const processGroup = groupTimelineDisplayEntries(timelineDisplayEntries(items), {
+      pendingPermissionRequestIds: new Set(),
+    }).find((node) => node.kind === "processGroup")
+
+    expect(processGroup).toEqual(expect.objectContaining({
+      state: expect.objectContaining({ failed: false, denied: false }),
+      entries: expect.arrayContaining([expect.objectContaining({ cancelled: true })]),
+    }))
+  })
 
   it("keeps an interrupted terminal error visible without promoting partial text", () => {
     const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
@@ -1214,6 +1634,41 @@ describe("AgentTimeline", () => {
       durationLabel: "8s",
       summary: "已处理 8s",
       state: expect.objectContaining({ active: false }),
+    }))
+  })
+
+  it("preserves completed turn duration after restoring history without phase events", () => {
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries([
+      {
+        id: "user-restored",
+        kind: "message",
+        role: "user",
+        content: "Reply once.",
+        timestamp: "2026-06-29T00:00:00.000Z",
+      },
+      {
+        id: "assistant-restored",
+        kind: "message",
+        role: "assistant",
+        content: "Done.",
+        timestamp: "2026-06-29T00:00:06.000Z",
+      },
+      {
+        id: "result-restored",
+        kind: "result",
+        content: "",
+        metadata: { turnOutcome: { status: "completed" } },
+        timestamp: "2026-06-29T00:00:06.000Z",
+      },
+    ]), { pendingPermissionRequestIds: new Set() })
+
+    const group = nodes.find((node) => node.kind === "processGroup")
+
+    expect(group).toEqual(expect.objectContaining({
+      kind: "processGroup",
+      label: "已处理",
+      durationLabel: "6s",
+      summary: "已处理 6s",
     }))
   })
 
@@ -1716,6 +2171,63 @@ describe("AgentTimeline", () => {
     expect(html).toContain("Failed")
     expect(html).toContain("Denied")
     expect(html).not.toContain("Running")
+  })
+
+  it("treats the exact SDK user denial as denied without marking the process failed", () => {
+    const items: SynapseAgentTimelineItem[] = [
+      {
+        id: "tool-call-sdk-denied",
+        kind: "toolCall",
+        toolUseId: "toolu-sdk-denied",
+        toolName: "Bash",
+        toolInput: "/bin/sleep 20",
+        timestamp: "2026-06-04T00:00:00.000Z",
+      },
+      {
+        id: "tool-result-sdk-denied",
+        kind: "toolResult",
+        toolUseId: "toolu-sdk-denied",
+        toolName: "Bash",
+        content: "The user denied this tool use. Stop and wait for the user's instructions.",
+        status: "error",
+        success: false,
+        timestamp: "2026-06-04T00:00:01.000Z",
+      },
+    ]
+
+    const nodes = groupTimelineDisplayEntries(timelineDisplayEntries(items), {
+      pendingPermissionRequestIds: new Set(),
+    })
+    expect(nodes.find((node) => node.kind === "processGroup")).toEqual(expect.objectContaining({
+      state: expect.objectContaining({ failed: false, denied: true }),
+    }))
+
+    const html = renderTimeline({
+      items,
+      sending: true,
+      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
+    })
+    expect(html).toContain("Denied")
+    expect(html).not.toContain("Failed")
+  })
+
+  it("keeps the SDK user denial sentence embedded in other text failed", () => {
+    const html = renderTimeline({
+      items: [{
+        id: "tool-result-embedded-sdk-denial",
+        kind: "toolResult",
+        toolName: "Bash",
+        content: "Error: The user denied this tool use. Stop and wait for the user's instructions.",
+        status: "error",
+        success: false,
+        timestamp: "2026-06-04T00:00:01.000Z",
+      }],
+      sending: true,
+      profile: { ...profile, toolDefaultCollapsed: "expanded", toolPreviewChars: 1200 },
+    })
+
+    expect(html).toContain("Failed")
+    expect(html).not.toContain("Denied")
   })
 
   it("keeps legacy same-name result fallback only for unidentified tools", () => {

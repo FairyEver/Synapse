@@ -557,6 +557,33 @@ describe("agent timeline conversion", () => {
     expect(JSON.stringify(restored)).not.toContain("/Users/liyang/Downloads")
   })
 
+  it("preserves opaque committed attachment references in restored history", () => {
+    const restored = historyRecordToTimelineItem("session-1", {
+      role: "user",
+      content: "分析资料",
+      timestamp: "2026-08-25T00:00:00.000Z",
+      metadata: {
+        userMessagePresentation: { version: 1, content: "分析资料" },
+        attachments: [{
+          kind: "path",
+          path: "synapse-agent-attachment://local/attachment-1",
+          entryType: "file",
+          name: "report.pdf",
+          byteSize: 42,
+        }],
+      },
+    }, 0, "claude")
+
+    expect(restored).toEqual(expect.objectContaining({
+      kind: "message",
+      attachments: [expect.objectContaining({
+        kind: "path",
+        path: "synapse-agent-attachment://local/attachment-1",
+        name: "report.pdf",
+      })],
+    }))
+  })
+
   it("preserves stored assistant usage metadata", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "assistant",

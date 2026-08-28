@@ -111,6 +111,23 @@ describe("useProjectActions", () => {
     expect(appConfig.updateConfig).not.toHaveBeenCalled()
   })
 
+  it("rejects a duplicate project name without writing", async () => {
+    const existingProject = { id: "project-existing", name: "Docs", path: "/work/docs" }
+    appConfig.refreshConfig.mockResolvedValue({
+      ...createDefaultConfig(),
+      global: {
+        ...createDefaultConfig().global,
+        projects: [existingProject],
+      },
+    })
+
+    await expect(currentActions?.addProject({
+      name: " docs ",
+      path: "/work/other-docs",
+    })).rejects.toThrow("这个项目名称已经存在了。")
+    expect(appConfig.updateConfig).not.toHaveBeenCalled()
+  })
+
   it("compares configured project paths using the renderer platform", async () => {
     Object.defineProperty(window, "synapse", {
       configurable: true,

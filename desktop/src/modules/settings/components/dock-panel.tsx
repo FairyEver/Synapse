@@ -43,7 +43,7 @@ function DockPanel({ workflowEntryVisible }: DockPanelProps) {
                     disabled={dock.saving}
                     isFirst={index === 0}
                     isLast={index === dock.pinnedApps.length - 1}
-                    onMove={(appId, direction) => void dock.moveDockApp(appId, direction)}
+                    onMove={dock.moveDockApp}
                     onRemove={(appId) => void dock.removeDockApp(appId)}
                   />
                 ))}

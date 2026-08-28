@@ -1,4 +1,5 @@
 import type { SynapseGitCommitFileChange } from "@/types/git"
+import { isBinaryDiff } from "@/lib/diff"
 
 export type GitDiffSection = {
   readonly key: string
@@ -41,5 +42,5 @@ export function mapCommitDiffSections(
 }
 
 export function isBinaryGitDiff(text: string): boolean {
-  return /^Binary files .+ differ$/m.test(text) || /^GIT binary patch$/m.test(text)
+  return isBinaryDiff(text)
 }

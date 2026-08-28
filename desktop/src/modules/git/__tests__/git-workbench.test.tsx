@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { GitChangesTab } from "../components/git-changes-tab"
-import { GitDiffViewer } from "../components/git-diff-viewer"
+import { GitDiffViewer } from "../components/git-diff-viewer-adapter"
 import { GitHistoryTab } from "../components/git-history-tab"
 import { GitWorkbench } from "../components/git-workbench"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
@@ -161,6 +161,32 @@ describe("GitWorkbench", () => {
     })
   })
 
+  it("returns focus to the commit action after cancelling confirmation", async () => {
+    await renderWorkbench(roots)
+    const commitButton = findButton("提交改动")
+
+    await click(commitButton)
+    const cancelButton = [...findDialog().querySelectorAll<HTMLElement>("button")]
+      .find((button) => button.textContent?.trim() === "取消")
+    expect(cancelButton).toBeTruthy()
+
+    await click(cancelButton!)
+
+    expect(document.activeElement).toBe(commitButton)
+    expect(bridge.git.commit).not.toHaveBeenCalled()
+  })
+
+  it("shows a neutral loading state before the first repository snapshot", async () => {
+    bridge.git.getSnapshot.mockImplementation(() => new Promise(() => {}))
+
+    await renderWorkbench(roots)
+
+    expect(document.body.textContent).toContain("正在读取")
+    expect(document.body.textContent).not.toContain("目录不可访问")
+    expect(document.body.textContent).not.toContain("无分支")
+    expect(findButton("读取中").hasAttribute("disabled")).toBe(true)
+  })
+
   it("commits both old and new paths for selected renames", async () => {
     bridge.git.getSnapshot.mockResolvedValue({
       repositoryId: "repo-1",
@@ -235,6 +261,40 @@ describe("GitWorkbench", () => {
     })
     expect(bridge.git.getSnapshot.mock.calls.length).toBeGreaterThan(snapshotCallsBeforeDiscard)
     expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+  })
+
+  it("returns focus to the discard action after cancelling confirmation", async () => {
+    await renderWorkbench(roots)
+    const discardButton = findButton("丢弃改动")
+
+    await click(discardButton)
+    const cancelButton = [...findAlertDialog().querySelectorAll<HTMLElement>("button")]
+      .find((button) => button.textContent?.trim() === "取消")
+    expect(cancelButton).toBeTruthy()
+
+    await click(cancelButton!)
+
+    expect(document.activeElement).toBe(discardButton)
+    expect(bridge.git.discardChanges).not.toHaveBeenCalled()
+  })
+
+  it("returns focus to the persistent action after discarding the last change", async () => {
+    bridge.git.getSnapshot
+      .mockResolvedValueOnce(gitSnapshot({
+        changes: [{ path: "docs/a.md", originalPath: null, status: "modified", indexStatus: "unchanged", worktreeStatus: "modified" }],
+      }))
+      .mockResolvedValue(gitSnapshot())
+    await renderWorkbench(roots)
+    const persistentAction = findButtonByLabel("刷新仓库状态")
+
+    await click(findButton("丢弃改动"))
+    const confirm = [...findAlertDialog().querySelectorAll<HTMLElement>("button")]
+      .find((button) => button.textContent?.trim() === "丢弃改动")
+    expect(confirm).toBeTruthy()
+    await click(confirm!)
+
+    expect(document.body.textContent).toContain("暂无改动")
+    expect(document.activeElement).toBe(persistentAction)
   })
 
   it("keeps discard errors visible and requires external conflict handling", async () => {
@@ -314,13 +374,19 @@ describe("GitWorkbench", () => {
     })
 
     expect(findButtonByLabel("统一视图").getAttribute("data-state")).toBe("on")
+    expect(findButtonByLabel("统一视图").getAttribute("aria-checked")).toBe("true")
+    expect(findButtonByLabel("分栏视图").getAttribute("aria-checked")).toBe("false")
     expect(findButtonByLabel("自动换行").getAttribute("data-state")).toBe("off")
+    expect(findButtonByLabel("自动换行").getAttribute("aria-pressed")).toBe("false")
     expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-mode")).toBe("unified")
 
     await click(findButtonByLabel("分栏视图"))
     await click(findButtonByLabel("自动换行"))
     expect(findButtonByLabel("分栏视图").getAttribute("data-state")).toBe("on")
+    expect(findButtonByLabel("统一视图").getAttribute("aria-checked")).toBe("false")
+    expect(findButtonByLabel("分栏视图").getAttribute("aria-checked")).toBe("true")
     expect(findButtonByLabel("自动换行").getAttribute("data-state")).toBe("on")
+    expect(findButtonByLabel("自动换行").getAttribute("aria-pressed")).toBe("true")
     expect(document.querySelector('[data-component="git-diff-view"]')?.getAttribute("data-mode")).toBe("split")
 
     await act(async () => {
@@ -354,6 +420,53 @@ describe("GitWorkbench", () => {
 
     expect(unified).toContain("grid-cols-[3.25rem_3.25rem_minmax(0,1fr)]")
     expect(split).toContain("grid-cols-[3.25rem_minmax(0,1fr)]")
+  })
+
+  it("uses semantic colors for added and deleted lines", () => {
+    const patch = [
+      "diff --git a/docs/a.md b/docs/a.md",
+      "--- a/docs/a.md",
+      "+++ b/docs/a.md",
+      "@@ -1,2 +1,2 @@",
+      " context",
+      "-old line",
+      "+new line",
+      "",
+    ].join("\n")
+    const html = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/a.md"
+        text={patch}
+        mode="unified"
+        wrap
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+    const container = document.createElement("div")
+    container.innerHTML = html
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('[role="row"]'))
+    const context = rows.find((row) => row.textContent?.includes("context"))
+    const deletion = rows.find((row) => row.textContent?.includes("-old line"))
+    const addition = rows.find((row) => row.textContent?.includes("+new line"))
+
+    expect(context?.className).toContain("bg-background")
+    expect(deletion?.className).toContain("bg-destructive/10")
+    expect(addition?.className).toContain("bg-emerald-500/10")
+    expect(addition?.className).toContain("dark:bg-emerald-400/15")
+
+    const splitHtml = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/a.md"
+        text={patch}
+        mode="split"
+        wrap
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+    expect(splitHtml).toContain("bg-destructive/20")
+    expect(splitHtml).toContain("bg-emerald-500/20")
   })
 
   it("keeps split line numbers aligned through uneven blocks and no-newline markers", () => {
@@ -598,7 +711,44 @@ describe("GitWorkbench", () => {
     )
 
     expect(html).toContain("差异内容已截断")
-    expect(html).toContain("文件已变更")
+    expect(html).toContain("二进制文件已变更")
+  })
+
+  it("keeps empty and pure-deletion fallback states understandable", () => {
+    const empty = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/empty.md"
+        text=""
+        mode="unified"
+        wrap
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+    const deleted = renderToStaticMarkup(
+      <GitDiffViewer
+        path="docs/deleted.md"
+        statusLabel="删除"
+        text={[
+          "diff --git a/docs/deleted.md b/docs/deleted.md",
+          "deleted file mode 100644",
+          "--- a/docs/deleted.md",
+          "+++ /dev/null",
+          "@@ -1 +0,0 @@",
+          "-removed",
+          "",
+        ].join("\n")}
+        mode="unified"
+        wrap
+        onModeChange={vi.fn()}
+        onWrapChange={vi.fn()}
+      />,
+    )
+
+    expect(empty).toContain("没有文本差异")
+    expect(deleted).toContain("删除")
+    expect(deleted).toContain("+++ /dev/null")
+    expect(deleted).toContain("-removed")
   })
 
   it("shows worktree diff failures instead of the unselected empty state", () => {
@@ -766,6 +916,65 @@ describe("GitWorkbench", () => {
 
     expect(bridge.git.fetchRemoteBranches).toHaveBeenCalledWith("repo-1", expect.any(String))
     expect(bridge.git.listRemoteBranches).toHaveBeenCalledTimes(3)
+  })
+
+  it("keeps focus in the branch name field after creating a branch fails", async () => {
+    bridge.git.createBranch.mockRejectedValueOnce(new Error("请先提交本地改动。"))
+    await renderWorkbench(roots)
+
+    await click(findButton("新建分支"))
+    await changeInput("分支名称", "bad..name")
+    const createButton = findButton("创建")
+    createButton.focus()
+    await click(createButton)
+
+    const branchNameInput = document.querySelector<HTMLInputElement>("#git-create-branch-name")
+    expect(findDialog().textContent).toContain("请先提交本地改动。")
+    expect(document.activeElement).toBe(branchNameInput)
+  })
+
+  it("returns focus to the new branch action after cancelling", async () => {
+    await renderWorkbench(roots)
+    const newBranchButton = findButton("新建分支")
+
+    await click(newBranchButton)
+    const cancelButton = [...findDialog().querySelectorAll<HTMLElement>("button")]
+      .find((button) => button.textContent?.trim() === "取消")
+    expect(cancelButton).toBeTruthy()
+    cancelButton!.focus()
+    await click(cancelButton!)
+
+    expect(document.activeElement).toBe(newBranchButton)
+  })
+
+  it("returns focus to the branch selector after switching branches", async () => {
+    bridge.git.checkoutBranch.mockResolvedValueOnce(undefined)
+    await renderWorkbench(roots)
+    const branchSelector = findButtonByLabel("分支")
+
+    await click(branchSelector)
+    const docsOption = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent?.trim() === "docs")
+    expect(docsOption).toBeTruthy()
+    await click(docsOption!)
+
+    expect(bridge.git.checkoutBranch).toHaveBeenCalledWith("repo-1", "docs")
+    expect(document.activeElement).toBe(branchSelector)
+  })
+
+  it("returns focus to the branch selector after switching branches fails", async () => {
+    bridge.git.checkoutBranch.mockRejectedValueOnce(new Error("请先提交本地改动。"))
+    await renderWorkbench(roots)
+    const branchSelector = findButtonByLabel("分支")
+
+    await click(branchSelector)
+    const docsOption = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent?.trim() === "docs")
+    expect(docsOption).toBeTruthy()
+    await click(docsOption!)
+
+    expect(document.body.textContent).toContain("请先提交本地改动。")
+    expect(document.activeElement).toBe(branchSelector)
   })
 
   it("keeps remote fetch available during an external Git operation", async () => {
@@ -1252,6 +1461,42 @@ describe("GitWorkbench", () => {
     expect(findButton("推送")).toBeTruthy()
   })
 
+  it("clears the previous commit result when reopening confirmation", async () => {
+    const status = createStatus({
+      refresh: vi.fn().mockResolvedValue(gitSnapshot({ changes: [], ahead: 1, behind: 0 })),
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const render = async (commitDialogOpen: boolean) => {
+      await act(async () => {
+        root.render(
+          <GitChangesTab
+            {...defaultDiffViewProps}
+            repository={repository}
+            status={status}
+            onPush={vi.fn()}
+            commitDialogOpen={commitDialogOpen}
+            onCommitDialogOpenChange={vi.fn()}
+          />,
+        )
+        await flush()
+      })
+    }
+
+    await render(true)
+    await changeTextarea("提交说明", "更新文档")
+    await click(findButton("提交选中文件"))
+    expect(document.body.textContent).toContain("可以推送本地提交。")
+
+    await render(false)
+    await render(true)
+
+    expect(document.body.textContent).not.toContain("可以推送本地提交。")
+    expect(findButton("提交选中文件")).toBeTruthy()
+  })
+
   it("routes a repository without commits to the initialization flow", async () => {
     const onInitialize = vi.fn()
     bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({
@@ -1266,6 +1511,25 @@ describe("GitWorkbench", () => {
     await click(findButton("初始化并推送"))
 
     expect(onInitialize).toHaveBeenCalledWith(repository, expect.any(Function))
+  })
+
+  it("keeps empty repository history in the empty state without requesting Git history", async () => {
+    bridge.git.getSnapshot.mockResolvedValue(gitSnapshot({
+      hasCommits: false,
+      upstream: null,
+      trackingStatus: "untracked",
+      ahead: 0,
+      changes: [],
+    }))
+    bridge.git.listHistory.mockRejectedValue(new Error("fatal: branch has no commits"))
+
+    await renderWorkbench(roots)
+    await click(findButton("历史"))
+
+    expect(document.body.textContent).toContain("暂无提交")
+    expect(document.body.textContent).not.toContain("读取失败")
+    expect(document.body.textContent).not.toContain("fatal: branch has no commits")
+    expect(bridge.git.listHistory).not.toHaveBeenCalled()
   })
 
   it("blocks commits while conflicts are present", async () => {

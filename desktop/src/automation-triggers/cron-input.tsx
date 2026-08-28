@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import {
   InputGroup,
@@ -17,6 +17,7 @@ type CronInputProps = {
 
 function CronInput({ disabled, id, value, onChange }: CronInputProps) {
   const [editorOpen, setEditorOpen] = useState(false)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
 
   return (
     <>
@@ -29,6 +30,7 @@ function CronInput({ disabled, id, value, onChange }: CronInputProps) {
         />
         <InputGroupAddon align="inline-end">
           <InputGroupButton
+            ref={editButtonRef}
             type="button"
             disabled={disabled}
             onClick={() => setEditorOpen(true)}
@@ -40,6 +42,7 @@ function CronInput({ disabled, id, value, onChange }: CronInputProps) {
       <CronEditorDialog
         open={editorOpen}
         value={value}
+        returnFocusRef={editButtonRef}
         onApply={onChange}
         onOpenChange={setEditorOpen}
       />

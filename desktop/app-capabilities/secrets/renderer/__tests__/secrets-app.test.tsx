@@ -166,6 +166,23 @@ describe("SecretsModule", () => {
     expect(document.querySelector<HTMLInputElement>("#secret-value")).not.toBeNull()
   })
 
+  it("returns focus to the add action after cancelling with Escape", async () => {
+    await renderSecretsModule()
+
+    const addButton = buttonByText("新增")
+    addButton.focus()
+    await act(async () => {
+      clickButton("新增")
+    })
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(addButton)
+  })
+
   it("lists secrets without values", async () => {
     mocks.secrets.list.mockResolvedValue({
       secrets: [savedSecret],
@@ -229,6 +246,28 @@ describe("SecretsModule", () => {
     })
 
     expect(document.body.textContent).not.toContain("super-secret")
+  })
+
+  it("returns focus to the reveal action after closing with Escape", async () => {
+    mocks.secrets.list.mockResolvedValue({
+      secrets: [savedSecret],
+      total: 1,
+    })
+    await renderSecretsModule()
+
+    const revealButton = document.querySelector<HTMLButtonElement>('button[aria-label="显示密钥值：TOKEN"]')
+    revealButton?.focus()
+    await act(async () => {
+      clickButtonByLabel("显示密钥值：TOKEN")
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(revealButton)
   })
 
   it("closes the value dialog when secrets change", async () => {
@@ -342,6 +381,24 @@ describe("SecretsModule", () => {
       description: "gitee",
     })
     expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "GITEE_TOKEN" })
+  })
+
+  it("shows a field error and restores focus after name validation fails", async () => {
+    mocks.secrets.create.mockRejectedValueOnce(new Error(
+      'Validation failed for "synapse:app:secrets:item:create": name: 密钥名称只能包含字母、数字和下划线',
+    ))
+    await renderSecretsModule()
+
+    await act(async () => clickButton("新增密钥"))
+    await act(async () => {
+      setInputValue("#secret-name", "invalid-name")
+      clickButton("保存密钥")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("密钥名称只能包含字母、数字和下划线")
+    expect(document.body.textContent).not.toContain("synapse:app:secrets:item:create")
+    expect(document.activeElement).toBe(document.querySelector("#secret-name"))
   })
 
   it("warns when an installed Skill binding scan is truncated", async () => {
@@ -833,6 +890,42 @@ describe("SecretsModule", () => {
 
     expect(mocks.secrets.delete).toHaveBeenCalledWith({ name: "TOKEN" })
     expect(mocks.secrets.scanSkillEnvBindings).toHaveBeenCalledWith({ name: "TOKEN" })
+  })
+
+  it("returns focus to the delete action after cancelling with Escape", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    await renderSecretsModule()
+
+    const deleteButton = document.querySelector<HTMLButtonElement>('button[aria-label="删除密钥：TOKEN"]')
+    deleteButton?.focus()
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN")
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(deleteButton)
+  })
+
+  it("focuses the add action after deleting the last secret", async () => {
+    mocks.secrets.list.mockResolvedValue({ secrets: [savedSecret], total: 1 })
+    await renderSecretsModule()
+
+    const addButton = buttonByText("新增")
+    await act(async () => {
+      clickButtonByLabel("删除密钥：TOKEN")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      clickButton("删除")
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(addButton)
   })
 
   it("shows the binding count in delete confirmation", async () => {

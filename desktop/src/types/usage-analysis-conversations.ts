@@ -56,6 +56,8 @@ export type CcRecordListInput = CcConversationListInput
 
 export type CcRecordListItem = CcConversationListItem & {
   readonly requestCount: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
 }
 
 export type CcRecordDetailRow = {

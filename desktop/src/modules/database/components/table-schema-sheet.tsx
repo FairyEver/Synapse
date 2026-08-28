@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,6 +62,7 @@ type TableSchemaSheetProps = {
   onUpdateColumnDescription: (column: string, description: string) => void
   onUpdateColumnChoices: (column: string, choices: string[]) => Promise<void>
   onDropTable: () => void
+  restoreFocusRef?: RefObject<HTMLButtonElement | null>
 }
 
 function TableSchemaSheet({
@@ -73,6 +74,7 @@ function TableSchemaSheet({
   onUpdateColumnDescription,
   onUpdateColumnChoices,
   onDropTable,
+  restoreFocusRef,
 }: TableSchemaSheetProps) {
   const [newColName, setNewColName] = useState("")
   const [newColKind, setNewColKind] = useState<ColumnKind>("text")
@@ -85,6 +87,8 @@ function TableSchemaSheet({
   const [editingChoicesCol, setEditingChoicesCol] = useState<string | null>(null)
   const [dropTableConfirmOpen, setDropTableConfirmOpen] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const dropTableButtonRef = useRef<HTMLButtonElement>(null)
+  const columnDescriptionTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const skipTableDescriptionCommitRef = useRef(false)
 
   const editingChoicesColumn = useMemo(
@@ -153,6 +157,10 @@ function TableSchemaSheet({
     setTimeout(() => editInputRef.current?.focus(), 0)
   }, [schema?.name])
 
+  const restoreColumnDescriptionTriggerFocus = useCallback((column: string) => {
+    window.setTimeout(() => columnDescriptionTriggerRefs.current.get(column)?.focus())
+  }, [])
+
   const commitEditDescription = useCallback(() => {
     if (editingCol) {
       logger.info("Column description edit submitted.", {
@@ -172,8 +180,18 @@ function TableSchemaSheet({
       <DialogContent
         className="gap-0 overflow-hidden p-0 sm:max-w-[600px]"
         showCloseButton={false}
+        onCloseAutoFocus={(event) => {
+          if (!restoreFocusRef?.current) {
+            return
+          }
+          event.preventDefault()
+          window.setTimeout(() => restoreFocusRef.current?.focus())
+        }}
         onEscapeKeyDown={(event) => {
-          if (document.activeElement?.id === "table-description") {
+          if (
+            document.activeElement?.id === "table-description"
+            || document.activeElement?.id.startsWith("column-description-")
+          ) {
             event.preventDefault()
           }
         }}
@@ -253,6 +271,7 @@ function TableSchemaSheet({
                             ) : editingCol === col.name ? (
                               <Input
                                 ref={editInputRef}
+                                id={`column-description-${col.name}`}
                                 className="h-7 text-xs"
                                 data-track="database-column-description"
                                 value={editingDesc}
@@ -260,17 +279,33 @@ function TableSchemaSheet({
                                 onBlur={commitEditDescription}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") commitEditDescription()
-                                  if (e.key === "Escape") setEditingCol(null)
+                                  if (e.key === "Escape") {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setEditingCol(null)
+                                    restoreColumnDescriptionTriggerFocus(col.name)
+                                  }
                                 }}
                                 placeholder="列说明"
                               />
                             ) : (
-                              <span
-                                className="cursor-pointer rounded px-1 py-0.5 hover:bg-muted"
+                              <Button
+                                ref={(element) => {
+                                  if (element) {
+                                    columnDescriptionTriggerRefs.current.set(col.name, element)
+                                  } else {
+                                    columnDescriptionTriggerRefs.current.delete(col.name)
+                                  }
+                                }}
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto justify-start px-1 py-0.5 text-left font-normal text-muted-foreground"
+                                data-track="database-column-description-open"
                                 onClick={() => startEditDescription(col.name, col.description ?? "")}
                               >
                                 {col.description || "点击添加说明"}
-                              </span>
+                              </Button>
                             )}
                           </TableCell>
                         </TableRow>
@@ -345,6 +380,7 @@ function TableSchemaSheet({
           <DialogFrameFooter className="sm:items-center sm:justify-between">
             <AlertDialog open={dropTableConfirmOpen} onOpenChange={setDropTableConfirmOpen}>
               <Button
+                ref={dropTableButtonRef}
                 variant="destructive"
                 data-track="database-drop-table-open"
                 onClick={(event) => {
@@ -357,7 +393,15 @@ function TableSchemaSheet({
               >
                 删除此表
               </Button>
-              <AlertDialogContent>
+              <AlertDialogContent
+                onCloseAutoFocus={(event) => {
+                  if (!dropTableButtonRef.current) {
+                    return
+                  }
+                  event.preventDefault()
+                  window.setTimeout(() => dropTableButtonRef.current?.focus())
+                }}
+              >
                 <AlertDialogHeader>
                   <AlertDialogTitle>确认删除</AlertDialogTitle>
                   <AlertDialogDescription>

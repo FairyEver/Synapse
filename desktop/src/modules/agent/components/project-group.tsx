@@ -27,6 +27,10 @@ import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { SessionTrailing } from "./session-trailing"
 import { AgentSidebarSessionRow } from "./agent-sidebar-session-row"
 import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
+import {
+  AgentSessionDeleteDialog,
+  type AgentSessionDeleteRequest,
+} from "./agent-session-delete-dialog"
 import { sessionLabel } from "../utils"
 import { conversationUnreadKey } from "../live-sync"
 
@@ -75,8 +79,13 @@ function ProjectGroup({
   const isSelected = selectedProjectId === project.id
   const [open, setOpen] = useState(isSelected || sessions.length > 0)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
+  const [deleteRequest, setDeleteRequest] = useState<AgentSessionDeleteRequest | null>(null)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const renameReturnFocusRef = useRef<HTMLElement | null>(null)
+  const deleteReturnFocusRef = useRef<HTMLElement | null>(null)
+  const deleteSuccessFocusRef = useRef<HTMLElement | null>(null)
+  const sessionRowRefs = useRef(new Map<string, HTMLDivElement>())
 
   const prevIsSelectedRef = useRef(isSelected)
   const prevSessionCountRef = useRef(sessions.length)
@@ -86,8 +95,33 @@ function ProjectGroup({
   prevIsSelectedRef.current = isSelected
   prevSessionCountRef.current = sessions.length
 
-  function handleRenameOpen(session: SynapseAgentSessionSummary) {
+  function handleRenameOpen(session: SynapseAgentSessionSummary, returnFocus?: HTMLElement) {
+    renameReturnFocusRef.current = returnFocus
+      ?? sessionRowRefs.current.get(`${session.projectId}:${session.id}`)
+      ?? null
     setRenameTarget(session)
+  }
+
+  function handleDeleteOpen(
+    session: SynapseAgentSessionSummary,
+    kind: AgentSessionDeleteRequest["kind"],
+  ) {
+    const sessionKey = `${session.projectId}:${session.id}`
+    deleteReturnFocusRef.current = sessionRowRefs.current.get(sessionKey) ?? null
+    const selected = sessions.find((candidate) => (
+      candidate.projectId === selectedProjectId && candidate.id === selectedConversationId
+    ))
+    const successTarget = kind === "others"
+      ? session
+      : selected && (selected.projectId !== session.projectId || selected.id !== session.id)
+        ? selected
+        : sessions.find((candidate) => (
+            candidate.projectId !== session.projectId || candidate.id !== session.id
+          ))
+    deleteSuccessFocusRef.current = successTarget
+      ? sessionRowRefs.current.get(`${successTarget.projectId}:${successTarget.id}`) ?? null
+      : null
+    setDeleteRequest({ kind, session, groupSessions: sessions })
   }
 
   async function handleClearSessions() {
@@ -198,8 +232,13 @@ function ProjectGroup({
                       />
                     }
                     trackValue={`${session.projectId}:${session.id}`}
+                    rowRef={(node) => {
+                      const key = `${session.projectId}:${session.id}`
+                      if (node) sessionRowRefs.current.set(key, node)
+                      else sessionRowRefs.current.delete(key)
+                    }}
                     onSelect={() => onSelect(session)}
-                    onDoubleClick={() => handleRenameOpen(session)}
+                    onDoubleClick={(event) => handleRenameOpen(session, event.currentTarget)}
                   >
                     {label}
                   </AgentSidebarSessionRow>
@@ -211,14 +250,14 @@ function ProjectGroup({
                 </ContextMenuItem>
                 <ContextMenuItem
                   variant="destructive"
-                  onClick={() => void onDelete(session)}
+                  onClick={() => handleDeleteOpen(session, "session")}
                 >
                   删除
                 </ContextMenuItem>
                 <ContextMenuItem
                   variant="destructive"
                   disabled={sessions.length <= 1}
-                  onClick={() => onDeleteOthers(session, sessions)}
+                  onClick={() => handleDeleteOpen(session, "others")}
                 >
                   删除其他
                 </ContextMenuItem>
@@ -232,6 +271,16 @@ function ProjectGroup({
         session={renameTarget}
         onOpenChange={(nextOpen) => { if (!nextOpen) setRenameTarget(null) }}
         onRename={onRename}
+        returnFocusRef={renameReturnFocusRef}
+      />
+
+      <AgentSessionDeleteDialog
+        request={deleteRequest}
+        onOpenChange={(nextOpen) => { if (!nextOpen) setDeleteRequest(null) }}
+        onDelete={onDelete}
+        onDeleteOthers={onDeleteOthers}
+        returnFocusRef={deleteReturnFocusRef}
+        successFocusRef={deleteSuccessFocusRef}
       />
 
       <AlertDialog open={clearDialogOpen} onOpenChange={(nextOpen) => {

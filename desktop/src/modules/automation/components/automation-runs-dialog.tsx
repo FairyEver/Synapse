@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { Clock, Play, RefreshCw, RotateCcw, Square } from "lucide-react"
 
 import { ActionResultView } from "@/action-runtime/action-result-view"
@@ -26,6 +26,7 @@ type AutomationRunsDialogProps = {
   open: boolean
   item: AutomationItem | null
   busy: boolean
+  returnFocusRef?: RefObject<HTMLElement | null>
   onOpenChange: (open: boolean) => void
   onStopRun: (runId: string) => Promise<void>
 }
@@ -34,9 +35,11 @@ function AutomationRunsDialog({
   open,
   item,
   busy,
+  returnFocusRef,
   onOpenChange,
   onStopRun,
 }: AutomationRunsDialogProps) {
+  const wasOpenRef = useRef(open)
   const [runs, setRuns] = useState<AutomationRun[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,6 +84,13 @@ function AutomationRunsDialog({
     }
   }, [open, item, loadRuns])
 
+  useEffect(() => {
+    if (wasOpenRef.current && !open) {
+      returnFocusRef?.current?.focus()
+    }
+    wasOpenRef.current = open
+  }, [open, returnFocusRef])
+
   function handleRetry() {
     void loadRuns()
   }
@@ -105,7 +115,10 @@ function AutomationRunsDialog({
 
   return (
     <Dialog data-track="automation-runs-dialog" open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-2xl" showCloseButton={false}>
+      <DialogContent
+        className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-2xl"
+        showCloseButton={false}
+      >
         <DialogFrame className="max-h-[calc(100vh-4rem)]">
           <DialogFrameHeader title={item?.name ?? "运行历史"} description="最近 100 次运行记录" />
 

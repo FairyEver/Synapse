@@ -416,6 +416,27 @@ describe("AutomationEditorApp", () => {
       button.textContent === "确认")?.disabled).toBe(true)
   })
 
+  it("restores focus to the title after cancelling rename", async () => {
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    const titleButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("自动化 #"))
+    await act(async () => {
+      titleButton?.click()
+    })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "取消")?.click()
+    })
+
+    expect(document.activeElement).toBe(titleButton)
+  })
+
   it("switches selected trigger back to list from the panel header change action", async () => {
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
     const rootElement = document.createElement("div")
@@ -625,6 +646,33 @@ describe("AutomationEditorApp", () => {
     })
 
     expect(closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("restores focus after continuing to edit unsaved changes", async () => {
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationEditorApp />)
+    })
+    await act(async () => {
+      findButtonContaining("Cron")?.click()
+    })
+    const triggerButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.textContent === "更换")
+    triggerButton?.focus()
+
+    await act(async () => {
+      window.dispatchEvent(new Event("beforeunload", { cancelable: true }))
+    })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((button) => button.textContent === "继续编辑")?.click()
+    })
+
+    expect(document.activeElement).toBe(triggerButton)
   })
 
   it("keeps partial Agent executor config while editing", async () => {

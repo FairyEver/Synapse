@@ -202,6 +202,7 @@ function payloadFromAgentEvent(event: AgentEvent): OutboxPayloadV1 {
     case "status":
     case "compactBoundary":
     case "sdkEvent":
+    case "fileCheckpoint":
       return eventPayload("event", undefined, event)
     default: {
       const exhaustive: never = event

@@ -107,6 +107,8 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
   const [exportingKnowledgeBaseProjectId, setExportingKnowledgeBaseProjectId] = useState<string | null>(null)
   const [transferProgress, setTransferProgress] = useState(IDLE_TRANSFER_PROGRESS)
   const isKnowledgeBaseCreateInFlightRef = useRef(false)
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.settings.repository)
 
   useEffect(() => {
@@ -248,8 +250,9 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
     }
   }
 
-  const handleEditProject = (project: SynapseProjectConfig) => {
+  const handleEditProject = (project: SynapseProjectConfig, trigger: HTMLButtonElement) => {
     logger.info("Project edit dialog opened.", { projectId: project.id })
+    editTriggerRef.current = trigger
     setEditingProject(project)
     setEditName(project.name)
     setEditPath(project.path)
@@ -301,8 +304,13 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
     const editingKnowledgeBase = isKnowledgeBaseProject(editingProject)
     const trimmedPath = editingKnowledgeBase ? editingProject.path : editPath.trim()
 
-    if (!trimmedName || (!editingKnowledgeBase && !trimmedPath)) {
-      setEditError(editingKnowledgeBase ? "项目名称不能为空。" : "项目名称和项目路径都不能为空。")
+    if (!trimmedName) {
+      setEditError("项目名称不能为空。")
+      return
+    }
+
+    if (!editingKnowledgeBase && !trimmedPath) {
+      setEditError("项目路径不能为空。")
       return
     }
 
@@ -469,14 +477,15 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleEditProject(project)}
+                          onClick={(event) => handleEditProject(project, event.currentTarget)}
                         >
                           修改
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
+                          onClick={(event) => {
+                            deleteTriggerRef.current = event.currentTarget
                             const bridge = window.synapse?.agent
                             if (!bridge) {
                               setDeleteTarget({ project, sessionCount: null })
@@ -543,7 +552,13 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
       </Dialog>
 
       <Dialog open={editingProject !== null} onOpenChange={(open) => { if (!open) handleEditDialogClose() }}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent
+          className="sm:max-w-[480px]"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            editTriggerRef.current?.focus()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>修改项目</DialogTitle>
             <DialogDescription className="sr-only">
@@ -606,7 +621,12 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
       </Dialog>
 
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            deleteTriggerRef.current?.focus()
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>删除项目</AlertDialogTitle>
             <AlertDialogDescription asChild>

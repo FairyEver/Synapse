@@ -4,21 +4,24 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { isBinaryDiff } from "@/lib/diff"
 import { cn } from "@/lib/utils"
-import { isBinaryGitDiff } from "../lib/git-diff-sections"
 
-export type GitDiffViewMode = "unified" | "split"
+export type DiffViewMode = "unified" | "split"
 
-type GitDiffViewerProps = {
+export type DiffViewerProps = {
   readonly path: string
   readonly originalPath?: string | null
   readonly statusLabel?: string
   readonly text: string
   readonly binary?: boolean
   readonly truncated?: boolean
-  readonly mode: GitDiffViewMode
+  readonly truncatedDescription?: string
+  readonly mode: DiffViewMode
   readonly wrap: boolean
-  readonly onModeChange: (mode: GitDiffViewMode) => void
+  readonly trackingScope?: string
+  readonly dataComponent?: string
+  readonly onModeChange: (mode: DiffViewMode) => void
   readonly onWrapChange: (wrap: boolean) => void
 }
 
@@ -34,18 +37,21 @@ type SplitDiffRow =
   | { readonly kind: "full"; readonly line: ParsedDiffLine }
   | { readonly kind: "pair"; readonly left?: ParsedDiffLine; readonly right?: ParsedDiffLine }
 
-export function GitDiffViewer({
+export function DiffViewer({
   path,
   originalPath = null,
   statusLabel,
   text,
   binary = false,
   truncated = false,
+  truncatedDescription = "内容过大，仅显示部分差异。",
   mode,
   wrap,
+  trackingScope = "diff",
+  dataComponent = "diff-view",
   onModeChange,
   onWrapChange,
-}: GitDiffViewerProps) {
+}: DiffViewerProps) {
   const lines = useMemo(() => parseUnifiedDiff(text), [text])
   return (
     <div className="grid min-w-0 bg-background">
@@ -61,7 +67,7 @@ export function GitDiffViewer({
             variant="outline"
             size="sm"
             aria-label="差异布局"
-            data-track="git-diff-layout"
+            data-track={`${trackingScope}-diff-layout`}
             onValueChange={(value) => {
               if (value === "unified" || value === "split") onModeChange(value)
             }}
@@ -74,7 +80,7 @@ export function GitDiffViewer({
             size="sm"
             pressed={wrap}
             aria-label="自动换行"
-            data-track="git-diff-wrap"
+            data-track={`${trackingScope}-diff-wrap`}
             onPressedChange={onWrapChange}
           >
             <WrapText />
@@ -86,19 +92,19 @@ export function GitDiffViewer({
         <div className="p-4 pb-0">
           <Alert>
             <AlertTitle>差异内容已截断</AlertTitle>
-            <AlertDescription>内容过大，仅显示前 2 MiB。</AlertDescription>
+            <AlertDescription>{truncatedDescription}</AlertDescription>
           </Alert>
         </div>
       ) : null}
-      {binary || isBinaryGitDiff(text) ? (
-        <div className="p-4 text-sm text-muted-foreground">文件已变更。</div>
+      {binary || isBinaryDiff(text) ? (
+        <div className="p-4 text-sm text-muted-foreground">二进制文件已变更。</div>
       ) : text ? (
         <div className="min-w-0 overflow-x-auto" data-allow-select="true">
           <div
             role="table"
             aria-label={`${originalPath ?? path} 与 ${path} 的差异`}
             className="min-w-full font-mono text-xs leading-5 text-foreground"
-            data-component="git-diff-view"
+            data-component={dataComponent}
             data-mode={mode}
           >
             {mode === "split"
@@ -160,12 +166,7 @@ function SplitDiff({ lines, wrap }: { readonly lines: readonly ParsedDiffLine[];
   })
 }
 
-function SplitPane({
-  line,
-  pairedLine,
-  wrap,
-  right = false,
-}: {
+function SplitPane({ line, pairedLine, wrap, right = false }: {
   readonly line?: ParsedDiffLine
   readonly pairedLine?: ParsedDiffLine
   readonly wrap: boolean
@@ -194,11 +195,7 @@ function LineNumber({ value }: { readonly value?: number }) {
   )
 }
 
-function DiffCode({
-  line,
-  pairedLine,
-  wrap,
-}: {
+function DiffCode({ line, pairedLine, wrap }: {
   readonly line: ParsedDiffLine
   readonly pairedLine?: ParsedDiffLine
   readonly wrap: boolean
@@ -228,7 +225,7 @@ function renderIntralineChange(line: ParsedDiffLine, pairedLine: ParsedDiffLine 
   return (
     <>
       {prefix}
-      <mark className={cn("text-inherit", line.kind === "addition" ? "bg-primary/15" : "bg-destructive/20")}>{changed}</mark>
+      <mark className={cn("text-inherit", line.kind === "addition" ? "bg-emerald-500/20 dark:bg-emerald-400/25" : "bg-destructive/20")}>{changed}</mark>
       {suffix}
     </>
   )
@@ -257,7 +254,7 @@ function changedSegments(value: string, counterpart: string): readonly [string, 
 }
 
 function diffLineBackground(kind: DiffLineKind): string {
-  if (kind === "addition") return "bg-primary/5"
+  if (kind === "addition") return "bg-emerald-500/10 dark:bg-emerald-400/15"
   if (kind === "deletion") return "bg-destructive/10"
   if (kind === "hunk") return "bg-muted"
   return "bg-background"
@@ -350,7 +347,7 @@ function splitDiffRows(lines: readonly ParsedDiffLine[]): readonly SplitDiffRow[
   return rows
 }
 
-export function GitRawDiff({ text, parseFailed = false }: { readonly text: string; readonly parseFailed?: boolean }) {
+export function RawDiff({ text, parseFailed = false }: { readonly text: string; readonly parseFailed?: boolean }) {
   return (
     <div className="grid min-w-0 gap-3 p-4">
       {parseFailed ? (

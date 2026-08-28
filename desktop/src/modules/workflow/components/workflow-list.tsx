@@ -71,7 +71,7 @@ function openRunner(workflowApi: WorkflowBridge, workflowId: string, runId: stri
   })
 }
 
-export function WorkflowList({ onCreate }: { onCreate: () => void }) {
+export function WorkflowList({ onCreate, onDeleteSuccess }: { onCreate: () => void; onDeleteSuccess?: () => void }) {
   const { items, migrationDiagnostics, loading, error, refresh } = useWorkflowList()
   const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
   const [historyWorkflowId, setHistoryWorkflowId] = useState<string | null>(null)
@@ -184,7 +184,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     }
   }
 
-  const handleDelete = async (id: string, cleanupImportedChildren = true) => {
+  const handleDelete = async (id: string, cleanupImportedChildren = true): Promise<boolean> => {
     try {
       await requireBridgeDomain("workflow").definition.delete(id, { cleanupImportedChildren })
     } catch (err) {
@@ -195,10 +195,15 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         ...diagnostic,
       })
       toast.error(diagnostic.errorMessage ?? "删除失败，请重试")
-      return
+      return false
     }
     toast.success("工作流已删除")
-    void refresh()
+    return true
+  }
+
+  const handleDeleteSuccess = async () => {
+    await refresh()
+    onDeleteSuccess?.()
   }
 
   const handleRawExport = async (id: string, name: string, migrationDiagnosticId?: string) => {
@@ -414,7 +419,8 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
                   else void handleExport(meta.id)
                 }}
                 onInspectDelete={() => requireBridgeDomain("workflow").operation.inspectDeletePackage(meta.id)}
-                onDelete={(cleanupImportedChildren) => void handleDelete(meta.id, cleanupImportedChildren)} />
+                onDelete={(cleanupImportedChildren) => handleDelete(meta.id, cleanupImportedChildren)}
+                onDeleteSuccess={() => void handleDeleteSuccess()} />
             ))}
             {migrationDiagnostics.map((diagnostic) => (
               <TableRow

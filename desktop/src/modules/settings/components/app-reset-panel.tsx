@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useLocalIdentity } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -11,6 +11,7 @@ const logger = createRendererLogger("settings.reset")
 
 function AppResetPanel() {
   const [isOpen, setIsOpen] = useState(false)
+  const resetButtonRef = useRef<HTMLButtonElement>(null)
   const { localIdentityState } = useLocalIdentity()
   const notifications = useAppNotifications()
 
@@ -27,6 +28,7 @@ function AppResetPanel() {
           controlClassName="flex w-full justify-end"
         >
           <Button
+            ref={resetButtonRef}
             type="button"
             variant="destructive"
             onClick={() => {
@@ -83,6 +85,7 @@ function AppResetPanel() {
         }
         confirmLabel={confirmLabel}
         delaySeconds={3}
+        returnFocusRef={resetButtonRef}
         onConfirm={() => {
           if (!userId) {
             logger.info("App reset confirmed without user ID. Initiating full reset.")

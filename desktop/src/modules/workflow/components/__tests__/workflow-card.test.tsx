@@ -192,6 +192,59 @@ describe("WorkflowCard", () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it("restores focus to the delete action after cancelling deletion", async () => {
+    const container = await renderWorkflowCard()
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
+    if (!deleteButton) throw new Error("Delete button not found")
+    const focusSpy = vi.spyOn(deleteButton, "focus")
+    deleteButton?.focus()
+    focusSpy.mockClear()
+
+    await openDeleteDialog(container)
+    await act(async () => {
+      findButtonByText("取消")?.click()
+      await new Promise<void>((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(focusSpy).toHaveBeenCalled()
+    expect(document.activeElement).toBe(deleteButton)
+  })
+
+  it("uses the stable success target instead of the removed delete action after deletion", async () => {
+    const onDeleteSuccess = vi.fn()
+    const container = await renderWorkflowCard({
+      onDelete: vi.fn(async () => true),
+      onDeleteSuccess,
+    })
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
+    if (!deleteButton) throw new Error("Delete button not found")
+    const focusSpy = vi.spyOn(deleteButton, "focus")
+
+    await openDeleteDialog(container)
+    focusSpy.mockClear()
+    await act(async () => {
+      findButtonByText("删除")?.click()
+      await new Promise<void>((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(onDeleteSuccess).toHaveBeenCalledOnce()
+    expect(focusSpy).not.toHaveBeenCalled()
+  })
+
+  it("restores focus to the delete action when deletion fails", async () => {
+    const container = await renderWorkflowCard({ onDelete: vi.fn(async () => false) })
+    const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
+    if (!deleteButton) throw new Error("Delete button not found")
+
+    await openDeleteDialog(container)
+    await act(async () => {
+      findButtonByText("删除")?.click()
+      await new Promise<void>((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(deleteButton)
+  })
+
   it("opens the active run from the progress action", async () => {
     const onOpenActiveRun = vi.fn()
     const container = await renderWorkflowCard({
@@ -302,6 +355,7 @@ async function renderWorkflowCard(props: Partial<ComponentProps<typeof WorkflowC
             onHistory={vi.fn()}
             onExport={vi.fn()}
             onDelete={vi.fn()}
+            onDeleteSuccess={vi.fn()}
             {...props}
           />
         </tbody>

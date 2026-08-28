@@ -4,6 +4,7 @@ import type {
   Options,
   PermissionMode,
   Query,
+  RewindFilesResult,
   SDKControlGetContextUsageResponse,
   SDKMessage,
   SDKUserMessage,
@@ -37,6 +38,7 @@ interface QueryLike {
   setPermissionMode?(mode: PermissionMode): Promise<void>
   grantAdditionalDirectories?(directories: readonly string[]): Promise<void>
   getContextUsage?(): Promise<SDKControlGetContextUsageResponse>
+  rewindFiles?(userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult>
 }
 
 interface RoutedQueryInput {
@@ -108,6 +110,11 @@ export class SynapseToolRouterQuery implements QueryLike {
   async getContextUsage(): Promise<SDKControlGetContextUsageResponse> {
     this.throwIfFailed()
     return (await this.query).getContextUsage()
+  }
+
+  async rewindFiles(userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult> {
+    this.throwIfFailed()
+    return (await this.query).rewindFiles(userMessageId, options)
   }
 
   private throwIfFailed(): void {

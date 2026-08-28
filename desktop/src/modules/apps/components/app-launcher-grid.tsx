@@ -23,6 +23,7 @@ type LauncherRevealMotion = {
 
 type AppLauncherGridProps = {
   readonly apps: readonly SynapseSystemAppManifest[]
+  readonly focusAppId?: SynapseSystemAppId | null
   readonly onOpenApp: (appId: SynapseSystemAppManifest["id"]) => void
   readonly pinnedAppIds: readonly SynapseSystemAppId[]
   readonly disabled?: boolean
@@ -50,6 +51,7 @@ function getLauncherRevealMotion(index: number, appCount: number): LauncherRevea
 
 export function AppLauncherGrid({
   apps,
+  focusAppId = null,
   onManageDock,
   onOpenApp,
   onPinApp,
@@ -57,7 +59,12 @@ export function AppLauncherGrid({
   pinnedAppIds,
 }: AppLauncherGridProps) {
   const gridRef = useRef<HTMLDivElement>(null)
+  const focusTargetRef = useRef<HTMLButtonElement>(null)
   const launcherAppsKey = apps.map((app) => app.id).join("\0")
+
+  useEffect(() => {
+    focusTargetRef.current?.focus()
+  }, [focusAppId])
 
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined
@@ -113,6 +120,7 @@ export function AppLauncherGrid({
               <ContextMenuTrigger asChild>
                 <div className="group relative h-32 w-32">
                   <button
+                    ref={app.id === focusAppId ? focusTargetRef : undefined}
                     type="button"
                     className="flex h-32 w-32 flex-col items-center justify-start rounded-md px-3 py-2 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
                     onClick={() => onOpenApp(app.id)}

@@ -1,6 +1,7 @@
 # Terminal backup and recovery
 
 Synapse ordinary configuration backup preserves Terminal structure, not terminal bodies.
+Excluded body namespaces are represented as empty backup entries without first materializing their on-disk contents, so large retained output cannot block or exhaust an ordinary configuration export.
 
 Included data:
 

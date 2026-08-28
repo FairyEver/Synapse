@@ -53,4 +53,56 @@ describe("TableSchemaSheet table description editor", () => {
     expect(escapeGuardIndex).toBeGreaterThan(escapeIndex)
     expect(escapeBlurIndex).toBeGreaterThan(escapeGuardIndex)
   })
+
+  it("keeps column-description Escape inside the editor and restores its button", async () => {
+    const source = await readFile(
+      new URL("../components/table-schema-sheet.tsx", import.meta.url),
+      "utf8",
+    )
+
+    const editorIndex = source.indexOf('data-track="database-column-description"')
+    const escapeIndex = source.indexOf('e.key === "Escape"', editorIndex)
+    const preventIndex = source.indexOf("e.preventDefault()", escapeIndex)
+    const stopIndex = source.indexOf("e.stopPropagation()", escapeIndex)
+    const restoreIndex = source.indexOf("restoreColumnDescriptionTriggerFocus", escapeIndex)
+
+    expect(source).toContain("columnDescriptionTriggerRefs")
+    expect(source).toContain('data-track="database-column-description-open"')
+    expect(source).toContain('document.activeElement?.id.startsWith("column-description-")')
+    expect(source).toContain('id={`column-description-${col.name}`}')
+    expect(escapeIndex).toBeGreaterThan(editorIndex)
+    expect(preventIndex).toBeGreaterThan(escapeIndex)
+    expect(stopIndex).toBeGreaterThan(preventIndex)
+    expect(restoreIndex).toBeGreaterThan(stopIndex)
+  })
+
+  it("restores focus to the table delete trigger after canceling confirmation", async () => {
+    const source = await readFile(
+      new URL("../components/table-schema-sheet.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("dropTableButtonRef")
+    expect(source).toContain("onCloseAutoFocus")
+    expect(source).toContain("dropTableButtonRef.current?.focus()")
+  })
+
+  it("restores focus to the schema trigger after closing the sheet", async () => {
+    const source = await readFile(
+      new URL("../components/table-schema-sheet.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("restoreFocusRef")
+    expect(source).toContain("restoreFocusRef.current?.focus()")
+  })
+
+  it("falls back to New Table after deleting the current table", async () => {
+    const source = await readFile(new URL("../index.tsx", import.meta.url), "utf8")
+    const dropIndex = source.indexOf("const handleDropTable")
+    const nextHandlerIndex = source.indexOf("const handleUpdateTableDescription", dropIndex)
+    const dropHandler = source.slice(dropIndex, nextHandlerIndex)
+
+    expect(dropHandler).toContain("createTableButtonRef.current?.focus()")
+  })
 })

@@ -114,6 +114,73 @@ describe("PriceRulesView", () => {
     expect(modelPatternValues()).toEqual(["", "first-model", "second-model"])
   })
 
+  it("returns focus to add after deleting the only draft row", async () => {
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PriceRulesView
+          state={{
+            data: [],
+            loading: false,
+            error: null,
+            reload: vi.fn(),
+          }}
+          presetState={presetState([])}
+          onSaved={vi.fn()}
+        />,
+      )
+      await flushPromises()
+    })
+
+    await act(async () => {
+      clickButton("添加")
+      await flushPromises()
+    })
+    await act(async () => {
+      const deleteButton = findButtonByAriaLabel("删除")
+      deleteButton.focus()
+      deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await flushPromises()
+    })
+
+    expect(document.activeElement).toBe(findButton("添加"))
+  })
+
+  it("focuses the invalid model pattern after save rejection", async () => {
+    modelPriceBridge.saveRules.mockRejectedValueOnce(new Error("第 1 行：模型匹配不能为空。"))
+    const host = document.createElement("div")
+    document.body.appendChild(host)
+    const root = createRoot(host)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PriceRulesView
+          state={{
+            data: [priceRule({ id: "local", modelPattern: "" })],
+            loading: false,
+            error: null,
+            reload: vi.fn(),
+          }}
+          presetState={presetState([])}
+          onSaved={vi.fn()}
+        />,
+      )
+      await flushPromises()
+    })
+
+    await act(async () => {
+      clickButton("保存")
+      await flushPromises()
+    })
+
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("模型匹配")
+  })
+
   it("confirms and clears rules", async () => {
     modelPriceBridge.clearRules.mockResolvedValueOnce([])
     const onSaved = vi.fn()
@@ -251,6 +318,7 @@ describe("PriceRulesView", () => {
     expect(onSaved).not.toHaveBeenCalled()
     expect(notifications.success).not.toHaveBeenCalledWith("已保存")
     expect(notifications.error).toHaveBeenCalledWith("第 1 行：inputPer1M 必须是大于等于 0 的数字。")
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("输入")
   })
 
   it("disables table controls while importing", async () => {
@@ -335,12 +403,26 @@ describe("PriceRulesView", () => {
 })
 
 function clickButton(label: string): void {
-  const button = [...document.querySelectorAll("button")]
+  findButton(label).dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function findButton(label: string): HTMLButtonElement {
+  const button = [...document.querySelectorAll<HTMLButtonElement>("button")]
     .find((candidate) => candidate.textContent?.trim() === label)
-    ?? [...document.querySelectorAll("button")]
+    ?? [...document.querySelectorAll<HTMLButtonElement>("button")]
       .find((candidate) => candidate.textContent?.includes(label))
   if (!button) throw new Error(`Button not found: ${label}`)
-  button.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  return button
+}
+
+function clickButtonByAriaLabel(label: string): void {
+  findButtonByAriaLabel(label).dispatchEvent(new MouseEvent("click", { bubbles: true }))
+}
+
+function findButtonByAriaLabel(label: string): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found by aria-label: ${label}`)
+  return button
 }
 
 function clickCheckbox(label: string): void {

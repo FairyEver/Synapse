@@ -137,6 +137,53 @@ describe("QuickInputModule", () => {
     expect(toast.success).toHaveBeenCalledWith("已保存")
   })
 
+  it("returns focus to the add action after cancelling with Escape", async () => {
+    await renderModule()
+
+    const addButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent === "新增")
+    addButton?.focus()
+    await clickButton("新增")
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(addButton)
+  })
+
+  it("returns focus to the delete action after cancelling with Escape", async () => {
+    await renderModule()
+
+    const deleteButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.getAttribute("aria-label") === "删除快捷输入：今天的工作计划有什么")
+    deleteButton?.focus()
+    await clickButton("删除快捷输入：今天的工作计划有什么")
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(deleteButton)
+  })
+
+  it("focuses the add action after deleting an item", async () => {
+    await renderModule()
+
+    const addButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent === "新增")
+    await clickButton("删除快捷输入：今天的工作计划有什么")
+    await clickButton("删除快捷输入")
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+
+    expect(document.activeElement).toBe(addButton)
+  })
+
   it("updates and deletes an item", async () => {
     await renderModule()
 

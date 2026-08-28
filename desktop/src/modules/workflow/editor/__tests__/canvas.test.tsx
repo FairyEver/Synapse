@@ -370,6 +370,56 @@ describe("WorkflowCanvas", () => {
     expect(onNodeSelect).toHaveBeenCalledWith("prompt-1")
   })
 
+  it("adds and selects a palette node through the imperative handle", async () => {
+    vi.mocked(nodeTypeRegistry.getManifest).mockReturnValue({
+      type: "text",
+      title: "文本",
+      icon: Square,
+      color: "bg-primary/10",
+      defaultConfig: { template: "" },
+      ports: { inputs: [], outputs: [] },
+      cardSummary: () => ({ title: "文本", subtitle: "" }),
+      configFields: [],
+      configSchema: {} as never,
+      share: {
+        selfContained: true,
+        capability: { id: "workflow.node.text", minVersion: "1.0.0" },
+      },
+    })
+    vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000002")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const canvasRef = createRef<WorkflowCanvasHandle>()
+    const onChange = vi.fn()
+    const onNodeSelect = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <WorkflowCanvas
+          ref={canvasRef}
+          definition={definitionWithEndOnly()}
+          onChange={onChange}
+          onNodeSelect={onNodeSelect}
+        />,
+      )
+    })
+
+    await act(async () => {
+      canvasRef.current?.addNode("text")
+    })
+
+    expect(onChange.mock.lastCall?.[0]).toEqual(expect.objectContaining({
+      nodes: expect.arrayContaining([expect.objectContaining({
+        id: "00000000-0000-4000-8000-000000000002",
+        type: "text",
+        config: { template: "" },
+      })]),
+    }))
+    expect(onNodeSelect).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000002")
+  })
+
   it("uses all Claude Code setting sources for new nodes", async () => {
     vi.mocked(nodeTypeRegistry.getManifest).mockReturnValue({
       type: "claude_code",

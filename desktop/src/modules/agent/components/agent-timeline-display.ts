@@ -8,11 +8,13 @@ import type {
 export type TimelineDisplayEntry = {
   readonly item: SynapseAgentTimelineItem
   readonly result?: SynapseAgentToolResultTimelineItem
+  readonly cancelled?: boolean
 }
 
 export function timelineDisplayEntries(items: readonly SynapseAgentTimelineItem[]): readonly TimelineDisplayEntry[] {
   const resultByUseId = new Map<string, SynapseAgentToolResultTimelineItem>()
   const toolCallUseIds = new Set<string>()
+  const latestCheckpointById = new Map<string, SynapseAgentTimelineItem>()
   for (const item of items) {
     if (item.kind === "toolCall" && item.toolUseId) {
       toolCallUseIds.add(item.toolUseId)
@@ -20,9 +22,11 @@ export function timelineDisplayEntries(items: readonly SynapseAgentTimelineItem[
     if (item.kind === "toolResult" && item.toolUseId && !resultByUseId.has(item.toolUseId)) {
       resultByUseId.set(item.toolUseId, item)
     }
+    if (item.kind === "fileCheckpoint") latestCheckpointById.set(item.checkpointId, item)
   }
 
   const entries: TimelineDisplayEntry[] = []
+  const emittedCheckpointIds = new Set<string>()
   for (const item of items) {
     if (isHiddenSdkStatus(item)) continue
     if (item.kind === "toolCall") {
@@ -33,6 +37,12 @@ export function timelineDisplayEntries(items: readonly SynapseAgentTimelineItem[
     if (item.kind === "toolResult") {
       if (item.toolUseId && toolCallUseIds.has(item.toolUseId)) continue
       if (!item.toolUseId && attachLegacyToolResult(entries, item)) continue
+    }
+    if (item.kind === "fileCheckpoint") {
+      if (emittedCheckpointIds.has(item.checkpointId)) continue
+      emittedCheckpointIds.add(item.checkpointId)
+      entries.push({ item: latestCheckpointById.get(item.checkpointId) ?? item })
+      continue
     }
     entries.push({ item })
   }
@@ -129,13 +139,17 @@ function appendTurnNodes(
   const hasUserAnchor = first ? isUserMessage(first) : false
   let anchorId = hasUserAnchor && first ? first.item.id : "root"
   let pendingProcessEntries: TimelineDisplayEntry[] = []
+  const postludeEntries: TimelineDisplayEntry[] = []
   const finalAssistantIndex = context.lifecycle === "completed" && !turnDidNotComplete(entries)
     ? findLastAssistantIndex(entries)
     : -1
+  const completedTurnStartedAtMs = (finalAssistantIndex >= 0 || turnWasCancelled(entries)) && hasUserAnchor && first
+    ? parseProcessTimestamp(first.item.timestamp)
+    : undefined
 
   const flushProcessEntries = () => {
     if (pendingProcessEntries.length === 0) return
-    nodes.push(createProcessGroup(pendingProcessEntries, anchorId, context))
+    nodes.push(createProcessGroup(pendingProcessEntries, anchorId, context, completedTurnStartedAtMs))
     pendingProcessEntries = []
   }
 
@@ -146,7 +160,14 @@ function appendTurnNodes(
   for (let index = hasUserAnchor ? 1 : 0; index < entries.length; index += 1) {
     const entry = entries[index]
     if (!entry || index === finalAssistantIndex) continue
+    if (entry.item.kind === "fileCheckpoint") {
+      postludeEntries.push(entry)
+      continue
+    }
     if (isRequiredMainlineEntry(entry, context)) {
+      if (isCancelledTerminalEntry(entry)) {
+        pendingProcessEntries = markLastCancelledTool(pendingProcessEntries)
+      }
       flushProcessEntries()
       nodes.push({ kind: "item", entry })
       anchorId = entry.item.id
@@ -158,6 +179,42 @@ function appendTurnNodes(
   flushProcessEntries()
   const finalAssistant = finalAssistantIndex >= 0 ? entries[finalAssistantIndex] : undefined
   if (finalAssistant) nodes.push({ kind: "item", entry: finalAssistant })
+  for (const entry of postludeEntries) nodes.push({ kind: "item", entry })
+}
+
+function turnWasCancelled(entries: readonly TimelineDisplayEntry[]): boolean {
+  return entries.some(isCancelledTerminalEntry)
+}
+
+function isCancelledTerminalEntry(entry: TimelineDisplayEntry): boolean {
+  const item = entry.item
+  if (item.kind === "result") return item.metadata?.turnOutcome?.status === "cancelled"
+  return item.kind === "error" && item.turnOutcome?.status === "cancelled"
+}
+
+const SDK_USER_DECLINED_TOOL_RESULT = "the user doesn't want to proceed with this tool use."
+const SDK_STOPPED_TOOL_RESULT = `${SDK_USER_DECLINED_TOOL_RESULT} the tool use was rejected (eg. if it was a file edit, the new_string was not written to the file). stop what you are doing and wait for the user to tell you how to proceed.`
+const SDK_USER_DENIED_TOOL_RESULT = "the user denied this tool use. stop and wait for the user's instructions."
+
+function markLastCancelledTool(
+  entries: readonly TimelineDisplayEntry[],
+): TimelineDisplayEntry[] {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]
+    if (!entry) continue
+    const result = entry.result
+      ?? (entry.item.kind === "toolResult" ? entry.item : undefined)
+    if (!result) continue
+    if (!isUserDeclinedToolResult(result)) return [...entries]
+    return entries.map((candidate, candidateIndex) =>
+      candidateIndex === index ? { ...candidate, cancelled: true } : candidate)
+  }
+  return [...entries]
+}
+
+function isUserDeclinedToolResult(result: SynapseAgentToolResultTimelineItem): boolean {
+  return [SDK_USER_DECLINED_TOOL_RESULT, SDK_STOPPED_TOOL_RESULT]
+    .includes(result.content?.trim().toLowerCase() ?? "")
 }
 
 function isUserMessage(entry: TimelineDisplayEntry): boolean {
@@ -206,10 +263,11 @@ function createProcessGroup(
   entries: readonly TimelineDisplayEntry[],
   anchorId: string,
   context: GroupTimelineDisplayContext & { readonly lifecycle: ProcessGroupLifecycle },
+  completedTurnStartedAtMs?: number,
 ): AgentTimelineDisplayNode {
   const state = processGroupState(entries, context)
   const label = processGroupLabel(state)
-  const durationLabel = processGroupDurationLabel(entries, state, context.nowMs)
+  const durationLabel = processGroupDurationLabel(entries, state, context.nowMs, completedTurnStartedAtMs)
   return {
     kind: "processGroup",
     id: `process:${anchorId}`,
@@ -237,8 +295,9 @@ function processGroupDurationLabel(
   entries: readonly TimelineDisplayEntry[],
   state: ProcessGroupState,
   nowMs: number | undefined,
+  completedTurnStartedAtMs?: number,
 ): string | undefined {
-  const range = processGroupTimeRange(entries, state, nowMs)
+  const range = processGroupTimeRange(entries, state, nowMs, completedTurnStartedAtMs)
   if (!range) return undefined
   return formatProcessGroupDuration(range.endMs - range.startMs)
 }
@@ -247,8 +306,9 @@ function processGroupTimeRange(
   entries: readonly TimelineDisplayEntry[],
   state: ProcessGroupState,
   nowMs: number | undefined,
+  completedTurnStartedAtMs?: number,
 ): { readonly startMs: number; readonly endMs: number } | undefined {
-  let startMs: number | undefined
+  let startMs = completedTurnStartedAtMs
   let endMs: number | undefined
 
   for (const entry of entries) {
@@ -341,7 +401,7 @@ function processGroupState(
     if (item.kind === "permissionRequest" && context.pendingPermissionRequestIds.has(item.requestId)) {
       pendingPermission = true
     }
-    if (result) {
+    if (result && !entry.cancelled) {
       if (isDeniedToolResult(result)) denied = true
       if (isFailedToolResult(result)) failed = true
     }
@@ -352,15 +412,17 @@ function processGroupState(
   return { active, failed, denied, pendingPermission }
 }
 
-function isDeniedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
-  return item.status?.toLowerCase() === "denied"
+export function isDeniedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
+  if (item.status?.toLowerCase() === "denied") return true
+  return item.content?.trim().toLowerCase() === SDK_USER_DENIED_TOOL_RESULT
 }
 
 function isFailedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
+  if (isDeniedToolResult(item)) return false
   if (item.success === false) return true
   if (typeof item.exitCode === "number" && item.exitCode !== 0) return true
   const status = item.status?.toLowerCase()
-  return status === "failed" || status === "error" || status === "denied"
+  return status === "failed" || status === "error"
 }
 
 export function defaultProcessGroupOpen(

@@ -23,6 +23,23 @@ export function agentRuntimeErrorSummary(error: unknown, fallbackMessage?: strin
     .replace(/\[path\]/g, "[path redacted]")
 }
 
+export function agentRuntimeCommandDiagnosticSummary(error: unknown): string {
+  const slashCommands: string[] = []
+  const protectedMessage = rawAgentRuntimeErrorMessage(error).replace(
+    /\b(Command\s+|resolving\s+)(\/[A-Za-z0-9][A-Za-z0-9_-]*)(?=\s)/gi,
+    (_match, prefix: string, command: string) => {
+      const placeholder = `__SYNAPSE_SLASH_COMMAND_${slashCommands.length}__`
+      slashCommands.push(command)
+      return `${prefix}${placeholder}`
+    },
+  )
+  let summary = agentRuntimeErrorSummary(protectedMessage)
+  slashCommands.forEach((command, index) => {
+    summary = summary.replaceAll(`__SYNAPSE_SLASH_COMMAND_${index}__`, command)
+  })
+  return summary
+}
+
 function truncateRunes(value: string, maxLength: number): string {
   return [...value].slice(0, maxLength).join("")
 }

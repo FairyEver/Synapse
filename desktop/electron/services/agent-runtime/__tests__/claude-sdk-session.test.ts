@@ -2,10 +2,9 @@ import type {
   PermissionResult,
   PermissionUpdate,
   SDKMessage,
-  SessionStore,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -166,6 +165,8 @@ describe("ClaudeSDKSession", () => {
 
     expect(getOptions()).toMatchObject({
       includePartialMessages: true,
+      enableFileCheckpointing: true,
+      extraArgs: { "replay-user-messages": null },
     })
   })
 
@@ -178,26 +179,18 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
-  it("consumes ai-title transcript entries for fresh conversations", async () => {
+  it("does not combine file checkpointing with the incompatible SDK session store", () => {
     const { factory, getOptions } = createQueryFactory()
-    const onConversationTitle = vi.fn(async (_title: string) => {})
+    const onConversationTitle = vi.fn()
     createSession(factory, { onConversationTitle })
 
     const options = getOptions()
-    const sessionStore = options.sessionStore as SessionStore
-    expect(options.sessionStoreFlush).toBe("eager")
-
-    await sessionStore.append({ projectKey: "project-1", sessionId: "sdk-1" }, [
-      { type: "user", message: { role: "user", content: "hello" } },
-      { type: "ai-title", aiTitle: "  Send test message in WeCom  " },
-      { type: "ai-title", aiTitle: "   " },
-    ])
-
-    expect(onConversationTitle).toHaveBeenCalledTimes(1)
-    expect(onConversationTitle).toHaveBeenCalledWith("Send test message in WeCom")
+    expect(options.enableFileCheckpointing).toBe(true)
+    expect(options.sessionStore).toBeUndefined()
+    expect(options.sessionStoreFlush).toBeUndefined()
   })
 
-  it("does not install a transcript mirror when resuming a conversation", () => {
+  it("does not install an SDK session store when resuming a conversation", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
       sdkSessionId: "sdk-existing",
@@ -400,7 +393,9 @@ describe("ClaudeSDKSession", () => {
       systemPrompt: {
         type: "preset",
         preset: "claude_code",
-        append: "Translate only.",
+        append: expect.stringContaining(
+          'Translate only.\n\nSynapse configured the exact workspace root for this session as "/tmp/project".',
+        ),
       },
       tools: [],
       disallowedTools: ["*"],
@@ -638,6 +633,157 @@ describe("ClaudeSDKSession", () => {
       },
     })
     expect(JSON.stringify(getOptions().settings)).not.toContain("side-token")
+  })
+
+  it("aligns the SDK PWD with a nested project cwd", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      cwd: "/workspace/repository/nested-project",
+      hostEnv: {
+        PATH: "/usr/bin:/bin",
+        PWD: "/workspace/repository",
+      },
+    })
+
+    expect(getOptions()).toMatchObject({
+      cwd: "/workspace/repository/nested-project",
+      env: {
+        PWD: "/workspace/repository/nested-project",
+      },
+    })
+  })
+
+  it("pins the configured workspace when it is nested inside another repository", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      cwd: "/workspace/repository/nested-project",
+    })
+
+    expect(getOptions().systemPrompt).toEqual({
+      type: "preset",
+      preset: "claude_code",
+      append: [
+        "Synapse configured the exact workspace root for this session as",
+        '"/workspace/repository/nested-project".',
+        "Treat that exact directory as the project root.",
+        "Resolve relative file paths and project commands from it.",
+        "Do not substitute an ancestor repository root.",
+      ].join(" "),
+    })
+  })
+
+  it.each([
+    ["Write", "file_path"],
+    ["Edit", "file_path"],
+    ["MultiEdit", "file_path"],
+    ["NotebookEdit", "notebook_path"],
+  ] as const)("denies %s outside the configured workspace before SDK permissions", async (toolName, pathKey) => {
+    const fixture = createWorkspaceWriteFixture()
+    try {
+      const { factory, getOptions } = createQueryFactory()
+      createSession(factory, { cwd: fixture.workspace })
+      const guard = preToolUseHook(getOptions(), "*")
+
+      await expect(workspaceWriteGuard(guard, toolName, pathKey, path.join(fixture.outside, "note.txt")))
+        .resolves.toEqual(workspaceWriteDenied())
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  it("allows new and existing files under real workspace or additional-directory roots", async () => {
+    const fixture = createWorkspaceWriteFixture()
+    try {
+      const existingPath = path.join(fixture.workspace, "existing.md")
+      writeFileSync(existingPath, "existing")
+      const { factory, getOptions } = createQueryFactory()
+      createSession(factory, {
+        cwd: fixture.workspace,
+        additionalDirectories: [fixture.additional],
+      })
+      const guard = preToolUseHook(getOptions(), "*")
+
+      await expect(workspaceWriteGuard(guard, "Write", "file_path", "new/deep/note.md"))
+        .resolves.toEqual({})
+      await expect(workspaceWriteGuard(guard, "Edit", "file_path", existingPath))
+        .resolves.toEqual({})
+      await expect(workspaceWriteGuard(
+        guard,
+        "Write",
+        "file_path",
+        path.join(fixture.additional, "note.md"),
+      )).resolves.toEqual({})
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  it.skipIf(process.platform === "win32")("denies a new file through a workspace symlink directory", async () => {
+    const fixture = createWorkspaceWriteFixture()
+    try {
+      const linkedDirectory = path.join(fixture.workspace, "linked-outside")
+      symlinkSync(fixture.outside, linkedDirectory, "dir")
+      const { factory, getOptions } = createQueryFactory()
+      createSession(factory, { cwd: fixture.workspace })
+      const guard = preToolUseHook(getOptions(), "*")
+
+      await expect(workspaceWriteGuard(
+        guard,
+        "Write",
+        "file_path",
+        path.join(linkedDirectory, "new.md"),
+      )).resolves.toEqual(workspaceWriteDenied())
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  it.skipIf(process.platform === "win32")("denies an existing workspace file symlink that resolves outside", async () => {
+    const fixture = createWorkspaceWriteFixture()
+    try {
+      const outsideFile = path.join(fixture.outside, "outside.md")
+      const linkedFile = path.join(fixture.workspace, "linked.md")
+      writeFileSync(outsideFile, "outside")
+      symlinkSync(outsideFile, linkedFile)
+      const { factory, getOptions } = createQueryFactory()
+      createSession(factory, { cwd: fixture.workspace })
+      const guard = preToolUseHook(getOptions(), "*")
+
+      await expect(workspaceWriteGuard(guard, "Edit", "file_path", linkedFile))
+        .resolves.toEqual(workspaceWriteDenied())
+    } finally {
+      fixture.cleanup()
+    }
+  })
+
+  it("fails closed when the target parent is not a directory or an authorized root cannot resolve", async () => {
+    const fixture = createWorkspaceWriteFixture()
+    try {
+      const nonDirectoryParent = path.join(fixture.workspace, "not-a-directory")
+      const missingAdditional = path.join(fixture.root, "missing-additional")
+      writeFileSync(nonDirectoryParent, "file")
+      const { factory, getOptions } = createQueryFactory()
+      createSession(factory, {
+        cwd: fixture.workspace,
+        additionalDirectories: [missingAdditional],
+      })
+      const guard = preToolUseHook(getOptions(), "*")
+
+      await expect(workspaceWriteGuard(
+        guard,
+        "Write",
+        "file_path",
+        path.join(nonDirectoryParent, "new.md"),
+      )).resolves.toEqual(workspaceWriteDenied())
+      await expect(workspaceWriteGuard(
+        guard,
+        "Write",
+        "file_path",
+        path.join(missingAdditional, "new.md"),
+      )).resolves.toEqual(workspaceWriteDenied())
+    } finally {
+      fixture.cleanup()
+    }
   })
 
   it("redacts secret-shaped env values in permission tool input summaries", async () => {
@@ -2034,6 +2180,52 @@ function preToolUseHook(options: Record<string, unknown>, matcher = "TodoWrite")
     "toolu-todo",
     { signal: new AbortController().signal },
   )
+}
+
+function createWorkspaceWriteFixture(): {
+  readonly root: string
+  readonly workspace: string
+  readonly additional: string
+  readonly outside: string
+  cleanup(): void
+} {
+  const root = mkdtempSync(path.join(tmpdir(), "synapse-agent-workspace-write-"))
+  const workspace = path.join(root, "workspace")
+  const additional = path.join(root, "additional")
+  const outside = path.join(root, "outside")
+  mkdirSync(workspace)
+  mkdirSync(additional)
+  mkdirSync(outside)
+  return {
+    root,
+    workspace,
+    additional,
+    outside,
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  }
+}
+
+function workspaceWriteGuard(
+  guard: (input: Record<string, unknown>) => Promise<unknown>,
+  toolName: string,
+  pathKey: "file_path" | "notebook_path",
+  requestedPath: string,
+): Promise<unknown> {
+  return guard({
+    hook_event_name: "PreToolUse",
+    tool_name: toolName,
+    tool_input: { [pathKey]: requestedPath },
+  })
+}
+
+function workspaceWriteDenied(): Record<string, unknown> {
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: "文件写入仅允许当前项目或已明确授权的附加目录。",
+    },
+  }
 }
 
 function todoWriteHookInput(toolInput: Record<string, unknown>): Record<string, unknown> {

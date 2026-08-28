@@ -193,7 +193,34 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       sdkSubtype?: string
       payload: Record<string, unknown>
     }
+  | {
+      type: "fileCheckpoint"
+      checkpointId: string
+      status: SynapseAgentFileCheckpointStatus
+      insertions: number
+      deletions: number
+      files: readonly SynapseAgentFileCheckpointFile[]
+      fileCount: number
+      coverageWarning: boolean
+    }
 )
+
+export type SynapseAgentFileCheckpointStatus =
+  | "available"
+  | "superseded"
+  | "rewound"
+  | "partial"
+  | "unavailable"
+
+export interface SynapseAgentFileCheckpointFile {
+  readonly id: string
+  readonly path: string
+  readonly kind: "added" | "modified" | "deleted"
+  readonly insertions: number
+  readonly deletions: number
+  readonly binary: boolean
+  readonly truncated: boolean
+}
 
 export type SynapseAgentPhaseValue =
   | "submitted"
@@ -261,6 +288,7 @@ export type SynapseAgentTimelineKind =
   | "result"
   | "phase"
   | "sdkEvent"
+  | "fileCheckpoint"
 
 interface SynapseAgentTimelineBase {
   readonly id: string
@@ -451,6 +479,17 @@ export interface SynapseAgentSdkEventTimelineItem extends SynapseAgentTimelineBa
   readonly summary?: string
 }
 
+export interface SynapseAgentFileCheckpointTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "fileCheckpoint"
+  readonly checkpointId: string
+  readonly status: SynapseAgentFileCheckpointStatus
+  readonly insertions: number
+  readonly deletions: number
+  readonly files: readonly SynapseAgentFileCheckpointFile[]
+  readonly fileCount: number
+  readonly coverageWarning: boolean
+}
+
 export type SynapseAgentTimelineItem =
   | SynapseAgentMessageTimelineItem
   | SynapseAgentThinkingTimelineItem
@@ -462,6 +501,43 @@ export type SynapseAgentTimelineItem =
   | SynapseAgentResultTimelineItem
   | SynapseAgentPhaseTimelineItem
   | SynapseAgentSdkEventTimelineItem
+  | SynapseAgentFileCheckpointTimelineItem
+
+export interface SynapseAgentFileCheckpointDetail {
+  readonly id: string
+  readonly conversationId: string
+  readonly status: SynapseAgentFileCheckpointStatus
+  readonly insertions: number
+  readonly deletions: number
+  readonly fileCount: number
+  readonly files: readonly SynapseAgentFileCheckpointFile[]
+}
+
+export interface SynapseAgentFileCheckpointDiff {
+  readonly checkpointId: string
+  readonly fileId: string
+  readonly path: string
+  readonly kind: "added" | "modified" | "deleted"
+  readonly patch?: string
+  readonly binary: boolean
+  readonly truncated: boolean
+  readonly diffCleared?: boolean
+}
+
+export interface SynapseAgentFileCheckpointPrepareResult {
+  readonly operationId: string
+  readonly expiresAt: string
+  readonly filesChanged: readonly string[]
+  readonly insertions: number
+  readonly deletions: number
+  readonly coverageWarning: boolean
+}
+
+export interface SynapseAgentFileCheckpointRewindResult {
+  readonly checkpointId: string
+  readonly status: "rewound" | "partial"
+  readonly skippedLinks: number
+}
 
 export type SynapseAgentToolCollapseDefault = "expanded" | "collapsed" | "auto"
 
@@ -486,6 +562,7 @@ export interface SynapseAgentDisplayProfile {
     readonly success: string
     readonly error: string
     readonly denied: string
+    readonly cancelled?: string
   }
 }
 

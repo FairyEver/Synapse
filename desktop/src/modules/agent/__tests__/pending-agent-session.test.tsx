@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
+import type { AgentDetachedConversation } from "@/types/agent-conversation-window"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "@/lib/default-agent-workspace"
 import { createPathAttachment, type AgentDraftAttachment } from "../attachments"
 import { AgentModule } from "../index"
@@ -582,6 +583,72 @@ describe("AgentModule pending prompt sessions", () => {
       conversationId: "conversation-1",
       sessionKey: "local:renderer",
     })
+  })
+
+  it("reloads the selected timeline before restoring a conversation whose detached window closed", async () => {
+    const detachedConversation: AgentDetachedConversation = {
+      projectId: targetSession.projectId,
+      conversationId: targetSession.id,
+      sessionKey: targetSession.sessionKey,
+      title: "Detached session",
+      windowId: 12,
+      openedAt: "2026-06-17T00:00:00.000Z",
+    }
+    let onDetachedWindowsChanged: ((items: AgentDetachedConversation[]) => void) | undefined
+    const selection = deferred<void>()
+    const selectSession = vi.fn(() => selection.promise)
+    mocks.bridge.agent.listDetachedConversationWindows.mockResolvedValue([detachedConversation])
+    mocks.bridge.agent.onDetachedConversationWindowsChanged.mockImplementation((listener) => {
+      onDetachedWindowsChanged = listener
+      return () => undefined
+    })
+    const initialChat = createChatState({
+      sessions: [{ ...targetSession, name: "Detached session" }],
+      selectedProjectId: targetSession.projectId,
+      selectedConversationId: targetSession.id,
+      selectSession,
+    })
+    mocks.chat = initialChat
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+      await Promise.resolve()
+    })
+    expect(container.textContent).toContain("已经在新窗口打开")
+
+    await act(async () => {
+      onDetachedWindowsChanged?.([])
+      await Promise.resolve()
+    })
+
+    expect(selectSession).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: targetSession.projectId,
+      id: targetSession.id,
+      sessionKey: targetSession.sessionKey,
+    }))
+    expect(container.textContent).toContain("加载中")
+    expect(container.querySelector("form")).toBeNull()
+
+    await act(async () => {
+      mocks.chat = {
+        ...initialChat,
+        selectSession: vi.fn().mockResolvedValue(undefined),
+      }
+      root.render(<AgentModule />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      selection.resolve()
+      await selection.promise
+    })
+
+    expect(container.querySelector("form")).not.toBeNull()
   })
 
   it("does not render a selected session excluded by the active source filter", async () => {

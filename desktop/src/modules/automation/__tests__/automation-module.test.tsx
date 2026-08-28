@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { act } from "react"
-import { createRoot } from "react-dom/client"
+import { createRoot as createReactRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -30,7 +30,20 @@ const mocks = vi.hoisted(() => ({
   listAutomationRuns: vi.fn(),
 }))
 
+const roots = new Set<Root>()
+
+function createRoot(container: Element) {
+  const root = createReactRoot(container)
+  roots.add(root)
+  return root
+}
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+globalThis.ResizeObserver = class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => mocks.rendererLogger,
@@ -113,7 +126,11 @@ vi.mock("../hooks/use-automation", async () => {
     }
   })
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => {
+    roots.forEach((root) => root.unmount())
+  })
+  roots.clear()
   vi.clearAllMocks()
   document.body.innerHTML = ""
 })
@@ -243,6 +260,34 @@ describe("AutomationModule", () => {
     expect(document.body.textContent).toContain("暂无运行记录")
   })
 
+  it("restores focus after closing run history", async () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem()],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+    mocks.listAutomationRuns.mockResolvedValue([])
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+    const historyButton = document.querySelector<HTMLButtonElement>('[aria-label="查看运行历史"]')
+    await act(async () => {
+      historyButton?.click()
+    })
+    await flushPromises()
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((button) => button.textContent === "关闭")?.click()
+    })
+
+    expect(document.activeElement).toBe(historyButton)
+  })
+
   it("opens the create editor window from the header action", async () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],
@@ -362,12 +407,48 @@ describe("AutomationModule", () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
     })
 
+    expect(document.activeElement).toBe(deleteButton())
+
     await act(async () => {
       deleteButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, altKey: true }))
     })
+    await flushPromises()
 
     expect(mocks.deleteAutomation).toHaveBeenCalledWith("automation:1")
     expect(refresh).toHaveBeenCalled()
+  })
+
+  it("focuses new after confirming deletion", async () => {
+    const refresh = vi.fn()
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem()],
+      loading: false,
+      error: null,
+      refresh,
+    })
+    mocks.deleteAutomation.mockResolvedValue({ deleted: true })
+    const rootElement = document.createElement("div")
+    document.body.appendChild(rootElement)
+    const root = createRoot(rootElement)
+
+    await act(async () => {
+      root.render(<AutomationModule />)
+    })
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[aria-label="删除自动化"]')?.click()
+    })
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((button) => button.textContent === "删除")?.click()
+    })
+    await flushPromises()
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve))
+    })
+
+    expect(document.activeElement).toBe(
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "新建"),
+    )
   })
 
   it("allows stopping a running automation without opening the editor", async () => {

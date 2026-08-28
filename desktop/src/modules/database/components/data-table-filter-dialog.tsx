@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type RefObject } from "react"
 import { Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -30,6 +30,7 @@ type DataTableFilterDialogProps = {
   columns: Column[]
   value: DatabaseWhereGroup | null
   onApply: (filter: DatabaseWhereGroup | null) => void
+  restoreFocusRef?: RefObject<HTMLButtonElement | null>
 }
 
 type DraftCondition = {
@@ -147,6 +148,7 @@ function DataTableFilterDialog({
   columns,
   value,
   onApply,
+  restoreFocusRef,
 }: DataTableFilterDialogProps) {
   const filterableColumns = useMemo(() => columns.filter((column) => !column.primaryKey), [columns])
   const firstColumn = filterableColumns[0]
@@ -220,7 +222,16 @@ function DataTableFilterDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} data-track="database-filter-dialog">
-      <DialogContent className="overflow-hidden gap-2 p-3 sm:max-w-md">
+      <DialogContent
+        className="overflow-hidden gap-2 p-3 sm:max-w-md"
+        onCloseAutoFocus={(event) => {
+          if (!restoreFocusRef?.current) {
+            return
+          }
+          event.preventDefault()
+          window.setTimeout(() => restoreFocusRef.current?.focus())
+        }}
+      >
         <DialogHeader>
           <DialogTitle>设置筛选条件</DialogTitle>
         </DialogHeader>

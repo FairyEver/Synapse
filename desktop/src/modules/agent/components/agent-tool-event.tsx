@@ -18,6 +18,7 @@ import type {
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
 import { AgentToolImageArtifacts } from "./agent-tool-image-artifacts"
+import { isDeniedToolResult } from "./agent-timeline-display"
 import { errorLogMeta, formatAgentInputText, sanitizeAgentRawInput } from "../utils"
 
 const logger = createRendererLogger("agent")
@@ -30,20 +31,22 @@ type AgentToolEventItem =
 function AgentToolEvent({
   item,
   result,
+  cancelled = false,
   profile,
 }: {
   readonly item: AgentToolEventItem
   readonly result?: SynapseAgentToolResultTimelineItem
+  readonly cancelled?: boolean
   readonly profile: SynapseAgentDisplayProfile
 }) {
   const rule = profile.tools?.[item.toolName]
   const label = rule?.label ?? profile.aliases?.[item.toolName] ?? item.toolName
   const body = toolBody(item, result)
   const effectiveResult = result ?? (item.kind === "toolResult" ? item : undefined)
-  const failed = effectiveResult ? isFailedToolResult(effectiveResult) : false
+  const failed = !cancelled && (effectiveResult ? isFailedToolResult(effectiveResult) : false)
   const permission = item.kind === "permissionRequest"
   const automaticOpen = shouldAutoOpenToolEvent({ permission, result: effectiveResult })
-  const status = statusLabel(item, profile, result)
+  const status = statusLabel(item, profile, result, cancelled)
   const userChangedOpenRef = useRef(false)
   const [open, setOpen] = useState(automaticOpen)
   const displayedOpen = userChangedOpenRef.current ? open : automaticOpen
@@ -189,8 +192,10 @@ function statusLabel(
   item: AgentToolEventItem,
   profile: SynapseAgentDisplayProfile,
   result: SynapseAgentToolResultTimelineItem | undefined,
+  cancelled: boolean,
 ): string {
   if (item.kind === "permissionRequest") return profile.statusLabels.pending
+  if (cancelled) return profile.statusLabels.cancelled ?? "Cancelled"
   const effectiveResult = result ?? (item.kind === "toolResult" ? item : undefined)
   if (!effectiveResult) return profile.statusLabels.running
   if (isDeniedToolResult(effectiveResult)) return profile.statusLabels.denied
@@ -198,15 +203,12 @@ function statusLabel(
   return profile.statusLabels.success
 }
 
-function isDeniedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
-  return item.status?.toLowerCase() === "denied"
-}
-
 function isFailedToolResult(item: SynapseAgentToolResultTimelineItem): boolean {
+  if (isDeniedToolResult(item)) return false
   if (item.success === false) return true
   if (typeof item.exitCode === "number" && item.exitCode !== 0) return true
   const status = item.status?.toLowerCase()
-  return status === "failed" || status === "error" || status === "denied"
+  return status === "failed" || status === "error"
 }
 
 function shouldAutoOpenToolEvent({

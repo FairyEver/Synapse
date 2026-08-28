@@ -3,13 +3,35 @@
 import {
   exportLexicalTreeToMdast,
   lexical,
+  MDXEditor,
+  type MDXEditorMethods,
+  tablePlugin,
 } from '@mdxeditor/editor'
-import { describe, expect, it } from 'vitest'
+import { act, createElement, createRef } from 'react'
+import { createRoot } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   registerTableCellLineBreak,
   TableCellLineBreakNode,
+  tableCellLineBreakPlugin,
   tableCellLineBreakExportVisitor,
 } from './mdxeditor-table-cell-line-break-plugin'
+
+const mountedRoots: ReturnType<typeof createRoot>[] = []
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+beforeEach(() => {
+  Range.prototype.getBoundingClientRect = vi.fn(() => new DOMRect())
+  Range.prototype.getClientRects = vi.fn(() => [] as unknown as DOMRectList)
+})
+
+afterEach(() => {
+  for (const root of mountedRoots.splice(0)) {
+    act(() => root.unmount())
+  }
+  document.body.innerHTML = ''
+})
 
 describe('registerTableCellLineBreak', () => {
   it('shows a new line after the first Shift+Enter at the end of a table cell', () => {
@@ -101,6 +123,55 @@ describe('registerTableCellLineBreak', () => {
     expect(paragraphChildren(editor)).toHaveLength(1)
 
     unregister()
+  })
+
+  it('commits a table cell line break to the root editor without waiting for blur', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onChange = vi.fn()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    mountedRoots.push(root)
+
+    await act(async () => {
+      root.render(createElement(MDXEditor, {
+        ref: editorRef,
+        markdown: '| A | B |\n| --- | --- |\n| first | second |',
+        onChange,
+        plugins: [tablePlugin(), tableCellLineBreakPlugin()],
+      }))
+      await Promise.resolve()
+    })
+
+    const cellEditor = host.querySelector<HTMLElement>('tbody td [contenteditable="true"]')
+    if (!cellEditor) throw new Error('MDXEditor did not render the table cell editor')
+    onChange.mockClear()
+
+    await act(async () => {
+      cellEditor.focus()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const text = cellEditor.querySelector('p')?.firstChild
+      if (!text) throw new Error('MDXEditor did not render the table cell text')
+      const selection = window.getSelection()
+      const range = document.createRange()
+      const offset = text.nodeType === Node.TEXT_NODE
+        ? text.nodeValue?.length ?? 0
+        : text.childNodes.length
+      range.setStart(text, offset)
+      range.collapse(true)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      cellEditor.dispatchEvent(keyboardEvent({ key: 'Enter', shiftKey: true }))
+      await Promise.resolve()
+    })
+
+    expect(cellEditor.querySelector('br')).not.toBeNull()
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled())
+    expect(editorRef.current?.getMarkdown()).toContain('<br />first')
+    expect(document.activeElement).toBe(cellEditor)
   })
 })
 

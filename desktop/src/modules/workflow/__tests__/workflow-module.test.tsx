@@ -17,6 +17,7 @@ const {
   workflowImportPackage,
   workflowImportSharePackage,
   workflowInspectImportPackage,
+  workflowListCallbacks,
   workflowOpenEditor,
   workflowUndoShareImport,
 } = vi.hoisted(() => ({
@@ -28,6 +29,7 @@ const {
   workflowImportPackage: vi.fn(),
   workflowImportSharePackage: vi.fn(),
   workflowInspectImportPackage: vi.fn(),
+  workflowListCallbacks: { onDeleteSuccess: undefined as (() => void) | undefined },
   workflowOpenEditor: vi.fn(),
   workflowUndoShareImport: vi.fn(),
 }))
@@ -66,7 +68,10 @@ vi.mock("@/app-shell/logging", () => ({
 }))
 
 vi.mock("../components/workflow-list", () => ({
-  WorkflowList: () => <div data-testid="workflow-list" />,
+  WorkflowList: ({ onDeleteSuccess }: { onDeleteSuccess?: () => void }) => {
+    workflowListCallbacks.onDeleteSuccess = onDeleteSuccess
+    return <button type="button" data-testid="workflow-list">工作流列表</button>
+  },
 }))
 
 vi.mock("../components/workflow-import-dialog", () => ({
@@ -96,6 +101,7 @@ vi.mock("../../../workflow-nodes/register.renderer", () => ({}))
 let roots: Root[] = []
 
 beforeEach(() => {
+  workflowListCallbacks.onDeleteSuccess = undefined
   Object.defineProperty(window, "synapse", {
     configurable: true,
     value: {
@@ -126,6 +132,30 @@ afterEach(() => {
 })
 
 describe("WorkflowModule", () => {
+  it("focuses the create action after a workflow is deleted successfully", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowModule />)
+    })
+
+    const listButton = container.querySelector<HTMLButtonElement>('[data-testid="workflow-list"]')
+    const createButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("新建"))
+    listButton?.focus()
+
+    await act(async () => {
+      workflowListCallbacks.onDeleteSuccess?.()
+      await new Promise<void>((resolve) => setTimeout(resolve, 50))
+    })
+
+    expect(workflowListCallbacks.onDeleteSuccess).toBeTypeOf("function")
+    expect(document.activeElement).toBe(createButton)
+  })
+
   it("shows a generic create failure and logs sanitized diagnostics", async () => {
     const rawError = "create failed token=sk-secret /Users/example/repo prompt text"
     workflowCreate.mockRejectedValue(new Error(rawError))

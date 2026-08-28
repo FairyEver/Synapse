@@ -78,6 +78,8 @@ export interface BackupPayload {
 
 export interface ExportOptions {
   readonly includeSecrets?: boolean
+  readonly excludeNamespaces?: readonly string[]
+  readonly emptyNamespaces?: readonly string[]
 }
 
 export interface ImportOptions {

@@ -37,14 +37,22 @@ type NameDialogState =
   | { readonly mode: 'create'; readonly item: null; readonly value: string }
   | { readonly mode: 'rename'; readonly item: DriveBrowserItemDto; readonly value: string }
 
-export function DriveConsolePage({ onNavigate }: { readonly onNavigate?: DriveBrowserNavigate } = {}) {
+export function DriveConsolePage({
+  onNavigate,
+  activeView,
+  onViewChange,
+}: {
+  readonly onNavigate?: DriveBrowserNavigate
+  readonly activeView?: DriveConsoleSystemView
+  readonly onViewChange?: (view: DriveConsoleSystemView) => void
+} = {}) {
   return (
     <>
       <Header fixed>
         <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
-        <DriveConsoleRoot onNavigate={onNavigate} />
+        <DriveConsoleRoot onNavigate={onNavigate} activeView={activeView} onViewChange={onViewChange} />
       </Main>
     </>
   )
@@ -54,10 +62,14 @@ export function DriveConsoleItemPage({
   itemId,
   surface = 'console',
   onNavigate,
+  activeView,
+  onViewChange,
 }: {
   readonly itemId: string
   readonly surface?: DriveBrowserSurface
   readonly onNavigate?: DriveBrowserNavigate
+  readonly activeView?: DriveConsoleSystemView
+  readonly onViewChange?: (view: DriveConsoleSystemView) => void
 }) {
   if (surface === 'standalone') {
     return <DriveBrowserPage context='owner' itemId={itemId} surface='standalone' onNavigate={onNavigate} />
@@ -68,24 +80,42 @@ export function DriveConsoleItemPage({
       <Header fixed>
         <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
-      <DriveConsoleItemMain itemId={itemId} surface={surface} onNavigate={onNavigate} />
+      <DriveConsoleItemMain
+        itemId={itemId}
+        surface={surface}
+        onNavigate={onNavigate}
+        activeView={activeView}
+        onViewChange={onViewChange}
+      />
     </>
   )
 }
 
-function DriveConsoleRoot({ onNavigate }: { readonly onNavigate?: DriveBrowserNavigate }) {
+function DriveConsoleRoot({
+  onNavigate,
+  activeView,
+  onViewChange,
+}: {
+  readonly onNavigate?: DriveBrowserNavigate
+  readonly activeView?: DriveConsoleSystemView
+  readonly onViewChange?: (view: DriveConsoleSystemView) => void
+}) {
   const state = useDriveConsole({ context: 'root' })
-  return <DriveConsoleContent state={state} onNavigate={onNavigate} />
+  return <DriveConsoleContent state={state} onNavigate={onNavigate} activeView={activeView} onViewChange={onViewChange} />
 }
 
 function DriveConsoleItemMain({
   itemId,
   surface,
   onNavigate,
+  activeView,
+  onViewChange,
 }: {
   readonly itemId: string
   readonly surface: DriveBrowserSurface
   readonly onNavigate?: DriveBrowserNavigate
+  readonly activeView?: DriveConsoleSystemView
+  readonly onViewChange?: (view: DriveConsoleSystemView) => void
 }) {
   const state = useDriveConsole({ context: 'item', itemId, surface })
   const fileReader = state.browser.status === 'ready' && shouldRenderDriveSingleFileReader(state.browser.snapshot)
@@ -98,7 +128,7 @@ function DriveConsoleItemMain({
       {fileReader ? (
         <DriveSingleFileReaderView snapshot={state.browser.snapshot} editContext={state.browser} annotationContext={annotationContext} embedded />
       ) : (
-        <DriveConsoleContent state={state} onNavigate={onNavigate} />
+        <DriveConsoleContent state={state} onNavigate={onNavigate} activeView={activeView} onViewChange={onViewChange} />
       )}
     </Main>
   )
@@ -107,11 +137,20 @@ function DriveConsoleItemMain({
 function DriveConsoleContent({
   state,
   onNavigate,
+  activeView: controlledActiveView,
+  onViewChange,
 }: {
   readonly state: DriveConsoleState
   readonly onNavigate?: DriveBrowserNavigate
+  readonly activeView?: DriveConsoleSystemView
+  readonly onViewChange?: (view: DriveConsoleSystemView) => void
 }) {
-  const [activeView, setActiveView] = useState<DriveConsoleSystemView>('files')
+  const [localActiveView, setLocalActiveView] = useState<DriveConsoleSystemView>('files')
+  const activeView = controlledActiveView ?? localActiveView
+  const setActiveView = (view: DriveConsoleSystemView) => {
+    if (controlledActiveView === undefined) setLocalActiveView(view)
+    onViewChange?.(view)
+  }
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moveTarget, setMoveTarget] = useState<DriveBrowserItemDto | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DriveBrowserItemDto | null>(null)
@@ -119,6 +158,8 @@ function DriveConsoleContent({
   const [sharesOpen, setSharesOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const deleteTriggerRef = useRef<HTMLElement | null>(null)
+  const deleteFallbackItemIdRef = useRef<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const nameInputId = 'drive-console-name-input'
@@ -157,13 +198,39 @@ function DriveConsoleContent({
     setSubmitting(true)
     try {
       await driveApi.deleteItem(deleteTarget.id)
-      setDeleteTarget(null)
       await refreshAfterMutation()
+      setDeleteTarget(null)
     } catch (error) {
       toast(errorMessage(error, '删除失败'))
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const openDeleteDialog = (item: DriveBrowserItemDto, trigger: HTMLElement) => {
+    deleteTriggerRef.current = trigger
+    const deleteActions = Array.from(
+      trigger.closest('tbody')?.querySelectorAll<HTMLElement>('[data-drive-delete-action]') ?? []
+    )
+    const triggerIndex = deleteActions.indexOf(trigger)
+    deleteFallbackItemIdRef.current = triggerIndex >= 0
+      ? (deleteActions[triggerIndex + 1] ?? deleteActions[triggerIndex - 1])?.dataset.driveItemId ?? null
+      : null
+    setDeleteTarget(item)
+  }
+
+  const handleDeleteCloseAutoFocus = (event: Event) => {
+    event.preventDefault()
+    if (deleteTriggerRef.current?.isConnected) {
+      deleteTriggerRef.current.focus()
+      return
+    }
+    const fallbackItemId = deleteFallbackItemIdRef.current
+    window.setTimeout(() => {
+      Array.from(document.querySelectorAll<HTMLElement>('[data-drive-delete-action]'))
+        .find((action) => action.dataset.driveItemId === fallbackItemId)
+        ?.focus()
+    }, 0)
   }
 
   const moveItem = async (parentId: string | null) => {
@@ -281,12 +348,15 @@ function DriveConsoleContent({
             snapshot={state.browser.snapshot}
             activeView={activeView}
             onOpenSystemView={setActiveView}
-            onDelete={setDeleteTarget}
+            onDelete={openDeleteDialog}
             onMove={setMoveTarget}
             onRename={(item) => setNameDialog({ mode: 'rename', item, value: item.name })}
             onShare={setShareTarget}
             onNavigate={onNavigate}
             onDropFiles={(files) => { void runUpload({ files }) }}
+            onLoadMoreChildren={state.browser.loadMoreChildren}
+            loadingMoreChildren={state.browser.loadingMoreChildren}
+            loadMoreChildrenError={state.browser.loadMoreChildrenError}
           />
         ) : null}
       </TabsContent>
@@ -337,6 +407,7 @@ function DriveConsoleContent({
         confirmText='删除'
         destructive
         isLoading={submitting}
+        onCloseAutoFocus={handleDeleteCloseAutoFocus}
         handleConfirm={() => { void deleteItem() }}
       />
       <DriveShareSettingsDialog

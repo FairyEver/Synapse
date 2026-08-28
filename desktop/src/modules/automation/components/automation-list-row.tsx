@@ -24,7 +24,7 @@ type AutomationListRowProps = {
   readonly onRun: () => void
   readonly onStop: () => void
   readonly onToggleEnabled: (enabled: boolean) => void
-  readonly onHistory: () => void
+  readonly onHistory: (event: MouseEvent<HTMLButtonElement>) => void
   readonly onDelete: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
@@ -177,8 +177,8 @@ function AutomationListRow({
                 variant="ghost"
                 disabled={pending}
                 aria-label="查看运行历史"
-                onClick={() => {
-                  onHistory()
+                onClick={(event) => {
+                  onHistory(event)
                 }}
               >
                 <History />

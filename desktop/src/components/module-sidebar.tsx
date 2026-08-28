@@ -1,4 +1,4 @@
-import { useMemo, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode, type UIEventHandler } from "react"
+import { useMemo, type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type UIEventHandler } from "react"
 import { Plus, Search, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -55,6 +55,7 @@ type ModuleSidebarHeaderProps = {
   addDisabled?: boolean
   addTitle?: string
   addTrackName?: string
+  addButtonRef?: Ref<HTMLButtonElement>
   actions?: ReactNode
 }
 
@@ -68,6 +69,7 @@ function ModuleSidebarHeader({
   addDisabled,
   addTitle,
   addTrackName,
+  addButtonRef,
   actions,
 }: ModuleSidebarHeaderProps) {
   const showSearch = onSearchChange !== undefined
@@ -108,6 +110,7 @@ function ModuleSidebarHeader({
       ) : null}
       {onAddClick ? (
         <Button
+          ref={addButtonRef}
           variant="outline"
           size="icon"
           disabled={addDisabled}
@@ -215,8 +218,9 @@ type ModuleSidebarRowProps = {
   readonly className?: string
   readonly "data-track"?: string
   readonly icon?: ReactNode
-  readonly onDoubleClick?: () => void
+  readonly onDoubleClick?: (event: MouseEvent<HTMLDivElement>) => void
   readonly onSelect: () => void
+  readonly rowRef?: Ref<HTMLDivElement>
   readonly trailing?: ReactNode
   readonly trackValue: string
 }
@@ -229,6 +233,7 @@ function ModuleSidebarRow({
   icon,
   onDoubleClick,
   onSelect,
+  rowRef,
   trailing,
   trackValue,
 }: ModuleSidebarRowProps) {
@@ -244,11 +249,12 @@ function ModuleSidebarRow({
 
   function handleDoubleClick(event: MouseEvent<HTMLDivElement>) {
     if (event.target instanceof Element && event.target.closest("button")) return
-    onDoubleClick?.()
+    onDoubleClick?.(event)
   }
 
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       data-track={dataTrack}

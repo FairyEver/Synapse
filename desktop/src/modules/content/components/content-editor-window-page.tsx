@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -346,9 +346,26 @@ function DiscardConfirmDialog({
   onOpenChange: (open: boolean) => void
   open: boolean
 }) {
+  const discardFocusTargetRef = useRef<HTMLElement | null>(null)
+  if (
+    open
+    && !discardFocusTargetRef.current
+    && typeof document !== "undefined"
+    && document.activeElement instanceof HTMLElement
+  ) {
+    discardFocusTargetRef.current = document.activeElement
+  }
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          const focusTarget = discardFocusTargetRef.current
+          discardFocusTargetRef.current = null
+          focusTarget?.focus()
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>放弃当前填写内容？</AlertDialogTitle>
           <AlertDialogDescription>关闭后，未保存的修改会丢失。</AlertDialogDescription>
@@ -533,7 +550,7 @@ function PromptEditorWindow({ request }: ContentEditorWindowPageProps) {
       if (request.kind === "create") {
         const existingPrompts = await listContent("prompt")
         if (hasDuplicateContentTitle(existingPrompts, payload.title)) {
-          throw new Error("已存在同名提示词。")
+          throw Object.assign(new Error("已存在同名提示词。"), { field: "title" })
         }
 
         const result = await createContent("prompt", payload)

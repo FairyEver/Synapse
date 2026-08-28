@@ -260,6 +260,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       case "status":
       case "compactBoundary":
       case "sdkEvent":
+      case "fileCheckpoint":
         break
       default: {
         const exhaustive: never = event

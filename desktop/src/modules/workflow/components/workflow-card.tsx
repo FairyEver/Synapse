@@ -19,17 +19,34 @@ export type WorkflowCardRunState = {
   runId?: string
 }
 
-interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onOpenActiveRun: (runId: string) => void; onHistory: () => void; onExport: () => void; onInspectDelete?: () => Promise<WorkflowShareDeletePlan>; onDelete: (cleanupImportedChildren?: boolean) => void }
+interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onOpenActiveRun: (runId: string) => void; onHistory: () => void; onExport: () => void; onInspectDelete?: () => Promise<WorkflowShareDeletePlan>; onDelete: (cleanupImportedChildren?: boolean) => boolean | Promise<boolean>; onDeleteSuccess: () => void }
 
-export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenActiveRun, onHistory, onExport, onInspectDelete, onDelete }: WorkflowCardProps) {
+export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenActiveRun, onHistory, onExport, onInspectDelete, onDelete, onDeleteSuccess }: WorkflowCardProps) {
   const badge = runState ? RUN_STATE_BADGE[runState.status] : null
   const hasLoadError = Boolean(meta.loadError)
   const suppressClickRef = useRef(false)
+  const deleteButtonRef = useRef<HTMLButtonElement>(null)
+  const deleteCancelButtonRef = useRef<HTMLButtonElement>(null)
+  const deleteSucceededRef = useRef(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [deletePlan, setDeletePlan] = useState<WorkflowShareDeletePlan | null>(null)
   const [cleanupImportedChildren, setCleanupImportedChildren] = useState(true)
   const [deletePlanLoading, setDeletePlanLoading] = useState(false)
   const [deletePlanError, setDeletePlanError] = useState(false)
+
+  const handleDeleteDialogOpenChange = (open: boolean) => {
+    suppressClickRef.current = open
+    setDeleteDialogOpen(open)
+  }
+
+  const deleteWorkflow = async () => {
+    setDeleting(true)
+    const deleted = await onDelete(cleanupImportedChildren)
+    deleteSucceededRef.current = deleted
+    setDeleting(false)
+    deleteCancelButtonRef.current?.click()
+  }
 
   const openDeleteDialog = () => {
     suppressClickRef.current = true
@@ -120,11 +137,9 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
           >
             <Download />
           </Button>
-          <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => {
-            suppressClickRef.current = open
-            setDeleteDialogOpen(open)
-          }}>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
             <Button
+              ref={deleteButtonRef}
               type="button"
               size="icon-sm"
               variant="ghost"
@@ -133,7 +148,9 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
               onClick={(e) => {
                 e.stopPropagation()
                 if (shouldBypassDeleteConfirm(e)) {
-                  onDelete(true)
+                  void Promise.resolve(onDelete(true)).then((deleted) => {
+                    if (deleted) onDeleteSuccess()
+                  })
                   return
                 }
                 openDeleteDialog()
@@ -141,7 +158,18 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
             >
               <Trash2 />
             </Button>
-            <AlertDialogContent onClick={(event) => event.stopPropagation()}>
+            <AlertDialogContent
+              onClick={(event) => event.stopPropagation()}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault()
+                if (deleteSucceededRef.current) {
+                  deleteSucceededRef.current = false
+                  onDeleteSuccess()
+                  return
+                }
+                queueMicrotask(() => deleteButtonRef.current?.focus())
+              }}
+            >
               <AlertDialogHeader>
                 <AlertDialogTitle>删除工作流</AlertDialogTitle>
                 <AlertDialogDescription>
@@ -167,7 +195,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
                 </p>
               ) : null}
               <AlertDialogFooter>
-                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogCancel ref={deleteCancelButtonRef}>取消</AlertDialogCancel>
                 {hasLoadError && meta.rawExportAvailable ? (
                   <Button
                     type="button"
@@ -181,8 +209,11 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onOpenAct
                   </Button>
                 ) : null}
                 <AlertDialogAction
-                  disabled={deletePlanLoading || deletePlanError}
-                  onClick={() => onDelete(cleanupImportedChildren)}
+                  disabled={deletePlanLoading || deletePlanError || deleting}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    void deleteWorkflow()
+                  }}
                 >
                   删除
                 </AlertDialogAction>

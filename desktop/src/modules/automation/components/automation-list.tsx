@@ -24,7 +24,7 @@ type AutomationListProps = {
   readonly onRun: (item: AutomationItem) => void
   readonly onStop: (item: AutomationItem) => void
   readonly onToggleEnabled: (item: AutomationItem, enabled: boolean) => void
-  readonly onHistory: (item: AutomationItem) => void
+  readonly onHistory: (item: AutomationItem, event: MouseEvent<HTMLButtonElement>) => void
   readonly onDelete: (item: AutomationItem, event: MouseEvent<HTMLElement>) => void
   readonly onCreateNew: () => void
 }
@@ -92,7 +92,7 @@ function AutomationList({
               onRun={() => onRun(item)}
               onStop={() => onStop(item)}
               onToggleEnabled={(enabled) => onToggleEnabled(item, enabled)}
-              onHistory={() => onHistory(item)}
+              onHistory={(event) => onHistory(item, event)}
               onDelete={(event) => onDelete(item, event)}
             />
           ))}

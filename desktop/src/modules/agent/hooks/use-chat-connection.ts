@@ -10,10 +10,12 @@ import type {
   SynapseAgentPermissionMode,
   SynapseAgentPermissionScope,
   SynapseAgentSessionSummary,
+  SynapseAgentSendResult,
   SynapseAgentTimelineItem,
   SynapseAgentTimelineResult,
 } from "@/types/agent"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
+import { agentAttachmentReference } from "@/types/agent-attachment"
 import type { SynapseAgentBridgeAttachment } from "@/types/bridge"
 import { DEFAULT_LOCAL_SESSION_KEY, pendingPermissionKey } from "../utils"
 import {
@@ -704,7 +706,7 @@ function useChatConnection(
         attachments: serializeDraftAttachments(attachments),
         clientSubmittedAt: now,
       })
-      if (result?.error) throw new Error(result.error)
+      if (result?.error && !isCancelledSendResult(result)) throw new Error(result.error)
       // NOTE: send() resolves when the message is enqueued, NOT when the turn
       // completes.  REMOVE_SENDING_CONVERSATION is handled by the terminal
       // phase event handler in use-chat-events (cancelled / completed / failed)
@@ -1242,7 +1244,7 @@ function optimisticMessageAttachments(
     if (attachment.kind !== "image") {
       return {
         kind: "path",
-        path: attachment.name,
+        path: agentAttachmentReference(attachment.attachmentId),
         entryType: attachment.kind,
         name: attachment.name,
         byteSize: attachment.byteSize,
@@ -1291,6 +1293,13 @@ function isRecoverableKnowledgeBaseWorkspaceErrorMessage(message: string): boole
 function sendFailureDisplayMessage(error: unknown): string {
   const message = errorMessage(error)
   return isAttachmentFailureMessage(message) ? message : "发送失败"
+}
+
+function isCancelledSendResult(result: SynapseAgentSendResult): boolean {
+  return result.events.some((event) => event.type === "result" && (
+    event.metadata?.cancelled === true
+    || event.metadata?.turnOutcome?.status === "cancelled"
+  ))
 }
 
 function isAttachmentFailureMessage(message: string): boolean {

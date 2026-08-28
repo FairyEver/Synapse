@@ -432,6 +432,24 @@ describe("AgentToolEvent", () => {
     expect(html).not.toContain("Failed")
   })
 
+  it("shows the exact SDK user denial as denied instead of failed", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-sdk-denied",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "The user denied this tool use. Stop and wait for the user's instructions.",
+        status: "error",
+        success: false,
+      }}
+      profile={profile}
+    />)
+
+    expect(html).toContain("Denied")
+    expect(html).not.toContain("Failed")
+  })
+
   it("keeps exit code and copy action when a failed tool result is expanded", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

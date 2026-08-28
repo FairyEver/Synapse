@@ -1,5 +1,5 @@
 import { isValidElement, useEffect, useMemo, useState } from "react"
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -21,6 +21,7 @@ type DelayedConfirmAlertDialogProps = {
   delaySeconds: number
   onConfirm: () => void | Promise<void>
   confirmLoadingLabel?: string
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 function DelayedConfirmAlertDialog({
@@ -33,6 +34,7 @@ function DelayedConfirmAlertDialog({
   delaySeconds,
   onConfirm,
   confirmLoadingLabel,
+  returnFocusRef,
 }: DelayedConfirmAlertDialogProps) {
   const [secondsLeft, setSecondsLeft] = useState(delaySeconds)
   const [isConfirming, setIsConfirming] = useState(false)
@@ -79,7 +81,12 @@ function DelayedConfirmAlertDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent
+        onCloseAutoFocus={returnFocusRef ? (event) => {
+          event.preventDefault()
+          returnFocusRef.current?.focus()
+        } : undefined}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {isValidElement(description) ? (
@@ -91,6 +98,7 @@ function DelayedConfirmAlertDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isConfirming}>{cancelLabel}</AlertDialogCancel>
           <Button
+            variant="destructive"
             disabled={secondsLeft > 0 || isConfirming}
             onClick={() => {
               void handleConfirm()

@@ -46,10 +46,52 @@ describe("AgentConversationExportService", () => {
         toolName: "Read",
         toolInputRaw: {
           file_path: "/Users/liyang/project/file.ts",
+          cwd: "/tmp",
+          path: "/etc",
+          memory_paths: { auto: "/foo" },
+          sourcePath: "/Users/liyang/Project Space/source.ts",
+          windowsPath: "C:\\Users\\liyang\\Project Space\\source.ts",
+          fileUrl: "file:///Users/liyang/Project%20Space/source.ts",
+          projectPath: "/Users/liyang/Project Space/project",
+          repositoryPath: "/Users/liyang/Repository Space/repository",
+          workDir: "/Users/liyang/Work Space/runtime",
+          homeDirectory: "/Users/liyang/Home Space",
+          attachmentPath: "/Users/liyang/Attachment Space/image.png",
+          absolutePaths: [
+            "/Users/liyang/Array Space/one.ts",
+            "C:\\Users\\liyang\\Array Space\\two.ts",
+            "docs/keep.md",
+          ],
+          projectDirectories: {
+            primary: "/Users/liyang/Object Space/project",
+            fallback: "docs/cache",
+            remoteUrl: "https://example.test/object/path",
+          },
+          remoteUrl: "https://example.test/api/v1/items",
+          httpUrl: "http://example.test/assets/path",
+          relativePath: "docs/setup.md",
           ANTHROPIC_AUTH_TOKEN: "sk-secret",
         },
       },
       createdAt: "2026-06-08T08:00:01.000Z",
+    })
+    await agentEvents.upsert({
+      id: "event-session-init",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      eventType: "sessionInit",
+      payload: {
+        type: "sessionInit",
+        payload: {
+          cwd: "/Users/liyang/project",
+          memory_paths: {
+            auto: "/Users/liyang/.claude/projects/project/memory/MEMORY.md",
+          },
+        },
+      },
+      createdAt: "2026-06-08T08:00:00.750Z",
     })
     await agentEvents.upsert({
       id: "conv-1:turn-1:stream-diagnostics",
@@ -127,6 +169,10 @@ describe("AgentConversationExportService", () => {
         }>
       }
       const eventsText = await readPackageFile("agent-events.json")
+      const events = JSON.parse(eventsText) as Array<{
+        id: string
+        payload: { toolInputRaw?: Record<string, unknown> }
+      }>
       const sdkStreamText = await readPackageFile("sdk-stream-events.json")
       const sdkStream = JSON.parse(sdkStreamText) as {
         rawHttpIncluded: boolean
@@ -180,6 +226,17 @@ describe("AgentConversationExportService", () => {
       expect(conversationText).toContain("\"sessionKey\": \"[redacted]\"")
       expect(timelineText).toContain("\"sessionKey\": \"[redacted]\"")
       expect(packageText).not.toContain(TEST_SESSION_KEY)
+      expect(packageText).not.toContain("/Users/liyang")
+      expect(packageText).not.toContain("/tmp")
+      expect(packageText).not.toContain("/etc")
+      expect(packageText).not.toContain("/foo")
+      expect(packageText).not.toContain("file:///")
+      expect(packageText).not.toContain("Project Space/source.ts")
+      expect(packageText).not.toContain("C:\\Users\\liyang")
+      expect(packageText).toContain("https://example.test/api/v1/items")
+      expect(packageText).toContain("docs/setup.md")
+      expect(packageText).toContain("and/or")
+      expect(packageText).toContain("//cdn.example.test/app.js")
       expect(attachments.messages).toEqual([{
         messageIndex: 0,
         role: "user",
@@ -201,7 +258,34 @@ describe("AgentConversationExportService", () => {
       }])
       expect(packageText).not.toContain("/Users/liyang/Documents/private-sources")
       expect(eventsText).toContain("toolu-read-1")
-      expect(eventsText).toContain("/Users/liyang/project/file.ts")
+      expect(eventsText).not.toContain("/Users/liyang/project/file.ts")
+      expect(eventsText).toContain("[path]")
+      expect(eventsText).not.toContain("\"cwd\": \"/Users/liyang/project\"")
+      expect(eventsText).not.toContain("/Users/liyang/.claude/projects/project/memory/MEMORY.md")
+      expect(eventsText).toContain("\"cwd\": \"[redacted]\"")
+      expect(eventsText).toContain("\"memory_paths\": \"[redacted]\"")
+      expect(events.find((event) => event.id === "event-1")?.payload.toolInputRaw).toMatchObject({
+        cwd: "[path]",
+        path: "[path]",
+        memory_paths: { auto: "[path]" },
+        sourcePath: "[path]",
+        windowsPath: "[path]",
+        fileUrl: "[path]",
+        projectPath: "[path]",
+        repositoryPath: "[path]",
+        workDir: "[path]",
+        homeDirectory: "[path]",
+        attachmentPath: "[path]",
+        absolutePaths: ["[path]", "[path]", "docs/keep.md"],
+        projectDirectories: {
+          primary: "[path]",
+          fallback: "docs/cache",
+          remoteUrl: "https://example.test/object/path",
+        },
+        remoteUrl: "https://example.test/api/v1/items",
+        httpUrl: "http://example.test/assets/path",
+        relativePath: "docs/setup.md",
+      })
       expect(eventsText).not.toContain("sk-secret")
       expect(eventsText).not.toContain("streamDiagnostics")
       expect(eventsText).not.toContain("[key]")
@@ -228,6 +312,11 @@ describe("AgentConversationExportService", () => {
       expect(timelineText).toContain("toolu-read-1")
       expect(transcript).toContain("Read")
       expect(transcript).toContain("输出")
+      expect(transcript).not.toContain("/tmp")
+      expect(transcript).not.toContain("file:///")
+      expect(transcript).not.toContain("Project Space/source.ts")
+      expect(transcript).toContain("https://example.test/api/v1/items")
+      expect(transcript).toContain("docs/setup.md")
       expect(transcript).not.toContain("sk-bearer")
       expect(transcript).not.toContain("[key]")
     })
@@ -258,6 +347,8 @@ describe("AgentConversationExportService", () => {
             toolName: "Read",
             toolInputRaw: {
               file_path: "/Users/liyang/project/file.ts",
+              sourcePath: "/Users/liyang/Project Space/source.ts",
+              windowsPath: "C:\\Users\\liyang\\Project Space\\source.ts",
               ANTHROPIC_AUTH_TOKEN: "sk-secret",
             },
             timestamp: "2026-06-08T08:00:01.000Z",
@@ -267,7 +358,12 @@ describe("AgentConversationExportService", () => {
             kind: "toolResult",
             toolUseId: "toolu-read-1",
             toolName: "Read",
-            content: "Authorization: Bearer sk-bearer failed",
+            content: [
+              "Authorization: Bearer sk-bearer failed",
+              "Top-level /tmp and file:///Users/liyang/Project%20Space/source.ts.",
+              "Quoted \"/Users/liyang/Project Space/source.ts\".",
+              "Keep https://example.test/api/v1/items and docs/setup.md.",
+            ].join("\n"),
             status: "error",
             success: false,
             timestamp: "2026-06-08T08:00:02.000Z",
@@ -768,7 +864,14 @@ function createConversation(): ConversationEntryV1 {
       },
       {
         role: "tool",
-        content: "Read\n{\"file_path\":\"/Users/liyang/project/file.ts\"}",
+        content: [
+          "Read",
+          "{\"file_path\":\"/Users/liyang/project/file.ts\"}",
+          "Top-level /tmp /etc /foo and multi-level /var/lib/app/config.json.",
+          "Quoted \"/Users/liyang/Project Space/source.ts\" and `C:\\Users\\liyang\\Project Space\\source.ts`.",
+          "File URL file:///Users/liyang/Project%20Space/source.ts.",
+          "Keep https://example.test/api/v1/items, docs/setup.md, and/or, and //cdn.example.test/app.js.",
+        ].join("\n"),
         timestamp: "2026-06-08T08:00:01.000Z",
         metadata: {
           agentEventType: "toolUse",

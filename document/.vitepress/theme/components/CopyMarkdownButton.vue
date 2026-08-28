@@ -5,7 +5,7 @@ import { VPButton } from 'vitepress/theme'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 interface MarkdownPageData extends PageData {
-  rawMarkdown?: string
+  copyMarkdown?: string
 }
 
 type CopyStatus = 'idle' | 'success' | 'error'
@@ -23,8 +23,8 @@ const { page } = useData()
 const status = ref<CopyStatus>('idle')
 let resetTimer: ReturnType<typeof setTimeout> | undefined
 
-const rawMarkdown = computed(
-  () => (page.value as MarkdownPageData).rawMarkdown ?? ''
+const copyMarkdownText = computed(
+  () => (page.value as MarkdownPageData).copyMarkdown ?? ''
 )
 
 const buttonText = computed(() => {
@@ -46,7 +46,7 @@ function scheduleReset() {
 
 async function copyMarkdown() {
   try {
-    await navigator.clipboard.writeText(rawMarkdown.value)
+    await navigator.clipboard.writeText(copyMarkdownText.value)
     status.value = 'success'
   } catch {
     status.value = 'error'
@@ -61,7 +61,7 @@ onBeforeUnmount(resetStatus)
 
 <template>
   <div
-    v-if="rawMarkdown"
+    v-if="copyMarkdownText"
     class="copy-markdown-action"
     :class="`copy-markdown-action--${placement}`"
   >

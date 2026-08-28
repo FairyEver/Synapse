@@ -136,6 +136,7 @@ describe("SystemAppContent launcher", () => {
     expect(mocks.openSystemApp).toHaveBeenCalledWith("database")
     expect(document.body.textContent).toContain("本地数据库")
     expect(document.body.textContent).not.toContain("数据库内容")
+    expect(document.activeElement).toBe(findButton("本地数据库"))
   })
 
   it("returns to the launcher list when the launcher reset key changes", async () => {

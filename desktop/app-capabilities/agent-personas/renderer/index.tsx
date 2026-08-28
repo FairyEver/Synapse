@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type FormEvent,
@@ -147,6 +148,9 @@ export function AgentPersonasModule() {
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [form, setForm] = useState<AgentPersonaFormState>(emptyFormState)
   const [deleteTarget, setDeleteTarget] = useState<SynapseAgentPersona | null>(null)
+  const addActionRef = useRef<HTMLButtonElement | null>(null)
+  const formTriggerRef = useRef<HTMLElement | null>(null)
+  const deleteTriggerRef = useRef<HTMLElement | null>(null)
 
   const agentPersonasBridge = useMemo(() => requireBridgeDomain("agentPersonas"), [])
   const {
@@ -185,11 +189,13 @@ export function AgentPersonasModule() {
   const visibleItems = activeTab === "builtin" ? builtinItems : userItems
 
   const openCreateForm = () => {
+    formTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setForm(emptyFormState)
     setFormOpen(true)
   }
 
   const openItem = (item: SynapseAgentPersona, mode: AgentPersonaFormState["mode"]) => {
+    formTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setForm({
       mode,
       item,
@@ -209,6 +215,23 @@ export function AgentPersonasModule() {
     setFormOpen(false)
     setForm(emptyFormState)
     setModelDialogOpen(false)
+  }
+
+  const restoreFormTriggerFocus = (event: Event) => {
+    const trigger = formTriggerRef.current
+    if (!trigger?.isConnected) return
+    event.preventDefault()
+    trigger.focus()
+    formTriggerRef.current = null
+  }
+
+  const restoreDeleteFocus = (event: Event) => {
+    const trigger = deleteTriggerRef.current
+    const target = trigger?.isConnected ? trigger : addActionRef.current
+    if (!target?.isConnected) return
+    event.preventDefault()
+    target.focus()
+    deleteTriggerRef.current = null
   }
 
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
@@ -290,6 +313,7 @@ export function AgentPersonasModule() {
       void deleteItem(item)
       return
     }
+    deleteTriggerRef.current = event.currentTarget
     setDeleteTarget(item)
   }
 
@@ -299,7 +323,7 @@ export function AgentPersonasModule() {
       value={activeTab}
       onValueChange={setActiveTab}
       actions={activeTab === "user" && !requiresLogin && !offlineEmpty ? (
-        <SystemAppTopBarActionButton type="button" onClick={openCreateForm} disabled={isReadOnly}>
+        <SystemAppTopBarActionButton ref={addActionRef} type="button" onClick={openCreateForm} disabled={isReadOnly}>
           <Plus data-icon="inline-start" />
           新增
         </SystemAppTopBarActionButton>
@@ -371,6 +395,7 @@ export function AgentPersonasModule() {
         refreshProviderModelCatalog={refreshProviderModelCatalog}
         onModelDialogOpenChange={setModelDialogOpen}
         onFormChange={setForm}
+        onCloseAutoFocus={restoreFormTriggerFocus}
         onOpenChange={(open) => {
           if (open) setFormOpen(true)
           else closeForm()
@@ -380,7 +405,7 @@ export function AgentPersonasModule() {
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
         if (!open) setDeleteTarget(null)
       }}>
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={restoreDeleteFocus}>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-balance">删除智能体</AlertDialogTitle>
             <AlertDialogDescription>
@@ -525,6 +550,7 @@ function AgentPersonaRow({
 function AgentPersonaDialog({
   form,
   modelDialogOpen,
+  onCloseAutoFocus,
   onFormChange,
   onModelDialogOpenChange,
   onOpenChange,
@@ -536,6 +562,7 @@ function AgentPersonaDialog({
 }: {
   readonly form: AgentPersonaFormState
   readonly modelDialogOpen: boolean
+  readonly onCloseAutoFocus: (event: Event) => void
   readonly onFormChange: Dispatch<SetStateAction<AgentPersonaFormState>>
   readonly onModelDialogOpenChange: (open: boolean) => void
   readonly onOpenChange: (open: boolean) => void
@@ -560,7 +587,7 @@ function AgentPersonaDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl" onCloseAutoFocus={onCloseAutoFocus}>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <DialogHeader>
             <DialogTitle className="text-balance">{title}</DialogTitle>

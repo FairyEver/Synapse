@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { GitBranch, Plus, RefreshCw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,6 +30,7 @@ type GitBranchSwitcherProps = {
   readonly repository: SynapseGitRepository
   readonly currentBranch: string | null
   readonly disabled?: boolean
+  readonly loading?: boolean
   readonly mode?: "full" | "select" | "create"
   readonly selectWidth?: "default" | "compact"
   readonly refreshKey?: number
@@ -40,6 +41,7 @@ export function GitBranchSwitcher({
   repository,
   currentBranch,
   disabled,
+  loading = false,
   mode = "full",
   selectWidth = "default",
   refreshKey = 0,
@@ -47,6 +49,10 @@ export function GitBranchSwitcher({
 }: GitBranchSwitcherProps) {
   const [open, setOpen] = useState(false)
   const [branchName, setBranchName] = useState("")
+  const [restoreBranchFocus, setRestoreBranchFocus] = useState(false)
+  const branchNameInputRef = useRef<HTMLInputElement>(null)
+  const createButtonRef = useRef<HTMLButtonElement>(null)
+  const selectTriggerRef = useRef<HTMLButtonElement>(null)
   const [remoteDialogOpen, setRemoteDialogOpen] = useState(false)
   const [selectedRemote, setSelectedRemote] = useState<{
     readonly remoteName: string
@@ -61,9 +67,16 @@ export function GitBranchSwitcher({
   })
   const { branches, remoteBranchGroups, busy, fetchingRemote, error } = gitBranches
 
+  useEffect(() => {
+    if (!restoreBranchFocus || busy) return
+    selectTriggerRef.current?.focus()
+    setRestoreBranchFocus(false)
+  }, [busy, restoreBranchFocus])
+
   const checkout = async (nextBranch: string) => {
     if (!nextBranch || nextBranch === currentBranch) return
     await gitBranches.checkoutLocal(nextBranch)
+    setRestoreBranchFocus(true)
   }
 
   const selectBranch = (value: string) => {
@@ -108,6 +121,8 @@ export function GitBranchSwitcher({
     if (completed) {
       setBranchName("")
       setOpen(false)
+    } else {
+      branchNameInputRef.current?.focus()
     }
   }
 
@@ -121,11 +136,11 @@ export function GitBranchSwitcher({
     <Select
       value={currentBranch ? `local:${currentBranch}` : ""}
       onValueChange={selectBranch}
-      disabled={disabled || busy || fetchingRemote || (branches.length === 0 && remoteBranchGroups.length === 0)}
+      disabled={loading || disabled || busy || fetchingRemote || (branches.length === 0 && remoteBranchGroups.length === 0)}
     >
-      <SelectTrigger size="sm" aria-label="分支" className={selectTriggerClassName}>
+      <SelectTrigger ref={selectTriggerRef} size="sm" aria-label="分支" className={selectTriggerClassName}>
         <GitBranch data-icon="inline-start" />
-        <SelectValue placeholder="无分支" />
+        <SelectValue placeholder={loading ? "正在读取" : "无分支"} />
       </SelectTrigger>
       <SelectContent>
         {branches.length > 0 ? (
@@ -158,7 +173,7 @@ export function GitBranchSwitcher({
       type="button"
       variant="outline"
       size="sm"
-      disabled={busy}
+      disabled={loading || busy}
       onClick={() => fetchingRemote ? void gitBranches.cancelRemoteFetch() : void gitBranches.fetchRemote()}
     >
       {fetchingRemote ? <X data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
@@ -167,7 +182,7 @@ export function GitBranchSwitcher({
   )
 
   const createButton = (
-    <Button type="button" variant="outline" size="sm" disabled={disabled || busy} onClick={() => setOpen(true)}>
+    <Button ref={createButtonRef} type="button" variant="outline" size="sm" disabled={loading || disabled || busy} onClick={() => setOpen(true)}>
       <Plus data-icon="inline-start" />
       新建分支
     </Button>
@@ -179,7 +194,15 @@ export function GitBranchSwitcher({
       {mode !== "create" ? fetchRemoteButton : null}
       {mode !== "select" ? createButton : null}
       <Dialog open={open} onOpenChange={setOpen} data-track="git-create-branch-dialog">
-        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+        <DialogContent
+          className="sm:max-w-sm"
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            if (!createButtonRef.current) return
+            event.preventDefault()
+            createButtonRef.current.focus()
+          }}
+        >
           <form className="grid gap-4" onSubmit={createBranch}>
             <DialogHeader>
               <DialogTitle>新建分支</DialogTitle>
@@ -187,6 +210,7 @@ export function GitBranchSwitcher({
             <div className="grid gap-2">
               <Label htmlFor="git-create-branch-name">分支名称</Label>
               <Input
+                ref={branchNameInputRef}
                 id="git-create-branch-name"
                 value={branchName}
                 onChange={(event) => setBranchName(event.target.value)}

@@ -126,6 +126,31 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).not.toContain('同步')
   })
 
+  it('loads additional files from a paged console folder', async () => {
+    const snapshot = {
+      ...folderSnapshot(),
+      childrenPage: { hasMore: true, limit: 100, nextOffset: 100 },
+    }
+    const loadMoreChildren = vi.fn()
+    vi.mocked(useDriveBrowser).mockReturnValue({
+      status: 'ready',
+      snapshot,
+      loadMoreChildren,
+      loadingMoreChildren: false,
+      loadMoreChildrenError: null,
+      reload: vi.fn(async () => snapshot),
+      reloading: false,
+      saveText: vi.fn(),
+      savingText: false,
+    })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+
+    await render(<DriveConsolePage />)
+    await click(button('加载更多'))
+
+    expect(loadMoreChildren).toHaveBeenCalledOnce()
+  })
+
   it('uses existing single file reader for file item routes', async () => {
     mockReadySnapshot(fileSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
@@ -173,6 +198,20 @@ describe('DriveConsolePage', () => {
 
     await click(button('预览'))
     expect(onNavigate).toHaveBeenCalledWith('/console/drive/folders/folder-1')
+  })
+
+  it('does not navigate the row when Enter is pressed on a row action', async () => {
+    const onNavigate = vi.fn()
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    await render(<DriveConsolePage onNavigate={onNavigate} />)
+    const deleteButton = rowButton('文档', '删除')
+
+    await act(async () => {
+      deleteButton?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    expect(onNavigate).not.toHaveBeenCalled()
   })
 
   it('creates folders in the root folder and refreshes', async () => {
@@ -536,6 +575,32 @@ describe('DriveConsolePage', () => {
     expect(driveApi.listPublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
   })
 
+  it('renders a route-controlled system view and reports view changes', async () => {
+    const onViewChange = vi.fn()
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    vi.mocked(driveApi.listTrash).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+
+    await render(<DriveConsolePage activeView='public-assets' onViewChange={onViewChange} />)
+    await act(async () => undefined)
+
+    expect(driveApi.listPublicAssets).toHaveBeenCalledWith({ offset: 0, limit: 50 })
+    expect(document.body.textContent).toContain('暂无公开素材')
+
+    await click(tabTrigger('回收站'))
+
+    expect(onViewChange).toHaveBeenCalledWith('trash')
+  })
+
   it('loads more public assets from the next page', async () => {
     mockReadySnapshot(folderSnapshot())
     vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
@@ -716,6 +781,59 @@ describe('DriveConsolePage', () => {
     expect(driveApi.deleteItem).toHaveBeenCalledWith('folder-1')
     expect(reload).toHaveBeenCalled()
   })
+
+  it('keeps the safe action focused when clicking the delete confirmation overlay', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    await render(<DriveConsolePage />)
+
+    await click(button('删除'))
+    const overlay = document.querySelector<HTMLElement>('[data-slot="alert-dialog-overlay"]')
+    const cancelButton = button('取消')
+    cancelButton?.focus()
+    const pointerDown = new MouseEvent('pointerdown', { bubbles: true, cancelable: true })
+
+    overlay?.dispatchEvent(pointerDown)
+
+    expect(pointerDown.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(cancelButton)
+  })
+
+  it('returns focus to the row delete action after cancelling confirmation', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    await render(<DriveConsolePage />)
+    const deleteButton = button('删除')
+
+    await click(deleteButton)
+    await click(button('取消'))
+    await flushTimers()
+
+    expect(document.activeElement).toBe(deleteButton)
+    expect(driveApi.deleteItem).not.toHaveBeenCalled()
+  })
+
+  it('moves focus to a neighboring row action after deleting the trigger row', async () => {
+    const initial = folderSnapshot()
+    const nextItem = {
+      ...initial.children[0],
+      id: 'folder-2',
+      name: '资料',
+      browserUrl: '/console/drive/folders/folder-2',
+      downloadUrl: '/drive/items/folder-2/download',
+    }
+    mockReadySnapshot({ ...initial, children: [...initial.children, nextItem] })
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+    await render(<DriveConsolePage />)
+
+    await click(rowButton('文档', '删除'))
+    rowWithText('文档')?.remove()
+    await click(button('取消'))
+    await flushTimers()
+    await flushTimers()
+
+    expect(document.activeElement).toBe(rowButton('资料', '删除'))
+  })
 })
 
 function mockReadySnapshot(snapshot: DriveBrowserSnapshotDto) {
@@ -787,6 +905,18 @@ function rowWithText(text: string) {
   return Array.from(document.querySelectorAll<HTMLTableRowElement>('tr'))
     .find((row) => row.textContent?.includes(text))
     ?? null
+}
+
+function rowButton(rowText: string, buttonText: string) {
+  return Array.from(rowWithText(rowText)?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+    .find((item) => item.textContent?.trim() === buttonText)
+    ?? null
+}
+
+async function flushTimers() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
 }
 
 async function openMoreActions() {

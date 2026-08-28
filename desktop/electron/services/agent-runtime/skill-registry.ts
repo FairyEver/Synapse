@@ -9,8 +9,8 @@ import type { StructuredLogger } from "../../runtime/logging"
 import { errorCode } from "../error-utils"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 import {
+  agentRuntimeCommandDiagnosticSummary,
   agentRuntimeErrorMessage,
-  agentRuntimeErrorSummary,
   rawAgentRuntimeErrorMessage,
 } from "./error-message"
 import { readSkillIdFile } from "../editor-adapters/skill-identity"
@@ -248,7 +248,7 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error
 }
 
-const errorSummary = agentRuntimeErrorSummary
+const errorSummary = agentRuntimeCommandDiagnosticSummary
 
 function isMissingPathError(error: unknown): boolean {
   return errorCode(error) === "ENOENT"

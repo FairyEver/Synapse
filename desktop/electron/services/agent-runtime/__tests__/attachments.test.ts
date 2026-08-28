@@ -4,6 +4,7 @@ import {
   buildAgentRuntimeUserContent,
   directoriesForPathAttachments,
   hasUnconfiguredAttachmentDirectories,
+  userMessagePresentationHistoryMetadataFromRefs,
 } from "../attachments"
 import type { AgentAttachment } from "../types"
 
@@ -37,6 +38,30 @@ describe("agent runtime attachments", () => {
     expect(content).toContain("1. [Image #1]")
     expect(content).toContain("2. [File #1]")
     expect(content).toContain("3. [Directory #1]")
+  })
+
+  it("persists opaque attachment references for non-image history actions", () => {
+    const metadata = userMessagePresentationHistoryMetadataFromRefs({
+      content: "",
+      projectId: "project-1",
+      sessionKey: "session-1",
+      platform: "claude",
+    }, [{
+      version: 2,
+      attachmentId: "attachment-1",
+      kind: "file",
+      name: "report.md",
+      byteSize: 7,
+      sha256: "a".repeat(64),
+    }])
+
+    expect(metadata).toMatchObject({
+      attachments: [{
+        path: "synapse-agent-attachment://local/attachment-1",
+        name: "report.md",
+      }],
+    })
+    expect(JSON.stringify(metadata)).not.toContain("/controlled/")
   })
 
   it("skips POSIX cwd-internal path attachments", () => {

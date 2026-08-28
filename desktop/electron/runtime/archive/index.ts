@@ -165,6 +165,7 @@ async function createZipArchive(
     await runArchiveCommand("ditto", [
       "-c",
       "-k",
+      "--norsrc",
       "--keepParent",
       sourceDirectoryPath,
       outputFilePath,

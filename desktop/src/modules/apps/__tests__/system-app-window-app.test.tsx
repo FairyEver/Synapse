@@ -148,6 +148,10 @@ describe("SystemAppWindowApp", () => {
       mocks.terminalOpenRequestListener?.({ requestId: "request-2", sessionId: "session-2" })
     })
     expect(document.body.textContent).toContain("终端窗口 session-2")
+    expect(new URLSearchParams(window.location.search).get("terminalOpenRequest")).toBe(JSON.stringify({
+      requestId: "request-2",
+      sessionId: "session-2",
+    }))
   })
 
   it("ignores malformed initial Terminal session open requests", async () => {
@@ -184,6 +188,10 @@ describe("SystemAppWindowApp", () => {
       mocks.gitOpenRequestListener?.({ requestId: "request-2", repositoryId: "repository-2" })
     })
     expect(document.body.textContent).toContain("Git 窗口 repository-2")
+    expect(new URLSearchParams(window.location.search).get("gitOpenRequest")).toBe(JSON.stringify({
+      requestId: "request-2",
+      repositoryId: "repository-2",
+    }))
   })
 
   it("ignores malformed initial Git repository open requests", async () => {

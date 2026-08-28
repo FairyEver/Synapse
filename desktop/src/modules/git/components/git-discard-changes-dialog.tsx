@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import type { RefObject } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -19,6 +20,7 @@ type GitDiscardChangesDialogProps = {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onDiscarded: () => void | Promise<void>
+  readonly returnFocusRef: RefObject<HTMLButtonElement | null>
 }
 
 const VISIBLE_PATH_LIMIT = 5
@@ -29,6 +31,7 @@ export function GitDiscardChangesDialog({
   open,
   onOpenChange,
   onDiscarded,
+  returnFocusRef,
 }: GitDiscardChangesDialogProps) {
   const [selectionId, setSelectionId] = useState<string | null>(null)
   const [preparing, setPreparing] = useState(false)
@@ -91,7 +94,10 @@ export function GitDiscardChangesDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange} data-track="git-discard-changes-dialog">
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={(event) => {
+        event.preventDefault()
+        returnFocusRef.current?.focus()
+      }}>
         <AlertDialogHeader>
           <AlertDialogTitle>丢弃 {selectedChanges.length} 个改动？</AlertDialogTitle>
           <AlertDialogDescription>

@@ -1,11 +1,13 @@
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 import { listDiscoverableBuiltinWorkflowNodeTypes } from "../../../../app-capabilities/surface-discovery"
+import { Button } from "@/components/ui/button"
 
 interface NodePaletteProps {
   collapsed?: boolean
+  onAddNode?: (type: string) => void
 }
 
-export function NodePalette({ collapsed }: NodePaletteProps) {
+export function NodePalette({ collapsed, onAddNode }: NodePaletteProps) {
   const types = listDiscoverableBuiltinWorkflowNodeTypes(
     nodeTypeRegistry.listTypes(),
   ).filter((type) => type !== "end")
@@ -21,15 +23,19 @@ export function NodePalette({ collapsed }: NodePaletteProps) {
         const manifest = nodeTypeRegistry.getManifest(type)
         const Icon = manifest.icon
         return (
-          <div
+          <Button
             key={type}
+            type="button"
+            variant="ghost"
+            size="sm"
             draggable
             onDragStart={(e) => e.dataTransfer.setData("application/workflow-node-type", type)}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-grab hover:bg-muted active:cursor-grabbing"
+            onClick={() => onAddNode?.(type)}
+            className="h-auto w-full justify-start gap-2 px-2 py-1.5 text-xs cursor-grab active:cursor-grabbing"
           >
             <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">{manifest.title}</span>
-          </div>
+          </Button>
         )
       })}
     </div>

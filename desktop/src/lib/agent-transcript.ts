@@ -108,6 +108,8 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
       return "阶段"
     case "sdkEvent":
       return "SDK"
+    case "fileCheckpoint":
+      return "文件修改"
     default: {
       const exhaustive: never = entry
       return exhaustive
@@ -181,6 +183,10 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
         .filter((part): part is string => Boolean(part))
         .map(redactSensitiveText)
         .join(" ")
+    case "fileCheckpoint":
+      return entry.files
+        .map((file) => `${file.path} +${file.insertions} -${file.deletions}`)
+        .join("\n")
     default: {
       const exhaustive: never = entry
       return exhaustive

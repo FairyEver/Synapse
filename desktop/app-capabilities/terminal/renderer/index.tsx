@@ -113,6 +113,7 @@ export function TerminalModule({
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalSession | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
+  const [deleteSessionTarget, setDeleteSessionTarget] = useState<SynapseTerminalSession | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(null)
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
@@ -144,6 +145,11 @@ export function TerminalModule({
   const xtermRef = useRef<Terminal | null>(null)
   const terminalGeometrySyncRef = useRef<((refreshRenderer?: boolean) => void) | null>(null)
   const deletedSessionIdsRef = useRef(new Set<string>())
+  const renameReturnFocusRef = useRef<HTMLElement | null>(null)
+  const deleteSessionReturnFocusRef = useRef<HTMLButtonElement | null>(null)
+  const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
+  const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
+  const createGroupActionRef = useRef<HTMLButtonElement | null>(null)
 
   const activeSession = useMemo(() => {
     if (!activeSessionId) return sessions[0] ?? null
@@ -261,9 +267,40 @@ export function TerminalModule({
     }
   }, [terminalBridge])
 
-  const openRenameDialog = useCallback((session: SynapseTerminalSession) => {
+  const openRenameDialog = useCallback((session: SynapseTerminalSession, returnFocus: HTMLElement) => {
+    renameReturnFocusRef.current = returnFocus
     setRenameTarget(session)
     setRenameTitle(session.title)
+  }, [])
+
+  const closeRenameDialog = useCallback(() => {
+    setRenameTarget(null)
+    setRenameTitle("")
+    globalThis.setTimeout(() => {
+      renameReturnFocusRef.current?.focus()
+      renameReturnFocusRef.current = null
+    }, 0)
+  }, [])
+
+  const openDeleteSessionDialog = useCallback((session: SynapseTerminalSession, returnFocus: HTMLButtonElement) => {
+    deleteSessionReturnFocusRef.current = returnFocus
+    setDeleteSessionTarget(session)
+  }, [])
+
+  const closeDeleteSessionDialog = useCallback(() => {
+    setDeleteSessionTarget(null)
+    globalThis.setTimeout(() => {
+      deleteSessionReturnFocusRef.current?.focus()
+      deleteSessionReturnFocusRef.current = null
+    }, 0)
+  }, [])
+
+  const closeDeleteGroupDialog = useCallback(() => {
+    setDeleteGroupTarget(null)
+    globalThis.setTimeout(() => {
+      deleteGroupReturnFocusRef.current?.focus()
+      deleteGroupReturnFocusRef.current = null
+    }, 0)
   }, [])
 
   const openCreateGroupDialog = useCallback(() => {
@@ -380,15 +417,14 @@ export function TerminalModule({
         title: renameTitle,
       })
       setSessions((current) => mergeSession(current, session))
-      setRenameTarget(null)
-      setRenameTitle("")
+      closeRenameDialog()
     } catch (error) {
       logger.error("Failed to rename terminal session.", error)
       toast.error("重命名终端失败")
     } finally {
       setRenameSaving(false)
     }
-  }, [renameTarget, renameTitle, terminalBridge])
+  }, [closeRenameDialog, renameTarget, renameTitle, terminalBridge])
 
   const deleteSession = useCallback(async (target: SynapseTerminalSession) => {
     const targetId = target.id
@@ -403,6 +439,15 @@ export function TerminalModule({
         })
         return nextSessions
       })
+      setDeleteSessionTarget(null)
+      deleteSessionReturnFocusRef.current = null
+      globalThis.setTimeout(() => {
+        const nextActiveRow = document.querySelector<HTMLElement>(
+          '[data-track="terminal-session-select"][aria-current="page"]',
+        )
+        const focusTarget = nextActiveRow ?? createSessionActionRef.current
+        focusTarget?.focus()
+      }, 0)
     } catch (error) {
       logger.error("Failed to delete terminal session.", error)
       toast.error("删除终端失败")
@@ -442,6 +487,8 @@ export function TerminalModule({
         return nextSessions
       })
       setDeleteGroupTarget(null)
+      deleteGroupReturnFocusRef.current = null
+      globalThis.setTimeout(() => createGroupActionRef.current?.focus(), 0)
     } catch (error) {
       logger.error("Failed to delete terminal group.", error)
       toast.error("删除分组失败")
@@ -461,6 +508,9 @@ export function TerminalModule({
       void deleteGroup(group)
       return
     }
+    deleteGroupReturnFocusRef.current = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('button[aria-label^="终端分组操作："]'),
+    ).find((button) => button.getAttribute("aria-label") === `终端分组操作：${group.name}`) ?? null
     setDeleteGroupTarget(group)
   }, [deleteGroup])
 
@@ -968,7 +1018,7 @@ export function TerminalModule({
       className="min-h-0 bg-background"
     >
       <div className="flex items-center justify-start">
-        <Button type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
+        <Button ref={createGroupActionRef} type="button" size="sm" variant="outline" onClick={openCreateGroupDialog}>
           <Plus data-icon="inline-start" />
           新建分组
         </Button>
@@ -1070,13 +1120,13 @@ export function TerminalModule({
                     <TerminalSessionLifecycleButton
                       disabled={deletingSessionId === session.id || stoppingSessionId === session.id}
                       session={session}
-                      onDelete={() => { void deleteSession(session) }}
+                      onDelete={(returnFocus) => openDeleteSessionDialog(session, returnFocus)}
                       onStop={() => { void stopSession(session) }}
                     />
                   }
                   trackValue={session.id}
                   onSelect={() => setActiveSessionId(session.id)}
-                  onDoubleClick={() => openRenameDialog(session)}
+                  onDoubleClick={(event) => openRenameDialog(session, event.currentTarget)}
                 >
                   {session.title}
                 </ModuleSidebarRow>
@@ -1095,7 +1145,7 @@ export function TerminalModule({
   return (
     <SystemAppWindowShell actions={(
       <>
-        <SystemAppTopBarActionButton type="button" onClick={() => { void createSession() }}>
+        <SystemAppTopBarActionButton ref={createSessionActionRef} type="button" onClick={() => { void createSession() }}>
           <Plus data-icon="inline-start" />
           新建终端
         </SystemAppTopBarActionButton>
@@ -1463,10 +1513,7 @@ export function TerminalModule({
         </DialogContent>
       </Dialog>
       <Dialog open={renameTarget !== null} onOpenChange={(open) => {
-        if (!open) {
-          setRenameTarget(null)
-          setRenameTitle("")
-        }
+        if (!open) closeRenameDialog()
       }}>
         <DialogContent>
           <DialogHeader>
@@ -1492,10 +1539,7 @@ export function TerminalModule({
               type="button"
               variant="outline"
               disabled={renameSaving}
-              onClick={() => {
-                setRenameTarget(null)
-                setRenameTitle("")
-              }}
+              onClick={closeRenameDialog}
             >
               取消
             </Button>
@@ -1509,8 +1553,32 @@ export function TerminalModule({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={deleteSessionTarget !== null} onOpenChange={(open) => {
+        if (!open && deletingSessionId === null) closeDeleteSessionDialog()
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除终端</AlertDialogTitle>
+            <AlertDialogDescription>
+              将删除「{deleteSessionTarget?.title}」及其保留输出。此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingSessionId !== null}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deletingSessionId !== null}
+              onClick={() => {
+                if (deleteSessionTarget) void deleteSession(deleteSessionTarget)
+              }}
+            >
+              删除终端
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={deleteGroupTarget !== null} onOpenChange={(open) => {
-        if (!open) setDeleteGroupTarget(null)
+        if (!open && !deleteGroupSaving) closeDeleteGroupDialog()
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1526,6 +1594,7 @@ export function TerminalModule({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteGroupSaving}>取消</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               disabled={deleteGroupSaving || deleteGroupHasActiveSessions}
               onClick={() => { void deleteGroup() }}
             >
@@ -1544,7 +1613,7 @@ export function TerminalModule({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>继续编辑</AlertDialogCancel>
-            <AlertDialogAction onClick={() => {
+            <AlertDialogAction variant="destructive" onClick={() => {
               const action = discardAction
               setDiscardAction(null)
               action?.()
@@ -1564,7 +1633,7 @@ function TerminalSessionLifecycleButton({
 }: {
   readonly disabled: boolean
   readonly session: SynapseTerminalSession
-  readonly onDelete: () => void
+  readonly onDelete: (returnFocus: HTMLButtonElement) => void
   readonly onStop: () => void
 }) {
   const active = session.status === "running" || session.status === "stopping"
@@ -1581,7 +1650,7 @@ function TerminalSessionLifecycleButton({
       onClick={(event) => {
         event.stopPropagation()
         if (active) onStop()
-        else onDelete()
+        else onDelete(event.currentTarget)
       }}
       onPointerDown={(event) => event.stopPropagation()}
     >

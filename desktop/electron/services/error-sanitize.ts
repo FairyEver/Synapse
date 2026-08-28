@@ -3,6 +3,8 @@ export {
   errorLogMessage,
   errorLogMeta,
   errorLogName,
+  isAbsoluteLocalPath,
+  redactAbsolutePathsInText,
   sanitizeError,
   sanitizeErrorPreservingPaths,
 } from "../../src/lib/error-sanitize"

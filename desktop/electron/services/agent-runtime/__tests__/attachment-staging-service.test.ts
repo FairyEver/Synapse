@@ -439,6 +439,59 @@ describe("AttachmentStagingService", () => {
       expect(runtime.controlledDirectories).toEqual([
         path.join(root, "staged", "project_1", "draft_1"),
       ])
+      await expect(service.resolveOpenPath({
+        projectId: "project_1",
+        attachmentId: "attachment_1",
+      })).resolves.toBe(fileRow.storagePath)
+      await service.commit({
+        actor: { kind: "user", id: "renderer" },
+        projectId: "project_1",
+        draftScopeId: "draft_1",
+        attachmentIds: ["attachment_2"],
+        conversationId: "conversation_1",
+        turnId: "turn_2",
+      })
+      await expect(service.resolveOpenPath({
+        projectId: "project_1",
+        attachmentId: "attachment_2",
+      })).resolves.toBe(sourceDirectory)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(sourceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it("reuses a staged directory selected twice in the same draft", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-directory-dedup-root-"))
+    const sourceRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-directory-dedup-source-"))
+    try {
+      const metadata = new MemoryNamespace<AgentAttachmentMetadataEntry>("agent.artifacts")
+      const service = new AttachmentStagingService({
+        rootDirectory: root,
+        metadata,
+        permissionGuard: createPermissionGuard(),
+        auditSink: new InMemoryAuditSink(),
+        randomId: (() => {
+          let nextId = 0
+          return () => `attachment_${nextId += 1}`
+        })(),
+      })
+
+      const [first] = await service.stagePaths({
+        actor: { kind: "user", id: "renderer" },
+        projectId: "project_1",
+        draftScopeId: "draft_1",
+        paths: [sourceRoot],
+      })
+      const [second] = await service.stagePaths({
+        actor: { kind: "user", id: "renderer" },
+        projectId: "project_1",
+        draftScopeId: "draft_1",
+        paths: [sourceRoot],
+      })
+
+      expect(second?.ref.attachmentId).toBe(first?.ref.attachmentId)
+      expect(await metadata.list()).toHaveLength(1)
     } finally {
       await rm(root, { recursive: true, force: true })
       await rm(sourceRoot, { recursive: true, force: true })

@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type MouseEvent,
+  type Ref,
 } from "react"
 import { FileOutput, Funnel, Pencil, SlidersHorizontal, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -91,6 +92,7 @@ type DataTableViewProps = {
   onExportTable: () => Promise<void> | void
   filter: DatabaseWhereGroup | null
   onFilterChange: (filter: DatabaseWhereGroup | null) => void
+  schemaButtonRef?: Ref<HTMLButtonElement>
 }
 
 type DataTableViewHandle = {
@@ -114,6 +116,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     onExportTable,
     filter,
     onFilterChange,
+    schemaButtonRef,
   },
   ref,
 ) {
@@ -122,8 +125,12 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   const [isAdding, setIsAdding] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
+  const [shouldRestoreAddRowFocus, setShouldRestoreAddRowFocus] = useState(false)
   const [resizedColumnWidths, setResizedColumnWidths] = useState<Record<string, number>>({})
   const rowEditorRef = useRef<RowEditorHandle | null>(null)
+  const addRowButtonRef = useRef<HTMLButtonElement | null>(null)
+  const filterButtonRef = useRef<HTMLButtonElement | null>(null)
+  const deleteTriggerRef = useRef<HTMLElement | null>(null)
   const logTableScroll = useMemo(
     () => debounce((snapshot: {
       clientHeight: number
@@ -196,6 +203,18 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     }
   }, [])
 
+  const restoreAddRowFocus = useCallback(() => {
+    setShouldRestoreAddRowFocus(true)
+  }, [])
+
+  useEffect(() => {
+    if (!shouldRestoreAddRowFocus || isAdding || editingId != null) {
+      return
+    }
+    addRowButtonRef.current?.focus()
+    setShouldRestoreAddRowFocus(false)
+  }, [editingId, isAdding, shouldRestoreAddRowFocus])
+
   const handleSaveEdit = useCallback(
     async (data: Record<string, unknown>) => {
       if (editingId != null) {
@@ -208,9 +227,10 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         })
         setEditingId(null)
         setEditingColumnName(null)
+        restoreAddRowFocus()
       }
     },
-    [editingId, onUpdate, tableName],
+    [editingId, onUpdate, restoreAddRowFocus, tableName],
   )
 
   const handleSaveNew = useCallback(
@@ -222,8 +242,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         values: sanitizeTrackRecord(data),
       })
       setIsAdding(false)
+      restoreAddRowFocus()
     },
-    [onInsert, tableName],
+    [onInsert, restoreAddRowFocus, tableName],
   )
 
   const deleteRow = useCallback(async (targetId: number) => {
@@ -234,10 +255,11 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       try {
         await onDelete(targetId)
         setDeleteId(null)
+        restoreAddRowFocus()
       } catch {
         // Dialog stays open on failure for retry
       }
-  }, [onDelete, tableName])
+  }, [onDelete, restoreAddRowFocus, tableName])
 
   const handleConfirmDelete = useCallback(async () => {
     if (deleteId != null) {
@@ -250,6 +272,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       void deleteRow(rowId)
       return
     }
+    deleteTriggerRef.current = event.currentTarget
     setDeleteId(rowId)
   }, [deleteRow])
 
@@ -455,6 +478,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">{tableName}</h2>
           <Button
+            ref={schemaButtonRef}
             variant="ghost"
             size="icon"
             className="size-7"
@@ -469,6 +493,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             <SlidersHorizontal className="size-4" />
           </Button>
           <Button
+            ref={filterButtonRef}
             variant={filter ? "secondary" : "ghost"}
             size="icon"
             className="size-7"
@@ -587,6 +612,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             </DropdownMenuContent>
           </DropdownMenu>
           <Button
+            ref={addRowButtonRef}
             type="button"
             variant="ghost"
             size="sm"
@@ -699,6 +725,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                     onCancel={() => {
                       setEditingId(null)
                       setEditingColumnName(null)
+                      restoreAddRowFocus()
                     }}
                   />
                 )
@@ -769,7 +796,10 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                 columns={columns}
                 initialFocusColumnName={editableColumns[0]?.name ?? null}
                 onSave={handleSaveNew}
-                onCancel={() => setIsAdding(false)}
+                onCancel={() => {
+                  setIsAdding(false)
+                  restoreAddRowFocus()
+                }}
               />
             ) : null}
 
@@ -818,7 +848,16 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       </div>
 
       <AlertDialog open={deleteId != null} onOpenChange={(open) => { if (!open) setDeleteId(null) }} data-track="database-row-delete-dialog">
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            const trigger = deleteTriggerRef.current
+            if (!trigger?.isConnected) {
+              return
+            }
+            event.preventDefault()
+            window.setTimeout(() => trigger.focus())
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
             <AlertDialogDescription>
@@ -838,6 +877,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         columns={columns}
         value={filter}
         onApply={handleFilterChange}
+        restoreFocusRef={filterButtonRef}
       />
     </div>
   )

@@ -20,6 +20,15 @@ const snapshot: SynapseGitRepositorySnapshot = {
 }
 
 describe("Git status view", () => {
+  it("does not report a missing directory before the first snapshot loads", () => {
+    expect(getGitActionPlan(null)).toMatchObject({
+      statusText: "正在读取",
+      primaryAction: "none",
+      primaryLabel: "读取中",
+      blockerText: null,
+    })
+  })
+
   it("does not report an untracked branch as synchronized", () => {
     expect(getGitActionPlan(snapshot)).toMatchObject({
       statusText: "未设置上游",

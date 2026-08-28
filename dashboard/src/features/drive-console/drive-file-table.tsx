@@ -1,6 +1,6 @@
 import type { DragEvent, ReactNode } from 'react'
 import type { DriveBrowserItemDto, DriveBrowserSnapshotDto } from '@synapse/shared'
-import { Archive, MoreHorizontal, Trash2 } from 'lucide-react'
+import { Archive, Loader2, MoreHorizontal, Trash2 } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,20 +34,27 @@ export function DriveFileTable({
   onShare,
   onNavigate = navigateDriveBrowserUrl,
   onDropFiles,
+  onLoadMoreChildren,
+  loadingMoreChildren = false,
+  loadMoreChildrenError = null,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly activeView: DriveConsoleSystemView
   readonly onOpenSystemView: (view: DriveConsoleSystemView) => void
-  readonly onDelete: (item: DriveBrowserItemDto) => void
+  readonly onDelete: (item: DriveBrowserItemDto, trigger: HTMLElement) => void
   readonly onMove: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
   readonly onNavigate?: DriveBrowserNavigate
   readonly onDropFiles: (files: readonly File[]) => void
+  readonly onLoadMoreChildren?: () => void
+  readonly loadingMoreChildren?: boolean
+  readonly loadMoreChildrenError?: string | null
 }) {
   if (activeView !== 'files') return null
 
   const rootSystemRows = snapshot.breadcrumbs.length <= 1
+  const canLoadMoreChildren = Boolean(snapshot.childrenPage?.hasMore && onLoadMoreChildren)
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     if (!Array.from(event.dataTransfer.types).includes('Files')) return
     event.preventDefault()
@@ -96,6 +103,23 @@ export function DriveFileTable({
           ))}
         </TableBody>
       </Table>
+      {canLoadMoreChildren || loadMoreChildrenError ? (
+        <div className='flex flex-col items-center gap-2 border-t px-3 py-3'>
+          {canLoadMoreChildren ? (
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              disabled={loadingMoreChildren}
+              onClick={onLoadMoreChildren}
+            >
+              {loadingMoreChildren ? <Loader2 data-icon='inline-start' className='animate-spin' /> : null}
+              {loadingMoreChildren ? '加载中' : '加载更多'}
+            </Button>
+          ) : null}
+          {loadMoreChildrenError ? <div className='text-sm text-destructive'>{loadMoreChildrenError}</div> : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -125,7 +149,7 @@ function DriveFileRow({
   onNavigate,
 }: {
   readonly item: DriveBrowserItemDto
-  readonly onDelete: (item: DriveBrowserItemDto) => void
+  readonly onDelete: (item: DriveBrowserItemDto, trigger: HTMLElement) => void
   readonly onMove: (item: DriveBrowserItemDto) => void
   readonly onRename: (item: DriveBrowserItemDto) => void
   readonly onShare: (item: DriveBrowserItemDto) => void
@@ -138,7 +162,7 @@ function DriveFileRow({
       className='cursor-pointer'
       onClick={() => onNavigate(item.browserUrl)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') onNavigate(item.browserUrl)
+        if (event.target === event.currentTarget && event.key === 'Enter') onNavigate(item.browserUrl)
       }}
     >
       <TableCell>
@@ -163,9 +187,9 @@ function DriveFileRow({
           }}>
             预览
           </Button>
-          <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+          <Button data-drive-delete-action data-drive-item-id={item.id} type='button' variant='ghost' size='sm' onClick={(event) => {
             event.stopPropagation()
-            onDelete(item)
+            onDelete(item, event.currentTarget)
           }}>
             删除
           </Button>

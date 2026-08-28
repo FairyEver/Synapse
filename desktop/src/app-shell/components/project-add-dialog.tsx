@@ -42,6 +42,8 @@ function ProjectAddDialog({
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const isSubmittingRef = useRef(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const pathInputRef = useRef<HTMLInputElement>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.settings.repository)
 
   useEffect(() => {
@@ -50,6 +52,15 @@ function ProjectAddDialog({
     setDraftPath(initialValues?.path ?? "")
     setFormError(null)
   }, [initialValues?.name, initialValues?.path, open])
+
+  useEffect(() => {
+    if (isSubmitting) return
+    if (formError === "这个项目路径已经存在了。") {
+      pathInputRef.current?.focus()
+    } else if (formError === "这个项目名称已经存在了。") {
+      nameInputRef.current?.focus()
+    }
+  }, [formError, isSubmitting])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (isSubmittingRef.current) return
@@ -80,6 +91,11 @@ function ProjectAddDialog({
 
     if (!name || !projectPath) {
       setFormError("项目名称和项目路径都不能为空。")
+      if (!name) {
+        nameInputRef.current?.focus()
+      } else {
+        pathInputRef.current?.focus()
+      }
       return
     }
 
@@ -98,7 +114,8 @@ function ProjectAddDialog({
       onOpenChange(false)
     } catch (error) {
       logger.error("Failed to add project.", { error, name, path: projectPath })
-      setFormError(error instanceof Error ? error.message : "添加失败。")
+      const message = error instanceof Error ? error.message : "添加失败。"
+      setFormError(message)
     } finally {
       isSubmittingRef.current = false
       setIsSubmitting(false)
@@ -120,6 +137,7 @@ function ProjectAddDialog({
             <Label htmlFor={nameInputId}>项目名称</Label>
             <Input
               id={nameInputId}
+              ref={nameInputRef}
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
               placeholder="我的项目"
@@ -131,6 +149,7 @@ function ProjectAddDialog({
             <div className="flex gap-2">
               <Input
                 id={pathInputId}
+                ref={pathInputRef}
                 value={draftPath}
                 onChange={(event) => setDraftPath(event.target.value)}
                 placeholder="/path/to/project"

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { formatBytes } from '@synapse/shared'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Copy, FileText, List, Pencil, Plus, ShieldCheck } from 'lucide-react'
@@ -45,6 +45,11 @@ const apiKeysQueryKey = ['dashboard-api-keys'] as const
 
 export function ApiKeysSettings() {
   const queryClient = useQueryClient()
+  const createTriggerRef = useRef<HTMLButtonElement>(null)
+  const renameTriggerRef = useRef<HTMLButtonElement>(null)
+  const permissionTriggerRef = useRef<HTMLButtonElement>(null)
+  const usageTriggerRef = useRef<HTMLButtonElement>(null)
+  const revokeTriggerRef = useRef<HTMLButtonElement>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState('')
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
@@ -79,9 +84,7 @@ export function ApiKeysSettings() {
         result.apiKey,
         ...current,
       ])
-      setName('')
-      setSelectedScopes([])
-      setCreateOpen(false)
+      closeCreateDialog()
       setCreated(result)
     },
     onError: (mutationError: Error) => toast.error(mutationError.message),
@@ -130,6 +133,12 @@ export function ApiKeysSettings() {
     const trimmedName = name.trim()
     if (!trimmedName || selectedScopes.length === 0) return
     createApiKey.mutate({ name: trimmedName, scopes: selectedScopes })
+  }
+
+  function closeCreateDialog() {
+    setCreateOpen(false)
+    setName('')
+    setSelectedScopes([])
   }
 
   function toggleScope(scope: string, checked: boolean) {
@@ -183,7 +192,7 @@ export function ApiKeysSettings() {
     <section className='flex flex-1 flex-col'>
       <div className='flex flex-none items-center justify-between gap-3'>
         <h3 className='text-lg font-medium'>API 秘钥</h3>
-        <Button size='sm' onClick={() => setCreateOpen(true)}>
+        <Button ref={createTriggerRef} size='sm' onClick={() => setCreateOpen(true)}>
           <Plus />
           创建秘钥
         </Button>
@@ -222,19 +231,47 @@ export function ApiKeysSettings() {
                       </CardDescription>
                     </div>
                     <div className='flex flex-wrap items-center gap-1 sm:justify-end'>
-                      <Button variant='ghost' size='sm' onClick={() => openRenameDialog(apiKey)}>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={(event) => {
+                          renameTriggerRef.current = event.currentTarget
+                          openRenameDialog(apiKey)
+                        }}
+                      >
                         <Pencil />
                         重命名
                       </Button>
-                      <Button variant='ghost' size='sm' onClick={() => openPermissionEditor(apiKey)}>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={(event) => {
+                          permissionTriggerRef.current = event.currentTarget
+                          openPermissionEditor(apiKey)
+                        }}
+                      >
                         <ShieldCheck />
                         编辑权限
                       </Button>
-                      <Button variant='ghost' size='sm' onClick={() => setUsageTarget(apiKey)}>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={(event) => {
+                          usageTriggerRef.current = event.currentTarget
+                          setUsageTarget(apiKey)
+                        }}
+                      >
                         <List />
                         使用记录
                       </Button>
-                      <Button variant='ghost' size='sm' onClick={() => setRevokeTarget(apiKey)}>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={(event) => {
+                          revokeTriggerRef.current = event.currentTarget
+                          setRevokeTarget(apiKey)
+                        }}
+                      >
                         撤销
                       </Button>
                     </div>
@@ -272,8 +309,17 @@ export function ApiKeysSettings() {
         </div>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => open ? setCreateOpen(true) : closeCreateDialog()}
+      >
+        <DialogContent
+          onCloseAutoFocus={(event) => {
+            if (created) return
+            event.preventDefault()
+            createTriggerRef.current?.focus()
+          }}
+        >
           <form className='space-y-4' onSubmit={submitCreate}>
             <DialogHeader>
               <DialogTitle>创建秘钥</DialogTitle>
@@ -300,7 +346,7 @@ export function ApiKeysSettings() {
               disabled={createApiKey.isPending}
             />
             <DialogFooter>
-              <Button type='button' variant='outline' onClick={() => setCreateOpen(false)}>
+              <Button type='button' variant='outline' onClick={closeCreateDialog}>
                 取消
               </Button>
               <Button
@@ -318,7 +364,12 @@ export function ApiKeysSettings() {
         open={Boolean(editTarget)}
         onOpenChange={(open) => !open && closePermissionEditor()}
       >
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            permissionTriggerRef.current?.focus()
+          }}
+        >
           <form className='space-y-4' onSubmit={submitPermissionUpdate}>
             <DialogHeader>
               <DialogTitle>编辑 API 权限</DialogTitle>
@@ -380,7 +431,12 @@ export function ApiKeysSettings() {
         open={Boolean(renameTarget)}
         onOpenChange={(open) => !open && closeRenameDialog()}
       >
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            renameTriggerRef.current?.focus()
+          }}
+        >
           <form className='space-y-4' onSubmit={submitRename}>
             <DialogHeader>
               <DialogTitle>重命名秘钥</DialogTitle>
@@ -426,9 +482,24 @@ export function ApiKeysSettings() {
         destructive
         isLoading={revokeApiKey.isPending}
         handleConfirm={() => revokeTarget && revokeApiKey.mutate(revokeTarget.id)}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          if (revokeTriggerRef.current?.isConnected) {
+            revokeTriggerRef.current.focus()
+            return
+          }
+          createTriggerRef.current?.focus()
+        }}
       />
 
-      <ApiKeyUsageDialog apiKey={usageTarget} onOpenChange={(open) => !open && setUsageTarget(null)} />
+      <ApiKeyUsageDialog
+        apiKey={usageTarget}
+        onOpenChange={(open) => !open && setUsageTarget(null)}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          usageTriggerRef.current?.focus()
+        }}
+      />
     </section>
   )
 }
@@ -534,9 +605,11 @@ function sameScopes(left: readonly string[], right: readonly string[]): boolean 
 function ApiKeyUsageDialog({
   apiKey,
   onOpenChange,
+  onCloseAutoFocus,
 }: {
   readonly apiKey: DashboardApiKey | null
   readonly onOpenChange: (open: boolean) => void
+  readonly onCloseAutoFocus: React.ComponentProps<typeof DialogContent>['onCloseAutoFocus']
 }) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE)
@@ -596,7 +669,7 @@ function ApiKeyUsageDialog({
 
   return (
     <Dialog open={Boolean(apiKey)} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-5xl'>
+      <DialogContent className='sm:max-w-5xl' onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{apiKey?.name ?? ''} 使用记录</DialogTitle>
           <DialogDescription className='sr-only'>API 密钥使用记录</DialogDescription>

@@ -86,6 +86,7 @@ import {
 } from "./stream-diagnostics"
 import { agentConversationDeliveryOptions } from "./event-delivery"
 import type { AttachmentStagingService } from "./attachment-staging-service"
+import type { AgentFileCheckpointService } from "./agent-file-checkpoint-service"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -103,6 +104,7 @@ export interface ConversationRouterDeps {
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly agentArtifactStore?: AgentArtifactStore
   readonly attachmentStagingService?: AttachmentStagingService
+  readonly fileCheckpoints?: AgentFileCheckpointService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
   readonly now?: () => Date
@@ -525,6 +527,7 @@ export class ConversationRouter {
         userHistoryMetadata,
       )
       this.emitConversationUpdated(conversation)
+      await this.appendSupersededCheckpointEvents(message, conversation, turnId)
 
       const isBackgroundPlatform = message.platform !== "local-renderer"
       const phaseRunId = randomUUID()
@@ -557,6 +560,7 @@ export class ConversationRouter {
           liveEventTimeoutMs,
           onResponseStarted,
         )
+        await this.appendFileCheckpointEvent(message, result, conversation.id, turnId, sessionHandle.liveSession)
         await this.appendAfterTurnEvents(message, result, conversation.id, turnId, sessionHandle.created)
 
         if (isBackgroundPlatform) {
@@ -723,6 +727,7 @@ export class ConversationRouter {
       })
     }
 
+    if (message.platform === "local-renderer") liveSession.beginFileCheckpoint?.(turnId)
     const accepted = await liveSession.send(message)
     if (!accepted) {
       await this.sessionManager.closeCurrentTurn(conversation.id)
@@ -985,6 +990,77 @@ export class ConversationRouter {
       await this.persistAgentEvent(conversationId, turnId, result.events.length, event)
       await this.saveEventHistory(conversationId, event)
     }
+  }
+
+  private async appendFileCheckpointEvent(
+    message: AgentMessage,
+    result: AgentRuntimeTurnResult,
+    conversationId: string,
+    turnId: string,
+    liveSession: AgentLiveSession,
+  ): Promise<void> {
+    if (message.platform !== "local-renderer" || !this.deps.fileCheckpoints || !liveSession.finalizeFileCheckpoint) return
+    try {
+      const capture = await liveSession.finalizeFileCheckpoint()
+      if (!capture) return
+      const checkpointEvents = await this.deps.fileCheckpoints.persistCapture(conversationId, capture)
+      const mutableEvents = result.events as AgentEvent[]
+      for (const event of checkpointEvents) {
+        mutableEvents.push(event)
+        this.emitEvent(message, conversationId, event)
+        await this.persistAgentEvent(conversationId, turnId, mutableEvents.length, event)
+        await this.saveEventHistory(conversationId, event)
+      }
+    } catch (error) {
+      this.deps.logger?.warn("Agent file checkpoint persistence failed.", {
+        boundary: "agent-runtime.file-checkpoint.persist",
+        projectId: this.deps.projectId,
+        conversationId,
+        turnId,
+        ...errorMetadata(error),
+      })
+    }
+  }
+
+  private async appendSupersededCheckpointEvents(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    turnId: string,
+  ): Promise<void> {
+    if (message.platform !== "local-renderer" || !this.deps.fileCheckpoints) return
+    try {
+      const events = await this.deps.fileCheckpoints.supersedeAvailable(conversation.id)
+      for (const [index, event] of events.entries()) {
+        this.emitEvent(message, conversation.id, event)
+        await this.persistAgentEvent(conversation.id, turnId, index, event)
+        await this.saveEventHistory(conversation.id, event)
+      }
+    } catch (error) {
+      this.deps.logger?.warn("Agent file checkpoint supersede failed.", {
+        boundary: "agent-runtime.file-checkpoint.supersede",
+        projectId: this.deps.projectId,
+        conversationId: conversation.id,
+        turnId,
+        ...errorMetadata(error),
+      })
+    }
+  }
+
+  async appendExternalEvent(
+    conversation: ConversationEntryV1,
+    event: AgentEvent,
+  ): Promise<void> {
+    const message: AgentMessage = {
+      projectId: conversation.projectId,
+      sessionKey: conversation.sessionKey,
+      platform: conversation.platform ?? "local-renderer",
+      workspaceKey: conversation.workspaceKey,
+      workspacePath: conversation.workspacePath,
+      content: "",
+    }
+    this.emitEvent(message, conversation.id, event)
+    await this.persistAgentEvent(conversation.id, event.turnId ?? randomUUID(), 1, event)
+    await this.saveEventHistory(conversation.id, event)
   }
 
   private async processSideSessionWithTimeout(
@@ -2400,6 +2476,22 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         }),
       }
     }
+    case "fileCheckpoint":
+      return {
+        role: "system",
+        content: `${event.fileCount} files changed`,
+        metadata: compactMetadata({
+          agentEventType: event.type,
+          sdkSessionId: event.sdkSessionId,
+          checkpointId: event.checkpointId,
+          status: event.status,
+          insertions: event.insertions,
+          deletions: event.deletions,
+          files: event.files,
+          fileCount: event.fileCount,
+          coverageWarning: event.coverageWarning,
+        }),
+      }
     case "text":
     case "result":
     case "sessionInit":

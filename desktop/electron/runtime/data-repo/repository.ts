@@ -56,7 +56,20 @@ export class DataRepositoryImpl implements DataRepository {
 
   async exportAll(options: ExportOptions = {}): Promise<BackupPayload> {
     const namespaces: BackupPayloadEntry[] = []
+    const excludedNamespaces = new Set(options.excludeNamespaces)
+    const emptyNamespaces = new Set(options.emptyNamespaces)
     for (const [name, entry] of this.entries) {
+      if (excludedNamespaces.has(name)) continue
+      if (emptyNamespaces.has(name)) {
+        namespaces.push({
+          name,
+          schemaVersion: entry.schema.currentVersion,
+          encrypted: !!entry.schema.encrypted,
+          data: { items: [] },
+        })
+        continue
+      }
+
       // Skip encrypted namespaces unless caller asked for secrets.
       if (entry.schema.encrypted && !options.includeSecrets) {
         namespaces.push({

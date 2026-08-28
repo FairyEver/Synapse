@@ -6,6 +6,7 @@ import type {
   AgentRuntimeAttachment,
 } from "./types"
 import type { AgentAttachmentRef } from "../../../src/types/agent-attachment"
+import { agentAttachmentReference } from "../../../src/types/agent-attachment"
 
 type PathFlavor = "posix" | "win32"
 
@@ -120,7 +121,7 @@ export function userMessagePresentationHistoryMetadataFromRefs(
     }
     return {
       kind: "path",
-      path: attachment.name,
+      path: agentAttachmentReference(attachment.attachmentId),
       entryType: attachment.kind,
       name: attachment.name,
       byteSize: attachment.byteSize,

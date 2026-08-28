@@ -25,12 +25,15 @@ type LiveConnectionPanelProps = {
   initialState?: SynapseLiveState
 }
 
-function LiveConnectionPanel({ initialState = DEFAULT_LIVE_STATE }: LiveConnectionPanelProps) {
-  const { isRetrying, retry, state } = useLiveConnection(initialState)
+function LiveConnectionPanel({ initialState }: LiveConnectionPanelProps) {
+  const { isLoading, isRetrying, retry, state } = useLiveConnection(
+    initialState ?? DEFAULT_LIVE_STATE,
+    initialState === undefined,
+  )
 
-  const Icon = state.status === "connected" ? Wifi : WifiOff
-  const label = LIVE_STATUS_LABELS[state.status]
-  const canRetry = state.status === "reconnecting" || state.status === "disconnected"
+  const Icon = isLoading ? RefreshCw : state.status === "connected" ? Wifi : WifiOff
+  const label = isLoading ? "正在读取" : LIVE_STATUS_LABELS[state.status]
+  const canRetry = !isLoading && (state.status === "reconnecting" || state.status === "disconnected")
 
   return (
     <SettingsFieldRow
@@ -41,16 +44,16 @@ function LiveConnectionPanel({ initialState = DEFAULT_LIVE_STATE }: LiveConnecti
       <div className="flex items-center justify-end gap-3">
         <div className="flex min-w-0 items-center gap-3" aria-live="polite">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-            <Icon className="size-4" aria-hidden="true" />
+            <Icon className={isLoading ? "size-4 animate-spin" : "size-4"} aria-hidden="true" />
           </span>
           <div className="min-w-0">
             <StatusPill
-              active={state.status === "connected"}
+              active={!isLoading && state.status === "connected"}
               activeLabel={label}
               inactiveLabel={label}
-              variant={state.status === "reconnecting" ? "warning" : "default"}
+              variant={!isLoading && state.status === "reconnecting" ? "warning" : "default"}
             />
-            {state.lastError ? (
+            {!isLoading && state.lastError ? (
               <p className="mt-1 text-xs text-muted-foreground">{state.lastError}</p>
             ) : null}
           </div>

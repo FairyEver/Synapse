@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
 import test from "node:test"
 
 import {
@@ -28,4 +29,13 @@ test("document links and copied Markdown share one environment replacement", () 
     ),
     "[契约](http://localhost:3000/api/open/openapi.json)\n`http://localhost:3000/api/open/v1`",
   )
+})
+
+test("document 404 keeps Chinese copy and a direct recovery action", async () => {
+  const config = await readFile(new URL("../../document/.vitepress/config.mts", import.meta.url), "utf8")
+
+  assert.match(config, /title:\s*'页面不存在'/u)
+  assert.match(config, /quote:\s*'请检查地址，或返回首页。'/u)
+  assert.match(config, /linkLabel:\s*'返回首页'/u)
+  assert.match(config, /linkText:\s*'返回首页'/u)
 })

@@ -47,6 +47,9 @@ describe("agent conversation window service", () => {
     }))
     expect(createWindow.mock.calls[0]?.[0]).not.toHaveProperty("maxWidth")
     expect(createWindow.mock.calls[0]?.[0]).not.toHaveProperty("maxHeight")
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Synapse AI Studio 对话 · 新会话",
+    }))
     expect(attachWindow).toHaveBeenCalledWith(
       "agent-conversation:project-1:conversation-1",
       window,
@@ -144,7 +147,7 @@ describe("agent conversation window service", () => {
       conversationId: "conversation-1",
     }, "新标题")).toBe(true)
 
-    expect(window.setTitle).toHaveBeenCalledWith("新标题")
+    expect(window.setTitle).toHaveBeenCalledWith("Synapse AI Studio 对话 · 新标题")
     expect(service.listDetachedConversations()).toEqual([expect.objectContaining({
       projectId: "project-1",
       conversationId: "conversation-1",
@@ -266,7 +269,7 @@ describe("agent conversation window service", () => {
       conversationId: "conversation-2",
       sessionKey: "local:renderer",
     })).toEqual({ focused: true })
-    expect(window.setTitle).toHaveBeenCalledWith("新会话")
+    expect(window.setTitle).toHaveBeenCalledWith("Synapse AI Studio 对话 · 新会话")
     expect(detachWindow).toHaveBeenCalledWith("agent-conversation:project-1:conversation-1")
     expect(attachWindow).toHaveBeenCalledWith("agent-conversation:project-1:conversation-2", window)
     expect(service.listDetachedConversations()).toEqual([{

@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { AlertCircle, Plus, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
@@ -89,10 +89,23 @@ function AutomationModule() {
   const { items, loading, error, refresh } = useAutomationItems()
   const { promise } = useAppNotifications()
   const [historyItem, setHistoryItem] = useState<AutomationItem | null>(null)
+  const historyReturnFocusRef = useRef<HTMLElement | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AutomationItem | null>(null)
+  const deleteReturnFocusRef = useRef<HTMLElement | null>(null)
+  const deleteSucceededRef = useRef(false)
+  const deleteFallbackFocusRef = useRef<HTMLButtonElement | null>(null)
+  const wasDeleteOpenRef = useRef(false)
   const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(() => new Set())
   const [openingEditor, setOpeningEditor] = useState(false)
   const [runningItemIds, setRunningItemIds] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    const open = Boolean(deleteTarget)
+    if (wasDeleteOpenRef.current && !open && !deleteSucceededRef.current) {
+      deleteReturnFocusRef.current?.focus()
+    }
+    wasDeleteOpenRef.current = open
+  }, [deleteTarget])
 
   async function runItemMutation<T>(
     itemId: string,
@@ -140,7 +153,10 @@ function AutomationModule() {
   async function handleDelete() {
     if (!deleteTarget) return
     const deleted = await deleteItem(deleteTarget)
-    if (deleted) setDeleteTarget(null)
+    if (deleted) {
+      deleteSucceededRef.current = true
+      setDeleteTarget(null)
+    }
   }
 
   function handleDeleteStart(item: AutomationItem, event: MouseEvent<HTMLElement>) {
@@ -149,6 +165,7 @@ function AutomationModule() {
       void deleteItem(item)
       return
     }
+    deleteReturnFocusRef.current = event.currentTarget
     setDeleteTarget(item)
   }
 
@@ -343,7 +360,10 @@ function AutomationModule() {
         onRun={(item) => { void handleRun(item) }}
         onStop={(item) => { void handleStop(item) }}
         onToggleEnabled={(item, enabled) => { void handleToggleEnabled(item, enabled) }}
-        onHistory={setHistoryItem}
+        onHistory={(item, event) => {
+          historyReturnFocusRef.current = event.currentTarget
+          setHistoryItem(item)
+        }}
         onDelete={handleDeleteStart}
         onCreateNew={() => { void handleCreateEditorOpen() }}
       />
@@ -367,6 +387,7 @@ function AutomationModule() {
               <RefreshCw className="size-4" />
             </SystemAppTopBarActionButton>
             <SystemAppTopBarActionButton
+              ref={deleteFallbackFocusRef}
               type="button"
               disabled={openingEditor}
               onClick={() => { void handleCreateEditorOpen() }}
@@ -382,6 +403,7 @@ function AutomationModule() {
               open={Boolean(historyItem)}
               item={historyItem}
               busy={Boolean(historyItem && pendingItemIds.has(historyItem.id))}
+              returnFocusRef={historyReturnFocusRef}
               onOpenChange={(open) => {
                 if (!open) setHistoryItem(null)
               }}
@@ -396,7 +418,16 @@ function AutomationModule() {
                 if (!open) setDeleteTarget(null)
               }}
             >
-              <AlertDialogContent>
+              <AlertDialogContent
+                onCloseAutoFocus={(event) => {
+                  event.preventDefault()
+                  const focusTarget = deleteSucceededRef.current
+                    ? deleteFallbackFocusRef.current
+                    : deleteReturnFocusRef.current
+                  deleteSucceededRef.current = false
+                  focusTarget?.focus()
+                }}
+              >
                 <AlertDialogHeader>
                   <AlertDialogTitle>删除自动化</AlertDialogTitle>
                   <AlertDialogDescription>
@@ -408,7 +439,10 @@ function AutomationModule() {
                   <AlertDialogAction
                     disabled={Boolean(deleteTarget && pendingItemIds.has(deleteTarget.id)) ||
                       deleteTarget?.activeRun?.status === "running"}
-                    onClick={() => { void handleDelete() }}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      void handleDelete()
+                    }}
                   >
                     删除
                   </AlertDialogAction>

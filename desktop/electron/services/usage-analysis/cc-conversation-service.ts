@@ -44,6 +44,8 @@ type SessionRow = {
 type AggregateRow = {
   readonly session_id: string
   readonly tokens: number
+  readonly priced_tokens: number
+  readonly unpriced_tokens: number
   readonly estimated_cost: number
   readonly last_timestamp_ms: number
 }
@@ -447,12 +449,18 @@ export class CcConversationService {
 
   async searchRecordsText(input: CcRecordListInput): Promise<CcRecordListResult> {
     const conversations = await this.searchConversationText(input)
+    const aggregates = this.queryRecordAggregates(conversations.items.map((item) => item.sessionId))
     return {
       ...conversations,
-      items: conversations.items.map((item) => ({
-        ...item,
-        requestCount: this.countUsageEvents(item.sessionId),
-      })),
+      items: conversations.items.map((item) => {
+        const aggregate = aggregates.get(item.sessionId)
+        return {
+          ...item,
+          requestCount: toNumber(aggregate?.request_count),
+          pricedTokens: toNumber(aggregate?.priced_tokens),
+          unpricedTokens: toNumber(aggregate?.unpriced_tokens),
+        }
+      }),
     }
   }
 
@@ -509,15 +517,6 @@ export class CcConversationService {
     return this.db.prepare("SELECT * FROM cc_sessions WHERE session_id = ?").get(sessionId) as SessionRow | undefined
   }
 
-  private countUsageEvents(sessionId: string): number {
-    const row = this.db.prepare(`
-      SELECT COUNT(*) AS total
-      FROM cc_usage_events
-      WHERE session_id = ?
-    `).get(sessionId) as { total?: number } | undefined
-    return toNumber(row?.total)
-  }
-
   private createSessionListFilter(input: CcConversationListInput): { whereSql: string; params: (string | number)[] } {
     const params: (string | number)[] = []
     const where: string[] = []
@@ -567,6 +566,8 @@ export class CcConversationService {
       SELECT
         session_id,
         SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
+        SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS priced_tokens,
+        SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS unpriced_tokens,
         SUM(total_cost) AS estimated_cost,
         MAX(timestamp_ms) AS last_timestamp_ms,
         COUNT(*) AS request_count
@@ -613,6 +614,8 @@ export class CcConversationService {
       endedAt: row.ended_at,
       modelSummary: row.model_summary,
       tokens: toNumber(aggregate?.tokens),
+      pricedTokens: toNumber(aggregate?.priced_tokens),
+      unpricedTokens: toNumber(aggregate?.unpriced_tokens),
       estimatedCost: toCostNumber(aggregate?.estimated_cost),
       toolCalls: toNumber(row.tool_call_count),
       eventCount: 0,
@@ -638,6 +641,16 @@ function usageTokenTotal(row: Record<string, unknown>): number {
 
 function toRecordDetailRow(row: Record<string, unknown>): CcRecordDetailRow {
   const durationMs = toNumber(row.duration_ms)
+  const tokens = usageTokenTotal(row)
+  const storedPricedTokens = toNumber(row.priced_tokens)
+  const storedUnpricedTokens = toNumber(row.unpriced_tokens)
+  const hasCompleteCoverage = storedPricedTokens + storedUnpricedTokens === tokens
+  const pricedTokens = hasCompleteCoverage
+    ? storedPricedTokens
+    : toNumber(row.price_known) === 1 ? tokens : 0
+  const unpricedTokens = hasCompleteCoverage
+    ? storedUnpricedTokens
+    : toNumber(row.price_known) === 1 ? 0 : tokens
   return {
     id: String(row.id ?? ""),
     usageEventId: String(row.id ?? ""),
@@ -646,9 +659,9 @@ function toRecordDetailRow(row: Record<string, unknown>): CcRecordDetailRow {
     sessionId: String(row.session_id ?? ""),
     workspaceLabel: String(row.workspace_label || row.workspace_key || "unknown"),
     model: String(row.model || "unknown"),
-    tokens: usageTokenTotal(row),
-    pricedTokens: toNumber(row.priced_tokens),
-    unpricedTokens: toNumber(row.unpriced_tokens),
+    tokens,
+    pricedTokens,
+    unpricedTokens,
     estimatedCost: toCostNumber(row.total_cost),
     tokenBreakdown: {
       input: toNumber(row.input_tokens),

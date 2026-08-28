@@ -6,13 +6,17 @@ import type { SynapseLiveState } from "@/types/live"
 
 const logger = createRendererLogger("live-connection")
 
-function useLiveConnection(initialState: SynapseLiveState) {
+function useLiveConnection(initialState: SynapseLiveState, showInitialLoading: boolean) {
   const [state, setState] = useState(initialState)
+  const [isLoading, setIsLoading] = useState(showInitialLoading)
   const [isRetrying, setIsRetrying] = useState(false)
 
   useEffect(() => {
     const bridge = getSynapseBridge()?.live
-    if (!bridge) return undefined
+    if (!bridge) {
+      setIsLoading(false)
+      return undefined
+    }
 
     let mounted = true
     void bridge.getState()
@@ -31,9 +35,13 @@ function useLiveConnection(initialState: SynapseLiveState) {
           }))
         }
       })
+      .finally(() => {
+        if (mounted) setIsLoading(false)
+      })
 
     const unsubscribe = bridge.onStateChanged((event) => {
       setState(event.state)
+      setIsLoading(false)
     })
 
     return () => {
@@ -57,7 +65,7 @@ function useLiveConnection(initialState: SynapseLiveState) {
     }
   }, [isRetrying])
 
-  return { isRetrying, retry, state }
+  return { isLoading, isRetrying, retry, state }
 }
 
 export { useLiveConnection }

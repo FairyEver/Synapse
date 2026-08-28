@@ -281,7 +281,7 @@ function MainApp() {
             disabled={dock.saving}
             value={activeAppId}
             onValueChange={handleDockValueChange}
-            onRemoveApp={(appId) => void dock.removeDockApp(appId)}
+            onRemoveApp={dock.removeDockApp}
             onManageDock={requestOpenSettingsDock}
           />
         }

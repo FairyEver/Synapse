@@ -48,6 +48,7 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
     success: "Done",
     error: "Failed",
     denied: "Denied",
+    cancelled: "Cancelled",
   },
 }
 
@@ -68,6 +69,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const detachedConversations = useDetachedAgentConversations()
   const pendingSessionRefreshKeyRef = useRef<string | null>(null)
   const pendingSessionMissingKeyRef = useRef<string | null>(null)
+  const detachedTargetKeyRef = useRef<string | null>(null)
+  const [restoringDetachedTargetKey, setRestoringDetachedTargetKey] = useState<string | null>(null)
 
   const projectOptions: ProjectOption[] = useMemo(() => [
     DEFAULT_AGENT_WORKSPACE_PROJECT,
@@ -97,13 +100,22 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         sessionKey: selectedSession.sessionKey,
       }
     : undefined
+  const selectedTargetKey = selectedTarget
+    ? `${selectedTarget.projectId}:${selectedTarget.conversationId}:${selectedTarget.sessionKey}`
+    : null
+  const selectedSessionRef = useRef(selectedSession)
+  selectedSessionRef.current = selectedSession
   const selectedDetached = isDetachedAgentConversation(detachedConversations, {
     projectId: selectedSession?.projectId,
     conversationId: selectedSession?.id,
   })
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
-  const contentLayout = selectedSession && selectedTarget && !selectedDetached ? "fill" : "center"
+  const restoringSelectedDetached = restoringDetachedTargetKey !== null
+    && restoringDetachedTargetKey === selectedTargetKey
+  const contentLayout = selectedSession && selectedTarget && !selectedDetached && !restoringSelectedDetached
+    ? "fill"
+    : "center"
   const mergedCommands = useMemo(() => {
     const defCommands = selectedAgentDefinition?.commands ?? []
     const runtimeCommands = chat.commands ?? []
@@ -207,6 +219,35 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     onPendingAgentSessionConsumed,
   ])
 
+  useEffect(() => {
+    if (selectedDetached) {
+      detachedTargetKeyRef.current = selectedTargetKey
+      setRestoringDetachedTargetKey(null)
+      return undefined
+    }
+
+    const detachedTargetKey = detachedTargetKeyRef.current
+    detachedTargetKeyRef.current = null
+    const targetSession = selectedSessionRef.current
+    if (!detachedTargetKey || detachedTargetKey !== selectedTargetKey || !targetSession) {
+      return undefined
+    }
+
+    setRestoringDetachedTargetKey(detachedTargetKey)
+    void chat.selectSession(targetSession).catch((rawError) => {
+      logger.error("Agent conversation restore after detached window close failed.", {
+        boundary: "renderer.agent.detached-close-restore",
+        projectId: targetSession.projectId,
+        conversationId: targetSession.id,
+        sessionKey: targetSession.sessionKey,
+        ...errorDiagnostic(rawError),
+      })
+    }).finally(() => {
+      setRestoringDetachedTargetKey((current) => current === detachedTargetKey ? null : current)
+    })
+    return undefined
+  }, [chat.selectSession, selectedDetached, selectedTargetKey])
+
   const handleOpenDetachedConversation = async (target: AgentConversationTarget) => {
     try {
       await requireSynapseBridge().agent.openConversationWindow({
@@ -296,6 +337,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     >
       {selectedDetached ? (
         <AgentDetachedPlaceholder onShowWindow={() => void handleShowDetachedConversation()} />
+      ) : restoringSelectedDetached ? (
+        <p className="text-sm text-muted-foreground">加载中</p>
       ) : selectedSession && selectedTarget ? (
         <AgentConversationWorkspace
           session={selectedSession}

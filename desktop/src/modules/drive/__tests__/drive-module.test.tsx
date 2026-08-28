@@ -3471,6 +3471,44 @@ describe("DriveModule", () => {
     expect(mocks.getDriveUsage).toHaveBeenCalledTimes(2)
   })
 
+  it("returns focus to the item delete action after cancelling confirmation", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+    ])
+    await render(<DriveModule />)
+    await flushAct()
+    const deleteButton = rowButton("report.txt", "删除")
+    expect(deleteButton).toBeTruthy()
+
+    await clickRowButtonText("report.txt", "删除")
+    await clickAlertDialogButton("取消")
+    await flushAct()
+
+    expect(document.activeElement).toBe(deleteButton)
+    expect(mocks.deleteDriveItem).not.toHaveBeenCalled()
+  })
+
+  it("moves focus to a neighboring item action after deleting the trigger row", async () => {
+    mocks.listDriveItems
+      .mockResolvedValueOnce([
+        createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),
+        createDriveItem({ id: "file-2", name: "next.txt", type: "file" }),
+      ])
+      .mockImplementationOnce(async () => {
+        await flushPromises()
+        return [createDriveItem({ id: "file-2", name: "next.txt", type: "file" })]
+      })
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickRowButtonText("report.txt", "删除")
+    await clickAlertDialogButton("删除")
+    await flushAct()
+    await flushAct()
+
+    expect(document.activeElement).toBe(rowButton("next.txt", "删除"))
+  })
+
   it("deletes an item immediately when Alt-clicking delete", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "report.txt", type: "file" }),

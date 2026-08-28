@@ -65,8 +65,29 @@ function formatCreateTableSubmitError(error: unknown): string {
   return message || "创建失败"
 }
 
+function formatDatabaseFolderOperationError(
+  action: "create" | "rename" | "delete" | "move",
+  error: unknown,
+): string {
+  const message = error instanceof Error ? error.message : ""
+  if (
+    (action === "create" || action === "rename")
+    && /UNIQUE constraint failed: _table_folders\.name/i.test(message)
+  ) {
+    return "文件夹名称已存在"
+  }
+
+  return {
+    create: "新建文件夹失败，请重试。",
+    rename: "重命名文件夹失败，请重试。",
+    delete: "删除文件夹失败，请重试。",
+    move: "移动数据表失败，请重试。",
+  }[action]
+}
+
 export {
   EMPTY_DATABASE_QUERY_RESULT,
+  formatDatabaseFolderOperationError,
   formatCreateTableSubmitError,
   getCurrentDatabaseError,
   getCurrentDatabaseQueryResult,

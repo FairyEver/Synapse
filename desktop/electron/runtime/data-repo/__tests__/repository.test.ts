@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -90,6 +90,66 @@ describe("DataRepositoryImpl (T2.13)", () => {
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
+  })
+
+  it("skips excluded namespaces before reading their service-owned files", async () => {
+    const dir = await tempDir()
+    try {
+      const repo = createDataRepository()
+      const filePath = path.join(dir, "core.config.json")
+      await writeFile(filePath, JSON.stringify({
+        schemaVersion: 1,
+        singleton: {
+          activeRepoUuid: null,
+          repositories: [],
+          global: {},
+        },
+        items: {},
+      }), "utf8")
+      const handle = new JsonNamespace<CoreConfigV1>({
+        name: coreConfigSchema.name,
+        schemaVersion: coreConfigSchema.currentVersion,
+        backend: "json",
+        filePath,
+        validate: coreConfigSchema.validate,
+      })
+      repo.register(coreConfigSchema, handle)
+
+      await expect(repo.exportAll({ excludeNamespaces: ["core.config"] }))
+        .resolves.toMatchObject({ namespaces: [] })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("exports empty namespace entries without reading omitted backup bodies", async () => {
+    const failRead = async (): Promise<never> => {
+      throw new Error("namespace body should not be read")
+    }
+    const repo = createDataRepository()
+    const handle: DataNamespace<CoreConfigV1> = {
+      name: coreConfigSchema.name,
+      schemaVersion: coreConfigSchema.currentVersion,
+      backend: "json",
+      getSingleton: failRead,
+      setSingleton: async () => {},
+      list: failRead,
+      get: failRead,
+      upsert: async () => {},
+      remove: async () => {},
+      onChange: () => () => {},
+    }
+    repo.register(coreConfigSchema, handle)
+
+    await expect(repo.exportAll({ emptyNamespaces: ["core.config"] }))
+      .resolves.toMatchObject({
+        namespaces: [{
+          name: "core.config",
+          schemaVersion: 1,
+          encrypted: false,
+          data: { items: [] },
+        }],
+      })
   })
 
   it("exportAll() omits encrypted namespace data unless includeSecrets is true", async () => {

@@ -1,4 +1,21 @@
 export const AGENT_ATTACHMENT_CONTRACT_VERSION = 2 as const
+export const AGENT_ATTACHMENT_REFERENCE_PREFIX = "synapse-agent-attachment://local/"
+
+export function agentAttachmentReference(attachmentId: string): string {
+  return `${AGENT_ATTACHMENT_REFERENCE_PREFIX}${encodeURIComponent(attachmentId)}`
+}
+
+export function parseAgentAttachmentReference(reference: string): string | null {
+  if (!reference.startsWith(AGENT_ATTACHMENT_REFERENCE_PREFIX)) return null
+  const encodedId = reference.slice(AGENT_ATTACHMENT_REFERENCE_PREFIX.length)
+  if (!encodedId || encodedId.includes("/")) return null
+  try {
+    const attachmentId = decodeURIComponent(encodedId)
+    return attachmentId.includes("/") ? null : attachmentId
+  } catch {
+    return null
+  }
+}
 
 export const AGENT_ATTACHMENT_IMAGE_MIME_TYPES = [
   "image/jpeg",

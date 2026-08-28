@@ -18,6 +18,7 @@ import type {
 } from "../../../src/types/agent"
 import { formatAgentTranscript } from "../../../src/lib/agent-transcript"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
+import { isAbsoluteLocalPath, redactAbsolutePathsInText } from "../error-sanitize"
 import { REDACTED, redactSensitiveValue } from "./redaction"
 import {
   isStreamDiagnosticEntry,
@@ -30,6 +31,7 @@ import {
 const EXPORT_SOURCE = "agent.exportConversationBundle"
 const MAX_EXPORT_FILE_NAME_SEGMENT_LENGTH = 80
 const STREAM_DIAGNOSTIC_EXPORT_METADATA_RESERVE_BYTES = 16 * 1024
+const STRUCTURED_ABSOLUTE_PATH_FIELD_NAMES = new Set(["cwd", "fileurl", "workdir"])
 
 export interface AgentConversationExportRequest {
   readonly projectId: string
@@ -217,7 +219,9 @@ class AgentConversationExportService {
         skipped,
       )
       const sdkStreamEvents = buildSdkStreamExport(persistedAgentEvents, conversation)
-      const agentEvents = persistedAgentEvents.filter((entry) => !isStreamDiagnosticEntry(entry))
+      const agentEvents = persistedAgentEvents
+        .filter((entry) => !isStreamDiagnosticEntry(entry))
+        .map(sanitizeAgentEventForExport)
       const agentUsage = await this.collectRows(
         "agent-usage.json",
         () => this.deps.agentUsage.list({
@@ -274,7 +278,7 @@ class AgentConversationExportService {
         redaction: {
           enabled: true,
           marker: "[redacted]",
-          description: "Sensitive tokens, session keys, API keys, Authorization/Bearer headers, cookies, passwords, credentials, and secrets are redacted.",
+          description: "Sensitive tokens, session keys, API keys, Authorization/Bearer headers, cookies, passwords, credentials, secrets, and local absolute paths are redacted.",
         },
         attachments: {
           binaryIncluded: false,
@@ -388,7 +392,7 @@ class AgentConversationExportService {
     value: unknown,
     included?: string[],
   ): Promise<void> {
-    await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportValue(value), null, 2)}\n`, included)
+    await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportOutputValue(value), null, 2)}\n`, included)
   }
 
   private async writeCompactJson(
@@ -397,7 +401,7 @@ class AgentConversationExportService {
     value: unknown,
     included?: string[],
   ): Promise<void> {
-    await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportValue(value))}\n`, included)
+    await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportOutputValue(value))}\n`, included)
   }
 
   private async writeText(
@@ -805,6 +809,42 @@ function sanitizeExportValue<T>(value: T): unknown {
   return normalizeExportMarkers(redactSensitiveValue(sanitizeAttachmentPaths(value)))
 }
 
+function sanitizeExportOutputValue<T>(value: T): unknown {
+  return redactAbsolutePaths(sanitizeExportValue(value))
+}
+
+function sanitizeAgentEventForExport(entry: AgentEventEntryV1): AgentEventEntryV1 {
+  if (entry.eventType !== "sessionInit") return entry
+  return {
+    ...entry,
+    payload: redactSessionInitRuntimePaths(entry.payload) as Record<string, unknown>,
+  }
+}
+
+function redactSessionInitRuntimePaths(
+  value: unknown,
+  seen: WeakMap<object, unknown> = new WeakMap(),
+): unknown {
+  if (!value || typeof value !== "object") return value
+  const cached = seen.get(value)
+  if (cached) return cached
+  if (Array.isArray(value)) {
+    const redacted: unknown[] = []
+    seen.set(value, redacted)
+    value.forEach((item) => redacted.push(redactSessionInitRuntimePaths(item, seen)))
+    return redacted
+  }
+  if (!isRecord(value)) return value
+  const redacted: Record<string, unknown> = {}
+  seen.set(value, redacted)
+  Object.entries(value).forEach(([key, item]) => {
+    redacted[key] = key === "cwd" || key === "memory_paths"
+      ? REDACTED
+      : redactSessionInitRuntimePaths(item, seen)
+  })
+  return redacted
+}
+
 function sanitizeAttachmentPaths(
   value: unknown,
   seen: WeakMap<object, unknown> = new WeakMap(),
@@ -833,14 +873,52 @@ function sanitizeAttachmentPaths(
 }
 
 function normalizeExportMarkers(value: unknown): unknown {
-  if (typeof value === "string") return normalizeExportText(value)
+  if (typeof value === "string") return value.replace(/\[key\]/g, "[redacted]")
   if (Array.isArray(value)) return value.map((item) => normalizeExportMarkers(item))
   if (!value || typeof value !== "object") return value
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeExportMarkers(item)]))
 }
 
+function redactAbsolutePaths(
+  value: unknown,
+  fieldName?: string,
+  inheritedPathContainer = false,
+): unknown {
+  const normalizedFieldName = fieldName?.replace(/[-_\s]/g, "").toLowerCase()
+  const isPathContainer = inheritedPathContainer
+    || (normalizedFieldName ? isStructuredPathContainerField(normalizedFieldName) : false)
+  if (typeof value === "string") {
+    if (
+      (isPathContainer || (normalizedFieldName && isStructuredAbsolutePathField(normalizedFieldName)))
+      && isAbsoluteLocalPath(value)
+    ) {
+      return "[path]"
+    }
+    return normalizeExportText(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactAbsolutePaths(item, fieldName, isPathContainer))
+  }
+  if (!value || typeof value !== "object") return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, redactAbsolutePaths(item, key, isPathContainer)]),
+  )
+}
+
+function isStructuredAbsolutePathField(normalizedFieldName: string): boolean {
+  if (normalizedFieldName.endsWith("url") && normalizedFieldName !== "fileurl") return false
+  return STRUCTURED_ABSOLUTE_PATH_FIELD_NAMES.has(normalizedFieldName)
+    || normalizedFieldName.endsWith("path")
+    || normalizedFieldName.endsWith("directory")
+    || normalizedFieldName.endsWith("root")
+}
+
+function isStructuredPathContainerField(normalizedFieldName: string): boolean {
+  return normalizedFieldName.endsWith("paths") || normalizedFieldName.endsWith("directories")
+}
+
 function normalizeExportText(value: string): string {
-  return value.replace(/\[key\]/g, "[redacted]")
+  return redactAbsolutePathsInText(value).replace(/\[key\]/g, "[redacted]")
 }
 
 function auditRequestMetadata(request: AgentConversationExportRequest): Record<string, unknown> {

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   timelineProps: [] as Array<{ readonly referenceActions?: unknown }>,
   composerProps: [] as Array<{
+    readonly draft: string
     readonly onDraftChange: (value: string) => void
     readonly onSubmit: (
       event: { preventDefault: () => void },
@@ -49,6 +50,7 @@ vi.mock("@/app-shell/config", () => ({
 
 vi.mock("../components/agent-composer", () => ({
   AgentComposer: (props: {
+    readonly draft: string
     readonly onStartNewConversation?: () => void
     readonly disabled?: boolean
     readonly quickInputs?: readonly { readonly content: string }[]
@@ -203,9 +205,11 @@ describe("AgentConversationWorkspace", () => {
       .find((button) => button.textContent === "保存")
     await act(async () => {
       saveButton?.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
     })
 
     expect(onRename).toHaveBeenCalledWith(session, "需求复盘")
+    expect(document.activeElement).toBe(container.querySelector("h2"))
   })
 
   it("hides detached button in window mode", () => {
@@ -271,6 +275,41 @@ describe("AgentConversationWorkspace", () => {
     })
 
     expect(container.textContent).not.toContain("待回答 1")
+  })
+
+  it("clears an unsent draft when switching conversations", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(workspaceElement({ mode: "embedded" }))
+    })
+    await act(async () => {
+      mocks.composerProps.at(-1)?.onDraftChange("conversation-one-draft")
+    })
+    expect(mocks.composerProps.at(-1)?.draft).toBe("conversation-one-draft")
+
+    await act(async () => {
+      root.render(workspaceElement({
+        mode: "embedded",
+        session: {
+          ...session,
+          id: "conversation-2",
+          sessionKey: "local:conversation-2",
+          name: "第二个会话",
+        },
+        target: {
+          projectId: "project-1",
+          conversationId: "conversation-2",
+          sessionKey: "local:conversation-2",
+        },
+      }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.composerProps.at(-1)?.draft).toBe("")
   })
 
   it("shows the fixed persona name in the conversation header", () => {
@@ -499,6 +538,7 @@ function skillCommand(name: string): SynapseAgentPublishedCommand {
 function renderWorkspace(options: {
   readonly mode: "embedded" | "window"
   readonly session?: SynapseAgentSessionSummary
+  readonly target?: { readonly projectId: string; readonly conversationId: string; readonly sessionKey: string }
   readonly onOpenDetached?: (target: { projectId: string; conversationId: string; sessionKey: string }) => void
   readonly project?: SynapseProjectConfig
   readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
@@ -511,11 +551,27 @@ function renderWorkspace(options: {
   const root = createRoot(container)
   roots.push(root)
   act(() => {
-    root.render(
-      <AgentConversationWorkspace
+    root.render(workspaceElement(options))
+  })
+  return container
+}
+
+function workspaceElement(options: {
+  readonly mode: "embedded" | "window"
+  readonly session?: SynapseAgentSessionSummary
+  readonly target?: { readonly projectId: string; readonly conversationId: string; readonly sessionKey: string }
+  readonly onOpenDetached?: (target: { projectId: string; conversationId: string; sessionKey: string }) => void
+  readonly project?: SynapseProjectConfig
+  readonly onReplaceDetachedTarget?: (session: SynapseAgentSessionSummary) => Promise<boolean>
+  readonly onRename?: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
+  readonly chat?: AgentConversationWorkspaceController
+  readonly commands?: readonly SynapseAgentPublishedCommand[]
+}) {
+  return (
+    <AgentConversationWorkspace
         session={options.session ?? session}
         project={options.project}
-        target={{ projectId: "project-1", conversationId: "conversation-1", sessionKey: "local:renderer" }}
+        target={options.target ?? { projectId: "project-1", conversationId: "conversation-1", sessionKey: "local:renderer" }}
         chat={options.chat ?? createController()}
         quickInputs={[]}
         commands={options.commands ?? []}
@@ -543,10 +599,8 @@ function renderWorkspace(options: {
         onOpenDetached={options.onOpenDetached}
         onReplaceDetachedTarget={options.onReplaceDetachedTarget}
         onRename={options.onRename}
-      />,
-    )
-  })
-  return container
+    />
+  )
 }
 
 function createController(

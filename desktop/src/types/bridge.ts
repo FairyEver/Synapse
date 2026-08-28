@@ -295,6 +295,10 @@ import type {
 import type {
   SynapseAgentCancelTurnResult,
   SynapseAgentConversationExportResult,
+  SynapseAgentFileCheckpointDetail,
+  SynapseAgentFileCheckpointDiff,
+  SynapseAgentFileCheckpointPrepareResult,
+  SynapseAgentFileCheckpointRewindResult,
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
   SynapseAgentPublishedCommand,
@@ -1691,6 +1695,18 @@ export type SynapseBridge = {
     getTimeline: (
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number; beforeIndex?: number },
     ) => Promise<SynapseAgentTimelineResult>
+    getFileCheckpoint: (
+      args: { projectId: string; conversationId: string; checkpointId: string },
+    ) => Promise<SynapseAgentFileCheckpointDetail>
+    getFileCheckpointDiff: (
+      args: { projectId: string; conversationId: string; checkpointId: string; fileId: string },
+    ) => Promise<SynapseAgentFileCheckpointDiff>
+    prepareFileCheckpointRewind: (
+      args: { projectId: string; conversationId: string; checkpointId: string },
+    ) => Promise<SynapseAgentFileCheckpointPrepareResult>
+    confirmFileCheckpointRewind: (
+      args: { projectId: string; conversationId: string; operationId: string },
+    ) => Promise<SynapseAgentFileCheckpointRewindResult>
     exportConversationBundle: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
     ) => Promise<SynapseAgentConversationExportResult>

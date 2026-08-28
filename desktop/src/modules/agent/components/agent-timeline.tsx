@@ -109,6 +109,7 @@ function AgentTimeline({
                           key={entry.item.id}
                           item={entry.item}
                           {...(entry.result ? { toolResult: entry.result } : {})}
+                          {...(entry.cancelled ? { toolCancelled: true } : {})}
                           profile={profile}
                           agentIcon={agentIcon}
                           pendingPermissions={pendingPermissions}
@@ -130,6 +131,7 @@ function AgentTimeline({
                   key={entry.item.id}
                   item={entry.item}
                   {...(entry.result ? { toolResult: entry.result } : {})}
+                  {...(entry.cancelled ? { toolCancelled: true } : {})}
                   profile={profile}
                   agentIcon={agentIcon}
                   pendingPermissions={pendingPermissions}

@@ -54,7 +54,7 @@ export function AgentGitActionMenu({
           <ChevronDown data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" onCloseAutoFocus={(event) => event.preventDefault()}>
+      <DropdownMenuContent align="start">
         <DropdownMenuItem disabled={operationDisabled} onSelect={() => onPrepareCommit("commit")}>
           提交全部改动
         </DropdownMenuItem>

@@ -53,7 +53,6 @@ function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuP
       <DropdownMenuContent
         align="start"
         className="w-80"
-        onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {quickInputs.map((item) => (
           <DropdownMenuItem

@@ -121,6 +121,43 @@ describe('ApiKeysSettings', () => {
     expect(document.body.textContent).toContain('CLI')
   })
 
+  it('restores focus to the create trigger after cancelling with Escape', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([])
+
+    renderSettings()
+    await waitForText('尚无秘钥')
+    const createTrigger = buttonByText('创建秘钥')
+    createTrigger.focus()
+    await click(createTrigger)
+    await waitForText('完整秘钥只会显示一次。')
+
+    await pressEscape(inputById('api-key-name'))
+
+    await waitFor(() => {
+      expect(document.body.textContent).not.toContain('完整秘钥只会显示一次。')
+      expect(document.activeElement).toBe(createTrigger)
+    })
+  })
+
+  it('discards the create draft after cancelling', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([])
+
+    renderSettings()
+    await waitForText('尚无秘钥')
+    await click(buttonByText('创建秘钥'))
+    await waitForText('完整秘钥只会显示一次。')
+    await inputValue(inputById('api-key-name'), '未提交草稿')
+    await click(permissionOption('获取公共链接文件'))
+    await click(buttonByText('取消'))
+
+    await click(buttonByText('创建秘钥'))
+    await waitForText('完整秘钥只会显示一次。')
+
+    expect(inputById('api-key-name').value).toBe('')
+    expect(checkbox().getAttribute('data-state')).toBe('unchecked')
+    expect(buttonByText('创建', 'last').disabled).toBe(true)
+  })
+
   it('edits an existing key permission set without rotating the secret', async () => {
     mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
     mockedDashboardApi.updateApiKeyPermissions.mockResolvedValue(apiKey({ scopes: [] }))
@@ -151,6 +188,23 @@ describe('ApiKeysSettings', () => {
     })
   })
 
+  it('restores focus to the permission trigger after cancelling', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
+
+    renderSettings()
+    await waitForText('开发环境')
+    const permissionTrigger = buttonByText('编辑权限')
+    await click(permissionTrigger)
+    await waitForText('编辑 API 权限')
+
+    await click(buttonByText('取消'))
+
+    await waitFor(() => {
+      expect(document.body.textContent).not.toContain('编辑 API 权限')
+      expect(document.activeElement).toBe(permissionTrigger)
+    })
+  })
+
   it('renames an existing key without changing its secret or permissions', async () => {
     mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
     mockedDashboardApi.renameApiKey.mockResolvedValue(apiKey({ name: '生产环境' }))
@@ -174,6 +228,23 @@ describe('ApiKeysSettings', () => {
     })
     expect(document.body.textContent).toContain('syn_sk_12345678...')
     expect(document.body.textContent).toContain('获取公共链接文件')
+  })
+
+  it('restores focus to the rename trigger after cancelling', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
+
+    renderSettings()
+    await waitForText('开发环境')
+    const renameTrigger = buttonByText('重命名')
+    await click(renameTrigger)
+    await waitForText('重命名秘钥')
+
+    await click(buttonByText('取消'))
+
+    await waitFor(() => {
+      expect(document.body.textContent).not.toContain('重命名秘钥')
+      expect(document.activeElement).toBe(renameTrigger)
+    })
   })
 
   it('shows a retry action when API permissions fail to load', async () => {
@@ -203,6 +274,7 @@ describe('ApiKeysSettings', () => {
 
     renderSettings()
     await waitForText('开发环境')
+    const createTrigger = buttonByText('创建秘钥')
     await click(buttonByText('撤销'))
     await waitForText('撤销“开发环境”后将无法恢复。')
     await click(buttonByText('撤销', 'last'))
@@ -210,6 +282,24 @@ describe('ApiKeysSettings', () => {
     await waitFor(() => {
       expect(mockedDashboardApi.revokeApiKey).toHaveBeenCalledWith('key-1')
       expect(document.body.textContent).not.toContain('开发环境')
+      expect(document.activeElement).toBe(createTrigger)
+    })
+  })
+
+  it('restores focus to the revoke trigger after cancelling', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
+
+    renderSettings()
+    await waitForText('开发环境')
+    const revokeTrigger = buttonByText('撤销')
+    await click(revokeTrigger)
+    await waitForText('撤销“开发环境”后将无法恢复。')
+
+    await click(buttonByText('取消'))
+
+    await waitFor(() => {
+      expect(document.body.textContent).not.toContain('撤销“开发环境”后将无法恢复。')
+      expect(document.activeElement).toBe(revokeTrigger)
     })
   })
 
@@ -246,6 +336,23 @@ describe('ApiKeysSettings', () => {
     })
     expect(document.body.textContent).toContain('下载')
     expect(document.body.textContent).toContain('成功')
+  })
+
+  it('restores focus to the usage trigger after closing', async () => {
+    mockedDashboardApi.listApiKeys.mockResolvedValue([apiKey()])
+
+    renderSettings()
+    await waitForText('开发环境')
+    const usageTrigger = buttonByText('使用记录')
+    await click(usageTrigger)
+    await waitForText('暂无使用记录')
+
+    await pressEscape(document.activeElement as HTMLElement)
+
+    await waitFor(() => {
+      expect(document.body.textContent).not.toContain('暂无使用记录')
+      expect(document.activeElement).toBe(usageTrigger)
+    })
   })
 })
 
@@ -297,6 +404,17 @@ async function inputValue(input: HTMLInputElement, value: string) {
 async function click(element: HTMLElement) {
   await act(async () => {
     element.click()
+    await Promise.resolve()
+  })
+}
+
+async function pressEscape(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    }))
     await Promise.resolve()
   })
 }

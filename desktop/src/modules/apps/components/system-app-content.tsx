@@ -149,6 +149,8 @@ function LauncherContent({
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
+  const [launcherFocusAppId, setLauncherFocusAppId] =
+    useState<SynapseSystemAppId | null>(null)
   const resetKeyRef = useRef(resetKey)
   const dock = useDockPreferences({ workflowEntryVisible })
 
@@ -166,6 +168,7 @@ function LauncherContent({
   }, [resetKey])
 
   const openApp = useCallback((appId: SynapseSystemAppId) => {
+    setLauncherFocusAppId(null)
     setActiveAppId(appId)
   }, [])
 
@@ -178,6 +181,7 @@ function LauncherContent({
         throw new Error("System app window bridge is unavailable.")
       }
       await appsBridge.openSystemApp(appId)
+      setLauncherFocusAppId(appId)
       setActiveAppId(null)
       setResourceContentOpenRequest(null)
     } catch {
@@ -204,6 +208,7 @@ function LauncherContent({
         <EmbeddedSystemAppShell
           appName={activeApp.name}
           onBack={() => {
+            setLauncherFocusAppId(activeApp.id)
             setActiveAppId(null)
             setResourceContentOpenRequest(null)
           }}
@@ -230,6 +235,7 @@ function LauncherContent({
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
               apps={listLaunchableSystemApps({ workflowEntryVisible })}
+              focusAppId={launcherFocusAppId}
               pinnedAppIds={dock.dockAppIds}
               disabled={dock.saving}
               onOpenApp={openApp}

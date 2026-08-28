@@ -75,6 +75,8 @@ import { AgentSessionRenameDialog } from "./agent-session-rename-dialog"
 import { AgentSessionCreateDialog } from "./agent-session-create-dialog"
 import { AgentTimeline } from "./agent-timeline"
 import { AgentGitCommitDialog } from "./agent-git-commit-dialog"
+import { AgentWorkspaceShell } from "./agent-workspace-shell"
+import { AgentFileCheckpointPanel } from "./agent-file-checkpoint-panel"
 
 const logger = createRendererLogger("agent")
 const EMPTY_QUICK_INPUTS: readonly SynapseQuickInputItem[] = []
@@ -177,6 +179,7 @@ function AgentConversationWorkspace({
   const [creatingConversation, setCreatingConversation] = useState(false)
   const [isExportingConversation, setIsExportingConversation] = useState(false)
   const [renameTarget, setRenameTarget] = useState<SynapseAgentSessionSummary | null>(null)
+  const renameReturnFocusRef = useRef<HTMLElement | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createMode, setCreateMode] = useState<SynapseAgentPermissionMode | undefined>()
   const [createInitialName, setCreateInitialName] = useState("")
@@ -240,6 +243,11 @@ function AgentConversationWorkspace({
   useEffect(() => {
     recentSlashSkillsRef.current = config.agent.recentSlashSkills
   }, [config.agent.recentSlashSkills])
+
+  useEffect(() => {
+    setDraft("")
+  }, [target.conversationId, target.projectId, target.sessionKey])
+
   const personas = chat.personas ?? []
   const activePersona = personas.find((item) => item.id === session.activeMainThreadPersonaId)
   const personaUnavailable = Boolean(
@@ -576,8 +584,30 @@ function AgentConversationWorkspace({
     setCreateDialogOpen(true)
   }
 
+  const workspacePanels = useMemo(() => [{
+    id: "agent.file-diff" as const,
+    title: () => "审查文件",
+    render: (request: { readonly checkpointId: string; readonly fileId?: string; readonly action?: "review" | "rewind" }) => (
+      <AgentFileCheckpointPanel
+        projectId={target.projectId}
+        conversationId={target.conversationId}
+        request={request}
+        onRewound={chat.refresh}
+      />
+    ),
+    isSameTarget: (
+      left: { readonly checkpointId: string; readonly fileId?: string },
+      right: { readonly checkpointId: string; readonly fileId?: string },
+    ) => left.checkpointId === right.checkpointId && left.fileId === right.fileId,
+  }], [chat.refresh, target.conversationId, target.projectId])
+
   return (
-    <div
+    <AgentWorkspaceShell
+      conversationKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
+      mode={mode}
+      panels={workspacePanels}
+    >
+      <div
       ref={workspaceRef}
       className="relative flex h-full min-h-0 flex-col gap-0 bg-background px-2 py-2.5"
       data-agent-conversation-workspace
@@ -586,8 +616,12 @@ function AgentConversationWorkspace({
         <div className="@container/agent-header flex items-center justify-between gap-2 px-0 py-0">
           <div className="flex min-w-0 items-center gap-2">
             <h2
-              className="truncate text-sm font-medium"
-              onDoubleClick={onRename ? () => setRenameTarget(session) : undefined}
+              tabIndex={-1}
+              className="truncate text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              onDoubleClick={onRename ? (event) => {
+                renameReturnFocusRef.current = event.currentTarget
+                setRenameTarget(session)
+              } : undefined}
             >
               {sessionLabel(session)}
             </h2>
@@ -700,6 +734,7 @@ function AgentConversationWorkspace({
           session={renameTarget}
           onOpenChange={(nextOpen) => { if (!nextOpen) setRenameTarget(null) }}
           onRename={onRename}
+          returnFocusRef={renameReturnFocusRef}
         />
       ) : null}
 
@@ -737,6 +772,7 @@ function AgentConversationWorkspace({
       />
 
       <AgentComposer
+        key={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         projectId={target.projectId}
         focusInputKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         dropTargetRef={workspaceRef}
@@ -819,7 +855,8 @@ function AgentConversationWorkspace({
           }
         }}
       />
-    </div>
+      </div>
+    </AgentWorkspaceShell>
   )
 }
 

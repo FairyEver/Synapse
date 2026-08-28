@@ -7,11 +7,12 @@ import type {
   PermissionResult,
   PermissionUpdate,
   Query,
+  RewindFilesResult,
   SDKControlGetContextUsageResponse,
   SDKMessage,
-  SessionStore,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
+import { lstat, realpath } from "node:fs/promises"
 import path from "node:path"
 
 import {
@@ -20,6 +21,7 @@ import {
   resolveCachedLoginShellPath,
 } from "../../runtime/process"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import { isFileNotFoundError, isPathInside } from "../fs-utils"
 import type {
   AgentContextWindowConfigurationSource,
   AgentModelContextReference,
@@ -76,6 +78,10 @@ import {
   SynapseToolRouterQuery,
   type SynapseToolRouterQueryOptions,
 } from "./synapse-tool-router-query"
+import {
+  AgentFileCheckpointTracker,
+  isReplayedUserMessage,
+} from "./agent-file-checkpoint-tracker"
 
 export interface QueryLike {
   next(): Promise<IteratorResult<SDKMessage, void>>
@@ -85,6 +91,7 @@ export interface QueryLike {
   setPermissionMode?(mode: PermissionMode): Promise<void>
   grantAdditionalDirectories?(directories: readonly string[]): Promise<void>
   getContextUsage?(): Promise<SDKControlGetContextUsageResponse>
+  rewindFiles?(userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult>
 }
 
 export type QueryFactory = (input: {
@@ -200,6 +207,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly toolPolicy: ClaudeSDKToolPolicy | undefined
   private readonly synapseToolRouterEnabled: boolean
   private readonly routerSubagentToolAccess: NonNullable<ClaudeSDKSessionOptions["routerSubagentToolAccess"]>
+  private readonly cwd: string
   private readonly query: QueryLike
   private additionalDirectories: readonly string[]
   private readonly abortController: AbortController | undefined
@@ -213,6 +221,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly subagentTypesById = new Map<string, string>()
   private readonly attachmentPathLabels = new Map<string, string>()
   private readonly contextUsageTracker: AgentContextUsageTracker
+  private readonly fileCheckpointTracker: AgentFileCheckpointTracker
   private lastTodoWriteSignature: string | undefined
   private repeatedTodoWriteCount = 0
   private closed = false
@@ -232,9 +241,14 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.projectId = options.projectId
     this.conversationId = options.conversationId
     this.providerId = options.providerId
+    this.cwd = path.resolve(options.cwd)
     this.contextUsageTracker = new AgentContextUsageTracker({
       modelContext: options.modelContext,
       contextWindowConfigurationSource: options.contextWindowConfigurationSource,
+    })
+    this.fileCheckpointTracker = new AgentFileCheckpointTracker({
+      cwd: this.cwd,
+      logger: options.logger,
     })
     this.sdkSessionId = options.sdkSessionId
     this.logger = options.logger
@@ -348,6 +362,30 @@ export class ClaudeSDKSession implements AgentLiveSession {
     ))
   }
 
+  beginFileCheckpoint(turnId: string): void {
+    this.fileCheckpointTracker.begin(turnId)
+  }
+
+  async finalizeFileCheckpoint() {
+    const sdkUserMessageId = this.fileCheckpointTracker.activeSdkUserMessageId()
+    return this.fileCheckpointTracker.finalize(
+      this.sdkSessionId,
+      () => sdkUserMessageId && this.query.rewindFiles
+        ? this.query.rewindFiles(sdkUserMessageId, { dryRun: true })
+        : Promise.resolve({ canRewind: false }),
+    )
+  }
+
+  async rewindFiles(
+    sdkUserMessageId: string,
+    options?: { readonly dryRun?: boolean },
+  ): Promise<RewindFilesResult> {
+    if (!this.query.rewindFiles) {
+      return { canRewind: false, error: "当前 Agent Runtime 不支持文件撤销。" }
+    }
+    return this.query.rewindFiles(sdkUserMessageId, options)
+  }
+
   nextEvent(): Promise<AgentEvent | null> {
     return this.eventQueue.next()
   }
@@ -431,11 +469,14 @@ export class ClaudeSDKSession implements AgentLiveSession {
     })
     const sdkEnv = mergeEnvironmentWithPath(hostEnv, {
       ...options.env,
+      PWD: this.cwd,
       BASH_DEFAULT_TIMEOUT_MS: CLAUDE_CODE_LONG_TASK_TIMEOUT_MS,
       BASH_MAX_TIMEOUT_MS: CLAUDE_CODE_LONG_TASK_TIMEOUT_MS,
     })
     const queryOptions: Partial<Options> = {
-      cwd: options.cwd,
+      cwd: this.cwd,
+      enableFileCheckpointing: true,
+      extraArgs: { "replay-user-messages": null },
       settingSources: ["user", "project", "local"],
       skills: "all",
       settings: {
@@ -459,15 +500,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
       ;(queryOptions as Record<string, unknown>).agent = options.agent
     }
     if (options.agents && Object.keys(options.agents).length > 0) queryOptions.agents = options.agents
-    if (options.systemPrompt) queryOptions.systemPrompt = options.systemPrompt
+    queryOptions.systemPrompt = withConfiguredWorkspaceRoot(options.systemPrompt, this.cwd)
     if (options.tools !== undefined) queryOptions.tools = options.tools
     if (options.disallowedTools?.length) queryOptions.disallowedTools = [...options.disallowedTools]
     if (this.additionalDirectories.length > 0) {
       queryOptions.additionalDirectories = [...this.additionalDirectories]
-    }
-    if (options.onConversationTitle && !options.sdkSessionId) {
-      queryOptions.sessionStore = conversationTitleSessionStore(options.onConversationTitle)
-      queryOptions.sessionStoreFlush = "eager"
     }
     queryOptions.hooks = this.buildHooks()
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
@@ -491,6 +528,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
         hooks: [async (input: HookInput): Promise<HookJSONOutput> => this.guardRepeatedTodoWrite(input)],
       }],
     }
+    hooks.PreToolUse?.push({
+      matcher: "*",
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
+        const workspaceBoundaryResult = await this.guardConfiguredWorkspaceWrite(input)
+        if (workspaceBoundaryResult) return workspaceBoundaryResult
+        await this.fileCheckpointTracker.captureBeforeTool(input)
+        return {}
+      }],
+    })
 
     if (this.personaToolPolicy && this.personaToolPolicy.mode !== "all") {
       hooks.PreToolUse?.unshift({
@@ -505,6 +551,28 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
 
     return hooks
+  }
+
+  private async guardConfiguredWorkspaceWrite(input: HookInput): Promise<HookJSONOutput | undefined> {
+    const record = input as unknown as Record<string, unknown>
+    if (record.hook_event_name !== "PreToolUse" || typeof record.tool_name !== "string") return undefined
+    if (!isWriteTool(record.tool_name)) return undefined
+    const toolInput = asRecord(record.tool_input)
+    const requestedPath = toolInput ? writePathForToolInput(toolInput) : undefined
+    if (!requestedPath) return undefined
+    const absolutePath = path.resolve(this.cwd, requestedPath)
+    const allowedRoots = [this.cwd, ...this.additionalDirectories]
+    if (!allowedRoots.some((root) => isPathInside(root, absolutePath))) {
+      return denyToolUse(WORKSPACE_WRITE_BOUNDARY_MESSAGE)
+    }
+    const [resolvedTarget, resolvedRoots] = await Promise.all([
+      resolveWorkspaceWriteTarget(absolutePath),
+      resolveExistingRoots(allowedRoots),
+    ])
+    if (resolvedTarget && resolvedRoots.some((root) => isPathInside(root, resolvedTarget))) {
+      return undefined
+    }
+    return denyToolUse(WORKSPACE_WRITE_BOUNDARY_MESSAGE)
   }
 
   private guardPersonaToolPolicy(input: HookInput): HookJSONOutput {
@@ -858,6 +926,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
     const raw = message as unknown as Record<string, unknown>
     const messageSessionId = typeof raw.session_id === "string" ? raw.session_id : undefined
     if (messageSessionId) this.sdkSessionId = messageSessionId
+    if (isReplayedUserMessage(raw)) {
+      this.fileCheckpointTracker.recordSdkUserMessageId(raw.uuid as string)
+      return []
+    }
 
     const envelope: AgentEventEnvelope & { readonly sdkSessionId?: string } = {
       conversationId: this.conversationId,
@@ -1010,26 +1082,33 @@ const MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_ALLOWS = 2
 const MAX_CONSECUTIVE_IDENTICAL_TODO_WRITE_DENIES = 2
 const TODO_WRITE_LOOP_GUIDANCE = "Repeated identical TodoWrite call was blocked to prevent a tool loop. Do not retry TodoWrite. Answer the user directly using the existing tool results."
 const TODO_WRITE_LOOP_STOP_REASON = "Stopped repeated TodoWrite calls to prevent a tool loop."
+const WORKSPACE_WRITE_BOUNDARY_MESSAGE = "文件写入仅允许当前项目或已明确授权的附加目录。"
 
-function conversationTitleSessionStore(
-  onConversationTitle: NonNullable<ClaudeSDKSessionOptions["onConversationTitle"]>,
-): SessionStore {
-  return {
-    async append(_key, entries) {
-      for (const entry of entries) {
-        const title = conversationTitleFromTranscriptEntry(entry)
-        if (title) await onConversationTitle(title)
-      }
-    },
-    async load() {
-      return null
-    },
+function withConfiguredWorkspaceRoot(
+  systemPrompt: Options["systemPrompt"],
+  cwd: string,
+): NonNullable<Options["systemPrompt"]> {
+  const workspaceBoundary = [
+    "Synapse configured the exact workspace root for this session as",
+    `${JSON.stringify(cwd)}.`,
+    "Treat that exact directory as the project root.",
+    "Resolve relative file paths and project commands from it.",
+    "Do not substitute an ancestor repository root.",
+  ].join(" ")
+
+  if (!systemPrompt) {
+    return {
+      type: "preset",
+      preset: "claude_code",
+      append: workspaceBoundary,
+    }
   }
-}
-
-function conversationTitleFromTranscriptEntry(entry: { readonly type: string, readonly [key: string]: unknown }): string | undefined {
-  if (entry.type !== "ai-title" || typeof entry.aiTitle !== "string") return undefined
-  return entry.aiTitle.trim() || undefined
+  if (typeof systemPrompt === "string") return `${systemPrompt}\n\n${workspaceBoundary}`
+  if (Array.isArray(systemPrompt)) return [...systemPrompt, workspaceBoundary]
+  return {
+    ...systemPrompt,
+    append: [systemPrompt.append, workspaceBoundary].filter(Boolean).join("\n\n"),
+  }
 }
 
 function projectAttachmentPaths(
@@ -1189,6 +1268,11 @@ class LazyQuery implements QueryLike {
     return (await this.query).getContextUsage()
   }
 
+  async rewindFiles(userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult> {
+    this.throwIfFailed()
+    return (await this.query).rewindFiles(userMessageId, options)
+  }
+
   private throwIfFailed(): void {
     if (this.failed) throw this.failure
   }
@@ -1306,6 +1390,51 @@ function pathMatchesPolicy(filePath: string, policyPath: string): boolean {
   const normalizedPolicy = normalizeToolPath(policyPath)
   if (!normalizedPolicy) return false
   return filePath === normalizedPolicy || filePath.startsWith(`${normalizedPolicy.replace(/\/+$/, "")}/`)
+}
+
+async function resolveExistingRoots(roots: readonly string[]): Promise<readonly string[]> {
+  const resolved = await Promise.all(roots.map(async (root) => {
+    try {
+      return await realpath(root)
+    } catch {
+      return undefined
+    }
+  }))
+  return resolved.filter((root): root is string => typeof root === "string")
+}
+
+async function resolveWorkspaceWriteTarget(absolutePath: string): Promise<string | undefined> {
+  try {
+    await lstat(absolutePath)
+  } catch (error) {
+    if (!isFileNotFoundError(error)) return undefined
+    return resolveNearestExistingParent(path.dirname(absolutePath))
+  }
+  try {
+    return await realpath(absolutePath)
+  } catch {
+    return undefined
+  }
+}
+
+async function resolveNearestExistingParent(startPath: string): Promise<string | undefined> {
+  let candidate = startPath
+  while (true) {
+    try {
+      await lstat(candidate)
+    } catch (error) {
+      if (!isFileNotFoundError(error)) return undefined
+      const parent = path.dirname(candidate)
+      if (parent === candidate) return undefined
+      candidate = parent
+      continue
+    }
+    try {
+      return await realpath(candidate)
+    } catch {
+      return undefined
+    }
+  }
 }
 
 function allowedWriteRootsMessage(agentType: string, allowedWriteRoots: readonly string[] | undefined): string {

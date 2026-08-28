@@ -12,6 +12,16 @@ import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 
+const mermaidRendererMock = vi.hoisted(() => ({
+  render: vi.fn(async () => undefined),
+  restore: vi.fn(),
+}))
+
+vi.mock('./markdown-mermaid-renderer', () => ({
+  renderDriveMermaidDiagrams: mermaidRendererMock.render,
+  restoreDriveMermaidDiagrams: mermaidRendererMock.restore,
+}))
+
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
 }));
@@ -87,6 +97,8 @@ let animationFrameCallbacks: Array<{ readonly id: number; readonly callback: Fra
 let nextAnimationFrameId: number
 
 beforeEach(() => {
+  mermaidRendererMock.render.mockClear()
+  mermaidRendererMock.restore.mockClear()
   annotationsMock = createAnnotationsMock()
   scrollIntoViewMock = vi.fn()
   scrollContainerScrollToMock = vi.fn()
@@ -785,6 +797,38 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-markdown-resizable-panel="outline"]')).toBeNull()
   })
 
+  it('rerenders Mermaid when the preview layout remounts the document in compact mode', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<pre><code class="language-mermaid">flowchart LR\nA --&gt; B</code></pre>',
+      }),
+    })
+
+    expect(mermaidRendererMock.render).toHaveBeenCalledTimes(1)
+
+    await setPreviewWidth(834)
+
+    expect(mermaidRendererMock.render).toHaveBeenCalledTimes(2)
+  })
+
+  it('restores ordered list markers when the preview layout remounts the document in compact mode', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<ol start="3"><li>三级</li><li>四级</li></ol>',
+      }),
+    })
+
+    expect(Array.from(document.querySelectorAll('ol > li'), (item) => (
+      item.getAttribute('data-drive-list-marker')
+    ))).toEqual(['3.', '4.'])
+
+    await setPreviewWidth(834)
+
+    expect(Array.from(document.querySelectorAll('ol > li'), (item) => (
+      item.getAttribute('data-drive-list-marker')
+    ))).toEqual(['3.', '4.'])
+  })
+
   it('keeps compact comment interactions separate from regular panel preferences', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
@@ -879,6 +923,22 @@ describe('DriveMarkdownRenderer', () => {
       }),
     }))
     expect(pendingOverlay()).toBeNull()
+  })
+
+  it('restores focus to the comments rail after cancelling a new comment draft with Escape', async () => {
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      dispatchPointerUpOnMarkdownBody()
+    })
+    await click(buttonWithText('添加评论'))
+
+    expect(document.activeElement).toBe(textarea())
+    await keyDown(textarea(), { key: 'Escape' })
+    await flushAnimationFrames()
+
+    expect(document.activeElement).toBe(buttonByLabel('刷新评论'))
   })
 
   it('keeps the first inline comment draft from scrolling its anchored rail during autofocus', async () => {

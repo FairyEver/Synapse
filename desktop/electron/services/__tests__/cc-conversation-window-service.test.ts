@@ -56,6 +56,31 @@ describe("createCcConversationWindowService", () => {
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
 
+  it("keeps a dedicated native title when the shared renderer updates the page title", async () => {
+    const window = createMockWindow()
+    const createWindow = vi.fn(() => window as never)
+    const service = createCcConversationWindowService({
+      createWindow,
+      createHealthService: vi.fn(() => ({ attach: vi.fn(), detach: vi.fn() })),
+      getAppPath: () => "/app",
+      getIconPath: () => null,
+      getPreloadPath: () => "/preload.js",
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      loadWindow: vi.fn(async () => undefined),
+    })
+
+    await service.openConversationWindow({ sessionId: "s1", title: "/private/conversation/path" })
+
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Synapse AI Studio CC 对话详情",
+    }))
+    const pageTitleHandler = window.listeners.get("page-title-updated")
+    expect(pageTitleHandler).toBeTypeOf("function")
+    const event = { preventDefault: vi.fn() }
+    pageTitleHandler?.(event)
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+  })
+
   it("cleans up tracking state when loading a conversation window fails", async () => {
     const firstWindow = createMockWindow()
     const secondWindow = createMockWindow()
@@ -92,14 +117,18 @@ describe("createCcConversationWindowService", () => {
 })
 
 function createMockWindow() {
+  const listeners = new Map<string, (event?: { preventDefault: () => void }) => void>()
   return {
+    listeners,
     webContents: { on: vi.fn() },
     close: vi.fn(),
     focus: vi.fn(),
     isDestroyed: vi.fn(() => false),
     isMinimized: vi.fn(() => false),
     once: vi.fn(),
-    on: vi.fn(),
+    on: vi.fn((event: string, listener: (event?: { preventDefault: () => void }) => void) => {
+      listeners.set(event, listener)
+    }),
     restore: vi.fn(),
     show: vi.fn(),
   }

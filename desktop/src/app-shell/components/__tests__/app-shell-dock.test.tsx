@@ -13,6 +13,11 @@ const apps = [
 ] as const
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver
 
 describe("AppShellDock", () => {
   const roots: Root[] = []
@@ -76,7 +81,7 @@ describe("AppShellDock", () => {
 
   it("handles app actions from the Dock context menu", async () => {
     const onManageDock = vi.fn()
-    const onRemoveApp = vi.fn()
+    const onRemoveApp = vi.fn().mockResolvedValue(true)
     const onValueChange = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -161,6 +166,37 @@ describe("AppShellDock", () => {
 
     expect(document.body.textContent).toContain("管理 Dock")
     expect(document.body.textContent).not.toContain("从 Dock 移除")
+  })
+
+  it("focuses launcher after removing a Dock app", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AppShellDock
+          apps={apps}
+          value="drive"
+          onValueChange={vi.fn()}
+          onRemoveApp={vi.fn().mockResolvedValue(true)}
+          onManageDock={vi.fn()}
+        />,
+      )
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      openContextMenuByButtonLabel("云盘")
+      await Promise.resolve()
+    })
+    await act(async () => {
+      findMenuItem("从 Dock 移除").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(document.activeElement).toBe(findButtonByLabel("应用"))
   })
 
   it("reports clicks on the currently active app icon", async () => {

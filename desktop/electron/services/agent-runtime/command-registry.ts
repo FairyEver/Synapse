@@ -17,7 +17,7 @@ import {
 } from "./agent-error-messages"
 import {
   agentRuntimeErrorMessage,
-  agentRuntimeErrorSummary,
+  agentRuntimeCommandDiagnosticSummary,
   rawAgentRuntimeErrorMessage,
 } from "./error-message"
 
@@ -349,7 +349,7 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error
 }
 
-const errorSummary = agentRuntimeErrorSummary
+const errorSummary = agentRuntimeCommandDiagnosticSummary
 
 function isMissingPathError(error: unknown): boolean {
   return errorCode(error) === "ENOENT"

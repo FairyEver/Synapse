@@ -258,17 +258,36 @@ export class AttachmentStagingService {
       })
 
       const created: AgentAttachmentMetadataEntry[] = []
+      const staged: AgentAttachmentMetadataEntry[] = []
       try {
+        const stagedDirectories = new Map(
+          (await this.deps.metadata.list({
+            projectId: input.projectId,
+            draftScopeId: input.draftScopeId,
+            lifecycle: "staged",
+            kind: "directory",
+          } as Partial<AgentAttachmentMetadataEntry>))
+            .filter((entry): entry is AgentDirectoryAttachmentMetadataEntry => entry.kind === "directory")
+            .map((entry) => [entry.sourcePath, entry]),
+        )
         for (const sourcePath of input.paths) {
           const resolvedPath = path.resolve(sourcePath)
           const sourceStat = await assertSelectedPathSafe(resolvedPath)
           if (sourceStat.isDirectory()) {
             await assertDirectoryTreeSafe(resolvedPath)
-            created.push(await this.persistDirectory({
+            const existing = stagedDirectories.get(resolvedPath)
+            if (existing) {
+              staged.push(existing)
+              continue
+            }
+            const entry = await this.persistDirectory({
               projectId: input.projectId,
               draftScopeId: input.draftScopeId,
               sourcePath: resolvedPath,
-            }))
+            })
+            created.push(entry)
+            staged.push(entry)
+            stagedDirectories.set(resolvedPath, entry)
             continue
           }
           if (!sourceStat.isFile()) throw new Error("附件路径必须是文件或文件夹。")
@@ -278,7 +297,7 @@ export class AttachmentStagingService {
             if (bytes.byteLength === 0) throw new Error("附件不能为空。")
             assertImageMimeMatches(bytes, imageMimeType)
             await this.assertQuotas(input.projectId, input.draftScopeId, 1, bytes.byteLength)
-            created.push(await this.persistBytes({
+            const entry = await this.persistBytes({
               projectId: input.projectId,
               draftScopeId: input.draftScopeId,
               attachment: {
@@ -288,24 +307,28 @@ export class AttachmentStagingService {
                 data: bytes,
               },
               bytes,
-            }))
+            })
+            created.push(entry)
+            staged.push(entry)
             continue
           }
           await this.assertQuotas(input.projectId, input.draftScopeId, 0, Number(sourceStat.size))
-          created.push(await this.persistFilePath({
+          const entry = await this.persistFilePath({
             projectId: input.projectId,
             draftScopeId: input.draftScopeId,
             sourcePath: resolvedPath,
-          }))
+          })
+          created.push(entry)
+          staged.push(entry)
         }
         this.recordAudit("fs.read.outside-userdata", input.actor, "allowed", "agent-attachment:selected-paths", {
           source: "agent.attachment.stagePaths",
           projectId: input.projectId,
           draftScopeId: input.draftScopeId,
-          attachmentCount: created.length,
-          byteSize: created.reduce((total, item) => total + item.byteSize, 0),
+          attachmentCount: staged.length,
+          byteSize: staged.reduce((total, item) => total + item.byteSize, 0),
         })
-        return created.map((entry) => this.toStagedAttachment(entry))
+        return staged.map((entry) => this.toStagedAttachment(entry))
       } catch (error) {
         await this.rollbackCreated(created)
         this.recordAudit("fs.read.outside-userdata", input.actor, "failed", "agent-attachment:selected-paths", {
@@ -499,6 +522,24 @@ export class AttachmentStagingService {
       throw new Error("附件不属于同一草稿。")
     }
     return { draftScopeId, refs: entries.map((entry) => this.toRef(entry)) }
+  }
+
+  async resolveOpenPath(input: {
+    readonly projectId: string
+    readonly attachmentId: string
+  }): Promise<string> {
+    const entry = await this.deps.metadata.get(input.attachmentId)
+    if (!entry || entry.projectId !== input.projectId || entry.lifecycle !== "committed") {
+      throw new Error("附件引用已失效。")
+    }
+    if (entry.kind === "directory") {
+      const sourceStat = await assertSelectedPathSafe(entry.sourcePath)
+      if (!sourceStat.isDirectory()) throw new Error("附件文件夹已失效。")
+      await assertDirectoryTreeSafe(entry.sourcePath)
+      return entry.sourcePath
+    }
+    await this.assertControlledRuntimeFile(entry)
+    return entry.storagePath
   }
 
   async resolveCommittedForRuntime(input: {

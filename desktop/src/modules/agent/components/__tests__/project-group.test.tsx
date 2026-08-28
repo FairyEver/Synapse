@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -38,6 +38,146 @@ afterEach(() => {
 })
 
 describe("ProjectGroup", () => {
+  it("focuses the selected session after deleting a different session", async () => {
+    const selectedSession = {
+      projectId: "project-1",
+      id: "selected-conversation",
+      sessionKey: "local:selected-conversation",
+      name: "当前会话",
+      active: true,
+      historyCount: 0,
+      createdAt: "2026-06-04T00:00:00.000Z",
+      updatedAt: "2026-06-04T00:02:00.000Z",
+    }
+    const deleteSession = {
+      ...selectedSession,
+      id: "delete-conversation",
+      sessionKey: "local:delete-conversation",
+      name: "待删会话",
+      active: false,
+      updatedAt: "2026-06-04T00:01:00.000Z",
+    }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    function Harness() {
+      const [sessions, setSessions] = useState([selectedSession, deleteSession])
+      return (
+        <ProjectGroup
+          project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
+          sessions={sessions}
+          selectedProjectId="project-1"
+          selectedConversationId="selected-conversation"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onQuickCreateSession={vi.fn()}
+          onCustomizeSession={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={(session) => setSessions((current) => current.filter((item) => item.id !== session.id))}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />
+      )
+    }
+
+    await act(async () => {
+      root.render(<Harness />)
+    })
+
+    const deleteRow = [...container.querySelectorAll<HTMLElement>('[data-track="agent-session-select"]')]
+      .find((row) => row.textContent?.includes("待删会话"))
+    await act(async () => {
+      deleteRow?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
+      await Promise.resolve()
+    })
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+        .find((item) => item.textContent === "删除")
+        ?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "删除")
+        ?.click()
+      await new Promise((resolve) => setTimeout(resolve, 60))
+    })
+
+    expect(document.body.textContent).not.toContain("待删会话")
+    expect(document.activeElement).toBe(
+      [...container.querySelectorAll<HTMLElement>('[data-track="agent-session-select"]')]
+        .find((row) => row.textContent?.includes("当前会话")),
+    )
+  })
+
+  it("confirms context-menu deletion and restores focus to the session row on cancel", async () => {
+    const session = {
+      projectId: "project-1",
+      id: "conversation-1",
+      sessionKey: "local:conversation-1",
+      name: "会话标题",
+      active: true,
+      historyCount: 0,
+      createdAt: "2026-06-04T00:00:00.000Z",
+      updatedAt: "2026-06-04T00:01:00.000Z",
+    }
+    const onDelete = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ProjectGroup
+          project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
+          sessions={[session]}
+          selectedProjectId="project-1"
+          selectedConversationId="conversation-1"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onQuickCreateSession={vi.fn()}
+          onCustomizeSession={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={onDelete}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    const row = container.querySelector<HTMLElement>('[data-track="agent-session-select"]')
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
+      await Promise.resolve()
+    })
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+        .find((item) => item.textContent === "删除")
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("删除会话？")
+    expect(document.body.textContent).toContain("此操作无法撤销")
+    expect(document.activeElement?.textContent).toBe("取消")
+    expect(onDelete).not.toHaveBeenCalled()
+
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "取消")
+        ?.click()
+      await new Promise((resolve) => setTimeout(resolve, 60))
+    })
+
+    expect(onDelete).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(row)
+  })
+
   it("opens the rename dialog when double-clicking a session row", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -83,6 +223,17 @@ describe("ProjectGroup", () => {
     expect(input?.value).toBe("会话标题")
     expect(input?.selectionStart).toBe(0)
     expect(input?.selectionEnd).toBe("会话标题".length)
+
+    await act(async () => {
+      const cancelButton = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "取消")
+      cancelButton?.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(document.activeElement).toBe(
+      container.querySelector('[data-track="agent-session-select"]'),
+    )
   })
 
   it("does not open the rename dialog when double-clicking the delete button", async () => {

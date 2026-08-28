@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -37,13 +37,14 @@ type CreateTableDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (name: string, columns: Column[], description?: string) => Promise<void> | void
+  restoreFocusRef?: RefObject<HTMLButtonElement | null>
 }
 
 const NAME_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/
 
 let nextKey = 0
 
-function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogProps) {
+function CreateTableDialog({ open, onOpenChange, onSubmit, restoreFocusRef }: CreateTableDialogProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [columns, setColumns] = useState<ColumnRow[]>([
@@ -51,6 +52,29 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
   ])
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [focusTarget, setFocusTarget] = useState<"name" | number | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const columnNameInputRefs = useRef(new Map<number, HTMLInputElement>())
+
+  useEffect(() => {
+    if (focusTarget === null) return
+    const target = focusTarget === "name"
+      ? nameInputRef.current
+      : columnNameInputRefs.current.get(focusTarget)
+    if (!target) return
+    target.focus()
+    setFocusTarget(null)
+  }, [focusTarget])
+
+  const showNameError = useCallback((message: string) => {
+    setError(message)
+    setFocusTarget("name")
+  }, [])
+
+  const showColumnError = useCallback((message: string, key: number) => {
+    setError(message)
+    setFocusTarget(key)
+  }, [])
 
   const reset = useCallback(() => {
     setName("")
@@ -58,6 +82,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
     setColumns([{ key: ++nextKey, name: "", kind: "text", description: "", choices: [] }])
     setError("")
     setIsSubmitting(false)
+    setFocusTarget(null)
   }, [])
 
   const handleOpenChange = useCallback(
@@ -91,23 +116,23 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
 
     const trimmedName = name.trim()
     if (!trimmedName) {
-      setError("请输入表名")
+      showNameError("请输入表名")
       return
     }
     if (!NAME_PATTERN.test(trimmedName)) {
-      setError("表名须以英文字母开头，只能包含字母、数字、下划线")
+      showNameError("表名须以英文字母开头，只能包含字母、数字、下划线")
       return
     }
 
     const validColumns = columns.filter((c) => c.name.trim())
     if (validColumns.length === 0) {
-      setError("至少需要一列")
+      showColumnError("至少需要一列", columns[0].key)
       return
     }
 
     const badCol = validColumns.find((c) => !NAME_PATTERN.test(c.name.trim()))
     if (badCol) {
-      setError(`列名 "${badCol.name.trim()}" 不合法，须以英文字母开头，只能包含字母、数字、下划线`)
+      showColumnError(`列名 "${badCol.name.trim()}" 不合法，须以英文字母开头，只能包含字母、数字、下划线`, badCol.key)
       return
     }
 
@@ -116,7 +141,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       return lower === "id" || lower === "created_at" || lower === "updated_at"
     })
     if (dupCol) {
-      setError(`列名 "${dupCol.name.trim()}" 为系统保留字段`)
+      showColumnError(`列名 "${dupCol.name.trim()}" 为系统保留字段`, dupCol.key)
       return
     }
 
@@ -128,13 +153,13 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       return false
     })
     if (repeatedColumn) {
-      setError(`列名 "${repeatedColumn.name.trim()}" 重复`)
+      showColumnError(`列名 "${repeatedColumn.name.trim()}" 重复`, repeatedColumn.key)
       return
     }
 
     const emptyChoices = validColumns.find((c) => (c.kind === "single_choice" || c.kind === "multi_choice") && c.choices.length === 0)
     if (emptyChoices) {
-      setError(`列 "${emptyChoices.name.trim()}" 需要填写选项`)
+      showColumnError(`列 "${emptyChoices.name.trim()}" 需要填写选项`, emptyChoices.key)
       return
     }
 
@@ -155,15 +180,33 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
       await onSubmit(trimmedName, definitions, description.trim() || undefined)
       handleOpenChange(false)
     } catch (submitError) {
-      setError(formatCreateTableSubmitError(submitError))
+      const formattedError = formatCreateTableSubmitError(submitError)
+      const rejectedColumnName = submitError instanceof Error
+        ? submitError.message.match(/Column "([^"]+)"/)?.[1]
+        : undefined
+      const rejectedColumn = rejectedColumnName
+        ? validColumns.find((column) => column.name.trim() === rejectedColumnName)
+        : undefined
+      if (rejectedColumn) {
+        showColumnError(formattedError, rejectedColumn.key)
+      } else {
+        showNameError(formattedError)
+      }
     } finally {
       setIsSubmitting(false)
     }
-  }, [name, description, columns, onSubmit, handleOpenChange, isSubmitting])
+  }, [name, description, columns, onSubmit, handleOpenChange, isSubmitting, showColumnError, showNameError])
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} data-track="database-create-table-dialog">
-      <DialogContent className="max-w-lg">
+      <DialogContent
+        className="max-w-lg"
+        onCloseAutoFocus={(event) => {
+          if (!restoreFocusRef?.current) return
+          event.preventDefault()
+          restoreFocusRef.current.focus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>新建表</DialogTitle>
         </DialogHeader>
@@ -172,6 +215,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
           <div className="flex flex-col gap-2">
             <Label htmlFor="table-name">表名</Label>
             <Input
+              ref={nameInputRef}
               id="table-name"
               data-track="database-create-table-name"
               value={name}
@@ -215,6 +259,13 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
                 <div key={col.key} className="flex flex-col gap-1.5 rounded-md border p-2">
                   <div className="flex items-center gap-2">
                     <Input
+                      ref={(element) => {
+                        if (element) {
+                          columnNameInputRefs.current.set(col.key, element)
+                        } else {
+                          columnNameInputRefs.current.delete(col.key)
+                        }
+                      }}
                       className="flex-1"
                       data-track="database-create-column-name"
                       value={col.name}

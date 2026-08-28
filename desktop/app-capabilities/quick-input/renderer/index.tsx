@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react"
 import { CircleAlert, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
@@ -71,6 +71,9 @@ export function QuickInputModule() {
   const [form, setForm] = useState<QuickInputFormState>(emptyFormState)
   const [deleteTarget, setDeleteTarget] = useState<SynapseQuickInputItem | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const addActionRef = useRef<HTMLButtonElement | null>(null)
+  const formTriggerRef = useRef<HTMLElement | null>(null)
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const quickInputBridge = useMemo(() => requireBridgeDomain("quickInput"), [])
 
@@ -96,12 +99,14 @@ export function QuickInputModule() {
     })
   }, [quickInputBridge, reload])
 
-  const openCreateForm = () => {
+  const openCreateForm = (event: MouseEvent<HTMLButtonElement>) => {
+    formTriggerRef.current = event.currentTarget
     setForm(emptyFormState)
     setFormOpen(true)
   }
 
-  const openEditForm = (item: SynapseQuickInputItem) => {
+  const openEditForm = (item: SynapseQuickInputItem, event: MouseEvent<HTMLButtonElement>) => {
+    formTriggerRef.current = event.currentTarget
     setForm({
       mode: "edit",
       item,
@@ -115,6 +120,28 @@ export function QuickInputModule() {
     if (saving) return
     setFormOpen(false)
     setForm(emptyFormState)
+  }
+
+  const restoreFormTriggerFocus = (event: Event) => {
+    const trigger = formTriggerRef.current
+    if (!trigger?.isConnected) return
+    event.preventDefault()
+    trigger.focus()
+    formTriggerRef.current = null
+  }
+
+  const openDeleteDialog = (item: SynapseQuickInputItem, event: MouseEvent<HTMLButtonElement>) => {
+    deleteTriggerRef.current = event.currentTarget
+    setDeleteTarget(item)
+  }
+
+  const restoreDeleteFocus = (event: Event) => {
+    const trigger = deleteTriggerRef.current
+    const target = trigger?.isConnected ? trigger : addActionRef.current
+    if (!target?.isConnected) return
+    event.preventDefault()
+    target.focus()
+    deleteTriggerRef.current = null
   }
 
   const submitForm = async (event: FormEvent<HTMLFormElement>) => {
@@ -164,7 +191,7 @@ export function QuickInputModule() {
   return (
     <SystemAppWindowShell
       actions={(
-        <SystemAppTopBarActionButton type="button" onClick={openCreateForm}>
+        <SystemAppTopBarActionButton ref={addActionRef} type="button" onClick={openCreateForm}>
           <Plus data-icon="inline-start" />
           新增
         </SystemAppTopBarActionButton>
@@ -202,7 +229,7 @@ export function QuickInputModule() {
           ) : (
             <QuickInputTable
               items={items}
-              onDelete={setDeleteTarget}
+              onDelete={openDeleteDialog}
               onEdit={openEditForm}
             />
           )}
@@ -212,6 +239,7 @@ export function QuickInputModule() {
         form={form}
         open={formOpen}
         saving={saving}
+        onCloseAutoFocus={restoreFormTriggerFocus}
         onContentChange={(content) => setForm((current) => ({ ...current, content, error: "" }))}
         onOpenChange={(open) => {
           if (open) {
@@ -223,7 +251,7 @@ export function QuickInputModule() {
         onSubmit={submitForm}
       />
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}>
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={restoreDeleteFocus}>
           <AlertDialogHeader>
             <AlertDialogTitle>删除快捷输入？</AlertDialogTitle>
             <AlertDialogDescription>删除后无法恢复。</AlertDialogDescription>
@@ -269,8 +297,8 @@ function QuickInputTable({
   onEdit,
 }: {
   readonly items: SynapseQuickInputItem[]
-  readonly onDelete: (item: SynapseQuickInputItem) => void
-  readonly onEdit: (item: SynapseQuickInputItem) => void
+  readonly onDelete: (item: SynapseQuickInputItem, event: MouseEvent<HTMLButtonElement>) => void
+  readonly onEdit: (item: SynapseQuickInputItem, event: MouseEvent<HTMLButtonElement>) => void
 }) {
   return (
     <div className="rounded-md border bg-background">
@@ -296,7 +324,7 @@ function QuickInputTable({
                       variant="ghost"
                       size="icon-xs"
                       aria-label={`编辑快捷输入：${preview}`}
-                      onClick={() => onEdit(item)}
+                      onClick={(event) => onEdit(item, event)}
                     >
                       <Pencil className="size-3.5" />
                     </Button>
@@ -305,7 +333,7 @@ function QuickInputTable({
                       variant="ghost"
                       size="icon-xs"
                       aria-label={`删除快捷输入：${preview}`}
-                      onClick={() => onDelete(item)}
+                      onClick={(event) => onDelete(item, event)}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -325,6 +353,7 @@ function QuickInputDialog({
   open,
   saving,
   onContentChange,
+  onCloseAutoFocus,
   onOpenChange,
   onSubmit,
 }: {
@@ -332,12 +361,13 @@ function QuickInputDialog({
   readonly open: boolean
   readonly saving: boolean
   readonly onContentChange: (content: string) => void
+  readonly onCloseAutoFocus: (event: Event) => void
   readonly onOpenChange: (open: boolean) => void
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <DialogHeader>
             <DialogTitle>{form.mode === "edit" ? "编辑快捷输入" : "新增快捷输入"}</DialogTitle>

@@ -47,6 +47,13 @@ function useProjectActions() {
       return { status: "existing", project: existingProject }
     }
 
+    const duplicateName = latestConfig.global.projects.some((project) => (
+      project.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase()
+    ))
+    if (duplicateName) {
+      throw new Error("这个项目名称已经存在了。")
+    }
+
     const project: SynapseProjectConfig = {
       id: crypto.randomUUID(),
       name,

@@ -58,6 +58,7 @@ type WorkflowFlowNode = Node<Record<string, unknown>, string>
 type WorkflowFlowEdge = Edge<{ label?: string }, string>
 
 export interface WorkflowCanvasHandle {
+  addNode: (type: string) => void
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
   updateNodeName: (nodeId: string, name: string) => void
   removeEdgesByIds: (edgeIds: string[]) => void
@@ -144,10 +145,12 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   // Refs for imperative handle — declared early so useImperativeHandle closure can access them
   const deleteNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
   const copyNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
+  const addNodeRef = useRef<(type: string) => void>(() => {})
   const onNodeSelectRef = useRef(onNodeSelect)
   onNodeSelectRef.current = onNodeSelect
 
   useImperativeHandle(ref, () => ({
+    addNode: (type) => addNodeRef.current(type),
     updateNodeConfig: (nodeId, config) => {
       setNodes((nds) => nds.map((n) => {
         if (n.id !== nodeId) return n
@@ -305,11 +308,8 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     event.dataTransfer.dropEffect = "move"
   }, [])
 
-  const onDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault()
-    const type = event.dataTransfer.getData("application/workflow-node-type")
-    if (!type) return
-    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+  const addNodeAtScreenPosition = useCallback((type: string, screenPosition: { x: number; y: number }) => {
+    const position = screenToFlowPosition(screenPosition)
     const id = crypto.randomUUID()
     const config = defaultConfig(type)
     const name = defaultName(type)
@@ -323,7 +323,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     const newWfNode: WorkflowNode = { id, name, type, position, config }
     const newDef = { ...definitionRef.current, nodes: [...definitionRef.current.nodes, newWfNode] }
     definitionRef.current = newDef
-    logger.info("node dropped", {
+    logger.info("node added", {
       nodeId: id,
       type,
       position,
@@ -332,6 +332,23 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     onChange(newDef)
     onNodeSelect?.(id)
   }, [screenToFlowPosition, onChange, setNodes, onNodeSelect])
+
+  const addNodeFromPalette = useCallback((type: string) => {
+    const bounds = reactFlowRootRef.current?.getBoundingClientRect()
+    if (!bounds) return
+    addNodeAtScreenPosition(type, {
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    })
+  }, [addNodeAtScreenPosition])
+  addNodeRef.current = addNodeFromPalette
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    const type = event.dataTransfer.getData("application/workflow-node-type")
+    if (!type) return
+    addNodeAtScreenPosition(type, { x: event.clientX, y: event.clientY })
+  }, [addNodeAtScreenPosition])
 
   const selectionChangeHandler = useCallback(({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[] }) => {
     logger.info("selection changed", {

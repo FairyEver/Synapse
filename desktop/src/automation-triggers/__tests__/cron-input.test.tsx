@@ -55,9 +55,63 @@ describe("CronInput", () => {
     expect(html).toContain('data-align="inline-end"')
     expect(html).toContain(">编辑</button>")
   })
+
+  it("restores focus to the edit button after cancelling", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <CronInput
+          id="task-form-cron"
+          value="0 9 * * *"
+          onChange={vi.fn()}
+        />,
+      )
+    })
+
+    const editButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.textContent === "编辑")
+    expect(editButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      editButton?.click()
+    })
+    const cancelButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => button.textContent === "取消")
+    expect(cancelButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      cancelButton?.click()
+    })
+
+    expect(document.activeElement).toBe(editButton)
+  })
 })
 
 describe("CronEditorDialog", () => {
+  it("shows an invalid expression error once", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <CronEditorDialog
+          open
+          value="bad cron"
+          onApply={vi.fn()}
+          onOpenChange={vi.fn()}
+        />,
+      )
+    })
+
+    expect(document.body.textContent?.match(/Cron 必须包含 5 段/g)).toHaveLength(1)
+  })
+
   it("tracks cron apply submits without recording the expression", async () => {
     const onApply = vi.fn()
     const container = document.createElement("div")

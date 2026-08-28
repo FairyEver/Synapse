@@ -229,6 +229,23 @@ const resultMetadataSchema = z.object({
   estimatedCost: z.boolean().optional(),
 })
 
+const fileCheckpointStatusSchema = z.enum([
+  "available",
+  "superseded",
+  "rewound",
+  "partial",
+  "unavailable",
+])
+const fileCheckpointFileSchema = z.object({
+  id: z.string(),
+  path: z.string(),
+  kind: z.enum(["added", "modified", "deleted"]),
+  insertions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  binary: z.boolean(),
+  truncated: z.boolean(),
+})
+
 export const timelineItemSchema = z.discriminatedUnion("kind", [
   z.object({
     ...timelineBaseSchema,
@@ -332,6 +349,17 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     sdkSubtype: z.string().optional(),
     label: z.string(),
     summary: z.string().optional(),
+  }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("fileCheckpoint"),
+    checkpointId: z.string(),
+    status: fileCheckpointStatusSchema,
+    insertions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+    files: z.array(fileCheckpointFileSchema),
+    fileCount: z.number().int().nonnegative(),
+    coverageWarning: z.boolean(),
   }),
 ])
 
@@ -618,6 +646,7 @@ export const agentEventTypeSchema = z.enum([
   "status",
   "compactBoundary",
   "sdkEvent",
+  "fileCheckpoint",
 ])
 
 export const agentEventSchema = z.discriminatedUnion("type", [
@@ -727,6 +756,17 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     sdkType: z.string(),
     sdkSubtype: z.string().optional(),
     payload: jsonRecordSchema,
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("fileCheckpoint"),
+    checkpointId: z.string(),
+    status: fileCheckpointStatusSchema,
+    insertions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+    files: z.array(fileCheckpointFileSchema),
+    fileCount: z.number().int().nonnegative(),
+    coverageWarning: z.boolean(),
   }),
 ])
 

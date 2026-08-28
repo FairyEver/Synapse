@@ -35,6 +35,12 @@ const kbProject: SynapseProjectConfig = {
   },
 }
 
+const standardProject: SynapseProjectConfig = {
+  id: "project-standard",
+  name: "Synapse",
+  path: "/Users/example/projects/synapse",
+}
+
 const rendererLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
@@ -267,6 +273,63 @@ describe("ProjectListEditor knowledge base actions", () => {
     expect(document.body.textContent).not.toContain("synapse-kb://project-1")
   })
 
+  it("reports only the missing project name when the existing path is valid", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderEditor([standardProject], onSave)
+
+    await act(async () => {
+      buttonByText("修改").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("项目名称"), "")
+      buttonByText("保存").click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("项目名称不能为空。")
+    expect(document.body.textContent).not.toContain("项目名称和项目路径都不能为空。")
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it("returns focus to the edited project action after Escape", async () => {
+    renderEditor([standardProject])
+    const editButton = buttonByText("修改")
+
+    await act(async () => {
+      editButton.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.activeElement).toBe(editButton)
+    })
+  })
+
+  it("returns focus to the project delete action after cancelling with Escape", async () => {
+    bridgeMocks.agent.listSessions.mockResolvedValueOnce([{}])
+    renderEditor([standardProject])
+    const deleteButton = buttonByText("删除")
+
+    await act(async () => {
+      deleteButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.activeElement).toBe(deleteButton)
+    })
+  })
+
   it("adds a regular project through the shared project dialog", async () => {
     const onAddProject = vi.fn(async (input: ProjectAddInput): Promise<ProjectAddResult> => ({
       status: "added",
@@ -298,6 +361,27 @@ describe("ProjectListEditor knowledge base actions", () => {
     expect(toast.success).toHaveBeenCalledWith("项目已添加。")
   })
 
+  it("focuses the first missing regular project field after validation fails", async () => {
+    const onAddProject = vi.fn()
+    renderEditor([], undefined, onAddProject)
+
+    await act(async () => {
+      buttonByText("添加项目").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("项目路径"), "/Users/example/new-project")
+      const addButton = buttonByText("添加")
+      addButton.focus()
+      addButton.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("项目名称和项目路径都不能为空。")
+    expect(document.activeElement).toBe(inputByLabel("项目名称"))
+    expect(onAddProject).not.toHaveBeenCalled()
+  })
+
   it("keeps the shared project dialog open when the path becomes a duplicate", async () => {
     const existingProject = { id: "project-existing", name: "Existing", path: "/Users/example/existing" }
     const onAddProject = vi.fn(async (): Promise<ProjectAddResult> => ({
@@ -319,6 +403,30 @@ describe("ProjectListEditor knowledge base actions", () => {
 
     expect(document.body.textContent).toContain("这个项目路径已经存在了。")
     expect(inputByLabel("项目路径").value).toBe("/Users/example/existing")
+    expect(document.activeElement).toBe(inputByLabel("项目路径"))
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it("keeps the shared project dialog open and focuses the name when it is a duplicate", async () => {
+    const onAddProject = vi.fn().mockRejectedValue(new Error("这个项目名称已经存在了。"))
+    renderEditor([standardProject], undefined, onAddProject)
+
+    await act(async () => {
+      buttonByText("添加项目").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("项目名称"), standardProject.name)
+      changeInput(inputByLabel("项目路径"), "/Users/example/projects/other")
+      const addButton = buttonByText("添加")
+      addButton.focus()
+      addButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("这个项目名称已经存在了。")
+    expect(document.activeElement).toBe(inputByLabel("项目名称"))
     expect(toast.success).not.toHaveBeenCalled()
   })
 

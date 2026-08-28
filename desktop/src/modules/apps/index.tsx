@@ -36,6 +36,8 @@ export function AppsModule({
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
+  const [launcherFocusAppId, setLauncherFocusAppId] =
+    useState<SynapseSystemAppId | null>(null)
   const resetKeyRef = useRef(resetKey)
   const dock = useDockPreferences({ workflowEntryVisible })
 
@@ -53,6 +55,7 @@ export function AppsModule({
   }, [resetKey])
 
   const openApp = useCallback((appId: SynapseSystemAppId) => {
+    setLauncherFocusAppId(null)
     if (appId === "launcher") {
       setActiveAppId(null)
       return
@@ -63,6 +66,7 @@ export function AppsModule({
   const openAppWindow = async (appId: SynapseSystemAppId) => {
     try {
       await requireAppsBridge().openSystemApp(appId)
+      setLauncherFocusAppId(appId)
       setActiveAppId(null)
       setResourceContentOpenRequest(null)
     } catch {
@@ -90,6 +94,7 @@ export function AppsModule({
         <EmbeddedSystemAppShell
           appName={activeApp.name}
           onBack={() => {
+            setLauncherFocusAppId(activeApp.id)
             setActiveAppId(null)
             setResourceContentOpenRequest(null)
           }}
@@ -116,6 +121,7 @@ export function AppsModule({
           <div className="mx-auto max-w-4xl">
             <AppLauncherGrid
               apps={listLaunchableSystemApps({ workflowEntryVisible })}
+              focusAppId={launcherFocusAppId}
               pinnedAppIds={dock.dockAppIds}
               disabled={dock.saving}
               onOpenApp={openApp}

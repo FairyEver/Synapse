@@ -49,6 +49,7 @@ import { DatabaseManagementCard, DatabaseServiceStatusCard } from "@/modules/set
 import type { Column, ColumnKind, DatabaseWhereGroup } from "@/types/database"
 import type { DatabaseTableImportInspection } from "@/types/database"
 import type { DatabaseAppViewId } from "@/modules/apps/types"
+import { formatDatabaseFolderOperationError } from "./utils"
 
 const logger = createRendererLogger("database")
 const ROW_NOT_FOUND_MESSAGE = "该行已不存在，已刷新列表。"
@@ -85,6 +86,8 @@ function DatabaseTablesView() {
   const [isSchemaSheetOpen, setIsSchemaSheetOpen] = useState(false)
   const [pendingImport, setPendingImport] = useState<DatabaseTableImportInspection | null>(null)
   const dataTableViewRef = useRef<DataTableViewHandle | null>(null)
+  const createTableButtonRef = useRef<HTMLButtonElement>(null)
+  const schemaButtonRef = useRef<HTMLButtonElement>(null)
 
   const selectedTable = activeTable ?? tables[0]?.name ?? null
   const { rows, total, error: queryError, refresh: refreshQuery, pageSize } = useDatabaseQuery(selectedTable, page, filter)
@@ -132,7 +135,7 @@ function DatabaseTablesView() {
 
   const handleFolderOperationError = useCallback((action: DatabaseFolderOperationAction, error: unknown) => {
     logger.error("Database folder operation failed.", { action, error })
-    showError(error instanceof Error ? error.message : "操作失败，请稍后重试。")
+    showError(formatDatabaseFolderOperationError(action, error))
   }, [showError])
 
   const handleOpenCreateDialog = useCallback(async () => {
@@ -251,6 +254,7 @@ function DatabaseTablesView() {
       },
       { loading: "正在删除表...", success: `表 "${selectedTable}" 已删除` },
     )
+    window.setTimeout(() => createTableButtonRef.current?.focus(), 100)
   }, [selectedTable, promise, refreshTables])
 
   const handleUpdateTableDescription = useCallback(
@@ -449,6 +453,7 @@ function DatabaseTablesView() {
           logger.warn("Open create dialog failed.", { error })
         })
       }}
+      createTableButtonRef={createTableButtonRef}
       onImportTable={() => {
         void handleChooseImportTable()
       }}
@@ -513,6 +518,7 @@ function DatabaseTablesView() {
                 onExportTable={handleExportTable}
                 filter={filter}
                 onFilterChange={handleFilterChange}
+                schemaButtonRef={schemaButtonRef}
               />
             </div>
           </div>
@@ -553,6 +559,7 @@ function DatabaseTablesView() {
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         onSubmit={handleCreateTable}
+        restoreFocusRef={createTableButtonRef}
       />
 
       <TableSchemaSheet
@@ -564,6 +571,7 @@ function DatabaseTablesView() {
         onUpdateColumnDescription={handleUpdateColumnDescription}
         onUpdateColumnChoices={handleUpdateColumnChoices}
         onDropTable={handleDropTable}
+        restoreFocusRef={schemaButtonRef}
       />
 
       <AlertDialog open={pendingImport !== null} onOpenChange={(open) => { if (!open) setPendingImport(null) }}>

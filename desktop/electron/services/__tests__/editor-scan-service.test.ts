@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { applyRuleSection } from "../../../src/definitions/editor/shared-rule-section"
 
 const trashItem = vi.hoisted(() => vi.fn())
 const fsMocks = vi.hoisted(() => ({ open: vi.fn() }))
@@ -1130,6 +1131,29 @@ describe("editor scan trash", () => {
     expect(nextContent).not.toContain("synapse-rule:first")
     expect(nextContent).toContain("# Handwritten")
     expect(nextContent).toContain("synapse-rule:second:begin")
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it("keeps a pre-existing empty shared Rule file after uninstalling its only section", async () => {
+    const projectRoot = await createTempDir()
+    const filePath = path.join(projectRoot, "AGENTS.md")
+    await writeFile(filePath, "")
+    const installedContent = applyRuleSection(await readFile(filePath, "utf8"), "first", "# First")
+    await writeFile(filePath, installedContent)
+    const { security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
+    await trashScanItem({
+      itemType: "rule",
+      itemName: "first",
+      itemPath: filePath,
+      editorId: "codex",
+      scope: "project",
+      source: "synapse",
+      trash: { mode: "rule-section", ruleId: "first" },
+      synapseContentId: "first",
+    }, security)
+
+    expect((await readFile(filePath, "utf8")).trim()).toBe("")
     expect(trashItem).not.toHaveBeenCalled()
   })
 

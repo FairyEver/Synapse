@@ -117,6 +117,16 @@ import {
 } from "./permission-sanitize"
 import { redactSensitiveText } from "./redaction"
 import { markCancelRequested } from "./turn-outcome"
+import type { AgentFileCheckpointEntryV1 } from "../../runtime/data-repo"
+import {
+  AgentFileCheckpointService,
+  AgentFileCheckpointPartialError,
+  AgentFileCheckpointUnavailableError,
+  type AgentFileCheckpointDetail,
+  type AgentFileCheckpointDiff,
+  type AgentFileCheckpointPrepareResult,
+  type AgentFileCheckpointRewindResult,
+} from "./agent-file-checkpoint-service"
 import {
   agentRuntimeErrorMessage,
   agentRuntimeErrorSummary,
@@ -139,6 +149,7 @@ export interface AgentRuntimeServiceDeps {
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
+  readonly fileCheckpointEntries?: DataNamespace<AgentFileCheckpointEntryV1>
   readonly agentArtifactStore?: AgentArtifactStore
   readonly attachmentStagingService?: AttachmentStagingService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
@@ -217,11 +228,22 @@ export class AgentRuntimeService {
   private readonly sessionLifecycle: SessionLifecycleManager
   private readonly sessionManager: SessionManager
   private readonly conversationRouter: ConversationRouter
+  private readonly fileCheckpoints: AgentFileCheckpointService | undefined
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
 
   constructor(deps: AgentRuntimeServiceDeps) {
     this.deps = deps
+    this.fileCheckpoints = deps.fileCheckpointEntries && deps.workDir && deps.permissionGuard && deps.auditSink
+      ? new AgentFileCheckpointService({
+          projectId: deps.projectId,
+          workspacePath: deps.workDir,
+          checkpoints: deps.fileCheckpointEntries,
+          permissionGuard: deps.permissionGuard,
+          auditSink: deps.auditSink,
+          now: deps.now,
+        })
+      : undefined
     this.repository = deps.sessionRepository ?? new AgentSessionRepository({
       projectId: deps.projectId,
       conversations: deps.conversations,
@@ -301,6 +323,7 @@ export class AgentRuntimeService {
         agentEvents: deps.agentEvents,
         agentArtifactStore: deps.agentArtifactStore,
         attachmentStagingService: deps.attachmentStagingService,
+        fileCheckpoints: this.fileCheckpoints,
         getUsagePriceRules: deps.getUsagePriceRules,
         loadExperimentalSynapseToolRouterEnabled: () => this.loadExperimentalSynapseToolRouterEnabled(),
         now: deps.now,
@@ -325,6 +348,78 @@ export class AgentRuntimeService {
     conversationId: string,
   ): Promise<AgentRuntimeTurnResult> {
     return this.conversationRouter.sendToConversation(message, conversationId)
+  }
+
+  async getFileCheckpointDetail(
+    conversationIdValue: string,
+    checkpointId: string,
+  ): Promise<AgentFileCheckpointDetail> {
+    return this.requireFileCheckpoints().detail(conversationIdValue, checkpointId)
+  }
+
+  async getFileCheckpointDiff(
+    conversationIdValue: string,
+    checkpointId: string,
+    fileId: string,
+  ): Promise<AgentFileCheckpointDiff> {
+    return this.requireFileCheckpoints().diff(conversationIdValue, checkpointId, fileId)
+  }
+
+  async prepareFileCheckpointRewind(input: {
+    readonly conversationId: string
+    readonly checkpointId: string
+    readonly actor: ActorIdentity
+  }): Promise<AgentFileCheckpointPrepareResult> {
+    const state = this.states.get(input.conversationId)
+    try {
+      return await this.requireFileCheckpoints().prepareRewind({
+        ...input,
+        busy: Boolean(state?.busy || state?.activeTurns || state?.queue.length),
+        rewind: (sdkUserMessageId, dryRun, sdkSessionId) => this.rewindCheckpointFiles(
+          input.conversationId,
+          sdkUserMessageId,
+          dryRun,
+          sdkSessionId,
+        ),
+      })
+    } catch (error) {
+      await this.appendCheckpointStatusErrorEvent(input.conversationId, error)
+      throw error
+    }
+  }
+
+  async confirmFileCheckpointRewind(input: {
+    readonly conversationId: string
+    readonly operationId: string
+  }): Promise<AgentFileCheckpointRewindResult> {
+    const state = this.states.get(input.conversationId)
+    let result: AgentFileCheckpointRewindResult
+    try {
+      result = await this.requireFileCheckpoints().confirmRewind({
+        conversationId: input.conversationId,
+        operationId: input.operationId,
+        busy: Boolean(state?.busy || state?.activeTurns || state?.queue.length),
+        rewind: (sdkUserMessageId, dryRun, sdkSessionId) => this.rewindCheckpointFiles(
+          input.conversationId,
+          sdkUserMessageId,
+          dryRun,
+          sdkSessionId,
+        ),
+      })
+    } catch (error) {
+      await this.appendCheckpointStatusErrorEvent(input.conversationId, error)
+      throw error
+    }
+    const conversation = await this.repository.get(input.conversationId)
+    if (conversation) await this.conversationRouter.appendExternalEvent(conversation, result.event)
+    return result
+  }
+
+  private async appendCheckpointStatusErrorEvent(conversationIdValue: string, error: unknown): Promise<void> {
+    if (!(error instanceof AgentFileCheckpointUnavailableError)
+      && !(error instanceof AgentFileCheckpointPartialError)) return
+    const conversation = await this.repository.get(conversationIdValue)
+    if (conversation) await this.conversationRouter.appendExternalEvent(conversation, error.event)
   }
 
   async stageAttachmentBytes(
@@ -359,6 +454,13 @@ export class AgentRuntimeService {
     return this.requireAttachmentStagingService().resolveStaged({
       projectId: this.deps.projectId,
       attachmentIds,
+    })
+  }
+
+  async resolveAttachmentOpenPath(attachmentId: string): Promise<string> {
+    return this.requireAttachmentStagingService().resolveOpenPath({
+      projectId: this.deps.projectId,
+      attachmentId,
     })
   }
 
@@ -1200,8 +1302,53 @@ export class AgentRuntimeService {
     if (deleted) {
       this.conversationRouter.forgetSavedSdkSession(conversationIdValue)
       await this.deps.agentArtifactStore?.removeConversationArtifacts(conversationIdValue)
+      await this.fileCheckpoints?.removeConversation(conversationIdValue)
     }
     return deleted
+  }
+
+  private requireFileCheckpoints(): AgentFileCheckpointService {
+    if (!this.fileCheckpoints) throw new Error("当前项目不支持 Agent 文件检查点。")
+    return this.fileCheckpoints
+  }
+
+  private async rewindCheckpointFiles(
+    conversationIdValue: string,
+    sdkUserMessageId: string,
+    dryRun: boolean,
+    expectedSdkSessionId: string,
+  ) {
+    const conversation = await this.repository.get(conversationIdValue)
+    if (!conversation) throw new Error(conversationNotFoundMessage(conversationIdValue))
+    const state = this.sessionManager.stateForConversation(conversationIdValue, {
+      projectId: this.deps.projectId,
+      sessionKey: conversation.sessionKey,
+      platform: conversation.platform ?? "local-renderer",
+      workspaceKey: conversation.workspaceKey,
+      workspacePath: conversation.workspacePath ?? this.deps.workDir,
+      providerId: conversation.providerId,
+      agentType: conversation.agentType,
+      content: "",
+    })
+    const handle = await this.sessionManager.getOrCreateSession({
+      state,
+      conversation,
+      message: {
+        projectId: this.deps.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: conversation.platform ?? "local-renderer",
+        workspaceKey: conversation.workspaceKey,
+        workspacePath: conversation.workspacePath ?? this.deps.workDir,
+        providerId: conversation.providerId,
+        agentType: conversation.agentType,
+        content: "",
+      },
+    })
+    if (!handle.liveSession.rewindFiles) throw new Error("当前 Agent Runtime 不支持文件撤销。")
+    if (handle.liveSession.currentSessionId() !== expectedSdkSessionId) {
+      throw new Error("文件检查点所属的 Agent 会话已发生变化。")
+    }
+    return handle.liveSession.rewindFiles(sdkUserMessageId, { dryRun })
   }
 
   private requireAttachmentStagingService(): AttachmentStagingService {

@@ -42,13 +42,18 @@ vi.mock("../../../../workflow-nodes/register.renderer", () => ({}))
 
 vi.mock("../canvas-floating-toolbar", () => ({
   CanvasFloatingToolbar: ({
+    definition,
+    onSave,
     onRun,
   }: {
+    definition: WorkflowDefinition
+    onSave: (definition: WorkflowDefinition) => Promise<unknown>
     onRun: (params: Record<string, unknown>) => Promise<string | null>
   }) => (
-    <button type="button" onClick={() => { void onRun({}) }}>
-      Run workflow
-    </button>
+    <>
+      <button type="button" onClick={() => { void onSave(definition) }}>Save workflow</button>
+      <button type="button" onClick={() => { void onRun({}) }}>Run workflow</button>
+    </>
   ),
 }))
 
@@ -71,8 +76,22 @@ vi.mock("../node-palette", () => ({
 }))
 
 vi.mock("../node-config-panel", () => ({
-  NodeConfigPanel: ({ validationItems = [] }: { validationItems?: Array<{ summary: string }> }) => (
+  NodeConfigPanel: ({
+    definition,
+    onDefinitionChange,
+    validationItems = [],
+  }: {
+    definition: WorkflowDefinition
+    onDefinitionChange?: (definition: WorkflowDefinition) => void
+    validationItems?: Array<{ summary: string }>
+  }) => (
     <div data-testid="node-config-panel">
+      <input
+        id="workflow-name"
+        aria-label="Workflow name"
+        value={definition.name}
+        onChange={(event) => onDefinitionChange?.({ ...definition, name: event.target.value })}
+      />
       {validationItems.map((item) => <p key={item.summary}>{item.summary}</p>)}
     </div>
   ),
@@ -117,11 +136,39 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  document.title = ""
   window.history.replaceState({}, "", "/")
   vi.clearAllMocks()
 })
 
 describe("WorkflowEditorApp", () => {
+  it("uses the workflow name in the native window title", async () => {
+    const workflowApi = createWorkflowApi({
+      get: vi.fn().mockResolvedValue(definition()),
+      openRunner: vi.fn(),
+      runDefinition: vi.fn(),
+      save: vi.fn(),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+
+    expect(document.title).toBe("编辑 - Nightly check")
+  })
+
   it("logs definition load failures without exposing raw backend error text", async () => {
     const rawError = "workflow get failed token=sk-secret at /Users/example/repo prompt text"
     const workflowApi = createWorkflowApi({
@@ -626,6 +673,96 @@ describe("WorkflowEditorApp", () => {
     expect(document.body.textContent).toContain("1 处需要处理")
     expect(document.body.textContent).not.toContain("需要处理 1 处")
   })
+
+  it("restores focus after cancelling an unsaved editor close", async () => {
+    const workflowApi = createWorkflowApi({
+      get: vi.fn().mockResolvedValue(definition()),
+      openRunner: vi.fn(),
+      runDefinition: vi.fn(),
+      save: vi.fn(),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+
+    const canvasButton = buttonByText("Change workflow")
+    const focusSpy = vi.spyOn(canvasButton, "focus")
+    await act(async () => {
+      canvasButton.click()
+    })
+    canvasButton.focus()
+    expect(focusSpy).toHaveBeenCalled()
+    expect(document.activeElement).toBe(canvasButton)
+    focusSpy.mockClear()
+
+    await act(async () => {
+      window.dispatchEvent(new Event("beforeunload", { cancelable: true }))
+    })
+    await act(async () => {
+      const closeDialog = document.querySelector<HTMLElement>("[data-slot='alert-dialog-content']")
+      const cancelButton = Array.from(closeDialog?.querySelectorAll("button") ?? [])
+        .find((button) => button.textContent?.trim() === "取消")
+      if (!cancelButton) throw new Error("Close dialog cancel button not found")
+      cancelButton.click()
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+
+    expect(focusSpy).toHaveBeenCalled()
+    expect(document.activeElement).toBe(canvasButton)
+  })
+
+  it("focuses the workflow name after an empty-name save failure", async () => {
+    const workflowApi = createWorkflowApi({
+      get: vi.fn().mockResolvedValue(definition()),
+      openRunner: vi.fn(),
+      runDefinition: vi.fn(),
+      save: vi.fn().mockResolvedValue({
+        errors: [{ type: "invalid_config", message: "工作流名称不能为空" }],
+      }),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+
+    const nameInput = document.querySelector<HTMLInputElement>("#workflow-name")
+    if (!nameInput) throw new Error("Workflow name input not found")
+    await act(async () => {
+      changeInput(nameInput, "")
+    })
+    await act(async () => {
+      buttonByText("Save workflow").click()
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+
+    expect(workflowApi.definition.update).toHaveBeenCalled()
+    expect(document.activeElement).toBe(nameInput)
+  })
 })
 
 function definition(): WorkflowDefinition {
@@ -668,4 +805,10 @@ function buttonByLabel(label: string): HTMLButtonElement {
   const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
   if (!button) throw new Error(`Button not found: ${label}`)
   return button
+}
+
+function changeInput(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event("input", { bubbles: true }))
 }

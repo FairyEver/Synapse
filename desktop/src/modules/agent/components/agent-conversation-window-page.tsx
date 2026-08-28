@@ -26,6 +26,7 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
     success: "Done",
     error: "Failed",
     denied: "Denied",
+    cancelled: "Cancelled",
   },
 }
 
@@ -48,12 +49,26 @@ function AgentConversationWindowPage({ request }: { readonly request: AgentConve
     && item.sessionKey === currentRequest.sessionKey)
 
   useEffect(() => {
-    if (!session) return
+    if (!session || chat.loading) return
     const key = `${session.projectId}:${session.id}:${session.sessionKey}`
     if (selectedRef.current === key) return
     selectedRef.current = key
+    if (
+      chat.selectedProjectId === session.projectId
+      && chat.selectedConversationId === session.id
+      && chat.selectedSessionKey === session.sessionKey
+    ) {
+      return
+    }
     void chat.selectSession(session)
-  }, [chat.selectSession, session])
+  }, [
+    chat.loading,
+    chat.selectSession,
+    chat.selectedConversationId,
+    chat.selectedProjectId,
+    chat.selectedSessionKey,
+    session,
+  ])
 
   if (!project) {
     return (
@@ -63,10 +78,10 @@ function AgentConversationWindowPage({ request }: { readonly request: AgentConve
     )
   }
 
-  if (!session && !chat.loading) {
+  if (chat.loading) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">对话不存在或已删除</p>
+        <p className="text-sm text-muted-foreground">加载中</p>
       </div>
     )
   }
@@ -74,7 +89,7 @@ function AgentConversationWindowPage({ request }: { readonly request: AgentConve
   if (!session) {
     return (
       <div className="flex h-full items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">加载中</p>
+        <p className="text-sm text-muted-foreground">对话不存在或已删除</p>
       </div>
     )
   }

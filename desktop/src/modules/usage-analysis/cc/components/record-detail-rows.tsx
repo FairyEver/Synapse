@@ -1,9 +1,9 @@
 import { ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
-import { formatSynapseCost } from "@/lib/cost-currency"
 import { formatDateTime } from "@/lib/date-time"
 import type { CcRecordDetailRow } from "@/types/usage-analysis-conversations"
+import { formatEstimatedCostLabel } from "./estimated-cost-label"
 
 function formatInteger(value: number): string {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(value)
@@ -47,7 +47,7 @@ export function RecordDetailRows({
           <TableCell className="text-muted-foreground">{formatDateTime(row.timestamp)}</TableCell>
           <TableCell>{row.model}</TableCell>
           <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
-          <TableCell className="text-right tabular-nums">{formatSynapseCost(row.estimatedCost)}</TableCell>
+          <TableCell className="text-right tabular-nums">{formatEstimatedCostLabel(row)}</TableCell>
           <TableCell className="text-right tabular-nums">{formatInteger(row.toolCalls)}</TableCell>
           <TableCell />
           <TableCell />

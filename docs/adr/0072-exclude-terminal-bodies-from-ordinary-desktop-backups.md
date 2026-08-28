@@ -9,3 +9,5 @@ Terminal restore uses a dedicated validated plan and atomic or recoverable commi
 Stored command bodies are included by default only if the existing `synapse-backup-v1` contract explicitly permits user configuration of the same sensitivity and supplies adequate protection and warning. If the current backup is ordinary plaintext JSON without sufficient notice, the final design treats command bodies as a sensitive option or explicitly communicates the risk rather than silently expanding exposure. Backup results and documentation always list omitted Terminal output.
 
 A future full-history backup is a separate format and flow with size disclosure and encryption. It is not inserted into ordinary configuration backups. Implementation updates backup documentation, the stable `AGENTS.md` boundary, and restore tests in the same task.
+
+Ordinary backup export must omit Terminal body namespaces before reading their records, while still emitting empty namespace entries so restore clears incompatible local bodies. Post-export filtering is not sufficient because it materializes the excluded history and can exhaust the desktop process before a backup is written.

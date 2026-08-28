@@ -120,6 +120,85 @@ describe("AgentComposer", () => {
     expect(document.activeElement).toBe(textarea)
   })
 
+  it("releases draft attachments when the conversation focus key changes", async () => {
+    let attachmentSequence = 0
+    const chooseAttachments = vi.fn(async (_input: { readonly draftScopeId: string }) => {
+      attachmentSequence += 1
+      return {
+        attachments: [{
+          sourceIndex: 0,
+          ref: {
+            version: 2 as const,
+            attachmentId: `conversation-file-${attachmentSequence}`,
+            kind: "file" as const,
+            name: `conversation-${attachmentSequence}.txt`,
+            byteSize: attachmentSequence,
+            sha256: String(attachmentSequence).repeat(64),
+          },
+        }],
+        rejectedCount: 0,
+      }
+    })
+    installShellBridge(undefined, { chooseAttachments })
+    const releaseAttachments = (window as unknown as {
+      synapse: { agent: { releaseAttachments: ReturnType<typeof vi.fn> } }
+    }).synapse.agent.releaseAttachments
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const renderComposer = (focusInputKey: string) => (
+      <AgentComposer
+        key={focusInputKey}
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        focusInputKey={focusInputKey}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />
+    )
+
+    await act(async () => {
+      root.render(renderComposer("project-1:conversation-1:local"))
+    })
+    openAttachmentMenu(container)
+    await act(async () => {
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent?.trim() === "附加文件")
+        ?.click()
+      await wait(20)
+    })
+    const firstDraftScopeId = chooseAttachments.mock.calls[0]?.[0].draftScopeId
+    expect(container.textContent).toContain("conversation-1.txt")
+
+    await act(async () => {
+      root.render(renderComposer("project-1:conversation-2:local"))
+      await wait(0)
+    })
+
+    expect(container.textContent).not.toContain("conversation-1.txt")
+    expect(releaseAttachments).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      draftScopeId: firstDraftScopeId,
+      attachmentIds: ["conversation-file-1"],
+    }))
+
+    openAttachmentMenu(container)
+    await act(async () => {
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent?.trim() === "附加文件")
+        ?.click()
+      await wait(20)
+    })
+    expect(chooseAttachments.mock.calls[1]?.[0].draftScopeId).not.toBe(firstDraftScopeId)
+  })
+
   it("requires a new session when switching a non-bypass conversation to bypassPermissions", () => {
     expect(getPermissionModeCapability({
       currentMode: "default",
@@ -244,6 +323,181 @@ describe("AgentComposer", () => {
     expect(container.textContent).toContain("文件夹")
     expect(container.innerHTML).not.toContain("/Users/liyang/Downloads/materials")
     expect(container.querySelector("textarea")).toBe(document.activeElement)
+  })
+
+  it("ignores and releases a file selected twice in the same draft", async () => {
+    let sequence = 0
+    const chooseAttachments = vi.fn(async () => {
+      sequence += 1
+      return {
+        attachments: [{
+          sourceIndex: 0,
+          ref: {
+            version: 2 as const,
+            attachmentId: `duplicate-${sequence}`,
+            kind: "file" as const,
+            name: "brief.md",
+            byteSize: 7,
+            mimeType: "text/markdown",
+            sha256: "a".repeat(64),
+          },
+        }],
+        rejectedCount: 0,
+      }
+    })
+    installShellBridge(undefined, { chooseAttachments })
+    const releaseAttachments = (window as unknown as {
+      synapse: { agent: { releaseAttachments: ReturnType<typeof vi.fn> } }
+    }).synapse.agent.releaseAttachments
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    for (let index = 0; index < 2; index += 1) {
+      openAttachmentMenu(container)
+      const fileItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent?.trim() === "附加文件")
+      await act(async () => {
+        fileItem?.click()
+        await wait(20)
+      })
+    }
+
+    expect(container.querySelectorAll('button[aria-label="删除附件 brief.md"]')).toHaveLength(1)
+    expect(releaseAttachments).toHaveBeenCalledWith(expect.objectContaining({
+      attachmentIds: ["duplicate-2"],
+    }))
+  })
+
+  it("ignores a directory staging identity selected twice without releasing it", async () => {
+    const chooseAttachments = vi.fn(async () => ({
+      attachments: [{
+        sourceIndex: 0,
+        ref: {
+          version: 2 as const,
+          attachmentId: "directory-1",
+          kind: "directory" as const,
+          name: "materials",
+          byteSize: 0,
+        },
+      }],
+      rejectedCount: 0,
+    }))
+    installShellBridge(undefined, { chooseAttachments })
+    const releaseAttachments = (window as unknown as {
+      synapse: { agent: { releaseAttachments: ReturnType<typeof vi.fn> } }
+    }).synapse.agent.releaseAttachments
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    for (let index = 0; index < 2; index += 1) {
+      openAttachmentMenu(container)
+      const folderItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent?.includes("附加文件夹"))
+      await act(async () => {
+        folderItem?.click()
+        await wait(20)
+      })
+    }
+
+    expect(container.querySelectorAll('button[aria-label="删除附件 materials"]')).toHaveLength(1)
+    expect(releaseAttachments).not.toHaveBeenCalled()
+  })
+
+  it("returns focus to the composer after removing an attachment", async () => {
+    installShellBridge(undefined, {
+      chooseAttachments: vi.fn(async () => ({
+        attachments: [{
+          sourceIndex: 0,
+          ref: {
+            version: 2 as const,
+            attachmentId: "directory-1",
+            kind: "directory" as const,
+            name: "materials",
+            byteSize: 0,
+          },
+        }],
+        rejectedCount: 0,
+      })),
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openAttachmentMenu(container)
+    await act(async () => {
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent?.trim() === "附加文件夹")
+        ?.click()
+      await wait(20)
+    })
+    const removeButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="删除附件 materials"]',
+    )
+    removeButton?.focus()
+    expect(document.activeElement).toBe(removeButton)
+
+    await act(async () => {
+      removeButton?.click()
+      await wait(0)
+    })
+
+    expect(document.activeElement).toBe(container.querySelector("textarea"))
   })
 
   it("rotates the draft attachment scope after a submitted attachment batch is accepted", async () => {
@@ -2526,6 +2780,52 @@ describe("AgentComposer", () => {
     expect(container.querySelector<HTMLTextAreaElement>("textarea")?.value).toBe("用户草稿")
   })
 
+  it("restores focus to the Git trigger after opening the Git window", async () => {
+    const onOpenGit = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          gitRepositoryAvailable
+          onPrepareGitCommit={vi.fn()}
+          onRunGitRemote={vi.fn()}
+          onCancelGitOperation={vi.fn()}
+          onOpenGit={onOpenGit}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="Git"]')
+    expect(trigger).toBeTruthy()
+    trigger?.focus()
+    openGitMenu(container)
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      .find((node) => node.textContent === "在 Git 中打开")
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item?.click()
+      await Promise.resolve()
+    })
+
+    expect(onOpenGit).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(trigger)
+  })
+
   it("direct sends a quick input without changing the current draft", async () => {
     const onDraftChange = vi.fn()
     const onDirectSend = vi.fn()
@@ -2566,6 +2866,43 @@ describe("AgentComposer", () => {
     expect(onDirectSend).toHaveBeenCalledWith("继续")
     expect(onDraftChange).not.toHaveBeenCalled()
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("returns focus to the quick input trigger after cancelling the menu with Escape", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          quickInputs={[quickInputItem("quick-1", "继续")]}
+          onDraftChange={vi.fn()}
+          onQuickInputDirectSend={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="快捷输入"]')
+    trigger?.focus()
+    openQuickInputMenu(container)
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }))
+      await wait(200)
+    })
+
+    expect(document.activeElement).toBe(trigger)
   })
 
   it("truncates quick input menu labels without leading item icons", async () => {

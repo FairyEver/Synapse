@@ -3,6 +3,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type RefObject,
+  useCallback,
   useMemo,
   useRef,
   useEffect,
@@ -196,14 +197,39 @@ function AgentComposer({
     return () => window.clearTimeout(timeoutId)
   }, [disabled, focusInputKey])
 
-  const addAttachments = (next: readonly AgentDraftAttachment[]) => {
+  const addAttachments = useCallback((next: readonly AgentDraftAttachment[]) => {
     if (next.length === 0) return
-    setAttachments((current) => [...current, ...next])
-  }
+    const seen = new Set(attachmentsRef.current.map(attachmentDuplicateKey).filter(Boolean))
+    const seenIds = new Set(attachmentsRef.current.map((attachment) => attachment.attachmentId))
+    const accepted: AgentDraftAttachment[] = []
+    const duplicateIds: string[] = []
+    let duplicateCount = 0
+    for (const attachment of next) {
+      const key = attachmentDuplicateKey(attachment)
+      if (key && seen.has(key)) {
+        duplicateCount += 1
+        if (!seenIds.has(attachment.attachmentId)) duplicateIds.push(attachment.attachmentId)
+        continue
+      }
+      accepted.push(attachment)
+      seenIds.add(attachment.attachmentId)
+      if (key) seen.add(key)
+    }
+    if (accepted.length > 0) {
+      const merged = [...attachmentsRef.current, ...accepted]
+      attachmentsRef.current = merged
+      setAttachments(merged)
+    }
+    if (duplicateIds.length > 0) {
+      void attachmentActions.release(draftScopeIdRef.current, duplicateIds)
+    }
+    if (duplicateCount > 0) toast("已忽略重复附件")
+  }, [attachmentActions])
 
   const removeAttachment = (id: string) => {
     setAttachments((current) => current.filter((attachment) => attachment.attachmentId !== id))
     void attachmentActions.release(draftScopeIdRef.current, [id])
+    window.setTimeout(() => textareaRef.current?.focus(), 0)
   }
 
   const acceptSubmittedAttachments = (submittedAttachments: readonly AgentDraftAttachment[]) => {
@@ -298,9 +324,7 @@ function AgentComposer({
 
     const attachFiles = (files: readonly File[]) => {
       void attachmentActions.stageFiles(files, draftScopeIdRef.current).then((result) => {
-        if (result.attachments.length > 0) {
-          setAttachments((current) => [...current, ...result.attachments])
-        }
+        addAttachments(result.attachments)
         showAttachmentRejections(result)
       }).catch((error) => {
         logger.warn("Agent attachment drop failed.", errorDiagnostic(error))
@@ -335,7 +359,7 @@ function AgentComposer({
       target.removeEventListener("dragleave", handleDragLeave)
       target.removeEventListener("drop", handleDrop)
     }
-  }, [attachmentActions, disabled, dropTargetRef])
+  }, [addAttachments, attachmentActions, disabled, dropTargetRef])
 
   const chooseAttachments = async (kind: "file" | "directory") => {
     if (choosingAttachments || attachmentSubmissionPendingRef.current) return
@@ -764,6 +788,11 @@ function showAttachmentRejections(
 ): void {
   if (result.rejectedCount === 0) return
   toast(result.attachments.length > 0 ? "部分附件无法添加" : "无法添加附件")
+}
+
+function attachmentDuplicateKey(attachment: AgentDraftAttachment): string | null {
+  if (attachment.kind === "directory") return `${attachment.kind}:${attachment.attachmentId}`
+  return [attachment.kind, attachment.name, attachment.byteSize, attachment.sha256].join(":")
 }
 
 function hasFileTransfer(dataTransfer: DataTransfer | null): boolean {

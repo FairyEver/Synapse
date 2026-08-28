@@ -2263,6 +2263,40 @@ describe("agentIpcModule", () => {
       ])
     })
 
+    it("emits cancelled instead of failed when a user-stopped turn settles with an error", async () => {
+      const send = vi.fn().mockResolvedValue({
+        conversationId: "conv-cancelled",
+        resultText: "",
+        error: "已停止本次执行。",
+        events: [{
+          type: "result",
+          content: "",
+          done: true,
+          metadata: { cancelled: true },
+        }],
+      })
+      const harness = createHarness({ agent: { send } })
+
+      await harness.invoke("synapse:app:agent:operation:send", {
+        projectId: "project-1",
+        content: "stop me",
+      })
+
+      const phases = harness.eventBusEmits
+        .filter((event) => event.type === "phase.update")
+        .map((event) => {
+          const payload = event.payload as { phase: string; status: string; errorMessage?: string }
+          return { phase: payload.phase, status: payload.status, errorMessage: payload.errorMessage }
+        })
+
+      expect(phases).toEqual([
+        { phase: "submitted", status: "done", errorMessage: undefined },
+        { phase: "received", status: "in-progress", errorMessage: undefined },
+        { phase: "received", status: "done", errorMessage: undefined },
+        { phase: "cancelled", status: "done", errorMessage: undefined },
+      ])
+    })
+
     it("routes sends with a conversation id to that conversation", async () => {
       const send = vi.fn()
       const sendToConversation = vi.fn().mockResolvedValue({

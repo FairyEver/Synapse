@@ -104,6 +104,24 @@ describe("DockPanel", () => {
     expect(mocks.restoreDefaultDock).toHaveBeenCalledTimes(1)
   })
 
+  it("returns focus to the moved app control after reordering", async () => {
+    await renderDockPanel()
+    const moveButton = findButtonByLabel("下移 对话")
+    const addButton = findButtonByText("添加")
+    mocks.moveDockApp.mockImplementationOnce(async () => {
+      addButton.focus()
+      return true
+    })
+
+    moveButton.focus()
+    await act(async () => {
+      moveButton.click()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(document.activeElement).toBe(moveButton)
+  })
+
   it("does not render remove for launcher and disables controls while saving", async () => {
     mocks.saving = true
     const container = await renderDockPanel()

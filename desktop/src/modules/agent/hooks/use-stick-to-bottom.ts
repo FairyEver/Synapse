@@ -72,6 +72,8 @@ export function latestTimelineContentSignal(item: SynapseAgentTimelineItem | und
       return `${item.kind}:${item.runId}:${item.phase}:${item.status}:${item.errorMessage?.length ?? 0}`
     case "sdkEvent":
       return `${item.kind}:${item.sdkType}:${item.sdkSubtype ?? ""}:${item.summary?.length ?? 0}`
+    case "fileCheckpoint":
+      return `${item.kind}:${item.checkpointId}:${item.status}:${item.files.length}`
     default: {
       const exhaustive: never = item
       return exhaustive

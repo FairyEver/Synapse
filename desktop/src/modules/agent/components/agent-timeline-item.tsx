@@ -1,11 +1,14 @@
-import { AlertCircle, Info } from "lucide-react"
+import { useState } from "react"
+import { AlertCircle, FileDiff, Info } from "lucide-react"
 import {
   Alert,
   AlertDescription,
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import type {
   SynapseAgentDisplayProfile,
+  SynapseAgentFileCheckpointTimelineItem,
   SynapseAgentPendingPermission,
   SynapseAgentPermissionScope,
   SynapseAgentTimelineItem,
@@ -19,6 +22,7 @@ import { AgentPermissionCard } from "./agent-permission-card"
 import { AgentThinkingEvent } from "./agent-thinking-event"
 import { AgentToolEvent } from "./agent-tool-event"
 import { AgentUserQuestionCard } from "./agent-user-question-card"
+import { useAgentWorkspacePanel } from "./agent-workspace-shell"
 
 function AgentTimelineItem({
   item,
@@ -30,9 +34,11 @@ function AgentTimelineItem({
   referenceActions,
   onRespondPermission,
   toolResult,
+  toolCancelled,
 }: {
   readonly item: SynapseAgentTimelineItem
   readonly toolResult?: SynapseAgentToolResultTimelineItem
+  readonly toolCancelled?: boolean
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
@@ -62,7 +68,7 @@ function AgentTimelineItem({
       return <AgentThinkingEvent item={item} profile={profile} />
     case "toolCall":
     case "toolResult":
-      return <AgentToolEvent item={item} result={toolResult} profile={profile} />
+      return <AgentToolEvent item={item} result={toolResult} cancelled={toolCancelled} profile={profile} />
     case "toolProgress":
       return <AgentToolProgressEvent item={item} />
     case "permissionRequest": {
@@ -139,11 +145,105 @@ function AgentTimelineItem({
           </div>
         </AgentAnnotation>
       )
+    case "fileCheckpoint":
+      return <AgentFileCheckpointCard item={item} />
     default: {
       const exhaustive: never = item
       return exhaustive
     }
   }
+}
+
+function AgentFileCheckpointCard({ item }: { readonly item: SynapseAgentFileCheckpointTimelineItem }) {
+  const { openPanel } = useAgentWorkspacePanel()
+  const [expanded, setExpanded] = useState(false)
+  const visibleFiles = expanded ? item.files : item.files.slice(0, 3)
+  const hiddenFileCount = item.files.length - visibleFiles.length
+  const statusLabel = item.status === "available"
+    ? "可撤销"
+    : item.status === "rewound"
+      ? "已撤销"
+      : item.status === "partial"
+        ? "部分撤销"
+        : item.status === "unavailable"
+          ? "不可用"
+          : "仅可审查"
+  return (
+    <section className="overflow-hidden rounded-lg border" aria-label={`已编辑 ${item.fileCount} 个文件`}>
+      <div className="flex items-center gap-3 px-3 py-2">
+        <FileDiff className="size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">已编辑 {item.fileCount} 个文件</div>
+          <div className="text-xs text-muted-foreground">
+            <span className="text-emerald-600 dark:text-emerald-400">+{item.insertions}</span>{" "}
+            <span className="text-destructive">-{item.deletions}</span>
+          </div>
+          {item.coverageWarning ? (
+            <div className="text-xs text-muted-foreground">终端或子智能体修改可能不在撤销范围内</div>
+          ) : null}
+        </div>
+        <Badge variant="secondary">{statusLabel}</Badge>
+        {item.status === "available" ? (
+          <Button
+            id={`agent-file-checkpoint-${item.checkpointId}-rewind`}
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => openPanel({
+              panelId: "agent.file-diff",
+              payload: { checkpointId: item.checkpointId, action: "rewind" },
+            })}
+          >
+            撤销
+          </Button>
+        ) : null}
+        {item.files.length > 0 ? <Button
+          id={`agent-file-checkpoint-${item.checkpointId}-review`}
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => openPanel({
+            panelId: "agent.file-diff",
+            payload: { checkpointId: item.checkpointId },
+          })}
+        >
+          审查
+        </Button> : null}
+      </div>
+      {item.files.length > 0 ? <div className="border-t py-1">
+        {visibleFiles.map((file) => (
+          <Button
+            key={file.id}
+            id={`agent-file-checkpoint-${item.checkpointId}-file-${file.id}`}
+            type="button"
+            variant="ghost"
+            className="flex h-8 w-full justify-start rounded-none px-3 font-normal"
+            onClick={() => openPanel({
+              panelId: "agent.file-diff",
+              payload: { checkpointId: item.checkpointId, fileId: file.id },
+            })}
+          >
+            <span className="min-w-0 flex-1 truncate text-left text-sm">{file.path}</span>
+            <span className="ml-3 shrink-0 text-xs tabular-nums">
+              <span className="text-emerald-600 dark:text-emerald-400">+{file.insertions}</span>{" "}
+              <span className="text-destructive">-{file.deletions}</span>
+            </span>
+          </Button>
+        ))}
+        {hiddenFileCount > 0 || expanded ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 w-full justify-start rounded-none px-3 font-normal"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? "收起" : `再显示 ${hiddenFileCount} 个文件`}
+          </Button>
+        ) : null}
+      </div> : null}
+    </section>
+  )
 }
 
 function AgentToolProgressEvent({ item }: { readonly item: SynapseAgentToolProgressTimelineItem }) {

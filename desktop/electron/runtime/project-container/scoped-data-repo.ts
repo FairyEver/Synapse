@@ -21,6 +21,7 @@ const PROJECT_SCOPED_NAMES = new Set([
   "audit",
   "agent.commands",
   "agent.command-settings",
+  "agent.file-checkpoints",
 ])
 
 export class ProjectScopedDataRepoImpl implements ProjectScopedDataRepo {

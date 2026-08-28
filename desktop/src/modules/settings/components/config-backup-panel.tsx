@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { exportConfigBackup, importConfigBackup } from "@/app-shell/config-backup"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -21,6 +21,23 @@ function ConfigBackupPanel() {
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const importTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const importConfirmRef = useRef<HTMLButtonElement | null>(null)
+  const exportTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const shouldRestoreExportFocusRef = useRef(false)
+  const shouldRestoreImportConfirmFocusRef = useRef(false)
+
+  useEffect(() => {
+    if (isExporting || !shouldRestoreExportFocusRef.current) return
+    shouldRestoreExportFocusRef.current = false
+    exportTriggerRef.current?.focus()
+  }, [isExporting])
+
+  useEffect(() => {
+    if (isImporting || !isImportOpen || !shouldRestoreImportConfirmFocusRef.current) return
+    shouldRestoreImportConfirmFocusRef.current = false
+    importConfirmRef.current?.focus()
+  }, [isImportOpen, isImporting])
 
   return (
     <>
@@ -29,6 +46,7 @@ function ConfigBackupPanel() {
           <p className="text-sm font-medium text-foreground">配置</p>
           <div className="flex gap-2">
             <Button
+              ref={importTriggerRef}
               type="button"
               variant="outline"
               onClick={() => {
@@ -39,12 +57,14 @@ function ConfigBackupPanel() {
               导入
             </Button>
             <Button
+              ref={exportTriggerRef}
               type="button"
               variant="outline"
               disabled={isExporting}
               onClick={() => {
                 if (isExporting) return
                 logger.info("Config backup export initiated.")
+                shouldRestoreExportFocusRef.current = true
                 setIsExporting(true)
                 void promise(
                   () => exportConfigBackup(),
@@ -61,7 +81,7 @@ function ConfigBackupPanel() {
               导出
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground">不包含终端输出、检查点和已保存命令正文。</p>
+          <p className="text-sm text-muted-foreground">不包含 Agent 对话、终端输出、检查点和已保存命令正文。</p>
         </div>
       </SettingsGroup>
 
@@ -72,7 +92,12 @@ function ConfigBackupPanel() {
           setIsImportOpen(open)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            importTriggerRef.current?.focus()
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>导入配置</AlertDialogTitle>
             <AlertDialogDescription>
@@ -82,6 +107,7 @@ function ConfigBackupPanel() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isImporting}>取消</AlertDialogCancel>
             <AlertDialogAction
+              ref={importConfirmRef}
               disabled={isImporting}
               onClick={(event) => {
                 event.preventDefault()
@@ -106,7 +132,10 @@ function ConfigBackupPanel() {
                   .then(() => {
                     setIsImportOpen(false)
                   })
-                  .catch((err) => { logger.warn("config import close dialog failed", err) })
+                  .catch((err) => {
+                    shouldRestoreImportConfirmFocusRef.current = true
+                    logger.warn("config import close dialog failed", err)
+                  })
                   .finally(() => { setIsImporting(false) })
               }}
             >

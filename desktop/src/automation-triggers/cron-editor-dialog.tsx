@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react"
 
 import { FormDialog } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
@@ -37,6 +37,7 @@ import {
 type CronEditorDialogProps = {
   open: boolean
   value: string
+  returnFocusRef?: RefObject<HTMLButtonElement | null>
   onApply: (value: string) => void
   onOpenChange: (open: boolean) => void
 }
@@ -74,9 +75,11 @@ const WEEKDAY_OPTIONS = [
 function CronEditorDialog({
   open,
   value,
+  returnFocusRef,
   onApply,
   onOpenChange,
 }: CronEditorDialogProps) {
+  const wasOpenRef = useRef(open)
   const matchedTemplate = inferCronTemplate(value)
   const [draft, setDraft] = useState(value)
   const [template, setTemplate] = useState<CronTemplateDraft>(
@@ -96,6 +99,13 @@ function CronEditorDialog({
     setTemplate(nextTemplate ?? createDefaultCronTemplateDraft())
     setActiveTab(getCronEditorInitialTab(value))
   }, [open, value])
+
+  useEffect(() => {
+    if (wasOpenRef.current && !open) {
+      returnFocusRef?.current?.focus()
+    }
+    wasOpenRef.current = open
+  }, [open, returnFocusRef])
 
   function updateTemplate(patch: Partial<CronTemplateDraft>) {
     setTemplate((current) => {
@@ -131,19 +141,14 @@ function CronEditorDialog({
         bodyClassName="min-h-0"
         contentClassName="sm:max-w-[560px]"
         footer={(
-          <>
-            <FieldError className="sm:mr-auto">
-              {validation.ok ? null : validation.message}
-            </FieldError>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                取消
-              </Button>
-              <Button type="submit" disabled={!validation.ok}>
-                应用
-              </Button>
-            </div>
-          </>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button type="submit" disabled={!validation.ok}>
+              应用
+            </Button>
+          </div>
         )}
         onSubmit={handleSubmit}
       >
@@ -205,7 +210,7 @@ function CronEditorFields({
         </TabsContent>
       </Tabs>
 
-      <PreviewField validation={validation} runs={previewRuns} />
+      {validation.ok ? <PreviewField validation={validation} runs={previewRuns} /> : null}
     </FieldGroup>
   )
 }

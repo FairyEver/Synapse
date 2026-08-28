@@ -961,7 +961,19 @@ async function writeBackupFile(filePath: string, backup: SynapseConfigBackup): P
 async function createConfigBackupPayload(exportedAt = new Date()): Promise<SynapseConfigBackup> {
   const config = await configStore.load()
   const dataRepository = dataRepositoryForBackup
-    ? prepareTerminalOrdinaryBackup(await dataRepositoryForBackup.exportAll({ includeSecrets: false }))
+    ? prepareTerminalOrdinaryBackup(await dataRepositoryForBackup.exportAll({
+        includeSecrets: false,
+        excludeNamespaces: [
+          "core.config",
+          "agent.events",
+          "agent.artifacts",
+          "agent.usage",
+          "conversations",
+          "outbox",
+          "audit",
+        ],
+        emptyNamespaces: [...TERMINAL_BODY_NAMESPACES, "agent.file-checkpoints"],
+      }))
     : undefined
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,

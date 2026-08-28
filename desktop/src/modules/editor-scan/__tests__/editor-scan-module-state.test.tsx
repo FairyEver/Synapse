@@ -8,6 +8,12 @@ import { EditorScanModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+} as typeof ResizeObserver
+
 const refresh = vi.fn()
 const mocks = vi.hoisted(() => ({
   openSkillUninstaller: vi.fn(),
@@ -218,6 +224,26 @@ describe("EditorScanModule", () => {
     expect(screenText()).toContain("目录")
     expect(screenText()).toContain("Cursor")
     expect(screenText()).toContain("未检测到 Cursor 的 skill 或规则")
+  })
+
+  it("returns focus to the refresh action after scanning completes", async () => {
+    document.body.tabIndex = -1
+    refresh.mockImplementation(async () => {
+      document.body.focus()
+    })
+    await renderEditorScanModule(roots)
+    const refreshButton = document.querySelector<HTMLButtonElement>("button[aria-label='刷新']")
+    if (!refreshButton) throw new Error("Refresh button not found")
+    refreshButton.focus()
+
+    await act(async () => {
+      refreshButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+      vi.runAllTimers()
+    })
+
+    expect(document.activeElement).toBe(refreshButton)
   })
 
   it("uses the same resizable sidebar layout as agent surfaces", async () => {

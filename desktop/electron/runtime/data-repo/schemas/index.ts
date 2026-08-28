@@ -81,6 +81,14 @@ export {
   type AgentPersonaRemoteCacheUserBucketV1,
 } from "./agent-persona-remote-cache"
 export {
+  agentFileCheckpointsSchema,
+  type AgentFileCheckpointChangeKindV1,
+  type AgentFileCheckpointEntryV1,
+  type AgentFileCheckpointFileV1,
+  type AgentFileCheckpointFingerprintV1,
+  type AgentFileCheckpointStatusV1,
+} from "./agent-file-checkpoints"
+export {
   reviveSoundNotifierSettingsEnvelope,
   soundNotifierSettingsSchemaDefinition,
   type SoundNotifierSettingsEntryV1,
@@ -202,6 +210,7 @@ import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
 import { secretsItemsSchema, secretsSettingsSchema } from "./secrets"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
+import { agentFileCheckpointsSchema } from "./agent-file-checkpoints"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
 import { systemNotifierSettingsSchemaDefinition } from "./system-notifier"
 import { updateInstallRecoverySchema } from "./update-install-recovery"
@@ -267,6 +276,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaItemsSchema,
   agentPersonaSettingsSchema,
   agentPersonaRemoteCacheSchema,
+  agentFileCheckpointsSchema,
   soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,

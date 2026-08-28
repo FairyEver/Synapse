@@ -110,7 +110,40 @@ describe('DrivePublicAssetsView', () => {
     expect(driveApi.trashPublicAsset).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('删除logo.png')
     await click(lastTextButton('删除'))
+    await flush()
     expect(driveApi.trashPublicAsset).toHaveBeenCalledWith('asset-1')
+    expect(document.body.textContent).not.toContain('logo.png')
+  })
+
+  it('does not show trashed public assets in the active list', async () => {
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [{ assetId: 'asset-1', itemId: 'item-1', name: 'trashed.png', size: '10', mimeType: 'image/png', url: '/files/asset-1', lifecycleStatus: 'trashed', accessCount: '0', responseBytes: '0', lastAccessedAt: null, createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z' }],
+      total: 1,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+
+    render(<DrivePublicAssetsView onChanged={async () => undefined} />)
+    await flush()
+
+    expect(document.body.textContent).not.toContain('trashed.png')
+    expect(document.body.textContent).toContain('暂无公开素材')
+  })
+
+  it('returns focus to the public asset rename action after cancelling', async () => {
+    vi.mocked(driveApi.listPublicAssets).mockResolvedValue({
+      items: [{ assetId: 'asset-1', itemId: 'item-1', name: 'logo.png', size: '10', mimeType: 'image/png', url: '/files/asset-1', lifecycleStatus: 'active', accessCount: '0', responseBytes: '0', lastAccessedAt: null, createdAt: '2026-06-29T00:00:00.000Z', updatedAt: '2026-06-29T00:00:00.000Z' }],
+      total: 1,
+      page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
+    })
+    render(<DrivePublicAssetsView onChanged={async () => undefined} />)
+    await flush()
+
+    const renameButton = textButton('重命名')
+    renameButton.focus()
+    await click(renameButton)
+    await click(lastTextButton('取消'))
+
+    expect(document.activeElement).toBe(renameButton)
   })
 
   it('cancels a public asset upload and shows feedback when transfer fails', async () => {

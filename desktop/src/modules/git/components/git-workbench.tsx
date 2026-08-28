@@ -30,7 +30,7 @@ import { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { GitBranchSwitcher } from "./git-branch-switcher"
 import { GitChangesTab } from "./git-changes-tab"
 import { GitDiscardChangesDialog } from "./git-discard-changes-dialog"
-import type { GitDiffViewMode } from "./git-diff-viewer"
+import type { GitDiffViewMode } from "./git-diff-viewer-adapter"
 import { GitHistoryTab } from "./git-history-tab"
 import { canHandleGitFailureAction, getGitFailureActionLabel } from "../lib/git-failure-view"
 import { getGitActionPlan, getGitErrorAdvice } from "../lib/git-status-view"
@@ -61,8 +61,12 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   const activeOperationIdRef = useRef<string | null>(null)
   const observedBranchRef = useRef<string | null | undefined>(undefined)
   const retryActionRef = useRef<(() => void) | null>(null)
+  const discardButtonRef = useRef<HTMLButtonElement>(null)
+  const commitButtonRef = useRef<HTMLButtonElement>(null)
+  const refreshButtonRef = useRef<HTMLButtonElement>(null)
   const status = useGitWorktreeStatus(repository, { autoRefreshEnabled: busy === null })
-  const history = useGitHistory(repository, { enabled: view === "history" })
+  const history = useGitHistory(repository, { enabled: view === "history" && Boolean(status.snapshot && status.snapshot.hasCommits !== false) })
+  const initialStatusLoading = status.loading && !status.snapshot && !status.error
   const currentBranch = status.snapshot?.currentBranch ?? null
   const actionPlan = getGitActionPlan(status.snapshot, status.error)
   const recommendedAction = actionPlan.primaryAction
@@ -209,7 +213,8 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
           <GitBranchSwitcher
             repository={repository}
             currentBranch={currentBranch}
-            disabled={busy !== null || worktreeMutationBlocked}
+            disabled={initialStatusLoading || busy !== null || worktreeMutationBlocked}
+            loading={initialStatusLoading}
             mode="select"
             selectWidth="compact"
             refreshKey={branchRefreshKey}
@@ -243,6 +248,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
                   全不选
                 </Button>
                 <Button
+                  ref={discardButtonRef}
                   type="button"
                   variant="destructive"
                   size="sm"
@@ -256,7 +262,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             <GitBranchSwitcher
               repository={repository}
               currentBranch={currentBranch}
-              disabled={busy !== null}
+              disabled={initialStatusLoading || busy !== null}
               mode="create"
               onChanged={refreshAfterBranchChange}
             />
@@ -288,6 +294,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               </DropdownMenuContent>
             </DropdownMenu>
             <Button
+              ref={refreshButtonRef}
               type="button"
               variant="outline"
               size="icon-sm"
@@ -298,6 +305,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
               <RefreshCw />
             </Button>
             <Button
+              ref={commitButtonRef}
               type="button"
               size="sm"
               disabled={busy !== null || recommendedAction === "none" || (syncBoundaryBlocked && changes.length === 0)}
@@ -371,8 +379,10 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
         selectedChanges={selectedChanges}
         open={discardDialogOpen}
         onOpenChange={setDiscardDialogOpen}
+        returnFocusRef={discardButtonRef}
         onDiscarded={async () => {
           await status.refresh()
+          globalThis.setTimeout(() => refreshButtonRef.current?.focus(), 0)
         }}
       />
       <Tabs value={view} onValueChange={setView} className="flex min-h-0 min-w-0 flex-1 flex-col gap-0">
@@ -395,6 +405,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
             diffWrap={diffWrap}
             onDiffViewModeChange={setDiffViewMode}
             onDiffWrapChange={setDiffWrap}
+            returnFocusRef={commitButtonRef}
           />
         </TabsContent>
         <TabsContent value="history" className="m-0 min-h-0 min-w-0 flex-1 data-[state=inactive]:hidden">

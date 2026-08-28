@@ -21,6 +21,8 @@ const recordData: CcRecordListResult = {
     endedAt: "2026-05-27T01:00:01.000Z",
     modelSummary: "claude-opus-4.6",
     tokens: 15,
+    pricedTokens: 15,
+    unpricedTokens: 0,
     estimatedCost: 0.01,
     toolCalls: 1,
     eventCount: 3,

@@ -61,6 +61,7 @@ export const agentBaseDefinition = {
       success: "Done",
       error: "Failed",
       denied: "Denied",
+      cancelled: "Cancelled",
     },
   },
 } as const satisfies SynapseAgentBaseDefinition

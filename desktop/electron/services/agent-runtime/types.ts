@@ -84,6 +84,7 @@ interface AgentEventBase {
     | "status"
     | "compactBoundary"
     | "sdkEvent"
+    | "fileCheckpoint"
     | "error"
   readonly agentSessionId?: string
   readonly threadId?: string
@@ -296,6 +297,34 @@ export interface AgentSdkEvent extends AgentEventBase {
   readonly payload: Record<string, unknown>
 }
 
+export type AgentFileCheckpointStatus =
+  | "available"
+  | "superseded"
+  | "rewound"
+  | "partial"
+  | "unavailable"
+
+export interface AgentFileCheckpointSummaryFile {
+  readonly id: string
+  readonly path: string
+  readonly kind: AgentFileCheckpointChangeKind
+  readonly insertions: number
+  readonly deletions: number
+  readonly binary: boolean
+  readonly truncated: boolean
+}
+
+export interface AgentFileCheckpointEvent extends AgentEventBase {
+  readonly type: "fileCheckpoint"
+  readonly checkpointId: string
+  readonly status: AgentFileCheckpointStatus
+  readonly insertions: number
+  readonly deletions: number
+  readonly files: readonly AgentFileCheckpointSummaryFile[]
+  readonly fileCount: number
+  readonly coverageWarning: boolean
+}
+
 export type AgentEvent =
   | AgentTextEvent
   | AgentThinkingEvent
@@ -310,6 +339,7 @@ export type AgentEvent =
   | AgentStatusEvent
   | AgentCompactBoundaryEvent
   | AgentSdkEvent
+  | AgentFileCheckpointEvent
 
 export type AgentPermissionBehavior = "allow" | "deny"
 export type AgentPermissionScope = "once" | "session"
@@ -343,6 +373,54 @@ export interface AgentPendingPermission {
   readonly createdAt: string
 }
 
+export type AgentFileCheckpointChangeKind = "added" | "modified" | "deleted"
+
+export interface AgentFileCheckpointFingerprint {
+  readonly kind: "missing" | "regular"
+  readonly sha256: string | null
+  readonly byteSize: number
+  readonly mode: number | null
+  readonly device: number | null
+  readonly inode: number | null
+  readonly parentRealPath: string
+}
+
+export interface AgentFileCheckpointCapturedFile {
+  readonly displayPath: string
+  readonly absolutePath: string
+  readonly kind: AgentFileCheckpointChangeKind
+  readonly insertions: number
+  readonly deletions: number
+  readonly beforeExists: boolean
+  readonly afterExists: boolean
+  readonly beforeFingerprint: AgentFileCheckpointFingerprint
+  readonly afterFingerprint: AgentFileCheckpointFingerprint
+  readonly binary: boolean
+  readonly truncated: boolean
+  readonly patch?: string
+}
+
+export interface AgentFileCheckpointCapture {
+  readonly turnId: string
+  readonly sdkSessionId: string
+  readonly sdkUserMessageId: string
+  readonly insertions: number
+  readonly deletions: number
+  readonly files: readonly AgentFileCheckpointCapturedFile[]
+  readonly fileCount: number
+  readonly status: "available" | "unavailable"
+  readonly coverageWarning: boolean
+}
+
+export interface AgentFileRewindResult {
+  readonly canRewind: boolean
+  readonly error?: string
+  readonly filesChanged?: readonly string[]
+  readonly insertions?: number
+  readonly deletions?: number
+  readonly skippedLinks?: number
+}
+
 export interface AgentLiveSession {
   readonly agentType: string
   readonly finished?: boolean
@@ -361,6 +439,9 @@ export interface AgentLiveSession {
   cancelCurrentTurn?(): Promise<boolean>
   setPermissionMode?(mode: string): Promise<void>
   grantAdditionalDirectories?(directories: readonly string[]): Promise<void>
+  beginFileCheckpoint?(turnId: string): void
+  finalizeFileCheckpoint?(): Promise<AgentFileCheckpointCapture | null>
+  rewindFiles?(sdkUserMessageId: string, options?: { readonly dryRun?: boolean }): Promise<AgentFileRewindResult>
 }
 
 export interface AgentUsageCostBreakdownCny {

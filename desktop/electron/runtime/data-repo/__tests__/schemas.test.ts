@@ -56,6 +56,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.compress_state",
         "agent.artifacts",
         "agent.events",
+        "agent.file-checkpoints",
         "agent.usage",
         "app.agent-personas.items",
         "app.agent-personas.remote-cache",

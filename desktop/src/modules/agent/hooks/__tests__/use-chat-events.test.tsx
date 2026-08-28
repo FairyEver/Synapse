@@ -430,6 +430,65 @@ describe("useChatEvents", () => {
     })
   })
 
+  it("does not mark a checkpoint postlude as sending after the result", async () => {
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe dispatch={dispatch} />)
+    })
+
+    await act(async () => {
+      bridgeState.listener?.({
+        domain: "agent",
+        type: "result",
+        timestamp: "2026-08-27T00:00:10.000Z",
+        scope: { sessionId: "conversation-1" },
+        payload: {
+          projectId: "project-1",
+          sessionKey: "local:renderer",
+          platform: "renderer",
+          event: {
+            type: "result",
+            content: "done",
+            done: true,
+          },
+        },
+      } satisfies SynapseAgentDomainEvent)
+      bridgeState.listener?.({
+        domain: "agent",
+        type: "fileCheckpoint",
+        timestamp: "2026-08-27T00:00:11.000Z",
+        scope: { sessionId: "conversation-1" },
+        payload: {
+          projectId: "project-1",
+          sessionKey: "local:renderer",
+          platform: "renderer",
+          event: {
+            type: "fileCheckpoint",
+            checkpointId: "checkpoint-1",
+            status: "available",
+            insertions: 3,
+            deletions: 0,
+            files: [],
+            fileCount: 0,
+            coverageWarning: false,
+          },
+        },
+      } satisfies SynapseAgentDomainEvent)
+    })
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "REMOVE_SENDING_CONVERSATION",
+      conversationId: "conversation-1",
+    })
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "ADD_SENDING_CONVERSATION",
+      conversationId: "conversation-1",
+    })
+  })
+
   it("marks a later event as sending after an earlier terminal phase", async () => {
     const dispatch: React.Dispatch<ChatAction> = vi.fn()
     const root = createRoot(document.createElement("div"))

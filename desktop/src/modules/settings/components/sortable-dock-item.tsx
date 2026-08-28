@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { CSS } from "@dnd-kit/utilities"
 import { useSortable } from "@dnd-kit/sortable"
 import { ArrowDown, ArrowUp, GripVertical, X } from "lucide-react"
@@ -10,7 +11,7 @@ type SortableDockItemProps = {
   readonly disabled: boolean
   readonly isFirst: boolean
   readonly isLast: boolean
-  readonly onMove: (appId: SynapseSystemAppId, direction: DockMoveDirection) => void
+  readonly onMove: (appId: SynapseSystemAppId, direction: DockMoveDirection) => Promise<boolean>
   readonly onRemove: (appId: SynapseSystemAppId) => void
 }
 
@@ -27,6 +28,17 @@ function SortableDockItem({
     disabled,
   })
   const removable = app.id !== REQUIRED_DOCK_APP_ID
+  const moveUpRef = useRef<HTMLButtonElement>(null)
+  const moveDownRef = useRef<HTMLButtonElement>(null)
+
+  const handleMove = async (direction: DockMoveDirection) => {
+    await onMove(app.id, direction)
+    setTimeout(() => {
+      const preferred = direction === "up" ? moveUpRef.current : moveDownRef.current
+      const fallback = direction === "up" ? moveDownRef.current : moveUpRef.current
+      ;(preferred?.disabled ? fallback : preferred)?.focus()
+    }, 0)
+  }
 
   return (
     <div
@@ -49,22 +61,24 @@ function SortableDockItem({
       <img src={app.icon} alt="" className="size-8 shrink-0 object-contain" draggable={false} />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{app.name}</span>
       <Button
+        ref={moveUpRef}
         type="button"
         variant="ghost"
         size="icon"
         disabled={disabled || isFirst}
         aria-label={`上移 ${app.name}`}
-        onClick={() => onMove(app.id, "up")}
+        onClick={() => void handleMove("up")}
       >
         <ArrowUp />
       </Button>
       <Button
+        ref={moveDownRef}
         type="button"
         variant="ghost"
         size="icon"
         disabled={disabled || isLast}
         aria-label={`下移 ${app.name}`}
-        onClick={() => onMove(app.id, "down")}
+        onClick={() => void handleMove("down")}
       >
         <ArrowDown />
       </Button>

@@ -105,6 +105,8 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameName, setRenameName] = useState("")
+  const closeReturnFocusRef = useRef<HTMLElement | null>(null)
+  const renameTriggerRef = useRef<HTMLButtonElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
   const automationBridge = useMemo(() => requireBridgeDomain("automation"), [])
 
@@ -181,6 +183,9 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirtyRef.current) return
       holdBeforeUnloadForCustomDialog(event)
+      closeReturnFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
       setShowCloseDialog(true)
     }
     window.addEventListener("beforeunload", handleBeforeUnload)
@@ -283,6 +288,7 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
     <div className="flex h-screen flex-col bg-background">
       <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border px-5">
         <Button
+          ref={renameTriggerRef}
           type="button"
           variant="ghost"
           className="-ml-2 min-w-0 justify-start px-2 font-semibold"
@@ -321,6 +327,10 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
           aria-describedby={undefined}
           className="sm:max-w-sm"
           onOpenAutoFocus={handleRenameOpenAutoFocus}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            renameTriggerRef.current?.focus()
+          }}
         >
           <DialogHeader>
             <DialogTitle>重命名自动化</DialogTitle>
@@ -355,7 +365,12 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
         </DialogContent>
       </Dialog>
       <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            closeReturnFocusRef.current?.focus()
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>未保存的更改</AlertDialogTitle>
             <AlertDialogDescription>关闭后，未保存的修改会丢失。</AlertDialogDescription>

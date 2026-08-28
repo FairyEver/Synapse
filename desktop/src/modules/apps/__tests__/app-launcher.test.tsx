@@ -315,6 +315,24 @@ describe("AppsModule", () => {
     expect(document.body.textContent).not.toContain("usage-monitor 内容")
   })
 
+  it("restores launcher focus to the app opened in a new window", async () => {
+    await renderAppsModule(roots)
+
+    await act(async () => {
+      findButton("IDE 管理").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const openWindowButton = findButtonByLabel("新窗口打开")
+      openWindowButton.focus()
+      openWindowButton.click()
+      await Promise.resolve()
+    })
+
+    expect(document.activeElement).toBe(findButton("IDE 管理"))
+  })
+
   it("returns from an embedded app to the launcher", async () => {
     await renderAppsModule(roots)
 

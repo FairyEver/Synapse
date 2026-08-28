@@ -1,6 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -124,16 +126,29 @@ vi.mock("../components/editor-bulk-skill-copy-dialog", () => ({
 vi.mock("../components/editor-bulk-skill-trash-dialog", () => ({
   EditorBulkSkillTrashDialog: ({
     items,
+    onTrashed,
     open,
   }: {
-    items: Array<{ name: string }>
+    items: Array<{ key: string; name: string }>
+    onTrashed?: (trashedKeys: string[]) => Promise<void> | void
     open: boolean
   }) => open ? (
-    <div data-bulk-trash-dialog>已选 {items.length} 个 Skill</div>
+    <div data-bulk-trash-dialog>
+      已选 {items.length} 个 Skill
+      <button type="button" onClick={() => void onTrashed?.(items.map((item) => item.key))}>
+        确认移到废纸篓
+      </button>
+    </div>
   ) : null,
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+} as typeof ResizeObserver
 
 let roots: Root[] = []
 
@@ -166,6 +181,18 @@ afterEach(() => {
 })
 
 describe("EditorScanModule bulk Skill selection", () => {
+  it("restores focus after the bulk trash confirmation closes", async () => {
+    const moduleSource = await readFile(join(__dirname, "../index.tsx"), "utf8")
+    const dialogSource = await readFile(
+      join(__dirname, "../components/editor-bulk-skill-trash-dialog.tsx"),
+      "utf8",
+    )
+
+    expect(moduleSource).toContain("bulkTrashButtonRef")
+    expect(dialogSource).toContain("onCloseAutoFocus")
+    expect(dialogSource).toContain("restoreFallbackOnCloseRef")
+  })
+
   it("shows selection actions after selecting a Skill", async () => {
     await renderModule()
 
@@ -213,5 +240,22 @@ describe("EditorScanModule bulk Skill selection", () => {
     })
 
     expect(document.querySelector("[data-bulk-trash-dialog]")?.textContent).toContain("已选 1 个 Skill")
+  })
+
+  it("focuses refresh after successfully trashing the selected Skills", async () => {
+    await renderModule()
+
+    await act(async () => {
+      clickText("选择 jenkins")
+    })
+    await act(async () => {
+      clickText("移到废纸篓")
+    })
+    await act(async () => {
+      clickText("确认移到废纸篓")
+      await Promise.resolve()
+    })
+
+    expect(document.activeElement).toBe(document.querySelector('button[aria-label="刷新"]'))
   })
 })

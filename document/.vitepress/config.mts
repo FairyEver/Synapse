@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
+import { buildCopyMarkdown } from './copy-markdown.mjs'
 import {
   replaceDocumentDeploymentLinks,
   resolveDocumentAppPublicUrl
@@ -20,11 +21,13 @@ export default defineConfig({
   async transformPageData(pageData, { siteConfig }) {
     if (!pageData.filePath) return
 
+    const rawMarkdown = replaceDocumentDeploymentLinks(
+      await readFile(resolve(siteConfig.srcDir, pageData.filePath), 'utf8'),
+      appPublicUrl
+    )
+
     return {
-      rawMarkdown: replaceDocumentDeploymentLinks(
-        await readFile(resolve(siteConfig.srcDir, pageData.filePath), 'utf8'),
-        appPublicUrl
-      )
+      copyMarkdown: buildCopyMarkdown(rawMarkdown, pageData.frontmatter)
     }
   },
 
@@ -51,6 +54,13 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/synapse-logo.png',
+
+    notFound: {
+      title: '页面不存在',
+      quote: '请检查地址，或返回首页。',
+      linkLabel: '返回首页',
+      linkText: '返回首页'
+    },
 
     nav: [
       { text: '首页', link: '/' },

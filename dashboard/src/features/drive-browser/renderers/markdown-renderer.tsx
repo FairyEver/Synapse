@@ -236,7 +236,7 @@ function DriveMarkdownBody({
   useLayoutEffect(() => {
     const root = bodyRef.current
     if (root) syncDriveHierarchicalListMarkers(root)
-  }, [annotated.html])
+  }, [annotated.html, isCompact])
 
   useEffect(() => {
     const root = bodyRef.current
@@ -247,7 +247,7 @@ function DriveMarkdownBody({
       controller.abort()
       restoreDriveMermaidDiagrams(root)
     }
-  }, [annotated.html, resolvedTheme])
+  }, [annotated.html, isCompact, resolvedTheme])
 
   const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner' || Boolean(effectiveAnnotationContext?.canComment)
   const canCreateAnnotation = annotationsEnabled
@@ -448,6 +448,11 @@ function DriveMarkdownBody({
     setCommentCreateError(null)
     setPendingImageAnchorTop(null)
     window.getSelection()?.removeAllRanges()
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(
+        '[data-markdown-comments-header="true"] button[aria-label="刷新评论"]'
+      )?.focus({ preventScroll: true })
+    })
   }, [])
 
   const clearPendingSelectionAction = useCallback(() => {

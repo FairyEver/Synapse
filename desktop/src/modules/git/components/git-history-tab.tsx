@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import type { SynapseGitCommitFileChange } from "@/types/git"
 import type { useGitHistory } from "../hooks/use-git-history"
 import { mapCommitDiffSections } from "../lib/git-diff-sections"
-import { GitDiffViewer, GitRawDiff, type GitDiffViewMode } from "./git-diff-viewer"
+import { GitDiffViewer, GitRawDiff, type GitDiffViewMode } from "./git-diff-viewer-adapter"
 
 type GitHistoryTabProps = {
   readonly history: ReturnType<typeof useGitHistory>

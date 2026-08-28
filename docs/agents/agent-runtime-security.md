@@ -17,9 +17,23 @@
 - 同一次选择或拖放遇到图片数量、单轮、项目或全局空间配额时，必须释放该次调用已经暂存的全部附件，不得向 Renderer 返回部分批次。其它无效路径仍可按项拒绝，不能破坏同批次有效项。
 - 附件孤儿回收必须按当前 `projectId` 过滤后再比较会话集合；任何项目服务都不得用本项目会话列表清理其它项目的 committed 附件。
 - Persona 显式禁用 Read 时继续禁用；runtime 不强制启用工具，也不以此判断模型能力。模型是否调用 Read、调用次数和是否读完不属于 Synapse 的完成条件。
+- 交互式 Agent 的 `Write`、`Edit`、`MultiEdit`、`NotebookEdit` 必须在 PreToolUse 阶段限制到会话 `cwd` 或已明确授权的 `additionalDirectories`；祖先 Git 仓库不得扩大该边界，且 `bypassPermissions` 不得绕过这条直接文件写入边界。校验必须同时约束词法路径和真实路径：已存在目标取目标 `realpath`，新目标取最近存在父目录的 `realpath`，授权根或目标无法安全解析时拒绝，项目内 symlink 不得把写入导向真实根外。该检查是 SDK 工具执行前的 fail-closed 预检，不提供文件描述符级原子写入，不能消除校验后到 SDK 实际写入之间的 TOCTOU 竞态。Bash、MCP 和外部进程不属于这条结构化路径检查，继续服从 SDK permission mode、显式授权及操作系统权限；项目目录不是通用 OS 沙箱。
 - 运行时附件清单不写入 history。timeline、权限卡片、工具事件、日志和导出必须把受控附件路径投影为稳定附件标签；存在附件上下文时不得持久化可能拆分路径的流式 `input_json_delta` 正文。
 - 附件诊断只允许记录类型和计数；不得记录 attachmentId、名称、路径、哈希、运行时清单、工具输入或模型输出。路径链路不登记为公开 capability/MCP。
 - 附件回滚不得恢复 Renderer 原图字节、raw image IPC、Blob URL 或重写用户附件。
+
+## Agent 文件检查点
+
+- Agent 文件检查点只属于本地交互式 Agent 会话。它依赖本地 Claude Agent SDK/CLI 的文件跟踪与 `rewindFiles`，不以 Anthropic 自家模型为能力门槛；DeepSeek 官方与百炼 Anthropic 兼容 Provider 使用同一运行路径。
+- SDK 必须同时启用 `enableFileCheckpointing` 与 `replay-user-messages`，并把回放用户消息 UUID 仅作为内部恢复锚点。回放消息不得重复进入 timeline、history 正文或导出。
+- 启用文件检查点时不得向 SDK 传入 `sessionStore` 或 `sessionStoreFlush`；SDK 0.3.245 明确拒绝该组合，因为外部 store 不镜像 rewind 所需备份 blob。新会话标题使用 Agent Runtime 的首条用户消息回退，不得为 AI title 恢复 transcript 镜像。
+- V1 只捕获前台 SDK `Write`、`Edit`、`MultiEdit`、`NotebookEdit` 对当前项目工作区普通文件的修改。Bash、普通 subagent、MCP、外部进程、目录操作、符号链接、硬链接、远程文件和额外目录不属于可恢复集合。
+- SDK `rewindFiles` 是实际恢复权威；Synapse sidecar 是审查 Diff、路径身份、文件指纹、并发校验和产品状态权威。timeline/history 只保存相对显示路径与摘要，不得保存绝对路径、源码快照或 patch。
+- Diff patch 每文件最多 128 KiB、每检查点最多 512 KiB；超限、二进制或读取失败只保留摘要与安全元数据。全局 64 MiB patch 配额只允许清理 `superseded` 或 `rewound` 的旧载荷，不得清理当前可撤销检查点的指纹和身份元数据。
+- 只允许撤销当前会话最后一个 `available` 检查点；发起下一轮用户消息必须先把旧检查点标记为 `superseded`。撤销只恢复文件，不回退对话历史、模型上下文、usage 或工具记录。
+- 撤销使用两阶段协议：prepare 产生 5 分钟有效的一次性 operation id；confirm 必须重新校验项目、会话、SDK session、busy 状态、精确文件集合、逐文件写权限、真实父路径和 after 指纹。任一校验失败时不得调用真实 rewind。
+- 实际 rewind 后必须逐文件验证 before 指纹。SDK 多文件恢复不是事务；链接跳过或任一文件未恢复时状态为 `partial`，不得报告完全撤销成功。权限检查与最终结果必须写入 `AuditSink`，日志不得包含源码、patch 或文件哈希。
+- 检查点详情、单文件 Diff、prepare 与 confirm 是 Agent UI 私有窄 IPC，不注册 Capability、MCP、Workflow、Deep Link 或 System App；Renderer 不获得任意路径读写能力。
 
 ## MCP 命名、传输与 Schema
 

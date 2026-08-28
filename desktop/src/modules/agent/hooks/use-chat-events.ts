@@ -257,11 +257,14 @@ function useChatEvents(
           pendingConversationIdsRef.current.delete(activeConversationId)
           dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: activeConversationId })
           dispatch({ type: "CANCEL_RESET" })
-        } else if (isAfterLastTerminal(
-          terminalConversationTimestampsRef.current,
-          activeConversationId,
-          domainEvent.timestamp,
-        )) {
+        } else if (
+          domainEvent.payload.event.type !== "fileCheckpoint"
+          && isAfterLastTerminal(
+            terminalConversationTimestampsRef.current,
+            activeConversationId,
+            domainEvent.timestamp,
+          )
+        ) {
           pendingConversationIdsRef.current.add(activeConversationId)
           dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: activeConversationId })
         }

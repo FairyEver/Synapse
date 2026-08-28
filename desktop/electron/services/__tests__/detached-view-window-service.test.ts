@@ -72,6 +72,26 @@ describe("detached view window service", () => {
     })
   })
 
+  it("keeps the BrowserWindow title authoritative after the renderer loads", async () => {
+    const window = createWindowMock()
+    const service = createDetachedViewWindowService({
+      createWindow: () => window as never,
+      logger: createLoggerMock(),
+    })
+
+    await service.open({
+      key: "view:1",
+      payload: {},
+      options: { title: "Git · Synapse" },
+      load: async () => undefined,
+    })
+
+    const event = { preventDefault: vi.fn() }
+    window.emitPageTitleUpdated(event)
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+  })
+
   it("cleans up and closes windows when loading fails by default", async () => {
     const window = createWindowMock()
     const loadError = new Error("load failed")
@@ -152,7 +172,8 @@ describe("detached view window service", () => {
 })
 
 function createWindowMock() {
-  const listeners = new Map<string, Array<() => void>>()
+  type WindowListener = (event?: { preventDefault: () => void }) => void
+  const listeners = new Map<string, WindowListener[]>()
   const window = {
     id: Math.floor(Math.random() * 100_000),
     webContents: {
@@ -168,13 +189,16 @@ function createWindowMock() {
     once: vi.fn((event: string, listener: () => void) => {
       if (event === "ready-to-show") listener()
     }),
-    on: vi.fn((event: string, listener: () => void) => {
+    on: vi.fn((event: string, listener: WindowListener) => {
       const current = listeners.get(event) ?? []
       listeners.set(event, current.concat(listener))
     }),
     restore: vi.fn(),
     emitClosed: () => {
       for (const listener of listeners.get("closed") ?? []) listener()
+    },
+    emitPageTitleUpdated: (event: { preventDefault: () => void }) => {
+      for (const listener of listeners.get("page-title-updated") ?? []) listener(event)
     },
   }
   return window

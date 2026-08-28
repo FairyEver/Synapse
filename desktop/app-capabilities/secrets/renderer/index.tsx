@@ -124,6 +124,11 @@ export function SecretsModule() {
   const deleteScanGeneration = useRef(0)
   const deleteTargetIdRef = useRef<string | null>(null)
   const deleteRequestIdsRef = useRef(new Set<string>())
+  const deletedSecretFocusFallbackRef = useRef<string | null>(null)
+  const addActionRef = useRef<HTMLButtonElement | null>(null)
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const formTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const secretValueTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const secretsBridge = useMemo(() => requireBridgeDomain("secrets"), [])
 
@@ -187,12 +192,21 @@ export function SecretsModule() {
     }
   }, [clearSecretReveals, invalidateDeleteScan, reload, replaceSecrets, secretsBridge])
 
-  const openCreateForm = () => {
+  useEffect(() => {
+    const deletedSecretId = deletedSecretFocusFallbackRef.current
+    if (!deletedSecretId || secrets.some((secret) => secret.id === deletedSecretId)) return
+    addActionRef.current?.focus()
+    deletedSecretFocusFallbackRef.current = null
+  }, [secrets])
+
+  const openCreateForm = (event: MouseEvent<HTMLButtonElement>) => {
+    formTriggerRef.current = event.currentTarget
     setForm(emptyFormState)
     setFormOpen(true)
   }
 
-  const openEditForm = (secret: SecretSafeView) => {
+  const openEditForm = (secret: SecretSafeView, event: MouseEvent<HTMLButtonElement>) => {
+    formTriggerRef.current = event.currentTarget
     setForm({
       mode: "edit",
       secret,
@@ -209,6 +223,14 @@ export function SecretsModule() {
     if (saving) return
     setFormOpen(false)
     setForm(emptyFormState)
+  }
+
+  const restoreFormTriggerFocus = (event: Event) => {
+    const trigger = formTriggerRef.current
+    if (!trigger?.isConnected) return
+    event.preventDefault()
+    trigger.focus()
+    formTriggerRef.current = null
   }
 
   const scanSkillEnvBindings = useCallback(async (name: string): Promise<SecretSkillEnvScanResult | null> => {
@@ -277,7 +299,7 @@ export function SecretsModule() {
         await scanAndOpenSkillEnvUpdate(saved.name)
       }
     } catch (error) {
-      const message = errorMessage(error, "保存失败")
+      const message = secretFormErrorMessage(error)
       logger.error("Failed to save secret.", error)
       setForm((current) => ({ ...current, error: message }))
       toast.error(message)
@@ -293,6 +315,7 @@ export function SecretsModule() {
     setDeleteRequestIds(new Set(deleteRequestIdsRef.current))
     try {
       await secretsBridge.item.delete({ name: secret.name })
+      deletedSecretFocusFallbackRef.current = secret.id
       setSecrets((current) => {
         const next = current.filter((entry) => entry.id !== secret.id)
         secretsRef.current = next
@@ -312,7 +335,8 @@ export function SecretsModule() {
     }
   }
 
-  const startDeleteSecret = async (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => {
+  const startDeleteSecret = async (secret: SecretSafeView, event: MouseEvent<HTMLButtonElement>) => {
+    deleteTriggerRef.current = event.currentTarget
     const bypassConfirmation = shouldBypassDeleteConfirm(event)
     const scanGeneration = ++deleteScanGeneration.current
     deleteTargetIdRef.current = secret.id
@@ -346,11 +370,24 @@ export function SecretsModule() {
     setDeleting({ secret, bindingCount: scanResult.items.length, hasScanWarnings, scanGeneration })
   }
 
-  const toggleSecretReveal = useCallback(async (secret: SecretSafeView) => {
+  const restoreDeleteTriggerFocus = (event: Event) => {
+    const trigger = deleteTriggerRef.current
+    const target = trigger?.isConnected ? trigger : addActionRef.current
+    if (!target?.isConnected) return
+    event.preventDefault()
+    target.focus()
+    deleteTriggerRef.current = null
+  }
+
+  const toggleSecretReveal = useCallback(async (
+    secret: SecretSafeView,
+    event: MouseEvent<HTMLButtonElement>,
+  ) => {
     if (!secret.hasValue) return
 
     const current = secretReveals[secret.id]
     if (current?.loading) return
+    secretValueTriggerRef.current = event.currentTarget
 
     setSecretReveals((reveals) => ({
       ...reveals,
@@ -387,6 +424,14 @@ export function SecretsModule() {
     }
   }, [secretReveals, secretsBridge])
 
+  const restoreSecretValueTriggerFocus = (event: Event) => {
+    const trigger = secretValueTriggerRef.current
+    if (!trigger?.isConnected) return
+    event.preventDefault()
+    trigger.focus()
+    secretValueTriggerRef.current = null
+  }
+
   const copySecretValue = useCallback(async (): Promise<boolean> => {
     if (!secretValueDialog) return false
     try {
@@ -407,7 +452,7 @@ export function SecretsModule() {
           <SystemAppTopBarActionButton type="button" iconOnly tooltip="刷新" onClick={() => void reload()}>
             <RefreshCw />
           </SystemAppTopBarActionButton>
-          <SystemAppTopBarActionButton type="button" onClick={openCreateForm}>
+          <SystemAppTopBarActionButton ref={addActionRef} type="button" onClick={openCreateForm}>
             <Plus data-icon="inline-start" />
             新增
           </SystemAppTopBarActionButton>
@@ -449,7 +494,7 @@ export function SecretsModule() {
               reveals={secretReveals}
               onDelete={(secret, event) => void startDeleteSecret(secret, event)}
               onEdit={openEditForm}
-              onRevealToggle={(secret) => void toggleSecretReveal(secret)}
+              onRevealToggle={(secret, event) => void toggleSecretReveal(secret, event)}
               onScan={(secret) => void scanAndOpenSkillEnvUpdate(secret.name)}
             />
           )}
@@ -459,6 +504,7 @@ export function SecretsModule() {
         form={form}
         open={formOpen}
         saving={saving}
+        onCloseAutoFocus={restoreFormTriggerFocus}
         onDescriptionChange={(description) => setForm((current) => ({ ...current, description, error: "" }))}
         onNameChange={(name) => setForm((current) => ({ ...current, name, error: "" }))}
         onOpenChange={(open) => {
@@ -473,6 +519,7 @@ export function SecretsModule() {
         onValueChange={(value) => setForm((current) => ({ ...current, value, error: "" }))}
       />
       <DeleteSecretDialog
+        onCloseAutoFocus={restoreDeleteTriggerFocus}
         state={deleting}
         onOpenChange={(open) => {
           if (!open) {
@@ -496,6 +543,7 @@ export function SecretsModule() {
       />
       <SecretValueDialog
         dialog={secretValueDialog}
+        onCloseAutoFocus={restoreSecretValueTriggerFocus}
         onCopy={copySecretValue}
         onOpenChange={(open) => {
           if (!open) setSecretValueDialog(null)
@@ -553,9 +601,9 @@ function SecretsTable({
   readonly deleteRequestIds: ReadonlySet<string>
   readonly secrets: SecretSafeView[]
   readonly reveals: SecretRevealStateById
-  readonly onDelete: (secret: SecretSafeView, event: MouseEvent<HTMLElement>) => void
-  readonly onEdit: (secret: SecretSafeView) => void
-  readonly onRevealToggle: (secret: SecretSafeView) => void
+  readonly onDelete: (secret: SecretSafeView, event: MouseEvent<HTMLButtonElement>) => void
+  readonly onEdit: (secret: SecretSafeView, event: MouseEvent<HTMLButtonElement>) => void
+  readonly onRevealToggle: (secret: SecretSafeView, event: MouseEvent<HTMLButtonElement>) => void
   readonly onScan: (secret: SecretSafeView) => void
 }) {
   return (
@@ -612,7 +660,7 @@ function SecretsTable({
                   variant="ghost"
                   size="icon-xs"
                   aria-label={`编辑密钥：${secret.name}`}
-                  onClick={() => onEdit(secret)}
+                  onClick={(event) => onEdit(secret, event)}
                 >
                   <Pencil className="size-3.5" />
                 </Button>
@@ -643,7 +691,7 @@ function SecretValueCell({
 }: {
   readonly reveal: SecretRevealState | undefined
   readonly secret: SecretSafeView
-  readonly onRevealToggle: (secret: SecretSafeView) => void
+  readonly onRevealToggle: (secret: SecretSafeView, event: MouseEvent<HTMLButtonElement>) => void
 }) {
   if (!secret.hasValue) {
     return <span className="text-sm text-muted-foreground">空值</span>
@@ -664,7 +712,7 @@ function SecretValueCell({
         size="icon-xs"
         aria-label={`显示密钥值：${secret.name}`}
         disabled={reveal?.loading === true}
-        onClick={() => onRevealToggle(secret)}
+        onClick={(event) => onRevealToggle(secret, event)}
       >
         <Eye className="size-3.5" />
       </Button>
@@ -674,10 +722,12 @@ function SecretValueCell({
 
 function SecretValueDialog({
   dialog,
+  onCloseAutoFocus,
   onCopy,
   onOpenChange,
 }: {
   readonly dialog: SecretValueDialogState | null
+  readonly onCloseAutoFocus: (event: Event) => void
   readonly onCopy: () => Promise<boolean>
   readonly onOpenChange: (open: boolean) => void
 }) {
@@ -711,7 +761,7 @@ function SecretValueDialog({
 
   return (
     <Dialog open={Boolean(dialog)} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{dialog?.secret.name ?? "密钥值"}</DialogTitle>
           <DialogDescription>值已明文显示。</DialogDescription>
@@ -741,6 +791,7 @@ function SecretDialog({
   form,
   open,
   saving,
+  onCloseAutoFocus,
   onDescriptionChange,
   onNameChange,
   onOpenChange,
@@ -751,6 +802,7 @@ function SecretDialog({
   readonly form: SecretFormState
   readonly open: boolean
   readonly saving: boolean
+  readonly onCloseAutoFocus: (event: Event) => void
   readonly onDescriptionChange: (description: string) => void
   readonly onNameChange: (name: string) => void
   readonly onOpenChange: (open: boolean) => void
@@ -759,10 +811,15 @@ function SecretDialog({
   readonly onValueChange: (value: string) => void
 }) {
   const isEdit = form.mode === "edit"
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!saving && form.error) nameInputRef.current?.focus()
+  }, [form.error, saving])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <form className="grid gap-4" onSubmit={onSubmit}>
           <DialogHeader>
             <DialogTitle>{isEdit ? "编辑密钥" : "新增密钥"}</DialogTitle>
@@ -773,6 +830,7 @@ function SecretDialog({
               <FieldLabel htmlFor="secret-name">名称</FieldLabel>
               <FieldContent>
                 <Input
+                  ref={nameInputRef}
                   id="secret-name"
                   value={form.name}
                   onChange={(event) => onNameChange(event.target.value)}
@@ -838,17 +896,19 @@ function SecretDialog({
 }
 
 function DeleteSecretDialog({
+  onCloseAutoFocus,
   state,
   onDelete,
   onOpenChange,
 }: {
+  readonly onCloseAutoFocus: (event: Event) => void
   readonly state: DeleteSecretDialogState | null
   readonly onDelete: () => void
   readonly onOpenChange: (open: boolean) => void
 }) {
   return (
     <AlertDialog open={Boolean(state)} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>删除密钥</AlertDialogTitle>
           <AlertDialogDescription>
@@ -886,6 +946,12 @@ function mergeSecret(secrets: SecretSafeView[], secret: SecretSafeView): SecretS
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim().length > 0) return error.message
   return fallback
+}
+
+function secretFormErrorMessage(error: unknown): string {
+  const message = errorMessage(error, "保存失败")
+  const validationMessage = message.match(/^Validation failed for "[^"]+": name: (.+)$/s)?.[1]
+  return validationMessage ?? message
 }
 
 function errorDiagnostic(error: unknown): { readonly errorName?: string, readonly errorMessageLength: number } {

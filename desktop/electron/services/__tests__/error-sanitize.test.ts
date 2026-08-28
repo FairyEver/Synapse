@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { sanitizeError } from "../error-sanitize"
+import {
+  isAbsoluteLocalPath,
+  redactAbsolutePathsInText,
+  sanitizeError,
+} from "../error-sanitize"
 
 describe("sanitizeError", () => {
   it("preserves clean text unchanged", () => {
@@ -89,6 +93,15 @@ describe("sanitizeError", () => {
     expect(result).toContain("[path]")
   })
 
+  it("redacts a quoted path even when its last segment looks like a secret field", () => {
+    const input = "ENOENT: opendir '/var/tmp/source-token=sk-secret'"
+    const result = sanitizeError(input)
+
+    expect(result).toBe("ENOENT: opendir '[path]'")
+    expect(result).not.toContain("/var/tmp")
+    expect(result).not.toContain("sk-secret")
+  })
+
   it("handles empty string", () => {
     expect(sanitizeError("")).toBe("")
   })
@@ -107,5 +120,37 @@ describe("sanitizeError", () => {
     const result = sanitizeError("invalid: Bearer xyz.invalid.token-more")
     expect(result).not.toContain("xyz.invalid.token-more")
     expect(result).toContain("Bearer [redacted]")
+  })
+})
+
+describe("redactAbsolutePathsInText", () => {
+  it("redacts top-level, multi-level, file URL, quoted-space, and Windows paths", () => {
+    const input = [
+      "/tmp /etc /foo /var/lib/app/config.json",
+      "file:///Users/example/Project%20Space/file.ts",
+      "\"/Users/example/Project Space/file.ts\"",
+      "`C:\\Users\\example\\Project Space\\file.ts`",
+    ].join("\n")
+    const result = redactAbsolutePathsInText(input)
+
+    expect(result).not.toContain("/tmp")
+    expect(result).not.toContain("file:///")
+    expect(result).not.toContain("Project Space/file.ts")
+    expect(result).not.toContain("C:\\Users")
+    expect(result.match(/\[path\]/g)).toHaveLength(7)
+  })
+
+  it("preserves URLs, relative paths, protocol-relative URLs, and ordinary slash text", () => {
+    const input = "https://example.test/api/v1 docs/setup.md and/or a/b //cdn.example.test/app.js"
+    expect(redactAbsolutePathsInText(input)).toBe(input)
+  })
+
+  it("recognizes only complete local absolute path values", () => {
+    expect(isAbsoluteLocalPath("/tmp")).toBe(true)
+    expect(isAbsoluteLocalPath("C:\\Users\\example\\file.ts")).toBe(true)
+    expect(isAbsoluteLocalPath("file:///Users/example/file.ts")).toBe(true)
+    expect(isAbsoluteLocalPath("https://example.test/api/v1")).toBe(false)
+    expect(isAbsoluteLocalPath("docs/setup.md")).toBe(false)
+    expect(isAbsoluteLocalPath("and/or")).toBe(false)
   })
 })

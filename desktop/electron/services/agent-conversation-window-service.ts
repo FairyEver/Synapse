@@ -64,6 +64,14 @@ function buildWindowUrl(baseUrl: string, request: AgentConversationWindowRequest
   return buildDetachedViewWindowUrl(baseUrl, params)
 }
 
+function normalizeConversationTitle(value: string | undefined): string {
+  return value?.trim() || "对话"
+}
+
+function buildConversationWindowTitle(value: string | undefined): string {
+  return `Synapse AI Studio 对话 · ${normalizeConversationTitle(value)}`
+}
+
 export function createAgentConversationWindowService(deps: Deps) {
   const detachedWindows = createDetachedViewWindowService({
     createWindow: deps.createWindow,
@@ -116,7 +124,7 @@ export function createAgentConversationWindowService(deps: Deps) {
         options: {
           ...AGENT_CONVERSATION_WINDOW_BOUNDS,
           show: false,
-          title: request.title?.trim() || "对话",
+          title: buildConversationWindowTitle(request.title),
           ...(icon ? { icon } : {}),
           webPreferences: {
             preload: deps.getPreloadPath(),
@@ -139,7 +147,7 @@ export function createAgentConversationWindowService(deps: Deps) {
             projectId: request.projectId,
             conversationId: request.conversationId,
             sessionKey: request.sessionKey,
-            title: request.title?.trim() || "对话",
+            title: normalizeConversationTitle(request.title),
             windowId: window.id,
             openedAt: deps.now(),
           })
@@ -181,9 +189,9 @@ export function createAgentConversationWindowService(deps: Deps) {
         return false
       }
 
-      const title = titleValue.trim() || "对话"
+      const title = normalizeConversationTitle(titleValue)
       try {
-        window.setTitle(title)
+        window.setTitle(buildConversationWindowTitle(title))
       } catch (error) {
         deps.logger.warn("Failed to rename agent conversation window.", {
           projectId: target.projectId,
@@ -243,7 +251,7 @@ export function createAgentConversationWindowService(deps: Deps) {
       }
 
       const previousDetached = detachedByKey.get(oldKey)
-      const title = request.to.title?.trim() || "对话"
+      const title = normalizeConversationTitle(request.to.title)
       if (oldKey !== newKey) {
         detachedByKey.delete(oldKey)
         deps.detachWindow?.(windowManagerIdForKey(oldKey))
@@ -251,7 +259,7 @@ export function createAgentConversationWindowService(deps: Deps) {
         deps.attachWindow?.(windowManagerIdForKey(newKey), window)
       }
 
-      window.setTitle(title)
+      window.setTitle(buildConversationWindowTitle(title))
       detachedByKey.set(newKey, {
         projectId: request.to.projectId,
         conversationId: request.to.conversationId,

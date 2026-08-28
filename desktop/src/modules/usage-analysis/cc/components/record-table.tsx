@@ -10,13 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatSynapseCost } from "@/lib/cost-currency"
 import { formatDateTime } from "@/lib/date-time"
 import type {
   CcRecordDetailRow,
   CcRecordListItem,
 } from "@/types/usage-analysis-conversations"
 import { RecordDetailRows } from "./record-detail-rows"
+import { formatEstimatedCostLabel } from "./estimated-cost-label"
 
 const SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 const ACTION_COLUMN_CLASS = "sticky right-0 z-10 bg-surface text-right"
@@ -165,7 +165,7 @@ export function RecordTable({
                 <TableCell className="text-muted-foreground">{formatDateTime(row.lastUsedAt)}</TableCell>
                 <TableCell>{row.modelSummary || "-"}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatSynapseCost(row.estimatedCost)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatEstimatedCostLabel(row)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.toolCalls)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.requestCount)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.eventCount)}</TableCell>

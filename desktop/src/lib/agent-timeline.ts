@@ -1,5 +1,7 @@
 import type {
   SynapseAgentEvent,
+  SynapseAgentFileCheckpointFile,
+  SynapseAgentFileCheckpointStatus,
   SynapseAgentErrorKind,
   SynapseAgentContextUsage,
   SynapseAgentImageArtifact,
@@ -13,6 +15,7 @@ import type {
   SynapseAgentUserQuestion,
   SynapseAgentUserQuestionResolution,
 } from "../types/agent"
+import { parseAgentAttachmentReference } from "../types/agent-attachment"
 
 type TimelineRecordRole = "user" | "assistant" | "system" | "tool"
 
@@ -167,6 +170,18 @@ export function agentEventToTimelineItem(
         sdkSubtype: event.sdkSubtype,
         label: "SDK event",
       }
+    case "fileCheckpoint":
+      return {
+        ...base,
+        kind: "fileCheckpoint",
+        checkpointId: event.checkpointId,
+        status: event.status,
+        insertions: event.insertions,
+        deletions: event.deletions,
+        files: event.files,
+        fileCount: event.fileCount,
+        coverageWarning: event.coverageWarning,
+      }
     default: {
       const exhaustive: never = event
       return exhaustive
@@ -263,6 +278,18 @@ export function historyRecordToTimelineItem(
         sdkSubtype: stringMetadata(metadata, "sdkSubtype"),
         label: stringMetadata(metadata, "sdkType") === "nativeSlashPassthrough" ? "Native slash" : "SDK event",
         summary: stringMetadata(metadata, "sdkSubtype"),
+      }
+    case "fileCheckpoint":
+      return {
+        ...base,
+        kind: "fileCheckpoint",
+        checkpointId: stringMetadata(metadata, "checkpointId") ?? `${sessionId}:checkpoint:${index}`,
+        status: fileCheckpointStatusMetadata(metadata, "status") ?? "unavailable",
+        insertions: numberMetadata(metadata, "insertions") ?? 0,
+        deletions: numberMetadata(metadata, "deletions") ?? 0,
+        files: fileCheckpointFilesMetadata(metadata, "files"),
+        fileCount: numberMetadata(metadata, "fileCount") ?? fileCheckpointFilesMetadata(metadata, "files").length,
+        coverageWarning: booleanMetadata(metadata, "coverageWarning") ?? false,
       }
     default: {
       const presentation = entry.role === "user" ? userMessagePresentationMetadata(metadata) : undefined
@@ -367,6 +394,17 @@ export function appendAgentTimelineEvent(
   if (event.type === "error") {
     const withStoppedProgress = markInFlightToolProgressStopped(current, timestamp)
     return [...withStoppedProgress, item]
+  }
+  if (event.type === "fileCheckpoint" && item.kind === "fileCheckpoint") {
+    const existingIndex = current.findIndex((candidate) =>
+      candidate.kind === "fileCheckpoint" && candidate.checkpointId === item.checkpointId)
+    if (existingIndex !== -1) {
+      return [
+        ...current.slice(0, existingIndex),
+        item,
+        ...current.slice(existingIndex + 1),
+      ]
+    }
   }
   if (event.type === "text" && item.kind === "message" && last?.kind === "message" && last.role === "assistant") {
     return [...current.slice(0, -1), { ...last, content: `${last.content}${item.content}`, timestamp }]
@@ -719,7 +757,7 @@ function messageAttachmentsMetadata(
     ) {
       attachments.push({
         kind: "path",
-        path: record.name,
+        path: parseAgentAttachmentReference(record.path) ? record.path : record.name,
         entryType: record.entryType,
         name: record.name,
         ...(typeof record.byteSize === "number" ? { byteSize: record.byteSize } : {}),
@@ -1058,4 +1096,46 @@ function errorKindMetadata(
     || value === "webfetch_preflight_failed"
     ? value
     : undefined
+}
+
+function fileCheckpointStatusMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): SynapseAgentFileCheckpointStatus | undefined {
+  const value = stringMetadata(metadata, key)
+  return value === "available"
+    || value === "superseded"
+    || value === "rewound"
+    || value === "partial"
+    || value === "unavailable"
+    ? value
+    : undefined
+}
+
+function fileCheckpointFilesMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): SynapseAgentFileCheckpointFile[] {
+  const value = metadata?.[key]
+  if (!Array.isArray(value)) return []
+  return value.flatMap((candidate) => {
+    const record = recordValue(candidate)
+    if (!record
+      || typeof record.id !== "string"
+      || typeof record.path !== "string"
+      || (record.kind !== "added" && record.kind !== "modified" && record.kind !== "deleted")
+      || !Number.isInteger(record.insertions)
+      || !Number.isInteger(record.deletions)
+      || typeof record.binary !== "boolean"
+      || typeof record.truncated !== "boolean") return []
+    return [{
+      id: record.id,
+      path: record.path,
+      kind: record.kind,
+      insertions: record.insertions as number,
+      deletions: record.deletions as number,
+      binary: record.binary,
+      truncated: record.truncated,
+    }]
+  })
 }

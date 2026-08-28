@@ -128,6 +128,23 @@ describe("agent tool IPC methods", () => {
     expect(electronMock.shell.openPath).toHaveBeenCalledWith(outsidePath)
   })
 
+  it("opens an opaque committed attachment reference without exposing its path", async () => {
+    const auditSink = fakeAuditSink()
+    const controlledPath = path.resolve("/controlled/attachment-1/original.md")
+    const resolveAttachmentOpenPath = vi.fn().mockResolvedValue(controlledPath)
+
+    await expect(toolMethods.openReference.handler(createContext({
+      auditSink,
+      agentRuntime: { resolveAttachmentOpenPath },
+    }), {
+      projectId: "project-1",
+      reference: "synapse-agent-attachment://local/attachment-1",
+    })).resolves.toEqual({ ok: true, path: controlledPath })
+
+    expect(resolveAttachmentOpenPath).toHaveBeenCalledWith("attachment-1")
+    expect(electronMock.shell.openPath).toHaveBeenCalledWith(controlledPath)
+  })
+
   it("escapes Windows editor shim line jump targets before cmd parses them", async () => {
     const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32")
     const auditSink = fakeAuditSink()
@@ -418,6 +435,9 @@ describe("agent tool IPC methods", () => {
 
 function createContext(options: {
   readonly auditSink: AuditSink
+  readonly agentRuntime?: {
+    resolveAttachmentOpenPath(attachmentId: string): Promise<string>
+  }
   readonly permissionGuard?: PermissionGuard
   readonly referenceActionService?: Pick<
     AgentReferenceActionService,
@@ -432,7 +452,7 @@ function createContext(options: {
   const permissionGuard = options.permissionGuard ?? fakePermissionGuard()
   const container = {
     get: vi.fn((serviceId: string) => {
-      if (serviceId === AGENT_RUNTIME_SERVICE_ID) return {}
+      if (serviceId === AGENT_RUNTIME_SERVICE_ID) return options.agentRuntime ?? {}
       if (serviceId === PROVIDER_SERVICE_ID) return {}
       throw new Error(`Unknown service: ${serviceId}`)
     }),

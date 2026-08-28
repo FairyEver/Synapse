@@ -91,6 +91,10 @@ export function createDetachedViewWindowService(deps: DetachedViewWindowServiceD
       keyByWindowId.set(window.id, request.key)
       request.onCreated?.({ key: request.key, window, payload: request.payload })
 
+      window.on("page-title-updated", (event) => {
+        event.preventDefault()
+      })
+
       if (request.preloadErrorMessage) {
         const preloadErrorMessage = request.preloadErrorMessage
         window.webContents.on("preload-error", (_event, _preloadPath, error) => {

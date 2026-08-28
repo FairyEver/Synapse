@@ -27,6 +27,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<DrivePublicAssetDto | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const renameTriggerRef = useRef<HTMLButtonElement>(null)
   const replaceTargetRef = useRef<DrivePublicAssetDto | null>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
@@ -35,7 +36,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
     setLoading(true)
     try {
       const nextPage = await driveApi.listPublicAssets({ offset: 0, limit: 50 })
-      setItems([...nextPage.items])
+      setItems(nextPage.items.filter((item) => item.lifecycleStatus === 'active'))
       setPage(nextPage.page)
     } catch (error) {
       toast(errorMessage(error, '公开素材加载失败'))
@@ -53,7 +54,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
     setLoadingMore(true)
     try {
       const nextPage = await driveApi.listPublicAssets({ offset: page.nextOffset, limit: page.limit })
-      setItems((current) => [...current, ...nextPage.items])
+      setItems((current) => [...current, ...nextPage.items.filter((item) => item.lifecycleStatus === 'active')])
       setPage(nextPage.page)
     } catch (error) {
       toast(errorMessage(error, '公开素材加载失败'))
@@ -123,9 +124,10 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
     if (!deleteTarget) return
     setSubmitting(true)
     try {
-      await driveApi.trashPublicAsset(deleteTarget.assetId)
+      const deletedAssetId = deleteTarget.assetId
+      await driveApi.trashPublicAsset(deletedAssetId)
       setDeleteTarget(null)
-      await load()
+      setItems((current) => current.filter((item) => item.assetId !== deletedAssetId))
       await onChanged()
     } catch (error) {
       toast(errorMessage(error, '删除失败'))
@@ -186,7 +188,8 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
                     <Button type='button' variant='ghost' size='sm' asChild>
                       <a href={item.url} target='_blank' rel='noreferrer'>打开</a>
                     </Button>
-                    <Button type='button' variant='ghost' size='sm' onClick={() => {
+                    <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+                      renameTriggerRef.current = event.currentTarget
                       setRenameTarget(item)
                       setRenameValue(item.name)
                     }}>
@@ -218,7 +221,13 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
       <Dialog open={renameTarget !== null} onOpenChange={(open) => {
         if (!open) setRenameTarget(null)
       }}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            renameTriggerRef.current?.focus()
+          }}
+        >
           <DialogHeader><DialogTitle>重命名</DialogTitle></DialogHeader>
           <div className='grid gap-2'>
             <Label htmlFor='drive-public-asset-name'>素材名称</Label>

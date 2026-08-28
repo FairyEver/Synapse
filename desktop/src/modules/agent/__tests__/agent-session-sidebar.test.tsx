@@ -499,6 +499,18 @@ describe("AgentSessionSidebar", () => {
 
     await act(async () => {
       deleteOthersItem!.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("删除其他会话？")
+    expect(document.body.textContent).toContain("永久删除同组其他 1 个会话")
+    expect(onDeleteOthers).not.toHaveBeenCalled()
+
+    await act(async () => {
+      [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "删除")
+        ?.click()
+      await Promise.resolve()
     })
 
     expect(onDeleteOthers).toHaveBeenCalledWith(workflowKeep, [workflowKeep, workflowOther])

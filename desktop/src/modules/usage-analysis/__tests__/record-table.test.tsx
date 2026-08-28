@@ -60,6 +60,43 @@ describe("RecordTable", () => {
     expect(html).toContain("2026/05/27 01:00")
   })
 
+  it("distinguishes unpriced records from zero-cost priced records", () => {
+    const unpricedRecord = {
+      ...record({ estimatedCost: 0, tokens: 15 }),
+      pricedTokens: 0,
+      unpricedTokens: 15,
+    } as CcRecordListItem
+    const html = renderToStaticMarkup(
+      <RecordTable
+        rows={[unpricedRecord]}
+        expandedSessionId={unpricedRecord.sessionId}
+        detailRows={[{
+          id: "u1",
+          usageEventId: "u1",
+          timestamp: "2026-05-27T01:00:00.000Z",
+          sessionId: unpricedRecord.sessionId,
+          workspaceLabel: "workspace",
+          model: "model-a",
+          tokens: 15,
+          pricedTokens: 0,
+          unpricedTokens: 15,
+          estimatedCost: 0,
+          tokenBreakdown: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
+          toolCalls: 0,
+        }]}
+        detailTotal={1}
+        detailLoading={false}
+        onToggleExpanded={() => undefined}
+        onOpenConversation={() => undefined}
+        onOpenDetail={() => undefined}
+        onLoadMoreDetails={() => undefined}
+      />,
+    )
+
+    expect(html.match(/未定价/g)).toHaveLength(2)
+    expect(html).not.toContain("¥0.00")
+  })
+
   it("removes shared path prefixes from title and project columns", () => {
     const html = renderToStaticMarkup(
       <RecordTable
@@ -189,6 +226,8 @@ function record(overrides: Partial<CcRecordListItem>): CcRecordListItem {
     endedAt: "2026-05-27T01:00:01.000Z",
     modelSummary: "claude-opus-4.6",
     tokens: 15,
+    pricedTokens: 15,
+    unpricedTokens: 0,
     estimatedCost: 0.01,
     toolCalls: 1,
     eventCount: 3,
