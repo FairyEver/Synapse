@@ -81,7 +81,7 @@
 - 普通/未绑定模型 persona 使用新建对话选择的模型；绑定模型 persona 固定使用其当前绑定并保存为基础模型。
 - conversation 保存 persona ID 和创建时 snapshot，每轮使用当前可访问的最新配置；配置变化关闭并重建 live session。persona 不存在、无权访问或缓存缺失时不得降级普通对话：保留历史查看/复制/导出，禁用发送并引导新建。
 - slash menu 只插入，不立即发送，也不是通用命令面板。
-- Quick Input 是独立 System App。Agent 只消费其文本并默认直接发送；不得恢复“直接发送”开关或塞回 slash menu。
+- Quick Input 是独立 System App。Agent 只消费其文本；composer 菜单固定向上展开，选择后追加到当前草稿末尾并保留输入焦点，不直接发送。不得恢复“直接发送”开关或塞回 slash menu。
 - Agent 项目路径与 Git System App 已登记仓库根路径精确匹配时，可在 composer 复用窄类型化 Git IPC；该入口不得经过 Agent 消息、slash command、MCP 或任意 Git 命令，提交仍必须使用仓库绑定的选择令牌。
 - Agent 已配置项目可通过窄类型化 Terminal IPC 以项目目录新建 UI 终端会话，再通过仅含 `sessionId` 的 System App 打开请求定位该会话；虚拟本地对话工作区不提供该入口，也不扩展为 MCP 或 Deep Link。
 - 工作区辅助面板属于 Agent 工作区壳，不属于消息组件、全局 App shell 或 `SidebarContentLayout`。宽屏使用会话与辅助面板分栏，窄屏切换为详情视图；面板状态按会话隔离，文件 Diff 只是首个面板描述符。

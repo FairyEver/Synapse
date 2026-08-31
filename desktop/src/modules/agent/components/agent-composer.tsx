@@ -89,7 +89,6 @@ function AgentComposer({
   knowledgeBaseActions = [],
   onKnowledgeBaseCommand,
   onOpenKnowledgeBaseSourceManager,
-  onQuickInputDirectSend,
   gitRepositoryAvailable = false,
   gitBusyAction = null,
   gitPreparing = false,
@@ -137,7 +136,6 @@ function AgentComposer({
   readonly onRetryPendingMessage?: (id: string) => void
   readonly onKnowledgeBaseCommand?: (commandText: string) => void
   readonly onOpenKnowledgeBaseSourceManager?: () => void
-  readonly onQuickInputDirectSend?: (content: string) => void
   readonly gitRepositoryAvailable?: boolean
   readonly gitBusyAction?: AgentGitAction | null
   readonly gitPreparing?: boolean
@@ -423,12 +421,13 @@ function AgentComposer({
     })
   }
 
-  const insertComposerText = (text: string) => {
+  const insertComposerText = (text: string, placement: "selection" | "end" = "selection") => {
     const el = textareaRef.current
+    const insertAtEnd = placement === "end"
     const next = insertTextAtComposerSelection({
       draft,
-      selectionStart: el?.selectionStart ?? draft.length,
-      selectionEnd: el?.selectionEnd ?? draft.length,
+      selectionStart: insertAtEnd ? draft.length : (el?.selectionStart ?? draft.length),
+      selectionEnd: insertAtEnd ? draft.length : (el?.selectionEnd ?? draft.length),
       text,
     })
     onDraftChange(next.value)
@@ -661,7 +660,7 @@ function AgentComposer({
               <QuickInputMenu
                 quickInputs={quickInputs}
                 disabled={disabled}
-                onDirectSend={(content) => onQuickInputDirectSend?.(content)}
+                onInsert={(content) => insertComposerText(content, "end")}
               />
               <KnowledgeBaseActionMenu
                 actions={knowledgeBaseActions}

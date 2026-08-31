@@ -1,4 +1,5 @@
-import { ChevronDown } from "lucide-react"
+import { useRef } from "react"
+import { ChevronUp } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -12,7 +13,7 @@ import type { SynapseQuickInputItem } from "@/types/quick-input"
 type QuickInputMenuProps = {
   readonly quickInputs: readonly SynapseQuickInputItem[]
   readonly disabled?: boolean
-  readonly onDirectSend: (content: string) => void
+  readonly onInsert: (content: string) => void
 }
 
 const QUICK_INPUT_PREVIEW_MAX_LENGTH = 24
@@ -32,7 +33,8 @@ function quickInputMenuPreview(content: string): string {
     : label
 }
 
-function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuProps) {
+function QuickInputMenu({ quickInputs, disabled, onInsert }: QuickInputMenuProps) {
+  const itemSelectedRef = useRef(false)
   if (quickInputs.length === 0) return null
 
   return (
@@ -47,19 +49,27 @@ function QuickInputMenu({ quickInputs, disabled, onDirectSend }: QuickInputMenuP
           disabled={disabled}
         >
           <span>快捷输入</span>
-          <ChevronDown data-icon="inline-end" />
+          <ChevronUp data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
+        side="top"
+        avoidCollisions={false}
         className="w-80"
+        onCloseAutoFocus={(event) => {
+          if (!itemSelectedRef.current) return
+          itemSelectedRef.current = false
+          event.preventDefault()
+        }}
       >
         {quickInputs.map((item) => (
           <DropdownMenuItem
             key={item.id}
-            aria-label={`发送快捷输入：${quickInputMenuPreview(item.content)}`}
+            aria-label={`追加快捷输入：${quickInputMenuPreview(item.content)}`}
             onSelect={() => {
-              onDirectSend(item.content)
+              itemSelectedRef.current = true
+              onInsert(item.content)
             }}
           >
             <span className="min-w-0 flex-1 truncate">{quickInputMenuPreview(item.content)}</span>

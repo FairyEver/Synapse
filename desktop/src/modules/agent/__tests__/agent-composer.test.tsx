@@ -2826,9 +2826,8 @@ describe("AgentComposer", () => {
     expect(document.activeElement).toBe(trigger)
   })
 
-  it("direct sends a quick input without changing the current draft", async () => {
+  it("appends a quick input to the draft without sending", async () => {
     const onDraftChange = vi.fn()
-    const onDirectSend = vi.fn()
     const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -2845,7 +2844,6 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           quickInputs={[quickInputItem("quick-1", "继续")]}
           onDraftChange={onDraftChange}
-          onQuickInputDirectSend={onDirectSend}
           onInputKeyDown={vi.fn()}
           onSubmit={onSubmit}
           onCancelTurn={vi.fn()}
@@ -2854,8 +2852,10 @@ describe("AgentComposer", () => {
       )
     })
 
+    const textarea = container.querySelector("textarea")
+    textarea?.setSelectionRange(2, 2)
     openQuickInputMenu(container)
-    const item = document.querySelector('[role="menuitem"][aria-label="发送快捷输入：继续"]') as HTMLElement | null
+    const item = document.querySelector('[role="menuitem"][aria-label="追加快捷输入：继续"]') as HTMLElement | null
     expect(item).toBeTruthy()
 
     await act(async () => {
@@ -2863,9 +2863,9 @@ describe("AgentComposer", () => {
       await wait(0)
     })
 
-    expect(onDirectSend).toHaveBeenCalledWith("继续")
-    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(onDraftChange).toHaveBeenCalledWith("用户正在输入 继续")
     expect(onSubmit).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(textarea)
   })
 
   it("returns focus to the quick input trigger after cancelling the menu with Escape", async () => {
@@ -2884,7 +2884,6 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           quickInputs={[quickInputItem("quick-1", "继续")]}
           onDraftChange={vi.fn()}
-          onQuickInputDirectSend={vi.fn()}
           onInputKeyDown={vi.fn()}
           onSubmit={vi.fn()}
           onCancelTurn={vi.fn()}
@@ -2922,7 +2921,6 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           quickInputs={[quickInputItem("quick-1", longContent)]}
           onDraftChange={vi.fn()}
-          onQuickInputDirectSend={vi.fn()}
           onInputKeyDown={vi.fn()}
           onSubmit={vi.fn()}
           onCancelTurn={vi.fn()}
@@ -2933,8 +2931,9 @@ describe("AgentComposer", () => {
 
     openQuickInputMenu(container)
     const menu = document.querySelector('[data-slot="dropdown-menu-content"]') as HTMLElement | null
-    const item = document.querySelector('[role="menuitem"][aria-label^="发送快捷输入："]') as HTMLElement | null
+    const item = document.querySelector('[role="menuitem"][aria-label^="追加快捷输入："]') as HTMLElement | null
     expect(menu?.className).toContain("w-80")
+    expect(menu?.getAttribute("data-side")).toBe("top")
     expect(item).toBeTruthy()
     expect(item?.textContent).toBe("这是一段非常长的片段内容，用来验证菜单中只显示预…")
     expect(item?.querySelector('[data-quick-input-action="send"]')).toBeNull()

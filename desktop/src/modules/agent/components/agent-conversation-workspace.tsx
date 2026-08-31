@@ -145,12 +145,11 @@ type AgentConversationWorkspaceProps = {
 }
 
 type DirectSendTrackInput = {
-  readonly name: "agent-quick-input-direct-send" | "agent-knowledge-base-command-send"
+  readonly name: "agent-knowledge-base-command-send"
   readonly boundary: string
   readonly content: string
   readonly target: PendingMessageTarget
   readonly sending: boolean
-  readonly preserveDraft?: boolean
   readonly commandName?: string
 }
 
@@ -325,27 +324,12 @@ function AgentConversationWorkspace({
   const submitContent = async (
     content: string,
     options: {
-      preserveDraft?: boolean
-      trackSource?: "quick-input-direct"
       attachments?: readonly AgentDraftAttachment[]
     } = {},
   ): Promise<boolean> => {
     const attachments = options.attachments ?? []
     if (!content.trim() && attachments.length === 0) return false
-    const preserveDraft = options.preserveDraft === true
-    if (options.trackSource === "quick-input-direct") {
-      trackDirectAgentSend({
-        name: "agent-quick-input-direct-send",
-        boundary: "renderer.agent.quick-input-direct-send",
-        content,
-        target,
-        sending: chat.sending,
-        preserveDraft,
-      })
-    }
-    if (!preserveDraft) {
-      setDraft("")
-    }
+    setDraft("")
     stick.forcePin()
     if (chat.sending) {
       return queueMessage(content, target, attachments)
@@ -353,10 +337,6 @@ function AgentConversationWorkspace({
     const sent = attachments.length > 0
       ? await chat.sendMessage(content, target, { attachments })
       : await chat.sendMessage(content, target)
-    if (!sent && preserveDraft) {
-      toast.error("发送失败")
-      return false
-    }
     if (!sent) {
       setDraft(content)
       return false
@@ -789,8 +769,6 @@ function AgentConversationWorkspace({
           openCreateDialog(nextMode)
         }}
         onDraftChange={setDraft}
-        onQuickInputDirectSend={(content) =>
-          void submitContent(content, { preserveDraft: true, trackSource: "quick-input-direct" })}
         slashCandidates={slashCandidates}
         recentSlashSkills={config.agent.recentSlashSkills}
         knowledgeBaseActions={knowledgeBaseActions}
@@ -873,7 +851,6 @@ function trackDirectAgentSend(input: DirectSendTrackInput): void {
       conversationId: input.target.conversationId,
       sessionKey: redactSessionKey(input.target.sessionKey),
       sending: input.sending,
-      ...(input.preserveDraft === undefined ? {} : { preserveDraft: input.preserveDraft }),
     },
   })
 }

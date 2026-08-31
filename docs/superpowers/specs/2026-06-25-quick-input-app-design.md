@@ -6,7 +6,7 @@ Date: 2026-06-25
 
 Synapse already has a global prompt snippet feature under Settings. It stores items in `config.global.quickInputs`, renders a Settings category named `提示词片段`, and exposes those snippets in Agent conversations through the composer menu and slash candidates. The old model includes `directSend`, so one item can either insert text into the draft or send immediately.
 
-The product direction changes this feature into a standalone system application named `快捷输入`. It should become a general quick text library, while the first integration remains Agent conversations. In Agent, all quick inputs send immediately; there is no longer an insert/direct-send mode.
+The product direction changes this feature into a standalone system application named `快捷输入`. It should become a general quick text library, while the first integration remains Agent conversations. In Agent, quick inputs append to the current draft; there is no insert/direct-send mode.
 
 This change also establishes a durable convention for system app owned data.
 
@@ -18,7 +18,7 @@ This change also establishes a durable convention for system app owned data.
 - Preserve existing user snippets through an internal migration.
 - Remove the old Settings category for prompt snippets.
 - Remove `directSend` from the active data model and UI.
-- Make Agent quick input selection send immediately from every quick input entry point.
+- Make Agent quick input selection append to the current draft without sending.
 - Treat the feature as a general quick text library, with only Agent integration in the first version.
 - Document the new system app data namespace convention in `AGENTS.md`.
 
@@ -163,10 +163,10 @@ Behavior:
 
 - Rename the composer button from `片段` to `快捷输入`.
 - The menu is hidden when there are no items.
-- Selecting any quick input sends its full content immediately.
-- Slash menu quick input candidates should use the same send-immediately semantics. The app must not have one quick input entry point that inserts and another that sends.
-- Existing draft text is preserved when sending a quick input from the composer menu.
-- Telemetry should record item id and content length, not full content.
+- The composer menu always opens above its trigger and does not flip downward.
+- Selecting any quick input appends its full content to the end of the current draft without sending.
+- Existing draft text is preserved, with one separating space when needed.
+- Focus returns to the composer after insertion.
 
 The old `directSend` value only participates in legacy migration input. It no longer affects Agent behavior.
 
@@ -217,9 +217,9 @@ App tests:
 Agent tests:
 
 - Composer renders `快捷输入` when items exist.
-- Menu selection sends immediately and preserves the existing draft.
-- Slash candidate selection also sends immediately.
-- Telemetry does not include full quick input content.
+- The menu is fixed above its trigger.
+- Menu selection appends to the draft and does not submit.
+- Existing draft text is preserved and focus returns to the composer.
 - Old insert/direct-send branching is removed.
 
 ## Release Notes
@@ -227,5 +227,5 @@ Agent tests:
 Add a pending release note when implementation lands:
 
 ```text
-- 提示词片段升级为独立的“快捷输入”应用；Agent 对话中选择快捷输入会直接发送，原有片段会自动迁移。
+- 提示词片段升级为独立的“快捷输入”应用；Agent 对话中选择快捷输入会追加到当前草稿，原有片段会自动迁移。
 ```
