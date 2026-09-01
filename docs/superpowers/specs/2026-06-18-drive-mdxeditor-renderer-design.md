@@ -22,6 +22,9 @@ This is an adapter for the current Drive render pipeline. It is not a new deskto
 - The existing Drive text save flow remains authoritative: `preview.text`, `edit.currentVersionId`, `editContext.saveText(...)`, reload, and version conflict handling.
 - `.mdx` files should be recognized as Markdown-compatible Drive browser files.
 - Ordinary `.md` and `.markdown` files should treat the `<=` comparison operator as CommonMark text before MDX JSX parsing. `.mdx` files keep strict MDX parsing.
+- Ordinary `.md` and `.markdown` URI/email autolinks should be adapted to MDXEditor-compatible links before rich parsing and serialized back as CommonMark autolinks.
+- CommonMark constructs that MDXEditor cannot round-trip without changing meaning, including indented code blocks and unsupported raw HTML, stay in source mode with their original text intact.
+- Compatibility normalization and save-time image checks must ignore inline and fenced code examples.
 - `.mdx` files with JSX, attributes, expressions, and MDX comments may use rich mode. Files with top-level MDX ESM `import` or `export` stay in source mode because MDXEditor does not round-trip arbitrary ESM declarations.
 - CommonMark files containing HTML comments outside code spans or fenced code stay in source mode because MDXEditor does not round-trip those comments.
 - Ordered lists must preserve their explicit starting number across rich editing and source serialization.
