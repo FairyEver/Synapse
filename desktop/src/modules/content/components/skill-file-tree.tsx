@@ -140,6 +140,8 @@ function SkillFileTreeRow({
   return (
     <div className="group flex h-7 min-w-0 items-center gap-1">
       <button
+        data-track="content.skill-file.select"
+        data-track-native="true"
         type="button"
         className={isActive
           ? "flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-md bg-background px-2 text-left text-xs font-medium ring-1 ring-border"

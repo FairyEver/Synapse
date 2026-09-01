@@ -164,6 +164,7 @@ function FailingAction() {
       onClick={() => {
         void promise(Promise.reject(new Error("token=sk-secret /private/repo prompt body")), {
           loading: "运行中",
+          trackingName: "test.operation",
         }).catch(() => undefined)
       }}
     >

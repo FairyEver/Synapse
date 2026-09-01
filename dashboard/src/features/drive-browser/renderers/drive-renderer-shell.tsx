@@ -286,6 +286,7 @@ export function DriveRendererContent({
         preview={preview}
         edit={snapshot.edit}
         editContext={editContext}
+        annotationContext={annotationContext}
         imageSourceContext={imageSourceContext}
       />
     )

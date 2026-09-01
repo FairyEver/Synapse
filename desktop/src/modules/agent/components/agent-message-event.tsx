@@ -184,6 +184,7 @@ function AssistantMessageBody({
         component: "agent",
         name: "agent-code-copy",
         action: "click",
+        eventKey: "agent.code.copy",
         metadata: {
           boundary: "renderer.agent.code-copy",
           messageId: item.id,
@@ -205,6 +206,7 @@ function AssistantMessageBody({
           component: "agent",
           name: "agent-reference-open",
           action: "click",
+          eventKey: "agent.reference.open",
           metadata: {
             boundary: "renderer.agent.reference-open",
             messageId: item.id,

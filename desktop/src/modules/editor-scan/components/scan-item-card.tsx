@@ -81,6 +81,8 @@ function ScanItemCard({
         <div className="min-w-0 flex-1">
           <div
             data-scan-item-card-action
+            data-track="editor-scan.item.open"
+            data-track-native="true"
             role="button"
             tabIndex={0}
             className="cursor-pointer"
@@ -119,6 +121,8 @@ function ScanItemCard({
             ) : null}
           </div>
           <button
+            data-track="editor-scan.item.reveal"
+            data-track-native="true"
             type="button"
             className="mt-1.5 block max-w-full truncate text-left text-xs text-muted-foreground/50 transition-colors hover:text-foreground"
             onClick={handleOpenInFinder}

@@ -112,6 +112,8 @@ function ContentImageField({
     return (
       <div ref={fieldRef} className="flex flex-col gap-2">
         <div
+          data-track="content.icon.drop"
+          data-track-native="true"
           className={cn(
             "flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 transition-colors",
             isDragOver ? "border-primary" : "border-border",

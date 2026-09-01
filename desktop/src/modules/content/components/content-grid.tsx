@@ -147,6 +147,8 @@ function ContentListCard({
 
   return (
     <div
+      data-track="content.item.open"
+      data-track-native="true"
       role="button"
       tabIndex={0}
       className="flex cursor-pointer flex-col rounded-lg bg-background px-3 py-3 outline-none transition-shadow hover:ring-2 hover:ring-muted-foreground/25 focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -237,6 +239,8 @@ async function copySkillName(skillName: string): Promise<void> {
 function SkillNameCopyButton({ skillName }: { skillName: string }) {
   return (
     <button
+      data-track="content.skill-name.copy"
+      data-track-native="true"
       type="button"
       className="block max-w-full truncate text-left font-mono text-xs leading-4 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       aria-label="复制 Skill 名称"
@@ -273,6 +277,8 @@ function SkillContentListCard({
 
   return (
     <div
+      data-track="content.item.open"
+      data-track-native="true"
       role="button"
       tabIndex={0}
       className="flex cursor-pointer flex-col rounded-lg bg-background px-3 py-3 outline-none transition-shadow hover:ring-2 hover:ring-muted-foreground/25 focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -308,6 +314,8 @@ function SkillContentListCard({
               titleAccessory={item.hasEnv === true ? (
                 <Badge asChild variant="secondary" className="cursor-pointer hover:bg-secondary/80">
                   <button
+                    data-track="content.environment.configure"
+                    data-track-native="true"
                     type="button"
                     aria-label={`配置 ${item.title} 的环境变量`}
                     onClick={(event) => {

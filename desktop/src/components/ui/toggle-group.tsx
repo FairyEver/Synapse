@@ -48,7 +48,7 @@ function ToggleGroup({
       )}
       onValueChange={(value: string | string[]) => {
         const label = dataTrack ?? (typeof value === "string" ? value : undefined) ?? "toggle-group"
-        track({ component: "toggle-group", name: label, action: "select", value })
+        track({ component: "toggle-group", name: label, action: "select", eventKey: dataTrack, value })
         onValueChange?.(value as string & string[])
       }}
       {...props}

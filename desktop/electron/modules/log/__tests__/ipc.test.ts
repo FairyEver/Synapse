@@ -26,6 +26,7 @@ vi.mock("electron", () => ({
 }))
 
 vi.mock("../../../services/log-store", () => ({
+  createMainLogger: () => ({ warn: vi.fn() }),
   logStore: mocks.logStore,
 }))
 

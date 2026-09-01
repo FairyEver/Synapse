@@ -334,6 +334,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       <div className="flex flex-col items-center gap-2">
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
         <img
+          data-track="settings.about.logo.click"
+          data-track-native="true"
           src={synapseLogo}
           alt="Synapse"
           draggable={false}
@@ -352,6 +354,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           >
             {settingsTitleParts.map((part) => (
               <span
+                data-track="settings.about.title-part.click"
+                data-track-native="true"
                 key={part.index}
                 aria-hidden="true"
                 className={

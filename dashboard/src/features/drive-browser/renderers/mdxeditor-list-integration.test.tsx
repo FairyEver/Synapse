@@ -8,16 +8,19 @@ import {
   codeMirrorPlugin,
   GenericJsxEditor,
   jsxPlugin,
+  linkPlugin,
   ListsToggle,
   MDXEditor,
   type MDXEditorMethods,
   listsPlugin,
+  quotePlugin,
   toolbarPlugin,
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
 import {
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
+  prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
 import {
   DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
@@ -102,6 +105,43 @@ describe('MDXEditor list integration', () => {
     expect(editorRef.current?.getMarkdown()).toContain('正文 a <= b。')
     expect(editorRef.current?.getMarkdown()).toContain('`a <= b`')
     expect(editorRef.current?.getMarkdown()).toContain('const ok = a <= b')
+  })
+
+  it('parses and round-trips CommonMark URI and email autolinks', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onError = vi.fn()
+    const source = [
+      '<https://example.com/a?q=1>',
+      '',
+      '联系 <user@example.com>。',
+      '',
+      '- <https://example.com/list>',
+      '',
+      '> <user@example.com>',
+    ].join('\n')
+    const prepared = prepareCommonMarkForMdxEditor(source)
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={prepared.markdown}
+          onError={onError}
+          toMarkdownOptions={commonMarkToMarkdownOptions}
+          plugins={[commonMarkTextCompatibilityPlugin(), linkPlugin(), listsPlugin(), quotePlugin()]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    expect(prepared.requiresSourceMode).toBe(false)
+    expect(onError).not.toHaveBeenCalled()
+    expect(editorRef.current?.getMarkdown()).toContain('<https://example.com/a?q=1>')
+    expect(editorRef.current?.getMarkdown()).toContain('<user@example.com>')
+    expect(editorRef.current?.getMarkdown()).toContain('* <https://example.com/list>')
   })
 
   it('keeps CommonMark HTML, escapes, comments, and JSX-looking code in Markdown mode', async () => {

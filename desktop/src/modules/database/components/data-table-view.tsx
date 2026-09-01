@@ -57,6 +57,7 @@ import {
   debounce,
   sanitizeTrackRecord,
   sanitizeTrackValue,
+  track,
 } from "@/lib/ui-tracking"
 import {
   DATA_TABLE_ACTION_COLUMN_WIDTH,
@@ -460,6 +461,12 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           column: columnName,
           from: startWidth,
           to: nextWidth,
+        })
+        track({
+          component: "database",
+          name: "database.column.resize",
+          action: "resize",
+          eventKey: "database.column.resize",
         })
       }
 

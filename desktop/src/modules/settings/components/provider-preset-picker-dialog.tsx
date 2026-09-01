@@ -142,6 +142,8 @@ function ProviderPresetPickerDialog({
           ) : null}
 
           <button
+            data-track="settings.provider-preset.custom.select"
+            data-track-native="true"
             type="button"
             data-selected={selectedValue === customValue}
             className="flex h-10 w-full items-center rounded-lg bg-muted/40 px-3 text-left text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 data-[selected=true]:bg-muted"
@@ -195,6 +197,8 @@ function ProviderPresetRow({
       className="flex w-full items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 transition-colors hover:bg-muted data-[selected=true]:bg-muted"
     >
       <button
+        data-track="settings.provider-preset.select"
+        data-track-native="true"
         type="button"
         className="min-w-0 flex-1 text-left"
         onClick={() => onSelect(option.value)}

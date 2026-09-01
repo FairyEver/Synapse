@@ -45,6 +45,7 @@ export type { FileBackedDataRepositoryOptions } from "./factory"
 
 export {
   allSchemas,
+  clientTelemetryOutboxSchema,
   auditSchema,
   agentArtifactsSchema,
   agentCompressStateSchema,
@@ -95,6 +96,9 @@ export {
   workflowShareStateSchema,
   workflowsSchema,
   type AuditEntryV1,
+  type ClientTelemetryCategory,
+  type ClientTelemetryOutcome,
+  type ClientTelemetryOutboxEntryV1,
   type AgentArtifactEntry,
   type AgentArtifactEntryV1,
   type AgentArtifactEntryV2,

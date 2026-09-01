@@ -16,7 +16,7 @@ function ContextMenu({
     <ContextMenuPrimitive.Root
       data-slot="context-menu"
       onOpenChange={(open) => {
-        track({ component: "context-menu", name: dataTrack ?? "context-menu", action: open ? "open" : "close" })
+        track({ component: "context-menu", name: dataTrack ?? "context-menu", action: open ? "open" : "close", eventKey: dataTrack })
         onOpenChange?.(open)
       }}
       {...props}
@@ -110,7 +110,7 @@ function ContextMenuItem({
       )}
       onSelect={(e) => {
         const label = dataTrack ?? extractLabel(e.currentTarget) ?? "context-menu-item"
-        track({ component: "context-menu-item", name: label, action: "select" })
+        track({ component: "context-menu-item", name: label, action: "select", eventKey: dataTrack })
         onSelect?.(e)
       }}
       {...props}
@@ -177,7 +177,7 @@ function ContextMenuCheckboxItem({
       )}
       checked={checked}
       onCheckedChange={(val) => {
-        track({ component: "context-menu-checkbox-item", name: dataTrack ?? props.textValue ?? "context-menu-checkbox-item", action: val ? "check" : "uncheck" })
+        track({ component: "context-menu-checkbox-item", name: dataTrack ?? props.textValue ?? "context-menu-checkbox-item", action: val ? "check" : "uncheck", eventKey: dataTrack })
         onCheckedChange?.(val)
       }}
       {...props}
@@ -214,7 +214,7 @@ function ContextMenuRadioItem({
       )}
       onSelect={(e) => {
         const label = dataTrack ?? extractLabel(e.currentTarget) ?? "context-menu-radio-item"
-        track({ component: "context-menu-radio-item", name: label, action: "select" })
+        track({ component: "context-menu-radio-item", name: label, action: "select", eventKey: dataTrack })
         onSelect?.(e)
       }}
       {...props}

@@ -69,6 +69,7 @@ function ConfigBackupPanel() {
                 void promise(
                   () => exportConfigBackup(),
                   {
+                    trackingName: "settings.config-backup.export",
                     loading: "正在导出配置...",
                     success: (result) => result ? "配置已导出。" : null,
                     error: (error) => error instanceof Error ? error.message : "导出配置失败。",
@@ -117,6 +118,7 @@ function ConfigBackupPanel() {
                 void promise(
                   () => importConfigBackup(),
                   {
+                    trackingName: "settings.config-backup.import",
                     loading: "正在导入配置...",
                     success: (result) => {
                       if (!result) {

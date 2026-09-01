@@ -274,6 +274,8 @@ export function GitRepositoryList({
 
                       return (
                         <div
+                          data-track="git.repository.open"
+                          data-track-native="true"
                           key={repository.id}
                           role="button"
                           tabIndex={0}

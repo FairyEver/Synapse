@@ -563,6 +563,8 @@ function SourceEntryList({
             )}
             data-raw-path={entry.relativePath}
             data-raw-drop-target={isDirectory ? entry.relativePath : undefined}
+            data-track="knowledge-base.source.entry"
+            data-track-native="true"
             draggable
             onClick={isDirectory ? () => onOpenDirectory(entry.relativePath) : undefined}
             onDragStart={(event) => {
@@ -1027,6 +1029,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.source.upload-drop",
         loading: "正在上传",
         success: (result) => sourceUploadSuccessMessage(result, "没有可上传的文件"),
         error: "上传失败",
@@ -1064,6 +1067,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.source.upload-files",
         loading: "正在上传",
         success: (result) => sourceUploadSuccessMessage(result, null),
         error: "上传失败",
@@ -1083,6 +1087,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.source.upload-folder",
         loading: "正在上传",
         success: (result) => sourceUploadSuccessMessage(result, null),
         error: "上传失败",
@@ -1105,6 +1110,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.source.add-url",
         loading: "正在添加",
         success: (result) => sourceUrlSuccessMessage(result, "没有可添加的 URL"),
         error: "添加失败",
@@ -1135,6 +1141,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.folder.create",
         loading: "正在新建",
         success: "已新建",
         error: "新建失败",
@@ -1166,6 +1173,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.entry.rename",
         loading: "正在重命名",
         success: "已重命名",
         error: "重命名失败",
@@ -1193,6 +1201,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.entry.move",
         loading: "正在移动",
         success: (result) => rawMutationSuccessMessage(result, "已移动", "没有可移动的条目"),
         error: "移动失败",
@@ -1227,6 +1236,7 @@ function KnowledgeBaseSourceManagerWindow() {
         return result
       },
       {
+        trackingName: "knowledge-base.entry.trash",
         loading: "正在移到废纸篓",
         success: (result) => rawMutationSuccessMessage(result, "已移到废纸篓", "没有可删除的条目"),
         error: "移到废纸篓失败",
@@ -1273,6 +1283,7 @@ function KnowledgeBaseSourceManagerWindow() {
         relativePaths,
       }),
       {
+        trackingName: "knowledge-base.entry.export",
         loading: "正在导出",
         success: (result) => rawMutationSuccessMessage(result, "已导出", null),
         error: "导出失败",

@@ -16,7 +16,7 @@ function DropdownMenu({
     <DropdownMenuPrimitive.Root
       data-slot="dropdown-menu"
       onOpenChange={(open) => {
-        track({ component: "dropdown-menu", name: dataTrack ?? "dropdown-menu", action: open ? "open" : "close" })
+        track({ component: "dropdown-menu", name: dataTrack ?? "dropdown-menu", action: open ? "open" : "close", eventKey: dataTrack })
         onOpenChange?.(open)
       }}
       {...props}
@@ -93,7 +93,7 @@ function DropdownMenuItem({
       )}
       onSelect={(e) => {
         const label = dataTrack ?? extractLabel(e.currentTarget) ?? "dropdown-menu-item"
-        track({ component: "dropdown-menu-item", name: label, action: "select" })
+        track({ component: "dropdown-menu-item", name: label, action: "select", eventKey: dataTrack })
         onSelect?.(e)
       }}
       {...props}
@@ -123,7 +123,7 @@ function DropdownMenuCheckboxItem({
       )}
       checked={checked}
       onCheckedChange={(val) => {
-        track({ component: "dropdown-menu-checkbox-item", name: dataTrack ?? props.textValue ?? "dropdown-menu-checkbox-item", action: val ? "check" : "uncheck" })
+        track({ component: "dropdown-menu-checkbox-item", name: dataTrack ?? props.textValue ?? "dropdown-menu-checkbox-item", action: val ? "check" : "uncheck", eventKey: dataTrack })
         onCheckedChange?.(val)
       }}
       {...props}
@@ -174,7 +174,7 @@ function DropdownMenuRadioItem({
       )}
       onSelect={(e) => {
         const label = dataTrack ?? extractLabel(e.currentTarget) ?? "dropdown-menu-radio-item"
-        track({ component: "dropdown-menu-radio-item", name: label, action: "select" })
+        track({ component: "dropdown-menu-radio-item", name: label, action: "select", eventKey: dataTrack })
         onSelect?.(e)
       }}
       {...props}

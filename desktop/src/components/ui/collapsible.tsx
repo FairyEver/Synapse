@@ -14,7 +14,7 @@ function Collapsible({
     <CollapsiblePrimitive.Root
       data-slot="collapsible"
       onOpenChange={(open) => {
-        track({ component: "collapsible", name: dataTrack ?? "collapsible", action: open ? "expand" : "collapse" })
+        track({ component: "collapsible", name: dataTrack ?? "collapsible", action: open ? "expand" : "collapse", eventKey: dataTrack })
         onOpenChange?.(open)
       }}
       {...props}

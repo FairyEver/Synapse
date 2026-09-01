@@ -89,7 +89,7 @@ function DatabaseManagementCard({ status, onRefreshStatus }: DatabaseManagementC
           logger.info("Database exported.")
           return result
         },
-        { loading: "正在导出...", success: (value) => value ? "数据库已导出" : null },
+        { trackingName: "settings.database.export", loading: "正在导出...", success: (value) => value ? "数据库已导出" : null },
       )
     } catch (error) {
       logger.warn("Database export failed.", {
@@ -108,7 +108,7 @@ function DatabaseManagementCard({ status, onRefreshStatus }: DatabaseManagementC
           logger.info("Database imported.")
           return result
         },
-        { loading: "正在导入...", success: (value) => value ? "数据库已导入" : null },
+        { trackingName: "settings.database.import", loading: "正在导入...", success: (value) => value ? "数据库已导入" : null },
       )
     } catch (error) {
       logger.warn("Database import failed.", {

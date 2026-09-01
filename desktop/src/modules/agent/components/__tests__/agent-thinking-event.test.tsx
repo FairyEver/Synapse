@@ -250,6 +250,7 @@ describe("AgentThinkingEvent", () => {
       component: "agent",
       name: "agent-thinking-copy",
       action: "click",
+      eventKey: "agent.thinking.copy",
       metadata: {
         boundary: "renderer.agent.thinking-copy",
         itemId: "thinking-copy",

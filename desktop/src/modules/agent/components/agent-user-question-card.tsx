@@ -90,6 +90,7 @@ function AgentUserQuestionCard({
       component: "agent",
       name: "agent-user-question-card-response",
       action: "submit",
+      eventKey: "agent.question.respond",
       metadata: {
         boundary: "renderer.agent.user-question-response",
         itemId: item.id,
@@ -116,6 +117,7 @@ function AgentUserQuestionCard({
       component: "agent",
       name: "agent-user-question-card-response",
       action: "submit",
+      eventKey: "agent.question.skip",
       value: "skip",
       metadata: {
         boundary: "renderer.agent.user-question-response",

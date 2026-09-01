@@ -366,6 +366,8 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
   return (
     <div className="flex min-h-full flex-col gap-3">
       <input
+        data-track="drive.public-asset.upload.select"
+        data-track-native="true"
         ref={uploadInputRef}
         type="file"
         multiple
@@ -374,6 +376,8 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
         onChange={handleUploadSelected}
       />
       <input
+        data-track="drive.public-asset.replace.select"
+        data-track-native="true"
         ref={replaceInputRef}
         type="file"
         accept={DRIVE_PUBLIC_ASSET_ACCEPT}

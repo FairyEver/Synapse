@@ -940,6 +940,7 @@ describe("AgentModule pending prompt sessions", () => {
       component: "agent",
       name: "agent-knowledge-base-command-send",
       action: "submit",
+      eventKey: "agent-knowledge-base-command-send",
       metadata: {
         boundary: "renderer.agent.knowledge-base-command-send",
         contentLength: 10,

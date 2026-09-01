@@ -39,7 +39,7 @@ import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } fr
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationAnchorFromSelection, createMarkdownImageAnnotationAnchor } from './markdown-annotation-target'
-import { getCommentActionErrorMessage, MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
+import { DriveCommentsRail, getCommentActionErrorMessage, type DriveCommentsRailItem } from '../drive-comments-rail'
 import { MarkdownImageFallbacks } from './markdown-image-fallback'
 import { MarkdownImageCommentsOverlay, type MarkdownImageThreadMarker } from './markdown-image-comments-overlay'
 import { InlineToolbar, type InlineToolbarAction } from './inline-toolbar'
@@ -273,7 +273,7 @@ function DriveMarkdownBody({
     })
   }, [annotations.threads, resolvedByThreadId])
   const railThreads = useMemo(
-    (): readonly MarkdownCommentsRailThread[] => sortedThreads.map((thread) => {
+    (): readonly DriveCommentsRailItem[] => sortedThreads.map((thread) => {
       const resolved = resolvedByThreadId.get(thread.id)
       const effectiveAnchor = thread.anchor && resolved?.positionStatus
         ? {
@@ -290,14 +290,16 @@ function DriveMarkdownBody({
         : { ...thread, anchorStatus: resolved.anchorStatus, anchor: effectiveAnchor }
       return {
         thread: effectiveThread,
-        anchorTop: resolved?.anchorStatus === 'orphaned' ? null : threadAnchorTopById[thread.id] ?? null,
+        placement: resolved?.anchorStatus !== 'orphaned' && typeof threadAnchorTopById[thread.id] === 'number'
+          ? { status: 'positioned', anchorTop: threadAnchorTopById[thread.id] }
+          : { status: 'unavailable' },
       }
     }),
     [resolvedByThreadId, sortedThreads, threadAnchorTopById]
   )
   const navigableThreadIds = useMemo(
     () => railThreads
-      .filter((item) => item.anchorTop !== null && item.thread.anchorStatus !== 'orphaned')
+      .filter((item) => item.placement.status === 'positioned' && item.thread.anchorStatus !== 'orphaned')
       .map((item) => item.thread.id),
     [railThreads]
   )
@@ -882,7 +884,7 @@ function DriveMarkdownBody({
     : null
 
   const renderCommentsRail = (mode: 'anchored' | 'list') => (
-    <MarkdownCommentsRail
+    <DriveCommentsRail
       mode={mode}
       threads={railThreads}
       draft={commentDraft}

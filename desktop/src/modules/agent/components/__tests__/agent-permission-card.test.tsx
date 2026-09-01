@@ -102,6 +102,7 @@ describe("AgentPermissionCard", () => {
       component: "agent",
       name: "agent-permission-card-response",
       action: "submit",
+      eventKey: "agent.permission.respond",
       value: "deny",
       metadata: {
         boundary: "renderer.agent.permission-card-response",

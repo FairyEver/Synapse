@@ -64,6 +64,7 @@ function AgentLocalReferenceLink({
     if (event.defaultPrevented || !localReference || !options.enabled) return
     if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return
     event.preventDefault()
+    track({ component: "agent", name: "agent.reference.context-menu", action: "open", eventKey: "agent.reference.context-menu" })
     const bounds = event.currentTarget.getBoundingClientRect()
     event.currentTarget.dispatchEvent(new window.MouseEvent("contextmenu", {
       bubbles: true,
@@ -137,6 +138,11 @@ async function runAgentReferenceAction(
       ? "agent-reference-open-default"
       : "agent-reference-show-in-folder",
     action: "complete",
+    eventKey: operation === "open_default"
+      ? "agent.reference.open-default"
+      : "agent.reference.show-in-folder",
+    category: "operation",
+    outcome: result === "accepted" ? "success" : "failure",
     metadata: {
       operation,
       messageId: options.messageId,

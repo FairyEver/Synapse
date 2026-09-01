@@ -17,7 +17,7 @@ function Popover({
     <PopoverPrimitive.Root
       data-slot="popover"
       onOpenChange={(open) => {
-        track({ component: "popover", name: dataTrack ?? "popover", action: open ? "open" : "close" })
+        track({ component: "popover", name: dataTrack ?? "popover", action: open ? "open" : "close", eventKey: dataTrack })
         onOpenChange?.(open)
       }}
       {...props}

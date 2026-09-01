@@ -73,21 +73,25 @@ describe("RunnerToolbar", () => {
     expect(onCopyRunReport).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-runner-view-timeline",
       name: "workflow-runner-view-timeline",
       action: "click",
     })
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-runner-view-token",
       name: "workflow-runner-view-token",
       action: "click",
     })
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-runner-stop",
       name: "workflow-runner-stop",
       action: "click",
     })
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-runner-copy-run-report",
       name: "workflow-runner-copy-run-report",
       action: "click",
     })

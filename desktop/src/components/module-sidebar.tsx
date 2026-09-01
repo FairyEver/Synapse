@@ -81,6 +81,7 @@ function ModuleSidebarHeader({
           component: "module-sidebar-search",
           name: searchTrackName,
           action: "change",
+          eventKey: searchTrackName,
           value: typeof sanitizedValue === "string" ? sanitizedValue : undefined,
         })
       }, 400)
@@ -242,6 +243,7 @@ function ModuleSidebarRow({
       component: "module-sidebar-item",
       name: extractLabel(event.currentTarget) ?? dataTrack,
       action: "select",
+      eventKey: dataTrack,
       value: trackValue,
     })
     onSelect()
@@ -258,6 +260,7 @@ function ModuleSidebarRow({
       role="button"
       tabIndex={0}
       data-track={dataTrack}
+      data-track-native="true"
       aria-current={active ? "page" : undefined}
       onClick={handleSelect}
       onDoubleClick={handleDoubleClick}
@@ -308,6 +311,7 @@ function ModuleSidebarItem({
           component: "module-sidebar-item",
           name: dataTrack ?? extractLabel(event.currentTarget) ?? "module-sidebar-item",
           action: "select",
+          eventKey: dataTrack,
           value: trackValue,
         })
         onClick?.()

@@ -120,6 +120,8 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
           <div className="mt-2 flex flex-col gap-1">
             {events.map((event) => (
               <button
+                data-track="usage.conversation.event.select"
+                data-track-native="true"
                 key={event.id}
                 type="button"
                 className={selected?.id === event.id
@@ -134,6 +136,8 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
             {error ? <div className="text-xs text-destructive">{error}</div> : null}
             {detail?.hasMore ? (
               <button
+                data-track="usage.conversation.load-more"
+                data-track-native="true"
                 type="button"
                 className="rounded-md border px-2 py-1 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={loadingMore}

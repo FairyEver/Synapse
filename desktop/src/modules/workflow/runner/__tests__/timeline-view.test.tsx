@@ -58,6 +58,7 @@ describe("TimelineView", () => {
       component: "workflow.runner",
       name: "workflow-runner-timeline-node-select",
       action: "select",
+      eventKey: "workflow.runner.timeline.select",
       value: "node-1",
       metadata: {
         boundary: "renderer.workflow.runner.timeline",

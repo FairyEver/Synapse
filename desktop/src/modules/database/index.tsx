@@ -157,7 +157,7 @@ function DatabaseTablesView() {
           })
           return result
         },
-        { loading: "正在导出...", success: (result) => result?.success ? "已导出" : null },
+        { trackingName: "database.table.export", loading: "正在导出...", success: (result) => result?.success ? "已导出" : null },
       )
     } catch (error) {
       logger.error("Table export failed.", { error })
@@ -212,7 +212,7 @@ function DatabaseTablesView() {
             sourcePath: sanitizeTrackValue("sourcePath", sourcePath),
           })
         },
-        { loading: "正在导入...", success: "已导入" },
+        { trackingName: "database.table.import", loading: "正在导入...", success: "已导入" },
       )
       setPendingImport(null)
     } catch (error) {
@@ -236,7 +236,7 @@ function DatabaseTablesView() {
           setPage(1)
           setFilter(null)
         },
-        { loading: "正在创建表...", success: `表 "${name}" 已创建` },
+        { trackingName: "database.table.create", loading: "正在创建表...", success: `表 "${name}" 已创建` },
       )
     },
     [promise, refreshTables],
@@ -252,7 +252,7 @@ function DatabaseTablesView() {
         setActiveTable(null)
         await refreshTables()
       },
-      { loading: "正在删除表...", success: `表 "${selectedTable}" 已删除` },
+      { trackingName: "database.table.delete", loading: "正在删除表...", success: `表 "${selectedTable}" 已删除` },
     )
     window.setTimeout(() => createTableButtonRef.current?.focus(), 100)
   }, [selectedTable, promise, refreshTables])
@@ -293,7 +293,7 @@ function DatabaseTablesView() {
           await refreshSchema()
           await refreshQuery()
         },
-        { loading: "正在添加列...", success: `列 "${name}" 已添加` },
+        { trackingName: "database.column.create", loading: "正在添加列...", success: `列 "${name}" 已添加` },
       )
     },
     [selectedTable, promise, refreshSchema, refreshQuery],
@@ -332,7 +332,7 @@ function DatabaseTablesView() {
           })
           await refreshSchema()
         },
-        { loading: "正在更新选项...", success: "选项已更新" },
+        { trackingName: "database.column.choices.update", loading: "正在更新选项...", success: "选项已更新" },
       )
     },
     [selectedTable, promise, refreshSchema],

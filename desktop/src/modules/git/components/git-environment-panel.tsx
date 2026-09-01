@@ -227,7 +227,12 @@ function IdentityForm({
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
-    <form className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end" onSubmit={onSubmit}>
+    <form
+      className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end"
+      data-track="git.environment.submit"
+      data-track-native="true"
+      onSubmit={onSubmit}
+    >
       <div className="grid gap-2">
         <Label htmlFor="git-identity-name">用户名</Label>
         <Input

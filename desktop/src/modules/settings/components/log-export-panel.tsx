@@ -107,6 +107,7 @@ function LogExportPanel() {
           return result
         },
         {
+          trackingName: "settings.logs.export",
           loading: "正在导出日志...",
           success: (result) => result.filePath ? `已导出 ${result.fileCount} 个日志文件到 ${result.filePath}` : null,
           error: (error) => error instanceof Error ? error.message : "导出日志失败",
@@ -132,6 +133,7 @@ function LogExportPanel() {
         await promise(async () => {
           await navigator.clipboard.writeText("")
         }, {
+          trackingName: "settings.logs.copy-empty",
           loading: "正在复制日志...",
           success: () => "当前没有日志文件",
           error: (error) => error instanceof Error ? error.message : "复制日志失败",
@@ -154,6 +156,7 @@ function LogExportPanel() {
             return content
           },
           {
+            trackingName: "settings.logs.copy-single",
             loading: "正在复制日志...",
             success: () => "已复制日志到剪切板",
             error: (error) => error instanceof Error ? error.message : "复制日志失败",
@@ -186,6 +189,7 @@ function LogExportPanel() {
             "删除日志超时，请稍后重试。",
           ),
         {
+          trackingName: "settings.logs.clear",
           loading: "正在删除日志...",
           success: (result) => result.fileCount > 0 ? `已删除 ${result.fileCount} 个日志文件` : "日志已清空",
           error: (error) => error instanceof Error ? error.message : "删除日志失败",
@@ -224,6 +228,7 @@ function LogExportPanel() {
           return content
         },
         {
+          trackingName: "settings.logs.copy-selected",
           loading: "正在复制日志...",
           success: () => `已复制 ${selectedNames.length} 个日志文件到剪切板`,
           error: (error) => error instanceof Error ? error.message : "复制日志失败",

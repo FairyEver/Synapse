@@ -21,7 +21,7 @@ function Sheet({
       <SheetPrimitive.Root
         data-slot="sheet"
         onOpenChange={(open) => {
-          track({ component: "sheet", name: dataTrack ?? titleRef.current ?? "sheet", action: open ? "open" : "close" })
+          track({ component: "sheet", name: dataTrack ?? titleRef.current ?? "sheet", action: open ? "open" : "close", eventKey: dataTrack })
           onOpenChange?.(open)
         }}
         {...props}

@@ -193,6 +193,7 @@ function EditorBulkSkillCopyDialog({
             scope === "project" ? projectPath : undefined,
           )),
           {
+            trackingName: "editor-scan.skill.bulk-copy",
             loading: `正在复制 ${item.item.name}...`,
             success: () => `已复制 ${item.item.name}`,
             error: (error) => error instanceof Error ? error.message : "复制失败。",

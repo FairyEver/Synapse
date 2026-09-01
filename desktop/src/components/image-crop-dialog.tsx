@@ -119,7 +119,7 @@ const ImageCropDialog = forwardRef<ImageCropDialogRef, ImageCropDialogProps>(
         />
 
         {children ? (
-          <span onClick={handleFileSelect} className="cursor-pointer">
+          <span data-track="image-crop.file-select" data-track-native="true" onClick={handleFileSelect} className="cursor-pointer">
             {children}
           </span>
         ) : (

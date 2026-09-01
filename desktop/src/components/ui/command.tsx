@@ -82,11 +82,11 @@ function CommandInput({
             className
           )}
           onFocus={(e) => {
-            track({ component: "command-input", name: trackName, action: "focus" })
+            track({ component: "command-input", name: trackName, action: "focus", eventKey: dataTrack })
             onFocus?.(e)
           }}
           onBlur={(e) => {
-            track({ component: "command-input", name: trackName, action: "blur" })
+            track({ component: "command-input", name: trackName, action: "blur", eventKey: dataTrack })
             onBlur?.(e)
           }}
           {...props}
@@ -174,7 +174,7 @@ function CommandItem({
         className
       )}
       onSelect={(value) => {
-        track({ component: "command-item", name: dataTrack ?? value ?? "command-item", action: "select", value })
+        track({ component: "command-item", name: dataTrack ?? value ?? "command-item", action: "select", eventKey: dataTrack, value })
         onSelect?.(value)
       }}
       {...props}

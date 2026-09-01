@@ -120,6 +120,8 @@ export function AppLauncherGrid({
               <ContextMenuTrigger asChild>
                 <div className="group relative h-32 w-32">
                   <button
+                    data-track="app-launcher.open"
+                    data-track-native="true"
                     ref={app.id === focusAppId ? focusTargetRef : undefined}
                     type="button"
                     className="flex h-32 w-32 flex-col items-center justify-start rounded-md px-3 py-2 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"

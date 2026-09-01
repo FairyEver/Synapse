@@ -111,6 +111,7 @@ function AutomationModule() {
     itemId: string,
     operation: () => Promise<T>,
     messages: {
+      trackingName: string
       loading: string
       success: string
       error: string
@@ -145,7 +146,7 @@ function AutomationModule() {
         logger.info("Automation deleted.", { automationId: item.id, automationNameLength: item.name.length })
         return deleted
       },
-      { loading: "正在删除自动化...", success: "自动化已删除。", error: "删除自动化失败。" },
+      { trackingName: "automation.delete", loading: "正在删除自动化...", success: "自动化已删除。", error: "删除自动化失败。" },
     )
     return result !== null
   }
@@ -178,6 +179,7 @@ function AutomationModule() {
         return updated
       },
       {
+        trackingName: enabled ? "automation.enable" : "automation.disable",
         loading: enabled ? "正在启用自动化..." : "正在停用自动化...",
         success: enabled ? "自动化已启用。" : "自动化已停用。",
         error: enabled ? "启用自动化失败。" : "停用自动化失败。",
@@ -201,6 +203,7 @@ function AutomationModule() {
           return run
         },
         {
+          trackingName: "automation.run",
           loading: "正在运行自动化...",
           success: "自动化已运行。",
           error: (runError) => {
@@ -246,6 +249,7 @@ function AutomationModule() {
       await promise(
         () => stopRunOrThrow(runId),
         {
+          trackingName: "automation.stop",
           loading: "正在停止自动化...",
           success: (result) => result.stopRequested ? "停止请求已发送。" : "自动化已停止。",
           error: "停止自动化失败。",

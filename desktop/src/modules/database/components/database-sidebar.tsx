@@ -370,6 +370,8 @@ function DatabaseSidebar({
         })}
 
         <div
+          data-track="database.sidebar.drop"
+          data-track-native="true"
           onDragOver={handleRootDragOver}
           onDrop={handleRootDrop}
           className="flex min-h-8 flex-col"

@@ -21,11 +21,11 @@ const DataTableCellInput = forwardRef<HTMLInputElement, DataTableCellInputProps>
           className,
         )}
         onFocus={(event) => {
-          track({ component: "data-table-cell-input", name: trackName, action: "focus" })
+          track({ component: "data-table-cell-input", name: trackName, action: "focus", eventKey: trackName })
           onFocus?.(event)
         }}
         onBlur={(event) => {
-          track({ component: "data-table-cell-input", name: trackName, action: "blur" })
+          track({ component: "data-table-cell-input", name: trackName, action: "blur", eventKey: trackName })
           onBlur?.(event)
         }}
         {...props}

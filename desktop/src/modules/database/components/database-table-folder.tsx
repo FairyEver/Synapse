@@ -55,6 +55,8 @@ function DatabaseTableFolder({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          data-track="database.folder.drop"
+          data-track-native="true"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -75,6 +77,8 @@ function DatabaseTableFolder({
                 <span className="truncate">{folder.name}</span>
               </CollapsibleTrigger>
               <button
+                data-track="database.folder.delete"
+                data-track-native="true"
                 type="button"
                 className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/folder:opacity-100"
                 onClick={(event) => onDelete(folder.id, event)}

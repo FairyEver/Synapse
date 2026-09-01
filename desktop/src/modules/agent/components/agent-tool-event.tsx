@@ -69,6 +69,7 @@ function AgentToolEvent({
       component: "agent",
       name: "agent-tool-copy",
       action: "click",
+      eventKey: "agent.tool.copy",
       metadata: {
         boundary: "renderer.agent.tool-copy",
         itemId: item.id,

@@ -422,6 +422,7 @@ describe("ConfigBackupService quick inputs", () => {
         "agent.usage",
         "conversations",
         "outbox",
+        "telemetry.outbox",
         "audit",
       ],
       emptyNamespaces: [

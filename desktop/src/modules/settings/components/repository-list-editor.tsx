@@ -404,6 +404,7 @@ function RepositoryListEditor({
           confirmedOperationToken: preview.operationToken,
         } : undefined),
         {
+          trackingName: "settings.repository.initialize",
           loading: "正在初始化目录...",
           success: (result) => result.message ?? "初始化完成。",
           error: (error) => error instanceof Error ? error.message : "初始化失败。",

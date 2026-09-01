@@ -5,6 +5,7 @@ import { formatBytes } from "@synapse/shared"
 import { Button } from "@/components/ui/button"
 import { ImageLightbox, type ImageLightboxPreview } from "@/components/image-lightbox"
 import { cn } from "@/lib/utils"
+import { track } from "@/lib/ui-tracking"
 import {
   attachmentDisplayName,
   attachmentMetadata,
@@ -26,6 +27,7 @@ function AgentComposerAttachmentStrip({
 }: AgentComposerAttachmentStripProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
+  const scrollTrackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [preview, setPreview] = useState<ImageLightboxPreview | null>(null)
@@ -45,6 +47,17 @@ function AgentComposerAttachmentStrip({
     const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
     setCanScrollLeft(viewport.scrollLeft > 1)
     setCanScrollRight(viewport.scrollLeft < maxScrollLeft - 1)
+  }, [])
+  const trackAttachmentScroll = useCallback(() => {
+    if (scrollTrackTimerRef.current) clearTimeout(scrollTrackTimerRef.current)
+    scrollTrackTimerRef.current = setTimeout(() => {
+      scrollTrackTimerRef.current = null
+      track({ component: "agent", name: "agent.attachment-strip.scroll", action: "scroll", eventKey: "agent.attachment-strip.scroll" })
+    }, 500)
+  }, [])
+
+  useEffect(() => () => {
+    if (scrollTrackTimerRef.current) clearTimeout(scrollTrackTimerRef.current)
   }, [])
 
   useEffect(() => {
@@ -103,7 +116,10 @@ function AgentComposerAttachmentStrip({
         <div
           ref={viewportRef}
           className="agent-composer-attachment-strip__viewport min-w-0 overflow-x-hidden"
-          onScroll={updateScrollControls}
+          onScroll={() => {
+            updateScrollControls()
+            trackAttachmentScroll()
+          }}
         >
           <div ref={contentRef} className="flex w-max min-w-full flex-nowrap gap-2">
             {attachments.map((attachment, index) => {

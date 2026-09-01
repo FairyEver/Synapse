@@ -45,6 +45,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
       component: "workflow.runner",
       name: "workflow-runner-node-result-close",
       action: "close",
+      eventKey: "workflow.runner.node-result.close",
       value: result.nodeId,
       metadata: {
         boundary: "renderer.workflow.runner.node-result",

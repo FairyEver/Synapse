@@ -52,7 +52,7 @@ function Toggle({
       className={cn(toggleVariants({ variant, size, className }))}
       onPressedChange={(pressed) => {
         const label = dataTrack ?? extractLabel(innerRef.current) ?? "toggle"
-        track({ component: "toggle", name: label, action: "toggle", value: pressed })
+        track({ component: "toggle", name: label, action: "toggle", eventKey: dataTrack, value: pressed })
         onPressedChange?.(pressed)
       }}
       {...props}

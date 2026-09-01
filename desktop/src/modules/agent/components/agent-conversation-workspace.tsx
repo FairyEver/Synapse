@@ -596,6 +596,8 @@ function AgentConversationWorkspace({
         <div className="@container/agent-header flex items-center justify-between gap-2 px-0 py-0">
           <div className="flex min-w-0 items-center gap-2">
             <h2
+              data-track="agent.session.rename-open"
+              data-track-native="true"
               tabIndex={-1}
               className="truncate text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               onDoubleClick={onRename ? (event) => {
@@ -843,6 +845,7 @@ function trackDirectAgentSend(input: DirectSendTrackInput): void {
     component: "agent",
     name: input.name,
     action: "submit",
+    eventKey: input.name,
     metadata: {
       boundary: input.boundary,
       contentLength: input.content.length,

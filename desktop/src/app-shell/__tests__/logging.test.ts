@@ -202,6 +202,7 @@ describe("renderer logging", () => {
   it("does not write raw bridge failures to console when renderer log forwarding fails", async () => {
     const rawError = "log bridge failed with token=sk-secret and prompt text"
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
     logWrite.mockImplementationOnce(() => {
       throw new Error(rawError)
     })
@@ -216,8 +217,22 @@ describe("renderer logging", () => {
       await Promise.resolve()
 
       expect(consoleError).not.toHaveBeenCalled()
+      expect(consoleWarn).not.toHaveBeenCalled()
+      expect(logWrite).toHaveBeenCalledTimes(1)
     } finally {
       consoleError.mockRestore()
+      consoleWarn.mockRestore()
     }
+  })
+
+  it("swallows asynchronous IPC write failures without recursively logging", async () => {
+    logWrite.mockRejectedValueOnce(new Error("IPC unavailable"))
+    const logger = createRendererLogger("ui.tracking")
+
+    expect(() => logger.info("button.click", { telemetry: { eventKey: "button.click" } })).not.toThrow()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(logWrite).toHaveBeenCalledTimes(1)
   })
 })

@@ -91,12 +91,16 @@ export class AdminController {
   @Get("/users")
   async listUsers(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
     const pagination = parsePagination(query, { allowedSortFields: userSortFields })
-    const result = await this.admin.listUsers(pagination)
+    const search = typeof query.search === "string" ? query.search.trim() : undefined
+    if (search && search.length > 120) throw new BadRequestException("用户搜索条件过长。")
+    const result = search
+      ? await this.admin.listUsers(pagination, search)
+      : await this.admin.listUsers(pagination)
     await this.recordAdminRead(request, {
       action: "admin.users.list",
       targetType: "user",
       targetId: "list",
-      detail: { page: pagination.page, pageSize: pagination.pageSize },
+      detail: { page: pagination.page, pageSize: pagination.pageSize, searched: Boolean(search) },
     })
     return result
   }

@@ -264,6 +264,7 @@ describe("WorkflowList", () => {
       component: "workflow",
       name: "workflow-list-run-submit",
       action: "submit",
+      eventKey: "workflow.list.run-submit",
       metadata: {
         boundary: "renderer.workflow.definition.list.run-submit",
         workflowId: "workflow-param",

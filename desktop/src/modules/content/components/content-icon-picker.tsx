@@ -47,6 +47,7 @@ function ContentIconPicker({
                   component: "content-icon-picker",
                   name: "content-icon-picker",
                   action: "select",
+                  eventKey: "content.icon.select",
                   value: option.value,
                 })
               }

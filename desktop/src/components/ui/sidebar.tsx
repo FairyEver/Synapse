@@ -92,12 +92,12 @@ function SidebarProvider({
   const toggleSidebar = React.useCallback(() => {
     if (isMobile) {
       setOpenMobile((open) => {
-        track({ component: "sidebar", name: "sidebar", action: open ? "close" : "open", value: "mobile" })
+        track({ component: "sidebar", name: "sidebar", action: open ? "close" : "open", eventKey: "sidebar.toggle", value: "mobile" })
         return !open
       })
     } else {
       setOpen((open) => {
-        track({ component: "sidebar", name: "sidebar", action: open ? "collapse" : "expand", value: "desktop" })
+        track({ component: "sidebar", name: "sidebar", action: open ? "collapse" : "expand", eventKey: "sidebar.toggle", value: "desktop" })
         return !open
       })
     }

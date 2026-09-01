@@ -90,6 +90,7 @@ function DiagnosticsPanel() {
       const nextReport = await promise(
         () => runDiagnosticsWithIpcCheck(),
         {
+          trackingName: "settings.diagnostics.run",
           loading: "正在运行诊断...",
           success: () => "诊断完成",
           error: () => "诊断失败",
@@ -111,6 +112,7 @@ function DiagnosticsPanel() {
       const result = await promise(
         () => requireSynapseBridge().ops.exportDiagnosticsBundle({ report }),
         {
+          trackingName: "settings.diagnostics.export",
           loading: "正在导出诊断包...",
           success: (exportResult) => exportResult.success ? "诊断包已导出" : null,
           error: () => "导出诊断包失败",

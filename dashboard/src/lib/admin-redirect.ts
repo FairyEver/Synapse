@@ -1,5 +1,6 @@
 const adminRoutePatterns = [
   /^\/system\/?$/u,
+  /^\/telemetry\/?$/u,
   /^\/users\/?$/u,
   /^\/devices\/?$/u,
   /^\/skill-repositories\/?$/u,

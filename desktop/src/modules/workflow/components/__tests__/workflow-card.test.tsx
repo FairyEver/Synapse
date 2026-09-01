@@ -93,21 +93,25 @@ describe("WorkflowCard", () => {
     expect(onExport).toHaveBeenCalledTimes(1)
     expect(mocks.track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-card-run",
       name: "workflow-card-run",
       action: "click",
     })
     expect(mocks.track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-card-history",
       name: "workflow-card-history",
       action: "click",
     })
     expect(mocks.track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-card-export",
       name: "workflow-card-export",
       action: "click",
     })
     expect(mocks.track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "workflow-card-delete-open",
       name: "workflow-card-delete-open",
       action: "click",
     })

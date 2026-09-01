@@ -38,6 +38,7 @@ function ScrollArea({
           component: "scroll-area",
           name: dataTrack,
           action: "scroll",
+          eventKey: dataTrack,
           value: snapshot.percent,
           metadata: snapshot,
         })

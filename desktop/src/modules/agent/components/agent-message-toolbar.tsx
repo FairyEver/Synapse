@@ -55,6 +55,7 @@ function AgentMessageToolbar({
       component: "agent",
       name: "agent-message-copy",
       action: "click",
+      eventKey: "agent.message.copy",
       metadata,
     })
     void navigator.clipboard.writeText(content).then(() => {

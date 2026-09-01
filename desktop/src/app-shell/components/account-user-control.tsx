@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { buildAccountDashboardHomeUrl } from "@/lib/account-dashboard-url"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseAccountState } from "@/types/account"
 
 type AccountUserControlProps = {
@@ -64,27 +65,40 @@ function AccountUserControl({
   const isActionPending = isLoading || pendingAction !== null
   const isBusy = isActionPending || isAuthenticating
 
-  const runAndReport = async (action: () => Promise<SynapseAccountState>): Promise<void> => {
-    const nextState = await action()
-    if (nextState.status === "error") {
-      warning(nextState.message)
+  const runAndReport = async (
+    eventKey: string,
+    action: () => Promise<SynapseAccountState>,
+  ): Promise<void> => {
+    const finishTracking = startTrackedOperation({ component: "account", eventKey })
+    let outcome: "success" | "failure" = "failure"
+    try {
+      const nextState = await action()
+      outcome = nextState.status === "error" ? "failure" : "success"
+      if (nextState.status === "error") {
+        warning(nextState.message)
+      }
+    } catch (error) {
+      logger.warn("Account operation failed.", { eventKey, error })
+      warning("账号操作失败，请重试。")
+    } finally {
+      finishTracking(outcome)
     }
   }
 
   const handleLogin = () => {
-    void runAndReport(startLogin)
+    void runAndReport("account.login", startLogin)
   }
 
   const handleCancelLogin = () => {
-    void runAndReport(cancelLogin)
+    void runAndReport("account.login.cancel", cancelLogin)
   }
 
   const handleRefresh = () => {
-    void runAndReport(refresh)
+    void runAndReport("account.refresh", refresh)
   }
 
   const handleLogout = () => {
-    void runAndReport(logout)
+    void runAndReport("account.logout", logout)
   }
 
   const handleOpenDashboard = () => {
@@ -117,23 +131,23 @@ function AccountUserControl({
             <>
               {isAccountOffline(state) ? (
                 <>
-                  <Button variant="outline" size="sm" disabled={isBusy} onClick={handleRefresh}>
+                  <Button data-track="account.refresh.click" variant="outline" size="sm" disabled={isBusy} onClick={handleRefresh}>
                     <RefreshCw data-icon="inline-start" className={pendingAction === "refresh" ? "animate-spin" : undefined} />
                     重试连接
                   </Button>
-                  <Button variant="outline" size="sm" disabled={isBusy} onClick={handleLogin}>
+                  <Button data-track="account.login.click" variant="outline" size="sm" disabled={isBusy} onClick={handleLogin}>
                     <LogIn data-icon="inline-start" />
                     重新登录
                   </Button>
                 </>
               ) : null}
-              <Button variant="outline" size="sm" disabled={isBusy} onClick={handleLogout}>
+              <Button data-track="account.logout.click" variant="outline" size="sm" disabled={isBusy} onClick={handleLogout}>
                 <LogOut data-icon="inline-start" />
                 退出
               </Button>
             </>
           ) : (
-            <Button size="sm" disabled={isActionPending} onClick={isAuthenticating ? handleCancelLogin : handleLogin}>
+            <Button data-track={isAuthenticating ? "account.login.cancel.click" : "account.login.click"} size="sm" disabled={isActionPending} onClick={isAuthenticating ? handleCancelLogin : handleLogin}>
               {isAuthenticating ? (
                 <LoaderCircle data-icon="inline-start" className="animate-spin" />
               ) : (
@@ -150,6 +164,7 @@ function AccountUserControl({
   if (state.status !== "authenticated") {
     return (
       <Button
+        data-track={isAuthenticating ? "account.login.cancel.click" : "account.login.click"}
         variant="ghost"
         size="sm"
         className={toolbarButtonClassName}
@@ -196,18 +211,18 @@ function AccountUserControl({
         ) : null}
         {isAccountOffline(state) ? (
           <>
-            <DropdownMenuItem onSelect={handleRefresh} disabled={isBusy}>
+            <DropdownMenuItem data-track="account.refresh.click" onSelect={handleRefresh} disabled={isBusy}>
               <RefreshCw className={pendingAction === "refresh" ? "animate-spin" : undefined} />
               重试连接
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={handleLogin} disabled={isBusy}>
+            <DropdownMenuItem data-track="account.login.click" onSelect={handleLogin} disabled={isBusy}>
               <LogIn />
               重新登录
             </DropdownMenuItem>
           </>
         ) : null}
         {onOpenSettings || isAccountOffline(state) ? <DropdownMenuSeparator /> : null}
-        <DropdownMenuItem variant="destructive" onSelect={handleLogout} disabled={isBusy}>
+        <DropdownMenuItem data-track="account.logout.click" variant="destructive" onSelect={handleLogout} disabled={isBusy}>
           <LogOut />
           退出登录
         </DropdownMenuItem>

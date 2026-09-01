@@ -406,6 +406,8 @@ function SkillAttachmentManager({
 
   return (
     <div
+      data-track="content.attachment.drop"
+      data-track-native="true"
       className="flex h-full min-h-0 flex-col"
       onDragOver={(event) => {
         event.preventDefault()
@@ -460,6 +462,8 @@ function SkillAttachmentManager({
         ) : null}
       </div>
       <input
+        data-track="content.files.select"
+        data-track-native="true"
         ref={fileInputRef}
         className="hidden"
         type="file"
@@ -470,6 +474,8 @@ function SkillAttachmentManager({
         }}
       />
       <input
+        data-track="content.folder.select"
+        data-track-native="true"
         ref={folderInputRef}
         className="hidden"
         type="file"

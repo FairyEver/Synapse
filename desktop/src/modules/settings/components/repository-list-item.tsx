@@ -77,6 +77,7 @@ function RepositoryListItem({
       await promise(
         () => syncRepository(repository.uuid),
         {
+          trackingName: "settings.repository.sync",
           loading: "正在同步仓库...",
           success: (result) => result.message ?? "仓库同步完成。",
           error: (error) => error instanceof Error ? error.message : "Git 仓库操作失败。",

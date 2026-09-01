@@ -17,7 +17,7 @@ function RadioGroup({
       data-slot="radio-group"
       className={cn("grid w-full gap-2", className)}
       onValueChange={(value) => {
-        track({ component: "radio-group", name: dataTrack ?? value ?? "radio-group", action: "select", value })
+        track({ component: "radio-group", name: dataTrack ?? value ?? "radio-group", action: "select", eventKey: dataTrack, value })
         onValueChange?.(value)
       }}
       {...props}

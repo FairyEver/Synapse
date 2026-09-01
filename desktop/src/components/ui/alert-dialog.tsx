@@ -21,7 +21,7 @@ function AlertDialog({
       <AlertDialogPrimitive.Root
         data-slot="alert-dialog"
         onOpenChange={(open) => {
-          track({ component: "alert-dialog", name: dataTrack ?? titleRef.current ?? "alert-dialog", action: open ? "open" : "close" })
+          track({ component: "alert-dialog", name: dataTrack ?? titleRef.current ?? "alert-dialog", action: open ? "open" : "close", eventKey: dataTrack })
           onOpenChange?.(open)
         }}
         {...props}

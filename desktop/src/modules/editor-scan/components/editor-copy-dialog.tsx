@@ -143,6 +143,7 @@ function EditorCopyDialog({
           targetScope: scope,
         }),
         {
+          trackingName: "editor-scan.item.copy",
           loading: `正在复制到 ${selectedEditor.label}...`,
           success: () => `已复制到 ${selectedEditor.label}`,
           error: (error) => error instanceof Error ? error.message : "复制失败。",

@@ -2,12 +2,12 @@
 
 ## Summary
 
-This design adds public discussion comments with conservative stable anchors to cloud drive `.md` files. Comments stay outside the Markdown source, Markdown Render owns the comment UI, and Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and targets outside Markdown rendered text and whole images remain out of scope.
+This design adds public discussion comments with conservative stable anchors to cloud drive `.md` files. Comments stay outside the Markdown source. Markdown Render owns comment creation and its authoritative browsing geometry; MDXEditor can display and operate existing comments through a separate editing geometry model. Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and targets outside Markdown rendered text and whole images remain out of scope.
 
 The implementation scope is intentionally small:
 
 - Only `.md` files are commentable.
-- Only the Markdown Render view exposes comment UI.
+- Markdown Render and MDXEditor expose existing comment threads; only Markdown Render creates threads.
 - Users create comments by selecting rendered text or targeting a whole rendered image.
 - Comments are plain text.
 - Comment threads support replies, nested replies, edit, and delete.
@@ -42,7 +42,7 @@ Important boundary:
 
 ### In Scope
 
-- `.md` files in Markdown Render.
+- `.md` files in Markdown Render and MDXEditor.
 - Internal sticky Markdown Render header.
 - Toggle heading outline.
 - Toggle comment rail.
@@ -63,10 +63,13 @@ Important boundary:
 - Conservative Anchor V2 resolution for text and whole-image targets.
 - Realtime Markdown preview and comment invalidation from the collaboration room.
 - Yjs collaboration in Monaco when `DRIVE_COLLABORATION_ENABLED=true`.
+- In MDXEditor rich-text mode, highlight and align existing text/image comments while edits remain safely mappable.
+- In MDXEditor source, Textarea, CodeMirror, and other unsafe mapping cases, keep comments available without claiming a precise position.
 
 ### Out of Scope
 
 - `.mdx`, `.markdown`, plain text, HTML, PDF, standalone image files, and Code Render comments.
+- Creating a comment from an MDXEditor selection.
 - Image point or region selection and Mermaid comments.
 - Insert-point comment UI.
 - Paragraph comment UI.
@@ -80,7 +83,7 @@ Important boundary:
 
 ## UI Design
 
-The Markdown renderer becomes a self-contained reading surface:
+The Markdown renderer remains a self-contained reading surface, while both Markdown Render and MDXEditor reuse the same comment rail presentation and actions:
 
 ```text
 DriveRendererShell
@@ -165,6 +168,17 @@ Comment rail:
 - Deletable comments show a direct delete icon. The first click changes it to a check icon, and the second click performs the deletion.
 - Deleting a comment also hides all of its descendant replies, including legacy descendants whose parent was deleted before this rule was introduced.
 - Deleting the first comment removes the entire thread and its rendered text marker.
+- The shared rail receives either a positioned document coordinate or a renderer-local `unavailable` placement for each thread.
+- Server `anchorStatus` remains authoritative. Renderer-local `unavailable` never rewrites an attached thread as `orphaned`.
+- Renderer-local placement failures display `编辑中暂未定位`; authoritative orphaned text and image threads keep their existing deletion/modified messages.
+
+MDXEditor behavior:
+
+- The renderer toolbar exposes `评论 N` for `.md` only. Existing comments open the rail on first load; after the user closes it, the current mount does not reopen it automatically.
+- Wide layouts use a resizable editor/comment split. Compact layouts use a right-side sheet and list presentation.
+- Rich-text mode supports highlight, rail alignment, navigation, replies, edit, and delete.
+- Source and forced Textarea modes use list presentation. CodeMirror text remains part of the offset stream so later content keeps stable offsets, but ranges touching CodeMirror are not measured precisely.
+- Editing strictly before a range shifts its local working range by the Unicode code-point delta. Editing after a range leaves it unchanged. Editing through the range makes local placement unavailable until save/reload establishes a new server-backed baseline.
 
 Rendered text markers:
 
@@ -185,6 +199,13 @@ Rendered image markers:
 - Highlight rectangles and comment-rail positions are derived from the rendered DOM. Pure layout changes must keep the DOM measurement and `ResizeObserver` flow authoritative, with regression coverage for highlight alignment, rail alignment, and comment navigation after reflow.
 - Changes to visible text, DOM text order, Markdown parser or renderer semantics, image alt handling, line breaks, code blocks, tables, or ignored/generated nodes must update and test both the server Markdown projection and the Renderer rendered-text model when their shared text stream changes.
 - Changes to the document scroll container, overlay coordinate space, virtualization, collapsed content, transforms, or asynchronous geometry that can move text without notifying the observed Markdown body must update the coordinate conversion or add an explicit remeasurement trigger.
+- Markdown Render and MDXEditor must not share text-model or geometry calculations. Browser positioning remains unchanged; only rail presentation and actions are shared.
+- MDXEditor comment cards use editor document coordinates: `targetRect.top - scrollerRect.top + scrollTop`. Its highlight overlay uses content-host coordinates: `targetRect - contentHostRect`.
+- Width changes, panel resize, responsive padding, scrollbar changes, images, tables, and font loading invalidate geometry only. They do not rebuild the editor text model.
+- MDXEditor DOM mutations and Lexical reconciliation signals invalidate the text model and geometry. Mutation, resize, image, font, and editor signals enter one animation-frame scheduler with at most one model rebuild and one React geometry commit per frame.
+- Pure scrolling never traverses editor text or measures ranges; it only updates the comment anchor layer transform.
+- Geometry retains subpixel values and ignores changes below `0.5px` to prevent high-DPI and zoom update loops.
+- The highlight overlay is outside the observed editor root and does not participate in layout. Natural content height and bottom comment compensation are measured separately.
 
 ## Data Model
 
@@ -553,6 +574,22 @@ dashboard/src/features/drive-browser/renderers/markdown-renderer.tsx
   comment rail
 ```
 
+Shared comment rail and MDXEditor positioning:
+
+```text
+dashboard/src/features/drive-browser/drive-comments-rail.tsx
+  shared cards, actions, collision avoidance, navigation, list mode
+
+dashboard/src/features/drive-browser/renderers/mdxeditor-comment-geometry.ts
+  editor-only Unicode text model
+  conservative working-range updates
+  batched DOM range and image measurement
+  ResizeObserver, MutationObserver, image, and font scheduling
+
+dashboard/src/features/drive-browser/renderers/mdxeditor-comment-observer-plugin.ts
+  Lexical reconciliation and MDXEditor view-mode signals
+```
+
 Suggested helper modules:
 
 ```text
@@ -688,6 +725,12 @@ Frontend tests:
 - Image action does not open the lightbox; image click still does.
 - Attached image thread markers stay clickable and count threads.
 - Broken and empty-alt images remain commentable; replaced/deleted images show `图片已替换或删除` without reassociation.
+- Existing `.md` comments appear in MDXEditor, while `.mdx` remains excluded.
+- Rich-text comments reposition after editor and rail width changes without changing Markdown Render positioning behavior.
+- Insertions/deletions before a comment shift the local range; edits after it do not; overlapping edits show `编辑中暂未定位`.
+- Source and Textarea modes show comments as a list, and CodeMirror ranges do not claim precise placement.
+- Multiple resize/mutation signals in one frame produce one scheduled measurement; duplicate ranges share one DOM Range measurement.
+- Pure scroll does not rebuild the text model or measure DOM ranges, and unmount cancels pending frames and observers.
 
 ## Risks And Mitigations
 
@@ -710,6 +753,14 @@ Mitigation: keep read access tied to existing share browser access. Keep write a
 Risk: nested replies become unreadable in a narrow right rail.
 
 Mitigation: store tree data, render as a linear discussion stream with "回复 <name>" metadata instead of recursive visual indentation.
+
+Risk: active editing causes the editor DOM to diverge from the last server-resolved anchor.
+
+Mitigation: use a renderer-local working range only for unambiguous prefix/suffix edits, never search or fuzzily reattach in the client, and reset from server results after save, reload, version, or mode changes.
+
+Risk: responsive reflow and asynchronous assets cause excessive measurement work.
+
+Mitigation: separate model and geometry dirty flags, share observers and range measurements, batch work into animation frames, and keep scrolling transform-only.
 
 ## Future Extensions
 
@@ -743,4 +794,4 @@ Future target examples:
 }
 ```
 
-`imageRegion` is distinct from the implemented whole-image Markdown target. These future renderers should own their own internal comment UI, just as Markdown Render owns its internal header and rails.
+`imageRegion` is distinct from the implemented whole-image Markdown target. Future renderers should own their positioning model while reusing the shared comment rail when its interaction model fits.

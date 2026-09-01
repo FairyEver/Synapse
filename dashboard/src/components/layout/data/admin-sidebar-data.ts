@@ -8,6 +8,7 @@ import {
   MessageSquareWarning,
   MonitorSmartphone,
   ScrollText,
+  ChartNoAxesCombined,
   Users,
 } from 'lucide-react'
 import { Logo } from '@/assets/logo'
@@ -20,6 +21,7 @@ export const adminSidebarData: SidebarData = {
     title: '管理',
     items: [
       { title: '系统概览', url: '/system', icon: LayoutDashboard },
+      { title: '埋点统计', url: '/telemetry', icon: ChartNoAxesCombined },
       { title: '用户管理', url: '/users', icon: Users },
       { title: '设备', url: '/devices', icon: MonitorSmartphone },
       { title: 'Skill 仓库', url: '/skill-repositories', icon: FolderKanban },

@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { holdBeforeUnloadForCustomDialog } from "@/lib/before-unload"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 // Side-effect: populate node type registry in the editor window's renderer process.
 // Without this, NodePalette.listTypes() returns [] and users cannot add nodes.
 // Use the renderer-only entry so we don't pull main-process executors into the
@@ -279,9 +280,14 @@ export function WorkflowEditorApp() {
   }
 
   const handleSave = useCallback(async (def: WorkflowDefinition, silent?: boolean) => {
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.editor.save" })
     // Short-circuit when nothing changed — avoid a pointless IPC round-trip
     // and give clear feedback that no save is needed (no spinner, no toast).
-    if (!isDirtyRef.current) return { versionHash: def.version }
+    if (!isDirtyRef.current) {
+      finishTracking("success")
+      return { versionHash: def.version }
+    }
+    let outcome: "success" | "failure" = "failure"
     savingRef.current = true
     setSaving(true)
     try {
@@ -321,10 +327,12 @@ export function WorkflowEditorApp() {
         definitionRef.current = updated
         setDefinition(updated)
       }
+      outcome = "success"
       return result
     } finally {
       savingRef.current = false
       setSaving(false)
+      finishTracking(outcome)
     }
   }, [])
 
@@ -350,6 +358,8 @@ export function WorkflowEditorApp() {
   const handleRun = async (params: Record<string, unknown>) => {
     const def = definitionRef.current
     if (!def) return null
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.editor.run" })
+    let outcome: "success" | "failure" = "failure"
     setRunning(true)
     try {
       const saveResult = await handleSave(def, true)
@@ -386,15 +396,20 @@ export function WorkflowEditorApp() {
         setConflictState({ saved: authoritativeDefinition, params })
         return null
       }
-      window.synapse?.workflow.operation.openRunner(authoritativeDefinition.id, result.runId).catch((err) => {
-        logger.warn("Workflow runner open failed after run.", {
-          boundary: "renderer.workflow.editor.run",
-          workflowId: authoritativeDefinition.id,
-          runId: result.runId,
-          ...errorDiagnostic(err),
+      const finishOpenRunnerTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.runner.open" })
+      void window.synapse?.workflow.operation.openRunner(authoritativeDefinition.id, result.runId)
+        .then(() => finishOpenRunnerTracking("success"))
+        .catch((err) => {
+          finishOpenRunnerTracking("failure")
+          logger.warn("Workflow runner open failed after run.", {
+            boundary: "renderer.workflow.editor.run",
+            workflowId: authoritativeDefinition.id,
+            runId: result.runId,
+            ...errorDiagnostic(err),
+          })
+          toast.error("打开运行窗口失败，请重试")
         })
-        toast.error("打开运行窗口失败，请重试")
-      })
+      outcome = "success"
       return result.runId
     } catch (err) {
       logger.error("handleRun failed", {
@@ -406,12 +421,15 @@ export function WorkflowEditorApp() {
       return null
     } finally {
       setRunning(false)
+      finishTracking(outcome)
     }
   }
 
   const handleForceRun = async () => {
     if (!conflictState) return
     const { saved, params } = conflictState
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.editor.force-run" })
+    let outcome: "success" | "failure" = "failure"
     setConflictState(null)
     setRunning(true)
     try {
@@ -440,15 +458,20 @@ export function WorkflowEditorApp() {
         definitionRef.current = forceResult.definition
         setDefinition(forceResult.definition)
       }
-      window.synapse?.workflow.operation.openRunner(authoritativeDefinition.id, forceResult.runId).catch((err) => {
-        logger.warn("Workflow runner open failed after force run.", {
-          boundary: "renderer.workflow.editor.force-run",
-          workflowId: authoritativeDefinition.id,
-          runId: forceResult.runId,
-          ...errorDiagnostic(err),
+      const finishOpenRunnerTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.runner.open" })
+      void window.synapse?.workflow.operation.openRunner(authoritativeDefinition.id, forceResult.runId)
+        .then(() => finishOpenRunnerTracking("success"))
+        .catch((err) => {
+          finishOpenRunnerTracking("failure")
+          logger.warn("Workflow runner open failed after force run.", {
+            boundary: "renderer.workflow.editor.force-run",
+            workflowId: authoritativeDefinition.id,
+            runId: forceResult.runId,
+            ...errorDiagnostic(err),
+          })
+          toast.error("打开运行窗口失败，请重试")
         })
-        toast.error("打开运行窗口失败，请重试")
-      })
+      outcome = "success"
     } catch (err) {
       logger.error("force run failed", {
         workflowId: saved.id,
@@ -458,6 +481,7 @@ export function WorkflowEditorApp() {
       toast.error("运行失败：无法连接到主进程")
     } finally {
       setRunning(false)
+      finishTracking(outcome)
     }
   }
 

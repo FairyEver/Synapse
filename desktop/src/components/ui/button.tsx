@@ -65,7 +65,7 @@ function Button({
       className={cn(buttonVariants({ variant, size, className }))}
       onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
         const label = dataTrack ?? extractLabel(e.currentTarget) ?? "button"
-        track({ component: "button", name: label, action: "click" })
+        track({ component: "button", name: label, action: "click", eventKey: dataTrack })
         onClick?.(e)
       }}
       {...props}

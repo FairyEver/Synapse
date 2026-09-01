@@ -33,6 +33,7 @@ function ContentBackgroundPicker({
                   component: "content-background-picker",
                   name: "content-background-picker",
                   action: "select",
+                  eventKey: "content.background.select",
                   value: option.value,
                 })
               }

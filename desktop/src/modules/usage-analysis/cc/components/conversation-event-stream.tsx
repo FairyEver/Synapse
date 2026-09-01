@@ -29,6 +29,8 @@ export function ConversationEventStream({
     <div className="flex min-w-0 flex-col gap-2">
       {events.map((event) => (
         <button
+          data-track="usage.conversation.event.select"
+          data-track-native="true"
           key={event.id}
           type="button"
           className={selectedId === event.id

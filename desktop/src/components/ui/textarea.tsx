@@ -23,11 +23,11 @@ function Textarea({
       )}
       rows={rows}
       onFocus={(e) => {
-        track({ component: "textarea", name: label, action: "focus" })
+        track({ component: "textarea", name: label, action: "focus", eventKey: dataTrack })
         onFocus?.(e)
       }}
       onBlur={(e) => {
-        track({ component: "textarea", name: label, action: "blur" })
+        track({ component: "textarea", name: label, action: "blur", eventKey: dataTrack })
         onBlur?.(e)
       }}
       {...props}

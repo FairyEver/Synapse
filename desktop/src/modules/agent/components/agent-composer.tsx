@@ -380,6 +380,7 @@ function AgentComposer({
       component: "agent",
       name: "agent-message-submit",
       action: "submit",
+      eventKey: "agent.message.submit",
       metadata: {
         boundary: "renderer.agent.composer-submit",
         draftLength: draft.trim().length,

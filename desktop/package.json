@@ -23,6 +23,7 @@
     "generate:ipc": "node scripts/build/generate-ipc.mjs",
     "check:ipc-codegen": "node scripts/checks/check-ipc-codegen.mjs",
     "check:hard-constraints": "node scripts/checks/check-hard-constraints.mjs",
+    "check:ui-tracking-coverage": "node scripts/checks/check-ui-tracking-coverage.mjs",
     "model-capabilities:check": "node scripts/model-capability/update-catalog.mjs --check",
     "model-capabilities:update": "node scripts/model-capability/update-catalog.mjs --official-docs",
     "check:packaged-asar": "node scripts/checks/verify-packaged-asar.mjs release",

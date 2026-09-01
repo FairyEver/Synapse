@@ -23,7 +23,7 @@ function Tabs({
         className
       )}
       onValueChange={(value) => {
-        track({ component: "tabs", name: dataTrack ?? value ?? "tabs", action: "select", value })
+        track({ component: "tabs", name: dataTrack ?? value ?? "tabs", action: "select", eventKey: dataTrack, value })
         onValueChange?.(value)
       }}
       {...props}

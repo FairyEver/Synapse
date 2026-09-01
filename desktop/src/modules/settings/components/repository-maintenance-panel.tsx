@@ -38,6 +38,7 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
               void promise(
                 () => manager.runMaintenance(repositoryUuid),
                 {
+                  trackingName: "settings.repository.maintenance",
                   loading: "正在整理历史记录...",
                   success: (result) => result.message ?? "整理完成。",
                   error: (error) => error instanceof Error ? error.message : "整理失败。",

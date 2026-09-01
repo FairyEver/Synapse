@@ -13,6 +13,7 @@ import { BackupModule } from "./backup/backup.module"
 import { DashboardModule } from "./dashboard/dashboard.module"
 import { DriveModule } from "./drive/drive.module"
 import { HealthModule } from "./health/health.module"
+import { ClientTelemetryModule } from "./client-telemetry/client-telemetry.module"
 import { OpenApiModule } from "./open-api/open-api.module"
 import { LiveModule } from "./live/live.module"
 import { PrismaModule } from "./prisma/prisma.module"
@@ -74,6 +75,7 @@ type RequestLogObject = {
     }),
     PrismaModule,
     UserAuthModule,
+    ClientTelemetryModule,
     LiveModule,
     WebhookModule,
     AdminAuthModule,

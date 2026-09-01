@@ -7,6 +7,12 @@
  */
 
 export {
+  clientTelemetryOutboxSchema,
+  type ClientTelemetryCategory,
+  type ClientTelemetryOutcome,
+  type ClientTelemetryOutboxEntryV1,
+} from "./client-telemetry"
+export {
   cheatCodeStatesSchema,
   type CheatCodeStatesEntryV1,
 } from "./cheat-code-states"
@@ -198,6 +204,7 @@ export {
 } from "./placeholders"
 
 import { coreConfigSchema } from "./core-config"
+import { clientTelemetryOutboxSchema } from "./client-telemetry"
 import { workflowMigrationStateSchema } from "./workflow-migration-state"
 import { workflowShareStateSchema } from "./workflow-share-state"
 import { cheatCodeStatesSchema } from "./cheat-code-states"
@@ -259,6 +266,7 @@ import type { NamespaceSchema } from "../types"
 /** Stable iteration order: framework reads/writes namespaces in this order. */
 export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   coreConfigSchema,
+  clientTelemetryOutboxSchema,
   coreIdentitySchema,
   driveSyncBindingsSchema,
   driveSyncBaselineSchema,

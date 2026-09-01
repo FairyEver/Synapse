@@ -48,6 +48,7 @@ function IdentityPanel() {
                     void promise(
                       () => navigator.clipboard.writeText(localIdentityState.identity.userId),
                       {
+                        trackingName: "settings.identity.user-id.copy",
                         loading: "正在复制用户 ID...",
                         success: "已复制到剪贴板。",
                         error: (error) => error instanceof Error ? error.message : "复制失败。",

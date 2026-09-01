@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MarkdownCommentsRail, type MarkdownCommentsRailThread } from './markdown-comments-rail'
+import { DriveCommentsRail, type DriveCommentsRailItem } from './drive-comments-rail'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('MarkdownCommentsRail', () => {
+describe('DriveCommentsRail', () => {
   it('opens unlocated comments in a dialog instead of the normal comment flow', async () => {
     renderRail({
       threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })],
@@ -48,7 +48,7 @@ describe('MarkdownCommentsRail', () => {
     const source = thread()
     const imageItem = {
       ...source,
-      anchorTop: null,
+      placement: { status: 'unavailable' },
       thread: {
         ...source.thread,
         anchorStatus: 'orphaned',
@@ -64,7 +64,7 @@ describe('MarkdownCommentsRail', () => {
           blockHint: { blockId: 'block', blockIndex: 0, imageIndex: 0, headingPath: [] },
         },
       },
-    } as MarkdownCommentsRailThread
+    } as DriveCommentsRailItem
 
     renderRail({ threads: [imageItem] })
     await click(buttonWithText('未定位评论'))
@@ -92,6 +92,33 @@ describe('MarkdownCommentsRail', () => {
 
     const text = document.body.textContent ?? ''
     expect(text.indexOf('Newer lost')).toBeLessThan(text.indexOf('Older lost'))
+  })
+
+  it('keeps temporarily unavailable comments in the direct list flow', () => {
+    renderRail({
+      mode: 'list',
+      threads: [thread({ anchorStatus: 'attached', anchorTop: null })],
+    })
+
+    expect(document.body.textContent).toContain('First line')
+    expect(document.body.textContent).toContain('编辑中暂未定位')
+    expect(document.body.textContent).not.toContain('未定位评论')
+    expect(optionalDialogContent()).toBeNull()
+  })
+
+  it('labels temporary placement failures separately in anchored mode', async () => {
+    renderRail({
+      threads: [thread({ anchorStatus: 'attached', anchorTop: null })],
+    })
+
+    expect(document.body.textContent).toContain('编辑中暂未定位')
+    expect(document.body.textContent).not.toContain('未定位评论')
+
+    await click(buttonWithText('编辑中暂未定位'))
+
+    expect(document.body.textContent).toContain('First line')
+    expect(document.body.textContent).toContain('编辑中暂未定位')
+    expect(document.body.textContent).not.toContain('原文已修改或删除')
   })
 
   it('keeps the unlocated entry visible after its dialog is closed', async () => {
@@ -837,7 +864,7 @@ describe('MarkdownCommentsRail', () => {
   })
 })
 
-function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0]> = {}) {
+function renderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> = {}) {
   host = document.createElement('div')
   document.body.append(host)
   const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
@@ -848,7 +875,7 @@ function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0
   root = createRoot(host)
   act(() => {
     root?.render(
-      <MarkdownCommentsRail
+      <DriveCommentsRail
         threads={[thread()]}
         activeThreadId={null}
         canReply
@@ -862,10 +889,10 @@ function renderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0
   })
 }
 
-function rerenderRail(overrides: Partial<Parameters<typeof MarkdownCommentsRail>[0]> = {}) {
+function rerenderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> = {}) {
   act(() => {
     root?.render(
-      <MarkdownCommentsRail
+      <DriveCommentsRail
         threads={[thread()]}
         activeThreadId={null}
         canReply
@@ -946,7 +973,11 @@ function thread(input: {
       updatedAt: input.updatedAt ?? '2026-06-21T00:00:00.000Z',
       permissions: { canDelete: input.canDeleteThread ?? true },
     },
-    anchorTop: 'anchorTop' in input ? input.anchorTop ?? null : 0,
+    placement: typeof input.anchorTop === 'number'
+      ? { status: 'positioned' as const, anchorTop: input.anchorTop }
+      : 'anchorTop' in input
+        ? { status: 'unavailable' as const }
+        : { status: 'positioned' as const, anchorTop: 0 },
   }
 }
 

@@ -147,6 +147,7 @@ describe("AgentComposerAttachmentStrip", () => {
     await act(async () => previewButton?.click())
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "agent-attachment-preview-open",
       name: "agent-attachment-preview-open",
       action: "click",
     })

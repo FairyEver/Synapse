@@ -198,6 +198,7 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
       component: "workflow",
       name: "workflow-run-params-submit",
       action: "submit",
+      eventKey: "workflow.run-params.submit",
       metadata: {
         boundary: "renderer.workflow.run-params.submit",
         workflowId,

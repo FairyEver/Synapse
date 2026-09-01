@@ -117,6 +117,7 @@ vi.mock("@/app-shell/notifications", () => ({
 }))
 
 vi.mock("@/lib/diagnostic-context", () => ({
+  recordDiagnosticBreadcrumb: vi.fn(),
   updateDiagnosticContext: vi.fn(),
 }))
 

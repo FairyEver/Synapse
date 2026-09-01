@@ -103,6 +103,7 @@ function McpSettingsPanel() {
             logger.info("MCP registered.", { target })
           },
           {
+            trackingName: "settings.mcp.register",
             loading: "正在注册 MCP...",
             success: `MCP Server 已注册到 ${MCP_SERVER_META.find((item) => item.id === target)?.label ?? target}`,
           },
@@ -124,6 +125,7 @@ function McpSettingsPanel() {
             logger.info("MCP settings opened.", { target })
           },
           {
+            trackingName: "settings.mcp.open-settings",
             loading: "正在打开配置文件...",
             success: null,
             error: (error) => error instanceof Error ? error.message : "打开失败。",

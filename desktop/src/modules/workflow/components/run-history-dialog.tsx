@@ -122,6 +122,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
       component: "workflow",
       name: "workflow-run-history-open-runner",
       action: "click",
+      eventKey: "workflow.run-history.open-runner",
       metadata: {
         boundary: "renderer.workflow.run-history.open-runner",
         workflowId,

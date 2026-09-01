@@ -65,8 +65,36 @@ model User {
   skillRepositoryInstallEvents   SkillRepositoryInstallEvent[]
   agentPersonas                  AgentPersona[]
   agentPersonaPreferences        AgentPersonaPreference[]
+  clientTelemetryEvents          ClientTelemetryEvent[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
+}
+
+model ClientTelemetryEvent {
+  eventId          String   @id @db.VarChar(64)
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category         String   @db.VarChar(24)
+  eventKey         String   @db.VarChar(64)
+  component        String   @db.VarChar(64)
+  action           String   @db.VarChar(32)
+  outcome          String?  @db.VarChar(16)
+  durationMs       Int?
+  moduleId         String?  @db.VarChar(64)
+  windowType       String   @db.VarChar(32)
+  clientInstanceId String   @db.VarChar(64)
+  sessionId        String   @db.VarChar(64)
+  appVersion       String   @db.VarChar(32)
+  platform         String   @db.VarChar(32)
+  occurredAt       DateTime
+  receivedAt       DateTime @default(now())
+
+  @@index([occurredAt])
+  @@index([userId, occurredAt])
+  @@index([clientInstanceId, occurredAt])
+  @@index([category, eventKey, occurredAt])
+  @@index([appVersion, occurredAt])
+  @@index([platform, occurredAt])
 }
 
 model UserApiKey {

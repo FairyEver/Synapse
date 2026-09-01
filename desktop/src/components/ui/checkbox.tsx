@@ -22,7 +22,7 @@ function Checkbox({
       )}
       onCheckedChange={(checked) => {
         const label = dataTrack ?? props["aria-label"] ?? props.id ?? "checkbox"
-        track({ component: "checkbox", name: label, action: checked ? "check" : "uncheck" })
+        track({ component: "checkbox", name: label, action: checked ? "check" : "uncheck", eventKey: dataTrack })
         onCheckedChange?.(checked)
       }}
       {...props}

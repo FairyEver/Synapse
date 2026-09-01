@@ -39,6 +39,8 @@ function FormDialog({
     >
       <form
         className="h-full min-h-0"
+        data-track="form-dialog.submit"
+        data-track-native="true"
         onSubmit={onSubmit}
       >
         <DialogFrame className="max-h-[calc(100vh-2rem)]">

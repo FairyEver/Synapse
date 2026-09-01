@@ -55,6 +55,7 @@ function AgentDefaultsContent() {
       await promise(
         () => updateConfig({ agent: { defaultPermissionMode: nextMode } }),
         {
+          trackingName: "settings.agent.permission-mode.save",
           loading: "正在保存设置...",
           success: () => "设置已保存。",
           error: (error) => error instanceof Error ? error.message : "保存设置失败。",
@@ -71,6 +72,7 @@ function AgentDefaultsContent() {
       await promise(
         () => updateConfig({ agent: { defaultProviderModel: value } }),
         {
+          trackingName: "settings.agent.provider-model.save",
           loading: "正在保存设置...",
           success: () => "设置已保存。",
           error: (error) => error instanceof Error ? error.message : "保存设置失败。",

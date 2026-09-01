@@ -109,6 +109,8 @@ export function WorkflowErrorCard({ items, onSelectItem }: WorkflowErrorCardProp
       <CardContent className="grid gap-1 px-3 pb-3 pt-0">
         {visibleItems.map((item) => (
           <button
+            data-track="workflow.error.select"
+            data-track-native="true"
             key={item.id}
             type="button"
             className="rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

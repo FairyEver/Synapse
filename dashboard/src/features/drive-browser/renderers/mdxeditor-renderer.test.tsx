@@ -9,6 +9,7 @@ import type {
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
   DriveBrowserSnapshotDto,
+  DriveAnnotationThreadDto,
   DriveDocumentImageSource,
   DriveDocumentImageSourcesDto,
 } from '@synapse/shared'
@@ -23,6 +24,22 @@ import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-r
 let objectUrlIndex = 0
 const mdxEditorMockState = vi.hoisted(() => ({
   imagePreviewHandler: null as ((imageSource: string) => Promise<string>) | null,
+}))
+const layoutModeMock = vi.hoisted(() => ({ value: 'regular' as 'regular' | 'compact' }))
+const annotationsMock = vi.hoisted(() => ({
+  input: undefined as unknown,
+  threads: [] as DriveAnnotationThreadDto[],
+  loading: false,
+  error: null as string | null,
+  refresh: vi.fn(async () => undefined),
+  createThread: vi.fn(),
+  creatingThread: false,
+  reply: vi.fn(async () => undefined),
+  replying: false,
+  updateComment: vi.fn(async () => undefined),
+  updatingComment: false,
+  deleteComment: vi.fn(async () => undefined),
+  deletingComment: false,
 }))
 
 function installObjectUrlMocks() {
@@ -40,9 +57,24 @@ installObjectUrlMocks()
 
 vi.mock('@mdxeditor/editor/style.css', () => ({}))
 
-vi.mock('./mdxeditor-commonmark-compatibility-plugin', () => ({
-  commonMarkTextCompatibilityPlugin: () => ({ name: 'commonMarkTextCompatibilityPlugin' }),
-  commonMarkToMarkdownOptions: { marker: 'commonmark' },
+vi.mock('./mdxeditor-commonmark-compatibility-plugin', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./mdxeditor-commonmark-compatibility-plugin')>()
+  return {
+    ...actual,
+    commonMarkTextCompatibilityPlugin: () => ({ name: 'commonMarkTextCompatibilityPlugin' }),
+    commonMarkToMarkdownOptions: { ...actual.commonMarkToMarkdownOptions, marker: 'commonmark' },
+  }
+})
+
+vi.mock('../use-drive-annotations', () => ({
+  useDriveAnnotations: (input: unknown) => {
+    annotationsMock.input = input
+    return annotationsMock
+  },
+}))
+
+vi.mock('@/features/file-browser/preview/file-preview-layout', () => ({
+  useFilePreviewLayoutMode: () => layoutModeMock.value,
 }))
 
 vi.mock('@mdxeditor/editor', async () => {
@@ -131,6 +163,7 @@ vi.mock('@mdxeditor/editor', async () => {
           'data-translation-heading': translation?.('toolbar.blockTypes.heading', 'Heading {{level}}', { level: 2 }) ?? '',
           'data-translation-unknown': translation?.('unknown.key', 'Fallback {{value}}', { value: 'OK' }) ?? '',
           readOnly,
+          className: contentEditableClassName,
           value,
           onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
             setValue(event.currentTarget.value)
@@ -202,6 +235,7 @@ vi.mock('@mdxeditor/editor', async () => {
     realmPlugin: () => () => ({ name: 'realmPlugin' }),
     createActiveEditorSubscription$: Symbol('createActiveEditorSubscription$'),
     createRootEditorSubscription$: Symbol('createRootEditorSubscription$'),
+    viewMode$: Symbol('viewMode$'),
     lexical: { LineBreakNode: class {} },
     $createGenericHTMLNode: () => null,
     $isImageNode: () => false,
@@ -218,9 +252,23 @@ vi.mock('@mdxeditor/editor', async () => {
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 
+class TestResizeObserver implements ResizeObserver {
+  readonly observed = new Set<Element>()
+  observe = (element: Element) => { this.observed.add(element) }
+  unobserve = (element: Element) => { this.observed.delete(element) }
+  disconnect = () => { this.observed.clear() }
+}
+
+vi.stubGlobal('ResizeObserver', TestResizeObserver)
+
 beforeEach(() => {
   objectUrlIndex = 0
   installObjectUrlMocks()
+  annotationsMock.threads = []
+  annotationsMock.input = undefined
+  annotationsMock.loading = false
+  annotationsMock.error = null
+  layoutModeMock.value = 'regular'
 })
 
 afterEach(() => {
@@ -349,6 +397,40 @@ describe('DriveMDXeditorRenderer', () => {
     })
     expect(editor().value).toBe('# Notes\n\n![](http://localhost:3000/files/asset_image)')
     expect(document.body.textContent).toContain('已同步')
+  })
+
+  it('does not normalize html image examples inside inline or fenced code', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+    const markdown = [
+      '# Notes',
+      '',
+      '`<img src="inline.png" />`',
+      '',
+      '```html',
+      '<img src="fenced.png" />',
+      '```',
+      '',
+      '<img src="https://synapse.test/files/actual.png" />',
+    ].join('\n')
+
+    await inputValue(editor(), markdown)
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: [
+        '# Notes',
+        '',
+        '`<img src="inline.png" />`',
+        '',
+        '```html',
+        '<img src="fenced.png" />',
+        '```',
+        '',
+        '![](https://synapse.test/files/actual.png)',
+      ].join('\n'),
+      baseVersionId: 'version-1',
+    })
   })
 
   it('keeps newer markdown edits dirty after a pending save resolves', async () => {
@@ -722,6 +804,29 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('未保存')
   })
 
+  it('allows temporary image urls shown only inside code examples', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ edit: editable(), editContext })
+    const markdown = [
+      '# Notes',
+      '',
+      '`![inline](blob:https://synapse.d2.pub/example)`',
+      '',
+      '```md',
+      '![fenced](blob:https://synapse.d2.pub/example)',
+      '```',
+    ].join('\n')
+
+    await inputValue(editor(), markdown)
+    await click(buttonWithText('保存'))
+
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: markdown,
+      baseVersionId: 'version-1',
+    })
+    expect(document.body.textContent).not.toContain('图片尚未完成上传')
+  })
+
   it('remembers public image consent after the first confirmed insertion', async () => {
     const editContext = createEditContext()
     vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
@@ -920,8 +1025,35 @@ describe('DriveMDXeditorRenderer', () => {
       preview: { ...basePreview(), text: '金额 <= 1000' },
     })
 
-    expect(editor().value).toBe('金额 <= 1000')
+    expect(editor().value).toBe('金额 \\<= 1000')
     expect(editor().dataset.commonmarkOptions).toBe('commonmark')
+    expect(document.body.textContent).not.toContain('解析失败')
+  })
+
+  it('opens CommonMark URI and email autolinks in rich mode', () => {
+    renderRenderer({
+      preview: {
+        ...basePreview(),
+        text: '<https://example.com/path?q=1>\n\n<user@example.com>',
+      },
+    })
+
+    expect(editor().value).toBe([
+      '[https://example.com/path?q=1](<https://example.com/path?q=1>)',
+      '',
+      '[user@example.com](<mailto:user@example.com>)',
+    ].join('\n'))
+    expect(document.body.textContent).not.toContain('解析失败')
+  })
+
+  it.each([
+    '    <https://example.com/code>',
+    '<span>raw html</span>',
+    '<!doctype html>',
+  ])('keeps CommonMark syntax that MDXEditor cannot round-trip in source mode: %s', (markdown) => {
+    renderRenderer({ preview: { ...basePreview(), text: markdown } })
+
+    expect(sourceEditor().value).toBe(markdown)
     expect(document.body.textContent).not.toContain('解析失败')
   })
 
@@ -1049,6 +1181,74 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().value).toBe('# Fixed')
     expect(document.body.textContent).toContain('已同步')
   })
+
+  it('shows existing .md comments in the shared rail and keeps local placement failures distinct', async () => {
+    annotationsMock.threads = [commentThread()]
+    renderRenderer({ annotationContext: { context: 'owner', itemId: 'file' } })
+
+    expect(annotationsMock.input).toEqual({ context: 'owner', itemId: 'file' })
+    expect(buttonWithText('评论 1')).not.toBeNull()
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('编辑中暂未定位')
+
+    await click(buttonWithText('编辑中暂未定位'))
+
+    expect(document.body.textContent).toContain('First comment')
+    expect(document.body.textContent).toContain('编辑中暂未定位')
+    expect(document.body.textContent).not.toContain('原文已修改或删除')
+  })
+
+  it('shows comments directly as a list while the Markdown editor is in source mode', () => {
+    annotationsMock.threads = [commentThread()]
+    renderRenderer({
+      preview: { ...basePreview(), text: ['正文', '', '<!-- keep this comment -->'].join('\n') },
+      annotationContext: { context: 'owner', itemId: 'file' },
+    })
+
+    expect(sourceEditor()).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('First comment')
+    expect(document.body.textContent).toContain('编辑中暂未定位')
+    expect(document.body.textContent).not.toContain('未定位评论')
+  })
+
+  it('uses a compact comment sheet without mounting the desktop split rail', () => {
+    layoutModeMock.value = 'compact'
+    annotationsMock.threads = [commentThread()]
+    renderRenderer({ annotationContext: { context: 'owner', itemId: 'file' } })
+
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
+    expect(document.querySelector('[data-mdxeditor-sheet="comments"]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('First comment')
+  })
+
+  it('does not reopen comments after the user closes them during the current mount', async () => {
+    annotationsMock.threads = [commentThread()]
+    const renderer = renderRenderer({ annotationContext: { context: 'owner', itemId: 'file' } })
+
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
+    await click(buttonWithText('评论 1'))
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
+
+    renderer.rerender({
+      preview: { ...basePreview(), text: '# Notes\n\nAfter edit' },
+      annotationContext: { context: 'owner', itemId: 'file' },
+    })
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
+  })
+
+  it('does not enable comments for .mdx files', () => {
+    annotationsMock.threads = [commentThread()]
+    renderRenderer({
+      current: { ...baseCurrent(), name: 'notes.mdx' },
+      annotationContext: { context: 'owner', itemId: 'file' },
+    })
+
+    expect(annotationsMock.input).toBeUndefined()
+    expect(document.body.textContent).not.toContain('评论 1')
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
+  })
 })
 
 function renderRenderer(input: {
@@ -1056,6 +1256,7 @@ function renderRenderer(input: {
   readonly preview?: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly editContext?: DriveRendererEditContext
+  readonly annotationContext?: ComponentProps<typeof DriveMDXeditorRenderer>['annotationContext']
   readonly imageSourceContext?: ComponentProps<typeof DriveMDXeditorRenderer>['imageSourceContext']
 } = {}) {
   host = document.createElement('div')
@@ -1071,6 +1272,7 @@ function renderRenderer(input: {
           preview={nextInput.preview ?? basePreview()}
           edit={nextInput.edit === undefined ? editable() : nextInput.edit}
           editContext={nextInput.editContext ?? createEditContext()}
+          annotationContext={nextInput.annotationContext}
           imageSourceContext={nextInput.imageSourceContext}
         />
       </DriveRendererToolbarProvider>
@@ -1144,6 +1346,57 @@ function basePreview(): DriveBrowserPreviewDto {
     imageUrl: null,
     visitUrl: null,
     relativeImages: [],
+  }
+}
+
+function commentThread(): DriveAnnotationThreadDto {
+  return {
+    id: 'thread-1',
+    itemId: 'file',
+    baseVersionId: 'version-1',
+    targetKind: 'textRange',
+    target: {
+      schemaVersion: 1,
+      kind: 'textRange',
+      surface: 'markdownRenderedText',
+      range: { start: 0, end: 5 },
+      quote: { exact: 'Notes', prefix: '', suffix: '' },
+    },
+    anchorStatus: 'attached',
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: 'version-1',
+      selectors: {
+        schemaVersion: 2,
+        kind: 'textRange',
+        position: { start: 0, end: 7 },
+        quote: { exact: 'Notes', prefix: '', suffix: '' },
+        semantic: { blockId: 'block-1', blockLocalRange: { start: 0, end: 5 }, headingPath: [] },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 2, end: 7 },
+      resolvedRenderedRange: { start: 0, end: 5 },
+      confidence: 1,
+      lastResolvedVersionId: 'version-1',
+    },
+    author: { id: 'user-1', email: null, handle: 'author' },
+    comments: [{
+      id: 'comment-1',
+      threadId: 'thread-1',
+      parentCommentId: null,
+      body: 'First comment',
+      author: { id: 'user-1', email: null, handle: 'author' },
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:00.000Z',
+      editedAt: null,
+      deletedAt: null,
+      deleted: false,
+      permissions: { canEdit: true, canDelete: true },
+    }],
+    createdAt: '2026-09-01T00:00:00.000Z',
+    updatedAt: '2026-09-01T00:00:00.000Z',
+    permissions: { canDelete: true },
   }
 }
 

@@ -43,6 +43,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
       component: "workflow.runner",
       name: "workflow-runner-timeline-node-select",
       action: "select",
+      eventKey: "workflow.runner.timeline.select",
       value: result.nodeId,
       metadata: {
         boundary: "renderer.workflow.runner.timeline",

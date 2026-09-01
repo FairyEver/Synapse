@@ -123,6 +123,7 @@ function CronEditorDialog({
       component: "automation",
       name: "automation-cron-apply",
       action: "submit",
+      eventKey: "automation.cron.apply",
       metadata: {
         boundary: "renderer.automation.cron-editor",
         activeTab,

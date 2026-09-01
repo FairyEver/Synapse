@@ -9,6 +9,7 @@ import { IdentityProvider } from "@/app-shell/identity-context"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
 import { installDiagnostics } from "@/app-shell/diagnostics"
 import { updateDiagnosticContext } from "@/lib/diagnostic-context"
+import { installNativeDataTrackCapture, track, updateTrackingContext } from "@/lib/ui-tracking"
 import { AppNotificationsProvider } from "@/app-shell/notifications"
 import { RepositoryManagerProvider } from "@/app-shell/repository"
 import "@/styles/globals.css"
@@ -18,16 +19,35 @@ const bootstrapLogger = createRendererLogger("renderer.bootstrap")
 bootstrapLogger.info("Renderer bootstrap started.")
 installRendererLogForwarding()
 const cleanupDiagnostics = installDiagnostics()
+const cleanupNativeDataTrackCapture = installNativeDataTrackCapture()
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     cleanupDiagnostics()
+    cleanupNativeDataTrackCapture()
   })
 }
 
 void (async () => {
   const windowType = new URLSearchParams(window.location.search).get("window")
   updateDiagnosticContext({ windowType: windowType ?? "main" })
+  updateTrackingContext({ windowType: windowType ?? "main" })
+  track({
+    component: "renderer",
+    name: "window-open",
+    action: "open",
+    eventKey: "app.window.open",
+    category: "lifecycle",
+  })
+  window.addEventListener("beforeunload", () => {
+    track({
+      component: "renderer",
+      name: "window-close",
+      action: "close",
+      eventKey: "app.window.close",
+      category: "lifecycle",
+    })
+  }, { once: true })
 
   if (windowType === "workflow-editor") {
     const { WorkflowEditorApp } = await import("@/modules/workflow/editor/editor-app")

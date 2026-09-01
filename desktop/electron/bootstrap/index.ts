@@ -13,6 +13,7 @@ export {
   coreActionRuntimeDescriptor,
   coreAppIconDescriptor,
   coreConfigDescriptor,
+  coreClientTelemetryDescriptor,
   coreDatabaseDescriptor,
   coreFileOpenerDescriptor,
   coreTextExtractorDescriptor,

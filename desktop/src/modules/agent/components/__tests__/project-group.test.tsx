@@ -316,6 +316,7 @@ describe("ProjectGroup", () => {
     expect(onQuickCreateSession).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "agent-project-new-session",
       name: "agent-project-new-session",
       action: "click",
     })
@@ -344,6 +345,7 @@ describe("ProjectGroup", () => {
     expect(onCustomizeSession).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "dropdown-menu-item",
+      eventKey: "agent-project-custom-new-session",
       name: "agent-project-custom-new-session",
       action: "select",
     })
@@ -365,6 +367,7 @@ describe("ProjectGroup", () => {
     expect(onShowProjectInFolder).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "dropdown-menu-item",
+      eventKey: "agent-project-show-in-folder",
       name: "agent-project-show-in-folder",
       action: "select",
     })
@@ -386,6 +389,7 @@ describe("ProjectGroup", () => {
     expect(onOpenProjectInTerminal).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "dropdown-menu-item",
+      eventKey: "agent-project-open-terminal",
       name: "agent-project-open-terminal",
       action: "select",
     })
@@ -465,6 +469,7 @@ describe("ProjectGroup", () => {
     expect(onDelete).toHaveBeenCalledWith(sessions[1])
     expect(track).toHaveBeenCalledWith({
       component: "dropdown-menu-item",
+      eventKey: "agent-project-clear-sessions",
       name: "agent-project-clear-sessions",
       action: "select",
     })

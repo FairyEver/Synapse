@@ -186,6 +186,7 @@ describe("RunParamsDialog", () => {
       component: "workflow",
       name: "workflow-run-params-submit",
       action: "submit",
+      eventKey: "workflow.run-params.submit",
       metadata: {
         boundary: "renderer.workflow.run-params.submit",
         workflowId: "workflow-1",

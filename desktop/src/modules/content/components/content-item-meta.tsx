@@ -81,6 +81,8 @@ function ContentItemText({
         </p>
         {descriptionWrap && isClamped && (
           <button
+            data-track="content.item-meta.expand"
+            data-track-native="true"
             type="button"
             className="self-start text-xs text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setShowFull(true)}

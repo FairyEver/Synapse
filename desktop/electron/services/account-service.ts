@@ -425,6 +425,11 @@ export class AccountService {
     return apiBaseUrl()
   }
 
+  fetchPublic(pathOrUrl: string, init: RequestInit = {}): Promise<Response> {
+    const url = pathOrUrl.startsWith("/") ? `${apiBaseUrl()}${pathOrUrl}` : pathOrUrl
+    return this.fetchImpl(url, init)
+  }
+
   async fetchAuthenticated(
     pathOrUrl: string,
     init: RequestInit = {},

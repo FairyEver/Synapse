@@ -159,6 +159,7 @@ function ProviderModelSelectDialog({
       component: "agent",
       name: "agent-provider-model-select",
       action: "submit",
+      eventKey: "agent.provider-model.select",
       metadata: {
         boundary: "renderer.provider-model-select",
         providerId: selection.providerId,

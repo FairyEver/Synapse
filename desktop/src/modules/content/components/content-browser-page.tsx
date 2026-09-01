@@ -345,6 +345,7 @@ function ContentBrowserPage({
     void promise(
       () => syncRepository(activeRepository.uuid),
       {
+        trackingName: "content.repository.sync",
         loading: "正在同步仓库...",
         success: (result) => result.message ?? "仓库同步完成。",
         error: (syncError) => syncError instanceof Error ? syncError.message : "同步仓库失败。",

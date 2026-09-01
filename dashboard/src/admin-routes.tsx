@@ -15,6 +15,7 @@ import LogsPage from '@/features/logs'
 import ProblemFeedbackPage from '@/features/problem-feedback'
 import { SkillRepositoryAdminPage } from '@/features/skill-repository'
 import SystemPage from '@/features/system'
+import TelemetryPage from '@/features/telemetry'
 import UsersPage from '@/features/users'
 import WebhookDeliveriesPage from '@/features/webhook-deliveries'
 import { normalizeAdminRedirect } from '@/lib/admin-redirect'
@@ -98,6 +99,7 @@ export const adminRouteTree = rootRoute.addChildren([
   accessRoute,
   authenticatedRoute.addChildren([
     adminPage('system', SystemPage), adminPage('users', UsersPage), adminPage('devices', DevicesPage),
+    adminPage('telemetry', TelemetryPage),
     skillRepositoriesRoute, webhookDeliveriesRoute, adminPage('audit-logs', AuditLogsPage),
     adminPage('problem-feedback', ProblemFeedbackPage),
     adminPage('backup', BackupPage), adminPage('drive', DriveAdminPage), adminPage('logs', LogsPage),

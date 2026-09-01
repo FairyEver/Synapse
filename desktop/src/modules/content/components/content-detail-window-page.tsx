@@ -106,6 +106,7 @@ function useContentWindowDeleteState(
         baseHistoryDirname: detail.latestHistoryDirname,
       }),
       {
+        trackingName: "content.delete",
         loading: "正在删除...",
         success: (result) => {
           setIsDeleteConfirmOpen(false)

@@ -55,9 +55,11 @@ type ThreadComposerState =
 
 type ThreadEditComposerState = Extract<ThreadComposerState, { readonly kind: 'edit' }>
 
-export type MarkdownCommentsRailThread = {
+export type DriveCommentsRailItem = {
   readonly thread: DriveAnnotationThreadDto
-  readonly anchorTop: number | null
+  readonly placement:
+    | { readonly status: 'positioned'; readonly anchorTop: number }
+    | { readonly status: 'unavailable' }
 }
 
 export type MarkdownCommentDraft = {
@@ -72,10 +74,10 @@ export type MarkdownCommentDraft = {
 }
 
 type AnchoredRailCard =
-  | { readonly id: string; readonly kind: 'thread'; readonly anchorTop: number; readonly item: MarkdownCommentsRailThread }
+  | { readonly id: string; readonly kind: 'thread'; readonly anchorTop: number; readonly item: DriveCommentsRailItem }
   | { readonly id: typeof COMMENT_DRAFT_CARD_ID; readonly kind: 'draft'; readonly anchorTop: number; readonly draft: MarkdownCommentDraft }
 
-export function MarkdownCommentsRail({
+export function DriveCommentsRail({
   mode = 'anchored',
   threads,
   draft,
@@ -95,7 +97,7 @@ export function MarkdownCommentsRail({
   onAnchoredWheel,
 }: {
   readonly mode?: 'anchored' | 'list'
-  readonly threads: readonly MarkdownCommentsRailThread[]
+  readonly threads: readonly DriveCommentsRailItem[]
   readonly draft?: MarkdownCommentDraft | null
   readonly activeThreadId: string | null
   readonly canReply: boolean
@@ -115,11 +117,23 @@ export function MarkdownCommentsRail({
   const [unlocatedDialogOpen, setUnlocatedDialogOpen] = useState(false)
   const anchoredRegionRef = useRef<HTMLDivElement | null>(null)
   const partition = useMemo(() => partitionRailThreads(threads), [threads])
+  const unlocatedThreads = useMemo(
+    () => mode === 'list'
+      ? partition.orphaned
+      : [...partition.orphaned, ...partition.unavailable],
+    [mode, partition]
+  )
+  const listThreads = useMemo(
+    () => mode === 'list'
+      ? [...partition.anchored, ...partition.unavailable]
+      : partition.anchored,
+    [mode, partition]
+  )
   const anchoredCards = useMemo<readonly AnchoredRailCard[]>(() => {
     const cards: AnchoredRailCard[] = partition.anchored.map((item) => ({
       id: item.thread.id,
       kind: 'thread',
-      anchorTop: item.anchorTop ?? 0,
+      anchorTop: item.placement.status === 'positioned' ? item.placement.anchorTop : 0,
       item,
     }))
     if (draft) cards.push({ id: COMMENT_DRAFT_CARD_ID, kind: 'draft', anchorTop: draft.anchorTop, draft })
@@ -154,21 +168,22 @@ export function MarkdownCommentsRail({
   }, [compact, onAnchoredWheel])
 
   useEffect(() => {
-    if (partition.orphaned.length === 0) setUnlocatedDialogOpen(false)
-  }, [partition.orphaned.length])
+    if (unlocatedThreads.length === 0) setUnlocatedDialogOpen(false)
+  }, [unlocatedThreads.length])
 
-  const unlocatedButton = partition.orphaned.length > 0 ? (
+  const unlocatedButton = unlocatedThreads.length > 0 ? (
     <UnlocatedCommentsButton
-      count={partition.orphaned.length}
+      count={unlocatedThreads.length}
+      label={partition.orphaned.length > 0 ? '未定位评论' : '编辑中暂未定位'}
       compact={compact}
       elementRef={compact ? undefined : measurements.unlocatedSectionRef}
       onClick={() => setUnlocatedDialogOpen(true)}
     />
   ) : null
-  const unlocatedDialog = partition.orphaned.length > 0 ? (
+  const unlocatedDialog = unlocatedThreads.length > 0 ? (
     <UnlocatedCommentsDialog
       open={unlocatedDialogOpen}
-      threads={partition.orphaned}
+      threads={unlocatedThreads}
       activeThreadId={activeThreadId}
       canReply={canReply}
       compact={compact}
@@ -196,17 +211,18 @@ export function MarkdownCommentsRail({
           onNavigateNext={onNavigateNext}
         />
         {unlocatedButton}
-        {partition.anchored.length === 0 && !draft ? (
+        {listThreads.length === 0 && !draft ? (
           <div className='px-3 py-6 text-sm text-muted-foreground'>
             {threads.length === 0 ? '暂无评论' : '暂无已定位评论'}
           </div>
         ) : (
           <div className='space-y-3 p-3'>
             {draft ? <CommentDraftCard draft={draft} compact /> : null}
-            {partition.anchored.map((item) => (
+            {listThreads.map((item) => (
               <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
                 <ThreadView
                   thread={item.thread}
+                  positionUnavailable={item.placement.status === 'unavailable' && item.thread.anchorStatus !== 'orphaned'}
                   active={item.thread.id === activeThreadId}
                   canReply={canReply}
                   compact
@@ -266,6 +282,7 @@ export function MarkdownCommentsRail({
                   {item.kind === 'thread' ? (
                     <ThreadView
                       thread={item.item.thread}
+                      positionUnavailable={false}
                       active={item.item.thread.id === activeThreadId}
                       canReply={canReply}
                       compact={false}
@@ -288,11 +305,13 @@ export function MarkdownCommentsRail({
 
 function UnlocatedCommentsButton({
   count,
+  label,
   compact,
   elementRef,
   onClick,
 }: {
   readonly count: number
+  readonly label: string
   readonly compact: boolean
   readonly elementRef?: (element: HTMLDivElement | null) => void
   readonly onClick: () => void
@@ -308,13 +327,13 @@ function UnlocatedCommentsButton({
         variant='outline'
         size='sm'
         className={cn('w-full justify-between', compact && 'min-h-11')}
-        aria-label={`查看 ${count} 条未定位评论`}
+        aria-label={`查看 ${count} 条${label}`}
         aria-haspopup='dialog'
         onClick={onClick}
       >
         <span className='flex min-w-0 items-center gap-2'>
           <MapPinOff />
-          <span>未定位评论</span>
+          <span>{label}</span>
         </span>
         <span className='flex items-center gap-1.5'>
           <Badge variant='secondary'>{count}</Badge>
@@ -338,7 +357,7 @@ function UnlocatedCommentsDialog({
   onDeleteComment,
 }: {
   readonly open: boolean
-  readonly threads: readonly MarkdownCommentsRailThread[]
+  readonly threads: readonly DriveCommentsRailItem[]
   readonly activeThreadId: string | null
   readonly canReply: boolean
   readonly compact: boolean
@@ -368,6 +387,7 @@ function UnlocatedCommentsDialog({
                   <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
                     <ThreadView
                       thread={item.thread}
+                      positionUnavailable={item.placement.status === 'unavailable' && item.thread.anchorStatus !== 'orphaned'}
                       active={item.thread.id === activeThreadId}
                       canReply={canReply}
                       compact={compact}
@@ -481,6 +501,7 @@ function CommentDraftCard({ draft, compact }: { readonly draft: MarkdownCommentD
 
 function ThreadView({
   thread,
+  positionUnavailable,
   active,
   canReply,
   compact,
@@ -490,6 +511,7 @@ function ThreadView({
   onDeleteComment,
 }: {
   readonly thread: DriveAnnotationThreadDto
+  readonly positionUnavailable: boolean
   readonly active: boolean
   readonly canReply: boolean
   readonly compact: boolean
@@ -603,9 +625,11 @@ function ThreadView({
             <span className='line-clamp-2'>“{quote}”</span>
           </Button>
         </div>
-        {thread.anchorStatus === 'orphaned' ? (
+        {thread.anchorStatus === 'orphaned' || positionUnavailable ? (
           <div className='ml-2.5 flex flex-wrap items-center gap-1'>
-            <span className='text-xs text-muted-foreground'>{annotationPositionLabel(thread)}</span>
+            <span className='text-xs text-muted-foreground'>
+              {positionUnavailable ? '编辑中暂未定位' : annotationPositionLabel(thread)}
+            </span>
           </div>
         ) : null}
       </div>
@@ -986,15 +1010,19 @@ function layoutRailCards(
   return { anchored, anchoredHeight: anchored.length > 0 ? previousBottom : 0 }
 }
 
-function partitionRailThreads(items: readonly MarkdownCommentsRailThread[]): {
-  readonly anchored: readonly MarkdownCommentsRailThread[]
-  readonly orphaned: readonly MarkdownCommentsRailThread[]
+function partitionRailThreads(items: readonly DriveCommentsRailItem[]): {
+  readonly anchored: readonly DriveCommentsRailItem[]
+  readonly orphaned: readonly DriveCommentsRailItem[]
+  readonly unavailable: readonly DriveCommentsRailItem[]
 } {
   const orphaned = items
-    .filter((item) => item.anchorTop === null || item.thread.anchorStatus === 'orphaned')
+    .filter((item) => item.thread.anchorStatus === 'orphaned')
     .sort((a, b) => Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt))
-  const anchored = items.filter((item) => item.anchorTop !== null && item.thread.anchorStatus !== 'orphaned')
-  return { anchored, orphaned }
+  const unavailable = items
+    .filter((item) => item.thread.anchorStatus !== 'orphaned' && item.placement.status === 'unavailable')
+    .sort((a, b) => Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt))
+  const anchored = items.filter((item) => item.placement.status === 'positioned' && item.thread.anchorStatus !== 'orphaned')
+  return { anchored, orphaned, unavailable }
 }
 
 function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]) {

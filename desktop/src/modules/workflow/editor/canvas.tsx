@@ -35,6 +35,7 @@ import { resolveBranchLabel } from "../lib/branch-label"
 import { errorDiagnostic } from "../lib/error-utils"
 import { WorkflowLayoutDirectionProvider } from "../workflow-layout-direction-context"
 import { exportWorkflowViewportAsPng } from "./workflow-image-export"
+import { startTrackedOperation, track } from "@/lib/ui-tracking"
 
 const logger = createRendererLogger("workflow.editor.canvas")
 
@@ -289,6 +290,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       targetHandle: connection.targetHandle,
       edgeCount: wfEdges.length,
     })
+    track({ component: "workflow", name: "workflow.canvas.edge.connect", action: "add", eventKey: "workflow.canvas.edge.connect" })
     onChange(newDef)
   }, [onChange, setEdges])
 
@@ -300,6 +302,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       nodeCount: wfNodes.length,
       selectedNodeIds: nodesRef.current.filter((node) => node.selected).map((node) => node.id),
     })
+    track({ component: "workflow", name: "workflow.canvas.node.drag", action: "drop", eventKey: "workflow.canvas.node.drag" })
     onChange(newDef)
   }, [onChange])
 
@@ -329,6 +332,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       position,
       nodeCount: newDef.nodes.length,
     })
+    track({ component: "workflow", name: "workflow.canvas.node.add", action: "add", eventKey: "workflow.canvas.node.add" })
     onChange(newDef)
     onNodeSelect?.(id)
   }, [screenToFlowPosition, onChange, setNodes, onNodeSelect])
@@ -379,6 +383,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       copiedNodeCount: copiedNodes.length,
       copiedEdgeCount: copiedEdges.length,
     })
+    track({ component: "workflow", name: "workflow.canvas.node.copy", action: "click", eventKey: "workflow.canvas.node.copy" })
     toast(`已复制 ${copiedNodes.length} 个节点`)
   }, [])
 
@@ -430,6 +435,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       pastedEdgeCount: newEdges.length,
       rewrittenBindings,
     })
+    track({ component: "workflow", name: "workflow.canvas.node.paste", action: "add", eventKey: "workflow.canvas.node.paste" })
 
     const newDef = {
       ...definitionRef.current,
@@ -478,6 +484,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
         removedEdgeCount: currentEdges.length - updated.length,
         remainingEdgeCount: updated.length,
       })
+      track({ component: "workflow", name: "workflow.canvas.node.disconnect", action: "remove", eventKey: "workflow.canvas.node.disconnect" })
       onChange(newDef)
       return updated
     })
@@ -520,6 +527,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       remainingNodeCount: updatedNodes.length,
       remainingEdgeCount: updatedEdges.length,
     })
+    track({ component: "workflow", name: "workflow.canvas.node.delete", action: "remove", eventKey: "workflow.canvas.node.delete" })
     onChange(newDef)
   }, [onChange, setEdges, setNodes])
 
@@ -533,6 +541,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       deletedEdgeIds: edgeIds,
       remainingEdgeCount: updated.length,
     })
+    track({ component: "workflow", name: "workflow.canvas.edge.delete", action: "remove", eventKey: "workflow.canvas.edge.delete" })
     const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
     definitionRef.current = newDef
     onChange(newDef)
@@ -553,6 +562,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     const newDef = { ...definitionRef.current, nodes: wfNodes }
     definitionRef.current = newDef
     logger.info("auto layout applied", { nodeCount: layouted.length })
+    track({ component: "workflow", name: "workflow.canvas.auto-layout", action: "complete", eventKey: "workflow.canvas.auto-layout", category: "operation", outcome: "success" })
     onChange(newDef)
     requestAnimationFrame(() => {
       void fitView(CANVAS_FIT_VIEW_OPTIONS)
@@ -572,6 +582,8 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   const handleExportPng = useCallback(async () => {
     if (imageExportInProgressRef.current || nodesRef.current.length === 0) return
 
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.canvas.export-image" })
+    let outcome: "success" | "failure" = "failure"
     imageExportInProgressRef.current = true
     setIsExportingImage(true)
     try {
@@ -583,6 +595,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
         bounds: getNodesBounds(nodesRef.current),
         workflowName: definitionRef.current.name,
       })
+      outcome = "success"
     } catch (error) {
       logger.error("workflow PNG export failed", {
         workflowId: definitionRef.current.id,
@@ -592,6 +605,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     } finally {
       imageExportInProgressRef.current = false
       setIsExportingImage(false)
+      finishTracking(outcome)
     }
   }, [getNodesBounds])
 

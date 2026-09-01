@@ -49,10 +49,13 @@ function emitRendererLog(
   message: string,
   details?: unknown,
 ): void {
-  // Logging failures must not break the user flow or create an unsanitized fallback log.
-  void writeRendererLog(level, category, message, details).catch((err) => {
-    console.warn(`[${category}] renderer log write failed.`, sanitizeRendererLogDetails("error", err))
-  })
+  // Logging is a one-way best-effort side effect. A failed bridge must never
+  // surface to the user or re-enter the renderer logging/telemetry pipeline.
+  try {
+    void writeRendererLog(level, category, message, details).catch(() => undefined)
+  } catch {
+    return
+  }
 }
 
 function createRendererLogger(category: string): RendererLogger {

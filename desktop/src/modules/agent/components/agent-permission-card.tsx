@@ -45,6 +45,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
       component: "agent",
       name: "agent-permission-card-response",
       action: "submit",
+      eventKey: "agent.permission.respond",
       value: behavior,
       metadata: {
         boundary: "renderer.agent.permission-card-response",
@@ -81,6 +82,8 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
     >
       {/* 标题区 */}
       <div
+        data-track="agent.permission-details.toggle"
+        data-track-native="true"
         className={cn("flex items-center gap-2 bg-muted/30 px-3 py-2", body && "cursor-pointer select-none")}
         onClick={body ? () => setCodeCollapsed(!codeCollapsed) : undefined}
       >

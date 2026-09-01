@@ -94,6 +94,68 @@ export type SystemOverview = {
   }>
 }
 
+export type TelemetryDimension = {
+  value: string
+  count: number
+}
+
+export type TelemetryStats = {
+  range: {
+    from: string
+    to: string
+    timezoneOffsetMinutes: number
+    interval: 'day'
+  }
+  summary: {
+    events: number
+    authenticatedUsers: number
+    anonymousClients: number
+    sessions: number
+    failures: number
+    failureRate: number
+    p95DurationMs: number | null
+  }
+  trend: Array<{
+    date: string
+    events: number
+    authenticatedEvents: number
+    anonymousEvents: number
+    activeUsers: number
+    anonymousClients: number
+    sessions: number
+    failures: number
+  }>
+  dimensions: {
+    modules: TelemetryDimension[]
+    events: TelemetryDimension[]
+    actions: TelemetryDimension[]
+    outcomes: TelemetryDimension[]
+    versions: TelemetryDimension[]
+    platforms: TelemetryDimension[]
+    windowTypes: TelemetryDimension[]
+  }
+  filterOptions: {
+    modules: TelemetryDimension[]
+    events: TelemetryDimension[]
+    versions: TelemetryDimension[]
+    platforms: TelemetryDimension[]
+    windowTypes: TelemetryDimension[]
+  }
+}
+
+export type TelemetryStatsOptions = {
+  from?: string
+  to?: string
+  timezoneOffsetMinutes?: number
+  identity?: 'all' | 'authenticated' | 'anonymous'
+  userId?: string
+  moduleId?: string
+  eventKey?: string
+  appVersion?: string
+  platform?: string
+  windowType?: string
+}
+
 export type PaginatedResponse<T> = {
   data: T[]
   total: number
@@ -467,6 +529,20 @@ type PaginationOptions = {
   pageSize?: number
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
+}
+
+type AdminUserListOptions = PaginationOptions & {
+  search?: string
+}
+
+function adminUserListQuerySuffix(options: AdminUserListOptions) {
+  return querySuffix({
+    page: options.page,
+    pageSize: options.pageSize,
+    sortBy: options.sortBy,
+    sortOrder: options.sortOrder,
+    search: options.search,
+  })
 }
 
 export type AdminDriveListQuery = PaginationOptions & {
@@ -1208,6 +1284,11 @@ export const adminApi = {
     request<{ ok: true }>(`${adminApiBasePath}/session`, { method: 'DELETE' }),
   getSystemOverview: () =>
     request<SystemOverview>(`${adminApiBasePath}/system`),
+  getTelemetryStats: (options: TelemetryStatsOptions = {}) =>
+    request<TelemetryStats>(
+      `${adminApiBasePath}/telemetry/stats${querySuffix(options)}`,
+      { cache: 'no-store' }
+    ),
   listProblemFeedback: (page = 1) =>
     request<PaginatedResponse<ProblemFeedbackRow>>(
       `${adminApiBasePath}/problem-feedback?page=${page}`,
@@ -1218,9 +1299,9 @@ export const adminApi = {
       `${adminApiBasePath}/problem-feedback/${encodeURIComponent(id)}`,
       { method: 'DELETE', cache: 'no-store' }
     ),
-  listUsers: (options: PaginationOptions = {}) =>
+  listUsers: (options: AdminUserListOptions = {}) =>
     request<PaginatedResponse<AdminUserRow>>(
-      `${adminApiBasePath}/users${paginationSuffix(options)}`
+      `${adminApiBasePath}/users${adminUserListQuerySuffix(options)}`
     ),
   listLiveClients: () =>
     request<LiveClientRow[]>(`${adminApiBasePath}/live-clients`),

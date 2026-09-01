@@ -35,6 +35,7 @@ function TagInput({
         component: "tag-input",
         name: trackName,
         action: "add",
+        eventKey: dataTrack,
         value: typeof sanitizedValue === "string" ? sanitizedValue : undefined,
         metadata: { count: nextValues.length },
       })
@@ -51,6 +52,7 @@ function TagInput({
         component: "tag-input",
         name: trackName,
         action: "remove",
+        eventKey: dataTrack,
         value: typeof sanitizedValue === "string" ? sanitizedValue : undefined,
         metadata: { count: nextValues.length },
       })
@@ -90,6 +92,7 @@ function TagInput({
   return (
     <div
       data-track={dataTrack}
+      data-track-native="true"
       className={cn(
         "flex min-h-8 flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent px-2 py-1 text-sm transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
         disabled && "pointer-events-none opacity-50",
@@ -119,10 +122,10 @@ function TagInput({
         className="min-w-16 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         onKeyDown={handleKeyDown}
         onFocus={() => {
-          track({ component: "tag-input", name: trackName, action: "focus" })
+          track({ component: "tag-input", name: trackName, action: "focus", eventKey: dataTrack })
         }}
         onBlur={() => {
-          track({ component: "tag-input", name: trackName, action: "blur" })
+          track({ component: "tag-input", name: trackName, action: "blur", eventKey: dataTrack })
           handleBlur()
         }}
         onCompositionStart={() => setComposing(true)}

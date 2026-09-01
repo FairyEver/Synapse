@@ -124,14 +124,24 @@ export class AdminService {
     }
   }
 
-  async listUsers(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
+  async listUsers(pagination?: PaginationQuery, search?: string): Promise<PaginatedResponse<unknown>> {
     const page = pagination ?? parsePagination({})
+    const where = search
+      ? {
+          OR: [
+            { id: { contains: search, mode: "insensitive" as const } },
+            { email: { contains: search, mode: "insensitive" as const } },
+            { handle: { contains: search, mode: "insensitive" as const } },
+          ],
+        }
+      : undefined
     const [data, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         ...toPrismaArgs(page),
+        where,
         select: adminUserSelect,
       }),
-      this.prisma.user.count(),
+      this.prisma.user.count({ where }),
     ])
     return { data, total, page: page.page, pageSize: page.pageSize }
   }

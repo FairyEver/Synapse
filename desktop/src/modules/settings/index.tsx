@@ -152,6 +152,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
         await promise(
           () => updateConfig(patch, reset),
           {
+            trackingName: reset ? "settings.config.save-reset" : "settings.config.save",
             loading: reset ? "正在保存并重置..." : "正在保存设置...",
             success: () => "设置已保存。",
             error: (updateError) => updateError instanceof Error ? updateError.message : "保存设置失败。",
@@ -194,6 +195,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
         await promise(
           () => replaceRepositories(nextRepositories, activeRepoUuid),
           {
+            trackingName: "settings.repositories.save",
             loading: "正在保存目录...",
             success: () => "目录已保存。",
             error: (updateError) => updateError instanceof Error ? updateError.message : "保存目录失败。",

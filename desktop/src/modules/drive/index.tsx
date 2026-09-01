@@ -1741,6 +1741,8 @@ function DriveFileList({
 
   return (
     <div
+      data-track="drive.file.drop"
+      data-track-native="true"
       className="relative flex min-h-full flex-col gap-3"
       data-testid="drive-file-list-dropzone"
       onDragEnter={handleDragEnter}
@@ -2117,6 +2119,8 @@ function DriveFileListRow({
                   <span
                     className="block min-w-0 truncate whitespace-nowrap font-medium select-text"
                     data-drive-item-name="true"
+                    data-track="drive.file.open"
+                    data-track-native="true"
                     title={item.name}
                     onContextMenu={(event) => {
                       event.stopPropagation()
@@ -2126,6 +2130,8 @@ function DriveFileListRow({
                   </span>
                 ) : (
                   <span
+                    data-track="drive.file.name.open"
+                    data-track-native="true"
                     className={cn(
                       "block min-w-0 truncate whitespace-nowrap font-medium select-text",
                       canOpenFileName && "cursor-pointer underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"

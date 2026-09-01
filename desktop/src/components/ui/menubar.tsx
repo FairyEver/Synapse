@@ -107,7 +107,7 @@ function MenubarItem({
       )}
       onSelect={(e) => {
         const label = dataTrack ?? extractLabel(e.currentTarget) ?? "menubar-item"
-        track({ component: "menubar-item", name: label, action: "select" })
+        track({ component: "menubar-item", name: label, action: "select", eventKey: dataTrack })
         onSelect?.(e)
       }}
       {...props}
@@ -137,7 +137,7 @@ function MenubarCheckboxItem({
       )}
       checked={checked}
       onCheckedChange={(val) => {
-        track({ component: "menubar-checkbox-item", name: dataTrack ?? props.textValue ?? "menubar-checkbox-item", action: val ? "check" : "uncheck" })
+        track({ component: "menubar-checkbox-item", name: dataTrack ?? props.textValue ?? "menubar-checkbox-item", action: val ? "check" : "uncheck", eventKey: dataTrack })
         onCheckedChange?.(val)
       }}
       {...props}
@@ -173,7 +173,7 @@ function MenubarRadioItem({
         className
       )}
       onSelect={(e) => {
-        track({ component: "menubar-radio-item", name: dataTrack ?? extractLabel(e.currentTarget) ?? "menubar-radio-item", action: "select" })
+        track({ component: "menubar-radio-item", name: dataTrack ?? extractLabel(e.currentTarget) ?? "menubar-radio-item", action: "select", eventKey: dataTrack })
         onSelect?.(e)
       }}
       {...props}

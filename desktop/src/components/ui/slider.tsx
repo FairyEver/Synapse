@@ -4,8 +4,8 @@ import { Slider as SliderPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { track, debounce } from "@/lib/ui-tracking"
 
-const debouncedTrackSlide = debounce((name: string, value: number[]) => {
-  track({ component: "slider", name, action: "slide", value })
+const debouncedTrackSlide = debounce((name: string, eventKey: string | undefined, value: number[]) => {
+  track({ component: "slider", name, action: "slide", eventKey, value })
 }, 300)
 
 function Slider({
@@ -42,7 +42,7 @@ function Slider({
         className
       )}
       onValueChange={(val) => {
-        debouncedTrackSlide(dataTrack ?? "slider", val)
+        debouncedTrackSlide(dataTrack ?? "slider", dataTrack, val)
         onValueChange?.(val)
       }}
       {...props}

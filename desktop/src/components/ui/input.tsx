@@ -23,11 +23,11 @@ function Input({
         className
       )}
       onFocus={(e) => {
-        track({ component: "input", name: label, action: "focus" })
+        track({ component: "input", name: label, action: "focus", eventKey: dataTrack })
         onFocus?.(e)
       }}
       onBlur={(e) => {
-        track({ component: "input", name: label, action: "blur" })
+        track({ component: "input", name: label, action: "blur", eventKey: dataTrack })
         onBlur?.(e)
       }}
       {...props}

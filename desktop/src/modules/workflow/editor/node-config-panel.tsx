@@ -125,6 +125,8 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
                   />
                 ) : (
                   <p
+                    data-track="workflow.node.rename-open"
+                    data-track-native="true"
                     className="text-sm font-medium truncate cursor-pointer hover:text-foreground/80"
                     onClick={() => setIsEditingName(true)}
                   >

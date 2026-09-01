@@ -26,7 +26,7 @@ function Switch({
       )}
       onCheckedChange={(checked) => {
         const label = dataTrack ?? props["aria-label"] ?? props.id ?? "switch"
-        track({ component: "switch", name: label, action: checked ? "check" : "uncheck" })
+        track({ component: "switch", name: label, action: checked ? "check" : "uncheck", eventKey: dataTrack })
         onCheckedChange?.(checked)
       }}
       {...props}

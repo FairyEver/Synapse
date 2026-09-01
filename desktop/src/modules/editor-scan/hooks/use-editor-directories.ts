@@ -48,6 +48,7 @@ function useEditorDirectories() {
           loadDirectories()
         },
         {
+          trackingName: "editor-scan.directory.create",
           loading: "正在创建目录...",
           success: () => "目录已创建。",
           error: (err) => (err instanceof Error ? err.message : "创建目录失败。"),

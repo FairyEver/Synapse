@@ -178,6 +178,7 @@ function useContentDownloadActions({
           return result
         },
         {
+          trackingName: "content.download",
           loading: `正在下载 ${definition.singularLabel}...`,
           success: (result) => {
             if (result.canceled) {
@@ -231,6 +232,7 @@ function useContentDownloadActions({
           })
         },
         {
+          trackingName: "content.body.copy",
           loading: "正在复制正文...",
           success: "正文已复制。",
           error: (error) => error instanceof Error ? error.message : "复制失败。",
@@ -275,6 +277,7 @@ function useContentDownloadActions({
           })
         },
         {
+          trackingName: "content.icon-prompt.copy",
           loading: "正在复制图标提示词...",
           success: "图标提示词已复制。",
           error: (error) => error instanceof Error ? error.message : "复制失败。",

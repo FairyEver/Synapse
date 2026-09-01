@@ -21,7 +21,7 @@ function Dialog({
       <DialogPrimitive.Root
         data-slot="dialog"
         onOpenChange={(open) => {
-          track({ component: "dialog", name: dataTrack ?? titleRef.current ?? "dialog", action: open ? "open" : "close" })
+          track({ component: "dialog", name: dataTrack ?? titleRef.current ?? "dialog", action: open ? "open" : "close", eventKey: dataTrack })
           onOpenChange?.(open)
         }}
         {...props}

@@ -57,6 +57,7 @@ function AgentPermissionModeMenu({
                     component: "agent",
                     name: "agent-permission-mode-select",
                     action: "select",
+                    eventKey: "agent.permission-mode.select",
                     metadata: {
                       boundary: "renderer.agent.permission-mode-select",
                       currentMode: selectedMode,

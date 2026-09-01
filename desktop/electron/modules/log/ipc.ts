@@ -10,10 +10,12 @@ import { app, dialog } from "electron"
 import path from "node:path"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
-import { logStore } from "../../services/log-store"
+import { createMainLogger, logStore } from "../../services/log-store"
 import type { SynapseRendererLogPayload } from "../../../src/types/log"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import { createControlledProcessRunner } from "../../runtime/process"
+import { CLIENT_TELEMETRY_SERVICE_ID } from "../../services/client-telemetry-constants"
+import type { ClientTelemetryService } from "../../services/client-telemetry-service"
 
 // Schemas
 const rendererLogPayloadSchema = z.object({
@@ -22,6 +24,8 @@ const rendererLogPayloadSchema = z.object({
   message: z.string(),
   details: z.unknown().optional(),
 })
+
+const telemetryLogger = createMainLogger("ipc.client-telemetry")
 
 const exportResultSchema = z.object({
   fileCount: z.number(),
@@ -103,7 +107,7 @@ export const logIpcModule: IpcModule = {
       operationId: "app.log.entry.write",
       request: rendererLogPayloadSchema,
       response: z.void(),
-      handler: async (_ctx, request: SynapseRendererLogPayload) => {
+      handler: async (ctx, request: SynapseRendererLogPayload) => {
         logStore.write({
           source: "renderer",
           level: request.level,
@@ -111,6 +115,13 @@ export const logIpcModule: IpcModule = {
           message: request.message,
           details: request.details,
         })
+        try {
+          ctx.resolve<ClientTelemetryService>(CLIENT_TELEMETRY_SERVICE_ID).recordRendererLog(request)
+        } catch (error) {
+          telemetryLogger.warn("Client telemetry service unavailable.", {
+            errorName: error instanceof Error ? error.name : typeof error,
+          })
+        }
       },
     },
     export: {

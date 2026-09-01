@@ -135,6 +135,8 @@ function ProviderModelPicker({
                             : `${tierConfig.label}，原名称：${tierConfig.originalLabel}`
                           return (
                             <button
+                              data-track="provider-model.tier.select"
+                              data-track-native="true"
                               key={tierConfig.tier}
                               data-tier={tierConfig.tier}
                               type="button"

@@ -6,6 +6,7 @@ describe('normalizeAdminRedirect', () => {
     expect(normalizeAdminRedirect('/users?page=2#active')).toBe('/users?page=2#active')
     expect(normalizeAdminRedirect('/admin/users?page=2#active')).toBe('/users?page=2#active')
     expect(normalizeAdminRedirect('/drive/')).toBe('/drive/')
+    expect(normalizeAdminRedirect('/telemetry?identity=anonymous')).toBe('/telemetry?identity=anonymous')
     expect(normalizeAdminRedirect('/teams')).toBeUndefined()
     expect(normalizeAdminRedirect('/invitations')).toBeUndefined()
     expect(normalizeAdminRedirect('/unknown')).toBeUndefined()

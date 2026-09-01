@@ -9,6 +9,7 @@ import {
 import { toast, type ExternalToast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
 import { createRendererLogger } from "@/app-shell/logging"
+import { track } from "@/lib/ui-tracking"
 import {
   DEFAULT_NOTIFICATION_DURATION_MS,
   ERROR_NOTIFICATION_DURATION_MS,
@@ -41,6 +42,7 @@ type AppNotificationPromiseInput<Value> = AppNotificationOptions & {
   error?: AppNotificationResultResolver<unknown>
   loading: ReactNode
   success?: AppNotificationResultResolver<Value>
+  trackingName: string
 }
 type AppNotificationRecord = {
   id: AppNotificationId
@@ -195,6 +197,7 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
         error: errorResolver,
         loading: loadingMessage,
         success: successResolver,
+        trackingName,
         ...options
       } = input
       const toastId = showToast(loadingMessage, "loading", options)
@@ -205,6 +208,15 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
         const value = await resolvePromiseSource(source)
         const elapsedMs = Math.round(performance.now() - startedAt)
         notificationLogger.info(`[async:ok] ${loadingLabel} (${elapsedMs}ms)`)
+        track({
+          component: "async-operation",
+          name: trackingName,
+          action: "complete",
+          eventKey: trackingName,
+          category: "operation",
+          outcome: "success",
+          durationMs: elapsedMs,
+        })
         const result = resolveNotificationResult(successResolver, value, "success", null)
 
         if (result.message === null) {
@@ -220,6 +232,15 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         const elapsedMs = Math.round(performance.now() - startedAt)
         notificationLogger.error(`[async:fail] ${loadingLabel} (${elapsedMs}ms)`, error)
+        track({
+          component: "async-operation",
+          name: trackingName,
+          action: "complete",
+          eventKey: trackingName,
+          category: "operation",
+          outcome: "failure",
+          durationMs: elapsedMs,
+        })
         const result = resolveNotificationResult(
           errorResolver,
           error,

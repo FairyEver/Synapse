@@ -126,6 +126,45 @@ describe('adminApi.users', () => {
       })
     )
   })
+
+  it('searches users for administrator filters', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [], total: 0, page: 1, pageSize: 20 }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.listUsers({ search: 'alice', pageSize: 20 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/users?pageSize=20&search=alice',
+      expect.objectContaining({ credentials: 'include' })
+    )
+  })
+})
+
+describe('adminApi.telemetry', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('requests aggregate statistics without caching', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ summary: { events: 0 }, trend: [], dimensions: {} }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.getTelemetryStats({ identity: 'anonymous', timezoneOffsetMinutes: 480 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/telemetry/stats?identity=anonymous&timezoneOffsetMinutes=480',
+      expect.objectContaining({ cache: 'no-store', credentials: 'include' })
+    )
+  })
 })
 
 describe('adminApi.drive', () => {

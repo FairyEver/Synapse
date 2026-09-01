@@ -96,6 +96,7 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
       await promise(
         () => switchRepository(repositoryUuid),
         {
+          trackingName: "repository.active.switch",
           loading: "正在切换仓库...",
           success: () => "切换完成。",
           error: (error) => error instanceof Error ? error.message : "切换仓库失败。",

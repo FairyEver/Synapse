@@ -970,6 +970,7 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
           "agent.usage",
           "conversations",
           "outbox",
+          "telemetry.outbox",
           "audit",
         ],
         emptyNamespaces: [...TERMINAL_BODY_NAMESPACES, "agent.file-checkpoints"],

@@ -64,6 +64,14 @@
 - 开放 API 的应用地址使用 `APP_PUBLIC_URL`，文档地址使用 `DOCUMENT_PUBLIC_URL`；生产未配置文档地址时从应用根地址派生 `/document`，DEV 必须显式指向独立的本地文档服务。API capability 和 OpenAPI `externalDocs` 由服务端输出绝对文档地址，契约 `servers` 继续保持版本化相对路径。
 - 开放 API 数据面只写固定列 `OpenApiUsageLog`，禁止 URL、密码、token、文件名、路径、storage key、manifest 和文件内容。POST/GET 显式跳过全局 Throttler，不增加密钥、IP、次数或频率限制。
 
+## 客户端埋点
+
+- 桌面端埋点复用 `ui.tracking` renderer 日志与既有日志 IPC，不新增 renderer analytics client、preload API 或并行跨进程通道。
+- 远程事件只允许固定分类、稳定事件键、组件、动作、结果、耗时、内置模块、窗口类型、客户端实例、会话、版本、平台和时间。输入内容、显示文案、URL、路径、文件名、错误文本、堆栈、仓库/资源 ID 与任意 metadata 不得进入远程事件。
+- 请求体不得包含 `userId`。服务端只根据有效桌面 Bearer Token 关联登录用户；无 Token 为匿名事件，有但无效的认证信息必须拒绝。登录事件不得在退出或切换账户后降级为匿名发送。
+- 埋点投递必须是不可感知的单向副作用：日志 IPC、队列和网络失败不得弹错、递归记录、阻断业务回调或无限等待身份切换。稳定事件键只能来自代码；异步操作必须使用显式稳定操作名并记录结果与耗时，处理器级静态检查负责阻止遗漏回归。
+- 原始事件保留 180 天，只能通过平台管理员保护的聚合统计接口查看；不提供普通用户读取、原始事件列表、明细导出或用户排行。完整设计见 `docs/superpowers/specs/2026-09-01-client-telemetry-design.md`。
+
 ## Drive
 
 - `公开素材`使用稳定、匿名、不过期 `/files/<assetId>`。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV；禁止 SVG、主动网页内容、压缩包、可执行、旧 Office 和宏格式。

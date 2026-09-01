@@ -883,6 +883,7 @@ describe("AgentComposer", () => {
     expect(onJumpToBottom).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "agent-timeline-jump-to-bottom",
       name: "agent-timeline-jump-to-bottom",
       action: "click",
     })
@@ -923,6 +924,7 @@ describe("AgentComposer", () => {
     expect(onJumpToBottom).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "button",
+      eventKey: "agent-timeline-idle-jump-to-bottom",
       name: "agent-timeline-idle-jump-to-bottom",
       action: "click",
     })
@@ -2435,11 +2437,11 @@ describe("AgentComposer", () => {
     })
     clickButton(container, "强制停止")
 
-    expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-message-send", action: "click" })
-    expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-pending-message-retry", action: "click" })
-    expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-pending-message-remove", action: "click" })
-    expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-turn-stop", action: "click" })
-    expect(track).toHaveBeenCalledWith({ component: "button", name: "agent-turn-force-stop", action: "click" })
+    expect(track).toHaveBeenCalledWith({ component: "button", eventKey: "agent-message-send", name: "agent-message-send", action: "click" })
+    expect(track).toHaveBeenCalledWith({ component: "button", eventKey: "agent-pending-message-retry", name: "agent-pending-message-retry", action: "click" })
+    expect(track).toHaveBeenCalledWith({ component: "button", eventKey: "agent-pending-message-remove", name: "agent-pending-message-remove", action: "click" })
+    expect(track).toHaveBeenCalledWith({ component: "button", eventKey: "agent-turn-stop", name: "agent-turn-stop", action: "click" })
+    expect(track).toHaveBeenCalledWith({ component: "button", eventKey: "agent-turn-force-stop", name: "agent-turn-force-stop", action: "click" })
   })
 
   it("tracks composer submits without recording message content", async () => {
@@ -2489,6 +2491,7 @@ describe("AgentComposer", () => {
       component: "agent",
       name: "agent-message-submit",
       action: "submit",
+      eventKey: "agent.message.submit",
       metadata: {
         boundary: "renderer.agent.composer-submit",
         draftLength: 18,

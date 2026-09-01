@@ -68,6 +68,8 @@ export function GitHistoryTab({
             <>
               {history.commits.map((commit) => (
                 <button
+                  data-track="git.history.commit.select"
+                  data-track-native="true"
                   key={commit.hash}
                   type="button"
                   data-active={history.selectedCommit?.hash === commit.hash ? "true" : undefined}
@@ -133,6 +135,8 @@ export function GitHistoryTab({
                       )
                       return canUseFormattedDiff ? (
                         <button
+                          data-track="git.history.file.select"
+                          data-track-native="true"
                           key={`${file.path}:${file.originalPath ?? ""}`}
                           type="button"
                           data-active={selectedFileIndex === index ? "true" : undefined}

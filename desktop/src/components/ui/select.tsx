@@ -17,11 +17,11 @@ function Select({
     <SelectPrimitive.Root
       data-slot="select"
       onOpenChange={(open) => {
-        track({ component: "select", name: dataTrack ?? "select", action: open ? "open" : "close" })
+        track({ component: "select", name: dataTrack ?? "select", action: open ? "open" : "close", eventKey: dataTrack })
         onOpenChange?.(open)
       }}
       onValueChange={(value) => {
-        track({ component: "select", name: dataTrack ?? value ?? "select", action: "select", value })
+        track({ component: "select", name: dataTrack ?? value ?? "select", action: "select", eventKey: dataTrack, value })
         onValueChange?.(value)
       }}
       {...props}

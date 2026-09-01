@@ -147,6 +147,26 @@ describe("AdminService", () => {
     expect(prisma.user.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("modulePermissions")
   })
 
+  it("searches users by id, email, or handle", async () => {
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await service.listUsers(undefined, "alice")
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        OR: [
+          { id: { contains: "alice", mode: "insensitive" } },
+          { email: { contains: "alice", mode: "insensitive" } },
+          { handle: { contains: "alice", mode: "insensitive" } },
+        ],
+      },
+    }))
+    expect(prisma.user.count).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.any(Object),
+    }))
+  })
+
   it("disables a user without returning the password hash", async () => {
     const prisma = createPrismaMock()
     const service = new AdminService(prisma as unknown as PrismaService)

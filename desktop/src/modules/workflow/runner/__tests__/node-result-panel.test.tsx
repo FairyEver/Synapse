@@ -59,6 +59,7 @@ describe("NodeResultPanel", () => {
       component: "workflow.runner",
       name: "workflow-runner-node-result-close",
       action: "close",
+      eventKey: "workflow.runner.node-result.close",
       value: "node-1",
       metadata: {
         boundary: "renderer.workflow.runner.node-result",

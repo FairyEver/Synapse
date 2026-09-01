@@ -12,6 +12,7 @@ import { useKnowledgeBaseStorageMigration } from "@/app-shell/hooks/use-knowledg
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { updateDiagnosticContext } from "@/lib/diagnostic-context"
+import { track, updateTrackingContext } from "@/lib/ui-tracking"
 import {
   type OpenAgentSessionPayload,
   publishActiveAppTab,
@@ -100,6 +101,7 @@ function MainApp() {
       activeAppId,
       windowType: "main",
     })
+    updateTrackingContext({ moduleId: activeAppId, windowType: "main" })
   }, [activeAppId, activeRepository?.uuid])
 
   const setActiveAppId = useCallback(
@@ -110,6 +112,15 @@ function MainApp() {
           from: previousAppId,
           to: nextAppId,
           source,
+        })
+        track({
+          component: "app-navigation",
+          name: "active-system-app-changed",
+          action: "select",
+          eventKey: `navigation.${nextAppId}`,
+          category: "navigation",
+          value: nextAppId,
+          metadata: { source },
         })
       }
       setActiveAppIdRaw(nextAppId)

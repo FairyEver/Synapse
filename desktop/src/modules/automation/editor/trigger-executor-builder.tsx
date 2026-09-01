@@ -116,6 +116,8 @@ function ChoiceList({
     <div className="grid gap-1">
       {items.map((item) => (
         <button
+          data-track="automation.executor.select"
+          data-track-native="true"
           key={item.id}
           type="button"
           className="flex w-full items-center justify-between gap-4 rounded-lg bg-transparent px-3 py-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

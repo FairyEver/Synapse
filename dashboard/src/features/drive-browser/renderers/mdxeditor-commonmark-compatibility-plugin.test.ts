@@ -4,6 +4,7 @@ import {
   commonMarkLessThanOrEqualSyntaxExtension,
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
+  prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
 
 describe('MDXEditor CommonMark compatibility', () => {
@@ -46,6 +47,78 @@ describe('MDXEditor CommonMark compatibility', () => {
       { safe } as never,
       {} as never,
     )).toBe('金额 <= 1000')
+  })
+
+  it('normalizes CommonMark autolinks and comparisons only outside code', () => {
+    const source = [
+      '<https://example.com/a?q=1>',
+      '联系 <user@example.com>，金额 <= 1000。',
+      '[现有链接](<https://example.com/existing>)',
+      '',
+      '`<https://example.com/code> <=`',
+      '',
+      '```md',
+      '<https://example.com/fenced>',
+      '<= 2000',
+      '```',
+    ].join('\n')
+
+    expect(prepareCommonMarkForMdxEditor(source)).toEqual({
+      markdown: [
+        '[https://example.com/a?q=1](<https://example.com/a?q=1>)',
+        '联系 [user@example.com](<mailto:user@example.com>)，金额 \\<= 1000。',
+        '[现有链接](<https://example.com/existing>)',
+        '',
+        '`<https://example.com/code> <=`',
+        '',
+        '```md',
+        '<https://example.com/fenced>',
+        '<= 2000',
+        '```',
+      ].join('\n'),
+      requiresSourceMode: false,
+    })
+  })
+
+  it('keeps indented code and unsupported raw HTML in source mode', () => {
+    for (const markdown of [
+      '    <https://example.com>',
+      '<!doctype html>',
+      '<?xml version="1.0"?>',
+      '<![CDATA[x < y]]>',
+      '<span>raw html</span>',
+      '<img src="image.png">',
+    ]) {
+      expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
+        markdown,
+        requiresSourceMode: true,
+      })
+    }
+  })
+
+  it('keeps supported break tags in rich mode without touching code examples', () => {
+    const markdown = [
+      '第一行<br>第二行',
+      '',
+      '`<br>`',
+      '',
+      '```html',
+      '<br>',
+      '```',
+    ].join('\n')
+
+    expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
+      markdown: [
+        '第一行<br />第二行',
+        '',
+        '`<br>`',
+        '',
+        '```html',
+        '<br>',
+        '```',
+      ].join('\n'),
+      requiresSourceMode: false,
+    })
   })
 })
 
