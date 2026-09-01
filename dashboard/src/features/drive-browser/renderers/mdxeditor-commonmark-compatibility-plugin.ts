@@ -50,26 +50,45 @@ export function prepareCommonMarkForMdxEditor(markdown: string): PreparedCommonM
   let requiresSourceMode = false
   let fence: { readonly marker: '`' | '~'; readonly length: number } | null = null
   let inlineCodeMarker: string | null = null
+  let activeListContentIndent: number | null = null
 
   const prepared = markdown.split(/(\r?\n)/u).map((line) => {
     if (/^\r?\n$/u.test(line)) return line
 
-    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/u.exec(line)
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line)
     if (fenceMatch) {
       const sequence = fenceMatch[1]
       const marker = sequence[0] as '`' | '~'
       if (!fence) {
-        fence = { marker, length: sequence.length }
-      } else if (marker === fence.marker && sequence.length >= fence.length) {
+        if (marker === '~' || !fenceMatch[2].includes('`')) {
+          fence = { marker, length: sequence.length }
+        }
+      } else if (
+        marker === fence.marker
+        && sequence.length >= fence.length
+        && /^\s*$/u.test(fenceMatch[2])
+      ) {
         fence = null
       }
       return line
     }
     if (fence) return line
 
-    if (/^(?: {4}|\t)\S/u.test(line)) {
-      requiresSourceMode = true
-      return line
+    const listIndent = markdownListContentIndent(line)
+    const leadingIndent = markdownLeadingIndent(line)
+    if (listIndent !== null && (leadingIndent <= 3 || activeListContentIndent !== null)) {
+      activeListContentIndent = listIndent
+    } else if (/\S/u.test(line)) {
+      if (activeListContentIndent !== null && leadingIndent < activeListContentIndent) {
+        activeListContentIndent = null
+      }
+      if (
+        leadingIndent >= 4
+        && (activeListContentIndent === null || leadingIndent >= activeListContentIndent + 4)
+      ) {
+        requiresSourceMode = true
+        return line
+      }
     }
 
     let result = ''
@@ -147,6 +166,23 @@ export const commonMarkToMarkdownOptions = {
 function isExistingLinkDestination(line: string, index: number): boolean {
   if (line[index - 1] === '(') return true
   return /^ {0,3}\[[^\]\r\n]+\]:\s*$/u.test(line.slice(0, index))
+}
+
+function markdownListContentIndent(line: string): number | null {
+  const match = /^([ \t]*)(?:[*+-]|\d{1,9}[.)])([ \t]+)/u.exec(line)
+  if (!match) return null
+  const markerLength = match[0].length - match[1].length - match[2].length
+  return markdownIndentWidth(match[1]) + markerLength + markdownIndentWidth(match[2])
+}
+
+function markdownLeadingIndent(line: string): number {
+  return markdownIndentWidth(/^[ \t]*/u.exec(line)?.[0] ?? '')
+}
+
+function markdownIndentWidth(value: string): number {
+  let width = 0
+  for (const character of value) width += character === '\t' ? 4 : 1
+  return width
 }
 
 function isCommonMarkUriAutolink(value: string): boolean {

@@ -83,6 +83,7 @@ describe('MDXEditor CommonMark compatibility', () => {
   it('keeps indented code and unsupported raw HTML in source mode', () => {
     for (const markdown of [
       '    <https://example.com>',
+      '1. list item\n\n       indented code',
       '<!doctype html>',
       '<?xml version="1.0"?>',
       '<![CDATA[x < y]]>',
@@ -94,6 +95,15 @@ describe('MDXEditor CommonMark compatibility', () => {
         requiresSourceMode: true,
       })
     }
+  })
+
+  it('does not mistake nested list indentation for an indented code block', () => {
+    const markdown = '1. 一级\n   * 二级\n      1. 三级'
+
+    expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
+      markdown,
+      requiresSourceMode: false,
+    })
   })
 
   it('keeps supported break tags in rich mode without touching code examples', () => {
