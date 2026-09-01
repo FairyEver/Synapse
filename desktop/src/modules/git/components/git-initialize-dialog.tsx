@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Spinner } from "@/components/ui/spinner"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseGitInitializationPlan, SynapseGitPushTarget, SynapseGitRepository } from "@/types/git"
 import type { GitOperationFailure } from "../hooks/use-git-operations"
 import { readOperationFailure } from "../hooks/use-git-operations"
@@ -147,6 +148,7 @@ export function useGitRepositoryInitialization() {
 
   const execute = async () => {
     if (!request || !plan) return
+    const finishTracking = startTrackedOperation({ component: "git", eventKey: "git.repository.initialize" })
     const operationId = createOperationId()
     activeOperationIdRef.current = operationId
     setPhase("executing")
@@ -162,14 +164,17 @@ export function useGitRepositoryInitialization() {
         operationId,
       })
       await request.onCompleted()
+      finishTracking("success")
       setRequest(null)
     } catch (err) {
       await request.onCompleted()
       if (isCancelledOperation(err)) {
+        finishTracking("cancelled")
         setRequest(null)
         return
       }
       const nextFailure = readOperationFailure(err, undefined, request.repository.id, "push")
+      finishTracking("failure")
       setFailure(nextFailure)
       setError(nextFailure?.message ?? (err instanceof Error ? err.message : "初始化仓库失败。"))
     } finally {

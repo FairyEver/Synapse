@@ -17,6 +17,7 @@ import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { ApiError } from '@/lib/api'
 import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
+import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { createMonacoCollaborationBinding } from './monaco-collaboration-binding'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
@@ -76,6 +77,12 @@ export function DriveCodeRenderer({
       && !editContext?.reloading
 
   useEffect(() => {
+    trackDriveEvent({ eventKey: 'web.drive.editor.open', component: 'drive-code-editor', action: 'open' })
+    const finishDuration = startDriveOperation('web.drive.editor.duration', 'drive-code-editor')
+    return () => finishDuration('success')
+  }, [current.id])
+
+  useEffect(() => {
     savedValueRef.current = initialText
     valueRef.current = initialText
     setValue(initialText)
@@ -127,6 +134,7 @@ export function DriveCodeRenderer({
 
   const handleSave = useCallback(async () => {
     if (!canSave || saveInFlightRef.current) return
+    const finishTracking = startDriveOperation('web.drive.editor.save', 'drive-code-editor')
     saveInFlightRef.current = true
     if (collaborationEnabled && collaborationState.state?.canWrite && collaborationContext) {
       setError(null)
@@ -142,7 +150,9 @@ export function DriveCodeRenderer({
           await driveBrowserApi.checkpointShare(collaborationContext.shareId, collaborationContext.itemId, input)
         }
         await editContext?.reload()
+        finishTracking('success')
       } catch (saveError) {
+        finishTracking('failure')
         setError(saveError instanceof Error ? saveError.message : '保存版本失败。')
       } finally {
         saveInFlightRef.current = false
@@ -151,6 +161,7 @@ export function DriveCodeRenderer({
       return
     }
     if (!canEdit || !edit?.currentVersionId || !editContext) {
+      finishTracking('cancelled')
       saveInFlightRef.current = false
       return
     }
@@ -158,9 +169,11 @@ export function DriveCodeRenderer({
     const submittedValue = valueRef.current
     try {
       await editContext.saveText({ text: submittedValue, baseVersionId: edit.currentVersionId })
+      finishTracking('success')
       savedValueRef.current = submittedValue
       setDirty(valueRef.current !== submittedValue)
     } catch (saveError) {
+      finishTracking('failure')
       if (saveError instanceof ApiError && saveError.status === 409) {
         setConflictOpen(true)
         return
@@ -177,6 +190,7 @@ export function DriveCodeRenderer({
 
   const handleReload = useCallback(async () => {
     if (!editContext) return
+    const finishTracking = startDriveOperation('web.drive.editor.reload', 'drive-code-editor')
     setError(null)
     try {
       const nextSnapshot = await editContext.reload()
@@ -187,7 +201,9 @@ export function DriveCodeRenderer({
       setDirty(false)
       setConflictOpen(false)
       setReloadConfirmOpen(false)
+      finishTracking('success')
     } catch (reloadError) {
+      finishTracking('failure')
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
   }, [editContext])
@@ -330,7 +346,7 @@ export function DriveCodeRenderer({
         <div className='flex items-center justify-between gap-3 border-t px-3 py-2 text-xs text-destructive'>
           <span>{displayedError}</span>
           {collaborationEnabled ? (
-            <Button type='button' size='sm' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
+            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' size='sm' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
@@ -350,11 +366,11 @@ export function DriveCodeRenderer({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
+            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
-            <AlertDialogAction onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
+            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.conflict-reload' onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -368,11 +384,11 @@ export function DriveCodeRenderer({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
+            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
-            <AlertDialogAction onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
+            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.reload' onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

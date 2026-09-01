@@ -64,6 +64,7 @@ import {
   trackedDriveApi as driveApi,
   trackedDriveBrowserApi as driveBrowserApi,
 } from '../shared/drive-telemetry-api'
+import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -207,6 +208,12 @@ export function DriveMDXeditorRenderer({
     && !uploadingImage
     && !editContext?.savingText
     && !editContext?.reloading
+
+  useEffect(() => {
+    trackDriveEvent({ eventKey: 'web.drive.editor.open', component: 'drive-markdown-editor', action: 'open' })
+    const finishDuration = startDriveOperation('web.drive.editor.duration', 'drive-markdown-editor')
+    return () => finishDuration('success')
+  }, [current.id])
   const relativeImagePreviewUrls = useMemo(
     () => new Map((preview.relativeImages ?? []).map(({ src, resolvedUrl }) => [src, resolvedUrl])),
     [preview.relativeImages],
@@ -415,13 +422,16 @@ export function DriveMDXeditorRenderer({
       setPendingPublicImageUpload(null)
       return
     }
+    const finishTracking = startDriveOperation('web.drive.editor.image-upload', 'drive-markdown-editor')
     setPendingPublicImageUpload(null)
     rememberPublicImageUploadConsent()
     try {
       const url = await stageDraftImage(pending.file)
       pending.resolve?.(url)
       if (pending.insertMarkdown) insertPublicImageMarkdown(pending.file, url)
+      finishTracking('success')
     } catch (stageError) {
+      finishTracking('failure')
       pending.reject?.(stageError instanceof Error ? stageError : new Error('图片插入失败。'))
     }
   }, [canEdit, insertPublicImageMarkdown, pendingPublicImageUpload, stageDraftImage])
@@ -533,6 +543,7 @@ export function DriveMDXeditorRenderer({
 
   const handleSave = useCallback(async () => {
     if (!canSave || saveInFlightRef.current || !edit?.currentVersionId || !editContext) return
+    const finishTracking = startDriveOperation('web.drive.editor.save', 'drive-markdown-editor')
     saveInFlightRef.current = true
     setError(null)
     const submittedValue = valueRef.current
@@ -573,7 +584,9 @@ export function DriveMDXeditorRenderer({
       setDirty(valueRef.current !== normalizedValue)
       await annotations.refresh()
       setCommentBaselineRevision((revision) => revision + 1)
+      finishTracking('success')
     } catch (saveError) {
+      finishTracking('failure')
       const cleanupFailed = await cleanupUploadedPublicAssets(uploadedAssets)
       if (saveError instanceof ApiError && saveError.status === 409) {
         setConflictOpen(true)
@@ -609,6 +622,7 @@ export function DriveMDXeditorRenderer({
 
   const handleReload = useCallback(async () => {
     if (!editContext) return
+    const finishTracking = startDriveOperation('web.drive.editor.reload', 'drive-markdown-editor')
     setError(null)
     try {
       const nextSnapshot = await editContext.reload()
@@ -623,7 +637,9 @@ export function DriveMDXeditorRenderer({
       clearDraftPublicImages()
       beginExternalMarkdownSync(nextText)
       editorRef.current?.setMarkdown(nextText)
+      finishTracking('success')
     } catch (reloadError) {
+      finishTracking('failure')
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
   }, [beginExternalMarkdownSync, clearDraftPublicImages, clearParseError, editContext])
@@ -945,11 +961,11 @@ export function DriveMDXeditorRenderer({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
+            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
-            <AlertDialogAction onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
+            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.conflict-reload' onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -966,7 +982,7 @@ export function DriveMDXeditorRenderer({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' onClick={() => { void uploadPendingPublicImage() }}>继续插入</Button>
+            <Button data-drive-telemetry-event='web.drive.editor.image-upload' type='button' onClick={() => { void uploadPendingPublicImage() }}>继续插入</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -980,11 +996,11 @@ export function DriveMDXeditorRenderer({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
+            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
-            <AlertDialogAction onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
+            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.reload' onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

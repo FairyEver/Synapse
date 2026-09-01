@@ -383,7 +383,7 @@ function DriveConsoleContent({
           </div>
           <DialogFooter>
             <Button type='button' variant='outline' disabled={submitting} onClick={() => setNameDialog(null)}>取消</Button>
-            <Button type='button' disabled={submitting || !nameDialog?.value.trim()} onClick={() => { void submitNameDialog() }}>
+            <Button data-drive-telemetry-event='web.drive.item.name-submit' type='button' disabled={submitting || !nameDialog?.value.trim()} onClick={() => { void submitNameDialog() }}>
               {nameDialog?.mode === 'rename' ? '保存' : '新建'}
             </Button>
           </DialogFooter>

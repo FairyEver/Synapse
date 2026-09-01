@@ -53,11 +53,12 @@ export function ModelPriceModule() {
       tabs={MODEL_PRICE_VIEWS.map((item) => ({ ...item, disabled: rulesBusy }))}
       value={view}
       onValueChange={setView}
+      data-track="model-price.view.select"
       actions={(
         <>
           {view === "coverage" ? (
             <>
-              <Select value={source} onValueChange={(next) => setSource(next as ModelPriceCoverageSource)}>
+              <Select value={source} onValueChange={(next) => setSource(next as ModelPriceCoverageSource)} data-track="model-price.coverage.source-select">
                 <SelectTrigger size="sm" aria-label="来源">
                   <SelectValue />
                 </SelectTrigger>
@@ -67,7 +68,7 @@ export function ModelPriceModule() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={range} onValueChange={(next) => setRange(next as ModelPriceCoverageRange)}>
+              <Select value={range} onValueChange={(next) => setRange(next as ModelPriceCoverageRange)} data-track="model-price.coverage.range-select">
                 <SelectTrigger size="sm" aria-label="范围">
                   <SelectValue />
                 </SelectTrigger>
@@ -80,6 +81,7 @@ export function ModelPriceModule() {
             </>
           ) : null}
           <SystemAppTopBarActionButton
+            data-track="model-price.refresh"
             type="button"
             disabled={activeLoading}
             aria-busy={activeLoading}

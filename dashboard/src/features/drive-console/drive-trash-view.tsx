@@ -98,6 +98,7 @@ export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promis
                     type='button'
                     variant='ghost'
                     size='sm'
+                    data-drive-telemetry-event='web.drive.trash.restore'
                     onClick={() => {
                       void restoreItem(item)
                     }}
@@ -108,6 +109,7 @@ export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promis
                     type='button'
                     variant='ghost'
                     size='sm'
+                    data-drive-telemetry-event='web.drive.trash.delete-open'
                     onClick={() => setDeleteTarget(item)}
                   >
                     删除

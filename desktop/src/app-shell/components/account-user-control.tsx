@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { buildAccountDashboardHomeUrl } from "@/lib/account-dashboard-url"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
-import { startTrackedOperation } from "@/lib/ui-tracking"
+import { runTrackedOperation, startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseAccountState } from "@/types/account"
 
 type AccountUserControlProps = {
@@ -103,7 +103,10 @@ function AccountUserControl({
 
   const handleOpenDashboard = () => {
     try {
-      void requireBridgeDomain("shell").openExternal(buildAccountDashboardHomeUrl())
+      void runTrackedOperation(
+        { component: "account", eventKey: "account.dashboard.open" },
+        () => requireBridgeDomain("shell").openExternal(buildAccountDashboardHomeUrl()),
+      )
         .catch((error) => {
           logger.warn("Failed to open account dashboard.", { error })
           warning("无法打开管理后台。")

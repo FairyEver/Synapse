@@ -16,6 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 
 type DriveSiteCreateDialogProps = {
   readonly folder: DriveItemDto | null
@@ -127,13 +128,16 @@ function DriveSiteCreateDialog({
     setSubmitting(true)
     setError(null)
     try {
-      const site = await requireSynapseBridge().drive.site.create({
-        sourceFolderItemId: folder.id,
-        name: form.name.trim(),
-        entryPath: form.entryPath,
-        accessMode: form.passwordEnabled ? "password" : "public",
-        expiresIn: form.expiresIn,
-      })
+      const site = await runTrackedOperation(
+        { component: "drive", eventKey: "drive.site.create" },
+        () => requireSynapseBridge().drive.site.create({
+          sourceFolderItemId: folder.id,
+          name: form.name.trim(),
+          entryPath: form.entryPath,
+          accessMode: form.passwordEnabled ? "password" : "public",
+          expiresIn: form.expiresIn,
+        }),
+      )
       setCreatedSite(site)
       onCreated(site)
       toast("网页分享已创建")

@@ -168,7 +168,7 @@ export function DriveShareSettingsDialog({
             <div className='text-sm text-muted-foreground'>{created.name}</div>
             <div className='flex gap-2'>
               <Input value={created.url} readOnly className='font-mono text-xs' onFocus={(event) => event.currentTarget.select()} />
-              <Button type='button' variant='outline' onClick={() => { void copyShareUrl(created.url) }}>复制链接</Button>
+              <Button data-drive-telemetry-event='web.drive.share.copy-url' type='button' variant='outline' onClick={() => { void copyShareUrl(created.url) }}>复制链接</Button>
             </div>
           </div>
         ) : (
@@ -238,6 +238,7 @@ export function DriveShareSettingsDialog({
               <Button
                 type='button'
                 disabled={submitting || (mode === 'web' && !canCreateWebShare)}
+                data-drive-telemetry-event='web.drive.share.create'
                 onClick={() => { void createShare() }}
               >
                 创建分享
@@ -375,9 +376,9 @@ export function DriveSharesDialog({
                   <Input value={item.password ? item.urlWithPassword : item.url} readOnly className='mt-1 font-mono text-xs' />
                 </div>
                 <div className='flex shrink-0 items-center gap-1'>
-                  <Button type='button' variant='ghost' size='sm' onClick={() => { void copyShareUrl(item.password ? item.urlWithPassword : item.url) }}>复制链接</Button>
-                  <Button type='button' variant='ghost' size='sm' disabled={actionShareId === item.id} onClick={() => openAccessSettings(item)}>访问设置</Button>
-                  <Button type='button' variant='ghost' size='sm' disabled={actionShareId === item.id} onClick={() => { void disableShare(item) }}>取消分享</Button>
+                  <Button data-drive-telemetry-event='web.drive.share.copy-url' type='button' variant='ghost' size='sm' onClick={() => { void copyShareUrl(item.password ? item.urlWithPassword : item.url) }}>复制链接</Button>
+                  <Button data-drive-telemetry-event='web.drive.share.access-open' type='button' variant='ghost' size='sm' disabled={actionShareId === item.id} onClick={() => openAccessSettings(item)}>访问设置</Button>
+                  <Button data-drive-telemetry-event='web.drive.share.disable' type='button' variant='ghost' size='sm' disabled={actionShareId === item.id} onClick={() => { void disableShare(item) }}>取消分享</Button>
                 </div>
               </div>
             ))}
@@ -412,7 +413,7 @@ export function DriveSharesDialog({
             />
             <DialogFooter>
               <Button type='button' variant='outline' disabled={Boolean(actionShareId)} onClick={() => setAccessTarget(null)}>取消</Button>
-              <Button type='button' disabled={Boolean(actionShareId)} onClick={() => { void updateShareAccess() }}>保存</Button>
+              <Button data-drive-telemetry-event='web.drive.share.access-save' type='button' disabled={Boolean(actionShareId)} onClick={() => { void updateShareAccess() }}>保存</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

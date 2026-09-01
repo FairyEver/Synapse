@@ -5,6 +5,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { ModulePage } from "@/components/module-page"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import { WorkflowList } from "./components/workflow-list"
 import { Loader2, Plus, Upload } from "lucide-react"
 import { WorkflowImportDialog } from "./components/workflow-import-dialog"
@@ -35,16 +36,19 @@ export function WorkflowModule() {
 
   const handleCreate = async () => {
     if (creating) return
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.create" })
     setCreating(true)
     try {
       const workflowApi = requireBridgeDomain("workflow")
       const result = await workflowApi.definition.create()
       if ("errors" in result) {
+        finishTracking("failure")
         toast.error(result.errors[0]?.message ?? "创建工作流失败：校验未通过")
         return
       }
 
       setListKey((k) => k + 1)
+      finishTracking("success")
 
       try {
         await workflowApi.operation.openEditor(result.id)
@@ -57,6 +61,7 @@ export function WorkflowModule() {
         toast.error("工作流已创建，但打开编辑器失败")
       }
     } catch (err) {
+      finishTracking("failure")
       logger.warn("Workflow create failed.", {
         boundary: "renderer.workflow.definition.create",
         ...errorDiagnostic(err),
@@ -68,10 +73,17 @@ export function WorkflowModule() {
   }
 
   const handleImportStart = async () => {
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.import.inspect" })
     try {
       const preview = await requireBridgeDomain("workflow").operation.inspectImportPackage()
-      if (preview) setImportPreview(preview)
+      if (preview) {
+        setImportPreview(preview)
+        finishTracking("success")
+      } else {
+        finishTracking("cancelled")
+      }
     } catch (err) {
+      finishTracking("failure")
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow import preview failed.", {
         boundary: "renderer.workflow.import.preview",
@@ -83,16 +95,19 @@ export function WorkflowModule() {
 
   const handleImportConfirm = async (mappings: WorkflowModelMapping[], options: WorkflowImportOptions) => {
     if (!importPreview || isShareImportPreview(importPreview)) return
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.import" })
     setImporting(true)
     try {
       const result = await requireBridgeDomain("workflow").operation.importPackage(importPreview.packagePath, mappings, options, importPreview.packageDigest)
       if ("errors" in result) {
+        finishTracking("failure")
         toast.error(result.errors[0]?.message ?? "导入失败：校验未通过")
         return
       }
       setImportPreview(null)
       setListKey((key) => key + 1)
       toast.success("工作流已导入")
+      finishTracking("success")
       try {
         await requireBridgeDomain("workflow").operation.openEditor(result.workflowId)
       } catch (err) {
@@ -104,6 +119,7 @@ export function WorkflowModule() {
         toast.error("工作流已导入，但打开编辑器失败")
       }
     } catch (err) {
+      finishTracking("failure")
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow import failed.", {
         boundary: "renderer.workflow.import",
@@ -117,6 +133,7 @@ export function WorkflowModule() {
 
   const handleShareImportConfirm = async (selections: WorkflowShareImportSelections) => {
     if (!importPreview || !isShareImportPreview(importPreview)) return
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.share-import" })
     setImporting(true)
     try {
       const result = await requireBridgeDomain("workflow").operation.importSharePackage(
@@ -125,6 +142,7 @@ export function WorkflowModule() {
         importPreview.packageDigest,
       )
       if ("errors" in result) {
+        finishTracking("failure")
         toast.error(result.errors[0]?.message ?? "导入失败：校验未通过")
         return
       }
@@ -152,6 +170,7 @@ export function WorkflowModule() {
           },
         },
       } : undefined)
+      finishTracking("success")
       try {
         await requireBridgeDomain("workflow").operation.openEditor(result.workflowId)
       } catch (err) {
@@ -163,6 +182,7 @@ export function WorkflowModule() {
         toast.error("工作流已导入，但打开编辑器失败")
       }
     } catch (err) {
+      finishTracking("failure")
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow share import failed.", {
         boundary: "renderer.workflow.share-import",

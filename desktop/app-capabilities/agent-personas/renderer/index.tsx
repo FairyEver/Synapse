@@ -75,6 +75,7 @@ import {
 } from "../../../src/components/ui/table"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import {
   resolveProviderModelDisplay,
   useProviderModelCatalog,
@@ -247,6 +248,12 @@ export function AgentPersonasModule() {
       setForm((current) => ({ ...current, errors }))
       return
     }
+    const eventKey = form.mode === "create"
+      ? "agent-personas.persona.create"
+      : form.mode === "edit"
+        ? "agent-personas.persona.update"
+        : "agent-personas.model.configure"
+    const finishTracking = startTrackedOperation({ component: "agent-personas", eventKey })
 
     try {
       setSaving(true)
@@ -258,6 +265,7 @@ export function AgentPersonasModule() {
             : null,
         })
         setListResult((current) => ({ ...current, items: mergeItem(current.items, saved) }))
+        finishTracking("success")
         toast.success("已保存")
         closeForm()
         return
@@ -277,9 +285,11 @@ export function AgentPersonasModule() {
         : await agentPersonasBridge.create(input)
 
       setListResult((current) => ({ ...current, items: mergeItem(current.items, saved) }))
+      finishTracking("success")
       toast.success("已保存")
       closeForm()
     } catch (error) {
+      finishTracking("failure")
       const message = errorMessage(error, "保存失败")
       logger.error("Failed to save agent persona.", error)
       setForm((current) => ({ ...current, errors: { ...current.errors, form: message } }))
@@ -295,14 +305,17 @@ export function AgentPersonasModule() {
       toast.error("离线时不能删除智能体")
       return
     }
+    const finishTracking = startTrackedOperation({ component: "agent-personas", eventKey: "agent-personas.persona.delete" })
     try {
       await agentPersonasBridge.delete({ id: item.id })
+      finishTracking("success")
       setListResult((current) => ({
         ...current,
         items: current.items.filter((entry) => entry.id !== item.id),
       }))
       setDeleteTarget(null)
     } catch (error) {
+      finishTracking("failure")
       logger.error("Failed to delete agent persona.", error)
       toast.error(errorMessage(error, "删除失败"))
     }
@@ -401,6 +414,7 @@ export function AgentPersonasModule() {
           else closeForm()
         }}
         onSubmit={submitForm}
+        data-track="agent-personas.persona.save"
       />
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
         if (!open) setDeleteTarget(null)

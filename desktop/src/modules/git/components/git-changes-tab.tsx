@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseGitRepository, SynapseGitWorkingTreeChange } from "@/types/git"
 import type { useGitWorktreeStatus } from "../hooks/use-git-worktree-status"
 import { getGitActionPlan } from "../lib/git-status-view"
@@ -126,6 +127,7 @@ export function GitChangesTab({
   }, [commitDialogOpen, hasConflicts, repository.id, selectedPathsKey, worktreeMutationBlocked])
 
   const commit = async () => {
+    const finishTracking = startTrackedOperation({ component: "git", eventKey: "git.commit" })
     setBusy(true)
     setError(null)
     setCommitNotice(null)
@@ -140,6 +142,7 @@ export function GitChangesTab({
       setMessage("")
       const nextSnapshot = await status.refresh()
       await onCommitted?.()
+      finishTracking("success")
       if (nextSnapshot && nextSnapshot.changeCount > 0) {
         setCommitNotice({ text: `还有 ${nextSnapshot.changeCount} 个改动。`, canPush: false })
         return
@@ -150,6 +153,7 @@ export function GitChangesTab({
       }
       setCommitNotice({ text: "已提交。", canPush: false })
     } catch (err) {
+      finishTracking("failure")
       const nextError = err instanceof Error ? err.message : "提交失败。"
       if (nextError.includes("重新审阅") || nextError.includes("已过期")) setPreparedSelectionId(null)
       setError(nextError)
@@ -345,7 +349,7 @@ export function GitChangesTab({
             >
               取消
             </Button>
-            <Button type="button" disabled={commitDisabled} onClick={() => void commit()}>
+            <Button type="button" disabled={commitDisabled} onClick={() => void commit()} data-track="git.commit.submit">
               {preparing ? "准备中" : busy ? "提交中" : "提交选中文件"}
             </Button>
           </DialogFooter>

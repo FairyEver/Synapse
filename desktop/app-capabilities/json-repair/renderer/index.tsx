@@ -7,6 +7,7 @@ import { Field, FieldLabel } from "../../../src/components/ui/field"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { utf8ByteLength } from "../shared/schema"
 import { useJsonRepair } from "./use-json-repair"
 
@@ -17,10 +18,13 @@ export function JsonRepairModule() {
 
   const copyJson = async () => {
     if (repair.json === null) return
+    const finishTracking = startTrackedOperation({ component: "json-repair", eventKey: "json-repair.result.copy" })
     try {
       await navigator.clipboard.writeText(repair.json)
+      finishTracking("success")
       toast.success("已复制")
     } catch {
+      finishTracking("failure")
       logger.error("JSON repair copy failed.", {
         stage: "clipboard_write",
         reason: "write_failed",
@@ -55,6 +59,7 @@ export function JsonRepairModule() {
               {formatBytes(repair.inputBytes)} / 128 KiB
             </p>
             <Button
+              data-track="json-repair.text.repair"
               type="button"
               disabled={!repair.canRepair}
               onClick={() => void repair.repair()}

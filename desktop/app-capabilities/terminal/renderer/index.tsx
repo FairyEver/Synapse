@@ -58,6 +58,7 @@ import {
 import { SidebarContentLayout } from "../../../src/components/sidebar-content-layout"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { runTrackedOperation } from "../../../src/lib/ui-tracking"
 import { getRendererPlatform } from "../../../src/lib/runtime-platform"
 import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
@@ -247,11 +248,10 @@ export function TerminalModule({
 
   const createSession = useCallback(async (input: SynapseTerminalCreateSessionInput = {}) => {
     try {
-      const session = await terminalBridge.session.create({
-        cols: DEFAULT_COLS,
-        rows: DEFAULT_ROWS,
-        ...input,
-      })
+      const session = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.session.create" },
+        () => terminalBridge.session.create({ cols: DEFAULT_COLS, rows: DEFAULT_ROWS, ...input }),
+      )
       setSessions((current) => mergeSession(current, session))
       setActiveSessionId(session.id)
       setTerminalReadError(null)
@@ -363,10 +363,13 @@ export function TerminalModule({
     if (!globalLaunchSettings) return
     setGlobalLaunchSaving(true)
     try {
-      const updated = await terminalBridge.globalLaunch.update({
-        expectedRevision: globalLaunchSettings.revision,
-        settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
-      })
+      const updated = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.settings.update" },
+        () => terminalBridge.globalLaunch.update({
+          expectedRevision: globalLaunchSettings.revision,
+          settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
+        }),
+      )
       setGlobalLaunchSettings(updated)
       setGlobalSettingsOpen(false)
       toast.success("终端设置已保存")
@@ -386,13 +389,16 @@ export function TerminalModule({
     setGroupSaving(true)
     try {
       if (groupDialogMode === "rename" && groupRenameTarget) {
-        const group = await terminalBridge.group.rename({
-          groupId: groupRenameTarget.id,
-          name: groupName,
-        })
+        const group = await runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.group.rename" },
+          () => terminalBridge.group.rename({ groupId: groupRenameTarget.id, name: groupName }),
+        )
         setGroups((current) => current.map((item) => item.id === group.id ? summarizeGroup(group) : item))
       } else {
-        const group = await terminalBridge.group.create({ name })
+        const group = await runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.group.create" },
+          () => terminalBridge.group.create({ name }),
+        )
         setGroups((current) => mergeGroup(current, group))
       }
       setGroupDialogMode(null)
@@ -412,10 +418,10 @@ export function TerminalModule({
     if (!title) return
     setRenameSaving(true)
     try {
-      const session = await terminalBridge.session.rename({
-        sessionId: renameTarget.id,
-        title: renameTitle,
-      })
+      const session = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.session.rename" },
+        () => terminalBridge.session.rename({ sessionId: renameTarget.id, title: renameTitle }),
+      )
       setSessions((current) => mergeSession(current, session))
       closeRenameDialog()
     } catch (error) {
@@ -430,7 +436,10 @@ export function TerminalModule({
     const targetId = target.id
     setDeletingSessionId(targetId)
     try {
-      await terminalBridge.session.delete({ sessionId: targetId })
+      await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.session.delete" },
+        () => terminalBridge.session.delete({ sessionId: targetId }),
+      )
       setSessions((current) => {
         const nextSessions = current.filter((session) => session.id !== targetId)
         setActiveSessionId((currentActiveId) => {
@@ -459,7 +468,10 @@ export function TerminalModule({
   const stopSession = useCallback(async (target: SynapseTerminalSession) => {
     setStoppingSessionId(target.id)
     try {
-      await terminalBridge.session.stop({ sessionId: target.id, force: target.status === "stopping" })
+      await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.session.stop" },
+        () => terminalBridge.session.stop({ sessionId: target.id, force: target.status === "stopping" }),
+      )
     } catch (error) {
       logger.error("Failed to stop terminal session.", error)
       toast.error("停止终端失败")
@@ -476,7 +488,10 @@ export function TerminalModule({
       .map((session) => session.id))
     setDeleteGroupSaving(true)
     try {
-      await terminalBridge.group.delete({ groupId })
+      await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.group.delete" },
+        () => terminalBridge.group.delete({ groupId }),
+      )
       setGroups((current) => current.filter((group) => group.id !== groupId))
       setSessions((current) => {
         const nextSessions = current.filter((session) => session.groupId !== groupId)
@@ -536,12 +551,15 @@ export function TerminalModule({
     if (!name) return
     setGroupSettingsSaving(true)
     try {
-      const group = await terminalBridge.group.updateSettings({
-        groupId: groupSettingsTarget.id,
-        name,
-        expectedLaunchRevision: groupSettingsTarget.launchRevision,
-        settings: groupSettingsLaunch,
-      })
+      const group = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.group.settings-update" },
+        () => terminalBridge.group.updateSettings({
+          groupId: groupSettingsTarget.id,
+          name,
+          expectedLaunchRevision: groupSettingsTarget.launchRevision,
+          settings: groupSettingsLaunch,
+        }),
+      )
       setGroups((current) => current.map((item) => item.id === group.id ? summarizeGroup(group) : item))
       resetGroupSettingsDialog()
     } catch (error) {
@@ -631,22 +649,28 @@ export function TerminalModule({
     setCommandSaving(true)
     try {
       if (commandEditTarget) {
-        await terminalBridge.groupCommand.update({
-          groupId: commandManagerTarget.id,
-          commandId: commandEditTarget.id,
-          ...(commandEditTarget.commandRevision ? { expectedCommandRevision: commandEditTarget.commandRevision } : {}),
-          name,
-          command,
-          launch: commandLaunch,
-        })
+        await runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.command.update" },
+          () => terminalBridge.groupCommand.update({
+            groupId: commandManagerTarget.id,
+            commandId: commandEditTarget.id,
+            ...(commandEditTarget.commandRevision ? { expectedCommandRevision: commandEditTarget.commandRevision } : {}),
+            name,
+            command,
+            launch: commandLaunch,
+          }),
+        )
       } else {
-        await terminalBridge.groupCommand.create({
-          groupId: commandManagerTarget.id,
-          expectedCommandCollectionRevision: commandManagerTarget.commandCollectionRevision,
-          name,
-          command,
-          ...(Object.keys(commandLaunch).length ? { launch: commandLaunch } : {}),
-        })
+        await runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.command.create" },
+          () => terminalBridge.groupCommand.create({
+            groupId: commandManagerTarget.id,
+            expectedCommandCollectionRevision: commandManagerTarget.commandCollectionRevision,
+            name,
+            command,
+            ...(Object.keys(commandLaunch).length ? { launch: commandLaunch } : {}),
+          }),
+        )
       }
       await refreshGroupsForCommandManager(commandManagerTarget.id)
       closeCommandForm()
@@ -671,10 +695,10 @@ export function TerminalModule({
     if (!commandManagerTarget) return
     setCommandDeletingId(command.id)
     try {
-      await terminalBridge.groupCommand.delete({
-        groupId: commandManagerTarget.id,
-        commandId: command.id,
-      })
+      await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.command.delete" },
+        () => terminalBridge.groupCommand.delete({ groupId: commandManagerTarget.id, commandId: command.id }),
+      )
       await refreshGroupsForCommandManager(commandManagerTarget.id)
       if (commandEditTarget?.id === command.id) closeCommandForm()
     } catch (error) {
@@ -696,12 +720,15 @@ export function TerminalModule({
     command: SynapseTerminalGroupCommandSummary,
   ) => {
     try {
-      const session = await terminalBridge.groupCommand.launch({
-        groupId: group.id,
-        commandId: command.id,
-        cols: DEFAULT_COLS,
-        rows: DEFAULT_ROWS,
-      })
+      const session = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.command.launch" },
+        () => terminalBridge.groupCommand.launch({
+          groupId: group.id,
+          commandId: command.id,
+          cols: DEFAULT_COLS,
+          rows: DEFAULT_ROWS,
+        }),
+      )
       setSessions((current) => mergeSession(current, session))
       setActiveSessionId(session.id)
       setTerminalReadError(null)

@@ -113,6 +113,7 @@ export function ScriptAutomationConfigForm<T extends ScriptAutomationConfig>({
               variant="ghost"
               size="icon"
               aria-label="删除输入"
+              data-track="script-runtime.input.remove"
               onClick={() => update({ inputs: value.inputs.filter((_, itemIndex) => itemIndex !== index) } as Partial<T>)}
             >
               <Trash2 className="size-4" />
@@ -123,6 +124,7 @@ export function ScriptAutomationConfigForm<T extends ScriptAutomationConfig>({
           type="button"
           variant="outline"
           size="sm"
+          data-track="script-runtime.input.add"
           onClick={() => update({
             inputs: [...value.inputs, { name: "", source: { type: "static", value: null } }],
           } as Partial<T>)}

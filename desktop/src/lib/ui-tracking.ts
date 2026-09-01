@@ -106,7 +106,7 @@ export function track(details: TrackDetails): void {
 export function startTrackedOperation(
   details: TrackOperationDetails,
 ): (outcome: TrackOutcome) => void {
-  const startedAt = performance.now()
+  const startedAt = trackingNow()
   let finished = false
 
   return (outcome) => {
@@ -119,8 +119,36 @@ export function startTrackedOperation(
       eventKey: details.eventKey,
       category: "operation",
       outcome,
-      durationMs: performance.now() - startedAt,
+      durationMs: Math.max(0, trackingNow() - startedAt),
     })
+  }
+}
+
+function trackingNow(): number {
+  try {
+    return typeof performance === "undefined" ? Date.now() : performance.now()
+  } catch {
+    try {
+      return Date.now()
+    } catch {
+      return 0
+    }
+  }
+}
+
+export async function runTrackedOperation<T>(
+  details: TrackOperationDetails,
+  operation: () => Promise<T>,
+  isCancelled: (error: unknown) => boolean = isCancelledError,
+): Promise<T> {
+  const finish = startTrackedOperation(details)
+  try {
+    const result = await operation()
+    finish("success")
+    return result
+  } catch (error) {
+    finish(isCancelled(error) ? "cancelled" : "failure")
+    throw error
   }
 }
 
@@ -361,4 +389,12 @@ function looksSensitiveTrackText(value: string): boolean {
 function looksAbsolutePathTrackValue(value: string): boolean {
   return POSIX_ABSOLUTE_TRACK_PATH_PATTERN.test(value)
     || WINDOWS_ABSOLUTE_TRACK_PATH_PATTERN.test(value)
+}
+
+function isCancelledError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.name === "AbortError"
+    || error.name === "GitOperationCancelledError"
+    || /(?:cancelled|canceled|已取消)/iu.test(error.message)
+  )
 }

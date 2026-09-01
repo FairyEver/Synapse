@@ -33,6 +33,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 import {
   DRIVE_SHARE_TABLE_COLUMNS,
   DRIVE_TABLE_STICKY_ACTION_COLUMN_CLASS,
@@ -122,10 +123,16 @@ function DriveSitesPanel({ active }: DriveSitesPanelProps) {
     setBusySiteId(site.siteId)
     try {
       if (action === "enable") {
-        await requireSynapseBridge().drive.site.enable({ siteId: site.siteId })
+        await runTrackedOperation(
+          { component: "drive", eventKey: "drive.site.enable" },
+          () => requireSynapseBridge().drive.site.enable({ siteId: site.siteId }),
+        )
         toast("网页分享已恢复")
       } else {
-        await requireSynapseBridge().drive.site.republish({ siteId: site.siteId, entryPath: site.entryPath })
+        await runTrackedOperation(
+          { component: "drive", eventKey: "drive.site.republish" },
+          () => requireSynapseBridge().drive.site.republish({ siteId: site.siteId, entryPath: site.entryPath }),
+        )
         toast("网页已更新")
       }
       await reloadSites()
@@ -139,7 +146,10 @@ function DriveSitesPanel({ active }: DriveSitesPanelProps) {
   const deleteSite = useCallback(async (site: DriveSiteDto) => {
     setBusySiteId(site.siteId)
     try {
-      await requireSynapseBridge().drive.site.delete({ siteId: site.siteId })
+      await runTrackedOperation(
+        { component: "drive", eventKey: "drive.site.delete" },
+        () => requireSynapseBridge().drive.site.delete({ siteId: site.siteId }),
+      )
       toast("网页分享已删除")
       setConfirmState(null)
       await reloadSites()
@@ -159,7 +169,10 @@ function DriveSitesPanel({ active }: DriveSitesPanelProps) {
     setBusySiteId(confirmState.site.siteId)
     try {
       if (confirmState.action === "disable") {
-        await requireSynapseBridge().drive.site.disable({ siteId: confirmState.site.siteId })
+        await runTrackedOperation(
+          { component: "drive", eventKey: "drive.site.disable" },
+          () => requireSynapseBridge().drive.site.disable({ siteId: confirmState.site.siteId }),
+        )
         toast("网页分享已停止")
       }
       setConfirmState(null)
@@ -442,11 +455,14 @@ function DriveSiteAccessDialog({
     if (!form) return
     setBusySiteId(form.site.siteId)
     try {
-      await requireSynapseBridge().drive.site.updateAccess({
-        siteId: form.site.siteId,
-        accessMode: form.passwordEnabled ? "password" : "public",
-        expiresIn: form.expiresIn,
-      })
+      await runTrackedOperation(
+        { component: "drive", eventKey: "drive.site.access-update" },
+        () => requireSynapseBridge().drive.site.updateAccess({
+          siteId: form.site.siteId,
+          accessMode: form.passwordEnabled ? "password" : "public",
+          expiresIn: form.expiresIn,
+        }),
+      )
       toast("访问设置已保存")
       await onSaved()
     } catch (rawError) {

@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, WorkflowMeta, WorkflowMigrationDiagnostic, WorkflowMigrationDiagnosticStatus } from "@/types/workflow"
 import type { WorkflowShareExportPreflight } from "@/types/workflow-package"
@@ -185,9 +186,12 @@ export function WorkflowList({ onCreate, onDeleteSuccess }: { onCreate: () => vo
   }
 
   const handleDelete = async (id: string, cleanupImportedChildren = true): Promise<boolean> => {
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.delete" })
     try {
       await requireBridgeDomain("workflow").definition.delete(id, { cleanupImportedChildren })
+      finishTracking("success")
     } catch (err) {
+      finishTracking("failure")
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow delete failed.", {
         boundary: "renderer.workflow.definition.list.delete",
@@ -207,14 +211,20 @@ export function WorkflowList({ onCreate, onDeleteSuccess }: { onCreate: () => vo
   }
 
   const handleRawExport = async (id: string, name: string, migrationDiagnosticId?: string) => {
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.export" })
     try {
       const workflowBridge = requireBridgeDomain("workflow")
       const result = migrationDiagnosticId
         ? await workflowBridge.operation.exportPackage(id, name, migrationDiagnosticId)
         : await workflowBridge.operation.exportPackage(id, name)
-      if (!result) return
+      if (!result) {
+        finishTracking("cancelled")
+        return
+      }
+      finishTracking("success")
       toast.success(result.kind === "future-raw" ? "工作流原文已导出" : "工作流已导出")
     } catch (err) {
+      finishTracking("failure")
       logger.warn("Workflow export failed.", {
         boundary: "renderer.workflow.definition.list.export",
         workflowId: id,
@@ -241,6 +251,7 @@ export function WorkflowList({ onCreate, onDeleteSuccess }: { onCreate: () => vo
 
   const handleExportConfirm = async (shareNote: string) => {
     if (!exportPreflight || exporting) return
+    const finishTracking = startTrackedOperation({ component: "workflow", eventKey: "workflow.export" })
     setExporting(true)
     try {
       const result = await requireBridgeDomain("workflow").operation.exportPackage(
@@ -250,10 +261,15 @@ export function WorkflowList({ onCreate, onDeleteSuccess }: { onCreate: () => vo
         shareNote,
         exportPreflight.packageDigestSeed,
       )
-      if (!result) return
+      if (!result) {
+        finishTracking("cancelled")
+        return
+      }
+      finishTracking("success")
       setExportPreflight(null)
       toast.success("工作流已导出")
     } catch (err) {
+      finishTracking("failure")
       const diagnostic = errorDiagnostic(err)
       logger.warn("Workflow export failed.", {
         boundary: "renderer.workflow.definition.list.export",

@@ -22,6 +22,7 @@ import { useEditorAdaptersForContentType } from "../../../src/modules/content/ho
 import { SharedInstallerFlow } from "../../../src/modules/installers/shared/shared-installer-flow"
 import type { SynapseInstallerSource } from "../../../src/types/installers"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 
 const logger = createRendererLogger("skill-installer.app")
 
@@ -90,12 +91,15 @@ function SkillSourceInput({
 
   const prepare = async (selectedPath = sourceDirectoryPath) => {
     if (!selectedPath.trim() || busy) return
+    const finishTracking = startTrackedOperation({ component: "skill-installer", eventKey: "skill-installer.source.prepare" })
     setBusy(true)
     setError("")
     try {
       const source = await prepareLocalSkillSource({ sourceDirectoryPath: selectedPath })
+      finishTracking("success")
       onSourceReady(source)
     } catch (err) {
+      finishTracking("failure")
       const message = err instanceof Error ? err.message : "读取 Skill 失败"
       logger.error("Failed to prepare local Skill source.", err)
       setError(message)
@@ -133,7 +137,7 @@ function SkillSourceInput({
       </FieldGroup>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <div className="flex justify-end">
-        <Button type="button" onClick={() => void prepare()} disabled={!sourceDirectoryPath.trim() || busy}>
+        <Button type="button" onClick={() => void prepare()} disabled={!sourceDirectoryPath.trim() || busy} data-track="skill-installer.source.prepare">
           {busy ? <Spinner data-icon="inline-start" /> : null}
           继续
         </Button>

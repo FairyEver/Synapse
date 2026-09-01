@@ -11,6 +11,7 @@ import { Spinner } from "../../../src/components/ui/spinner"
 import { Switch } from "../../../src/components/ui/switch"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { getSynapseBridge, requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import {
@@ -83,6 +84,7 @@ export function HtmlGeneratorModule() {
   const generateHtml = async () => {
     setTemplateTouched(true)
     if (!canGenerateHtml || !parsedData.ok) return
+    const finishTracking = startTrackedOperation({ component: "html-generator", eventKey: "html-generator.html.generate" })
     const revision = revisionRef.current
     const requestId = ++htmlRequestRef.current
     setHtmlRun({ busy: true, error: null, result: null })
@@ -91,11 +93,13 @@ export function HtmlGeneratorModule() {
         template,
         data: parsedData.data,
       })
+      finishTracking(response.ok ? "success" : "failure")
       if (revision !== revisionRef.current || requestId !== htmlRequestRef.current) return
       setHtmlRun(response.ok
         ? { busy: false, error: null, result: response.result }
         : { busy: false, error: response.error, result: null })
     } catch (error) {
+      finishTracking("failure")
       logger.error("HTML generation failed.", error)
       if (revision === revisionRef.current && requestId === htmlRequestRef.current) {
         setHtmlRun({ busy: false, error: { message: errorMessage(error) }, result: null })
@@ -107,6 +111,7 @@ export function HtmlGeneratorModule() {
     setTemplateTouched(true)
     setOutputTouched(true)
     if (!canGenerateFile || !parsedData.ok) return
+    const finishTracking = startTrackedOperation({ component: "html-generator", eventKey: "html-generator.file.generate" })
     const revision = revisionRef.current
     const requestId = ++fileRequestRef.current
     setFileRun({ busy: true, error: null, result: null })
@@ -117,11 +122,13 @@ export function HtmlGeneratorModule() {
         outputPath,
         overwrite,
       })
+      finishTracking(response.ok ? "success" : "failure")
       if (revision !== revisionRef.current || requestId !== fileRequestRef.current) return
       setFileRun(response.ok
         ? { busy: false, error: null, result: response.result }
         : { busy: false, error: response.error, result: null })
     } catch (error) {
+      finishTracking("failure")
       logger.error("HTML file generation failed.", error)
       if (revision === revisionRef.current && requestId === fileRequestRef.current) {
         setFileRun({ busy: false, error: { message: errorMessage(error) }, result: null })
@@ -145,8 +152,15 @@ export function HtmlGeneratorModule() {
   }
 
   const copyText = async (value: string) => {
-    await navigator.clipboard.writeText(value)
-    toast.success("已复制")
+    const finishTracking = startTrackedOperation({ component: "html-generator", eventKey: "html-generator.result.copy" })
+    try {
+      await navigator.clipboard.writeText(value)
+      finishTracking("success")
+      toast.success("已复制")
+    } catch (error) {
+      finishTracking("failure")
+      throw error
+    }
   }
 
   const currentResult = activeTab === "html" ? htmlRun.result : fileRun.result
@@ -254,12 +268,12 @@ export function HtmlGeneratorModule() {
 
           <div className="flex justify-end">
             {activeTab === "html" ? (
-              <Button disabled={!canGenerateHtml} onClick={() => void generateHtml()}>
+              <Button disabled={!canGenerateHtml} onClick={() => void generateHtml()} data-track="html-generator.html.generate">
                 {htmlRun.busy ? <Spinner data-icon="inline-start" /> : null}
                 {htmlRun.busy ? "生成中" : "生成 HTML"}
               </Button>
             ) : (
-              <Button disabled={!canGenerateFile} onClick={() => void generateFile()}>
+              <Button disabled={!canGenerateFile} onClick={() => void generateFile()} data-track="html-generator.file.generate">
                 {fileRun.busy ? <Spinner data-icon="inline-start" /> : null}
                 {fileRun.busy ? "生成并写入中" : "生成 HTML 文件"}
               </Button>

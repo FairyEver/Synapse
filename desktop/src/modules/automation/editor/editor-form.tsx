@@ -32,6 +32,7 @@ import { holdBeforeUnloadForCustomDialog } from "@/lib/before-unload"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { sanitizeError } from "@/lib/error-sanitize"
 import { getRendererPlatform } from "@/lib/runtime-platform"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode } from "../types"
 import {
   buildAutomationCreateInputFromDraft,
@@ -43,6 +44,10 @@ import {
 import { TriggerExecutorBuilder } from "./trigger-executor-builder"
 
 const logger = createRendererLogger("automation.editor")
+const AUTOMATION_SAVE_EVENT_KEYS = {
+  create: "automation.editor.create",
+  edit: "automation.editor.save",
+} as const
 
 type AutomationEditorFormProps = {
   readonly mode: AutomationEditorMode
@@ -222,6 +227,11 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
 
   async function handleSave(enableAfterSave: boolean) {
     if (loadState.status !== "ready") return
+    const eventKey = AUTOMATION_SAVE_EVENT_KEYS[mode.mode]
+    const finishTracking = startTrackedOperation({
+      component: "automation",
+      eventKey,
+    })
     const { draft, item } = loadState
     const enabled = enableAfterSave ? true : item?.enabled ?? false
     setSaving(true)
@@ -238,8 +248,10 @@ export function AutomationEditorForm({ mode }: AutomationEditorFormProps) {
         setLoadState({ status: "ready", item: created, draft: createAutomationDraftFromItem(created) })
       }
       setDirty(false)
+      finishTracking("success")
       window.close()
     } catch (saveError) {
+      finishTracking("failure")
       logger.warn("Automation editor save failed.", {
         boundary: "renderer.automation.editor.save",
         mode: mode.mode,

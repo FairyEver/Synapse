@@ -8,6 +8,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "../../../src/compo
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Spinner } from "../../../src/components/ui/spinner"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 
 const logger = createRendererLogger("file-opener.app")
@@ -21,12 +22,15 @@ export function FileOpenerModule() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!canOpen) return
+    const finishTracking = startTrackedOperation({ component: "file-opener", eventKey: "file-opener.file.open" })
     setBusy(true)
     setStatus(null)
     try {
       await requireBridgeDomain("fileOpener").file.open({ path })
+      finishTracking("success")
       setStatus({ kind: "success", message: "已提交打开请求" })
     } catch (error) {
+      finishTracking("failure")
       logger.error("File open request failed.", error)
       setStatus({ kind: "error", message: error instanceof Error ? error.message : "打开文件失败" })
     } finally {
@@ -37,7 +41,7 @@ export function FileOpenerModule() {
   return (
     <SystemAppWindowShell>
       <ScrollArea className="h-full min-h-0">
-        <form className="mx-auto w-full max-w-2xl p-3 sm:p-5" onSubmit={submit} aria-busy={busy}>
+        <form className="mx-auto w-full max-w-2xl p-3 sm:p-5" onSubmit={submit} aria-busy={busy} data-track="file-opener.file.open">
           <Card className="py-0">
             <CardContent className="p-4 sm:p-5">
               <FieldGroup>

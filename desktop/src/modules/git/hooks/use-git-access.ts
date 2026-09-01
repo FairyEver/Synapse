@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 import type {
   SynapseGitAccessState,
   SynapseGitClearHttpsCredentialInput,
@@ -75,7 +76,10 @@ export function useGitAccess() {
   ) => {
     setError(null)
     try {
-      await gitBridge().configureCredentialHelper(input)
+      await runTrackedOperation(
+        { component: "git", eventKey: "git.credential-helper.configure" },
+        () => gitBridge().configureCredentialHelper(input),
+      )
       await refresh(options.hosts)
       return true
     } catch (err) {
@@ -91,7 +95,10 @@ export function useGitAccess() {
   ) => {
     setError(null)
     try {
-      await gitBridge().saveHttpsCredential(input)
+      await runTrackedOperation(
+        { component: "git", eventKey: "git.credential.save" },
+        () => gitBridge().saveHttpsCredential(input),
+      )
       await refresh(httpsRefreshHosts(input, options))
       return true
     } catch (err) {
@@ -107,7 +114,10 @@ export function useGitAccess() {
   ) => {
     setError(null)
     try {
-      await gitBridge().clearHttpsCredential(input)
+      await runTrackedOperation(
+        { component: "git", eventKey: "git.credential.clear" },
+        () => gitBridge().clearHttpsCredential(input),
+      )
       await refresh(httpsRefreshHosts(input, options))
       return true
     } catch (err) {
@@ -123,7 +133,10 @@ export function useGitAccess() {
   ) => {
     setError(null)
     try {
-      await gitBridge().generateSshKey(input)
+      await runTrackedOperation(
+        { component: "git", eventKey: "git.ssh-key.generate" },
+        () => gitBridge().generateSshKey(input),
+      )
       await refresh(options.hosts ?? access?.hosts.map((host) => ({
         host: host.host,
         protocol: host.protocol,
@@ -142,7 +155,10 @@ export function useGitAccess() {
   ): Promise<SynapseGitSshTestResult | null> => {
     setError(null)
     try {
-      return await gitBridge().testSshConnection(input)
+      return await runTrackedOperation(
+        { component: "git", eventKey: "git.ssh.test" },
+        () => gitBridge().testSshConnection(input),
+      )
     } catch (err) {
       const message = errorMessage(err, "测试 SSH 连接失败。")
       setError(message)

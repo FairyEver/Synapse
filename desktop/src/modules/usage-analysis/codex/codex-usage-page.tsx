@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import { useUsageAutoRefresh } from "../shared/auto-refresh"
 import { CODEX_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
@@ -24,6 +25,7 @@ export function CodexUsagePage() {
   const [refreshing, setRefreshing] = useState(false)
 
   const refresh = useCallback(async (input?: UsageAnalysisRefreshInput) => {
+    const finishTracking = startTrackedOperation({ component: "usage-analysis", eventKey: "usage-analysis.codex.refresh" })
     setRefreshing(true)
     try {
       const result = input
@@ -32,7 +34,9 @@ export function CodexUsagePage() {
       const warning = getUsageRefreshWarning(result)
       if (warning) showWarning(warning)
       setRefreshKey((current) => current + 1)
+      finishTracking("success")
     } catch {
+      finishTracking("failure")
       showError("刷新失败")
     } finally {
       setRefreshing(false)

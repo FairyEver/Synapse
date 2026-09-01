@@ -31,6 +31,7 @@ import { ERROR_NOTIFICATION_DURATION_MS } from "@/app-shell/notification-duratio
 import { ModuleContentPanel, ModulePage } from "@/components/module-page"
 import { RelativeTime } from "@/components/relative-time"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation, track } from "@/lib/ui-tracking"
 import { FormDialog } from "@/components/form-dialog"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
 import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
@@ -620,11 +621,20 @@ function DriveModuleContent() {
     options: { readonly destinationPath?: string; readonly retry?: boolean } = {},
   ) => {
     if (uploadActionsDisabled && !options.retry) return
+    track({
+      component: "drive",
+      name: "drive.upload",
+      action: "submit",
+      eventKey: "drive.upload",
+      category: "operation",
+    })
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.upload" })
     let taskId: string | null = null
     if (options.retry) setUploadRetrying(true)
     try {
       const { request, skipped } = await createRequest()
       if (request.items.length === 0) {
+        finishTracking("cancelled")
         toast(skipped > 0 ? `已跳过 ${skipped} 个文件` : "没有可上传的文件")
         return
       }
@@ -643,12 +653,15 @@ function DriveModuleContent() {
       setUploadTask((current) => current?.id === taskId ? finishDriveUploadTask(current, resultWithSkipped) : current)
       const message = uploadResultMessage(resultWithSkipped)
       if (driveUploadFailedCount(resultWithSkipped) > 0) {
+        finishTracking("failure")
         toast.error(message, { duration: ERROR_NOTIFICATION_DURATION_MS })
       } else {
+        finishTracking("success")
         toast(message)
       }
       await refreshCurrentItemsAfterUpload()
     } catch (rawError) {
+      finishTracking("failure")
       const message = errorMessage(rawError, "上传失败")
       if (taskId) {
         setUploadTask((current) => current?.id === taskId
@@ -715,6 +728,8 @@ function DriveModuleContent() {
     if (!nameDialog) return
     const name = nameDialog.value.trim()
     if (!name) return
+    const eventKey = nameDialog.mode === "create" ? "drive.folder.create" : "drive.item.rename"
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey })
     setSubmitting(true)
     try {
       if (nameDialog.mode === "create") {
@@ -726,7 +741,9 @@ function DriveModuleContent() {
       }
       setNameDialog(null)
       await loadItems()
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       toast(errorMessage(rawError, nameDialog.mode === "create" ? "创建失败" : "重命名失败"))
     } finally {
       setSubmitting(false)
@@ -745,6 +762,7 @@ function DriveModuleContent() {
   const handleMoveSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!moveTarget) return
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.item.move" })
     setSubmitting(true)
     try {
       await requireSynapseBridge().drive.item.move({
@@ -754,7 +772,9 @@ function DriveModuleContent() {
       toast("已移动")
       setMoveTarget(null)
       await loadItems()
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       toast(errorMessage(rawError, "移动失败"))
     } finally {
       setSubmitting(false)
@@ -763,6 +783,7 @@ function DriveModuleContent() {
 
   const deleteDriveItem = useCallback(async (item: DriveItemDto): Promise<boolean> => {
     if (deletingItemIdsRef.current.has(item.id)) return false
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.item.delete" })
     setDeletingItemId(item.id, true)
     setSubmitting(true)
     try {
@@ -772,8 +793,10 @@ function DriveModuleContent() {
       toast("已删除")
       await loadItems()
       await loadDriveUsage()
+      finishTracking("success")
       return true
     } catch (rawError) {
+      finishTracking("failure")
       toast(errorMessage(rawError, "删除失败"))
       return false
     } finally {
@@ -826,21 +849,31 @@ function DriveModuleContent() {
   }, [loadItems])
 
   const handlePreview = useCallback(async (item: DriveItemDto) => {
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.item.preview" })
     try {
       const { url } = await requireSynapseBridge().drive.item.previewUrl({ itemId: item.id })
       await openDriveUrl(url)
+      finishTracking("success")
     } catch {
+      finishTracking("failure")
       toast("打开失败")
     }
   }, [])
 
   const handleDownload = useCallback(async (item: DriveItemDto) => {
     if (item.storageStatus !== "active" || downloadingItemIdsRef.current.has(item.id)) return
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.item.download" })
     setDownloadingItemId(item.id, true)
     try {
       const result = await requireSynapseBridge().drive.item.download({ itemId: item.id })
-      if (result) toast("已下载")
+      if (result) {
+        finishTracking("success")
+        toast("已下载")
+      } else {
+        finishTracking("cancelled")
+      }
     } catch (rawError) {
+      finishTracking("failure")
       toast(errorMessage(rawError, "下载失败"))
     } finally {
       setDownloadingItemId(item.id, false)
@@ -850,6 +883,7 @@ function DriveModuleContent() {
   const handleAccessSettingsConfirm = useCallback(async (settings: DriveAccessSettingsInput) => {
     const target = accessSettingsTarget
     if (!target) return
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.share.create" })
     let afterCreate: (() => Promise<void>) | null = null
     setSubmitting(true)
     try {
@@ -874,7 +908,9 @@ function DriveModuleContent() {
         await copySharedUrlAfterShare(getDriveAccessUrl(share))
         await reloadDriveItemsAfterAccessChange(loadItems)
       }
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       toast(errorMessage(rawError, "分享失败"))
     } finally {
       setSubmitting(false)
@@ -885,12 +921,15 @@ function DriveModuleContent() {
   const handleDisableShare = useCallback(async (item: DriveItemDto) => {
     const shareId = item.activeShareId
     if (!shareId || disablingShareIdsRef.current.has(shareId)) return
+    const finishTracking = startTrackedOperation({ component: "drive", eventKey: "drive.share.disable" })
     setDisablingShareId(shareId, true)
     try {
       await requireSynapseBridge().drive.share.disable({ shareId })
       toast("已取消分享")
       await loadItems()
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       toast(errorMessage(rawError, "取消分享失败"))
     } finally {
       setDisablingShareId(shareId, false)

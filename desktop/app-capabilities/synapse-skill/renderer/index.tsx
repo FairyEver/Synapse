@@ -14,6 +14,7 @@ import { Card, CardContent } from "../../../src/components/ui/card"
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Spinner } from "../../../src/components/ui/spinner"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import { useEditorAdaptersForContentType } from "../../../src/modules/content/hooks/use-editor-adapters-for-content-type"
 import { SharedInstallerFlow } from "../../../src/modules/installers/shared/shared-installer-flow"
@@ -256,12 +257,15 @@ function SynapseSkillModule() {
     if (statusLoading) return
     const editor = globalEditors.find((item) => item.id === editorId) ?? null
     if (!editor) return
+    const finishTracking = startTrackedOperation({ component: "synapse-skill", eventKey: "synapse-skill.install.prepare" })
     setPreparing(true)
     try {
       const installSource = await ensureSource()
       setInitialEditor(editor)
       setFlowSource(installSource)
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       const message = error instanceof Error ? error.message : "读取 Synapse Skill 失败"
       logger.error("Failed to prepare Synapse Skill source.", error)
       toast.error(message)
@@ -277,6 +281,7 @@ function SynapseSkillModule() {
 
   const runBatchInstall = async () => {
     if (batchInstalling || batchableEntries.length === 0) return
+    const finishTracking = startTrackedOperation({ component: "synapse-skill", eventKey: "synapse-skill.install.batch" })
 
     setBatchInstalling(true)
     setBatchErrors({})
@@ -303,6 +308,7 @@ function SynapseSkillModule() {
         nextErrors[entry.target.editorId] = entry.error ?? "安装失败"
       }
       setBatchErrors(nextErrors)
+      finishTracking(failedResults.length > 0 ? "failure" : "success")
 
       if (failedResults.length === batchResults.length) {
         toast.error("安装失败")
@@ -315,6 +321,7 @@ function SynapseSkillModule() {
       }
       await refreshStatus()
     } catch (error) {
+      finishTracking("failure")
       const message = error instanceof Error ? error.message : "安装失败"
       logger.error("Failed to batch install Synapse Skill.", error)
       toast.error(message)
@@ -325,12 +332,15 @@ function SynapseSkillModule() {
   }
 
   const openInstallFlow = async () => {
+    const finishTracking = startTrackedOperation({ component: "synapse-skill", eventKey: "synapse-skill.install.prepare" })
     setPreparing(true)
     try {
       const installSource = await ensureSource()
       setInitialEditor(null)
       setFlowSource(installSource)
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       const message = error instanceof Error ? error.message : "读取 Synapse Skill 失败"
       logger.error("Failed to prepare Synapse Skill source.", error)
       toast.error(message)

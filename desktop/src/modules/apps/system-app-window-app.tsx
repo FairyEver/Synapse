@@ -4,6 +4,7 @@ import {
 } from "@/app-shell/content-navigation"
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { updateTrackingContext } from "@/lib/ui-tracking"
 import { SystemAppContent } from "./components/system-app-content"
 import type {
   SynapseSystemAppGitOpenRequest,
@@ -88,6 +89,10 @@ export function SystemAppWindowApp() {
     useState<SynapseSystemAppGitOpenRequest | null>(() => parseInitialGitOpenRequest())
   const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
     useState<SynapseSystemAppTerminalOpenRequest | null>(() => parseInitialTerminalOpenRequest())
+
+  useEffect(() => {
+    updateTrackingContext({ moduleId: appId ?? "apps", windowType: "system-app" })
+  }, [appId])
 
   useEffect(() => {
     const bridge = getAppsBridge()

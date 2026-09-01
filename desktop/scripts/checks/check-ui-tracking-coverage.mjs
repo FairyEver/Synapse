@@ -5,6 +5,7 @@ import ts from "typescript"
 
 const desktopRoot = path.resolve(import.meta.dirname, "../..")
 const rendererRoot = path.join(desktopRoot, "src")
+const capabilitiesRoot = path.join(desktopRoot, "app-capabilities")
 const primitivesRoot = path.join(rendererRoot, "components/ui")
 const interactionProps = new Set([
   "onClick", "onDoubleClick", "onChange", "onInput", "onValueChange", "onOpenChange",
@@ -23,11 +24,12 @@ const primitiveDelegationAllowlist = new Map([
 ])
 
 const primitiveFiles = (await readdir(primitivesRoot)).filter((name) => name.endsWith(".tsx"))
-const rendererFiles = await listRendererFiles(rendererRoot)
+const capabilityRendererFiles = await listCapabilityRendererFiles(capabilitiesRoot)
+const rendererFiles = [...await listRendererFiles(rendererRoot), ...capabilityRendererFiles]
 const issues = []
 
 for (const file of rendererFiles) {
-  const relativePath = path.relative(rendererRoot, file)
+  const relativePath = path.relative(desktopRoot, file)
   const source = await readFile(file, "utf8")
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   const declarations = collectDeclarations(sourceFile)
@@ -36,19 +38,22 @@ for (const file of rendererFiles) {
   inspectNotificationPromises(sourceFile, relativePath, issues)
 
   const isPrimitive = file.startsWith(`${primitivesRoot}${path.sep}`)
+  const isCapabilityRenderer = file.startsWith(`${capabilitiesRoot}${path.sep}`)
   if (isPrimitive && primitiveDelegationAllowlist.has(path.basename(file))) continue
-  inspectInteractionHandlers(sourceFile, relativePath, declarations, isPrimitive, issues)
+  inspectInteractionHandlers(sourceFile, relativePath, declarations, isPrimitive, isCapabilityRenderer, issues)
 }
+
+await inspectCapabilitySemanticContracts(capabilityRendererFiles, issues)
 
 if (issues.length > 0) {
   process.stderr.write(`UI tracking coverage check failed (${issues.length} handler-level issue${issues.length === 1 ? "" : "s"}):\n`)
   process.stderr.write(`${issues.map((issue) => `- ${issue}`).join("\n")}\n`)
   process.exitCode = 1
 } else {
-  process.stdout.write(`UI tracking coverage check passed (${primitiveFiles.length} shared primitives and ${rendererFiles.length} renderer files checked at handler level).\n`)
+  process.stdout.write(`UI tracking coverage check passed (${primitiveFiles.length} shared primitives, ${capabilityRendererFiles.length} capability renderer files, and ${rendererFiles.length} total renderer files checked at handler level).\n`)
 }
 
-function inspectInteractionHandlers(sourceFile, relativePath, declarations, isPrimitive, issues) {
+function inspectInteractionHandlers(sourceFile, relativePath, declarations, isPrimitive, isCapabilityRenderer, issues) {
   const visit = (node) => {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
       const tagName = node.tagName.getText(sourceFile)
@@ -58,9 +63,19 @@ function inspectInteractionHandlers(sourceFile, relativePath, declarations, isPr
         const propName = attribute.name.getText(sourceFile)
         if (!interactionProps.has(propName) || !attribute.initializer) continue
         if (!isPrimitive && !isRawElement) continue
-        if (trackedPrimitiveNames.has(tagName)) continue
         const expression = jsxAttributeExpression(attribute.initializer)
         if (!expression) continue
+        if (isCapabilityRenderer && isBusinessAsyncHandler(expression, declarations, sourceFile)) {
+          if (!handlerContainsOperationTracking(expression, declarations, sourceFile, new Set())) {
+            const line = sourceFile.getLineAndCharacterOfPosition(attribute.getStart(sourceFile)).line + 1
+            issues.push(`${relativePath}:${line} ${tagName}.${propName} business async handler has no tracked operation`)
+          }
+          if (!hasStableSemanticMarker(node, expression, declarations, sourceFile)) {
+            const line = sourceFile.getLineAndCharacterOfPosition(attribute.getStart(sourceFile)).line + 1
+            issues.push(`${relativePath}:${line} ${tagName}.${propName} business handler has no stable semantic event`)
+          }
+        }
+        if (trackedPrimitiveNames.has(tagName)) continue
         if (isImplicitNativeTracked(tagName, propName, node, sourceFile)) continue
         if (hasNativeDataTrack(node, sourceFile, propName)) continue
         if (handlerContainsTracking(expression, declarations, sourceFile, new Set())) continue
@@ -83,11 +98,11 @@ function inspectStableTrackingCalls(sourceFile, relativePath, issues) {
         issues.push(`${relativePath}:${line} track() must declare a static eventKey`)
       }
     }
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "startTrackedOperation") {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && (node.expression.text === "startTrackedOperation" || node.expression.text === "runTrackedOperation")) {
       const input = node.arguments[0]
       if (input && ts.isObjectLiteralExpression(input) && !hasStaticStringProperty(input, "eventKey") && !hasIdentifierProperty(input, "eventKey")) {
         const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1
-        issues.push(`${relativePath}:${line} startTrackedOperation() must declare a stable eventKey`)
+        issues.push(`${relativePath}:${line} ${node.expression.text}() must declare a stable eventKey`)
       }
     }
     ts.forEachChild(node, visit)
@@ -110,7 +125,7 @@ function inspectNotificationPromises(sourceFile, relativePath, issues) {
 }
 
 function handlerContainsTracking(node, declarations, sourceFile, seen) {
-  if (/\b(?:track|startTrackedOperation|useAppNotifications|promise)\s*\(/u.test(node.getText(sourceFile))) return true
+  if (/\b(?:track|startTrackedOperation|runTrackedOperation|useAppNotifications|promise)\s*\(/u.test(node.getText(sourceFile))) return true
   let covered = false
   const visit = (child) => {
     if (covered) return
@@ -125,6 +140,42 @@ function handlerContainsTracking(node, declarations, sourceFile, seen) {
   }
   visit(node)
   return covered
+}
+
+function handlerContainsOperationTracking(node, declarations, sourceFile, seen) {
+  if (/\b(?:startTrackedOperation|runTrackedOperation)\s*\(/u.test(node.getText(sourceFile))) return true
+  let covered = false
+  const visit = (child) => {
+    if (covered) return
+    if (ts.isIdentifier(child)) {
+      const declaration = declarations.get(child.text)
+      if (declaration && !seen.has(child.text)) {
+        seen.add(child.text)
+        covered = handlerContainsOperationTracking(declaration, declarations, sourceFile, seen)
+      }
+    }
+    if (!covered) ts.forEachChild(child, visit)
+  }
+  visit(node)
+  return covered
+}
+
+function isBusinessAsyncHandler(node, declarations, sourceFile) {
+  const text = resolveHandlerText(node, declarations, sourceFile, new Set())
+  return /\bawait\b/u.test(text)
+    && /\.(?:create|update|delete|remove|save|write|generate|repair|install|uninstall|extract|preview|test|sync|pull|push|clone|rename|restore|download|upload|stop|cancel|initialize)\s*\(/u.test(text)
+}
+
+function hasStableSemanticMarker(jsxNode, handler, declarations, sourceFile) {
+  const handlerText = resolveHandlerText(handler, declarations, sourceFile, new Set())
+  if (/\b(?:startTrackedOperation|runTrackedOperation)\s*\(/u.test(handlerText)) return true
+  return jsxNode.attributes.properties.some((attribute) => (
+    ts.isJsxAttribute(attribute)
+    && attribute.name.getText(sourceFile) === "data-track"
+    && attribute.initializer
+    && ts.isStringLiteral(attribute.initializer)
+    && /^[a-z][a-z0-9-]*(?:\.[a-z0-9-]+){2,}$/u.test(attribute.initializer.text)
+  ))
 }
 
 function isPropagationOnlyHandler(node, declarations, sourceFile) {
@@ -215,9 +266,38 @@ async function listRendererFiles(root) {
       if (entry.name === "__tests__" || entry.name === "generated") continue
       const target = path.join(directory, entry.name)
       if (entry.isDirectory()) await visit(target)
-      else if (entry.name.endsWith(".tsx") && !entry.name.endsWith(".test.tsx")) results.push(target)
+      else if (/\.tsx?$/u.test(entry.name) && !/\.(?:test|spec)\.tsx?$/u.test(entry.name)) results.push(target)
     }
   }
   await visit(root)
   return results
+}
+
+async function listCapabilityRendererFiles(root) {
+  const results = []
+  const capabilityEntries = await readdir(root, { withFileTypes: true })
+  for (const capability of capabilityEntries) {
+    if (!capability.isDirectory()) continue
+    const rendererDirectory = path.join(root, capability.name, "renderer")
+    try {
+      results.push(...await listRendererFiles(rendererDirectory))
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error
+    }
+  }
+  return results
+}
+
+async function inspectCapabilitySemanticContracts(files, issues) {
+  const sourceByCapability = new Map()
+  for (const file of files) {
+    const capabilityId = path.relative(capabilitiesRoot, file).split(path.sep)[0]
+    const source = await readFile(file, "utf8")
+    sourceByCapability.set(capabilityId, `${sourceByCapability.get(capabilityId) ?? ""}\n${source}`)
+  }
+  for (const [capabilityId, source] of sourceByCapability) {
+    if (!source.includes(`\"${capabilityId}.`)) {
+      issues.push(`app-capabilities/${capabilityId}/renderer has no stable semantic event for ${capabilityId}`)
+    }
+  }
 }

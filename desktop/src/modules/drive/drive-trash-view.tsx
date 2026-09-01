@@ -36,6 +36,7 @@ import {
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 import { DriveItemIcon } from "./drive-item-icon"
 import { DRIVE_TRASH_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
 
@@ -153,7 +154,10 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
   const deleteTrashItem = useCallback(async (target: DriveTrashItemDto) => {
     await runTrashMutation(
       target,
-      () => requireSynapseBridge().drive.trash.delete({ itemId: target.id }),
+      () => runTrackedOperation(
+        { component: "drive", eventKey: "drive.trash.delete" },
+        () => requireSynapseBridge().drive.trash.delete({ itemId: target.id }),
+      ),
       "已删除",
       "删除失败",
       onUsageChange,
@@ -208,11 +212,14 @@ const DriveTrashView = forwardRef<DriveTrashViewHandle, DriveTrashViewProps>(fun
                 onRestore={() => {
                   void runTrashMutation(
                     item,
-                    () => requireSynapseBridge().drive.trash.restore({
-                      itemId: item.id,
-                      kind: item.kind,
-                      ...(item.assetId ? { assetId: item.assetId } : {}),
-                    }),
+                    () => runTrackedOperation(
+                      { component: "drive", eventKey: "drive.trash.restore" },
+                      () => requireSynapseBridge().drive.trash.restore({
+                        itemId: item.id,
+                        kind: item.kind,
+                        ...(item.assetId ? { assetId: item.assetId } : {}),
+                      }),
+                    ),
                     "已恢复",
                     "恢复失败",
                     onDriveItemsChanged,

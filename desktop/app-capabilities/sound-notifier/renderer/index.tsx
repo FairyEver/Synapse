@@ -13,6 +13,7 @@ import {
 import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SynapseSoundNotifierSettings } from "../../../src/types/sound-notifier"
 import {
@@ -61,13 +62,16 @@ export function SoundNotifierModule() {
   }, [reload, soundNotifierBridge])
 
   const preview = useCallback(async (eventType: SoundNotifierEventType) => {
+    const finishTracking = startTrackedOperation({ component: "sound-notifier", eventKey: "sound-notifier.sound.preview" })
     try {
       await soundNotifierBridge.sound.preview({
         eventType,
         repeatCount,
         intervalMs,
       })
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       logger.error("Failed to preview sound notifier.", error)
       toast.error(errorMessage(error, "试听失败"))
     }

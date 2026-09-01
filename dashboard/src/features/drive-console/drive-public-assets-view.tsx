@@ -171,7 +171,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
             if (file && target) void runUpload(file, target)
           }}
         />
-        <Button type='button' variant='outline' size='sm' onClick={() => uploadInputRef.current?.click()}>上传公开素材</Button>
+        <Button data-drive-telemetry-event='web.drive.public-asset.upload-choose' type='button' variant='outline' size='sm' onClick={() => uploadInputRef.current?.click()}>上传公开素材</Button>
       </div>
       {loading ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
       {!loading && items.length === 0 ? <div className='rounded-lg border p-6 text-center text-sm text-muted-foreground'>暂无公开素材</div> : null}
@@ -194,20 +194,20 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
                     <Button type='button' variant='ghost' size='sm' asChild>
                       <a href={item.url} target='_blank' rel='noreferrer'>打开</a>
                     </Button>
-                    <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+                    <Button data-drive-telemetry-event='web.drive.public-asset.copy-url' type='button' variant='ghost' size='sm' onClick={(event) => {
                       renameTriggerRef.current = event.currentTarget
                       setRenameTarget(item)
                       setRenameValue(item.name)
                     }}>
                       重命名
                     </Button>
-                    <Button type='button' variant='ghost' size='sm' onClick={() => {
+                    <Button data-drive-telemetry-event='web.drive.public-asset.rename-open' type='button' variant='ghost' size='sm' onClick={() => {
                       replaceTargetRef.current = item
                       replaceInputRef.current?.click()
                     }}>
                       替换
                     </Button>
-                    <Button type='button' variant='ghost' size='sm' onClick={() => setDeleteTarget(item)}>
+                    <Button data-drive-telemetry-event='web.drive.public-asset.delete-open' type='button' variant='ghost' size='sm' onClick={() => setDeleteTarget(item)}>
                       删除
                     </Button>
                   </TableCell>
@@ -242,7 +242,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
           </div>
           <DialogFooter>
             <Button type='button' variant='outline' onClick={() => setRenameTarget(null)}>取消</Button>
-            <Button type='button' disabled={submitting || !renameTarget || renameValue.trim().length === 0} onClick={() => {
+            <Button data-drive-telemetry-event='web.drive.public-asset.rename-submit' type='button' disabled={submitting || !renameTarget || renameValue.trim().length === 0} onClick={() => {
               void renamePublicAsset()
             }}>
               保存

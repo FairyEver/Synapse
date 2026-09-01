@@ -6,6 +6,7 @@ import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 import {
   Dialog,
   DialogContent,
@@ -92,13 +93,19 @@ function AutomationRunsDialog({
   }, [open, returnFocusRef])
 
   function handleRetry() {
-    void loadRuns()
+    void runTrackedOperation(
+      { component: "automation", eventKey: "automation.history.retry" },
+      () => loadRuns(),
+    )
   }
 
   async function handleStop(run: AutomationRun) {
     if (!item) return
     try {
-      await onStopRun(run.id)
+      await runTrackedOperation(
+        { component: "automation", eventKey: "automation.history.stop" },
+        () => onStopRun(run.id),
+      )
       setError(null)
       setRuns(await listAutomationRuns(item.id))
     } catch (stopError) {

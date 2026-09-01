@@ -46,6 +46,7 @@ vi.mock("@/lib/electron-bridge", () => ({
 
 vi.mock("@/lib/ui-tracking", () => ({
   track: vi.fn(),
+  startTrackedOperation: vi.fn(() => vi.fn()),
   extractLabel: () => "button",
   mergeRefs: (...refs: unknown[]) => (value: unknown) => {
     for (const ref of refs) {

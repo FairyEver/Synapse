@@ -54,6 +54,7 @@ import {
   AlertDialogTitle,
 } from "../../../src/components/ui/alert-dialog"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
@@ -269,6 +270,8 @@ export function SecretsModule() {
       setForm((current) => ({ ...current, error: "名称不能为空" }))
       return
     }
+    const eventKey = form.mode === "edit" ? "secrets.item.update" : "secrets.item.create"
+    const finishTracking = startTrackedOperation({ component: "secrets", eventKey })
 
     try {
       setSaving(true)
@@ -292,6 +295,7 @@ export function SecretsModule() {
         return next
       })
       clearSecretReveals()
+      finishTracking("success")
       toast.success("已保存")
       setFormOpen(false)
       setForm(emptyFormState)
@@ -299,6 +303,7 @@ export function SecretsModule() {
         await scanAndOpenSkillEnvUpdate(saved.name)
       }
     } catch (error) {
+      finishTracking("failure")
       const message = secretFormErrorMessage(error)
       logger.error("Failed to save secret.", error)
       setForm((current) => ({ ...current, error: message }))
@@ -312,6 +317,7 @@ export function SecretsModule() {
     if (!isCurrentDeleteTarget(scanGeneration, secret.id)) return
     if (deleteRequestIdsRef.current.has(secret.id)) return
     deleteRequestIdsRef.current.add(secret.id)
+    const finishTracking = startTrackedOperation({ component: "secrets", eventKey: "secrets.item.delete" })
     setDeleteRequestIds(new Set(deleteRequestIdsRef.current))
     try {
       await secretsBridge.item.delete({ name: secret.name })
@@ -322,11 +328,13 @@ export function SecretsModule() {
         return next
       })
       clearSecretReveals()
+      finishTracking("success")
       if (isCurrentDeleteTarget(scanGeneration, secret.id)) {
         invalidateDeleteScan()
         setDeleting(null)
       }
     } catch (error) {
+      finishTracking("failure")
       logger.error("Failed to delete secret.", errorDiagnostic(error))
       toast.error("删除失败")
     } finally {
@@ -394,6 +402,7 @@ export function SecretsModule() {
       [secret.id]: { loading: true },
     }))
     const requestGeneration = secretRevealGeneration.current
+    const finishTracking = startTrackedOperation({ component: "secrets", eventKey: "secrets.value.reveal" })
 
     try {
       const valueView = await secretsBridge.item.get({ name: secret.name, includeValue: true })
@@ -409,7 +418,9 @@ export function SecretsModule() {
       if (requestGeneration === secretRevealGeneration.current) {
         setSecretValueDialog({ secret, value: valueView.value })
       }
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       logger.error("Failed to reveal secret value.", errorDiagnostic(error))
       setSecretReveals((reveals) => {
         if (requestGeneration !== secretRevealGeneration.current) return reveals
@@ -434,11 +445,14 @@ export function SecretsModule() {
 
   const copySecretValue = useCallback(async (): Promise<boolean> => {
     if (!secretValueDialog) return false
+    const finishTracking = startTrackedOperation({ component: "secrets", eventKey: "secrets.value.copy" })
     try {
       await navigator.clipboard.writeText(secretValueDialog.value)
+      finishTracking("success")
       toast.success("已复制")
       return true
     } catch (error) {
+      finishTracking("failure")
       logger.error("Failed to copy secret value.", errorDiagnostic(error))
       toast.error("复制失败")
       return false
@@ -515,6 +529,7 @@ export function SecretsModule() {
           }
         }}
         onSubmit={submitForm}
+        data-track="secrets.item.save"
         onUpdateValueChange={(updateValue) => setForm((current) => ({ ...current, updateValue, error: "" }))}
         onValueChange={(value) => setForm((current) => ({ ...current, value, error: "" }))}
       />

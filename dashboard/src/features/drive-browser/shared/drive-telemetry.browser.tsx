@@ -185,6 +185,30 @@ describe('Drive Web telemetry', () => {
     expect(sendClientTelemetryBatch).toHaveBeenCalledTimes(1)
   })
 
+  it('isolates Beacon failures, preserves the event, and executes the business callback once', async () => {
+    const sendBeacon = vi.fn(() => {
+      throw new Error('beacon unavailable')
+    })
+    Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: sendBeacon })
+    const callback = vi.fn()
+    render(
+      <DriveTelemetryBoundary scope='console'>
+        <button data-drive-telemetry-event='web.drive.file-upload.choose' onClick={callback}>上传</button>
+      </DriveTelemetryBoundary>,
+    )
+
+    const button = host?.querySelector('button')
+    act(() => button?.click())
+    expect(() => window.dispatchEvent(new Event('pagehide'))).not.toThrow()
+
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(sendBeacon).toHaveBeenCalledTimes(1)
+
+    flushDriveTelemetry()
+    await settlePromises()
+    expect(sendClientTelemetryBatch).toHaveBeenCalledTimes(1)
+  })
+
   it('captures Drive dialog and menu interactions rendered through portals', async () => {
     render(<DriveTelemetryBoundary scope='console'><div /></DriveTelemetryBoundary>)
     const portal = document.createElement('div')

@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseGitRepository, SynapseGitWorkingTreeChange } from "@/types/git"
 
 type GitDiscardChangesDialogProps = {
@@ -67,14 +68,17 @@ export function GitDiscardChangesDialog({
 
   const discard = async () => {
     if (!selectionId) return
+    const finishTracking = startTrackedOperation({ component: "git", eventKey: "git.discard" })
     setBusy(true)
     setError(null)
     try {
       await requireSynapseBridge().git.discardChanges({ repositoryId: repository.id, selectionId })
       setSelectionId(null)
       await onDiscarded()
+      finishTracking("success")
       onOpenChange(false)
     } catch (cause) {
+      finishTracking("failure")
       const nextError = cause instanceof Error ? cause.message : "丢弃改动失败。"
       if (nextError.includes("重新审阅") || nextError.includes("已过期")) setSelectionId(null)
       setError(nextError)
@@ -121,6 +125,7 @@ export function GitDiscardChangesDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
           <AlertDialogAction
+            data-track="git.discard.confirm"
             variant="destructive"
             disabled={busy || preparing || !selectionId}
             onClick={(event) => {

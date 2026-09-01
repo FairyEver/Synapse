@@ -42,6 +42,7 @@ import {
 } from "../../../src/components/ui/table"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type { SynapseQuickInputItem } from "../../../src/types/quick-input"
@@ -153,6 +154,8 @@ export function QuickInputModule() {
       setForm((current) => ({ ...current, error: "内容不能为空" }))
       return
     }
+    const eventKey = form.mode === "edit" ? "quick-input.item.update" : "quick-input.item.create"
+    const finishTracking = startTrackedOperation({ component: "quick-input", eventKey })
 
     try {
       setSaving(true)
@@ -161,9 +164,11 @@ export function QuickInputModule() {
         : await quickInputBridge.item.create({ content })
 
       setItems((current) => mergeItem(current, saved))
+      finishTracking("success")
       toast.success("已保存")
       closeForm()
     } catch (error) {
+      finishTracking("failure")
       const message = errorMessage(error, "保存失败")
       logger.error("Failed to save quick input item.", error)
       setForm((current) => ({ ...current, error: message }))
@@ -175,12 +180,15 @@ export function QuickInputModule() {
 
   const deleteItem = async () => {
     if (!deleteTarget || deleting) return
+    const finishTracking = startTrackedOperation({ component: "quick-input", eventKey: "quick-input.item.delete" })
     try {
       setDeleting(true)
       await quickInputBridge.item.delete({ id: deleteTarget.id })
+      finishTracking("success")
       setItems((current) => current.filter((entry) => entry.id !== deleteTarget.id))
       setDeleteTarget(null)
     } catch (error) {
+      finishTracking("failure")
       logger.error("Failed to delete quick input item.", error)
       toast.error("删除失败")
     } finally {
@@ -249,6 +257,7 @@ export function QuickInputModule() {
           }
         }}
         onSubmit={submitForm}
+        data-track="quick-input.item.save"
       />
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}>
         <AlertDialogContent onCloseAutoFocus={restoreDeleteFocus}>

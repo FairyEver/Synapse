@@ -229,7 +229,7 @@ export function DrivePreviewFloatingMenu({
                 if (action.kind === 'link') {
                   return (
                     <DropdownMenuItem key={action.id} asChild>
-                      <a data-drive-telemetry-event={`web.drive.preview.${action.id}`} href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+                      <a data-drive-telemetry-event='web.drive.preview.action' href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
                         <action.icon data-icon='inline-start' />
                         {action.label}
                       </a>

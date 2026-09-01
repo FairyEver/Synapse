@@ -6,6 +6,7 @@ import type {
   DriveAnnotationThreadDto,
 } from '@synapse/shared'
 import { trackedDriveAnnotationApi as driveAnnotationApi } from './shared/drive-telemetry-api'
+import { startDriveOperation } from './shared/drive-telemetry'
 
 export type DriveAnnotationContext =
   | { readonly context: 'owner'; readonly itemId: string }
@@ -37,9 +38,9 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
   const createMutation = useMutation({
     mutationFn: (body: DriveAnnotationCreateInput) => {
       if (!input) throw new Error('Drive annotation context is missing.')
-      return input.context === 'owner'
+      return trackAnnotationOperation('web.drive.comment.create', () => input.context === 'owner'
         ? driveAnnotationApi.createOwner(input.itemId, body)
-        : driveAnnotationApi.createShare(input.shareId, input.itemId, body)
+        : driveAnnotationApi.createShare(input.shareId, input.itemId, body))
     },
     onSuccess: invalidate,
   })
@@ -47,9 +48,9 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     mutationFn: (variables: { readonly threadId: string } & DriveAnnotationReplyInput) => {
       if (!input) throw new Error('Drive annotation context is missing.')
       const { threadId, ...body } = variables
-      return input.context === 'owner'
+      return trackAnnotationOperation('web.drive.comment.reply', () => input.context === 'owner'
         ? driveAnnotationApi.replyOwner(input.itemId, threadId, body)
-        : driveAnnotationApi.replyShare(input.shareId, input.itemId, threadId, body)
+        : driveAnnotationApi.replyShare(input.shareId, input.itemId, threadId, body))
     },
     onSuccess: invalidate,
   })
@@ -57,18 +58,18 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     mutationFn: (variables: { readonly commentId: string } & DriveAnnotationCommentUpdateInput) => {
       if (!input) throw new Error('Drive annotation context is missing.')
       const { commentId, ...body } = variables
-      return input.context === 'owner'
+      return trackAnnotationOperation('web.drive.comment.update', () => input.context === 'owner'
         ? driveAnnotationApi.updateOwnerComment(input.itemId, commentId, body)
-        : driveAnnotationApi.updateShareComment(input.shareId, input.itemId, commentId, body)
+        : driveAnnotationApi.updateShareComment(input.shareId, input.itemId, commentId, body))
     },
     onSuccess: invalidate,
   })
   const deleteCommentMutation = useMutation({
     mutationFn: (commentId: string) => {
       if (!input) throw new Error('Drive annotation context is missing.')
-      return input.context === 'owner'
+      return trackAnnotationOperation('web.drive.comment.delete', () => input.context === 'owner'
         ? driveAnnotationApi.deleteOwnerComment(input.itemId, commentId)
-        : driveAnnotationApi.deleteShareComment(input.shareId, input.itemId, commentId)
+        : driveAnnotationApi.deleteShareComment(input.shareId, input.itemId, commentId))
     },
     onSuccess: invalidate,
   })
@@ -85,5 +86,17 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
     updatingComment: updateMutation.isPending,
     deleteComment: deleteCommentMutation.mutateAsync,
     deletingComment: deleteCommentMutation.isPending,
+  }
+}
+
+async function trackAnnotationOperation<T>(eventKey: string, operation: () => Promise<T>): Promise<T> {
+  const finish = startDriveOperation(eventKey, 'drive-comments')
+  try {
+    const result = await operation()
+    finish('success')
+    return result
+  } catch (error) {
+    finish('failure')
+    throw error
   }
 }

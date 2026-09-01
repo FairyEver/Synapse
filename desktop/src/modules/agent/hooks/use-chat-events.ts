@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
+import { track } from "@/lib/ui-tracking"
 import { redactSessionKey } from "@/lib/agent-redaction"
 import type {
   SynapseAgentContextUsage,
@@ -282,6 +283,16 @@ function useChatEvents(
       updateTimeline((current) =>
         appendAgentTimelineEvent(current, domainEvent.payload.event, domainEvent.timestamp, agentType))
       const event = domainEvent.payload.event
+      if (event.type === "result" || event.type === "error") {
+        track({
+          component: "agent",
+          name: "agent.response.complete",
+          action: "complete",
+          eventKey: "agent.response.complete",
+          category: "operation",
+          outcome: event.type === "result" ? "success" : "failure",
+        })
+      }
       const resultModel = event.type === "result" ? event.metadata?.model : undefined
       if (resultModel) {
         dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: resultModel })

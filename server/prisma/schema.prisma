@@ -93,6 +93,9 @@ model ClientTelemetryEvent {
   @@index([userId, occurredAt])
   @@index([clientInstanceId, occurredAt])
   @@index([category, eventKey, occurredAt])
+  @@index([eventKey, occurredAt])
+  @@index([moduleId, occurredAt])
+  @@index([sessionId, occurredAt])
   @@index([appVersion, occurredAt])
   @@index([platform, occurredAt])
 }

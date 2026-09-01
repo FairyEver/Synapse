@@ -18,6 +18,7 @@ import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import { Spinner } from "../../../src/components/ui/spinner"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { useEditorAdaptersForContentType } from "../../../src/modules/content/hooks/use-editor-adapters-for-content-type"
 import { SharedInstallerFlow } from "../../../src/modules/installers/shared/shared-installer-flow"
 import type { SynapseInstallerSource } from "../../../src/types/installers"
@@ -83,12 +84,15 @@ function RuleSourceInput({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (busy) return
+    const finishTracking = startTrackedOperation({ component: "rule-installer", eventKey: "rule-installer.source.prepare" })
     setBusy(true)
     setError("")
     try {
       const source = await prepareInlineRuleSource({ name, body })
+      finishTracking("success")
       onSourceReady(source)
     } catch (err) {
+      finishTracking("failure")
       const message = err instanceof Error ? err.message : "读取 Rule 失败"
       logger.error("Failed to prepare inline Rule source.", err)
       setError(message)
@@ -99,7 +103,7 @@ function RuleSourceInput({
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} data-track="rule-installer.source.prepare">
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field className="gap-2 md:grid md:grid-cols-[7rem_minmax(0,1fr)] md:items-center">

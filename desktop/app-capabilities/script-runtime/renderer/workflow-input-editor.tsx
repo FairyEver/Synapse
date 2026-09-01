@@ -58,6 +58,7 @@ export function WorkflowScriptInputEditor({
               variant="ghost"
               size="icon"
               aria-label="删除输入"
+              data-track="script-runtime.input.remove"
               onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}
             >
               <Trash2 className="size-4" />
@@ -75,6 +76,7 @@ export function WorkflowScriptInputEditor({
         type="button"
         variant="outline"
         size="sm"
+        data-track="script-runtime.input.add"
         onClick={() => onChange([
           ...value,
           { name: "", source: { type: "static_json", value: null } },

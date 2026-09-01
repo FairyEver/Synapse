@@ -7,6 +7,7 @@ import { Card, CardContent } from "../../../src/components/ui/card"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { Switch } from "../../../src/components/ui/switch"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import type {
   SynapseSystemNotifierSettings,
@@ -47,6 +48,7 @@ export function SystemNotifierModule() {
 
   const updateSettings = useCallback(async (patch: SynapseSystemNotifierSettingsPatch) => {
     if (!settings || saving) return
+    const finishTracking = startTrackedOperation({ component: "system-notifier", eventKey: "system-notifier.settings.update" })
     const previous = settings
     setSaveError(false)
     setTestError(false)
@@ -54,7 +56,9 @@ export function SystemNotifierModule() {
     setSaving(true)
     try {
       setSettings(await bridge.settings.update(patch))
+      finishTracking("success")
     } catch {
+      finishTracking("failure")
       logger.error("System notifier settings update failed.")
       setSettings(previous)
       setSaveError(true)
@@ -65,12 +69,15 @@ export function SystemNotifierModule() {
 
   const testNotification = useCallback(async () => {
     if (testingRef.current || saving) return
+    const finishTracking = startTrackedOperation({ component: "system-notifier", eventKey: "system-notifier.notification.test" })
     testingRef.current = true
     setTestError(false)
     setTesting(true)
     try {
       await bridge.notification.test()
+      finishTracking("success")
     } catch {
+      finishTracking("failure")
       logger.error("System notifier test IPC failed.")
       setTestError(true)
     } finally {
@@ -116,6 +123,7 @@ export function SystemNotifierModule() {
                 onCheckedChange={(silent) => void updateSettings({ silent })}
               />
               <Button
+                data-track="system-notifier.notification.test"
                 type="button"
                 variant="outline"
                 disabled={saving || testing}

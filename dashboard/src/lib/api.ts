@@ -134,6 +134,45 @@ export type TelemetryStats = {
     platforms: TelemetryDimension[]
     windowTypes: TelemetryDimension[]
   }
+  insights: {
+    active: {
+      dau: number
+      wau: number
+      mau: number
+      stickiness: number
+    }
+    sessions: {
+      averageDurationMs: number | null
+      p95DurationMs: number | null
+    }
+    identities: {
+      new: number
+      returning: number
+    }
+    adoption: Array<{
+      featureKey: string
+      identities: number
+      sessions: number
+      events: number
+      successRate: number | null
+    }>
+    funnels: Array<{
+      funnelKey: string
+      stages: Array<{
+        stageKey: string
+        identities: number
+        conversionFromStart: number
+        conversionFromPrevious: number
+      }>
+    }>
+    retention: Array<{
+      cohortDate: string
+      cohortSize: number
+      day1Rate: number | null
+      day7Rate: number | null
+      day30Rate: number | null
+    }>
+  }
   filterOptions: {
     modules: TelemetryDimension[]
     events: TelemetryDimension[]

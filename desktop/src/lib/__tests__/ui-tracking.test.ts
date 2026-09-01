@@ -6,6 +6,7 @@ import { redactSessionKey } from "../agent-redaction"
 import {
   installNativeDataTrackCapture,
   resetRemoteTrackingForTests,
+  runTrackedOperation,
   sanitizeTrackRecord,
   sanitizeTrackValue,
   startTrackedOperation,
@@ -139,6 +140,59 @@ describe("ui tracking value sanitizers", () => {
         outcome: "success",
         durationMs: expect.any(Number),
       }),
+    )
+  })
+
+  it("preserves the business result when tracking delivery fails", async () => {
+    const businessCallback = vi.fn().mockResolvedValue("saved")
+    rendererLog.mockImplementation(() => {
+      throw new Error("renderer telemetry IPC failed")
+    })
+
+    await expect(runTrackedOperation(
+      { component: "drive", eventKey: "drive.editor.save" },
+      businessCallback,
+    )).resolves.toBe("saved")
+    expect(businessCallback).toHaveBeenCalledOnce()
+  })
+
+  it("preserves the business result when the telemetry clock fails", async () => {
+    const businessCallback = vi.fn().mockResolvedValue("saved")
+    vi.spyOn(performance, "now").mockImplementation(() => {
+      throw new Error("clock unavailable")
+    })
+
+    await expect(runTrackedOperation(
+      { component: "drive", eventKey: "drive.editor.save" },
+      businessCallback,
+    )).resolves.toBe("saved")
+    expect(businessCallback).toHaveBeenCalledOnce()
+  })
+
+  it("records a failed or cancelled operation without retrying the business callback", async () => {
+    const failure = new Error("save failed")
+    const failedCallback = vi.fn().mockRejectedValue(failure)
+    const cancelled = Object.assign(new Error("cancelled"), { name: "AbortError" })
+    const cancelledCallback = vi.fn().mockRejectedValue(cancelled)
+
+    await expect(runTrackedOperation(
+      { component: "drive", eventKey: "drive.editor.save" },
+      failedCallback,
+    )).rejects.toBe(failure)
+    await expect(runTrackedOperation(
+      { component: "drive", eventKey: "drive.upload" },
+      cancelledCallback,
+    )).rejects.toBe(cancelled)
+
+    expect(failedCallback).toHaveBeenCalledOnce()
+    expect(cancelledCallback).toHaveBeenCalledOnce()
+    expect(rendererLog).toHaveBeenCalledWith(
+      "drive.editor.save:complete",
+      expect.objectContaining({ outcome: "failure" }),
+    )
+    expect(rendererLog).toHaveBeenCalledWith(
+      "drive.upload:complete",
+      expect.objectContaining({ outcome: "cancelled" }),
     )
   })
 

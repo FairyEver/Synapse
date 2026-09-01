@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import {
   createJsonRepairErrorPayload,
   type JsonRepairErrorPayload,
@@ -42,15 +43,18 @@ export function useJsonRepair() {
 
   const repair = useCallback(async () => {
     if (!canRepair) return
+    const finishTracking = startTrackedOperation({ component: "json-repair", eventKey: "json-repair.text.repair" })
     const revision = revisionRef.current
     setState({ busy: true, error: null, json: null })
     try {
       const response = await bridge.text.repair({ text })
+      finishTracking(response.ok ? "success" : "failure")
       if (revision !== revisionRef.current) return
       setState(response.ok
         ? { busy: false, error: null, json: response.result.json }
         : { busy: false, error: response.error, json: null })
     } catch {
+      finishTracking("failure")
       logger.error("JSON repair IPC failed.")
       if (revision === revisionRef.current) {
         setState({

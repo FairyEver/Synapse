@@ -112,7 +112,7 @@ export function DriveMoveDialog({
         </div>
         <DialogFooter>
           <Button type='button' variant='outline' disabled={submitting} onClick={() => onOpenChange(false)}>取消</Button>
-          <Button type='button' disabled={submitting} onClick={() => onSubmit(selectedParentId)}>移动</Button>
+          <Button data-drive-telemetry-event='web.drive.item.move-submit' type='button' disabled={submitting} onClick={() => onSubmit(selectedParentId)}>移动</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

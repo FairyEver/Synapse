@@ -228,7 +228,7 @@ function DrivePreviewHeaderAction({
   if (action.kind === 'link') {
     return (
       <Button asChild variant='outline' size='sm'>
-        <a data-drive-telemetry-event={`web.drive.preview.${action.id}`} href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+        <a data-drive-telemetry-event='web.drive.preview.action' href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
           <action.icon data-icon='inline-start' />
           {action.label}
         </a>
@@ -284,7 +284,7 @@ function DrivePreviewHeaderMenuAction({
   if (action.kind === 'link') {
     return (
       <DropdownMenuItem asChild>
-        <a data-drive-telemetry-event={`web.drive.preview.${action.id}`} href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+        <a data-drive-telemetry-event='web.drive.preview.action' href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
           <action.icon data-icon='inline-start' />
           {action.label}
         </a>

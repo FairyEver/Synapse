@@ -50,6 +50,7 @@ void (async () => {
   }, { once: true })
 
   if (windowType === "workflow-editor") {
+    updateTrackingContext({ moduleId: "workflow", windowType })
     const { WorkflowEditorApp } = await import("@/modules/workflow/editor/editor-app")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
@@ -63,6 +64,7 @@ void (async () => {
       </StrictMode>,
     )
   } else if (windowType === "workflow-runner") {
+    updateTrackingContext({ moduleId: "workflow", windowType })
     const { WorkflowRunnerApp } = await import("@/modules/workflow/runner/runner-app")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
@@ -74,6 +76,7 @@ void (async () => {
       </StrictMode>,
     )
   } else if (windowType === "knowledge-source-manager") {
+    updateTrackingContext({ moduleId: "knowledge-base", windowType })
     const { KnowledgeBaseSourceManagerWindow } = await import("@/modules/knowledge-base/source-manager-window")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
@@ -85,6 +88,7 @@ void (async () => {
       </StrictMode>,
     )
   } else if (windowType === "automation-editor") {
+    updateTrackingContext({ moduleId: "automation", windowType })
     const { AutomationEditorApp } = await import("@/modules/automation/editor/editor-app")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

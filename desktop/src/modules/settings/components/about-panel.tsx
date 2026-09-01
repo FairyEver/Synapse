@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation, track } from "@/lib/ui-tracking"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import {
   SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
@@ -267,7 +268,12 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
         if (!installerUrl || !targetVersion || !isOfficialMacInstallerUrl(installerUrl, targetVersion)) {
           throw new Error("安装包地址不可用，请稍后重试。")
         }
-        await getSynapseBridge()?.shell.openExternal(installerUrl)
+        const shell = getSynapseBridge()?.shell
+        if (!shell) throw new Error("当前环境无法打开安装包。")
+        await runTrackedOperation(
+          { component: "update", eventKey: "update.installer.open" },
+          () => shell.openExternal(installerUrl),
+        )
         return
       }
 
@@ -310,6 +316,14 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
   const handlePostponeInstall = () => {
     logger.info("Automatic update install postponed.")
+    track({
+      component: "update",
+      name: "update.install.postpone",
+      action: "cancel",
+      eventKey: "update.install.postpone",
+      category: "operation",
+      outcome: "cancelled",
+    })
     setAutomaticInstallArmed(false)
     clearInstallTimers()
     setInstallCountdown(null)

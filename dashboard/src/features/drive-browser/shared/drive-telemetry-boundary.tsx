@@ -1,7 +1,13 @@
 import { useEffect, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
-import { trackDriveEvent, type DriveTelemetryAction } from './drive-telemetry'
+import { startDriveOperation, trackDriveEvent, type DriveTelemetryAction } from './drive-telemetry'
 
 export type DriveTelemetryScope = 'console' | 'owner' | 'share'
+
+const PAGE_EVENT_KEYS = {
+  console: { open: 'web.drive.page.console.open', close: 'web.drive.page.console.close', duration: 'web.drive.page.console.duration' },
+  owner: { open: 'web.drive.page.owner.open', close: 'web.drive.page.owner.close', duration: 'web.drive.page.owner.duration' },
+  share: { open: 'web.drive.page.share.open', close: 'web.drive.page.share.close', duration: 'web.drive.page.share.duration' },
+} as const
 
 export function DriveTelemetryBoundary({
   scope,
@@ -11,19 +17,22 @@ export function DriveTelemetryBoundary({
   readonly children: ReactNode
 }) {
   useEffect(() => {
+    const eventKeys = PAGE_EVENT_KEYS[scope]
+    const finishDuration = startDriveOperation(eventKeys.duration, 'drive-page')
     trackDriveEvent({
-      eventKey: `web.drive.page.${scope}.open`,
+      eventKey: eventKeys.open,
       component: 'drive-page',
       action: 'open',
       category: 'lifecycle',
     })
     return () => {
       trackDriveEvent({
-        eventKey: `web.drive.page.${scope}.close`,
+        eventKey: eventKeys.close,
         component: 'drive-page',
         action: 'close',
         category: 'lifecycle',
       })
+      finishDuration('success')
     }
   }, [scope])
 

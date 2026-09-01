@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type {
   SynapseGitBranch,
   SynapseGitCheckoutRemoteBranchInput,
@@ -55,15 +56,18 @@ export function useGitBranches({ repositoryId, loadEnabled, refreshKey, onChange
     }
   }, [loadEnabled, refresh, refreshKey])
 
-  const runMutation = async (action: () => Promise<unknown>, fallback: string): Promise<boolean> => {
+  const runMutation = async (eventKey: string, action: () => Promise<unknown>, fallback: string): Promise<boolean> => {
+    const finishTracking = startTrackedOperation({ component: "git", eventKey })
     setBusy(true)
     setError(null)
     try {
       await action()
       if (loadEnabled) await refresh()
       await onChanged()
+      finishTracking("success")
       return true
     } catch (cause) {
+      finishTracking("failure")
       setError(errorMessage(cause, fallback))
       return false
     } finally {
@@ -72,21 +76,25 @@ export function useGitBranches({ repositoryId, loadEnabled, refreshKey, onChange
   }
 
   const checkoutLocal = async (branchName: string): Promise<boolean> => runMutation(
+    "git.branch.checkout",
     () => requireSynapseBridge().git.checkoutBranch(repositoryId, branchName),
     "切换分支失败。",
   )
 
   const createBranch = async (branchName: string): Promise<boolean> => runMutation(
+    "git.branch.create",
     () => requireSynapseBridge().git.createBranch(repositoryId, branchName),
     "新建分支失败。",
   )
 
   const checkoutRemote = async (input: SynapseGitCheckoutRemoteBranchInput): Promise<boolean> => runMutation(
+    "git.branch.checkout-remote",
     () => requireSynapseBridge().git.checkoutRemoteBranch(repositoryId, input),
     "检出远程分支失败。",
   )
 
   const fetchRemote = async (): Promise<void> => {
+    const finishTracking = startTrackedOperation({ component: "git", eventKey: "git.branch.fetch-remote" })
     const operationId = globalThis.crypto?.randomUUID?.()
       ?? `git-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
     fetchOperationIdRef.current = operationId
@@ -96,7 +104,9 @@ export function useGitBranches({ repositoryId, loadEnabled, refreshKey, onChange
       await requireSynapseBridge().git.fetchRemoteBranches(repositoryId, operationId)
       await refresh()
       await onChanged()
+      finishTracking("success")
     } catch (cause) {
+      finishTracking("failure")
       setError(errorMessage(cause, "获取远程分支失败。"))
     } finally {
       if (fetchOperationIdRef.current === operationId) {
@@ -109,9 +119,12 @@ export function useGitBranches({ repositoryId, loadEnabled, refreshKey, onChange
   const cancelRemoteFetch = async (): Promise<void> => {
     const operationId = fetchOperationIdRef.current
     if (!operationId) return
+    const finishTracking = startTrackedOperation({ component: "git", eventKey: "git.branch.fetch-cancel" })
     try {
       await requireSynapseBridge().git.cancelOperation(operationId)
+      finishTracking("success")
     } catch (cause) {
+      finishTracking("failure")
       setError(errorMessage(cause, "取消获取远程分支失败。"))
     }
   }

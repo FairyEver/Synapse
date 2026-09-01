@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import { ModuleContentPanel } from "@/components/module-page"
 import {
   AlertDialog,
@@ -151,13 +152,16 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   }
 
   const save = async () => {
+    const finishTracking = startTrackedOperation({ component: "model-price", eventKey: "model-price.rule.save" })
     setSaving(true)
     try {
       const saved = await requireSynapseBridge().modelPrice.rule.save(rows.map(toRuleInput))
       setRows(saved.map(toEditableRule))
       onSaved()
       showSuccess("已保存")
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       const message = error instanceof Error ? error.message : "保存失败"
       showError(message)
       setFocusErrorMessage(message)
@@ -167,13 +171,16 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
   }
 
   const clear = async () => {
+    const finishTracking = startTrackedOperation({ component: "model-price", eventKey: "model-price.rule.clear" })
     setClearing(true)
     try {
       const clearedRows = await requireSynapseBridge().modelPrice.rule.clear()
       setRows(clearedRows.map(toEditableRule))
       onSaved()
       showSuccess("已清空")
+      finishTracking("success")
     } catch {
+      finishTracking("failure")
       showError("清空失败")
     } finally {
       setClearing(false)
@@ -182,6 +189,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
 
   const importPreset = async () => {
     if (selectedPresetIds.length === 0) return
+    const finishTracking = startTrackedOperation({ component: "model-price", eventKey: "model-price.preset.import" })
     setImporting(true)
     try {
       const selectedIds = presetState.data
@@ -192,7 +200,9 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
       setImportDialogOpen(false)
       onSaved()
       showSuccess(selectedIds.length > 1 ? `已导入 ${selectedIds.length} 个预设` : "已导入预设")
+      finishTracking("success")
     } catch {
+      finishTracking("failure")
       showError("导入失败")
     } finally {
       setImporting(false)

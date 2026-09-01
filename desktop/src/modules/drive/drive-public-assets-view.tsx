@@ -49,6 +49,7 @@ import {
 import { driveErrorMessage as errorMessage, formatDriveBytes as formatBytes } from "@/lib/drive-format"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 import type { DrivePublicAssetLocalFile, DrivePublicAssetUploadResultItem } from "@/types/bridge"
 import { DriveItemIcon } from "./drive-item-icon"
 import { DRIVE_PUBLIC_ASSET_TABLE_COLUMNS, DriveTableColumns } from "./drive-table-columns"
@@ -178,7 +179,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     }
     setUploading(true)
     try {
-      const result = await requireSynapseBridge().drive.directLink.upload({ files })
+      const result = await runTrackedOperation(
+        { component: "drive", eventKey: "drive.public-asset.upload" },
+        () => requireSynapseBridge().drive.directLink.upload({ files }),
+      )
       setUploadResults(result.results)
       toast(publicAssetUploadToast(result.results))
       await loadAssets()
@@ -205,10 +209,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     }
     setBusyAssetId(target.assetId)
     try {
-      await requireSynapseBridge().drive.directLink.update({
-        assetId: target.assetId,
-        ...file,
-      })
+      await runTrackedOperation(
+        { component: "drive", eventKey: "drive.public-asset.replace" },
+        () => requireSynapseBridge().drive.directLink.update({ assetId: target.assetId, ...file }),
+      )
       toast("已替换")
       await loadAssets()
       onUsageChange?.()
@@ -226,10 +230,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     if (!name) return
     setBusyAssetId(renameState.asset.assetId)
     try {
-      await requireSynapseBridge().drive.directLink.rename({
-        assetId: renameState.asset.assetId,
-        name,
-      })
+      await runTrackedOperation(
+        { component: "drive", eventKey: "drive.public-asset.rename" },
+        () => requireSynapseBridge().drive.directLink.rename({ assetId: renameState.asset.assetId, name }),
+      )
       toast("已重命名")
       setRenameState(null)
       await loadAssets()
@@ -267,7 +271,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     if (target.action === "trash") {
       await runAssetMutation(
         target.asset,
-        () => requireSynapseBridge().drive.directLink.delete({ assetId: target.asset.assetId }),
+        () => runTrackedOperation(
+          { component: "drive", eventKey: "drive.public-asset.trash" },
+          () => requireSynapseBridge().drive.directLink.delete({ assetId: target.asset.assetId }),
+        ),
         "已移到回收站",
         "移到回收站失败",
       )
@@ -275,7 +282,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
     }
     await runAssetMutation(
       target.asset,
-      () => requireSynapseBridge().drive.trash.delete({ itemId: target.asset.itemId }),
+      () => runTrackedOperation(
+        { component: "drive", eventKey: "drive.public-asset.delete" },
+        () => requireSynapseBridge().drive.trash.delete({ itemId: target.asset.itemId }),
+      ),
       "已删除",
       "删除失败",
       { refreshUsage: true },
@@ -285,7 +295,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
   const deletePublicAsset = useCallback(async (asset: DrivePublicAssetDto) => {
     await runAssetMutation(
       asset,
-      () => requireSynapseBridge().drive.trash.delete({ itemId: asset.itemId }),
+      () => runTrackedOperation(
+        { component: "drive", eventKey: "drive.public-asset.delete" },
+        () => requireSynapseBridge().drive.trash.delete({ itemId: asset.itemId }),
+      ),
       "已删除",
       "删除失败",
       { refreshUsage: true },
@@ -342,7 +355,10 @@ const DrivePublicAssetsView = forwardRef<DrivePublicAssetsViewHandle, DrivePubli
                 onRestore={() => {
                   void runAssetMutation(
                     asset,
-                    () => requireSynapseBridge().drive.directLink.restore({ assetId: asset.assetId }),
+                    () => runTrackedOperation(
+                      { component: "drive", eventKey: "drive.public-asset.restore" },
+                      () => requireSynapseBridge().drive.directLink.restore({ assetId: asset.assetId }),
+                    ),
                     "已恢复",
                     "恢复失败",
                   )

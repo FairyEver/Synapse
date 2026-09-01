@@ -2,11 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useUpdateOpenRequest } from "@/hooks/use-update-open-request"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation, track } from "@/lib/ui-tracking"
 import type { SynapseAppUpdateState } from "@/types/update"
 
 const logger = createRendererLogger("settings.app-update")
 
 type UpdateAction = "check" | "download" | "install"
+
+const UPDATE_ACTION_EVENT_KEYS = {
+  check: "update.check",
+  download: "update.download",
+} as const
 
 const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   currentVersion: "0.0.0",
@@ -57,9 +63,11 @@ function useAppUpdateController() {
 
     inFlightActionsRef.current.add(action)
     try {
-      const state = action === "download"
-        ? await bridge.downloadUpdate()
-        : await bridge.checkForUpdates()
+      const eventKey = UPDATE_ACTION_EVENT_KEYS[action]
+      const state = await runTrackedOperation(
+        { component: "update", eventKey },
+        () => action === "download" ? bridge.downloadUpdate() : bridge.checkForUpdates(),
+      )
       if (!mountedRef.current) return undefined
 
       inFlightActionsRef.current.delete(action)
@@ -169,6 +177,13 @@ function useAppUpdateController() {
   }, [advanceAutomaticUpdate, applyUpdateState])
 
   useUpdateOpenRequest(useCallback(async (request, { acknowledge }) => {
+    track({
+      component: "update",
+      name: request.automatic ? "update.deeplink.accept" : "update.deeplink.reject",
+      action: "open",
+      eventKey: request.automatic ? "update.deeplink.accept" : "update.deeplink.reject",
+      category: "navigation",
+    })
     if (!request.automatic) {
       await acknowledge()
       return
@@ -192,7 +207,12 @@ function useAppUpdateController() {
   }, [advanceAutomaticUpdate, runUpdateAction])
 
   const cancelDownload = useCallback(async () => {
-    await getSynapseBridge()?.updater?.cancelDownload()
+    const updater = getSynapseBridge()?.updater
+    if (!updater) return
+    await runTrackedOperation(
+      { component: "update", eventKey: "update.download.cancel" },
+      () => updater.cancelDownload(),
+    )
   }, [])
 
   const installUpdate = useCallback(async () => {
@@ -203,7 +223,10 @@ function useAppUpdateController() {
 
     inFlightActionsRef.current.add("install")
     try {
-      await bridge.installUpdate()
+      await runTrackedOperation(
+        { component: "update", eventKey: "update.install" },
+        () => bridge.installUpdate(),
+      )
     } finally {
       inFlightActionsRef.current.delete("install")
     }

@@ -31,6 +31,7 @@ import {
 import { trackedDriveFileVersionsApi as driveFileVersionsApi } from './shared/drive-telemetry-api'
 import { cn } from '@/lib/utils'
 import { formatDriveBrowserBytes } from './shared/drive-format'
+import { startDriveOperation } from './shared/drive-telemetry'
 
 const versionPageSize = 100
 const versionSkeletonRows = [0, 1, 2] as const
@@ -69,7 +70,10 @@ export function DriveFileVersionsDialog({
     void Promise.resolve(onChanged?.()).catch(() => undefined)
   }
   const restoreMutation = useMutation({
-    mutationFn: (versionId: string) => driveFileVersionsApi.restore(itemId, versionId),
+    mutationFn: (versionId: string) => trackVersionOperation(
+      'web.drive.version.restore',
+      () => driveFileVersionsApi.restore(itemId, versionId),
+    ),
     onSuccess: () => {
       setConfirmTarget(null)
       invalidateVersionState()
@@ -78,7 +82,10 @@ export function DriveFileVersionsDialog({
     onError: (error: Error) => toast.error(error.message),
   })
   const deleteMutation = useMutation({
-    mutationFn: (versionId: string) => driveFileVersionsApi.delete(itemId, versionId),
+    mutationFn: (versionId: string) => trackVersionOperation(
+      'web.drive.version.delete',
+      () => driveFileVersionsApi.delete(itemId, versionId),
+    ),
     onSuccess: (result) => {
       setConfirmTarget(null)
       invalidateVersionState()
@@ -88,7 +95,10 @@ export function DriveFileVersionsDialog({
   })
   const pinMutation = useMutation({
     mutationFn: ({ versionId, isPinned }: { versionId: string; isPinned: boolean }) =>
-      driveFileVersionsApi.updatePin(itemId, versionId, isPinned),
+      trackVersionOperation(
+        'web.drive.version.pin-update',
+        () => driveFileVersionsApi.updatePin(itemId, versionId, isPinned),
+      ),
     onSuccess: () => {
       invalidateVersionState()
       toast.success('已保存')
@@ -354,6 +364,7 @@ function DriveFileVersionRow({
         <div className='flex items-center justify-end gap-1'>
           {canDownload ? (
             <DriveVersionActionButton
+              telemetryEvent='web.drive.version.download'
               href={driveFileVersionsApi.downloadUrl(itemId, version.id)}
               label={`下载 v${version.versionNumber}`}
               tooltip='下载'
@@ -363,6 +374,7 @@ function DriveFileVersionRow({
           ) : null}
           {canModify ? (
             <DriveVersionActionButton
+              telemetryEvent='web.drive.version.restore-open'
               label={`恢复 v${version.versionNumber}`}
               tooltip='恢复'
               onClick={() => onRestore(version)}
@@ -372,6 +384,7 @@ function DriveFileVersionRow({
           ) : null}
           {canModify ? (
             <DriveVersionActionButton
+              telemetryEvent='web.drive.version.pin-toggle'
               disabled={pinning}
               label={version.isPinned ? `取消保留 v${version.versionNumber}` : `保留 v${version.versionNumber}`}
               tooltip={version.isPinned ? '取消保留' : '保留'}
@@ -382,6 +395,7 @@ function DriveFileVersionRow({
           ) : null}
           {canModify && !version.isPinned ? (
             <DriveVersionActionButton
+              telemetryEvent='web.drive.version.delete-open'
               destructive
               label={`删除 v${version.versionNumber}`}
               tooltip='删除'
@@ -414,6 +428,7 @@ function DriveVersionActionButton({
   label,
   onClick,
   tooltip,
+  telemetryEvent,
 }: {
   readonly children: ReactNode
   readonly destructive?: boolean
@@ -422,14 +437,16 @@ function DriveVersionActionButton({
   readonly label: string
   readonly onClick?: () => void
   readonly tooltip: string
+  readonly telemetryEvent: string
 }) {
   const className = cn('size-8', destructive && 'text-destructive hover:text-destructive')
   const button = href ? (
     <Button asChild variant='ghost' size='icon' className={className} aria-label={label}>
-      <a href={href}>{children}</a>
+      <a data-drive-telemetry-event={telemetryEvent} href={href}>{children}</a>
     </Button>
   ) : (
     <Button
+      data-drive-telemetry-event={telemetryEvent}
       type='button'
       variant='ghost'
       size='icon'
@@ -450,6 +467,18 @@ function DriveVersionActionButton({
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>
   )
+}
+
+async function trackVersionOperation<T>(eventKey: string, operation: () => Promise<T>): Promise<T> {
+  const finish = startDriveOperation(eventKey, 'drive-versions')
+  try {
+    const result = await operation()
+    finish('success')
+    return result
+  } catch (error) {
+    finish('failure')
+    throw error
+  }
 }
 
 function driveVersionSourceLabel(source: DriveFileVersionSource) {

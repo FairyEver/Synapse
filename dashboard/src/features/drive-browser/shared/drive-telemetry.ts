@@ -231,13 +231,14 @@ function installLifecycleFlush(): void {
 }
 
 function flushWithBeacon(): void {
+  let batch: QueuedDriveTelemetryEvent[] = []
   try {
     drainSampledEvents()
     if (queue.length === 0 || typeof navigator.sendBeacon !== 'function') {
       flushDriveTelemetry()
       return
     }
-    const batch = takeEligibleBatch()
+    batch = takeEligibleBatch()
     if (batch.length === 0) return
     const body = new Blob([JSON.stringify({ events: batch.map((entry) => entry.event) })], { type: 'application/json' })
     if (navigator.sendBeacon('/api/client-telemetry/events', body)) {
@@ -246,6 +247,10 @@ function flushWithBeacon(): void {
     queue.unshift(...batch)
     trimQueue()
   } catch {
+    if (batch.length > 0) {
+      queue.unshift(...batch)
+      trimQueue()
+    }
     return
   }
 }

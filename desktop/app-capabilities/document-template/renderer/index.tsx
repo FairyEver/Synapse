@@ -22,6 +22,7 @@ import { Spinner } from "../../../src/components/ui/spinner"
 import { Switch } from "../../../src/components/ui/switch"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 
 type JsonSource = "file" | "inline"
@@ -93,6 +94,7 @@ export function DocumentTemplateModule() {
       },
     })
     if (!jsonInput) return
+    const finishTracking = startTrackedOperation({ component: "document-template", eventKey: "document-template.document.generate" })
 
     try {
       setBusy(true)
@@ -103,8 +105,10 @@ export function DocumentTemplateModule() {
         ...jsonInput,
       })
       setResultPath(result.outputPath)
+      finishTracking("success")
       toast.success("生成完成")
     } catch (error) {
+      finishTracking("failure")
       const message = errorMessage(error, "生成失败")
       logger.error("Document generation failed.", error)
       setFormError(message)
@@ -122,9 +126,12 @@ export function DocumentTemplateModule() {
 
   const revealGeneratedFile = async () => {
     if (!resultPath) return
+    const finishTracking = startTrackedOperation({ component: "document-template", eventKey: "document-template.output.reveal" })
     try {
       await requireBridgeDomain("shell").showItemInFolder(resultPath)
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       logger.error("Failed to reveal generated document.", error)
       toast.error(errorMessage(error, "无法在文件夹中查看"))
     }
@@ -133,7 +140,7 @@ export function DocumentTemplateModule() {
   return (
     <SystemAppWindowShell>
       <ScrollArea className="h-full min-h-0">
-        <form className="mx-auto w-full max-w-3xl p-3 sm:p-5" onSubmit={submit} aria-busy={busy}>
+        <form className="mx-auto w-full max-w-3xl p-3 sm:p-5" onSubmit={submit} aria-busy={busy} data-track="document-template.document.generate">
           <Card className="py-0">
             <CardContent className="grid gap-5 p-4 sm:p-5">
               <FieldSet className="min-w-0 gap-4">

@@ -20,6 +20,11 @@ import { cn, getDisplayNameInitials } from '@/lib/utils'
 const COMMENT_CARD_ESTIMATED_HEIGHT = 128
 const COMMENT_CARD_GAP = 12
 const COMMENT_DRAFT_CARD_ID = '__comment-draft__'
+const COMMENT_COMPOSER_EVENT_KEYS = {
+  draft: 'web.drive.comment.create',
+  reply: 'web.drive.comment.reply',
+  edit: 'web.drive.comment.update',
+} as const
 type CommentActionPromise = Promise<unknown>
 
 type CommentRailMeasurements = {
@@ -780,10 +785,10 @@ function CommentView({
                   !compact && 'opacity-70 group-hover/comment:opacity-100 group-focus-within/comment:opacity-100'
                 )}>
                   {canReply ? (
-                    <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartReply}>回复</Button>
+                    <Button data-drive-telemetry-event='web.drive.comment.reply-open' type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartReply}>回复</Button>
                   ) : null}
                   {comment.permissions.canEdit ? (
-                    <Button type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartEdit}>编辑</Button>
+                    <Button data-drive-telemetry-event='web.drive.comment.edit-open' type='button' variant='ghost' size='sm' className={cn(compact ? 'min-h-11 px-3' : 'h-7 px-2', 'text-xs')} disabled={actionsDisabled} onClick={onStartEdit}>编辑</Button>
                   ) : null}
                 </div>
               ) : null}
@@ -866,7 +871,7 @@ function CommentComposer({
       {error ? <div role='status' className='mt-2 text-sm text-destructive'>{error}</div> : null}
       <div className='mt-2 flex justify-end gap-1'>
         <Button type='button' variant='ghost' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={submitting} onClick={onCancel}>取消</Button>
-        <Button type='button' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={!value.trim() || submitting} onClick={onSubmit}>
+        <Button data-drive-telemetry-event={COMMENT_COMPOSER_EVENT_KEYS[dataAttribute]} type='button' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={!value.trim() || submitting} onClick={onSubmit}>
           {submitting ? submittingLabel : submitLabel}
         </Button>
       </div>
@@ -907,6 +912,7 @@ function CommentDeleteButton({
 
   return (
     <Button
+      data-drive-telemetry-event='web.drive.comment.delete'
       type='button'
       variant='ghost'
       size='icon'

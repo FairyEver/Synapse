@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseGitOperationState, SynapseGitUserFacingFailure } from "@/types/git"
 
 type CloneRepositoryInput = {
@@ -46,6 +47,18 @@ const EMPTY_BUSY_STATE: GitOperationBusyState = {
   globalPhase: null,
   repositoryOperationIds: {},
   repositoryPhases: {},
+}
+
+const GLOBAL_EVENT_KEYS: Record<GitGlobalOperation, string> = {
+  clone: "git.repository.clone",
+  "add-local": "git.repository.add-local",
+}
+
+const REPOSITORY_EVENT_KEYS: Record<GitRepositoryOperation, string> = {
+  sync: "git.repository.sync",
+  pull: "git.repository.pull",
+  push: "git.repository.push",
+  remove: "git.repository.remove",
 }
 
 function createClientOperationId(): string {
@@ -105,6 +118,8 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
   }, [])
 
   async function runGlobal(label: GitGlobalOperation, action: (operationId: string) => Promise<unknown>): Promise<GitGlobalOperationResult> {
+    const eventKey = GLOBAL_EVENT_KEYS[label]
+    const finishTracking = startTrackedOperation({ component: "git", eventKey })
     const operationId = createClientOperationId()
     setBusy((current) => ({ ...current, global: label, globalOperationId: operationId, globalPhase: "queued" }))
     setError(null)
@@ -112,10 +127,12 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
     try {
       await action(operationId)
       await onCompleted()
+      finishTracking("success")
       return { ok: true }
     } catch (err) {
       const message = err instanceof Error ? err.message : "操作失败。"
       if (isCancelledOperation(err)) {
+        finishTracking("cancelled")
         await onCompleted()
         setError(null)
         setLastFailure(null)
@@ -123,6 +140,7 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
       }
       await onCompleted()
       const failure = readOperationFailure(err, label)
+      finishTracking("failure")
       setError(message)
       setLastFailure(failure)
       retryRef.current = failure && (failure.category === "network" || failure.category === "timeout")
@@ -141,6 +159,8 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
     operation: GitRepositoryOperation,
     action: (operationId: string) => Promise<unknown>,
   ): Promise<GitRepositoryOperationResult> {
+    const eventKey = REPOSITORY_EVENT_KEYS[operation]
+    const finishTracking = startTrackedOperation({ component: "git", eventKey })
     const operationId = createClientOperationId()
     setBusy((current) => ({
       ...current,
@@ -162,10 +182,12 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
     try {
       await action(operationId)
       await onCompleted()
+      finishTracking("success")
       return { ok: true }
     } catch (err) {
       const message = err instanceof Error ? err.message : "操作失败。"
       if (isCancelledOperation(err)) {
+        finishTracking("cancelled")
         await onCompleted()
         setError(null)
         setLastFailure(null)
@@ -173,6 +195,7 @@ export function useGitOperations(onCompleted: () => void | Promise<void>) {
       }
       await onCompleted()
       const failure = readOperationFailure(err, undefined, repositoryId, operation)
+      finishTracking("failure")
       setLastFailure(failure)
       setError(message)
       retryRef.current = failure && (failure.category === "network" || failure.category === "timeout")

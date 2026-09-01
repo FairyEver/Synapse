@@ -11,6 +11,7 @@ import { Spinner } from "../../../src/components/ui/spinner"
 import { Switch } from "../../../src/components/ui/switch"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import {
   DEFAULT_TEXT_FILE_ENCODING,
@@ -55,6 +56,7 @@ export function TextFileWriterModule() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!canWrite) return
+    const finishTracking = startTrackedOperation({ component: "text-file-writer", eventKey: "text-file-writer.file.write" })
     setBusy(true)
     clearStatus()
     try {
@@ -64,10 +66,12 @@ export function TextFileWriterModule() {
         encoding,
         overwrite,
       })
+      finishTracking(response.ok ? "success" : "failure")
       setStatus(response.ok
         ? { kind: "success", result: response.result }
         : { kind: "error", message: response.error.message })
     } catch (error) {
+      finishTracking("failure")
       logger.error("Text file write failed.", error)
       setStatus({ kind: "error", message: errorMessage(error) })
     } finally {
@@ -77,9 +81,12 @@ export function TextFileWriterModule() {
 
   const revealResult = async () => {
     if (status?.kind !== "success") return
+    const finishTracking = startTrackedOperation({ component: "text-file-writer", eventKey: "text-file-writer.output.reveal" })
     try {
       await requireBridgeDomain("shell").showItemInFolder(status.result.path)
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       logger.error("Text file reveal failed.", error)
       setStatus({ kind: "error", message: "无法在文件夹中显示文件。" })
     }
@@ -88,7 +95,7 @@ export function TextFileWriterModule() {
   return (
     <SystemAppWindowShell>
       <ScrollArea className="h-full min-h-0">
-        <form className="mx-auto w-full max-w-3xl p-3 sm:p-5" onSubmit={submit} aria-busy={busy}>
+        <form className="mx-auto w-full max-w-3xl p-3 sm:p-5" onSubmit={submit} aria-busy={busy} data-track="text-file-writer.file.write">
           <Card className="py-0">
             <CardContent className="grid gap-5 p-4 sm:p-5">
               <FieldGroup className="gap-4">

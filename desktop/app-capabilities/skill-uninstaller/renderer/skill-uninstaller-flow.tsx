@@ -22,6 +22,7 @@ import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { getEditorLabel } from "@/lib/editor-registry"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type {
   SkillUninstallBatchResult,
   SkillUninstallCandidate,
@@ -152,6 +153,7 @@ export function SkillUninstallerFlow({
       return
     }
     if (activeScanIdRef.current) await cancelScan()
+    const finishTracking = startTrackedOperation({ component: "skill-uninstaller", eventKey: "skill-uninstaller.target.scan" })
 
     const nextScanId = crypto.randomUUID()
     activeScanIdRef.current = nextScanId
@@ -166,10 +168,18 @@ export function SkillUninstallerFlow({
 
     try {
       const result = await skillUninstallerBridge.scan({ scanId: nextScanId, query: normalizedQuery })
-      if (activeScanIdRef.current !== nextScanId) return
+      if (activeScanIdRef.current !== nextScanId) {
+        finishTracking("cancelled")
+        return
+      }
       setScanResult(result)
+      finishTracking("success")
     } catch (error) {
-      if (activeScanIdRef.current !== nextScanId) return
+      if (activeScanIdRef.current !== nextScanId) {
+        finishTracking("cancelled")
+        return
+      }
+      finishTracking("failure")
       logger.error("Skill uninstall scan failed.", { error })
       setErrorMessage(error instanceof Error ? error.message : "扫描失败。")
     } finally {
@@ -247,15 +257,19 @@ export function SkillUninstallerFlow({
       setCancellingUninstall(false)
       return
     }
+    const finishTracking = startTrackedOperation({ component: "skill-uninstaller", eventKey: "skill-uninstaller.uninstall.cancel" })
     try {
       await skillUninstallerBridge.cancelUninstall({ operationId })
+      finishTracking("success")
     } catch (error) {
+      finishTracking("failure")
       logger.warn("Skill uninstall cancellation failed.", { error })
     }
   }
 
   const submitUninstall = async () => {
     if (selectedCandidates.length === 0 || uninstalling || !scanQuery) return
+    const finishTracking = startTrackedOperation({ component: "skill-uninstaller", eventKey: "skill-uninstaller.target.uninstall" })
     setUninstalling(true)
     setCancellingUninstall(false)
     setUninstallProgress({ completed: 0, total: selectedCandidates.length })
@@ -310,7 +324,9 @@ export function SkillUninstallerFlow({
             : "已移到废纸篓，刷新失败。")
         }
       }
+      finishTracking(result.cancelled ? "cancelled" : incompleteCount > 0 ? "failure" : "success")
     } catch (error) {
+      finishTracking("failure")
       logger.error("Skill uninstall failed.", { error })
       setErrorMessage(error instanceof Error ? error.message : "移到废纸篓失败。")
     } finally {
@@ -383,6 +399,7 @@ export function SkillUninstallerFlow({
 
         <div className="flex justify-end">
           <Button
+            data-track="skill-uninstaller.target.scan"
             type="button"
             variant="outline"
             disabled={uninstalling}
@@ -460,6 +477,7 @@ export function SkillUninstallerFlow({
           variant="destructive"
           disabled={selectedPaths.size === 0 || uninstalling}
           onClick={() => setConfirmOpen(true)}
+          data-track="skill-uninstaller.target.uninstall"
         >
           {uninstalling ? <Spinner aria-label="处理中" data-icon="inline-start" /> : null}
           {selectedPaths.size > 0 ? `移到废纸篓（${selectedPaths.size}）` : "移到废纸篓"}

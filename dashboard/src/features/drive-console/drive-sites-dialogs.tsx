@@ -135,10 +135,10 @@ export function DriveWebSharesPanel({
               <Input value={site.password ? site.urlWithPassword : site.url} readOnly className='mt-1 font-mono text-xs' />
             </div>
             <div className='flex shrink-0 flex-wrap items-center justify-end gap-1'>
-              <Button type='button' variant='ghost' size='sm' onClick={() => { void onCopyUrl(site.password ? site.urlWithPassword : site.url) }}>
+              <Button data-drive-telemetry-event='web.drive.site.copy-url' type='button' variant='ghost' size='sm' onClick={() => { void onCopyUrl(site.password ? site.urlWithPassword : site.url) }}>
                 复制链接
               </Button>
-              <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.republishSite(site.siteId, { entryPath: site.entryPath }), '更新网页失败') }}>
+              <Button data-drive-telemetry-event='web.drive.site.republish' type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.republishSite(site.siteId, { entryPath: site.entryPath }), '更新网页失败') }}>
                 更新网页
               </Button>
               <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => {
@@ -149,11 +149,11 @@ export function DriveWebSharesPanel({
                 访问设置
               </Button>
               {site.status === 'active' ? (
-                <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.disableSite(site.siteId), '停止分享失败') }}>停止分享</Button>
+                <Button data-drive-telemetry-event='web.drive.site.disable' type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.disableSite(site.siteId), '停止分享失败') }}>停止分享</Button>
               ) : site.status !== 'failed' ? (
-                <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.enableSite(site.siteId), '恢复分享失败') }}>恢复分享</Button>
+                <Button data-drive-telemetry-event='web.drive.site.enable' type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.enableSite(site.siteId), '恢复分享失败') }}>恢复分享</Button>
               ) : null}
-              <Button type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => setDeleteTarget(site)}>删除</Button>
+              <Button data-drive-telemetry-event='web.drive.site.delete-open' type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => setDeleteTarget(site)}>删除</Button>
             </div>
           </div>
         ))}
@@ -182,7 +182,7 @@ export function DriveWebSharesPanel({
           </div>
           <DialogFooter>
             <Button type='button' variant='outline' disabled={submitting} onClick={() => setAccessTarget(null)}>取消</Button>
-            <Button type='button' disabled={submitting} onClick={() => { void updateSiteAccess() }}>保存</Button>
+            <Button data-drive-telemetry-event='web.drive.site.access-save' type='button' disabled={submitting} onClick={() => { void updateSiteAccess() }}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

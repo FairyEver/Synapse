@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { localUserTimelineItem } from "@/lib/agent-timeline"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type {
   SynapseAgentPendingPermission,
   SynapseAgentMessageAttachment,
@@ -511,6 +512,7 @@ function useChatConnection(
     personaId?: string | null,
   ) => {
     if (!projectId) return undefined
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.session.create" })
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
@@ -529,6 +531,7 @@ function useChatConnection(
         personaId,
       })
       const createdSession = normalizeSessionProject(created, projectId)
+      finishTracking("success")
       session = createdSession
       if (requestId !== selectRequestIdRef.current) {
         dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.some((item) => isSameSession(item, createdSession))
@@ -547,6 +550,7 @@ function useChatConnection(
       dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, createdSession.projectId, createdSession.id) })
       clearTimeline()
     } catch (rawError) {
+      finishTracking("failure")
       if (requestId !== selectRequestIdRef.current) {
         return undefined
       }
@@ -738,6 +742,7 @@ function useChatConnection(
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, state.sessions, state.timeline.length, updateTimeline])
 
   const deleteSession = useCallback(async (target: SynapseAgentSessionSummary) => {
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.session.delete" })
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     const bridge = requireSynapseBridge()
@@ -748,6 +753,7 @@ function useChatConnection(
         conversationId: target.id,
       })
       if (requestId !== selectRequestIdRef.current) {
+        finishTracking(result.ok ? "success" : "failure")
         if (result.ok) {
           dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
           dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
@@ -766,6 +772,7 @@ function useChatConnection(
         return
       }
       if (!result.ok) {
+        finishTracking("failure")
         dispatch({ type: "SET_ERROR", error: "会话不存在" })
         return
       }
@@ -814,7 +821,9 @@ function useChatConnection(
         }
       }
       toast("会话已删除")
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       if (requestId !== selectRequestIdRef.current) {
         return
       }
@@ -842,6 +851,7 @@ function useChatConnection(
   ])
 
   const renameSession = useCallback(async (target: SynapseAgentSessionSummary, name: string) => {
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.session.rename" })
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
     try {
@@ -855,7 +865,9 @@ function useChatConnection(
       dispatch({ type: "UPDATE_ARCHIVED_SESSIONS", updater: (current) => current.map((session) =>
         isSameSession(session, target) ? { ...session, name, updatedAt: new Date().toISOString() } : session) })
       toast("已重命名")
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       logger.error("Agent session rename failed.", {
         projectId: target.projectId,
         conversationId: target.id,
@@ -879,13 +891,16 @@ function useChatConnection(
     const projectId = resolved.projectId
     const conversationId = resolved.conversationId
     if (!projectId || !conversationId) return
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.permission-mode.update" })
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
     try {
       const updated = await bridge.agent.setPermissionMode({ projectId, conversationId, mode })
       dispatch({ type: "UPDATE_SESSIONS", updater: (current) =>
         current.map((session) => session.id === updated.id ? updated : session) })
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       const message = rawError instanceof Error ? rawError.message : "切换失败"
       logger.error("Agent permission mode switch failed.", {
         projectId,
@@ -909,6 +924,7 @@ function useChatConnection(
     const { projectId, requestId } = target
     const permissionKey = pendingPermissionKey(target)
     if (respondingPermissionKeysRef.current.has(permissionKey)) return
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.permission.respond" })
     respondingPermissionKeysRef.current.add(permissionKey)
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
@@ -925,7 +941,9 @@ function useChatConnection(
           errorLength: errorMessage(refreshError).length,
         })
       }
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       logger.error("Agent permission response failed.", {
         projectId,
         requestId,
@@ -972,6 +990,7 @@ function useChatConnection(
     const projectId = resolved.projectId
     const conversationId = resolved.conversationId
     if (!projectId || !conversationId) return
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.turn.cancel" })
     const bridge = requireSynapseBridge()
     dispatch({ type: "CANCEL_REQUESTED" })
     try {
@@ -981,7 +1000,9 @@ function useChatConnection(
       } else if (result.status === "no-active-turn") {
         dispatch({ type: "CANCEL_RESET" })
       }
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       logger.error("Agent cancel turn failed.", {
         projectId,
         conversationId,
@@ -1002,6 +1023,7 @@ function useChatConnection(
     const projectId = resolved.projectId
     const conversationId = resolved.conversationId
     if (!projectId || !conversationId) return
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.turn.force-stop" })
     const bridge = requireSynapseBridge()
     try {
       const result = await bridge.agent.forceKillTurn({ projectId, conversationId })
@@ -1010,7 +1032,9 @@ function useChatConnection(
       } else if (result.status === "no-active-turn") {
         dispatch({ type: "CANCEL_RESET" })
       }
+      finishTracking("success")
     } catch (rawError) {
+      finishTracking("failure")
       logger.error("Agent force kill turn failed.", {
         projectId,
         conversationId,

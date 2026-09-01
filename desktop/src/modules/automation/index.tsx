@@ -21,6 +21,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { errorLogMeta } from "@/lib/error-sanitize"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
@@ -279,7 +280,10 @@ function AutomationModule() {
     if (openingEditor) return
     setOpeningEditor(true)
     try {
-      await requireBridgeDomain("automation").editor.openCreate()
+      await runTrackedOperation(
+        { component: "automation", eventKey: "automation.editor.create-open" },
+        () => requireBridgeDomain("automation").editor.openCreate(),
+      )
     } catch (openError) {
       logger.warn("Automation create editor open failed.", {
         boundary: "renderer.automation.open-create-editor",
@@ -293,7 +297,10 @@ function AutomationModule() {
 
   async function handleEditorOpen(item: AutomationItem) {
     try {
-      await requireBridgeDomain("automation").editor.openEdit(item.id)
+      await runTrackedOperation(
+        { component: "automation", eventKey: "automation.editor.edit-open" },
+        () => requireBridgeDomain("automation").editor.openEdit(item.id),
+      )
     } catch (openError) {
       logger.warn("Automation editor open failed.", {
         boundary: "renderer.automation.open-editor",

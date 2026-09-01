@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseGitOperationState, SynapseGitRepository, SynapseGitRepositorySnapshot } from "@/types/git"
 import type { GitOperationFailure } from "../hooks/use-git-operations"
 import { readOperationFailure } from "../hooks/use-git-operations"
@@ -111,6 +112,12 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
   }
 
   const run = async (kind: "sync" | "pull" | "push", action: (operationId: string) => Promise<unknown>) => {
+    const eventKey = kind === "sync"
+      ? "git.repository.sync"
+      : kind === "pull"
+        ? "git.repository.pull"
+        : "git.repository.push"
+    const finishTracking = startTrackedOperation({ component: "git", eventKey })
     const operationId = globalThis.crypto?.randomUUID?.() ?? `git-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
     activeOperationIdRef.current = operationId
     setBusy(kind)
@@ -120,8 +127,10 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
     try {
       await action(operationId)
       await refreshAll()
+      finishTracking("success")
     } catch (err) {
       if (err instanceof Error && (err.name === "GitOperationCancelledError" || /操作已取消/.test(err.message))) {
+        finishTracking("cancelled")
         await refreshAll()
         setOperationError(null)
         setOperationFailure(null)
@@ -129,6 +138,7 @@ export function GitWorkbench({ repository, onBack, onOperationFailure, onHandleF
       }
       await refreshAll()
       const failure = readOperationFailure(err, undefined, repository.id, kind)
+      finishTracking("failure")
       setOperationError(err instanceof Error ? err.message : "操作失败。")
       setOperationFailure(failure)
       retryActionRef.current = failure && (failure.category === "network" || failure.category === "timeout")
