@@ -103,14 +103,15 @@ describe("ProjectGroup", () => {
       [...document.body.querySelectorAll<HTMLButtonElement>("button")]
         .find((button) => button.textContent === "删除")
         ?.click()
-      await new Promise((resolve) => setTimeout(resolve, 60))
     })
 
-    expect(document.body.textContent).not.toContain("待删会话")
-    expect(document.activeElement).toBe(
-      [...container.querySelectorAll<HTMLElement>('[data-track="agent-session-select"]')]
-        .find((row) => row.textContent?.includes("当前会话")),
-    )
+    await vi.waitFor(() => {
+      expect(document.body.textContent).not.toContain("待删会话")
+      expect(document.activeElement).toBe(
+        [...container.querySelectorAll<HTMLElement>('[data-track="agent-session-select"]')]
+          .find((row) => row.textContent?.includes("当前会话")),
+      )
+    })
   })
 
   it("confirms context-menu deletion and restores focus to the session row on cancel", async () => {
