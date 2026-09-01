@@ -12,6 +12,7 @@ import { Throttle } from "@nestjs/throttler"
 import type { Request } from "express"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
+import { userSessionCookieName } from "../auth/user-web-session"
 import { AuditLogService, auditActors } from "../common/audit-log.service"
 import {
   parseClientTelemetryBatch,
@@ -34,7 +35,15 @@ export class ClientTelemetryController {
     const authorization = request.headers.authorization
     const token = readBearerToken(authorization)
     if (authorization && !token) throw new UnauthorizedException("认证信息无效。")
-    const userId = token ? (await this.auth.verifyAccessToken(token)).userId : null
+    const cookieToken = request.cookies?.[userSessionCookieName]
+    const userId = token
+      ? (await this.auth.verifyAccessToken(token)).userId
+      : typeof cookieToken === "string"
+        ? (await this.auth.verifyWebSession(cookieToken))?.userId ?? null
+        : null
+    if (typeof cookieToken === "string" && !userId) {
+      throw new UnauthorizedException("未登录或登录已过期。")
+    }
     return this.service.ingest(userId, events)
   }
 }

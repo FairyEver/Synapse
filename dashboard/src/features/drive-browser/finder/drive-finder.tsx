@@ -90,7 +90,7 @@ function DriveFinderToolbar({
         {mode === 'share' ? <DriveShareViewerStatus snapshot={snapshot} /> : null}
         {actions.directoryDownloadUrl ? (
           <Button asChild variant='outline' size='sm'>
-            <a href={actions.directoryDownloadUrl}>
+            <a data-drive-telemetry-event='web.drive.folder.download' href={actions.directoryDownloadUrl}>
               <Download data-icon='inline-start' />
               下载整个目录
             </a>

@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { driveBrowserApi } from '@/lib/api'
+import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -238,7 +238,7 @@ function DriveMarkdownImageSourceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent data-drive-telemetry-scope='portal'>
         <DialogHeader>
           <DialogTitle>图片来源</DialogTitle>
         </DialogHeader>

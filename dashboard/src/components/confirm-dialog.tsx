@@ -10,6 +10,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 
+type ConfirmDialogContentProps = Omit<
+  React.ComponentProps<typeof AlertDialogContent>,
+  'children' | 'className' | 'onCloseAutoFocus'
+> & {
+  readonly [key: `data-${string}`]: string | number | boolean | undefined
+}
+
 type ConfirmDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -21,6 +28,7 @@ type ConfirmDialogProps = {
   destructive?: boolean
   isLoading?: boolean
   className?: string
+  contentProps?: ConfirmDialogContentProps
   children?: React.ReactNode
   onCloseAutoFocus?: React.ComponentProps<typeof AlertDialogContent>['onCloseAutoFocus']
 } & (
@@ -34,6 +42,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
     desc,
     children,
     className,
+    contentProps,
     confirmText,
     cancelBtnText,
     destructive,
@@ -46,7 +55,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   } = props
   return (
     <AlertDialog {...actions}>
-      <AlertDialogContent className={cn(className && className)} onCloseAutoFocus={onCloseAutoFocus}>
+      <AlertDialogContent {...contentProps} className={cn(className && className)} onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader className='text-start'>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>

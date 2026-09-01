@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { DriveBrowserSurface, DriveUsageDto } from '@synapse/shared'
 import { useDriveBrowser, type DriveBrowserState } from '@/features/drive-browser/use-drive-browser'
-import { driveApi } from '@/lib/api'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
 
 export type DriveConsoleInput =
   | { readonly context: 'root' }

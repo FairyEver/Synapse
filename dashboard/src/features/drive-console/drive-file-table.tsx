@@ -65,6 +65,7 @@ export function DriveFileTable({
   return (
     <div
       data-testid='drive-console-dropzone'
+      data-drive-telemetry-event='web.drive.file.drop'
       className='rounded-lg border bg-background'
       onDragOver={(event) => {
         if (Array.from(event.dataTransfer.types).includes('Files')) {
@@ -126,7 +127,7 @@ export function DriveFileTable({
 
 function SystemRow({ icon, name, onOpen }: { readonly icon: ReactNode; readonly name: string; readonly onOpen: () => void }) {
   return (
-    <TableRow className='cursor-pointer' onClick={onOpen}>
+    <TableRow data-drive-telemetry-event='web.drive.system-view.open' className='cursor-pointer' onClick={onOpen}>
       <TableCell>
         <div className='flex min-w-0 items-center gap-2'>
           {icon}
@@ -157,6 +158,7 @@ function DriveFileRow({
 }) {
   return (
     <TableRow
+      data-drive-telemetry-event='web.drive.item.open'
       role='link'
       tabIndex={0}
       className='cursor-pointer'
@@ -175,19 +177,19 @@ function DriveFileRow({
       <TableCell className='text-right tabular-nums text-muted-foreground'><RelativeTime value={item.updatedAt} className='tabular-nums' /></TableCell>
       <TableCell>
         <div className='flex justify-end gap-1'>
-          <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+          <Button data-drive-telemetry-event='web.drive.share.open' type='button' variant='ghost' size='sm' onClick={(event) => {
             event.stopPropagation()
             onShare(item)
           }}>
             分享
           </Button>
-          <Button type='button' variant='ghost' size='sm' onClick={(event) => {
+          <Button data-drive-telemetry-event='web.drive.item.preview' type='button' variant='ghost' size='sm' onClick={(event) => {
             event.stopPropagation()
             onNavigate(item.browserUrl)
           }}>
             预览
           </Button>
-          <Button data-drive-delete-action data-drive-item-id={item.id} type='button' variant='ghost' size='sm' onClick={(event) => {
+          <Button data-drive-delete-action data-drive-item-id={item.id} data-drive-telemetry-event='web.drive.item.delete-open' type='button' variant='ghost' size='sm' onClick={(event) => {
             event.stopPropagation()
             onDelete(item, event.currentTarget)
           }}>
@@ -196,6 +198,7 @@ function DriveFileRow({
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button
+                data-drive-telemetry-event='web.drive.item.actions.open'
                 type='button'
                 variant='ghost'
                 size='icon'
@@ -206,12 +209,12 @@ function DriveFileRow({
                 <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align='end' onClick={(event) => event.stopPropagation()}>
+            <DropdownMenuContent data-drive-telemetry-scope='portal' align='end' onClick={(event) => event.stopPropagation()}>
               <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => onRename(item)}>
+                <DropdownMenuItem data-drive-telemetry-event='web.drive.item.rename-open' onClick={() => onRename(item)}>
                   重命名
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onMove(item)}>
+                <DropdownMenuItem data-drive-telemetry-event='web.drive.item.move-open' onClick={() => onMove(item)}>
                   移动
                 </DropdownMenuItem>
               </DropdownMenuGroup>

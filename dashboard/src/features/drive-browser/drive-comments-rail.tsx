@@ -370,6 +370,7 @@ function UnlocatedCommentsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        data-drive-telemetry-scope='portal'
         showCloseButton={false}
         data-markdown-comments-unlocated-dialog='true'
         className='h-[min(44rem,calc(100svh-2rem))] gap-0 overflow-hidden p-0 sm:max-w-2xl'

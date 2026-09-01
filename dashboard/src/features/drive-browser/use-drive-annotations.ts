@@ -5,7 +5,7 @@ import type {
   DriveAnnotationReplyInput,
   DriveAnnotationThreadDto,
 } from '@synapse/shared'
-import { driveAnnotationApi } from '@/lib/api'
+import { trackedDriveAnnotationApi as driveAnnotationApi } from './shared/drive-telemetry-api'
 
 export type DriveAnnotationContext =
   | { readonly context: 'owner'; readonly itemId: string }

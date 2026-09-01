@@ -54,6 +54,7 @@ export function DriveFinderList({
             const selected = snapshot.current.id === item.id
             return (
               <TableRow
+                data-drive-telemetry-event='web.drive.item.open'
                 key={item.id}
                 role='link'
                 tabIndex={0}
@@ -87,6 +88,7 @@ export function DriveFinderList({
         <div className='flex flex-col items-center gap-2 border-t px-3 py-3'>
           {canLoadMoreChildren ? (
             <Button
+              data-drive-telemetry-event='web.drive.children.load-more'
               type='button'
               variant='outline'
               size='sm'

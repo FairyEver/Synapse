@@ -35,6 +35,7 @@ export function DriveFinderBreadcrumbs({
         <span key={item.id} className='flex min-w-0 items-center gap-1'>
           {index > 0 ? <span className='text-muted-foreground'>/</span> : null}
           <a
+            data-drive-telemetry-event='web.drive.breadcrumb.open'
             href={item.browserUrl}
             className={cn(
               'min-w-0 truncate rounded-sm px-1 py-0.5 hover:bg-accent',

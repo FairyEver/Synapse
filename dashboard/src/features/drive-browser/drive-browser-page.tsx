@@ -18,6 +18,7 @@ import { DriveRendererShell } from './renderers/drive-renderer-shell'
 import type { DriveRendererEditContext } from './renderers/drive-renderer-shell'
 import type { DriveRendererId } from './renderers/drive-renderer-registry'
 import type { DriveBrowserNavigate } from './shared/drive-navigation'
+import { DriveTelemetryBoundary } from './shared/drive-telemetry-boundary'
 import { shouldRenderDriveBodyRenderer } from './shared/drive-view-model'
 import type { DriveAnnotationContext } from './use-drive-annotations'
 import { useDriveBrowser } from './use-drive-browser'
@@ -42,6 +43,14 @@ type DriveBrowserLayoutMode = 'auto' | 'fixed'
 type DriveBrowserLoadingMode = 'card' | 'reader'
 
 export function DriveBrowserPage(props: DriveBrowserPageProps) {
+  return (
+    <DriveTelemetryBoundary scope={props.context}>
+      <DriveBrowserPageContent {...props} />
+    </DriveTelemetryBoundary>
+  )
+}
+
+function DriveBrowserPageContent(props: DriveBrowserPageProps) {
   const state = useDriveBrowser(props)
   const initialPassword = props.context === 'share' ? props.initialPassword : undefined
   const onInitialPasswordConsumed = props.context === 'share'
@@ -149,7 +158,7 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
 }
 
 export function DriveConsoleBrowserPage(props: Omit<Extract<DriveBrowserPageProps, { context: 'owner' }>, 'context' | 'surface'>) {
-  return <DriveBrowserPage {...props} context='owner' surface='console' />
+  return <DriveBrowserPageContent {...props} context='owner' surface='console' />
 }
 
 export {
@@ -270,6 +279,7 @@ function DriveBrowserPasswordForm({
   const unlockErrorMessage = unlockError === message ? '密码不正确，请重试。' : unlockError
   return (
     <form
+      data-drive-telemetry-event='web.drive.share.unlock'
       onSubmit={(event) => {
         event.preventDefault()
         if (unlocking || password.length === 0) return

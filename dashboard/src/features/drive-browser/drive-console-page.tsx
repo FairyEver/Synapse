@@ -7,17 +7,18 @@ import {
   DriveConsoleRootBrowser,
   type DriveBrowserPageProps,
 } from './drive-browser-page'
+import { DriveTelemetryBoundary } from './shared/drive-telemetry-boundary'
 
 export function DriveConsolePage() {
   return (
-    <>
+    <DriveTelemetryBoundary scope='console'>
       <Header fixed>
         <h1 className='text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
         <DriveConsoleRootBrowser />
       </Main>
-    </>
+    </DriveTelemetryBoundary>
   )
 }
 
@@ -32,13 +33,13 @@ export function DriveConsoleItemPage(
   }
 
   return (
-    <>
+    <DriveTelemetryBoundary scope='console'>
       <Header fixed>
         <h1 className='text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
         <DriveConsoleBrowserPage {...browserProps} />
       </Main>
-    </>
+    </DriveTelemetryBoundary>
   )
 }

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
+import { trackDriveEvent } from '../shared/drive-telemetry'
 import { DriveCodeRenderer } from './code-renderer'
 import { getDrivePreviewDriveBrowserUrl } from './drive-preview-actions'
 import { DrivePreviewFloatingMenu, clampDriveFloatingMenuPosition, shouldSuppressDriveFloatingMenuOpen } from './drive-preview-floating-menu'
@@ -102,6 +103,11 @@ export function DriveRendererShell({
   }
   const setRenderer = (id: DriveRendererId) => {
     setRendererChangeError(null)
+    trackDriveEvent({
+      eventKey: 'web.drive.renderer.select',
+      component: 'drive-renderer',
+      action: 'select',
+    })
     void refreshBeforeDriveRendererSwitch({
       id,
       collaborationEnabled: Boolean(snapshot.collaboration?.enabled),

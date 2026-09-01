@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { driveApi } from '@/lib/api'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
 
 export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promise<void> }) {
   const [items, setItems] = useState<DriveTrashItemDto[]>([])
@@ -126,6 +126,7 @@ export function DriveTrashView({ onChanged }: { readonly onChanged: () => Promis
         ) : null}
       </div>
       <ConfirmDialog
+        contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)

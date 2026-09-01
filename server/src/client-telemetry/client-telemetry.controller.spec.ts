@@ -9,6 +9,7 @@ import {
 import type { ClientTelemetryService } from "./client-telemetry.service"
 import type { UserAuthService } from "../auth/user-auth.service"
 import type { AuditLogService } from "../common/audit-log.service"
+import { userSessionCookieName } from "../auth/user-web-session"
 
 const event = {
   eventId: "event-1",
@@ -35,6 +36,39 @@ describe("ClientTelemetryController", () => {
     await controller.ingest({ body: { events: [event] }, headers: {} } as never)
 
     expect(ingest).toHaveBeenCalledWith(null, [event])
+  })
+
+  it("derives the user from a valid Web session cookie", async () => {
+    const ingest = vi.fn().mockResolvedValue({ accepted: 1, duplicates: 0 })
+    const verifyWebSession = vi.fn().mockResolvedValue({ userId: "user-web", sessionId: "web-session" })
+    const controller = new ClientTelemetryController(
+      { ingest } as unknown as ClientTelemetryService,
+      { verifyWebSession } as unknown as UserAuthService,
+    )
+
+    await controller.ingest({
+      body: { events: [event] },
+      headers: {},
+      cookies: { [userSessionCookieName]: "web-token" },
+    } as never)
+
+    expect(verifyWebSession).toHaveBeenCalledWith("web-token")
+    expect(ingest).toHaveBeenCalledWith("user-web", [event])
+  })
+
+  it("rejects an expired Web session instead of treating it as anonymous", async () => {
+    const ingest = vi.fn()
+    const controller = new ClientTelemetryController(
+      { ingest } as unknown as ClientTelemetryService,
+      { verifyWebSession: vi.fn().mockResolvedValue(null) } as unknown as UserAuthService,
+    )
+
+    await expect(controller.ingest({
+      body: { events: [event] },
+      headers: {},
+      cookies: { [userSessionCookieName]: "expired-web-token" },
+    } as never)).rejects.toBeInstanceOf(UnauthorizedException)
+    expect(ingest).not.toHaveBeenCalled()
   })
 
   it("derives the user from a valid bearer token", async () => {

@@ -24,7 +24,8 @@ import type { DriveBrowserNavigate } from '@/features/drive-browser/shared/drive
 import type { DriveAnnotationContext } from '@/features/drive-browser/use-drive-annotations'
 import { shouldRenderDriveSingleFileReader } from '@/features/drive-browser/shared/drive-view-model'
 import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-format'
-import { driveApi } from '@/lib/api'
+import { DriveTelemetryBoundary } from '@/features/drive-browser/shared/drive-telemetry-boundary'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
 import { DriveFileTable, type DriveConsoleSystemView } from './drive-file-table'
 import { DriveMoveDialog } from './drive-move-dialog'
 import { DrivePublicAssetsView } from './drive-public-assets-view'
@@ -47,14 +48,14 @@ export function DriveConsolePage({
   readonly onViewChange?: (view: DriveConsoleSystemView) => void
 } = {}) {
   return (
-    <>
+    <DriveTelemetryBoundary scope='console'>
       <Header fixed>
         <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
       <Main fixed fluid>
         <DriveConsoleRoot onNavigate={onNavigate} activeView={activeView} onViewChange={onViewChange} />
       </Main>
-    </>
+    </DriveTelemetryBoundary>
   )
 }
 
@@ -76,7 +77,7 @@ export function DriveConsoleItemPage({
   }
 
   return (
-    <>
+    <DriveTelemetryBoundary scope='console'>
       <Header fixed>
         <h1 className='text-balance text-lg font-semibold'>网盘</h1>
       </Header>
@@ -87,7 +88,7 @@ export function DriveConsoleItemPage({
         activeView={activeView}
         onViewChange={onViewChange}
       />
-    </>
+    </DriveTelemetryBoundary>
   )
 }
 
@@ -278,6 +279,7 @@ function DriveConsoleContent({
 
   return (
     <Tabs
+      data-drive-telemetry-event='web.drive.view.select'
       value={activeView}
       onValueChange={(value) => setActiveView(value as DriveConsoleSystemView)}
       className='mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col gap-3'
@@ -299,7 +301,7 @@ function DriveConsoleContent({
               void runUpload({ files })
             }}
           />
-          <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+          <Button data-drive-telemetry-event='web.drive.file-upload.choose' type='button' variant='outline' size='sm' disabled={uploading} onClick={() => fileInputRef.current?.click()}>
             <Upload data-icon='inline-start' />
             上传文件
           </Button>
@@ -314,15 +316,15 @@ function DriveConsoleContent({
               void runUpload({ files })
             }}
           />
-          <Button type='button' variant='outline' size='sm' disabled={uploading} onClick={() => { void pickAndUploadFolder() }}>
+          <Button data-drive-telemetry-event='web.drive.folder-upload.choose' type='button' variant='outline' size='sm' disabled={uploading} onClick={() => { void pickAndUploadFolder() }}>
             <FolderUp data-icon='inline-start' />
             上传文件夹
           </Button>
-          <Button type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
+          <Button data-drive-telemetry-event='web.drive.folder-create.open' type='button' variant='outline' size='sm' onClick={() => setNameDialog({ mode: 'create', item: null, value: '' })}>
             新建文件夹
           </Button>
-          <Button type='button' variant='outline' size='sm' onClick={() => setSharesOpen(true)}>分享管理</Button>
-          <Button type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
+          <Button data-drive-telemetry-event='web.drive.shares.open' type='button' variant='outline' size='sm' onClick={() => setSharesOpen(true)}>分享管理</Button>
+          <Button data-drive-telemetry-event='web.drive.refresh' type='button' variant='outline' size='sm' onClick={() => { void state.refresh() }}>刷新</Button>
         </div>
       </div>
       <TabsList>
@@ -363,7 +365,7 @@ function DriveConsoleContent({
       <Dialog open={nameDialog !== null} onOpenChange={(open) => {
         if (!open) setNameDialog(null)
       }}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent data-drive-telemetry-scope='portal' aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{nameDialog?.mode === 'rename' ? '重命名' : '新建文件夹'}</DialogTitle>
           </DialogHeader>
@@ -397,6 +399,7 @@ function DriveConsoleContent({
         onSubmit={(parentId) => { void moveItem(parentId) }}
       />
       <ConfirmDialog
+        contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)

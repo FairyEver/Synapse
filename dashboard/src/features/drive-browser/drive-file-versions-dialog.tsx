@@ -28,7 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { driveFileVersionsApi } from '@/lib/api'
+import { trackedDriveFileVersionsApi as driveFileVersionsApi } from './shared/drive-telemetry-api'
 import { cn } from '@/lib/utils'
 import { formatDriveBrowserBytes } from './shared/drive-format'
 
@@ -108,7 +108,7 @@ export function DriveFileVersionsDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className='gap-0 overflow-hidden p-0 sm:max-w-3xl' showCloseButton={false} aria-describedby={undefined}>
+        <DialogContent data-drive-telemetry-scope='portal' className='gap-0 overflow-hidden p-0 sm:max-w-3xl' showCloseButton={false} aria-describedby={undefined}>
           <DialogFrame>
             <DialogFrameHeader title='历史版本' bordered />
             <DialogFrameBody className='px-6 py-4'>
@@ -144,6 +144,7 @@ export function DriveFileVersionsDialog({
       </Dialog>
       {confirmTarget ? (
         <ConfirmDialog
+          contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
           open
           onOpenChange={(nextOpen) => {
             if (!nextOpen) setConfirmTarget(null)

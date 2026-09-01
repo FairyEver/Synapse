@@ -104,11 +104,11 @@ export function DrivePreviewHeader({
         {overflowActions.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type='button' variant='outline' size='icon' className='h-8 w-8' aria-label='更多操作'>
+              <Button data-drive-telemetry-event='web.drive.preview.menu' type='button' variant='outline' size='icon' className='h-8 w-8' aria-label='更多操作'>
                 <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align='end'>
+            <DropdownMenuContent data-drive-telemetry-scope='portal' align='end'>
               <DropdownMenuGroup>
                 {overflowActions.map((action) => (
                   <DrivePreviewHeaderMenuAction
@@ -168,11 +168,11 @@ function DrivePreviewCompactHeader({
         <span className='min-w-0 flex-1 truncate text-sm font-medium'>{identity.name}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type='button' variant='outline' size='icon' className='size-11' aria-label='更多操作'>
+            <Button data-drive-telemetry-event='web.drive.preview.menu' type='button' variant='outline' size='icon' className='size-11' aria-label='更多操作'>
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align='end' className='w-72'>
+          <DropdownMenuContent data-drive-telemetry-scope='portal' align='end' className='w-72'>
             <DropdownMenuLabel className='min-w-0 truncate'>{identity.name}</DropdownMenuLabel>
             <div className='px-2 pb-2 text-xs text-muted-foreground'>
               {identity.sizeLabel} / {identity.kindLabel} / <RelativeTime value={identity.updatedAt} />
@@ -228,7 +228,7 @@ function DrivePreviewHeaderAction({
   if (action.kind === 'link') {
     return (
       <Button asChild variant='outline' size='sm'>
-        <a href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+        <a data-drive-telemetry-event={`web.drive.preview.${action.id}`} href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
           <action.icon data-icon='inline-start' />
           {action.label}
         </a>
@@ -237,7 +237,7 @@ function DrivePreviewHeaderAction({
   }
   if (action.kind === 'versions') {
     return (
-      <Button type='button' variant='outline' size='sm' onClick={() => onOpenVersions(action.itemId)}>
+      <Button data-drive-telemetry-event='web.drive.preview.versions' type='button' variant='outline' size='sm' onClick={() => onOpenVersions(action.itemId)}>
         <action.icon data-icon='inline-start' />
         {action.label}
       </Button>
@@ -246,14 +246,15 @@ function DrivePreviewHeaderAction({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type='button' variant='outline' size='sm'>
+        <Button data-drive-telemetry-event='web.drive.preview.renderer-menu' type='button' variant='outline' size='sm'>
           {action.label}
           <ChevronDown data-icon='inline-end' />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align='end'>
+      <DropdownMenuContent data-drive-telemetry-scope='portal' align='end'>
         {action.options.map((option) => (
           <DropdownMenuCheckboxItem
+            data-drive-telemetry-event='web.drive.renderer.select'
             key={option.id}
             checked={option.id === selectedRendererId}
             disabled={Boolean(option.disabledReason)}
@@ -283,7 +284,7 @@ function DrivePreviewHeaderMenuAction({
   if (action.kind === 'link') {
     return (
       <DropdownMenuItem asChild>
-        <a href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+        <a data-drive-telemetry-event={`web.drive.preview.${action.id}`} href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
           <action.icon data-icon='inline-start' />
           {action.label}
         </a>
@@ -292,7 +293,7 @@ function DrivePreviewHeaderMenuAction({
   }
   if (action.kind === 'versions') {
     return (
-      <DropdownMenuItem onSelect={() => onOpenVersions(action.itemId)}>
+      <DropdownMenuItem data-drive-telemetry-event='web.drive.preview.versions' onSelect={() => onOpenVersions(action.itemId)}>
         <action.icon data-icon='inline-start' />
         {action.label}
       </DropdownMenuItem>
@@ -300,6 +301,7 @@ function DrivePreviewHeaderMenuAction({
   }
   return action.options.map((option) => (
     <DropdownMenuCheckboxItem
+      data-drive-telemetry-event='web.drive.renderer.select'
       key={option.id}
       checked={option.id === selectedRendererId}
       disabled={Boolean(option.disabledReason)}

@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-format'
-import { driveApi } from '@/lib/api'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
+import { startDriveOperation } from '@/features/drive-browser/shared/drive-telemetry'
 
 const DRIVE_PUBLIC_ASSET_ACCEPT = Object.keys(DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION).map((extension) => `.${extension}`).join(',')
 
@@ -69,6 +70,9 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
     const prepared = target
       ? await driveApi.preparePublicAssetReplace(target.assetId, { name: file.name, size: String(file.size), mimeType })
       : await driveApi.preparePublicAssetUpload({ name: file.name, size: String(file.size), mimeType })
+    const finish = startDriveOperation(target
+      ? 'web.drive.operation.public-assets.replace-transfer'
+      : 'web.drive.operation.public-assets.upload-transfer')
     let completed = false
     try {
       const response = await fetch(prepared.upload.url, { method: prepared.upload.method, headers: prepared.upload.headers, body: file })
@@ -79,9 +83,11 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
         await driveApi.completePublicAssetUpload(prepared.sessionId)
       }
       completed = true
+      finish('success')
       await load()
       await onChanged()
     } catch (error) {
+      finish('failure')
       if (!completed) {
         try {
           if (target) {
@@ -222,6 +228,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
         if (!open) setRenameTarget(null)
       }}>
         <DialogContent
+          data-drive-telemetry-scope='portal'
           aria-describedby={undefined}
           onCloseAutoFocus={(event) => {
             event.preventDefault()
@@ -244,6 +251,7 @@ export function DrivePublicAssetsView({ onChanged }: { readonly onChanged: () =>
         </DialogContent>
       </Dialog>
       <ConfirmDialog
+        contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
         open={deleteTarget !== null}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)

@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { driveApi } from '@/lib/api'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
 
 const DRIVE_SITE_DIALOG_PAGE_SIZE = 50
 
@@ -168,7 +168,7 @@ export function DriveWebSharesPanel({
       <Dialog open={accessTarget !== null} onOpenChange={(nextOpen) => {
         if (!nextOpen) setAccessTarget(null)
       }}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent data-drive-telemetry-scope='portal' aria-describedby={undefined}>
           <DialogHeader><DialogTitle>访问设置</DialogTitle></DialogHeader>
           <div className='grid gap-4'>
             <label className='flex items-center justify-between gap-3' htmlFor='drive-web-share-password-enabled'>
@@ -187,6 +187,7 @@ export function DriveWebSharesPanel({
         </DialogContent>
       </Dialog>
       <ConfirmDialog
+        contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
         open={deleteTarget !== null}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setDeleteTarget(null)
@@ -215,7 +216,7 @@ function ExpirySelect({
   return (
     <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue as DriveAccessExpiresIn)}>
       <SelectTrigger id={id} className='w-full'><SelectValue /></SelectTrigger>
-      <SelectContent>
+      <SelectContent data-drive-telemetry-scope='portal'>
         <SelectItem value='3d'>3 天</SelectItem>
         <SelectItem value='7d'>7 天</SelectItem>
         <SelectItem value='30d'>30 天</SelectItem>

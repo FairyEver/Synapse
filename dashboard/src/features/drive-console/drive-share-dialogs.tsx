@@ -28,7 +28,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDriveBrowserBytes } from '@/features/drive-browser/shared/drive-format'
-import { driveApi } from '@/lib/api'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
 import { DriveWebSharesPanel } from './drive-sites-dialogs'
 
 type ShareCreateMode = 'drive' | 'web'
@@ -159,7 +159,7 @@ export function DriveShareSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent data-drive-telemetry-scope='portal' aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{created ? '分享已创建' : '分享'}</DialogTitle>
         </DialogHeader>
@@ -205,7 +205,7 @@ export function DriveShareSettingsDialog({
                         <SelectTrigger id='drive-web-share-entry' className='w-full'>
                           <SelectValue placeholder='选择入口页' />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent data-drive-telemetry-scope='portal'>
                           {preflight.htmlFiles.map((htmlFile) => (
                             <SelectItem key={htmlFile} value={htmlFile}>{htmlFile}</SelectItem>
                           ))}
@@ -351,7 +351,7 @@ export function DriveSharesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-4xl' aria-describedby={undefined}>
+      <DialogContent data-drive-telemetry-scope='portal' className='sm:max-w-4xl' aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>分享管理</DialogTitle>
         </DialogHeader>
@@ -396,7 +396,7 @@ export function DriveSharesDialog({
         <Dialog open={accessTarget !== null} onOpenChange={(nextOpen) => {
           if (!nextOpen) setAccessTarget(null)
         }}>
-          <DialogContent aria-describedby={undefined}>
+          <DialogContent data-drive-telemetry-scope='portal' aria-describedby={undefined}>
             <DialogHeader><DialogTitle>访问设置</DialogTitle></DialogHeader>
             <DriveShareAccessFields
               idPrefix='drive-share-manage'
@@ -483,7 +483,7 @@ function DriveShareAccessFields({
         <Label htmlFor={`${idPrefix}-access-mode`}>权限</Label>
         <Select value={settings.accessMode ?? 'link_read'} onValueChange={(value) => updateAccessMode(value as DriveShareAccessMode)}>
           <SelectTrigger id={`${idPrefix}-access-mode`} className='w-full'><SelectValue /></SelectTrigger>
-          <SelectContent>
+          <SelectContent data-drive-telemetry-scope='portal'>
             <SelectItem value='link_read'>可阅读</SelectItem>
             <SelectItem value='link_edit'>登录用户可编辑</SelectItem>
             <SelectItem value='specified_users_edit'>指定用户可编辑</SelectItem>
@@ -572,7 +572,7 @@ function ExpirySelect({
   return (
     <Select value={value} onValueChange={(nextValue) => onValueChange(nextValue as DriveAccessExpiresIn)}>
       <SelectTrigger id={id} className='w-full'><SelectValue placeholder={placeholder} /></SelectTrigger>
-      <SelectContent>
+      <SelectContent data-drive-telemetry-scope='portal'>
         <SelectItem value='3d'>3 天</SelectItem>
         <SelectItem value='7d'>7 天</SelectItem>
         <SelectItem value='30d'>30 天</SelectItem>

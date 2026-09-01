@@ -7,7 +7,8 @@ import type {
   DriveBrowserSurface,
   DriveFileContentUpdateResult,
 } from '@synapse/shared'
-import { ApiError, driveBrowserApi } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { trackedDriveBrowserApi as driveBrowserApi } from './shared/drive-telemetry-api'
 import { driveAnnotationsQueryKey, type DriveAnnotationContext } from './use-drive-annotations'
 
 export type DriveBrowserInput =

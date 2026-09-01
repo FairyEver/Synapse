@@ -15,7 +15,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
-import { ApiError, driveBrowserApi } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { createMonacoCollaborationBinding } from './monaco-collaboration-binding'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
@@ -340,7 +341,7 @@ export function DriveCodeRenderer({
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div>
       ) : null}
       <AlertDialog open={reloadConfirmOpen} onOpenChange={setReloadConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent data-drive-telemetry-scope='portal'>
           <AlertDialogHeader>
             <AlertDialogTitle>放弃本地修改？</AlertDialogTitle>
             <AlertDialogDescription>
@@ -358,7 +359,7 @@ export function DriveCodeRenderer({
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent data-drive-telemetry-scope='portal'>
           <AlertDialogHeader>
             <AlertDialogTitle>文件已有新内容</AlertDialogTitle>
             <AlertDialogDescription>

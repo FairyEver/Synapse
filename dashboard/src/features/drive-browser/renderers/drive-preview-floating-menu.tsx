@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
+import { trackDriveEvent } from '../shared/drive-telemetry'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemMenuSections } from './drive-preview-actions'
 import { DriveRendererOptionMenuLabel } from './drive-preview-header'
 import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
@@ -156,7 +157,15 @@ export function DrivePreviewFloatingMenu({
     event.currentTarget.releasePointerCapture(event.pointerId)
     event.preventDefault()
     suppressClickRef.current = true
-    if (!drag.moved) setOpen((current) => !current)
+    if (!drag.moved) {
+      setOpen((current) => !current)
+      return
+    }
+    trackDriveEvent({
+      eventKey: 'web.drive.preview.menu-drag',
+      component: 'drive-preview-menu',
+      action: 'complete',
+    })
   }
 
   const handlePointerCancel = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -182,6 +191,7 @@ export function DrivePreviewFloatingMenu({
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <Button
+            data-drive-telemetry-event='web.drive.preview.menu'
             type='button'
             size='icon'
             className={cn(
@@ -202,7 +212,7 @@ export function DrivePreviewFloatingMenu({
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='end' className='w-64'>
+        <DropdownMenuContent data-drive-telemetry-scope='portal' align='end' className='w-64'>
           <DropdownMenuLabel className='flex min-w-0 items-center gap-2'>
             <DriveBrowserItemIcon item={snapshot.current} />
             <span className='min-w-0 truncate'>{identity.name}</span>
@@ -219,7 +229,7 @@ export function DrivePreviewFloatingMenu({
                 if (action.kind === 'link') {
                   return (
                     <DropdownMenuItem key={action.id} asChild>
-                      <a href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
+                      <a data-drive-telemetry-event={`web.drive.preview.${action.id}`} href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
                         <action.icon data-icon='inline-start' />
                         {action.label}
                       </a>
@@ -228,7 +238,7 @@ export function DrivePreviewFloatingMenu({
                 }
                 if (action.kind === 'versions') {
                   return (
-                    <DropdownMenuItem key={action.id} onSelect={() => onOpenVersions(action.itemId)}>
+                    <DropdownMenuItem data-drive-telemetry-event='web.drive.preview.versions' key={action.id} onSelect={() => onOpenVersions(action.itemId)}>
                       <action.icon data-icon='inline-start' />
                       {action.label}
                     </DropdownMenuItem>
@@ -236,6 +246,7 @@ export function DrivePreviewFloatingMenu({
                 }
                 return action.options.map((option) => (
                   <DropdownMenuCheckboxItem
+                    data-drive-telemetry-event='web.drive.renderer.select'
                     key={option.id}
                     checked={option.id === selectedRendererId}
                     disabled={Boolean(option.disabledReason)}
@@ -261,7 +272,7 @@ function DrivePreviewFloatingRendererItem({ item }: { readonly item: DriveRender
     if (item.href) {
       return (
         <DropdownMenuItem asChild disabled={item.disabled}>
-          <a href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
+          <a data-drive-telemetry-event='web.drive.renderer.action' href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
             {item.loading ? <Loader2 className='animate-spin' /> : item.icon ? <item.icon data-icon='inline-start' /> : null}
             {item.label}
           </a>
@@ -269,7 +280,7 @@ function DrivePreviewFloatingRendererItem({ item }: { readonly item: DriveRender
       )
     }
     return (
-      <DropdownMenuItem disabled={item.disabled} onSelect={item.onClick}>
+      <DropdownMenuItem data-drive-telemetry-event='web.drive.renderer.action' disabled={item.disabled} onSelect={item.onClick}>
         {item.loading ? <Loader2 className='animate-spin' /> : item.icon ? <item.icon data-icon='inline-start' /> : null}
         {item.label}
       </DropdownMenuItem>
@@ -278,6 +289,7 @@ function DrivePreviewFloatingRendererItem({ item }: { readonly item: DriveRender
   if (item.kind === 'toggle') {
     return (
       <DropdownMenuCheckboxItem
+        data-drive-telemetry-event='web.drive.renderer.action'
         checked={item.pressed}
         disabled={item.disabled}
         onCheckedChange={(checked) => item.onPressedChange(Boolean(checked))}
@@ -290,7 +302,7 @@ function DrivePreviewFloatingRendererItem({ item }: { readonly item: DriveRender
     <>
       <DropdownMenuLabel>{item.label}</DropdownMenuLabel>
       {item.items.map((menuItem) => (
-        <DropdownMenuItem key={menuItem.id} disabled={menuItem.disabled} onSelect={menuItem.onSelect}>
+        <DropdownMenuItem data-drive-telemetry-event='web.drive.renderer.action' key={menuItem.id} disabled={menuItem.disabled} onSelect={menuItem.onSelect}>
           {menuItem.label}
         </DropdownMenuItem>
       ))}

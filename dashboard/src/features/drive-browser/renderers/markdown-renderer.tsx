@@ -978,7 +978,7 @@ function DriveMarkdownBody({
           open={compactPanel === 'outline'}
           onOpenChange={(open) => setOutlinePanelOpen(open)}
         >
-          <SheetContent side='left' data-markdown-sheet='outline' className='gap-0 overflow-hidden'>
+          <SheetContent data-drive-telemetry-scope='portal' side='left' data-markdown-sheet='outline' className='gap-0 overflow-hidden'>
             <SheetHeader className='pr-14'>
               <SheetTitle>目录</SheetTitle>
               <SheetDescription className='sr-only'>跳转到文档标题</SheetDescription>
@@ -1003,6 +1003,7 @@ function DriveMarkdownBody({
           onOpenChange={(open) => setCommentPanelOpen(open)}
         >
           <SheetContent
+            data-drive-telemetry-scope='portal'
             side='right'
             data-markdown-sheet='comments'
             className='gap-0 overflow-hidden'

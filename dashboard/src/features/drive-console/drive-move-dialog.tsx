@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import type { DriveBrowserItemDto, DriveItemTreeEntryDto } from '@synapse/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { driveApi } from '@/lib/api'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
 
 const DRIVE_MOVE_TREE_LIMIT = 200
 
@@ -73,7 +73,7 @@ export function DriveMoveDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent data-drive-telemetry-scope='portal' aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>移动</DialogTitle>
         </DialogHeader>

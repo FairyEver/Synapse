@@ -60,3 +60,17 @@ export async function requestJson<T>(path: string, options: RequestInit = {}) {
 
   return (await response.json()) as T
 }
+
+export async function sendClientTelemetryBatch(body: unknown): Promise<void> {
+  const response = await fetch('/api/client-telemetry/events', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    keepalive: true,
+  })
+
+  if (!response.ok) {
+    throw new ApiError('埋点发送失败。', response.status)
+  }
+}

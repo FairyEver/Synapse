@@ -1,5 +1,7 @@
 import type { DriveFolderUploadPrepareResult, DriveUploadPrepareResult } from '@synapse/shared'
-import { ApiError, driveApi } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { trackedDriveApi as driveApi } from '@/features/drive-browser/shared/drive-telemetry-api'
+import { startDriveOperation } from '@/features/drive-browser/shared/drive-telemetry'
 
 export type DriveWebUploadInput = {
   readonly parentId: string | null
@@ -104,16 +106,31 @@ export async function uploadDriveFiles(input: DriveWebUploadInput): Promise<Driv
 }
 
 export async function pickDriveFolderForUpload(): Promise<DriveFolderPickerResult> {
+  const finish = startDriveOperation('web.drive.operation.upload.folder-picker')
   const picker = (globalThis as DriveDirectoryPickerGlobal).showDirectoryPicker
-  if (!picker) return { kind: 'unsupported' }
+  if (!picker) {
+    finish('cancelled')
+    return { kind: 'unsupported' }
+  }
   let root: DriveFileSystemDirectoryHandle
   try {
     root = await picker.call(globalThis, { mode: 'read' })
   } catch (error) {
-    if (isPickerCancel(error)) return { kind: 'cancelled' }
+    if (isPickerCancel(error)) {
+      finish('cancelled')
+      return { kind: 'cancelled' }
+    }
+    finish('failure')
     throw error
   }
-  return { kind: 'selected', folder: await readDirectoryHandle(root) }
+  try {
+    const folder = await readDirectoryHandle(root)
+    finish('success')
+    return { kind: 'selected', folder }
+  } catch (error) {
+    finish('failure')
+    throw error
+  }
 }
 
 function driveFolderUploadFile(file: File): { readonly folderName: string; readonly relativePath: string } | null {
@@ -248,6 +265,7 @@ async function uploadPreparedDriveFile(
   prepared: { readonly sessionId: string; readonly upload: DriveUploadPrepareResult['upload'] },
   file: File,
 ): Promise<DriveWebUploadResult> {
+  const finish = startDriveOperation('web.drive.operation.upload.file-transfer')
   try {
     const response = await fetch(prepared.upload.url, {
       method: prepared.upload.method,
@@ -258,8 +276,10 @@ async function uploadPreparedDriveFile(
       throw new ApiError(await uploadResponseMessage(response), response.status)
     }
     await driveApi.completeUpload(prepared.sessionId)
+    finish('success')
     return { completed: 1, failed: 0, skipped: 0 }
   } catch (error) {
+    finish('failure')
     try {
       await driveApi.cancelUpload(prepared.sessionId)
     } catch {

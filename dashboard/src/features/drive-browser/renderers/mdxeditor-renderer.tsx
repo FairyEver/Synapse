@@ -59,7 +59,11 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
-import { ApiError, driveApi, driveBrowserApi } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import {
+  trackedDriveApi as driveApi,
+  trackedDriveBrowserApi as driveBrowserApi,
+} from '../shared/drive-telemetry-api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -910,7 +914,7 @@ export function DriveMDXeditorRenderer({
       </div>
       {isCompact && annotationsEnabled ? (
         <Sheet open={compactCommentsOpen} onOpenChange={setCommentPanelOpen}>
-          <SheetContent side='right' data-mdxeditor-sheet='comments' className='gap-0 overflow-hidden'>
+          <SheetContent data-drive-telemetry-scope='portal' side='right' data-mdxeditor-sheet='comments' className='gap-0 overflow-hidden'>
             <SheetHeader className='sr-only'>
               <SheetTitle>评论</SheetTitle>
               <SheetDescription>查看和管理文档评论</SheetDescription>
@@ -932,7 +936,7 @@ export function DriveMDXeditorRenderer({
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div>
       ) : null}
       <AlertDialog open={reloadConfirmOpen} onOpenChange={setReloadConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent data-drive-telemetry-scope='portal'>
           <AlertDialogHeader>
             <AlertDialogTitle>放弃本地修改？</AlertDialogTitle>
             <AlertDialogDescription>
@@ -953,7 +957,7 @@ export function DriveMDXeditorRenderer({
       <AlertDialog open={pendingPublicImageUpload !== null} onOpenChange={(open) => {
         if (!open) cancelPendingPublicImageUpload()
       }}>
-        <AlertDialogContent>
+        <AlertDialogContent data-drive-telemetry-scope='portal'>
           <AlertDialogHeader>
             <AlertDialogTitle>插入公开素材</AlertDialogTitle>
             <AlertDialogDescription>
@@ -967,7 +971,7 @@ export function DriveMDXeditorRenderer({
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent data-drive-telemetry-scope='portal'>
           <AlertDialogHeader>
             <AlertDialogTitle>文件已有新内容</AlertDialogTitle>
             <AlertDialogDescription>
