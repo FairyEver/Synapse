@@ -61,6 +61,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.agent-personas.items",
         "app.agent-personas.remote-cache",
         "app.agent-personas.settings",
+        "app.connectors.credentials",
+        "app.connectors.items",
         "app.quick-input.items",
         "app.quick-input.settings",
         "app.secrets.items",
@@ -293,6 +295,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         || schema.name === "app.terminal.global-launch-bodies"
         || schema.name === "app.terminal.group-launch-bodies"
         || schema.name === "app.terminal.launch-bodies"
+        || schema.name === "app.connectors.credentials"
         || schema.name === "webhook.config"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }
