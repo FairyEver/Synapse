@@ -22,7 +22,7 @@ It preserves the existing `/api/admin/**` authorization boundary and all ordinar
 - `/admin` resolves to `/admin/system` for an active administrator session and `/admin/access` otherwise.
 - `/admin/access` is the only management-secret entry page.
 - The root path continues to redirect to `/console/`.
-- Public shares, standalone Drive readers, signup, password reset, desktop authorization and `/desktop/update` remain outside the admin application.
+- Public shares, standalone Drive readers, signup, password reset completion, desktop authorization and `/desktop/update` remain outside the admin application. Password reset link generation belongs to administrator user management.
 - The same browser may hold an ordinary-user session and an administrator session at the same time. The sessions, permissions and logout behavior remain independent.
 
 ## Frontend Applications
@@ -31,7 +31,7 @@ It preserves the existing `/api/admin/**` authorization boundary and all ordinar
 
 The console application owns:
 
-- ordinary-user sign-in, signup and password reset;
+- ordinary-user sign-in, signup and password reset completion;
 - My Skills and Explore Skills;
 - personal Drive;
 - user Webhooks and the current user's Webhook history;
@@ -41,7 +41,7 @@ The console application owns:
 The admin application owns:
 
 - system overview;
-- user and device management;
+- user and device management, including one-time password reset link generation;
 - Skill repository management;
 - global Webhook history;
 - audit logs and problem feedback;
@@ -50,6 +50,22 @@ The admin application owns:
 The admin application has no profile settings. Its identity label is always `平台管理员`; its only account-area action is `退出管理界面`.
 
 The applications may share the existing shadcn primitives, theme providers and identity-neutral request helpers. They do not share navigation, auth stores, route guards or business route composition. Role-based runtime switching is removed.
+
+## Administrator Password Reset Links
+
+Ordinary users cannot request password reset links. An active administrator session may generate a link for an active user from `/admin/users`. The plaintext link is returned once for manual delivery and is never stored in audit records or server logs.
+
+Links expire after 30 minutes and are single-use. Generating a link marks the user's previous unused reset links as used. Completing a reset updates the password, consumes every remaining reset link, and revokes the user's existing sessions and refresh tokens. Disabled users must be enabled before an administrator can generate a link.
+
+The API boundary is:
+
+```text
+POST /api/admin/users/:id/password-reset-link
+POST /api/auth/password-reset/validate
+POST /api/auth/password-reset/confirm
+```
+
+The first endpoint requires an administrator session. Validation and confirmation remain public because they consume an opaque bearer token. Audit records identify the administrator and target user but never contain the token or complete reset URL.
 
 ## Administrator Access Secret
 

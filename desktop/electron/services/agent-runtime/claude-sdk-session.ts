@@ -92,6 +92,7 @@ export interface QueryLike {
   grantAdditionalDirectories?(directories: readonly string[]): Promise<void>
   getContextUsage?(): Promise<SDKControlGetContextUsageResponse>
   rewindFiles?(userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult>
+  reconnectMcpServer?(serverName: string): Promise<void>
 }
 
 export type QueryFactory = (input: {
@@ -130,6 +131,8 @@ export interface ClaudeSDKSessionOptions {
   readonly abortSignal?: AbortSignal
   readonly additionalDirectories?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
+  readonly mcpServers?: Options["mcpServers"]
+  readonly onElicitation?: Options["onElicitation"]
   readonly onConversationTitle?: (title: string) => void | Promise<void>
   readonly queryFactory?: QueryFactory
   readonly synapseToolRouter?: SynapseToolRouterQueryOptions
@@ -228,6 +231,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private queryFinished = false
   private permissionMode: PermissionMode | undefined
   private synapseToolRouterFallbackEmitted = false
+  private readonly mcpServerNames: readonly string[]
+  private mcpServersReconnected = false
   mainThreadAgentName: string | undefined
   readonly agentDefinitionsHash: string | undefined
   get finished(): boolean {
@@ -257,6 +262,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.toolPolicy = options.toolPolicy
     this.synapseToolRouterEnabled = Boolean(options.synapseToolRouter)
     this.routerSubagentToolAccess = options.routerSubagentToolAccess ?? {}
+    this.mcpServerNames = Object.keys(options.mcpServers ?? {})
     this.permissionMode = parsePermissionMode(options.mode)
     this.now = options.now ?? (() => new Date())
     this.mainThreadAgentName = options.agent
@@ -489,6 +495,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
       includePartialMessages: true,
       canUseTool: (toolName, input, context) => this.canUseTool(toolName, input, context),
     }
+    if (options.mcpServers && Object.keys(options.mcpServers).length > 0) queryOptions.mcpServers = options.mcpServers
+    if (options.onElicitation) queryOptions.onElicitation = options.onElicitation
 
     if (packagedRuntime.status === "present") {
       queryOptions.pathToClaudeCodeExecutable = packagedRuntime.executablePath
@@ -924,6 +932,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   private async bridgeMessage(message: SDKMessage): Promise<readonly AgentEvent[]> {
     const raw = message as unknown as Record<string, unknown>
+    if (raw.type === "system" && raw.subtype === "init") {
+      await this.reconnectConfiguredMcpServers()
+    }
     const messageSessionId = typeof raw.session_id === "string" ? raw.session_id : undefined
     if (messageSessionId) this.sdkSessionId = messageSessionId
     if (isReplayedUserMessage(raw)) {
@@ -958,6 +969,25 @@ export class ClaudeSDKSession implements AgentLiveSession {
         this.projectSynapseToolRouterEvent(this.resolveToolResultName(enriched)),
       )
     })
+  }
+
+  private async reconnectConfiguredMcpServers(): Promise<void> {
+    if (this.mcpServersReconnected || this.mcpServerNames.length === 0) return
+    this.mcpServersReconnected = true
+    if (!this.query.reconnectMcpServer) return
+    for (const serverName of this.mcpServerNames) {
+      try {
+        await this.query.reconnectMcpServer(serverName)
+      } catch (error) {
+        this.logger?.warn("MCP server reconnect failed; continuing with the session.", {
+          boundary: "claude-sdk-mcp-reconnect",
+          projectId: this.projectId,
+          conversationId: this.conversationId,
+          serverName,
+          ...errorLogMeta(error),
+        })
+      }
+    }
   }
 
   private async refreshContextUsageAfterCompaction(): Promise<AgentContextUsage | undefined> {

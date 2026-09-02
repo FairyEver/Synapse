@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { InlineToolbar, type InlineToolbarAction } from './inline-toolbar'
 
-const HOVER_CLOSE_DELAY = 120
+const HOVER_INTENT_DELAY = 120
 
 type ImageElementPosition = {
   readonly imageId: string
@@ -49,20 +49,25 @@ export function MarkdownImageCommentsOverlay({
   const imageById = useMemo(() => new Map(images.map((image) => [image.imageId, image])), [images])
   const [hoveredImageId, setHoveredImageId] = useState<string | null>(null)
   const [positions, setPositions] = useState<readonly ImageElementPosition[]>([])
-  const closeTimerRef = useRef<number | null>(null)
+  const hoveredImageIdRef = useRef<string | null>(null)
+  const hoverTimerRef = useRef<number | null>(null)
 
-  const cancelClose = useCallback(() => {
-    if (closeTimerRef.current === null) return
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = null
+  const updateHoveredImage = useCallback((imageId: string | null) => {
+    hoveredImageIdRef.current = imageId
+    setHoveredImageId(imageId)
+  }, [])
+  const cancelHoverTimer = useCallback(() => {
+    if (hoverTimerRef.current === null) return
+    window.clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = null
   }, [])
   const scheduleClose = useCallback(() => {
-    cancelClose()
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null
-      setHoveredImageId(null)
-    }, HOVER_CLOSE_DELAY)
-  }, [cancelClose])
+    cancelHoverTimer()
+    hoverTimerRef.current = window.setTimeout(() => {
+      hoverTimerRef.current = null
+      updateHoveredImage(null)
+    }, HOVER_INTENT_DELAY)
+  }, [cancelHoverTimer, updateHoveredImage])
 
   useEffect(() => {
     const root = rootRef.current
@@ -119,15 +124,22 @@ export function MarkdownImageCommentsOverlay({
   useLayoutEffect(() => {
     const root = rootRef.current
     if (!root || images.length === 0) return
-    const activateFromTarget = (target: EventTarget | null) => {
+    const activateFromTarget = (target: EventTarget | null, deferImageSwitch: boolean) => {
       const element = target instanceof Element ? target.closest<HTMLElement>('[data-drive-markdown-image-id]') : null
       if (!element || !root.contains(element) || element.hidden) return
       const imageId = element.dataset.driveMarkdownImageId
       if (!imageId || !imageById.has(imageId)) return
-      cancelClose()
-      setHoveredImageId(imageId)
+      cancelHoverTimer()
+      if (deferImageSwitch && hoveredImageIdRef.current && hoveredImageIdRef.current !== imageId) {
+        hoverTimerRef.current = window.setTimeout(() => {
+          hoverTimerRef.current = null
+          updateHoveredImage(imageId)
+        }, HOVER_INTENT_DELAY)
+        return
+      }
+      updateHoveredImage(imageId)
     }
-    const onPointerOver = (event: PointerEvent) => activateFromTarget(event.target)
+    const onPointerOver = (event: PointerEvent) => activateFromTarget(event.target, true)
     const onPointerOut = (event: PointerEvent) => {
       const from = event.target instanceof Element
         ? event.target.closest<HTMLElement>('[data-drive-markdown-image-id]')
@@ -139,7 +151,7 @@ export function MarkdownImageCommentsOverlay({
       if (to?.dataset.driveMarkdownImageId === from.dataset.driveMarkdownImageId) return
       scheduleClose()
     }
-    const onFocusIn = (event: FocusEvent) => activateFromTarget(event.target)
+    const onFocusIn = (event: FocusEvent) => activateFromTarget(event.target, false)
     const onFocusOut = (event: FocusEvent) => {
       const from = event.target instanceof Element
         ? event.target.closest<HTMLElement>('[data-drive-markdown-image-id]')
@@ -160,9 +172,9 @@ export function MarkdownImageCommentsOverlay({
       root.removeEventListener('pointerout', onPointerOut)
       root.removeEventListener('focusin', onFocusIn)
       root.removeEventListener('focusout', onFocusOut)
-      cancelClose()
+      cancelHoverTimer()
     }
-  }, [cancelClose, imageById, images.length, rootRef, scheduleClose])
+  }, [cancelHoverTimer, imageById, images.length, rootRef, scheduleClose, updateHoveredImage])
 
   const positionById = useMemo(() => new Map(positions.map((position) => [position.imageId, position])), [positions])
   const hoveredImage = hoveredImageId ? imageById.get(hoveredImageId) ?? null : null
@@ -234,9 +246,9 @@ export function MarkdownImageCommentsOverlay({
           actions={commentActions}
           containerRef={containerRef}
           boundaryRef={scrollRef}
-          onPointerEnter={cancelClose}
+          onPointerEnter={cancelHoverTimer}
           onPointerLeave={scheduleClose}
-          onFocus={cancelClose}
+          onFocus={cancelHoverTimer}
           onBlur={scheduleClose}
         />
       ) : null}

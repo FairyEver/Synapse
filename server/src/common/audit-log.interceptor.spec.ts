@@ -227,6 +227,35 @@ describe("AuditLogInterceptor", () => {
     })
   })
 
+  it("records password reset link generation without exposing the link", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const interceptor = new AuditLogInterceptor(auditLog as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "POST",
+        path: "/api/admin/users/user-1/password-reset-link",
+        params: { id: "user-1" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => of({ resetUrl: "https://app.example.com/console/reset-password?token=secret-token" }) },
+    ))
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "current-admin@example.com",
+      action: "admin.user.password_reset_link_create",
+      targetType: "user",
+      targetId: "user-1",
+      detail: {
+        method: "POST",
+        path: "/api/admin/users/user-1/password-reset-link",
+        body: undefined,
+      },
+      ipAddress: "127.0.0.1",
+    })
+    expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("secret-token")
+  })
+
   it("does not fallback-audit successful authenticated admin read operations", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }

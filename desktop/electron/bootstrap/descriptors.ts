@@ -85,6 +85,8 @@ import { withLegacyTerminalMigration } from "../../app-capabilities/terminal/mai
 import { createTerminalRepository } from "../../app-capabilities/terminal/main/repository"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createQuickInputService, type QuickInputService } from "../../app-capabilities/quick-input/main/service"
+import { createConnectorsService } from "../../app-capabilities/connectors/main/service"
+import type { ReturnTypeOfConnectorsService } from "../../app-capabilities/connectors/main/service-types"
 import {
   QUICK_INPUT_ITEMS_NAMESPACE,
   QUICK_INPUT_SETTINGS_NAMESPACE,
@@ -100,6 +102,8 @@ import {
   SECRETS_ITEMS_NAMESPACE,
   SECRETS_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/secrets/shared/capability"
+import { CONNECTORS_ITEMS_NAMESPACE, CONNECTORS_CREDENTIALS_NAMESPACE } from "../../app-capabilities/connectors/shared/capability"
+import type { ConnectorItemEntryV1, ConnectorCredentialEntryV1 } from "../runtime/data-repo/schemas/connectors"
 import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/cache"
 import { RemoteAgentPersonaClient } from "../../app-capabilities/agent-personas/main/remote-client"
 import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
@@ -490,6 +494,21 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
   async start(instance) {
     await instance.initialize()
   },
+}
+
+export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsService> = {
+  id: "core.connectors",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createConnectorsService({
+      items: dataRepository.namespace<ConnectorItemEntryV1>(CONNECTORS_ITEMS_NAMESPACE),
+      credentials: dataRepository.namespace<ConnectorCredentialEntryV1>(CONNECTORS_CREDENTIALS_NAMESPACE),
+      logger: ctx.logger.child("connectors"),
+    })
+  },
+  async start(instance) { await instance.initialize() },
 }
 
 export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {

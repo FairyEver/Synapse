@@ -9,7 +9,7 @@ import type {
   DataRepository,
   OutboxEntryV1,
 } from "../../runtime/data-repo"
-import { app, nativeImage, type NativeImage } from "electron"
+import { app, nativeImage, shell, type NativeImage } from "electron"
 import path from "node:path"
 import type { ProjectScopedService } from "../../runtime/project-container"
 import {
@@ -30,6 +30,7 @@ import {
   type AgentConversationWindowService,
 } from "../agent-conversation-window-service"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
+import type { ClaudeSDKSessionOptions } from "./claude-sdk-session"
 import { AgentArtifactStore } from "./artifact-store"
 import {
   AttachmentStagingService,
@@ -248,6 +249,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         isManagedKnowledgeBase
         && typeof ctx.projectMeta.workspacePath === "string"
         && ctx.projectMeta.workspacePath.length > 0
+      const figmaSkillPackageRoot = app.isPackaged
+        ? path.join(process.resourcesPath, "figma-skill")
+        : path.join(app.getAppPath(), "app-capabilities", "figma-skill", "skill-package")
       const isManagedKnowledgeBaseRuntimeMessage = (message: AgentMessage) =>
         hasManagedKnowledgeBaseWorkspace
         && (message.platform === "local-renderer" || message.platform === "workflow")
@@ -329,9 +333,14 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         publishedProjectCommands: async () => isManagedKnowledgeBase
           ? MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS
           : [],
-        sdkPlugins: async (message) => isManagedKnowledgeBaseRuntimeMessage(message)
-          ? [{ type: "local", path: ctx.projectMeta.workspacePath as string }]
-          : [],
+        sdkPlugins: async (message, conversation) => [
+          ...(isManagedKnowledgeBaseRuntimeMessage(message)
+            ? [{ type: "local" as const, path: ctx.projectMeta.workspacePath as string }]
+            : []),
+          ...(conversation.agentConfig?.figmaDesktopMcpEnabled === true
+            ? [{ type: "local" as const, path: figmaSkillPackageRoot, skipMcpDiscovery: true }]
+            : []),
+        ],
         allowPluginHooks: async (message) => isManagedKnowledgeBaseRuntimeMessage(message),
         allowAgentNativeSlash: (name, message) =>
           isManagedKnowledgeBaseRuntimeMessage(message)
@@ -347,6 +356,28 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         sdkPersonaConfig: personaRuntimeResolver
           ? (_message, conversation) => personaRuntimeResolver.resolve(conversation)
           : undefined,
+        loadFigmaDesktopMcpEnabled: async () => {
+          const connectors = optionalService<{
+            getMcpServers(): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
+          }>(ctx.globalRegistry, "core.connectors")
+          if (!connectors) return false
+          const servers = await connectors.getMcpServers()
+          return Object.keys(servers).length > 0
+        },
+        resolveMcpServers: async (_message, conversation) => {
+          if (conversation.agentConfig?.figmaDesktopMcpEnabled !== true) return {}
+          const connectors = optionalService<{
+            getMcpServers(): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
+          }>(ctx.globalRegistry, "core.connectors")
+          return connectors ? connectors.getMcpServers() : {}
+        },
+        onElicitation: async (request) => {
+          if (request.mode === "url" && request.url) {
+            await shell.openExternal(request.url)
+            return { action: "accept" }
+          }
+          return { action: "decline" }
+        },
         resolvePersonaForSessionCreate: personaRuntimeResolver
           ? (personaId) => personaRuntimeResolver.resolve({
             agentConfig: { activeMainThreadPersonaId: personaId },

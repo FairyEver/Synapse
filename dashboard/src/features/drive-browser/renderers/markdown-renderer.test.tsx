@@ -307,7 +307,10 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('[data-image-lightbox]')).toBeNull()
     expect(document.querySelector('[data-drive-markdown-image-comment-target="true"]')).not.toBeNull()
     expect(textarea()).toBeTruthy()
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')?.textContent).toContain('示意图')
+    const imageComposer = document.querySelector<HTMLElement>('[data-markdown-comment-composer-popover="true"]')
+    expect(imageComposer?.style.left).toBe('348px')
+    expect(imageComposer?.style.top).toBe('136px')
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
 
     await inputValue(textarea(), '检查这张图')
     await click(buttonWithText('评论'))
@@ -316,6 +319,43 @@ describe('DriveMarkdownRenderer', () => {
       target: expect.objectContaining({ kind: 'image', imageId: 'mdimg_1', resourceKey: 'file:asset_1' }),
       body: '检查这张图',
     }))
+  })
+
+  it('keeps the lower image comment action available while the pointer crosses an adjacent image', async () => {
+    mockAdjacentImageCommentRects()
+    renderMarkdown({
+      previewData: preview({
+        html: [
+          '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1" alt="上图"></p>',
+          '<p><img data-drive-markdown-image-id="mdimg_2" src="/files/asset_2" alt="下图"></p>',
+        ].join(''),
+        markdownProjection: adjacentImageProjection(),
+      }),
+      edit: editable(),
+      annotationContext: { context: 'owner', itemId: 'item-1' },
+    })
+    await setPreviewWidth(1200)
+    triggerAllResizeObservers()
+    await flushAnimationFrames()
+    const upperImage = document.querySelector<HTMLElement>('[data-drive-markdown-image-id="mdimg_1"]')
+    const lowerImage = document.querySelector<HTMLElement>('[data-drive-markdown-image-id="mdimg_2"]')
+    if (!upperImage || !lowerImage) throw new Error('Missing adjacent projected images')
+
+    await act(async () => lowerImage.dispatchEvent(new Event('pointerover', { bubbles: true })))
+    expect(document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')?.style.top).toBe('300px')
+
+    await act(async () => {
+      lowerImage.dispatchEvent(new MouseEvent('pointerout', { bubbles: true, relatedTarget: upperImage }))
+      upperImage.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    })
+    const imageToolbar = document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-action="true"]')
+    if (!imageToolbar) throw new Error('Missing image comment action')
+    await act(async () => imageToolbar.dispatchEvent(new Event('pointerover', { bubbles: true })))
+
+    expect(document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')?.style.top).toBe('300px')
+    await click(buttonWithText('添加评论'))
+    expect(document.querySelector('[data-markdown-comment-composer-popover="true"]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
   })
 
   it('shows the image comment action when a projected image receives keyboard focus', async () => {
@@ -907,9 +947,10 @@ describe('DriveMarkdownRenderer', () => {
 
     await click(buttonWithText('添加评论'))
     expect(pendingOverlay()).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comment-composer-popover="true"]')).not.toBeNull()
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
     expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
-    expect(toolbarButtonTexts()).toContain('评论 1')
+    expect(toolbarButtonTexts()).toContain('评论 0')
     await inputValue(textarea(), 'New comment')
     await click(buttonWithText('评论'))
 
@@ -925,7 +966,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).toBeNull()
   })
 
-  it('restores focus to the comments rail after cancelling a new comment draft with Escape', async () => {
+  it('closes the nearby comment composer with Escape without opening the comment rail', async () => {
+    mockCommentComposerRects()
     renderMarkdown()
     selectStrongText()
 
@@ -938,15 +980,20 @@ describe('DriveMarkdownRenderer', () => {
     await keyDown(textarea(), { key: 'Escape' })
     await flushAnimationFrames()
 
-    expect(document.activeElement).toBe(buttonByLabel('刷新评论'))
+    expect(document.querySelector('[data-markdown-comment-composer-popover="true"]')).toBeNull()
+    expect(commentRailPanel()).toBeUndefined()
   })
 
-  it('keeps the first inline comment draft from scrolling its anchored rail during autofocus', async () => {
+  it('keeps the document position stable while autofocus opens the nearby composer', async () => {
+    mockCommentComposerRects()
     const nativeFocus = HTMLTextAreaElement.prototype.focus
+    const visibleWhenFocused: boolean[] = []
     vi.spyOn(HTMLTextAreaElement.prototype, 'focus').mockImplementation(function (options?: FocusOptions) {
+      const composer = this.closest<HTMLElement>('[data-markdown-comment-composer-popover="true"]')
+      visibleWhenFocused.push(Boolean(composer && composer.getAttribute('aria-hidden') !== 'true' && !composer.classList.contains('invisible')))
       nativeFocus.call(this, options)
-      const scrollRegion = this.closest<HTMLElement>('[data-markdown-comments-scroll-region="true"]')
-      if (scrollRegion && !options?.preventScroll) scrollRegion.scrollTop = 480
+      const documentScroller = document.querySelector<HTMLElement>('[data-testid="markdown-document-scroll"]')
+      if (documentScroller && !options?.preventScroll) documentScroller.scrollTop = 480
     })
     renderMarkdown()
     selectStrongText()
@@ -956,9 +1003,41 @@ describe('DriveMarkdownRenderer', () => {
     })
     await click(buttonWithText('添加评论'))
 
-    const scrollRegion = document.querySelector<HTMLElement>('[data-markdown-comments-scroll-region="true"]')
-    expect(scrollRegion?.scrollTop).toBe(0)
+    expect(markdownDocumentScroller().scrollTop).toBe(0)
     expect(document.activeElement).toBe(textarea())
+    expect(visibleWhenFocused).toEqual([true])
+  })
+
+  it('keeps a new comment composer beside the selection when the comment rail is dense', async () => {
+    annotationsMock.threads = Array.from({ length: 8 }, (_, index) => thread({
+      id: `thread-${index + 1}`,
+      body: `Comment ${index + 1}`,
+      createdAt: `2026-06-21T00:${String(index).padStart(2, '0')}:00.000Z`,
+    }))
+    const nativeRect = HTMLElement.prototype.getBoundingClientRect
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+        return domRect({ width: 288, height: 148 })
+      }
+      if (this.getAttribute('data-testid') === 'markdown-document-scroll') {
+        return domRect({ left: 0, top: 0, width: 800, height: 600 })
+      }
+      return nativeRect.call(this)
+    })
+    renderMarkdown()
+    selectStrongText()
+
+    await act(async () => {
+      dispatchPointerUpOnMarkdownBody()
+    })
+    await click(buttonWithText('添加评论'))
+
+    const composer = document.querySelector<HTMLElement>('[data-markdown-comment-composer-popover="true"]')
+    expect(composer?.className).toContain('fixed')
+    expect(composer?.style.left).toBe('136px')
+    expect(composer?.style.top).toBe('56px')
+    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
+    expect(document.querySelectorAll('[data-markdown-comment-thread-id]')).toHaveLength(8)
   })
 
   it('waits for pointer completion before creating a selection anchor', async () => {
@@ -1750,13 +1829,47 @@ function configureMarkdownDocumentScroller() {
   })
 }
 
+function mockCommentComposerRects() {
+  const nativeRect = HTMLElement.prototype.getBoundingClientRect
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+      return domRect({ width: 288, height: 148 })
+    }
+    if (this.getAttribute('data-testid') === 'markdown-document-scroll') {
+      return domRect({ left: 0, top: 0, width: 800, height: 600 })
+    }
+    return nativeRect.call(this)
+  })
+}
+
 function mockImageCommentRects() {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+      return domRect({ width: 288, height: 148 })
+    }
     if (this.hasAttribute('data-inline-toolbar')) {
       return domRect({ width: 104, height: 32 })
     }
     if (this.hasAttribute('data-drive-markdown-image-id')) {
       return domRect({ left: 100, top: 120, width: 240, height: 180 })
+    }
+    return domRect({ left: 0, top: 0, width: 800, height: 600 })
+  })
+}
+
+function mockAdjacentImageCommentRects() {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+      return domRect({ width: 288, height: 148 })
+    }
+    if (this.hasAttribute('data-inline-toolbar')) {
+      return domRect({ width: 104, height: 32 })
+    }
+    if (this.dataset.driveMarkdownImageId === 'mdimg_1') {
+      return domRect({ left: 100, top: 120, width: 240, height: 180 })
+    }
+    if (this.dataset.driveMarkdownImageId === 'mdimg_2') {
+      return domRect({ left: 100, top: 300, width: 240, height: 180 })
     }
     return domRect({ left: 0, top: 0, width: 800, height: 600 })
   })
@@ -1921,6 +2034,28 @@ function imageProjection(): DriveMarkdownProjectionDto {
       alt: '示意图',
       title: null,
     }],
+  }
+}
+
+function adjacentImageProjection(): DriveMarkdownProjectionDto {
+  const projection = imageProjection()
+  const firstImage = projection.images[0]
+  if (!firstImage) throw new Error('Missing base projected image')
+  return {
+    ...projection,
+    images: [
+      { ...firstImage, alt: '上图' },
+      {
+        ...firstImage,
+        imageId: 'mdimg_2',
+        segmentId: 'segment-image-2',
+        imageIndex: 1,
+        documentIndex: 1,
+        source: '/files/asset_2',
+        resourceKey: 'file:asset_2',
+        alt: '下图',
+      },
+    ],
   }
 }
 

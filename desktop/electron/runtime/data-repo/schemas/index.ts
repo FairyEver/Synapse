@@ -69,6 +69,12 @@ export {
   type QuickInputSettingsEntryV1,
 } from "./quick-input"
 export {
+  connectorsItemsSchema,
+  connectorsCredentialsSchema,
+  type ConnectorItemEntryV1,
+  type ConnectorCredentialEntryV1,
+} from "./connectors"
+export {
   secretsItemsSchema,
   secretsSettingsSchema,
   type SecretItemEntryV1,
@@ -214,6 +220,7 @@ import { gitCloneJournalSchema } from "./git-clone-journal"
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
 import { quickInputItemsSchema, quickInputSettingsSchema } from "./quick-input"
+import { connectorsItemsSchema, connectorsCredentialsSchema } from "./connectors"
 import { secretsItemsSchema, secretsSettingsSchema } from "./secrets"
 import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-personas"
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
@@ -279,6 +286,8 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   cheatCodeStatesSchema,
   quickInputItemsSchema,
   quickInputSettingsSchema,
+  connectorsItemsSchema,
+  connectorsCredentialsSchema,
   secretsItemsSchema,
   secretsSettingsSchema,
   agentPersonaItemsSchema,

@@ -83,6 +83,7 @@ import type {
   SecretValueView,
   SecretsChangedEvent,
 } from "../../app-capabilities/secrets/shared/schema"
+import type { ConnectorItem, ConnectorListResult } from "../../app-capabilities/connectors/shared/schema"
 import type {
   SynapseAgentPersona,
   SynapseAgentPersonaBuiltinModelUpdateInput,
@@ -1086,6 +1087,14 @@ export type SynapseBridge = {
       scanSkillEnvBindings: (input: SecretSkillEnvScanInput) => Promise<SecretSkillEnvScanResult>
       scanSkillEnvBindingsBatch: (input: SecretSkillEnvBatchScanInput) => Promise<SecretSkillEnvBatchScanResult>
       queueSkillEnvBindings: (input: SecretSkillEnvQueueInput) => Promise<SecretSkillEnvQueueResult>
+    }
+  }
+  connectors: {
+    item: {
+      list: () => Promise<ConnectorListResult>
+      connect: (input: { id: string }) => Promise<ConnectorItem>
+      disconnect: (input: { id: string }) => Promise<void>
+      onChanged: (listener: (event: { items: ConnectorItem[] }) => void) => () => void
     }
   }
   agentPersonas: {

@@ -15,6 +15,7 @@ vi.mock('@/lib/api', () => ({
     listLiveClients: vi.fn(),
     listUsers: vi.fn(),
     subscribeLiveClients: vi.fn(),
+    createUserPasswordResetLink: vi.fn(),
     updateUserAdminNote: vi.fn(),
     updateUserStatus: vi.fn(),
   },
@@ -80,9 +81,10 @@ describe('UsersPage status confirmation', () => {
     })
 
     renderPage()
-    const disableButton = await waitFor(() => tableButtonByText('禁用'))
+    const actionsButton = await waitFor(() => userActionsButton('ada@example.com'))
 
-    await click(disableButton)
+    await openMenu(actionsButton)
+    await click(menuItemByText('禁用用户'))
 
     expect(mockedAdminApi.updateUserStatus).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('禁用用户')
@@ -92,7 +94,8 @@ describe('UsersPage status confirmation', () => {
 
     expect(mockedAdminApi.updateUserStatus).not.toHaveBeenCalled()
 
-    await click(tableButtonByText('禁用'))
+    await openMenu(userActionsButton('ada@example.com'))
+    await click(menuItemByText('禁用用户'))
     await click(dialogButtonByText('禁用'))
 
     expect(mockedAdminApi.updateUserStatus).toHaveBeenCalledWith('user-1', 'disabled')
@@ -130,7 +133,8 @@ describe('UsersPage status confirmation', () => {
       expect(document.body.textContent).toContain('付费客户')
     })
 
-    await click(tableButtonByText('备注'))
+    await openMenu(userActionsButton('ada@example.com'))
+    await click(menuItemByText('编辑备注'))
     const textarea = document.querySelector('textarea')
     if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('textarea not found')
 
@@ -151,6 +155,55 @@ describe('UsersPage status confirmation', () => {
     expect(mockedAdminApi.updateUserAdminNote).toHaveBeenCalledWith(
       'user-1',
       '内部测试账号'
+    )
+  })
+
+  it('generates and copies password reset links for active users', async () => {
+    mockedAdminApi.listUsers.mockResolvedValue({
+      data: [{
+        id: 'user-1',
+        email: 'ada@example.com',
+        handle: 'ada',
+        adminNote: null,
+        status: 'active',
+        createdAt: '2026-06-14T00:00:00.000Z',
+        updatedAt: '2026-06-14T00:00:00.000Z',
+      }],
+      total: 1,
+    })
+    mockedAdminApi.listLiveClients.mockResolvedValue([])
+    mockedAdminApi.subscribeLiveClients.mockReturnValue(() => {})
+    mockedAdminApi.createUserPasswordResetLink.mockResolvedValue({
+      ok: true,
+      resetUrl: 'https://app.example.com/console/reset-password?token=reset-token',
+      expiresAt: '2026-09-02T02:30:00.000Z',
+    })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+
+    renderPage()
+    await waitFor(() => userActionsButton('ada@example.com'))
+    await openMenu(userActionsButton('ada@example.com'))
+    await click(menuItemByText('生成重置链接'))
+
+    expect(document.body.textContent).toContain('生成重置链接')
+    expect(document.body.textContent).toContain('30 分钟后失效')
+    await click(dialogButtonByText('生成链接'))
+
+    await waitFor(() => {
+      expect(mockedAdminApi.createUserPasswordResetLink).toHaveBeenCalledWith('user-1')
+      expect(document.body.textContent).toContain('重置链接已生成')
+    })
+    const input = document.querySelector('#password-reset-link')
+    expect(input).toBeInstanceOf(HTMLInputElement)
+    expect((input as HTMLInputElement).value).toContain('token=reset-token')
+
+    await click(dialogButtonByText('复制链接'))
+    expect(writeText).toHaveBeenCalledWith(
+      'https://app.example.com/console/reset-password?token=reset-token'
     )
   })
 })
@@ -197,11 +250,28 @@ async function waitFor<T>(read: () => T): Promise<T> {
   throw lastError
 }
 
-function tableButtonByText(text: string): HTMLButtonElement {
-  const button = Array.from(document.querySelectorAll('table button'))
-    .find((item) => item.textContent === text)
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} table button not found`)
+function userActionsButton(email: string): HTMLButtonElement {
+  const button = document.querySelector(`button[aria-label="${email} 的用户操作"]`)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`${email} actions button not found`)
   return button
+}
+
+function menuItemByText(text: string): HTMLElement {
+  const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+    .find((element) => element.textContent === text)
+  if (!(item instanceof HTMLElement)) throw new Error(`${text} menu item not found`)
+  return item
+}
+
+async function openMenu(button: HTMLButtonElement) {
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      ctrlKey: false,
+    }))
+    await Promise.resolve()
+  })
 }
 
 function dialogButtonByText(text: string): HTMLButtonElement {

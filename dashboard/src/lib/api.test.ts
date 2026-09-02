@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { adminApi, dashboardApi, driveAnnotationApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAdminAuthExpired, subscribeAuthExpired } from './api'
+import { adminApi, dashboardApi, driveAnnotationApi, driveApi, driveBrowserApi, driveFileVersionsApi, shouldNotifyAuthExpired, subscribeAdminAuthExpired, subscribeAuthExpired, userAuthApi } from './api'
 
 describe('dashboardApi.apiKeys', () => {
   afterEach(() => {
@@ -141,6 +141,53 @@ describe('adminApi.users', () => {
       '/api/admin/users?pageSize=20&search=alice',
       expect.objectContaining({ credentials: 'include' })
     )
+  })
+
+  it('creates password reset links through the admin endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        ok: true,
+        resetUrl: 'https://app.example.com/console/reset-password?token=reset-token',
+        expiresAt: '2026-09-02T02:30:00.000Z',
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await adminApi.createUserPasswordResetLink('user/id')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/users/user%2Fid/password-reset-link',
+      expect.objectContaining({ cache: 'no-store', credentials: 'include', method: 'POST' })
+    )
+  })
+})
+
+describe('userAuthApi.passwordReset', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('validates reset tokens without exposing a self-service request endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ valid: true, expiresAt: '2026-09-02T02:30:00.000Z' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    )
+
+    await userAuthApi.validatePasswordResetToken('reset-token')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/password-reset/validate',
+      expect.objectContaining({
+        body: JSON.stringify({ token: 'reset-token' }),
+        credentials: 'include',
+        method: 'POST',
+      })
+    )
+    expect(userAuthApi).not.toHaveProperty('requestPasswordReset')
   })
 })
 

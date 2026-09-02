@@ -41,6 +41,7 @@ import { textFileWriterIpcModule } from "../../app-capabilities/text-file-writer
 import { htmlGeneratorIpcModule } from "../../app-capabilities/html-generator/main/ipc"
 import { terminalIpcModule } from "../../app-capabilities/terminal/main/ipc"
 import { quickInputIpcModule } from "../../app-capabilities/quick-input/main/ipc"
+import { connectorsIpcModule } from "../../app-capabilities/connectors/main/ipc"
 import { agentPersonasIpcModule } from "../../app-capabilities/agent-personas/main/ipc"
 import { soundNotifierIpcModule } from "../../app-capabilities/sound-notifier/main/ipc"
 import { systemNotifierIpcModule } from "../../app-capabilities/system-notifier/main/ipc"
@@ -91,6 +92,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(htmlGeneratorIpcModule, ctx)
   registry.register(terminalIpcModule, ctx)
   registry.register(quickInputIpcModule, ctx)
+  registry.register(connectorsIpcModule, ctx)
   registry.register(secretsIpcModule, ctx)
   registry.register(skillUninstallerIpcModule, ctx)
   registry.register(agentPersonasIpcModule, ctx)
@@ -140,6 +142,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   htmlGeneratorIpcModule,
   terminalIpcModule,
   quickInputIpcModule,
+  connectorsIpcModule,
   secretsIpcModule,
   skillUninstallerIpcModule,
   agentPersonasIpcModule,

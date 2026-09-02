@@ -1,0 +1,6 @@
+{
+  "name": "synapse-figma",
+  "version": "1.0.0",
+  "description": "Figma Desktop MCP workflows for design inspection, design-to-code, and Figma file generation.",
+  "license": "MIT"
+}

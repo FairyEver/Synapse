@@ -26,7 +26,6 @@ import { UserAuthService, userAuthOptionsToken } from "./user-auth.service"
         return {
           accessMinutes: env.userAccessTokenMinutes,
           refreshDays: env.userRefreshTokenDays,
-          exposePasswordResetUrl: process.env.NODE_ENV !== "production",
         }
       },
     },

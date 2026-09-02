@@ -1,6 +1,9 @@
-import { Injectable, NotFoundException, Optional } from "@nestjs/common"
+import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type UserStatus } from "@prisma/client"
+import { buildPasswordResetUrl } from "@synapse/shared"
 import { PinoLogger } from "nestjs-pino"
+import { passwordResetTokenTtlMs } from "../auth/password-reset"
+import { createOpaqueToken, hashToken } from "../auth/token"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
@@ -202,6 +205,39 @@ export class AdminService {
       ipAddress,
     })
     return user
+  }
+
+  async createUserPasswordResetLink(id: string, publicAppUrl: string) {
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + passwordResetTokenTtlMs)
+    const token = createOpaqueToken()
+
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id },
+        select: { id: true, status: true },
+      })
+      if (!user) throw new NotFoundException("用户不存在。")
+      if (user.status !== "active") throw new BadRequestException("请先启用用户。")
+
+      await tx.userPasswordResetToken.updateMany({
+        where: { userId: id, usedAt: null },
+        data: { usedAt: now },
+      })
+      await tx.userPasswordResetToken.create({
+        data: {
+          tokenHash: hashToken(token),
+          userId: id,
+          expiresAt,
+        },
+      })
+
+      return {
+        ok: true as const,
+        resetUrl: buildPasswordResetUrl({ publicAppUrl, token }),
+        expiresAt,
+      }
+    })
   }
 
   async listSkillRepositories(

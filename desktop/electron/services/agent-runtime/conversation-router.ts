@@ -107,6 +107,7 @@ export interface ConversationRouterDeps {
   readonly fileCheckpoints?: AgentFileCheckpointService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
+  readonly loadFigmaDesktopMcpEnabled?: () => boolean | Promise<boolean>
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
   readonly permissionGuard?: PermissionGuard
@@ -222,6 +223,7 @@ export class ConversationRouter {
     this.assertProject(message)
     const providerId = await this.resolveNewConversationProviderId(message)
     const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
+    const figmaDesktopMcpEnabled = await this.loadFigmaDesktopMcpEnabled()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
       platform: message.platform,
@@ -233,6 +235,7 @@ export class ConversationRouter {
       mode: message.modeOverride,
       modelTier: message.modelTier,
       experimentalSynapseToolRouterEnabled,
+      figmaDesktopMcpEnabled,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
@@ -259,6 +262,7 @@ export class ConversationRouter {
     const ac = new AbortController()
     const providerId = await this.resolveNewConversationProviderId(message)
     const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
+    const figmaDesktopMcpEnabled = await this.loadFigmaDesktopMcpEnabled()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
       platform: message.platform,
@@ -270,6 +274,7 @@ export class ConversationRouter {
       mode: message.modeOverride,
       modelTier: message.modelTier,
       experimentalSynapseToolRouterEnabled,
+      figmaDesktopMcpEnabled,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
@@ -1507,14 +1512,19 @@ export class ConversationRouter {
     }
     const providerId = await this.resolveNewConversationProviderId(message)
     const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
+    const figmaDesktopMcpEnabled = await this.loadFigmaDesktopMcpEnabled()
     return this.repository.getOrCreateActive(
       { ...message, providerId },
-      { experimentalSynapseToolRouterEnabled },
+      { experimentalSynapseToolRouterEnabled, figmaDesktopMcpEnabled },
     )
   }
 
   private async loadExperimentalSynapseToolRouterEnabled(): Promise<boolean> {
     return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) === true
+  }
+
+  private async loadFigmaDesktopMcpEnabled(): Promise<boolean> {
+    return (await this.deps.loadFigmaDesktopMcpEnabled?.()) === true
   }
 
   private async resolveNewConversationProviderId(message: AgentMessage): Promise<string> {

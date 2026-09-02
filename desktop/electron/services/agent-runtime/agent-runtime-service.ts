@@ -77,6 +77,7 @@ import {
   type AgentLiveSessionFactory,
   type SessionManagerDeps,
 } from "./session-manager"
+import type { ClaudeSDKSessionOptions } from "./claude-sdk-session"
 import { SessionLifecycleManager } from "./session-lifecycle"
 import type {
   RuntimeSessionState,
@@ -154,6 +155,7 @@ export interface AgentRuntimeServiceDeps {
   readonly attachmentStagingService?: AttachmentStagingService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
+  readonly loadFigmaDesktopMcpEnabled?: () => boolean | Promise<boolean>
   readonly executeSynapseTool?: SessionManagerDeps["executeSynapseTool"]
   readonly eventBus?: ScopedEventBus
   readonly onConversationRenamed?: (conversation: ConversationEntryV1) => void
@@ -184,6 +186,11 @@ export interface AgentRuntimeServiceDeps {
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
   readonly sdkPersonaConfig?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
+  readonly resolveMcpServers?: (
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+  ) => Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
+  readonly onElicitation?: ClaudeSDKSessionOptions["onElicitation"]
   readonly resolvePersonaForSessionCreate?: (personaId: string) =>
     ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
@@ -267,6 +274,8 @@ export class AgentRuntimeService {
       allowPluginHooks: deps.allowPluginHooks,
       sdkAgents: deps.sdkAgents,
       sdkPersonaConfig: deps.sdkPersonaConfig,
+      resolveMcpServers: deps.resolveMcpServers,
+      onElicitation: deps.onElicitation,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
       executeSynapseTool: deps.executeSynapseTool,
       onConversationTitle: (conversationId, title) =>
@@ -326,6 +335,7 @@ export class AgentRuntimeService {
         fileCheckpoints: this.fileCheckpoints,
         getUsagePriceRules: deps.getUsagePriceRules,
         loadExperimentalSynapseToolRouterEnabled: () => this.loadExperimentalSynapseToolRouterEnabled(),
+        loadFigmaDesktopMcpEnabled: () => this.loadFigmaDesktopMcpEnabled(),
         now: deps.now,
         permissionGuard: deps.permissionGuard,
         auditSink: deps.auditSink,
@@ -1249,6 +1259,7 @@ export class AgentRuntimeService {
       providerId,
       modelTier,
       experimentalSynapseToolRouterEnabled: await this.loadExperimentalSynapseToolRouterEnabled(),
+      figmaDesktopMcpEnabled: await this.loadFigmaDesktopMcpEnabled(),
       mainThreadPersonaSnapshot,
     })
   }
@@ -1258,6 +1269,18 @@ export class AgentRuntimeService {
       return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) === true
     } catch (error) {
       this.deps.logger?.warn("Failed to load the experimental Synapse tool router setting; using the safe default.", {
+        projectId: this.deps.projectId,
+        ...errorLogMeta(error),
+      })
+      return false
+    }
+  }
+
+  private async loadFigmaDesktopMcpEnabled(): Promise<boolean> {
+    try {
+      return (await this.deps.loadFigmaDesktopMcpEnabled?.()) === true
+    } catch (error) {
+      this.deps.logger?.warn("Failed to load the Figma Desktop MCP setting; using the safe default.", {
         projectId: this.deps.projectId,
         ...errorLogMeta(error),
       })

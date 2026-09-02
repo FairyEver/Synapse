@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Prisma } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
+import { hashToken } from "../auth/token"
 import { AdminService } from "./admin.service"
 
 type DailyTrendCountMock = {
@@ -45,6 +46,10 @@ function createPrismaMock(counts: {
       findUnique: vi.fn().mockResolvedValue({ status: "active" }),
       findMany: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
+    },
+    userPasswordResetToken: {
+      create: vi.fn().mockResolvedValue({ id: "reset-1" }),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     skillRepository: {
       count: vi.fn(),
@@ -248,6 +253,56 @@ describe("AdminService", () => {
     expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
       data: { adminNote: null },
     }))
+  })
+
+  it("creates one-time password reset links for active users", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-02T01:00:00.000Z"))
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({ id: "user-1", status: "active" })
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    const result = await service.createUserPasswordResetLink("user-1", "https://app.example.com/")
+    const token = new URL(result.resetUrl).searchParams.get("token")
+
+    expect(result).toMatchObject({
+      ok: true,
+      expiresAt: new Date("2026-09-02T01:30:00.000Z"),
+    })
+    expect(result.resetUrl).toMatch(/^https:\/\/app\.example\.com\/console\/reset-password\?token=/)
+    expect(prisma.userPasswordResetToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", usedAt: null },
+      data: { usedAt: new Date("2026-09-02T01:00:00.000Z") },
+    })
+    expect(prisma.userPasswordResetToken.create).toHaveBeenCalledWith({
+      data: {
+        tokenHash: hashToken(token!),
+        userId: "user-1",
+        expiresAt: new Date("2026-09-02T01:30:00.000Z"),
+      },
+    })
+  })
+
+  it("rejects password reset links for disabled users", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({ id: "user-1", status: "disabled" })
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await expect(service.createUserPasswordResetLink("user-1", "https://app.example.com"))
+      .rejects
+      .toThrow("请先启用用户。")
+    expect(prisma.userPasswordResetToken.create).not.toHaveBeenCalled()
+  })
+
+  it("rejects password reset links for missing users", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue(null)
+    const service = new AdminService(prisma as unknown as PrismaService)
+
+    await expect(service.createUserPasswordResetLink("missing-user", "https://app.example.com"))
+      .rejects
+      .toThrow("用户不存在。")
+    expect(prisma.userPasswordResetToken.create).not.toHaveBeenCalled()
   })
 
   it("reports a missing user when updating an admin note", async () => {

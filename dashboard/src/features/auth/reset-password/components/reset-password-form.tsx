@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
 import { Loader2, RotateCcw } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -17,7 +16,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { zodResolver } from '../../zod-resolver'
-import { buildAuthRedirectSearch } from '../../auth-redirect-search'
 
 const formSchema = z
   .object({
@@ -31,17 +29,16 @@ const formSchema = z
 
 type ResetPasswordFormProps = React.HTMLAttributes<HTMLFormElement> & {
   token: string
-  redirectTo?: string
+  onComplete: () => void
 }
 
 export function ResetPasswordForm({
   className,
-  redirectTo,
+  onComplete,
   token,
   ...props
 }: ResetPasswordFormProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [isComplete, setIsComplete] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -52,26 +49,15 @@ export function ResetPasswordForm({
     setIsLoading(true)
     try {
       await userAuthApi.resetPassword({ token, password: data.password })
-      setIsComplete(true)
       form.reset()
       toast.success('密码已更新')
+      onComplete()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '重设失败'
       toast.error(message)
     } finally {
       setIsLoading(false)
     }
-  }
-
-  if (isComplete) {
-    return (
-      <div className='flex flex-col gap-4'>
-        <p className='text-sm text-muted-foreground'>密码已更新。</p>
-        <Button asChild>
-          <Link to='/sign-in' search={buildAuthRedirectSearch(redirectTo)}>去登录</Link>
-        </Button>
-      </div>
-    )
   }
 
   return (

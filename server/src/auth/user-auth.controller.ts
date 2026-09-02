@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Header, Post, Req, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import {
   DESKTOP_CLIENT_ID,
@@ -9,7 +9,6 @@ import {
 } from "@synapse/shared"
 import type { Request } from "express"
 import { z } from "zod"
-import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { AuthenticatedUserRequest, UserAuthGuard } from "./user-auth.guard"
 import { UserAuthService } from "./user-auth.service"
@@ -35,12 +34,11 @@ const loginSchema = z.object({
   password: z.string().min(1),
 }).strict()
 
-const passwordResetRequestSchema = z.object({
-  email: z.string().email(),
+const passwordResetTokenSchema = z.object({
+  token: z.string().trim().min(1),
 }).strict()
 
-const passwordResetConfirmSchema = z.object({
-  token: z.string().trim().min(1),
+const passwordResetConfirmSchema = passwordResetTokenSchema.extend({
   password: z.string().min(8),
 }).strict()
 
@@ -78,21 +76,18 @@ export class UserAuthController {
     return this.auth.login(parseBody(loginSchema, body, "登录请求无效。"), request.ip)
   }
 
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
-  @Post("/password-reset/request")
-  requestPasswordReset(@Body() body: unknown, @Req() request: Request) {
-    const input = parseBody(passwordResetRequestSchema, body, "找回密码请求无效。")
-    return this.auth.requestPasswordReset({
-      email: input.email,
-      publicAppUrl: resolvePublicAppUrl({
-        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
-        request,
-      }),
-    }, readRequestIp(request))
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Post("/password-reset/validate")
+  @Header("Cache-Control", "no-store")
+  validatePasswordResetToken(@Body() body: unknown) {
+    return this.auth.validatePasswordResetToken(
+      parseBody(passwordResetTokenSchema, body, "重置链接无效。"),
+    )
   }
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/password-reset/confirm")
+  @Header("Cache-Control", "no-store")
   resetPassword(@Body() body: unknown, @Req() request: Request) {
     return this.auth.resetPassword(
       parseBody(passwordResetConfirmSchema, body, "重设密码请求无效。"),

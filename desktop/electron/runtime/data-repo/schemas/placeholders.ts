@@ -229,6 +229,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
     modelTier?: string
     env?: Record<string, string>
     experimentalSynapseToolRouterEnabled?: boolean
+    figmaDesktopMcpEnabled?: boolean
     activeMainThreadPersonaId?: string | null
     activeMainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }
@@ -1378,6 +1379,8 @@ function isConversationAgentConfig(value: unknown): value is NonNullable<Convers
     && (value.env === undefined || isStringRecord(value.env))
     && (value.experimentalSynapseToolRouterEnabled === undefined
       || typeof value.experimentalSynapseToolRouterEnabled === "boolean")
+    && (value.figmaDesktopMcpEnabled === undefined
+      || typeof value.figmaDesktopMcpEnabled === "boolean")
     && (value.activeMainThreadPersonaId === undefined
       || value.activeMainThreadPersonaId === null
       || typeof value.activeMainThreadPersonaId === "string")

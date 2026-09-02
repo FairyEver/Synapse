@@ -13,8 +13,8 @@ describe("UserAuthController", () => {
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.register)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.login)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.login)).toBe(60000)
-    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.requestPasswordReset)).toBe(5)
-    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.requestPasswordReset)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.validatePasswordResetToken)).toBe(10)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.validatePasswordResetToken)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.resetPassword)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.resetPassword)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.refresh)).toBe(5)
@@ -25,6 +25,10 @@ describe("UserAuthController", () => {
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.authorizeDesktop)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.issueDesktopToken)).toBe(10)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.issueDesktopToken)).toBe(60000)
+  })
+
+  it("does not expose self-service password reset requests", () => {
+    expect(UserAuthController.prototype).not.toHaveProperty("requestPasswordReset")
   })
 
   it("passes valid login requests to the service", () => {
@@ -57,55 +61,26 @@ describe("UserAuthController", () => {
     }, "203.0.113.21")
   })
 
-  it("passes password reset requests with the configured public app URL", () => {
+  it("passes password reset token validation to the service", () => {
     const auth = {
-      requestPasswordReset: vi.fn().mockResolvedValue({ ok: true }),
+      validatePasswordResetToken: vi.fn().mockResolvedValue({ valid: true }),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
-    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
-    try {
-      controller.requestPasswordReset(
-        { email: "user@example.com" },
-        {
-          ip: "203.0.113.30",
-          protocol: "https",
-          headers: { host: "evil.example.com" },
-          get: (name: string) => (name === "host" ? "evil.example.com" : undefined),
-        } as never,
-      )
-    } finally {
-      vi.unstubAllEnvs()
-    }
+    controller.validatePasswordResetToken({ token: "reset-token" })
 
-    expect(auth.requestPasswordReset).toHaveBeenCalledWith({
-      email: "user@example.com",
-      publicAppUrl: "https://app.example.com",
-    }, "203.0.113.30")
+    expect(auth.validatePasswordResetToken).toHaveBeenCalledWith({ token: "reset-token" })
   })
 
-  it("rejects password reset URL generation when APP_PUBLIC_URL is missing", () => {
+  it("rejects invalid password reset token validation before calling the service", () => {
     const auth = {
-      requestPasswordReset: vi.fn(),
+      validatePasswordResetToken: vi.fn(),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
-    vi.stubEnv("APP_PUBLIC_URL", "")
-    try {
-      expect(() => controller.requestPasswordReset(
-        { email: "user@example.com" },
-        {
-          ip: "203.0.113.30",
-          protocol: "https",
-          headers: { host: "evil.example.com" },
-          get: (name: string) => (name === "host" ? "evil.example.com" : undefined),
-        } as never,
-      )).toThrow("APP_PUBLIC_URL 未配置，无法生成公开链接。")
-    } finally {
-      vi.unstubAllEnvs()
-    }
-
-    expect(auth.requestPasswordReset).not.toHaveBeenCalled()
+    expect(() => controller.validatePasswordResetToken({ token: "" }))
+      .toThrow(BadRequestException)
+    expect(auth.validatePasswordResetToken).not.toHaveBeenCalled()
   })
 
   it("passes valid password reset confirmations with the request ip", () => {

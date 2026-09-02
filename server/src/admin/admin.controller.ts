@@ -1,10 +1,11 @@
-import { BadRequestException, Body, Controller, Delete, Get, Head, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Head, Header, Logger, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuditLogService, auditLogExportLimit } from "../common/audit-log.service"
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
+import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { LiveDeviceService } from "../live/live-device.service"
 import { WebhookService } from "../webhooks/webhook.service"
@@ -148,6 +149,15 @@ export class AdminController {
     const result = userAdminNoteSchema.safeParse(body)
     if (!result.success) throw badRequestFromZodError(result.error, "管理员备注无效。")
     return this.admin.updateUserAdminNote(id, result.data, request?.admin?.email, request?.ip)
+  }
+
+  @Post("/users/:id/password-reset-link")
+  @Header("Cache-Control", "no-store")
+  createUserPasswordResetLink(@Param("id") id: string, @Req() request: AdminRequest) {
+    return this.admin.createUserPasswordResetLink(id, resolvePublicAppUrl({
+      configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
+      request,
+    }))
   }
 
   @Post("/skill-repositories/:id/removed")

@@ -64,10 +64,24 @@ export default defineConfig({
 
     nav: [
       { text: '首页', link: '/' },
+      { text: '连接器', link: '/connectors/' },
       { text: '开放接口', link: '/open-api/' }
     ],
 
     sidebar: {
+      '/connectors/': [
+        { text: '概览', link: '/connectors/' },
+        {
+          text: '连接器',
+          collapsed: false,
+          items: [
+            {
+              text: 'Figma 连接器',
+              link: '/connectors/figma'
+            }
+          ]
+        }
+      ],
       '/open-api/': [
         { text: '概览', link: '/open-api/' },
         {

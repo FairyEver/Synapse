@@ -42,6 +42,7 @@ import { createMarkdownAnnotationAnchorFromSelection, createMarkdownImageAnnotat
 import { DriveCommentsRail, getCommentActionErrorMessage, type DriveCommentsRailItem } from '../drive-comments-rail'
 import { MarkdownImageFallbacks } from './markdown-image-fallback'
 import { MarkdownImageCommentsOverlay, type MarkdownImageThreadMarker } from './markdown-image-comments-overlay'
+import { MarkdownCommentComposerPopover } from './markdown-comment-composer-popover'
 import { InlineToolbar, type InlineToolbarAction } from './inline-toolbar'
 import { renderDriveMermaidDiagrams, restoreDriveMermaidDiagrams } from './markdown-mermaid-renderer'
 import {
@@ -166,7 +167,6 @@ function DriveMarkdownBody({
   const [commentDraftOpen, setCommentDraftOpen] = useState(false)
   const [commentBody, setCommentBody] = useState('')
   const [commentCreateError, setCommentCreateError] = useState<string | null>(null)
-  const [pendingImageAnchorTop, setPendingImageAnchorTop] = useState<number | null>(null)
   const [commentAnchorBaseOffset, setCommentAnchorBaseOffset] = useState(0)
   const [commentAnchoredDocumentHeight, setCommentAnchoredDocumentHeight] = useState(0)
   const [documentNaturalHeight, setDocumentNaturalHeight] = useState(0)
@@ -183,7 +183,6 @@ function DriveMarkdownBody({
     setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
-    setPendingImageAnchorTop(null)
     setCommentAnchoredDocumentHeight(0)
     setDocumentNaturalHeight(0)
     setThreadAnchorTopById({})
@@ -310,7 +309,7 @@ function DriveMarkdownBody({
   const nextThreadId = activeNavigableIndex === -1
     ? navigableThreadIds[0] ?? null
     : navigableThreadIds[activeNavigableIndex + 1] ?? null
-  const commentCount = railThreads.length + (commentDraftOpen ? 1 : 0)
+  const commentCount = railThreads.length
   const imageThreadMarkers = useMemo<readonly MarkdownImageThreadMarker[]>(() => {
     const threadIdsByImageId = new Map<string, string[]>()
     for (const thread of sortedThreads) {
@@ -448,7 +447,6 @@ function DriveMarkdownBody({
     setCommentDraftOpen(false)
     setCommentBody('')
     setCommentCreateError(null)
-    setPendingImageAnchorTop(null)
     window.getSelection()?.removeAllRanges()
     window.requestAnimationFrame(() => {
       document.querySelector<HTMLButtonElement>(
@@ -459,7 +457,6 @@ function DriveMarkdownBody({
 
   const clearPendingSelectionAction = useCallback(() => {
     setPendingTarget(null)
-    setPendingImageAnchorTop(null)
     selectionRangeRef.current = null
     setTextSelectionActive(false)
     setCommentCreateError(null)
@@ -473,9 +470,8 @@ function DriveMarkdownBody({
       setTextSelectionActive(false)
       window.getSelection()?.removeAllRanges()
       setCommentDraftOpen(true)
-      setCommentPanelOpen(true)
     },
-  }], [setCommentPanelOpen])
+  }], [])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [
@@ -582,7 +578,6 @@ function DriveMarkdownBody({
     }
     selectionRangeRef.current = selection.getRangeAt(0).cloneRange()
     setPendingTarget(target)
-    setPendingImageAnchorTop(null)
   }, [canCreateAnnotation, clearPendingSelectionAction, collaborationTextMatchesProjection, commentDraftOpen, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
 
   useEffect(() => {
@@ -680,17 +675,11 @@ function DriveMarkdownBody({
         ? liveCollaboration.session.text
         : null,
     })
-    const root = bodyRef.current
-    const imageElement = root ? findVisibleMarkdownCommentImage(root, image.imageId) : null
     setPendingTarget(pending)
-    setPendingImageAnchorTop(root && imageElement
-      ? imageElement.getBoundingClientRect().top - root.getBoundingClientRect().top
-      : 0)
     selectionRangeRef.current = null
     setCommentCreateError(null)
     setCommentDraftOpen(true)
-    setCommentPanelOpen(true)
-  }, [collaborationTextMatchesProjection, liveCollaboration.session, liveCollaboration.state?.epoch, projection, setCommentPanelOpen])
+  }, [collaborationTextMatchesProjection, liveCollaboration.session, liveCollaboration.state?.epoch, projection])
 
   const focusImageThreads = useCallback((marker: MarkdownImageThreadMarker) => {
     setCommentPanelOpen(true)
@@ -775,7 +764,6 @@ function DriveMarkdownBody({
       selectionRangeRef.current = null
       setCommentDraftOpen(false)
       setCommentBody('')
-      setPendingImageAnchorTop(null)
       window.getSelection()?.removeAllRanges()
     } catch (cause) {
       setCommentCreateError(getCommentActionErrorMessage(cause))
@@ -865,29 +853,18 @@ function DriveMarkdownBody({
     </div>
   )
 
-  const commentDraft = commentDraftOpen && pendingTarget
-    ? {
-        anchorTop: pendingTarget.target.kind === 'image'
-          ? pendingImageAnchorTop ?? 0
-          : annotationOverlayRects.find((rect) => rect.kind === 'pending')?.top ?? 0,
-        quote: markdownAnnotationTargetLabel(pendingTarget.target),
-        value: commentBody,
-        submitting: annotations.creatingThread,
-        error: commentCreateError,
-        onValueChange: (value: string) => {
-          setCommentBody(value)
-          if (commentCreateError) setCommentCreateError(null)
-        },
-        onSubmit: () => { void createThread() },
-        onCancel: clearPendingComment,
-      }
+  const commentComposerAnchor = commentDraftOpen && pendingTarget
+    ? pendingTarget.target.kind === 'textRange'
+      ? selectionRangeRef.current
+      : bodyRef.current
+        ? findVisibleMarkdownCommentImage(bodyRef.current, pendingTarget.target.imageId)
+        : null
     : null
 
   const renderCommentsRail = (mode: 'anchored' | 'list') => (
     <DriveCommentsRail
       mode={mode}
       threads={railThreads}
-      draft={commentDraft}
       activeThreadId={activeThreadId}
       canReply={canCreateAnnotation}
       loading={annotations.loading}
@@ -907,6 +884,21 @@ function DriveMarkdownBody({
 
   return (
     <div className='h-full min-h-0 overflow-hidden bg-background'>
+      {commentDraftOpen && pendingTarget ? (
+        <MarkdownCommentComposerPopover
+          anchor={commentComposerAnchor}
+          boundaryRef={documentScrollRef}
+          value={commentBody}
+          submitting={annotations.creatingThread}
+          error={commentCreateError}
+          onValueChange={(value) => {
+            setCommentBody(value)
+            if (commentCreateError) setCommentCreateError(null)
+          }}
+          onSubmit={() => { void createThread() }}
+          onCancel={clearPendingComment}
+        />
+      ) : null}
       {selectionRangeRef.current && pendingTarget?.target.kind === 'textRange' && !commentDraftOpen ? (
         <InlineToolbar
           data-drive-annotation-selection-action
@@ -1045,15 +1037,6 @@ function findVisibleMarkdownCommentImage(root: HTMLElement, imageId: string): HT
   return candidates.find((element) => element.hasAttribute('data-drive-markdown-image-fallback-host'))
     ?? candidates.find((element) => element.tagName === 'IMG')
     ?? null
-}
-
-function markdownAnnotationTargetLabel(target: DriveAnnotationTargetDto): string {
-  if (target.kind === 'textRange') return target.quote.exact.replace(/\s+/gu, ' ').trim()
-  const alt = target.snapshot.alt.trim()
-  if (alt) return alt
-  const source = target.snapshot.src.split(/[?#]/u)[0] ?? ''
-  const pathSegments = source.split(/[\\/]/u)
-  return pathSegments[pathSegments.length - 1]?.trim() || '图片'
 }
 
 function encodeStateVector(doc: Y.Doc): string {

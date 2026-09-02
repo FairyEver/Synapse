@@ -15,6 +15,7 @@ import { settingsAppDefinition } from "../settings/app-definition"
 import { usageMonitorAppDefinition } from "../usage-analysis/app-definition"
 import { workflowAppDefinition } from "../workflow/app-definition"
 import { launcherAppDefinition } from "./launcher-app-definition"
+import { connectorsAppDefinition } from "../../../app-capabilities/connectors/renderer/app-definition"
 import type { SynapseSystemAppDefinition, SynapseSystemAppId } from "./types"
 import { isSystemAppId } from "./types"
 
@@ -36,6 +37,7 @@ const systemAppDefinitions = [
   editorScanAppDefinition,
   usageMonitorAppDefinition,
   modelPriceAppDefinition,
+  connectorsAppDefinition,
 ] as const satisfies readonly SynapseSystemAppDefinition[]
 
 export function listSystemAppDefinitions(): readonly SynapseSystemAppDefinition[] {

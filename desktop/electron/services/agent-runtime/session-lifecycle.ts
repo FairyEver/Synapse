@@ -96,6 +96,7 @@ export class SessionLifecycleManager {
     readonly mode?: string
     readonly modelTier?: string
     readonly experimentalSynapseToolRouterEnabled?: boolean
+    readonly figmaDesktopMcpEnabled?: boolean
     readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }): Promise<ConversationEntryV1> {
     return this.deps.repository.createSession({
@@ -109,6 +110,7 @@ export class SessionLifecycleManager {
       mode: input.mode,
       modelTier: input.modelTier,
       experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled,
+      figmaDesktopMcpEnabled: input.figmaDesktopMcpEnabled,
       mainThreadPersonaSnapshot: input.mainThreadPersonaSnapshot,
       resumePolicy: "resume",
     })

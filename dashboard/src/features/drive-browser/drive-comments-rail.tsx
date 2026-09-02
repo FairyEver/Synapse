@@ -621,14 +621,14 @@ function ThreadView({
             variant='ghost'
             size='sm'
             className={cn(
-              'h-auto w-full justify-start whitespace-normal px-0 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-foreground',
+              'h-auto min-w-0 flex-1 justify-start whitespace-normal px-0 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-transparent hover:text-foreground',
               compact ? 'min-h-11' : 'min-h-7'
             )}
             aria-label={`查看评论：${quote}`}
             aria-current={active ? 'true' : undefined}
             onClick={() => onFocusThread(thread.id)}
           >
-            <span className='line-clamp-2'>“{quote}”</span>
+            <span className='line-clamp-2 min-w-0 max-w-full flex-1 break-all'>“{quote}”</span>
           </Button>
         </div>
         {thread.anchorStatus === 'orphaned' || positionUnavailable ? (

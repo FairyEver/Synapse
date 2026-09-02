@@ -2,6 +2,7 @@ import type { ConversationEntryV1 } from "../../../runtime/data-repo"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { ProviderService } from "../../provider"
 import { ClaudeSDKSession } from "../claude-sdk-session"
+import type { ClaudeSDKSessionOptions } from "../claude-sdk-session"
 import type { AgentSessionRepository } from "../session-repository"
 import { SessionManager, validateWorkspaceDirectory, type CreateAgentLiveSessionInput } from "../session-manager"
 import type { PendingPermissionState, RuntimeSessionState } from "../session-lifecycle"
@@ -234,6 +235,45 @@ describe("SessionManager", () => {
         type: "local",
         path: "/Applications/Synapse/resources/example-plugin",
       }],
+    }))
+  })
+
+  it("resolves MCP servers from the conversation snapshot", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const resolveMcpServers = vi.fn(async (
+      _message: AgentMessage,
+      conversation: ConversationEntryV1,
+    ): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>> => {
+      if (conversation.agentConfig?.figmaDesktopMcpEnabled !== true) return {}
+      return { figma: { type: "http", url: "http://127.0.0.1:3845/mcp" } }
+    })
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      resolveMcpServers,
+    })
+
+    await manager.getOrCreateSession({
+      state: manager.stateForConversation("conversation-1", baseMessage("default")),
+      conversation: { ...baseConversation(), agentConfig: { figmaDesktopMcpEnabled: true } },
+      message: baseMessage("default"),
+    })
+
+    expect(resolveMcpServers).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "run" }),
+      expect.objectContaining({ agentConfig: { figmaDesktopMcpEnabled: true } }),
+    )
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      mcpServers: { figma: { type: "http", url: "http://127.0.0.1:3845/mcp" } },
     }))
   })
 

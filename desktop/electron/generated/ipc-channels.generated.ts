@@ -345,6 +345,12 @@ export const IPC_CHANNELS = {
     "delete": "synapse:app:quick_input:item:delete",
     "changed": "synapse:app:quick_input:item:changed",
   },
+  "connectors": {
+    "list": "synapse:app:connectors:item:list",
+    "connect": "synapse:app:connectors:item:connect",
+    "disconnect": "synapse:app:connectors:item:disconnect",
+    "changed": "synapse:app:connectors:item:changed",
+  },
   "secrets": {
     "list": "synapse:app:secrets:item:list",
     "get": "synapse:app:secrets:item:get",

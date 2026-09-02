@@ -20,6 +20,7 @@
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
 | Agent Personas | 是 | 否 | — | — | — | — |
+| Connectors | 是 | 否 | — | — | — | — |
 | Clipboard | 否 | 否 | 2 | — | — | — |
 | Document Template | 否 | 否 | 1 | — | 1 | — |
 | File Opener | 否 | 否 | 1 | — | 1 | `open` |
@@ -47,6 +48,7 @@
 - JavaScript Run、Node.js Run 是能力包，不是隐藏的 System App；它们只注册 Workflow Node 和 Automation Action。它们的 capability ID 进入 catalog，但不映射为 MCP tool。
 - Script Runtime 是两者共用的内部执行基础设施，不注册用户产品表面。
 - Screenshot 当前是空目录占位。
+- `figma-skill` 是随桌面端打包的 Agent SDK Skill 插件，不注册独立 System App、MCP domain 或 MCP tool；仅在 Figma Desktop MCP 连接开启后创建的新对话中按会话快照加载。
 - Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
 - Terminal 的 43 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
@@ -68,12 +70,13 @@
 | Editor Scan | 是 | 否 | — |
 | Usage Monitor | 是 | 否 | — |
 | Model Price | 是 | 否 | `model_price` |
+| Connectors | 是 | 否 | — |
 
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 
 Git 仍是普通 System App，不新增 MCP domain。其带恢复 journal 的原子 clone、仓库注册、状态与差异预览、主进程选择令牌、精确提交与按文件丢弃、同步、空仓库初始化与远端默认分支接入、缓存远程分支发现与 tracking 检出、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；仓库目录定位复用受权限与审计保护的 Shell IPC，设为项目复用系统设置的全局项目配置与添加流程。Agent 项目与 Git 仓库根路径精确匹配时，composer 可复用同一 Git IPC 执行确认后的全部改动提交及常用远端操作，并可定向打开对应 Git 工作台；该入口不经过 Agent、MCP 或通用命令执行。这不改变上表的 capability 或 MCP 数量。远程分支、空仓库初始化与文件丢弃能力不注册任意 Git 命令入口，也不扩展为 Workflow、Automation、MCP 或 Deep Link 表面。
 
-MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。
+MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。Connectors 是独立的 System App；其连接器状态与凭据只写入 Synapse 内置 DataRepository，并在内置 Claude SDK 会话创建时临时注入 MCP，不写入外部 Claude 配置。当前 Figma 连接器使用本机 Figma Desktop MCP，不发起远程 OAuth；内置 Skill 只依赖 Desktop MCP 实际提供的设计上下文、变量、截图、动效、元数据、FigJam 工具及 Code Connect/设计系统 Prompt，不声明 Desktop 写入能力。Figma 连接器开启后，只有新建对话会快照并加载内置 `synapse-figma` Skill 与 Figma MCP；已有对话不会动态注入，关闭连接器的新对话也不会加载。
 
 ## MCP capability domain
 

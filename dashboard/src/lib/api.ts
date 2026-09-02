@@ -370,11 +370,15 @@ export type UserRegistrationResult = {
   ok: true
 }
 
-export type PasswordResetRequestResult = {
+export type PasswordResetLinkResult = {
   ok: true
-  resetUrl?: string
-  expiresAt?: string
+  resetUrl: string
+  expiresAt: string
 }
+
+export type PasswordResetValidationResult =
+  | { valid: false }
+  | { valid: true; expiresAt: string }
 
 export type DesktopAuthorizeInput = {
   clientId: string
@@ -1375,6 +1379,11 @@ export const adminApi = {
         body: JSON.stringify({ adminNote }),
       }
     ),
+  createUserPasswordResetLink: (id: string) =>
+    request<PasswordResetLinkResult>(
+      `${adminApiBasePath}/users/${encodeURIComponent(id)}/password-reset-link`,
+      { cache: 'no-store', method: 'POST' }
+    ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
     request<BackupResult>(`${adminApiBasePath}/backup`, { method: 'POST' }),
@@ -1504,10 +1513,10 @@ export const userAuthApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  requestPasswordReset: (input: { email: string }) =>
-    request<PasswordResetRequestResult>('/api/auth/password-reset/request', {
+  validatePasswordResetToken: (token: string) =>
+    request<PasswordResetValidationResult>('/api/auth/password-reset/validate', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ token }),
     }),
   resetPassword: (input: { token: string; password: string }) =>
     request<{ ok: true }>('/api/auth/password-reset/confirm', {

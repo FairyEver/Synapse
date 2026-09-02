@@ -213,6 +213,10 @@
         "to": "synapse-skill"
       },
       {
+        "from": "app-capabilities/figma-skill/skill-package",
+        "to": "figma-skill"
+      },
+      {
         "from": "resources/knowledge-base",
         "to": "knowledge-base"
       }

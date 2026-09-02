@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, RefreshCw } from 'lucide-react'
+import { MoreHorizontal, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminApi, type AdminUserRow, type LiveClientRow } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -17,6 +17,13 @@ import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Dialog,
   DialogContent,
@@ -37,6 +44,7 @@ import {
   getUsersTableError,
   getUsersTableLoading,
 } from './users-page-error'
+import { UserPasswordResetLinkDialog } from './user-password-reset-link-dialog'
 
 export default function UsersPage() {
   const [page, setPage] = useState(1)
@@ -50,6 +58,7 @@ export default function UsersPage() {
     status: AdminUserRow['status']
   } | null>(null)
   const [noteTarget, setNoteTarget] = useState<AdminUserRow | null>(null)
+  const [passwordResetTarget, setPasswordResetTarget] = useState<AdminUserRow | null>(null)
   const [adminNoteDraft, setAdminNoteDraft] = useState('')
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
@@ -125,6 +134,11 @@ export default function UsersPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const createPasswordResetLink = useMutation({
+    mutationFn: (id: string) => adminApi.createUserPasswordResetLink(id),
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   function handleToggle(user: AdminUserRow) {
     const newStatus = user.status === 'active' ? 'disabled' : 'active'
     setStatusTarget({ user, status: newStatus })
@@ -133,6 +147,11 @@ export default function UsersPage() {
   function openAdminNoteDialog(user: AdminUserRow) {
     setNoteTarget(user)
     setAdminNoteDraft(user.adminNote ?? '')
+  }
+
+  function openPasswordResetDialog(user: AdminUserRow) {
+    createPasswordResetLink.reset()
+    setPasswordResetTarget(user)
   }
 
   function confirmStatusChange() {
@@ -248,30 +267,45 @@ export default function UsersPage() {
     {
       id: 'actions',
       cell: ({ row }) => (
-        <div className='flex justify-end gap-2'>
-          <Button
-            variant='ghost'
-            size='sm'
-            onClick={() => openAdminNoteDialog(row.original)}
-          >
-            <Pencil className='size-4' />
-            备注
-          </Button>
-          <Button
-            variant='ghost'
-            size='sm'
-            disabled={
-              toggleStatus.isPending &&
-              statusTarget?.user.id === row.original.id
-            }
-            onClick={() => handleToggle(row.original)}
-          >
-            {row.original.status === 'active' ? '禁用' : '启用'}
-          </Button>
+        <div className='flex justify-end'>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant='ghost'
+                size='icon'
+                className='size-8'
+                aria-label={`${row.original.email} 的用户操作`}
+              >
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuItem onSelect={() => openAdminNoteDialog(row.original)}>
+                编辑备注
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={row.original.status !== 'active'}
+                onSelect={() => openPasswordResetDialog(row.original)}
+              >
+                生成重置链接
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant={row.original.status === 'active' ? 'destructive' : 'default'}
+                disabled={
+                  toggleStatus.isPending &&
+                  statusTarget?.user.id === row.original.id
+                }
+                onSelect={() => handleToggle(row.original)}
+              >
+                {row.original.status === 'active' ? '禁用用户' : '启用用户'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       ),
       meta: {
-        className: 'w-36',
+        className: 'w-16',
         thClassName: 'text-right',
         tdClassName: 'text-right',
       },
@@ -332,6 +366,23 @@ export default function UsersPage() {
           destructive={statusTarget?.status === 'disabled'}
           isLoading={toggleStatus.isPending}
           handleConfirm={confirmStatusChange}
+        />
+        <UserPasswordResetLinkDialog
+          open={Boolean(passwordResetTarget)}
+          user={passwordResetTarget}
+          result={createPasswordResetLink.data}
+          isPending={createPasswordResetLink.isPending}
+          onGenerate={() => {
+            if (passwordResetTarget) {
+              createPasswordResetLink.mutate(passwordResetTarget.id)
+            }
+          }}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPasswordResetTarget(null)
+              createPasswordResetLink.reset()
+            }
+          }}
         />
         <Dialog
           open={Boolean(noteTarget)}

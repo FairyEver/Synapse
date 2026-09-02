@@ -16,6 +16,7 @@ const SENSITIVE_BODY_KEY_PATTERN = /authorization|bearer|cookie|password|token|s
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
 const USER_ADMIN_NOTE_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/admin-note$/
+const USER_PASSWORD_RESET_LINK_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/password-reset-link$/
 const ADMIN_WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 const PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN =
   /^\/api\/admin\/problem-feedback(?:\/[^/]+)?$/u
@@ -173,6 +174,9 @@ function resolveKnownAdminAuditTarget(
   }
   if (method === "PATCH" && USER_ADMIN_NOTE_PATH_PATTERN.test(path)) {
     return { action: "admin.user.admin_note_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
+  }
+  if (method === "POST" && USER_PASSWORD_RESET_LINK_PATH_PATTERN.test(path)) {
+    return { action: "admin.user.password_reset_link_create", targetType: "user", targetId: params.id ?? readId(responseBody) }
   }
   if (method === "GET" && path === "/api/admin/backup/list") {
     return { action: "backup.list", targetType: "backup", targetId: "list" }

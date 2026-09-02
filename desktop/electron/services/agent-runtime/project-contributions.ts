@@ -13,6 +13,7 @@ export type AgentProjectMessageContext = {
 export type AgentSdkPluginSpec = {
   readonly type: "local"
   readonly path: string
+  readonly skipMcpDiscovery?: boolean
 }
 
 export type AgentSdkAgentDefinition = AgentDefinition

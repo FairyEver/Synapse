@@ -73,6 +73,8 @@ export interface CreateAgentLiveSessionInput {
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly additionalDirectories?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
+  readonly mcpServers?: ClaudeSDKSessionOptions["mcpServers"]
+  readonly onElicitation?: ClaudeSDKSessionOptions["onElicitation"]
   readonly abortSignal?: AbortSignal
   readonly onConversationTitle?: (title: string) => void | Promise<void>
   readonly synapseToolRouter?: SynapseToolRouterExecutor
@@ -111,6 +113,11 @@ export interface SessionManagerDeps {
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
   readonly sdkPersonaConfig?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
+  readonly resolveMcpServers?: (
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+  ) => Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
+  readonly onElicitation?: ClaudeSDKSessionOptions["onElicitation"]
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
   readonly onConversationTitle?: (conversationId: string, title: string) => void | Promise<void>
@@ -164,6 +171,8 @@ export class SessionManager {
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
         sdkSettings: input.sdkSettings,
+        mcpServers: input.mcpServers,
+        onElicitation: input.onElicitation,
         synapseToolRouter: input.synapseToolRouter
           ? {
               cwd: input.cwd,
@@ -414,6 +423,10 @@ export class SessionManager {
       ),
       additionalDirectories,
       sdkSettings,
+      mcpServers: this.deps.resolveMcpServers
+        ? await this.deps.resolveMcpServers(input.message, input.conversation)
+        : undefined,
+      onElicitation: this.deps.onElicitation,
       synapseToolRouter: synapseToolRouterEnabled && this.deps.executeSynapseTool
         ? (toolName, args, abortSignal) => this.deps.executeSynapseTool?.(
             toolName,

@@ -15,7 +15,6 @@ import {
   DESKTOP_CLIENT_ID,
   DESKTOP_PKCE_CHALLENGE_METHOD,
   DESKTOP_REDIRECT_URI,
-  buildPasswordResetUrl as buildSharedPasswordResetUrl,
   normalizeUserHandle,
 } from "@synapse/shared"
 import { AuditLogService, auditActors } from "../common/audit-log.service"
@@ -28,7 +27,6 @@ export const userAuthOptionsToken = "USER_AUTH_OPTIONS"
 export interface UserAuthOptions {
   readonly accessMinutes: number
   readonly refreshDays: number
-  readonly exposePasswordResetUrl: boolean
 }
 
 export interface UserTokenPair {
@@ -55,11 +53,9 @@ export interface UserMeResponse {
   readonly teams: readonly []
 }
 
-export interface PasswordResetRequestResult {
-  readonly ok: true
-  readonly resetUrl?: string
-  readonly expiresAt?: Date
-}
+export type PasswordResetValidationResult =
+  | { readonly valid: false }
+  | { readonly valid: true; readonly expiresAt: Date }
 
 interface UserJwtPayload {
   readonly sub: string
@@ -83,7 +79,6 @@ function refreshUnauthorized(code: RefreshFailureCode, message = "未登录或�
 
 const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
 const desktopLoginCodeTtlMs = 5 * 60 * 1000
-const passwordResetTokenTtlMs = 30 * 60 * 1000
 const refreshTokenGraceMs = 24 * 60 * 60 * 1000
 
 type DesktopLoginExchangeFailureReason =
@@ -146,6 +141,13 @@ function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, pas
   if (!passwordChangedAt) return false
   if (!payload.iat) return true
   return payload.iat <= Math.floor(passwordChangedAt.getTime() / 1000)
+}
+
+function isUsablePasswordResetRecord(
+  record: { readonly usedAt: Date | null; readonly expiresAt: Date; readonly user: Pick<User, "status"> } | null,
+  now: Date,
+): record is { readonly usedAt: null; readonly expiresAt: Date; readonly user: Pick<User, "status"> } {
+  return Boolean(record && !record.usedAt && record.expiresAt > now && record.user.status === "active")
 }
 
 function normalizeProfileHandle(value: string): string {
@@ -258,58 +260,16 @@ export class UserAuthService {
     }
   }
 
-  async requestPasswordReset(
-    input: { email: string; publicAppUrl: string },
-    ipAddress = "system",
-  ): Promise<PasswordResetRequestResult> {
-    const email = input.email.trim().toLowerCase()
-    if (!this.options.exposePasswordResetUrl) {
-      await this.auditLog?.record({
-        adminEmail: email,
-        action: "user.password_reset.request_unavailable",
-        targetType: "user",
-        targetId: "unknown",
-        ipAddress,
-      })
-      throw new ServiceUnavailableException("找回密码暂不可用。")
-    }
+  async validatePasswordResetToken(input: { token: string }): Promise<PasswordResetValidationResult> {
+    const token = input.token.trim()
+    if (!token) return { valid: false }
 
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      select: { id: true, email: true, status: true },
+    const record = await this.prisma.userPasswordResetToken.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { user: true },
     })
-    if (!user || user.status !== "active") {
-      await this.auditLog?.record({
-        adminEmail: email,
-        action: "user.password_reset.request_ignored",
-        targetType: "user",
-        targetId: user?.id ?? "unknown",
-        ipAddress,
-      })
-      return { ok: true }
-    }
-
-    const token = createOpaqueToken()
-    const expiresAt = new Date(Date.now() + passwordResetTokenTtlMs)
-    await this.prisma.userPasswordResetToken.create({
-      data: {
-        tokenHash: hashToken(token),
-        userId: user.id,
-        expiresAt,
-      },
-    })
-    await this.recordUserAuthSuccessAuditSafely({
-      adminEmail: user.email,
-      action: "user.password_reset.request",
-      targetId: user.id,
-      ipAddress,
-    })
-
-    return {
-      ok: true,
-      resetUrl: buildSharedPasswordResetUrl({ publicAppUrl: input.publicAppUrl, token }),
-      expiresAt,
-    }
+    if (!isUsablePasswordResetRecord(record, new Date())) return { valid: false }
+    return { valid: true, expiresAt: record.expiresAt }
   }
 
   async resetPassword(input: { token: string; password: string }, ipAddress = "system"): Promise<{ ok: true }> {
@@ -321,7 +281,7 @@ export class UserAuthService {
       include: { user: true },
     })
     const now = new Date()
-    if (!record || record.usedAt || record.expiresAt <= now || record.user.status !== "active") {
+    if (!isUsablePasswordResetRecord(record, now)) {
       await this.recordPasswordResetFailure(record, ipAddress)
       throw new UnauthorizedException("重置链接无效或已过期。")
     }

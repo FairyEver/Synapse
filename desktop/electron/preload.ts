@@ -488,6 +488,14 @@ const synapseBridge: SynapseBridge = {
       queueSkillEnvBindings: (input) => invoke(IPC_CHANNELS.secrets.queueSkillEnvBindings)(input),
     },
   },
+  connectors: {
+    item: {
+      list: () => invoke(IPC_CHANNELS.connectors.list)(),
+      connect: (input) => invoke(IPC_CHANNELS.connectors.connect)(input),
+      disconnect: (input) => invoke(IPC_CHANNELS.connectors.disconnect)(input),
+      onChanged: createRawPayloadSubscription(subscribe, IPC_CHANNELS.connectors.changed),
+    },
+  },
   agentPersonas: {
     list: () => invoke(IPC_CHANNELS.agentPersonas.list)(),
     create: (input) => invoke(IPC_CHANNELS.agentPersonas.create)(input),

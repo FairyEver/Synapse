@@ -255,6 +255,21 @@ describe('DriveCommentsRail', () => {
     expect(onFocusThread).toHaveBeenCalledWith('thread-1')
   })
 
+  it('keeps a long unbroken quote within the comment rail', () => {
+    const quote = 'https://example.com/wiki/document?openbrd=1&blockId=long-unbroken-comment-anchor'
+    renderRail({ threads: [thread({ quote })] })
+
+    const action = Array.from(document.querySelectorAll('button')).find((button) =>
+      button.getAttribute('aria-label')?.startsWith('查看评论：https://example.com/wiki/document')
+    )
+    if (!action) throw new Error('Missing long quote action')
+    const excerpt = action.querySelector('span')
+    expect(action.className).toContain('min-w-0')
+    expect(action.className).toContain('flex-1')
+    expect(excerpt?.className).toContain('max-w-full')
+    expect(excerpt?.className).toContain('break-all')
+  })
+
   it('marks the active thread quote action as current', () => {
     renderRail({ activeThreadId: 'thread-1' })
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -19,7 +19,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { buildAuthRedirectSearch } from '../../auth-redirect-search'
 import { zodResolver } from '../../zod-resolver'
 
 const formSchema = z.object({
@@ -106,13 +105,9 @@ export function UserAuthForm({
             <FormItem>
               <div className='flex items-center justify-between gap-2'>
                 <FormLabel>密码</FormLabel>
-                <Link
-                  to='/forgot-password'
-                  search={buildAuthRedirectSearch(redirectTo)}
-                  className='flex min-h-11 items-center text-sm font-medium text-muted-foreground hover:opacity-75 sm:min-h-0'
-                >
-                  忘记密码？
-                </Link>
+                <span className='text-sm text-muted-foreground'>
+                  忘记密码请联系管理员
+                </span>
               </div>
               <FormControl>
                 <PasswordInput

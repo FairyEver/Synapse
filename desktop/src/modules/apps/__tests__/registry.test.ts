@@ -30,6 +30,7 @@ describe("system app registry", () => {
       "editor-scan",
       "usage-monitor",
       "model-price",
+      "connectors",
     ])
   })
 
@@ -99,7 +100,7 @@ describe("system app registry", () => {
       expect(app.removable).toBe(false)
       expect(app.renameable).toBe(false)
       expect(app.iconEditable).toBe(false)
-      expect(app.icon).toMatch(/\.png/)
+      expect(app.icon).toMatch(/(\.(png|svg)|data:image\/svg\+xml)/)
       expect(app.name.length).toBeGreaterThan(0)
       expect(app.windowTitle.length).toBeGreaterThan(0)
       expect(app.namespace.length).toBeGreaterThan(0)

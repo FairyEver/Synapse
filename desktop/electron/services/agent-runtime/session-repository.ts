@@ -36,6 +36,7 @@ export interface CreateAgentSessionInput {
   readonly mode?: string
   readonly modelTier?: string
   readonly experimentalSynapseToolRouterEnabled?: boolean
+  readonly figmaDesktopMcpEnabled?: boolean
   readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   readonly sdkSessionId?: string
   readonly usage?: ConversationEntryV1["usage"]
@@ -77,7 +78,10 @@ export class AgentSessionRepository {
 
   async getOrCreateActive(
     message: AgentMessage,
-    creationConfig?: { readonly experimentalSynapseToolRouterEnabled: boolean },
+    creationConfig?: {
+      readonly experimentalSynapseToolRouterEnabled?: boolean
+      readonly figmaDesktopMcpEnabled?: boolean
+    },
   ): Promise<ConversationEntryV1> {
     const existing = await this.getActive(
       message.sessionKey,
@@ -112,6 +116,7 @@ export class AgentSessionRepository {
       agentType: message.agentType,
       providerId: message.providerId,
       experimentalSynapseToolRouterEnabled: creationConfig?.experimentalSynapseToolRouterEnabled,
+      figmaDesktopMcpEnabled: creationConfig?.figmaDesktopMcpEnabled,
     })
   }
 
@@ -155,6 +160,7 @@ export class AgentSessionRepository {
         || input.modelTier
         || input.mainThreadPersonaSnapshot
         || input.experimentalSynapseToolRouterEnabled !== undefined
+        || input.figmaDesktopMcpEnabled !== undefined
         ? {
             ...(input.mode ? { mode: input.mode } : {}),
             ...(input.modelTier ? { modelTier: input.modelTier } : {}),
@@ -166,6 +172,9 @@ export class AgentSessionRepository {
               : {}),
             ...(input.experimentalSynapseToolRouterEnabled !== undefined
               ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
+              : {}),
+            ...(input.figmaDesktopMcpEnabled !== undefined
+              ? { figmaDesktopMcpEnabled: input.figmaDesktopMcpEnabled }
               : {}),
           }
         : undefined,
@@ -247,12 +256,18 @@ export class AgentSessionRepository {
       workspacePath: input.workspacePath,
       agentType: input.agentType,
       providerId: input.providerId,
-      agentConfig: input.mode || input.modelTier || input.experimentalSynapseToolRouterEnabled !== undefined
+      agentConfig: input.mode
+        || input.modelTier
+        || input.experimentalSynapseToolRouterEnabled !== undefined
+        || input.figmaDesktopMcpEnabled !== undefined
         ? {
             ...(input.mode ? { mode: input.mode } : {}),
             ...(input.modelTier ? { modelTier: input.modelTier } : {}),
             ...(input.experimentalSynapseToolRouterEnabled !== undefined
               ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
+              : {}),
+            ...(input.figmaDesktopMcpEnabled !== undefined
+              ? { figmaDesktopMcpEnabled: input.figmaDesktopMcpEnabled }
               : {}),
           }
         : undefined,

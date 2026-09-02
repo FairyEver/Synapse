@@ -193,15 +193,15 @@ describe("AppsModule", () => {
       const firstAnimation = animationCalls[0]
       const centerAnimation = animationCalls[7]
 
-      expect(launcherItems).toHaveLength(15)
-      expect(animateElement).toHaveBeenCalledTimes(15)
+      expect(launcherItems).toHaveLength(16)
+      expect(animateElement).toHaveBeenCalledTimes(16)
       expect(firstAnimation).toBeTruthy()
       expect(centerAnimation).toBeTruthy()
       if (!firstAnimation || !centerAnimation) return
       expect(firstAnimation[0]).toEqual([
         {
           opacity: 0,
-          transform: "translate3d(16px, 8px, 0) scale(0.75)",
+          transform: "translate3d(16px, 12px, 0) scale(0.75)",
         },
         {
           opacity: 1,

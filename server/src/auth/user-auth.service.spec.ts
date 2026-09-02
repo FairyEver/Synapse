@@ -93,7 +93,6 @@ function pkceChallenge(verifier: string): string {
 function createService(
   prisma: ReturnType<typeof createPrismaMock>,
   auditLog?: { record: ReturnType<typeof vi.fn> },
-  options: { exposePasswordResetUrl?: boolean } = {},
 ) {
   return new UserAuthService(
     prisma as never,
@@ -101,7 +100,6 @@ function createService(
     {
       accessMinutes: 15,
       refreshDays: 30,
-      exposePasswordResetUrl: options.exposePasswordResetUrl ?? true,
     },
     auditLog as never,
   )
@@ -834,130 +832,36 @@ describe("UserAuthService", () => {
     expect(JSON.stringify(auditLog.record.mock.calls)).not.toContain("secret-value")
   })
 
-  it("requests a password reset without exposing unknown users", async () => {
+  it("validates active password reset tokens", async () => {
     const prisma = createPrismaMock()
-    prisma.user.findUnique.mockResolvedValue(null)
-    const auditLog = { record: vi.fn() }
-    const service = createService(prisma, auditLog)
+    const expiresAt = new Date("2999-01-01T00:00:00.000Z")
+    prisma.userPasswordResetToken.findUnique.mockResolvedValue({
+      expiresAt,
+      usedAt: null,
+      user: { status: "active" },
+    })
 
-    await expect(service.requestPasswordReset({
-      email: "Missing@example.com",
-      publicAppUrl: "https://app.example.com",
-    }, "203.0.113.40"))
+    await expect(createService(prisma).validatePasswordResetToken({ token: "reset-token" }))
       .resolves
-      .toEqual({ ok: true })
-
-    expect(prisma.userPasswordResetToken.create).not.toHaveBeenCalled()
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "missing@example.com",
-      action: "user.password_reset.request_ignored",
-      targetType: "user",
-      targetId: "unknown",
-      ipAddress: "203.0.113.40",
+      .toEqual({ valid: true, expiresAt })
+    expect(prisma.userPasswordResetToken.findUnique).toHaveBeenCalledWith({
+      where: { tokenHash: hashToken("reset-token") },
+      include: { user: true },
     })
   })
 
-  it("creates a development password reset URL for active users", async () => {
+  it.each([
+    ["missing", null],
+    ["used", { expiresAt: new Date("2999-01-01T00:00:00.000Z"), usedAt: new Date(), user: { status: "active" } }],
+    ["expired", { expiresAt: new Date("2000-01-01T00:00:00.000Z"), usedAt: null, user: { status: "active" } }],
+    ["disabled", { expiresAt: new Date("2999-01-01T00:00:00.000Z"), usedAt: null, user: { status: "disabled" } }],
+  ])("rejects %s password reset tokens during validation", async (_label, record) => {
     const prisma = createPrismaMock()
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user-1",
-      email: "u@example.com",
-      status: "active",
-    })
-    const auditLog = { record: vi.fn() }
-    const service = createService(prisma, auditLog)
+    prisma.userPasswordResetToken.findUnique.mockResolvedValue(record)
 
-    const result = await service.requestPasswordReset({
-      email: "U@example.com",
-      publicAppUrl: "https://app.example.com/",
-    }, "203.0.113.41")
-
-    expect(result.ok).toBe(true)
-    expect(result.resetUrl).toMatch(/^https:\/\/app\.example\.com\/console\/reset-password\?token=/)
-    expect(result.expiresAt).toEqual(expect.any(Date))
-    const token = new URL(result.resetUrl!).searchParams.get("token")
-    expect(prisma.userPasswordResetToken.create).toHaveBeenCalledWith({
-      data: {
-        tokenHash: hashToken(token!),
-        userId: "user-1",
-        expiresAt: result.expiresAt,
-      },
-    })
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "u@example.com",
-      action: "user.password_reset.request",
-      targetType: "user",
-      targetId: "user-1",
-      ipAddress: "203.0.113.41",
-    })
-  })
-
-  it("returns password reset URLs when request audit logging fails", async () => {
-    const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
-    const prisma = createPrismaMock()
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user-1",
-      email: "u@example.com",
-      status: "active",
-    })
-    const auditLog = { record: vi.fn().mockRejectedValue(new Error("audit unavailable token=secret-value")) }
-    const service = createService(prisma, auditLog)
-
-    try {
-      const result = await service.requestPasswordReset({
-        email: "U@example.com",
-        publicAppUrl: "https://app.example.com/",
-      }, "203.0.113.41")
-
-      expect(result.ok).toBe(true)
-      expect(result.resetUrl).toMatch(/^https:\/\/app\.example\.com\/console\/reset-password\?token=/)
-      expect(result.expiresAt).toEqual(expect.any(Date))
-      const token = new URL(result.resetUrl!).searchParams.get("token")
-      expect(prisma.userPasswordResetToken.create).toHaveBeenCalledWith({
-        data: {
-          tokenHash: hashToken(token!),
-          userId: "user-1",
-          expiresAt: result.expiresAt,
-        },
-      })
-      expect(warnSpy).toHaveBeenCalledWith({
-        action: "user.password_reset.request",
-        targetType: "user",
-        targetId: "user-1",
-        errorName: "Error",
-      }, "Failed to record user authentication success audit log")
-      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain("secret-value")
-    } finally {
-      warnSpy.mockRestore()
-    }
-  })
-
-  it("rejects password reset requests before creating tokens when delivery is disabled", async () => {
-    const prisma = createPrismaMock()
-    prisma.user.findUnique.mockResolvedValue({
-      id: "user-1",
-      email: "u@example.com",
-      status: "active",
-    })
-    const auditLog = { record: vi.fn() }
-    const service = createService(prisma, auditLog, { exposePasswordResetUrl: false })
-
-    await expect(service.requestPasswordReset({
-      email: "U@example.com",
-      publicAppUrl: "https://app.example.com",
-    }, "203.0.113.42"))
-      .rejects
-      .toThrow("找回密码暂不可用。")
-
-    expect(prisma.user.findUnique).not.toHaveBeenCalled()
-    expect(prisma.userPasswordResetToken.create).not.toHaveBeenCalled()
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "u@example.com",
-      action: "user.password_reset.request_unavailable",
-      targetType: "user",
-      targetId: "unknown",
-      ipAddress: "203.0.113.42",
-    })
+    await expect(createService(prisma).validatePasswordResetToken({ token: "reset-token" }))
+      .resolves
+      .toEqual({ valid: false })
   })
 
   it("resets a password, consumes tokens, and revokes sessions", async () => {

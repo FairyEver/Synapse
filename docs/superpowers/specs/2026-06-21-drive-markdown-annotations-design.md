@@ -133,7 +133,8 @@ Comment creation:
 ```text
 User selects rendered text
   -> compact comment action appears near selection
-  -> user enters plain text
+  -> lightweight composer appears beside the selected text
+  -> user enters plain text without adding a draft card to the comment rail
   -> create annotation thread plus first comment
   -> comment rail opens
   -> new thread is focused
@@ -147,9 +148,12 @@ Whole-image comment creation:
 User hovers or focuses a rendered image
   -> show the add-comment action above the visible top edge when it fully fits
   -> otherwise show it below the visible bottom edge when it fully fits
+  -> lightweight composer appears beside the image and stays inside the visible document boundary
   -> image click still opens the lightbox; action click stops that event
   -> create annotation thread plus first comment
 ```
+
+The creation composer prefers the anchor's right side, then left, below, and above. If no side fully fits, it clamps to the nearest visible document edge. Existing comment-card collision layout never participates in composer placement. After visible placement completes, the textarea receives focus once so typing can begin immediately.
 
 Images with attached threads always show a top-right thread-count marker. Broken-image fallbacks retain the same image identity and remain focusable/commentable. Empty alt text uses the source filename, then `图片`, as the target label. The first touch implementation keeps existing markers interactive but does not add a separate compact-mode creation entry.
 

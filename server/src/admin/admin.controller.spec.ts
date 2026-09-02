@@ -48,6 +48,23 @@ describe("AdminController", () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, AdminController)).toContain(AdminAuthGuard)
   })
 
+  it("creates password reset links with the configured public app URL", async () => {
+    const createUserPasswordResetLink = vi.fn().mockResolvedValue({
+      ok: true,
+      resetUrl: "https://app.example.com/console/reset-password?token=reset-token",
+      expiresAt: new Date("2026-09-02T01:30:00.000Z"),
+    })
+    const controller = createController({ createUserPasswordResetLink })
+    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
+
+    await controller.createUserPasswordResetLink("user-1", {
+      admin: { sessionId: "admin-session", id: "admin-session", email: "platform_admin:admin-session" },
+      ip: "203.0.113.10",
+    } as never)
+
+    expect(createUserPasswordResetLink).toHaveBeenCalledWith("user-1", "https://app.example.com")
+  })
+
   it("does not expose retired team or invitation handlers", () => {
     const prototype = AdminController.prototype as unknown as Record<string, unknown>
 

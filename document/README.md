@@ -25,6 +25,7 @@ document/
 ├── .vitepress/
 │   ├── config.mts
 │   └── theme/
+├── connectors/
 ├── open-api/
 └── index.md
 ```
