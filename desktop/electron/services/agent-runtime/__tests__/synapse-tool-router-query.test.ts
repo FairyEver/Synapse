@@ -17,6 +17,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
         headers: { Authorization: "Bearer secret" },
       }),
       status("local", { command: "node", args: ["server.js"], env: { TOKEN: "secret" } }),
+      statusWithState("pending", "pending", { type: "http", url: "https://example.com/pending" }),
       { name: "disabled", status: "disabled" },
     ])
 
@@ -155,6 +156,14 @@ function status(
   config: NonNullable<McpServerStatus["config"]>,
 ): McpServerStatus {
   return { name, status: "connected", config }
+}
+
+function statusWithState(
+  name: string,
+  state: McpServerStatus["status"],
+  config: NonNullable<McpServerStatus["config"]>,
+): McpServerStatus {
+  return { name, status: state, config }
 }
 
 function promptThatMustNotBeRead(): AsyncIterable<SDKUserMessage> {

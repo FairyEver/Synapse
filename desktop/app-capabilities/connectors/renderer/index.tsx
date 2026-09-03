@@ -76,7 +76,7 @@ export function ConnectorsModule() {
 function ConnectorCard({ item, busy, onAction }: { readonly item: ConnectorItem; readonly busy: boolean; readonly onAction: (item: ConnectorItem) => void }) {
   const connected = item.status === "connected"
   const connecting = item.status === "connecting"
-  const stateLabel = busy || connecting ? "检测中" : connected ? "已激活" : "未激活"
+  const stateLabel = busy || connecting ? "检测中" : connected ? "已激活" : item.status === "error" ? "连接失败" : "未激活"
 
   const openDocumentation = useCallback(async () => {
     try {
@@ -92,19 +92,17 @@ function ConnectorCard({ item, busy, onAction }: { readonly item: ConnectorItem;
         <img src={icon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
         <div className="min-w-0 flex-1">
           <CardTitle className="text-base">Figma</CardTitle>
-          {item.status !== "error" ? (
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="mt-1 h-auto p-0 text-xs font-normal text-muted-foreground"
-              data-track="connectors.connector.documentation"
-              onClick={() => void openDocumentation()}
-            >
-              更多信息
-              <ExternalLink data-icon="inline-end" />
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="mt-1 h-auto p-0 text-xs font-normal text-muted-foreground"
+            data-track="connectors.connector.documentation"
+            onClick={() => void openDocumentation()}
+          >
+            更多信息
+            <ExternalLink data-icon="inline-end" />
+          </Button>
           {item.status === "error" && item.errorMessage ? <p className="mt-1 text-xs text-destructive">{item.errorMessage}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -114,7 +112,7 @@ function ConnectorCard({ item, busy, onAction }: { readonly item: ConnectorItem;
             checked={connected}
             disabled={busy || connecting}
             aria-busy={busy}
-            aria-label={`${item.name}${connected ? "已激活" : "未激活"}`}
+            aria-label={`${item.name}${connected ? "已激活" : item.status === "error" ? "连接失败" : "未激活"}`}
             data-track="connectors.connector.toggle"
             onCheckedChange={() => onAction(item)}
           />

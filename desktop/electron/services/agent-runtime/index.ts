@@ -265,6 +265,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           projectPath: ctx.projectMeta.workspacePath,
         })
         : undefined
+      const getConnectedFigmaMcpServers = async (): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>> => {
+        const connectors = optionalService<{
+          getMcpServers(): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
+        }>(ctx.globalRegistry, "core.connectors")
+        return connectors ? connectors.getMcpServers() : {}
+      }
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -340,14 +346,18 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         publishedProjectCommands: async () => isManagedKnowledgeBase
           ? MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS
           : [],
-        sdkPlugins: async (message, conversation) => [
-          ...(isManagedKnowledgeBaseRuntimeMessage(message)
-            ? [{ type: "local" as const, path: ctx.projectMeta.workspacePath as string }]
-            : []),
-          ...(conversation.agentConfig?.figmaDesktopMcpEnabled === true
-            ? [{ type: "local" as const, path: figmaSkillPackageRoot, skipMcpDiscovery: true }]
-            : []),
-        ],
+        sdkPlugins: async (message, conversation) => {
+          const figmaEnabled = conversation.agentConfig?.figmaDesktopMcpEnabled === true
+            && Object.keys(await getConnectedFigmaMcpServers()).length > 0
+          return [
+            ...(isManagedKnowledgeBaseRuntimeMessage(message)
+              ? [{ type: "local" as const, path: ctx.projectMeta.workspacePath as string }]
+              : []),
+            ...(figmaEnabled
+              ? [{ type: "local" as const, path: figmaSkillPackageRoot, skipMcpDiscovery: true }]
+              : []),
+          ]
+        },
         allowPluginHooks: async (message) => isManagedKnowledgeBaseRuntimeMessage(message),
         allowAgentNativeSlash: (name, message) =>
           isManagedKnowledgeBaseRuntimeMessage(message)
@@ -364,19 +374,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           ? (_message, conversation) => personaRuntimeResolver.resolve(conversation)
           : undefined,
         loadFigmaDesktopMcpEnabled: async () => {
-          const connectors = optionalService<{
-            getMcpServers(): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
-          }>(ctx.globalRegistry, "core.connectors")
-          if (!connectors) return false
-          const servers = await connectors.getMcpServers()
+          const servers = await getConnectedFigmaMcpServers()
           return Object.keys(servers).length > 0
         },
         resolveMcpServers: async (_message, conversation) => {
           if (conversation.agentConfig?.figmaDesktopMcpEnabled !== true) return {}
-          const connectors = optionalService<{
-            getMcpServers(): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
-          }>(ctx.globalRegistry, "core.connectors")
-          return connectors ? connectors.getMcpServers() : {}
+          return getConnectedFigmaMcpServers()
         },
         onElicitation: async (request) => {
           if (request.mode === "url" && request.url) {

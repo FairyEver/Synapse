@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react"
-import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { Check, CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
@@ -114,7 +114,6 @@ export function TerminalModule({
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalSession | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
-  const [deleteSessionTarget, setDeleteSessionTarget] = useState<SynapseTerminalSession | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(null)
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
@@ -147,7 +146,6 @@ export function TerminalModule({
   const terminalGeometrySyncRef = useRef<((refreshRenderer?: boolean) => void) | null>(null)
   const deletedSessionIdsRef = useRef(new Set<string>())
   const renameReturnFocusRef = useRef<HTMLElement | null>(null)
-  const deleteSessionReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
   const createGroupActionRef = useRef<HTMLButtonElement | null>(null)
@@ -279,19 +277,6 @@ export function TerminalModule({
     globalThis.setTimeout(() => {
       renameReturnFocusRef.current?.focus()
       renameReturnFocusRef.current = null
-    }, 0)
-  }, [])
-
-  const openDeleteSessionDialog = useCallback((session: SynapseTerminalSession, returnFocus: HTMLButtonElement) => {
-    deleteSessionReturnFocusRef.current = returnFocus
-    setDeleteSessionTarget(session)
-  }, [])
-
-  const closeDeleteSessionDialog = useCallback(() => {
-    setDeleteSessionTarget(null)
-    globalThis.setTimeout(() => {
-      deleteSessionReturnFocusRef.current?.focus()
-      deleteSessionReturnFocusRef.current = null
     }, 0)
   }, [])
 
@@ -448,8 +433,6 @@ export function TerminalModule({
         })
         return nextSessions
       })
-      setDeleteSessionTarget(null)
-      deleteSessionReturnFocusRef.current = null
       globalThis.setTimeout(() => {
         const nextActiveRow = document.querySelector<HTMLElement>(
           '[data-track="terminal-session-select"][aria-current="page"]',
@@ -1147,7 +1130,7 @@ export function TerminalModule({
                     <TerminalSessionLifecycleButton
                       disabled={deletingSessionId === session.id || stoppingSessionId === session.id}
                       session={session}
-                      onDelete={(returnFocus) => openDeleteSessionDialog(session, returnFocus)}
+                      onDelete={() => { void deleteSession(session) }}
                       onStop={() => { void stopSession(session) }}
                     />
                   }
@@ -1580,30 +1563,6 @@ export function TerminalModule({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <AlertDialog open={deleteSessionTarget !== null} onOpenChange={(open) => {
-        if (!open && deletingSessionId === null) closeDeleteSessionDialog()
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除终端</AlertDialogTitle>
-            <AlertDialogDescription>
-              将删除「{deleteSessionTarget?.title}」及其保留输出。此操作无法撤销。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingSessionId !== null}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={deletingSessionId !== null}
-              onClick={() => {
-                if (deleteSessionTarget) void deleteSession(deleteSessionTarget)
-              }}
-            >
-              删除终端
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <AlertDialog open={deleteGroupTarget !== null} onOpenChange={(open) => {
         if (!open && !deleteGroupSaving) closeDeleteGroupDialog()
       }}>
@@ -1660,28 +1619,57 @@ function TerminalSessionLifecycleButton({
 }: {
   readonly disabled: boolean
   readonly session: SynapseTerminalSession
-  readonly onDelete: (returnFocus: HTMLButtonElement) => void
+  readonly onDelete: () => void
   readonly onStop: () => void
 }) {
+  const [deleteArmed, setDeleteArmed] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const active = session.status === "running" || session.status === "stopping"
-  const actionLabel = session.status === "running" ? "停止" : session.status === "stopping" ? "强制停止" : "删除"
+  const actionLabel = active ? (session.status === "running" ? "停止" : "强制停止") : (deleteArmed ? "确认删除" : "删除")
+
+  useEffect(() => {
+    if (!deleteArmed) return undefined
+    timerRef.current = setTimeout(() => setDeleteArmed(false), 3000)
+    const handleClickOutside = (event: MouseEvent) => {
+      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
+        setDeleteArmed(false)
+      }
+    }
+    document.addEventListener("pointerdown", handleClickOutside, true)
+    return () => {
+      clearTimeout(timerRef.current)
+      document.removeEventListener("pointerdown", handleClickOutside, true)
+    }
+  }, [deleteArmed])
+
   return (
     <Button
+      ref={buttonRef}
       type="button"
       size="icon-xs"
       variant="ghost"
       disabled={disabled}
       aria-label={`${actionLabel}终端会话：${session.title}`}
       title={actionLabel}
-      className={cn("text-muted-foreground", active ? "hover:text-foreground" : "hover:text-destructive")}
+      className={cn(
+        "text-muted-foreground",
+        active ? "hover:text-foreground" : deleteArmed ? "text-destructive" : "hover:text-destructive",
+      )}
       onClick={(event) => {
         event.stopPropagation()
         if (active) onStop()
-        else onDelete(event.currentTarget)
+        else if (shouldBypassDeleteConfirm(event) || deleteArmed) {
+          setDeleteArmed(false)
+          onDelete()
+        } else {
+          setDeleteArmed(true)
+        }
       }}
       onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
     >
-      {active ? <Square className="size-3.5" /> : <Trash2 className="size-3.5" />}
+      {active ? <Square className="size-3.5" /> : deleteArmed ? <Check className="size-3.5" /> : <Trash2 className="size-3.5" />}
     </Button>
   )
 }

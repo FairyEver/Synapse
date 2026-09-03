@@ -1179,7 +1179,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
   })
 
-  it("confirms before deleting the active terminal session and selects the next session", async () => {
+  it("arms terminal session deletion in place before selecting the next session", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
       createSession({ id: "session-1", groupId: "group-1", title: "一号终端", status: "ended", updatedAt: "2026-06-24T00:02:00.000Z" }),
@@ -1189,21 +1189,15 @@ describe("TerminalModule", () => {
     await renderModule()
     await clickSessionDelete("一号终端")
 
-    expect(document.body.textContent).toContain("删除终端")
-    expect(document.body.textContent).toContain("将删除「一号终端」及其保留输出。此操作无法撤销。")
-    expect(buttonForText("删除终端")?.dataset.variant).toBe("destructive")
+    const deleteButton = document.body.querySelector<HTMLButtonElement>(
+      '[aria-label="确认删除终端会话：一号终端"]',
+    )
+    expect(deleteButton).toBeTruthy()
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(deleteButton?.querySelector("svg")).toBeTruthy()
     expect(terminalBridge.deleteSession).not.toHaveBeenCalled()
-
-    await clickButton("取消")
-    expect(terminalBridge.deleteSession).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("一号终端")
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    expect(document.activeElement).toBe(document.body.querySelector('[aria-label="删除终端会话：一号终端"]'))
 
     await clickSessionDelete("一号终端")
-    await clickButton("删除终端")
 
     expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
     expect(document.body.textContent).not.toContain("一号终端")
@@ -1220,7 +1214,7 @@ describe("TerminalModule", () => {
 
     await renderModule()
     await clickSessionDelete("临时终端")
-    await clickButton("删除终端")
+    await clickSessionDelete("临时终端")
 
     expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
     expect(document.body.textContent).toContain("新建终端")
@@ -1910,7 +1904,7 @@ async function clickButtonByTitle(title: string): Promise<void> {
 }
 
 async function clickSessionDelete(title: string): Promise<void> {
-  const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label="删除终端会话：${title}"]`)
+  const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label$="终端会话：${title}"]`)
   await act(async () => {
     button?.click()
     await Promise.resolve()

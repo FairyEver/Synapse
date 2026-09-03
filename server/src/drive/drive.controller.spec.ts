@@ -1079,7 +1079,7 @@ describe("DriveController", () => {
         .get("/drive/items/file-1/render")
         .expect(200)
       expect(render.headers["content-type"]).toContain("text/html; charset=utf-8")
-      expectDriveHtmlRenderCsp(render.headers["content-security-policy"])
+      expectDriveHtmlRenderCsp(render.headers["content-security-policy"], { allowSameOrigin: true })
       expect(render.text).toContain("Notes")
       expect(drive.resolveOwnerRenderAccess).toHaveBeenLastCalledWith({
         userId: "user-1",
@@ -1732,7 +1732,7 @@ describe("DriveController", () => {
       .expect(200)
 
     expect(response.headers["content-type"]).toContain("text/html; charset=utf-8")
-    expectDriveHtmlRenderCsp(response.headers["content-security-policy"])
+    expectDriveHtmlRenderCsp(response.headers["content-security-policy"], { allowSameOrigin: true })
     expect(response.text).toContain("Shared page")
     expect(drive.resolveShareRenderAccess).toHaveBeenCalledWith({
       shareId: "shr_file",
@@ -2374,15 +2374,16 @@ function driveAccessCookieName(kind: "share", publicId: string): string {
 }
 
 function expectDriveHtmlRenderCsp(value: string | undefined, options: { readonly allowSameOrigin?: boolean } = {}): void {
+  const allowSameOrigin = options.allowSameOrigin ?? true
   expect(value).toContain("frame-ancestors 'self'")
   expect(value).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:")
   expect(value).toContain("connect-src 'self' https:")
-  expect(value).toContain(options.allowSameOrigin
+  expect(value).toContain(allowSameOrigin
     ? "sandbox allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock"
     : "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock")
   expect(value).toContain("object-src 'none'")
   expect(value).toContain("base-uri 'none'")
-  if (options.allowSameOrigin) expect(value).toContain("allow-same-origin")
+  if (allowSameOrigin) expect(value).toContain("allow-same-origin")
   else expect(value).not.toContain("allow-same-origin")
   expect(value).not.toContain("allow-top-navigation")
   expect(value).not.toContain("script-src 'none'")

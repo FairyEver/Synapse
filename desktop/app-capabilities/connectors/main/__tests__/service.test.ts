@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createConnectorsService } from "../service"
+import { createConnectorsService, probeFigmaDesktopServer } from "../service"
 
 function createHarness() {
   const store = new Map<string, Record<string, unknown>>()
@@ -75,6 +75,27 @@ describe("connectors service", () => {
     await unavailableService.initialize()
     await expect(unavailableService.connect("figma")).rejects.toThrow("未检测到 Figma Desktop MCP")
     expect(probe).toHaveBeenCalledOnce()
+    await expect(unavailableService.list()).resolves.toMatchObject({ items: [{ id: "figma", status: "error", errorMessage: expect.stringContaining("未检测到") }] })
     await expect(unavailableService.getMcpServers()).resolves.toEqual({})
+  })
+
+  it("only reports ready after MCP initialize and tools/list succeed", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('data: {"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"Figma","version":"1"}}}\n\n', {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "mcp-session-id": "session-1" },
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: "2.0", id: 2, result: { tools: [{ name: "get_metadata" }] } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(probeFigmaDesktopServer()).resolves.toMatchObject({ ok: true, toolCount: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:3845/mcp")
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ method: "initialize" })
+    vi.unstubAllGlobals()
   })
 })

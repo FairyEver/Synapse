@@ -176,7 +176,7 @@ export function rebuildMcpServers(statuses: readonly McpServerStatus[]): Record<
       }
       continue
     }
-    if (status.status === "disabled") continue
+    if (status.status !== "connected") continue
     if (!status.config) throw new ToolRouterFallbackError("missing-server-config")
     if (status.config.type === "claudeai-proxy" || status.config.type === "sdk") {
       throw new ToolRouterFallbackError("unsupported-server-config")

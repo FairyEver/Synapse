@@ -11,7 +11,14 @@ export type ConnectorServiceDeps = {
   readonly items: DataNamespace<ConnectorItemEntryV1>
   readonly credentials: DataNamespace<ConnectorCredentialEntryV1>
   readonly logger: { warn(message: string, meta?: Record<string, unknown>): void }
-  readonly probeDesktopServer?: () => Promise<boolean>
+  readonly probeDesktopServer?: () => Promise<DesktopServerProbeResult | boolean>
+}
+
+export type DesktopServerProbeResult = {
+  readonly ok: boolean
+  readonly errorMessage?: string
+  readonly stage?: "transport" | "initialize" | "tools"
+  readonly toolCount?: number
 }
 
 type ConnectorEvents = { changed: [payload: { items: ConnectorItem[] }] }
@@ -62,23 +69,52 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
   async function connect(id: string): Promise<ConnectorItem> {
     if (id !== FIGMA_ID) throw new Error("不支持的连接器。")
     const current = await requireItem(id)
-    const reachable = await (deps.probeDesktopServer ?? probeFigmaDesktopServer)()
-    if (!reachable) {
+    const connecting = {
+      ...current,
+      endpoint: FIGMA_ENDPOINT,
+      authType: "none" as const,
+      status: "connecting" as const,
+      errorMessage: undefined,
+      updatedAt: now(),
+    }
+    await deps.items.upsert(connecting)
+    await emit()
+
+    let probe: DesktopServerProbeResult
+    try {
+      const result = await (deps.probeDesktopServer ?? probeFigmaDesktopServer)()
+      probe = typeof result === "boolean"
+        ? { ok: result, ...(!result ? { errorMessage: "未检测到 Figma Desktop MCP，请先在 Figma Dev Mode 中开启 MCP Server。" } : {}) }
+        : result
+    } catch (error) {
+      deps.logger.warn("Figma Desktop MCP probe failed.", {
+        boundary: "connectors.figma.probe",
+        stage: "transport",
+        errorMessage: error instanceof Error ? error.message : "unknown error",
+      })
+      probe = { ok: false, stage: "transport" }
+    }
+    if (!probe.ok) {
       const unavailable = {
-        ...current,
+        ...connecting,
         endpoint: FIGMA_ENDPOINT,
         authType: "none" as const,
         status: "error" as const,
-        errorMessage: "未检测到 Figma Desktop MCP，请先在 Figma Dev Mode 中开启 MCP Server。",
+        errorMessage: probe.errorMessage ?? "Figma Desktop MCP 未完成连接。请打开 Figma 文件，并在 Dev Mode 中重启 MCP Server 后重试。",
         updatedAt: now(),
       }
       await deps.items.upsert(unavailable)
       await emit()
+      deps.logger.warn("Figma Desktop MCP is not ready.", {
+        boundary: "connectors.figma.probe",
+        stage: probe.stage ?? "transport",
+        toolCount: probe.toolCount ?? 0,
+      })
       throw new Error(unavailable.errorMessage)
     }
 
     const connected = {
-      ...current,
+      ...connecting,
       description: FIGMA_DESCRIPTION,
       endpoint: FIGMA_ENDPOINT,
       authType: "none" as const,
@@ -113,17 +149,100 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
   return { initialize, list, connect, disconnect, getMcpServers, onChanged }
 }
 
-async function probeFigmaDesktopServer(): Promise<boolean> {
+export async function probeFigmaDesktopServer(): Promise<DesktopServerProbeResult> {
+  const timeoutMs = 4_000
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 1_500)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(FIGMA_ENDPOINT, { method: "GET", signal: controller.signal })
-    return response.status !== 404 && response.status < 500
-  } catch {
-    return false
+    const initialized = await mcpRequest(controller.signal, {
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "Synapse", version: "1.0.0" },
+      },
+    })
+    const sessionId = initialized.sessionId
+    if (!sessionId || !initialized.result || typeof initialized.result !== "object") {
+      return { ok: false, stage: "initialize", errorMessage: "Figma Desktop MCP 返回了无效的初始化响应。请重启 Figma 的 MCP Server。" }
+    }
+
+    await mcpRequest(controller.signal, {
+      method: "notifications/initialized",
+      params: {},
+      sessionId,
+      allowEmpty: true,
+    })
+    const tools = await mcpRequest(controller.signal, {
+      id: 2,
+      method: "tools/list",
+      params: {},
+      sessionId,
+    })
+    const toolList = tools.result && typeof tools.result === "object" && "tools" in tools.result
+      ? (tools.result as { tools?: unknown }).tools
+      : undefined
+    if (!Array.isArray(toolList)) {
+      return { ok: false, stage: "tools", errorMessage: "Figma Desktop MCP 未返回工具列表。请确认已打开 Figma 文件后重启 MCP Server。" }
+    }
+    return { ok: true, toolCount: toolList.length }
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "AbortError"
+    return {
+      ok: false,
+      stage: timedOut ? "tools" : "transport",
+      errorMessage: timedOut
+        ? "Figma Desktop MCP 工具加载超时。请确认已打开 Figma 文件，并在 Dev Mode 中重启 MCP Server。"
+        : "未检测到可用的 Figma Desktop MCP。请在 Figma Dev Mode 中开启 MCP Server。",
+    }
   } finally {
     clearTimeout(timeout)
   }
+}
+
+type McpRequest = {
+  readonly id?: number
+  readonly method: string
+  readonly params: Record<string, unknown>
+  readonly sessionId?: string
+  readonly allowEmpty?: boolean
+}
+
+async function mcpRequest(signal: AbortSignal, request: McpRequest): Promise<{ readonly result?: unknown; readonly sessionId?: string }> {
+  const response = await fetch(FIGMA_ENDPOINT, {
+    method: "POST",
+    signal,
+    headers: {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": "2025-06-18",
+      ...(request.sessionId ? { "Mcp-Session-Id": request.sessionId } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", ...(request.id === undefined ? {} : { id: request.id }), method: request.method, params: request.params }),
+  })
+  if (!response.ok) {
+    if (request.allowEmpty && response.status === 202) return { sessionId: request.sessionId }
+    throw new Error(`MCP HTTP ${response.status}`)
+  }
+  if (request.allowEmpty && response.status === 202) return { sessionId: request.sessionId }
+  const body = await response.text()
+  const payload = parseMcpPayload(body)
+  if (!payload || typeof payload !== "object" || "error" in payload) throw new Error("Invalid MCP response")
+  return { result: (payload as { result?: unknown }).result, sessionId: response.headers.get("mcp-session-id") ?? request.sessionId }
+}
+
+function parseMcpPayload(body: string): unknown {
+  const trimmed = body.trim()
+  if (!trimmed) return undefined
+  try { return JSON.parse(trimmed) }
+  catch { /* Streamable HTTP may return one or more SSE data frames. */ }
+  for (const line of trimmed.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue
+    try { return JSON.parse(line.slice(5).trim()) }
+    catch { continue }
+  }
+  return undefined
 }
 
 function toPublic(item: ConnectorItemEntryV1): ConnectorItem { return { ...item } }

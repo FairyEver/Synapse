@@ -1,6 +1,6 @@
 import type { DriveBrowserItemDto } from '@synapse/shared'
 
-const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock'
+const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock'
 const DRIVE_IFRAME_ALLOW = 'clipboard-write *'
 
 export function DriveIframeRenderer({
