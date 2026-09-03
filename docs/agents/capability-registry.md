@@ -76,7 +76,7 @@
 
 Git 仍是普通 System App，不新增 MCP domain。其带恢复 journal 的原子 clone、仓库注册、状态与差异预览、主进程选择令牌、精确提交与按文件丢弃、同步、空仓库初始化与远端默认分支接入、缓存远程分支发现与 tracking 检出、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；仓库目录定位复用受权限与审计保护的 Shell IPC，设为项目复用系统设置的全局项目配置与添加流程。Agent 项目与 Git 仓库根路径精确匹配时，composer 可复用同一 Git IPC 执行确认后的全部改动提交及常用远端操作，并可定向打开对应 Git 工作台；该入口不经过 Agent、MCP 或通用命令执行。这不改变上表的 capability 或 MCP 数量。远程分支、空仓库初始化与文件丢弃能力不注册任意 Git 命令入口，也不扩展为 Workflow、Automation、MCP 或 Deep Link 表面。
 
-MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。Connectors 是独立的 System App；其连接器状态与凭据只写入 Synapse 内置 DataRepository，并在内置 Claude SDK 会话创建时临时注入 MCP，不写入外部 Claude 配置。当前 Figma 连接器使用 Figma Desktop 的本地 MCP（`http://127.0.0.1:3845/mcp`），不需要 OAuth 或静态 Bearer；连接探测必须完成 MCP 初始化和 `tools/list`，工具发现失败或超时不得标记为已激活。内置 Skill 只依赖 Figma MCP 实际提供的设计上下文、变量、截图、动效、元数据、FigJam 工具及 Code Connect/设计系统 Prompt，不声明 Figma 写入能力。Figma 连接器开启后，只有新建对话会快照并加载内置 `synapse-figma` Skill 与 Figma MCP；已有对话不会动态注入，关闭连接器的新对话也不会加载。
+MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。Connectors 是独立的 System App；其连接器状态与凭据只写入 Synapse 内置 DataRepository，并在内置 Claude SDK 会话创建时临时注入 MCP，不写入外部 Claude 配置。当前 Figma 连接器使用 Figma Desktop 的本地 MCP（`http://127.0.0.1:3845/mcp`），不需要 OAuth 或静态 Bearer；连接探测必须完成 MCP 初始化和 `tools/list`，工具发现失败或超时不得标记为已激活。内置 Skill 只依赖 Figma MCP 实际提供的设计上下文、变量、截图、动效、元数据、FigJam 工具及 Code Connect/设计系统 Prompt，不声明 Figma 写入能力。Figma 连接器开启后，只有新建对话会把 `figma` 固化到 `expectedMcpServerNames` 快照，并加载内置 `synapse-figma` Skill 与 Figma MCP；两者使用同一次 MCP 配置解析结果，最终 Query 未确认 Figma 已连接时不得启动半连接会话。已有对话不会动态注入，关闭连接器的新对话也不会加载。
 
 ## MCP capability domain
 

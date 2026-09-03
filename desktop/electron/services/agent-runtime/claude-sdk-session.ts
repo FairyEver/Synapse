@@ -75,6 +75,7 @@ import {
   parseSynapseToolRouterInvoke,
 } from "./synapse-tool-router"
 import {
+  createDirectValidatedQuery,
   SynapseToolRouterQuery,
   type SynapseToolRouterQueryOptions,
 } from "./synapse-tool-router-query"
@@ -98,7 +99,8 @@ export interface QueryLike {
 export type QueryFactory = (input: {
   prompt: AsyncIterable<SDKUserMessage>
   options: Record<string, unknown>
-  logger?: Pick<StructuredLogger, "warn">
+  expectedMcpServerNames?: readonly string[]
+  logger?: Pick<StructuredLogger, "warn"> & Partial<Pick<StructuredLogger, "info">>
   synapseToolRouter?: SynapseToolRouterQueryOptions
 }) => QueryLike
 
@@ -132,6 +134,7 @@ export interface ClaudeSDKSessionOptions {
   readonly additionalDirectories?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly mcpServers?: Options["mcpServers"]
+  readonly expectedMcpServerNames?: readonly string[]
   readonly onElicitation?: Options["onElicitation"]
   readonly onConversationTitle?: (title: string) => void | Promise<void>
   readonly queryFactory?: QueryFactory
@@ -140,7 +143,7 @@ export interface ClaudeSDKSessionOptions {
     readonly allowedTools?: readonly string[]
     readonly disallowedTools?: readonly string[]
   }>>
-  readonly logger?: Pick<StructuredLogger, "warn">
+  readonly logger?: Pick<StructuredLogger, "warn"> & Partial<Pick<StructuredLogger, "info">>
   readonly now?: () => Date
 }
 
@@ -204,7 +207,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly inputQueue = new AsyncQueue<SDKUserMessage>()
   private readonly eventQueue = new AsyncQueue<AgentEvent>()
   private readonly permissions = new Map<string, PendingPermission>()
-  private readonly logger: Pick<StructuredLogger, "warn"> | undefined
+  private readonly logger: Pick<StructuredLogger, "warn"> & Partial<Pick<StructuredLogger, "info">> | undefined
   private readonly subagentToolPolicies: AgentSdkSubagentToolPolicies
   private readonly personaToolPolicy: ClaudeSDKPersonaToolPolicy | undefined
   private readonly toolPolicy: ClaudeSDKToolPolicy | undefined
@@ -290,6 +293,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       this.query = queryFactory({
         prompt: this.inputQueue,
         options: queryOptions,
+        expectedMcpServerNames: options.expectedMcpServerNames,
         logger: this.logger,
         synapseToolRouter,
       })
@@ -1221,13 +1225,15 @@ function projectRouterToolBlocks(value: unknown): unknown {
 function defaultQueryFactory(input: {
   prompt: AsyncIterable<SDKUserMessage>
   options: Record<string, unknown>
-  logger?: Pick<StructuredLogger, "warn">
+  expectedMcpServerNames?: readonly string[]
+  logger?: Pick<StructuredLogger, "warn"> & Partial<Pick<StructuredLogger, "info">>
   synapseToolRouter?: SynapseToolRouterQueryOptions
 }): QueryLike {
   if (input.synapseToolRouter) {
     return new SynapseToolRouterQuery({
       prompt: input.prompt,
       options: input.options,
+      expectedMcpServerNames: input.expectedMcpServerNames,
       logger: input.logger,
       router: input.synapseToolRouter,
     })
@@ -1243,13 +1249,11 @@ class LazyQuery implements QueryLike {
   constructor(input: {
     readonly prompt: AsyncIterable<SDKUserMessage>
     readonly options: Record<string, unknown>
-    readonly logger?: Pick<StructuredLogger, "warn">
+    readonly expectedMcpServerNames?: readonly string[]
+    readonly logger?: Pick<StructuredLogger, "warn"> & Partial<Pick<StructuredLogger, "info">>
   }) {
     this.query = import("@anthropic-ai/claude-agent-sdk")
-      .then(({ query }) => query({
-        prompt: input.prompt,
-        options: input.options as Options,
-      }))
+      .then((sdk) => createDirectValidatedQuery(sdk, input))
       .catch((error) => {
         this.failed = true
         this.failure = error

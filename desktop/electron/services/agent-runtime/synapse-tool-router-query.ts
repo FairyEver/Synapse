@@ -12,12 +12,14 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 
 import type { StructuredLogger } from "../../runtime/service-registry"
+import { AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE } from "./agent-error-messages"
 import { createSynapseToolRouterServer, type SynapseToolRouterExecutor } from "./synapse-tool-router"
 
 export type SynapseToolRouterFallbackReason =
   | "discovery-failed"
   | "duplicate-server"
   | "explicit-permission-rule"
+  | "expected-server-unavailable"
   | "missing-server-config"
   | "policy-helper"
   | "synapse-server-tool-policy"
@@ -47,9 +49,19 @@ const MCP_DISCOVERY_POLL_INTERVAL_MS = 50
 interface RoutedQueryInput {
   readonly prompt: AsyncIterable<SDKUserMessage>
   readonly options: Record<string, unknown>
+  readonly expectedMcpServerNames?: readonly string[]
   readonly router: SynapseToolRouterQueryOptions
-  readonly logger?: Pick<StructuredLogger, "warn">
+  readonly logger?: Pick<StructuredLogger, "warn"> & Partial<Pick<StructuredLogger, "info">>
 }
+
+interface DirectValidatedQueryInput {
+  readonly prompt: AsyncIterable<SDKUserMessage>
+  readonly options: Record<string, unknown>
+  readonly expectedMcpServerNames?: readonly string[]
+  readonly logger?: Pick<StructuredLogger, "warn"> & Partial<Pick<StructuredLogger, "info">>
+}
+
+type McpValidationPhase = "router" | "fallback" | "direct" | "direct-retry"
 
 type AgentSdkModule = typeof import(
   "@anthropic-ai/claude-agent-sdk",
@@ -57,9 +69,24 @@ type AgentSdkModule = typeof import(
 )
 
 class ToolRouterFallbackError extends Error {
-  constructor(readonly reason: SynapseToolRouterFallbackReason) {
-    super(reason)
+  constructor(readonly reason: SynapseToolRouterFallbackReason, message: string = reason) {
+    super(message)
     this.name = "ToolRouterFallbackError"
+  }
+}
+
+class ExpectedMcpServerUnavailableError extends ToolRouterFallbackError {
+  constructor(
+    readonly expectedServerNames: readonly string[],
+    readonly serverStatuses: readonly McpServerStatus[],
+  ) {
+    super(
+      "expected-server-unavailable",
+      expectedServerNames.includes("figma")
+        ? AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE
+        : `预期的 MCP 服务未进入本次会话：${expectedServerNames.join("、")}。`,
+    )
+    this.name = "ExpectedMcpServerUnavailableError"
   }
 }
 
@@ -126,6 +153,13 @@ export class SynapseToolRouterQuery implements QueryLike {
 }
 
 export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryInput): Promise<Query> {
+  const expectedServerNames = [...new Set(
+    input.expectedMcpServerNames ?? configuredMcpServerNames(input.options),
+  )]
+  input.logger?.info?.("Starting MCP discovery for Synapse tool router.", {
+    boundary: "claude-sdk.synapse-tool-router.discovery",
+    expectedServerNames,
+  })
   try {
     const resolved = await sdk.resolveSettings({
       cwd: input.router.cwd,
@@ -139,20 +173,35 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
     let statuses: McpServerStatus[]
     try {
       await discovery.initializationResult()
-      statuses = await waitForMcpServerStatuses(discovery)
+      statuses = await waitForMcpServerStatuses(discovery, expectedServerNames)
     } finally {
       await Promise.resolve(discovery.close())
     }
+    assertExpectedMcpServersConnected(statuses, expectedServerNames)
+    input.logger?.info?.("MCP discovery completed for Synapse tool router.", {
+      boundary: "claude-sdk.synapse-tool-router.discovery",
+      expectedServerNames,
+      serverStatuses: summarizeMcpServerStatuses(statuses),
+    })
     const mcpServers = rebuildMcpServers(statuses)
     mcpServers["synapse-tool-router"] = createSynapseToolRouterServer(sdk, input.router.executeTool)
-    return sdk.query({
-      prompt: input.prompt,
-      options: {
+    input.logger?.info?.("Rebuilt MCP configuration for Synapse tool router.", {
+      boundary: "claude-sdk.synapse-tool-router.rebuild",
+      expectedServerNames,
+      finalServerNames: Object.keys(mcpServers),
+    })
+    return await startValidatedQuery(
+      sdk,
+      input.prompt,
+      {
         ...input.options,
         strictMcpConfig: true,
         mcpServers,
       } as Options,
-    })
+      expectedServerNames,
+      input.logger,
+      "router",
+    )
   } catch (error) {
     const reason = fallbackReason(error)
     input.router.onFallback?.(reason)
@@ -160,21 +209,219 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
       boundary: "claude-sdk.synapse-tool-router.fallback",
       reason,
     })
-    return sdk.query({ prompt: input.prompt, options: input.options as Options })
+    try {
+      return await startValidatedQuery(
+        sdk,
+        input.prompt,
+        input.options as Options,
+        expectedServerNames,
+        input.logger,
+        "fallback",
+      )
+    } catch (fallbackError) {
+      input.logger?.warn("Expected MCP servers remain unavailable after fallback.", {
+        boundary: "claude-sdk.synapse-tool-router.fallback",
+        expectedServerNames,
+        serverStatuses: fallbackError instanceof ExpectedMcpServerUnavailableError
+          ? summarizeMcpServerStatuses(fallbackError.serverStatuses)
+          : [],
+      })
+      throw fallbackError
+    }
   }
 }
 
-async function waitForMcpServerStatuses(query: Pick<Query, "mcpServerStatus">): Promise<McpServerStatus[]> {
+export async function createDirectValidatedQuery(
+  sdk: AgentSdkModule,
+  input: DirectValidatedQueryInput,
+): Promise<Query> {
+  const expectedServerNames = [...new Set(
+    input.expectedMcpServerNames ?? configuredMcpServerNames(input.options),
+  )]
+  if (expectedServerNames.length === 0) {
+    return sdk.query({ prompt: input.prompt, options: input.options as Options })
+  }
+  try {
+    return await startValidatedQuery(
+      sdk,
+      input.prompt,
+      input.options as Options,
+      expectedServerNames,
+      input.logger,
+      "direct",
+    )
+  } catch (error) {
+    input.logger?.warn("Expected MCP servers were unavailable; retrying the full query configuration.", {
+      boundary: "claude-sdk.mcp-session-ready",
+      expectedServerNames,
+      serverStatuses: error instanceof ExpectedMcpServerUnavailableError
+        ? summarizeMcpServerStatuses(error.serverStatuses)
+        : [],
+    })
+    try {
+      return await startValidatedQuery(
+        sdk,
+        input.prompt,
+        input.options as Options,
+        expectedServerNames,
+        input.logger,
+        "direct-retry",
+      )
+    } catch (retryError) {
+      input.logger?.warn("Expected MCP servers remain unavailable after retrying the full query configuration.", {
+        boundary: "claude-sdk.mcp-session-ready",
+        expectedServerNames,
+        serverStatuses: retryError instanceof ExpectedMcpServerUnavailableError
+          ? summarizeMcpServerStatuses(retryError.serverStatuses)
+          : [],
+      })
+      throw retryError
+    }
+  }
+}
+
+async function startValidatedQuery(
+  sdk: AgentSdkModule,
+  prompt: AsyncIterable<SDKUserMessage>,
+  options: Options,
+  expectedServerNames: readonly string[],
+  logger: RoutedQueryInput["logger"],
+  phase: McpValidationPhase,
+): Promise<Query> {
+  if (expectedServerNames.length === 0) return sdk.query({ prompt, options })
+  const gate = createPromptGate(prompt)
+  const query = sdk.query({ prompt: gate.prompt, options })
+  try {
+    const validated = await validateFinalQuery(query, expectedServerNames, logger, phase)
+    gate.open()
+    return validated
+  } catch (error) {
+    gate.close()
+    throw error
+  }
+}
+
+async function waitForMcpServerStatuses(
+  query: Pick<Query, "mcpServerStatus">,
+  expectedServerNames: readonly string[],
+): Promise<McpServerStatus[]> {
   const deadline = Date.now() + MCP_DISCOVERY_PENDING_TIMEOUT_MS
   let statuses = await query.mcpServerStatus()
-  while (statuses.some((status) => status.status === "pending")) {
+  while (hasPendingOrMissingServers(statuses, expectedServerNames)) {
     if (Date.now() >= deadline) {
+      if (hasUnavailableExpectedServers(statuses, expectedServerNames)) {
+        throw new ExpectedMcpServerUnavailableError(expectedServerNames, statuses)
+      }
       throw new ToolRouterFallbackError("discovery-failed")
     }
     await new Promise((resolve) => setTimeout(resolve, MCP_DISCOVERY_POLL_INTERVAL_MS))
     statuses = await query.mcpServerStatus()
   }
   return statuses
+}
+
+async function validateFinalQuery(
+  query: Query,
+  expectedServerNames: readonly string[],
+  logger: RoutedQueryInput["logger"],
+  phase: McpValidationPhase,
+): Promise<Query> {
+  if (expectedServerNames.length === 0) return query
+  let statuses: McpServerStatus[] = []
+  try {
+    await query.initializationResult()
+    statuses = await waitForMcpServerStatuses(query, expectedServerNames)
+    assertExpectedMcpServersConnected(statuses, expectedServerNames)
+    logger?.info?.("Expected MCP servers are ready in the final agent query.", {
+      boundary: "claude-sdk.mcp-session-ready",
+      phase,
+      expectedServerNames,
+      finalServerNames: statuses
+        .filter((status) => status.status === "connected")
+        .map((status) => status.name),
+      serverStatuses: summarizeMcpServerStatuses(statuses),
+    })
+    return query
+  } catch (error) {
+    try {
+      await Promise.resolve(query.close())
+    } catch {
+      logger?.warn("Failed to close an MCP query after readiness validation failed.", {
+        boundary: "claude-sdk.mcp-session-ready",
+        phase,
+        expectedServerNames,
+      })
+    }
+    if (error instanceof ExpectedMcpServerUnavailableError) throw error
+    throw new ExpectedMcpServerUnavailableError(expectedServerNames, statuses)
+  }
+}
+
+function configuredMcpServerNames(options: Record<string, unknown>): readonly string[] {
+  const configured = asRecord(options.mcpServers)
+  if (!configured) return []
+  return Object.keys(configured).filter((name) => name !== "synapse-mcp" && name !== "synapse-tool-router")
+}
+
+function hasPendingOrMissingServers(
+  statuses: readonly McpServerStatus[],
+  expectedServerNames: readonly string[],
+): boolean {
+  return statuses.some((status) => status.status === "pending")
+    || expectedServerNames.some((name) => !statuses.some((status) => status.name === name))
+}
+
+function hasUnavailableExpectedServers(
+  statuses: readonly McpServerStatus[],
+  expectedServerNames: readonly string[],
+): boolean {
+  return expectedServerNames.some((name) => {
+    const status = statuses.find((candidate) => candidate.name === name)
+    return !status || status.status !== "connected"
+  })
+}
+
+function assertExpectedMcpServersConnected(
+  statuses: readonly McpServerStatus[],
+  expectedServerNames: readonly string[],
+): void {
+  if (hasUnavailableExpectedServers(statuses, expectedServerNames)) {
+    throw new ExpectedMcpServerUnavailableError(expectedServerNames, statuses)
+  }
+}
+
+function summarizeMcpServerStatuses(
+  statuses: readonly McpServerStatus[],
+): readonly { readonly name: string, readonly status: McpServerStatus["status"] }[] {
+  return statuses.map((status) => ({ name: status.name, status: status.status }))
+}
+
+function createPromptGate(prompt: AsyncIterable<SDKUserMessage>): {
+  readonly prompt: AsyncIterable<SDKUserMessage>
+  open(): void
+  close(): void
+} {
+  let closed = false
+  let release: (() => void) | undefined
+  const ready = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return {
+    prompt: {
+      async *[Symbol.asyncIterator]() {
+        await ready
+        if (closed) return
+        yield* prompt
+      },
+    },
+    open() {
+      release?.()
+    },
+    close() {
+      closed = true
+      release?.()
+    },
+  }
 }
 
 export function rebuildMcpServers(statuses: readonly McpServerStatus[]): Record<string, McpServerConfig> {
@@ -225,8 +472,12 @@ function fallbackReason(error: unknown): SynapseToolRouterFallbackReason {
   return error instanceof ToolRouterFallbackError ? error.reason : "discovery-failed"
 }
 
-async function* pendingPrompt(): AsyncGenerator<SDKUserMessage, void> {
-  await new Promise<never>(() => undefined)
+function pendingPrompt(): AsyncIterable<SDKUserMessage> {
+  return {
+    [Symbol.asyncIterator]: () => ({
+      next: () => new Promise<never>(() => undefined),
+    }),
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

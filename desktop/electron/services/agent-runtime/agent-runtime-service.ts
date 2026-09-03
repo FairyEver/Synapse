@@ -179,7 +179,11 @@ export interface AgentRuntimeServiceDeps {
   readonly knowledgeBaseLintPreflight?: Pick<KnowledgeBaseLintPreflightService, "run">
   readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
-  readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+  readonly sdkPlugins?: (
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    mcpServers: NonNullable<ClaudeSDKSessionOptions["mcpServers"]>,
+  ) =>
     readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
   readonly allowPluginHooks?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     boolean | Promise<boolean>

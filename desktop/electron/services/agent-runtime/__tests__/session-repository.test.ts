@@ -103,7 +103,9 @@ describe("AgentSessionRepository", () => {
     const restored = await repository.getOrCreateActive(message, { figmaDesktopMcpEnabled: false })
 
     expect(created.agentConfig?.figmaDesktopMcpEnabled).toBe(true)
+    expect(created.agentConfig?.expectedMcpServerNames).toEqual(["figma"])
     expect(restored.agentConfig?.figmaDesktopMcpEnabled).toBe(true)
+    expect(restored.agentConfig?.expectedMcpServerNames).toEqual(["figma"])
   })
 
   it("keeps active conversations isolated by platform", async () => {

@@ -346,9 +346,11 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         publishedProjectCommands: async () => isManagedKnowledgeBase
           ? MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS
           : [],
-        sdkPlugins: async (message, conversation) => {
-          const figmaEnabled = conversation.agentConfig?.figmaDesktopMcpEnabled === true
-            && Object.keys(await getConnectedFigmaMcpServers()).length > 0
+        sdkPlugins: async (message, conversation, mcpServers) => {
+          const figmaExpected = conversation.agentConfig?.expectedMcpServerNames?.includes("figma")
+            ?? conversation.agentConfig?.figmaDesktopMcpEnabled === true
+          const figmaEnabled = figmaExpected
+            && Object.hasOwn(mcpServers, "figma")
           return [
             ...(isManagedKnowledgeBaseRuntimeMessage(message)
               ? [{ type: "local" as const, path: ctx.projectMeta.workspacePath as string }]
@@ -378,7 +380,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           return Object.keys(servers).length > 0
         },
         resolveMcpServers: async (_message, conversation) => {
-          if (conversation.agentConfig?.figmaDesktopMcpEnabled !== true) return {}
+          const figmaExpected = conversation.agentConfig?.expectedMcpServerNames?.includes("figma")
+            ?? conversation.agentConfig?.figmaDesktopMcpEnabled === true
+          if (!figmaExpected) return {}
           return getConnectedFigmaMcpServers()
         },
         onElicitation: async (request) => {

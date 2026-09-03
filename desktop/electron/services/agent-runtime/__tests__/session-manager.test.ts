@@ -325,6 +325,77 @@ describe("SessionManager", () => {
     }))
   })
 
+  it("keeps the Figma skill and MCP config on the same resolved snapshot", async () => {
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const figmaMcpServers = {
+      figma: { type: "http" as const, url: "http://127.0.0.1:3845/mcp" },
+    }
+    const resolveMcpServers = vi.fn(async () => figmaMcpServers)
+    const sdkPlugins = vi.fn((_message, _conversation, mcpServers) =>
+      Object.hasOwn(mcpServers, "figma")
+        ? [{ type: "local" as const, path: "/Applications/Synapse/resources/figma-skill" }]
+        : [])
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+      resolveMcpServers,
+      sdkPlugins,
+    })
+    const conversation = {
+      ...baseConversation(),
+      agentConfig: { figmaDesktopMcpEnabled: true, expectedMcpServerNames: ["figma"] },
+    }
+
+    await manager.getOrCreateSession({
+      state: manager.stateForConversation("conversation-1", baseMessage("default")),
+      conversation,
+      message: baseMessage("default"),
+    })
+
+    expect(resolveMcpServers).toHaveBeenCalledOnce()
+    expect(sdkPlugins).toHaveBeenCalledWith(expect.anything(), conversation, figmaMcpServers)
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      mcpServers: figmaMcpServers,
+      expectedMcpServerNames: ["figma"],
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/figma-skill" }],
+    }))
+  })
+
+  it("rejects a Figma conversation when its expected MCP config is missing", async () => {
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states: new Map(),
+      pendingPermissions: new Map(),
+      createSession,
+      resolveMcpServers: vi.fn(async () => ({})),
+    })
+
+    await expect(manager.getOrCreateSession({
+      state: manager.stateForConversation("conversation-1", baseMessage("default")),
+      conversation: {
+        ...baseConversation(),
+        agentConfig: { figmaDesktopMcpEnabled: true, expectedMcpServerNames: ["figma"] },
+      },
+      message: baseMessage("default"),
+    })).rejects.toThrow("Figma MCP 未进入本次会话")
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
   it("passes project SDK agents into new live sessions", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())

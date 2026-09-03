@@ -37,6 +37,7 @@ export interface CreateAgentSessionInput {
   readonly modelTier?: string
   readonly experimentalSynapseToolRouterEnabled?: boolean
   readonly figmaDesktopMcpEnabled?: boolean
+  readonly expectedMcpServerNames?: readonly string[]
   readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   readonly sdkSessionId?: string
   readonly usage?: ConversationEntryV1["usage"]
@@ -81,6 +82,7 @@ export class AgentSessionRepository {
     creationConfig?: {
       readonly experimentalSynapseToolRouterEnabled?: boolean
       readonly figmaDesktopMcpEnabled?: boolean
+      readonly expectedMcpServerNames?: readonly string[]
     },
   ): Promise<ConversationEntryV1> {
     const existing = await this.getActive(
@@ -117,6 +119,8 @@ export class AgentSessionRepository {
       providerId: message.providerId,
       experimentalSynapseToolRouterEnabled: creationConfig?.experimentalSynapseToolRouterEnabled,
       figmaDesktopMcpEnabled: creationConfig?.figmaDesktopMcpEnabled,
+      expectedMcpServerNames: creationConfig?.expectedMcpServerNames
+        ?? expectedMcpServerNamesFromLegacyFigmaFlag(creationConfig?.figmaDesktopMcpEnabled),
     })
   }
 
@@ -161,6 +165,7 @@ export class AgentSessionRepository {
         || input.mainThreadPersonaSnapshot
         || input.experimentalSynapseToolRouterEnabled !== undefined
         || input.figmaDesktopMcpEnabled !== undefined
+        || input.expectedMcpServerNames !== undefined
         ? {
             ...(input.mode ? { mode: input.mode } : {}),
             ...(input.modelTier ? { modelTier: input.modelTier } : {}),
@@ -175,6 +180,9 @@ export class AgentSessionRepository {
               : {}),
             ...(input.figmaDesktopMcpEnabled !== undefined
               ? { figmaDesktopMcpEnabled: input.figmaDesktopMcpEnabled }
+              : {}),
+            ...(input.expectedMcpServerNames !== undefined || input.figmaDesktopMcpEnabled !== undefined
+              ? { expectedMcpServerNames: resolveExpectedMcpServerNames(input) }
               : {}),
           }
         : undefined,
@@ -260,6 +268,7 @@ export class AgentSessionRepository {
         || input.modelTier
         || input.experimentalSynapseToolRouterEnabled !== undefined
         || input.figmaDesktopMcpEnabled !== undefined
+        || input.expectedMcpServerNames !== undefined
         ? {
             ...(input.mode ? { mode: input.mode } : {}),
             ...(input.modelTier ? { modelTier: input.modelTier } : {}),
@@ -268,6 +277,9 @@ export class AgentSessionRepository {
               : {}),
             ...(input.figmaDesktopMcpEnabled !== undefined
               ? { figmaDesktopMcpEnabled: input.figmaDesktopMcpEnabled }
+              : {}),
+            ...(input.expectedMcpServerNames !== undefined || input.figmaDesktopMcpEnabled !== undefined
+              ? { expectedMcpServerNames: resolveExpectedMcpServerNames(input) }
               : {}),
           }
         : undefined,
@@ -905,6 +917,18 @@ function usageSourceFields(
 
 function stringField(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function expectedMcpServerNamesFromLegacyFigmaFlag(enabled: boolean | undefined): readonly string[] | undefined {
+  return enabled === undefined ? undefined : enabled ? ["figma"] : []
+}
+
+function resolveExpectedMcpServerNames(input: CreateAgentSessionInput): string[] {
+  return [...new Set(
+    input.expectedMcpServerNames
+      ?? expectedMcpServerNamesFromLegacyFigmaFlag(input.figmaDesktopMcpEnabled)
+      ?? [],
+  )]
 }
 
 function randomId(): string {

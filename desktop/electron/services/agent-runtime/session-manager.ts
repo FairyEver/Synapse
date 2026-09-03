@@ -7,6 +7,7 @@ import { resolveModelContextConfiguration } from "../model-capability/catalog"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID, type CCProvider, type ProviderService } from "../provider"
 import {
   AGENT_CANCELLED_MESSAGE,
+  AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE,
   AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
   AGENT_PROVIDER_REQUIRED_MESSAGE,
@@ -75,6 +76,7 @@ export interface CreateAgentLiveSessionInput {
   readonly additionalDirectories?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly mcpServers?: ClaudeSDKSessionOptions["mcpServers"]
+  readonly expectedMcpServerNames?: readonly string[]
   readonly onElicitation?: ClaudeSDKSessionOptions["onElicitation"]
   readonly abortSignal?: AbortSignal
   readonly onConversationTitle?: (title: string) => void | Promise<void>
@@ -107,7 +109,11 @@ export interface SessionManagerDeps {
     projectId: string,
     sessionKey: string,
   ) => Record<string, string> | undefined
-  readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+  readonly sdkPlugins?: (
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    mcpServers: NonNullable<ClaudeSDKSessionOptions["mcpServers"]>,
+  ) =>
     readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
   readonly allowPluginHooks?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     boolean | Promise<boolean>
@@ -196,6 +202,7 @@ export class SessionManager {
         additionalDirectories: input.additionalDirectories,
         sdkSettings: input.sdkSettings,
         mcpServers: input.mcpServers,
+        expectedMcpServerNames: input.expectedMcpServerNames,
         onElicitation: input.onElicitation,
         synapseToolRouter: input.synapseToolRouter
           ? {
@@ -431,6 +438,35 @@ export class SessionManager {
     const sdkSessionId = input.conversation.resumePolicy === "fresh" || recreatingPersonaRuntime
       ? undefined
       : input.conversation.sdkSessionId
+    const mcpServers = this.deps.resolveMcpServers
+      ? await this.deps.resolveMcpServers(input.message, input.conversation)
+      : undefined
+    const resolvedMcpServers = mcpServers ?? {}
+    const expectedMcpServerNames = resolveExpectedMcpServerNames(input.conversation)
+    const missingMcpServerNames = expectedMcpServerNames.filter(
+      (name) => !Object.hasOwn(resolvedMcpServers, name),
+    )
+    if (missingMcpServerNames.length > 0) {
+      this.deps.logger?.warn("Expected MCP server config is unavailable; refusing to create a partial session.", {
+        boundary: "agent-runtime.live-session.mcp-config",
+        projectId: this.deps.projectId,
+        conversationId: input.conversation.id,
+        expectedServerNames: expectedMcpServerNames,
+        resolvedServerNames: Object.keys(resolvedMcpServers),
+      })
+      throw new Error(expectedMcpServerUnavailableMessage(missingMcpServerNames))
+    }
+    const plugins = await Promise.resolve(
+      this.deps.sdkPlugins?.(input.message, input.conversation, resolvedMcpServers) ?? [],
+    )
+    this.deps.logger?.info("Resolved MCP configuration for agent live session.", {
+      boundary: "agent-runtime.live-session.mcp-config",
+      projectId: this.deps.projectId,
+      conversationId: input.conversation.id,
+      expectedServerNames: expectedMcpServerNames,
+      resolvedServerNames: Object.keys(resolvedMcpServers),
+    })
+
     const liveSession = await this.createSession({
       projectId: this.deps.projectId,
       conversation: input.conversation,
@@ -443,7 +479,7 @@ export class SessionManager {
       contextWindowConfigurationSource: modelContextConfiguration.configurationSource,
       mode: modeOverride,
       maxTurns: DEFAULT_CLAUDE_SDK_MAX_TURNS,
-      plugins: await Promise.resolve(this.deps.sdkPlugins?.(input.message, input.conversation) ?? []),
+      plugins,
       allowPluginHooks: await Promise.resolve(
         this.deps.allowPluginHooks?.(input.message, input.conversation) ?? false,
       ),
@@ -458,9 +494,8 @@ export class SessionManager {
       ),
       additionalDirectories,
       sdkSettings,
-      mcpServers: this.deps.resolveMcpServers
-        ? await this.deps.resolveMcpServers(input.message, input.conversation)
-        : undefined,
+      mcpServers,
+      expectedMcpServerNames,
       onElicitation: this.deps.onElicitation,
       synapseToolRouter: synapseToolRouterEnabled && this.deps.executeSynapseTool
         ? (toolName, args, abortSignal) => this.deps.executeSynapseTool?.(
@@ -802,6 +837,18 @@ function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {
     agents: {},
     definitionsHash: "",
   }
+}
+
+function resolveExpectedMcpServerNames(conversation: ConversationEntryV1): readonly string[] {
+  const configured = conversation.agentConfig?.expectedMcpServerNames
+  if (configured) return [...new Set(configured)]
+  return conversation.agentConfig?.figmaDesktopMcpEnabled === true ? ["figma"] : []
+}
+
+function expectedMcpServerUnavailableMessage(serverNames: readonly string[]): string {
+  return serverNames.includes("figma")
+    ? AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE
+    : `预期的 MCP 服务未进入本次会话：${serverNames.join("、")}。`
 }
 
 function sdkToolOptionsForPersonaPolicy(

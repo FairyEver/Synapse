@@ -15,10 +15,11 @@
 
 1. 以 `user`、`project`、`local` 正常 setting sources 解析 SDK 设置。
 2. 创建不读取真实用户 prompt 的 discovery query，只等待初始化与 `mcpServerStatus()`，随后关闭。
-3. 从有效配置移除 `synapse-mcp`，保留其它启用且可安全序列化的 stdio、HTTP 或 SSE server。
-4. 以 `strictMcpConfig: true` 创建正式 query，并注入进程内 `synapse-tool-router`。
+3. 把会话显式注入的非 Synapse Server 记录为预期集合，等待 discovery 中的 `pending` 完成，并校验预期集合全部为 `connected`；缺失或不可用时不得静默删除。
+4. 从有效配置移除 `synapse-mcp`，保留其它启用且可安全序列化的 stdio、HTTP 或 SSE server。
+5. 以 `strictMcpConfig: true` 创建正式 query，并注入进程内 `synapse-tool-router`；正式 query 初始化后再次校验预期集合。校验失败时回退完整 MCP 配置并重新连接，回退后仍不可用则终止会话并显示可操作错误。
 
-以下任一情况整会话回退当前完整 MCP：discovery 失败、server 重名、缺失或不支持的 server 配置、policy helper、Synapse server 级工具策略，或有效权限配置显式引用 `mcp__synapse-mcp__*`。回退 reason 使用固定枚举；配置、header、环境变量与凭据只留在内存，不进入日志、事件、历史或导出。
+以下任一情况整会话回退当前完整 MCP：discovery 失败、预期 Server 缺失或不可用、server 重名、缺失或不支持的 server 配置、policy helper、Synapse server 级工具策略，或有效权限配置显式引用 `mcp__synapse-mcp__*`。回退 reason 使用固定枚举；结构化日志只记录预期 Server 名称、发现状态与最终 Server 名称，配置、header、环境变量与凭据只留在内存，不进入日志、事件、历史或导出。
 
 ## 内部协议
 

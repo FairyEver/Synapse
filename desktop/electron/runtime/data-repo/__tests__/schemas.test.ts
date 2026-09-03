@@ -612,6 +612,32 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(driveSyncStateSchema.validate({ schemaVersion: 1, health: "invented" })).toBe(false)
     expect(
       conversationsSchema.validate({
+        id: "conv-expected-mcp",
+        schemaVersion: 1,
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        agentConfig: { expectedMcpServerNames: ["figma"] },
+        history: [],
+        active: true,
+        createdAt: "2026-09-03T00:00:00.000Z",
+        updatedAt: "2026-09-03T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(
+      conversationsSchema.validate({
+        id: "conv-invalid-expected-mcp",
+        schemaVersion: 1,
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        agentConfig: { expectedMcpServerNames: ["figma", 1] },
+        history: [],
+        active: true,
+        createdAt: "2026-09-03T00:00:00.000Z",
+        updatedAt: "2026-09-03T00:00:00.000Z",
+      }),
+    ).toBe(false)
+    expect(
+      conversationsSchema.validate({
         id: "conv-1",
         schemaVersion: 1,
         projectId: "proj-1",
