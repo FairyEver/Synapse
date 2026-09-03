@@ -71,14 +71,14 @@ Prompt 是 MCP 服务端提供的模板，不等同于聊天输入；不同 Agen
 
 ## 提示词示例
 
-发送提示词前，先在 Figma Desktop 选中目标对象，并在 Synapse 中新建 Agent 对话。下面的示例显式指定工具，减少 Agent 误选工具的情况。
+发送提示词前，先在 Figma Desktop 选中目标对象，并在 Synapse 中新建 Agent 对话。下面的示例明确输入、任务和输出，减少歧义。
 
 ### 按设计实现页面或组件
 
 ```text
 我已在 Figma Desktop 选中目标 Frame。请按以下顺序处理：
-1. 调用 get_design_context 读取结构和样式。
-2. 调用 get_screenshot 进行视觉核对。
+1. 读取该选区的设计结构和样式。
+2. 结合选区截图进行视觉核对。
 3. 在现有代码库中实现它，先复用已有组件、设计 token 和图标。
 
 目标代码目录：<path>
@@ -88,31 +88,31 @@ Prompt 是 MCP 服务端提供的模板，不等同于聊天输入；不同 Agen
 ### 只提取变量和样式
 
 ```text
-仅调用 get_variable_defs。列出当前 Figma 选区使用的变量和样式，逐项给出名称、类型和实际值；按颜色、间距、字体分组。不要生成代码，也不要调用其它 Figma 工具。
+只读取当前 Figma 选区使用的变量和样式，逐项给出名称、类型和实际值；按颜色、间距、字体分组。不要生成代码。
 ```
 
 ### 分层读取大型页面
 
 ```text
-我已选中一个较大的 Figma 页面。先调用 get_metadata，列出页面中的顶层 Frame 及其 node ID；根据结构找出登录表单区域后，再只对该区域调用 get_design_context。不要一次读取整个页面，也不要修改 Figma 文件。
+我已选中一个较大的 Figma 页面。先扫描页面的轻量结构，列出顶层 Frame 及其 node ID；根据结构找出登录表单区域后，再只读取该区域的完整设计上下文。不要一次读取整个页面，也不要修改 Figma 文件。
 ```
 
 ### 提取动效实现信息
 
 ```text
-我已选中带有交互动效的 Frame。先调用 get_design_context，再对同一个 node ID 调用 get_motion_context；如果存在子节点动效，设置 recursive=true。返回关键帧、时长、缓动和可直接改写到现有代码的 CSS / Motion 实现建议。
+我已选中带有交互动效的 Frame。请读取静态设计和同一选区的动效信息；如果存在子节点动效，也一并检查。返回关键帧、时长、缓动和可直接改写到现有代码的 CSS / Motion 实现建议。
 ```
 
 ### 整理 FigJam 选区
 
 ```text
-我已在 FigJam 选中一组流程图节点。调用 get_figjam，先按节点名称和连接关系还原结构，再输出 Mermaid 流程图和待确认的缺失信息。不要把 FigJam 当作 Figma Design 图层读取，也不要修改画布。
+我已在 FigJam 选中一组流程图节点。请按节点名称和连接关系还原结构，再输出 Mermaid 流程图和待确认的缺失信息。不要把 FigJam 当作 Figma Design 图层读取，也不要修改画布。
 ```
 
 ### 生成 Code Connect 映射提案
 
 ```text
-我已选中一个已发布的 Figma 组件。调用 MCP Prompt map_selection_to_code_connect，使用：
+我已选中一个已发布的 Figma 组件。请生成 Code Connect 映射提案，使用：
 - source: <组件源码路径或 URL>
 - componentName: <代码组件名>
 - nodeId: <可选，当前选区的 node ID>
@@ -123,7 +123,7 @@ Prompt 是 MCP 服务端提供的模板，不等同于聊天输入；不同 Agen
 ### 生成设计系统规则
 
 ```text
-请调用 MCP Prompt create_design_system_rules。只记录当前设计中可以验证的颜色、字体、间距、组件状态、动效和资源约定，并将结果保存到仓库已有的 rules/ 或 instructions/ 目录。不要凭空补充未在选区中出现的规范。
+请根据当前设计生成项目设计系统规则。只记录当前设计中可以验证的颜色、字体、间距、组件状态、动效和资源约定，并将结果保存到仓库已有的 rules/ 或 instructions/ 目录。不要凭空补充未在选区中出现的规范。
 ```
 
 ## 服务地址
