@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
         modelName: "glm-5.1",
       },
       recentSlashSkills: [] as string[],
+      allowedWriteDirectories: [],
     },
   },
   updateConfig: vi.fn(),

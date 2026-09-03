@@ -100,6 +100,7 @@ export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {
   defaultProviderModel: null,
   experimentalSynapseToolRouterEnabled: false,
   recentSlashSkills: [],
+  allowedWriteDirectories: [],
 }
 
 export const DEFAULT_CONFIG: SynapseConfig = {

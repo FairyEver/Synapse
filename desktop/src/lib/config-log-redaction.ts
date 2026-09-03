@@ -21,6 +21,7 @@ export type SanitizedConfigPatchForLog = Omit<SynapseConfigPatch, "global" | "ag
   global?: SanitizedGlobalPatchForLog
   agent?: Omit<NonNullable<SynapseConfigPatch["agent"]>, "recentSlashSkills"> & {
     recentSlashSkillCount?: number
+    allowedWriteDirectoryCount?: number
   }
 }
 
@@ -59,10 +60,13 @@ export function sanitizeConfigPatchForLog(patch: SynapseConfigPatch): SanitizedC
   }
 
   if (agentPatch) {
-    const { recentSlashSkills, ...agentRest } = agentPatch
+    const { recentSlashSkills, allowedWriteDirectories, ...agentRest } = agentPatch
     sanitized.agent = {
       ...agentRest,
       ...(recentSlashSkills ? { recentSlashSkillCount: recentSlashSkills.length } : {}),
+      ...(allowedWriteDirectories
+        ? { allowedWriteDirectoryCount: allowedWriteDirectories.length }
+        : {}),
     }
   }
 

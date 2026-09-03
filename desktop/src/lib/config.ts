@@ -654,13 +654,27 @@ function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
     : null
 
   const recentSlashSkills = normalizeRecentSlashSkills(value.recentSlashSkills)
+  const allowedWriteDirectories = normalizeAllowedWriteDirectories(value.allowedWriteDirectories)
 
   return {
     defaultPermissionMode,
     defaultProviderModel,
     experimentalSynapseToolRouterEnabled: value.experimentalSynapseToolRouterEnabled === true,
     recentSlashSkills,
+    allowedWriteDirectories,
   }
+}
+
+function normalizeAllowedWriteDirectories(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return dedupeByKey(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    (item) => item,
+  )
 }
 
 function normalizeRecentSlashSkills(value: unknown): string[] {

@@ -648,6 +648,8 @@ function validateAgentConfig(
   const experimentalSynapseToolRouterEnabled = rawValue.experimentalSynapseToolRouterEnabled === true
   const recentSlashSkills = validateRecentSlashSkills(rawValue.recentSlashSkills, errors)
   if (!recentSlashSkills) return null
+  const allowedWriteDirectories = validateAllowedWriteDirectories(rawValue.allowedWriteDirectories, errors)
+  if (!allowedWriteDirectories) return null
 
   const providerModel = rawValue.defaultProviderModel
   if (providerModel === undefined || providerModel === null) {
@@ -656,6 +658,7 @@ function validateAgentConfig(
       defaultProviderModel: null,
       experimentalSynapseToolRouterEnabled,
       recentSlashSkills,
+      allowedWriteDirectories,
     }
   }
 
@@ -685,7 +688,17 @@ function validateAgentConfig(
     },
     experimentalSynapseToolRouterEnabled,
     recentSlashSkills,
+    allowedWriteDirectories,
   }
+}
+
+function validateAllowedWriteDirectories(rawValue: unknown, errors: string[]): string[] | null {
+  if (rawValue === undefined) return []
+  if (!Array.isArray(rawValue) || !rawValue.every((item) => typeof item === "string")) {
+    errors.push("config.agent.allowedWriteDirectories 必须是字符串数组。")
+    return null
+  }
+  return [...new Set(rawValue.map((item) => item.trim()).filter(Boolean))]
 }
 
 function validateRecentSlashSkills(rawValue: unknown, errors: string[]): string[] | null {

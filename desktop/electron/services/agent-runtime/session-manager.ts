@@ -1,4 +1,5 @@
-import { stat } from "node:fs/promises"
+import path from "node:path"
+import { realpath, stat } from "node:fs/promises"
 
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
@@ -101,6 +102,7 @@ export interface SessionManagerDeps {
   readonly now?: () => Date
   readonly createSession?: AgentLiveSessionFactory
   readonly validateWorkspacePath?: (cwd: string) => void | Promise<void>
+  readonly getAllowedWriteDirectories?: () => readonly string[] | Promise<readonly string[]>
   readonly getReplyTargetEnv?: (
     projectId: string,
     sessionKey: string,
@@ -131,6 +133,28 @@ export interface SessionManagerDeps {
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
 const AGENT_ATTACHMENT_DIRECTORIES_UNAVAILABLE_MESSAGE = "当前会话未能授权新的附件目录，请重试。"
+
+async function resolveAllowedWriteDirectories(
+  directories: readonly string[],
+): Promise<readonly string[]> {
+  const resolved: string[] = []
+  for (const directory of directories) {
+    if (!path.isAbsolute(directory)) continue
+    try {
+      const canonicalPath = await realpath(directory)
+      if (!(await stat(canonicalPath)).isDirectory()) continue
+      if (!resolved.includes(canonicalPath)) resolved.push(canonicalPath)
+    } catch {
+      // A deleted or inaccessible configured directory must not expand the SDK boundary.
+      continue
+    }
+  }
+  return resolved
+}
+
+function sameDirectories(left: readonly string[] | undefined, right: readonly string[]): boolean {
+  return (left ?? []).length === right.length && (left ?? []).every((directory, index) => directory === right[index])
+}
 
 export class AgentAttachmentDirectoryAuthorizationError extends Error {
   constructor(cause?: unknown) {
@@ -245,7 +269,11 @@ export class SessionManager {
     }
     await this.deps.validateWorkspacePath?.(cwd)
     const attachments = normalizeAgentAttachments(input.message.attachments)
+    const allowedWriteDirectories = await resolveAllowedWriteDirectories(
+      await Promise.resolve(this.deps.getAllowedWriteDirectories?.() ?? []),
+    )
     const additionalDirectories = mergeAdditionalDirectories(
+      allowedWriteDirectories,
       input.message.runtimeAttachmentDirectories ?? [],
       directoriesForPathAttachments({ cwd, attachments }),
     )
@@ -253,6 +281,10 @@ export class SessionManager {
     const modeOverride = input.message.modeOverride ?? input.conversation.agentConfig?.mode
     const providerMatches = input.state.providerId === providerId
     const modeMatches = input.state.modeOverride === modeOverride
+    const allowedWriteDirectoriesMatch = sameDirectories(
+      input.state.allowedWriteDirectories,
+      allowedWriteDirectories,
+    )
     const providerEnv = await this.deps.providerService.buildEnv(providerId, {
       actor: { kind: "user", id: input.message.userId },
       projectId: this.deps.projectId,
@@ -310,6 +342,7 @@ export class SessionManager {
       && !input.state.liveSession.finished
       && providerMatches
       && modeMatches
+      && allowedWriteDirectoriesMatch
       && modelMatches
       && modelContextMatches
       && synapseToolRouterMatches
@@ -368,6 +401,7 @@ export class SessionManager {
           || !modelContextMatches
           || !synapseToolRouterMatches
           || !sdkSettingsMatch
+          || !allowedWriteDirectoriesMatch
           || !personaDefinitionsMatch
         )
       ) {
@@ -379,6 +413,7 @@ export class SessionManager {
           modelContextChanged: !modelContextMatches,
           synapseToolRouterChanged: !synapseToolRouterMatches,
           sdkSettingsChanged: !sdkSettingsMatch,
+          allowedWriteDirectoriesChanged: !allowedWriteDirectoriesMatch,
           agentDefinitionsChanged: !personaDefinitionsMatch,
           previousProviderId: input.state.providerId,
           nextProviderId: providerId,
@@ -452,6 +487,7 @@ export class SessionManager {
     input.state.mainThreadAgentName = activeAgentName
     input.state.agentDefinitionsHash = agentDefinitionsHash
     input.state.additionalDirectories = additionalDirectories
+    input.state.allowedWriteDirectories = allowedWriteDirectories
     this.deps.logger?.info("Created agent live session.", {
       boundary: "agent-runtime.live-session.create",
       projectId: this.deps.projectId,
@@ -554,6 +590,7 @@ export class SessionManager {
     state.mainThreadAgentName = undefined
     state.agentDefinitionsHash = undefined
     state.additionalDirectories = undefined
+    state.allowedWriteDirectories = undefined
   }
 
   async closeState(conversationId: string): Promise<void> {

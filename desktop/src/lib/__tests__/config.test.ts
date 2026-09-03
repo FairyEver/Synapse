@@ -14,6 +14,7 @@ describe("Synapse config Agent defaults", () => {
     expect(createDefaultConfig().agent.defaultPermissionMode).toBe("default")
     expect(createDefaultConfig().agent.experimentalSynapseToolRouterEnabled).toBe(false)
     expect(createDefaultConfig().agent.recentSlashSkills).toEqual([])
+    expect(createDefaultConfig().agent.allowedWriteDirectories).toEqual([])
   })
 
   it("normalizes missing Agent config to safe defaults", () => {
@@ -25,6 +26,18 @@ describe("Synapse config Agent defaults", () => {
 
     expect(config.agent.defaultPermissionMode).toBe("default")
     expect(config.agent.experimentalSynapseToolRouterEnabled).toBe(false)
+    expect(config.agent.allowedWriteDirectories).toEqual([])
+  })
+
+  it("normalizes configured Agent write directories", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: { allowedWriteDirectories: [" /tmp ", "/tmp", 42, ""] },
+    })
+
+    expect(config.agent.allowedWriteDirectories).toEqual(["/tmp"])
   })
 
   it("only enables the experimental Synapse tool router for an explicit boolean true", () => {

@@ -29,7 +29,6 @@ const unsupportedToolNames = [
   "get_code_connect_suggestions",
   "send_code_connect_mappings",
 ] as const
-
 function readSkills(): string {
   return readdirSync(skillRoot)
     .map((name) => readFileSync(path.join(skillRoot, name, "SKILL.md"), "utf8"))

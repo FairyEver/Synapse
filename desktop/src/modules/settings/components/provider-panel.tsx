@@ -532,7 +532,7 @@ function ProviderPanelView({
     <Card>
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
-          <CardTitle className="text-base">Claude 供应商</CardTitle>
+          <CardTitle className="text-base">模型供应商</CardTitle>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button type="button" variant="outline" onClick={onImportFile}>
@@ -917,7 +917,7 @@ function ProviderFormDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <FormDialog
-          title={mode === "create" ? "新建 Claude 供应商" : "编辑 Claude 供应商"}
+          title={mode === "create" ? "新建模型供应商" : "编辑模型供应商"}
           contentClassName="sm:max-w-4xl"
           bodyClassName="flex flex-col gap-2"
           onSubmit={onSubmit}

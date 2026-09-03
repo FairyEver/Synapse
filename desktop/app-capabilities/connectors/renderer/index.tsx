@@ -44,11 +44,11 @@ export function ConnectorsModule() {
         setItems((current) => current.map((entry) => entry.id === item.id
           ? { ...entry, status: "available", errorMessage: undefined, updatedAt: new Date().toISOString() }
           : entry))
-        toast.success("Figma Desktop MCP 已停用")
+        toast.success("Figma MCP 已停用")
       } else {
         const connected = await bridge.item.connect({ id: item.id })
         setItems((current) => current.map((entry) => entry.id === connected.id ? connected : entry))
-        toast.success("Figma Desktop MCP 已激活")
+        toast.success("Figma MCP 已激活")
       }
     } catch (error) {
       await reload()
@@ -91,9 +91,8 @@ function ConnectorCard({ item, busy, onAction }: { readonly item: ConnectorItem;
       <CardContent className="flex items-center gap-4 py-1">
         <img src={icon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
         <div className="min-w-0 flex-1">
-          <CardTitle className="text-base">Figma Desktop</CardTitle>
-          {connected ? <p className="mt-1 text-xs text-muted-foreground">仅对新建对话生效</p> : null}
-          {!connected && item.status !== "error" ? (
+          <CardTitle className="text-base">Figma</CardTitle>
+          {item.status !== "error" ? (
             <Button
               type="button"
               variant="link"

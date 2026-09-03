@@ -233,6 +233,7 @@ describe("ConfigBackupService quick inputs", () => {
           defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
           experimentalSynapseToolRouterEnabled: false,
           recentSlashSkills: ["review-code", "openai-docs", "third"],
+          allowedWriteDirectories: [],
         },
       }))
       const importedConfig = vi.mocked(configStore.replace).mock.calls[0]?.[0] as SynapseConfig | undefined
@@ -293,6 +294,7 @@ describe("ConfigBackupService quick inputs", () => {
           defaultProviderModel: null,
           experimentalSynapseToolRouterEnabled: false,
           recentSlashSkills: [],
+          allowedWriteDirectories: [],
         },
       }))
     } finally {
@@ -321,6 +323,7 @@ describe("ConfigBackupService quick inputs", () => {
           defaultProviderModel: null,
           experimentalSynapseToolRouterEnabled: false,
           recentSlashSkills: [],
+          allowedWriteDirectories: [],
         },
       }))
     } finally {

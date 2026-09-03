@@ -266,6 +266,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workDir: ctx.projectMeta.workspacePath,
         managedKnowledgeBase: isManagedKnowledgeBase,
         validateWorkspacePath: validateWorkspaceDirectory,
+        getAllowedWriteDirectories: async () => (
+          await ctx.globalRegistry.get<{ load(): Promise<SynapseConfig> }>("core.config").load()
+        ).agent.allowedWriteDirectories,
         conversations,
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),

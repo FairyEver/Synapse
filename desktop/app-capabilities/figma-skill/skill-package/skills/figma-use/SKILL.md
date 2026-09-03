@@ -27,7 +27,7 @@ When the MCP client exposes prompts, use these server-provided prompts for their
 
 ## Build code from Figma
 
-Translate returned structure into the target repository's existing components and design tokens. Preserve layout relationships, typography, states, motion, and responsive behavior. Reuse existing components and Figma-provided assets when they are returned; do not invent colors or redraw icons unnecessarily. Follow the repository's UI rules and run the smallest relevant verification.
+Translate returned structure into the target repository's existing components and design tokens. Preserve layout relationships, typography, states, motion, and responsive behavior. Reuse components and Figma-provided assets when they are returned; do not invent colors or redraw icons unnecessarily. Follow the repository's UI rules and run the smallest relevant verification.
 
 ## Guardrails
 

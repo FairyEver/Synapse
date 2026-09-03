@@ -28,6 +28,7 @@ export interface RuntimeSessionState {
   sdkSettings?: ClaudeSDKRuntimeSettings
   synapseToolRouterEnabled?: boolean
   additionalDirectories?: readonly string[]
+  allowedWriteDirectories?: readonly string[]
   modeOverride?: string
   mainThreadAgentName?: string
   agentDefinitionsHash?: string

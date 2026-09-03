@@ -61,6 +61,7 @@ const configSchema = z.object({
     defaultProviderModel: providerModelSchema,
     experimentalSynapseToolRouterEnabled: z.boolean(),
     recentSlashSkills: z.array(z.string()),
+    allowedWriteDirectories: z.array(z.string()),
   }),
 })
 

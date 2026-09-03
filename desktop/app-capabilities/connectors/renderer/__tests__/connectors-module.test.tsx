@@ -73,7 +73,7 @@ describe("ConnectorsModule", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("Figma Desktop")
+    expect(document.body.textContent).toContain("Figma")
     expect(document.body.textContent).not.toContain("连接 Figma Desktop MCP")
     expect(document.body.textContent).toContain("更多信息")
     expect(document.body.textContent).not.toContain("查看 Figma 连接器文档")
@@ -89,6 +89,18 @@ describe("ConnectorsModule", () => {
     })
 
     expect(mocks.openExternal).toHaveBeenCalledWith(FIGMA_DOCUMENTATION_URL)
+  })
+
+  it("keeps the documentation link visible after activation", async () => {
+    mocks.connectors.item.list.mockResolvedValue({ items: [{ ...figmaItem, status: "connected" }] })
+    renderModule()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("更多信息")
+    expect(document.body.textContent).not.toContain("仅对新建对话生效")
   })
 })
 

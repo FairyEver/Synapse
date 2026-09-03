@@ -90,6 +90,7 @@ export type SynapseAgentGlobalConfig = {
   defaultProviderModel: { providerId: string; modelTier: ModelTier } | null
   experimentalSynapseToolRouterEnabled: boolean
   recentSlashSkills: string[]
+  allowedWriteDirectories: string[]
 }
 
 export type SynapseConfig = {

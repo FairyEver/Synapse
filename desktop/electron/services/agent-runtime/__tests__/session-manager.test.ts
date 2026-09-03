@@ -30,6 +30,54 @@ vi.mock("../claude-sdk-session", () => ({
 }))
 
 describe("SessionManager", () => {
+  it("passes configured allowed write directories to the SDK and recreates after removal", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const sessions: FakeLiveSession[] = []
+    const createSession = vi.fn(() => {
+      const session = new FakeLiveSession()
+      sessions.push(session)
+      return session
+    })
+    let allowedWriteDirectories: readonly string[] = ["/tmp"]
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      getAllowedWriteDirectories: () => allowedWriteDirectories,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      additionalDirectories: ["/private/tmp"],
+    }))
+
+    allowedWriteDirectories = []
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
+    expect(createSession).toHaveBeenLastCalledWith(expect.objectContaining({
+      additionalDirectories: [],
+    }))
+  })
+
   it("rejects unavailable workspace paths before creating live sessions", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())

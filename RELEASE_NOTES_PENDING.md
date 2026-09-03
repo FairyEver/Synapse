@@ -2,13 +2,19 @@
 
 ## 新增功能
 
-- 新增“连接器”应用，首个支持 Figma Desktop MCP：可在应用内检测、连接和断开本机 Figma MCP 服务；连接状态保存在 Synapse 内置配置中，并自动注入后续会话。
+- 系统设置新增“路径白名单”，可选择并移除文件夹；新建或重建 Agent 对话时，列表会作为 SDK 的额外目录白名单传入。
+
+- 新增“连接器”应用，首个支持 Figma Desktop MCP：可在应用内连接和断开 Figma 本地服务；连接状态保存在 Synapse 内置配置中，并自动注入后续会话。
 
 - 管理员现在可以在用户管理中为正常用户生成一次性密码重置链接，复制后通过现有渠道发送给用户；链接 30 分钟内有效，重新生成会使旧链接失效。
 
 ## 功能优化
 
-- Figma 连接器卡片使用“Figma Desktop”作为标题并移除重复副标题；“更多信息”文档新增 MCP 工具、Prompt、Skill 清单和 Figma Desktop 下载地址。
+- 设置中的供应商面板统一使用“模型供应商”文案，新增和编辑模型供应商时名称保持一致。
+
+- Figma 连接器卡片使用“Figma”作为标题并移除重复副标题；“更多信息”文档新增 MCP 工具、Prompt、Skill 清单、本地 MCP 配置说明，以及通过 Quick Actions 查找隐藏启用开关的步骤。
+
+- Figma 连接器激活后仍保留“更多信息”文档链接，副标题不再切换为状态说明。
 
 - 普通用户不再自行申请找回密码；登录页会提示联系管理员，重置链接失效时也会给出明确的处理方式。
 
@@ -16,9 +22,10 @@
 
 ## 问题修复
 
-- Figma 连接器改为使用本机 Figma Desktop MCP，不再尝试远程 OAuth；未检测到本地服务时会显示可操作的启动提示。
-- Figma Desktop MCP 连接开启后，新建对话会自动获得内置 Figma 工作流 Skill；已有对话保持原有能力，关闭连接器后新对话不会加载 Figma Skill 或 MCP。
-- Figma 内置工作流 Skill 已按 Figma Desktop MCP 的实际工具和 Prompt 对齐；明确支持设计上下文、截图、元数据、变量、动效、FigJam 和 Code Connect 提案，并不再误报 Desktop 不提供的写入能力。
+- 修复 Figma 连接器在新版 Figma 客户端中仍使用旧版本机 MCP 配置的问题；现在按官方文档连接 Figma Desktop 本地 MCP。
+- Figma MCP 连接开启后，新建对话会自动获得内置 Figma 工作流 Skill；已有对话保持原有能力，关闭连接器后新对话不会加载 Figma Skill 或 MCP。
+- Figma 内置工作流 Skill 已按 Figma MCP 的实际工具和 Prompt 对齐；明确支持设计上下文、截图、元数据、变量、动效、FigJam 和 Code Connect 提案，并不再误报 Figma 不提供的写入能力。
+- Figma 内置 Skill 已按 Figma Desktop 本地 MCP 的工具和 Prompt 对齐，不再要求远程 OAuth 或本地 MCP 不支持的写入工具。
 - 修复 Figma 连接器开关在连接完成后仍显示为未激活的问题；现在会使用连接结果立即同步开关状态，失败时自动刷新错误状态。
 - 修复云盘分享 Markdown 中相邻图片的评论按钮难以点击的问题；鼠标从图片移向其“添加评论”按钮时，按钮会保持可用。
 - 修复云盘 Markdown 评论引用长链接时可能撑出右侧评论栏的问题。

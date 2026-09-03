@@ -146,6 +146,7 @@ export interface AgentRuntimeServiceDeps {
   readonly providerService: ProviderService
   readonly createSession?: AgentLiveSessionFactory
   readonly validateWorkspacePath?: (cwd: string) => void | Promise<void>
+  readonly getAllowedWriteDirectories?: SessionManagerDeps["getAllowedWriteDirectories"]
   readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
@@ -269,6 +270,7 @@ export class AgentRuntimeService {
       now: deps.now,
       createSession: deps.createSession,
       validateWorkspacePath: deps.validateWorkspacePath,
+      getAllowedWriteDirectories: deps.getAllowedWriteDirectories,
       getReplyTargetEnv: (projectId, sessionKey) => deps.replyTargets?.getAgentEnv(projectId, sessionKey),
       sdkPlugins: deps.sdkPlugins,
       allowPluginHooks: deps.allowPluginHooks,

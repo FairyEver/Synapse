@@ -177,7 +177,7 @@ describe("ProviderPanel dialog editor", () => {
     renderProviderPanel()
     await flush()
 
-    expect(document.body.textContent).toContain("Claude 供应商")
+    expect(document.body.textContent).toContain("模型供应商")
     expect(document.body.textContent).toContain("Custom Provider")
     expect(document.body.textContent).toContain("名称")
     expect(document.body.textContent).toContain("模型")
@@ -205,7 +205,7 @@ describe("ProviderPanel dialog editor", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("编辑 Claude 供应商")
+    expect(document.body.textContent).toContain("编辑模型供应商")
     expect(document.body.textContent).toContain("供应商名称")
     expect(document.body.textContent).toContain("备注")
     expect(document.body.textContent).toContain("官网链接")
