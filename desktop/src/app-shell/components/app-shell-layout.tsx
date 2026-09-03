@@ -6,10 +6,11 @@ import { SwitchRepositoryOnboardingDialog } from "@/app-shell/components/switch-
 type AppShellLayoutProps = {
   dock: ReactNode
   children: ReactNode
+  leading?: ReactNode
   actions?: ReactNode
 }
 
-function AppShellLayout({ dock, children, actions }: AppShellLayoutProps) {
+function AppShellLayout({ dock, children, leading, actions }: AppShellLayoutProps) {
   return (
     <main className="h-screen overflow-hidden bg-muted/30">
       <RepoOnboardingDialog />
@@ -22,7 +23,7 @@ function AppShellLayout({ dock, children, actions }: AppShellLayoutProps) {
 
         <footer className="shrink-0 border-t border-sidebar-border/50">
           <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 px-3">
-            <div className="min-w-0" aria-hidden="true" />
+            <div className="min-w-0">{leading}</div>
             <div className="min-w-0 justify-self-center">{dock}</div>
             {actions && (
               <div className="min-w-0 justify-self-end">

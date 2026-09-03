@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { AppShellDock } from "@/app-shell/components/app-shell-dock"
+import { AppShellUpdateIndicator } from "@/app-shell/components/app-shell-update-indicator"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { KnowledgeBaseStorageMigrationDialog } from "@/app-shell/components/knowledge-base-storage-migration-dialog"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
@@ -255,6 +256,11 @@ function MainApp() {
     })
   }, [setActiveAppId])
 
+  const handleOpenUpdateIndicator = useCallback(() => {
+    setActiveAppId("settings", "notification")
+    requestOpenSettingsAbout()
+  }, [setActiveAppId])
+
   useUpdateOpenRequest(handleUpdateOpenRequest)
 
   useEffect(() => {
@@ -286,6 +292,7 @@ function MainApp() {
     <IdentityGate>
       <SoundNotifierHost />
       <AppShellLayout
+        leading={<AppShellUpdateIndicator onOpen={handleOpenUpdateIndicator} />}
         dock={
           <AppShellDock
             apps={dock.pinnedApps}
