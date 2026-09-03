@@ -41,6 +41,9 @@ interface QueryLike {
   rewindFiles?(userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult>
 }
 
+const MCP_DISCOVERY_PENDING_TIMEOUT_MS = 5_000
+const MCP_DISCOVERY_POLL_INTERVAL_MS = 50
+
 interface RoutedQueryInput {
   readonly prompt: AsyncIterable<SDKUserMessage>
   readonly options: Record<string, unknown>
@@ -136,7 +139,7 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
     let statuses: McpServerStatus[]
     try {
       await discovery.initializationResult()
-      statuses = await discovery.mcpServerStatus()
+      statuses = await waitForMcpServerStatuses(discovery)
     } finally {
       await Promise.resolve(discovery.close())
     }
@@ -159,6 +162,19 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
     })
     return sdk.query({ prompt: input.prompt, options: input.options as Options })
   }
+}
+
+async function waitForMcpServerStatuses(query: Pick<Query, "mcpServerStatus">): Promise<McpServerStatus[]> {
+  const deadline = Date.now() + MCP_DISCOVERY_PENDING_TIMEOUT_MS
+  let statuses = await query.mcpServerStatus()
+  while (statuses.some((status) => status.status === "pending")) {
+    if (Date.now() >= deadline) {
+      throw new ToolRouterFallbackError("discovery-failed")
+    }
+    await new Promise((resolve) => setTimeout(resolve, MCP_DISCOVERY_POLL_INTERVAL_MS))
+    statuses = await query.mcpServerStatus()
+  }
+  return statuses
 }
 
 export function rebuildMcpServers(statuses: readonly McpServerStatus[]): Record<string, McpServerConfig> {

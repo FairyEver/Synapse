@@ -108,6 +108,51 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     })
   })
 
+  it("waits for pending MCP servers before rebuilding the strict configuration", async () => {
+    const discovery = {
+      initializationResult: vi.fn(async () => ({})),
+      mcpServerStatus: vi.fn()
+        .mockResolvedValueOnce([
+          statusWithState("figma", "pending", { type: "http", url: "http://127.0.0.1:3845/mcp" }),
+        ])
+        .mockResolvedValueOnce([
+          status("figma", { type: "http", url: "http://127.0.0.1:3845/mcp" }),
+        ]),
+      close: vi.fn(),
+    }
+    const final = { close: vi.fn() }
+    const query = vi.fn()
+      .mockReturnValueOnce(discovery)
+      .mockReturnValueOnce(final)
+    const sdk = {
+      resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })),
+      query,
+      tool: vi.fn((name, description, inputSchema, handler, extras) => ({
+        name, description, inputSchema, handler, ...extras,
+      })),
+      createSdkMcpServer: vi.fn((options) => ({ type: "sdk", name: options.name, instance: {} })),
+    }
+
+    await createRoutedQuery(sdk as never, {
+      prompt: promptThatMustNotBeRead(),
+      options: { settingSources: ["user", "project", "local"] },
+      router: {
+        cwd: "/tmp/project",
+        settingSources: ["user", "project", "local"],
+        executeTool: vi.fn(),
+      },
+    })
+
+    expect(discovery.mcpServerStatus).toHaveBeenCalledTimes(2)
+    expect(query.mock.calls[1]?.[0]).toMatchObject({
+      options: {
+        mcpServers: {
+          figma: { type: "http", url: "http://127.0.0.1:3845/mcp" },
+        },
+      },
+    })
+  })
+
   it("starts the unmodified final query when discovery cannot preserve permissions", async () => {
     const query = vi.fn(() => ({ close: vi.fn() }))
     const onFallback = vi.fn()
