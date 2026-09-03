@@ -210,6 +210,9 @@ describe("AgentConversationWorkspace", () => {
     })
 
     expect(onRename).toHaveBeenCalledWith(session, "需求复盘")
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
     expect(document.activeElement).toBe(container.querySelector("h2"))
   })
 
