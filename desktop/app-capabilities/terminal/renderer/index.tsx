@@ -1631,7 +1631,7 @@ function TerminalSessionLifecycleButton({
   useEffect(() => {
     if (!deleteArmed) return undefined
     timerRef.current = setTimeout(() => setDeleteArmed(false), 3000)
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: PointerEvent) => {
       if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setDeleteArmed(false)
       }
