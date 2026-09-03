@@ -172,6 +172,10 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       const permissionGuard = ctx.globalRegistry.get<PermissionGuard>("core.permission-guard")
       const auditSink = ctx.globalRegistry.get<AuditSink>("core.audit-sink")
       const dataRepository = ctx.globalRegistry.get<DataRepository>("core.data-repository")
+      const configService = optionalService<{ load(): Promise<SynapseConfig> }>(
+        ctx.globalRegistry,
+        "core.config",
+      )
       const runner = createControlledProcessRunner({ permissionGuard, auditSink })
       const outbox = new ReplyOutboxService({
         projectId: ctx.projectId,
@@ -267,8 +271,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         managedKnowledgeBase: isManagedKnowledgeBase,
         validateWorkspacePath: validateWorkspaceDirectory,
         getAllowedWriteDirectories: async () => (
-          await ctx.globalRegistry.get<{ load(): Promise<SynapseConfig> }>("core.config").load()
-        ).agent.allowedWriteDirectories,
+          configService ? (await configService.load()).agent.allowedWriteDirectories : []
+        ),
         conversations,
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
@@ -278,8 +282,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         attachmentStagingService,
         getUsagePriceRules: () => listModelPriceRules(getUsageAnalysisDb()),
         loadExperimentalSynapseToolRouterEnabled: async () => (
-          await ctx.globalRegistry.get<{ load(): Promise<SynapseConfig> }>("core.config").load()
-        ).agent.experimentalSynapseToolRouterEnabled,
+          configService ? (await configService.load()).agent.experimentalSynapseToolRouterEnabled : false
+        ),
         executeSynapseTool: async (toolName, args, context) => {
           const action = MCP_TOOL_ACTIONS[toolName]
           const domain = getMcpToolDomainId(toolName)

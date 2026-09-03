@@ -27,6 +27,10 @@ vi.mock("@/modules/settings/components/provider-panel", () => ({
   ProviderPanel: () => <div>Provider panel</div>,
 }))
 
+vi.mock("@/modules/settings/components/agent-allowed-directories-panel", () => ({
+  AgentAllowedDirectoriesPanel: () => <div>Agent allowed directories</div>,
+}))
+
 describe("ClaudeCodePanel", () => {
   it("renders Agent runtime status globally", () => {
     const html = renderToStaticMarkup(<ClaudeCodePanel />)
