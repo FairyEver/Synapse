@@ -66,6 +66,7 @@ import type {
   AgentPermissionRequestEvent,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
+  AgentToolResultEvent,
   AgentUserQuestionResolution,
 } from "./types"
 import { redactSensitiveText } from "./redaction"
@@ -107,7 +108,7 @@ export interface ConversationRouterDeps {
   readonly fileCheckpoints?: AgentFileCheckpointService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
   readonly loadExperimentalSynapseToolRouterEnabled?: () => boolean | Promise<boolean>
-  readonly loadFigmaDesktopMcpEnabled?: () => boolean | Promise<boolean>
+  readonly loadEnabledConnectorIds?: () => readonly string[] | Promise<readonly string[]>
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
   readonly permissionGuard?: PermissionGuard
@@ -223,7 +224,7 @@ export class ConversationRouter {
     this.assertProject(message)
     const providerId = await this.resolveNewConversationProviderId(message)
     const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
-    const figmaDesktopMcpEnabled = await this.loadFigmaDesktopMcpEnabled()
+    const connectorIds = await this.loadEnabledConnectorIds()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
       platform: message.platform,
@@ -235,7 +236,7 @@ export class ConversationRouter {
       mode: message.modeOverride,
       modelTier: message.modelTier,
       experimentalSynapseToolRouterEnabled,
-      figmaDesktopMcpEnabled,
+      connectorIds,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
@@ -262,7 +263,7 @@ export class ConversationRouter {
     const ac = new AbortController()
     const providerId = await this.resolveNewConversationProviderId(message)
     const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
-    const figmaDesktopMcpEnabled = await this.loadFigmaDesktopMcpEnabled()
+    const connectorIds = await this.loadEnabledConnectorIds()
     const conversation = await this.repository.createSideSession({
       sessionKey: message.sessionKey,
       platform: message.platform,
@@ -274,7 +275,7 @@ export class ConversationRouter {
       mode: message.modeOverride,
       modelTier: message.modelTier,
       experimentalSynapseToolRouterEnabled,
-      figmaDesktopMcpEnabled,
+      connectorIds,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
@@ -1512,10 +1513,10 @@ export class ConversationRouter {
     }
     const providerId = await this.resolveNewConversationProviderId(message)
     const experimentalSynapseToolRouterEnabled = await this.loadExperimentalSynapseToolRouterEnabled()
-    const figmaDesktopMcpEnabled = await this.loadFigmaDesktopMcpEnabled()
+    const connectorIds = await this.loadEnabledConnectorIds()
     return this.repository.getOrCreateActive(
       { ...message, providerId },
-      { experimentalSynapseToolRouterEnabled, figmaDesktopMcpEnabled },
+      { experimentalSynapseToolRouterEnabled, connectorIds },
     )
   }
 
@@ -1523,8 +1524,8 @@ export class ConversationRouter {
     return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) === true
   }
 
-  private async loadFigmaDesktopMcpEnabled(): Promise<boolean> {
-    return (await this.deps.loadFigmaDesktopMcpEnabled?.()) === true
+  private async loadEnabledConnectorIds(): Promise<readonly string[]> {
+    return [...new Set(await this.deps.loadEnabledConnectorIds?.() ?? [])]
   }
 
   private async resolveNewConversationProviderId(message: AgentMessage): Promise<string> {
@@ -2417,7 +2418,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           toolInputSummary: truncateString(event.toolInput, MAX_SUMMARY_LENGTH),
         }),
       }
-    case "toolResult":
+    case "toolResult": {
       const artifactLabel = event.imageArtifacts?.length
         ? `${event.toolName} (${event.imageArtifacts.length} image${event.imageArtifacts.length === 1 ? "" : "s"})`
         : event.toolName
@@ -2438,6 +2439,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           success: event.success,
         }),
       }
+    }
     case "thinking":
       return {
         role: "system",
@@ -2920,7 +2922,8 @@ function sanitizeValue(
 
 function stripTransientImageBlocks<T extends AgentEvent>(event: T): T {
   if (event.type !== "toolResult" || !event.imageBlocks) return event
-  const { imageBlocks: _imageBlocks, ...rest } = event
+  const { imageBlocks, ...rest } = event as AgentToolResultEvent
+  void imageBlocks
   return rest as T
 }
 

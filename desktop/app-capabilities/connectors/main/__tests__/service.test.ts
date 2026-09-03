@@ -1,101 +1,222 @@
 import { describe, expect, it, vi } from "vitest"
-import { createConnectorsService, probeFigmaDesktopServer } from "../service"
+import { figmaConnector } from "../definitions"
+import { ConnectorDriverRegistry } from "../driver-registry"
+import { createConnectorsService } from "../service"
+import type { BuiltinConnectorDefinition, ConnectorDriver, ProbeResult } from "../types"
 
-function createHarness() {
-  const store = new Map<string, Record<string, unknown>>()
-  const items = {
-    get: vi.fn(async (id: string) => store.get(id)),
-    list: vi.fn(async () => [...store.values()]),
-    upsert: vi.fn(async (entry: Record<string, unknown>) => { store.set(String(entry.id), entry) }),
+function createHarness(options: {
+  readonly probe?: ProbeResult
+  readonly legacy?: Record<string, unknown>
+  readonly initialState?: Record<string, unknown>
+  readonly definitions?: readonly BuiltinConnectorDefinition[]
+} = {}) {
+  let state: Record<string, unknown> | null = options.initialState ?? null
+  const legacy = new Map<string, Record<string, unknown>>()
+  if (options.legacy) legacy.set(String(options.legacy.id), options.legacy)
+  const stateNamespace = {
+    getSingleton: vi.fn(async () => state),
+    setSingleton: vi.fn(async (value: Record<string, unknown>) => { state = value }),
   }
-  const credentials = {
-    get: vi.fn(async () => undefined),
-    remove: vi.fn(async () => undefined),
-    upsert: vi.fn(async () => undefined),
+  const legacyItems = {
+    get: vi.fn(async (id: string) => legacy.get(id) ?? null),
+    remove: vi.fn(async (id: string) => { legacy.delete(id) }),
   }
+  const driver: ConnectorDriver = {
+    probe: vi.fn(async () => options.probe ?? { ok: true, toolCount: 2 }),
+    createAgentContribution: vi.fn((definition) => ({
+      mcpServers: [{ name: definition.id, config: { type: "http", url: definition.integration.endpoint } }],
+      skillPackageIds: [definition.skillPackageId],
+    })),
+  }
+  const drivers = new ConnectorDriverRegistry()
+  drivers.register("mcp-streamable-http", driver)
+  const logger = { warn: vi.fn() }
   const service = createConnectorsService({
-    items: items as never,
-    credentials: credentials as never,
-    logger: { warn: vi.fn() },
-    probeDesktopServer: vi.fn(async () => true),
+    state: stateNamespace as never,
+    legacyItems: legacyItems as never,
+    drivers,
+    definitions: options.definitions,
+    logger,
+    now: () => new Date("2026-09-03T08:00:00.000Z"),
   })
-  return { service, items, credentials }
+  return { service, stateNamespace, legacyItems, driver, logger, readState: () => state }
 }
 
 describe("connectors service", () => {
-  it("connects Figma Desktop MCP without OAuth or bearer token storage", async () => {
-    const { service, items, credentials } = createHarness()
+  it("lists builtin definitions and enables a connector only after a successful probe", async () => {
+    const { service, driver, readState } = createHarness()
 
     await service.initialize()
-    const connected = await service.connect("figma")
-    expect(connected.status).toBe("connected")
-    expect(credentials.upsert).not.toHaveBeenCalled()
-
-    await expect(service.getMcpServers()).resolves.toEqual({
-      figma: { type: "http", url: "http://127.0.0.1:3845/mcp" },
+    await expect(service.list()).resolves.toEqual({
+      items: [{
+        id: "figma",
+        name: "Figma",
+        description: "连接 Figma Desktop MCP",
+        documentationUrl: "https://synapse.d2.pub/document/connectors/figma",
+        enabled: false,
+        probeStatus: "idle",
+      }],
     })
-    expect(items.upsert).toHaveBeenCalled()
+
+    await expect(service.connect("figma")).resolves.toMatchObject({
+      id: "figma",
+      enabled: true,
+      probeStatus: "ready",
+    })
+    expect(driver.probe).toHaveBeenCalledWith(figmaConnector)
+    expect(readState()).toEqual({
+      schemaVersion: 1,
+      connectors: {
+        figma: {
+          enabled: true,
+          lastProbe: { at: "2026-09-03T08:00:00.000Z", status: "success" },
+        },
+      },
+    })
   })
 
-  it("migrates an older remote connector row to Desktop MCP", async () => {
-    const { service, items } = createHarness()
-    await items.upsert({
-      id: "figma",
-      schemaVersion: 1,
-      providerKey: "figma",
-      name: "Figma",
-      description: "在 Claude 会话中使用 Figma MCP",
-      endpoint: "https://mcp.figma.com/mcp",
-      authType: "oauth2",
-      status: "connecting",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+  it("persists a stable failure code without enabling the connector", async () => {
+    const { service, logger, readState } = createHarness({
+      probe: { ok: false, errorCode: "required_tools_missing" },
     })
 
     await service.initialize()
-    await expect(service.getMcpServers()).resolves.toEqual({})
-    expect(items.upsert).toHaveBeenLastCalledWith(expect.objectContaining({
-      id: "figma",
-      endpoint: "http://127.0.0.1:3845/mcp",
-      authType: "none",
-      status: "available",
+    await expect(service.connect("figma")).rejects.toThrow("缺少必要工具")
+    await expect(service.getEnabledConnectorIds()).resolves.toEqual([])
+    await expect(service.list()).resolves.toMatchObject({
+      items: [{ enabled: false, probeStatus: "error", errorMessage: expect.stringContaining("缺少必要工具") }],
+    })
+    expect(readState()).toEqual({
+      schemaVersion: 1,
+      connectors: {
+        figma: {
+          enabled: false,
+          lastProbe: {
+            at: "2026-09-03T08:00:00.000Z",
+            status: "failed",
+            errorCode: "required_tools_missing",
+          },
+        },
+      },
+    })
+    expect(logger.warn).toHaveBeenCalledWith("Connector probe failed.", expect.objectContaining({
+      connectorId: "figma",
+      errorCode: "required_tools_missing",
     }))
   })
 
-  it("surfaces a clear setup error when Figma Desktop MCP is not running", async () => {
-    const { items } = createHarness()
-    const probe = vi.fn(async () => false)
-    const unavailableService = createConnectorsService({
-      items: items as never,
-      credentials: { remove: vi.fn(async () => undefined) } as never,
-      logger: { warn: vi.fn() },
-      probeDesktopServer: probe,
+  it("migrates a connected local Figma row and removes the legacy source", async () => {
+    const timestamp = "2026-09-02T08:00:00.000Z"
+    const { service, legacyItems, readState } = createHarness({
+      legacy: {
+        id: "figma",
+        schemaVersion: 1,
+        providerKey: "figma",
+        name: "Figma",
+        endpoint: "http://127.0.0.1:3845/mcp",
+        authType: "none",
+        status: "connected",
+        lastConnectedAt: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
     })
 
-    await unavailableService.initialize()
-    await expect(unavailableService.connect("figma")).rejects.toThrow("未检测到 Figma Desktop MCP")
-    expect(probe).toHaveBeenCalledOnce()
-    await expect(unavailableService.list()).resolves.toMatchObject({ items: [{ id: "figma", status: "error", errorMessage: expect.stringContaining("未检测到") }] })
-    await expect(unavailableService.getMcpServers()).resolves.toEqual({})
+    await service.initialize()
+
+    expect(readState()).toEqual({
+      schemaVersion: 1,
+      connectors: {
+        figma: { enabled: true, lastProbe: { at: timestamp, status: "success" } },
+      },
+    })
+    expect(legacyItems.remove).toHaveBeenCalledWith("figma")
   })
 
-  it("only reports ready after MCP initialize and tools/list succeed", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response('data: {"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"Figma","version":"1"}}}\n\n', {
-        status: 200,
-        headers: { "content-type": "text/event-stream", "mcp-session-id": "session-1" },
-      }))
-      .mockResolvedValueOnce(new Response(null, { status: 202 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: "2.0", id: 2, result: { tools: [{ name: "get_metadata" }] } }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }))
-    vi.stubGlobal("fetch", fetchMock)
+  it("does not enable an older remote or OAuth Figma row", async () => {
+    const timestamp = "2026-09-02T08:00:00.000Z"
+    const { service, readState } = createHarness({
+      legacy: {
+        id: "figma",
+        schemaVersion: 1,
+        providerKey: "figma",
+        name: "Figma",
+        endpoint: "https://mcp.figma.com/mcp",
+        authType: "oauth2",
+        status: "connected",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    })
 
-    await expect(probeFigmaDesktopServer()).resolves.toMatchObject({ ok: true, toolCount: 1 })
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:3845/mcp")
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ method: "initialize" })
-    vi.unstubAllGlobals()
+    await service.initialize()
+
+    expect(readState()).toEqual({
+      schemaVersion: 1,
+      connectors: { figma: { enabled: false } },
+    })
+  })
+
+  it("does not re-import legacy state after the new state store exists", async () => {
+    const timestamp = "2026-09-02T08:00:00.000Z"
+    const initialState = { schemaVersion: 1, connectors: { figma: { enabled: false } } }
+    const { service, readState } = createHarness({
+      initialState,
+      legacy: {
+        id: "figma",
+        endpoint: "http://127.0.0.1:3845/mcp",
+        authType: "none",
+        status: "connected",
+        lastConnectedAt: timestamp,
+        updatedAt: timestamp,
+      },
+    })
+
+    await service.initialize()
+
+    expect(readState()).toBe(initialState)
+  })
+
+  it("creates contributions from the conversation snapshot after the connector is disabled", async () => {
+    const { service } = createHarness()
+    await service.initialize()
+    await service.connect("figma")
+    await service.disconnect("figma")
+
+    await expect(service.getEnabledConnectorIds()).resolves.toEqual([])
+    expect(service.createAgentContribution(["figma", "figma"])).toEqual({
+      mcpServers: [{
+        name: "figma",
+        config: { type: "http", url: "http://127.0.0.1:3845/mcp" },
+      }],
+      skillPackageIds: ["figma-skill"],
+    })
+  })
+
+  it("merges multiple connector definitions without connector-specific service branches", async () => {
+    const secondDefinition: BuiltinConnectorDefinition = {
+      id: "design-tool",
+      name: "Design Tool",
+      skillPackageId: "design-tool-skill",
+      integration: { kind: "mcp-streamable-http", endpoint: "http://127.0.0.1:3900/mcp" },
+    }
+    const { service } = createHarness({ definitions: [figmaConnector, secondDefinition] })
+    await service.initialize()
+
+    expect(service.createAgentContribution(["figma", "design-tool"])).toEqual({
+      mcpServers: [
+        { name: "figma", config: { type: "http", url: "http://127.0.0.1:3845/mcp" } },
+        { name: "design-tool", config: { type: "http", url: "http://127.0.0.1:3900/mcp" } },
+      ],
+      skillPackageIds: ["figma-skill", "design-tool-skill"],
+    })
+  })
+
+  it("rejects unknown connector ids", async () => {
+    const { service } = createHarness()
+    await service.initialize()
+
+    await expect(service.connect("unknown")).rejects.toThrow("连接器不存在")
+    expect(() => service.createAgentContribution(["unknown"])).toThrow("连接器不存在")
   })
 })

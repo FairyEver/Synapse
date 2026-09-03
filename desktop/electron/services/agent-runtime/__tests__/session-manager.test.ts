@@ -2,9 +2,13 @@ import type { ConversationEntryV1 } from "../../../runtime/data-repo"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { ProviderService } from "../../provider"
 import { ClaudeSDKSession } from "../claude-sdk-session"
-import type { ClaudeSDKSessionOptions } from "../claude-sdk-session"
 import type { AgentSessionRepository } from "../session-repository"
-import { SessionManager, validateWorkspaceDirectory, type CreateAgentLiveSessionInput } from "../session-manager"
+import {
+  SessionManager,
+  validateWorkspaceDirectory,
+  type AgentConnectorRuntimeContribution,
+  type CreateAgentLiveSessionInput,
+} from "../session-manager"
 import type { PendingPermissionState, RuntimeSessionState } from "../session-lifecycle"
 import type {
   AgentEvent,
@@ -286,15 +290,18 @@ describe("SessionManager", () => {
     }))
   })
 
-  it("resolves MCP servers from the conversation snapshot", async () => {
+  it("resolves connector contributions from the conversation snapshot", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const createSession = vi.fn(() => new FakeLiveSession())
-    const resolveMcpServers = vi.fn(async (
+    const resolveConnectorContribution = vi.fn(async (
       _message: AgentMessage,
       conversation: ConversationEntryV1,
-    ): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>> => {
-      if (conversation.agentConfig?.figmaDesktopMcpEnabled !== true) return {}
-      return { figma: { type: "http", url: "http://127.0.0.1:3845/mcp" } }
+    ): Promise<AgentConnectorRuntimeContribution> => {
+      if (!conversation.agentConfig?.connectorIds?.includes("figma")) return { mcpServers: {}, plugins: [] }
+      return {
+        mcpServers: { figma: { type: "http" as const, url: "http://127.0.0.1:3845/mcp" } },
+        plugins: [],
+      }
     })
     const manager = new SessionManager({
       projectId: "project-1",
@@ -307,34 +314,33 @@ describe("SessionManager", () => {
       states,
       pendingPermissions: new Map(),
       createSession,
-      resolveMcpServers,
+      resolveConnectorContribution,
     })
 
     await manager.getOrCreateSession({
       state: manager.stateForConversation("conversation-1", baseMessage("default")),
-      conversation: { ...baseConversation(), agentConfig: { figmaDesktopMcpEnabled: true } },
+      conversation: { ...baseConversation(), agentConfig: { connectorIds: ["figma"] } },
       message: baseMessage("default"),
     })
 
-    expect(resolveMcpServers).toHaveBeenCalledWith(
+    expect(resolveConnectorContribution).toHaveBeenCalledWith(
       expect.objectContaining({ content: "run" }),
-      expect.objectContaining({ agentConfig: { figmaDesktopMcpEnabled: true } }),
+      expect.objectContaining({ agentConfig: { connectorIds: ["figma"] } }),
     )
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       mcpServers: { figma: { type: "http", url: "http://127.0.0.1:3845/mcp" } },
     }))
   })
 
-  it("keeps the Figma skill and MCP config on the same resolved snapshot", async () => {
+  it("keeps connector skills and MCP config on the same resolved snapshot", async () => {
     const createSession = vi.fn(() => new FakeLiveSession())
     const figmaMcpServers = {
       figma: { type: "http" as const, url: "http://127.0.0.1:3845/mcp" },
     }
-    const resolveMcpServers = vi.fn(async () => figmaMcpServers)
-    const sdkPlugins = vi.fn((_message, _conversation, mcpServers) =>
-      Object.hasOwn(mcpServers, "figma")
-        ? [{ type: "local" as const, path: "/Applications/Synapse/resources/figma-skill" }]
-        : [])
+    const resolveConnectorContribution = vi.fn(async () => ({
+      mcpServers: figmaMcpServers,
+      plugins: [{ type: "local" as const, path: "/Applications/Synapse/resources/figma-skill" }],
+    }))
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
@@ -346,12 +352,11 @@ describe("SessionManager", () => {
       states: new Map(),
       pendingPermissions: new Map(),
       createSession,
-      resolveMcpServers,
-      sdkPlugins,
+      resolveConnectorContribution,
     })
     const conversation = {
       ...baseConversation(),
-      agentConfig: { figmaDesktopMcpEnabled: true, expectedMcpServerNames: ["figma"] },
+      agentConfig: { connectorIds: ["figma"] },
     }
 
     await manager.getOrCreateSession({
@@ -360,8 +365,7 @@ describe("SessionManager", () => {
       message: baseMessage("default"),
     })
 
-    expect(resolveMcpServers).toHaveBeenCalledOnce()
-    expect(sdkPlugins).toHaveBeenCalledWith(expect.anything(), conversation, figmaMcpServers)
+    expect(resolveConnectorContribution).toHaveBeenCalledOnce()
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       mcpServers: figmaMcpServers,
       expectedMcpServerNames: ["figma"],
@@ -369,7 +373,7 @@ describe("SessionManager", () => {
     }))
   })
 
-  it("rejects a Figma conversation when its expected MCP config is missing", async () => {
+  it("rejects a legacy conversation when its expected MCP config is missing", async () => {
     const createSession = vi.fn(() => new FakeLiveSession())
     const manager = new SessionManager({
       projectId: "project-1",
@@ -382,7 +386,7 @@ describe("SessionManager", () => {
       states: new Map(),
       pendingPermissions: new Map(),
       createSession,
-      resolveMcpServers: vi.fn(async () => ({})),
+      resolveConnectorContribution: vi.fn(async () => ({ mcpServers: {}, plugins: [] })),
     })
 
     await expect(manager.getOrCreateSession({
@@ -392,7 +396,7 @@ describe("SessionManager", () => {
         agentConfig: { figmaDesktopMcpEnabled: true, expectedMcpServerNames: ["figma"] },
       },
       message: baseMessage("default"),
-    })).rejects.toThrow("Figma MCP 未进入本次会话")
+    })).rejects.toThrow("请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话")
     expect(createSession).not.toHaveBeenCalled()
   })
 
@@ -898,7 +902,7 @@ describe("SessionManager", () => {
   })
 
   it("recreates the SDK session when the effective context configuration changes", async () => {
-    let explicitWindow: string | undefined
+    const contextConfiguration = { explicitWindow: undefined as string | undefined }
     const sessions: FakeLiveSession[] = []
     const createSession = vi.fn(() => {
       const session = new FakeLiveSession()
@@ -913,7 +917,9 @@ describe("SessionManager", () => {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
           ANTHROPIC_MODEL: "qwen3.7-plus",
-          ...(explicitWindow ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: explicitWindow } : {}),
+          ...(contextConfiguration.explicitWindow
+            ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: contextConfiguration.explicitWindow }
+            : {}),
         })),
         getProvider: vi.fn(async () => ({ id: "bailian", settingsConfig: {} })),
         getActiveProvider: vi.fn(),
@@ -926,7 +932,7 @@ describe("SessionManager", () => {
     const conversation = { ...baseConversation(), providerId: "bailian" }
 
     const first = await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
-    explicitWindow = "200000"
+    contextConfiguration.explicitWindow = "200000"
     const second = await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
 
     expect(first.created).toBe(true)

@@ -26,6 +26,22 @@ import type {
 } from "../types"
 
 describe("AgentRuntimeService", () => {
+  it("snapshots enabled connector ids when creating a session", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: {} as ProviderService,
+      loadEnabledConnectorIds: vi.fn(async () => ["figma", "figma"]),
+      now: fixedNow,
+    })
+
+    const conversation = await service.createSession({ sessionKey: "s1" })
+
+    expect(conversation.agentConfig?.connectorIds).toEqual(["figma"])
+  })
+
   it("does not send a turn when live attachment directory authorization fails", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new AttachmentGrantFailureSession()

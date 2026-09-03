@@ -14,6 +14,7 @@ import {
   automationItemsSchema,
   automationRunsSchema,
   conversationsSchema,
+  connectorsStateSchema,
   coreConfigSchema,
   coreIdentitySchema,
   driveSyncBaselineSchema,
@@ -46,6 +47,22 @@ import {
 } from "../index"
 
 describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
+  it("validates the versioned connector state envelope", () => {
+    expect(connectorsStateSchema.validate({
+      schemaVersion: 1,
+      connectors: {
+        figma: {
+          enabled: true,
+          lastProbe: { at: "2026-09-03T08:00:00.000Z", status: "success" },
+        },
+      },
+    })).toBe(true)
+    expect(connectorsStateSchema.validate({
+      schemaVersion: 1,
+      connectors: { figma: { enabled: "yes" } },
+    })).toBe(false)
+  })
+
   it("allSchemas exposes runtime namespaces", () => {
     const names = allSchemas.map((s) => s.name).sort()
     expect(names).toEqual(
@@ -63,6 +80,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.agent-personas.settings",
         "app.connectors.credentials",
         "app.connectors.items",
+        "app.connectors.state",
         "app.quick-input.items",
         "app.quick-input.settings",
         "app.secrets.items",

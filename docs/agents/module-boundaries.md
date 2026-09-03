@@ -4,6 +4,13 @@
 
 ## App 能力包
 
+### Connectors
+
+- 内置连接器由静态 `BuiltinConnectorDefinition` 注册，类型差异只通过 `integration.kind` 对应的 Driver 实现；Service、IPC、Renderer 和 Agent Runtime 不得按连接器 ID 增加业务分支。
+- V1 Driver 只支持无认证的本机 IPv4 回环 Streamable HTTP MCP。启用前必须经过权限与审计，并完成 initialize、initialized、`tools/list` 和必需工具校验；定义、协议版本、超时和用户状态不得混存。
+- `app.connectors.state` 只保存版本、启用标志和稳定探测错误码。新 Agent 对话保存连接器 ID 快照，运行时再从当前内置定义生成 MCP 与 Skill contribution；之后启停不得改变已有对话。
+- 内置 Skill 只保存使用说明，开发和正式包路径由 Agent Runtime 按 `skillPackageId` 统一解析；不得从网络下载 Skill 或让 Skill 建立 MCP 连接。
+
 ### Text Extractor
 
 - app id `text-extractor`，namespace `text_extractor`。

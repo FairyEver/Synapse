@@ -85,7 +85,7 @@ describe("AgentSessionRepository", () => {
     expect(restored.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(true)
   })
 
-  it("persists the Figma Desktop MCP snapshot only when creating a conversation", async () => {
+  it("persists connector ids only when creating a conversation", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
       projectId: "project-1",
@@ -99,13 +99,12 @@ describe("AgentSessionRepository", () => {
       content: "hello",
     }
 
-    const created = await repository.getOrCreateActive(message, { figmaDesktopMcpEnabled: true })
-    const restored = await repository.getOrCreateActive(message, { figmaDesktopMcpEnabled: false })
+    const created = await repository.getOrCreateActive(message, { connectorIds: ["figma", "figma"] })
+    const restored = await repository.getOrCreateActive(message, { connectorIds: [] })
 
-    expect(created.agentConfig?.figmaDesktopMcpEnabled).toBe(true)
-    expect(created.agentConfig?.expectedMcpServerNames).toEqual(["figma"])
-    expect(restored.agentConfig?.figmaDesktopMcpEnabled).toBe(true)
-    expect(restored.agentConfig?.expectedMcpServerNames).toEqual(["figma"])
+    expect(created.agentConfig?.connectorIds).toEqual(["figma"])
+    expect(created.agentConfig?.figmaDesktopMcpEnabled).toBeUndefined()
+    expect(restored.agentConfig?.connectorIds).toEqual(["figma"])
   })
 
   it("keeps active conversations isolated by platform", async () => {

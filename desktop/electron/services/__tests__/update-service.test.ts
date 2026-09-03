@@ -444,7 +444,6 @@ describe("UpdateService", () => {
       }))
 
     updateService.startAutoCheck()
-    await vi.advanceTimersByTimeAsync(60_000)
     expect(resolveAutoCheck).toBeTypeOf("function")
 
     const manualState = await updateService.checkForUpdates()
@@ -535,7 +534,7 @@ describe("UpdateService", () => {
     }))
   })
 
-  it("does not poll update metadata every minute after the startup auto check", async () => {
+  it("checks immediately on startup and then polls update metadata every ten minutes", async () => {
     vi.useFakeTimers()
     const { updateService } = await importUpdateService()
     updateService.initialize()
@@ -553,13 +552,12 @@ describe("UpdateService", () => {
       .mockImplementationOnce(noUpdateCheck)
 
     updateService.startAutoCheck()
-    await vi.advanceTimersByTimeAsync(60_000)
     expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(60_000)
     expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
 
-    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000 - 60_000)
+    await vi.advanceTimersByTimeAsync(9 * 60_000)
     expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
@@ -599,7 +597,6 @@ describe("UpdateService", () => {
     updateService.setWindowManager(windowManager)
     updateService.initialize()
     updateService.startAutoCheck()
-    await vi.advanceTimersByTimeAsync(60_000)
     expect(updaterMock.notificationInstances).toHaveLength(1)
 
     updaterMock.notificationInstances[0]?.click()

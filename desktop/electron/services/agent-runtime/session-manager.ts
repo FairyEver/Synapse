@@ -7,11 +7,11 @@ import { resolveModelContextConfiguration } from "../model-capability/catalog"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID, type CCProvider, type ProviderService } from "../provider"
 import {
   AGENT_CANCELLED_MESSAGE,
-  AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE,
   AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
   AGENT_PROVIDER_REQUIRED_MESSAGE,
   AGENT_SESSION_RESETTING_MESSAGE,
+  agentMcpServersUnavailableMessage,
 } from "./agent-error-messages"
 import {
   directoriesForPathAttachments,
@@ -93,6 +93,11 @@ export type AgentLiveSessionHandle = {
   readonly created: boolean
 }
 
+export type AgentConnectorRuntimeContribution = {
+  readonly mcpServers: NonNullable<ClaudeSDKSessionOptions["mcpServers"]>
+  readonly plugins: readonly AgentSdkPluginSpec[]
+}
+
 export interface SessionManagerDeps {
   readonly projectId: string
   readonly workDir?: string
@@ -121,10 +126,10 @@ export interface SessionManagerDeps {
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
   readonly sdkPersonaConfig?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     ResolvedPersonaSdkConfig | Promise<ResolvedPersonaSdkConfig>
-  readonly resolveMcpServers?: (
+  readonly resolveConnectorContribution?: (
     message: AgentMessage,
     conversation: ConversationEntryV1,
-  ) => Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
+  ) => Promise<AgentConnectorRuntimeContribution>
   readonly onElicitation?: ClaudeSDKSessionOptions["onElicitation"]
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
@@ -438,11 +443,14 @@ export class SessionManager {
     const sdkSessionId = input.conversation.resumePolicy === "fresh" || recreatingPersonaRuntime
       ? undefined
       : input.conversation.sdkSessionId
-    const mcpServers = this.deps.resolveMcpServers
-      ? await this.deps.resolveMcpServers(input.message, input.conversation)
+    const connectorContribution = this.deps.resolveConnectorContribution
+      ? await this.deps.resolveConnectorContribution(input.message, input.conversation)
       : undefined
-    const resolvedMcpServers = mcpServers ?? {}
-    const expectedMcpServerNames = resolveExpectedMcpServerNames(input.conversation)
+    const resolvedMcpServers = connectorContribution?.mcpServers ?? {}
+    const expectedMcpServerNames = [...new Set([
+      ...resolveExpectedMcpServerNames(input.conversation),
+      ...Object.keys(resolvedMcpServers),
+    ])]
     const missingMcpServerNames = expectedMcpServerNames.filter(
       (name) => !Object.hasOwn(resolvedMcpServers, name),
     )
@@ -454,11 +462,14 @@ export class SessionManager {
         expectedServerNames: expectedMcpServerNames,
         resolvedServerNames: Object.keys(resolvedMcpServers),
       })
-      throw new Error(expectedMcpServerUnavailableMessage(missingMcpServerNames))
+      throw new Error(agentMcpServersUnavailableMessage(missingMcpServerNames))
     }
-    const plugins = await Promise.resolve(
-      this.deps.sdkPlugins?.(input.message, input.conversation, resolvedMcpServers) ?? [],
-    )
+    const plugins = [
+      ...await Promise.resolve(
+        this.deps.sdkPlugins?.(input.message, input.conversation, resolvedMcpServers) ?? [],
+      ),
+      ...(connectorContribution?.plugins ?? []),
+    ]
     this.deps.logger?.info("Resolved MCP configuration for agent live session.", {
       boundary: "agent-runtime.live-session.mcp-config",
       projectId: this.deps.projectId,
@@ -494,7 +505,7 @@ export class SessionManager {
       ),
       additionalDirectories,
       sdkSettings,
-      mcpServers,
+      mcpServers: resolvedMcpServers,
       expectedMcpServerNames,
       onElicitation: this.deps.onElicitation,
       synapseToolRouter: synapseToolRouterEnabled && this.deps.executeSynapseTool
@@ -843,12 +854,6 @@ function resolveExpectedMcpServerNames(conversation: ConversationEntryV1): reado
   const configured = conversation.agentConfig?.expectedMcpServerNames
   if (configured) return [...new Set(configured)]
   return conversation.agentConfig?.figmaDesktopMcpEnabled === true ? ["figma"] : []
-}
-
-function expectedMcpServerUnavailableMessage(serverNames: readonly string[]): string {
-  return serverNames.includes("figma")
-    ? AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE
-    : `预期的 MCP 服务未进入本次会话：${serverNames.join("、")}。`
 }
 
 function sdkToolOptionsForPersonaPolicy(

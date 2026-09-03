@@ -1,248 +1,240 @@
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
-import type { Options } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
-import type { ConnectorCredentialEntryV1, ConnectorItemEntryV1 } from "../../../electron/runtime/data-repo/schemas/connectors"
+import type {
+  ConnectorItemEntryV1,
+  ConnectorLocalStateV1,
+  ConnectorProbeErrorCodeV1,
+  ConnectorStateStoreV1,
+} from "../../../electron/runtime/data-repo/schemas/connectors"
 import type { ConnectorItem } from "../shared/schema"
-
-const FIGMA_ID = "figma"
-const FIGMA_ENDPOINT = "http://127.0.0.1:3845/mcp"
-const FIGMA_DESCRIPTION = "连接 Figma Desktop MCP"
+import { builtinConnectors } from "./definitions"
+import type { ConnectorDriverRegistry } from "./driver-registry"
+import type { AgentContribution, BuiltinConnectorDefinition, ProbeResult } from "./types"
 
 export type ConnectorServiceDeps = {
-  readonly items: DataNamespace<ConnectorItemEntryV1>
-  readonly credentials: DataNamespace<ConnectorCredentialEntryV1>
+  readonly state: DataNamespace<ConnectorStateStoreV1>
+  readonly legacyItems: DataNamespace<ConnectorItemEntryV1>
+  readonly drivers: ConnectorDriverRegistry
+  readonly definitions?: readonly BuiltinConnectorDefinition[]
   readonly logger: { warn(message: string, meta?: Record<string, unknown>): void }
-  readonly probeDesktopServer?: () => Promise<DesktopServerProbeResult | boolean>
-}
-
-export type DesktopServerProbeResult = {
-  readonly ok: boolean
-  readonly errorMessage?: string
-  readonly stage?: "transport" | "initialize" | "tools"
-  readonly toolCount?: number
+  readonly now?: () => Date
 }
 
 type ConnectorEvents = { changed: [payload: { items: ConnectorItem[] }] }
 
 export function createConnectorsService(deps: ConnectorServiceDeps) {
+  const definitions = deps.definitions ?? builtinConnectors
+  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]))
   const listeners = new Set<(payload: ConnectorEvents["changed"][0]) => void>()
+  const probingIds = new Set<string>()
+  const now = () => (deps.now ?? (() => new Date()))().toISOString()
 
-  const now = () => new Date().toISOString()
-  const emit = async () => {
-    const items = (await deps.items.list()).sort((a, b) => a.name.localeCompare(b.name)).map(toPublic)
-    for (const listener of listeners) listener({ items })
+  if (definitionsById.size !== definitions.length) throw new Error("Builtin connector ids must be unique.")
+
+  async function initialize(): Promise<void> {
+    const existing = await deps.state.getSingleton()
+    if (!existing) await deps.state.setSingleton(await migrateLegacyState())
+    await removeMigratedLegacyFigmaItem()
   }
 
-  async function initialize() {
-    const existing = await deps.items.get(FIGMA_ID)
-    if (!existing) {
-      const timestamp = now()
-      await deps.items.upsert({
-        id: FIGMA_ID,
-        schemaVersion: 1,
-        providerKey: FIGMA_ID,
-        name: "Figma",
-        description: FIGMA_DESCRIPTION,
-        endpoint: FIGMA_ENDPOINT,
-        authType: "none",
-        status: "available",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })
-    } else {
-      // Figma Desktop MCP is local and does not persist an OAuth session. Reset
-      // stale remote/OAuth metadata when upgrading an existing connector row.
-      await deps.items.upsert({
-        ...existing,
-        description: FIGMA_DESCRIPTION,
-        endpoint: FIGMA_ENDPOINT,
-        authType: "none",
-        status: "available",
-        accountLabel: undefined,
-        errorMessage: undefined,
-        updatedAt: now(),
-      })
+  async function list(): Promise<{ items: ConnectorItem[] }> {
+    const store = await readState()
+    return {
+      items: definitions
+        .map((definition) => toPublic(definition, store.connectors[definition.id], probingIds.has(definition.id)))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     }
   }
-
-  async function list() { return { items: (await deps.items.list()).sort((a, b) => a.name.localeCompare(b.name)).map(toPublic) } }
 
   async function connect(id: string): Promise<ConnectorItem> {
-    if (id !== FIGMA_ID) throw new Error("不支持的连接器。")
-    const current = await requireItem(id)
-    const connecting = {
-      ...current,
-      endpoint: FIGMA_ENDPOINT,
-      authType: "none" as const,
-      status: "connecting" as const,
-      errorMessage: undefined,
-      updatedAt: now(),
-    }
-    await deps.items.upsert(connecting)
+    const definition = requireDefinition(id)
+    probingIds.add(id)
     await emit()
 
-    let probe: DesktopServerProbeResult
     try {
-      const result = await (deps.probeDesktopServer ?? probeFigmaDesktopServer)()
-      probe = typeof result === "boolean"
-        ? { ok: result, ...(!result ? { errorMessage: "未检测到 Figma Desktop MCP，请先在 Figma Dev Mode 中开启 MCP Server。" } : {}) }
-        : result
-    } catch (error) {
-      deps.logger.warn("Figma Desktop MCP probe failed.", {
-        boundary: "connectors.figma.probe",
-        stage: "transport",
-        errorMessage: error instanceof Error ? error.message : "unknown error",
-      })
-      probe = { ok: false, stage: "transport" }
-    }
-    if (!probe.ok) {
-      const unavailable = {
-        ...connecting,
-        endpoint: FIGMA_ENDPOINT,
-        authType: "none" as const,
-        status: "error" as const,
-        errorMessage: probe.errorMessage ?? "Figma Desktop MCP 未完成连接。请打开 Figma 文件，并在 Dev Mode 中重启 MCP Server 后重试。",
-        updatedAt: now(),
+      let result: ProbeResult
+      try {
+        result = await deps.drivers.resolve(definition).probe(definition)
+      } catch {
+        result = { ok: false as const, errorCode: "transport_error" as const }
       }
-      await deps.items.upsert(unavailable)
-      await emit()
-      deps.logger.warn("Figma Desktop MCP is not ready.", {
-        boundary: "connectors.figma.probe",
-        stage: probe.stage ?? "transport",
-        toolCount: probe.toolCount ?? 0,
+      if (!result.ok) {
+        await updateConnectorState(id, {
+          enabled: false,
+          lastProbe: { at: now(), status: "failed", errorCode: result.errorCode },
+        })
+        deps.logger.warn("Connector probe failed.", {
+          boundary: "connectors.probe",
+          connectorId: id,
+          errorCode: result.errorCode,
+        })
+        throw new Error(probeErrorMessage(definition, result.errorCode))
+      }
+
+      await updateConnectorState(id, {
+        enabled: true,
+        lastProbe: { at: now(), status: "success" },
       })
-      throw new Error(unavailable.errorMessage)
+    } finally {
+      probingIds.delete(id)
+      await emit()
     }
 
-    const connected = {
-      ...connecting,
-      description: FIGMA_DESCRIPTION,
-      endpoint: FIGMA_ENDPOINT,
-      authType: "none" as const,
-      status: "connected" as const,
-      errorMessage: undefined,
-      lastConnectedAt: now(),
-      updatedAt: now(),
-    }
-    await deps.items.upsert(connected)
-    await emit()
-    return toPublic(connected)
+    return currentPublicItem(definition)
   }
 
-  async function disconnect(id: string) {
-    const current = await requireItem(id)
-    await deps.items.upsert({ ...current, status: "available", accountLabel: undefined, errorMessage: undefined, updatedAt: now() })
+  async function disconnect(id: string): Promise<void> {
+    requireDefinition(id)
+    const store = await readState()
+    await updateConnectorState(id, {
+      ...(store.connectors[id] ?? { enabled: false }),
+      enabled: false,
+    })
     await emit()
   }
 
-  async function getMcpServers(): Promise<NonNullable<Options["mcpServers"]>> {
-    const item = await deps.items.get(FIGMA_ID)
-    if (!item || item.status !== "connected") return {}
-    return { figma: { type: "http", url: item.endpoint } }
+  async function getEnabledConnectorIds(): Promise<string[]> {
+    const store = await readState()
+    return definitions
+      .filter((definition) => store.connectors[definition.id]?.enabled === true)
+      .map((definition) => definition.id)
   }
 
-  function onChanged(listener: (payload: ConnectorEvents["changed"][0]) => void) { listeners.add(listener); return () => listeners.delete(listener) }
-  async function requireItem(id: string): Promise<ConnectorItemEntryV1> {
-    const item = await deps.items.get(id)
-    if (!item) throw new Error("连接器不存在。")
-    return item
+  function createAgentContribution(connectorIds: readonly string[]): AgentContribution {
+    const mcpServers: AgentContribution["mcpServers"][number][] = []
+    const skillPackageIds = new Set<string>()
+    const serverNames = new Set<string>()
+
+    for (const id of new Set(connectorIds)) {
+      const definition = requireDefinition(id)
+      const contribution = deps.drivers.resolve(definition).createAgentContribution(definition)
+      for (const server of contribution.mcpServers) {
+        if (serverNames.has(server.name)) throw new Error(`Duplicate connector MCP server name: ${server.name}`)
+        serverNames.add(server.name)
+        mcpServers.push(server)
+      }
+      for (const skillPackageId of contribution.skillPackageIds) skillPackageIds.add(skillPackageId)
+    }
+
+    return { mcpServers, skillPackageIds: [...skillPackageIds] }
   }
-  return { initialize, list, connect, disconnect, getMcpServers, onChanged }
-}
 
-export async function probeFigmaDesktopServer(): Promise<DesktopServerProbeResult> {
-  const timeoutMs = 4_000
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const initialized = await mcpRequest(controller.signal, {
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2025-06-18",
-        capabilities: {},
-        clientInfo: { name: "Synapse", version: "1.0.0" },
-      },
+  function onChanged(listener: (payload: ConnectorEvents["changed"][0]) => void): () => void {
+    listeners.add(listener)
+    return () => listeners.delete(listener)
+  }
+
+  async function emit(): Promise<void> {
+    const payload = await list()
+    for (const listener of listeners) listener(payload)
+  }
+
+  async function currentPublicItem(definition: BuiltinConnectorDefinition): Promise<ConnectorItem> {
+    const store = await readState()
+    return toPublic(definition, store.connectors[definition.id], probingIds.has(definition.id))
+  }
+
+  async function updateConnectorState(id: string, state: ConnectorLocalStateV1): Promise<void> {
+    const store = await readState()
+    await deps.state.setSingleton({
+      schemaVersion: 1,
+      connectors: { ...store.connectors, [id]: state },
     })
-    const sessionId = initialized.sessionId
-    if (!sessionId || !initialized.result || typeof initialized.result !== "object") {
-      return { ok: false, stage: "initialize", errorMessage: "Figma Desktop MCP 返回了无效的初始化响应。请重启 Figma 的 MCP Server。" }
+  }
+
+  async function readState(): Promise<ConnectorStateStoreV1> {
+    return await deps.state.getSingleton() ?? { schemaVersion: 1, connectors: {} }
+  }
+
+  function requireDefinition(id: string): BuiltinConnectorDefinition {
+    const definition = definitionsById.get(id)
+    if (!definition) throw new Error("连接器不存在。")
+    return definition
+  }
+
+  async function migrateLegacyState(): Promise<ConnectorStateStoreV1> {
+    const definition = definitionsById.get("figma")
+    const legacy = definition ? await deps.legacyItems.get(definition.id) : null
+    if (!definition || !legacy || definition.integration.kind !== "mcp-streamable-http") {
+      return { schemaVersion: 1, connectors: {} }
     }
 
-    await mcpRequest(controller.signal, {
-      method: "notifications/initialized",
-      params: {},
-      sessionId,
-      allowEmpty: true,
-    })
-    const tools = await mcpRequest(controller.signal, {
-      id: 2,
-      method: "tools/list",
-      params: {},
-      sessionId,
-    })
-    const toolList = tools.result && typeof tools.result === "object" && "tools" in tools.result
-      ? (tools.result as { tools?: unknown }).tools
-      : undefined
-    if (!Array.isArray(toolList)) {
-      return { ok: false, stage: "tools", errorMessage: "Figma Desktop MCP 未返回工具列表。请确认已打开 Figma 文件后重启 MCP Server。" }
-    }
-    return { ok: true, toolCount: toolList.length }
-  } catch (error) {
-    const timedOut = error instanceof Error && error.name === "AbortError"
+    const matchesCurrentLocalDefinition = legacy.endpoint === definition.integration.endpoint
+      && legacy.authType === "none"
+    const enabled = matchesCurrentLocalDefinition && legacy.status === "connected"
+    const lastProbe = enabled
+      ? { at: legacy.lastConnectedAt ?? legacy.updatedAt, status: "success" as const }
+      : legacy.status === "error"
+        ? { at: legacy.updatedAt, status: "failed" as const, errorCode: "legacy_probe_failed" as const }
+        : undefined
     return {
-      ok: false,
-      stage: timedOut ? "tools" : "transport",
-      errorMessage: timedOut
-        ? "Figma Desktop MCP 工具加载超时。请确认已打开 Figma 文件，并在 Dev Mode 中重启 MCP Server。"
-        : "未检测到可用的 Figma Desktop MCP。请在 Figma Dev Mode 中开启 MCP Server。",
+      schemaVersion: 1,
+      connectors: { [definition.id]: { enabled, ...(lastProbe ? { lastProbe } : {}) } },
     }
-  } finally {
-    clearTimeout(timeout)
+  }
+
+  async function removeMigratedLegacyFigmaItem(): Promise<void> {
+    const legacy = await deps.legacyItems.get("figma")
+    if (!legacy) return
+    try {
+      await deps.legacyItems.remove("figma")
+    } catch (error) {
+      deps.logger.warn("Failed to remove migrated connector state.", {
+        boundary: "connectors.state.legacy-cleanup",
+        connectorId: "figma",
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+    }
+  }
+
+  return {
+    initialize,
+    list,
+    connect,
+    disconnect,
+    getEnabledConnectorIds,
+    createAgentContribution,
+    onChanged,
   }
 }
 
-type McpRequest = {
-  readonly id?: number
-  readonly method: string
-  readonly params: Record<string, unknown>
-  readonly sessionId?: string
-  readonly allowEmpty?: boolean
-}
-
-async function mcpRequest(signal: AbortSignal, request: McpRequest): Promise<{ readonly result?: unknown; readonly sessionId?: string }> {
-  const response = await fetch(FIGMA_ENDPOINT, {
-    method: "POST",
-    signal,
-    headers: {
-      Accept: "application/json, text/event-stream",
-      "Content-Type": "application/json",
-      "MCP-Protocol-Version": "2025-06-18",
-      ...(request.sessionId ? { "Mcp-Session-Id": request.sessionId } : {}),
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", ...(request.id === undefined ? {} : { id: request.id }), method: request.method, params: request.params }),
-  })
-  if (!response.ok) {
-    if (request.allowEmpty && response.status === 202) return { sessionId: request.sessionId }
-    throw new Error(`MCP HTTP ${response.status}`)
+function toPublic(
+  definition: BuiltinConnectorDefinition,
+  state: ConnectorLocalStateV1 | undefined,
+  checking: boolean,
+): ConnectorItem {
+  const probeStatus = checking
+    ? "checking" as const
+    : state?.lastProbe?.status === "failed"
+      ? "error" as const
+      : state?.lastProbe?.status === "success"
+        ? "ready" as const
+        : "idle" as const
+  return {
+    id: definition.id,
+    name: definition.name,
+    description: definition.description,
+    documentationUrl: definition.documentationUrl,
+    enabled: state?.enabled ?? false,
+    probeStatus,
+    ...(state?.lastProbe?.status === "failed" && state.lastProbe.errorCode
+      ? { errorMessage: probeErrorMessage(definition, state.lastProbe.errorCode) }
+      : {}),
   }
-  if (request.allowEmpty && response.status === 202) return { sessionId: request.sessionId }
-  const body = await response.text()
-  const payload = parseMcpPayload(body)
-  if (!payload || typeof payload !== "object" || "error" in payload) throw new Error("Invalid MCP response")
-  return { result: (payload as { result?: unknown }).result, sessionId: response.headers.get("mcp-session-id") ?? request.sessionId }
 }
 
-function parseMcpPayload(body: string): unknown {
-  const trimmed = body.trim()
-  if (!trimmed) return undefined
-  try { return JSON.parse(trimmed) }
-  catch { /* Streamable HTTP may return one or more SSE data frames. */ }
-  for (const line of trimmed.split(/\r?\n/)) {
-    if (!line.startsWith("data:")) continue
-    try { return JSON.parse(line.slice(5).trim()) }
-    catch { continue }
+function probeErrorMessage(
+  definition: BuiltinConnectorDefinition,
+  errorCode: ConnectorProbeErrorCodeV1,
+): string {
+  switch (errorCode) {
+    case "invalid_endpoint": return `${definition.name} MCP 地址无效。`
+    case "permission_denied": return `没有权限检测 ${definition.name} MCP。`
+    case "probe_timeout": return `${definition.name} MCP 检测超时，请确认本机服务已启动。`
+    case "initialize_failed": return `${definition.name} MCP 初始化失败，请重启本机服务后重试。`
+    case "tools_list_failed": return `${definition.name} MCP 未返回工具列表，请重启本机服务后重试。`
+    case "required_tools_missing": return `${definition.name} MCP 缺少必要工具，请更新或重启本机服务。`
+    case "redirect_not_allowed": return `${definition.name} MCP 返回了不允许的重定向。`
+    case "legacy_probe_failed":
+    case "transport_error": return `未检测到可用的 ${definition.name} MCP，请确认本机服务已启动。`
   }
-  return undefined
 }
-
-function toPublic(item: ConnectorItemEntryV1): ConnectorItem { return { ...item } }

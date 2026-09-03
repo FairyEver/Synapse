@@ -36,7 +36,7 @@ vi.mock("@/components/ui/scroll-area", () => ({
   ScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
-import { ConnectorsModule, FIGMA_DOCUMENTATION_URL } from "../index"
+import { ConnectorsModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -44,14 +44,11 @@ const roots: Root[] = []
 
 const figmaItem = {
   id: "figma",
-  providerKey: "figma",
   name: "Figma",
   description: "连接 Figma Desktop MCP",
-  endpoint: "http://127.0.0.1:3845/mcp",
-  authType: "none" as const,
-  status: "available" as const,
-  createdAt: "2026-09-02T00:00:00.000Z",
-  updatedAt: "2026-09-02T00:00:00.000Z",
+  documentationUrl: "https://synapse.d2.pub/document/connectors/figma",
+  enabled: false,
+  probeStatus: "idle" as const,
 }
 
 beforeEach(() => {
@@ -88,11 +85,11 @@ describe("ConnectorsModule", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.openExternal).toHaveBeenCalledWith(FIGMA_DOCUMENTATION_URL)
+    expect(mocks.openExternal).toHaveBeenCalledWith(figmaItem.documentationUrl)
   })
 
   it("keeps the documentation link visible after activation", async () => {
-    mocks.connectors.item.list.mockResolvedValue({ items: [{ ...figmaItem, status: "connected" }] })
+    mocks.connectors.item.list.mockResolvedValue({ items: [{ ...figmaItem, enabled: true, probeStatus: "ready" }] })
     renderModule()
 
     await act(async () => {
@@ -101,6 +98,31 @@ describe("ConnectorsModule", () => {
 
     expect(document.body.textContent).toContain("更多信息")
     expect(document.body.textContent).not.toContain("仅对新建对话生效")
+  })
+
+  it("uses connector definition fields for activation", async () => {
+    const item = {
+      ...figmaItem,
+      id: "design-tool",
+      name: "Design Tool",
+      documentationUrl: "https://example.test/design-tool",
+    }
+    mocks.connectors.item.list.mockResolvedValue({ items: [item] })
+    mocks.connectors.item.connect.mockResolvedValue({ ...item, enabled: true, probeStatus: "ready" })
+    renderModule()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    const toggle = document.querySelector<HTMLButtonElement>('[role="switch"]')
+    await act(async () => {
+      toggle?.click()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Design Tool")
+    expect(mocks.connectors.item.connect).toHaveBeenCalledWith({ id: "design-tool" })
+    expect(mocks.toast.success).toHaveBeenCalledWith("Design Tool MCP 已激活")
   })
 })
 

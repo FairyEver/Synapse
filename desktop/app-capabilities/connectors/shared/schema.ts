@@ -1,19 +1,14 @@
 import { z } from "zod"
 
-export const connectorStatusSchema = z.enum(["available", "connecting", "connected", "error"])
+export const connectorProbeStatusSchema = z.enum(["idle", "checking", "ready", "error"])
 export const connectorItemSchema = z.object({
   id: z.string().min(1),
-  providerKey: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
-  endpoint: z.string().url(),
-  authType: z.enum(["none", "oauth2"]),
-  status: connectorStatusSchema,
-  accountLabel: z.string().optional(),
-  lastConnectedAt: z.string().optional(),
+  documentationUrl: z.string().url().optional(),
+  enabled: z.boolean(),
+  probeStatus: connectorProbeStatusSchema,
   errorMessage: z.string().optional(),
-  createdAt: z.string().min(1),
-  updatedAt: z.string().min(1),
 })
 export const connectorCredentialSchema = z.object({
   id: z.string().min(1),

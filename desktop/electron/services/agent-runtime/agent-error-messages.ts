@@ -20,7 +20,6 @@ export const AGENT_PROVIDER_REQUIRED_MESSAGE = "缺少模型供应商配置。"
 export const AGENT_PERSONA_UNAVAILABLE_MESSAGE = "智能体不可用，请新建对话选择其他智能体。"
 export const AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE = "智能体指定的模型不可用，请在智能体设置中重新绑定模型。"
 export const AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE = "项目工作目录未配置。"
-export const AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE = "Figma MCP 未进入本次会话。请确认 Figma Dev Mode MCP Server 已开启，并在连接器中重新连接后新建对话。"
 export const AGENT_COMMAND_EXECUTION_UNAVAILABLE_MESSAGE = "当前环境不支持执行该命令。"
 export const AGENT_COMMAND_EXEC_BODY_MISSING_MESSAGE = "命令缺少可执行内容。"
 export const AGENT_COMMAND_PROMPT_REQUIRED_MESSAGE = "命令缺少提示词内容。"
@@ -47,6 +46,10 @@ export const AGENT_RELAY_QUESTION_ERROR_MESSAGE = "中继会话请求了用户�
 const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
 const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
 export const AGENT_TOOL_USE_INTERRUPTED_MESSAGE = "Agent 在工具调用后中断，发送“继续”可接着执行。"
+
+export function agentMcpServersUnavailableMessage(serverNames: readonly string[]): string {
+  return `连接器 MCP 未进入本次会话（${serverNames.join("、")}）。请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话。`
+}
 
 export type AgentErrorKind =
   | "execution_failed"

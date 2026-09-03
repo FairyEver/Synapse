@@ -172,7 +172,11 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.logging")?.dependsOn).toEqual([])
     expect(byId.get("core.audit-sink")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
-    expect(byId.get("core.connectors")?.dependsOn).toEqual(["core.data-repository"])
+    expect(byId.get("core.connectors")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
     expect(byId.get("core.agent-personas")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.agent-reference-actions")?.dependsOn).toEqual([
       "core.permission-guard",

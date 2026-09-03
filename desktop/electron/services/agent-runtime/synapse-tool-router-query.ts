@@ -12,7 +12,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 
 import type { StructuredLogger } from "../../runtime/service-registry"
-import { AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE } from "./agent-error-messages"
+import { agentMcpServersUnavailableMessage } from "./agent-error-messages"
 import { createSynapseToolRouterServer, type SynapseToolRouterExecutor } from "./synapse-tool-router"
 
 export type SynapseToolRouterFallbackReason =
@@ -82,9 +82,7 @@ class ExpectedMcpServerUnavailableError extends ToolRouterFallbackError {
   ) {
     super(
       "expected-server-unavailable",
-      expectedServerNames.includes("figma")
-        ? AGENT_FIGMA_MCP_UNAVAILABLE_MESSAGE
-        : `预期的 MCP 服务未进入本次会话：${expectedServerNames.join("、")}。`,
+      agentMcpServersUnavailableMessage(expectedServerNames),
     )
     this.name = "ExpectedMcpServerUnavailableError"
   }

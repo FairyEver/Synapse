@@ -85,6 +85,8 @@ import { withLegacyTerminalMigration } from "../../app-capabilities/terminal/mai
 import { createTerminalRepository } from "../../app-capabilities/terminal/main/repository"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
 import { createQuickInputService, type QuickInputService } from "../../app-capabilities/quick-input/main/service"
+import { ConnectorDriverRegistry } from "../../app-capabilities/connectors/main/driver-registry"
+import { createMcpStreamableHttpDriver } from "../../app-capabilities/connectors/main/mcp-streamable-http-driver"
 import { createConnectorsService } from "../../app-capabilities/connectors/main/service"
 import type { ReturnTypeOfConnectorsService } from "../../app-capabilities/connectors/main/service-types"
 import {
@@ -102,8 +104,8 @@ import {
   SECRETS_ITEMS_NAMESPACE,
   SECRETS_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/secrets/shared/capability"
-import { CONNECTORS_ITEMS_NAMESPACE, CONNECTORS_CREDENTIALS_NAMESPACE } from "../../app-capabilities/connectors/shared/capability"
-import type { ConnectorItemEntryV1, ConnectorCredentialEntryV1 } from "../runtime/data-repo/schemas/connectors"
+import { CONNECTORS_ITEMS_NAMESPACE, CONNECTORS_STATE_NAMESPACE } from "../../app-capabilities/connectors/shared/capability"
+import type { ConnectorItemEntryV1, ConnectorStateStoreV1 } from "../runtime/data-repo/schemas/connectors"
 import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/cache"
 import { RemoteAgentPersonaClient } from "../../app-capabilities/agent-personas/main/remote-client"
 import { createAgentPersonaService, type AgentPersonaService } from "../../app-capabilities/agent-personas/main/service"
@@ -499,12 +501,18 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
 export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsService> = {
   id: "core.connectors",
   criticality: "degraded",
-  dependsOn: ["core.data-repository"],
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink"],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const drivers = new ConnectorDriverRegistry()
+    drivers.register("mcp-streamable-http", createMcpStreamableHttpDriver({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+    }))
     return createConnectorsService({
-      items: dataRepository.namespace<ConnectorItemEntryV1>(CONNECTORS_ITEMS_NAMESPACE),
-      credentials: dataRepository.namespace<ConnectorCredentialEntryV1>(CONNECTORS_CREDENTIALS_NAMESPACE),
+      state: dataRepository.namespace<ConnectorStateStoreV1>(CONNECTORS_STATE_NAMESPACE),
+      legacyItems: dataRepository.namespace<ConnectorItemEntryV1>(CONNECTORS_ITEMS_NAMESPACE),
+      drivers,
       logger: ctx.logger.child("connectors"),
     })
   },

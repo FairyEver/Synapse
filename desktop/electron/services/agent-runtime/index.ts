@@ -46,6 +46,7 @@ import {
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
 import type { SynapseActionRouter } from "../../capabilities/action-router"
 import type { AgentPersonaService } from "../../../app-capabilities/agent-personas/main/service"
+import type { ReturnTypeOfConnectorsService } from "../../../app-capabilities/connectors/main/service-types"
 import { CustomCommandRegistry } from "./command-registry"
 import { createAgentPersonaRuntimeResolver } from "./persona-runtime"
 import { validateWorkspaceDirectory } from "./session-manager"
@@ -253,9 +254,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         isManagedKnowledgeBase
         && typeof ctx.projectMeta.workspacePath === "string"
         && ctx.projectMeta.workspacePath.length > 0
-      const figmaSkillPackageRoot = app.isPackaged
-        ? path.join(process.resourcesPath, "figma-skill")
-        : path.join(app.getAppPath(), "app-capabilities", "figma-skill", "skill-package")
       const isManagedKnowledgeBaseRuntimeMessage = (message: AgentMessage) =>
         hasManagedKnowledgeBaseWorkspace
         && (message.platform === "local-renderer" || message.platform === "workflow")
@@ -265,12 +263,10 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           projectPath: ctx.projectMeta.workspacePath,
         })
         : undefined
-      const getConnectedFigmaMcpServers = async (): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>> => {
-        const connectors = optionalService<{
-          getMcpServers(): Promise<NonNullable<ClaudeSDKSessionOptions["mcpServers"]>>
-        }>(ctx.globalRegistry, "core.connectors")
-        return connectors ? connectors.getMcpServers() : {}
-      }
+      const connectorsService = () => optionalService<ReturnTypeOfConnectorsService>(
+        ctx.globalRegistry,
+        "core.connectors",
+      )
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -346,20 +342,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         publishedProjectCommands: async () => isManagedKnowledgeBase
           ? MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_PUBLISHED_COMMANDS
           : [],
-        sdkPlugins: async (message, conversation, mcpServers) => {
-          const figmaExpected = conversation.agentConfig?.expectedMcpServerNames?.includes("figma")
-            ?? conversation.agentConfig?.figmaDesktopMcpEnabled === true
-          const figmaEnabled = figmaExpected
-            && Object.hasOwn(mcpServers, "figma")
-          return [
-            ...(isManagedKnowledgeBaseRuntimeMessage(message)
-              ? [{ type: "local" as const, path: ctx.projectMeta.workspacePath as string }]
-              : []),
-            ...(figmaEnabled
-              ? [{ type: "local" as const, path: figmaSkillPackageRoot, skipMcpDiscovery: true }]
-              : []),
-          ]
-        },
+        sdkPlugins: async (message) => isManagedKnowledgeBaseRuntimeMessage(message)
+          ? [{ type: "local" as const, path: ctx.projectMeta.workspacePath as string }]
+          : [],
         allowPluginHooks: async (message) => isManagedKnowledgeBaseRuntimeMessage(message),
         allowAgentNativeSlash: (name, message) =>
           isManagedKnowledgeBaseRuntimeMessage(message)
@@ -375,15 +360,23 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         sdkPersonaConfig: personaRuntimeResolver
           ? (_message, conversation) => personaRuntimeResolver.resolve(conversation)
           : undefined,
-        loadFigmaDesktopMcpEnabled: async () => {
-          const servers = await getConnectedFigmaMcpServers()
-          return Object.keys(servers).length > 0
-        },
-        resolveMcpServers: async (_message, conversation) => {
-          const figmaExpected = conversation.agentConfig?.expectedMcpServerNames?.includes("figma")
-            ?? conversation.agentConfig?.figmaDesktopMcpEnabled === true
-          if (!figmaExpected) return {}
-          return getConnectedFigmaMcpServers()
+        loadEnabledConnectorIds: async () => connectorsService()?.getEnabledConnectorIds() ?? [],
+        resolveConnectorContribution: async (_message, conversation) => {
+          const connectorIds = connectorIdsForConversation(conversation)
+          if (connectorIds.length === 0) return { mcpServers: {}, plugins: [] }
+          const connectors = connectorsService()
+          if (!connectors) throw new Error("连接器服务不可用。")
+          const contribution = connectors.createAgentContribution(connectorIds)
+          return {
+            mcpServers: Object.fromEntries(
+              contribution.mcpServers.map((server) => [server.name, server.config]),
+            ) as NonNullable<ClaudeSDKSessionOptions["mcpServers"]>,
+            plugins: contribution.skillPackageIds.map((skillPackageId) => ({
+              type: "local" as const,
+              path: resolveBuiltinConnectorSkillPackageRoot(skillPackageId),
+              skipMcpDiscovery: true,
+            })),
+          }
         },
         onElicitation: async (request) => {
           if (request.mode === "url" && request.url) {
@@ -418,6 +411,23 @@ function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T 
     }
     return undefined
   }
+}
+
+function connectorIdsForConversation(conversation: ConversationEntryV1): readonly string[] {
+  const configured = conversation.agentConfig?.connectorIds
+  if (configured) return [...new Set(configured)]
+  const expectedServerNames = conversation.agentConfig?.expectedMcpServerNames
+  if (expectedServerNames) return [...new Set(expectedServerNames)]
+  return conversation.agentConfig?.figmaDesktopMcpEnabled === true ? ["figma"] : []
+}
+
+export function resolveBuiltinConnectorSkillPackageRoot(skillPackageId: string): string {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(skillPackageId)) {
+    throw new Error(`Invalid builtin connector skill package id: ${skillPackageId}`)
+  }
+  return app.isPackaged
+    ? path.join(process.resourcesPath, skillPackageId)
+    : path.join(app.getAppPath(), "app-capabilities", skillPackageId, "skill-package")
 }
 
 const AGENT_IMAGE_PREVIEW_MAX_SIDE = 1568

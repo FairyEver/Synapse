@@ -229,6 +229,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
     modelTier?: string
     env?: Record<string, string>
     experimentalSynapseToolRouterEnabled?: boolean
+    connectorIds?: string[]
     figmaDesktopMcpEnabled?: boolean
     expectedMcpServerNames?: string[]
     activeMainThreadPersonaId?: string | null
@@ -1380,6 +1381,7 @@ function isConversationAgentConfig(value: unknown): value is NonNullable<Convers
     && (value.env === undefined || isStringRecord(value.env))
     && (value.experimentalSynapseToolRouterEnabled === undefined
       || typeof value.experimentalSynapseToolRouterEnabled === "boolean")
+    && (value.connectorIds === undefined || isStringArray(value.connectorIds))
     && (value.figmaDesktopMcpEnabled === undefined
       || typeof value.figmaDesktopMcpEnabled === "boolean")
     && (value.expectedMcpServerNames === undefined

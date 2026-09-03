@@ -12,8 +12,6 @@ import { SystemAppWindowShell } from "../../../src/modules/apps/components/syste
 import type { ConnectorItem } from "../shared/schema"
 import icon from "./assets/figma.png"
 
-export const FIGMA_DOCUMENTATION_URL = "https://synapse.d2.pub/document/connectors/figma"
-
 export function ConnectorsModule() {
   const bridge = useMemo(() => requireBridgeDomain("connectors"), [])
   const [items, setItems] = useState<ConnectorItem[]>([])
@@ -39,16 +37,16 @@ export function ConnectorsModule() {
   const handleAction = useCallback(async (item: ConnectorItem) => {
     setBusyId(item.id)
     try {
-      if (item.status === "connected") {
+      if (item.enabled) {
         await bridge.item.disconnect({ id: item.id })
         setItems((current) => current.map((entry) => entry.id === item.id
-          ? { ...entry, status: "available", errorMessage: undefined, updatedAt: new Date().toISOString() }
+          ? { ...entry, enabled: false }
           : entry))
-        toast.success("Figma MCP 已停用")
+        toast.success(`${item.name} MCP 已停用`)
       } else {
         const connected = await bridge.item.connect({ id: item.id })
         setItems((current) => current.map((entry) => entry.id === connected.id ? connected : entry))
-        toast.success("Figma MCP 已激活")
+        toast.success(`${item.name} MCP 已激活`)
       }
     } catch (error) {
       await reload()
@@ -74,45 +72,47 @@ export function ConnectorsModule() {
 }
 
 function ConnectorCard({ item, busy, onAction }: { readonly item: ConnectorItem; readonly busy: boolean; readonly onAction: (item: ConnectorItem) => void }) {
-  const connected = item.status === "connected"
-  const connecting = item.status === "connecting"
-  const stateLabel = busy || connecting ? "检测中" : connected ? "已激活" : item.status === "error" ? "连接失败" : "未激活"
+  const connecting = busy || item.probeStatus === "checking"
+  const stateLabel = connecting ? "检测中" : item.enabled ? "已激活" : item.probeStatus === "error" ? "连接失败" : "未激活"
 
   const openDocumentation = useCallback(async () => {
+    if (!item.documentationUrl) return
     try {
-      await requireBridgeDomain("shell").openExternal(FIGMA_DOCUMENTATION_URL)
+      await requireBridgeDomain("shell").openExternal(item.documentationUrl)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "无法打开文档")
     }
-  }, [])
+  }, [item.documentationUrl])
 
   return (
     <Card size="sm">
       <CardContent className="flex items-center gap-4 py-1">
         <img src={icon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
         <div className="min-w-0 flex-1">
-          <CardTitle className="text-base">Figma</CardTitle>
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="mt-1 h-auto p-0 text-xs font-normal text-muted-foreground"
-            data-track="connectors.connector.documentation"
-            onClick={() => void openDocumentation()}
-          >
-            更多信息
-            <ExternalLink data-icon="inline-end" />
-          </Button>
-          {item.status === "error" && item.errorMessage ? <p className="mt-1 text-xs text-destructive">{item.errorMessage}</p> : null}
+          <CardTitle className="text-base">{item.name}</CardTitle>
+          {item.documentationUrl ? (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="mt-1 h-auto p-0 text-xs font-normal text-muted-foreground"
+              data-track="connectors.connector.documentation"
+              onClick={() => void openDocumentation()}
+            >
+              更多信息
+              <ExternalLink data-icon="inline-end" />
+            </Button>
+          ) : null}
+          {item.probeStatus === "error" && item.errorMessage ? <p className="mt-1 text-xs text-destructive">{item.errorMessage}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {busy ? <Spinner className="size-3.5" aria-hidden="true" /> : null}
           <span className="text-sm text-muted-foreground">{stateLabel}</span>
           <Switch
-            checked={connected}
-            disabled={busy || connecting}
+            checked={item.enabled}
+            disabled={connecting}
             aria-busy={busy}
-            aria-label={`${item.name}${connected ? "已激活" : item.status === "error" ? "连接失败" : "未激活"}`}
+            aria-label={`${item.name}${item.enabled ? "已激活" : item.probeStatus === "error" ? "连接失败" : "未激活"}`}
             data-track="connectors.connector.toggle"
             onCheckedChange={() => onAction(item)}
           />

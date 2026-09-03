@@ -367,7 +367,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
         settingSources: ["user", "project", "local"],
         executeTool: vi.fn(),
       },
-    })).rejects.toThrow("Figma MCP 未进入本次会话")
+    })).rejects.toThrow("请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话")
     expect(fallback.close).toHaveBeenCalledOnce()
   })
 
@@ -429,7 +429,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       prompt: promptThatMustNotBeRead(),
       options: { mcpServers: { figma: figmaConfig } },
       expectedMcpServerNames: ["figma"],
-    })).rejects.toThrow("Figma MCP 未进入本次会话")
+    })).rejects.toThrow("请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话")
     expect(first.close).toHaveBeenCalledOnce()
     expect(second.close).toHaveBeenCalledOnce()
   })

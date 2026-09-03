@@ -2073,7 +2073,7 @@ describe("ConversationRouter", () => {
         includedInReadableContent: false,
       }],
     })
-    expect(JSON.stringify(userEntry)).not.toMatch(/AQID|base64|\"data\":/)
+    expect(JSON.stringify(userEntry)).not.toMatch(/AQID|base64|"data":/)
   })
 
   it("does not persist runtime path bytes for legacy direct attachments", async () => {
@@ -2121,7 +2121,7 @@ describe("ConversationRouter", () => {
       expect(userEntry?.metadata).toEqual(expect.objectContaining({
         userMessagePresentation: { version: 1, content: "请分析" },
       }))
-      expect(JSON.stringify(userEntry)).not.toMatch(/AQID|base64|\"data\":/)
+      expect(JSON.stringify(userEntry)).not.toMatch(/AQID|base64|"data":/)
       expect(JSON.stringify(userEntry)).not.toContain("/Users/liyang/Documents/private-sources")
       expect(await artifactRows.list()).toEqual([])
     } finally {
@@ -2540,6 +2540,26 @@ describe("ConversationRouter", () => {
 
     expect((await conversations.get(first.conversationId))?.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(true)
     expect((await conversations.get(second.conversationId))?.agentConfig?.experimentalSynapseToolRouterEnabled).toBe(false)
+  })
+
+  it("snapshots enabled connector ids for new conversations only", async () => {
+    let connectorIds: readonly string[] = ["figma", "figma"]
+    const { conversations, router } = createRouter({
+      loadEnabledConnectorIds: () => connectorIds,
+      sessions: [
+        new ScriptedSession([{ type: "result", content: "first", done: true }]),
+        new ScriptedSession([{ type: "result", content: "second", done: true }]),
+        new ScriptedSession([{ type: "result", content: "third", done: true }]),
+      ],
+    })
+
+    const first = await router.send(baseMessage("first"))
+    connectorIds = []
+    await router.send(baseMessage("same conversation"))
+    const second = await router.sendNewSession(baseMessage("new conversation"), "New")
+
+    expect((await conversations.get(first.conversationId))?.agentConfig?.connectorIds).toEqual(["figma"])
+    expect((await conversations.get(second.conversationId))?.agentConfig?.connectorIds).toEqual([])
   })
 
   it("emits background phase events with conversation scope", async () => {
@@ -3079,6 +3099,7 @@ function createRouter(input: {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly loadExperimentalSynapseToolRouterEnabled?: ConversationRouterDeps["loadExperimentalSynapseToolRouterEnabled"]
+  readonly loadEnabledConnectorIds?: ConversationRouterDeps["loadEnabledConnectorIds"]
 } = {}) {
   const conversations = input.conversations ?? new MemoryNamespace<ConversationEntryV1>("conversations")
   const providerService = new FakeProviderService(input.activeProviderId ?? "anthropic", input.env ?? {})
@@ -3137,6 +3158,7 @@ function createRouter(input: {
       afterTurn: input.afterTurn,
       getUsagePriceRules: () => input.priceRules ?? [],
       loadExperimentalSynapseToolRouterEnabled: input.loadExperimentalSynapseToolRouterEnabled,
+      loadEnabledConnectorIds: input.loadEnabledConnectorIds,
     },
     repository,
     sessionManager,

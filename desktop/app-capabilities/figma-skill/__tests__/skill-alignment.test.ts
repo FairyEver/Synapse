@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
+import { figmaConnector } from "../../connectors/main/definitions"
 
 const skillRoot = path.join(__dirname, "..", "skill-package", "skills")
 const desktopTools = [
@@ -44,6 +45,7 @@ describe("Figma Desktop Skill alignment", () => {
     for (const name of desktopTools) {
       expect(content, name).toContain(`\`${name}\``)
     }
+    expect(figmaConnector.integration.requiredTools.every((name) => desktopTools.includes(name))).toBe(true)
   })
 
   it("documents the prompts exposed by the local Desktop MCP", () => {
@@ -51,5 +53,9 @@ describe("Figma Desktop Skill alignment", () => {
     for (const name of desktopPrompts) {
       expect(content, name).toContain(`\`${name}\``)
     }
+  })
+
+  it("is selected by the builtin Figma connector definition", () => {
+    expect(figmaConnector.skillPackageId).toBe("figma-skill")
   })
 })

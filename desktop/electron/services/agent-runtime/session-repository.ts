@@ -36,6 +36,7 @@ export interface CreateAgentSessionInput {
   readonly mode?: string
   readonly modelTier?: string
   readonly experimentalSynapseToolRouterEnabled?: boolean
+  readonly connectorIds?: readonly string[]
   readonly figmaDesktopMcpEnabled?: boolean
   readonly expectedMcpServerNames?: readonly string[]
   readonly mainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
@@ -81,6 +82,7 @@ export class AgentSessionRepository {
     message: AgentMessage,
     creationConfig?: {
       readonly experimentalSynapseToolRouterEnabled?: boolean
+      readonly connectorIds?: readonly string[]
       readonly figmaDesktopMcpEnabled?: boolean
       readonly expectedMcpServerNames?: readonly string[]
     },
@@ -118,6 +120,7 @@ export class AgentSessionRepository {
       agentType: message.agentType,
       providerId: message.providerId,
       experimentalSynapseToolRouterEnabled: creationConfig?.experimentalSynapseToolRouterEnabled,
+      connectorIds: creationConfig?.connectorIds,
       figmaDesktopMcpEnabled: creationConfig?.figmaDesktopMcpEnabled,
       expectedMcpServerNames: creationConfig?.expectedMcpServerNames
         ?? expectedMcpServerNamesFromLegacyFigmaFlag(creationConfig?.figmaDesktopMcpEnabled),
@@ -164,6 +167,7 @@ export class AgentSessionRepository {
         || input.modelTier
         || input.mainThreadPersonaSnapshot
         || input.experimentalSynapseToolRouterEnabled !== undefined
+        || input.connectorIds !== undefined
         || input.figmaDesktopMcpEnabled !== undefined
         || input.expectedMcpServerNames !== undefined
         ? {
@@ -177,6 +181,9 @@ export class AgentSessionRepository {
               : {}),
             ...(input.experimentalSynapseToolRouterEnabled !== undefined
               ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
+              : {}),
+            ...(input.connectorIds !== undefined
+              ? { connectorIds: [...new Set(input.connectorIds)] }
               : {}),
             ...(input.figmaDesktopMcpEnabled !== undefined
               ? { figmaDesktopMcpEnabled: input.figmaDesktopMcpEnabled }
@@ -267,6 +274,7 @@ export class AgentSessionRepository {
       agentConfig: input.mode
         || input.modelTier
         || input.experimentalSynapseToolRouterEnabled !== undefined
+        || input.connectorIds !== undefined
         || input.figmaDesktopMcpEnabled !== undefined
         || input.expectedMcpServerNames !== undefined
         ? {
@@ -274,6 +282,9 @@ export class AgentSessionRepository {
             ...(input.modelTier ? { modelTier: input.modelTier } : {}),
             ...(input.experimentalSynapseToolRouterEnabled !== undefined
               ? { experimentalSynapseToolRouterEnabled: input.experimentalSynapseToolRouterEnabled }
+              : {}),
+            ...(input.connectorIds !== undefined
+              ? { connectorIds: [...new Set(input.connectorIds)] }
               : {}),
             ...(input.figmaDesktopMcpEnabled !== undefined
               ? { figmaDesktopMcpEnabled: input.figmaDesktopMcpEnabled }
