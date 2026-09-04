@@ -58,6 +58,22 @@ import type {
   TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
 } from "../shared/schema"
+import {
+  TERMINAL_WORKSPACE_PANE_LIMIT,
+  collectTerminalPaneLeaves,
+  findTerminalPane,
+  removeTerminalPane,
+  setTerminalSplitRatio,
+  splitTerminalPane,
+  type TerminalClosePaneInput,
+  type TerminalCloseWorkspaceInput,
+  type TerminalCloseWorkspaceResult,
+  type TerminalRenameWorkspaceInput,
+  type TerminalSetSplitRatioInput,
+  type TerminalSplitPaneInput,
+  type TerminalSplitPaneResult,
+  type TerminalWorkspace,
+} from "../shared/workspace"
 import { createTerminalCoreEmulator, type TerminalCoreEmulator } from "./emulator"
 import {
   resolveTerminalEnvironment,
@@ -65,7 +81,7 @@ import {
   resolveTerminalShellArgs,
 } from "./environment"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
-import type { TerminalStore, TerminalStoreState } from "./store"
+import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState } from "./store"
 
 export type PtyDisposable = { dispose(): void }
 export type PtyLike = {
@@ -144,6 +160,8 @@ const DEFAULT_ROWS = 24
 const LEASE_MIN_MS = 1_000
 const LEASE_MAX_MS = 60_000
 const COMMAND_ENTER_FLUSH_DELAY_MS = 10
+const RUNTIME_PERSIST_DELAY_MS = 250
+const RUNTIME_CHECKPOINT_INTERVAL_MS = 5_000
 const IDEMPOTENCY_RETENTION_MS = 24 * 60 * 60 * 1_000
 const DELETE_TOMBSTONE_RETENTION_MS = 24 * 60 * 60 * 1_000
 const MAX_SEMANTIC_ACTIONS = 128
@@ -177,6 +195,7 @@ export function createTerminalService(deps: {
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
+  const workspaces = new Map<string, TerminalWorkspace>()
   const sessions = new Map<string, TerminalSession>()
   const runtimes = new Map<string, TerminalRuntime>()
   const buffers = new Map<string, TerminalOutputBuffer>()
@@ -188,6 +207,8 @@ export function createTerminalService(deps: {
   const activeStopOperations = new Map<string, { stop?: string; force?: string }>()
   const idempotency = new Map<string, IdempotencyEntry>()
   const idempotencyInFlight = new Map<string, { digest: string; promise: Promise<unknown> }>()
+  const dirtyRuntimeSessionIds = new Set<string>()
+  const persistedOutputSeqBySession = new Map<string, number>()
   const deletePlans = new Map<string, {
     readonly deletePlanId: string
     readonly groupId: string
@@ -220,7 +241,13 @@ export function createTerminalService(deps: {
   }
   let persistInFlight: Promise<void> | undefined
   let persistPending = false
+  let fullPersistPending = false
+  let runtimePersistTimer: ReturnType<typeof setTimeout> | undefined
+  let lastRuntimeCheckpointAt = 0
   let persistIdleWaiters: Array<() => void> = []
+  let persistRevision = 0
+  let settledPersistRevision = 0
+  let persistRevisionWaiters: Array<{ readonly revision: number; readonly resolve: () => void }> = []
   let lastPersistError: unknown
 
   function now(): string { return new Date().toISOString() }
@@ -244,6 +271,7 @@ export function createTerminalService(deps: {
     return {
       globalLaunch,
       groups: [...groups.values()],
+      workspaces: [...workspaces.values()],
       sessions: [...sessions.values()],
       output: [...buffers.values()].flatMap((buffer) => buffer.snapshot()),
       terminalDomainRevision,
@@ -272,7 +300,32 @@ export function createTerminalService(deps: {
     }
   }
 
-  function schedulePersist(): void {
+  function schedulePersist(): number {
+    persistRevision += 1
+    if (runtimePersistTimer) {
+      clearTimeout(runtimePersistTimer)
+      runtimePersistTimer = undefined
+    }
+    fullPersistPending = true
+    queuePersist()
+    return persistRevision
+  }
+
+  function scheduleRuntimePersist(sessionId: string): void {
+    dirtyRuntimeSessionIds.add(sessionId)
+    if (!deps.store.saveRuntimeState) {
+      schedulePersist()
+      return
+    }
+    persistRevision += 1
+    if (runtimePersistTimer) return
+    runtimePersistTimer = setTimeout(() => {
+      runtimePersistTimer = undefined
+      queuePersist()
+    }, RUNTIME_PERSIST_DELAY_MS)
+  }
+
+  function queuePersist(): void {
     persistPending = true
     if (!persistInFlight) persistInFlight = runPersistLoop()
   }
@@ -281,26 +334,35 @@ export function createTerminalService(deps: {
     try {
       do {
         persistPending = false
+        const snapshotRevision = persistRevision
+        const saveFullState = fullPersistPending || !deps.store.saveRuntimeState
+        fullPersistPending = false
         try {
-          const snapshot = snapshotState()
-          await deps.store.saveState(snapshot)
-          lastPersistError = undefined
-          const ready = pendingDomainEvents.filter((event) => event.domainRevision <= snapshot.terminalDomainRevision)
-          pendingDomainEvents.splice(0, ready.length)
-          for (const event of ready) events.emit("domainChanged", event)
-          for (const [sessionId, creationRevision] of unpublishedSessions) {
-            if (creationRevision > snapshot.terminalDomainRevision) continue
-            unpublishedSessions.delete(sessionId)
-            const session = sessions.get(sessionId)
-            if (session) events.emit("sessionChanged", session)
+          if (saveFullState) {
+            const snapshot = snapshotState()
+            await deps.store.saveState(snapshot)
+            commitFullPersist(snapshot)
+            publishPersistedDomainEvents(snapshot.terminalDomainRevision)
+          } else {
+            const snapshot = await snapshotRuntimeState()
+            if (snapshot.update.sessions.length > 0) {
+              await deps.store.saveRuntimeState!(snapshot.update)
+              commitRuntimePersist(snapshot)
+            }
           }
+          lastPersistError = undefined
         } catch (error) {
           lastPersistError = error
           deps.logger?.warn("Terminal service failed to persist state.", { error })
         }
+        settledPersistRevision = snapshotRevision
+        const readyRevisionWaiters = persistRevisionWaiters.filter((waiter) => waiter.revision <= snapshotRevision)
+        persistRevisionWaiters = persistRevisionWaiters.filter((waiter) => waiter.revision > snapshotRevision)
+        for (const waiter of readyRevisionWaiters) waiter.resolve()
       } while (persistPending)
     } finally {
       persistInFlight = undefined
+      if (runtimePersistTimer || persistPending) return
       const waiters = persistIdleWaiters
       persistIdleWaiters = []
       for (const resolve of waiters) resolve()
@@ -308,13 +370,111 @@ export function createTerminalService(deps: {
   }
 
   function waitForPersistIdle(): Promise<void> {
-    if (!persistInFlight) return Promise.resolve()
+    if (!persistInFlight && !runtimePersistTimer && !persistPending) return Promise.resolve()
     return new Promise((resolve) => persistIdleWaiters.push(resolve))
   }
 
+  function waitForPersistRevision(revision: number): Promise<void> {
+    if (settledPersistRevision >= revision) return Promise.resolve()
+    return new Promise((resolve) => persistRevisionWaiters.push({ revision, resolve }))
+  }
+
   async function flushPersist(): Promise<void> {
-    schedulePersist()
-    await waitForPersistIdle()
+    const revision = schedulePersist()
+    await waitForPersistRevision(revision)
+  }
+
+  async function snapshotRuntimeState(): Promise<{
+    readonly update: TerminalRuntimeStoreUpdate
+    readonly stateRevisionBySession: ReadonlyMap<string, number>
+    readonly attemptedCheckpoint: boolean
+  }> {
+    const captureCheckpoint = Date.now() - lastRuntimeCheckpointAt >= RUNTIME_CHECKPOINT_INTERVAL_MS
+    const updates: TerminalRuntimeStoreUpdate["sessions"][number][] = []
+    const stateRevisionBySession = new Map<string, number>()
+    let attemptedCheckpoint = false
+    for (const sessionId of dirtyRuntimeSessionIds) {
+      const runtime = runtimes.get(sessionId)
+      let checkpoint: TerminalStoreState["checkpoints"][number] | undefined
+      if (captureCheckpoint && runtime) {
+        attemptedCheckpoint = true
+        const captured = await runtime.emulator.captureSnapshot(TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES)
+        if (captured.serialized !== null) {
+          checkpoint = {
+            sessionId,
+            throughOutputSeq: captured.throughOutputSeq,
+            sizeRevision: captured.sizeRevision,
+            emulatorId: "xterm-headless",
+            emulatorVersion: "6.0.0",
+            serialized: captured.serialized,
+          }
+        }
+      }
+      const session = sessions.get(sessionId)
+      const buffer = buffers.get(sessionId)
+      if (!session || !buffer) {
+        dirtyRuntimeSessionIds.delete(sessionId)
+        continue
+      }
+      if (checkpoint && (checkpoint.sizeRevision !== session.sizeRevision
+        || checkpoint.throughOutputSeq > session.lastOutputSeq)) checkpoint = undefined
+      updates.push({
+        session,
+        output: buffer.snapshotAfter(persistedOutputSeqBySession.get(sessionId) ?? 0),
+        firstRetainedOutputSeq: buffer.firstOutputSeq,
+        ...(checkpoint ? { checkpoint } : {}),
+      })
+      stateRevisionBySession.set(sessionId, session.stateRevision)
+    }
+    return { update: { sessions: updates }, stateRevisionBySession, attemptedCheckpoint }
+  }
+
+  function commitRuntimePersist(snapshot: {
+    readonly update: TerminalRuntimeStoreUpdate
+    readonly stateRevisionBySession: ReadonlyMap<string, number>
+    readonly attemptedCheckpoint: boolean
+  }): void {
+    for (const update of snapshot.update.sessions) {
+      const persistedSeq = update.output.at(-1)?.seq
+      if (persistedSeq !== undefined) persistedOutputSeqBySession.set(update.session.id, persistedSeq)
+      if (update.checkpoint) checkpoints.set(update.session.id, update.checkpoint)
+      const current = sessions.get(update.session.id)
+      if (current?.stateRevision === snapshot.stateRevisionBySession.get(update.session.id)) {
+        dirtyRuntimeSessionIds.delete(update.session.id)
+      }
+    }
+    if (snapshot.attemptedCheckpoint) lastRuntimeCheckpointAt = Date.now()
+  }
+
+  function commitFullPersist(snapshot: TerminalStoreState): void {
+    const retainedSessionIds = new Set(snapshot.sessions.map((session) => session.id))
+    for (const session of snapshot.sessions) {
+      persistedOutputSeqBySession.set(session.id, session.lastOutputSeq)
+      if (sessions.get(session.id)?.stateRevision === session.stateRevision) {
+        dirtyRuntimeSessionIds.delete(session.id)
+      }
+    }
+    for (const sessionId of persistedOutputSeqBySession.keys()) {
+      if (!retainedSessionIds.has(sessionId)) persistedOutputSeqBySession.delete(sessionId)
+    }
+    for (const sessionId of dirtyRuntimeSessionIds) {
+      if (!retainedSessionIds.has(sessionId)) dirtyRuntimeSessionIds.delete(sessionId)
+    }
+    checkpoints.clear()
+    for (const checkpoint of snapshot.checkpoints) checkpoints.set(checkpoint.sessionId, checkpoint)
+    lastRuntimeCheckpointAt = Date.now()
+  }
+
+  function publishPersistedDomainEvents(throughDomainRevision: number): void {
+    const ready = pendingDomainEvents.filter((event) => event.domainRevision <= throughDomainRevision)
+    pendingDomainEvents.splice(0, ready.length)
+    for (const event of ready) events.emit("domainChanged", event)
+    for (const [sessionId, creationRevision] of unpublishedSessions) {
+      if (creationRevision > throughDomainRevision) continue
+      unpublishedSessions.delete(sessionId)
+      const session = sessions.get(sessionId)
+      if (session) events.emit("sessionChanged", session)
+    }
   }
 
   function bumpDomain(eventType: string, objectId: string, objectRevision: number, operationId?: string): void {
@@ -374,6 +534,46 @@ export function createTerminalService(deps: {
     const session = sessions.get(sessionId)
     if (!session) throw terminalContractError("not_found", "not_found")
     return session
+  }
+
+  function getWorkspaceOrThrow(workspaceId: string): TerminalWorkspace {
+    const workspace = workspaces.get(workspaceId)
+    if (!workspace) throw terminalContractError("not_found", "not_found")
+    return workspace
+  }
+
+  function getWorkspaceBySessionId(sessionId: string): TerminalWorkspace | undefined {
+    return [...workspaces.values()].find((workspace) =>
+      collectTerminalPaneLeaves(workspace.layout).some((pane) => pane.sessionId === sessionId))
+  }
+
+  function createWorkspaceForSession(session: TerminalSession): TerminalWorkspace {
+    const timestamp = now()
+    const workspace: TerminalWorkspace = {
+      id: randomUUID(),
+      groupId: session.groupId,
+      title: session.title,
+      layout: { type: "leaf", paneId: randomUUID(), sessionId: session.id },
+      layoutRevision: 1,
+      closingPaneIds: [],
+      closing: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    workspaces.set(workspace.id, workspace)
+    bumpDomain("workspace.created", workspace.id, workspace.layoutRevision)
+    return workspace
+  }
+
+  function updateGroupMembership(groupId: string): void {
+    const group = groups.get(groupId)
+    if (!group) return
+    groups.set(groupId, {
+      ...group,
+      groupRevision: group.groupRevision + 1,
+      membershipRevision: group.membershipRevision + 1,
+      updatedAt: now(),
+    })
   }
 
   function getRuntimeForInput(sessionId: string): TerminalRuntime {
@@ -474,7 +674,7 @@ export function createTerminalService(deps: {
           changeTypes: ["output", "attention"],
         })
       }
-      schedulePersist()
+      scheduleRuntimePersist(session.id)
     })
     const exitDisposable = child.onExit((event) => {
       const current = sessions.get(session.id)
@@ -517,7 +717,7 @@ export function createTerminalService(deps: {
           changeTypes: ["lifecycle", "operation", "attention", "lease"],
         })
       }
-      void flushPersist()
+      void finalizeWorkspaceClosures(session.id)
     })
     runtimes.set(session.id, { pty: child, buffer, emulator, disposables: [dataDisposable, exitDisposable] })
   }
@@ -550,6 +750,7 @@ export function createTerminalService(deps: {
           attention: unknownAttention(session, "output_evicted"),
         }
         sessions.set(session.id, updated)
+        dirtyRuntimeSessionIds.add(session.id)
         events.emit("sessionChanged", updated)
         events.emit("stateChanged", {
           sessionId: session.id,
@@ -571,6 +772,7 @@ export function createTerminalService(deps: {
     },
     createdByClientId?: string,
     commandLaunch?: TerminalLaunchLayer,
+    createWorkspace = true,
   ): Promise<TerminalSession> {
     assertCreateQuota()
     const group = input.groupId ? getGroupOrThrow(input.groupId) : ensureDefaultGroup()
@@ -646,13 +848,8 @@ export function createTerminalService(deps: {
     const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
     sessions.set(session.id, session)
     buffers.set(session.id, buffer)
-    const nextGroup: TerminalGroup = {
-      ...group,
-      groupRevision: group.groupRevision + 1,
-      membershipRevision: group.membershipRevision + 1,
-      updatedAt: timestamp,
-    }
-    groups.set(group.id, nextGroup)
+    if (createWorkspace) createWorkspaceForSession(session)
+    updateGroupMembership(group.id)
     bumpDomain("session.created", session.id, session.metadataRevision)
     unpublishedSessions.set(session.id, terminalDomainRevision)
     try {
@@ -691,6 +888,7 @@ export function createTerminalService(deps: {
     }
     terminalDomainRevision = state.terminalDomainRevision
     groups.clear()
+    workspaces.clear()
     sessions.clear()
     buffers.clear()
     checkpoints.clear()
@@ -718,6 +916,16 @@ export function createTerminalService(deps: {
         initialDiscardedBytes: restored.discardedOutputBytes,
         initialDiscardedChunks: restored.discardedOutputChunks,
       }))
+    }
+    const assignedSessionIds = new Set<string>()
+    for (const workspace of state.workspaces ?? []) {
+      const panes = collectTerminalPaneLeaves(workspace.layout)
+      if (panes.some((pane) => !sessions.has(pane.sessionId))) continue
+      workspaces.set(workspace.id, workspace)
+      for (const pane of panes) assignedSessionIds.add(pane.sessionId)
+    }
+    for (const session of sessions.values()) {
+      if (!assignedSessionIds.has(session.id)) createWorkspaceForSession(session)
     }
     for (const operation of state.operations) {
       const restoredSession = sessions.get(operation.resourceId)
@@ -763,6 +971,7 @@ export function createTerminalService(deps: {
       })
     }
     ensureDefaultGroup()
+    for (const workspace of [...workspaces.values()]) finalizeWorkspaceClosuresInMemory(workspace.id)
     await flushPersist()
   }
 
@@ -829,6 +1038,264 @@ export function createTerminalService(deps: {
 
   function listSessions(): TerminalSession[] {
     return [...sessions.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+  }
+
+  function listWorkspaces(): TerminalWorkspace[] {
+    return [...workspaces.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+  }
+
+  function getWorkspace(input: { workspaceId: string }): TerminalWorkspace {
+    return getWorkspaceOrThrow(input.workspaceId)
+  }
+
+  function getWorkspaceForSession(input: { sessionId: string }): TerminalWorkspace {
+    const workspace = getWorkspaceBySessionId(input.sessionId)
+    if (!workspace) throw terminalContractError("not_found", "not_found")
+    return workspace
+  }
+
+  async function renameWorkspace(input: TerminalRenameWorkspaceInput): Promise<TerminalWorkspace> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    const title = input.title.trim()
+    if (title === workspace.title) return workspace
+    const updated = {
+      ...workspace,
+      title,
+      layoutRevision: workspace.layoutRevision + 1,
+      updatedAt: now(),
+    }
+    workspaces.set(updated.id, updated)
+    bumpDomain("workspace.renamed", updated.id, updated.layoutRevision)
+    await flushPersist()
+    return updated
+  }
+
+  async function splitPane(input: TerminalSplitPaneInput): Promise<TerminalSplitPaneResult> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    if (workspace.closing || workspace.closingPaneIds.includes(input.paneId)) {
+      throw terminalContractError("lifecycle_conflict", "lifecycle")
+    }
+    const targetPane = findTerminalPane(workspace.layout, input.paneId)
+    if (!targetPane) throw terminalContractError("not_found", "not_found")
+    if (collectTerminalPaneLeaves(workspace.layout).length >= TERMINAL_WORKSPACE_PANE_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { details: { dimension: "workspace_panes" } })
+    }
+    const targetSession = getSessionOrThrow(targetPane.sessionId)
+    const session = await createSessionRecord({
+      groupId: workspace.groupId,
+      cwd: runtimes.get(targetSession.id)?.emulator.currentCwd ?? targetSession.cwd,
+      cols: input.cols,
+      rows: input.rows,
+    }, "ui", undefined, undefined, undefined, false)
+    const paneId = randomUUID()
+    const layout = splitTerminalPane(workspace.layout, input.paneId, {
+      splitId: randomUUID(),
+      direction: input.direction === "right" ? "horizontal" : "vertical",
+      ratio: 0.5,
+    }, { type: "leaf", paneId, sessionId: session.id })
+    if (!layout) throw terminalContractError("not_found", "not_found")
+    const updated = {
+      ...workspace,
+      layout,
+      layoutRevision: workspace.layoutRevision + 1,
+      updatedAt: now(),
+    }
+    workspaces.set(updated.id, updated)
+    bumpDomain("workspace.layout_changed", updated.id, updated.layoutRevision)
+    await flushPersist()
+    return { workspace: updated, paneId, sessionId: session.id }
+  }
+
+  async function updateSplitRatio(input: TerminalSetSplitRatioInput): Promise<TerminalWorkspace> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    const ratio = Math.min(0.95, Math.max(0.05, input.ratio))
+    const layout = setTerminalSplitRatio(workspace.layout, input.splitId, ratio)
+    if (!layout) throw terminalContractError("not_found", "not_found")
+    if (stableJson(layout) === stableJson(workspace.layout)) return workspace
+    const updated = {
+      ...workspace,
+      layout,
+      layoutRevision: workspace.layoutRevision + 1,
+      updatedAt: now(),
+    }
+    workspaces.set(updated.id, updated)
+    bumpDomain("workspace.layout_changed", updated.id, updated.layoutRevision)
+    await flushPersist()
+    return updated
+  }
+
+  async function closePane(input: TerminalClosePaneInput): Promise<TerminalCloseWorkspaceResult> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    const pane = findTerminalPane(workspace.layout, input.paneId)
+    if (!pane) throw terminalContractError("not_found", "not_found")
+    const session = getSessionOrThrow(pane.sessionId)
+    assertForceCloseSupported(input.force, [session])
+    const closingPaneIds = workspace.closingPaneIds.includes(pane.paneId)
+      ? workspace.closingPaneIds
+      : [...workspace.closingPaneIds, pane.paneId]
+    const updated = closingPaneIds === workspace.closingPaneIds
+      ? workspace
+      : {
+          ...workspace,
+          closingPaneIds,
+          layoutRevision: workspace.layoutRevision + 1,
+          updatedAt: now(),
+        }
+    if (updated !== workspace) {
+      workspaces.set(updated.id, updated)
+      bumpDomain("workspace.close_requested", updated.id, updated.layoutRevision)
+      await flushPersist()
+    }
+    await requestSessionClosure(session, Boolean(input.force))
+    await finalizeWorkspaceClosures(session.id)
+    return workspaceCloseResult(input.workspaceId)
+  }
+
+  async function closeWorkspace(input: TerminalCloseWorkspaceInput): Promise<TerminalCloseWorkspaceResult> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    const panes = collectTerminalPaneLeaves(workspace.layout)
+    const memberSessions = panes.map((pane) => getSessionOrThrow(pane.sessionId))
+    assertForceCloseSupported(input.force, memberSessions)
+    const updated: TerminalWorkspace = workspace.closing
+      ? workspace
+      : {
+          ...workspace,
+          closing: true,
+          closingPaneIds: panes.map((pane) => pane.paneId),
+          layoutRevision: workspace.layoutRevision + 1,
+          updatedAt: now(),
+        }
+    if (updated !== workspace) {
+      workspaces.set(updated.id, updated)
+      bumpDomain("workspace.close_requested", updated.id, updated.layoutRevision)
+      await flushPersist()
+    }
+    for (const session of memberSessions) await requestSessionClosure(session, Boolean(input.force))
+    await finalizeWorkspaceClosures(memberSessions[0]?.id)
+    return workspaceCloseResult(input.workspaceId)
+  }
+
+  function assertWorkspaceRevision(workspace: TerminalWorkspace, expected: number): void {
+    if (workspace.layoutRevision !== expected) {
+      throw terminalContractError("revision_conflict", "revision", {
+        details: { currentRevision: workspace.layoutRevision },
+      })
+    }
+  }
+
+  function assertForceCloseSupported(force: boolean | undefined, members: readonly TerminalSession[]): void {
+    if (force && process.platform === "win32" && members.some(isActiveSession)) {
+      throw terminalContractError("force_stop_unsupported", "capability")
+    }
+  }
+
+  async function requestSessionClosure(session: TerminalSession, force: boolean): Promise<void> {
+    const current = sessions.get(session.id)
+    if (!current || !isActiveSession(current)) return
+    if (!force && current.status === "stopping") return
+    await terminate({ sessionId: current.id, idempotencyKey: randomUUID() }, userController(), force)
+  }
+
+  function workspaceCloseResult(workspaceId: string): TerminalCloseWorkspaceResult {
+    const workspace = workspaces.get(workspaceId)
+    if (!workspace) return { workspaceId, state: "deleted", remainingSessionIds: [] }
+    return {
+      workspaceId,
+      state: "closing",
+      remainingSessionIds: collectTerminalPaneLeaves(workspace.layout)
+        .map((pane) => pane.sessionId)
+        .filter((sessionId) => sessions.has(sessionId)),
+    }
+  }
+
+  async function finalizeWorkspaceClosures(sessionId?: string): Promise<void> {
+    const targets = sessionId
+      ? [...workspaces.values()].filter((workspace) => collectTerminalPaneLeaves(workspace.layout)
+          .some((pane) => pane.sessionId === sessionId))
+      : [...workspaces.values()]
+    const deletedSessionIds = targets.flatMap((workspace) => finalizeWorkspaceClosuresInMemory(workspace.id))
+    if (deletedSessionIds.length === 0) {
+      schedulePersist()
+      return
+    }
+    await flushPersist()
+    if (!lastPersistError) {
+      for (const deletedSessionId of deletedSessionIds) events.emit("sessionDeleted", { sessionId: deletedSessionId })
+    }
+  }
+
+  function finalizeWorkspaceClosuresInMemory(workspaceId: string): string[] {
+    const workspace = workspaces.get(workspaceId)
+    if (!workspace) return []
+    const panes = collectTerminalPaneLeaves(workspace.layout)
+    if (workspace.closing) {
+      if (panes.some((pane) => isActiveSession(sessions.get(pane.sessionId)))) return []
+      for (const pane of panes) removeWorkspaceSession(pane.sessionId)
+      workspaces.delete(workspace.id)
+      updateGroupMembership(workspace.groupId)
+      bumpDomain("workspace.deleted", workspace.id, workspace.layoutRevision)
+      return panes.map((pane) => pane.sessionId)
+    }
+
+    let layout = workspace.layout
+    const deletedSessionIds: string[] = []
+    const pendingPaneIds: string[] = []
+    for (const paneId of workspace.closingPaneIds) {
+      const pane = findTerminalPane(layout, paneId)
+      if (!pane) continue
+      if (isActiveSession(sessions.get(pane.sessionId))) {
+        pendingPaneIds.push(paneId)
+        continue
+      }
+      const nextLayout = removeTerminalPane(layout, paneId)
+      if (nextLayout === undefined) continue
+      removeWorkspaceSession(pane.sessionId)
+      deletedSessionIds.push(pane.sessionId)
+      if (nextLayout === null) {
+        workspaces.delete(workspace.id)
+        updateGroupMembership(workspace.groupId)
+        bumpDomain("workspace.deleted", workspace.id, workspace.layoutRevision)
+        return deletedSessionIds
+      }
+      layout = nextLayout
+    }
+    if (deletedSessionIds.length > 0 || pendingPaneIds.length !== workspace.closingPaneIds.length) {
+      const updated = {
+        ...workspace,
+        layout,
+        closingPaneIds: pendingPaneIds,
+        layoutRevision: workspace.layoutRevision + 1,
+        updatedAt: now(),
+      }
+      workspaces.set(updated.id, updated)
+      bumpDomain("workspace.layout_changed", updated.id, updated.layoutRevision)
+    }
+    return deletedSessionIds
+  }
+
+  function removeSessionResources(sessionId: string): void {
+    cleanupRuntime(sessionId)
+    sessions.delete(sessionId)
+    buffers.delete(sessionId)
+    checkpoints.delete(sessionId)
+    leases.delete(sessionId)
+    leaseRevisions.delete(sessionId)
+    activeStopOperations.delete(sessionId)
+  }
+
+  function removeWorkspaceSession(sessionId: string): void {
+    const session = sessions.get(sessionId)
+    removeSessionResources(sessionId)
+    if (session) bumpDomain("session.deleted", session.id, session.metadataRevision)
+  }
+
+  function isActiveSession(session: TerminalSession | undefined): boolean {
+    return session?.status === "running" || session?.status === "stopping"
   }
 
   async function createGroup(input: TerminalCreateGroupInput): Promise<TerminalGroup> {
@@ -1106,6 +1573,9 @@ export function createTerminalService(deps: {
       buffers.delete(session.id)
       leases.delete(session.id)
     }
+    for (const workspace of [...workspaces.values()]) {
+      if (workspace.groupId === group.id) workspaces.delete(workspace.id)
+    }
     groups.delete(group.id)
     deletePlans.delete(deletePlanId)
     bumpDomain("group.deleted", group.id, group.groupRevision, operationId)
@@ -1321,9 +1791,27 @@ export function createTerminalService(deps: {
     operation.finalLifecycle = session.status
     operation.finalCause = "session_deleted"
     operation.updatedAt = now()
-    sessions.delete(session.id)
-    buffers.delete(session.id)
-    leases.delete(session.id)
+    const workspace = getWorkspaceBySessionId(session.id)
+    if (workspace) {
+      const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === session.id)
+      const layout = pane ? removeTerminalPane(workspace.layout, pane.paneId) : undefined
+      if (layout === null) {
+        workspaces.delete(workspace.id)
+        updateGroupMembership(workspace.groupId)
+        bumpDomain("workspace.deleted", workspace.id, workspace.layoutRevision, operation.operationId)
+      } else if (layout) {
+        const updated = {
+          ...workspace,
+          layout,
+          closingPaneIds: workspace.closingPaneIds.filter((paneId) => paneId !== pane?.paneId),
+          layoutRevision: workspace.layoutRevision + 1,
+          updatedAt: now(),
+        }
+        workspaces.set(updated.id, updated)
+        bumpDomain("workspace.layout_changed", updated.id, updated.layoutRevision, operation.operationId)
+      }
+    }
+    removeSessionResources(session.id)
     bumpDomain("session.deleted", session.id, session.metadataRevision, operation.operationId)
     await flushPersist()
     if (!lastPersistError) events.emit("sessionDeleted", { sessionId: session.id })
@@ -1997,6 +2485,14 @@ export function createTerminalService(deps: {
     getGlobalLaunchSettings,
     updateGlobalLaunchSettings,
     listGroups,
+    listWorkspaces,
+    getWorkspace,
+    getWorkspaceForSession,
+    renameWorkspace,
+    splitPane,
+    updateSplitRatio,
+    closePane,
+    closeWorkspace,
     getGroup,
     getGroupCommand,
     createGroup,
@@ -2046,7 +2542,7 @@ export function createTerminalService(deps: {
     getLastPersistError: () => lastPersistError,
     getPersistDiagnostics: () => ({
       inFlight: Boolean(persistInFlight),
-      pending: persistPending,
+      pending: persistPending || Boolean(runtimePersistTimer),
       idleWaiterCount: persistIdleWaiters.length,
     }),
     get events() { return events },

@@ -78,6 +78,7 @@ describe("terminal store", () => {
     await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
       globalLaunch: { revision: 1, updatedAt: "1970-01-01T00:00:00.000Z" },
       groups: [],
+      workspaces: [],
       sessions: [],
       output: [],
       terminalDomainRevision: 0,
@@ -123,6 +124,7 @@ describe("terminal store", () => {
     await expect(createTerminalStore({ baseDir: tempDir }).loadState()).resolves.toEqual({
       globalLaunch: { revision: 1, updatedAt: "1970-01-01T00:00:00.000Z" },
       groups: [expect.objectContaining({ id: "g1", name: "Legacy" })],
+      workspaces: [],
       sessions: [],
       output: [],
       terminalDomainRevision: 0,

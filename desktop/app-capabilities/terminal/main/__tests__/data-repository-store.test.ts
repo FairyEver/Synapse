@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { createFileBackedDataRepository } from "../../../../electron/runtime/data-repo"
 import { createTerminalDataRepositoryStore } from "../data-repository-store"
@@ -15,6 +15,8 @@ describe("Terminal DataRepository store", () => {
     const groupId = randomUUID()
     const commandId = randomUUID()
     const sessionId = randomUUID()
+    const workspaceId = randomUUID()
+    const paneId = randomUUID()
     const safeStorage = reversibleSafeStorage()
     const repository = createTerminalRepository(createFileBackedDataRepository({
       rootDir: path.join(root, "data-v1"),
@@ -46,6 +48,17 @@ describe("Terminal DataRepository store", () => {
             launch: { defaultCwd: "/tmp", environment: { COMMAND_SECRET: "command-private", COMMAND_UNSET: null } },
           }],
         },
+      }],
+      workspaces: [{
+        id: workspaceId,
+        groupId,
+        title: "Shell workspace",
+        layout: { type: "leaf", paneId, sessionId },
+        layoutRevision: 1,
+        closingPaneIds: [],
+        closing: false,
+        createdAt: timestamp(),
+        updatedAt: timestamp(),
       }],
       sessions: [{
         id: sessionId, groupId, title: "Shell", cwd: "/tmp", shell: "/bin/sh", status: "ended",
@@ -80,6 +93,10 @@ describe("Terminal DataRepository store", () => {
       defaultCwd: "/tmp",
       environment: { COMMAND_SECRET: "command-private", COMMAND_UNSET: null },
     })
+    expect(loaded.workspaces).toEqual([expect.objectContaining({
+      id: workspaceId,
+      layout: { type: "leaf", paneId, sessionId },
+    })])
     expect(loaded.output[0]?.data).toBe("private-output")
     expect(loaded.checkpoints[0]?.serialized).toBe("private-checkpoint")
     const persisted = readAllFiles(root).join("\n")
@@ -129,7 +146,60 @@ describe("Terminal DataRepository store", () => {
     expect(await repository.groups.list()).toEqual([])
     expect(await repository.deleteIntents.list()).toEqual([])
   })
+
+  it("persists runtime output incrementally without rescanning block manifests", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-runtime-save-"))
+    const safeStorage = reversibleSafeStorage()
+    const repository = createTerminalRepository(createFileBackedDataRepository({ rootDir: path.join(root, "data-v1"), safeStorage }))
+    const store = createTerminalDataRepositoryStore({
+      repository,
+      blocks: createTerminalEncryptedBlockStore({ baseDir: path.join(root, "terminal"), safeStorage }),
+    })
+    const groupId = randomUUID()
+    const sessionId = randomUUID()
+    const session = terminalSession(groupId, sessionId)
+    await store.saveState({
+      terminalDomainRevision: 1,
+      groups: [{
+        id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
+        groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1,
+      }],
+      sessions: [{ ...session, lastOutputSeq: 1 }],
+      output: [{ sessionId, seq: 1, data: "one", createdAt: timestamp(), source: "pty" }],
+      operations: [], idempotency: [], checkpoints: [],
+    })
+    await store.loadState()
+    const listBlocks = vi.spyOn(repository.blocks, "list")
+
+    await store.saveRuntimeState!({
+      sessions: [{
+        session: { ...session, lastOutputSeq: 2, stateRevision: 3 },
+        output: [{ sessionId, seq: 2, data: "two", createdAt: timestamp(), source: "pty" }],
+        firstRetainedOutputSeq: 1,
+      }],
+    })
+
+    expect(listBlocks).not.toHaveBeenCalled()
+    const loaded = await store.loadState()
+    expect(loaded.output.map((chunk) => [chunk.seq, chunk.data])).toEqual([[1, "one"], [2, "two"]])
+    expect(loaded.sessions[0]).toMatchObject({ id: sessionId, lastOutputSeq: 2, stateRevision: 3 })
+  })
 })
+
+function terminalSession(groupId: string, sessionId: string) {
+  return {
+    id: sessionId, groupId, title: "Shell", cwd: "/tmp", shell: "/bin/sh", status: "running" as const,
+    createdAt: timestamp(), updatedAt: timestamp(), startedAt: timestamp(), cols: 80, rows: 24,
+    lastOutputSeq: 0, metadataRevision: 1, stateRevision: 2, inputRevision: 0, sizeRevision: 1,
+    creationSource: "ui" as const, endTimeUnknown: false, inputHistoryBeforeBaselineUnknown: false,
+    launchRevisionApplied: 1, discardedOutputBytes: 0, discardedOutputChunks: 0,
+    attention: {
+      state: "unknown" as const, kind: "unknown" as const, reason: "output_changed" as const,
+      confidence: 0, detectedAt: timestamp(), throughOutputSeq: 0, sizeRevision: 1,
+      detectorId: "passive-terminal-v1" as const, detectorVersion: "1.0.0" as const,
+    },
+  }
+}
 
 function reversibleSafeStorage() {
   return {

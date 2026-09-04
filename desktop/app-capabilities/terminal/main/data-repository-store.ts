@@ -6,17 +6,25 @@ import type {
   TerminalGroupRecord,
   TerminalIdempotencyRecord,
   TerminalSessionRecord,
+  TerminalWorkspaceRecord,
 } from "../shared/contract-schema"
 import {
   terminalOutputChunkSchema,
+  terminalSessionSchema,
   type TerminalEnvironment,
   type TerminalGroup,
   type TerminalGroupCommand,
   type TerminalSession,
 } from "../shared/schema"
+import type { TerminalWorkspace } from "../shared/workspace"
 import type { TerminalEncryptedBlockStore } from "./encrypted-block-store"
 import type { TerminalRepository } from "./repository"
-import { terminalStoreStateSchema, type TerminalStore, type TerminalStoreState } from "./store"
+import {
+  terminalStoreStateSchema,
+  type TerminalRuntimeStoreUpdate,
+  type TerminalStore,
+  type TerminalStoreState,
+} from "./store"
 
 type PersistenceLogger = {
   warn(message: string, meta?: Record<string, unknown>): void
@@ -28,6 +36,9 @@ export function createTerminalDataRepositoryStore(options: {
   readonly logger?: PersistenceLogger
 }): TerminalStore {
   let initialized = false
+  let outputManifestsBySession: Map<string, Map<number, TerminalBlockManifestEntry>> | undefined
+  let checkpointManifestsBySession: Map<string, TerminalBlockManifestEntry> | undefined
+  let persistedFirstOutputSeqBySession: Map<string, number> | undefined
 
   async function initialize(): Promise<void> {
     if (initialized) return
@@ -39,6 +50,7 @@ export function createTerminalDataRepositoryStore(options: {
     await initialize()
     await recoverPendingDeletes()
     const snapshot = await options.repository.loadSnapshot()
+    rememberBlockManifests(snapshot.blocks)
     const retainedBlockIds = new Set(snapshot.blocks.map((item) => item.blockId))
     for (const blockId of await options.blocks.listBlockIds()) {
       if (!retainedBlockIds.has(blockId)) await options.blocks.deleteBlock(blockId)
@@ -150,6 +162,7 @@ export function createTerminalDataRepositoryStore(options: {
         },
       } : undefined,
       groups,
+      workspaces: snapshot.workspaces.map(toServiceWorkspace),
       sessions,
       output,
       terminalDomainRevision: snapshot.domain.terminalDomainRevision,
@@ -180,6 +193,7 @@ export function createTerminalDataRepositoryStore(options: {
     const deleteIntent = await createDeleteIntent(state)
     await syncGlobalLaunch(state)
     await syncGroups(state)
+    await syncWorkspaces(state)
     await syncSessions(state)
     await syncOperations(state)
     await syncIdempotency(state)
@@ -191,6 +205,39 @@ export function createTerminalDataRepositoryStore(options: {
       updatedAt: new Date().toISOString(),
     })
     if (deleteIntent) await options.repository.deleteIntents.remove(deleteIntent.id)
+  }
+
+  async function saveRuntimeState(source: TerminalRuntimeStoreUpdate): Promise<void> {
+    await initialize()
+    const updates = source.sessions.map((item) => ({
+      session: terminalSessionSchema.parse(item.session),
+      output: item.output.map((chunk) => terminalOutputChunkSchema.parse(chunk)),
+      firstRetainedOutputSeq: item.firstRetainedOutputSeq,
+      ...(item.checkpoint ? { checkpoint: parseCheckpoint(item.checkpoint) } : {}),
+    }))
+    for (const update of updates) {
+      if (!Number.isSafeInteger(update.firstRetainedOutputSeq) || update.firstRetainedOutputSeq < 1) {
+        throw new Error("Invalid Terminal retained output sequence")
+      }
+      if (update.output.some((chunk) => chunk.sessionId !== update.session.id)) {
+        throw new Error("Terminal runtime output belongs to another session")
+      }
+    }
+    await syncRuntimeOutput(updates)
+    for (const update of updates) {
+      const launchBodyRef = Object.keys(update.session.launchEnvironment ?? {}).length
+        ? update.session.id
+        : undefined
+      await options.repository.sessions.upsert(toSessionRecord(
+        update.session,
+        update.output,
+        launchBodyRef,
+        update.firstRetainedOutputSeq,
+      ))
+    }
+    for (const update of updates) {
+      if (update.checkpoint) await syncCheckpoint(update.checkpoint)
+    }
   }
 
   async function syncGlobalLaunch(state: TerminalStoreState): Promise<void> {
@@ -224,13 +271,18 @@ export function createTerminalDataRepositoryStore(options: {
 
   async function createDeleteIntent(state: TerminalStoreState): Promise<TerminalDeleteIntentEntry | null> {
     const snapshot = await options.repository.loadSnapshot()
+    rememberBlockManifests(snapshot.blocks)
     const wantedGroups = new Set(state.groups.map((group) => group.id))
     const wantedCommands = new Set(state.groups.flatMap((group) => group.settings?.commands?.map((command) => command.id) ?? []))
     const wantedSessions = new Set(state.sessions.map((session) => session.id))
+    const wantedWorkspaces = new Set(state.workspaces.map((workspace) => workspace.id))
     const groupIds = snapshot.groups.filter((group) => !wantedGroups.has(group.groupId)).map((group) => group.groupId)
     const commandIds = snapshot.commands.filter((command) => !wantedCommands.has(command.commandId)).map((command) => command.commandId)
     const sessionIds = snapshot.sessions.filter((session) => !wantedSessions.has(session.sessionId)).map((session) => session.sessionId)
-    if (!groupIds.length && !commandIds.length && !sessionIds.length) return null
+    const workspaceIds = snapshot.workspaces
+      .filter((workspace) => !wantedWorkspaces.has(workspace.workspaceId))
+      .map((workspace) => workspace.workspaceId)
+    if (!groupIds.length && !commandIds.length && !sessionIds.length && !workspaceIds.length) return null
     const removedSessions = new Set(sessionIds)
     const intent: TerminalDeleteIntentEntry = {
       schemaVersion: 1,
@@ -238,6 +290,7 @@ export function createTerminalDataRepositoryStore(options: {
       groupIds,
       commandIds,
       sessionIds,
+      workspaceIds,
       blockIds: snapshot.blocks.filter((block) => removedSessions.has(block.sessionId)).map((block) => block.blockId),
       createdAt: new Date().toISOString(),
     }
@@ -254,6 +307,9 @@ export function createTerminalDataRepositoryStore(options: {
       for (const sessionId of intent.sessionIds) {
         await options.repository.launchBodies.remove(sessionId)
         await options.repository.sessions.remove(sessionId)
+      }
+      for (const workspaceId of intent.workspaceIds ?? []) {
+        await options.repository.workspaces.remove(workspaceId)
       }
       for (const commandId of intent.commandIds) {
         await options.repository.commandBodies.remove(commandId)
@@ -382,6 +438,11 @@ export function createTerminalDataRepositoryStore(options: {
     }
   }
 
+  async function syncWorkspaces(state: TerminalStoreState): Promise<void> {
+    const records = state.workspaces.map(toWorkspaceRecord)
+    await syncCollection(options.repository.workspaces, records)
+  }
+
   async function syncOperations(state: TerminalStoreState): Promise<void> {
     await syncCollection(options.repository.operations, state.operations)
   }
@@ -403,80 +464,175 @@ export function createTerminalDataRepositoryStore(options: {
   }
 
   async function syncOutput(state: TerminalStoreState): Promise<void> {
-    const manifests = await options.repository.blocks.list()
-    const byRange = new Map(manifests
-      .filter((item) => item.type === "output")
-      .map((item) => [`${item.sessionId}:${item.firstOutputSeq}`, item]))
+    await ensureBlockManifestIndex()
+    const manifests = [...outputManifestsBySession!.values()].flatMap((items) => [...items.values()])
     const wanted = new Set<string>()
     for (const chunk of state.output) {
       const rangeKey = `${chunk.sessionId}:${chunk.seq}`
       wanted.add(rangeKey)
-      if (byRange.has(rangeKey)) continue
-      const plaintext = Buffer.from(JSON.stringify(chunk), "utf8")
-      const written = await options.blocks.writeBlock({ sessionId: chunk.sessionId, type: "output", plaintext })
-      if (!written.persisted) continue
-      const manifest: TerminalBlockManifestEntry = {
-        schemaVersion: 1,
-        id: written.blockId,
-        blockId: written.blockId,
-        sessionId: chunk.sessionId,
-        type: "output",
-        firstOutputSeq: chunk.seq,
-        nextOutputSeq: chunk.seq + 1,
-        byteLength: written.byteLength,
-        sha256: written.sha256,
-        createdAt: chunk.createdAt,
-        encryptionSchemaVersion: 1,
-      }
-      await options.repository.blocks.upsert(manifest)
+      if (outputManifestsBySession!.get(chunk.sessionId)?.has(chunk.seq)) continue
+      await persistOutputChunk(chunk)
     }
     for (const manifest of manifests) {
       if (manifest.type !== "output" || wanted.has(`${manifest.sessionId}:${manifest.firstOutputSeq}`)) continue
-      await options.blocks.deleteBlock(manifest.blockId)
-      await options.repository.blocks.remove(manifest.id)
+      await removeManifest(manifest)
+    }
+    persistedFirstOutputSeqBySession = new Map()
+    for (const chunk of state.output) {
+      const current = persistedFirstOutputSeqBySession.get(chunk.sessionId)
+      if (current === undefined || chunk.seq < current) persistedFirstOutputSeqBySession.set(chunk.sessionId, chunk.seq)
     }
   }
 
   async function syncCheckpoints(state: TerminalStoreState): Promise<void> {
-    const manifests = (await options.repository.blocks.list()).filter((item) => item.type === "checkpoint")
-    const existingBySession = new Map(manifests.map((item) => [item.sessionId, item]))
+    await ensureBlockManifestIndex()
+    const manifests = [...checkpointManifestsBySession!.values()]
     const wanted = new Set(state.checkpoints.map((item) => item.sessionId))
     for (const checkpoint of state.checkpoints) {
-      const plaintext = Buffer.from(JSON.stringify(checkpoint), "utf8")
-      const sha256 = createHash("sha256").update(plaintext).digest("hex")
-      const existing = existingBySession.get(checkpoint.sessionId)
-      if (existing?.sha256 === sha256) continue
-      const written = await options.blocks.writeBlock({ sessionId: checkpoint.sessionId, type: "checkpoint", plaintext })
-      if (!written.persisted) continue
-      await options.repository.blocks.upsert({
-        schemaVersion: 1,
-        id: written.blockId,
-        blockId: written.blockId,
-        sessionId: checkpoint.sessionId,
-        type: "checkpoint",
-        firstOutputSeq: checkpoint.throughOutputSeq,
-        nextOutputSeq: checkpoint.throughOutputSeq + 1,
-        byteLength: written.byteLength,
-        sha256: written.sha256,
-        createdAt: new Date().toISOString(),
-        encryptionSchemaVersion: 1,
-      })
-      if (existing) {
-        await options.blocks.deleteBlock(existing.blockId)
-        await options.repository.blocks.remove(existing.id)
-      }
+      await syncCheckpoint(checkpoint)
     }
     for (const manifest of manifests) {
       if (wanted.has(manifest.sessionId)) continue
-      await options.blocks.deleteBlock(manifest.blockId)
-      await options.repository.blocks.remove(manifest.id)
+      await removeManifest(manifest)
     }
+  }
+
+  async function syncRuntimeOutput(updates: TerminalRuntimeStoreUpdate["sessions"]): Promise<void> {
+    await ensureBlockManifestIndex()
+    for (const update of updates) {
+      const previousFirst = persistedFirstOutputSeqBySession!.get(update.session.id) ?? update.firstRetainedOutputSeq
+      for (let seq = previousFirst; seq < update.firstRetainedOutputSeq; seq += 1) {
+        const manifest = outputManifestsBySession!.get(update.session.id)?.get(seq)
+        if (manifest) await removeManifest(manifest)
+      }
+      persistedFirstOutputSeqBySession!.set(update.session.id, update.firstRetainedOutputSeq)
+      for (const chunk of update.output) {
+        if (outputManifestsBySession!.get(chunk.sessionId)?.has(chunk.seq)) continue
+        await persistOutputChunk(chunk)
+      }
+    }
+  }
+
+  async function persistOutputChunk(chunk: TerminalStoreState["output"][number]): Promise<void> {
+    const plaintext = Buffer.from(JSON.stringify(chunk), "utf8")
+    const written = await options.blocks.writeBlock({ sessionId: chunk.sessionId, type: "output", plaintext })
+    if (!written.persisted) return
+    const manifest: TerminalBlockManifestEntry = {
+      schemaVersion: 1,
+      id: written.blockId,
+      blockId: written.blockId,
+      sessionId: chunk.sessionId,
+      type: "output",
+      firstOutputSeq: chunk.seq,
+      nextOutputSeq: chunk.seq + 1,
+      byteLength: written.byteLength,
+      sha256: written.sha256,
+      createdAt: chunk.createdAt,
+      encryptionSchemaVersion: 1,
+    }
+    await options.repository.blocks.upsert(manifest)
+    rememberManifest(manifest)
+  }
+
+  async function syncCheckpoint(checkpoint: TerminalStoreState["checkpoints"][number]): Promise<void> {
+    await ensureBlockManifestIndex()
+    const plaintext = Buffer.from(JSON.stringify(checkpoint), "utf8")
+    const sha256 = createHash("sha256").update(plaintext).digest("hex")
+    const existing = checkpointManifestsBySession!.get(checkpoint.sessionId)
+    if (existing?.sha256 === sha256) return
+    const written = await options.blocks.writeBlock({ sessionId: checkpoint.sessionId, type: "checkpoint", plaintext })
+    if (!written.persisted) return
+    const manifest: TerminalBlockManifestEntry = {
+      schemaVersion: 1,
+      id: written.blockId,
+      blockId: written.blockId,
+      sessionId: checkpoint.sessionId,
+      type: "checkpoint",
+      firstOutputSeq: checkpoint.throughOutputSeq,
+      nextOutputSeq: checkpoint.throughOutputSeq + 1,
+      byteLength: written.byteLength,
+      sha256: written.sha256,
+      createdAt: new Date().toISOString(),
+      encryptionSchemaVersion: 1,
+    }
+    await options.repository.blocks.upsert(manifest)
+    rememberManifest(manifest)
+    if (existing) await removeManifest(existing)
+  }
+
+  async function ensureBlockManifestIndex(): Promise<void> {
+    if (outputManifestsBySession && checkpointManifestsBySession && persistedFirstOutputSeqBySession) return
+    rememberBlockManifests(await options.repository.blocks.list())
+  }
+
+  function rememberBlockManifests(manifests: readonly TerminalBlockManifestEntry[]): void {
+    outputManifestsBySession = new Map()
+    checkpointManifestsBySession = new Map()
+    persistedFirstOutputSeqBySession = new Map()
+    for (const manifest of manifests) rememberManifest(manifest)
+  }
+
+  function rememberManifest(manifest: TerminalBlockManifestEntry): void {
+    if (manifest.type === "checkpoint") {
+      checkpointManifestsBySession!.set(manifest.sessionId, manifest)
+      return
+    }
+    const sessionManifests = outputManifestsBySession!.get(manifest.sessionId) ?? new Map()
+    sessionManifests.set(manifest.firstOutputSeq, manifest)
+    outputManifestsBySession!.set(manifest.sessionId, sessionManifests)
+    const currentFirst = persistedFirstOutputSeqBySession!.get(manifest.sessionId)
+    if (currentFirst === undefined || manifest.firstOutputSeq < currentFirst) {
+      persistedFirstOutputSeqBySession!.set(manifest.sessionId, manifest.firstOutputSeq)
+    }
+  }
+
+  async function removeManifest(manifest: TerminalBlockManifestEntry): Promise<void> {
+    await options.blocks.deleteBlock(manifest.blockId)
+    await options.repository.blocks.remove(manifest.id)
+    if (manifest.type === "checkpoint") {
+      if (checkpointManifestsBySession!.get(manifest.sessionId)?.id === manifest.id) {
+        checkpointManifestsBySession!.delete(manifest.sessionId)
+      }
+      return
+    }
+    outputManifestsBySession!.get(manifest.sessionId)?.delete(manifest.firstOutputSeq)
   }
 
   return {
     loadState,
     saveState,
+    saveRuntimeState,
     get persistenceProtection() { return options.blocks.persistenceProtection },
+  }
+}
+
+function toServiceWorkspace(record: TerminalWorkspaceRecord): TerminalWorkspace {
+  return {
+    id: record.workspaceId,
+    groupId: record.groupId,
+    title: record.title,
+    layout: record.layout,
+    layoutRevision: record.layoutRevision,
+    closingPaneIds: record.closingPaneIds,
+    closing: record.closing,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }
+}
+
+function toWorkspaceRecord(workspace: TerminalWorkspace): TerminalWorkspaceRecord {
+  return {
+    schemaVersion: 1,
+    id: workspace.id,
+    workspaceId: workspace.id,
+    groupId: workspace.groupId,
+    title: workspace.title,
+    layout: workspace.layout,
+    layoutRevision: workspace.layoutRevision,
+    closingPaneIds: workspace.closingPaneIds,
+    closing: workspace.closing,
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt,
   }
 }
 
@@ -531,10 +687,11 @@ function toSessionRecord(
   session: TerminalSession,
   output: TerminalStoreState["output"],
   launchBodyRef: string | undefined,
+  retainedFirstOutputSeq?: number,
 ): TerminalSessionRecord {
-  const firstRetainedOutputSeq = output.length
+  const firstRetainedOutputSeq = retainedFirstOutputSeq ?? (output.length
     ? Math.min(...output.map((chunk) => chunk.seq))
-    : session.lastOutputSeq + 1
+    : session.lastOutputSeq + 1)
   const isTerminal = session.status === "ended" || session.status === "failed" || session.status === "lost"
   return {
     schemaVersion: 2,

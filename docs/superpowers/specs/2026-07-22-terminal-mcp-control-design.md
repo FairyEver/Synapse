@@ -123,6 +123,8 @@ On graceful application shutdown, Synapse may attempt only the proven normal-sto
 
 Output does not advance the global domain revision. The raw output authority begins at the ordered data delivered by the packaged node-pty runtime to Terminal core; it does not claim access to bytes that node-pty did not expose. Core splits delivered data into bounded, UTF-8-safe records before assigning positive, non-reused output sequence numbers. `afterOutputSeq` is the last consumed record, `firstSeq` is the earliest retained record, and `nextOutputSeq` is the greatest known record cursor, or zero before output. Missing records are explicit gaps. The raw-input byte contract is separately limited by proven node-pty write behavior.
 
+Low-frequency user and Agent mutations wait only until a persistence snapshot containing that mutation has settled. They never wait for the shared Terminal persistence queue to become globally idle, because later PTY output may continue scheduling independent snapshots without bound.
+
 ## Creation and group inheritance
 
 Three creation paths exist:
@@ -185,6 +187,7 @@ Structured records live in registered versioned DataRepository namespaces:
 - `app.terminal.groups`
 - `app.terminal.commands`
 - `app.terminal.sessions`
+- `app.terminal.workspaces`
 - `app.terminal.operations`
 - `app.terminal.idempotency`
 - manifest and quota-index records as required
@@ -375,6 +378,7 @@ Implementation is inside the existing Terminal App Capability architecture and t
 - DataRepository schemas, encrypted block store, recovery, migration, retention, backup projection, and restore planning.
 - Lifecycle, operation, revision, event, observation, lease, semantic input, raw, paste, resize, termination, and deletion behavior.
 - Renderer synchronization and explicit user takeover/emergency paths.
+- Renderer workspaces persist a recursive split tree whose leaf panes reference immutable sessions. This layout is UI/IPC-only: closing a pane deletes its session, closing the sidebar workspace deletes every referenced session, and MCP continues to address sessions without controlling pane layout.
 - One canonical development-time MCP tool set without compatibility aliases.
 - MCP capability registration, dispatch, schemas, permission and risk declarations.
 

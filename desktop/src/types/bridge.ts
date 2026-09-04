@@ -109,6 +109,9 @@ import type {
 import type {
   SynapseTerminalAttachSessionInput,
   SynapseTerminalAttachSessionResult,
+  SynapseTerminalClosePaneInput,
+  SynapseTerminalCloseWorkspaceInput,
+  SynapseTerminalCloseWorkspaceResult,
   SynapseTerminalCreateGroupCommandInput,
   SynapseTerminalCreateGroupInput,
   SynapseTerminalCreateSessionInput,
@@ -127,16 +130,21 @@ import type {
   SynapseTerminalReadSessionResult,
   SynapseTerminalRenameGroupInput,
   SynapseTerminalRenameSessionInput,
+  SynapseTerminalRenameWorkspaceInput,
   SynapseTerminalResizeSessionInput,
   SynapseTerminalResizedEvent,
   SynapseTerminalRunStartupCommandInput,
+  SynapseTerminalSetSplitRatioInput,
   SynapseTerminalSession,
   SynapseTerminalSessionDeletedEvent,
   SynapseTerminalStopSessionInput,
+  SynapseTerminalSplitPaneInput,
+  SynapseTerminalSplitPaneResult,
   SynapseTerminalUpdateGroupCommandInput,
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalUpdateGlobalLaunchSettingsInput,
   SynapseTerminalWriteSessionInput,
+  SynapseTerminalWorkspace,
 } from "./terminal"
 import type {
   SynapseSkillRepositoryInstallPrepareResult,
@@ -1182,6 +1190,18 @@ export type SynapseBridge = {
       update: (input: SynapseTerminalUpdateGroupCommandInput) => Promise<SynapseTerminalGroupCommand>
       delete: (input: SynapseTerminalDeleteGroupCommandInput) => Promise<void>
       launch: (input: SynapseTerminalLaunchGroupCommandInput) => Promise<SynapseTerminalSession>
+    }
+    workspace: {
+      list: () => Promise<SynapseTerminalWorkspace[]>
+      get: (input: { workspaceId: string }) => Promise<SynapseTerminalWorkspace>
+      getForSession: (input: { sessionId: string }) => Promise<SynapseTerminalWorkspace>
+      rename: (input: SynapseTerminalRenameWorkspaceInput) => Promise<SynapseTerminalWorkspace>
+      close: (input: SynapseTerminalCloseWorkspaceInput) => Promise<SynapseTerminalCloseWorkspaceResult>
+    }
+    pane: {
+      split: (input: SynapseTerminalSplitPaneInput) => Promise<SynapseTerminalSplitPaneResult>
+      updateRatio: (input: SynapseTerminalSetSplitRatioInput) => Promise<SynapseTerminalWorkspace>
+      close: (input: SynapseTerminalClosePaneInput) => Promise<SynapseTerminalCloseWorkspaceResult>
     }
     session: {
       list: () => Promise<SynapseTerminalSession[]>

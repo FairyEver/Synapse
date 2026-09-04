@@ -8,6 +8,9 @@ import type { TerminalService } from "./service"
 import {
   terminalAttachSessionInputSchema,
   terminalAttachSessionResultSchema,
+  terminalClosePaneInputSchema,
+  terminalCloseWorkspaceInputSchema,
+  terminalCloseWorkspaceResultSchema,
   terminalCreateGroupCommandInputSchema,
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
@@ -28,16 +31,22 @@ import {
   terminalReadSessionResultSchema,
   terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
+  terminalRenameWorkspaceInputSchema,
   terminalResizeSessionInputSchema,
   terminalResizedEventSchema,
   terminalRunStartupCommandInputSchema,
+  terminalSetSplitRatioInputSchema,
   terminalSessionIdInputSchema,
   terminalSessionSchema,
   terminalStopSessionInputSchema,
+  terminalSplitPaneInputSchema,
+  terminalSplitPaneResultSchema,
   terminalUpdateGroupCommandInputSchema,
   terminalUpdateGlobalLaunchSettingsInputSchema,
   terminalUpdateGroupSettingsInputSchema,
   terminalWriteSessionInputSchema,
+  terminalWorkspaceIdInputSchema,
+  terminalWorkspaceSchema,
 } from "../shared/schema"
 
 const terminalDataEventPayloadSchema = z.object({
@@ -240,6 +249,69 @@ export const terminalIpcModule: IpcModule = {
         const plan = service.previewGroupDelete(request.groupId)
         await service.commitGroupDelete(plan.deletePlanId)
       },
+    },
+    listWorkspaces: {
+      operationId: "app.terminal.workspace.list",
+      kind: "invoke",
+      request: z.void(),
+      response: z.array(terminalWorkspaceSchema),
+      handler: (ctx) => resolveTerminalService(ctx).listWorkspaces(),
+    },
+    getWorkspace: {
+      operationId: "app.terminal.workspace.get",
+      kind: "invoke",
+      request: terminalWorkspaceIdInputSchema,
+      response: terminalWorkspaceSchema,
+      handler: (ctx, request: z.infer<typeof terminalWorkspaceIdInputSchema>) =>
+        resolveTerminalService(ctx).getWorkspace(request),
+    },
+    getWorkspaceForSession: {
+      operationId: "app.terminal.workspace.for_session",
+      kind: "invoke",
+      request: terminalSessionIdInputSchema,
+      response: terminalWorkspaceSchema,
+      handler: (ctx, request: z.infer<typeof terminalSessionIdInputSchema>) =>
+        resolveTerminalService(ctx).getWorkspaceForSession(request),
+    },
+    renameWorkspace: {
+      operationId: "app.terminal.workspace.rename",
+      kind: "invoke",
+      request: terminalRenameWorkspaceInputSchema,
+      response: terminalWorkspaceSchema,
+      handler: (ctx, request: z.infer<typeof terminalRenameWorkspaceInputSchema>) =>
+        resolveTerminalService(ctx).renameWorkspace(request),
+    },
+    splitPane: {
+      operationId: "app.terminal.pane.split",
+      kind: "invoke",
+      request: terminalSplitPaneInputSchema,
+      response: terminalSplitPaneResultSchema,
+      handler: (ctx, request: z.infer<typeof terminalSplitPaneInputSchema>) =>
+        resolveTerminalService(ctx).splitPane(request),
+    },
+    updateSplitRatio: {
+      operationId: "app.terminal.split.resize",
+      kind: "invoke",
+      request: terminalSetSplitRatioInputSchema,
+      response: terminalWorkspaceSchema,
+      handler: (ctx, request: z.infer<typeof terminalSetSplitRatioInputSchema>) =>
+        resolveTerminalService(ctx).updateSplitRatio(request),
+    },
+    closePane: {
+      operationId: "app.terminal.pane.close",
+      kind: "invoke",
+      request: terminalClosePaneInputSchema,
+      response: terminalCloseWorkspaceResultSchema,
+      handler: (ctx, request: z.infer<typeof terminalClosePaneInputSchema>) =>
+        resolveTerminalService(ctx).closePane(request),
+    },
+    closeWorkspace: {
+      operationId: "app.terminal.workspace.close",
+      kind: "invoke",
+      request: terminalCloseWorkspaceInputSchema,
+      response: terminalCloseWorkspaceResultSchema,
+      handler: (ctx, request: z.infer<typeof terminalCloseWorkspaceInputSchema>) =>
+        resolveTerminalService(ctx).closeWorkspace(request),
     },
     listSessions: {
       operationId: "app.terminal.session.list",

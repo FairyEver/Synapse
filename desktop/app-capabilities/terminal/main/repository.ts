@@ -12,11 +12,13 @@ import type {
   TerminalLaunchBodyRecord,
   TerminalOperation,
   TerminalSessionRecord,
+  TerminalWorkspaceRecord,
 } from "../shared/contract-schema"
 
 export type TerminalRepositorySnapshot = {
   readonly globalLaunch: TerminalGlobalLaunchRecord | null
   readonly groups: TerminalGroupRecord[]
+  readonly workspaces: TerminalWorkspaceRecord[]
   readonly commands: TerminalCommandRecord[]
   readonly sessions: TerminalSessionRecord[]
   readonly operations: TerminalOperation[]
@@ -30,6 +32,7 @@ export type TerminalRepository = ReturnType<typeof createTerminalRepository>
 
 export function createTerminalRepository(dataRepository: DataRepository) {
   const groups = dataRepository.namespace<TerminalGroupRecord>("app.terminal.groups")
+  const workspaces = dataRepository.namespace<TerminalWorkspaceRecord>("app.terminal.workspaces")
   const globalLaunch = dataRepository.namespace<TerminalGlobalLaunchRecord>("app.terminal.global-launch")
   const globalLaunchBodies = dataRepository.namespace<TerminalGlobalLaunchBodyRecord>("app.terminal.global-launch-bodies")
   const commands = dataRepository.namespace<TerminalCommandRecord>("app.terminal.commands")
@@ -46,6 +49,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
   async function loadSnapshot(): Promise<TerminalRepositorySnapshot> {
     const [
       groupItems,
+      workspaceItems,
       globalLaunchItem,
       commandItems,
       sessionItems,
@@ -56,6 +60,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
       domainState,
     ] = await Promise.all([
       groups.list(),
+      workspaces.list(),
       globalLaunch.getSingleton(),
       commands.list(),
       sessions.list(),
@@ -68,6 +73,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
     return {
       globalLaunch: globalLaunchItem,
       groups: groupItems,
+      workspaces: workspaceItems,
       commands: commandItems,
       sessions: sessionItems,
       operations: operationItems,
@@ -85,6 +91,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
   return {
     loadSnapshot,
     groups,
+    workspaces,
     globalLaunch,
     globalLaunchBodies,
     commands,
@@ -100,6 +107,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
   } satisfies {
     loadSnapshot(): Promise<TerminalRepositorySnapshot>
     groups: DataNamespace<TerminalGroupRecord>
+    workspaces: DataNamespace<TerminalWorkspaceRecord>
     globalLaunch: DataNamespace<TerminalGlobalLaunchRecord>
     globalLaunchBodies: DataNamespace<TerminalGlobalLaunchBodyRecord>
     commands: DataNamespace<TerminalCommandRecord>

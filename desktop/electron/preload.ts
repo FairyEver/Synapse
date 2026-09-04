@@ -577,6 +577,18 @@ const synapseBridge: SynapseBridge = {
       delete: (input) => invoke(IPC_CHANNELS.terminal.deleteGroupCommand)(input),
       launch: (input) => invoke(IPC_CHANNELS.terminal.launchGroupCommand)(input),
     },
+    workspace: {
+      list: () => invoke(IPC_CHANNELS.terminal.listWorkspaces)(),
+      get: (input) => invoke(IPC_CHANNELS.terminal.getWorkspace)(input),
+      getForSession: (input) => invoke(IPC_CHANNELS.terminal.getWorkspaceForSession)(input),
+      rename: (input) => invoke(IPC_CHANNELS.terminal.renameWorkspace)(input),
+      close: (input) => invoke(IPC_CHANNELS.terminal.closeWorkspace)(input),
+    },
+    pane: {
+      split: (input) => invoke(IPC_CHANNELS.terminal.splitPane)(input),
+      updateRatio: (input) => invoke(IPC_CHANNELS.terminal.updateSplitRatio)(input),
+      close: (input) => invoke(IPC_CHANNELS.terminal.closePane)(input),
+    },
     session: {
       list: () => invoke(IPC_CHANNELS.terminal.listSessions)(),
       create: (input) => invoke(IPC_CHANNELS.terminal.createSession)(input),

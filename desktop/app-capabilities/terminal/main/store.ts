@@ -13,6 +13,7 @@ import {
   type TerminalOutputChunk,
   type TerminalSession,
 } from "../shared/schema"
+import { terminalWorkspaceSchema, type TerminalWorkspace } from "../shared/workspace"
 
 export const terminalStoreStateSchema = z.object({
   globalLaunch: terminalGlobalLaunchSettingsSchema.default({
@@ -20,6 +21,7 @@ export const terminalStoreStateSchema = z.object({
     updatedAt: new Date(0).toISOString(),
   }),
   groups: z.array(terminalGroupSchema),
+  workspaces: z.array(terminalWorkspaceSchema).default([]),
   sessions: z.array(terminalSessionSchema),
   output: z.array(terminalOutputChunkSchema),
   terminalDomainRevision: z.number().int().nonnegative().default(0),
@@ -45,11 +47,23 @@ export const terminalStoreStateSchema = z.object({
 
 export type TerminalStoreState = z.infer<typeof terminalStoreStateSchema>
 
+export type TerminalRuntimeStoreSessionUpdate = {
+  readonly session: TerminalSession
+  readonly output: TerminalOutputChunk[]
+  readonly firstRetainedOutputSeq: number
+  readonly checkpoint?: TerminalStoreState["checkpoints"][number]
+}
+
+export type TerminalRuntimeStoreUpdate = {
+  readonly sessions: TerminalRuntimeStoreSessionUpdate[]
+}
+
 export type TerminalStore = {
   loadState(): Promise<TerminalStoreState>
   saveState(state: {
     globalLaunch: TerminalGlobalLaunchSettings
     groups: TerminalGroup[]
+    workspaces?: TerminalWorkspace[]
     sessions: TerminalSession[]
     output: TerminalOutputChunk[]
     terminalDomainRevision?: number
@@ -57,6 +71,7 @@ export type TerminalStore = {
     idempotency?: TerminalStoreState["idempotency"]
     checkpoints?: TerminalStoreState["checkpoints"]
   }): Promise<void>
+  saveRuntimeState?(update: TerminalRuntimeStoreUpdate): Promise<void>
   readonly persistenceProtection?: "available" | "unavailable" | "degraded"
 }
 
@@ -73,6 +88,7 @@ export function createTerminalStore(options: { baseDir: string }): TerminalStore
           return {
             globalLaunch: { revision: 1, updatedAt: new Date(0).toISOString() },
             groups: [],
+            workspaces: [],
             sessions: [],
             output: [],
             terminalDomainRevision: 0,
@@ -115,6 +131,7 @@ function validateTerminalStoreState(state: TerminalStoreState): void {
   }
 
   const sessionIds = new Set<string>()
+  const sessionGroups = new Map<string, string>()
   for (const session of state.sessions) {
     if (sessionIds.has(session.id)) {
       throw new Error(`Duplicate terminal session id: ${session.id}`)
@@ -123,6 +140,39 @@ function validateTerminalStoreState(state: TerminalStoreState): void {
       throw new Error(`Unknown terminal session group: ${session.groupId}`)
     }
     sessionIds.add(session.id)
+    sessionGroups.set(session.id, session.groupId)
+  }
+
+  const workspaceIds = new Set<string>()
+  const assignedSessionIds = new Set<string>()
+  const paneIds = new Set<string>()
+  const splitIds = new Set<string>()
+  for (const workspace of state.workspaces) {
+    if (workspaceIds.has(workspace.id)) throw new Error(`Duplicate terminal workspace id: ${workspace.id}`)
+    if (!groupIds.has(workspace.groupId)) throw new Error(`Unknown terminal workspace group: ${workspace.groupId}`)
+    workspaceIds.add(workspace.id)
+    const workspacePanes = collectWorkspacePanes(workspace.layout)
+    const workspacePaneIds = new Set(workspacePanes.map((pane) => pane.paneId))
+    if (new Set(workspace.closingPaneIds).size !== workspace.closingPaneIds.length) {
+      throw new Error(`Duplicate closing terminal pane in workspace: ${workspace.id}`)
+    }
+    for (const pane of workspacePanes) {
+      if (!sessionIds.has(pane.sessionId)) throw new Error(`Unknown terminal workspace session: ${pane.sessionId}`)
+      if (sessionGroups.get(pane.sessionId) !== workspace.groupId) {
+        throw new Error(`Terminal workspace session belongs to another group: ${pane.sessionId}`)
+      }
+      if (assignedSessionIds.has(pane.sessionId)) throw new Error(`Duplicate terminal workspace session: ${pane.sessionId}`)
+      if (paneIds.has(pane.paneId)) throw new Error(`Duplicate terminal pane id: ${pane.paneId}`)
+      assignedSessionIds.add(pane.sessionId)
+      paneIds.add(pane.paneId)
+    }
+    for (const splitId of collectWorkspaceSplitIds(workspace.layout)) {
+      if (splitIds.has(splitId)) throw new Error(`Duplicate terminal split id: ${splitId}`)
+      splitIds.add(splitId)
+    }
+    for (const closingPaneId of workspace.closingPaneIds) {
+      if (!workspacePaneIds.has(closingPaneId)) throw new Error(`Unknown closing terminal pane: ${closingPaneId}`)
+    }
   }
 
   const outputSeqBySession = new Map<string, Set<number>>()
@@ -138,6 +188,18 @@ function validateTerminalStoreState(state: TerminalStoreState): void {
     sessionSeqs.add(chunk.seq)
     outputSeqBySession.set(chunk.sessionId, sessionSeqs)
   }
+}
+
+function collectWorkspacePanes(layout: TerminalWorkspace["layout"]): Array<{ paneId: string; sessionId: string }> {
+  return layout.type === "leaf"
+    ? [layout]
+    : [...collectWorkspacePanes(layout.first), ...collectWorkspacePanes(layout.second)]
+}
+
+function collectWorkspaceSplitIds(layout: TerminalWorkspace["layout"]): string[] {
+  return layout.type === "leaf"
+    ? []
+    : [layout.splitId, ...collectWorkspaceSplitIds(layout.first), ...collectWorkspaceSplitIds(layout.second)]
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

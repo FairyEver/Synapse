@@ -17,7 +17,9 @@ export type TerminalOutputBuffer = {
   append(sessionId: string, data: string): TerminalOutputChunk
   read(input: { afterSeq?: number; limitBytes: number }): TerminalOutputBufferReadResult
   snapshot(): TerminalOutputChunk[]
+  snapshotAfter(afterSeq: number): TerminalOutputChunk[]
   evictOldest(): { bytes: number; seq: number } | null
+  readonly firstOutputSeq: number
   readonly totalBytes: number
   readonly nextOutputSeq: number
   readonly discardedBytes: number
@@ -93,6 +95,13 @@ export function createTerminalOutputBuffer(options: {
     snapshot() {
       return entries.map(stripByteLength)
     },
+    snapshotAfter(afterSeq) {
+      const chunks: TerminalOutputChunk[] = []
+      for (const entry of entries) {
+        if (entry.seq > afterSeq) chunks.push(stripByteLength(entry))
+      }
+      return chunks
+    },
     evictOldest() {
       const removed = entries.shift()
       if (!removed) return null
@@ -101,6 +110,7 @@ export function createTerminalOutputBuffer(options: {
       discardedChunks += 1
       return { bytes: removed.byteLength, seq: removed.seq }
     },
+    get firstOutputSeq() { return entries[0]?.seq ?? nextSeq },
     get totalBytes() { return totalBytes },
     get nextOutputSeq() { return nextSeq },
     get discardedBytes() { return discardedBytes },

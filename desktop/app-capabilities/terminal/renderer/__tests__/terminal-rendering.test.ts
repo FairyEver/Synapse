@@ -27,6 +27,7 @@ describe("terminal rendering", () => {
     )
 
     const options = createTerminalRenderingOptions({
+      appearanceSize: "medium",
       container: document.createElement("div"),
       disableStdin: false,
     })

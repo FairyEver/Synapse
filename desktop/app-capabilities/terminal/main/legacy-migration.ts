@@ -131,6 +131,9 @@ export function withLegacyTerminalMigration(options: {
       return options.target.loadState()
     },
     saveState: (state) => options.target.saveState(state),
+    ...(options.target.saveRuntimeState
+      ? { saveRuntimeState: (update) => options.target.saveRuntimeState!(update) }
+      : {}),
     get persistenceProtection() { return options.target.persistenceProtection },
   }
 }

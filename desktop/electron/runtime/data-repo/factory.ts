@@ -103,6 +103,11 @@ export function sqliteIndexesFor(namespace: string): readonly string[] {
         "json_extract(value, '$.groupId'), json_extract(value, '$.createdAt'), id",
         "json_extract(value, '$.lifecycle'), json_extract(value, '$.createdAt'), id",
       ]
+    case "app.terminal.workspaces":
+      return [
+        "json_extract(value, '$.groupId'), json_extract(value, '$.createdAt'), id",
+        "json_extract(value, '$.updatedAt'), id",
+      ]
     case "app.terminal.operations":
       return ["json_extract(value, '$.resourceId'), json_extract(value, '$.createdAt'), id"]
     case "app.terminal.idempotency":

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { terminalLayoutNodeSchema } from "./workspace"
 
 export const terminalLifecycleSchema = z.enum(["running", "stopping", "ended", "failed", "lost"])
 export const terminalAttentionStateSchema = z.enum(["waiting", "not_waiting", "unknown"])
@@ -82,7 +83,7 @@ export const terminalSessionRecordSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().uuid(),
   groupId: z.string().uuid(),
-  title: z.string().min(1).max(120),
+  title: z.string().trim().min(1).max(120),
   cwd: z.string().min(1),
   shell: z.string().min(1),
   launchBodyRef: z.string().uuid().optional(),
@@ -112,6 +113,20 @@ export const terminalSessionRecordSchema = z.object({
   commandDeliveryOperationId: z.string().uuid().optional(),
   launchFacts: terminalLaunchFactsSchema,
   attention: terminalAttentionSchema,
+}).strict()
+
+export const terminalWorkspaceRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  groupId: z.string().uuid(),
+  title: z.string().min(1).max(120),
+  layout: terminalLayoutNodeSchema,
+  layoutRevision: z.number().int().positive(),
+  closingPaneIds: z.array(z.string().min(1)),
+  closing: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 }).strict()
 
 export const terminalLaunchBodyRecordSchema = z.object({
@@ -511,6 +526,7 @@ export type TerminalAttention = z.infer<typeof terminalAttentionSchema>
 export type TerminalEndFacts = z.infer<typeof terminalEndFactsSchema>
 export type TerminalLease = z.infer<typeof terminalLeaseSchema>
 export type TerminalSessionRecord = z.infer<typeof terminalSessionRecordSchema>
+export type TerminalWorkspaceRecord = z.infer<typeof terminalWorkspaceRecordSchema>
 export type TerminalGlobalLaunchRecord = z.infer<typeof terminalGlobalLaunchRecordSchema>
 export type TerminalGlobalLaunchBodyRecord = z.infer<typeof terminalGlobalLaunchBodyRecordSchema>
 export type TerminalLaunchBodyRecord = z.infer<typeof terminalLaunchBodyRecordSchema>

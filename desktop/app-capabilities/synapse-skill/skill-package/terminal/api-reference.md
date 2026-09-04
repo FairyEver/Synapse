@@ -2,6 +2,8 @@
 
 Terminal MCP currently exposes one development contract. Tool names are the full `app.terminal.<subdomain>.<action>` id with dots replaced by underscores. Requests do not include `contractVersion`, and there are no v1/v2 or legacy aliases to negotiate. Machine logic must use `code`, `category`, `outcome`, revisions, watermarks, and operation ids rather than human messages.
 
+The Terminal UI may group multiple sessions into one split workspace. MCP still addresses each underlying session by `sessionId`; it does not expose or mutate UI workspace, pane, focus, or split-layout state.
+
 ## Capability discovery
 
 - `app_terminal_capabilities_get`: local unauthenticated capability discovery for platform, risk, limits, degradation, persistence protection, termination matrix, and raw encoding.

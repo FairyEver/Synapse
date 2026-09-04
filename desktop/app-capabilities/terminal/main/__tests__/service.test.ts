@@ -51,6 +51,166 @@ describe("TerminalService core", () => {
     expect(harness.service.listSessions().map((item) => item.id)).toContain(session.id)
   })
 
+  it("batches PTY output into one incremental runtime save", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-04T00:00:00.000Z"))
+    try {
+      const pty = fakePty()
+      const store = memoryStore()
+      const fullSave = vi.spyOn(store, "saveState")
+      const runtimeSave = vi.fn(async () => undefined)
+      store.saveRuntimeState = runtimeSave
+      const service = createTerminalService({
+        store,
+        spawnPty: () => pty,
+        resolveDefaultShell: () => "/bin/zsh",
+        resolveDefaultCwd: () => os.tmpdir(),
+      })
+      await service.start()
+      await service.createSession({})
+      fullSave.mockClear()
+
+      for (let index = 0; index < 100; index += 1) pty.emitData(`line-${index}\n`)
+      expect(runtimeSave).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(250)
+      await service.flushPersistQueue()
+
+      expect(fullSave).not.toHaveBeenCalled()
+      expect(runtimeSave).toHaveBeenCalledTimes(1)
+      expect(runtimeSave.mock.calls[0]?.[0].sessions).toHaveLength(1)
+      expect(runtimeSave.mock.calls[0]?.[0].sessions[0]?.output).toHaveLength(100)
+      expect(runtimeSave.mock.calls[0]?.[0].sessions[0]?.checkpoint).toBeUndefined()
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      pty.emitData("checkpoint\n")
+      await vi.advanceTimersByTimeAsync(250)
+      await service.flushPersistQueue()
+
+      expect(runtimeSave).toHaveBeenCalledTimes(2)
+      expect(runtimeSave.mock.calls[1]?.[0].sessions[0]?.output).toHaveLength(1)
+      expect(runtimeSave.mock.calls[1]?.[0].sessions[0]?.checkpoint).toMatchObject({ throughOutputSeq: 101 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("creates one sidebar workspace and recursively splits its focused pane", async () => {
+    const ptys = [fakePty(), fakePty(), fakePty()]
+    let spawnIndex = 0
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty: () => ptys[spawnIndex++]!,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await service.start()
+    const rootSession = await service.createSession({ title: "Workspace" })
+    const workspace = service.getWorkspaceForSession({ sessionId: rootSession.id })
+    const rootPane = workspace.layout.type === "leaf" ? workspace.layout : null
+    expect(rootPane).not.toBeNull()
+
+    const right = await service.splitPane({
+      workspaceId: workspace.id,
+      paneId: rootPane!.paneId,
+      direction: "right",
+      expectedLayoutRevision: workspace.layoutRevision,
+    })
+    const down = await service.splitPane({
+      workspaceId: workspace.id,
+      paneId: right.paneId,
+      direction: "down",
+      expectedLayoutRevision: right.workspace.layoutRevision,
+    })
+
+    expect(service.listWorkspaces()).toHaveLength(1)
+    expect(collectPaneSessionIds(down.workspace.layout)).toHaveLength(3)
+    expect(down.workspace.layout).toMatchObject({
+      type: "split",
+      direction: "horizontal",
+      second: { type: "split", direction: "vertical" },
+    })
+  })
+
+  it("closes one pane after its PTY exits and deletes the whole workspace from the sidebar", async () => {
+    const ptys = [fakePty(), fakePty()]
+    let spawnIndex = 0
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty: () => ptys[spawnIndex++]!,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await service.start()
+    const root = await service.createSession({ title: "Workspace" })
+    const initial = service.getWorkspaceForSession({ sessionId: root.id })
+    const rootPaneId = initial.layout.type === "leaf" ? initial.layout.paneId : ""
+    const split = await service.splitPane({
+      workspaceId: initial.id,
+      paneId: rootPaneId,
+      direction: "right",
+      expectedLayoutRevision: initial.layoutRevision,
+    })
+
+    const closingPane = await service.closePane({
+      workspaceId: split.workspace.id,
+      paneId: split.paneId,
+      expectedLayoutRevision: split.workspace.layoutRevision,
+    })
+    expect(closingPane.state).toBe("closing")
+    ptys[1]!.emitExit({ exitCode: 0 })
+    await service.flushPersistQueue()
+    const collapsed = service.getWorkspace({ workspaceId: initial.id })
+    expect(collapsed.layout).toMatchObject({ type: "leaf", sessionId: root.id })
+
+    const closingWorkspace = await service.closeWorkspace({
+      workspaceId: collapsed.id,
+      expectedLayoutRevision: collapsed.layoutRevision,
+    })
+    expect(closingWorkspace.state).toBe("closing")
+    ptys[0]!.emitExit({ exitCode: 0 })
+    await service.flushPersistQueue()
+    expect(service.listWorkspaces()).toEqual([])
+    expect(service.listSessions()).toEqual([])
+  })
+
+  it("finishes a persisted pane close after restart", async () => {
+    const store = memoryStore()
+    const ptys = [fakePty(), fakePty()]
+    let spawnIndex = 0
+    const service = createTerminalService({
+      store,
+      spawnPty: () => ptys[spawnIndex++]!,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await service.start()
+    const root = await service.createSession({ title: "Workspace" })
+    const initial = service.getWorkspaceForSession({ sessionId: root.id })
+    const split = await service.splitPane({
+      workspaceId: initial.id,
+      paneId: initial.layout.type === "leaf" ? initial.layout.paneId : "",
+      direction: "right",
+      expectedLayoutRevision: initial.layoutRevision,
+    })
+    await service.closePane({
+      workspaceId: initial.id,
+      paneId: split.paneId,
+      expectedLayoutRevision: split.workspace.layoutRevision,
+    })
+
+    const recovered = createTerminalService({
+      store,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await recovered.start()
+
+    expect(recovered.listWorkspaces()).toHaveLength(1)
+    expect(recovered.listWorkspaces()[0]?.layout).toMatchObject({ type: "leaf", sessionId: root.id })
+    expect(recovered.listSessions().map((session) => session.id)).toEqual([root.id])
+  })
+
   it("creates an ungrouped UI session in the first terminal group", async () => {
     const harness = await startedHarness()
     const firstGroup = harness.service.listGroups()[0]!
@@ -486,6 +646,29 @@ describe("TerminalService core", () => {
     expect(service.readSession({ sessionId: session.id }).chunks.map((chunk) => chunk.data)).toContain("nvm use\r\n")
   })
 
+  it("renames a session without waiting for later terminal output to finish persisting", async () => {
+    const store = controllableStore()
+    const { service, pty } = await startedHarness(store)
+    const session = await service.createSession({ title: "Before" })
+
+    const renamed = await runMutationWhileOutputKeepsPersistBusy(service, pty, store, () =>
+      service.renameSession({ sessionId: session.id, title: "After" }))
+
+    expect(renamed.title).toBe("After")
+  })
+
+  it("creates a group command without waiting for later terminal output to finish persisting", async () => {
+    const store = controllableStore()
+    const { service, pty } = await startedHarness(store)
+    const group = service.listGroups()[0]!
+    await service.createSession({ groupId: group.id })
+
+    const command = await runMutationWhileOutputKeepsPersistBusy(service, pty, store, () =>
+      service.createGroupCommand({ groupId: group.id, name: "dev", command: "pnpm dev" }))
+
+    expect(command).toMatchObject({ name: "dev", command: "pnpm dev" })
+  })
+
   it("returns bounded observation watermarks without consuming shared output", async () => {
     const { service, pty } = await startedHarness()
     const session = await service.createSession({})
@@ -514,9 +697,8 @@ describe("TerminalService core", () => {
   })
 })
 
-async function startedHarness() {
+async function startedHarness(store = memoryStore()) {
   const pty = fakePty()
-  const store = memoryStore()
   const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-service-"))
   const service = createTerminalService({
     store,
@@ -529,12 +711,80 @@ async function startedHarness() {
   return { service, pty, store }
 }
 
+async function runMutationWhileOutputKeepsPersistBusy<T>(
+  service: ReturnType<typeof createTerminalService>,
+  pty: ReturnType<typeof fakePty>,
+  store: ReturnType<typeof controllableStore>,
+  mutate: () => Promise<T>,
+): Promise<T> {
+  store.pauseWrites()
+  pty.emitData("before")
+  await store.waitForPendingSave()
+
+  const mutation = mutate()
+  store.releaseNextSave()
+  await store.waitForPendingSave()
+
+  pty.emitData("after")
+  store.releaseNextSave()
+  const result = await mutation
+
+  await store.waitForPendingSave()
+  expect(store.pendingSaveCount()).toBe(1)
+  store.releaseNextSave()
+  await service.flushPersistQueue()
+  return result
+}
+
 function memoryStore(): TerminalStore & { state: TerminalStoreState } {
   const holder = {
     persistenceProtection: "available" as const,
     state: { groups: [], sessions: [], output: [], terminalDomainRevision: 0, operations: [], idempotency: [], checkpoints: [] } as TerminalStoreState,
     async loadState() { return structuredClone(holder.state) },
     async saveState(state: TerminalStoreState) { holder.state = structuredClone(state) },
+  }
+  return holder
+}
+
+function collectPaneSessionIds(layout: ReturnType<ReturnType<typeof createTerminalService>["getWorkspace"]>["layout"]): string[] {
+  return layout.type === "leaf"
+    ? [layout.sessionId]
+    : [...collectPaneSessionIds(layout.first), ...collectPaneSessionIds(layout.second)]
+}
+
+function controllableStore() {
+  const pendingSaves: Array<{ readonly state: TerminalStoreState; readonly resolve: () => void }> = []
+  let pendingSaveWaiters: Array<() => void> = []
+  let writesPaused = false
+  const holder = {
+    persistenceProtection: "available" as const,
+    state: { groups: [], sessions: [], output: [], terminalDomainRevision: 0, operations: [], idempotency: [], checkpoints: [] } as TerminalStoreState,
+    async loadState() { return structuredClone(holder.state) },
+    async saveState(state: TerminalStoreState) {
+      const snapshot = structuredClone(state)
+      if (!writesPaused) {
+        holder.state = snapshot
+        return
+      }
+      await new Promise<void>((resolve) => {
+        pendingSaves.push({ state: snapshot, resolve })
+        const waiters = pendingSaveWaiters
+        pendingSaveWaiters = []
+        for (const waiter of waiters) waiter()
+      })
+    },
+    pauseWrites() { writesPaused = true },
+    pendingSaveCount() { return pendingSaves.length },
+    async waitForPendingSave() {
+      if (pendingSaves.length) return
+      await new Promise<void>((resolve) => pendingSaveWaiters.push(resolve))
+    },
+    releaseNextSave() {
+      const pending = pendingSaves.shift()
+      if (!pending) throw new Error("No pending Terminal save to release")
+      holder.state = pending.state
+      pending.resolve()
+    },
   }
   return holder
 }

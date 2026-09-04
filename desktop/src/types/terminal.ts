@@ -1,6 +1,9 @@
 import type {
   TerminalAttachSessionInput,
   TerminalAttachSessionResult,
+  TerminalClosePaneInput,
+  TerminalCloseWorkspaceInput,
+  TerminalCloseWorkspaceResult,
   TerminalCreateGroupCommandInput,
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
@@ -21,15 +24,22 @@ import type {
   TerminalReadSessionResult,
   TerminalRenameGroupInput,
   TerminalRenameSessionInput,
+  TerminalRenameWorkspaceInput,
   TerminalResizeSessionInput,
   TerminalResizedEvent,
   TerminalRunStartupCommandInput,
+  TerminalSetSplitRatioInput,
   TerminalSession,
   TerminalStopSessionInput,
+  TerminalSplitPaneInput,
+  TerminalSplitPaneResult,
   TerminalUpdateGroupCommandInput,
   TerminalUpdateGroupSettingsInput,
   TerminalUpdateGlobalLaunchSettingsInput,
   TerminalWriteSessionInput,
+  TerminalWorkspace,
+  TerminalLayoutNode,
+  TerminalPaneLeaf,
 } from "../../app-capabilities/terminal/shared/schema"
 
 export type SynapseTerminalGroup = TerminalGroup
@@ -41,6 +51,9 @@ export type SynapseTerminalEnvironmentValueInput = TerminalEnvironmentValueInput
 export type SynapseTerminalLaunchLayer = TerminalLaunchLayer
 export type SynapseTerminalGlobalLaunchSettings = TerminalGlobalLaunchSettings
 export type SynapseTerminalSession = TerminalSession
+export type SynapseTerminalWorkspace = TerminalWorkspace
+export type SynapseTerminalLayoutNode = TerminalLayoutNode
+export type SynapseTerminalPaneLeaf = TerminalPaneLeaf
 export type SynapseTerminalOutputChunk = TerminalOutputChunk
 export type SynapseTerminalCreateGroupInput = TerminalCreateGroupInput
 export type SynapseTerminalRenameGroupInput = TerminalRenameGroupInput
@@ -55,6 +68,7 @@ export type SynapseTerminalCreateSessionInput = TerminalCreateSessionInput
 export type SynapseTerminalAttachSessionInput = TerminalAttachSessionInput
 export type SynapseTerminalAttachSessionResult = TerminalAttachSessionResult
 export type SynapseTerminalRenameSessionInput = TerminalRenameSessionInput
+export type SynapseTerminalRenameWorkspaceInput = TerminalRenameWorkspaceInput
 export type SynapseTerminalDeleteSessionInput = TerminalDeleteSessionInput
 export type SynapseTerminalReadSessionInput = TerminalReadSessionInput
 export type SynapseTerminalReadSessionResult = TerminalReadSessionResult
@@ -63,6 +77,12 @@ export type SynapseTerminalResizeSessionInput = TerminalResizeSessionInput
 export type SynapseTerminalResizedEvent = TerminalResizedEvent
 export type SynapseTerminalStopSessionInput = TerminalStopSessionInput
 export type SynapseTerminalRunStartupCommandInput = TerminalRunStartupCommandInput
+export type SynapseTerminalSplitPaneInput = TerminalSplitPaneInput
+export type SynapseTerminalSplitPaneResult = TerminalSplitPaneResult
+export type SynapseTerminalSetSplitRatioInput = TerminalSetSplitRatioInput
+export type SynapseTerminalClosePaneInput = TerminalClosePaneInput
+export type SynapseTerminalCloseWorkspaceInput = TerminalCloseWorkspaceInput
+export type SynapseTerminalCloseWorkspaceResult = TerminalCloseWorkspaceResult
 
 export type SynapseTerminalDataEvent = {
   readonly sessionId: string

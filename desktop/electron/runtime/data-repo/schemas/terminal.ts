@@ -12,6 +12,7 @@ import {
   terminalLaunchBodyRecordSchema,
   terminalOperationSchema,
   terminalSessionRecordSchema,
+  terminalWorkspaceRecordSchema,
   type TerminalCommandBodyRecord,
   type TerminalCommandRecord,
   type TerminalDomainState,
@@ -23,6 +24,7 @@ import {
   type TerminalLaunchBodyRecord,
   type TerminalOperation,
   type TerminalSessionRecord,
+  type TerminalWorkspaceRecord,
 } from "../../../../app-capabilities/terminal/shared/contract-schema"
 import type { NamespaceSchema } from "../types"
 
@@ -48,6 +50,7 @@ const terminalDeleteIntentEntrySchema = z.object({
   groupIds: z.array(z.string().uuid()),
   commandIds: z.array(z.string().uuid()),
   sessionIds: z.array(z.string().uuid()),
+  workspaceIds: z.array(z.string().uuid()).optional(),
   blockIds: z.array(z.string().uuid()),
   createdAt: z.string().datetime(),
 }).strict()
@@ -113,6 +116,14 @@ export const terminalSessionsSchema: NamespaceSchema<TerminalSessionRecord> = {
   currentVersion: 2,
   migrations: noMigrations,
   validate: (value): value is TerminalSessionRecord => terminalSessionRecordSchema.safeParse(value).success,
+}
+
+export const terminalWorkspacesSchema: NamespaceSchema<TerminalWorkspaceRecord> = {
+  name: "app.terminal.workspaces",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (value): value is TerminalWorkspaceRecord => terminalWorkspaceRecordSchema.safeParse(value).success,
 }
 
 export const terminalLaunchBodiesSchema: NamespaceSchema<TerminalLaunchBodyRecord> = {

@@ -1,11 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react"
-import { Check, CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
+import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
-import { Terminal } from "@xterm/xterm"
-import { FitAddon } from "@xterm/addon-fit"
-import { WebLinksAddon } from "@xterm/addon-web-links"
-import { WebglAddon } from "@xterm/addon-webgl"
-import "@xterm/xterm/css/xterm.css"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import {
@@ -72,14 +67,20 @@ import type {
   SynapseTerminalGroupSummary,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalLaunchLayer,
-  SynapseTerminalOutputChunk,
-  SynapseTerminalResizedEvent,
   SynapseTerminalSession,
+  SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
+import { collectTerminalPaneLeaves, removeTerminalPane } from "../shared/schema"
 import { encodeTerminalCommandInput } from "../shared/terminal-input"
-import { isTerminalShiftEnterEvent } from "./terminal-keyboard"
-import { createTerminalRenderingOptions } from "./terminal-rendering"
+import {
+  readTerminalAppearanceSize,
+  writeTerminalAppearanceSize,
+} from "./terminal-appearance"
 import { TerminalLaunchSettingsForm } from "./terminal-launch-settings-form"
+import {
+  TerminalWorkspaceView,
+  type TerminalWorkspaceViewHandle,
+} from "./terminal-workspace-view"
 import {
   getTerminalToolbarActions,
   isTerminalToolbarActionEnabled,
@@ -89,8 +90,6 @@ import {
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
-const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
-
 const logger = createRendererLogger("terminal.app")
 
 export function TerminalModule({
@@ -101,21 +100,23 @@ export function TerminalModule({
   readonly onOpenRequestConsumed?: (requestId: string) => void
 } = {}) {
   const terminalBridge = requireBridgeDomain("terminal")
-  const shellBridge = requireBridgeDomain("shell")
   const [groups, setGroups] = useState<SynapseTerminalGroupSummary[]>([])
+  const [workspaces, setWorkspaces] = useState<SynapseTerminalWorkspace[]>([])
   const [sessions, setSessions] = useState<SynapseTerminalSession[]>([])
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
+  const [activePaneIds, setActivePaneIds] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false)
   const [globalLaunchSettings, setGlobalLaunchSettings] = useState<SynapseTerminalGlobalLaunchSettings | null>(null)
   const [globalLaunchDraft, setGlobalLaunchDraft] = useState<SynapseTerminalLaunchLayer>({})
+  const [terminalAppearanceSize, setTerminalAppearanceSize] = useState(readTerminalAppearanceSize)
+  const [terminalAppearanceSizeDraft, setTerminalAppearanceSizeDraft] = useState(terminalAppearanceSize)
   const [globalLaunchSaving, setGlobalLaunchSaving] = useState(false)
   const [globalLaunchChoosingDirectory, setGlobalLaunchChoosingDirectory] = useState(false)
-  const [renameTarget, setRenameTarget] = useState<SynapseTerminalSession | null>(null)
+  const [renameTarget, setRenameTarget] = useState<SynapseTerminalWorkspace | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
-  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
-  const [stoppingSessionId, setStoppingSessionId] = useState<string | null>(null)
+  const [closingWorkspaceId, setClosingWorkspaceId] = useState<string | null>(null)
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
   const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroupSummary | null>(null)
   const [groupName, setGroupName] = useState("")
@@ -138,36 +139,41 @@ export function TerminalModule({
   const [commandSaving, setCommandSaving] = useState(false)
   const [commandDeletingId, setCommandDeletingId] = useState<string | null>(null)
   const [discardAction, setDiscardAction] = useState<(() => void) | null>(null)
-  const [terminalReadError, setTerminalReadError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
-  const terminalContainerRef = useRef<HTMLDivElement | null>(null)
-  const xtermRef = useRef<Terminal | null>(null)
-  const terminalGeometrySyncRef = useRef<((refreshRenderer?: boolean) => void) | null>(null)
-  const deletedSessionIdsRef = useRef(new Set<string>())
+  const workspaceViewRef = useRef<TerminalWorkspaceViewHandle | null>(null)
   const renameReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
   const createGroupActionRef = useRef<HTMLButtonElement | null>(null)
 
-  const activeSession = useMemo(() => {
-    if (!activeSessionId) return sessions[0] ?? null
-    return sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null
-  }, [activeSessionId, sessions])
-  const terminalSessionId = activeSession?.id ?? null
+  const activeWorkspace = useMemo(() => {
+    if (!activeWorkspaceId) return workspaces[0] ?? null
+    return workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? workspaces[0] ?? null
+  }, [activeWorkspaceId, workspaces])
+  const activeWorkspaceLeaves = activeWorkspace ? collectTerminalPaneLeaves(activeWorkspace.layout) : []
+  const activePaneId = activeWorkspace
+    ? activePaneIds[activeWorkspace.id] && activeWorkspaceLeaves.some((pane) => pane.paneId === activePaneIds[activeWorkspace.id])
+      ? activePaneIds[activeWorkspace.id]!
+      : activeWorkspaceLeaves[0]?.paneId ?? null
+    : null
+  const activePane = activeWorkspaceLeaves.find((pane) => pane.paneId === activePaneId) ?? null
+  const activeSession = activePane
+    ? sessions.find((session) => session.id === activePane.sessionId) ?? null
+    : null
   const terminalSessionStatus = activeSession?.status ?? null
-  const activeSessionRef = useRef(activeSession)
-  activeSessionRef.current = activeSession
 
-  const sessionGroups = useMemo(() => groupSessions(groups, sessions), [groups, sessions])
-  const activeSessionRunning = activeSession?.status === "running"
+  const workspaceGroups = useMemo(() => groupWorkspaces(groups, workspaces), [groups, workspaces])
   const rendererPlatform = getRendererPlatform()
   const toolbarActions = useMemo(
     () => getTerminalToolbarActions(rendererPlatform),
     [rendererPlatform],
   )
   const globalLaunchDirty = globalSettingsOpen
-    && JSON.stringify(globalLaunchDraft) !== JSON.stringify(globalLaunchSettings?.settings ?? {})
+    && (
+      JSON.stringify(globalLaunchDraft) !== JSON.stringify(globalLaunchSettings?.settings ?? {})
+      || terminalAppearanceSizeDraft !== terminalAppearanceSize
+    )
   const groupSettingsDirty = Boolean(groupSettingsTarget) && (
     groupSettingsName !== groupSettingsTarget?.name
     || JSON.stringify(groupSettingsLaunch) !== JSON.stringify(groupSettingsTarget ? launchLayerFromGroup(groupSettingsTarget) : {})
@@ -187,15 +193,17 @@ export function TerminalModule({
   }, [])
 
   const refreshSessions = useCallback(async () => {
-    const [nextGroups, nextSessions] = await Promise.all([
+    const [nextGroups, nextWorkspaces, nextSessions] = await Promise.all([
       terminalBridge.group.list(),
+      terminalBridge.workspace.list(),
       terminalBridge.session.list(),
     ])
     setGroups(nextGroups)
+    setWorkspaces(nextWorkspaces)
     setSessions(nextSessions)
-    setActiveSessionId((current) => {
-      if (current && nextSessions.some((session) => session.id === current)) return current
-      return nextSessions[0]?.id ?? null
+    setActiveWorkspaceId((current) => {
+      if (current && nextWorkspaces.some((workspace) => workspace.id === current)) return current
+      return nextWorkspaces[0]?.id ?? null
     })
   }, [terminalBridge])
 
@@ -217,18 +225,28 @@ export function TerminalModule({
     }
   }, [refreshSessions])
 
+  useEffect(() => terminalBridge.operation.onDomainChanged(() => {
+    void refreshSessions().catch((error) => {
+      logger.warn("Failed to refresh terminal objects after a domain change.", error)
+    })
+  }), [refreshSessions, terminalBridge])
+
   useEffect(() => {
     if (!openRequest) return
     let cancelled = false
     Promise.all([
       terminalBridge.group.list(),
       terminalBridge.session.get({ sessionId: openRequest.sessionId }),
+      terminalBridge.workspace.getForSession({ sessionId: openRequest.sessionId }),
     ])
-      .then(([nextGroups, session]) => {
+      .then(([nextGroups, session, workspace]) => {
         if (cancelled) return
         setGroups(nextGroups)
         setSessions((current) => mergeSession(current, session))
-        setActiveSessionId(session.id)
+        setWorkspaces((current) => mergeWorkspace(current, workspace))
+        setActiveWorkspaceId(workspace.id)
+        const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === session.id)
+        if (pane) setActivePaneIds((current) => ({ ...current, [workspace.id]: pane.paneId }))
         setOpenGroupIds((current) => ({ ...current, [session.groupId]: true }))
       })
       .catch((error) => {
@@ -250,9 +268,12 @@ export function TerminalModule({
         { component: "terminal", eventKey: "terminal.session.create" },
         () => terminalBridge.session.create({ cols: DEFAULT_COLS, rows: DEFAULT_ROWS, ...input }),
       )
+      const workspace = await terminalBridge.workspace.getForSession({ sessionId: session.id })
       setSessions((current) => mergeSession(current, session))
-      setActiveSessionId(session.id)
-      setTerminalReadError(null)
+      setWorkspaces((current) => mergeWorkspace(current, workspace))
+      setActiveWorkspaceId(workspace.id)
+      const paneId = collectTerminalPaneLeaves(workspace.layout)[0]?.paneId
+      if (paneId) setActivePaneIds((current) => ({ ...current, [workspace.id]: paneId }))
       terminalBridge.group.list()
         .then(setGroups)
         .catch((error) => {
@@ -265,10 +286,10 @@ export function TerminalModule({
     }
   }, [terminalBridge])
 
-  const openRenameDialog = useCallback((session: SynapseTerminalSession, returnFocus: HTMLElement) => {
+  const openRenameDialog = useCallback((workspace: SynapseTerminalWorkspace, returnFocus: HTMLElement) => {
     renameReturnFocusRef.current = returnFocus
-    setRenameTarget(session)
-    setRenameTitle(session.title)
+    setRenameTarget(workspace)
+    setRenameTitle(workspace.title)
   }, [])
 
   const closeRenameDialog = useCallback(() => {
@@ -321,12 +342,13 @@ export function TerminalModule({
       const settings = await terminalBridge.globalLaunch.get()
       setGlobalLaunchSettings(settings)
       setGlobalLaunchDraft(settings.settings ?? {})
+      setTerminalAppearanceSizeDraft(terminalAppearanceSize)
       setGlobalSettingsOpen(true)
     } catch (error) {
       logger.error("Failed to load global terminal launch settings.", error)
       toast.error("加载终端设置失败")
     }
-  }, [terminalBridge])
+  }, [terminalAppearanceSize, terminalBridge])
 
   const chooseLaunchCwd = useCallback(async (
     setChoosing: (value: boolean) => void,
@@ -355,6 +377,8 @@ export function TerminalModule({
           settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
         }),
       )
+      writeTerminalAppearanceSize(terminalAppearanceSizeDraft)
+      setTerminalAppearanceSize(terminalAppearanceSizeDraft)
       setGlobalLaunchSettings(updated)
       setGlobalSettingsOpen(false)
       toast.success("终端设置已保存")
@@ -366,7 +390,7 @@ export function TerminalModule({
     } finally {
       setGlobalLaunchSaving(false)
     }
-  }, [globalLaunchDraft, globalLaunchSettings, terminalBridge])
+  }, [globalLaunchDraft, globalLaunchSettings, terminalAppearanceSizeDraft, terminalBridge])
 
   const saveGroup = useCallback(async () => {
     const name = groupName.trim()
@@ -397,78 +421,123 @@ export function TerminalModule({
     }
   }, [groupDialogMode, groupName, groupRenameTarget, terminalBridge])
 
-  const renameSession = useCallback(async () => {
+  const renameWorkspace = useCallback(async () => {
     if (!renameTarget) return
     const title = renameTitle.trim()
     if (!title) return
     setRenameSaving(true)
     try {
-      const session = await runTrackedOperation(
-        { component: "terminal", eventKey: "terminal.session.rename" },
-        () => terminalBridge.session.rename({ sessionId: renameTarget.id, title: renameTitle }),
+      const workspace = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.workspace.rename" },
+        () => terminalBridge.workspace.rename({
+          workspaceId: renameTarget.id,
+          title,
+          expectedLayoutRevision: renameTarget.layoutRevision,
+        }),
       )
-      setSessions((current) => mergeSession(current, session))
+      setWorkspaces((current) => mergeWorkspace(current, workspace))
       closeRenameDialog()
     } catch (error) {
-      logger.error("Failed to rename terminal session.", error)
+      logger.error("Failed to rename terminal workspace.", error)
       toast.error("重命名终端失败")
     } finally {
       setRenameSaving(false)
     }
   }, [closeRenameDialog, renameTarget, renameTitle, terminalBridge])
 
-  const deleteSession = useCallback(async (target: SynapseTerminalSession) => {
-    const targetId = target.id
-    setDeletingSessionId(targetId)
+  const closeWorkspace = useCallback(async (target: SynapseTerminalWorkspace, force = false) => {
+    setClosingWorkspaceId(target.id)
     try {
-      await runTrackedOperation(
-        { component: "terminal", eventKey: "terminal.session.delete" },
-        () => terminalBridge.session.delete({ sessionId: targetId }),
+      const result = await runTrackedOperation(
+        { component: "terminal", eventKey: force ? "terminal.workspace.force_close" : "terminal.workspace.close" },
+        () => terminalBridge.workspace.close({
+          workspaceId: target.id,
+          expectedLayoutRevision: target.layoutRevision,
+          ...(force ? { force: true } : {}),
+        }),
       )
-      setSessions((current) => {
-        const nextSessions = current.filter((session) => session.id !== targetId)
-        setActiveSessionId((currentActiveId) => {
-          if (currentActiveId !== targetId) return currentActiveId
-          return nextSessions[0]?.id ?? null
-        })
-        return nextSessions
-      })
-      globalThis.setTimeout(() => {
-        const nextActiveRow = document.querySelector<HTMLElement>(
-          '[data-track="terminal-session-select"][aria-current="page"]',
-        )
-        const focusTarget = nextActiveRow ?? createSessionActionRef.current
-        focusTarget?.focus()
-      }, 0)
+      if (result.state === "deleted") {
+        setWorkspaces((current) => current.filter((workspace) => workspace.id !== target.id))
+        setActiveWorkspaceId((current) => current === target.id ? null : current)
+        globalThis.setTimeout(() => {
+          const nextActiveRow = document.querySelector<HTMLElement>(
+            '[data-track="terminal-session-select"][aria-current="page"]',
+          )
+          ;(nextActiveRow ?? createSessionActionRef.current)?.focus()
+        }, 0)
+      }
     } catch (error) {
-      logger.error("Failed to delete terminal session.", error)
-      toast.error("删除终端失败")
+      logger.error("Failed to close terminal workspace.", error)
+      toast.error("关闭终端失败")
     } finally {
-      setDeletingSessionId((current) => current === targetId ? null : current)
+      setClosingWorkspaceId((current) => current === target.id ? null : current)
     }
   }, [terminalBridge])
 
-  const stopSession = useCallback(async (target: SynapseTerminalSession) => {
-    setStoppingSessionId(target.id)
+  const splitPane = useCallback(async (paneId: string, direction: "right" | "down") => {
+    if (!activeWorkspace) return
+    try {
+      const result = await runTrackedOperation(
+        { component: "terminal", eventKey: `terminal.pane.split_${direction}` },
+        () => terminalBridge.pane.split({
+          workspaceId: activeWorkspace.id,
+          paneId,
+          direction,
+          expectedLayoutRevision: activeWorkspace.layoutRevision,
+          cols: DEFAULT_COLS,
+          rows: DEFAULT_ROWS,
+        }),
+      )
+      const session = await terminalBridge.session.get({ sessionId: result.sessionId })
+      setWorkspaces((current) => mergeWorkspace(current, result.workspace))
+      setSessions((current) => mergeSession(current, session))
+      setActivePaneIds((current) => ({ ...current, [result.workspace.id]: result.paneId }))
+    } catch (error) {
+      logger.error("Failed to split terminal pane.", error)
+      toast.error(error instanceof Error && error.message.includes("quota_exceeded")
+        ? "一个终端最多支持 8 个分屏"
+        : "创建分屏失败")
+    }
+  }, [activeWorkspace, terminalBridge])
+
+  const closePane = useCallback(async (paneId: string) => {
+    if (!activeWorkspace) return
+    const force = rendererPlatform === "darwin" && activeWorkspace.closingPaneIds.includes(paneId)
     try {
       await runTrackedOperation(
-        { component: "terminal", eventKey: "terminal.session.stop" },
-        () => terminalBridge.session.stop({ sessionId: target.id, force: target.status === "stopping" }),
+        { component: "terminal", eventKey: force ? "terminal.pane.force_close" : "terminal.pane.close" },
+        () => terminalBridge.pane.close({
+          workspaceId: activeWorkspace.id,
+          paneId,
+          expectedLayoutRevision: activeWorkspace.layoutRevision,
+          ...(force ? { force: true } : {}),
+        }),
       )
     } catch (error) {
-      logger.error("Failed to stop terminal session.", error)
-      toast.error("停止终端失败")
-    } finally {
-      setStoppingSessionId((current) => current === target.id ? null : current)
+      logger.error("Failed to close terminal pane.", error)
+      toast.error("关闭分屏失败")
     }
-  }, [terminalBridge])
+  }, [activeWorkspace, rendererPlatform, terminalBridge])
+
+  const updateSplitRatio = useCallback(async (splitId: string, ratio: number) => {
+    if (!activeWorkspace) return
+    try {
+      const workspace = await terminalBridge.pane.updateRatio({
+        workspaceId: activeWorkspace.id,
+        splitId,
+        ratio,
+        expectedLayoutRevision: activeWorkspace.layoutRevision,
+      })
+      setWorkspaces((current) => mergeWorkspace(current, workspace))
+    } catch (error) {
+      logger.warn("Failed to persist terminal split ratio.", error)
+      void refreshSessions()
+    }
+  }, [activeWorkspace, refreshSessions, terminalBridge])
 
   const deleteGroup = useCallback(async (target = deleteGroupTarget) => {
     if (!target) return
     const groupId = target.id
-    const removedSessionIds = new Set(sessions
-      .filter((session) => session.groupId === groupId)
-      .map((session) => session.id))
     setDeleteGroupSaving(true)
     try {
       await runTrackedOperation(
@@ -476,13 +545,11 @@ export function TerminalModule({
         () => terminalBridge.group.delete({ groupId }),
       )
       setGroups((current) => current.filter((group) => group.id !== groupId))
-      setSessions((current) => {
-        const nextSessions = current.filter((session) => session.groupId !== groupId)
-        setActiveSessionId((currentActiveId) => {
-          if (!currentActiveId || !removedSessionIds.has(currentActiveId)) return currentActiveId
-          return nextSessions[0]?.id ?? null
-        })
-        return nextSessions
+      setSessions((current) => current.filter((session) => session.groupId !== groupId))
+      setWorkspaces((current) => current.filter((workspace) => workspace.groupId !== groupId))
+      setActiveWorkspaceId((current) => {
+        if (!current) return current
+        return workspaces.some((workspace) => workspace.id === current && workspace.groupId === groupId) ? null : current
       })
       setDeleteGroupTarget(null)
       deleteGroupReturnFocusRef.current = null
@@ -493,7 +560,7 @@ export function TerminalModule({
     } finally {
       setDeleteGroupSaving(false)
     }
-  }, [deleteGroupTarget, sessions, terminalBridge])
+  }, [deleteGroupTarget, terminalBridge, workspaces])
 
   const deleteGroupMembers = deleteGroupTarget
     ? sessions.filter((session) => session.groupId === deleteGroupTarget.id)
@@ -712,9 +779,12 @@ export function TerminalModule({
           rows: DEFAULT_ROWS,
         }),
       )
+      const workspace = await terminalBridge.workspace.getForSession({ sessionId: session.id })
       setSessions((current) => mergeSession(current, session))
-      setActiveSessionId(session.id)
-      setTerminalReadError(null)
+      setWorkspaces((current) => mergeWorkspace(current, workspace))
+      setActiveWorkspaceId(workspace.id)
+      const paneId = collectTerminalPaneLeaves(workspace.layout)[0]?.paneId
+      if (paneId) setActivePaneIds((current) => ({ ...current, [workspace.id]: paneId }))
       terminalBridge.group.list()
         .then(setGroups)
         .catch((error) => {
@@ -727,300 +797,41 @@ export function TerminalModule({
     }
   }, [terminalBridge])
 
-  const handleTerminalDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!isExternalFileDrag(event)) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = "copy"
-  }, [])
-
-  const handleTerminalDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!isExternalFileDrag(event)) return
-    event.preventDefault()
-
-    if (!terminalSessionId || !activeSessionRunning) {
-      toast.error("终端未运行")
-      return
-    }
-
-    const paths = Array.from(event.dataTransfer.files ?? [])
-      .map((file) => shellBridge.filePathForDroppedFile(file))
-    if (paths.length === 0 || paths.some((path) => !isValidDroppedTerminalPath(path))) {
-      toast.error("拖拽路径不可用")
-      return
-    }
-
-    const validPaths = paths.filter(isValidDroppedTerminalPath)
-    const input = formatDroppedTerminalPaths(validPaths)
-    void writeTerminalInputChunks({
-      input,
-      write: (data) => terminalBridge.session.write({
-        sessionId: terminalSessionId,
-        data,
-      }),
-    }).catch((error) => {
-      logger.error("Failed to write dropped terminal paths.", error)
-      toast.error("写入终端失败")
-    })
-  }, [activeSessionRunning, shellBridge, terminalBridge, terminalSessionId])
-
   const runToolbarAction = useCallback(async (action: TerminalToolbarAction) => {
-    if (!activeSession) return
-    if (!isTerminalToolbarActionEnabled(action, activeSession.status)) return
-
+    if (!activeSession || !isTerminalToolbarActionEnabled(action, activeSession.status)) return
     if (action.kind === "xterm-local") {
-      if (action.operation === "clear") {
-        xtermRef.current?.clear()
-        terminalGeometrySyncRef.current?.(true)
-      }
+      if (action.operation === "clear") workspaceViewRef.current?.clearActivePane()
       return
     }
-
     const payload = resolveTerminalToolbarPayload(action, rendererPlatform)
     if (!payload) return
-
     const data = action.kind === "shell-command" ? encodeTerminalCommandInput(payload) : payload
     try {
-      await terminalBridge.session.write({
-        sessionId: activeSession.id,
-        data,
-      })
+      await terminalBridge.session.write({ sessionId: activeSession.id, data })
     } catch (error) {
       logger.error("Failed to run terminal toolbar action.", error)
       toast.error("写入终端失败")
     }
   }, [activeSession, rendererPlatform, terminalBridge])
 
-  useEffect(() => {
-    const container = terminalContainerRef.current
-    const initialSession = activeSessionRef.current
-    if (!container || !terminalSessionId || !initialSession) return undefined
+  const handleSessionChanged = useCallback((session: SynapseTerminalSession) => {
+    setSessions((current) => mergeSession(current, session))
+  }, [])
 
-    setTerminalReadError(null)
-    let disposed = false
-    let lastSeq = 0
-    let attached = false
-    let projectionAvailable = false
-    let geometrySyncReady = false
-    let appliedSizeRevision = initialSession.sizeRevision
-    let announcedSizeRevision = initialSession.sizeRevision
-    let drainInFlight = false
-    let requestedResize = { cols: initialSession.cols, rows: initialSession.rows }
-    const pendingChunks: SynapseTerminalOutputChunk[] = []
-    const resizeBarriers = new Map<number, SynapseTerminalResizedEvent>()
-    const xterm = new Terminal({
-      ...createTerminalRenderingOptions({
-        container,
-        disableStdin: initialSession.status !== "running",
-      }),
-      cols: initialSession.cols,
-      rows: initialSession.rows,
-    })
-    xtermRef.current = xterm
-    const fitAddon = new FitAddon()
-    const webLinksAddon = new WebLinksAddon((_event, uri) => {
-      void shellBridge.openExternal(uri).catch((error) => {
-        logger.error("Failed to open terminal web link.", error)
-        toast.error("打开链接失败")
-      })
-    })
-    xterm.loadAddon(fitAddon)
-    xterm.loadAddon(webLinksAddon)
-    xterm.open(container)
-    const webglRenderer = loadWebglRenderer(xterm)
+  const handleSessionDeleted = useCallback((sessionId: string) => {
+    setSessions((current) => current.filter((session) => session.id !== sessionId))
+    setWorkspaces((current) => current.flatMap((workspace) => {
+      const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === sessionId)
+      if (!pane) return [workspace]
+      const layout = removeTerminalPane(workspace.layout, pane.paneId)
+      return layout ? [{ ...workspace, layout }] : []
+    }))
+  }, [])
 
-    const syncTerminalGeometry = (refreshRenderer = false) => {
-      if (disposed || !geometrySyncReady || !projectionAvailable) return
-      if (refreshRenderer) {
-        webglRenderer?.refresh()
-      }
-      const proposed = fitAddon.proposeDimensions()
-      const cols = proposed?.cols ?? xterm.cols
-      const rows = proposed?.rows ?? xterm.rows
-      if (!cols || !rows) return
-      if (xterm.cols === cols && xterm.rows === rows) return
-      if (requestedResize.cols === cols && requestedResize.rows === rows) return
-      requestedResize = { cols, rows }
-      void terminalBridge.session.resize({
-        sessionId: terminalSessionId,
-        cols,
-        rows,
-      }).catch((error) => {
-        requestedResize = { cols: xterm.cols, rows: xterm.rows }
-        logger.warn("Failed to resize terminal session.", error)
-      })
-    }
-    terminalGeometrySyncRef.current = syncTerminalGeometry
-
-    const resizeObserver = new ResizeObserver(() => syncTerminalGeometry())
-    resizeObserver.observe(container)
-
-    const writeTerminalInput = (data: string) => {
-      if (disposed || xterm.options.disableStdin) return
-      void terminalBridge.session.write({
-        sessionId: terminalSessionId,
-        data,
-      }).catch((error) => {
-        logger.error("Failed to write terminal input.", error)
-        toast.error("写入终端失败")
-      })
-    }
-
-    xterm.attachCustomKeyEventHandler((event) => {
-      if (!isTerminalShiftEnterEvent(event)) return true
-      event.preventDefault()
-      event.stopPropagation()
-      if (event.type === "keydown") writeTerminalInput("\n")
-      return false
-    })
-
-    const inputDisposable = xterm.onData(writeTerminalInput)
-
-    const writeTerminalData = (data: string) => new Promise<void>((resolve) => {
-      if (disposed) {
-        resolve()
-        return
-      }
-      xterm.write(data, resolve)
-    })
-
-    const writePendingChunksThrough = async (throughOutputSeq: number) => {
-      pendingChunks.sort((left, right) => left.seq - right.seq)
-      while (!disposed && pendingChunks.length > 0) {
-        const chunk = pendingChunks[0]!
-        if (chunk.seq > throughOutputSeq) break
-        pendingChunks.shift()
-        if (chunk.seq <= lastSeq) continue
-        await writeTerminalData(chunk.data)
-        lastSeq = chunk.seq
-      }
-    }
-
-    const drainProjection = async () => {
-      if (drainInFlight || !attached || !projectionAvailable || disposed) return
-      drainInFlight = true
-      try {
-        while (!disposed) {
-          const nextBarrier = [...resizeBarriers.values()]
-            .filter((event) => event.sizeRevision > appliedSizeRevision)
-            .sort((left, right) => left.sizeRevision - right.sizeRevision)[0]
-          if (nextBarrier) {
-            await writePendingChunksThrough(nextBarrier.throughOutputSeq)
-            if (disposed) return
-            xterm.resize(nextBarrier.cols, nextBarrier.rows)
-            webglRenderer?.refresh()
-            appliedSizeRevision = nextBarrier.sizeRevision
-            requestedResize = { cols: nextBarrier.cols, rows: nextBarrier.rows }
-            resizeBarriers.delete(nextBarrier.sizeRevision)
-            continue
-          }
-          if (announcedSizeRevision > appliedSizeRevision) return
-          if (pendingChunks.length === 0) return
-          await writePendingChunksThrough(Number.POSITIVE_INFINITY)
-        }
-      } finally {
-        drainInFlight = false
-        const hasApplicableBarrier = [...resizeBarriers.keys()].some((revision) => revision > appliedSizeRevision)
-        if (hasApplicableBarrier || (announcedSizeRevision <= appliedSizeRevision && pendingChunks.length > 0)) {
-          void drainProjection()
-        }
-      }
-    }
-
-    const unsubscribeData = terminalBridge.operation.onData((event) => {
-      if (event.sessionId !== terminalSessionId || disposed) return
-      pendingChunks.push(event.chunk)
-      void drainProjection()
-    })
-
-    const unsubscribeSessionChanged = terminalBridge.operation.onSessionChanged((session) => {
-      setSessions((current) => mergeSession(current, session))
-      if (session.id !== terminalSessionId || session.sizeRevision <= announcedSizeRevision) return
-      announcedSizeRevision = session.sizeRevision
-      void drainProjection()
-    })
-    const unsubscribeSessionDeleted = terminalBridge.operation.onSessionDeleted((event) => {
-      deletedSessionIdsRef.current.add(event.sessionId)
-      setSessions((current) => {
-        const nextSessions = current.filter((session) => session.id !== event.sessionId)
-        setActiveSessionId((currentActiveId) => {
-          if (currentActiveId !== event.sessionId) return currentActiveId
-          return nextSessions[0]?.id ?? null
-        })
-        return nextSessions
-      })
-    })
-    const unsubscribeResized = terminalBridge.operation.onResized((event) => {
-      if (event.sessionId !== terminalSessionId || disposed || event.sizeRevision <= appliedSizeRevision) return
-      announcedSizeRevision = Math.max(announcedSizeRevision, event.sizeRevision)
-      resizeBarriers.set(event.sizeRevision, event)
-      void drainProjection()
-    })
-    const unsubscribeDomainChanged = terminalBridge.operation.onDomainChanged(() => {
-      void refreshSessions().catch((error) => {
-        logger.warn("Failed to refresh terminal objects after a domain change.", error)
-      })
-    })
-
-    const attachProjection = async () => {
-      const snapshot = await terminalBridge.session.attach({ sessionId: terminalSessionId })
-      if (disposed) return
-      setSessions((current) => mergeSession(current, snapshot.session))
-      if (snapshot.degraded) {
-        setTerminalReadError("终端画面无法恢复")
-        attached = true
-        return
-      }
-
-      xterm.resize(snapshot.cols, snapshot.rows)
-      await writeTerminalData(snapshot.serialized)
-      if (disposed) return
-      lastSeq = snapshot.throughOutputSeq
-      appliedSizeRevision = snapshot.sizeRevision
-      announcedSizeRevision = Math.max(announcedSizeRevision, snapshot.sizeRevision)
-      requestedResize = { cols: snapshot.cols, rows: snapshot.rows }
-      for (const revision of resizeBarriers.keys()) {
-        if (revision <= appliedSizeRevision) resizeBarriers.delete(revision)
-      }
-      attached = true
-      projectionAvailable = true
-      await drainProjection()
-      geometrySyncReady = true
-      syncTerminalGeometry()
-    }
-
-    void attachProjection().catch((error) => {
-      logger.error("Failed to attach terminal projection.", error)
-      if (!disposed && !deletedSessionIdsRef.current.has(terminalSessionId)) {
-        setTerminalReadError("终端画面无法恢复")
-        toast.error("终端画面无法恢复")
-      }
-    })
-
-    return () => {
-      disposed = true
-      unsubscribeData()
-      unsubscribeSessionChanged()
-      unsubscribeSessionDeleted()
-      unsubscribeResized()
-      unsubscribeDomainChanged()
-      inputDisposable.dispose()
-      webglRenderer?.dispose()
-      resizeObserver.disconnect()
-      if (terminalGeometrySyncRef.current === syncTerminalGeometry) {
-        terminalGeometrySyncRef.current = null
-      }
-      if (xtermRef.current === xterm) {
-        xtermRef.current = null
-      }
-      xterm.dispose()
-    }
-  }, [refreshSessions, shellBridge, terminalBridge, terminalSessionId])
-
-  useEffect(() => {
-    if (xtermRef.current) {
-      xtermRef.current.options.disableStdin = terminalSessionStatus !== "running"
-    }
-  }, [terminalSessionStatus])
+  const selectActivePane = useCallback((paneId: string) => {
+    if (!activeWorkspace) return
+    setActivePaneIds((current) => ({ ...current, [activeWorkspace.id]: paneId }))
+  }, [activeWorkspace])
 
   const sidebar = (
     <ModuleSidebar
@@ -1042,7 +853,7 @@ export function TerminalModule({
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
             </>
-          ) : sessionGroups.length > 0 ? sessionGroups.map((group) => (
+          ) : workspaceGroups.length > 0 ? workspaceGroups.map((group) => (
             <ModuleSidebarGroup
               key={group.id}
               open={openGroupIds[group.id] ?? true}
@@ -1120,25 +931,26 @@ export function TerminalModule({
                 </>
               ) : null}
             >
-              {group.sessions.map((session) => (
+              {group.workspaces.map((workspace) => (
                 <ModuleSidebarRow
-                  key={session.id}
-                  active={session.id === activeSession?.id}
+                  key={workspace.id}
+                  active={workspace.id === activeWorkspace?.id}
                   data-track="terminal-session-select"
-                  icon={<TerminalSessionStatusIcon status={session.status} />}
+                  icon={<TerminalSessionStatusIcon status={workspaceStatus(workspace, sessions)} />}
                   trailing={
-                    <TerminalSessionLifecycleButton
-                      disabled={deletingSessionId === session.id || stoppingSessionId === session.id}
-                      session={session}
-                      onDelete={() => { void deleteSession(session) }}
-                      onStop={() => { void stopSession(session) }}
+                    <TerminalWorkspaceLifecycleButton
+                      canForce={rendererPlatform === "darwin"}
+                      closing={workspace.closing}
+                      disabled={closingWorkspaceId === workspace.id}
+                      title={workspace.title}
+                      onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
                     />
                   }
-                  trackValue={session.id}
-                  onSelect={() => setActiveSessionId(session.id)}
-                  onDoubleClick={(event) => openRenameDialog(session, event.currentTarget)}
+                  trackValue={workspace.id}
+                  onSelect={() => setActiveWorkspaceId(workspace.id)}
+                  onDoubleClick={(event) => openRenameDialog(workspace, event.currentTarget)}
                 >
-                  {session.title}
+                  {workspace.title}
                 </ModuleSidebarRow>
               ))}
             </ModuleSidebarGroup>
@@ -1172,11 +984,8 @@ export function TerminalModule({
         sidebarPersistenceId="terminal"
       >
         <main className="flex h-full min-h-0 min-w-0 flex-col">
-          {activeSession ? (
+          {activeWorkspace && activePaneId ? (
             <div className="dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-              {terminalReadError ? (
-                <div className="border-b bg-background px-3 py-2 text-sm text-muted-foreground">{terminalReadError}</div>
-              ) : null}
               {toolbarActions.length ? (
                 <div
                   data-terminal-toolbar
@@ -1202,18 +1011,20 @@ export function TerminalModule({
                   ))}
                 </div>
               ) : null}
-              <div
-                role="region"
-                aria-label="终端输出与输入"
-                tabIndex={0}
-                onDragOver={handleTerminalDragOver}
-                onDrop={handleTerminalDrop}
-                className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div
-                  ref={terminalContainerRef}
-                  data-terminal-xterm-mount
-                  className="h-full min-h-0 min-w-0 overflow-hidden"
+              <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+                <TerminalWorkspaceView
+                  ref={workspaceViewRef}
+                  activePaneId={activePaneId}
+                  appearanceSize={terminalAppearanceSize}
+                  onActivePaneChange={selectActivePane}
+                  onClosePane={closePane}
+                  onSessionChanged={handleSessionChanged}
+                  onSessionDeleted={handleSessionDeleted}
+                  onSplitPane={splitPane}
+                  onSplitRatioChange={updateSplitRatio}
+                  platform={rendererPlatform}
+                  sessions={sessions}
+                  workspace={activeWorkspace}
                 />
               </div>
             </div>
@@ -1249,6 +1060,8 @@ export function TerminalModule({
                 onRevealEnvironmentValue={(key) => terminalBridge.launch.revealEnvironmentValue({ scope: "global", key })}
                 onCopyEnvironmentValue={(key, draftValue) => terminalBridge.launch.copyEnvironmentValue({ scope: "global", key, draftValue })}
                 onChange={setGlobalLaunchDraft}
+                appearanceSize={terminalAppearanceSizeDraft}
+                onAppearanceSizeChange={setTerminalAppearanceSizeDraft}
               />
             </DialogFrameBody>
             <DialogFrameFooter>
@@ -1539,7 +1352,7 @@ export function TerminalModule({
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault()
-                void renameSession()
+                void renameWorkspace()
               }
             }}
             autoFocus
@@ -1556,7 +1369,7 @@ export function TerminalModule({
             <Button
               type="button"
               disabled={renameSaving || !renameTitle.trim()}
-              onClick={() => { void renameSession() }}
+              onClick={() => { void renameWorkspace() }}
             >
               保存
             </Button>
@@ -1611,65 +1424,37 @@ export function TerminalModule({
   )
 }
 
-function TerminalSessionLifecycleButton({
+function TerminalWorkspaceLifecycleButton({
+  canForce,
+  closing,
   disabled,
-  session,
-  onDelete,
-  onStop,
+  onClose,
+  title,
 }: {
+  readonly canForce: boolean
+  readonly closing: boolean
   readonly disabled: boolean
-  readonly session: SynapseTerminalSession
-  readonly onDelete: () => void
-  readonly onStop: () => void
+  readonly onClose: () => void
+  readonly title: string
 }) {
-  const [deleteArmed, setDeleteArmed] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const active = session.status === "running" || session.status === "stopping"
-  const actionLabel = active ? (session.status === "running" ? "停止" : "强制停止") : (deleteArmed ? "确认删除" : "删除")
-
-  useEffect(() => {
-    if (!deleteArmed) return undefined
-    timerRef.current = setTimeout(() => setDeleteArmed(false), 3000)
-    const handleClickOutside = (event: PointerEvent) => {
-      if (buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
-        setDeleteArmed(false)
-      }
-    }
-    document.addEventListener("pointerdown", handleClickOutside, true)
-    return () => {
-      clearTimeout(timerRef.current)
-      document.removeEventListener("pointerdown", handleClickOutside, true)
-    }
-  }, [deleteArmed])
-
+  const actionLabel = closing ? (canForce ? "强制关闭" : "正在关闭") : "关闭"
   return (
     <Button
-      ref={buttonRef}
       type="button"
       size="icon-xs"
       variant="ghost"
-      disabled={disabled}
-      aria-label={`${actionLabel}终端会话：${session.title}`}
+      disabled={disabled || (closing && !canForce)}
+      aria-label={`${actionLabel}终端：${title}`}
       title={actionLabel}
-      className={cn(
-        "text-muted-foreground",
-        active ? "hover:text-foreground" : deleteArmed ? "text-destructive" : "hover:text-destructive",
-      )}
+      className="text-muted-foreground hover:text-destructive"
       onClick={(event) => {
         event.stopPropagation()
-        if (active) onStop()
-        else if (shouldBypassDeleteConfirm(event) || deleteArmed) {
-          setDeleteArmed(false)
-          onDelete()
-        } else {
-          setDeleteArmed(true)
-        }
+        onClose()
       }}
       onPointerDown={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      {active ? <Square className="size-3.5" /> : deleteArmed ? <Check className="size-3.5" /> : <Trash2 className="size-3.5" />}
+      {closing ? <Square className="size-3.5" /> : <Trash2 className="size-3.5" />}
     </Button>
   )
 }
@@ -1702,17 +1487,17 @@ function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTermina
   )
 }
 
-function groupSessions(
+function groupWorkspaces(
   groups: readonly SynapseTerminalGroupSummary[],
-  sessions: readonly SynapseTerminalSession[],
-): Array<SynapseTerminalGroupSummary & { sessions: SynapseTerminalSession[] }> {
+  workspaces: readonly SynapseTerminalWorkspace[],
+): Array<SynapseTerminalGroupSummary & { workspaces: SynapseTerminalWorkspace[] }> {
   const sortedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder)
   const grouped = sortedGroups.map((group) => ({
     ...group,
-    sessions: sessions.filter((session) => session.groupId === group.id),
+    workspaces: workspaces.filter((workspace) => workspace.groupId === group.id),
   }))
-  const groupedSessionIds = new Set(grouped.flatMap((group) => group.sessions.map((session) => session.id)))
-  const ungrouped = sessions.filter((session) => !groupedSessionIds.has(session.id))
+  const groupedWorkspaceIds = new Set(grouped.flatMap((group) => group.workspaces.map((workspace) => workspace.id)))
+  const ungrouped = workspaces.filter((workspace) => !groupedWorkspaceIds.has(workspace.id))
 
   if (ungrouped.length === 0) return grouped
   return [
@@ -1727,44 +1512,24 @@ function groupSessions(
       launchRevision: 1,
       membershipRevision: 1,
       commandCollectionRevision: 1,
-      sessions: ungrouped,
+      workspaces: ungrouped,
     },
   ]
 }
 
-function isExternalFileDrag(event: DragEvent<HTMLElement>): boolean {
-  const types = Array.from(event.dataTransfer.types ?? [])
-  if (types.includes("Files")) return true
-  return Array.from(event.dataTransfer.files ?? []).length > 0
-}
-
-function isValidDroppedTerminalPath(path: string | null): path is string {
-  return typeof path === "string" && path.length > 0 && !/[\r\n]/.test(path)
-}
-
-function formatDroppedTerminalPaths(paths: readonly string[]): string {
-  return `${paths.map(escapeTerminalPath).join(" ")} `
-}
-
-function escapeTerminalPath(path: string): string {
-  return path.replace(/([\\\s"'`$&;()<>|*?[\]{}!#~])/g, "\\$1")
-}
-
-async function writeTerminalInputChunks(options: {
-  readonly input: string
-  readonly write: (data: string) => Promise<void>
-}): Promise<void> {
-  for (const chunk of splitTerminalInput(options.input)) {
-    await options.write(chunk)
-  }
-}
-
-function splitTerminalInput(input: string): string[] {
-  const chunks: string[] = []
-  for (let index = 0; index < input.length; index += TERMINAL_WRITE_CHUNK_SIZE) {
-    chunks.push(input.slice(index, index + TERMINAL_WRITE_CHUNK_SIZE))
-  }
-  return chunks
+function workspaceStatus(
+  workspace: SynapseTerminalWorkspace,
+  sessions: readonly SynapseTerminalSession[],
+): SynapseTerminalSession["status"] {
+  const sessionById = new Map(sessions.map((session) => [session.id, session]))
+  const statuses = collectTerminalPaneLeaves(workspace.layout)
+    .map((pane) => sessionById.get(pane.sessionId)?.status)
+    .filter((status): status is SynapseTerminalSession["status"] => Boolean(status))
+  if (statuses.includes("running")) return "running"
+  if (statuses.includes("stopping")) return "stopping"
+  if (statuses.includes("failed")) return "failed"
+  if (statuses.includes("lost")) return "lost"
+  return "ended"
 }
 
 function mergeSession(
@@ -1774,6 +1539,15 @@ function mergeSession(
   return sessions.some((item) => item.id === session.id)
     ? sessions.map((item) => item.id === session.id ? session : item)
     : [...sessions, session]
+}
+
+function mergeWorkspace(
+  workspaces: readonly SynapseTerminalWorkspace[],
+  workspace: SynapseTerminalWorkspace,
+): SynapseTerminalWorkspace[] {
+  return workspaces.some((item) => item.id === workspace.id)
+    ? workspaces.map((item) => item.id === workspace.id ? workspace : item)
+    : [...workspaces, workspace]
 }
 
 function mergeGroup(
@@ -1831,23 +1605,5 @@ function mergeLaunchLayers(
     ...((lower?.environment || higher?.environment) ? {
       environment: { ...lower?.environment, ...higher?.environment },
     } : {}),
-  }
-}
-
-function loadWebglRenderer(xterm: Terminal): { dispose(): void; refresh(): void } | undefined {
-  try {
-    const webglAddon = new WebglAddon()
-    const contextLossDisposable = webglAddon.onContextLoss(() => {
-      logger.warn("Terminal WebGL renderer context lost; falling back to DOM renderer.")
-      webglAddon.dispose()
-    })
-    xterm.loadAddon(webglAddon)
-    return {
-      dispose: () => contextLossDisposable.dispose(),
-      refresh: () => webglAddon.clearTextureAtlas(),
-    }
-  } catch (error) {
-    logger.warn("Terminal WebGL renderer unavailable; falling back to DOM renderer.", { error })
-    return undefined
   }
 }

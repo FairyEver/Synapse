@@ -1,5 +1,6 @@
 import { SerializeAddon } from "@xterm/addon-serialize"
 import { Terminal } from "@xterm/headless"
+import { fileURLToPath } from "node:url"
 
 export const TERMINAL_EMULATOR_ID = "xterm-headless" as const
 export const TERMINAL_EMULATOR_VERSION = "6.0.0" as const
@@ -55,7 +56,19 @@ export function createTerminalCoreEmulator(input: {
   let throughOutputSeq = input.throughOutputSeq ?? 0
   let sizeRevision = input.sizeRevision
   let modeEvidenceFresh = false
+  let currentCwd: string | undefined
   let writeChain = Promise.resolve()
+
+  terminal.parser.registerOscHandler(7, (value) => {
+    try {
+      const url = new URL(value)
+      if (url.protocol !== "file:") return false
+      currentCwd = fileURLToPath(url)
+      return true
+    } catch {
+      return false
+    }
+  })
 
   function accept(data: string, outputSeq: number): Promise<void> {
     writeChain = writeChain.then(() => new Promise<void>((resolve) => {
@@ -189,6 +202,7 @@ export function createTerminalCoreEmulator(input: {
     dispose: () => terminal.dispose(),
     get throughOutputSeq(): number { return throughOutputSeq },
     get sizeRevision(): number { return sizeRevision },
+    get currentCwd(): string | undefined { return currentCwd },
   }
 }
 

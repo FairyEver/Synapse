@@ -12,6 +12,7 @@ import type {
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
   SynapseTerminalUpdateGroupSettingsInput,
+  SynapseTerminalWorkspace,
 } from "../../../../src/types/terminal"
 
 const bridgeState = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const bridgeState = vi.hoisted(() => ({
     updatedAt: "2026-08-08T00:00:00.000Z",
   } as SynapseTerminalGlobalLaunchSettings,
   groups: [] as SynapseTerminalGroup[],
+  workspaces: [] as SynapseTerminalWorkspace[],
   sessions: [] as SynapseTerminalSession[],
   chunks: [] as SynapseTerminalOutputChunk[],
   nextSeq: 0,
@@ -190,9 +192,70 @@ const terminalBridge = vi.hoisted(() => ({
       .filter((session) => session.groupId === groupId)
       .map((session) => session.id))
     bridgeState.groups = bridgeState.groups.filter((group) => group.id !== groupId)
+    bridgeState.workspaces = bridgeState.workspaces.filter((workspace) => workspace.groupId !== groupId)
     bridgeState.sessions = bridgeState.sessions.filter((session) => session.groupId !== groupId)
     bridgeState.chunks = bridgeState.chunks.filter((chunk) => !removedSessionIds.has(chunk.sessionId))
   }),
+  listWorkspaces: vi.fn(async () => bridgeState.workspaces),
+  getWorkspace: vi.fn(async ({ workspaceId }: { workspaceId: string }) => getWorkspace(workspaceId)),
+  getWorkspaceForSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    const workspace = bridgeState.workspaces.find((item) => workspaceHasSession(item, sessionId))
+    if (!workspace) throw new Error("Workspace not found")
+    return workspace
+  }),
+  renameWorkspace: vi.fn(async ({ workspaceId, title }: { workspaceId: string; title: string }) => {
+    const current = getWorkspace(workspaceId)
+    const workspace = {
+      ...current,
+      title: title.trim(),
+      layoutRevision: current.layoutRevision + 1,
+      updatedAt: "2026-06-24T00:02:00.000Z",
+    }
+    bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
+    return workspace
+  }),
+  closeWorkspace: vi.fn(async ({ workspaceId }: { workspaceId: string }) => {
+    const workspace = getWorkspace(workspaceId)
+    const sessionIds = workspace.layout.type === "leaf" ? [workspace.layout.sessionId] : []
+    bridgeState.workspaces = bridgeState.workspaces.filter((item) => item.id !== workspaceId)
+    bridgeState.sessions = bridgeState.sessions.filter((session) => !sessionIds.includes(session.id))
+    return { workspaceId, state: "deleted" as const, remainingSessionIds: [] }
+  }),
+  splitPane: vi.fn(async ({ workspaceId, paneId, direction }: {
+    workspaceId: string
+    paneId: string
+    direction: "right" | "down"
+  }) => {
+    const current = getWorkspace(workspaceId)
+    if (current.layout.type !== "leaf" || current.layout.paneId !== paneId) throw new Error("Pane not found")
+    const session = createSession({
+      id: `session-${bridgeState.sessions.length + 1}`,
+      groupId: current.groupId,
+      title: `Session ${bridgeState.sessions.length + 1}`,
+    })
+    bridgeState.workspaces = bridgeState.workspaces.filter((workspace) => workspace.id !== `workspace-${session.id}`)
+    const nextPaneId = `pane-${session.id}`
+    const workspace = {
+      ...current,
+      layout: {
+        type: "split" as const,
+        splitId: `split-${session.id}`,
+        direction: direction === "right" ? "horizontal" as const : "vertical" as const,
+        ratio: 0.5,
+        first: current.layout,
+        second: { type: "leaf" as const, paneId: nextPaneId, sessionId: session.id },
+      },
+      layoutRevision: current.layoutRevision + 1,
+    }
+    bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
+    return { workspace, paneId: nextPaneId, sessionId: session.id }
+  }),
+  updateSplitRatio: vi.fn(async ({ workspaceId }: { workspaceId: string }) => getWorkspace(workspaceId)),
+  closePane: vi.fn(async ({ workspaceId }: { workspaceId: string }) => ({
+    workspaceId,
+    state: "closing" as const,
+    remainingSessionIds: [],
+  })),
   listSessions: vi.fn(async () => bridgeState.sessions),
   createSession: vi.fn(async (input: {
     groupId?: string
@@ -247,6 +310,8 @@ const terminalBridge = vi.hoisted(() => ({
   writeSession: vi.fn(async () => undefined),
   resizeSession: vi.fn(async () => undefined),
   deleteSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    bridgeState.workspaces = bridgeState.workspaces.filter((workspace) =>
+      workspace.layout.type !== "leaf" || workspace.layout.sessionId !== sessionId)
     bridgeState.sessions = bridgeState.sessions.filter((session) => session.id !== sessionId)
     bridgeState.chunks = bridgeState.chunks.filter((chunk) => chunk.sessionId !== sessionId)
   }),
@@ -297,7 +362,7 @@ const xtermState = vi.hoisted(() => ({
     dispose: ReturnType<typeof vi.fn>
     cols: number
     rows: number
-    options: { disableStdin?: boolean }
+    options: { disableStdin?: boolean; fontSize?: number; lineHeight?: number }
     emitInput: (data: string) => void
     emitKeyEvent: (event: KeyboardEvent) => boolean | undefined
     inputDispose: ReturnType<typeof vi.fn>
@@ -350,6 +415,18 @@ vi.mock("@/lib/electron-bridge", () => ({
         update: terminalBridge.updateGroupCommand,
         delete: terminalBridge.deleteGroupCommand,
         launch: terminalBridge.launchGroupCommand,
+      },
+      workspace: {
+        list: terminalBridge.listWorkspaces,
+        get: terminalBridge.getWorkspace,
+        getForSession: terminalBridge.getWorkspaceForSession,
+        rename: terminalBridge.renameWorkspace,
+        close: terminalBridge.closeWorkspace,
+      },
+      pane: {
+        split: terminalBridge.splitPane,
+        updateRatio: terminalBridge.updateSplitRatio,
+        close: terminalBridge.closePane,
       },
       session: {
         list: terminalBridge.listSessions,
@@ -512,8 +589,10 @@ let roots: Root[] = []
 
 beforeEach(() => {
   window.synapse = { platform: "darwin" } as typeof window.synapse
+  window.localStorage.clear()
   bridgeState.globalLaunch = { revision: 1, updatedAt: "2026-08-08T00:00:00.000Z" }
   bridgeState.groups = []
+  bridgeState.workspaces = []
   bridgeState.sessions = []
   bridgeState.chunks = []
   bridgeState.nextSeq = 0
@@ -544,6 +623,14 @@ beforeEach(() => {
   terminalBridge.deleteGroupCommand.mockClear()
   terminalBridge.launchGroupCommand.mockClear()
   terminalBridge.deleteGroup.mockClear()
+  terminalBridge.listWorkspaces.mockClear()
+  terminalBridge.getWorkspace.mockClear()
+  terminalBridge.getWorkspaceForSession.mockClear()
+  terminalBridge.renameWorkspace.mockClear()
+  terminalBridge.closeWorkspace.mockClear()
+  terminalBridge.splitPane.mockClear()
+  terminalBridge.updateSplitRatio.mockClear()
+  terminalBridge.closePane.mockClear()
   terminalBridge.listSessions.mockClear()
   terminalBridge.createSession.mockClear()
   terminalBridge.getSession.mockClear()
@@ -667,6 +754,27 @@ describe("TerminalModule", () => {
     expect(xtermState.instances).toHaveLength(1)
   })
 
+  it("saves a terminal appearance size from the appearance category", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "zsh" })
+    await renderEmbeddedModule()
+
+    await clickButton("终端设置")
+    expect(document.body.textContent).toContain("外观")
+    await selectTab("外观")
+    expect(document.body.textContent).toContain("字号")
+    expect(document.body.querySelector<HTMLSelectElement>('select[aria-label="字号"]')?.value).toBe("medium")
+
+    await changeSelect("字号", "large")
+    await clickButton("保存")
+
+    expect(window.localStorage.getItem("synapse:app:terminal:appearance_size:v1")).toBe("large")
+    expect(xtermState.instances).toHaveLength(1)
+    expect(xtermState.instances[0]?.options.fontSize).toBe(16)
+    expect(xtermState.instances[0]?.options.lineHeight).toBe(1.1)
+    expect(webglState.instances[0]?.clearTextureAtlas).toHaveBeenCalled()
+  })
+
   it("marks the discard action for unsaved terminal settings as destructive", async () => {
     await renderEmbeddedModule()
 
@@ -721,7 +829,7 @@ describe("TerminalModule", () => {
     expect(main?.textContent).not.toContain("运行中")
     expect(main?.textContent).not.toContain("终止进程")
     expect(main?.textContent).not.toContain("同目录新开")
-    expect(document.querySelector("[aria-label='终端输出与输入']")).toBeTruthy()
+    expect(document.querySelector("[aria-label^='终端输出与输入']")).toBeTruthy()
   })
 
   it("renders a compact toolbar above the active terminal surface", async () => {
@@ -731,7 +839,7 @@ describe("TerminalModule", () => {
     await renderModule()
 
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
-    const terminalRegion = document.querySelector("[aria-label='终端输出与输入']")
+    const terminalRegion = document.querySelector("[aria-label^='终端输出与输入']")
     expect(toolbar).toBeTruthy()
     expect(toolbar?.classList.contains("overflow-x-auto")).toBe(true)
     expect(toolbar?.classList.contains("whitespace-nowrap")).toBe(true)
@@ -848,7 +956,7 @@ describe("TerminalModule", () => {
     await renderModule()
 
     const main = document.body.querySelector("main")
-    const terminalRegion = document.querySelector("[aria-label='终端输出与输入']")
+    const terminalRegion = document.querySelector("[aria-label^='终端输出与输入']")
     const xtermMount = terminalRegion?.querySelector("[data-terminal-xterm-mount]")
     expect(main?.classList.contains("h-full")).toBe(true)
     expect(main?.classList.contains("min-h-0")).toBe(true)
@@ -869,7 +977,7 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).not.toContain("Agent 控制")
   })
 
-  it("renames a terminal session by double-clicking its name", async () => {
+  it("renames a terminal workspace by double-clicking its name", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
@@ -878,9 +986,10 @@ describe("TerminalModule", () => {
     await changeInput("终端名称", "  构建日志  ")
     await clickButton("保存")
 
-    expect(terminalBridge.renameSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      title: "  构建日志  ",
+    expect(terminalBridge.renameWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      title: "构建日志",
+      expectedLayoutRevision: 1,
     })
     expect(document.body.textContent).toContain("构建日志")
     await act(async () => {
@@ -898,7 +1007,7 @@ describe("TerminalModule", () => {
     await renderModule()
 
     expect(document.body.querySelector('[aria-label="终端会话操作：开发终端"]')).toBeNull()
-    expect(document.body.querySelector('[aria-label="删除终端会话：开发终端"]')).toBeTruthy()
+    expect(document.body.querySelector('[aria-label="关闭终端：开发终端"]')).toBeTruthy()
   })
 
   it("creates an empty terminal group and keeps it visible", async () => {
@@ -935,7 +1044,7 @@ describe("TerminalModule", () => {
     await clickButton("默认分组")
 
     expect(document.querySelector("[data-slot='collapsible'][data-state='closed']")).toBeTruthy()
-    expect(document.querySelector("[aria-label='终端输出与输入']")).toBeTruthy()
+    expect(document.querySelector("[aria-label^='终端输出与输入']")).toBeTruthy()
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
   })
 
@@ -1179,7 +1288,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
   })
 
-  it("arms terminal session deletion in place before selecting the next session", async () => {
+  it("closes a terminal workspace and selects the next workspace", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
       createSession({ id: "session-1", groupId: "group-1", title: "一号终端", status: "ended", updatedAt: "2026-06-24T00:02:00.000Z" }),
@@ -1189,17 +1298,10 @@ describe("TerminalModule", () => {
     await renderModule()
     await clickSessionDelete("一号终端")
 
-    const deleteButton = document.body.querySelector<HTMLButtonElement>(
-      '[aria-label="确认删除终端会话：一号终端"]',
-    )
-    expect(deleteButton).toBeTruthy()
-    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
-    expect(deleteButton?.querySelector("svg")).toBeTruthy()
-    expect(terminalBridge.deleteSession).not.toHaveBeenCalled()
-
-    await clickSessionDelete("一号终端")
-
-    expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(terminalBridge.closeWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      expectedLayoutRevision: 1,
+    })
     expect(document.body.textContent).not.toContain("一号终端")
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
     await act(async () => {
@@ -1214,9 +1316,11 @@ describe("TerminalModule", () => {
 
     await renderModule()
     await clickSessionDelete("临时终端")
-    await clickSessionDelete("临时终端")
 
-    expect(terminalBridge.deleteSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(terminalBridge.closeWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      expectedLayoutRevision: 1,
+    })
     expect(document.body.textContent).toContain("新建终端")
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
@@ -1285,6 +1389,47 @@ describe("TerminalModule", () => {
     expect(terminalBridge.writeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       data: "\n",
+    })
+  })
+
+  it("splits the active pane to the right with Cmd+D while keeping one sidebar workspace", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "d", metaKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(terminalBridge.splitPane).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      paneId: "pane-session-1",
+      direction: "right",
+      expectedLayoutRevision: 1,
+      cols: 80,
+      rows: 24,
+    })
+    expect(document.querySelectorAll('[data-track="terminal-session-select"]')).toHaveLength(1)
+    expect(xtermState.instances.filter((instance) => instance.dispose.mock.calls.length === 0)).toHaveLength(2)
+  })
+
+  it("closes the active pane with Cmd+W", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      await Promise.resolve()
+    })
+
+    expect(terminalBridge.closePane).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      paneId: "pane-session-1",
+      expectedLayoutRevision: 1,
     })
   })
 
@@ -1905,7 +2050,7 @@ async function clickButtonByTitle(title: string): Promise<void> {
 }
 
 async function clickSessionDelete(title: string): Promise<void> {
-  const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label$="终端会话：${title}"]`)
+  const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label="关闭终端：${title}"]`)
   await act(async () => {
     button?.click()
     await Promise.resolve()
@@ -2006,6 +2151,28 @@ async function changeTextarea(label: string, value: string): Promise<void> {
   })
 }
 
+async function changeSelect(label: string, value: string): Promise<void> {
+  const select = document.body.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
+  await act(async () => {
+    if (select) {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set
+      valueSetter?.call(select, value)
+      select.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    await Promise.resolve()
+  })
+}
+
+async function selectTab(label: string): Promise<void> {
+  const tab = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    .find((button) => button.textContent === label)
+  await act(async () => {
+    tab?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    tab?.click()
+    await Promise.resolve()
+  })
+}
+
 type DroppedTerminalFile = File & { readonly path: string | null }
 
 function createDroppedFile(name: string, path: string | null): DroppedTerminalFile {
@@ -2032,7 +2199,7 @@ async function dispatchTerminalDragEvent(
   type: "dragover" | "drop",
   files: DroppedTerminalFile[],
 ): Promise<TerminalDragTestEvent> {
-  const terminalRegion = document.querySelector<HTMLElement>("[aria-label='终端输出与输入']")
+  const terminalRegion = document.querySelector<HTMLElement>("[aria-label^='终端输出与输入']")
   if (!terminalRegion) throw new Error("Terminal region not found")
 
   const dataTransfer = {
@@ -2097,7 +2264,37 @@ function createSession(overrides: Partial<SynapseTerminalSession> = {}): Synapse
   bridgeState.sessions = bridgeState.sessions.some((item) => item.id === session.id)
     ? bridgeState.sessions.map((item) => item.id === session.id ? session : item)
     : [...bridgeState.sessions, session]
+  if (!bridgeState.workspaces.some((workspace) => workspace.layout.type === "leaf" && workspace.layout.sessionId === session.id)) {
+    bridgeState.workspaces = [...bridgeState.workspaces, createWorkspace(session)]
+  }
   return session
+}
+
+function createWorkspace(session: SynapseTerminalSession): SynapseTerminalWorkspace {
+  return {
+    id: `workspace-${session.id}`,
+    groupId: session.groupId,
+    title: session.title,
+    layout: { type: "leaf", paneId: `pane-${session.id}`, sessionId: session.id },
+    layoutRevision: 1,
+    closingPaneIds: [],
+    closing: false,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  }
+}
+
+function getWorkspace(workspaceId: string): SynapseTerminalWorkspace {
+  const workspace = bridgeState.workspaces.find((item) => item.id === workspaceId)
+  if (!workspace) throw new Error("Workspace not found")
+  return workspace
+}
+
+function workspaceHasSession(workspace: SynapseTerminalWorkspace, sessionId: string): boolean {
+  const visit = (layout: SynapseTerminalWorkspace["layout"]): boolean => layout.type === "leaf"
+    ? layout.sessionId === sessionId
+    : visit(layout.first) || visit(layout.second)
+  return visit(workspace.layout)
 }
 
 function createChunk(overrides: Partial<SynapseTerminalOutputChunk> = {}): SynapseTerminalOutputChunk {

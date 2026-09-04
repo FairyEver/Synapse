@@ -1,4 +1,8 @@
 import type { ITerminalOptions, ITheme } from "@xterm/xterm"
+import {
+  getTerminalAppearanceOptions,
+  type TerminalAppearanceSize,
+} from "./terminal-appearance"
 
 const TERMINAL_FONT_FAMILY = [
   "\"MesloLGS NF\"",
@@ -27,7 +31,6 @@ const TERMINAL_VISUAL_OPTIONS = {
   cursorBlink: true,
   cursorStyle: "block",
   fontFamily: TERMINAL_FONT_FAMILY,
-  fontSize: 14,
   letterSpacing: 0,
   lineHeight: 1.1,
   scrollback: 5000,
@@ -35,6 +38,7 @@ const TERMINAL_VISUAL_OPTIONS = {
 } satisfies Partial<ITerminalOptions>
 
 type TerminalRenderingInput = {
+  readonly appearanceSize: TerminalAppearanceSize
   readonly container: HTMLElement
   readonly disableStdin: boolean
 }
@@ -44,6 +48,7 @@ let terminalColorContext: CanvasRenderingContext2D | null | undefined
 export function createTerminalRenderingOptions(input: TerminalRenderingInput): ITerminalOptions {
   return {
     ...TERMINAL_VISUAL_OPTIONS,
+    ...getTerminalAppearanceOptions(input.appearanceSize),
     convertEol: true,
     disableStdin: input.disableStdin,
     theme: createTerminalTheme(input.container),

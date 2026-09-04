@@ -87,4 +87,16 @@ describe("terminal output buffer", () => {
       appended,
     ])
   })
+
+  it("snapshots only output added after a persisted sequence", () => {
+    const buffer = createTerminalOutputBuffer({ maxBytes: 100 })
+    buffer.append("s1", "one")
+    const second = buffer.append("s1", "two")
+
+    expect(buffer.firstOutputSeq).toBe(1)
+    expect(buffer.snapshotAfter(1)).toEqual([second])
+
+    buffer.evictOldest()
+    expect(buffer.firstOutputSeq).toBe(2)
+  })
 })

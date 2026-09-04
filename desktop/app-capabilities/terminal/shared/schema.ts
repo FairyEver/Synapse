@@ -1,6 +1,37 @@
 import { z } from "zod"
 import { terminalLaunchFactsSchema } from "./contract-schema"
 
+export {
+  TERMINAL_WORKSPACE_PANE_LIMIT,
+  collectTerminalPaneLeaves,
+  findTerminalPane,
+  removeTerminalPane,
+  setTerminalSplitRatio,
+  splitTerminalPane,
+  terminalClosePaneInputSchema,
+  terminalCloseWorkspaceInputSchema,
+  terminalCloseWorkspaceResultSchema,
+  terminalLayoutNodeSchema,
+  terminalPaneLeafSchema,
+  terminalRenameWorkspaceInputSchema,
+  terminalSetSplitRatioInputSchema,
+  terminalSplitPaneInputSchema,
+  terminalSplitPaneResultSchema,
+  terminalWorkspaceIdInputSchema,
+  terminalWorkspaceSchema,
+  type TerminalClosePaneInput,
+  type TerminalCloseWorkspaceInput,
+  type TerminalCloseWorkspaceResult,
+  type TerminalLayoutNode,
+  type TerminalPaneLeaf,
+  type TerminalRenameWorkspaceInput,
+  type TerminalSetSplitRatioInput,
+  type TerminalSplitNode,
+  type TerminalSplitPaneInput,
+  type TerminalSplitPaneResult,
+  type TerminalWorkspace,
+} from "./workspace"
+
 export const terminalSessionStatusSchema = z.enum(["running", "stopping", "ended", "failed", "lost"])
 
 export const terminalEnvironmentSchema = z.record(
