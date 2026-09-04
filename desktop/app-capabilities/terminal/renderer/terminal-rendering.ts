@@ -29,8 +29,9 @@ const TERMINAL_VISUAL_OPTIONS = {
   fontFamily: TERMINAL_FONT_FAMILY,
   fontSize: 14,
   letterSpacing: 0,
-  lineHeight: 1.2,
+  lineHeight: 1.1,
   scrollback: 5000,
+  smoothScrollDuration: 80,
 } satisfies Partial<ITerminalOptions>
 
 type TerminalRenderingInput = {

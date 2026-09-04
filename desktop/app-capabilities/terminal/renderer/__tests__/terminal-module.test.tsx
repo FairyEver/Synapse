@@ -1463,7 +1463,8 @@ describe("TerminalModule", () => {
       cursorStyle: "block",
       fontSize: expect.any(Number),
       letterSpacing: 0,
-      lineHeight: expect.any(Number),
+      lineHeight: 1.1,
+      smoothScrollDuration: 80,
       theme: expect.objectContaining({
         background: expect.any(String),
         foreground: expect.any(String),
