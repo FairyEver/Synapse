@@ -1007,12 +1007,10 @@ export function TerminalModule({
       actions={(
         <>
           <SystemAppTopBarActionButton ref={createSessionActionRef} type="button" onClick={() => { void createSession() }}>
-            <Plus data-icon="inline-start" />
-            新建终端
+            新建
           </SystemAppTopBarActionButton>
           <SystemAppTopBarActionButton type="button" onClick={() => { void openGlobalSettingsDialog() }}>
-            <Settings data-icon="inline-start" />
-            终端设置
+            设置
           </SystemAppTopBarActionButton>
         </>
       )}

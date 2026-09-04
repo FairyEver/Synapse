@@ -794,8 +794,13 @@ describe("TerminalModule", () => {
 
     expect(document.querySelector('[data-embedded-system-app-left] button[aria-label="收起侧边栏"]')).toBeTruthy()
     const actions = document.querySelector("[data-embedded-system-app-actions]")
-    expect(actions?.textContent).toContain("新建终端")
-    expect(actions?.textContent).toContain("终端设置")
+    const actionButtons = Array.from(actions?.querySelectorAll("button") ?? [])
+    const createButton = actionButtons.find((button) => button.textContent?.trim() === "新建")
+    const settingsButton = actionButtons.find((button) => button.textContent?.trim() === "设置")
+    expect(createButton?.querySelector("svg")).toBeNull()
+    expect(settingsButton?.querySelector("svg")).toBeNull()
+    expect(actions?.textContent).not.toContain("新建终端")
+    expect(actions?.textContent).not.toContain("终端设置")
   })
 
   it("edits global launch settings from the terminal header without remounting the active terminal", async () => {
@@ -803,7 +808,7 @@ describe("TerminalModule", () => {
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "zsh" })]
     await renderEmbeddedModule()
 
-    await clickButton("终端设置")
+    await clickButton("设置")
     expect(document.body.textContent).toContain("终端设置")
     expect(document.querySelector('[data-slot="dialog-content"]')?.classList.contains("sm:max-w-3xl")).toBe(true)
     expect(document.querySelectorAll('[data-slot="dialog-content"] [data-slot="dialog-close"]')).toHaveLength(1)
@@ -825,7 +830,7 @@ describe("TerminalModule", () => {
     createSession({ id: "session-1", groupId: "group-1", title: "zsh" })
     await renderEmbeddedModule()
 
-    await clickButton("终端设置")
+    await clickButton("设置")
     expect(document.body.textContent).toContain("外观")
     await selectTab("外观")
     expect(document.body.textContent).toContain("字号")
@@ -845,7 +850,7 @@ describe("TerminalModule", () => {
   it("marks the discard action for unsaved terminal settings as destructive", async () => {
     await renderEmbeddedModule()
 
-    await clickButton("终端设置")
+    await clickButton("设置")
     await changeInput("工作目录", "/repo/global")
     await clickButton("取消")
 
@@ -870,7 +875,7 @@ describe("TerminalModule", () => {
 
     const actions = document.querySelector("[data-embedded-system-app-actions]")
     const main = document.body.querySelector("main")
-    expect(actions?.textContent).toContain("新建终端")
+    expect(actions?.textContent).toContain("新建")
     expect(document.body.textContent).toContain("已失联")
     expect(main?.textContent).not.toContain("同目录新开")
     expect(main?.textContent).not.toContain("终止进程")
