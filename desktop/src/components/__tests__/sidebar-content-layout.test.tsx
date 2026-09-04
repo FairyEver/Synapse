@@ -114,6 +114,17 @@ describe("SidebarContentLayout", () => {
     expect(container.querySelector('[data-testid="resize-handle"]')).not.toBeNull()
   })
 
+  it("hides the sidebar and resize handle when collapsed", async () => {
+    const container = await renderLayout({
+      sidebarCollapsed: true,
+      sidebarResizable: true,
+    })
+
+    expect(container.textContent).not.toContain("Sidebar")
+    expect(container.querySelector('[data-testid="resize-handle"]')).toBeNull()
+    expect(container.textContent).toContain("Content")
+  })
+
   it("allows callers to set sidebar pixel constraints", async () => {
     const container = await renderLayout({
       sidebarResizable: true,

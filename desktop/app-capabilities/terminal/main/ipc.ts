@@ -1,9 +1,12 @@
-import { BrowserWindow, clipboard, dialog } from "electron"
+import { app, BrowserWindow, clipboard, dialog } from "electron"
+import path from "node:path"
 import { z } from "zod"
 
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
+import { createMainLogger } from "../../../electron/services/log-store"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
+import { materializeTerminalClipboardImage } from "./clipboard-image"
 import type { TerminalService } from "./service"
 import {
   terminalAttachSessionInputSchema,
@@ -69,6 +72,7 @@ const terminalDomainChangedEventPayloadSchema = z.object({
 })
 
 const terminalEventWiredServices = new WeakSet<TerminalService>()
+const logger = createMainLogger("app.terminal.ipc")
 
 function resolveTerminalService(ctx: Parameters<IpcModule["methods"][string]["handler"]>[0]): TerminalService {
   const service = ctx.resolve<TerminalService>("core.terminal")
@@ -236,6 +240,19 @@ export const terminalIpcModule: IpcModule = {
         if (value === null) throw new Error("Terminal environment value is unavailable.")
         clipboard.writeText(value)
       },
+    },
+    materializeClipboardImage: {
+      operationId: "app.terminal.clipboard.materialize_image",
+      kind: "invoke",
+      request: z.void(),
+      response: z.string().nullable(),
+      handler: () => materializeTerminalClipboardImage({
+        clipboard,
+        directory: path.join(app.getPath("userData"), "terminal", "clipboard-images"),
+        onCleanupError: (error) => {
+          logger.warn("Failed to remove a stale terminal clipboard image.", error)
+        },
+      }),
     },
     deleteGroup: {
       operationId: "app.terminal.group.delete",

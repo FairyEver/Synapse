@@ -10,7 +10,11 @@ import { terminalIpcModule } from "../ipc"
 const electronDialogMock = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
 }))
-const electronClipboardMock = vi.hoisted(() => ({ writeText: vi.fn() }))
+const electronClipboardMock = vi.hoisted(() => ({
+  writeText: vi.fn(),
+  readText: vi.fn(() => ""),
+  readImage: vi.fn(() => ({ isEmpty: () => true, toPNG: () => Buffer.alloc(0) })),
+}))
 
 vi.mock("electron", () => ({
   app: {
@@ -78,6 +82,7 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.getGroupCommand.operationId).toBe("app.terminal.group_command.get")
     expect(terminalIpcModule.methods.revealEnvironmentValue.operationId).toBe("app.terminal.environment.reveal")
     expect(terminalIpcModule.methods.copyEnvironmentValue.operationId).toBe("app.terminal.environment.copy")
+    expect(terminalIpcModule.methods.materializeClipboardImage.operationId).toBe("app.terminal.clipboard.materialize_image")
     expect(terminalIpcModule.methods.chooseCwd.operationId).toBe("app.terminal.launch.choose_cwd")
     expect(terminalIpcModule.methods.createGroupCommand.operationId).toBe("app.terminal.group_command.create")
     expect(terminalIpcModule.methods.updateGroupCommand.operationId).toBe("app.terminal.group_command.update")

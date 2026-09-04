@@ -1,6 +1,7 @@
 import { createRendererLogger } from "@/app-shell/logging"
 
 const SIDEBAR_WIDTH_STORAGE_PREFIX = "synapse:app:ui:sidebar_width:v1"
+const SIDEBAR_COLLAPSED_STORAGE_PREFIX = "synapse:app:ui:sidebar_collapsed:v1"
 const logger = createRendererLogger("ui.sidebar-layout")
 
 type SidebarSizeConstraints = {
@@ -15,6 +16,10 @@ function clampSidebarSize(size: number, minSize: number, maxSize: number): numbe
 
 function getSidebarWidthStorageKey(persistenceId: string): string {
   return `${SIDEBAR_WIDTH_STORAGE_PREFIX}:${persistenceId.replaceAll("-", "_")}`
+}
+
+function getSidebarCollapsedStorageKey(persistenceId: string): string {
+  return `${SIDEBAR_COLLAPSED_STORAGE_PREFIX}:${persistenceId.replaceAll("-", "_")}`
 }
 
 function readSidebarWidth(
@@ -63,4 +68,38 @@ function writeSidebarWidth(
   }
 }
 
-export { readSidebarWidth, writeSidebarWidth }
+function readSidebarCollapsed(persistenceId: string): boolean {
+  if (typeof window === "undefined") return false
+
+  try {
+    const stored = window.localStorage.getItem(getSidebarCollapsedStorageKey(persistenceId))
+    if (stored === null || stored === "false") return false
+    if (stored === "true") return true
+
+    logger.warn("Ignored invalid persisted sidebar collapsed state.", { persistenceId })
+    return false
+  } catch (error) {
+    logger.warn("Failed to read persisted sidebar collapsed state.", { persistenceId, error })
+    return false
+  }
+}
+
+function writeSidebarCollapsed(persistenceId: string, collapsed: boolean): void {
+  if (typeof window === "undefined") return
+
+  try {
+    window.localStorage.setItem(
+      getSidebarCollapsedStorageKey(persistenceId),
+      String(collapsed),
+    )
+  } catch (error) {
+    logger.warn("Failed to persist sidebar collapsed state.", { persistenceId, error })
+  }
+}
+
+export {
+  readSidebarCollapsed,
+  readSidebarWidth,
+  writeSidebarCollapsed,
+  writeSidebarWidth,
+}

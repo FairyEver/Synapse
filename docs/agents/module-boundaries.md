@@ -46,6 +46,7 @@
 - UI 中一个侧边栏终端对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行，关闭侧边栏终端必须删除整个 workspace、全部叶子 session 及其历史；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
 - workspace 与 pane 是 UI/IPC 聚合，不新增 MCP 工具；MCP 继续按不可变 `sessionId` 管理底层会话，不能假定或修改 Renderer 布局。
 - 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane。
+- Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。
 - 启动设置只属于 Terminal：全局入口位于 Terminal Header，分组和快捷命令入口位于对应对象；不得在系统设置中增加重复入口。解析顺序固定为安全系统环境、Synapse 内置、全局、分组、快捷命令、一次性覆盖，配置变化只影响新 PTY。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。

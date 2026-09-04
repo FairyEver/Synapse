@@ -17,6 +17,7 @@ type SidebarContentLayoutProps = {
   contentClassName?: string
   contentLayout?: "default" | "fill" | "center"
   contentScrollable?: boolean
+  sidebarCollapsed?: boolean
   sidebarResizable?: boolean
   sidebarPersistenceId?: string
   sidebarDefaultSize?: number
@@ -33,6 +34,7 @@ function SidebarContentLayout({
   contentClassName,
   contentLayout = "default",
   contentScrollable = true,
+  sidebarCollapsed = false,
   sidebarResizable = false,
   sidebarPersistenceId,
   sidebarDefaultSize = 220,
@@ -76,25 +78,29 @@ function SidebarContentLayout({
       onLayoutChanged={sidebarResizable && sidebarPersistenceId ? handleLayoutChanged : undefined}
       className={cn("h-full min-h-0 w-full overflow-hidden", containerClassName, className)}
     >
-      <ResizablePanel
-        defaultSize={initialSidebarSize}
-        minSize={sidebarMinSize}
-        maxSize={sidebarResizable ? sidebarMaxSize : sidebarDefaultSize}
-        disabled={!sidebarResizable}
-        groupResizeBehavior="preserve-pixel-size"
-        onResize={sidebarResizable && sidebarPersistenceId ? handleSidebarResize : undefined}
-      >
-        <div
-          className={cn(
-            "h-full min-h-0 min-w-0 overflow-hidden bg-background",
-            sidebarClassName,
-          )}
-        >
-          {sidebar}
-        </div>
-      </ResizablePanel>
+      {!sidebarCollapsed ? (
+        <>
+          <ResizablePanel
+            defaultSize={latestSidebarSizeRef.current}
+            minSize={sidebarMinSize}
+            maxSize={sidebarResizable ? sidebarMaxSize : sidebarDefaultSize}
+            disabled={!sidebarResizable}
+            groupResizeBehavior="preserve-pixel-size"
+            onResize={sidebarResizable && sidebarPersistenceId ? handleSidebarResize : undefined}
+          >
+            <div
+              className={cn(
+                "h-full min-h-0 min-w-0 overflow-hidden bg-background",
+                sidebarClassName,
+              )}
+            >
+              {sidebar}
+            </div>
+          </ResizablePanel>
 
-      {sidebarResizable ? <ResizableHandle withHandle /> : null}
+          {sidebarResizable ? <ResizableHandle withHandle /> : null}
+        </>
+      ) : null}
 
       <ResizablePanel>
         {contentScrollable ? (

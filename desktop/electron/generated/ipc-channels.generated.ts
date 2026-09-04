@@ -417,6 +417,7 @@ export const IPC_CHANNELS = {
     "chooseCwd": "synapse:app:terminal:launch:choose_cwd",
     "revealEnvironmentValue": "synapse:app:terminal:environment:reveal",
     "copyEnvironmentValue": "synapse:app:terminal:environment:copy",
+    "materializeClipboardImage": "synapse:app:terminal:clipboard:materialize_image",
     "deleteGroup": "synapse:app:terminal:group:delete",
     "listWorkspaces": "synapse:app:terminal:workspace:list",
     "getWorkspace": "synapse:app:terminal:workspace:get",

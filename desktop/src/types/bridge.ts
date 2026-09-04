@@ -1176,6 +1176,9 @@ export type SynapseBridge = {
       revealEnvironmentValue: (input: SynapseTerminalEnvironmentValueInput) => Promise<string | null>
       copyEnvironmentValue: (input: SynapseTerminalEnvironmentValueInput) => Promise<void>
     }
+    clipboard: {
+      materializeImage: () => Promise<string | null>
+    }
     group: {
       list: () => Promise<SynapseTerminalGroupSummary[]>
       get: (input: { groupId: string }) => Promise<SynapseTerminalGroup>

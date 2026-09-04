@@ -398,8 +398,14 @@ function TerminalPane({
         event.preventDefault()
         event.stopPropagation()
         if (event.type === "keydown" && !event.repeat) {
-          void navigator.clipboard.readText().then((text) => {
-            if (!disposed) xterm.paste(text)
+          void terminalBridge.clipboard.materializeImage().then(async (imagePath) => {
+            if (disposed) return
+            if (imagePath) {
+              xterm.paste(quoteTerminalClipboardPath(imagePath, platform))
+              return
+            }
+            if (!navigator.clipboard?.readText) return
+            xterm.paste(await navigator.clipboard.readText())
           }).catch((error) => {
             logger.error("Failed to read clipboard for terminal paste.", error)
             toast.error("读取剪贴板失败")
@@ -621,6 +627,11 @@ function TerminalPane({
       <div ref={containerRef} data-terminal-xterm-mount className="h-full min-h-0 min-w-0 flex-1 overflow-hidden p-1" />
     </div>
   )
+}
+
+function quoteTerminalClipboardPath(filePath: string, platform?: string): string {
+  if (platform === "win32") return `"${filePath.replaceAll('"', '\\"')}"`
+  return `'${filePath.replaceAll("'", "'\\''")}'`
 }
 
 type FocusDirection = "down" | "left" | "right" | "up"

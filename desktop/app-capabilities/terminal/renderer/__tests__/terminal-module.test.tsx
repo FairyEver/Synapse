@@ -52,6 +52,7 @@ const terminalBridge = vi.hoisted(() => ({
   chooseCwd: vi.fn(async () => "/repo/app"),
   revealEnvironmentValue: vi.fn(async () => null),
   copyEnvironmentValue: vi.fn(async () => undefined),
+  materializeClipboardImage: vi.fn(async (): Promise<string | null> => null),
   getGlobalLaunchSettings: vi.fn(async () => bridgeState.globalLaunch),
   updateGlobalLaunchSettings: vi.fn(async ({ expectedRevision, settings }: {
     expectedRevision: number
@@ -405,6 +406,9 @@ vi.mock("@/lib/electron-bridge", () => ({
         revealEnvironmentValue: terminalBridge.revealEnvironmentValue,
         copyEnvironmentValue: terminalBridge.copyEnvironmentValue,
       },
+      clipboard: {
+        materializeImage: terminalBridge.materializeClipboardImage,
+      },
       group: {
         list: terminalBridge.listGroups,
         get: terminalBridge.getGroup,
@@ -565,19 +569,22 @@ vi.mock("../../../../src/components/sidebar-content-layout", () => ({
     sidebar,
     children,
     contentScrollable,
+    sidebarCollapsed,
     sidebarResizable,
   }: {
     readonly sidebar: ReactNode
     readonly children: ReactNode
     readonly contentScrollable?: boolean
+    readonly sidebarCollapsed?: boolean
     readonly sidebarResizable?: boolean
   }) => (
     <div
       data-testid="terminal-sidebar-content-layout"
       data-content-scrollable={String(contentScrollable)}
+      data-sidebar-collapsed={String(sidebarCollapsed)}
       data-sidebar-resizable={String(sidebarResizable)}
     >
-      <div data-testid="terminal-sidebar">{sidebar}</div>
+      {!sidebarCollapsed ? <div data-testid="terminal-sidebar">{sidebar}</div> : null}
       {children}
     </div>
   ),
@@ -635,6 +642,8 @@ beforeEach(() => {
   terminalBridge.chooseCwd.mockClear()
   terminalBridge.revealEnvironmentValue.mockClear()
   terminalBridge.copyEnvironmentValue.mockClear()
+  terminalBridge.materializeClipboardImage.mockReset()
+  terminalBridge.materializeClipboardImage.mockResolvedValue(null)
   terminalBridge.getGlobalLaunchSettings.mockClear()
   terminalBridge.updateGlobalLaunchSettings.mockClear()
   terminalBridge.createGroup.mockClear()
@@ -704,6 +713,39 @@ describe("TerminalModule", () => {
     expect(layout?.getAttribute("data-content-scrollable")).toBe("false")
   })
 
+  it("toggles and persists sidebar visibility from the system app header", async () => {
+    await renderModule()
+
+    const layout = document.querySelector('[data-testid="terminal-sidebar-content-layout"]')
+    expect(layout?.getAttribute("data-sidebar-collapsed")).toBe("false")
+    expect(document.querySelector('[data-testid="terminal-sidebar"]')).toBeTruthy()
+
+    await clickButtonByAriaLabel("收起侧边栏")
+
+    expect(layout?.getAttribute("data-sidebar-collapsed")).toBe("true")
+    expect(document.querySelector('[data-testid="terminal-sidebar"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="展开侧边栏"]')).toBeTruthy()
+    expect(window.localStorage.getItem("synapse:app:ui:sidebar_collapsed:v1:terminal")).toBe("true")
+
+    await clickButtonByAriaLabel("展开侧边栏")
+
+    expect(layout?.getAttribute("data-sidebar-collapsed")).toBe("false")
+    expect(document.querySelector('[data-testid="terminal-sidebar"]')).toBeTruthy()
+    expect(document.querySelector('button[aria-label="收起侧边栏"]')).toBeTruthy()
+    expect(window.localStorage.getItem("synapse:app:ui:sidebar_collapsed:v1:terminal")).toBe("false")
+  })
+
+  it("restores the persisted terminal sidebar state", async () => {
+    window.localStorage.setItem("synapse:app:ui:sidebar_collapsed:v1:terminal", "true")
+
+    await renderModule()
+
+    expect(document.querySelector('[data-testid="terminal-sidebar-content-layout"]')
+      ?.getAttribute("data-sidebar-collapsed")).toBe("true")
+    expect(document.querySelector('[data-testid="terminal-sidebar"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="展开侧边栏"]')).toBeTruthy()
+  })
+
   it("shows the empty state and creates a terminal session", async () => {
     await renderModule()
 
@@ -750,6 +792,7 @@ describe("TerminalModule", () => {
   it("renders terminal actions in the embedded header", async () => {
     await renderEmbeddedModule()
 
+    expect(document.querySelector('[data-embedded-system-app-left] button[aria-label="收起侧边栏"]')).toBeTruthy()
     const actions = document.querySelector("[data-embedded-system-app-actions]")
     expect(actions?.textContent).toContain("新建终端")
     expect(actions?.textContent).toContain("终端设置")
@@ -1494,8 +1537,41 @@ describe("TerminalModule", () => {
     })
 
     expect(event.defaultPrevented).toBe(true)
+    expect(terminalBridge.materializeClipboardImage).toHaveBeenCalledTimes(1)
     expect(readText).toHaveBeenCalledTimes(1)
     expect(xtermState.instances[0]?.paste).toHaveBeenCalledWith("first\nsecond")
+  })
+
+  it("pastes an image-only clipboard path through xterm with Cmd+V", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.materializeClipboardImage.mockResolvedValueOnce(
+      "/Users/liyang/Library/Application Support/Synapse/terminal/clipboard-images/clipboard-image-1.png",
+    )
+    const readText = vi.fn(async () => "")
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText },
+    })
+
+    await renderModule()
+    const event = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "v",
+      metaKey: true,
+    })
+
+    await act(async () => {
+      expect(xtermState.instances[0]?.emitKeyEvent(event)).toBe(false)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(readText).not.toHaveBeenCalled()
+    expect(xtermState.instances[0]?.paste).toHaveBeenCalledWith(
+      "'/Users/liyang/Library/Application Support/Synapse/terminal/clipboard-images/clipboard-image-1.png'",
+    )
   })
 
   it("splits the active pane to the right with Cmd+D while keeping one sidebar workspace", async () => {

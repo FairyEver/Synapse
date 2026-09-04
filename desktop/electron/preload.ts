@@ -562,6 +562,9 @@ const synapseBridge: SynapseBridge = {
       revealEnvironmentValue: (input) => invoke(IPC_CHANNELS.terminal.revealEnvironmentValue)(input),
       copyEnvironmentValue: (input) => invoke(IPC_CHANNELS.terminal.copyEnvironmentValue)(input),
     },
+    clipboard: {
+      materializeImage: () => invoke(IPC_CHANNELS.terminal.materializeClipboardImage)(),
+    },
     group: {
       list: () => invoke(IPC_CHANNELS.terminal.listGroups)(),
       get: (input) => invoke(IPC_CHANNELS.terminal.getGroup)(input),

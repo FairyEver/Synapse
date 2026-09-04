@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
@@ -55,6 +55,7 @@ import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { runTrackedOperation } from "../../../src/lib/ui-tracking"
 import { getRendererPlatform } from "../../../src/lib/runtime-platform"
+import { readSidebarCollapsed, writeSidebarCollapsed } from "../../../src/lib/sidebar-layout-storage"
 import { cn } from "../../../src/lib/utils"
 import { SystemAppWindowShell } from "../../../src/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "../../../src/modules/apps/components/system-app-top-bar"
@@ -93,6 +94,7 @@ import {
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
+const TERMINAL_SIDEBAR_PERSISTENCE_ID = "terminal"
 const logger = createRendererLogger("terminal.app")
 
 export function TerminalModule({
@@ -114,6 +116,9 @@ export function TerminalModule({
   const [globalLaunchDraft, setGlobalLaunchDraft] = useState<SynapseTerminalLaunchLayer>({})
   const [terminalAppearanceSize, setTerminalAppearanceSize] = useState(readTerminalAppearanceSize)
   const [terminalAppearanceSizeDraft, setTerminalAppearanceSizeDraft] = useState(terminalAppearanceSize)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
+    readSidebarCollapsed(TERMINAL_SIDEBAR_PERSISTENCE_ID)
+  ))
   const [globalLaunchSaving, setGlobalLaunchSaving] = useState(false)
   const [globalLaunchChoosingDirectory, setGlobalLaunchChoosingDirectory] = useState(false)
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalWorkspace | null>(null)
@@ -841,6 +846,14 @@ export function TerminalModule({
     setActivePaneIds((current) => ({ ...current, [activeWorkspace.id]: paneId }))
   }, [activeWorkspace])
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((current) => {
+      const next = !current
+      writeSidebarCollapsed(TERMINAL_SIDEBAR_PERSISTENCE_ID, next)
+      return next
+    })
+  }, [])
+
   const sidebar = (
     <ModuleSidebar
       variant="bare"
@@ -972,24 +985,44 @@ export function TerminalModule({
     </ModuleSidebar>
   )
 
+  const sidebarToggleLabel = sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"
+  const sidebarToggle = (
+    <SystemAppTopBarActionButton
+      iconOnly
+      type="button"
+      aria-label={sidebarToggleLabel}
+      aria-expanded={!sidebarCollapsed}
+      tooltip={sidebarToggleLabel}
+      data-track="terminal-sidebar-toggle"
+      onClick={toggleSidebar}
+    >
+      <PanelLeft />
+    </SystemAppTopBarActionButton>
+  )
+
   return (
-    <SystemAppWindowShell actions={(
-      <>
-        <SystemAppTopBarActionButton ref={createSessionActionRef} type="button" onClick={() => { void createSession() }}>
-          <Plus data-icon="inline-start" />
-          新建终端
-        </SystemAppTopBarActionButton>
-        <SystemAppTopBarActionButton type="button" onClick={() => { void openGlobalSettingsDialog() }}>
-          <Settings data-icon="inline-start" />
-          终端设置
-        </SystemAppTopBarActionButton>
-      </>
-    )}>
+    <SystemAppWindowShell
+      left={sidebarToggle}
+      embeddedLeftAddon={sidebarToggle}
+      actions={(
+        <>
+          <SystemAppTopBarActionButton ref={createSessionActionRef} type="button" onClick={() => { void createSession() }}>
+            <Plus data-icon="inline-start" />
+            新建终端
+          </SystemAppTopBarActionButton>
+          <SystemAppTopBarActionButton type="button" onClick={() => { void openGlobalSettingsDialog() }}>
+            <Settings data-icon="inline-start" />
+            终端设置
+          </SystemAppTopBarActionButton>
+        </>
+      )}
+    >
       <SidebarContentLayout
         sidebar={sidebar}
+        sidebarCollapsed={sidebarCollapsed}
         contentScrollable={false}
         sidebarResizable
-        sidebarPersistenceId="terminal"
+        sidebarPersistenceId={TERMINAL_SIDEBAR_PERSISTENCE_ID}
       >
         <main className="flex h-full min-h-0 min-w-0 flex-col">
           {activeWorkspace && activePaneId ? (
