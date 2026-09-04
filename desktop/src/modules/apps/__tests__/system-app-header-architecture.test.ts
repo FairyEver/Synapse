@@ -41,4 +41,11 @@ describe("system app header architecture", () => {
       }
     })
   }
+
+  it("keeps terminal header controls on the shared action button", async () => {
+    const source = await readFile(new URL(appEntrypoints.terminal.path, import.meta.url), "utf8")
+
+    expect(source).toContain("<SystemAppTopBarActionButton")
+    expect(source).toContain("embeddedLeftAddon={headerNavigation}")
+  })
 })

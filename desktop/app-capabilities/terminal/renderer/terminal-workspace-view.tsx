@@ -785,7 +785,16 @@ function TerminalPane({
           {readError}
         </div>
       ) : null}
-      <div ref={containerRef} data-terminal-xterm-mount className="h-full min-h-0 min-w-0 flex-1 overflow-hidden p-1" />
+      <div
+        data-terminal-xterm-frame
+        className="h-full min-h-0 min-w-0 flex-1 overflow-hidden p-1"
+      >
+        <div
+          ref={containerRef}
+          data-terminal-xterm-mount
+          className="h-full min-h-0 min-w-0 overflow-hidden"
+        />
+      </div>
     </div>
   )
 }

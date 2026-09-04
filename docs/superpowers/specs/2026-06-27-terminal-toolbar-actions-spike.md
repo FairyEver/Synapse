@@ -17,24 +17,23 @@ The new toolbar should add high-frequency, project-agnostic terminal actions wit
 
 ## Product Decision
 
-Add a very small toolbar at the top of the active terminal pane, inside the dark terminal area and above xterm.
+Add a very small toolbar at the bottom of the active terminal pane, inside the dark terminal area and below xterm.
 
 ```text
 ┌──────────────────┬─────────────────────────────────────────┐
-│ Terminal groups  │ Ctrl+C  Clear  │  /exit  /clear │
-│                  ├─────────────────────────────────────────┤
-│ zsh              │                                         │
-│ dev              │                 xterm                   │
+│ Terminal groups  │                                         │
 │                  │                                         │
+│ zsh              │                 xterm                   │
+│ dev              ├─────────────────────────────────────────┤
+│                  │ Ctrl+C  Clear  │  /exit  /clear          │
 └──────────────────┴─────────────────────────────────────────┘
 ```
 
 Reasons:
 
-- Top placement avoids fighting the shell prompt and the latest output line.
+- Bottom placement keeps the actions next to the terminal input area without overlaying xterm content.
 - The toolbar belongs to the active terminal pane, not the global app shell.
-- Users can discover actions before focusing the terminal.
-- A fixed-height top row is easier to keep stable than a bottom overlay.
+- A fixed-height bottom row remains visible while terminal output scrolls.
 - The toolbar can horizontally scroll on narrow screens without wrapping.
 
 The first version should ship only built-in toolbar actions defined in code. Do not add user customization, storage schema, command management UI, or MCP tools for toolbar actions yet.
@@ -125,15 +124,15 @@ Recommended structure:
 ```text
 dark terminal pane
 ┌───────────────────────────────────────────────┐
-│ [Ctrl+C] [Clear] │ [/exit] [/clear] │
-├───────────────────────────────────────────────┤
 │ xterm                                         │
+├───────────────────────────────────────────────┤
+│ [Ctrl+C] [Clear] │ [/exit] [/clear]           │
 └───────────────────────────────────────────────┘
 ```
 
 Layout details:
 
-- The toolbar is a single row above xterm.
+- The toolbar is a single row below xterm.
 - Height should be compact and stable.
 - The row uses `overflow-x-auto` and `whitespace-nowrap`; actions never wrap.
 - Buttons use small or extra-small project button variants.

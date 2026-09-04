@@ -173,6 +173,13 @@ export function TerminalModule({
   const terminalSessionStatus = activeSession?.status ?? null
 
   const workspaceGroups = useMemo(() => groupWorkspaces(groups, workspaces), [groups, workspaces])
+  const activeHeaderWorkspaces = useMemo(() => {
+    const sessionsById = new Map(sessions.map((session) => [session.id, session]))
+    return workspaceGroups
+      .flatMap((group) => group.workspaces)
+      .filter((workspace) => !workspace.closing && collectTerminalPaneLeaves(workspace.layout)
+        .some((pane) => sessionsById.get(pane.sessionId)?.status === "running"))
+  }, [sessions, workspaceGroups])
   const rendererPlatform = getRendererPlatform()
   const toolbarActions = useMemo(
     () => getTerminalToolbarActions(rendererPlatform),
@@ -873,6 +880,10 @@ export function TerminalModule({
     setActivePaneIds((current) => ({ ...current, [activeWorkspace.id]: paneId }))
   }, [activeWorkspace])
 
+  const selectWorkspace = useCallback((workspaceId: string) => {
+    setActiveWorkspaceId(workspaceId)
+  }, [])
+
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((current) => {
       const next = !current
@@ -995,7 +1006,7 @@ export function TerminalModule({
                     />
                   }
                   trackValue={workspace.id}
-                  onSelect={() => setActiveWorkspaceId(workspace.id)}
+                  onSelect={() => selectWorkspace(workspace.id)}
                   onDoubleClick={(event) => openRenameDialog(workspace, event.currentTarget)}
                 >
                   {workspace.title}
@@ -1020,23 +1031,48 @@ export function TerminalModule({
       aria-label={sidebarToggleLabel}
       aria-expanded={!sidebarCollapsed}
       tooltip={sidebarToggleLabel}
+      className="aria-expanded:bg-transparent aria-expanded:hover:bg-muted"
       data-track="terminal-sidebar-toggle"
       onClick={toggleSidebar}
     >
       <PanelLeft />
     </SystemAppTopBarActionButton>
   )
+  const headerNavigation = (
+    <>
+      {sidebarToggle}
+      {activeHeaderWorkspaces.length > 0 ? (
+        <nav aria-label="活动终端会话" className="flex min-w-0 items-center gap-0 overflow-x-auto whitespace-nowrap">
+          {activeHeaderWorkspaces.map((workspace) => (
+            <SystemAppTopBarActionButton
+              key={workspace.id}
+              type="button"
+              aria-current={workspace.id === activeWorkspace?.id ? "page" : undefined}
+              aria-label={`切换到会话：${workspace.title}`}
+              className={workspace.id === activeWorkspace?.id ? "bg-muted text-foreground" : undefined}
+              data-track="terminal-header-session-select"
+              onClick={() => selectWorkspace(workspace.id)}
+            >
+              <span className="max-w-32 truncate">{workspace.title}</span>
+            </SystemAppTopBarActionButton>
+          ))}
+        </nav>
+      ) : null}
+    </>
+  )
 
   return (
     <SystemAppWindowShell
-      left={sidebarToggle}
-      embeddedLeftAddon={sidebarToggle}
+      left={headerNavigation}
+      embeddedLeftAddon={headerNavigation}
       actions={(
         <>
           <SystemAppTopBarActionButton ref={createSessionActionRef} type="button" onClick={() => { void createSession() }}>
+            <Plus data-icon="inline-start" />
             新建
           </SystemAppTopBarActionButton>
           <SystemAppTopBarActionButton type="button" onClick={() => { void openGlobalSettingsDialog() }}>
+            <Settings data-icon="inline-start" />
             设置
           </SystemAppTopBarActionButton>
         </>
@@ -1052,10 +1088,27 @@ export function TerminalModule({
         <main className="flex h-full min-h-0 min-w-0 flex-col">
           {activeWorkspace && activePaneId ? (
             <div className="dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+              <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+                <TerminalWorkspaceView
+                  ref={workspaceViewRef}
+                  activePaneId={activePaneId}
+                  appearanceSize={terminalAppearanceSize}
+                  onActivePaneChange={selectActivePane}
+                  onClosePane={closePane}
+                  onMovePane={movePane}
+                  onSessionChanged={handleSessionChanged}
+                  onSessionDeleted={handleSessionDeleted}
+                  onSplitPane={splitPane}
+                  onSplitRatioChange={updateSplitRatio}
+                  platform={rendererPlatform}
+                  sessions={sessions}
+                  workspace={activeWorkspace}
+                />
+              </div>
               {toolbarActions.length ? (
                 <div
                   data-terminal-toolbar
-                  className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-b bg-card px-2.5 py-1.5 whitespace-nowrap"
+                  className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-t bg-card px-2.5 py-1.5 whitespace-nowrap"
                 >
                   {toolbarActions.map((action) => (
                     <div key={action.id} className="flex shrink-0 items-center gap-1">
@@ -1077,23 +1130,6 @@ export function TerminalModule({
                   ))}
                 </div>
               ) : null}
-              <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-                <TerminalWorkspaceView
-                  ref={workspaceViewRef}
-                  activePaneId={activePaneId}
-                  appearanceSize={terminalAppearanceSize}
-                  onActivePaneChange={selectActivePane}
-                  onClosePane={closePane}
-                  onMovePane={movePane}
-                  onSessionChanged={handleSessionChanged}
-                  onSessionDeleted={handleSessionDeleted}
-                  onSplitPane={splitPane}
-                  onSplitRatioChange={updateSplitRatio}
-                  platform={rendererPlatform}
-                  sessions={sessions}
-                  workspace={activeWorkspace}
-                />
-              </div>
             </div>
           ) : (
             <div className="flex h-full min-h-0 items-center justify-center">

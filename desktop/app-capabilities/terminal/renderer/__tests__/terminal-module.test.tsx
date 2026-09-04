@@ -800,15 +800,60 @@ describe("TerminalModule", () => {
   it("renders terminal actions in the embedded header", async () => {
     await renderEmbeddedModule()
 
-    expect(document.querySelector('[data-embedded-system-app-left] button[aria-label="收起侧边栏"]')).toBeTruthy()
+    const sidebarToggle = document.querySelector<HTMLButtonElement>('[data-embedded-system-app-left] button[aria-label="收起侧边栏"]')
+    expect(sidebarToggle?.dataset.variant).toBe("ghost")
+    expect(sidebarToggle?.className).toContain("aria-expanded:bg-transparent")
     const actions = document.querySelector("[data-embedded-system-app-actions]")
     const actionButtons = Array.from(actions?.querySelectorAll("button") ?? [])
     const createButton = actionButtons.find((button) => button.textContent?.trim() === "新建")
     const settingsButton = actionButtons.find((button) => button.textContent?.trim() === "设置")
-    expect(createButton?.querySelector("svg")).toBeNull()
-    expect(settingsButton?.querySelector("svg")).toBeNull()
+    expect(createButton?.dataset.variant).toBe("ghost")
+    expect(settingsButton?.dataset.variant).toBe("ghost")
+    expect(createButton?.querySelector("svg")).toBeTruthy()
+    expect(settingsButton?.querySelector("svg")).toBeTruthy()
     expect(actions?.textContent).not.toContain("新建终端")
     expect(actions?.textContent).not.toContain("终端设置")
+  })
+
+  it("lists running workspaces in the header and switches the active workspace", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({ id: "session-2", groupId: "group-1", title: "日志终端" })
+    createSession({ id: "session-3", groupId: "group-1", title: "历史终端", status: "lost" })
+
+    await renderEmbeddedModule()
+
+    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    expect(navigation?.textContent).toContain("开发终端")
+    expect(navigation?.textContent).toContain("日志终端")
+    expect(navigation?.textContent).not.toContain("历史终端")
+    expect(navigation?.querySelectorAll("svg")).toHaveLength(0)
+    expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
+
+    await clickButton("日志终端", navigation ?? document.body)
+
+    expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("日志终端")
+    expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
+  })
+
+  it("removes a workspace from the header when its session stops running", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+    expect(document.querySelector('[aria-label="活动终端会话"]')?.textContent).toContain("开发终端")
+
+    bridgeState.sessions = bridgeState.sessions.map((session) => ({
+      ...session,
+      status: "exited" as const,
+    }))
+    await act(async () => {
+      bridgeState.domainChangedListener?.({})
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('[aria-label="活动终端会话"]')).toBeNull()
   })
 
   it("edits global launch settings from the terminal header without remounting the active terminal", async () => {
@@ -912,7 +957,7 @@ describe("TerminalModule", () => {
     expect(document.querySelector("[aria-label^='终端输出与输入']")).toBeTruthy()
   })
 
-  it("renders a compact toolbar above the active terminal surface", async () => {
+  it("renders a compact toolbar below the active terminal surface", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
@@ -925,8 +970,10 @@ describe("TerminalModule", () => {
     expect(toolbar?.classList.contains("whitespace-nowrap")).toBe(true)
     expect(toolbar?.classList.contains("min-h-10")).toBe(true)
     expect(toolbar?.classList.contains("bg-card")).toBe(true)
+    expect(toolbar?.classList.contains("border-t")).toBe(true)
+    expect(toolbar?.classList.contains("border-b")).toBe(false)
     if (!toolbar || !terminalRegion) throw new Error("Missing terminal toolbar or region")
-    expect(toolbar.compareDocumentPosition(terminalRegion)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(terminalRegion.compareDocumentPosition(toolbar)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(document.body.textContent).toContain("Ctrl+C")
     expect(document.body.textContent).toContain("Clear")
     expect(document.body.textContent).not.toContain("Claude")
@@ -1065,13 +1112,17 @@ describe("TerminalModule", () => {
     const main = document.body.querySelector("main")
     const terminalRegion = document.querySelector("[aria-label^='终端输出与输入']")
     const xtermMount = terminalRegion?.querySelector("[data-terminal-xterm-mount]")
+    const xtermFrame = xtermMount?.parentElement
     expect(main?.classList.contains("h-full")).toBe(true)
     expect(main?.classList.contains("min-h-0")).toBe(true)
     expect(terminalRegion?.parentElement?.classList.contains("h-full")).toBe(true)
     expect(terminalRegion?.classList.contains("flex-1")).toBe(true)
     expect(terminalRegion?.classList.contains("min-h-0")).toBe(true)
     expect(xtermMount).toBeTruthy()
+    expect(xtermFrame?.hasAttribute("data-terminal-xterm-frame")).toBe(true)
+    expect(xtermFrame?.classList.contains("p-1")).toBe(true)
     expect(xtermMount?.classList.contains("h-full")).toBe(true)
+    expect(xtermMount?.classList.contains("p-1")).toBe(false)
     expect(xtermState.instances[0]?.open).toHaveBeenCalledWith(xtermMount)
   })
 
