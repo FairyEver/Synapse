@@ -14,6 +14,8 @@ describe("terminal toolbar actions", () => {
       "claude",
       "codex",
       "vscode",
+      "slash-exit",
+      "slash-clear",
     ])
     expect(TERMINAL_TOOLBAR_ACTIONS.map((action) => action.label)).toEqual([
       "Ctrl+C",
@@ -21,6 +23,8 @@ describe("terminal toolbar actions", () => {
       "Claude",
       "Codex",
       "code .",
+      "/exit",
+      "/clear",
     ])
   })
 
@@ -31,6 +35,8 @@ describe("terminal toolbar actions", () => {
       "claude",
       "codex",
       "vscode",
+      "slash-exit",
+      "slash-clear",
     ])
     expect(getTerminalToolbarActions("sunos").map((action) => action.id)).toEqual([
       "interrupt",
@@ -38,6 +44,8 @@ describe("terminal toolbar actions", () => {
       "claude",
       "codex",
       "vscode",
+      "slash-exit",
+      "slash-clear",
     ])
     expect(getTerminalToolbarActions(undefined).map((action) => action.id)).toEqual([
       "interrupt",
@@ -45,15 +53,19 @@ describe("terminal toolbar actions", () => {
       "claude",
       "codex",
       "vscode",
+      "slash-exit",
+      "slash-clear",
     ])
   })
 
   it("resolves terminal sequences and shell commands for the active platform", () => {
     const interrupt = TERMINAL_TOOLBAR_ACTIONS.find((action) => action.id === "interrupt")
     const claude = TERMINAL_TOOLBAR_ACTIONS.find((action) => action.id === "claude")
+    const slashClear = TERMINAL_TOOLBAR_ACTIONS.find((action) => action.id === "slash-clear")
 
     expect(interrupt ? resolveTerminalToolbarPayload(interrupt, "win32") : null).toBe("\x03")
     expect(claude ? resolveTerminalToolbarPayload(claude, "darwin") : null).toBe("claude")
+    expect(slashClear ? resolveTerminalToolbarPayload(slashClear, "linux") : null).toBe("/clear")
   })
 
   it("treats running-only actions as disabled for non-running sessions", () => {

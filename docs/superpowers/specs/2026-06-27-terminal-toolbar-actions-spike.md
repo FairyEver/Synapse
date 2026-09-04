@@ -21,7 +21,7 @@ Add a very small toolbar at the top of the active terminal pane, inside the dark
 
 ```text
 ┌──────────────────┬─────────────────────────────────────────┐
-│ Terminal groups  │ Ctrl+C  Clear  Claude  Codex  code .     │
+│ Terminal groups  │ Ctrl+C  Clear  Claude  Codex  code .  /exit  /clear │
 │                  ├─────────────────────────────────────────┤
 │ zsh              │                                         │
 │ dev              │                 xterm                   │
@@ -106,6 +106,8 @@ Initial action set:
 | `Claude` | `shell-command` | `claude` | running session | macOS, Windows, Linux |
 | `Codex` | `shell-command` | `codex` | running session | macOS, Windows, Linux |
 | `code .` | `shell-command` | `code .` | running session | macOS, Windows, Linux |
+| `/exit` | `shell-command` | `/exit` | running session | macOS, Windows, Linux |
+| `/clear` | `shell-command` | `/clear` | running session | macOS, Windows, Linux |
 
 Decision notes:
 
@@ -114,6 +116,7 @@ Decision notes:
 - Do not add `Clear` as shell text. Local xterm clearing avoids injecting `clear` into a running program and avoids shell-specific differences.
 - Do not disable `Clear` for exited/lost sessions. It is a visual buffer operation and remains useful for reading or resetting a stale pane.
 - Do not auto-detect whether `claude`, `codex`, or `code` exists. A missing command should fail naturally in shell output, matching normal terminal behavior.
+- `/exit` and `/clear` submit the shared Claude Code and Codex slash commands without detecting which CLI is active.
 
 ## UI Behavior
 
@@ -126,7 +129,7 @@ Recommended structure:
 ```text
 dark terminal pane
 ┌───────────────────────────────────────────────┐
-│ [Ctrl+C] [Clear] [Claude] [Codex] [code .]     │
+│ [Ctrl+C] [Clear] [Claude] [Codex] [code .] [/exit] [/clear] │
 ├───────────────────────────────────────────────┤
 │ xterm                                         │
 └───────────────────────────────────────────────┘
@@ -191,7 +194,7 @@ Renderer tests should cover:
 - Toolbar appears for an active session.
 - Toolbar does not appear in empty state.
 - `Ctrl+C` writes `\x03` to the active running session.
-- `Claude`, `Codex`, and `code .` write command text plus carriage return.
+- `Claude`, `Codex`, `code .`, `/exit`, and `/clear` write command text plus carriage return.
 - Running-only buttons are disabled for `lost`, `exited`, `killed`, and `failed` sessions.
 - `Clear` remains enabled for non-running sessions and calls the xterm clear method without calling `writeSession`.
 - Toolbar row uses horizontal overflow behavior and does not add terminal-pane marketing or helper copy.

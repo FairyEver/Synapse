@@ -75,6 +75,24 @@ export const TERMINAL_TOOLBAR_ACTIONS: readonly TerminalToolbarAction[] = [
     kind: "shell-command",
     command: "code .",
   },
+  {
+    id: "slash-exit",
+    label: "/exit",
+    ariaLabel: "运行 /exit",
+    platforms: ALL_PLATFORMS,
+    availability: "running-session",
+    kind: "shell-command",
+    command: "/exit",
+  },
+  {
+    id: "slash-clear",
+    label: "/clear",
+    ariaLabel: "运行 /clear",
+    platforms: ALL_PLATFORMS,
+    availability: "running-session",
+    kind: "shell-command",
+    command: "/clear",
+  },
 ] as const
 
 export function getTerminalToolbarActions(platform: string | undefined): readonly TerminalToolbarAction[] {

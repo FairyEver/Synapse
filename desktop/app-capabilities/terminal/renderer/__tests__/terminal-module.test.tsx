@@ -855,9 +855,11 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("Claude")
     expect(document.body.textContent).toContain("Codex")
     expect(document.body.textContent).toContain("code .")
+    expect(document.body.textContent).toContain("/exit")
+    expect(document.body.textContent).toContain("/clear")
 
     const toolbarButtons = Array.from(toolbar.querySelectorAll("button"))
-    expect(toolbarButtons).toHaveLength(5)
+    expect(toolbarButtons).toHaveLength(7)
     for (const button of toolbarButtons) {
       expect(button.className).toContain("text-foreground/75")
       expect(button.className).toContain("transition-[scale,background-color,color]")
@@ -895,6 +897,8 @@ describe("TerminalModule", () => {
     await clickButton("Claude")
     await clickButton("Codex")
     await clickButton("code .")
+    await clickButton("/exit")
+    await clickButton("/clear")
 
     expect(terminalBridge.writeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
@@ -911,6 +915,14 @@ describe("TerminalModule", () => {
     expect(terminalBridge.writeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
       data: "code .\r",
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "/exit\r",
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "/clear\r",
     })
   })
 
@@ -929,6 +941,8 @@ describe("TerminalModule", () => {
     expect(buttonForText("Claude")?.disabled).toBe(true)
     expect(buttonForText("Codex")?.disabled).toBe(true)
     expect(buttonForText("code .")?.disabled).toBe(true)
+    expect(buttonForText("/exit")?.disabled).toBe(true)
+    expect(buttonForText("/clear")?.disabled).toBe(true)
     expect(buttonForText("Clear")?.disabled).toBe(false)
 
     await clickButton("Clear")
