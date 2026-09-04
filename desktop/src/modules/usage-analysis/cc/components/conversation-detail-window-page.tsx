@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { sanitizeError } from "@/lib/error-sanitize"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
   CcConversationDetail,
   CcConversationParseError,
@@ -115,41 +116,47 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
             </AlertDescription>
           </Alert>
         ) : null}
-        <aside className="min-h-0 overflow-auto rounded-md border bg-card p-2 lg:col-span-2">
-          <h2 className="text-sm font-medium">事件</h2>
-          <div className="mt-2 flex flex-col gap-1">
-            {events.map((event) => (
-              <button
-                data-track="usage.conversation.event.select"
-                data-track-native="true"
-                key={event.id}
-                type="button"
-                className={selected?.id === event.id
-                  ? "truncate rounded-md bg-muted px-2 py-1 text-left text-xs"
-                  : "truncate rounded-md px-2 py-1 text-left text-xs hover:bg-accent"}
-                onClick={() => setSelected(event)}
-              >
-                {event.type}
-              </button>
-            ))}
-            {!detail && !error ? <div className="text-xs text-muted-foreground">加载中</div> : null}
-            {error ? <div className="text-xs text-destructive">{error}</div> : null}
-            {detail?.hasMore ? (
-              <button
-                data-track="usage.conversation.load-more"
-                data-track-native="true"
-                type="button"
-                className="rounded-md border px-2 py-1 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={loadingMore}
-                onClick={() => void loadMore()}
-              >
-                {loadingMore ? "加载中" : "加载更多"}
-              </button>
-            ) : null}
-          </div>
+        <aside className="min-h-0 overflow-hidden rounded-md border bg-card lg:col-span-2">
+          <ScrollArea className="h-full">
+            <div className="p-2">
+              <h2 className="text-sm font-medium">事件</h2>
+              <div className="mt-2 flex flex-col gap-1">
+                {events.map((event) => (
+                  <button
+                    data-track="usage.conversation.event.select"
+                    data-track-native="true"
+                    key={event.id}
+                    type="button"
+                    className={selected?.id === event.id
+                      ? "truncate rounded-md bg-muted px-2 py-1 text-left text-xs"
+                      : "truncate rounded-md px-2 py-1 text-left text-xs hover:bg-accent"}
+                    onClick={() => setSelected(event)}
+                  >
+                    {event.type}
+                  </button>
+                ))}
+                {!detail && !error ? <div className="text-xs text-muted-foreground">加载中</div> : null}
+                {error ? <div className="text-xs text-destructive">{error}</div> : null}
+                {detail?.hasMore ? (
+                  <button
+                    data-track="usage.conversation.load-more"
+                    data-track-native="true"
+                    type="button"
+                    className="rounded-md border px-2 py-1 text-left text-xs hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={loadingMore}
+                    onClick={() => void loadMore()}
+                  >
+                    {loadingMore ? "加载中" : "加载更多"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </ScrollArea>
         </aside>
-        <section className="min-h-0 overflow-auto lg:col-span-7">
-          <ConversationEventStream events={events} selectedId={selected?.id} onSelect={setSelected} />
+        <section className="min-h-0 overflow-hidden lg:col-span-7">
+          <ScrollArea className="h-full">
+            <ConversationEventStream events={events} selectedId={selected?.id} onSelect={setSelected} />
+          </ScrollArea>
         </section>
         <aside className="min-h-0 overflow-hidden lg:col-span-3">
           <ConversationEventInspector event={selected} />

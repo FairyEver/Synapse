@@ -399,7 +399,9 @@ describe("PriceRulesView", () => {
     expect(document.querySelector("[data-price-rules-actions]")?.className).toContain("flex-wrap")
     expect(document.querySelector("[data-price-rules-actions]")?.className).toContain("max-w-full")
     expect(document.querySelector("[data-price-rules-table-panel]")?.className).toContain("overflow-hidden")
-    expect(document.querySelector("[data-slot='table-container']")?.className).toContain("overflow-x-auto")
+    const tableContainer = document.querySelector("[data-slot='table-container']")
+    expect(tableContainer?.getAttribute("data-scrollbars")).toBe("horizontal")
+    expect(tableContainer?.querySelector("[data-radix-scroll-area-viewport]")).not.toBeNull()
   })
 })
 
@@ -414,10 +416,6 @@ function findButton(label: string): HTMLButtonElement {
       .find((candidate) => candidate.textContent?.includes(label))
   if (!button) throw new Error(`Button not found: ${label}`)
   return button
-}
-
-function clickButtonByAriaLabel(label: string): void {
-  findButtonByAriaLabel(label).dispatchEvent(new MouseEvent("click", { bubbles: true }))
 }
 
 function findButtonByAriaLabel(label: string): HTMLButtonElement {

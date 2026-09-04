@@ -248,9 +248,11 @@ describe("AgentSessionSidebar", () => {
     const list = [...wrapper.querySelectorAll("div")]
       .find((element) => element.className.includes("flex-col") && element.textContent?.includes(longTitle))
     const sidebarList = wrapper.querySelector('[data-track="agent-session-list"]')
-    expect(sidebarList?.className).toContain("overflow-y-auto")
-    expect(sidebarList?.className).toContain("overflow-x-hidden")
+    const sidebarViewport = sidebarList?.querySelector("[data-radix-scroll-area-viewport]")
+    expect(sidebarList?.getAttribute("data-scrollbars")).toBe("vertical")
     expect(sidebarList?.className).toContain("min-w-0")
+    expect(sidebarViewport?.className).toContain("overflow-x-hidden")
+    expect(sidebarViewport?.className).toContain("px-0.5")
     expect(list?.className).toContain("w-full")
 
     const indentedSessionList = [...wrapper.querySelectorAll("div")]

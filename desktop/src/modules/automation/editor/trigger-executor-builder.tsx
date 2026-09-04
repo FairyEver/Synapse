@@ -11,6 +11,7 @@ import {
   ItemDescription,
   ItemTitle,
 } from "@/components/ui/item"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { createPlatformActionDefaultConfig } from "../../../../action-packages/builtin/shell-defaults"
 import { listDiscoverableBuiltinAutomationActionTypes } from "../../../../app-capabilities/surface-discovery"
@@ -178,94 +179,102 @@ export function TriggerExecutorBuilder({
       data-layout="automation-editor-builder"
       className="grid h-full min-h-0 w-full max-w-full grid-cols-[400px_1px_minmax(0,1fr)] gap-5 overflow-hidden"
     >
-      <section data-layout="automation-editor-trigger-panel" className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-5">
-        <BuilderHeader
-          actionAriaLabel={selectedTrigger ? "更换触发条件" : undefined}
-          actionLabel={selectedTrigger ? "更换" : undefined}
-          layout="automation-editor-trigger-header"
-          onAction={selectedTrigger ? () => onTriggerChange(null, {}) : undefined}
-          title="当以下情况发生时"
-        />
-        {selectedTrigger ? (
-          <div className="grid min-w-0 gap-4">
-            <SelectedSummary
-              layout="automation-editor-trigger-summary"
-              title={selectedTrigger.manifest.title}
-              summary={safeTriggerSummary(selectedTrigger.manifest.id, triggerConfig)}
-              extraAction={(
-                <TriggerVariablesDialog
-                  triggerTitle={selectedTrigger.manifest.title}
-                  variables={selectedTrigger.manifest.variables ?? []}
-                />
-              )}
+      <section data-layout="automation-editor-trigger-panel" className="min-h-0 min-w-0 overflow-hidden">
+        <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+          <div className="p-5">
+            <BuilderHeader
+              actionAriaLabel={selectedTrigger ? "更换触发条件" : undefined}
+              actionLabel={selectedTrigger ? "更换" : undefined}
+              layout="automation-editor-trigger-header"
+              onAction={selectedTrigger ? () => onTriggerChange(null, {}) : undefined}
+              title="当以下情况发生时"
             />
-            {TriggerConfigForm ? (
-              <div
-                data-layout="automation-editor-trigger-config"
-                className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
-              >
-                <TriggerConfigForm
-                  value={parseTriggerValue(selectedTrigger.manifest.id, triggerConfig)}
-                  onChange={(config) => onTriggerChange(selectedTrigger.manifest.id, config)}
+            {selectedTrigger ? (
+              <div className="grid min-w-0 gap-4">
+                <SelectedSummary
+                  layout="automation-editor-trigger-summary"
+                  title={selectedTrigger.manifest.title}
+                  summary={safeTriggerSummary(selectedTrigger.manifest.id, triggerConfig)}
+                  extraAction={(
+                    <TriggerVariablesDialog
+                      triggerTitle={selectedTrigger.manifest.title}
+                      variables={selectedTrigger.manifest.variables ?? []}
+                    />
+                  )}
                 />
+                {TriggerConfigForm ? (
+                  <div
+                    data-layout="automation-editor-trigger-config"
+                    className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
+                  >
+                    <TriggerConfigForm
+                      value={parseTriggerValue(selectedTrigger.manifest.id, triggerConfig)}
+                      onChange={(config) => onTriggerChange(selectedTrigger.manifest.id, config)}
+                    />
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            ) : (
+              <ChoiceList
+                items={rendererAutomationTriggerRegistry.list().map((trigger) => ({
+                  id: trigger.manifest.id,
+                  title: trigger.manifest.title,
+                }))}
+                onSelect={(id) => onTriggerChange(id, { ...rendererAutomationTriggerRegistry.getDefaultConfig(id) })}
+              />
+            )}
           </div>
-        ) : (
-          <ChoiceList
-            items={rendererAutomationTriggerRegistry.list().map((trigger) => ({
-              id: trigger.manifest.id,
-              title: trigger.manifest.title,
-            }))}
-            onSelect={(id) => onTriggerChange(id, { ...rendererAutomationTriggerRegistry.getDefaultConfig(id) })}
-          />
-        )}
+        </ScrollArea>
       </section>
 
       <Separator data-layout="automation-editor-divider" orientation="vertical" />
 
-      <section data-layout="automation-editor-executor-panel" className="min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-5">
-        <BuilderHeader
-          actionAriaLabel={selectedExecutor ? "更换执行操作" : undefined}
-          actionLabel={selectedExecutor ? "更换" : undefined}
-          layout="automation-editor-executor-header"
-          onAction={selectedExecutor ? () => onExecutorChange(null, {}) : undefined}
-          title="就执行以下操作"
-        />
-        {selectedExecutor ? (
-          <div className="grid min-w-0 gap-4">
-            <SelectedSummary
-              layout="automation-editor-executor-summary"
-              title={selectedExecutor.manifest.title}
-              summary={safeExecutorSummary(selectedExecutor.manifest.id, executorConfig)}
+      <section data-layout="automation-editor-executor-panel" className="min-h-0 min-w-0 overflow-hidden">
+        <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
+          <div className="p-5">
+            <BuilderHeader
+              actionAriaLabel={selectedExecutor ? "更换执行操作" : undefined}
+              actionLabel={selectedExecutor ? "更换" : undefined}
+              layout="automation-editor-executor-header"
+              onAction={selectedExecutor ? () => onExecutorChange(null, {}) : undefined}
+              title="就执行以下操作"
             />
-            {ExecutorConfigForm ? (
-              <div
-                data-layout="automation-editor-executor-config"
-                className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
-              >
-                <ExecutorConfigForm
-                  value={parseExecutorValue(selectedExecutor.manifest.id, executorConfig)}
-                  projects={projects}
-                  onChange={(config) => onExecutorChange(selectedExecutor.manifest.id, config)}
+            {selectedExecutor ? (
+              <div className="grid min-w-0 gap-4">
+                <SelectedSummary
+                  layout="automation-editor-executor-summary"
+                  title={selectedExecutor.manifest.title}
+                  summary={safeExecutorSummary(selectedExecutor.manifest.id, executorConfig)}
                 />
+                {ExecutorConfigForm ? (
+                  <div
+                    data-layout="automation-editor-executor-config"
+                    className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
+                  >
+                    <ExecutorConfigForm
+                      value={parseExecutorValue(selectedExecutor.manifest.id, executorConfig)}
+                      projects={projects}
+                      onChange={(config) => onExecutorChange(selectedExecutor.manifest.id, config)}
+                    />
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        ) : (
-          <ChoiceList
-            items={rendererActionRegistry.list()
-              .filter((executor) => discoverableExecutorTypes.has(executor.manifest.id))
-              .map((executor) => ({
-                id: executor.manifest.id,
-                title: executor.manifest.title,
-              }))}
-            onSelect={(id) => onExecutorChange(
-              id,
-              createPlatformActionDefaultConfig(id, rendererActionRegistry.getDefaultConfig(id), platform),
+            ) : (
+              <ChoiceList
+                items={rendererActionRegistry.list()
+                  .filter((executor) => discoverableExecutorTypes.has(executor.manifest.id))
+                  .map((executor) => ({
+                    id: executor.manifest.id,
+                    title: executor.manifest.title,
+                  }))}
+                onSelect={(id) => onExecutorChange(
+                  id,
+                  createPlatformActionDefaultConfig(id, rendererActionRegistry.getDefaultConfig(id), platform),
+                )}
+              />
             )}
-          />
-        )}
+          </div>
+        </ScrollArea>
       </section>
     </div>
   )

@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import type { SynapseAgentFileCheckpointDiff } from "@/types/agent"
 import { useAgentFileCheckpoint } from "../hooks/use-agent-file-checkpoint"
@@ -99,7 +100,7 @@ export function AgentFileCheckpointPanel({
           </Alert>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="min-w-0 overflow-x-hidden">
         {diff ? (
           <DiffViewer
             path={diff.path}
@@ -120,7 +121,7 @@ export function AgentFileCheckpointPanel({
         ) : !error ? (
           <div className="p-4 text-sm text-muted-foreground">正在加载差异</div>
         ) : null}
-      </div>
+      </ScrollArea>
       <AlertDialog open={Boolean(prepared)} onOpenChange={(open) => {
         if (!open && !rewinding) setPrepared(null)
       }}>

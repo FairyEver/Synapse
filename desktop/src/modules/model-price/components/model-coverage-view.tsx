@@ -61,7 +61,7 @@ export function ModelCoverageView({ state }: ModelCoverageViewProps) {
 
   return (
     <CoveragePanel>
-      <Table className="table-fixed" containerClassName="overflow-x-hidden">
+      <Table className="table-fixed" containerClassName="overflow-x-hidden" scrollbars="none">
         <colgroup>
           <col className="w-2/5" />
           <col className="w-1/4" />

@@ -22,7 +22,7 @@ function ScrollArea({
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   "data-track"?: string
   onViewportScroll?: React.UIEventHandler<HTMLDivElement>
-  scrollbars?: "vertical" | "horizontal" | "both"
+  scrollbars?: "vertical" | "horizontal" | "both" | "none"
   trackScroll?: boolean
   viewportClassName?: string
   viewportRef?: React.Ref<HTMLDivElement>
@@ -54,6 +54,7 @@ function ScrollArea({
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
       data-track={dataTrack}
+      data-scrollbars={scrollbars}
       className={cn("relative min-h-0 overflow-hidden", className)}
       {...props}
     >

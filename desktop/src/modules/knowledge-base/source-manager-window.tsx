@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/empty"
 import { RelativeTime } from "@/components/relative-time"
 import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
@@ -372,21 +373,23 @@ function SourceManagerSidebar({
   onOpenRoot,
 }: SourceManagerSidebarProps) {
   return (
-    <aside aria-label="文件夹树" className="flex w-64 shrink-0 flex-col border-r border-border bg-muted/30 p-3">
+    <aside aria-label="文件夹树" className="flex min-h-0 w-64 shrink-0 flex-col border-r border-border bg-muted/30 p-3">
       <div className="px-2 py-2 text-sm font-semibold">资料</div>
-      <div className="flex flex-col gap-1">
-        <Button
-          type="button"
-          variant={currentDirectory === "" ? "secondary" : "ghost"}
-          className="justify-start"
-          onClick={onOpenRoot}
-          aria-label="打开树文件夹 资料"
-        >
-          <Folder data-icon="inline-start" />
-          资料
-        </Button>
-        {renderTreeItems(rootItems)}
-      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="flex flex-col gap-1">
+          <Button
+            type="button"
+            variant={currentDirectory === "" ? "secondary" : "ghost"}
+            className="justify-start"
+            onClick={onOpenRoot}
+            aria-label="打开树文件夹 资料"
+          >
+            <Folder data-icon="inline-start" />
+            资料
+          </Button>
+          {renderTreeItems(rootItems)}
+        </div>
+      </ScrollArea>
     </aside>
   )
 }
@@ -1523,59 +1526,61 @@ function KnowledgeBaseSourceManagerWindow() {
 
         <section
           aria-label="拖拽上传资料"
-          className={cn("relative min-h-0 flex-1 overflow-auto", isDragging && "bg-accent/50")}
+          className={cn("relative min-h-0 flex-1 overflow-hidden", isDragging && "bg-accent/50")}
         >
-          <div className="space-y-2 p-4">
-            <SourceSelectionBar
-              selectedCount={selectedList.length}
-              visibleCount={visibleEntries.length}
-              checked={selectionBarChecked}
-              onCheckedChange={toggleAllVisibleEntries}
-              onMove={() => {
-                setMoveTargetPath("")
-                setMoveOpen(true)
-              }}
-              onExport={() => void exportEntries(selectedList)}
-              onTrash={() => setTrashPaths(selectedList)}
-            />
-            <SourceEntryList
-              entries={visibleEntries}
-              isLoading={isLoading}
-              loadError={loadError}
-              query={query}
-              selectedPaths={selectedPaths}
-              onToggleSelected={toggleSelected}
-              onOpenDirectory={openDirectory}
-              onRename={openRenameDialog}
-              onMoveEntry={(entry) => {
-                setSelectedPaths(new Set([entry.relativePath]))
-                setMoveTargetPath(parentPath(entry.relativePath))
-                setMoveOpen(true)
-              }}
-              onExportEntry={(entry) => void exportEntries([entry.relativePath])}
-              onTrashEntry={(entry) => setTrashPaths([entry.relativePath])}
-              internalDropTarget={internalDropTarget}
-              onDragEntry={startInternalDrag}
-              onDragEnd={endInternalDrag}
-              onInternalDragOverDirectory={(targetDirectoryPath) => {
-                if (internalDragPaths.length > 0) {
-                  setInternalDropTarget(targetDirectoryPath)
-                }
-              }}
-              onDropOnDirectory={(targetDirectoryPath, event) => {
-                void dropInternalDrag(targetDirectoryPath, event)
-              }}
-            />
-            <SourceEntryPagination
-              page={entryPage}
-              pageSize={RAW_DIRECTORY_PAGE_SIZE}
-              totalCount={entryTotalCount}
-              visibleCount={visibleEntries.length}
-              hasMore={entryHasMore}
-              onPrevious={previousEntryPage}
-              onNext={nextEntryPage}
-            />
-          </div>
+          <ScrollArea className="h-full">
+            <div className="space-y-2 p-4">
+              <SourceSelectionBar
+                selectedCount={selectedList.length}
+                visibleCount={visibleEntries.length}
+                checked={selectionBarChecked}
+                onCheckedChange={toggleAllVisibleEntries}
+                onMove={() => {
+                  setMoveTargetPath("")
+                  setMoveOpen(true)
+                }}
+                onExport={() => void exportEntries(selectedList)}
+                onTrash={() => setTrashPaths(selectedList)}
+              />
+              <SourceEntryList
+                entries={visibleEntries}
+                isLoading={isLoading}
+                loadError={loadError}
+                query={query}
+                selectedPaths={selectedPaths}
+                onToggleSelected={toggleSelected}
+                onOpenDirectory={openDirectory}
+                onRename={openRenameDialog}
+                onMoveEntry={(entry) => {
+                  setSelectedPaths(new Set([entry.relativePath]))
+                  setMoveTargetPath(parentPath(entry.relativePath))
+                  setMoveOpen(true)
+                }}
+                onExportEntry={(entry) => void exportEntries([entry.relativePath])}
+                onTrashEntry={(entry) => setTrashPaths([entry.relativePath])}
+                internalDropTarget={internalDropTarget}
+                onDragEntry={startInternalDrag}
+                onDragEnd={endInternalDrag}
+                onInternalDragOverDirectory={(targetDirectoryPath) => {
+                  if (internalDragPaths.length > 0) {
+                    setInternalDropTarget(targetDirectoryPath)
+                  }
+                }}
+                onDropOnDirectory={(targetDirectoryPath, event) => {
+                  void dropInternalDrag(targetDirectoryPath, event)
+                }}
+              />
+              <SourceEntryPagination
+                page={entryPage}
+                pageSize={RAW_DIRECTORY_PAGE_SIZE}
+                totalCount={entryTotalCount}
+                visibleCount={visibleEntries.length}
+                hasMore={entryHasMore}
+                onPrevious={previousEntryPage}
+                onNext={nextEntryPage}
+              />
+            </div>
+          </ScrollArea>
           {isDragging ? (
             <div className="pointer-events-none absolute inset-4 flex items-center justify-center rounded-lg border border-dashed border-border bg-background/80 text-sm text-muted-foreground">
               松开上传
@@ -1656,19 +1661,21 @@ function KnowledgeBaseSourceManagerWindow() {
             <DialogTitle>移动</DialogTitle>
             <DialogDescription>选择目标文件夹。</DialogDescription>
           </DialogHeader>
-          <div className="max-h-72 overflow-auto rounded-md border border-border p-2">
-            <Button
-              type="button"
-              variant={moveTargetPath === "" ? "secondary" : "ghost"}
-              className="w-full justify-start"
-              onClick={() => setMoveTargetPath("")}
-              aria-label="选择目标文件夹 资料"
-            >
-              <Folder data-icon="inline-start" />
-              资料
-            </Button>
-            {renderMoveTreeItems(directoryTree[""] ?? [])}
-          </div>
+          <ScrollArea className="max-h-72 rounded-md border border-border">
+            <div className="p-2">
+              <Button
+                type="button"
+                variant={moveTargetPath === "" ? "secondary" : "ghost"}
+                className="w-full justify-start"
+                onClick={() => setMoveTargetPath("")}
+                aria-label="选择目标文件夹 资料"
+              >
+                <Folder data-icon="inline-start" />
+                资料
+              </Button>
+              {renderMoveTreeItems(directoryTree[""] ?? [])}
+            </div>
+          </ScrollArea>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setMoveOpen(false)}>取消</Button>
             <Button type="button" onClick={moveSelected} aria-label="确认移动">移动</Button>

@@ -4,6 +4,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 type ContentEditorWindowLayoutProps = {
   actions: ReactNode
@@ -38,8 +39,10 @@ function ContentEditorWindowLayout({
             maxSize={420}
             groupResizeBehavior="preserve-pixel-size"
           >
-            <aside className="h-full min-h-0 overflow-auto p-4">
-              {meta}
+            <aside className="h-full min-h-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="p-4">{meta}</div>
+              </ScrollArea>
             </aside>
           </ResizablePanel>
           <ResizableHandle withHandle />
@@ -55,8 +58,10 @@ function ContentEditorWindowLayout({
             maxSize={560}
             groupResizeBehavior="preserve-pixel-size"
           >
-            <aside className="h-full min-h-0 overflow-auto p-4">
-              {auxiliary}
+            <aside className="h-full min-h-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="p-4">{auxiliary}</div>
+              </ScrollArea>
             </aside>
           </ResizablePanel>
         </ResizablePanelGroup>

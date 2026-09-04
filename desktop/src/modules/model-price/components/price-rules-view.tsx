@@ -301,7 +301,7 @@ export function PriceRulesView({ state, presetState, onSaved, onBusyChange }: Pr
       </div>
       <ModuleContentPanel className="min-w-0 max-w-full overflow-hidden">
         <div data-price-rules-table-panel className="min-w-0 max-w-full overflow-hidden">
-          <Table containerClassName="min-w-0 max-w-full overflow-x-auto" className="min-w-[60rem] table-fixed">
+          <Table containerClassName="min-w-0 max-w-full" className="min-w-[60rem] table-fixed">
             <colgroup>
               <col className="w-20" />
               <col className="w-auto" />

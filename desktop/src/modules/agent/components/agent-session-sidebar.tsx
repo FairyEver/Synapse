@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAppConfig } from "@/app-shell/config"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { ArchivedGroup } from "./archived-group"
@@ -135,9 +136,11 @@ function AgentSessionSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <div
-        className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-0.5 py-0.5"
+      <ScrollArea
+        className="min-h-0 w-full min-w-0 flex-1"
+        viewportClassName="overflow-x-hidden px-0.5 py-0.5"
         data-track="agent-session-list"
+        trackScroll={false}
       >
         <div className="px-2 pb-2">
           <Select
@@ -201,7 +204,7 @@ function AgentSessionSidebar({
             onRename={onRename}
           />
         ) : null}
-      </div>
+      </ScrollArea>
       <AgentSessionCreateDialog
         open={createTarget !== null}
         onOpenChange={(open) => { if (!open) setCreateTarget(null) }}

@@ -155,10 +155,11 @@ describe("AgentTimeline", () => {
     expect(html).toContain('data-allow-select="true"')
   })
 
-  it("uses a native scrolling viewport for the timeline", () => {
+  it("uses the shared scrolling viewport for the timeline", () => {
     const html = renderTimeline()
-    expect(html).toContain("overflow-y-auto")
-    expect(html).not.toContain('data-slot="scroll-area"')
+    expect(html).toContain('data-slot="scroll-area"')
+    expect(html).toContain('data-scrollbars="vertical"')
+    expect(html).toContain("data-radix-scroll-area-viewport")
   })
 
   it("keeps horizontal space around timeline cards so focus rings are not clipped", () => {

@@ -1,5 +1,6 @@
 import { useState, type Ref } from "react"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
@@ -65,7 +66,11 @@ function AgentTimeline({
   const [processGroupOpenOverrides, setProcessGroupOpenOverrides] = useState<Record<string, boolean>>({})
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
-      <div ref={viewportRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <ScrollArea
+        className="min-h-0 min-w-0 flex-1"
+        viewportRef={viewportRef}
+        viewportClassName="min-w-0 overflow-x-hidden"
+      >
         {displayNodes.length === 0 ? (
           <div data-allow-select="true" className="mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center px-4 pb-34 pt-4 text-center">
             {sending ? (
@@ -144,7 +149,7 @@ function AgentTimeline({
             })}
           </div>
         )}
-      </div>
+      </ScrollArea>
     </div>
   )
 }
