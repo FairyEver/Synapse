@@ -12,10 +12,12 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
+import { X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { Button } from "../../../src/components/ui/button"
 import {
   ResizableHandle,
   ResizablePanel,
@@ -319,7 +321,7 @@ function TerminalPane({
 
     const syncTerminalGeometry = (refreshRenderer = false) => {
       if (disposed || !geometrySyncReady || !projectionAvailable) return
-      if (refreshRenderer) webglRenderer?.refresh()
+      if (refreshRenderer) xterm.refresh(0, xterm.rows - 1)
       const proposed = fitAddon.proposeDimensions()
       const cols = proposed?.cols ?? xterm.cols
       const rows = proposed?.rows ?? xterm.rows
@@ -399,7 +401,7 @@ function TerminalPane({
             await writePendingChunksThrough(nextBarrier.throughOutputSeq)
             if (disposed) return
             xterm.resize(nextBarrier.cols, nextBarrier.rows)
-            webglRenderer?.refresh()
+            xterm.refresh(0, xterm.rows - 1)
             appliedSizeRevision = nextBarrier.sizeRevision
             requestedResize = { cols: nextBarrier.cols, rows: nextBarrier.rows }
             resizeBarriers.delete(nextBarrier.sizeRevision)
@@ -540,16 +542,39 @@ function TerminalPane({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={cn(
-        "relative h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-background p-1 focus-visible:outline-none",
+        "relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background focus-visible:outline-none",
         active && "ring-1 ring-inset ring-ring",
       )}
     >
+      <div
+        data-terminal-pane-header
+        className="flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5"
+      >
+        <span className="truncate text-xs font-medium text-foreground/75" title={session.title}>
+          {session.title}
+        </span>
+        <Button
+          type="button"
+          size="icon-xs"
+          variant="ghost"
+          aria-label={`关闭分屏：${session.title}`}
+          title="关闭分屏"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={(event) => {
+            event.stopPropagation()
+            onShortcut("close-pane")
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <X className="size-3.5" />
+        </Button>
+      </div>
       {readError ? (
-        <div className="absolute inset-x-1 top-1 z-10 bg-background px-2 py-1 text-sm text-muted-foreground">
+        <div className="absolute inset-x-1 top-8 z-10 bg-background px-2 py-1 text-sm text-muted-foreground">
           {readError}
         </div>
       ) : null}
-      <div ref={containerRef} data-terminal-xterm-mount className="h-full min-h-0 min-w-0 overflow-hidden" />
+      <div ref={containerRef} data-terminal-xterm-mount className="h-full min-h-0 min-w-0 flex-1 overflow-hidden p-1" />
     </div>
   )
 }
@@ -616,7 +641,7 @@ function splitTerminalInput(input: string): string[] {
   return chunks
 }
 
-function loadWebglRenderer(xterm: Terminal): { dispose(): void; refresh(): void } | undefined {
+function loadWebglRenderer(xterm: Terminal): { dispose(): void } | undefined {
   try {
     const webglAddon = new WebglAddon()
     const contextLossDisposable = webglAddon.onContextLoss(() => {
@@ -626,7 +651,6 @@ function loadWebglRenderer(xterm: Terminal): { dispose(): void; refresh(): void 
     xterm.loadAddon(webglAddon)
     return {
       dispose: () => contextLossDisposable.dispose(),
-      refresh: () => webglAddon.clearTextureAtlas(),
     }
   } catch (error) {
     logger.warn("Terminal WebGL renderer unavailable; falling back to DOM renderer.", { error })

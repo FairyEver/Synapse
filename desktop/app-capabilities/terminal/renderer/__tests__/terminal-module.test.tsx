@@ -355,6 +355,7 @@ const xtermState = vi.hoisted(() => ({
     open: ReturnType<typeof vi.fn>
     write: ReturnType<typeof vi.fn>
     clear: ReturnType<typeof vi.fn>
+    refresh: ReturnType<typeof vi.fn>
     resize: ReturnType<typeof vi.fn>
     loadAddon: ReturnType<typeof vi.fn>
     attachCustomKeyEventHandler: ReturnType<typeof vi.fn>
@@ -470,6 +471,7 @@ vi.mock("@xterm/xterm", () => ({
         callback?.()
       }),
       clear: vi.fn(),
+      refresh: vi.fn(),
       resize: vi.fn((cols: number, rows: number) => {
         instance.cols = cols
         instance.rows = rows
@@ -772,7 +774,8 @@ describe("TerminalModule", () => {
     expect(xtermState.instances).toHaveLength(1)
     expect(xtermState.instances[0]?.options.fontSize).toBe(16)
     expect(xtermState.instances[0]?.options.lineHeight).toBe(1.1)
-    expect(webglState.instances[0]?.clearTextureAtlas).toHaveBeenCalled()
+    expect(xtermState.instances[0]?.refresh).toHaveBeenCalledWith(0, xtermState.instances[0]!.rows - 1)
+    expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
   })
 
   it("marks the discard action for unsaved terminal settings as destructive", async () => {
@@ -1416,6 +1419,36 @@ describe("TerminalModule", () => {
     expect(xtermState.instances.filter((instance) => instance.dispose.mock.calls.length === 0)).toHaveLength(2)
   })
 
+  it("renders a title bar and close button for every terminal pane", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "d", metaKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const paneHeaders = document.querySelectorAll("[data-terminal-pane-header]")
+    expect(paneHeaders).toHaveLength(2)
+    expect(paneHeaders[0]?.textContent).toContain("开发终端")
+    expect(paneHeaders[1]?.textContent).toContain("Session 2")
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>('[aria-label="关闭分屏：Session 2"]')
+    await act(async () => {
+      closeButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(terminalBridge.closePane).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      paneId: "pane-session-2",
+      expectedLayoutRevision: 2,
+    })
+  })
+
   it("closes the active pane with Cmd+W", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -1654,12 +1687,13 @@ describe("TerminalModule", () => {
     })
   })
 
-  it("refreshes terminal geometry and WebGL atlas after local clear", async () => {
+  it("redraws the terminal after local clear without clearing the shared WebGL atlas", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
     await renderModule()
     xtermState.fitInstances[0]?.fit.mockClear()
+    xtermState.instances[0]?.refresh.mockClear()
     webglState.instances[0]?.clearTextureAtlas.mockClear()
     terminalBridge.resizeSession.mockClear()
 
@@ -1667,7 +1701,8 @@ describe("TerminalModule", () => {
 
     expect(xtermState.instances[0]?.clear).toHaveBeenCalled()
     expect(xtermState.fitInstances[0]?.fit).not.toHaveBeenCalled()
-    expect(webglState.instances[0]?.clearTextureAtlas).toHaveBeenCalledTimes(1)
+    expect(xtermState.instances[0]?.refresh).toHaveBeenCalledWith(0, xtermState.instances[0]!.rows - 1)
+    expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
     expect(terminalBridge.resizeSession).not.toHaveBeenCalled()
   })
 
@@ -1821,7 +1856,9 @@ describe("TerminalModule", () => {
     await renderModule()
     const xterm = xtermState.instances[0]!
     xterm.write.mockClear()
+    xterm.refresh.mockClear()
     xterm.resize.mockClear()
+    webglState.instances[0]?.clearTextureAtlas.mockClear()
 
     await act(async () => {
       bridgeState.sessionChangedListener?.({
@@ -1864,6 +1901,8 @@ describe("TerminalModule", () => {
     expect(oldWriteOrder).toEqual(expect.any(Function))
     expect(oldWriteInvocation).toBeLessThan(resizeInvocation ?? 0)
     expect(resizeInvocation).toBeLessThan(newWriteInvocation ?? 0)
+    expect(xterm.refresh).toHaveBeenCalledWith(0, 29)
+    expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
     expect(xtermState.instances).toHaveLength(1)
   })
 
