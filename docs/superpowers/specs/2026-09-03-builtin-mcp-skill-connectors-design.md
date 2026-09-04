@@ -56,4 +56,4 @@ type ConnectorStateStore = {
 
 新对话创建时保存当前已启用的 `connectorIds`。每次为该对话创建 live session 时，从注册表解析这些 ID，由 Driver 生成 MCP 配置和 Skill Package ID，再由 Agent Runtime 统一解析 Skill 的开发/正式包路径。
 
-已有对话始终使用创建时快照，连接器后续启停只影响新对话。MCP 和 Skill 必须来自同一次 Contribution 解析；预期 MCP 缺失时必须在用户 Prompt 进入 Query 前失败，禁止启动半连接会话。历史 `figmaDesktopMcpEnabled` 与 `expectedMcpServerNames` 只保留读取兼容。
+已有对话始终使用创建时快照，连接器后续启停只影响新对话。MCP 和 Skill 必须来自同一次 Contribution 解析；预期 MCP 缺失、连接失败、待授权或超时时记录诊断并降级该工具，用户 Prompt 和普通对话继续执行。历史 `figmaDesktopMcpEnabled` 与 `expectedMcpServerNames` 只保留读取兼容与诊断。

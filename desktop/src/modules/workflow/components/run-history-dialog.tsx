@@ -252,12 +252,14 @@ function RunHistoryItem({
               </CollapsibleTrigger>
             </div>
             <CollapsibleContent className="min-w-0">
-              <pre
-                className="mt-2 max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-2.5 font-mono text-xs leading-5 text-foreground"
-                data-allow-select="true"
-              >
-                {firstError}
-              </pre>
+              <ScrollArea className="mt-2 max-h-48 max-w-full rounded-md bg-muted">
+                <pre
+                  className="whitespace-pre-wrap break-all p-2.5 font-mono text-xs leading-5 text-foreground"
+                  data-allow-select="true"
+                >
+                  {firstError}
+                </pre>
+              </ScrollArea>
             </CollapsibleContent>
           </div>
         </Collapsible>

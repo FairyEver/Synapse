@@ -14,7 +14,10 @@ import type {
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalWorkspace,
 } from "../../../../src/types/terminal"
-import { WORKSPACE_FILE_TREE_DRAG_TYPE } from "../../../../src/lib/workspace-file-tree-drag"
+import {
+  WORKSPACE_FILE_TREE_DRAG_TYPE,
+  writeWorkspaceFileTreeDrag,
+} from "../../../../src/lib/workspace-file-tree-drag"
 
 const bridgeState = vi.hoisted(() => ({
   globalLaunch: {
@@ -858,6 +861,8 @@ describe("TerminalModule", () => {
     await renderEmbeddedModule()
 
     const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    expect(navigation?.classList.contains("h-10")).toBe(true)
+    expect(navigation?.classList.contains("no-scrollbar")).toBe(true)
     expect(navigation?.textContent).toContain("开发终端")
     expect(navigation?.textContent).toContain("日志终端")
     expect(navigation?.textContent).not.toContain("历史终端")
@@ -899,6 +904,7 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("终端设置")
     expect(document.querySelector('[data-slot="dialog-content"]')?.classList.contains("sm:max-w-3xl")).toBe(true)
     expect(document.querySelectorAll('[data-slot="dialog-content"] [data-slot="dialog-close"]')).toHaveLength(1)
+    expect(document.querySelector('[data-slot="dialog-frame-body"] [data-scrollbars="vertical"]')).not.toBeNull()
     await changeInput("工作目录", "/repo/global")
     expect(document.body.textContent).toContain("环境变量")
     await clickButton("保存")
@@ -1001,6 +1007,7 @@ describe("TerminalModule", () => {
     const terminalRegion = document.querySelector("[aria-label^='终端输出与输入']")
     expect(toolbar).toBeTruthy()
     expect(toolbar?.classList.contains("overflow-x-auto")).toBe(true)
+    expect(toolbar?.classList.contains("no-scrollbar")).toBe(true)
     expect(toolbar?.classList.contains("whitespace-nowrap")).toBe(true)
     expect(toolbar?.classList.contains("min-h-10")).toBe(true)
     expect(toolbar?.classList.contains("bg-card")).toBe(true)
@@ -1429,6 +1436,7 @@ describe("TerminalModule", () => {
       name: "dev",
       command: "pnpm dev",
     })
+    expect(document.body.querySelector('[data-slot="dialog-content"] [data-scrollbars="vertical"]')).not.toBeNull()
 
     await clickButtonByAriaLabel("编辑命令：dev")
 
@@ -1765,6 +1773,63 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("dims only inactive panes when the workspace is split", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const originalPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：开发终端"]')
+    expect(originalPane?.classList.contains("opacity-50")).toBe(false)
+
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "d", metaKey: true }))
+      await flushPromises()
+    })
+
+    const firstPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：开发终端"]')
+    const secondPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：Session 2"]')
+    expect(firstPane?.classList.contains("opacity-50")).toBe(true)
+    expect(secondPane?.classList.contains("opacity-50")).toBe(false)
+
+    await act(async () => {
+      firstPane?.click()
+    })
+
+    expect(firstPane?.classList.contains("opacity-50")).toBe(false)
+    expect(secondPane?.classList.contains("opacity-50")).toBe(true)
+  })
+
+  it("keeps visible panes clear when the active pane session is temporarily unavailable", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const secondSession = createSession({ id: "session-2", groupId: "group-1", title: "终端二" })
+    const thirdSession = createSession({ id: "session-3", groupId: "group-1", title: "终端三" })
+    bridgeState.workspaces = [{
+      ...createWorkspace(secondSession),
+      layout: {
+        type: "split",
+        splitId: "split-1",
+        direction: "horizontal",
+        ratio: 0.5,
+        first: { type: "leaf", paneId: "pane-missing", sessionId: "session-missing" },
+        second: {
+          type: "split",
+          splitId: "split-2",
+          direction: "vertical",
+          ratio: 0.5,
+          first: { type: "leaf", paneId: "pane-session-2", sessionId: secondSession.id },
+          second: { type: "leaf", paneId: "pane-session-3", sessionId: thirdSession.id },
+        },
+      },
+    }]
+
+    await renderModule()
+
+    const visiblePanes = document.querySelectorAll<HTMLElement>('[aria-label^="终端输出与输入："]')
+    expect(visiblePanes).toHaveLength(2)
+    expect([...visiblePanes].every((pane) => !pane.classList.contains("opacity-50"))).toBe(true)
+  })
+
   it("moves a pane to a target edge by dragging its title bar", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -2090,14 +2155,19 @@ describe("TerminalModule", () => {
       scopeId: "scope-1",
       paths: ["/Users/liyang/My Files/first.ts", "/tmp/second.md"],
     })
-    const payload = JSON.stringify({ scopeId: "scope-1", relativePaths: ["first.ts", "second.md"] })
+    const dragPayload = { scopeId: "scope-1", relativePaths: ["first.ts", "second.md"] }
+    const payload = JSON.stringify(dragPayload)
+    writeWorkspaceFileTreeDrag({
+      effectAllowed: "none",
+      setData: vi.fn(),
+    } as unknown as DataTransfer, dragPayload)
 
     await renderModule()
-    const dragOver = await dispatchTerminalWorkspaceTreeDragEvent("dragover", payload)
+    const dragOver = await dispatchTerminalWorkspaceTreeDragEvent("dragover", payload, [])
     expect(dragOver.defaultPrevented).toBe(true)
     expect(document.body.textContent).toContain("松开插入路径")
 
-    await dispatchTerminalWorkspaceTreeDragEvent("drop", payload)
+    await dispatchTerminalWorkspaceTreeDragEvent("drop", "", [])
 
     expect(terminalBridge.resolveWorkspaceTreePaths).toHaveBeenCalledWith({
       scopeId: "scope-1",
@@ -2809,13 +2879,14 @@ async function dispatchTerminalDragEvent(
 async function dispatchTerminalWorkspaceTreeDragEvent(
   type: "dragover" | "drop",
   payload: string,
+  types = [WORKSPACE_FILE_TREE_DRAG_TYPE],
 ): Promise<TerminalDragTestEvent> {
   const terminalRegion = document.querySelector<HTMLElement>("[aria-label^='终端输出与输入']")
   if (!terminalRegion) throw new Error("Terminal region not found")
   const dataTransfer = {
     files: [],
     items: [],
-    types: [WORKSPACE_FILE_TREE_DRAG_TYPE],
+    types,
     dropEffect: "none",
     effectAllowed: "all",
     getData: (requestedType: string) => requestedType === WORKSPACE_FILE_TREE_DRAG_TYPE ? payload : "",

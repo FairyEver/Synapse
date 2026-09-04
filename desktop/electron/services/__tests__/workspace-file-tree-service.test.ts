@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -63,6 +63,12 @@ describe("workspace file tree service", () => {
         .rejects.toMatchObject({ code: "invalid_path" })
       await expect(service.listDirectory({ ownerId: 1, scopeId: scope.scopeId, relativePath: "outside" }))
         .rejects.toMatchObject({ code: "invalid_path" })
+      await writeFile(path.join(outside, "secret.txt"), "")
+      await expect(service.resolvePaths({
+        ownerId: 1,
+        scopeId: scope.scopeId,
+        relativePaths: ["outside/secret.txt"],
+      })).rejects.toMatchObject({ code: "invalid_path" })
       service.stop()
     },
   )
@@ -93,6 +99,7 @@ describe("workspace file tree service", () => {
     await writeFile(path.join(root, "src", "index.ts"), "")
     const { service } = createService()
     const scope = await service.openScope({ ownerId: 1, rootPath: root, surface: "agent" })
+    const canonicalRoot = await realpath(root)
 
     await expect(service.resolvePaths({
       ownerId: 1,
@@ -100,7 +107,7 @@ describe("workspace file tree service", () => {
       relativePaths: ["src", "src/index.ts"],
     })).resolves.toEqual({
       scopeId: scope.scopeId,
-      paths: [path.join(root, "src"), path.join(root, "src", "index.ts")],
+      paths: [path.join(canonicalRoot, "src"), path.join(canonicalRoot, "src", "index.ts")],
     })
     await expect(service.resolvePaths({
       ownerId: 1,

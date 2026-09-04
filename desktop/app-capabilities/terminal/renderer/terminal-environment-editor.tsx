@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Button } from "../../../src/components/ui/button"
 import { Input } from "../../../src/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "../../../src/components/ui/native-select"
+import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import {
   Table,
   TableBody,
@@ -96,7 +97,7 @@ export function TerminalEnvironmentEditor({
           添加
         </Button>
       </div>
-      <div className="max-h-80 overflow-auto rounded-lg border">
+      <ScrollArea className="max-h-80 rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -175,7 +176,7 @@ export function TerminalEnvironmentEditor({
             })}
           </TableBody>
         </Table>
-      </div>
+      </ScrollArea>
     </div>
   )
 }

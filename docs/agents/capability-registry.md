@@ -54,7 +54,7 @@
 - Terminal 的 43 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
 - Agent 已配置项目可通过现有 Terminal UI IPC 在项目目录新建会话，并以仅含 `sessionId` 的 System App 请求打开或聚焦 Terminal；该入口不新增 MCP capability、tool 或 Deep Link。
 - Terminal 分屏 workspace/pane 仅属于现有 System App 的 UI IPC：创建、调整与拖拽重排 pane 时，每个 pane 仍由一个既有 session 承载，因此 MCP 工具数量保持 43，不注册 workspace/pane MCP capability、tool 或 Deep Link。
-- Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取和监听；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。该入口不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
+- Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取、监听并解析拖拽选中项；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。文件树路径拖拽只写入 Agent 草稿或当前 Terminal session，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
 - Terminal 图片剪贴板落盘仅属于现有 System App 的 UI 私有 IPC，用于把临时 PNG 路径交给当前 PTY；不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
 
 ## 普通业务模块 System App
@@ -79,7 +79,7 @@
 
 Git 仍是普通 System App，不新增 MCP domain。其带恢复 journal 的原子 clone、仓库注册、状态与差异预览、主进程选择令牌、精确提交与按文件丢弃、同步、空仓库初始化与远端默认分支接入、缓存远程分支发现与 tracking 检出、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；仓库目录定位复用受权限与审计保护的 Shell IPC，设为项目复用系统设置的全局项目配置与添加流程。Agent 项目与 Git 仓库根路径精确匹配时，composer 可复用同一 Git IPC 执行确认后的全部改动提交及常用远端操作，并可定向打开对应 Git 工作台；该入口不经过 Agent、MCP 或通用命令执行。这不改变上表的 capability 或 MCP 数量。远程分支、空仓库初始化与文件丢弃能力不注册任意 Git 命令入口，也不扩展为 Workflow、Automation、MCP 或 Deep Link 表面。
 
-MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。Connectors 是独立的 System App；客户端内置定义通过 `integration.kind` 选择 Driver，状态写入版本化的 Synapse DataRepository，并在内置 Claude SDK 会话创建时临时注入 MCP 和对应 Skill，不写入外部 Claude 配置。V1 仅支持无认证的 `http://127.0.0.1:<port>/<path>` Streamable HTTP MCP；探测必须完成 MCP 初始化、initialized 通知、`tools/list` 和必需工具校验，失败或超时不得启用。当前 Figma 定义使用 `http://127.0.0.1:3845/mcp` 和内置 `figma-skill`，Skill 不声明 Figma 写入能力。新对话把已启用的连接器 ID 固化到会话快照，并从同一份 Agent Contribution 加载 MCP 与 Skill；已有对话不会因之后启停而动态变化，最终 Query 缺少预期 MCP 时不得启动半连接会话。
+MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。Connectors 是独立的 System App；客户端内置定义通过 `integration.kind` 选择 Driver，状态写入版本化的 Synapse DataRepository，并在内置 Claude SDK 会话创建时临时注入 MCP 和对应 Skill，不写入外部 Claude 配置。V1 仅支持无认证的 `http://127.0.0.1:<port>/<path>` Streamable HTTP MCP；探测必须完成 MCP 初始化、initialized 通知、`tools/list` 和必需工具校验，失败或超时不得启用。当前 Figma 定义使用 `http://127.0.0.1:3845/mcp` 和内置 `figma-skill`，Skill 不声明 Figma 写入能力。新对话把已启用的连接器 ID 固化到会话快照，并从同一份 Agent Contribution 加载 MCP 与 Skill；已有对话不会因之后启停而动态变化，最终 Query 缺少或连不上预期 MCP 时只降级该工具，不阻断普通对话。
 
 ## MCP capability domain
 

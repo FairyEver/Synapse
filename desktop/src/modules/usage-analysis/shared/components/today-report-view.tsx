@@ -79,7 +79,7 @@ function TodayRhythmTable({ rows }: { readonly rows: readonly UsageTimeBucket[] 
       <CardHeader>
         <CardTitle>今日节奏</CardTitle>
       </CardHeader>
-      <CardContent className="min-w-0 overflow-x-auto">
+      <CardContent className="min-w-0">
         <Table>
           <TableHeader>
             <TableRow>

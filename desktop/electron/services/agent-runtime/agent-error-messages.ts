@@ -47,10 +47,6 @@ const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
 const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
 export const AGENT_TOOL_USE_INTERRUPTED_MESSAGE = "Agent 在工具调用后中断，发送“继续”可接着执行。"
 
-export function agentMcpServersUnavailableMessage(serverNames: readonly string[]): string {
-  return `连接器 MCP 未进入本次会话（${serverNames.join("、")}）。请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话。`
-}
-
 export type AgentErrorKind =
   | "execution_failed"
   | "tool_use_interrupted"

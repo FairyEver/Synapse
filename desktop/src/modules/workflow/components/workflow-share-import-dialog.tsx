@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import { resolveModelDisplayName } from "@/lib/provider-model"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -140,22 +141,23 @@ function WorkflowShareImportDialog({
             )}
           />
           <DialogFrameBody
-            ref={bodyRef}
-            className="max-h-[min(30rem,calc(100vh-10rem))] overflow-y-auto overscroll-contain"
+            className="max-h-[min(30rem,calc(100vh-10rem))] overflow-hidden"
           >
-            <div className="mx-auto max-w-3xl px-5 py-4">
-              {preview ? renderStep({
-                preview,
-                selections,
-                step,
-                missing,
-                onSelectModel: setSelectingModelRefId,
-                onUpdateModel: updateModel,
-                onUpdateProject: updateProject,
-                onUpdateResource: updateResource,
-                onUpdateEnvironment: updateEnvironment,
-              }) : null}
-            </div>
+            <ScrollArea className="h-full" viewportClassName="overscroll-contain" viewportRef={bodyRef}>
+              <div className="mx-auto max-w-3xl px-5 py-4">
+                {preview ? renderStep({
+                  preview,
+                  selections,
+                  step,
+                  missing,
+                  onSelectModel: setSelectingModelRefId,
+                  onUpdateModel: updateModel,
+                  onUpdateProject: updateProject,
+                  onUpdateResource: updateResource,
+                  onUpdateEnvironment: updateEnvironment,
+                }) : null}
+              </div>
+            </ScrollArea>
           </DialogFrameBody>
           <DialogFrameFooter>
             <Button type="button" variant="outline" disabled={importing} onClick={() => onOpenChange(false)}>取消</Button>

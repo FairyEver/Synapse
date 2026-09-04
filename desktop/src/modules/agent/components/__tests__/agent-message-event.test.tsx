@@ -194,11 +194,12 @@ describe("AgentMessageEvent", () => {
 
     const streamdownWrapper = container.querySelector("[data-streamdown='table-wrapper']")
     const table = container.querySelector<HTMLTableElement>("[data-streamdown='table']")
-    const tableContainer = table?.parentElement
+    const tableContainer = container.querySelector("[data-streamdown='table-container']")
 
     expect(streamdownWrapper).toBeNull()
     expect(table).not.toBeNull()
     expect(tableContainer?.getAttribute("data-streamdown")).toBe("table-container")
+    expect(tableContainer?.getAttribute("data-scrollbars")).toBe("horizontal")
     expect(tableContainer?.className).toContain("border-border")
     expect(table?.className).not.toContain("border-border")
     expect(container.querySelector("th")?.textContent).toBe("页面")

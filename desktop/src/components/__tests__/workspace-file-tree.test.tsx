@@ -151,12 +151,23 @@ describe("WorkspaceFileTree", () => {
     renderTree(dataSource)
     await flush()
 
-    clickNode("first.ts")
-    clickNode("second.ts", { metaKey: true })
+    await clickNode("first.ts")
+    await clickNode("second.ts", { metaKey: true })
     expect(selectedNodeNames()).toEqual(["first.ts", "second.ts"])
 
-    clickNode("third.ts")
-    clickNode("first.ts", { shiftKey: true })
+    await clickNode("third.ts")
+    await clickNode("first.ts", { shiftKey: true })
+    expect(selectedNodeNames()).toEqual(["first.ts", "second.ts", "third.ts"])
+
+    await clickNode("second.ts")
+    await act(async () => {
+      document.querySelector<HTMLElement>('[role="tree"]')?.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        ctrlKey: true,
+        key: "a",
+      }))
+      await Promise.resolve()
+    })
     expect(selectedNodeNames()).toEqual(["first.ts", "second.ts", "third.ts"])
   })
 
@@ -173,8 +184,8 @@ describe("WorkspaceFileTree", () => {
 
     renderTree(dataSource)
     await flush()
-    clickNode("first.ts")
-    clickNode("second.ts", { ctrlKey: true })
+    await clickNode("first.ts")
+    await clickNode("second.ts", { ctrlKey: true })
 
     const values = new Map<string, string>()
     const event = new Event("dragstart", { bubbles: true, cancelable: true })
@@ -186,6 +197,8 @@ describe("WorkspaceFileTree", () => {
     })
     act(() => document.querySelector<HTMLElement>('[title="second.ts"]')?.dispatchEvent(event))
 
+    expect(event.defaultPrevented).toBe(false)
+    expect(document.querySelector(".row.preview")).toBeNull()
     expect(values.get(WORKSPACE_FILE_TREE_DRAG_TYPE)).toBe(JSON.stringify({
       scopeId: "scope-1",
       relativePaths: ["first.ts", "second.ts"],
@@ -223,11 +236,14 @@ function renderTree(dataSource: WorkspaceFileTreeDataSource): void {
   })
 }
 
-function clickNode(name: string, options: MouseEventInit = {}): void {
-  act(() => document.querySelector<HTMLElement>(`[title="${name}"]`)?.dispatchEvent(new MouseEvent("click", {
-    bubbles: true,
-    ...options,
-  })))
+async function clickNode(name: string, options: MouseEventInit = {}): Promise<void> {
+  await act(async () => {
+    document.querySelector<HTMLElement>(`[title="${name}"]`)?.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      ...options,
+    }))
+    await Promise.resolve()
+  })
 }
 
 function selectedNodeNames(): string[] {

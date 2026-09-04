@@ -39,7 +39,7 @@
 
 - “Synapse MCP 工具按需加载”是默认关闭的 Agent 实验功能，只对创建时已固化开启且使用非 Anthropic 官方端点的对话生效。Anthropic 官方端点继续使用 SDK 原生工具模式；对话切换 Provider/端点时按快照与端点重新计算，不读取当前全局开关改写旧对话。
 - 实验会话必须先用正常 `settingSources` 做一次不消费用户 prompt、不发送模型请求的 MCP discovery，再以 `strictMcpConfig: true` 重建其它可序列化 MCP，移除 `synapse-mcp` 并注入进程内 `synapse-tool-router`。不得用 `disallowedTools`、运行时 toggle 或同名 server 覆盖模拟隔离。
-- 只要 discovery 失败、MCP 配置无法无损重建、存在显式 `mcp__synapse-mcp__*` 权限规则、policy helper 或 Synapse server 工具策略，整次会话必须回退完整 MCP。新会话必须把显式注入的 MCP Server 名称固化到 `expectedMcpServerNames` 快照；discovery 与最终 Query 都必须确认该集合已连接，缺失、失败、待授权或超时不得被静默过滤，完整配置回退后仍不可用时必须终止本次会话并返回可操作错误。回退只记录安全 reason 枚举并显示一次会话状态；诊断可记录 Server 名称与状态，不得记录 header、环境变量、凭据或 MCP 配置正文。
+- 只要 discovery 失败、MCP 配置无法无损重建、存在显式 `mcp__synapse-mcp__*` 权限规则、policy helper 或 Synapse server 工具策略，整次会话必须回退完整 MCP。新会话继续把显式注入的 MCP Server 名称固化到 `expectedMcpServerNames` 快照，用于 discovery、诊断和兼容；连接器 MCP 缺失、失败、待授权或超时必须记录安全 reason 与状态，但不得阻断用户 Prompt 或终止普通对话。诊断可记录 Server 名称与状态，不得记录 header、环境变量、凭据或 MCP 配置正文。
 - 内部 router 只暴露 `search` 与 `invoke`。`search` 只读且可自动允许；`invoke` 必须把原始 Synapse 工具名和参数投影回 Persona、子 Agent allowlist、permission mode、权限卡片、toolUse/toolResult、history 与导出，并以 `toolUseId` 关联。底层执行仍走同一 action router、`PermissionGuard`、`AuditSink` 和公共 MCP 结果归一化。
 - 自动注册/清理 Synapse MCP 时移除旧 server：`synapse-data`、`synapse-database`、`synapse-services`，以及旧权限 allowlist 工具名；不得自动新增 `mcp__synapse-mcp__*` allowlist。
 - MCP 工具顶层 `inputSchema` 必须是普通对象，禁止顶层 `oneOf`、`anyOf`、`allOf`。跨字段条件由 dispatcher/service 校验，并在描述中说明。新增/修改工具时运行 `buildAllMcpTools()` 顶层兼容性测试。

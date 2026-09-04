@@ -28,7 +28,10 @@ import {
 } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { writeWorkspaceFileTreeDrag } from "@/lib/workspace-file-tree-drag"
+import {
+  clearWorkspaceFileTreeDrag,
+  writeWorkspaceFileTreeDrag,
+} from "@/lib/workspace-file-tree-drag"
 import type {
   WorkspaceFileTreeDataSource,
   WorkspaceFileTreeEntry,
@@ -285,6 +288,7 @@ function WorkspaceFileTreeNode({
     }
   }
   const handleDragStart = (event: DragEvent<HTMLDivElement>) => {
+    event.stopPropagation()
     const relativePaths = node.isSelected
       ? node.tree.selectedNodes.map((selected) => selected.data.relativePath)
       : [node.data.relativePath]
@@ -301,6 +305,7 @@ function WorkspaceFileTreeNode({
       )}
       title={node.data.name}
       onClick={handleClick}
+      onDragEnd={clearWorkspaceFileTreeDrag}
       onDragStart={handleDragStart}
       onMouseDown={handleMouseDown}
     >

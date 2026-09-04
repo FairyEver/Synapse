@@ -35,6 +35,7 @@ import {
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "../../../src/components/ui/empty"
 import { Field, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
+import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import {
   Table,
   TableBody,
@@ -1124,7 +1125,7 @@ export function TerminalModule({
     <>
       {sidebarToggle}
       {activeHeaderWorkspaces.length > 0 ? (
-        <nav aria-label="活动终端会话" className="flex min-w-0 items-center gap-0 overflow-x-auto whitespace-nowrap">
+        <nav aria-label="活动终端会话" className="no-scrollbar flex h-10 min-w-0 items-center gap-0 overflow-x-auto whitespace-nowrap">
           {activeHeaderWorkspaces.map((workspace) => (
             <SystemAppTopBarActionButton
               key={workspace.id}
@@ -1191,7 +1192,7 @@ export function TerminalModule({
               {toolbarActions.length ? (
                 <div
                   data-terminal-toolbar
-                  className="flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-t bg-card px-2.5 py-1.5 whitespace-nowrap"
+                  className="no-scrollbar flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-t bg-card px-2.5 py-1.5 whitespace-nowrap"
                 >
                   {toolbarActions.map((action) => (
                     <div key={action.id} className="flex shrink-0 items-center gap-1">
@@ -1237,18 +1238,20 @@ export function TerminalModule({
         >
           <DialogFrame>
             <DialogFrameHeader bordered title="终端设置" />
-            <DialogFrameBody className="overflow-auto px-5 py-4">
-              <TerminalLaunchSettingsForm
-                value={globalLaunchDraft}
-                inheritedLabel="系统"
-                choosingDirectory={globalLaunchChoosingDirectory}
-                onChooseDirectory={() => { void chooseLaunchCwd(setGlobalLaunchChoosingDirectory, setGlobalLaunchDraft) }}
-                onRevealEnvironmentValue={(key) => terminalBridge.launch.revealEnvironmentValue({ scope: "global", key })}
-                onCopyEnvironmentValue={(key, draftValue) => terminalBridge.launch.copyEnvironmentValue({ scope: "global", key, draftValue })}
-                onChange={setGlobalLaunchDraft}
-                appearanceSize={terminalAppearanceSizeDraft}
-                onAppearanceSizeChange={setTerminalAppearanceSizeDraft}
-              />
+            <DialogFrameBody className="overflow-hidden">
+              <ScrollArea className="h-full" viewportClassName="px-5 py-4">
+                <TerminalLaunchSettingsForm
+                  value={globalLaunchDraft}
+                  inheritedLabel="系统"
+                  choosingDirectory={globalLaunchChoosingDirectory}
+                  onChooseDirectory={() => { void chooseLaunchCwd(setGlobalLaunchChoosingDirectory, setGlobalLaunchDraft) }}
+                  onRevealEnvironmentValue={(key) => terminalBridge.launch.revealEnvironmentValue({ scope: "global", key })}
+                  onCopyEnvironmentValue={(key, draftValue) => terminalBridge.launch.copyEnvironmentValue({ scope: "global", key, draftValue })}
+                  onChange={setGlobalLaunchDraft}
+                  appearanceSize={terminalAppearanceSizeDraft}
+                  onAppearanceSizeChange={setTerminalAppearanceSizeDraft}
+                />
+              </ScrollArea>
             </DialogFrameBody>
             <DialogFrameFooter>
               <Button type="button" variant="outline" disabled={globalLaunchSaving} onClick={() => requestDiscard(globalLaunchDirty, () => setGlobalSettingsOpen(false))}>取消</Button>
@@ -1375,7 +1378,7 @@ export function TerminalModule({
             </DialogDescription>
           </DialogHeader>
           {commandManagerCommands.length ? (
-            <div className="max-h-[min(24rem,calc(100vh-12rem))] overflow-auto rounded-md border">
+            <ScrollArea className="max-h-[min(24rem,calc(100vh-12rem))] rounded-md border">
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -1416,7 +1419,7 @@ export function TerminalModule({
                   ))}
                 </TableBody>
               </Table>
-            </div>
+            </ScrollArea>
           ) : (
             <Empty className="min-h-40 border">
               <EmptyHeader>

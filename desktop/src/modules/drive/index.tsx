@@ -1955,7 +1955,7 @@ function DriveBreadcrumbs({
 }) {
   return (
     <nav
-      className="min-w-0 flex-1 overflow-x-auto"
+      className="no-scrollbar min-w-0 flex-1 overflow-x-auto"
       aria-label="当前位置"
     >
       <ol className="flex min-w-max items-center gap-0.5 text-sm text-muted-foreground">

@@ -3,6 +3,7 @@ import {
   redactSensitiveText,
   redactSensitiveValue,
 } from "@/lib/agent-redaction"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 function eventText(event: CcRawConversationEvent): string {
   return event.contentBlocks.map((block) => {
@@ -42,9 +43,11 @@ export function ConversationEventStream({
             <span className="text-sm font-medium">{event.type}</span>
             <span className="text-xs text-muted-foreground">{event.timestamp ?? `#${event.lineNumber}`}</span>
           </div>
-          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs" data-allow-select="true">
-            {eventText(event) || JSON.stringify(redactSensitiveValue(event.raw), null, 2)}
-          </pre>
+          <ScrollArea className="mt-2 max-h-40">
+            <pre className="whitespace-pre-wrap text-xs" data-allow-select="true">
+              {eventText(event) || JSON.stringify(redactSensitiveValue(event.raw), null, 2)}
+            </pre>
+          </ScrollArea>
         </button>
       ))}
     </div>

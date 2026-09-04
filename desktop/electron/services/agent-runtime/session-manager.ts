@@ -11,7 +11,6 @@ import {
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
   AGENT_PROVIDER_REQUIRED_MESSAGE,
   AGENT_SESSION_RESETTING_MESSAGE,
-  agentMcpServersUnavailableMessage,
 } from "./agent-error-messages"
 import {
   directoriesForPathAttachments,
@@ -455,14 +454,13 @@ export class SessionManager {
       (name) => !Object.hasOwn(resolvedMcpServers, name),
     )
     if (missingMcpServerNames.length > 0) {
-      this.deps.logger?.warn("Expected MCP server config is unavailable; refusing to create a partial session.", {
+      this.deps.logger?.warn("Connector MCP server config is unavailable; continuing without it.", {
         boundary: "agent-runtime.live-session.mcp-config",
         projectId: this.deps.projectId,
         conversationId: input.conversation.id,
         expectedServerNames: expectedMcpServerNames,
         resolvedServerNames: Object.keys(resolvedMcpServers),
       })
-      throw new Error(agentMcpServersUnavailableMessage(missingMcpServerNames))
     }
     const plugins = [
       ...await Promise.resolve(

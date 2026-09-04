@@ -66,11 +66,13 @@ describe("WorkflowExportDialog", () => {
     render()
     const content = document.body.querySelector('[data-slot="dialog-content"]')
     const body = document.body.querySelector('[data-slot="dialog-frame-body"]')
+    const scrollArea = body?.querySelector('[data-scrollbars="vertical"]')
+    const viewport = scrollArea?.querySelector('[data-slot="scroll-area-viewport"]')
     const footer = document.body.querySelector('[data-slot="dialog-frame-footer"]')
 
     expect(content?.className).toContain("overflow-hidden")
-    expect(body?.className).toContain("overflow-y-auto")
-    expect(body?.className).toContain("overscroll-contain")
+    expect(body?.className).toContain("overflow-hidden")
+    expect(viewport?.className).toContain("overscroll-contain")
     expect(footer).not.toBeNull()
   })
 

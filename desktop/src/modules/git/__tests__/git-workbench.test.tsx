@@ -1248,7 +1248,7 @@ describe("GitWorkbench", () => {
     const detailContent = container.querySelector('[data-git-history-detail-content="true"]')
     const fileList = container.querySelector('[data-git-history-file-list="true"]')
     const diff = container.querySelector('[data-component="git-diff-view"]')
-    const diffScroller = diff?.parentElement
+    const diffScroller = diff?.closest('[data-scrollbars="horizontal"]')
 
     expect(root?.className).toContain("min-w-0")
     expect(rightPane?.className).toContain("min-w-0")
@@ -1259,7 +1259,7 @@ describe("GitWorkbench", () => {
     expect(fileList?.className).toContain("max-w-full")
     expect(diff).toBeTruthy()
     expect(diffScroller?.className).toContain("min-w-0")
-    expect(diffScroller?.className).toContain("overflow-x-auto")
+    expect(diffScroller?.getAttribute("data-scrollbars")).toBe("horizontal")
     expect(diffScroller?.getAttribute("data-allow-select")).toBe("true")
   })
 
@@ -1302,9 +1302,9 @@ describe("GitWorkbench", () => {
 
     const fileList = container.querySelector('[data-git-history-file-list="true"]')
 
-    expect(fileList?.children).toHaveLength(161)
+    expect(fileList?.querySelector(".divide-y")?.children).toHaveLength(161)
     expect(fileList?.className).toContain("max-h-80")
-    expect(fileList?.className).toContain("overflow-y-auto")
+    expect(fileList?.getAttribute("data-scrollbars")).toBe("vertical")
   })
 
   it("keeps long worktree diffs inside the right pane", () => {
@@ -1359,7 +1359,7 @@ describe("GitWorkbench", () => {
     const selectionBar = container.querySelector('[data-git-changes-selection-bar="true"]')
     const textarea = container.querySelector("textarea")
     const diff = container.querySelector('[data-component="git-diff-view"]')
-    const diffScroller = diff?.parentElement
+    const diffScroller = diff?.closest('[data-scrollbars="horizontal"]')
 
     expect(root?.className).toContain("min-w-0")
     expect(rightPane?.className).toContain("min-w-0")
@@ -1373,7 +1373,7 @@ describe("GitWorkbench", () => {
     expect(textarea).toBeNull()
     expect(diff).toBeTruthy()
     expect(diffScroller?.className).toContain("min-w-0")
-    expect(diffScroller?.className).toContain("overflow-x-auto")
+    expect(diffScroller?.getAttribute("data-scrollbars")).toBe("horizontal")
     expect(diffScroller?.getAttribute("data-allow-select")).toBe("true")
   })
 

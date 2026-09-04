@@ -213,18 +213,21 @@ describe("WorkflowShareImportDialog", () => {
 
     const content = document.body.querySelector('[data-slot="dialog-content"]')
     const body = document.body.querySelector('[data-slot="dialog-frame-body"]')
+    const scrollArea = body?.querySelector('[data-scrollbars="vertical"]')
+    const viewport = scrollArea?.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')
     expect(content?.className).toContain("max-h-[calc(100vh-2rem)]")
     expect(content?.className).not.toContain("h-[min(640px")
     expect(body?.className).toContain("max-h-[min(30rem,calc(100vh-10rem))]")
-    expect(body?.className).toContain("overflow-y-auto")
+    expect(body?.className).toContain("overflow-hidden")
+    expect(viewport?.className).toContain("overscroll-contain")
     expect(document.body.textContent).toContain("导入后需要检查日报项目和附件目录。")
     expect(document.body.textContent).toContain("入口")
     expect(document.body.textContent).toContain("依赖")
 
-    if (!(body instanceof HTMLDivElement)) throw new Error("Dialog body not found")
-    body.scrollTop = 120
+    if (!(viewport instanceof HTMLDivElement)) throw new Error("Dialog viewport not found")
+    viewport.scrollTop = 120
     act(() => button("下一步").click())
-    expect(body.scrollTop).toBe(0)
+    expect(viewport.scrollTop).toBe(0)
     expect(document.body.textContent).toContain("来源未验证")
     expect(document.body.textContent).toContain("敏感信息")
     expect(document.body.textContent).toContain("高风险配置")

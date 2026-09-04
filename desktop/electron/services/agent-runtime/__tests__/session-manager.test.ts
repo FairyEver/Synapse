@@ -373,7 +373,7 @@ describe("SessionManager", () => {
     }))
   })
 
-  it("rejects a legacy conversation when its expected MCP config is missing", async () => {
+  it("continues a legacy conversation when its expected MCP config is missing", async () => {
     const createSession = vi.fn(() => new FakeLiveSession())
     const manager = new SessionManager({
       projectId: "project-1",
@@ -389,15 +389,18 @@ describe("SessionManager", () => {
       resolveConnectorContribution: vi.fn(async () => ({ mcpServers: {}, plugins: [] })),
     })
 
-    await expect(manager.getOrCreateSession({
+    await manager.getOrCreateSession({
       state: manager.stateForConversation("conversation-1", baseMessage("default")),
       conversation: {
         ...baseConversation(),
         agentConfig: { figmaDesktopMcpEnabled: true, expectedMcpServerNames: ["figma"] },
       },
       message: baseMessage("default"),
-    })).rejects.toThrow("请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话")
-    expect(createSession).not.toHaveBeenCalled()
+    })
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      mcpServers: {},
+      expectedMcpServerNames: ["figma"],
+    }))
   })
 
   it("passes project SDK agents into new live sessions", async () => {

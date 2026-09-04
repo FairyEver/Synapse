@@ -125,33 +125,35 @@ export function GitHistoryTab({
                   </div>
                 </div>
                 {selectedCommit.files.length > 0 ? (
-                  <div className="max-h-80 max-w-full divide-y divide-border overflow-x-hidden overflow-y-auto rounded-lg border" data-git-history-file-list="true">
-                    {selectedCommit.files.map((file, index) => {
-                      const content = (
-                        <>
-                          <span className="min-w-0 truncate font-medium">{file.path}</span>
-                          <Badge variant="outline">{statusLabels[file.status]}</Badge>
-                        </>
-                      )
-                      return canUseFormattedDiff ? (
-                        <button
-                          data-track="git.history.file.select"
-                          data-track-native="true"
-                          key={`${file.path}:${file.originalPath ?? ""}`}
-                          type="button"
-                          data-active={selectedFileIndex === index ? "true" : undefined}
-                          className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
-                          onClick={() => setSelectedFile({ commitHash: selectedCommit.hash, index })}
-                        >
-                          {content}
-                        </button>
-                      ) : (
-                        <div key={`${file.path}:${file.originalPath ?? ""}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm">
-                          {content}
-                        </div>
-                      )
-                    })}
-                  </div>
+                  <ScrollArea className="max-h-80 max-w-full rounded-lg border" data-git-history-file-list="true" viewportClassName="overflow-x-hidden">
+                    <div className="divide-y divide-border">
+                      {selectedCommit.files.map((file, index) => {
+                        const content = (
+                          <>
+                            <span className="min-w-0 truncate font-medium">{file.path}</span>
+                            <Badge variant="outline">{statusLabels[file.status]}</Badge>
+                          </>
+                        )
+                        return canUseFormattedDiff ? (
+                          <button
+                            data-track="git.history.file.select"
+                            data-track-native="true"
+                            key={`${file.path}:${file.originalPath ?? ""}`}
+                            type="button"
+                            data-active={selectedFileIndex === index ? "true" : undefined}
+                            className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 data-[active=true]:bg-muted"
+                            onClick={() => setSelectedFile({ commitHash: selectedCommit.hash, index })}
+                          >
+                            {content}
+                          </button>
+                        ) : (
+                          <div key={`${file.path}:${file.originalPath ?? ""}`} className="flex min-w-0 items-center justify-between gap-3 px-3 py-2 text-sm">
+                            {content}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </ScrollArea>
                 ) : null}
                 {selectedCommit.filesTruncated ? (
                   <Alert>

@@ -189,6 +189,10 @@ export function createWorkspaceFileTreeService(deps: {
         if (!targetStats.isDirectory() && !targetStats.isFile() && !targetStats.isSymbolicLink()) {
           throw new WorkspaceFileTreeError("invalid_path")
         }
+        if (!targetStats.isSymbolicLink()) {
+          const canonicalTarget = await realpath(targetPath)
+          assertWithinRoot(scope.rootPath, canonicalTarget)
+        }
       } catch (error) {
         if (error instanceof WorkspaceFileTreeError) throw error
         throw new WorkspaceFileTreeError("unavailable")

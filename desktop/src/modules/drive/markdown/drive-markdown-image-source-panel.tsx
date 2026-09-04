@@ -1,5 +1,6 @@
 import type { DriveDocumentImageSource, DriveDocumentImageSourcesDto } from "@synapse/shared"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Sheet,
   SheetContent,
@@ -59,10 +60,12 @@ export function DriveMarkdownImageSourcePanel({
           </Button>
         </div>
         {sources ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 pb-4">
-            <ImageSourceGroup title="需处理" sources={pendingSources} onImport={onImport} />
-            <ImageSourceGroup title="已托管" sources={ownerSources} onImport={onImport} />
-          </div>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="flex flex-col gap-4 px-4 pb-4">
+              <ImageSourceGroup title="需处理" sources={pendingSources} onImport={onImport} />
+              <ImageSourceGroup title="已托管" sources={ownerSources} onImport={onImport} />
+            </div>
+          </ScrollArea>
         ) : null}
       </SheetContent>
     </Sheet>

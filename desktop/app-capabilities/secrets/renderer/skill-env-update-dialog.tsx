@@ -11,6 +11,7 @@ import {
   DialogFrameFooter,
   DialogFrameHeader,
 } from "../../../src/components/ui/dialog"
+import { ScrollArea } from "../../../src/components/ui/scroll-area"
 import {
   Table,
   TableBody,
@@ -201,95 +202,99 @@ export function SkillEnvUpdateDialog({
       >
         <DialogFrame>
           <DialogFrameHeader bordered title="更新 Skill 配置" />
-          <DialogFrameBody className="flex flex-col overflow-auto">
-            {Object.entries(queueErrors).length > 0 ? (
-              <div className="flex flex-col gap-2 border-b px-5 py-3">
-                {Object.entries(queueErrors).map(([id, kind]) => {
-                  const group = activeGroups.find((entry) => groupId(entry.name) === id)
-                  if (!group) return null
-                  return (
-                    <div key={id} className="flex items-center justify-between gap-3" role="alert">
-                      <p className="text-sm text-destructive">
-                        {kind === "scan_truncated"
-                          ? `${group.name} 的关联 Skill 过多，请整理后重新扫描。`
-                          : kind === "session_expired"
-                          ? `${group.name} 的扫描会话已过期，请重新扫描。`
-                          : `${group.name} 的更新请求失败，请重试。`}
-                      </p>
-                      {kind === "session_expired" || kind === "scan_truncated" ? (
-                        <Button type="button" variant="outline" size="sm" onClick={() => void rescanGroup(group.name)}>
-                          重新扫描
-                        </Button>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
-            <Table className="min-w-4xl">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-10"><span className="sr-only">选择</span></TableHead>
-                  <TableHead>配置键</TableHead>
-                  <TableHead>Skill</TableHead>
-                  <TableHead>编辑器</TableHead>
-                  <TableHead>范围</TableHead>
-                  <TableHead>路径</TableHead>
-                  <TableHead>状态</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {groupedItems.map(({ groupId: bindingGroupId, groupName, item, itemKey: bindingKey }) => {
-                  const queueResult = queueResults[bindingKey]
-                  const requiresRescan = queueResult?.status === "conflict"
-                  const scanIncomplete = queueErrors[bindingGroupId] === "scan_truncated"
-                    || queueErrors[bindingGroupId] === "session_expired"
-                  const selectable = item.status === "needs_update"
-                    && queueResult?.status !== "updated"
-                    && !requiresRescan
-                    && !scanIncomplete
-                  return (
-                    <TableRow key={bindingKey}>
-                      <TableCell>
-                        <Checkbox
-                          aria-label={`选择 Skill：${item.skillName}（${groupName}）`}
-                          checked={selectedIds.includes(bindingKey)}
-                          disabled={!selectable || updating}
-                          onCheckedChange={(checked) => toggleItem(bindingKey, checked === true)}
-                        />
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{groupName}</TableCell>
-                      <TableCell className="font-medium">{item.skillName}</TableCell>
-                      <TableCell>{item.editors.map((editor) => editor.label).join("、")}</TableCell>
-                      <TableCell>{scopeLabel(item)}</TableCell>
-                      <TableCell className="max-w-80 truncate font-mono text-xs" title={item.envPath}>
-                        {item.envPath}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-start gap-2">
-                          <BindingStatus
-                            item={item}
-                            queueError={queueErrors[bindingGroupId]}
-                            queueResult={queueResult}
-                          />
-                          {requiresRescan ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="xs"
-                              disabled={updating}
-                              onClick={() => void rescanGroup(groupName)}
-                            >
+          <DialogFrameBody className="overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="flex flex-col">
+                {Object.entries(queueErrors).length > 0 ? (
+                  <div className="flex flex-col gap-2 border-b px-5 py-3">
+                    {Object.entries(queueErrors).map(([id, kind]) => {
+                      const group = activeGroups.find((entry) => groupId(entry.name) === id)
+                      if (!group) return null
+                      return (
+                        <div key={id} className="flex items-center justify-between gap-3" role="alert">
+                          <p className="text-sm text-destructive">
+                            {kind === "scan_truncated"
+                              ? `${group.name} 的关联 Skill 过多，请整理后重新扫描。`
+                              : kind === "session_expired"
+                              ? `${group.name} 的扫描会话已过期，请重新扫描。`
+                              : `${group.name} 的更新请求失败，请重试。`}
+                          </p>
+                          {kind === "session_expired" || kind === "scan_truncated" ? (
+                            <Button type="button" variant="outline" size="sm" onClick={() => void rescanGroup(group.name)}>
                               重新扫描
                             </Button>
                           ) : null}
                         </div>
-                      </TableCell>
+                      )
+                    })}
+                  </div>
+                ) : null}
+                <Table className="min-w-4xl">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-10"><span className="sr-only">选择</span></TableHead>
+                      <TableHead>配置键</TableHead>
+                      <TableHead>Skill</TableHead>
+                      <TableHead>编辑器</TableHead>
+                      <TableHead>范围</TableHead>
+                      <TableHead>路径</TableHead>
+                      <TableHead>状态</TableHead>
                     </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedItems.map(({ groupId: bindingGroupId, groupName, item, itemKey: bindingKey }) => {
+                      const queueResult = queueResults[bindingKey]
+                      const requiresRescan = queueResult?.status === "conflict"
+                      const scanIncomplete = queueErrors[bindingGroupId] === "scan_truncated"
+                        || queueErrors[bindingGroupId] === "session_expired"
+                      const selectable = item.status === "needs_update"
+                        && queueResult?.status !== "updated"
+                        && !requiresRescan
+                        && !scanIncomplete
+                      return (
+                        <TableRow key={bindingKey}>
+                          <TableCell>
+                            <Checkbox
+                              aria-label={`选择 Skill：${item.skillName}（${groupName}）`}
+                              checked={selectedIds.includes(bindingKey)}
+                              disabled={!selectable || updating}
+                              onCheckedChange={(checked) => toggleItem(bindingKey, checked === true)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{groupName}</TableCell>
+                          <TableCell className="font-medium">{item.skillName}</TableCell>
+                          <TableCell>{item.editors.map((editor) => editor.label).join("、")}</TableCell>
+                          <TableCell>{scopeLabel(item)}</TableCell>
+                          <TableCell className="max-w-80 truncate font-mono text-xs" title={item.envPath}>
+                            {item.envPath}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-start gap-2">
+                              <BindingStatus
+                                item={item}
+                                queueError={queueErrors[bindingGroupId]}
+                                queueResult={queueResult}
+                              />
+                              {requiresRescan ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  disabled={updating}
+                                  onClick={() => void rescanGroup(groupName)}
+                                >
+                                  重新扫描
+                                </Button>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </ScrollArea>
           </DialogFrameBody>
           <DialogFrameFooter>
             <Button

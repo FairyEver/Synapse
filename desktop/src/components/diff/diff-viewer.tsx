@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import { WrapText } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { isBinaryDiff } from "@/lib/diff"
@@ -99,7 +100,7 @@ export function DiffViewer({
       {binary || isBinaryDiff(text) ? (
         <div className="p-4 text-sm text-muted-foreground">二进制文件已变更。</div>
       ) : text ? (
-        <div className="min-w-0 overflow-x-auto" data-allow-select="true">
+        <ScrollArea className="min-w-0" data-allow-select="true" scrollbars="horizontal">
           <div
             role="table"
             aria-label={`${originalPath ?? path} 与 ${path} 的差异`}
@@ -111,7 +112,7 @@ export function DiffViewer({
               ? <SplitDiff lines={lines} wrap={wrap} />
               : <UnifiedDiff lines={lines} wrap={wrap} />}
           </div>
-        </div>
+        </ScrollArea>
       ) : (
         <div className="p-4 text-sm text-muted-foreground">没有文本差异。</div>
       )}
@@ -356,9 +357,11 @@ export function RawDiff({ text, parseFailed = false }: { readonly text: string; 
           <AlertDescription>已显示原始内容。</AlertDescription>
         </Alert>
       ) : null}
-      <pre className="block w-full min-w-0 max-w-full overflow-x-auto bg-muted p-3 text-xs leading-relaxed text-foreground" data-allow-select="true">
-        {text || "没有文本差异。"}
-      </pre>
+      <ScrollArea className="w-full min-w-0 max-w-full bg-muted" data-allow-select="true" scrollbars="horizontal">
+        <pre className="block min-w-max p-3 text-xs leading-relaxed text-foreground" data-allow-select="true">
+          {text || "没有文本差异。"}
+        </pre>
+      </ScrollArea>
     </div>
   )
 }

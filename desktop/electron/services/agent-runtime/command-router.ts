@@ -229,6 +229,8 @@ export class AgentCommandRouter {
       return { kind: "nativeSlash", name }
     }
 
+    if (looksLikePosixAbsolutePath(parsed.name)) return null
+
     if (this.deps.unknownSlashBehavior === "passthrough") {
       return null
     }
@@ -565,6 +567,10 @@ function shouldEscapeCommandChar(char: string, quote: "\"" | "'" | undefined): b
 
 function commandName(name: string): string {
   return name.startsWith("/") ? name.slice(1).toLowerCase() : name.toLowerCase()
+}
+
+function looksLikePosixAbsolutePath(value: string): boolean {
+  return value.indexOf("/", 1) >= 0
 }
 
 function parseAddExecArgs(args: readonly string[]): {

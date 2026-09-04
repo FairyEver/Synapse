@@ -409,6 +409,21 @@ describe("AgentCommandRouter", () => {
     expect(resets).toEqual(["s1"])
   })
 
+  it("passes an absolute POSIX path through as a normal message", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => baseConversation(),
+    })
+
+    await expect(router.handle(
+      baseMessage("/Users/liyang/Documents/code/project\n这里是什么"),
+      baseConversation(),
+    )).resolves.toBeNull()
+  })
+
   it("rejects remote non-admin users when switching permission modes", async () => {
     const { providerService } = makeProviderService()
     const modeSwitches: string[] = []

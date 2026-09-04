@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { ModelTierLabel } from "@/components/model-tier-label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
@@ -72,8 +73,8 @@ function ProviderModelPicker({
   }
 
   return (
-    <div
-      className={cn("overflow-y-auto rounded-lg border", className)}
+    <ScrollArea
+      className={cn("rounded-lg border", className)}
       aria-busy={loading || undefined}
     >
       <TooltipProvider>
@@ -178,7 +179,7 @@ function ProviderModelPicker({
           </Table>
         </RadioGroup>
       </TooltipProvider>
-    </div>
+    </ScrollArea>
   )
 }
 

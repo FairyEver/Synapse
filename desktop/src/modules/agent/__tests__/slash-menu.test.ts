@@ -64,12 +64,10 @@ describe("agent slash menu utilities", () => {
     })
   })
 
-  it("detects a slash fragment even when slash is not preceded by whitespace", () => {
-    expect(findAgentSlashFragment("prefix/path", 11)).toEqual({
-      start: 6,
-      end: 11,
-      query: "path",
-    })
+  it("does not treat path separators as slash fragments", () => {
+    expect(findAgentSlashFragment("prefix/path", 11)).toBeNull()
+    expect(findAgentSlashFragment("/Users/liyang/Documents/project", 31)).toBeNull()
+    expect(findAgentSlashFragment("/Users/liyang/Documents/project", 6)).toBeNull()
   })
 
   it("returns null when the cursor is outside a slash token", () => {

@@ -430,7 +430,7 @@ function SourceManagerToolbar({
           上传文件夹
         </Button>
       </header>
-      <nav aria-label="当前位置" className="overflow-x-auto px-4 pb-3">
+      <nav aria-label="当前位置" className="no-scrollbar overflow-x-auto px-4 pb-3">
         <div className="flex min-w-max items-center gap-1 text-sm">
           {breadcrumbs.map((item, index) => (
             <div key={item.path || "root"} className="flex shrink-0 items-center gap-1">

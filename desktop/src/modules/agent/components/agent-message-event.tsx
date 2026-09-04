@@ -11,6 +11,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import { MARKDOWN_BODY_CLASSNAME } from "@/components/markdown-viewer"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { redactSensitiveText } from "@/lib/agent-redaction"
 import { sanitizeUrl } from "@/lib/url-sanitize"
@@ -329,9 +330,10 @@ function AgentMessageTable({
   ...props
 }: ComponentProps<"table"> & { readonly node?: unknown }) {
   return (
-    <div
+    <ScrollArea
       data-streamdown="table-container"
-      className="my-4 max-w-full overflow-x-auto rounded-md border border-border bg-background"
+      className="my-4 max-w-full rounded-md border border-border bg-background"
+      scrollbars="horizontal"
     >
       <table
         {...props}
@@ -340,7 +342,7 @@ function AgentMessageTable({
       >
         {children}
       </table>
-    </div>
+    </ScrollArea>
   )
 }
 

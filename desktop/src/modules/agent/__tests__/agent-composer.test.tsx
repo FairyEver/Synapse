@@ -9,7 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AgentComposer as AgentComposerImpl } from "../components/agent-composer"
 import type { AgentDraftAttachment } from "../attachments"
 import { getPermissionModeCapability } from "../permission-mode-capability"
-import { WORKSPACE_FILE_TREE_DRAG_TYPE } from "@/lib/workspace-file-tree-drag"
+import {
+  WORKSPACE_FILE_TREE_DRAG_TYPE,
+  writeWorkspaceFileTreeDrag,
+} from "@/lib/workspace-file-tree-drag"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
@@ -1524,15 +1527,21 @@ describe("AgentComposer", () => {
     const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!
     textarea.setSelectionRange(4, 4)
     act(() => textarea.dispatchEvent(new MouseEvent("click", { bubbles: true })))
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length)
     const timeline = container.querySelector<HTMLElement>('[data-testid="timeline"]')!
-    const payload = JSON.stringify({ scopeId: "scope-1", relativePaths: ["src/first.ts", "docs/second file.md"] })
+    const dragPayload = { scopeId: "scope-1", relativePaths: ["src/first.ts", "docs/second file.md"] }
+    const payload = JSON.stringify(dragPayload)
+    writeWorkspaceFileTreeDrag({
+      effectAllowed: "none",
+      setData: vi.fn(),
+    } as unknown as DataTransfer, dragPayload)
 
-    const dragOver = createWorkspaceTreeDragEvent("dragover", payload)
+    const dragOver = createWorkspaceTreeDragEvent("dragover", payload, [])
     act(() => timeline.dispatchEvent(dragOver))
     expect(dragOver.defaultPrevented).toBe(true)
     expect(container.textContent).toContain("松开插入路径")
 
-    const drop = createWorkspaceTreeDragEvent("drop", payload)
+    const drop = createWorkspaceTreeDragEvent("drop", "", [])
     await act(async () => {
       timeline.dispatchEvent(drop)
       await wait(0)
@@ -3585,13 +3594,17 @@ function createFileDragEvent(
   return event
 }
 
-function createWorkspaceTreeDragEvent(type: "dragover" | "drop", payload: string): Event {
+function createWorkspaceTreeDragEvent(
+  type: "dragover" | "drop",
+  payload: string,
+  types = [WORKSPACE_FILE_TREE_DRAG_TYPE],
+): Event {
   const event = new Event(type, { bubbles: true, cancelable: true })
   Object.defineProperty(event, "dataTransfer", {
     configurable: true,
     value: {
       files: [],
-      types: [WORKSPACE_FILE_TREE_DRAG_TYPE],
+      types,
       dropEffect: "none",
       getData: (requestedType: string) => requestedType === WORKSPACE_FILE_TREE_DRAG_TYPE ? payload : "",
     },

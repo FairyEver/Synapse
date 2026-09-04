@@ -2396,6 +2396,7 @@ describe("DriveModule", () => {
     expect(breadcrumbNav).not.toBeNull()
     expect(breadcrumbNav?.className).toContain("flex-1")
     expect(breadcrumbNav?.className).toContain("overflow-x-auto")
+    expect(breadcrumbNav?.className).toContain("no-scrollbar")
     expect(breadcrumbNav?.parentElement?.className).toContain("min-h-8")
     expect(breadcrumbNav?.parentElement?.className).not.toContain("rounded-lg")
     expect(breadcrumbNav?.parentElement?.className).not.toContain("border")

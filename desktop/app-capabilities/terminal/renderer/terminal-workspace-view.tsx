@@ -30,6 +30,7 @@ import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
 import { runTrackedOperation, track } from "../../../src/lib/ui-tracking"
 import { cn } from "../../../src/lib/utils"
 import {
+  clearWorkspaceFileTreeDrag,
   hasWorkspaceFileTreeDrag,
   readWorkspaceFileTreeDrag,
 } from "../../../src/lib/workspace-file-tree-drag"
@@ -144,6 +145,13 @@ export function TerminalWorkspaceView({
     () => new Set(collectTerminalPaneLeaves(workspace.layout).map((pane) => pane.paneId)),
     [workspace.layout],
   )
+  const visiblePaneIds = useMemo(
+    () => collectTerminalPaneLeaves(workspace.layout)
+      .filter((pane) => sessionsById.has(pane.sessionId))
+      .map((pane) => pane.paneId),
+    [sessionsById, workspace.layout],
+  )
+  const dimInactivePanes = visiblePaneIds.length > 1 && visiblePaneIds.includes(activePaneId)
 
   useEffect(() => {
     setFileTreePaneIds((current) => {
@@ -237,6 +245,7 @@ export function TerminalWorkspaceView({
       fileTreePaneIds={fileTreePaneIds}
       fileTreeWidth={fileTreeWidth}
       draggedPaneId={paneDrag?.sourcePaneId ?? null}
+      dimInactivePanes={dimInactivePanes}
       dropEdge={paneDrag?.edge ?? null}
       dropTargetPaneId={paneDrag?.targetPaneId ?? null}
       onActivePaneChange={onActivePaneChange}
@@ -265,6 +274,7 @@ export function TerminalWorkspaceView({
 function TerminalLayout({
   activePaneId,
   appearanceSize,
+  dimInactivePanes,
   draggedPaneId,
   dropEdge,
   dropTargetPaneId,
@@ -293,6 +303,7 @@ function TerminalLayout({
 }: {
   readonly activePaneId: string
   readonly appearanceSize: TerminalAppearanceSize
+  readonly dimInactivePanes: boolean
   readonly draggedPaneId: string | null
   readonly dropEdge: SynapseTerminalPaneDropEdge | null
   readonly dropTargetPaneId: string | null
@@ -330,6 +341,7 @@ function TerminalLayout({
       <TerminalPane
         active={layout.paneId === activePaneId}
         appearanceSize={appearanceSize}
+        dimmed={dimInactivePanes && layout.paneId !== activePaneId}
         dragSourcePaneId={draggedPaneId}
         dragged={layout.paneId === draggedPaneId}
         dropEdge={layout.paneId === dropTargetPaneId ? dropEdge : null}
@@ -363,6 +375,7 @@ function TerminalLayout({
   const sharedProps = {
     activePaneId,
     appearanceSize,
+    dimInactivePanes,
     draggedPaneId,
     dropEdge,
     dropTargetPaneId,
@@ -422,6 +435,7 @@ function TerminalPane({
   appearanceSize,
   closePending,
   closing,
+  dimmed,
   dragSourcePaneId,
   dragged,
   dropEdge,
@@ -449,6 +463,7 @@ function TerminalPane({
   readonly appearanceSize: TerminalAppearanceSize
   readonly closePending: boolean
   readonly closing: boolean
+  readonly dimmed: boolean
   readonly dragSourcePaneId: string | null
   readonly dragged: boolean
   readonly dropEdge: SynapseTerminalPaneDropEdge | null
@@ -844,6 +859,7 @@ function TerminalPane({
       return
     }
     event.preventDefault()
+    if (workspacePathDrag) event.stopPropagation()
     event.dataTransfer.dropEffect = session.status === "running" ? "copy" : "none"
     setPathDropActive(session.status === "running")
   }, [dragSourcePaneId, onPaneDragTargetChange, paneId, session.status])
@@ -869,9 +885,12 @@ function TerminalPane({
       }
       return
     }
+    const workspacePathTransfer = hasWorkspaceFileTreeDrag(event.dataTransfer)
     const workspacePathDrag = readWorkspaceFileTreeDrag(event.dataTransfer)
+    clearWorkspaceFileTreeDrag()
     if (!workspacePathDrag && !isExternalFileDrag(event)) return
     event.preventDefault()
+    if (workspacePathTransfer) event.stopPropagation()
     setPathDropActive(false)
     onActive()
     if (session.status !== "running") {
@@ -952,6 +971,7 @@ function TerminalPane({
       className={cn(
         "relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background focus-visible:outline-none",
         active && "ring-1 ring-inset ring-ring",
+        dimmed && "opacity-50",
       )}
     >
       <div
@@ -1027,6 +1047,7 @@ function TerminalPane({
           <div
             className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center justify-center border border-dashed bg-background/80"
             data-terminal-path-drop-overlay
+            role="status"
             style={{ left: fileTreeOpen ? fileTreeWidth : 0 }}
           >
             <span className="text-sm font-medium text-foreground">松开插入路径</span>

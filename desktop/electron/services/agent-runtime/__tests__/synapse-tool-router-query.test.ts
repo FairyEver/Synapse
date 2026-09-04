@@ -156,8 +156,8 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     })
 
     expect(discovery.mcpServerStatus).toHaveBeenCalledTimes(2)
-    expect(final.initializationResult).toHaveBeenCalledOnce()
-    expect(final.mcpServerStatus).toHaveBeenCalledOnce()
+    expect(final.initializationResult).not.toHaveBeenCalled()
+    expect(final.mcpServerStatus).not.toHaveBeenCalled()
     expect(query.mock.calls[1]?.[0]).toMatchObject({
       options: {
         mcpServers: {
@@ -219,32 +219,60 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       expect(result).toBe(fallback)
       expect(onFallback).toHaveBeenCalledWith("expected-server-unavailable")
       expect(query).toHaveBeenLastCalledWith({ prompt: expect.anything(), options })
+      expect(logger.warn).toHaveBeenCalledWith(expect.any(String), {
+        boundary: "claude-sdk.synapse-tool-router.fallback",
+        reason: "expected-server-unavailable",
+        serverStatuses: [{ name: "figma", status: unavailableStatus }],
+      })
       expect(JSON.stringify([logger.info.mock.calls, logger.warn.mock.calls])).not.toContain("secret-discovery-canary")
     },
   )
 
-  it.each([
-    ["missing", []],
-    ["pending", [statusWithState(
-      "figma",
-      "pending",
-      { type: "http", url: "http://127.0.0.1:3845/mcp" },
-    )]],
-  ] as const)("falls back when an expected server remains %s until discovery times out", async (_state, statuses) => {
+  it("falls back immediately when an expected server is missing from discovery", async () => {
+    const discovery = {
+      initializationResult: vi.fn(async () => ({})),
+      mcpServerStatus: vi.fn(async () => []),
+      close: vi.fn(),
+    }
+    const fallback = { close: vi.fn() }
+    const query = vi.fn()
+      .mockReturnValueOnce(discovery)
+      .mockReturnValueOnce(fallback)
+    const onFallback = vi.fn()
+    const sdk = {
+      resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })),
+      query,
+    }
+
+    await expect(createRoutedQuery(sdk as never, {
+      prompt: promptThatMustNotBeRead(),
+      options: {
+        mcpServers: { figma: { type: "http", url: "http://127.0.0.1:3845/mcp" } },
+      },
+      router: {
+        cwd: "/tmp/project",
+        settingSources: ["user", "project", "local"],
+        executeTool: vi.fn(),
+        onFallback,
+      },
+    })).resolves.toBe(fallback)
+    expect(discovery.mcpServerStatus).toHaveBeenCalledOnce()
+    expect(onFallback).toHaveBeenCalledWith("expected-server-unavailable")
+  })
+
+  it("falls back when an expected server remains pending until discovery times out", async () => {
     vi.useFakeTimers()
     try {
       const discovery = {
         initializationResult: vi.fn(async () => ({})),
-        mcpServerStatus: vi.fn(async () => [...statuses]),
+        mcpServerStatus: vi.fn(async () => [statusWithState(
+          "figma",
+          "pending",
+          { type: "http", url: "http://127.0.0.1:3845/mcp" },
+        )]),
         close: vi.fn(),
       }
-      const fallback = {
-        initializationResult: vi.fn(async () => ({})),
-        mcpServerStatus: vi.fn(async () => [
-          status("figma", { type: "http", url: "http://127.0.0.1:3845/mcp" }),
-        ]),
-        close: vi.fn(),
-      }
+      const fallback = { close: vi.fn() }
       const query = vi.fn()
         .mockReturnValueOnce(discovery)
         .mockReturnValueOnce(fallback)
@@ -275,38 +303,25 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     }
   })
 
-  it("does not consume the user prompt before the final MCP set passes readiness validation", async () => {
+  it("does not gate the user prompt when an MCP disconnects after discovery", async () => {
     const figmaConfig = { type: "http" as const, url: "http://127.0.0.1:3845/mcp" }
     const discovery = {
       initializationResult: vi.fn(async () => ({})),
       mcpServerStatus: vi.fn(async () => [status("figma", figmaConfig)]),
       close: vi.fn(),
     }
-    const unavailableFinal = {
-      initializationResult: vi.fn(async () => ({})),
-      mcpServerStatus: vi.fn(async () => [statusWithState("figma", "failed", figmaConfig)]),
-      close: vi.fn(),
-    }
-    const fallback = {
-      initializationResult: vi.fn(async () => ({})),
-      mcpServerStatus: vi.fn(async () => [status("figma", figmaConfig)]),
-      close: vi.fn(),
-    }
+    const final = { close: vi.fn() }
     const promptValue = { type: "user", message: { role: "user", content: "run" } } as unknown as SDKUserMessage
     const sourceRead = vi.fn(async () => ({ done: false as const, value: promptValue }))
     const prompt: AsyncIterable<SDKUserMessage> = {
       [Symbol.asyncIterator]: () => ({ next: sourceRead }),
     }
-    const gatedReads: Array<Promise<IteratorResult<SDKUserMessage>>> = []
+    let finalPromptRead: Promise<IteratorResult<SDKUserMessage>> | undefined
     const query = vi.fn()
       .mockReturnValueOnce(discovery)
-      .mockImplementationOnce(({ prompt: gatedPrompt }) => {
-        gatedReads.push(gatedPrompt[Symbol.asyncIterator]().next())
-        return unavailableFinal
-      })
-      .mockImplementationOnce(({ prompt: gatedPrompt }) => {
-        gatedReads.push(gatedPrompt[Symbol.asyncIterator]().next())
-        return fallback
+      .mockImplementationOnce(({ prompt: finalPrompt }) => {
+        finalPromptRead = finalPrompt[Symbol.asyncIterator]().next()
+        return final
       })
     const sdk = {
       resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })),
@@ -327,13 +342,13 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       },
     })
 
-    expect(result).toBe(fallback)
-    await expect(gatedReads[0]).resolves.toEqual({ done: true, value: undefined })
-    await expect(gatedReads[1]).resolves.toEqual({ done: false, value: promptValue })
+    expect(result).toBe(final)
+    await expect(finalPromptRead).resolves.toEqual({ done: false, value: promptValue })
     expect(sourceRead).toHaveBeenCalledOnce()
+    expect(query).toHaveBeenCalledTimes(2)
   })
 
-  it("rejects the session when an expected MCP server is still unavailable after fallback", async () => {
+  it("continues the full session when an expected MCP server is unavailable after fallback", async () => {
     const failedStatus = statusWithState(
       "figma",
       "failed",
@@ -367,72 +382,39 @@ describe("Synapse tool router strict MCP reconstruction", () => {
         settingSources: ["user", "project", "local"],
         executeTool: vi.fn(),
       },
-    })).rejects.toThrow("请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话")
-    expect(fallback.close).toHaveBeenCalledOnce()
+    })).resolves.toBe(fallback)
+    expect(fallback.mcpServerStatus).not.toHaveBeenCalled()
+    expect(fallback.close).not.toHaveBeenCalled()
   })
 
-  it("retries a direct full-config query before exposing the user prompt", async () => {
-    const figmaConfig = { type: "http" as const, url: "http://127.0.0.1:3845/mcp" }
-    const unavailable = {
-      initializationResult: vi.fn(async () => ({})),
-      mcpServerStatus: vi.fn(async () => [statusWithState("figma", "failed", figmaConfig)]),
-      close: vi.fn(),
-    }
-    const connected = {
-      initializationResult: vi.fn(async () => ({})),
-      mcpServerStatus: vi.fn(async () => [status("figma", figmaConfig)]),
-      close: vi.fn(),
-    }
-    const promptValue = { type: "user", message: { role: "user", content: "run" } } as unknown as SDKUserMessage
-    const sourceRead = vi.fn(async () => ({ done: false as const, value: promptValue }))
-    const prompt: AsyncIterable<SDKUserMessage> = {
-      [Symbol.asyncIterator]: () => ({ next: sourceRead }),
-    }
-    const gatedReads: Array<Promise<IteratorResult<SDKUserMessage>>> = []
-    const query = vi.fn()
-      .mockImplementationOnce(({ prompt: gatedPrompt }) => {
-        gatedReads.push(gatedPrompt[Symbol.asyncIterator]().next())
-        return unavailable
-      })
-      .mockImplementationOnce(({ prompt: gatedPrompt }) => {
-        gatedReads.push(gatedPrompt[Symbol.asyncIterator]().next())
-        return connected
+  it.each(["failed", "needs-auth"] as const)(
+    "does not preflight-block a direct query when an MCP server is %s",
+    async (unavailableStatus) => {
+      const figmaConfig = { type: "http" as const, url: "http://127.0.0.1:3845/mcp" }
+      const unavailable = {
+        initializationResult: vi.fn(async () => ({})),
+        mcpServerStatus: vi.fn(async () => [statusWithState("figma", unavailableStatus, figmaConfig)]),
+        close: vi.fn(),
+      }
+      const query = vi.fn(() => unavailable)
+      const prompt = promptThatMustNotBeRead()
+
+      const result = await createDirectValidatedQuery({ query } as never, {
+        prompt,
+        options: { mcpServers: { figma: figmaConfig } },
       })
 
-    const result = await createDirectValidatedQuery({ query } as never, {
-      prompt,
-      options: { mcpServers: { figma: figmaConfig } },
-      expectedMcpServerNames: ["figma"],
-    })
-
-    expect(result).toBe(connected)
-    await expect(gatedReads[0]).resolves.toEqual({ done: true, value: undefined })
-    await expect(gatedReads[1]).resolves.toEqual({ done: false, value: promptValue })
-    expect(sourceRead).toHaveBeenCalledOnce()
-    expect(unavailable.close).toHaveBeenCalledOnce()
-  })
-
-  it("rejects a direct query when the expected MCP set is still unavailable after retry", async () => {
-    const figmaConfig = { type: "http" as const, url: "http://127.0.0.1:3845/mcp" }
-    const failedQuery = () => ({
-      initializationResult: vi.fn(async () => ({})),
-      mcpServerStatus: vi.fn(async () => [statusWithState("figma", "needs-auth", figmaConfig)]),
-      close: vi.fn(),
-    })
-    const first = failedQuery()
-    const second = failedQuery()
-    const query = vi.fn()
-      .mockReturnValueOnce(first)
-      .mockReturnValueOnce(second)
-
-    await expect(createDirectValidatedQuery({ query } as never, {
-      prompt: promptThatMustNotBeRead(),
-      options: { mcpServers: { figma: figmaConfig } },
-      expectedMcpServerNames: ["figma"],
-    })).rejects.toThrow("请确认对应应用的本机 MCP 服务已开启，在连接器中重新连接后新建对话")
-    expect(first.close).toHaveBeenCalledOnce()
-    expect(second.close).toHaveBeenCalledOnce()
-  })
+      expect(result).toBe(unavailable)
+      expect(query).toHaveBeenCalledOnce()
+      expect(query).toHaveBeenCalledWith({
+        prompt,
+        options: { mcpServers: { figma: figmaConfig } },
+      })
+      expect(unavailable.initializationResult).not.toHaveBeenCalled()
+      expect(unavailable.mcpServerStatus).not.toHaveBeenCalled()
+      expect(unavailable.close).not.toHaveBeenCalled()
+    },
+  )
 
   it("starts the unmodified final query when discovery cannot preserve permissions", async () => {
     const query = vi.fn(() => ({ close: vi.fn() }))

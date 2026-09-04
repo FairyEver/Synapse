@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Dialog,
   DialogContent,
@@ -392,7 +393,7 @@ function SkillUpdateDialog({
             选择需要更新的安装目标。
           </DialogDescription>
         </DialogHeader>
-        <div className="max-h-72 overflow-y-auto">
+        <ScrollArea className="max-h-72">
           <label
             className="flex items-center gap-3 rounded-md px-2 py-2 font-medium hover:bg-muted/50"
             htmlFor="skill-update-select-all"
@@ -433,7 +434,7 @@ function SkillUpdateDialog({
               </label>
             )
           })}
-        </div>
+        </ScrollArea>
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
             {hasFailures || hasWarnings ? "关闭" : "取消"}

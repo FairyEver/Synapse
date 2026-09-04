@@ -56,9 +56,11 @@ export function findAgentSlashFragment(value: string, cursor: number): AgentSlas
   const safeCursor = Math.max(0, Math.min(cursor, value.length))
   const tokenStart = findTokenStart(value, safeCursor)
   const slashIndex = value.lastIndexOf("/", safeCursor - 1)
-  if (slashIndex < tokenStart) return null
+  if (slashIndex !== tokenStart) return null
 
   const end = findTokenEnd(value, slashIndex)
+  const nextSlashIndex = value.indexOf("/", slashIndex + 1)
+  if (nextSlashIndex >= 0 && nextSlashIndex < end) return null
   if (safeCursor < slashIndex + 1 || safeCursor > end) return null
 
   return {

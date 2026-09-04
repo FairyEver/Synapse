@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import {
+  clearWorkspaceFileTreeDrag,
   hasWorkspaceFileTreeDrag,
   readWorkspaceFileTreeDrag,
 } from "@/lib/workspace-file-tree-drag"
@@ -162,6 +163,7 @@ function AgentComposer({
   const [slashMenuDismissed, setSlashMenuDismissed] = useState(false)
   const [highlightedSlashIndex, setHighlightedSlashIndex] = useState(0)
   const [selectionStart, setSelectionStart] = useState(0)
+  const composerSelectionRef = useRef({ start: draft.length, end: draft.length })
   const [attachments, setAttachments] = useState<AgentDraftAttachment[]>([])
   const [dropActive, setDropActive] = useState(false)
   const [pathDropActive, setPathDropActive] = useState(false)
@@ -342,6 +344,7 @@ function AgentComposer({
       if (disabled || attachmentSubmissionPendingRef.current) return
       if (hasWorkspaceFileTreeDrag(event.dataTransfer)) {
         event.preventDefault()
+        event.stopPropagation()
         event.dataTransfer!.dropEffect = "copy"
         setDropActive(false)
         setPathDropActive(true)
@@ -362,16 +365,18 @@ function AgentComposer({
       if (disabled || attachmentSubmissionPendingRef.current) return
       if (hasWorkspaceFileTreeDrag(event.dataTransfer)) {
         event.preventDefault()
+        event.stopPropagation()
         setDropActive(false)
         setPathDropActive(false)
         const payload = readWorkspaceFileTreeDrag(event.dataTransfer)
+        clearWorkspaceFileTreeDrag()
         if (!payload) return
-        const input = textareaRef.current
-        const selection = {
-          start: input?.selectionStart ?? selectionStart,
-          end: input?.selectionEnd ?? selectionStart,
-        }
+        const selection = composerSelectionRef.current
         void requireSynapseBridge().agent.workspaceTree.resolve(payload).then((result) => {
+          if (result.paths.length === 0 || result.paths.some((path) => /[\r\n]/.test(path))) {
+            toast("无法插入文件路径")
+            return
+          }
           const next = insertTextAtComposerSelection({
             draft,
             selectionStart: selection.start,
@@ -384,6 +389,7 @@ function AgentComposer({
             if (!nextInput) return
             nextInput.focus()
             nextInput.setSelectionRange(next.cursor, next.cursor)
+            composerSelectionRef.current = { start: next.cursor, end: next.cursor }
             setSelectionStart(next.cursor)
           }, 0)
         }).catch((error) => {
@@ -401,6 +407,7 @@ function AgentComposer({
       attachFiles(files)
     }
     const clearDropState = () => {
+      clearWorkspaceFileTreeDrag()
       setDropActive(false)
       setPathDropActive(false)
     }
@@ -415,7 +422,7 @@ function AgentComposer({
       target.removeEventListener("drop", handleDrop)
       window.removeEventListener("dragend", clearDropState)
     }
-  }, [addAttachments, attachmentActions, disabled, draft, dropTargetRef, onDraftChange, selectionStart])
+  }, [addAttachments, attachmentActions, disabled, draft, dropTargetRef, onDraftChange])
 
   const chooseAttachments = async (kind: "file" | "directory") => {
     if (choosingAttachments || attachmentSubmissionPendingRef.current) return
@@ -455,6 +462,10 @@ function AgentComposer({
   const updateSelectionStart = () => {
     const el = textareaRef.current
     if (!el) return
+    composerSelectionRef.current = {
+      start: el.selectionStart,
+      end: el.selectionEnd,
+    }
     setSelectionStart(el.selectionStart)
     setSlashMenuDismissed(false)
   }
@@ -476,6 +487,7 @@ function AgentComposer({
       if (!el) return
       el.focus()
       el.setSelectionRange(next.cursor, next.cursor)
+      composerSelectionRef.current = { start: next.cursor, end: next.cursor }
       setSelectionStart(next.cursor)
     })
   }
@@ -495,6 +507,7 @@ function AgentComposer({
       if (!nextEl) return
       nextEl.focus()
       nextEl.setSelectionRange(next.cursor, next.cursor)
+      composerSelectionRef.current = { start: next.cursor, end: next.cursor }
       setSelectionStart(next.cursor)
     }, 0)
   }
@@ -585,6 +598,7 @@ function AgentComposer({
         <div
           className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border border-dashed bg-background/80"
           data-agent-path-drop-overlay
+          role="status"
         >
           <span className="text-sm font-medium text-foreground">松开插入路径</span>
         </div>,
@@ -707,6 +721,10 @@ function AgentComposer({
               value={draft}
               onChange={(e) => {
                 onDraftChange(e.target.value)
+                composerSelectionRef.current = {
+                  start: e.target.selectionStart,
+                  end: e.target.selectionEnd,
+                }
                 setSelectionStart(e.target.selectionStart)
                 setSlashMenuDismissed(false)
               }}

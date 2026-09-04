@@ -194,8 +194,7 @@ export function TimeReportView({ state, trendBucket, onTrendBucketChange, refres
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
       <div className="flex min-w-0 flex-col gap-2">
         <UsageTrendChart title="Token / 请求 / 工具" rows={rows} bucket={trendBucket} onBucketChange={onTrendBucketChange} />
-        <div className="min-w-0 overflow-x-auto">
-          <Table>
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead>时间</TableHead>
@@ -218,8 +217,7 @@ export function TimeReportView({ state, trendBucket, onTrendBucketChange, refres
               </TableRow>
             ))}
           </TableBody>
-          </Table>
-        </div>
+        </Table>
       </div>
     </ReportState>
   )
@@ -278,8 +276,7 @@ export function DetailsReportView({
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0} refreshing={refreshing}>
       <div className="flex min-w-0 flex-col gap-2">
         <div className="text-sm text-muted-foreground">最近 200 条</div>
-        <div className="min-w-0 overflow-x-auto">
-          <Table>
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead>时间</TableHead>
@@ -313,8 +310,7 @@ export function DetailsReportView({
               </TableRow>
             ))}
           </TableBody>
-          </Table>
-        </div>
+        </Table>
       </div>
     </ReportState>
   )
@@ -324,8 +320,7 @@ function ModelTable({ title, rows, compact = false }: { readonly title?: string;
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
-      <div className="min-w-0 overflow-x-auto">
-        <Table>
+      <Table>
         <TableHeader>
           <TableRow>
             <TableHead>模型</TableHead>
@@ -346,8 +341,7 @@ function ModelTable({ title, rows, compact = false }: { readonly title?: string;
             </TableRow>
           ))}
         </TableBody>
-        </Table>
-      </div>
+      </Table>
     </div>
   )
 }
@@ -366,8 +360,7 @@ function ProjectTable({
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
-      <div className="min-w-0 overflow-x-auto">
-        <Table>
+      <Table>
         <TableHeader>
           <TableRow>
             <TableHead>项目</TableHead>
@@ -388,8 +381,7 @@ function ProjectTable({
             </TableRow>
           ))}
         </TableBody>
-        </Table>
-      </div>
+      </Table>
     </div>
   )
 }
@@ -398,8 +390,7 @@ function ToolTable({ title, rows, compact = false }: { readonly title?: string; 
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
-      <div className="min-w-0 overflow-x-auto">
-        <Table>
+      <Table>
         <TableHeader>
           <TableRow>
             <TableHead>工具</TableHead>
@@ -424,8 +415,7 @@ function ToolTable({ title, rows, compact = false }: { readonly title?: string; 
             </TableRow>
           ))}
         </TableBody>
-        </Table>
-      </div>
+      </Table>
     </div>
   )
 }

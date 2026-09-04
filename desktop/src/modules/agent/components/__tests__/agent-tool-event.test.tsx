@@ -531,11 +531,12 @@ describe("AgentToolEvent", () => {
     container.innerHTML = html
 
     const output = container.querySelector("pre")
-    const outputFrame = output?.parentElement
+    const outputFrame = container.querySelector('[data-slot="scroll-area"]')
+    const outputViewport = container.querySelector('[data-slot="scroll-area-viewport"]')
 
     expect(html).not.toContain("data-orientation=\"horizontal\"")
-    expect(outputFrame?.className).toContain("overflow-x-hidden")
     expect(outputFrame?.className).toContain("max-w-full")
+    expect(outputViewport?.className).toContain("overflow-x-hidden")
     expect(output?.className).toContain("break-all")
     expect(output?.textContent).toContain("读取新来源文件和当前清单")
   })

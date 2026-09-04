@@ -53,8 +53,9 @@ export function WorkflowExportDialog({
       >
         <DialogFrame className="max-h-[calc(100vh-2rem)]">
           <DialogFrameHeader title="导出工作流" showCloseButton={!exporting} />
-          <DialogFrameBody className="overflow-y-auto overscroll-contain px-5 py-4">
-            <div className="grid gap-4">
+          <DialogFrameBody className="overflow-hidden">
+            <ScrollArea className="h-full" viewportClassName="overscroll-contain px-5 py-4">
+              <div className="grid gap-4">
               <div className="grid grid-cols-[7rem_1fr] items-baseline gap-x-3 gap-y-2 text-sm">
                 <span className="text-muted-foreground">内容</span>
                 <span>{preflight.workflows.length} 个工作流，{preflight.workflows.reduce((sum, workflow) => sum + workflow.nodeCount, 0)} 个节点</span>
@@ -126,7 +127,8 @@ export function WorkflowExportDialog({
                   </div>
                 </ScrollArea>
               ) : null}
-            </div>
+              </div>
+            </ScrollArea>
           </DialogFrameBody>
           <DialogFrameFooter>
             <Button type="button" variant="outline" disabled={exporting} onClick={() => onOpenChange(false)}>取消</Button>

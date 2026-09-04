@@ -763,6 +763,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     const breadcrumbNav = document.querySelector<HTMLElement>('nav[aria-label="当前位置"]')
     expect(breadcrumbNav).not.toBeNull()
     expect(breadcrumbNav?.className).toContain("overflow-x-auto")
+    expect(breadcrumbNav?.className).toContain("no-scrollbar")
     expect(breadcrumbNav?.previousElementSibling?.tagName).toBe("HEADER")
     expect(breadcrumbNav?.previousElementSibling?.querySelector('input[placeholder="搜索当前文件夹"]')).not.toBeNull()
     expect(breadcrumbNav?.querySelector('input[placeholder="搜索当前文件夹"]')).toBeNull()

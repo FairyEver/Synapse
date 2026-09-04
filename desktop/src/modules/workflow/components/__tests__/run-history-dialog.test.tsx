@@ -225,9 +225,10 @@ describe("RunHistoryDialog", () => {
     })
 
     const detail = document.body.querySelector("[data-slot=collapsible-content] pre")
+    const detailScrollArea = detail?.closest('[data-scrollbars="vertical"]')
     expect(detail?.textContent).toContain(rawError)
-    expect(detail?.className).toContain("max-w-full")
-    expect(detail?.className).toContain("overflow-auto")
+    expect(detailScrollArea?.className).toContain("max-w-full")
+    expect(detailScrollArea?.className).toContain("max-h-48")
     expect(detail?.className).toContain("whitespace-pre-wrap")
     expect(detail?.className).toContain("break-all")
     expect(openRunner).not.toHaveBeenCalled()

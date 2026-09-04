@@ -9,6 +9,7 @@
 - 内置连接器由静态 `BuiltinConnectorDefinition` 注册，类型差异只通过 `integration.kind` 对应的 Driver 实现；Service、IPC、Renderer 和 Agent Runtime 不得按连接器 ID 增加业务分支。
 - V1 Driver 只支持无认证的本机 IPv4 回环 Streamable HTTP MCP。启用前必须经过权限与审计，并完成 initialize、initialized、`tools/list` 和必需工具校验；定义、协议版本、超时和用户状态不得混存。
 - `app.connectors.state` 只保存版本、启用标志和稳定探测错误码。新 Agent 对话保存连接器 ID 快照，运行时再从当前内置定义生成 MCP 与 Skill contribution；之后启停不得改变已有对话。
+- 会话启动时连接器 MCP 不可用只记录诊断并降级该工具，不得阻断用户 Prompt 或普通对话。
 - 内置 Skill 只保存使用说明，开发和正式包路径由 Agent Runtime 按 `skillPackageId` 统一解析；不得从网络下载 Skill 或让 Skill 建立 MCP 连接。
 
 ### Text Extractor
@@ -47,6 +48,7 @@
 - workspace 与 pane 是 UI/IPC 聚合，不新增 MCP 工具；MCP 继续按不可变 `sessionId` 管理底层会话，不能假定或修改 Renderer 布局。
 - 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane。
 - Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。
+- Terminal pane 文件树允许按系统平台使用 `Cmd/Ctrl` 切换选择、`Shift` 连续选择，并把全部选中路径拖入当前 session；路径必须由文件树 scope 在主进程解析，按现有终端路径规则转义后写入，不得伪造成外部文件或新增 MCP 工具。
 - 启动设置只属于 Terminal：全局入口位于 Terminal Header，分组和快捷命令入口位于对应对象；不得在系统设置中增加重复入口。解析顺序固定为安全系统环境、Synapse 内置、全局、分组、快捷命令、一次性覆盖，配置变化只影响新 PTY。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
@@ -105,6 +107,7 @@
 - Quick Input 是独立 System App。Agent 只消费其文本；composer 菜单固定向上展开，选择后追加到当前草稿末尾并保留输入焦点，不直接发送。不得恢复“直接发送”开关或塞回 slash menu。
 - Agent 项目路径与 Git System App 已登记仓库根路径精确匹配时，可在 composer 复用窄类型化 Git IPC；该入口不得经过 Agent 消息、slash command、MCP 或任意 Git 命令，提交仍必须使用仓库绑定的选择令牌。
 - Agent 已配置项目可通过窄类型化 Terminal IPC 以项目目录新建 UI 终端会话，再通过仅含 `sessionId` 的 System App 打开请求定位该会话；虚拟本地对话工作区不提供该入口，也不扩展为 MCP 或 Deep Link。
+- Agent 项目文件树拖入对话时只把主进程解析后的选中路径以空格连接并插入草稿当前光标，不创建附件、不立即发送，也不扩展为公开 Capability、MCP 或 Deep Link。
 - 工作区辅助面板属于 Agent 工作区壳，不属于消息组件、全局 App shell 或 `SidebarContentLayout`。宽屏使用会话与辅助面板分栏，窄屏切换为详情视图；面板状态按会话隔离，文件 Diff 只是首个面板描述符。
 - 共享只读 Diff renderer 位于 `desktop/src/components/diff/`，Git 通过模块内 adapter 消费，Agent 不得跨模块导入 Git 内部实现。patch 生成与解析复用 desktop 直接生产依赖 `diff`。
 - Agent 文件检查点摘要是 turn postlude 与 append-only history 事件；完整 sidecar 存在项目级 `agent.file-checkpoints` DataRepository。四个详情/撤销 IPC 仅供 Agent UI 使用，不扩张公开 Capability、MCP、Workflow、Deep Link、File Opener 或 Git 边界。
