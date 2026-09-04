@@ -140,6 +140,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.run-statuses",
         "core.workflow.snapshots",
         "core.workflow.window-manager",
+        "core.workspace-file-tree",
         "core.json-repair",
         "core.clipboard",
         "git.access-service",

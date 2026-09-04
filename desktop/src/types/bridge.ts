@@ -146,7 +146,15 @@ import type {
   SynapseTerminalUpdateGlobalLaunchSettingsInput,
   SynapseTerminalWriteSessionInput,
   SynapseTerminalWorkspace,
+  SynapseTerminalWorkingDirectoryChangedEvent,
 } from "./terminal"
+import type {
+  WorkspaceFileTreeChangedEvent,
+  WorkspaceFileTreeDirectoryResult,
+  WorkspaceFileTreeResolvePathsInput,
+  WorkspaceFileTreeResolvePathsResult,
+  WorkspaceFileTreeScope,
+} from "./workspace-file-tree"
 import type {
   SynapseSkillRepositoryInstallPrepareResult,
   SynapseSkillRepositoryInstallResolveResult,
@@ -1180,6 +1188,13 @@ export type SynapseBridge = {
     clipboard: {
       materializeImage: () => Promise<string | null>
     }
+    workspaceTree: {
+      open: (input: { sessionId: string }) => Promise<WorkspaceFileTreeScope>
+      list: (input: { scopeId: string; relativePath: string }) => Promise<WorkspaceFileTreeDirectoryResult>
+      resolve: (input: WorkspaceFileTreeResolvePathsInput) => Promise<WorkspaceFileTreeResolvePathsResult>
+      close: (input: { scopeId: string }) => Promise<void>
+      onChanged: (listener: (event: WorkspaceFileTreeChangedEvent) => void) => () => void
+    }
     group: {
       list: () => Promise<SynapseTerminalGroupSummary[]>
       get: (input: { groupId: string }) => Promise<SynapseTerminalGroup>
@@ -1227,6 +1242,9 @@ export type SynapseBridge = {
       onSessionDeleted: (listener: (event: SynapseTerminalSessionDeletedEvent) => void) => () => void
       onResized: (listener: (event: SynapseTerminalResizedEvent) => void) => () => void
       onDomainChanged: (listener: (event: SynapseTerminalDomainChangedEvent) => void) => () => void
+      onWorkingDirectoryChanged: (
+        listener: (event: SynapseTerminalWorkingDirectoryChangedEvent) => void,
+      ) => () => void
     }
   }
   git: {
@@ -1716,6 +1734,13 @@ export type SynapseBridge = {
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
     listAllSessions: (request: { excludeProjectIds?: string[]; limit?: number }) => Promise<SynapseAgentSessionSummary[]>
+    workspaceTree: {
+      open: (input: { projectId: string }) => Promise<WorkspaceFileTreeScope>
+      list: (input: { scopeId: string; relativePath: string }) => Promise<WorkspaceFileTreeDirectoryResult>
+      resolve: (input: WorkspaceFileTreeResolvePathsInput) => Promise<WorkspaceFileTreeResolvePathsResult>
+      close: (input: { scopeId: string }) => Promise<void>
+      onChanged: (listener: (event: WorkspaceFileTreeChangedEvent) => void) => () => void
+    }
     openConversationWindow: (
       request: AgentConversationWindowRequest,
     ) => Promise<AgentConversationWindowOpenResult>

@@ -1,14 +1,23 @@
 import { Buffer } from "node:buffer"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { createTerminalCoreEmulator } from "../emulator"
 
 describe("TerminalCoreEmulator renderer snapshots", () => {
   it("tracks an OSC 7 working directory for subsequent pane creation", async () => {
-    const emulator = createTerminalCoreEmulator({ cols: 80, rows: 24, sizeRevision: 1 })
+    const onWorkingDirectoryChanged = vi.fn()
+    const emulator = createTerminalCoreEmulator({
+      cols: 80,
+      rows: 24,
+      sizeRevision: 1,
+      onWorkingDirectoryChanged,
+    })
     try {
       await emulator.accept("\u001b]7;file:///tmp/project%20one\u0007", 1)
+      await emulator.accept("\u001b]7;file:///tmp/project%20one\u0007", 2)
       expect(emulator.currentCwd).toBe("/tmp/project one")
+      expect(onWorkingDirectoryChanged).toHaveBeenCalledTimes(1)
+      expect(onWorkingDirectoryChanged).toHaveBeenCalledWith()
     } finally {
       emulator.dispose()
     }

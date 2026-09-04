@@ -97,6 +97,10 @@ export type SynapseTerminalSessionDeletedEvent = {
   readonly sessionId: string
 }
 
+export type SynapseTerminalWorkingDirectoryChangedEvent = {
+  readonly sessionId: string
+}
+
 export type SynapseTerminalDomainChangedEvent = {
   readonly domainRevision: number
   readonly eventType: string

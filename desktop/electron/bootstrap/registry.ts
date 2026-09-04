@@ -60,6 +60,7 @@ import {
   coreSystemNotifierIntegrationDescriptor,
   coreSynapseSkillDescriptor,
   coreTerminalDescriptor,
+  coreWorkspaceFileTreeDescriptor,
   coreUsageAnalysisDescriptor,
   coreHttpTestDescriptor,
   coreKnowledgeBaseDescriptor,
@@ -131,6 +132,7 @@ export function buildServiceRegistry(
   registry.register(coreExecutionIsolationDescriptor)
   registry.register(coreSideChannelDescriptor)
   registry.register(coreTerminalDescriptor)
+  registry.register(coreWorkspaceFileTreeDescriptor)
   registry.register(coreSynapseSkillDescriptor)
   registry.register(coreQuickInputDescriptor)
   registry.register(coreConnectorsDescriptor)

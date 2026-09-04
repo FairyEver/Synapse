@@ -110,10 +110,18 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.deleteSession.operationId).toBe("app.terminal.session.delete")
     expect(terminalIpcModule.methods.stopSession.operationId).toBe("app.terminal.session.stop")
     expect(terminalIpcModule.methods.runStartupCommand.operationId).toBe("app.terminal.session.run_startup_command")
+    expect(terminalIpcModule.methods.openWorkspaceTree.operationId).toBe("app.terminal.workspace_tree.open")
+    expect(terminalIpcModule.methods.listWorkspaceTree.operationId).toBe("app.terminal.workspace_tree.list")
+    expect(terminalIpcModule.methods.resolveWorkspaceTreePaths.operationId).toBe("app.terminal.workspace_tree.resolve_paths")
+    expect(terminalIpcModule.methods.closeWorkspaceTree.operationId).toBe("app.terminal.workspace_tree.close")
     expect(terminalIpcModule.events.data.operationId).toBe("app.terminal.operation.data")
     expect(terminalIpcModule.events.sessionChanged.operationId).toBe("app.terminal.operation.session_changed")
     expect(terminalIpcModule.events.sessionDeleted.operationId).toBe("app.terminal.operation.session_deleted")
     expect(terminalIpcModule.events.resized.operationId).toBe("app.terminal.operation.resized")
+    expect(terminalIpcModule.events.workingDirectoryChanged.operationId)
+      .toBe("app.terminal.operation.working_directory_changed")
+    expect(terminalIpcModule.events.workspaceTreeChanged.operationId)
+      .toBe("app.terminal.workspace_tree.changed")
   })
 
   it("chooses a terminal launch cwd through the native directory dialog", async () => {
@@ -460,6 +468,7 @@ describe("terminalIpcModule", () => {
       sizeRevision: 2,
       throughOutputSeq: 1,
     })
+    ;(service.events as EventEmitter).emit("workingDirectoryChanged", { sessionId: "session-1" })
 
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:data", {
       sessionId: "session-1",
@@ -482,6 +491,10 @@ describe("terminalIpcModule", () => {
       sizeRevision: 2,
       throughOutputSeq: 1,
     })
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:app:terminal:operation:working_directory_changed",
+      { sessionId: "session-1" },
+    )
   })
 })
 

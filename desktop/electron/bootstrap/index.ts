@@ -26,6 +26,7 @@ export {
   coreQuickInputDescriptor,
   coreSecretsDescriptor,
   coreUpdateDescriptor,
+  coreWorkspaceFileTreeDescriptor,
   coreWorkflowPackageDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,

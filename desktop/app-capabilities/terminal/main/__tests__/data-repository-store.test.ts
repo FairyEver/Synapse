@@ -184,6 +184,102 @@ describe("Terminal DataRepository store", () => {
     expect(loaded.output.map((chunk) => [chunk.seq, chunk.data])).toEqual([[1, "one"], [2, "two"]])
     expect(loaded.sessions[0]).toMatchObject({ id: sessionId, lastOutputSeq: 2, stateRevision: 3 })
   })
+
+  it("writes only records changed by a structural workspace save", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-delta-save-"))
+    const safeStorage = reversibleSafeStorage()
+    const repository = createTerminalRepository(createFileBackedDataRepository({ rootDir: path.join(root, "data-v1"), safeStorage }))
+    const store = createTerminalDataRepositoryStore({
+      repository,
+      blocks: createTerminalEncryptedBlockStore({ baseDir: path.join(root, "terminal"), safeStorage }),
+    })
+    const groupId = randomUUID()
+    const sessionId = randomUUID()
+    const workspaceId = randomUUID()
+    const paneId = randomUUID()
+    const operationId = randomUUID()
+    const commandId = randomUUID()
+    const state: Parameters<typeof store.saveState>[0] = {
+      globalLaunch: { revision: 1, updatedAt: timestamp() },
+      terminalDomainRevision: 1,
+      groups: [{
+        id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
+        groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1,
+        settings: {
+          environment: { GROUP_SECRET: "group-private" },
+          commands: [{
+            id: commandId,
+            name: "Build",
+            command: "pnpm build",
+            createdAt: timestamp(),
+            updatedAt: timestamp(),
+            commandRevision: 1,
+          }],
+        },
+      }],
+      workspaces: [{
+        id: workspaceId,
+        groupId,
+        title: "Shell workspace",
+        layout: { type: "leaf", paneId, sessionId },
+        layoutRevision: 1,
+        closingPaneIds: [],
+        closing: false,
+        createdAt: timestamp(),
+        updatedAt: timestamp(),
+      }],
+      sessions: [{ ...terminalSession(groupId, sessionId), launchEnvironment: { SESSION_SECRET: "session-private" } }],
+      output: [],
+      operations: [{
+        schemaVersion: 2,
+        id: operationId,
+        operationId,
+        kind: "stop",
+        resourceType: "session",
+        resourceId: sessionId,
+        status: "completed",
+        createdAt: timestamp(),
+        updatedAt: timestamp(),
+        requestedBy: "user",
+      }],
+      idempotency: [],
+      checkpoints: [],
+    }
+    await store.saveState(state)
+    const globalLaunchUpsert = vi.spyOn(repository.globalLaunch, "setSingleton")
+    const groupUpsert = vi.spyOn(repository.groups, "upsert")
+    const groupLaunchUpsert = vi.spyOn(repository.groupLaunchBodies, "upsert")
+    const groupLaunchRemove = vi.spyOn(repository.groupLaunchBodies, "remove")
+    const commandUpsert = vi.spyOn(repository.commands, "upsert")
+    const commandBodyUpsert = vi.spyOn(repository.commandBodies, "upsert")
+    const sessionUpsert = vi.spyOn(repository.sessions, "upsert")
+    const launchBodyUpsert = vi.spyOn(repository.launchBodies, "upsert")
+    const launchBodyRemove = vi.spyOn(repository.launchBodies, "remove")
+    const operationUpsert = vi.spyOn(repository.operations, "upsert")
+    const workspaceUpsert = vi.spyOn(repository.workspaces, "upsert")
+
+    await store.saveState({
+      ...state,
+      terminalDomainRevision: 2,
+      workspaces: [{
+        ...state.workspaces![0]!,
+        title: "Renamed workspace",
+        layoutRevision: 2,
+      }],
+    })
+
+    expect(globalLaunchUpsert).not.toHaveBeenCalled()
+    expect(groupUpsert).not.toHaveBeenCalled()
+    expect(groupLaunchUpsert).not.toHaveBeenCalled()
+    expect(groupLaunchRemove).not.toHaveBeenCalled()
+    expect(commandUpsert).not.toHaveBeenCalled()
+    expect(commandBodyUpsert).not.toHaveBeenCalled()
+    expect(sessionUpsert).not.toHaveBeenCalled()
+    expect(launchBodyUpsert).not.toHaveBeenCalled()
+    expect(launchBodyRemove).not.toHaveBeenCalled()
+    expect(operationUpsert).not.toHaveBeenCalled()
+    expect(workspaceUpsert).toHaveBeenCalledTimes(1)
+  })
 })
 
 function terminalSession(groupId: string, sessionId: string) {

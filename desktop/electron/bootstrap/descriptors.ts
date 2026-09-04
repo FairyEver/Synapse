@@ -84,6 +84,11 @@ import { createTerminalEncryptedBlockStore } from "../../app-capabilities/termin
 import { withLegacyTerminalMigration } from "../../app-capabilities/terminal/main/legacy-migration"
 import { createTerminalRepository } from "../../app-capabilities/terminal/main/repository"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
+import {
+  createWorkspaceFileTreeService,
+  WORKSPACE_FILE_TREE_SERVICE_ID,
+  type WorkspaceFileTreeService,
+} from "../services/workspace-file-tree-service"
 import { createQuickInputService, type QuickInputService } from "../../app-capabilities/quick-input/main/service"
 import { ConnectorDriverRegistry } from "../../app-capabilities/connectors/main/driver-registry"
 import { createMcpStreamableHttpDriver } from "../../app-capabilities/connectors/main/mcp-streamable-http-driver"
@@ -467,6 +472,22 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   },
   async stop(instance) {
     await instance.stop()
+  },
+}
+
+export const coreWorkspaceFileTreeDescriptor: ServiceDescriptor<WorkspaceFileTreeService> = {
+  id: WORKSPACE_FILE_TREE_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return createWorkspaceFileTreeService({
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("workspace-file-tree"),
+    })
+  },
+  stop(instance) {
+    instance.stop()
   },
 }
 

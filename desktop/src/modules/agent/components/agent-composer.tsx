@@ -9,7 +9,8 @@ import {
   useEffect,
   useState,
 } from "react"
-import { ArrowUp, ChevronDown, CornerDownRight, RotateCcw, Square, Trash2 } from "lucide-react"
+import { createPortal } from "react-dom"
+import { ArrowUp, ChevronDown, CornerDownRight, Folder, RotateCcw, Square, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
+import {
+  hasWorkspaceFileTreeDrag,
+  readWorkspaceFileTreeDrag,
+} from "@/lib/workspace-file-tree-drag"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
 import { insertTextAtComposerSelection } from "../composer-insert"
@@ -43,6 +49,7 @@ import { QuickInputMenu } from "./quick-input-menu"
 import { AgentPermissionModeMenu } from "./permission-mode-menu"
 import { AgentSlashMenu } from "./agent-slash-menu"
 import { AgentGitActionMenu } from "./agent-git-action-menu"
+import { useOptionalAgentWorkspacePanel } from "./agent-workspace-shell"
 import type { AgentGitAction } from "../hooks/use-project-git-actions"
 import { useAgentAttachmentActions, type DraftAttachmentResult } from "../hooks/use-agent-attachment-actions"
 import {
@@ -157,11 +164,13 @@ function AgentComposer({
   const [selectionStart, setSelectionStart] = useState(0)
   const [attachments, setAttachments] = useState<AgentDraftAttachment[]>([])
   const [dropActive, setDropActive] = useState(false)
+  const [pathDropActive, setPathDropActive] = useState(false)
   const [choosingAttachments, setChoosingAttachments] = useState(false)
   const [attachmentSubmissionPending, setAttachmentSubmissionPending] = useState(false)
   const attachmentSubmissionPendingRef = useRef(false)
   const draftScopeIdRef = useRef(createDraftScopeId())
   const attachmentActions = useAgentAttachmentActions(projectId)
+  const workspacePanel = useOptionalAgentWorkspacePanel()
   const attachmentsRef = useRef<readonly AgentDraftAttachment[]>([])
   attachmentsRef.current = attachments
 
@@ -330,7 +339,15 @@ function AgentComposer({
       })
     }
     const handleDragOver = (event: globalThis.DragEvent) => {
-      if (disabled || attachmentSubmissionPendingRef.current || !hasFileTransfer(event.dataTransfer)) return
+      if (disabled || attachmentSubmissionPendingRef.current) return
+      if (hasWorkspaceFileTreeDrag(event.dataTransfer)) {
+        event.preventDefault()
+        event.dataTransfer!.dropEffect = "copy"
+        setDropActive(false)
+        setPathDropActive(true)
+        return
+      }
+      if (!hasFileTransfer(event.dataTransfer)) return
       event.preventDefault()
       event.dataTransfer!.dropEffect = "copy"
       setDropActive(true)
@@ -339,25 +356,66 @@ function AgentComposer({
       const relatedTarget = event.relatedTarget
       if (relatedTarget instanceof Node && target.contains(relatedTarget)) return
       setDropActive(false)
+      setPathDropActive(false)
     }
     const handleDrop = (event: globalThis.DragEvent) => {
-      if (disabled || attachmentSubmissionPendingRef.current || !hasFileTransfer(event.dataTransfer)) return
+      if (disabled || attachmentSubmissionPendingRef.current) return
+      if (hasWorkspaceFileTreeDrag(event.dataTransfer)) {
+        event.preventDefault()
+        setDropActive(false)
+        setPathDropActive(false)
+        const payload = readWorkspaceFileTreeDrag(event.dataTransfer)
+        if (!payload) return
+        const input = textareaRef.current
+        const selection = {
+          start: input?.selectionStart ?? selectionStart,
+          end: input?.selectionEnd ?? selectionStart,
+        }
+        void requireSynapseBridge().agent.workspaceTree.resolve(payload).then((result) => {
+          const next = insertTextAtComposerSelection({
+            draft,
+            selectionStart: selection.start,
+            selectionEnd: selection.end,
+            text: result.paths.join(" "),
+          })
+          onDraftChange(next.value)
+          window.setTimeout(() => {
+            const nextInput = textareaRef.current
+            if (!nextInput) return
+            nextInput.focus()
+            nextInput.setSelectionRange(next.cursor, next.cursor)
+            setSelectionStart(next.cursor)
+          }, 0)
+        }).catch((error) => {
+          logger.warn("Agent workspace path drop failed.", errorDiagnostic(error))
+          toast("无法插入文件路径")
+        })
+        return
+      }
+      if (!hasFileTransfer(event.dataTransfer)) return
       const files = Array.from(event.dataTransfer?.files ?? [])
       if (files.length === 0) return
       event.preventDefault()
       setDropActive(false)
+      setPathDropActive(false)
       attachFiles(files)
+    }
+    const clearDropState = () => {
+      setDropActive(false)
+      setPathDropActive(false)
     }
 
     target.addEventListener("dragover", handleDragOver)
     target.addEventListener("dragleave", handleDragLeave)
     target.addEventListener("drop", handleDrop)
+    window.addEventListener("dragend", clearDropState)
     return () => {
       target.removeEventListener("dragover", handleDragOver)
       target.removeEventListener("dragleave", handleDragLeave)
       target.removeEventListener("drop", handleDrop)
+      window.removeEventListener("dragend", clearDropState)
     }
-  }, [addAttachments, attachmentActions, disabled, dropTargetRef])
+  }, [addAttachments, attachmentActions, disabled, draft, dropTargetRef, onDraftChange, selectionStart])
 
   const chooseAttachments = async (kind: "file" | "directory") => {
     if (choosingAttachments || attachmentSubmissionPendingRef.current) return
@@ -523,6 +581,15 @@ function AgentComposer({
 
   return (
     <>
+      {pathDropActive && dropTargetRef?.current ? createPortal(
+        <div
+          className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border border-dashed bg-background/80"
+          data-agent-path-drop-overlay
+        >
+          <span className="text-sm font-medium text-foreground">松开插入路径</span>
+        </div>,
+        dropTargetRef.current,
+      ) : null}
       <div
         aria-hidden="true"
         className="agent-composer-fade pointer-events-none absolute inset-x-0 bottom-0 h-56 bg-gradient-to-b from-background/0 to-background"
@@ -654,6 +721,21 @@ function AgentComposer({
           )}
           leadingActions={(
             <>
+              {workspacePanel?.fileTreeAvailable ? (
+                <Button
+                  ref={workspacePanel.fileTreeTriggerRef}
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={workspacePanel.fileTreeOpen ? "关闭文件树" : "打开文件树"}
+                  title={workspacePanel.fileTreeOpen ? "关闭文件树" : "打开文件树"}
+                  aria-pressed={workspacePanel.fileTreeOpen}
+                  data-track="agent-workspace-file-tree-toggle"
+                  onClick={workspacePanel.toggleFileTree}
+                >
+                  <Folder />
+                </Button>
+              ) : null}
               <AgentAttachmentMenu
                 disabled={disabled || choosingAttachments || attachmentSubmissionPending}
                 onChoose={(kind) => void chooseAttachments(kind)}

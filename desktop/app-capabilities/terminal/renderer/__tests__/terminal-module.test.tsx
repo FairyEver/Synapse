@@ -14,6 +14,7 @@ import type {
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalWorkspace,
 } from "../../../../src/types/terminal"
+import { WORKSPACE_FILE_TREE_DRAG_TYPE } from "../../../../src/lib/workspace-file-tree-drag"
 
 const bridgeState = vi.hoisted(() => ({
   globalLaunch: {
@@ -35,11 +36,13 @@ const bridgeState = vi.hoisted(() => ({
     sizeRevision: number
     throughOutputSeq: number
   }) => void) | null,
+  workingDirectoryChangedListener: null as ((event: { sessionId: string }) => void) | null,
   domainChangedListener: null as ((event: unknown) => void) | null,
   dataUnsubscribe: vi.fn(),
   sessionChangedUnsubscribe: vi.fn(),
   sessionDeletedUnsubscribe: vi.fn(),
   resizedUnsubscribe: vi.fn(),
+  workingDirectoryChangedUnsubscribe: vi.fn(),
   domainChangedUnsubscribe: vi.fn(),
   deferredAttach: null as null | {
     promise: Promise<unknown>
@@ -340,6 +343,18 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.resizedListener = listener
     return bridgeState.resizedUnsubscribe
   }),
+  openWorkspaceTree: vi.fn(async () => ({ scopeId: "scope-1", rootName: "project", revision: 0 })),
+  listWorkspaceTree: vi.fn(async ({ scopeId, relativePath }: {
+    scopeId: string
+    relativePath: string
+  }) => ({ scopeId, relativePath, revision: 0, entries: [] })),
+  closeWorkspaceTree: vi.fn(async () => undefined),
+  resolveWorkspaceTreePaths: vi.fn(async ({ scopeId }: { scopeId: string }) => ({ scopeId, paths: [] as string[] })),
+  onWorkspaceTreeChanged: vi.fn(() => () => undefined),
+  onWorkingDirectoryChanged: vi.fn((listener: NonNullable<typeof bridgeState.workingDirectoryChangedListener>) => {
+    bridgeState.workingDirectoryChangedListener = listener
+    return bridgeState.workingDirectoryChangedUnsubscribe
+  }),
   onDomainChanged: vi.fn((listener: (event: unknown) => void) => {
     bridgeState.domainChangedListener = listener
     return bridgeState.domainChangedUnsubscribe
@@ -360,6 +375,7 @@ const shellBridge = vi.hoisted(() => ({
 const xtermState = vi.hoisted(() => ({
   instances: [] as Array<{
     open: ReturnType<typeof vi.fn>
+    focus: ReturnType<typeof vi.fn>
     write: ReturnType<typeof vi.fn>
     clear: ReturnType<typeof vi.fn>
     getSelection: ReturnType<typeof vi.fn>
@@ -456,11 +472,19 @@ vi.mock("@/lib/electron-bridge", () => ({
         stop: terminalBridge.stopSession,
         runStartupCommand: terminalBridge.runStartupCommand,
       },
+      workspaceTree: {
+        open: terminalBridge.openWorkspaceTree,
+        list: terminalBridge.listWorkspaceTree,
+        resolve: terminalBridge.resolveWorkspaceTreePaths,
+        close: terminalBridge.closeWorkspaceTree,
+        onChanged: terminalBridge.onWorkspaceTreeChanged,
+      },
       operation: {
         onData: terminalBridge.onData,
         onSessionChanged: terminalBridge.onSessionChanged,
         onSessionDeleted: terminalBridge.onSessionDeleted,
         onResized: terminalBridge.onResized,
+        onWorkingDirectoryChanged: terminalBridge.onWorkingDirectoryChanged,
         onDomainChanged: terminalBridge.onDomainChanged,
       },
     }
@@ -496,6 +520,7 @@ vi.mock("@xterm/xterm", () => ({
         terminal.append(screen)
         container.append(terminal)
       }),
+      focus: vi.fn(),
       write: vi.fn((_data: string, callback?: () => void) => {
         callback?.()
       }),
@@ -637,12 +662,14 @@ beforeEach(() => {
   bridgeState.sessionChangedListener = null
   bridgeState.sessionDeletedListener = null
   bridgeState.resizedListener = null
+  bridgeState.workingDirectoryChangedListener = null
   bridgeState.domainChangedListener = null
   bridgeState.deferredAttach = null
   bridgeState.dataUnsubscribe.mockClear()
   bridgeState.sessionChangedUnsubscribe.mockClear()
   bridgeState.sessionDeletedUnsubscribe.mockClear()
   bridgeState.resizedUnsubscribe.mockClear()
+  bridgeState.workingDirectoryChangedUnsubscribe.mockClear()
   bridgeState.domainChangedUnsubscribe.mockClear()
   terminalBridge.listGroups.mockClear()
   terminalBridge.getGroup.mockClear()
@@ -691,6 +718,13 @@ beforeEach(() => {
   terminalBridge.onSessionChanged.mockClear()
   terminalBridge.onSessionDeleted.mockClear()
   terminalBridge.onResized.mockClear()
+  terminalBridge.openWorkspaceTree.mockClear()
+  terminalBridge.listWorkspaceTree.mockClear()
+  terminalBridge.closeWorkspaceTree.mockClear()
+  terminalBridge.resolveWorkspaceTreePaths.mockClear()
+  terminalBridge.resolveWorkspaceTreePaths.mockImplementation(async ({ scopeId }: { scopeId: string }) => ({ scopeId, paths: [] }))
+  terminalBridge.onWorkspaceTreeChanged.mockClear()
+  terminalBridge.onWorkingDirectoryChanged.mockClear()
   terminalBridge.onDomainChanged.mockClear()
   vi.mocked(XtermTerminal).mockClear()
   xtermState.instances = []
@@ -1124,6 +1158,45 @@ describe("TerminalModule", () => {
     expect(xtermMount?.classList.contains("h-full")).toBe(true)
     expect(xtermMount?.classList.contains("p-1")).toBe(false)
     expect(xtermState.instances[0]?.open).toHaveBeenCalledWith(xtermMount)
+  })
+
+  it("opens a dark file tree as an overlay and follows the live working directory", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+    })]
+
+    await renderModule()
+    const xtermFrame = document.querySelector("[data-terminal-xterm-frame]")
+
+    await clickButtonByAriaLabel("打开文件树：开发终端")
+
+    const overlay = document.querySelector("[data-terminal-file-tree-overlay]")
+    expect(overlay).toBeTruthy()
+    expect(overlay?.parentElement).toBe(xtermFrame?.parentElement)
+    expect(overlay?.querySelector('[aria-label="文件树"]')?.classList.contains("dark")).toBe(true)
+    expect(terminalBridge.openWorkspaceTree).toHaveBeenCalledWith({ sessionId: "session-1" })
+
+    await act(async () => {
+      bridgeState.workingDirectoryChangedListener?.({ sessionId: "session-1" })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(terminalBridge.openWorkspaceTree).toHaveBeenCalledTimes(2)
+    expect(document.querySelector("[data-terminal-xterm-frame]")).toBe(xtermFrame)
+
+    await act(async () => {
+      overlay?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }))
+    })
+    expect(document.querySelector("[data-terminal-file-tree-overlay]")).toBeTruthy()
+
+    await act(async () => {
+      xtermFrame?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }))
+    })
+    expect(document.querySelector("[data-terminal-file-tree-overlay]")).toBeNull()
   })
 
   it("does not render session-level Agent control", async () => {
@@ -1747,6 +1820,147 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("queues rapid pane closes and uses the latest workspace revision", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const firstSession = createSession({ id: "session-1", groupId: "group-1", title: "终端一" })
+    const secondSession = createSession({ id: "session-2", groupId: "group-1", title: "终端二" })
+    bridgeState.workspaces = [{
+      ...createWorkspace(firstSession),
+      layout: {
+        type: "split",
+        splitId: "split-1",
+        direction: "horizontal",
+        ratio: 0.5,
+        first: { type: "leaf", paneId: "pane-session-1", sessionId: firstSession.id },
+        second: { type: "leaf", paneId: "pane-session-2", sessionId: secondSession.id },
+      },
+    }]
+    const firstClose = createDeferred<void>()
+    terminalBridge.closePane.mockImplementationOnce(async ({ workspaceId }) => {
+      await firstClose.promise
+      bridgeState.workspaces = bridgeState.workspaces.map((workspace) => workspace.id === workspaceId
+        ? { ...workspace, closingPaneIds: ["pane-session-1"], layoutRevision: 2 }
+        : workspace)
+      return { workspaceId, state: "closing" as const, remainingSessionIds: [firstSession.id, secondSession.id] }
+    })
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(terminalBridge.closePane).toHaveBeenCalledTimes(1)
+    const firstCloseButton = document.body.querySelector<HTMLButtonElement>('[aria-label="正在关闭分屏：终端一"]')
+    expect(firstCloseButton?.disabled).toBe(true)
+
+    const secondPane = document.body.querySelector<HTMLElement>('[aria-label="终端输出与输入：终端二"]')
+    await act(async () => {
+      secondPane?.click()
+      xtermState.instances[1]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      xtermState.instances[1]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      await Promise.resolve()
+    })
+
+    expect(terminalBridge.closePane).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      firstClose.resolve()
+      await flushPromises()
+    })
+
+    expect(terminalBridge.closePane).toHaveBeenCalledTimes(2)
+    expect(terminalBridge.closePane).toHaveBeenLastCalledWith({
+      workspaceId: "workspace-session-1",
+      paneId: "pane-session-2",
+      expectedLayoutRevision: 2,
+    })
+  })
+
+  it("refreshes the workspace revision after a pane close conflict", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.closePane.mockImplementationOnce(async ({ workspaceId }) => {
+      bridgeState.workspaces = bridgeState.workspaces.map((workspace) => workspace.id === workspaceId
+        ? { ...workspace, layoutRevision: 2 }
+        : workspace)
+      throw new Error("revision_conflict")
+    })
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      await flushPromises()
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      await flushPromises()
+    })
+
+    expect(terminalBridge.closePane).toHaveBeenCalledTimes(2)
+    expect(terminalBridge.closePane).toHaveBeenLastCalledWith({
+      workspaceId: "workspace-session-1",
+      paneId: "pane-session-1",
+      expectedLayoutRevision: 2,
+    })
+  })
+
+  it("queues a sidebar workspace close behind an in-flight pane close", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const paneClose = createDeferred<void>()
+    terminalBridge.closePane.mockImplementationOnce(async ({ workspaceId }) => {
+      await paneClose.promise
+      bridgeState.workspaces = bridgeState.workspaces.map((workspace) => workspace.id === workspaceId
+        ? { ...workspace, closingPaneIds: ["pane-session-1"], layoutRevision: 2 }
+        : workspace)
+      return { workspaceId, state: "closing" as const, remainingSessionIds: ["session-1"] }
+    })
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      await Promise.resolve()
+    })
+    await clickSessionDelete("开发终端")
+
+    expect(terminalBridge.closeWorkspace).not.toHaveBeenCalled()
+
+    await act(async () => {
+      paneClose.resolve()
+      await flushPromises()
+    })
+
+    expect(terminalBridge.closeWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      expectedLayoutRevision: 2,
+    })
+  })
+
+  it("does not let an older domain refresh overwrite a newer workspace", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const session = createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    await renderModule()
+    const olderRefresh = createDeferred<SynapseTerminalWorkspace[]>()
+    const newerRefresh = createDeferred<SynapseTerminalWorkspace[]>()
+    terminalBridge.listWorkspaces
+      .mockImplementationOnce(() => olderRefresh.promise)
+      .mockImplementationOnce(() => newerRefresh.promise)
+
+    act(() => {
+      bridgeState.domainChangedListener?.({})
+      bridgeState.domainChangedListener?.({})
+    })
+    await act(async () => {
+      newerRefresh.resolve([{ ...createWorkspace(session), title: "最新名称", layoutRevision: 3 }])
+      await flushPromises()
+      olderRefresh.resolve([{ ...createWorkspace(session), title: "旧名称", layoutRevision: 2 }])
+      await flushPromises()
+    })
+
+    expect(document.body.textContent).toContain("最新名称")
+    expect(document.body.textContent).not.toContain("旧名称")
+  })
+
   it("leaves plain Enter, modified Shift+Enter, and IME input to xterm", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -1867,6 +2081,33 @@ describe("TerminalModule", () => {
       sessionId: "session-1",
       data: "/Users/liyang/My\\ Files/Quarterly\\ Report\\ \\(final\\).txt /tmp/costs\\&notes\\\"\\$\\\\.md ",
     })
+  })
+
+  it("inserts selected file-tree paths and shows drop feedback", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.resolveWorkspaceTreePaths.mockResolvedValue({
+      scopeId: "scope-1",
+      paths: ["/Users/liyang/My Files/first.ts", "/tmp/second.md"],
+    })
+    const payload = JSON.stringify({ scopeId: "scope-1", relativePaths: ["first.ts", "second.md"] })
+
+    await renderModule()
+    const dragOver = await dispatchTerminalWorkspaceTreeDragEvent("dragover", payload)
+    expect(dragOver.defaultPrevented).toBe(true)
+    expect(document.body.textContent).toContain("松开插入路径")
+
+    await dispatchTerminalWorkspaceTreeDragEvent("drop", payload)
+
+    expect(terminalBridge.resolveWorkspaceTreePaths).toHaveBeenCalledWith({
+      scopeId: "scope-1",
+      relativePaths: ["first.ts", "second.md"],
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "/Users/liyang/My\\ Files/first.ts /tmp/second.md ",
+    })
+    expect(document.body.textContent).not.toContain("松开插入路径")
   })
 
   it("rejects dropped paths containing line breaks", async () => {
@@ -2565,6 +2806,31 @@ async function dispatchTerminalDragEvent(
   return event
 }
 
+async function dispatchTerminalWorkspaceTreeDragEvent(
+  type: "dragover" | "drop",
+  payload: string,
+): Promise<TerminalDragTestEvent> {
+  const terminalRegion = document.querySelector<HTMLElement>("[aria-label^='终端输出与输入']")
+  if (!terminalRegion) throw new Error("Terminal region not found")
+  const dataTransfer = {
+    files: [],
+    items: [],
+    types: [WORKSPACE_FILE_TREE_DRAG_TYPE],
+    dropEffect: "none",
+    effectAllowed: "all",
+    getData: (requestedType: string) => requestedType === WORKSPACE_FILE_TREE_DRAG_TYPE ? payload : "",
+  }
+  const event = new Event(type, { bubbles: true, cancelable: true }) as TerminalDragTestEvent
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer, configurable: true })
+
+  await act(async () => {
+    terminalRegion.dispatchEvent(event)
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  return event
+}
+
 type TerminalPaneDataTransfer = {
   files: File[]
   items: never[]
@@ -2704,4 +2970,19 @@ function createDeferredAttach(): NonNullable<typeof bridgeState.deferredAttach> 
     reject = nextReject
   })
   return { promise, resolve, reject }
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>
+  resolve: (value?: T) => void
+} {
+  let resolve: (value: T) => void = () => undefined
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+  return { promise, resolve }
+}
+
+async function flushPromises(): Promise<void> {
+  for (let index = 0; index < 12; index += 1) await Promise.resolve()
 }

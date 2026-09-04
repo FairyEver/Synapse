@@ -51,6 +51,20 @@ describe("TerminalService core", () => {
     expect(harness.service.listSessions().map((item) => item.id)).toContain(session.id)
   })
 
+  it("uses the OSC 7 working directory and falls back to the launch cwd", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    expect(service.getCurrentWorkingDirectory(session.id)).toBe(session.cwd)
+    const changed = new Promise<{ sessionId: string }>((resolve) => {
+      service.events.once("workingDirectoryChanged", resolve)
+    })
+
+    pty.emitData("\u001b]7;file:///tmp\u0007")
+
+    await expect(changed).resolves.toEqual({ sessionId: session.id })
+    expect(service.getCurrentWorkingDirectory(session.id)).toBe("/tmp")
+  })
+
   it("batches PTY output into one incremental runtime save", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-09-04T00:00:00.000Z"))

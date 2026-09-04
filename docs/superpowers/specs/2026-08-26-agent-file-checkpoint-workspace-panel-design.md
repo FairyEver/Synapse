@@ -123,11 +123,13 @@ App Shell
     └── SidebarContentLayout
         ├── Session Sidebar
         └── AgentWorkspaceShell
-            └── WorkspaceAuxiliaryPanelLayout
-                ├── Conversation Pane
-                │   └── AgentConversationWorkspace 现有内容
-                └── Workspace Auxiliary Panel
-                    └── 注册的面板内容
+            ├── WorkspaceAuxiliaryPanelLayout
+            │   ├── Conversation Pane
+            │   │   └── AgentConversationWorkspace 现有内容
+            │   └── Workspace Detail Panel（可选）
+            │       └── 注册的面板内容
+            └── Workspace Navigation Overlay（可选）
+                └── 当前项目文件树
 ```
 
 建议新增两个层次：
@@ -139,7 +141,7 @@ App Shell
 
 ### 5.2 面板注册模型
 
-V1 只允许一个活动面板实例。注册项至少包含：
+V1 只允许一个活动详情面板实例。左侧工作区文件树属于独立的覆盖式导航面板，不进入详情面板注册表，可与右侧详情面板同时打开。注册项至少包含：
 
 ```ts
 type AgentWorkspacePanelRegistration<Payload> = {
@@ -172,6 +174,7 @@ V1 不显示空的加号、标签栏或插件入口。未来新增第二个真�
 | 项目 | 建议值 |
 |---|---:|
 | Conversation Pane 最小宽度 | 560px |
+| Navigation Panel 最小/默认/最大宽度 | 220px / 280px / 480px |
 | Auxiliary Panel 最小宽度 | 400px |
 | Auxiliary Panel 默认宽度 | 480px |
 | Auxiliary Panel 最大宽度 | 720px 或容器 55% |
@@ -179,8 +182,9 @@ V1 不显示空的加号、标签栏或插件入口。未来新增第二个真�
 
 行为：
 
-- 宽度足够：横向 `ResizablePanelGroup`，左侧会话、右侧辅助面板。
-- 宽度不足：打开面板后进入详情模式，只显示辅助面板；顶部提供返回/关闭，关闭后恢复原会话和滚动位置。
+- 左侧工作区导航始终覆盖在会话之上，不参与会话与右侧详情面板的空间分配；窄窗口中最多占用减去 160px 后的可用宽度，保证会话始终可见。
+- 点击左侧工作区导航之外的区域时关闭文件树；文件树内部操作和文件树入口按钮不触发外部关闭。
+- 右侧详情面板沿用 `ResizablePanelGroup`：宽度足够时与会话并排，宽度不足时进入详情模式。
 - embedded 和 window 分别持久化像素宽度，使用现有侧栏宽度存储模式的通用化 helper。
 - 面板打开状态、当前 checkpoint 和 fileId 不跨会话持久化。切换会话立即关闭，防止显示上一会话的敏感内容。
 - 面板不自动打开。Agent 完成修改后只追加摘要卡片。

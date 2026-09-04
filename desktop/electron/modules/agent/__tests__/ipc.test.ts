@@ -98,6 +98,14 @@ describe("agentIpcModule", () => {
     } as never)
   })
 
+  it("declares stable workspace file tree channels", () => {
+    expect(agentIpcModule.methods.openWorkspaceTree.operationId).toBe("app.agent.workspace_tree.open")
+    expect(agentIpcModule.methods.listWorkspaceTree.operationId).toBe("app.agent.workspace_tree.list")
+    expect(agentIpcModule.methods.resolveWorkspaceTreePaths.operationId).toBe("app.agent.workspace_tree.resolve_paths")
+    expect(agentIpcModule.methods.closeWorkspaceTree.operationId).toBe("app.agent.workspace_tree.close")
+    expect(agentIpcModule.events.workspaceTreeChanged.operationId).toBe("app.agent.workspace_tree.changed")
+  })
+
   it("chooses multiple files and converts supported images into visual attachments", async () => {
     const root = await fs.mkdtemp(path.join(await fs.realpath(tmpdir()), "synapse-agent-choose-files-"))
     const imagePath = path.join(root, "screen.png")

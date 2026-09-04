@@ -6,6 +6,9 @@ import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { debounce, track } from "@/lib/ui-tracking"
 
+const baseViewportClassName =
+  "size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+
 function ScrollArea({
   className,
   children,
@@ -57,10 +60,7 @@ function ScrollArea({
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
         data-slot="scroll-area-viewport"
-        className={cn(
-          "size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1",
-          viewportClassName,
-        )}
+        className={cn(baseViewportClassName, viewportClassName)}
         onScroll={(event) => {
           if (dataTrack && trackScroll) {
             const target = event.currentTarget
@@ -89,6 +89,48 @@ function ScrollArea({
   )
 }
 
+function VirtualScrollArea({
+  children,
+  className,
+  ...props
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+  return (
+    <ScrollAreaPrimitive.Root
+      data-slot="scroll-area"
+      className={cn("relative size-full min-h-0 overflow-hidden", className)}
+      {...props}
+    >
+      {children}
+      <ScrollBar />
+    </ScrollAreaPrimitive.Root>
+  )
+}
+
+const VirtualScrollAreaViewport = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<"div">
+>(({ children, className, style, ...props }, forwardedRef) => {
+  const { overflow, ...viewportStyle } = style ?? {}
+
+  return (
+    <ScrollAreaPrimitive.Viewport
+      ref={forwardedRef}
+      data-slot="scroll-area-viewport"
+      className={cn(baseViewportClassName, className)}
+      style={overflow ? {
+        ...viewportStyle,
+        overflowX: "hidden",
+        overflowY: overflow as React.CSSProperties["overflowY"],
+      } : viewportStyle}
+      {...props}
+    >
+      {children}
+    </ScrollAreaPrimitive.Viewport>
+  )
+})
+
+VirtualScrollAreaViewport.displayName = "VirtualScrollAreaViewport"
+
 function ScrollBar({
   className,
   orientation = "vertical",
@@ -113,4 +155,4 @@ function ScrollBar({
   )
 }
 
-export { ScrollArea, ScrollBar }
+export { ScrollArea, ScrollBar, VirtualScrollArea, VirtualScrollAreaViewport }

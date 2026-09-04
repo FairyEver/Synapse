@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, type ComponentProps, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type Ref, useRef } from "react"
+import { act, type ComponentProps, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type Ref, useRef, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AgentComposer as AgentComposerImpl } from "../components/agent-composer"
 import type { AgentDraftAttachment } from "../attachments"
 import { getPermissionModeCapability } from "../permission-mode-capability"
+import { WORKSPACE_FILE_TREE_DRAG_TYPE } from "@/lib/workspace-file-tree-drag"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
@@ -1482,6 +1483,68 @@ describe("AgentComposer", () => {
     expect(container.textContent).toContain("brief.md")
     expect(container.textContent).toContain("materials")
     expect(container.querySelector(".agent-composer-input-box")?.hasAttribute("data-drop-active")).toBe(false)
+  })
+
+  it("inserts file-tree paths at the current cursor without creating attachments", async () => {
+    const resolveWorkspaceTreePaths = vi.fn(async () => ({
+      scopeId: "scope-1",
+      paths: ["/repo/src/first.ts", "/repo/docs/second file.md"],
+    }))
+    const resolveAttachmentPaths = vi.fn()
+    installShellBridge(undefined, { resolveAttachmentPaths, resolveWorkspaceTreePaths })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    function WorkspaceHarness() {
+      const dropTargetRef = useRef<HTMLDivElement>(null)
+      const [draft, setDraft] = useState("Run  now")
+      return (
+        <div ref={dropTargetRef} data-testid="conversation-workspace" className="relative">
+          <div data-testid="timeline" />
+          <AgentComposer
+            dropTargetRef={dropTargetRef}
+            draft={draft}
+            disabled={false}
+            canSend={false}
+            sending={false}
+            cancelPhase="idle"
+            onDraftChange={setDraft}
+            onInputKeyDown={vi.fn()}
+            onSubmit={vi.fn()}
+            onCancelTurn={vi.fn()}
+            onForceKillTurn={vi.fn()}
+          />
+        </div>
+      )
+    }
+
+    await act(async () => root.render(<WorkspaceHarness />))
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!
+    textarea.setSelectionRange(4, 4)
+    act(() => textarea.dispatchEvent(new MouseEvent("click", { bubbles: true })))
+    const timeline = container.querySelector<HTMLElement>('[data-testid="timeline"]')!
+    const payload = JSON.stringify({ scopeId: "scope-1", relativePaths: ["src/first.ts", "docs/second file.md"] })
+
+    const dragOver = createWorkspaceTreeDragEvent("dragover", payload)
+    act(() => timeline.dispatchEvent(dragOver))
+    expect(dragOver.defaultPrevented).toBe(true)
+    expect(container.textContent).toContain("松开插入路径")
+
+    const drop = createWorkspaceTreeDragEvent("drop", payload)
+    await act(async () => {
+      timeline.dispatchEvent(drop)
+      await wait(0)
+    })
+
+    expect(resolveWorkspaceTreePaths).toHaveBeenCalledWith({
+      scopeId: "scope-1",
+      relativePaths: ["src/first.ts", "docs/second file.md"],
+    })
+    expect(textarea.value).toBe("Run /repo/src/first.ts /repo/docs/second file.md now")
+    expect(resolveAttachmentPaths).not.toHaveBeenCalled()
+    expect(container.textContent).not.toContain("松开插入路径")
   })
 
   it("does not intercept non-file or disabled workspace drops", async () => {
@@ -3522,12 +3585,27 @@ function createFileDragEvent(
   return event
 }
 
+function createWorkspaceTreeDragEvent(type: "dragover" | "drop", payload: string): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "dataTransfer", {
+    configurable: true,
+    value: {
+      files: [],
+      types: [WORKSPACE_FILE_TREE_DRAG_TYPE],
+      dropEffect: "none",
+      getData: (requestedType: string) => requestedType === WORKSPACE_FILE_TREE_DRAG_TYPE ? payload : "",
+    },
+  })
+  return event
+}
+
 function installShellBridge(
   filePathForDroppedFile: (file: File) => string | null = (file) =>
     (file as File & { readonly path?: string }).path ?? null,
   options?: {
     readonly chooseAttachments?: ReturnType<typeof vi.fn>
     readonly resolveAttachmentPaths?: ReturnType<typeof vi.fn>
+    readonly resolveWorkspaceTreePaths?: ReturnType<typeof vi.fn>
   },
 ) {
   const filesByPath = new Map<string, File>()
@@ -3594,6 +3672,9 @@ function installShellBridge(
       agent: {
         chooseAttachments: typeof chooseAttachments
         resolveAttachmentPaths: typeof resolveAttachmentPaths
+        workspaceTree: {
+          resolve: NonNullable<typeof options>["resolveWorkspaceTreePaths"]
+        }
         stageClipboardImage: typeof stageClipboardImage
         releaseAttachments: typeof releaseAttachments
       }
@@ -3605,6 +3686,9 @@ function installShellBridge(
     agent: {
       chooseAttachments,
       resolveAttachmentPaths,
+      workspaceTree: {
+        resolve: options?.resolveWorkspaceTreePaths ?? vi.fn(async () => ({ scopeId: "scope-1", paths: [] })),
+      },
       stageClipboardImage,
       releaseAttachments,
     },

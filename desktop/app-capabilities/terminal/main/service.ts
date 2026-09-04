@@ -646,6 +646,11 @@ export function createTerminalService(deps: {
       rows: session.rows,
       sizeRevision: session.sizeRevision,
       throughOutputSeq: session.lastOutputSeq,
+      onWorkingDirectoryChanged: () => {
+        if (!unpublishedSessions.has(session.id)) {
+          events.emit("workingDirectoryChanged", { sessionId: session.id })
+        }
+      },
     })
     const dataDisposable = child.onData((data) => {
       const current = sessions.get(session.id)
@@ -2514,6 +2519,11 @@ export function createTerminalService(deps: {
     }
   }
 
+  function getCurrentWorkingDirectory(sessionId: string): string {
+    const session = getSessionOrThrow(sessionId)
+    return runtimes.get(sessionId)?.emulator.currentCwd ?? session.cwd
+  }
+
   return {
     start,
     stop,
@@ -2546,6 +2556,7 @@ export function createTerminalService(deps: {
     createMcpSession,
     createSessionOverride,
     getSession,
+    getCurrentWorkingDirectory,
     readSession,
     attachSession,
     renameSession,

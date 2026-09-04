@@ -10,6 +10,7 @@ import {
 import { sessionMethods } from "./ipc-sessions"
 import { messageMethods } from "./ipc-messages"
 import { toolMethods } from "./ipc-tools"
+import { agentWorkspaceTreeEvents, agentWorkspaceTreeMethods } from "./ipc-workspace-tree"
 
 // ─── Event schemas ────────────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ export const agentIpcModule: IpcModule = {
     ...sessionMethods,
     ...messageMethods,
     ...toolMethods,
+    ...agentWorkspaceTreeMethods,
   },
   events: {
     event: {
@@ -94,5 +96,6 @@ export const agentIpcModule: IpcModule = {
       operationId: "app.agent.operation.detached_conversations_changed",
       payload: z.array(agentDetachedConversationSchema),
     },
+    ...agentWorkspaceTreeEvents,
   },
 }

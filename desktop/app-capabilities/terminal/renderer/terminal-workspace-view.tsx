@@ -6,26 +6,39 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type PointerEvent as ReactPointerEvent,
   type Ref,
 } from "react"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { X } from "lucide-react"
+import { Folder, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Button } from "../../../src/components/ui/button"
+import { Spinner } from "../../../src/components/ui/spinner"
+import { WorkspaceFileTree } from "../../../src/components/workspace-file-tree"
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "../../../src/components/ui/resizable"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
-import { runTrackedOperation } from "../../../src/lib/ui-tracking"
+import { runTrackedOperation, track } from "../../../src/lib/ui-tracking"
 import { cn } from "../../../src/lib/utils"
+import {
+  hasWorkspaceFileTreeDrag,
+  readWorkspaceFileTreeDrag,
+} from "../../../src/lib/workspace-file-tree-drag"
+import {
+  readWorkspacePanelWidth,
+  writeWorkspacePanelWidth,
+  type WorkspacePanelSizeConstraints,
+} from "../../../src/lib/workspace-panel-layout-storage"
+import { useDismissOnPointerDownOutside } from "../../../src/hooks/use-dismiss-on-pointer-down-outside"
 import type {
   SynapseTerminalLayoutNode,
   SynapseTerminalOutputChunk,
@@ -34,6 +47,8 @@ import type {
   SynapseTerminalSession,
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
+import type { WorkspaceFileTreeDataSource } from "../../../src/types/workspace-file-tree"
+import { collectTerminalPaneLeaves } from "../shared/schema"
 import {
   getTerminalClipboardShortcut,
   getTerminalPaneShortcut,
@@ -52,6 +67,15 @@ import {
 const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
 const TERMINAL_PANE_DRAG_TYPE = "application/x-synapse-terminal-pane"
 const TERMINAL_PANE_DROP_EDGE_RATIO = 0.25
+const TERMINAL_FILE_TREE_MIN_WIDTH = 220
+const TERMINAL_FILE_TREE_DEFAULT_WIDTH = 280
+const TERMINAL_FILE_TREE_MAX_WIDTH = 480
+const TERMINAL_FILE_TREE_PERSISTENCE_ID = "terminal-file-tree"
+const TERMINAL_FILE_TREE_WIDTH_CONSTRAINTS: WorkspacePanelSizeConstraints = {
+  defaultSize: TERMINAL_FILE_TREE_DEFAULT_WIDTH,
+  minSize: TERMINAL_FILE_TREE_MIN_WIDTH,
+  maxSize: TERMINAL_FILE_TREE_MAX_WIDTH,
+}
 const logger = createRendererLogger("terminal.workspace")
 
 export type TerminalWorkspaceViewHandle = {
@@ -73,6 +97,7 @@ export function TerminalWorkspaceView({
   onSessionDeleted,
   onSplitPane,
   onSplitRatioChange,
+  pendingClosePaneIds,
   platform,
   ref,
   sessions,
@@ -91,6 +116,7 @@ export function TerminalWorkspaceView({
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onSplitPane: (paneId: string, direction: "right" | "down") => void
   readonly onSplitRatioChange: (splitId: string, ratio: number) => void
+  readonly pendingClosePaneIds: ReadonlySet<string>
   readonly platform: string | undefined
   readonly ref?: Ref<TerminalWorkspaceViewHandle>
   readonly sessions: readonly SynapseTerminalSession[]
@@ -98,6 +124,9 @@ export function TerminalWorkspaceView({
 }) {
   const paneElementsRef = useRef(new Map<string, HTMLDivElement>())
   const paneControlsRef = useRef(new Map<string, PaneControls>())
+  const [fileTreePaneIds, setFileTreePaneIds] = useState<ReadonlySet<string>>(new Set())
+  const [fileTreeWidth, setFileTreeWidth] = useState(() =>
+    readWorkspacePanelWidth(TERMINAL_FILE_TREE_PERSISTENCE_ID, TERMINAL_FILE_TREE_WIDTH_CONSTRAINTS))
   const [paneDrag, setPaneDrag] = useState<{
     readonly sourcePaneId: string
     readonly targetPaneId: string | null
@@ -107,6 +136,23 @@ export function TerminalWorkspaceView({
     () => new Map(sessions.map((session) => [session.id, session])),
     [sessions],
   )
+  const workspaceClosingPaneIds = useMemo(
+    () => new Set(workspace.closingPaneIds),
+    [workspace.closingPaneIds],
+  )
+  const workspacePaneIds = useMemo(
+    () => new Set(collectTerminalPaneLeaves(workspace.layout).map((pane) => pane.paneId)),
+    [workspace.layout],
+  )
+
+  useEffect(() => {
+    setFileTreePaneIds((current) => {
+      const next = new Set([...current].filter((paneId) => workspacePaneIds.has(paneId)))
+      return next.size === current.size && [...current].every((paneId) => next.has(paneId))
+        ? current
+        : next
+    })
+  }, [workspacePaneIds])
 
   useImperativeHandle(ref, () => ({
     clearActivePane() {
@@ -158,17 +204,46 @@ export function TerminalWorkspaceView({
   }, [])
 
   const handlePaneDragEnd = useCallback(() => setPaneDrag(null), [])
+  const handleToggleFileTree = useCallback((paneId: string) => {
+    setFileTreePaneIds((current) => {
+      const next = new Set(current)
+      if (next.has(paneId)) next.delete(paneId)
+      else next.add(paneId)
+      return next
+    })
+  }, [])
+  const handleCloseFileTree = useCallback((paneId: string) => {
+    setFileTreePaneIds((current) => {
+      if (!current.has(paneId)) return current
+      const next = new Set(current)
+      next.delete(paneId)
+      return next
+    })
+  }, [])
+  const handleFileTreeWidthCommit = useCallback((width: number) => {
+    setFileTreeWidth(width)
+    writeWorkspacePanelWidth(
+      TERMINAL_FILE_TREE_PERSISTENCE_ID,
+      width,
+      TERMINAL_FILE_TREE_WIDTH_CONSTRAINTS,
+    )
+  }, [])
 
   return (
     <TerminalLayout
       activePaneId={activePaneId}
       appearanceSize={appearanceSize}
       layout={workspace.layout}
+      fileTreePaneIds={fileTreePaneIds}
+      fileTreeWidth={fileTreeWidth}
       draggedPaneId={paneDrag?.sourcePaneId ?? null}
       dropEdge={paneDrag?.edge ?? null}
       dropTargetPaneId={paneDrag?.targetPaneId ?? null}
       onActivePaneChange={onActivePaneChange}
       onMovePane={onMovePane}
+      onCloseFileTree={handleCloseFileTree}
+      onFileTreeWidthChange={setFileTreeWidth}
+      onFileTreeWidthCommit={handleFileTreeWidthCommit}
       onPaneDragEnd={handlePaneDragEnd}
       onPaneDragStart={handlePaneDragStart}
       onPaneDragTargetChange={handlePaneDragTargetChange}
@@ -176,10 +251,13 @@ export function TerminalWorkspaceView({
       onSessionDeleted={onSessionDeleted}
       onShortcut={handleShortcut}
       onSplitRatioChange={onSplitRatioChange}
+      onToggleFileTree={handleToggleFileTree}
+      pendingClosePaneIds={pendingClosePaneIds}
       platform={platform}
       registerPaneControls={registerPaneControls}
       registerPaneElement={registerPaneElement}
       sessionsById={sessionsById}
+      workspaceClosingPaneIds={workspaceClosingPaneIds}
     />
   )
 }
@@ -190,9 +268,14 @@ function TerminalLayout({
   draggedPaneId,
   dropEdge,
   dropTargetPaneId,
+  fileTreePaneIds,
+  fileTreeWidth,
   layout,
   onActivePaneChange,
   onMovePane,
+  onCloseFileTree,
+  onFileTreeWidthChange,
+  onFileTreeWidthCommit,
   onPaneDragEnd,
   onPaneDragStart,
   onPaneDragTargetChange,
@@ -200,16 +283,21 @@ function TerminalLayout({
   onSessionDeleted,
   onShortcut,
   onSplitRatioChange,
+  onToggleFileTree,
+  pendingClosePaneIds,
   platform,
   registerPaneControls,
   registerPaneElement,
   sessionsById,
+  workspaceClosingPaneIds,
 }: {
   readonly activePaneId: string
   readonly appearanceSize: TerminalAppearanceSize
   readonly draggedPaneId: string | null
   readonly dropEdge: SynapseTerminalPaneDropEdge | null
   readonly dropTargetPaneId: string | null
+  readonly fileTreePaneIds: ReadonlySet<string>
+  readonly fileTreeWidth: number
   readonly layout: SynapseTerminalLayoutNode
   readonly onActivePaneChange: (paneId: string) => void
   readonly onMovePane: (
@@ -217,6 +305,9 @@ function TerminalLayout({
     targetPaneId: string,
     edge: SynapseTerminalPaneDropEdge,
   ) => void
+  readonly onCloseFileTree: (paneId: string) => void
+  readonly onFileTreeWidthChange: (width: number) => void
+  readonly onFileTreeWidthCommit: (width: number) => void
   readonly onPaneDragEnd: () => void
   readonly onPaneDragStart: (paneId: string) => void
   readonly onPaneDragTargetChange: (paneId: string, edge: SynapseTerminalPaneDropEdge | null) => void
@@ -224,10 +315,13 @@ function TerminalLayout({
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onShortcut: (paneId: string, shortcut: TerminalPaneShortcut) => void
   readonly onSplitRatioChange: (splitId: string, ratio: number) => void
+  readonly onToggleFileTree: (paneId: string) => void
+  readonly pendingClosePaneIds: ReadonlySet<string>
   readonly platform: string | undefined
   readonly registerPaneControls: (paneId: string, controls: PaneControls | null) => void
   readonly registerPaneElement: (paneId: string, element: HTMLDivElement | null) => void
   readonly sessionsById: ReadonlyMap<string, SynapseTerminalSession>
+  readonly workspaceClosingPaneIds: ReadonlySet<string>
 }) {
   if (layout.type === "leaf") {
     const session = sessionsById.get(layout.sessionId)
@@ -239,15 +333,23 @@ function TerminalLayout({
         dragSourcePaneId={draggedPaneId}
         dragged={layout.paneId === draggedPaneId}
         dropEdge={layout.paneId === dropTargetPaneId ? dropEdge : null}
+        fileTreeOpen={fileTreePaneIds.has(layout.paneId)}
+        fileTreeWidth={fileTreeWidth}
         onActive={() => onActivePaneChange(layout.paneId)}
         onMovePane={onMovePane}
+        onCloseFileTree={() => onCloseFileTree(layout.paneId)}
+        onFileTreeWidthChange={onFileTreeWidthChange}
+        onFileTreeWidthCommit={onFileTreeWidthCommit}
         onPaneDragEnd={onPaneDragEnd}
         onPaneDragStart={() => onPaneDragStart(layout.paneId)}
         onPaneDragTargetChange={(edge) => onPaneDragTargetChange(layout.paneId, edge)}
         onSessionChanged={onSessionChanged}
         onSessionDeleted={onSessionDeleted}
         onShortcut={(shortcut) => onShortcut(layout.paneId, shortcut)}
+        onToggleFileTree={() => onToggleFileTree(layout.paneId)}
         paneId={layout.paneId}
+        closePending={pendingClosePaneIds.has(layout.paneId)}
+        closing={workspaceClosingPaneIds.has(layout.paneId)}
         platform={platform}
         registerControls={registerPaneControls}
         registerElement={registerPaneElement}
@@ -264,8 +366,13 @@ function TerminalLayout({
     draggedPaneId,
     dropEdge,
     dropTargetPaneId,
+    fileTreePaneIds,
+    fileTreeWidth,
     onActivePaneChange,
     onMovePane,
+    onCloseFileTree,
+    onFileTreeWidthChange,
+    onFileTreeWidthCommit,
     onPaneDragEnd,
     onPaneDragStart,
     onPaneDragTargetChange,
@@ -273,10 +380,13 @@ function TerminalLayout({
     onSessionDeleted,
     onShortcut,
     onSplitRatioChange,
+    onToggleFileTree,
+    pendingClosePaneIds,
     platform,
     registerPaneControls,
     registerPaneElement,
     sessionsById,
+    workspaceClosingPaneIds,
   }
 
   return (
@@ -310,10 +420,17 @@ function TerminalLayout({
 function TerminalPane({
   active,
   appearanceSize,
+  closePending,
+  closing,
   dragSourcePaneId,
   dragged,
   dropEdge,
+  fileTreeOpen,
+  fileTreeWidth,
   onActive,
+  onCloseFileTree,
+  onFileTreeWidthChange,
+  onFileTreeWidthCommit,
   onMovePane,
   onPaneDragEnd,
   onPaneDragStart,
@@ -321,6 +438,7 @@ function TerminalPane({
   onSessionChanged,
   onSessionDeleted,
   onShortcut,
+  onToggleFileTree,
   paneId,
   platform,
   registerControls,
@@ -329,10 +447,17 @@ function TerminalPane({
 }: {
   readonly active: boolean
   readonly appearanceSize: TerminalAppearanceSize
+  readonly closePending: boolean
+  readonly closing: boolean
   readonly dragSourcePaneId: string | null
   readonly dragged: boolean
   readonly dropEdge: SynapseTerminalPaneDropEdge | null
+  readonly fileTreeOpen: boolean
+  readonly fileTreeWidth: number
   readonly onActive: () => void
+  readonly onCloseFileTree: () => void
+  readonly onFileTreeWidthChange: (width: number) => void
+  readonly onFileTreeWidthCommit: (width: number) => void
   readonly onMovePane: (
     sourcePaneId: string,
     targetPaneId: string,
@@ -344,6 +469,7 @@ function TerminalPane({
   readonly onSessionChanged: (session: SynapseTerminalSession) => void
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onShortcut: (shortcut: TerminalPaneShortcut) => void
+  readonly onToggleFileTree: () => void
   readonly paneId: string
   readonly platform: string | undefined
   readonly registerControls: (paneId: string, controls: PaneControls | null) => void
@@ -351,8 +477,12 @@ function TerminalPane({
   readonly session: SynapseTerminalSession
 }) {
   const terminalBridge = requireBridgeDomain("terminal")
+  const workspaceTreeBridge = terminalBridge.workspaceTree
   const shellBridge = requireBridgeDomain("shell")
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const paneContentRef = useRef<HTMLDivElement | null>(null)
+  const fileTreeOverlayRef = useRef<HTMLDivElement | null>(null)
+  const fileTreeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const syncTerminalGeometryRef = useRef<((refreshRenderer?: boolean) => void) | null>(null)
   const appearanceSizeRef = useRef(appearanceSize)
@@ -361,11 +491,27 @@ function TerminalPane({
   const onSessionDeletedRef = useRef(onSessionDeleted)
   const onShortcutRef = useRef(onShortcut)
   const [readError, setReadError] = useState<string | null>(null)
+  const [pathDropActive, setPathDropActive] = useState(false)
+  const [fileTreeRootRevision, setFileTreeRootRevision] = useState(0)
+  const fileTreeDataSource = useMemo<WorkspaceFileTreeDataSource | null>(() =>
+    workspaceTreeBridge ? ({
+      open: () => workspaceTreeBridge.open({ sessionId: session.id }),
+      list: workspaceTreeBridge.list,
+      close: workspaceTreeBridge.close,
+      onChanged: workspaceTreeBridge.onChanged,
+    }) : null, [session.id, workspaceTreeBridge])
   appearanceSizeRef.current = appearanceSize
   sessionRef.current = session
   onSessionChangedRef.current = onSessionChanged
   onSessionDeletedRef.current = onSessionDeleted
   onShortcutRef.current = onShortcut
+
+  useDismissOnPointerDownOutside(
+    fileTreeOpen,
+    fileTreeOverlayRef,
+    fileTreeTriggerRef,
+    onCloseFileTree,
+  )
 
   useEffect(() => {
     const xterm = xtermRef.current
@@ -376,6 +522,20 @@ function TerminalPane({
   useEffect(() => {
     if (active) xtermRef.current?.focus()
   }, [active])
+
+  useEffect(() => {
+    if (!fileTreeOpen) return undefined
+    return terminalBridge.operation.onWorkingDirectoryChanged?.((event) => {
+      if (event.sessionId === session.id) setFileTreeRootRevision((current) => current + 1)
+    })
+  }, [fileTreeOpen, session.id, terminalBridge])
+
+  useEffect(() => {
+    if (!pathDropActive) return undefined
+    const clearPathDrop = () => setPathDropActive(false)
+    window.addEventListener("dragend", clearPathDrop)
+    return () => window.removeEventListener("dragend", clearPathDrop)
+  }, [pathDropActive])
 
   useEffect(() => {
     const container = containerRef.current
@@ -645,8 +805,27 @@ function TerminalPane({
     syncTerminalGeometryRef.current?.(true)
   }, [appearanceSize])
 
+  const writeDroppedPaths = useCallback((paths: readonly (string | null)[], eventKey: string) => {
+    if (paths.length === 0 || paths.some((path) => !isValidDroppedTerminalPath(path))) {
+      toast.error("拖拽路径不可用")
+      return
+    }
+    const input = formatDroppedTerminalPaths(paths.filter(isValidDroppedTerminalPath))
+    void runTrackedOperation(
+      { component: "terminal", eventKey },
+      () => writeTerminalInputChunks({
+        input,
+        write: (data) => terminalBridge.session.write({ sessionId: session.id, data }),
+      }),
+    ).catch((error) => {
+      logger.error("Failed to write dropped terminal paths.", error)
+      toast.error("写入终端失败")
+    })
+  }, [session.id, terminalBridge])
+
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (isTerminalPaneDrag(event)) {
+      setPathDropActive(false)
       const sourcePaneId = dragSourcePaneId
       const edge = sourcePaneId && sourcePaneId !== paneId
         ? resolveTerminalPaneDropEdge(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
@@ -658,20 +837,27 @@ function TerminalPane({
       }
       return
     }
-    if (!isExternalFileDrag(event)) return
+    const workspacePathDrag = hasWorkspaceFileTreeDrag(event.dataTransfer)
+    if (!workspacePathDrag && !isExternalFileDrag(event)) return
+    if (workspacePathDrag && isWorkspaceFileTreeEvent(event)) {
+      setPathDropActive(false)
+      return
+    }
     event.preventDefault()
-    event.dataTransfer.dropEffect = "copy"
-  }, [dragSourcePaneId, onPaneDragTargetChange, paneId])
+    event.dataTransfer.dropEffect = session.status === "running" ? "copy" : "none"
+    setPathDropActive(session.status === "running")
+  }, [dragSourcePaneId, onPaneDragTargetChange, paneId, session.status])
 
   const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (!isTerminalPaneDrag(event)) return
     const relatedTarget = event.relatedTarget
     if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) return
-    onPaneDragTargetChange(null)
+    if (isTerminalPaneDrag(event)) onPaneDragTargetChange(null)
+    setPathDropActive(false)
   }, [onPaneDragTargetChange])
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (isTerminalPaneDrag(event)) {
+      setPathDropActive(false)
       event.preventDefault()
       const sourcePaneId = readTerminalPaneDragId(event) ?? dragSourcePaneId
       const edge = sourcePaneId && sourcePaneId !== paneId
@@ -683,30 +869,27 @@ function TerminalPane({
       }
       return
     }
-    if (!isExternalFileDrag(event)) return
+    const workspacePathDrag = readWorkspaceFileTreeDrag(event.dataTransfer)
+    if (!workspacePathDrag && !isExternalFileDrag(event)) return
     event.preventDefault()
+    setPathDropActive(false)
     onActive()
     if (session.status !== "running") {
       toast.error("终端未运行")
       return
     }
-    const paths = Array.from(event.dataTransfer.files ?? []).map((file) => shellBridge.filePathForDroppedFile(file))
-    if (paths.length === 0 || paths.some((path) => !isValidDroppedTerminalPath(path))) {
-      toast.error("拖拽路径不可用")
+    if (workspacePathDrag) {
+      void workspaceTreeBridge.resolve(workspacePathDrag).then((result) => {
+        writeDroppedPaths(result.paths, "terminal.pane.drop_workspace_paths")
+      }).catch((error) => {
+        logger.warn("Failed to resolve dropped workspace paths.", { error })
+        toast.error("拖拽路径不可用")
+      })
       return
     }
-    const input = formatDroppedTerminalPaths(paths.filter(isValidDroppedTerminalPath))
-    void runTrackedOperation(
-      { component: "terminal", eventKey: "terminal.pane.drop_files" },
-      () => writeTerminalInputChunks({
-        input,
-        write: (data) => terminalBridge.session.write({ sessionId: session.id, data }),
-      }),
-    ).catch((error) => {
-      logger.error("Failed to write dropped terminal paths.", error)
-      toast.error("写入终端失败")
-    })
-  }, [dragSourcePaneId, onActive, onMovePane, onPaneDragEnd, paneId, session.id, session.status, shellBridge, terminalBridge])
+    const paths = Array.from(event.dataTransfer.files ?? []).map((file) => shellBridge.filePathForDroppedFile(file))
+    writeDroppedPaths(paths, "terminal.pane.drop_files")
+  }, [dragSourcePaneId, onActive, onMovePane, onPaneDragEnd, paneId, session.status, shellBridge, workspaceTreeBridge, writeDroppedPaths])
 
   const handlePaneDragStart = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (event.target instanceof Element && event.target.closest("button")) {
@@ -717,6 +900,41 @@ function TerminalPane({
     event.dataTransfer.setData(TERMINAL_PANE_DRAG_TYPE, paneId)
     onPaneDragStart()
   }, [onPaneDragStart, paneId])
+
+  const handleFileTreeResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const startX = event.clientX
+    const startWidth = fileTreeWidth
+    let latestWidth = startWidth
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const availableWidth = paneContentRef.current?.getBoundingClientRect().width
+        ?? TERMINAL_FILE_TREE_MAX_WIDTH
+      latestWidth = Math.min(
+        TERMINAL_FILE_TREE_MAX_WIDTH,
+        Math.max(TERMINAL_FILE_TREE_MIN_WIDTH, startWidth + moveEvent.clientX - startX),
+        Math.max(TERMINAL_FILE_TREE_MIN_WIDTH, availableWidth),
+      )
+      onFileTreeWidthChange(latestWidth)
+    }
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+      onFileTreeWidthCommit(latestWidth)
+      track({
+        component: "terminal",
+        name: "terminal.file_tree.resize",
+        action: "resize",
+        eventKey: "terminal.file_tree.resize",
+      })
+    }
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp, { once: true })
+  }, [fileTreeWidth, onFileTreeWidthChange, onFileTreeWidthCommit])
+
+  const closeActionLabel = closePending || (closing && platform !== "darwin")
+    ? "正在关闭分屏"
+    : closing ? "强制关闭分屏" : "关闭分屏"
 
   return (
     <div
@@ -748,23 +966,47 @@ function TerminalPane({
           dragged && "cursor-grabbing",
         )}
       >
-        <span className="truncate text-xs font-medium text-foreground/75" title={session.title}>
-          {session.title}
-        </span>
+        <div className="flex min-w-0 items-center gap-0.5">
+          <span className="truncate text-xs font-medium text-foreground/75" title={session.title}>
+            {session.title}
+          </span>
+          {workspaceTreeBridge ? <Button
+            ref={fileTreeTriggerRef}
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={fileTreeOpen ? `关闭文件树：${session.title}` : `打开文件树：${session.title}`}
+            title={fileTreeOpen ? "关闭文件树" : "打开文件树"}
+            aria-pressed={fileTreeOpen}
+            data-track="terminal-pane-file-tree-toggle"
+            className="shrink-0 text-muted-foreground"
+            onClick={(event) => {
+              event.stopPropagation()
+              onActive()
+              onToggleFileTree()
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <Folder className="size-3.5" />
+          </Button> : null}
+        </div>
         <Button
           type="button"
           size="icon-xs"
           variant="ghost"
-          aria-label={`关闭分屏：${session.title}`}
-          title="关闭分屏"
+          aria-label={`${closeActionLabel}：${session.title}`}
+          title={closeActionLabel}
           className="text-muted-foreground hover:text-destructive"
+          disabled={closePending || (closing && platform !== "darwin")}
           onClick={(event) => {
             event.stopPropagation()
             onShortcut("close-pane")
           }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <X className="size-3.5" />
+          {closePending
+            ? <Spinner className="size-3.5" aria-hidden="true" />
+            : closing ? <Square className="size-3.5" /> : <X className="size-3.5" />}
         </Button>
       </div>
       {dropEdge ? (
@@ -780,20 +1022,54 @@ function TerminalPane({
           )}
         />
       ) : null}
-      {readError ? (
-        <div className="absolute inset-x-1 top-8 z-10 bg-background px-2 py-1 text-sm text-muted-foreground">
-          {readError}
-        </div>
-      ) : null}
-      <div
-        data-terminal-xterm-frame
-        className="h-full min-h-0 min-w-0 flex-1 overflow-hidden p-1"
-      >
+      <div ref={paneContentRef} className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        {pathDropActive ? (
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 z-20 flex items-center justify-center border border-dashed bg-background/80"
+            data-terminal-path-drop-overlay
+            style={{ left: fileTreeOpen ? fileTreeWidth : 0 }}
+          >
+            <span className="text-sm font-medium text-foreground">松开插入路径</span>
+          </div>
+        ) : null}
+        {readError ? (
+          <div className="absolute inset-x-1 top-1 z-10 bg-background px-2 py-1 text-sm text-muted-foreground">
+            {readError}
+          </div>
+        ) : null}
         <div
-          ref={containerRef}
-          data-terminal-xterm-mount
-          className="h-full min-h-0 min-w-0 overflow-hidden"
-        />
+          data-terminal-xterm-frame
+          className="h-full min-h-0 min-w-0 overflow-hidden p-1"
+        >
+          <div
+            ref={containerRef}
+            data-terminal-xterm-mount
+            className="h-full min-h-0 min-w-0 overflow-hidden"
+          />
+        </div>
+        {fileTreeOpen && fileTreeDataSource ? (
+          <div
+            ref={fileTreeOverlayRef}
+            data-terminal-file-tree-overlay
+            className="absolute inset-y-0 left-0 z-10 max-w-full border-r bg-background"
+            style={{ width: fileTreeWidth }}
+          >
+            <WorkspaceFileTree
+              key={`${session.id}:${fileTreeRootRevision}`}
+              dataSource={fileTreeDataSource}
+              theme="dark"
+              onClose={onCloseFileTree}
+            />
+            <div
+              role="separator"
+              aria-label="调整文件树宽度"
+              aria-orientation="vertical"
+              data-track="terminal-pane-file-tree-resize"
+              className="absolute inset-y-0 right-0 w-1 cursor-col-resize"
+              onPointerDown={handleFileTreeResizeStart}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -841,6 +1117,10 @@ function isExternalFileDrag(event: DragEvent<HTMLElement>): boolean {
 
 function isTerminalPaneDrag(event: DragEvent<HTMLElement>): boolean {
   return Array.from(event.dataTransfer.types ?? []).includes(TERMINAL_PANE_DRAG_TYPE)
+}
+
+function isWorkspaceFileTreeEvent(event: DragEvent<HTMLElement>): boolean {
+  return event.target instanceof Element && Boolean(event.target.closest("[data-terminal-file-tree-overlay]"))
 }
 
 function readTerminalPaneDragId(event: DragEvent<HTMLElement>): string | null {

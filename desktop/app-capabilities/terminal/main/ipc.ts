@@ -9,6 +9,10 @@ import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/na
 import { materializeTerminalClipboardImage } from "./clipboard-image"
 import type { TerminalService } from "./service"
 import {
+  terminalWorkspaceTreeEvents,
+  terminalWorkspaceTreeMethods,
+} from "./workspace-tree-ipc"
+import {
   terminalAttachSessionInputSchema,
   terminalAttachSessionResultSchema,
   terminalClosePaneInputSchema,
@@ -62,6 +66,10 @@ const terminalSessionDeletedEventPayloadSchema = z.object({
   sessionId: z.string().min(1),
 })
 
+const terminalWorkingDirectoryChangedEventPayloadSchema = z.object({
+  sessionId: z.string().min(1),
+})
+
 const terminalDomainChangedEventPayloadSchema = z.object({
   domainRevision: z.number().int().positive(),
   eventType: z.string().min(1),
@@ -105,6 +113,12 @@ function wireTerminalEvents(
   })
   service.events.on("domainChanged", (payload) => {
     windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.domainChanged.operationId), payload)
+  })
+  service.events.on("workingDirectoryChanged", (payload) => {
+    windowManager.broadcast(
+      ipcOperationIdToChannel(terminalIpcModule.events.workingDirectoryChanged.operationId),
+      payload,
+    )
   })
   terminalEventWiredServices.add(service)
 }
@@ -430,6 +444,7 @@ export const terminalIpcModule: IpcModule = {
       handler: (ctx, request: z.infer<typeof terminalRunStartupCommandInputSchema>) =>
         resolveTerminalService(ctx).runStartupCommand(request),
     },
+    ...terminalWorkspaceTreeMethods,
   },
   events: {
     data: {
@@ -457,6 +472,12 @@ export const terminalIpcModule: IpcModule = {
       kind: "event",
       payload: terminalDomainChangedEventPayloadSchema,
     },
+    workingDirectoryChanged: {
+      operationId: "app.terminal.operation.working_directory_changed",
+      kind: "event",
+      payload: terminalWorkingDirectoryChangedEventPayloadSchema,
+    },
+    ...terminalWorkspaceTreeEvents,
   },
 }
 

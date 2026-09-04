@@ -54,6 +54,7 @@
 - Terminal 的 43 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
 - Agent 已配置项目可通过现有 Terminal UI IPC 在项目目录新建会话，并以仅含 `sessionId` 的 System App 请求打开或聚焦 Terminal；该入口不新增 MCP capability、tool 或 Deep Link。
 - Terminal 分屏 workspace/pane 仅属于现有 System App 的 UI IPC：创建、调整与拖拽重排 pane 时，每个 pane 仍由一个既有 session 承载，因此 MCP 工具数量保持 43，不注册 workspace/pane MCP capability、tool 或 Deep Link。
+- Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取和监听；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。该入口不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
 - Terminal 图片剪贴板落盘仅属于现有 System App 的 UI 私有 IPC，用于把临时 PNG 路径交给当前 PTY；不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
 
 ## 普通业务模块 System App

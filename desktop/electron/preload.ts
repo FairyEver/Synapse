@@ -42,7 +42,9 @@ import type {
   SynapseTerminalResizedEvent,
   SynapseTerminalSession,
   SynapseTerminalSessionDeletedEvent,
+  SynapseTerminalWorkingDirectoryChangedEvent,
 } from "../src/types/terminal"
+import type { WorkspaceFileTreeChangedEvent } from "../src/types/workspace-file-tree"
 import { IPC_CHANNELS } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
 
@@ -565,6 +567,16 @@ const synapseBridge: SynapseBridge = {
     clipboard: {
       materializeImage: () => invoke(IPC_CHANNELS.terminal.materializeClipboardImage)(),
     },
+    workspaceTree: {
+      open: (input) => invoke(IPC_CHANNELS.terminal.openWorkspaceTree)(input),
+      list: (input) => invoke(IPC_CHANNELS.terminal.listWorkspaceTree)(input),
+      resolve: (input) => invoke(IPC_CHANNELS.terminal.resolveWorkspaceTreePaths)(input),
+      close: (input) => invoke(IPC_CHANNELS.terminal.closeWorkspaceTree)(input),
+      onChanged: createRawPayloadSubscription<WorkspaceFileTreeChangedEvent>(
+        subscribe,
+        IPC_CHANNELS.terminal.workspaceTreeChanged,
+      ),
+    },
     group: {
       list: () => invoke(IPC_CHANNELS.terminal.listGroups)(),
       get: (input) => invoke(IPC_CHANNELS.terminal.getGroup)(input),
@@ -612,6 +624,10 @@ const synapseBridge: SynapseBridge = {
       onSessionDeleted: createRawPayloadSubscription<SynapseTerminalSessionDeletedEvent>(subscribe, IPC_CHANNELS.terminal.sessionDeleted),
       onResized: createRawPayloadSubscription<SynapseTerminalResizedEvent>(subscribe, IPC_CHANNELS.terminal.resized),
       onDomainChanged: createRawPayloadSubscription<SynapseTerminalDomainChangedEvent>(subscribe, IPC_CHANNELS.terminal.domainChanged),
+      onWorkingDirectoryChanged: createRawPayloadSubscription<SynapseTerminalWorkingDirectoryChangedEvent>(
+        subscribe,
+        IPC_CHANNELS.terminal.workingDirectoryChanged,
+      ),
     },
   },
   git: {
@@ -1174,6 +1190,16 @@ const synapseBridge: SynapseBridge = {
     listSessions: (projectId) => invoke(IPC_CHANNELS.agent.listSessions)({ projectId }),
     listAllSessions: (request: { excludeProjectIds?: string[]; limit?: number }) =>
       invoke(IPC_CHANNELS.agent.listAllSessions)(request),
+    workspaceTree: {
+      open: (input) => invoke(IPC_CHANNELS.agent.openWorkspaceTree)(input),
+      list: (input) => invoke(IPC_CHANNELS.agent.listWorkspaceTree)(input),
+      resolve: (input) => invoke(IPC_CHANNELS.agent.resolveWorkspaceTreePaths)(input),
+      close: (input) => invoke(IPC_CHANNELS.agent.closeWorkspaceTree)(input),
+      onChanged: createRawPayloadSubscription<WorkspaceFileTreeChangedEvent>(
+        subscribe,
+        IPC_CHANNELS.agent.workspaceTreeChanged,
+      ),
+    },
     openConversationWindow: (request) => invoke(IPC_CHANNELS.agent.openConversationWindow)(request),
     focusConversationWindow: (target) => invoke(IPC_CHANNELS.agent.focusConversationWindow)(target),
     replaceConversationWindowTarget: (request) =>

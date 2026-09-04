@@ -25,6 +25,7 @@ import type { SynapseAgentPersona } from "@/types/agent-persona"
 import type { AgentConversationTarget as ImportedAgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
+import type { WorkspaceFileTreeDataSource } from "@/types/workspace-file-tree"
 import {
   type AgentDraftAttachment,
   formatDraftAttachmentsForMessage,
@@ -170,6 +171,7 @@ function AgentConversationWorkspace({
   onRename,
   onUserSessionRequested,
 }: AgentConversationWorkspaceProps) {
+  const workspaceTreeBridge = getSynapseBridge()?.agent?.workspaceTree
   const { config, updateConfig } = useAppConfig()
   const referenceActions = useAgentReferenceActions(target.projectId)
   const projectGit = useProjectGitActions(project)
@@ -203,6 +205,13 @@ function AgentConversationWorkspace({
   })
   const showJumpToBottom = !stick.isPinned && stick.hasUnread
   const showIdleJumpToBottom = !stick.isPinned && !stick.hasUnread && !chat.sending
+  const fileTreeDataSource = useMemo<WorkspaceFileTreeDataSource | undefined>(() =>
+    workspaceTreeBridge ? ({
+      open: () => workspaceTreeBridge.open({ projectId: target.projectId }),
+      list: workspaceTreeBridge.list,
+      close: workspaceTreeBridge.close,
+      onChanged: workspaceTreeBridge.onChanged,
+    }) : undefined, [target.projectId, workspaceTreeBridge])
   const selectedPendingMessages = pendingMessagesForTarget(pendingMessages, target)
   const latestActivityTimestamp = useMemo(
     () => latestConversationActivityTimestamp(chat.timeline),
@@ -586,6 +595,7 @@ function AgentConversationWorkspace({
       conversationKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
       mode={mode}
       panels={workspacePanels}
+      fileTreeDataSource={fileTreeDataSource}
     >
       <div
       ref={workspaceRef}

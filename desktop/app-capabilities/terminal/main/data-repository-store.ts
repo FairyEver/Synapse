@@ -199,11 +199,14 @@ export function createTerminalDataRepositoryStore(options: {
     await syncIdempotency(state)
     await syncOutput(state)
     await syncCheckpoints(state)
-    await options.repository.domain.setSingleton({
-      schemaVersion: 2,
-      terminalDomainRevision: state.terminalDomainRevision,
-      updatedAt: new Date().toISOString(),
-    })
+    const persistedDomain = await options.repository.domain.getSingleton()
+    if (persistedDomain?.terminalDomainRevision !== state.terminalDomainRevision) {
+      await options.repository.domain.setSingleton({
+        schemaVersion: 2,
+        terminalDomainRevision: state.terminalDomainRevision,
+        updatedAt: new Date().toISOString(),
+      })
+    }
     if (deleteIntent) await options.repository.deleteIntents.remove(deleteIntent.id)
   }
 
@@ -243,7 +246,7 @@ export function createTerminalDataRepositoryStore(options: {
   async function syncGlobalLaunch(state: TerminalStoreState): Promise<void> {
     const settings = state.globalLaunch.settings
     const environment = splitEnvironment(settings?.environment)
-    await options.repository.globalLaunch.setSingleton({
+    const record = {
       schemaVersion: 1,
       id: "default",
       revision: state.globalLaunch.revision,
@@ -252,15 +255,19 @@ export function createTerminalDataRepositoryStore(options: {
       shell: settings?.shell,
       environmentKeys: Object.keys(environment.values).sort(),
       unsetEnvironmentKeys: environment.unsetKeys,
-    })
+    } as const
+    const existing = await options.repository.globalLaunch.getSingleton()
+    if (!sameRecord(existing, record)) await options.repository.globalLaunch.setSingleton(record)
+    const existingBody = await options.repository.globalLaunchBodies.getSingleton()
     if (Object.keys(environment.values).length) {
-      await options.repository.globalLaunchBodies.setSingleton({
+      const body = {
         schemaVersion: 1,
         id: "default",
         environment: environment.values,
         updatedAt: state.globalLaunch.updatedAt,
-      })
-    } else {
+      } as const
+      if (!sameRecord(existingBody, body)) await options.repository.globalLaunchBodies.setSingleton(body)
+    } else if (existingBody) {
       if (options.repository.globalLaunchBodies.clearSingleton) {
         await options.repository.globalLaunchBodies.clearSingleton()
       } else {
@@ -326,6 +333,12 @@ export function createTerminalDataRepositoryStore(options: {
   async function syncGroups(state: TerminalStoreState): Promise<void> {
     const existingGroups = await options.repository.groups.list()
     const existingCommands = await options.repository.commands.list()
+    const existingGroupLaunchBodies = await options.repository.groupLaunchBodies.list()
+    const existingCommandBodies = await options.repository.commandBodies.list()
+    const existingGroupById = new Map(existingGroups.map((group) => [group.groupId, group]))
+    const existingCommandById = new Map(existingCommands.map((command) => [command.commandId, command]))
+    const existingGroupLaunchBodyById = new Map(existingGroupLaunchBodies.map((body) => [body.groupId, body]))
+    const existingCommandBodyById = new Map(existingCommandBodies.map((body) => [body.commandId, body]))
     const wantedGroupIds = new Set(state.groups.map((group) => group.id))
     const wantedCommandIds = new Set<string>()
     for (const group of state.groups) {
@@ -349,16 +362,21 @@ export function createTerminalDataRepositoryStore(options: {
         environmentKeys: Object.keys(environment.values).sort(),
         unsetEnvironmentKeys: environment.unsetKeys,
       }
-      await options.repository.groups.upsert(record)
+      if (!sameRecord(existingGroupById.get(group.id), record)) {
+        await options.repository.groups.upsert(record)
+      }
       if (launchBodyRef) {
-        await options.repository.groupLaunchBodies.upsert({
+        const body = {
           schemaVersion: 1,
           id: launchBodyRef,
           groupId: group.id,
           environment: environment.values,
           updatedAt: group.updatedAt,
-        })
-      } else {
+        } as const
+        if (!sameRecord(existingGroupLaunchBodyById.get(group.id), body)) {
+          await options.repository.groupLaunchBodies.upsert(body)
+        }
+      } else if (existingGroupLaunchBodyById.has(group.id)) {
         await options.repository.groupLaunchBodies.remove(group.id)
       }
       for (const command of group.settings?.commands ?? []) {
@@ -382,15 +400,20 @@ export function createTerminalDataRepositoryStore(options: {
           environmentKeys: Object.keys(commandEnvironment.values).sort(),
           unsetEnvironmentKeys: commandEnvironment.unsetKeys,
         }
-        await options.repository.commandBodies.upsert({
+        const commandBody = {
           schemaVersion: 1,
           id: command.id,
           commandId: command.id,
           body: command.command,
           ...(Object.keys(commandEnvironment.values).length ? { environment: commandEnvironment.values } : {}),
           updatedAt: command.updatedAt,
-        })
-        await options.repository.commands.upsert(commandRecord)
+        } as const
+        if (!sameRecord(existingCommandBodyById.get(command.id), commandBody)) {
+          await options.repository.commandBodies.upsert(commandBody)
+        }
+        if (!sameRecord(existingCommandById.get(command.id), commandRecord)) {
+          await options.repository.commands.upsert(commandRecord)
+        }
       }
     }
     for (const command of existingCommands) {
@@ -407,6 +430,9 @@ export function createTerminalDataRepositoryStore(options: {
 
   async function syncSessions(state: TerminalStoreState): Promise<void> {
     const existing = await options.repository.sessions.list()
+    const existingLaunchBodies = await options.repository.launchBodies.list()
+    const existingById = new Map(existing.map((session) => [session.sessionId, session]))
+    const existingLaunchBodyById = new Map(existingLaunchBodies.map((body) => [body.sessionId, body]))
     const wanted = new Set(state.sessions.map((session) => session.id))
     const outputBySession = new Map<string, typeof state.output>()
     for (const chunk of state.output) {
@@ -418,16 +444,22 @@ export function createTerminalDataRepositoryStore(options: {
       const output = outputBySession.get(session.id) ?? []
       const environment = session.launchEnvironment ?? {}
       const launchBodyRef = Object.keys(environment).length ? session.id : undefined
-      await options.repository.sessions.upsert(toSessionRecord(session, output, launchBodyRef))
+      const record = toSessionRecord(session, output, launchBodyRef)
+      if (!sameRecord(existingById.get(session.id), record)) {
+        await options.repository.sessions.upsert(record)
+      }
       if (launchBodyRef) {
-        await options.repository.launchBodies.upsert({
+        const body = {
           schemaVersion: 1,
           id: launchBodyRef,
           sessionId: session.id,
           environment,
           createdAt: session.createdAt,
-        })
-      } else {
+        } as const
+        if (!sameRecord(existingLaunchBodyById.get(session.id), body)) {
+          await options.repository.launchBodies.upsert(body)
+        }
+      } else if (existingLaunchBodyById.has(session.id)) {
         await options.repository.launchBodies.remove(session.id)
       }
     }
@@ -765,9 +797,16 @@ async function syncCollection<T extends { id: string }>(
   records: readonly T[],
 ): Promise<void> {
   const existing = await namespace.list()
+  const existingById = new Map(existing.map((item) => [item.id, item]))
   const wanted = new Set(records.map((item) => item.id))
-  for (const record of records) await namespace.upsert(record)
+  for (const record of records) {
+    if (!sameRecord(existingById.get(record.id), record)) await namespace.upsert(record)
+  }
   for (const record of existing) if (!wanted.has(record.id)) await namespace.remove(record.id)
+}
+
+function sameRecord(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 async function safeList<T>(

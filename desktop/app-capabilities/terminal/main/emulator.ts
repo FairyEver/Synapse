@@ -44,6 +44,7 @@ export function createTerminalCoreEmulator(input: {
   readonly scrollback?: number
   readonly throughOutputSeq?: number
   readonly sizeRevision: number
+  readonly onWorkingDirectoryChanged?: () => void
 }) {
   const terminal = new Terminal({
     cols: input.cols,
@@ -63,7 +64,11 @@ export function createTerminalCoreEmulator(input: {
     try {
       const url = new URL(value)
       if (url.protocol !== "file:") return false
-      currentCwd = fileURLToPath(url)
+      const nextCwd = fileURLToPath(url)
+      if (nextCwd !== currentCwd) {
+        currentCwd = nextCwd
+        input.onWorkingDirectoryChanged?.()
+      }
       return true
     } catch {
       return false

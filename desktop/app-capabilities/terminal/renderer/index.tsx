@@ -72,7 +72,7 @@ import type {
   SynapseTerminalSession,
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
-import { collectTerminalPaneLeaves, removeTerminalPane } from "../shared/schema"
+import { collectTerminalPaneLeaves } from "../shared/schema"
 import {
   buildTerminalCommandWrites,
   TERMINAL_COMMAND_ENTER_DELAY_MS,
@@ -126,6 +126,7 @@ export function TerminalModule({
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
   const [closingWorkspaceId, setClosingWorkspaceId] = useState<string | null>(null)
+  const [pendingClosePaneIds, setPendingClosePaneIds] = useState<ReadonlySet<string>>(() => new Set())
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
   const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroupSummary | null>(null)
   const [groupName, setGroupName] = useState("")
@@ -155,6 +156,9 @@ export function TerminalModule({
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
   const createGroupActionRef = useRef<HTMLButtonElement | null>(null)
+  const pendingClosePaneIdsRef = useRef(new Set<string>())
+  const refreshRequestIdRef = useRef(0)
+  const workspaceMutationQueuesRef = useRef(new Map<string, Promise<void>>())
 
   const activeWorkspace = useMemo(() => {
     if (!activeWorkspaceId) return workspaces[0] ?? null
@@ -209,11 +213,13 @@ export function TerminalModule({
   }, [])
 
   const refreshSessions = useCallback(async () => {
+    const requestId = ++refreshRequestIdRef.current
     const [nextGroups, nextWorkspaces, nextSessions] = await Promise.all([
       terminalBridge.group.list(),
       terminalBridge.workspace.list(),
       terminalBridge.session.list(),
     ])
+    if (requestId !== refreshRequestIdRef.current) return
     setGroups(nextGroups)
     setWorkspaces(nextWorkspaces)
     setSessions(nextSessions)
@@ -222,6 +228,40 @@ export function TerminalModule({
       return nextWorkspaces[0]?.id ?? null
     })
   }, [terminalBridge])
+
+  const enqueueWorkspaceMutation = useCallback(<T,>(
+    workspaceId: string,
+    mutation: () => Promise<T>,
+  ): Promise<T> => {
+    const previous = workspaceMutationQueuesRef.current.get(workspaceId)
+    const run = previous ? previous.then(mutation, mutation) : mutation()
+    const settled = run.then(() => undefined, () => undefined)
+    workspaceMutationQueuesRef.current.set(workspaceId, settled)
+    void settled.then(() => {
+      if (workspaceMutationQueuesRef.current.get(workspaceId) === settled) {
+        workspaceMutationQueuesRef.current.delete(workspaceId)
+      }
+    })
+    return run
+  }, [])
+
+  const getCurrentWorkspace = useCallback(async (workspaceId: string) => (
+    (await terminalBridge.workspace.list()).find((workspace) => workspace.id === workspaceId) ?? null
+  ), [terminalBridge])
+
+  const refreshAfterWorkspaceMutation = useCallback(async (message: string) => {
+    try {
+      await refreshSessions()
+    } catch (error) {
+      logger.warn(message, error)
+    }
+  }, [refreshSessions])
+
+  const setPaneClosePending = useCallback((paneId: string, pending: boolean) => {
+    if (pending) pendingClosePaneIdsRef.current.add(paneId)
+    else pendingClosePaneIdsRef.current.delete(paneId)
+    setPendingClosePaneIds(new Set(pendingClosePaneIdsRef.current))
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -443,35 +483,44 @@ export function TerminalModule({
     if (!title) return
     setRenameSaving(true)
     try {
-      const workspace = await runTrackedOperation(
-        { component: "terminal", eventKey: "terminal.workspace.rename" },
-        () => terminalBridge.workspace.rename({
-          workspaceId: renameTarget.id,
-          title,
-          expectedLayoutRevision: renameTarget.layoutRevision,
-        }),
-      )
+      const workspace = await enqueueWorkspaceMutation(renameTarget.id, async () => {
+        const current = await getCurrentWorkspace(renameTarget.id)
+        if (!current) throw new Error("Terminal workspace not found")
+        return runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.workspace.rename" },
+          () => terminalBridge.workspace.rename({
+            workspaceId: current.id,
+            title,
+            expectedLayoutRevision: current.layoutRevision,
+          }),
+        )
+      })
       setWorkspaces((current) => mergeWorkspace(current, workspace))
       closeRenameDialog()
     } catch (error) {
       logger.error("Failed to rename terminal workspace.", error)
+      await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after renaming a workspace.")
       toast.error("重命名终端失败")
     } finally {
       setRenameSaving(false)
     }
-  }, [closeRenameDialog, renameTarget, renameTitle, terminalBridge])
+  }, [closeRenameDialog, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, renameTarget, renameTitle, terminalBridge])
 
   const closeWorkspace = useCallback(async (target: SynapseTerminalWorkspace, force = false) => {
     setClosingWorkspaceId(target.id)
     try {
-      const result = await runTrackedOperation(
-        { component: "terminal", eventKey: force ? "terminal.workspace.force_close" : "terminal.workspace.close" },
-        () => terminalBridge.workspace.close({
-          workspaceId: target.id,
-          expectedLayoutRevision: target.layoutRevision,
-          ...(force ? { force: true } : {}),
-        }),
-      )
+      const result = await enqueueWorkspaceMutation(target.id, async () => {
+        const current = await getCurrentWorkspace(target.id)
+        if (!current) return { workspaceId: target.id, state: "deleted" as const, remainingSessionIds: [] }
+        return runTrackedOperation(
+          { component: "terminal", eventKey: force ? "terminal.workspace.force_close" : "terminal.workspace.close" },
+          () => terminalBridge.workspace.close({
+            workspaceId: current.id,
+            expectedLayoutRevision: current.layoutRevision,
+            ...(force ? { force: true } : {}),
+          }),
+        )
+      })
       if (result.state === "deleted") {
         setWorkspaces((current) => current.filter((workspace) => workspace.id !== target.id))
         setActiveWorkspaceId((current) => current === target.id ? null : current)
@@ -482,58 +531,84 @@ export function TerminalModule({
           ;(nextActiveRow ?? createSessionActionRef.current)?.focus()
         }, 0)
       }
+      await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after closing a workspace.")
     } catch (error) {
       logger.error("Failed to close terminal workspace.", error)
+      await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a workspace close error.")
       toast.error("关闭终端失败")
     } finally {
       setClosingWorkspaceId((current) => current === target.id ? null : current)
     }
-  }, [terminalBridge])
+  }, [enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
 
   const splitPane = useCallback(async (paneId: string, direction: "right" | "down") => {
     if (!activeWorkspace) return
+    const workspaceId = activeWorkspace.id
     try {
-      const result = await runTrackedOperation(
-        { component: "terminal", eventKey: `terminal.pane.split_${direction}` },
-        () => terminalBridge.pane.split({
-          workspaceId: activeWorkspace.id,
-          paneId,
-          direction,
-          expectedLayoutRevision: activeWorkspace.layoutRevision,
-          cols: DEFAULT_COLS,
-          rows: DEFAULT_ROWS,
-        }),
-      )
+      const result = await enqueueWorkspaceMutation(workspaceId, async () => {
+        const current = await getCurrentWorkspace(workspaceId)
+        if (!current || !collectTerminalPaneLeaves(current.layout).some((pane) => pane.paneId === paneId)) {
+          throw new Error("Terminal pane not found")
+        }
+        return runTrackedOperation(
+          { component: "terminal", eventKey: `terminal.pane.split_${direction}` },
+          () => terminalBridge.pane.split({
+            workspaceId,
+            paneId,
+            direction,
+            expectedLayoutRevision: current.layoutRevision,
+            cols: DEFAULT_COLS,
+            rows: DEFAULT_ROWS,
+          }),
+        )
+      })
       const session = await terminalBridge.session.get({ sessionId: result.sessionId })
       setWorkspaces((current) => mergeWorkspace(current, result.workspace))
       setSessions((current) => mergeSession(current, session))
       setActivePaneIds((current) => ({ ...current, [result.workspace.id]: result.paneId }))
     } catch (error) {
       logger.error("Failed to split terminal pane.", error)
+      await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a pane split error.")
       toast.error(error instanceof Error && error.message.includes("quota_exceeded")
         ? "一个终端最多支持 8 个分屏"
         : "创建分屏失败")
     }
-  }, [activeWorkspace, terminalBridge])
+  }, [activeWorkspace, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
 
   const closePane = useCallback(async (paneId: string) => {
     if (!activeWorkspace) return
-    const force = rendererPlatform === "darwin" && activeWorkspace.closingPaneIds.includes(paneId)
+    if (pendingClosePaneIdsRef.current.has(paneId)) return
+    const workspaceId = activeWorkspace.id
+    const nextPaneId = collectTerminalPaneLeaves(activeWorkspace.layout)
+      .find((pane) => pane.paneId !== paneId && !pendingClosePaneIdsRef.current.has(pane.paneId))?.paneId
+    setPaneClosePending(paneId, true)
+    if (nextPaneId) {
+      setActivePaneIds((current) => ({ ...current, [workspaceId]: nextPaneId }))
+    }
     try {
-      await runTrackedOperation(
-        { component: "terminal", eventKey: force ? "terminal.pane.force_close" : "terminal.pane.close" },
-        () => terminalBridge.pane.close({
-          workspaceId: activeWorkspace.id,
-          paneId,
-          expectedLayoutRevision: activeWorkspace.layoutRevision,
-          ...(force ? { force: true } : {}),
-        }),
-      )
+      await enqueueWorkspaceMutation(workspaceId, async () => {
+        const current = await getCurrentWorkspace(workspaceId)
+        if (!current || !collectTerminalPaneLeaves(current.layout).some((pane) => pane.paneId === paneId)) return
+        const force = rendererPlatform === "darwin" && current.closingPaneIds.includes(paneId)
+        await runTrackedOperation(
+          { component: "terminal", eventKey: force ? "terminal.pane.force_close" : "terminal.pane.close" },
+          () => terminalBridge.pane.close({
+            workspaceId,
+            paneId,
+            expectedLayoutRevision: current.layoutRevision,
+            ...(force ? { force: true } : {}),
+          }),
+        )
+        await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after closing a pane.")
+      })
     } catch (error) {
       logger.error("Failed to close terminal pane.", error)
+      await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a pane close error.")
       toast.error("关闭分屏失败")
+    } finally {
+      setPaneClosePending(paneId, false)
     }
-  }, [activeWorkspace, rendererPlatform, terminalBridge])
+  }, [activeWorkspace, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, rendererPlatform, setPaneClosePending, terminalBridge])
 
   const movePane = useCallback(async (
     sourcePaneId: string,
@@ -541,41 +616,51 @@ export function TerminalModule({
     edge: SynapseTerminalPaneDropEdge,
   ) => {
     if (!activeWorkspace) return
+    const workspaceId = activeWorkspace.id
     try {
-      const workspace = await runTrackedOperation(
-        { component: "terminal", eventKey: "terminal.pane.move" },
-        () => terminalBridge.pane.move({
-          workspaceId: activeWorkspace.id,
-          sourcePaneId,
-          targetPaneId,
-          edge,
-          expectedLayoutRevision: activeWorkspace.layoutRevision,
-        }),
-      )
+      const workspace = await enqueueWorkspaceMutation(workspaceId, async () => {
+        const current = await getCurrentWorkspace(workspaceId)
+        if (!current) throw new Error("Terminal workspace not found")
+        return runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.pane.move" },
+          () => terminalBridge.pane.move({
+            workspaceId,
+            sourcePaneId,
+            targetPaneId,
+            edge,
+            expectedLayoutRevision: current.layoutRevision,
+          }),
+        )
+      })
       setWorkspaces((current) => mergeWorkspace(current, workspace))
       setActivePaneIds((current) => ({ ...current, [workspace.id]: sourcePaneId }))
     } catch (error) {
       logger.error("Failed to move terminal pane.", error)
       toast.error("移动分屏失败")
-      void refreshSessions()
+      void refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a pane move error.")
     }
-  }, [activeWorkspace, refreshSessions, terminalBridge])
+  }, [activeWorkspace, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
 
   const updateSplitRatio = useCallback(async (splitId: string, ratio: number) => {
     if (!activeWorkspace) return
+    const workspaceId = activeWorkspace.id
     try {
-      const workspace = await terminalBridge.pane.updateRatio({
-        workspaceId: activeWorkspace.id,
-        splitId,
-        ratio,
-        expectedLayoutRevision: activeWorkspace.layoutRevision,
+      const workspace = await enqueueWorkspaceMutation(workspaceId, async () => {
+        const current = await getCurrentWorkspace(workspaceId)
+        if (!current) throw new Error("Terminal workspace not found")
+        return terminalBridge.pane.updateRatio({
+          workspaceId,
+          splitId,
+          ratio,
+          expectedLayoutRevision: current.layoutRevision,
+        })
       })
       setWorkspaces((current) => mergeWorkspace(current, workspace))
     } catch (error) {
       logger.warn("Failed to persist terminal split ratio.", error)
-      void refreshSessions()
+      void refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a split ratio error.")
     }
-  }, [activeWorkspace, refreshSessions, terminalBridge])
+  }, [activeWorkspace, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
 
   const deleteGroup = useCallback(async (target = deleteGroupTarget) => {
     if (!target) return
@@ -867,12 +952,9 @@ export function TerminalModule({
 
   const handleSessionDeleted = useCallback((sessionId: string) => {
     setSessions((current) => current.filter((session) => session.id !== sessionId))
-    setWorkspaces((current) => current.flatMap((workspace) => {
-      const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === sessionId)
-      if (!pane) return [workspace]
-      const layout = removeTerminalPane(workspace.layout, pane.paneId)
-      return layout ? [{ ...workspace, layout }] : []
-    }))
+    setWorkspaces((current) => current.filter((workspace) => (
+      workspace.layout.type !== "leaf" || workspace.layout.sessionId !== sessionId
+    )))
   }, [])
 
   const selectActivePane = useCallback((paneId: string) => {
@@ -1100,6 +1182,7 @@ export function TerminalModule({
                   onSessionDeleted={handleSessionDeleted}
                   onSplitPane={splitPane}
                   onSplitRatioChange={updateSplitRatio}
+                  pendingClosePaneIds={pendingClosePaneIds}
                   platform={rendererPlatform}
                   sessions={sessions}
                   workspace={activeWorkspace}
@@ -1649,7 +1732,9 @@ function mergeWorkspace(
   workspace: SynapseTerminalWorkspace,
 ): SynapseTerminalWorkspace[] {
   return workspaces.some((item) => item.id === workspace.id)
-    ? workspaces.map((item) => item.id === workspace.id ? workspace : item)
+    ? workspaces.map((item) => item.id === workspace.id
+      ? item.layoutRevision > workspace.layoutRevision ? item : workspace
+      : item)
     : [...workspaces, workspace]
 }
 
