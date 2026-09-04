@@ -47,7 +47,12 @@ vi.mock("@/app-shell/account", () => ({
 }))
 
 vi.mock("@/app-shell/navigation", () => ({
-  consumeRequestedSettingsCategory: () => requestedSettingsCategory.current,
+  acknowledgeRequestedSettingsCategory: (category: string) => {
+    if (requestedSettingsCategory.current === category) {
+      requestedSettingsCategory.current = null
+    }
+  },
+  readRequestedSettingsCategory: () => requestedSettingsCategory.current,
   subscribeOpenSettingsAccount: () => () => undefined,
   subscribeOpenSettingsAbout: () => () => undefined,
   subscribeOpenSettingsDock: () => () => undefined,
@@ -163,6 +168,7 @@ describe("SettingsModule layout", () => {
 
     expect(container.textContent).toContain("Dock 栏")
     expect(container.textContent).toContain("已固定")
+    expect(requestedSettingsCategory.current).toBeNull()
   })
 
   it("opens the MCP registration panel from the settings sidebar", async () => {

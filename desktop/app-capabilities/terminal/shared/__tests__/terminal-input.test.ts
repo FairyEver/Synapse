@@ -1,28 +1,28 @@
 import { describe, expect, it } from "vitest"
-import { encodeTerminalCommandInput } from "../terminal-input"
+import { buildTerminalCommandWrites } from "../terminal-input"
 
-describe("encodeTerminalCommandInput", () => {
-  it("submits a single-line command with terminal Enter", () => {
-    expect(encodeTerminalCommandInput("cloud")).toBe("cloud\r")
+describe("buildTerminalCommandWrites", () => {
+  it("separates a single-line command from terminal Enter", () => {
+    expect(buildTerminalCommandWrites("cloud")).toEqual(["cloud", "\r"])
   })
 
   it("submits every line of a multiline command", () => {
-    expect(encodeTerminalCommandInput("npm run test\nnpm run build"))
-      .toBe("npm run test\rnpm run build\r")
+    expect(buildTerminalCommandWrites("npm run test\nnpm run build"))
+      .toEqual(["npm run test", "\r", "npm run build", "\r"])
   })
 
   it("normalizes CRLF and CR line endings", () => {
-    expect(encodeTerminalCommandInput("npm run test\r\nnpm run build\rcloud"))
-      .toBe("npm run test\rnpm run build\rcloud\r")
+    expect(buildTerminalCommandWrites("npm run test\r\nnpm run build\rcloud"))
+      .toEqual(["npm run test", "\r", "npm run build", "\r", "cloud", "\r"])
   })
 
   it("preserves internal blank lines without duplicating the final Enter", () => {
-    expect(encodeTerminalCommandInput("npm run test\n\nnpm run build\n"))
-      .toBe("npm run test\r\rnpm run build\r")
+    expect(buildTerminalCommandWrites("npm run test\n\nnpm run build\n"))
+      .toEqual(["npm run test", "\r", "\r", "npm run build", "\r"])
   })
 
   it("does not modify shell syntax outside line endings", () => {
-    expect(encodeTerminalCommandInput("echo \"a|b\" | grep b\nprintf 'next'"))
-      .toBe("echo \"a|b\" | grep b\rprintf 'next'\r")
+    expect(buildTerminalCommandWrites("echo \"a|b\" | grep b\nprintf 'next'"))
+      .toEqual(["echo \"a|b\" | grep b", "\r", "printf 'next'", "\r"])
   })
 })

@@ -33,6 +33,7 @@ const TERMINAL_VISUAL_OPTIONS = {
   fontFamily: TERMINAL_FONT_FAMILY,
   letterSpacing: 0,
   lineHeight: 1.1,
+  macOptionClickForcesSelection: true,
   scrollback: 5000,
   smoothScrollDuration: 80,
 } satisfies Partial<ITerminalOptions>
@@ -53,6 +54,23 @@ export function createTerminalRenderingOptions(input: TerminalRenderingInput): I
     disableStdin: input.disableStdin,
     theme: createTerminalTheme(input.container),
   }
+}
+
+export function constrainTerminalCompositionToViewport(container: HTMLElement): void {
+  const screen = container.querySelector<HTMLElement>(".xterm-screen")
+  const composition = container.querySelector<HTMLElement>(".composition-view")
+  if (!screen || !composition) return
+
+  const screenWidth = screen.clientWidth
+  const cursorLeft = Number.parseFloat(composition.style.left)
+  if (screenWidth <= 0 || !Number.isFinite(cursorLeft)) return
+
+  const availableWidth = Math.max(1, Math.floor(screenWidth - Math.max(0, cursorLeft)))
+  const maxWidth = `${availableWidth}px`
+  composition.classList.add("overflow-x-hidden")
+  composition.style.maxWidth = maxWidth
+  container.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")?.style.setProperty("max-width", maxWidth)
+  composition.scrollLeft = composition.scrollWidth
 }
 
 function createTerminalTheme(container: HTMLElement): ITheme {

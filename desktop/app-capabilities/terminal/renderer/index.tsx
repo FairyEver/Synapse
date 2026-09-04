@@ -71,7 +71,10 @@ import type {
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
 import { collectTerminalPaneLeaves, removeTerminalPane } from "../shared/schema"
-import { encodeTerminalCommandInput } from "../shared/terminal-input"
+import {
+  buildTerminalCommandWrites,
+  TERMINAL_COMMAND_ENTER_DELAY_MS,
+} from "../shared/terminal-input"
 import {
   readTerminalAppearanceSize,
   writeTerminalAppearanceSize,
@@ -805,9 +808,14 @@ export function TerminalModule({
     }
     const payload = resolveTerminalToolbarPayload(action, rendererPlatform)
     if (!payload) return
-    const data = action.kind === "shell-command" ? encodeTerminalCommandInput(payload) : payload
+    const writes = action.kind === "shell-command" ? buildTerminalCommandWrites(payload) : [payload]
     try {
-      await terminalBridge.session.write({ sessionId: activeSession.id, data })
+      for (const data of writes) {
+        if (action.kind === "shell-command" && data === "\r") {
+          await new Promise<void>((resolve) => setTimeout(resolve, TERMINAL_COMMAND_ENTER_DELAY_MS))
+        }
+        await terminalBridge.session.write({ sessionId: activeSession.id, data })
+      }
     } catch (error) {
       logger.error("Failed to run terminal toolbar action.", error)
       toast.error("写入终端失败")
@@ -993,7 +1001,7 @@ export function TerminalModule({
                 >
                   {toolbarActions.map((action) => (
                     <div key={action.id} className="flex shrink-0 items-center gap-1">
-                      {action.id === "claude" ? (
+                      {action.id === "slash-exit" ? (
                         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
                       ) : null}
                       <Button

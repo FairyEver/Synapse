@@ -5,11 +5,13 @@ import { useAppConfig } from "@/app-shell/config"
 import { useProjectActions } from "@/app-shell/use-project-actions"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
-  consumeRequestedSettingsCategory,
+  acknowledgeRequestedSettingsCategory,
+  readRequestedSettingsCategory,
   subscribeOpenSettingsAccount,
   subscribeOpenSettingsAbout,
   subscribeOpenSettingsDock,
   subscribeOpenSettingsStorage,
+  type RequestedSettingsCategory,
 } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
@@ -68,7 +70,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
   const { promise, warning } = useAppNotifications()
   const accountUiVisible = isAccountUiVisible()
   const [activeCategory, setActiveCategoryRaw] = useState<SettingsCategoryId>(
-    () => resolveSettingsCategory(consumeRequestedSettingsCategory(), accountUiVisible),
+    () => resolveSettingsCategory(readRequestedSettingsCategory(), accountUiVisible),
   )
   const activeCategoryRef = useRef(activeCategory)
   activeCategoryRef.current = activeCategory
@@ -88,27 +90,26 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
   }, [])
 
   useEffect(() => {
-    return subscribeOpenSettingsAbout(() => {
-      setActiveCategory("about")
-    })
-  }, [setActiveCategory])
+    const handleRequestedCategory = (category: RequestedSettingsCategory) => {
+      setActiveCategory(category)
+      acknowledgeRequestedSettingsCategory(category)
+    }
+    const unsubscribers = [
+      subscribeOpenSettingsAbout(() => handleRequestedCategory("about")),
+      subscribeOpenSettingsAccount(() => handleRequestedCategory("account")),
+      subscribeOpenSettingsDock(() => handleRequestedCategory("dock")),
+      subscribeOpenSettingsStorage(() => handleRequestedCategory("repositories")),
+    ]
+    const requestedCategory = readRequestedSettingsCategory()
+    if (requestedCategory) {
+      handleRequestedCategory(requestedCategory)
+    }
 
-  useEffect(() => {
-    return subscribeOpenSettingsAccount(() => {
-      setActiveCategory("account")
-    })
-  }, [setActiveCategory])
-
-  useEffect(() => {
-    return subscribeOpenSettingsDock(() => {
-      setActiveCategory("dock")
-    })
-  }, [setActiveCategory])
-
-  useEffect(() => {
-    return subscribeOpenSettingsStorage(() => {
-      setActiveCategory("repositories")
-    })
+    return () => {
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe()
+      }
+    }
   }, [setActiveCategory])
 
   const context = useMemo(

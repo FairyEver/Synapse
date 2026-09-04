@@ -132,10 +132,14 @@ function subscribeOpenSettingsAccount(listener: () => void): () => void {
   }
 }
 
-function consumeRequestedSettingsCategory(): RequestedSettingsCategory | null {
-  const category = requestedSettingsCategory
-  requestedSettingsCategory = null
-  return category
+function readRequestedSettingsCategory(): RequestedSettingsCategory | null {
+  return requestedSettingsCategory
+}
+
+function acknowledgeRequestedSettingsCategory(category: RequestedSettingsCategory): void {
+  if (requestedSettingsCategory === category) {
+    requestedSettingsCategory = null
+  }
 }
 
 function requestWatchNextAgentSession(payload: WatchNextAgentSessionPayload): void {
@@ -193,10 +197,11 @@ function subscribeOpenAgentSession(
 }
 
 export {
+  acknowledgeRequestedSettingsCategory,
   cancelWatchNextAgentSession,
   publishActiveAppTab,
   readCurrentAppTab,
-  consumeRequestedSettingsCategory,
+  readRequestedSettingsCategory,
   requestOpenAgentSession,
   requestOpenSettingsAccount,
   requestOpenSettingsAbout,
@@ -215,4 +220,4 @@ export {
   subscribeWatchNextAgentSession,
 }
 
-export type { OpenAgentSessionPayload, WatchNextAgentSessionPayload }
+export type { OpenAgentSessionPayload, RequestedSettingsCategory, WatchNextAgentSessionPayload }

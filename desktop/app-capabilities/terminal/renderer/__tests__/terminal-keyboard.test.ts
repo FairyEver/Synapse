@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  getTerminalClipboardShortcut,
   getTerminalPaneShortcut,
   isTerminalShiftEnterEvent,
   type TerminalKeyboardEvent,
@@ -55,5 +56,34 @@ describe("terminal pane shortcuts", () => {
 
   it("does not reserve shortcuts on Linux", () => {
     expect(getTerminalPaneShortcut({ ...SHIFT_ENTER_EVENT, metaKey: true, shiftKey: false, key: "d" }, "linux")).toBeNull()
+  })
+})
+
+describe("terminal clipboard shortcuts", () => {
+  it.each([
+    ["Cmd+C", { metaKey: true, key: "c" }, "copy"],
+    ["Cmd+V", { metaKey: true, key: "V" }, "paste"],
+  ])("maps %s on macOS", (_name, overrides, expected) => {
+    expect(getTerminalClipboardShortcut({
+      ...SHIFT_ENTER_EVENT,
+      key: "",
+      shiftKey: false,
+      ...overrides,
+    }, "darwin")).toBe(expected)
+  })
+
+  it.each([
+    ["Windows", "win32", { metaKey: true, key: "c" }],
+    ["Linux", "linux", { metaKey: true, key: "v" }],
+    ["Cmd+Shift+C", "darwin", { metaKey: true, shiftKey: true, key: "c" }],
+    ["Ctrl+Cmd+C", "darwin", { ctrlKey: true, metaKey: true, key: "c" }],
+    ["IME Cmd+V", "darwin", { isComposing: true, metaKey: true, key: "v" }],
+  ])("leaves %s to xterm", (_name, platform, overrides) => {
+    expect(getTerminalClipboardShortcut({
+      ...SHIFT_ENTER_EVENT,
+      key: "",
+      shiftKey: false,
+      ...overrides,
+    }, platform)).toBeNull()
   })
 })

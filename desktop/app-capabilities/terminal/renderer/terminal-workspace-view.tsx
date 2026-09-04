@@ -33,6 +33,7 @@ import type {
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
 import {
+  getTerminalClipboardShortcut,
   getTerminalPaneShortcut,
   isTerminalShiftEnterEvent,
   type TerminalPaneShortcut,
@@ -41,7 +42,10 @@ import {
   getTerminalAppearanceOptions,
   type TerminalAppearanceSize,
 } from "./terminal-appearance"
-import { createTerminalRenderingOptions } from "./terminal-rendering"
+import {
+  constrainTerminalCompositionToViewport,
+  createTerminalRenderingOptions,
+} from "./terminal-rendering"
 
 const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
 const logger = createRendererLogger("terminal.workspace")
@@ -318,6 +322,9 @@ function TerminalPane({
     xterm.loadAddon(webLinksAddon)
     xterm.open(container)
     const webglRenderer = loadWebglRenderer(xterm)
+    const compositionTextarea = container.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")
+    const constrainComposition = () => constrainTerminalCompositionToViewport(container)
+    compositionTextarea?.addEventListener("compositionupdate", constrainComposition)
 
     const syncTerminalGeometry = (refreshRenderer = false) => {
       if (disposed || !geometrySyncReady || !projectionAvailable) return
@@ -345,7 +352,10 @@ function TerminalPane({
     }
     registerControls(paneId, controls)
 
-    const resizeObserver = new ResizeObserver(() => syncTerminalGeometry())
+    const resizeObserver = new ResizeObserver(() => {
+      syncTerminalGeometry()
+      constrainComposition()
+    })
     resizeObserver.observe(container)
 
     const writeTerminalInput = (data: string) => {
@@ -362,6 +372,39 @@ function TerminalPane({
         event.preventDefault()
         event.stopPropagation()
         if (event.type === "keydown" && !event.repeat) onShortcutRef.current(shortcut)
+        return false
+      }
+      const clipboardShortcut = getTerminalClipboardShortcut(event, platform)
+      if (clipboardShortcut === "copy") {
+        if (!xterm.hasSelection() || !navigator.clipboard?.writeText) return true
+        event.preventDefault()
+        event.stopPropagation()
+        if (event.type === "keydown" && !event.repeat) {
+          const selection = xterm.getSelection()
+          void navigator.clipboard.writeText(selection).catch((error) => {
+            logger.error("Failed to copy terminal selection.", error)
+            toast.error("复制终端文字失败")
+          })
+        }
+        return false
+      }
+      if (clipboardShortcut === "paste") {
+        if (xterm.options.disableStdin) {
+          event.preventDefault()
+          event.stopPropagation()
+          return false
+        }
+        if (!navigator.clipboard?.readText) return true
+        event.preventDefault()
+        event.stopPropagation()
+        if (event.type === "keydown" && !event.repeat) {
+          void navigator.clipboard.readText().then((text) => {
+            if (!disposed) xterm.paste(text)
+          }).catch((error) => {
+            logger.error("Failed to read clipboard for terminal paste.", error)
+            toast.error("读取剪贴板失败")
+          })
+        }
         return false
       }
       if (!isTerminalShiftEnterEvent(event)) return true
@@ -486,6 +529,7 @@ function TerminalPane({
       inputDisposable.dispose()
       webglRenderer?.dispose()
       resizeObserver.disconnect()
+      compositionTextarea?.removeEventListener("compositionupdate", constrainComposition)
       registerControls(paneId, null)
       if (syncTerminalGeometryRef.current === syncTerminalGeometry) {
         syncTerminalGeometryRef.current = null

@@ -12,6 +12,29 @@ export type TerminalPaneShortcut =
   | "split-down"
   | "split-right"
 
+export type TerminalClipboardShortcut = "copy" | "paste"
+
+export function getTerminalClipboardShortcut(
+  event: TerminalKeyboardEvent,
+  platform: string | undefined,
+): TerminalClipboardShortcut | null {
+  if (
+    platform !== "darwin"
+    || event.isComposing
+    || !event.metaKey
+    || event.altKey
+    || event.ctrlKey
+    || event.shiftKey
+  ) {
+    return null
+  }
+
+  const key = event.key.toLowerCase()
+  if (key === "c") return "copy"
+  if (key === "v") return "paste"
+  return null
+}
+
 export function isTerminalShiftEnterEvent(event: TerminalKeyboardEvent): boolean {
   return event.key === "Enter"
     && event.shiftKey

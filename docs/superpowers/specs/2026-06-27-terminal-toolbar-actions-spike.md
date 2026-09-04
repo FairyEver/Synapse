@@ -21,7 +21,7 @@ Add a very small toolbar at the top of the active terminal pane, inside the dark
 
 ```text
 ┌──────────────────┬─────────────────────────────────────────┐
-│ Terminal groups  │ Ctrl+C  Clear  Claude  Codex  code .  /exit  /clear │
+│ Terminal groups  │ Ctrl+C  Clear  │  /exit  /clear │
 │                  ├─────────────────────────────────────────┤
 │ zsh              │                                         │
 │ dev              │                 xterm                   │
@@ -103,9 +103,6 @@ Initial action set:
 | --- | --- | --- | --- | --- |
 | `Ctrl+C` | `terminal-sequence` | `\x03` | running session | macOS, Windows, Linux |
 | `Clear` | `xterm-local` | `clear` | any session | macOS, Windows, Linux |
-| `Claude` | `shell-command` | `claude` | running session | macOS, Windows, Linux |
-| `Codex` | `shell-command` | `codex` | running session | macOS, Windows, Linux |
-| `code .` | `shell-command` | `code .` | running session | macOS, Windows, Linux |
 | `/exit` | `shell-command` | `/exit` | running session | macOS, Windows, Linux |
 | `/clear` | `shell-command` | `/clear` | running session | macOS, Windows, Linux |
 
@@ -115,7 +112,6 @@ Decision notes:
 - Do not add a separate `Stop` button in the first version. `stopSession` is a stronger action than interrupt and can kill the whole pty. It is useful, but too easy to misclick in a dense toolbar.
 - Do not add `Clear` as shell text. Local xterm clearing avoids injecting `clear` into a running program and avoids shell-specific differences.
 - Do not disable `Clear` for exited/lost sessions. It is a visual buffer operation and remains useful for reading or resetting a stale pane.
-- Do not auto-detect whether `claude`, `codex`, or `code` exists. A missing command should fail naturally in shell output, matching normal terminal behavior.
 - `/exit` and `/clear` submit the shared Claude Code and Codex slash commands without detecting which CLI is active.
 
 ## UI Behavior
@@ -129,7 +125,7 @@ Recommended structure:
 ```text
 dark terminal pane
 ┌───────────────────────────────────────────────┐
-│ [Ctrl+C] [Clear] [Claude] [Codex] [code .] [/exit] [/clear] │
+│ [Ctrl+C] [Clear] │ [/exit] [/clear] │
 ├───────────────────────────────────────────────┤
 │ xterm                                         │
 └───────────────────────────────────────────────┘
@@ -161,11 +157,11 @@ Action execution:
 1. Resolve the platform-specific action payload.
 2. Check active session and status.
 3. For `terminal-sequence`, call `writeSession({ sessionId, data: sequence })`.
-4. For `shell-command`, call `writeSession({ sessionId, data: command + "\r" })`.
+4. For `shell-command`, write the command text first, wait for rapid-input detection to settle, then write `\r` as a separate Enter action.
 5. For `xterm-local: clear`, call `xterm.clear()` for the active xterm.
 6. On failure, log through `createRendererLogger` and show a short toast.
 
-Use `\r` for submitted shell commands because xterm input currently forwards Enter as carriage return from user input. Continue to preserve existing chunking helpers if a future action payload could exceed the bridge limit; the initial built-ins are small and do not require chunking.
+Use `\r` for submitted shell commands because xterm input currently forwards Enter as carriage return from user input. Command text and Enter must use separate writes so child TUIs do not treat the complete sequence as pasted multiline input. Continue to preserve existing chunking helpers if a future action payload could exceed the bridge limit; the initial built-ins are small and do not require chunking.
 
 ## Boundaries
 
@@ -194,7 +190,7 @@ Renderer tests should cover:
 - Toolbar appears for an active session.
 - Toolbar does not appear in empty state.
 - `Ctrl+C` writes `\x03` to the active running session.
-- `Claude`, `Codex`, `code .`, `/exit`, and `/clear` write command text plus carriage return.
+- `/exit` and `/clear` write command text, then a separate carriage return after the input-settle delay.
 - Running-only buttons are disabled for `lost`, `exited`, `killed`, and `failed` sessions.
 - `Clear` remains enabled for non-running sessions and calls the xterm clear method without calling `writeSession`.
 - Toolbar row uses horizontal overflow behavior and does not add terminal-pane marketing or helper copy.
@@ -204,7 +200,7 @@ Manual verification should include:
 
 - Narrow window: toolbar scrolls horizontally instead of wrapping.
 - Running shell: `Ctrl+C` interrupts a foreground process.
-- Running shell: launch buttons submit commands as if typed.
+- Running shell: slash-command buttons submit commands as if typed.
 - Exited/lost session: no write actions are available, local clear still works.
 
 ## Future Extensions

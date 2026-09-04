@@ -11,18 +11,12 @@ describe("terminal toolbar actions", () => {
     expect(TERMINAL_TOOLBAR_ACTIONS.map((action) => action.id)).toEqual([
       "interrupt",
       "clear",
-      "claude",
-      "codex",
-      "vscode",
       "slash-exit",
       "slash-clear",
     ])
     expect(TERMINAL_TOOLBAR_ACTIONS.map((action) => action.label)).toEqual([
       "Ctrl+C",
       "Clear",
-      "Claude",
-      "Codex",
-      "code .",
       "/exit",
       "/clear",
     ])
@@ -32,27 +26,18 @@ describe("terminal toolbar actions", () => {
     expect(getTerminalToolbarActions("darwin").map((action) => action.id)).toEqual([
       "interrupt",
       "clear",
-      "claude",
-      "codex",
-      "vscode",
       "slash-exit",
       "slash-clear",
     ])
     expect(getTerminalToolbarActions("sunos").map((action) => action.id)).toEqual([
       "interrupt",
       "clear",
-      "claude",
-      "codex",
-      "vscode",
       "slash-exit",
       "slash-clear",
     ])
     expect(getTerminalToolbarActions(undefined).map((action) => action.id)).toEqual([
       "interrupt",
       "clear",
-      "claude",
-      "codex",
-      "vscode",
       "slash-exit",
       "slash-clear",
     ])
@@ -60,11 +45,11 @@ describe("terminal toolbar actions", () => {
 
   it("resolves terminal sequences and shell commands for the active platform", () => {
     const interrupt = TERMINAL_TOOLBAR_ACTIONS.find((action) => action.id === "interrupt")
-    const claude = TERMINAL_TOOLBAR_ACTIONS.find((action) => action.id === "claude")
+    const slashExit = TERMINAL_TOOLBAR_ACTIONS.find((action) => action.id === "slash-exit")
     const slashClear = TERMINAL_TOOLBAR_ACTIONS.find((action) => action.id === "slash-clear")
 
     expect(interrupt ? resolveTerminalToolbarPayload(interrupt, "win32") : null).toBe("\x03")
-    expect(claude ? resolveTerminalToolbarPayload(claude, "darwin") : null).toBe("claude")
+    expect(slashExit ? resolveTerminalToolbarPayload(slashExit, "darwin") : null).toBe("/exit")
     expect(slashClear ? resolveTerminalToolbarPayload(slashClear, "linux") : null).toBe("/clear")
   })
 

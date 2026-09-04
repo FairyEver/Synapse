@@ -355,6 +355,9 @@ const xtermState = vi.hoisted(() => ({
     open: ReturnType<typeof vi.fn>
     write: ReturnType<typeof vi.fn>
     clear: ReturnType<typeof vi.fn>
+    getSelection: ReturnType<typeof vi.fn>
+    hasSelection: ReturnType<typeof vi.fn>
+    paste: ReturnType<typeof vi.fn>
     refresh: ReturnType<typeof vi.fn>
     resize: ReturnType<typeof vi.fn>
     loadAddon: ReturnType<typeof vi.fn>
@@ -466,11 +469,29 @@ vi.mock("@xterm/xterm", () => ({
     disableStdin?: boolean
   } = {}) {
     const instance = {
-      open: vi.fn(),
+      open: vi.fn((container: HTMLElement) => {
+        const terminal = document.createElement("div")
+        const screen = document.createElement("div")
+        const helpers = document.createElement("div")
+        const textarea = document.createElement("textarea")
+        const composition = document.createElement("div")
+        terminal.className = "xterm"
+        screen.className = "xterm-screen"
+        helpers.className = "xterm-helpers"
+        textarea.className = "xterm-helper-textarea"
+        composition.className = "composition-view"
+        helpers.append(textarea, composition)
+        screen.append(helpers)
+        terminal.append(screen)
+        container.append(terminal)
+      }),
       write: vi.fn((_data: string, callback?: () => void) => {
         callback?.()
       }),
       clear: vi.fn(),
+      getSelection: vi.fn(() => ""),
+      hasSelection: vi.fn(() => false),
+      paste: vi.fn(),
       refresh: vi.fn(),
       resize: vi.fn((cols: number, rows: number) => {
         instance.cols = cols
@@ -852,14 +873,14 @@ describe("TerminalModule", () => {
     expect(toolbar.compareDocumentPosition(terminalRegion)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     expect(document.body.textContent).toContain("Ctrl+C")
     expect(document.body.textContent).toContain("Clear")
-    expect(document.body.textContent).toContain("Claude")
-    expect(document.body.textContent).toContain("Codex")
-    expect(document.body.textContent).toContain("code .")
+    expect(document.body.textContent).not.toContain("Claude")
+    expect(document.body.textContent).not.toContain("Codex")
+    expect(document.body.textContent).not.toContain("code .")
     expect(document.body.textContent).toContain("/exit")
     expect(document.body.textContent).toContain("/clear")
 
     const toolbarButtons = Array.from(toolbar.querySelectorAll("button"))
-    expect(toolbarButtons).toHaveLength(7)
+    expect(toolbarButtons).toHaveLength(4)
     for (const button of toolbarButtons) {
       expect(button.className).toContain("text-foreground/75")
       expect(button.className).toContain("transition-[scale,background-color,color]")
@@ -888,15 +909,12 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("新建终端")
   })
 
-  it("writes interrupt and shell launcher actions into the running terminal", async () => {
+  it("writes interrupt and slash actions into the running terminal", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
     await renderModule()
     await clickButton("Ctrl+C")
-    await clickButton("Claude")
-    await clickButton("Codex")
-    await clickButton("code .")
     await clickButton("/exit")
     await clickButton("/clear")
 
@@ -906,24 +924,43 @@ describe("TerminalModule", () => {
     })
     expect(terminalBridge.writeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
-      data: "claude\r",
+      data: "/exit",
     })
     expect(terminalBridge.writeSession).toHaveBeenCalledWith({
       sessionId: "session-1",
-      data: "codex\r",
+      data: "/clear",
     })
-    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15))
+    })
+
+    const writes = terminalBridge.writeSession.mock.calls.map(([input]) => input.data)
+    expect(writes.filter((data) => data === "\r")).toHaveLength(2)
+    expect(writes).not.toContain("/exit\r")
+    expect(writes).not.toContain("/clear\r")
+  })
+
+  it("submits /clear with Enter after the command text has settled", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await clickButton("/clear")
+
+    expect(terminalBridge.writeSession.mock.calls.map(([input]) => input)).toEqual([{
       sessionId: "session-1",
-      data: "code .\r",
+      data: "/clear",
+    }])
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15))
     })
-    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      data: "/exit\r",
-    })
-    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
-      sessionId: "session-1",
-      data: "/clear\r",
-    })
+
+    expect(terminalBridge.writeSession.mock.calls.map(([input]) => input)).toEqual([
+      { sessionId: "session-1", data: "/clear" },
+      { sessionId: "session-1", data: "\r" },
+    ])
   })
 
   it("keeps running-only toolbar actions disabled for a lost session while allowing local clear", async () => {
@@ -938,9 +975,6 @@ describe("TerminalModule", () => {
     await renderModule()
 
     expect(buttonForText("Ctrl+C")?.disabled).toBe(true)
-    expect(buttonForText("Claude")?.disabled).toBe(true)
-    expect(buttonForText("Codex")?.disabled).toBe(true)
-    expect(buttonForText("code .")?.disabled).toBe(true)
     expect(buttonForText("/exit")?.disabled).toBe(true)
     expect(buttonForText("/clear")?.disabled).toBe(true)
     expect(buttonForText("Clear")?.disabled).toBe(false)
@@ -1409,6 +1443,61 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("copies the current xterm selection with Cmd+C", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderModule()
+    xtermState.instances[0]?.hasSelection.mockReturnValue(true)
+    xtermState.instances[0]?.getSelection.mockReturnValue("selected output")
+    const event = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "c",
+      metaKey: true,
+    })
+
+    await act(async () => {
+      expect(xtermState.instances[0]?.emitKeyEvent(event)).toBe(false)
+      await Promise.resolve()
+    })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(writeText).toHaveBeenCalledWith("selected output")
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
+  it("pastes clipboard text through xterm with Cmd+V", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const readText = vi.fn(async () => "first\nsecond")
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText },
+    })
+
+    await renderModule()
+    const event = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "v",
+      metaKey: true,
+    })
+
+    await act(async () => {
+      expect(xtermState.instances[0]?.emitKeyEvent(event)).toBe(false)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(readText).toHaveBeenCalledTimes(1)
+    expect(xtermState.instances[0]?.paste).toHaveBeenCalledWith("first\nsecond")
+  })
+
   it("splits the active pane to the right with Cmd+D while keeping one sidebar workspace", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -1497,6 +1586,24 @@ describe("TerminalModule", () => {
     expect(events.map((event) => xtermState.instances[0]?.emitKeyEvent(event)))
       .toEqual([true, true, true, true, true])
     expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
+  it("keeps ongoing speech input inside the terminal viewport", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    const screen = document.querySelector<HTMLElement>(".xterm-screen")!
+    const textarea = document.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea")!
+    const composition = document.querySelector<HTMLElement>(".composition-view")!
+    composition.style.left = "180px"
+    Object.defineProperty(screen, "clientWidth", { value: 240 })
+    Object.defineProperty(composition, "scrollWidth", { value: 320 })
+
+    textarea.dispatchEvent(new CompositionEvent("compositionupdate", { data: "持续增长的语音输入" }))
+
+    expect(composition.style.maxWidth).toBe("60px")
+    expect(composition.scrollLeft).toBe(320)
   })
 
   it("does not write Shift+Enter into a read-only terminal", async () => {
