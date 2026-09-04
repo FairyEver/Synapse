@@ -24,10 +24,12 @@ import {
   ResizablePanelGroup,
 } from "../../../src/components/ui/resizable"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { runTrackedOperation } from "../../../src/lib/ui-tracking"
 import { cn } from "../../../src/lib/utils"
 import type {
   SynapseTerminalLayoutNode,
   SynapseTerminalOutputChunk,
+  SynapseTerminalPaneDropEdge,
   SynapseTerminalResizedEvent,
   SynapseTerminalSession,
   SynapseTerminalWorkspace,
@@ -48,6 +50,8 @@ import {
 } from "./terminal-rendering"
 
 const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
+const TERMINAL_PANE_DRAG_TYPE = "application/x-synapse-terminal-pane"
+const TERMINAL_PANE_DROP_EDGE_RATIO = 0.25
 const logger = createRendererLogger("terminal.workspace")
 
 export type TerminalWorkspaceViewHandle = {
@@ -64,6 +68,7 @@ export function TerminalWorkspaceView({
   appearanceSize,
   onActivePaneChange,
   onClosePane,
+  onMovePane,
   onSessionChanged,
   onSessionDeleted,
   onSplitPane,
@@ -77,6 +82,11 @@ export function TerminalWorkspaceView({
   readonly appearanceSize: TerminalAppearanceSize
   readonly onActivePaneChange: (paneId: string) => void
   readonly onClosePane: (paneId: string) => void
+  readonly onMovePane: (
+    sourcePaneId: string,
+    targetPaneId: string,
+    edge: SynapseTerminalPaneDropEdge,
+  ) => void
   readonly onSessionChanged: (session: SynapseTerminalSession) => void
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onSplitPane: (paneId: string, direction: "right" | "down") => void
@@ -88,6 +98,11 @@ export function TerminalWorkspaceView({
 }) {
   const paneElementsRef = useRef(new Map<string, HTMLDivElement>())
   const paneControlsRef = useRef(new Map<string, PaneControls>())
+  const [paneDrag, setPaneDrag] = useState<{
+    readonly sourcePaneId: string
+    readonly targetPaneId: string | null
+    readonly edge: SynapseTerminalPaneDropEdge | null
+  } | null>(null)
   const sessionsById = useMemo(
     () => new Map(sessions.map((session) => [session.id, session])),
     [sessions],
@@ -123,12 +138,40 @@ export function TerminalWorkspaceView({
     focusPane(paneId, shortcut.slice("focus-".length) as FocusDirection)
   }, [focusPane, onClosePane, onSplitPane])
 
+  const handlePaneDragStart = useCallback((sourcePaneId: string) => {
+    setPaneDrag({ sourcePaneId, targetPaneId: null, edge: null })
+  }, [])
+
+  const handlePaneDragTargetChange = useCallback((
+    targetPaneId: string,
+    edge: SynapseTerminalPaneDropEdge | null,
+  ) => {
+    setPaneDrag((current) => {
+      if (!current) return current
+      if (current.sourcePaneId === targetPaneId) {
+        return current.targetPaneId === null ? current : { ...current, targetPaneId: null, edge: null }
+      }
+      if (!edge && current.targetPaneId !== targetPaneId) return current
+      if (current.targetPaneId === targetPaneId && current.edge === edge) return current
+      return { ...current, targetPaneId: edge ? targetPaneId : null, edge }
+    })
+  }, [])
+
+  const handlePaneDragEnd = useCallback(() => setPaneDrag(null), [])
+
   return (
     <TerminalLayout
       activePaneId={activePaneId}
       appearanceSize={appearanceSize}
       layout={workspace.layout}
+      draggedPaneId={paneDrag?.sourcePaneId ?? null}
+      dropEdge={paneDrag?.edge ?? null}
+      dropTargetPaneId={paneDrag?.targetPaneId ?? null}
       onActivePaneChange={onActivePaneChange}
+      onMovePane={onMovePane}
+      onPaneDragEnd={handlePaneDragEnd}
+      onPaneDragStart={handlePaneDragStart}
+      onPaneDragTargetChange={handlePaneDragTargetChange}
       onSessionChanged={onSessionChanged}
       onSessionDeleted={onSessionDeleted}
       onShortcut={handleShortcut}
@@ -144,8 +187,15 @@ export function TerminalWorkspaceView({
 function TerminalLayout({
   activePaneId,
   appearanceSize,
+  draggedPaneId,
+  dropEdge,
+  dropTargetPaneId,
   layout,
   onActivePaneChange,
+  onMovePane,
+  onPaneDragEnd,
+  onPaneDragStart,
+  onPaneDragTargetChange,
   onSessionChanged,
   onSessionDeleted,
   onShortcut,
@@ -157,8 +207,19 @@ function TerminalLayout({
 }: {
   readonly activePaneId: string
   readonly appearanceSize: TerminalAppearanceSize
+  readonly draggedPaneId: string | null
+  readonly dropEdge: SynapseTerminalPaneDropEdge | null
+  readonly dropTargetPaneId: string | null
   readonly layout: SynapseTerminalLayoutNode
   readonly onActivePaneChange: (paneId: string) => void
+  readonly onMovePane: (
+    sourcePaneId: string,
+    targetPaneId: string,
+    edge: SynapseTerminalPaneDropEdge,
+  ) => void
+  readonly onPaneDragEnd: () => void
+  readonly onPaneDragStart: (paneId: string) => void
+  readonly onPaneDragTargetChange: (paneId: string, edge: SynapseTerminalPaneDropEdge | null) => void
   readonly onSessionChanged: (session: SynapseTerminalSession) => void
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onShortcut: (paneId: string, shortcut: TerminalPaneShortcut) => void
@@ -175,7 +236,14 @@ function TerminalLayout({
       <TerminalPane
         active={layout.paneId === activePaneId}
         appearanceSize={appearanceSize}
+        dragSourcePaneId={draggedPaneId}
+        dragged={layout.paneId === draggedPaneId}
+        dropEdge={layout.paneId === dropTargetPaneId ? dropEdge : null}
         onActive={() => onActivePaneChange(layout.paneId)}
+        onMovePane={onMovePane}
+        onPaneDragEnd={onPaneDragEnd}
+        onPaneDragStart={() => onPaneDragStart(layout.paneId)}
+        onPaneDragTargetChange={(edge) => onPaneDragTargetChange(layout.paneId, edge)}
         onSessionChanged={onSessionChanged}
         onSessionDeleted={onSessionDeleted}
         onShortcut={(shortcut) => onShortcut(layout.paneId, shortcut)}
@@ -193,7 +261,14 @@ function TerminalLayout({
   const sharedProps = {
     activePaneId,
     appearanceSize,
+    draggedPaneId,
+    dropEdge,
+    dropTargetPaneId,
     onActivePaneChange,
+    onMovePane,
+    onPaneDragEnd,
+    onPaneDragStart,
+    onPaneDragTargetChange,
     onSessionChanged,
     onSessionDeleted,
     onShortcut,
@@ -235,7 +310,14 @@ function TerminalLayout({
 function TerminalPane({
   active,
   appearanceSize,
+  dragSourcePaneId,
+  dragged,
+  dropEdge,
   onActive,
+  onMovePane,
+  onPaneDragEnd,
+  onPaneDragStart,
+  onPaneDragTargetChange,
   onSessionChanged,
   onSessionDeleted,
   onShortcut,
@@ -247,7 +329,18 @@ function TerminalPane({
 }: {
   readonly active: boolean
   readonly appearanceSize: TerminalAppearanceSize
+  readonly dragSourcePaneId: string | null
+  readonly dragged: boolean
+  readonly dropEdge: SynapseTerminalPaneDropEdge | null
   readonly onActive: () => void
+  readonly onMovePane: (
+    sourcePaneId: string,
+    targetPaneId: string,
+    edge: SynapseTerminalPaneDropEdge,
+  ) => void
+  readonly onPaneDragEnd: () => void
+  readonly onPaneDragStart: () => void
+  readonly onPaneDragTargetChange: (edge: SynapseTerminalPaneDropEdge | null) => void
   readonly onSessionChanged: (session: SynapseTerminalSession) => void
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onShortcut: (shortcut: TerminalPaneShortcut) => void
@@ -553,12 +646,43 @@ function TerminalPane({
   }, [appearanceSize])
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (isTerminalPaneDrag(event)) {
+      const sourcePaneId = dragSourcePaneId
+      const edge = sourcePaneId && sourcePaneId !== paneId
+        ? resolveTerminalPaneDropEdge(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
+        : null
+      onPaneDragTargetChange(edge)
+      if (edge) {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = "move"
+      }
+      return
+    }
     if (!isExternalFileDrag(event)) return
     event.preventDefault()
     event.dataTransfer.dropEffect = "copy"
-  }, [])
+  }, [dragSourcePaneId, onPaneDragTargetChange, paneId])
+
+  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!isTerminalPaneDrag(event)) return
+    const relatedTarget = event.relatedTarget
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) return
+    onPaneDragTargetChange(null)
+  }, [onPaneDragTargetChange])
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (isTerminalPaneDrag(event)) {
+      event.preventDefault()
+      const sourcePaneId = readTerminalPaneDragId(event) ?? dragSourcePaneId
+      const edge = sourcePaneId && sourcePaneId !== paneId
+        ? resolveTerminalPaneDropEdge(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
+        : null
+      onPaneDragEnd()
+      if (sourcePaneId && edge) {
+        onMovePane(sourcePaneId, paneId, edge)
+      }
+      return
+    }
     if (!isExternalFileDrag(event)) return
     event.preventDefault()
     onActive()
@@ -572,23 +696,39 @@ function TerminalPane({
       return
     }
     const input = formatDroppedTerminalPaths(paths.filter(isValidDroppedTerminalPath))
-    void writeTerminalInputChunks({
-      input,
-      write: (data) => terminalBridge.session.write({ sessionId: session.id, data }),
-    }).catch((error) => {
+    void runTrackedOperation(
+      { component: "terminal", eventKey: "terminal.pane.drop_files" },
+      () => writeTerminalInputChunks({
+        input,
+        write: (data) => terminalBridge.session.write({ sessionId: session.id, data }),
+      }),
+    ).catch((error) => {
       logger.error("Failed to write dropped terminal paths.", error)
       toast.error("写入终端失败")
     })
-  }, [onActive, session.id, session.status, shellBridge, terminalBridge])
+  }, [dragSourcePaneId, onActive, onMovePane, onPaneDragEnd, paneId, session.id, session.status, shellBridge, terminalBridge])
+
+  const handlePaneDragStart = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest("button")) {
+      event.preventDefault()
+      return
+    }
+    event.dataTransfer.effectAllowed = "move"
+    event.dataTransfer.setData(TERMINAL_PANE_DRAG_TYPE, paneId)
+    onPaneDragStart()
+  }, [onPaneDragStart, paneId])
 
   return (
     <div
       ref={(element) => registerElement(paneId, element)}
       role="region"
       aria-label={`终端输出与输入：${session.title}`}
+      data-track="terminal.pane.surface"
+      data-track-native="true"
       tabIndex={0}
       onClick={onActive}
       onFocus={onActive}
+      onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={cn(
@@ -598,7 +738,15 @@ function TerminalPane({
     >
       <div
         data-terminal-pane-header
-        className="flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5"
+        data-track="terminal.pane.drag"
+        data-track-native="true"
+        draggable
+        onDragEnd={onPaneDragEnd}
+        onDragStart={handlePaneDragStart}
+        className={cn(
+          "flex h-7 shrink-0 cursor-grab items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
+          dragged && "cursor-grabbing",
+        )}
       >
         <span className="truncate text-xs font-medium text-foreground/75" title={session.title}>
           {session.title}
@@ -619,6 +767,19 @@ function TerminalPane({
           <X className="size-3.5" />
         </Button>
       </div>
+      {dropEdge ? (
+        <div
+          aria-hidden="true"
+          data-terminal-pane-drop-edge={dropEdge}
+          className={cn(
+            "pointer-events-none absolute z-20 bg-primary/20",
+            dropEdge === "top" && "inset-x-0 top-0 h-1/4",
+            dropEdge === "right" && "inset-y-0 right-0 w-1/4",
+            dropEdge === "bottom" && "inset-x-0 bottom-0 h-1/4",
+            dropEdge === "left" && "inset-y-0 left-0 w-1/4",
+          )}
+        />
+      ) : null}
       {readError ? (
         <div className="absolute inset-x-1 top-8 z-10 bg-background px-2 py-1 text-sm text-muted-foreground">
           {readError}
@@ -667,6 +828,33 @@ function centerOf(rect: DOMRect): { x: number; y: number } {
 function isExternalFileDrag(event: DragEvent<HTMLElement>): boolean {
   const types = Array.from(event.dataTransfer.types ?? [])
   return types.includes("Files") || Array.from(event.dataTransfer.files ?? []).length > 0
+}
+
+function isTerminalPaneDrag(event: DragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types ?? []).includes(TERMINAL_PANE_DRAG_TYPE)
+}
+
+function readTerminalPaneDragId(event: DragEvent<HTMLElement>): string | null {
+  const paneId = event.dataTransfer.getData(TERMINAL_PANE_DRAG_TYPE)
+  return paneId || null
+}
+
+export function resolveTerminalPaneDropEdge(
+  clientX: number,
+  clientY: number,
+  rect: Pick<DOMRect, "bottom" | "height" | "left" | "right" | "top" | "width">,
+): SynapseTerminalPaneDropEdge | null {
+  if (rect.width <= 0 || rect.height <= 0) return null
+  const horizontalPosition = (clientX - rect.left) / rect.width
+  const verticalPosition = (clientY - rect.top) / rect.height
+  const distances: ReadonlyArray<readonly [SynapseTerminalPaneDropEdge, number]> = [
+    ["top", verticalPosition],
+    ["right", 1 - horizontalPosition],
+    ["bottom", 1 - verticalPosition],
+    ["left", horizontalPosition],
+  ]
+  const nearest = distances.reduce((best, candidate) => candidate[1] < best[1] ? candidate : best)
+  return nearest[1] >= 0 && nearest[1] <= TERMINAL_PANE_DROP_EDGE_RATIO ? nearest[0] : null
 }
 
 function isValidDroppedTerminalPath(path: string | null): path is string {

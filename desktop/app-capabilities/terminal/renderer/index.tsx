@@ -68,6 +68,7 @@ import type {
   SynapseTerminalGroupSummary,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalLaunchLayer,
+  SynapseTerminalPaneDropEdge,
   SynapseTerminalSession,
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
@@ -526,6 +527,32 @@ export function TerminalModule({
       toast.error("关闭分屏失败")
     }
   }, [activeWorkspace, rendererPlatform, terminalBridge])
+
+  const movePane = useCallback(async (
+    sourcePaneId: string,
+    targetPaneId: string,
+    edge: SynapseTerminalPaneDropEdge,
+  ) => {
+    if (!activeWorkspace) return
+    try {
+      const workspace = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.pane.move" },
+        () => terminalBridge.pane.move({
+          workspaceId: activeWorkspace.id,
+          sourcePaneId,
+          targetPaneId,
+          edge,
+          expectedLayoutRevision: activeWorkspace.layoutRevision,
+        }),
+      )
+      setWorkspaces((current) => mergeWorkspace(current, workspace))
+      setActivePaneIds((current) => ({ ...current, [workspace.id]: sourcePaneId }))
+    } catch (error) {
+      logger.error("Failed to move terminal pane.", error)
+      toast.error("移动分屏失败")
+      void refreshSessions()
+    }
+  }, [activeWorkspace, refreshSessions, terminalBridge])
 
   const updateSplitRatio = useCallback(async (splitId: string, ratio: number) => {
     if (!activeWorkspace) return
@@ -1057,6 +1084,7 @@ export function TerminalModule({
                   appearanceSize={terminalAppearanceSize}
                   onActivePaneChange={selectActivePane}
                   onClosePane={closePane}
+                  onMovePane={movePane}
                   onSessionChanged={handleSessionChanged}
                   onSessionDeleted={handleSessionDeleted}
                   onSplitPane={splitPane}

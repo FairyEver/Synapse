@@ -126,6 +126,7 @@ import type {
   SynapseTerminalGroupSummary,
   SynapseTerminalGlobalLaunchSettings,
   SynapseTerminalLaunchGroupCommandInput,
+  SynapseTerminalMovePaneInput,
   SynapseTerminalReadSessionInput,
   SynapseTerminalReadSessionResult,
   SynapseTerminalRenameGroupInput,
@@ -1203,6 +1204,7 @@ export type SynapseBridge = {
     }
     pane: {
       split: (input: SynapseTerminalSplitPaneInput) => Promise<SynapseTerminalSplitPaneResult>
+      move: (input: SynapseTerminalMovePaneInput) => Promise<SynapseTerminalWorkspace>
       updateRatio: (input: SynapseTerminalSetSplitRatioInput) => Promise<SynapseTerminalWorkspace>
       close: (input: SynapseTerminalClosePaneInput) => Promise<SynapseTerminalCloseWorkspaceResult>
     }

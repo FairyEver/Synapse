@@ -589,6 +589,7 @@ const synapseBridge: SynapseBridge = {
     },
     pane: {
       split: (input) => invoke(IPC_CHANNELS.terminal.splitPane)(input),
+      move: (input) => invoke(IPC_CHANNELS.terminal.movePane)(input),
       updateRatio: (input) => invoke(IPC_CHANNELS.terminal.updateSplitRatio)(input),
       close: (input) => invoke(IPC_CHANNELS.terminal.closePane)(input),
     },

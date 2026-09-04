@@ -132,6 +132,60 @@ describe("TerminalService core", () => {
     })
   })
 
+  it("reorders existing panes without creating or stopping terminal sessions", async () => {
+    const ptys = [fakePty(), fakePty(), fakePty()]
+    let spawnIndex = 0
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty: () => ptys[spawnIndex++]!,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await service.start()
+    const rootSession = await service.createSession({ title: "Workspace" })
+    const initial = service.getWorkspaceForSession({ sessionId: rootSession.id })
+    const rootPaneId = initial.layout.type === "leaf" ? initial.layout.paneId : ""
+    const right = await service.splitPane({
+      workspaceId: initial.id,
+      paneId: rootPaneId,
+      direction: "right",
+      expectedLayoutRevision: initial.layoutRevision,
+    })
+    const down = await service.splitPane({
+      workspaceId: initial.id,
+      paneId: right.paneId,
+      direction: "down",
+      expectedLayoutRevision: right.workspace.layoutRevision,
+    })
+
+    const moved = await service.movePane({
+      workspaceId: initial.id,
+      sourcePaneId: down.paneId,
+      targetPaneId: rootPaneId,
+      edge: "bottom",
+      expectedLayoutRevision: down.workspace.layoutRevision,
+    })
+
+    expect(moved.layoutRevision).toBe(down.workspace.layoutRevision + 1)
+    expect(collectPaneSessionIds(moved.layout)).toEqual(expect.arrayContaining(
+      collectPaneSessionIds(down.workspace.layout),
+    ))
+    expect(collectPaneSessionIds(moved.layout)).toHaveLength(3)
+    expect(moved.layout).toMatchObject({
+      type: "split",
+      direction: "horizontal",
+      first: {
+        type: "split",
+        direction: "vertical",
+        first: { paneId: rootPaneId },
+        second: { paneId: down.paneId },
+      },
+      second: { paneId: right.paneId },
+    })
+    expect(spawnIndex).toBe(3)
+    expect(ptys.every((pty) => pty.kill.mock.calls.length === 0)).toBe(true)
+  })
+
   it("closes one pane after its PTY exits and deletes the whole workspace from the sidebar", async () => {
     const ptys = [fakePty(), fakePty()]
     let spawnIndex = 0

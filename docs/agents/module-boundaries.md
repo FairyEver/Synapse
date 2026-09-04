@@ -43,7 +43,7 @@
 
 - app id `terminal`，capability 使用 `app.terminal.<subdomain>.<action>`，tool 名严格点转下划线。
 - UI、IPC、MCP 复用 `desktop/app-capabilities/terminal/main/service.ts` 的分组、会话、命令、历史和不可变 `sessionId`。
-- UI 中一个侧边栏终端对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行，关闭侧边栏终端必须删除整个 workspace、全部叶子 session 及其历史；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
+- UI 中一个侧边栏终端对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行；拖动 pane 顶栏只能投放到另一 pane 的四个边缘并重组布局树，不合并 session 或创建标签容器。关闭侧边栏终端必须删除整个 workspace、全部叶子 session 及其历史；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
 - workspace 与 pane 是 UI/IPC 聚合，不新增 MCP 工具；MCP 继续按不可变 `sessionId` 管理底层会话，不能假定或修改 Renderer 布局。
 - 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane。
 - Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。

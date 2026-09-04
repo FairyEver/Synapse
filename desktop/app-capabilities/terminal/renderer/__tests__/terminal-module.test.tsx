@@ -251,6 +251,12 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
     return { workspace, paneId: nextPaneId, sessionId: session.id }
   }),
+  movePane: vi.fn(async ({ workspaceId }: { workspaceId: string }) => {
+    const current = getWorkspace(workspaceId)
+    const workspace = { ...current, layoutRevision: current.layoutRevision + 1 }
+    bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
+    return workspace
+  }),
   updateSplitRatio: vi.fn(async ({ workspaceId }: { workspaceId: string }) => getWorkspace(workspaceId)),
   closePane: vi.fn(async ({ workspaceId }: { workspaceId: string }) => ({
     workspaceId,
@@ -433,6 +439,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       },
       pane: {
         split: terminalBridge.splitPane,
+        move: terminalBridge.movePane,
         updateRatio: terminalBridge.updateSplitRatio,
         close: terminalBridge.closePane,
       },
@@ -661,6 +668,7 @@ beforeEach(() => {
   terminalBridge.renameWorkspace.mockClear()
   terminalBridge.closeWorkspace.mockClear()
   terminalBridge.splitPane.mockClear()
+  terminalBridge.movePane.mockClear()
   terminalBridge.updateSplitRatio.mockClear()
   terminalBridge.closePane.mockClear()
   terminalBridge.listSessions.mockClear()
@@ -1633,6 +1641,44 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("moves a pane to a target edge by dragging its title bar", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "d", metaKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const sourceHeader = Array.from(document.querySelectorAll<HTMLElement>("[data-terminal-pane-header]"))
+      .find((header) => header.textContent?.includes("Session 2"))
+    const targetPane = document.querySelector<HTMLElement>('[aria-label="终端输出与输入：开发终端"]')
+    if (!sourceHeader || !targetPane) throw new Error("Terminal panes not found")
+    targetPane.getBoundingClientRect = () => new DOMRect(0, 0, 400, 300)
+    const dataTransfer = createTerminalPaneDataTransfer()
+
+    await dispatchTerminalPaneDragEvent(sourceHeader, "dragstart", dataTransfer, 0, 0)
+    const dragOver = await dispatchTerminalPaneDragEvent(targetPane, "dragover", dataTransfer, 200, 290)
+
+    expect(dragOver.defaultPrevented).toBe(true)
+    expect(dataTransfer.dropEffect).toBe("move")
+    expect(targetPane.querySelector('[data-terminal-pane-drop-edge="bottom"]')).not.toBeNull()
+
+    await dispatchTerminalPaneDragEvent(targetPane, "drop", dataTransfer, 200, 290)
+
+    expect(terminalBridge.movePane).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      sourcePaneId: "pane-session-2",
+      targetPaneId: "pane-session-1",
+      edge: "bottom",
+      expectedLayoutRevision: 2,
+    })
+    expect(targetPane.querySelector("[data-terminal-pane-drop-edge]")).toBeNull()
+  })
+
   it("closes the active pane with Cmd+W", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -2462,6 +2508,50 @@ async function dispatchTerminalDragEvent(
 
   await act(async () => {
     terminalRegion.dispatchEvent(event)
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  return event
+}
+
+type TerminalPaneDataTransfer = {
+  files: File[]
+  items: never[]
+  types: string[]
+  dropEffect: string
+  effectAllowed: string
+  getData: (type: string) => string
+  setData: (type: string, value: string) => void
+}
+
+function createTerminalPaneDataTransfer(): TerminalPaneDataTransfer {
+  const data = new Map<string, string>()
+  const transfer: TerminalPaneDataTransfer = {
+    files: [],
+    items: [],
+    types: [],
+    dropEffect: "none",
+    effectAllowed: "all",
+    getData: (type) => data.get(type) ?? "",
+    setData: (type, value) => {
+      data.set(type, value)
+      if (!transfer.types.includes(type)) transfer.types.push(type)
+    },
+  }
+  return transfer
+}
+
+async function dispatchTerminalPaneDragEvent(
+  target: HTMLElement,
+  type: "dragstart" | "dragover" | "drop",
+  dataTransfer: TerminalPaneDataTransfer,
+  clientX: number,
+  clientY: number,
+): Promise<Event> {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY })
+  Object.defineProperty(event, "dataTransfer", { value: dataTransfer, configurable: true })
+  await act(async () => {
+    target.dispatchEvent(event)
     await Promise.resolve()
     await Promise.resolve()
   })

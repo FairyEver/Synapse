@@ -74,6 +74,16 @@ export const terminalSplitPaneResultSchema = z.object({
   sessionId: z.string().min(1),
 }).strict()
 
+export const terminalPaneDropEdgeSchema = z.enum(["top", "right", "bottom", "left"])
+
+export const terminalMovePaneInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  sourcePaneId: z.string().min(1),
+  targetPaneId: z.string().min(1),
+  edge: terminalPaneDropEdgeSchema,
+  expectedLayoutRevision: z.number().int().positive(),
+}).strict()
+
 export const terminalSetSplitRatioInputSchema = z.object({
   workspaceId: z.string().min(1),
   splitId: z.string().min(1),
@@ -104,6 +114,8 @@ export type TerminalWorkspace = z.infer<typeof terminalWorkspaceSchema>
 export type TerminalRenameWorkspaceInput = z.infer<typeof terminalRenameWorkspaceInputSchema>
 export type TerminalSplitPaneInput = z.infer<typeof terminalSplitPaneInputSchema>
 export type TerminalSplitPaneResult = z.infer<typeof terminalSplitPaneResultSchema>
+export type TerminalPaneDropEdge = z.infer<typeof terminalPaneDropEdgeSchema>
+export type TerminalMovePaneInput = z.infer<typeof terminalMovePaneInputSchema>
 export type TerminalSetSplitRatioInput = z.infer<typeof terminalSetSplitRatioInputSchema>
 export type TerminalClosePaneInput = z.infer<typeof terminalClosePaneInputSchema>
 export type TerminalCloseWorkspaceInput = z.infer<typeof terminalCloseWorkspaceInputSchema>
@@ -152,6 +164,44 @@ export function removeTerminalPane(
   const second = removeTerminalPane(layout.second, paneId)
   if (second !== undefined) return second === null ? layout.first : { ...layout, second }
   return undefined
+}
+
+export function moveTerminalPane(
+  layout: TerminalLayoutNode,
+  sourcePaneId: string,
+  targetPaneId: string,
+  edge: TerminalPaneDropEdge,
+  splitId: string,
+): TerminalLayoutNode | null {
+  if (sourcePaneId === targetPaneId) return null
+  const sourcePane = findTerminalPane(layout, sourcePaneId)
+  const targetPane = findTerminalPane(layout, targetPaneId)
+  if (!sourcePane || !targetPane) return null
+
+  const withoutSource = removeTerminalPane(layout, sourcePaneId)
+  if (!withoutSource) return null
+  const direction = edge === "left" || edge === "right" ? "horizontal" : "vertical"
+  const sourceFirst = edge === "left" || edge === "top"
+  return insertTerminalPane(withoutSource, targetPaneId, {
+    type: "split",
+    splitId,
+    direction,
+    ratio: 0.5,
+    first: sourceFirst ? sourcePane : targetPane,
+    second: sourceFirst ? targetPane : sourcePane,
+  })
+}
+
+function insertTerminalPane(
+  layout: TerminalLayoutNode,
+  targetPaneId: string,
+  split: TerminalSplitNode,
+): TerminalLayoutNode | null {
+  if (layout.type === "leaf") return layout.paneId === targetPaneId ? split : null
+  const first = insertTerminalPane(layout.first, targetPaneId, split)
+  if (first) return { ...layout, first }
+  const second = insertTerminalPane(layout.second, targetPaneId, split)
+  return second ? { ...layout, second } : null
 }
 
 export function setTerminalSplitRatio(

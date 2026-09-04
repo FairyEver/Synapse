@@ -29,6 +29,7 @@ import {
   terminalGroupSchema,
   terminalGlobalLaunchSettingsSchema,
   terminalLaunchGroupCommandInputSchema,
+  terminalMovePaneInputSchema,
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
   terminalReadSessionResultSchema,
@@ -305,6 +306,14 @@ export const terminalIpcModule: IpcModule = {
       response: terminalSplitPaneResultSchema,
       handler: (ctx, request: z.infer<typeof terminalSplitPaneInputSchema>) =>
         resolveTerminalService(ctx).splitPane(request),
+    },
+    movePane: {
+      operationId: "app.terminal.pane.move",
+      kind: "invoke",
+      request: terminalMovePaneInputSchema,
+      response: terminalWorkspaceSchema,
+      handler: (ctx, request: z.infer<typeof terminalMovePaneInputSchema>) =>
+        resolveTerminalService(ctx).movePane(request),
     },
     updateSplitRatio: {
       operationId: "app.terminal.split.resize",

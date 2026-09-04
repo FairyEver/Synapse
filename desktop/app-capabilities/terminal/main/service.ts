@@ -62,12 +62,14 @@ import {
   TERMINAL_WORKSPACE_PANE_LIMIT,
   collectTerminalPaneLeaves,
   findTerminalPane,
+  moveTerminalPane,
   removeTerminalPane,
   setTerminalSplitRatio,
   splitTerminalPane,
   type TerminalClosePaneInput,
   type TerminalCloseWorkspaceInput,
   type TerminalCloseWorkspaceResult,
+  type TerminalMovePaneInput,
   type TerminalRenameWorkspaceInput,
   type TerminalSetSplitRatioInput,
   type TerminalSplitPaneInput,
@@ -1115,6 +1117,39 @@ export function createTerminalService(deps: {
     const layout = setTerminalSplitRatio(workspace.layout, input.splitId, ratio)
     if (!layout) throw terminalContractError("not_found", "not_found")
     if (stableJson(layout) === stableJson(workspace.layout)) return workspace
+    const updated = {
+      ...workspace,
+      layout,
+      layoutRevision: workspace.layoutRevision + 1,
+      updatedAt: now(),
+    }
+    workspaces.set(updated.id, updated)
+    bumpDomain("workspace.layout_changed", updated.id, updated.layoutRevision)
+    await flushPersist()
+    return updated
+  }
+
+  async function movePane(input: TerminalMovePaneInput): Promise<TerminalWorkspace> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    if (input.sourcePaneId === input.targetPaneId) {
+      throw terminalContractError("invalid_argument", "validation")
+    }
+    if (
+      workspace.closing
+      || workspace.closingPaneIds.includes(input.sourcePaneId)
+      || workspace.closingPaneIds.includes(input.targetPaneId)
+    ) {
+      throw terminalContractError("lifecycle_conflict", "lifecycle")
+    }
+    const layout = moveTerminalPane(
+      workspace.layout,
+      input.sourcePaneId,
+      input.targetPaneId,
+      input.edge,
+      randomUUID(),
+    )
+    if (!layout) throw terminalContractError("not_found", "not_found")
     const updated = {
       ...workspace,
       layout,
@@ -2490,6 +2525,7 @@ export function createTerminalService(deps: {
     getWorkspaceForSession,
     renameWorkspace,
     splitPane,
+    movePane,
     updateSplitRatio,
     closePane,
     closeWorkspace,

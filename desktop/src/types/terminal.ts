@@ -19,6 +19,8 @@ import type {
   TerminalEnvironmentValueInput,
   TerminalLaunchLayer,
   TerminalLaunchGroupCommandInput,
+  TerminalMovePaneInput,
+  TerminalPaneDropEdge,
   TerminalOutputChunk,
   TerminalReadSessionInput,
   TerminalReadSessionResult,
@@ -79,6 +81,8 @@ export type SynapseTerminalStopSessionInput = TerminalStopSessionInput
 export type SynapseTerminalRunStartupCommandInput = TerminalRunStartupCommandInput
 export type SynapseTerminalSplitPaneInput = TerminalSplitPaneInput
 export type SynapseTerminalSplitPaneResult = TerminalSplitPaneResult
+export type SynapseTerminalMovePaneInput = TerminalMovePaneInput
+export type SynapseTerminalPaneDropEdge = TerminalPaneDropEdge
 export type SynapseTerminalSetSplitRatioInput = TerminalSetSplitRatioInput
 export type SynapseTerminalClosePaneInput = TerminalClosePaneInput
 export type SynapseTerminalCloseWorkspaceInput = TerminalCloseWorkspaceInput

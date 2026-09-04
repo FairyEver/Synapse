@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import { findPaneInDirection } from "../terminal-workspace-view"
+import { findPaneInDirection, resolveTerminalPaneDropEdge } from "../terminal-workspace-view"
 
 describe("terminal workspace directional focus", () => {
   it("selects the nearest pane in the requested direction", () => {
@@ -29,6 +29,22 @@ describe("terminal workspace directional focus", () => {
     ])
 
     expect(findPaneInDirection("left", "left", panes)).toBeNull()
+  })
+})
+
+describe("terminal pane drop edge", () => {
+  const rect = new DOMRect(100, 200, 400, 300)
+
+  it("resolves the closest accepted edge", () => {
+    expect(resolveTerminalPaneDropEdge(300, 210, rect)).toBe("top")
+    expect(resolveTerminalPaneDropEdge(490, 350, rect)).toBe("right")
+    expect(resolveTerminalPaneDropEdge(300, 490, rect)).toBe("bottom")
+    expect(resolveTerminalPaneDropEdge(110, 350, rect)).toBe("left")
+  })
+
+  it("does not accept the center or an invalid target rectangle", () => {
+    expect(resolveTerminalPaneDropEdge(300, 350, rect)).toBeNull()
+    expect(resolveTerminalPaneDropEdge(0, 0, new DOMRect())).toBeNull()
   })
 })
 
