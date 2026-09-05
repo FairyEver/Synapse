@@ -34,7 +34,7 @@ Filesystem writes, listener creation, and notification triggering pass through `
 
 Top-level permission requests and question/plan-exit tools map to “需要你的操作”. A top-level stop maps to “任务已完成”. Subagent events are ignored. New user input clears waiting state.
 
-The notification contains only the Agent product name, sanitized session title, and mapped status. It is suppressed only when the exact session is active in the currently focused renderer. The native notification object remains alive until close or click.
+The notification contains only the Agent product name, sanitized session title, and mapped status. It is suppressed only when the exact session is active in the currently focused renderer. Otherwise it always uses the native notification adapter, including when another Synapse window, System App, or pane is focused. The native notification object remains alive until close or click.
 
 On click, Synapse focuses the app and sends the existing Terminal System App open request containing only a new request id and the target `sessionId`. The renderer resolves the owning workspace and pane, selects them, and focuses the terminal. No notification action is routed through System Notifier.
 

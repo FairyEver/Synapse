@@ -53,7 +53,7 @@
 - 启动设置只属于 Terminal：全局入口位于 Terminal Header，分组和快捷命令入口位于对应对象；不得在系统设置中增加重复入口。解析顺序固定为安全系统环境、Synapse 内置、全局、分组、快捷命令、一次性覆盖，配置变化只影响新 PTY。
 - Agent 原生通知是默认关闭的 Terminal 启动设置，只影响新 PTY。启用后可为 `codex`、`claude` 注入会话级 PATH shim 和官方 Hook；用户别名或函数最终按 PATH 调用这两个命令时必须继续生效，绝对路径、远程 Shell、主动重置 PATH 或 `SYNAPSE_AGENT_NOTIFICATIONS_DISABLED=1` 不承诺接入。
 - Agent Hook 只能向随机会话 token 保护的 loopback 端口上报有限事件元数据，不得上报提示词、回答、终端输出或工具参数。通知只显示 Agent 名、session 标题和状态；当前精确 session 聚焦时抑制，子 Agent 完成不得触发。
-- 可点击 Agent 通知由 Terminal 业务模块拥有，不得改造成 System Notifier 回调或统一通知中心。点击必须复用不可变 `sessionId` 的 System App 打开请求定位具体 workspace/pane；Codex Hook 信任必须由用户确认，不得绕过。
+- 可点击 Agent 通知由 Terminal 业务模块拥有，不得改造成 System Notifier 回调或统一通知中心。除精确 session 位于当前焦点时抑制外，统一使用系统原生通知，不得改用 renderer 应用内通知。点击必须复用不可变 `sessionId` 的 System App 打开请求定位具体 workspace/pane；Codex Hook 信任必须由用户确认，不得绕过。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
 - 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
