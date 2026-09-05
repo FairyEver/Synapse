@@ -2677,6 +2677,9 @@ describe("TerminalModule", () => {
     bridgeState.chunks = [createChunk({ sessionId: session.id, seq: 1, data: "snapshot" })]
 
     await renderModule()
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
     const xterm = xtermState.instances[0]!
     xterm.write.mockClear()
     xterm.refresh.mockClear()
