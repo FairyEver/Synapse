@@ -35,6 +35,19 @@ describe("desktop release workflow", () => {
       .toBeLessThan(workflowText.indexOf("pnpm --filter @synapse/desktop run build:renderer"))
   })
 
+  it("prepares a dedicated macOS signing keychain before packaging", () => {
+    const workflowText = readFileSync(releaseWorkflowPath, "utf8")
+    const keychainStep = workflowText.indexOf("Prepare Apple signing keychain")
+    const packageStep = workflowText.indexOf("Package macOS installer")
+
+    expect(keychainStep).toBeGreaterThan(-1)
+    expect(packageStep).toBeGreaterThan(keychainStep)
+    expect(workflowText).toContain('security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"')
+    expect(workflowText).toContain('echo "CSC_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"')
+    expect(workflowText).not.toContain("CSC_KEY_PASSWORD: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}")
+    expect(workflowText).not.toContain("CSC_LINK: ${{ secrets.APPLE_SIGNING_CERT }}")
+  })
+
   it("verifies COSCLI checksum before executing the downloaded binary", () => {
     const workflowText = readFileSync(releaseWorkflowPath, "utf8")
 
