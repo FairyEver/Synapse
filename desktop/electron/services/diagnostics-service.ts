@@ -51,6 +51,7 @@ import {
 } from "./agent-runtime/claude-runtime-binary"
 import { isManagedKnowledgeBaseProject, resolveProjectWorkspacePath } from "./knowledge-base/managed-path"
 import { resolveKnowledgeBasesDirectory, resolveKnowledgeBaseStorageRoot } from "./knowledge-base/storage-root"
+import type { DataMaintenanceSnapshot } from "./data-maintenance-service"
 
 type AppPathName = Parameters<Electron.App["getPath"]>[0]
 
@@ -188,6 +189,7 @@ type DiagnosticsServiceDeps = {
   probeGitVersion?: (input: { gitPath: string; effectivePath: string }) => Promise<GitVersionProbeResult>
   inspectClaudeRuntime?: () => PackagedClaudeRuntimeStatus
   collectCodexRuntimeDiagnostics?: (input: { settingsPath: string }) => Promise<CodexRuntimeDiagnostics>
+  getDataMaintenanceSnapshot?: () => DataMaintenanceSnapshot | undefined
 }
 
 const RECENT_LOG_FILE_LIMIT = 3
@@ -1171,6 +1173,30 @@ class DiagnosticsService {
       this.ok("data-repo.inspect", "服务", "DataRepository", "数据仓库信息已读取", {
         namespaces: this.deps.dataRepository.inspect(),
       }))
+
+    const maintenance = this.deps.getDataMaintenanceSnapshot?.()
+    if (maintenance) {
+      const details = { ...maintenance }
+      if (maintenance.status === "failed") {
+        checks.push(this.degraded(
+          "data-repo.maintenance",
+          "服务",
+          "运行数据维护",
+          "后台维护失败，将自动重试",
+          details,
+        ))
+      } else {
+        checks.push(this.ok(
+          "data-repo.maintenance",
+          "服务",
+          "运行数据维护",
+          maintenance.status === "running" || maintenance.status === "scheduled"
+            ? "后台维护已调度"
+            : "后台维护正常",
+          details,
+        ))
+      }
+    }
   }
 
   private async addOpsChecks(checks: SynapseDiagnosticsCheck[], projectId?: string): Promise<void> {

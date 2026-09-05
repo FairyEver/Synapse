@@ -234,6 +234,11 @@ const usageAnalysisWorkerEntries = [
   "dist-electron/electron/services/usage-analysis/conversation-worker.js",
   "dist-electron/electron/services/usage-analysis/refresh-worker.js",
 ]
+const dataMaintenanceWorkerEntries = [
+  "dist-electron/electron/runtime/data-repo/maintenance/runner.js",
+  "dist-electron/electron/runtime/data-repo/maintenance/worker.js",
+  "dist-electron/electron/runtime/data-repo/maintenance/engine.js",
+]
 const textExtractionServiceEntry =
   "dist-electron/app-capabilities/text-extractor/main/service.js"
 const textExtractionWorkerLaunchEntry =
@@ -432,6 +437,19 @@ function verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures) {
       }
       queue.push(dependencyPath)
     }
+  }
+}
+
+function verifyDataMaintenanceWorker(header, unpackedPath, failures) {
+  for (const relativePath of dataMaintenanceWorkerEntries) {
+    verifyUnpackedNode(
+      header,
+      unpackedPath,
+      relativePath,
+      failures,
+      "data maintenance worker entry is missing from app.asar",
+    )
+    verifyUnpackedSourceMap(header, unpackedPath, relativePath, failures)
   }
 }
 
@@ -1140,6 +1158,7 @@ async function verifyResources(resourcesPath, label) {
     await runHtmlGenerationWorkerSmoke(unpackedPath, failures)
   }
   verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
+  verifyDataMaintenanceWorker(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)
   verifyTerminalRuntime(header, resourcesPath, unpackedPath, failures)
   verifyExtraResources(resourcesPath, failures)

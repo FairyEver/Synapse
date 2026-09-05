@@ -77,3 +77,5 @@
 - 生产日志使用结构化 logger，不记录正文、token、Authorization、Cookie、secret、未脱敏输入或原始异常堆栈中可能包含的敏感数据。
 - 日志和审计需要保留排障所需普通路径与资源身份，但不能把脱敏摘要误当作运行输入。
 - Agent 回复 Outbox 只保存已有外部 dispatcher 接管的投递事件；本地 Renderer 通过 EventBus 接收事件，不得为其复制 Outbox 记录。已发送记录按回复目标保留最近 500 条，清理必须覆盖先前进程留下的数据，待发送和失败记录不得随已发送记录一起删除。
+- `agent.events` 中 `sdkEvent` / `streamDiagnostics` 是原始诊断层，保留 30 天后可由后台维护删除；Conversation history、语义事件、usage、artifact 与 file checkpoint 不得混入该清理。已删除 conversation 的孤儿 `agent.events` 可分批清理。
+- 运行数据维护只能在主窗口创建后调度，通过独立 Worker 对 `DataRepository` 内部 SQLite 表执行最多十万行一轮、五百行一批的短事务；中断、超时或锁冲突保留已提交批次并自动重试，不执行启动期 `VACUUM`，不得阻塞 Renderer。权限仅允许 `system:data-maintenance` 对 `runtime-data` 执行 `database.mutate`，结果写入结构化日志、AuditSink 和诊断页。

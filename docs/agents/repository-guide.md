@@ -57,6 +57,8 @@ server/                 # 服务端与管理后台
 
 数据库只保存对象元数据和引用，例如 `storageKey`、`assetId`、`mimeType`、`size`、`sha256`、归属、状态和版本；不得把图片或大文件字节写入 PostgreSQL、SQLite 或 DataRepository。删除、替换、回滚和孤儿清理必须显式设计，底层删除失败不得静默丢失元数据。
 
+桌面 `DataRepository` 的历史数据维护必须在主窗口创建后由独立 Worker 分批执行，主进程启动链不得等待扫描、清理或空间回收。SQLite 清理只处理已声明的冗余/孤儿记录并保留待处理数据；审计 JSONL 保持 append-only，活动文件达到 64 MiB 后无损轮转，历史分段继续参与读取和诊断导出，不得以轮转为由删除审计历史。
+
 当前轻量 Backup 包含数据库和 Drive COS 对象清单，不包含 Drive、Skill Repository 或 Platform Media 的对象字节。需要可恢复的新域必须同步设计 manifest、复制和恢复流程。
 
 ## 桌面更新与发布

@@ -5,6 +5,7 @@ import {
   InMemoryAuditSink,
   createPermissionGuard,
   systemAutomationPolicy,
+  systemDataMaintenancePolicy,
   systemMcpAutoRegisterPolicy,
   systemShellExecPolicy,
   userInitiatedAllowPolicy,
@@ -139,6 +140,22 @@ describe("PermissionGuard (T6.6)", () => {
       resource: "wf-1",
       context: { source: "automation" },
     })).allowed).toBe(false)
+  })
+
+  it("systemDataMaintenancePolicy is limited to the built-in runtime-data cleanup", async () => {
+    const guard = createPermissionGuard()
+    guard.registerPolicy(systemDataMaintenancePolicy)
+    const request: PermissionRequest = {
+      action: "database.mutate",
+      actor: { kind: "system", id: "data-maintenance" },
+      resource: "runtime-data",
+      context: { source: "core.data-maintenance" },
+    }
+
+    expect((await guard.check(request)).allowed).toBe(true)
+    expect((await guard.check({ ...request, resource: "business-data" })).allowed).toBe(false)
+    expect((await guard.check({ ...request, actor: { kind: "system", id: "automation" } })).allowed).toBe(false)
+    expect((await guard.check({ ...request, action: "fs.write" })).allowed).toBe(false)
   })
 
   it("default shell policies allow authenticated webhook exec requests", async () => {

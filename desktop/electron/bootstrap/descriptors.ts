@@ -192,6 +192,7 @@ import { ExecutionIsolationService } from "../services/execution-isolation"
 import { AgentRelayService } from "../services/relay"
 import { AutomationIngressService } from "../services/automation-ingress"
 import { DiagnosticsService } from "../services/diagnostics-service"
+import { DataMaintenanceService } from "../services/data-maintenance-service"
 import { contentService } from "../services/content-service"
 import { contentSubmissionService } from "../services/content-submission-service"
 import { contentWriteTransactionService } from "../services/content-write-transaction-service"
@@ -242,7 +243,7 @@ import type {
 } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
-import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy } from "../runtime/security"
+import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy, systemDataMaintenancePolicy } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
 import {
   buildHostEnvironment,
@@ -1908,11 +1909,43 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
       permissionGuard,
       auditSink,
       logger: ctx.logger.child("diagnostics"),
+      getDataMaintenanceSnapshot: () => {
+        try {
+          return ctx.registry.get<DataMaintenanceService>("core.data-maintenance").inspect()
+        } catch {
+          return undefined
+        }
+      },
       createZipArchive: (sourceDirectoryPath, outputFilePath) => createZipArchive(sourceDirectoryPath, outputFilePath, {
         actor: { kind: "user" },
         processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       }),
     })
+  },
+}
+
+export const coreDataMaintenanceDescriptor: ServiceDescriptor<DataMaintenanceService> = {
+  id: "core.data-maintenance",
+  startupPhase: "background",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    if (!dataRepository.maintenance) {
+      throw new Error("DataRepository maintenance executor is unavailable")
+    }
+    return new DataMaintenanceService({
+      executor: dataRepository.maintenance,
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      logger: ctx.logger.child("data-maintenance"),
+    })
+  },
+  start(service) {
+    service.start()
+  },
+  stop(service) {
+    return service.stop()
   },
 }
 
@@ -1970,6 +2003,7 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     guard.registerPolicy(webhookShellExecPolicy)
     guard.registerPolicy(systemAutomationPolicy)
     guard.registerPolicy(systemMcpAutoRegisterPolicy)
+    guard.registerPolicy(systemDataMaintenancePolicy)
     return guard
   },
 }

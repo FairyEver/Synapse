@@ -195,6 +195,19 @@ export const systemMcpAutoRegisterPolicy: PermissionPolicy = {
       : "defer-to-next",
 }
 
+/** Allow only the built-in runtime-data maintenance worker to prune bounded redundant records. */
+export const systemDataMaintenancePolicy: PermissionPolicy = {
+  id: "system-data-maintenance-allow",
+  decide: (req) =>
+    req.actor.kind === "system"
+      && req.actor.id === "data-maintenance"
+      && req.action === "database.mutate"
+      && req.resource === "runtime-data"
+      && req.context.source === "core.data-maintenance"
+      ? "allow"
+      : "defer-to-next",
+}
+
 // ----- AuditSink ----------------------------------------------------
 
 export interface AuditEvent {

@@ -30,6 +30,7 @@ import {
   coreClientTelemetryDescriptor,
   coreConfigDescriptor,
   coreDataRepositoryDescriptor,
+  coreDataMaintenanceDescriptor,
   coreDatabaseDescriptor,
   coreFileOpenerDescriptor,
   coreTextFileWriterDescriptor,
@@ -185,6 +186,7 @@ export function buildServiceRegistry(
   registry.register(gitBranchServiceDescriptor)
   registry.register(gitHistoryServiceDescriptor)
   registry.register(coreDiagnosticsDescriptor)
+  registry.register(coreDataMaintenanceDescriptor)
   registry.register(coreUpdateDescriptor)
   registry.register(repoWatchDescriptor)
   registry.register(repoMaintenanceDescriptor)

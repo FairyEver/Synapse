@@ -13,6 +13,8 @@ import {
   reviveWorkflowsEnvelope,
 } from "./schemas"
 import type { NamespaceSchema } from "./types"
+import { AUDIT_ACTIVE_SEGMENT_MAX_BYTES } from "../../../config"
+import { createDataMaintenanceExecutor } from "./maintenance/runner"
 
 export interface FileBackedDataRepositoryOptions {
   readonly rootDir: string
@@ -27,10 +29,13 @@ export function createFileBackedDataRepository(
 ): DataRepositoryImpl {
   mkdirSync(options.rootDir, { recursive: true })
 
-  const repo = new DataRepositoryImpl()
+  const sqlitePath = path.join(options.rootDir, "runtime.sqlite")
+  const repo = new DataRepositoryImpl({
+    maintenance: createDataMaintenanceExecutor({ databasePath: sqlitePath }),
+  })
   let sqliteDb: ReturnType<typeof openSqliteDatabase> | null = null
   const getSqliteDb = () => {
-    sqliteDb ??= openSqliteDatabase(path.join(options.rootDir, "runtime.sqlite"))
+    sqliteDb ??= openSqliteDatabase(sqlitePath)
     return sqliteDb
   }
 
@@ -69,6 +74,7 @@ export function createFileBackedDataRepository(
           filePath: path.join(options.rootDir, `${safeFileName(schema.name)}.jsonl`),
           defaults: (schema as NamespaceSchema<IdentifiedRecordValue>).defaults,
           validate: (schema as NamespaceSchema<IdentifiedRecordValue>).validate,
+          maxFileBytes: schema.name === "audit" ? AUDIT_ACTIVE_SEGMENT_MAX_BYTES : undefined,
         }))
         break
       case "sqlite": {

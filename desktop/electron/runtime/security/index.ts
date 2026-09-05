@@ -11,6 +11,7 @@ export {
   webhookShellExecPolicy,
   systemAutomationPolicy,
   systemMcpAutoRegisterPolicy,
+  systemDataMaintenancePolicy,
 } from "./permission-guard"
 export type {
   ActorIdentity,

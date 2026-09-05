@@ -26,6 +26,7 @@ import type {
   ExportOptions,
   ImportOptions,
   NamespaceSchema,
+  DataMaintenanceExecutor,
 } from "./types"
 
 interface RegistrationEntry<T> {
@@ -35,6 +36,11 @@ interface RegistrationEntry<T> {
 
 export class DataRepositoryImpl implements DataRepository {
   private readonly entries = new Map<string, RegistrationEntry<unknown>>()
+  readonly maintenance?: DataMaintenanceExecutor
+
+  constructor(options: { readonly maintenance?: DataMaintenanceExecutor } = {}) {
+    this.maintenance = options.maintenance
+  }
 
   register<T>(schema: NamespaceSchema<T>, handle: DataNamespace<T>): void {
     if (this.entries.has(schema.name)) {

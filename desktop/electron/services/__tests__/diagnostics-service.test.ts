@@ -259,6 +259,66 @@ describe("DiagnosticsService.collect", () => {
     ]))
   })
 
+  it("reports background runtime-data maintenance state", async () => {
+    const service = createService({
+      getDataMaintenanceSnapshot: () => ({
+        status: "completed",
+        startedAt: "2026-04-29T03:30:00.000Z",
+        finishedAt: "2026-04-29T03:30:01.000Z",
+        deleted: {
+          localOutbox: 1_500_000,
+          retainedOutbox: 0,
+          rawAgentDiagnostics: 20_000,
+          orphanAgentEvents: 100,
+        },
+        freePagesBefore: 0,
+        freePagesAfter: 12_000,
+      }),
+    })
+
+    const report = await service.collect()
+
+    expect(report.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "data-repo.maintenance",
+        group: "服务",
+        status: "ok",
+        details: expect.objectContaining({
+          status: "completed",
+          deleted: expect.objectContaining({ localOutbox: 1_500_000 }),
+        }),
+      }),
+    ]))
+  })
+
+  it("marks failed runtime-data maintenance as retryable degradation", async () => {
+    const service = createService({
+      getDataMaintenanceSnapshot: () => ({
+        status: "failed",
+        startedAt: "2026-04-29T03:30:00.000Z",
+        finishedAt: "2026-04-29T03:30:01.000Z",
+        nextRunAt: "2026-04-29T03:35:01.000Z",
+        deleted: {
+          localOutbox: 0,
+          retainedOutbox: 0,
+          rawAgentDiagnostics: 0,
+          orphanAgentEvents: 0,
+        },
+        errorName: "Error",
+        errorLength: 12,
+      }),
+    })
+
+    const report = await service.collect()
+    expect(report.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "data-repo.maintenance",
+        status: "degraded",
+        message: "后台维护失败，将自动重试",
+      }),
+    ]))
+  })
+
   it("records Codex process and config timing in MCP diagnostics", async () => {
     const service = createService({
       getMcpHttpStatus: vi.fn(() => ({

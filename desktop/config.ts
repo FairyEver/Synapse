@@ -163,6 +163,24 @@ export const AUTOMATION_INGRESS_WEBHOOK_RUN_LIST_LIMIT = 100
 // Reply Outbox 已发送记录保留上限：按回复目标保留最近的已发送事件，避免长会话外部回复历史无限增长。
 export const REPLY_OUTBOX_SENT_RETENTION_LIMIT = 500
 
+// 本地运行数据单次后台维护最多删除的记录数：分轮释放空间，避免长事务持续占用数据库写锁。
+export const DATA_MAINTENANCE_MAX_DELETIONS_PER_RUN = 100_000
+
+// 本地运行数据后台维护单批删除行数：每批独立提交并主动让出 Worker 事件循环。
+export const DATA_MAINTENANCE_DELETE_BATCH_SIZE = 500
+
+// 本地运行数据维护单轮超时（毫秒）：异常查询或文件锁不得无限占用后台 Worker。
+export const DATA_MAINTENANCE_RUN_TIMEOUT_MS = 120_000
+
+// 本地运行数据维护完成后的复查间隔（毫秒）：持续治理长期运行客户端中新产生的冗余数据。
+export const DATA_MAINTENANCE_INTERVAL_MS = 6 * ONE_HOUR_MS
+
+// Agent 原始 SDK 与流诊断事件保留时长：会话正文和语义事件不受影响。
+export const AGENT_RAW_DIAGNOSTIC_RETENTION_MS = 30 * 24 * ONE_HOUR_MS
+
+// 审计日志当前活动分段上限：超过后无损轮转，旧分段继续参与读取和诊断导出。
+export const AUDIT_ACTIVE_SEGMENT_MAX_BYTES = 64 * 1024 * 1024
+
 // 知识库资料目录上传最大文件数：限制外部文件夹递归复制进托管 .raw 时的单次文件数量，避免误选大目录拖垮主进程。
 export const KNOWLEDGE_BASE_RAW_UPLOAD_MAX_FILES = 2_000
 

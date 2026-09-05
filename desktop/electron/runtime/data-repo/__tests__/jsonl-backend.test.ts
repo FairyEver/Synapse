@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises"
+import { mkdtemp, readdir, rm, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { JsonLinesNamespace } from "../backends/jsonl"
@@ -239,6 +239,71 @@ describe("JsonLinesNamespace (T2.4)", () => {
       await expect(ns.upsert({ id: "new", action: "y", outcome: "denied" }))
         .resolves.toBeUndefined()
       await expect(ns.list()).rejects.toBeInstanceOf(InvalidNamespaceDataError)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("rotates an oversized active file without dropping prior audit history", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "audit.jsonl")
+    try {
+      const ns = new JsonLinesNamespace<AuditEvent>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: file,
+        maxFileBytes: 140,
+      })
+      await ns.upsert({ id: "e1", action: "first-operation", outcome: "allowed" })
+      await ns.upsert({ id: "e2", action: "second-operation", outcome: "denied" })
+
+      const segmentNames = (await readdir(dir)).filter((name) => name.startsWith("audit.jsonl.segment-"))
+      expect(segmentNames).toHaveLength(1)
+      expect(await readFile(file, "utf8")).toContain('"id":"e2"')
+
+      const reloaded = new JsonLinesNamespace<AuditEvent>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: file,
+        maxFileBytes: 140,
+      })
+      expect((await reloaded.list()).map((event) => event.id)).toEqual(["e1", "e2"])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("serializes concurrent appends across repeated rotations", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "audit.jsonl")
+    try {
+      const ns = new JsonLinesNamespace<AuditEvent>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: file,
+        maxFileBytes: 140,
+      })
+      const events = Array.from({ length: 20 }, (_, index) => ({
+        id: `e${index}`,
+        action: `operation-${index}`,
+        outcome: index % 2 === 0 ? "allowed" as const : "denied" as const,
+      }))
+
+      await Promise.all(events.map((event) => ns.upsert(event)))
+
+      const reloaded = new JsonLinesNamespace<AuditEvent>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: file,
+        maxFileBytes: 140,
+      })
+      expect((await reloaded.list()).map((event) => event.id)).toEqual(events.map((event) => event.id))
+      expect((await readdir(dir)).filter((name) => name.startsWith("audit.jsonl.segment-")))
+        .toHaveLength(19)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

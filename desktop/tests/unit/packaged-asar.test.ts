@@ -147,6 +147,18 @@ const SYNTHETIC_HTML_GENERATION_FILES: Readonly<Record<string, string>> = {
   "node_modules/ejs/lib/cjs/ejs.js": "module.exports = {}\n",
   "node_modules/ejs/lib/cjs/utils.js": "module.exports = {}\n",
 }
+const DATA_MAINTENANCE_PATH =
+  "dist-electron/electron/runtime/data-repo/maintenance"
+const SYNTHETIC_DATA_MAINTENANCE_FILES: Readonly<Record<string, string>> = {
+  [`${DATA_MAINTENANCE_PATH}/runner.js`]:
+    "exports.runDataMaintenance = async () => ({ status: 'completed' })\n",
+  [`${DATA_MAINTENANCE_PATH}/runner.js.map`]: "{}",
+  [`${DATA_MAINTENANCE_PATH}/worker.js`]: "require('./engine')\n",
+  [`${DATA_MAINTENANCE_PATH}/worker.js.map`]: "{}",
+  [`${DATA_MAINTENANCE_PATH}/engine.js`]:
+    "exports.executeDataMaintenance = () => ({ status: 'completed' })\n",
+  [`${DATA_MAINTENANCE_PATH}/engine.js.map`]: "{}",
+}
 const SYNTHETIC_JSON_REPAIR_FILES = {
   "node_modules/repair-json-stream/package.json": JSON.stringify({
     name: "repair-json-stream",
@@ -194,6 +206,7 @@ const SYNTHETIC_JSON_REPAIR_FILES = {
 } as const
 
 interface CreateAsarBufferOptions {
+  readonly includeDataMaintenanceWorker?: boolean
   readonly includeHtmlGeneration?: boolean
   readonly includeJsonRepair?: boolean
   readonly omitJsonRepairRootExport?: boolean
@@ -304,6 +317,20 @@ function createHtmlGenerationFiles(files: Readonly<Record<string, string>>) {
   }
 }
 
+function createDataMaintenanceFiles() {
+  const node = (fileName: string) => createUnpackedFileNode(
+    SYNTHETIC_DATA_MAINTENANCE_FILES[`${DATA_MAINTENANCE_PATH}/${fileName}`],
+  )
+  return {
+    "runner.js": node("runner.js"),
+    "runner.js.map": node("runner.js.map"),
+    "worker.js": node("worker.js"),
+    "worker.js.map": node("worker.js.map"),
+    "engine.js": node("engine.js"),
+    "engine.js.map": node("engine.js.map"),
+  }
+}
+
 function createEjsFiles(files: Readonly<Record<string, string>>) {
   return {
     "package.json": createUnpackedFileNode(files["node_modules/ejs/package.json"]),
@@ -369,6 +396,7 @@ function createPackageManifestFiles(
 
 function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const {
+    includeDataMaintenanceWorker = true,
     includeHtmlGeneration = true,
     includeJsonRepair = true,
     omitJsonRepairRootExport = false,
@@ -491,6 +519,21 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                     : {}),
                 },
               },
+              ...(includeDataMaintenanceWorker
+                ? {
+                    runtime: {
+                      files: {
+                        "data-repo": {
+                          files: {
+                            maintenance: {
+                              files: createDataMaintenanceFiles(),
+                            },
+                          },
+                        },
+                      },
+                    },
+                  }
+                : {}),
               services: {
                 files: {
                   ...(includeClaudeRuntimeGuard
@@ -780,6 +823,14 @@ describe("packaged asar verification", () => {
     await writeRequiredExtraResourceFixtures(resourcesPath)
     await writeTextExtractionRuntimeFixtures(resourcesPath, overrides)
     await writeHtmlGenerationRuntimeFixtures(resourcesPath)
+    for (const [relativePath, content] of Object.entries(SYNTHETIC_DATA_MAINTENANCE_FILES)) {
+      await writeUnpackedFixture(
+        resourcesPath,
+        ["app.asar.unpacked", ...relativePath.split("/")],
+        content,
+        { sourceMap: false },
+      )
+    }
   }
 
   async function expectJsonRepairExportFailure(
@@ -851,6 +902,30 @@ describe("packaged asar verification", () => {
         root,
       ])).rejects.toMatchObject({
         stderr: expect.stringContaining("JSON Repair runtime is missing from packed app.asar"),
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rejects packages missing the data maintenance worker", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(
+        path.join(resourcesPath, "app.asar"),
+        createAsarBuffer({ includeDataMaintenanceWorker: false }),
+      )
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+
+      await expect(execFileAsync(process.execPath, [
+        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
+        root,
+      ])).rejects.toMatchObject({
+        stderr: expect.stringContaining("data maintenance worker entry is missing from app.asar"),
       })
     } finally {
       await rm(root, { recursive: true, force: true })

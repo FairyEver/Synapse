@@ -2300,6 +2300,18 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(repoMaintenanceDescriptor.dependsOn).toEqual(["repo.watch", "repo.pending-pushes"])
   })
 
+  it("coreDataMaintenanceDescriptor starts only background Worker scheduling", async () => {
+    const { coreDataMaintenanceDescriptor } = await importBootstrap()
+    expect(coreDataMaintenanceDescriptor.id).toBe("core.data-maintenance")
+    expect(coreDataMaintenanceDescriptor.criticality).toBe("degraded")
+    expect(coreDataMaintenanceDescriptor.startupPhase).toBe("background")
+    expect(coreDataMaintenanceDescriptor.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+  })
+
   it("repoPendingPushesDescriptor depends on core.database", async () => {
     const { repoPendingPushesDescriptor } = await importBootstrap()
     expect(repoPendingPushesDescriptor.id).toBe("repo.pending-pushes")

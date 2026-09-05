@@ -93,6 +93,57 @@ export interface DataRepositoryInspectEntry {
   readonly rowCount?: number
 }
 
+export type DataMaintenanceStatus =
+  | "idle"
+  | "scheduled"
+  | "running"
+  | "partial"
+  | "completed"
+  | "failed"
+
+export interface DataMaintenanceCounts {
+  readonly localOutbox: number
+  readonly retainedOutbox: number
+  readonly rawAgentDiagnostics: number
+  readonly orphanAgentEvents: number
+}
+
+export interface DataMaintenanceResult {
+  readonly status: "partial" | "completed"
+  readonly startedAt: string
+  readonly finishedAt: string
+  readonly durationMs: number
+  readonly databaseBytesBefore: number
+  readonly databaseBytesAfter: number
+  readonly freePagesBefore: number
+  readonly freePagesAfter: number
+  readonly deleted: DataMaintenanceCounts
+}
+
+export interface DataMaintenanceProgress {
+  readonly phase: "outbox-local" | "outbox-retention" | "agent-diagnostics" | "agent-orphans"
+  readonly deleted: DataMaintenanceCounts
+}
+
+export interface DataMaintenancePolicy {
+  readonly maxDeletions: number
+  readonly batchSize: number
+  readonly rawAgentDiagnosticCutoff: string
+  readonly outboxSentRetentionLimit: number
+}
+
+export interface DataMaintenanceExecution {
+  readonly result: Promise<DataMaintenanceResult>
+  terminate(): Promise<number>
+}
+
+export interface DataMaintenanceExecutor {
+  run(
+    policy: DataMaintenancePolicy,
+    onProgress?: (progress: DataMaintenanceProgress) => void,
+  ): DataMaintenanceExecution
+}
+
 export interface DataRepository {
   /**
    * Fetch (or create) the typed namespace handle. Calling twice with the same
@@ -102,6 +153,8 @@ export interface DataRepository {
   exportAll(options?: ExportOptions): Promise<BackupPayload>
   importAll(payload: BackupPayload, options?: ImportOptions): Promise<void>
   inspect(): readonly DataRepositoryInspectEntry[]
+  /** File-backed repositories expose bounded maintenance through an isolated Worker. */
+  readonly maintenance?: DataMaintenanceExecutor
 }
 
 // ------- Migration framework (T2.6) ----------------------------------

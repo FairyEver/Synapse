@@ -17,7 +17,7 @@
  * leave the default.
  */
 
-import { appendFile, open } from "node:fs/promises"
+import { appendFile, open, readdir, rename, stat } from "node:fs/promises"
 import path from "node:path"
 
 import { AbstractDataNamespace, type NamespaceBaseDeps } from "../namespace-base"
@@ -47,6 +47,8 @@ export interface JsonLinesBackendDeps<T> extends NamespaceBaseDeps<T> {
   readonly allowSingleton?: boolean
   /** Optional validator for read-back items. */
   readonly validate?: (data: unknown) => data is T
+  /** Optional active-file limit. Rotation preserves all prior segments. */
+  readonly maxFileBytes?: number
 }
 
 export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string }>
@@ -56,9 +58,12 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
   private readonly allowRemove: boolean
   private readonly allowSingleton: boolean
   private readonly validate?: (data: unknown) => data is T
+  private readonly maxFileBytes?: number
   private cache: Map<string, T> | null = null
   private singleton: T | null = null
   private headerWritten = false
+  private rotationSequence = 0
+  private writeQueue: Promise<void> = Promise.resolve()
 
   constructor(deps: JsonLinesBackendDeps<T>) {
     super({ ...deps, backend: "jsonl" })
@@ -66,25 +71,33 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
     this.allowRemove = deps.allowRemove ?? false
     this.allowSingleton = deps.allowSingleton ?? false
     this.validate = deps.validate
+    this.maxFileBytes = deps.maxFileBytes
   }
 
   private async load(): Promise<Map<string, T>> {
     if (this.cache) return this.cache
     const cache = new Map<string, T>()
 
-    if (!(await fileExists(this.filePath))) {
+    const dataFiles = await this.listDataFiles()
+    if (dataFiles.length === 0) {
       this.cache = cache
       return cache
     }
 
-    const content = await readTextFile(this.filePath)
-    if (!content) {
-      this.cache = cache
-      return cache
+    for (const dataFile of dataFiles) {
+      await this.loadFileIntoCache(dataFile, cache)
     }
+    this.cache = cache
+    return cache
+  }
+
+  private async loadFileIntoCache(dataFile: string, cache: Map<string, T>): Promise<void> {
+    const content = await readTextFile(dataFile)
+    if (!content) return
 
     const lines = content.split("\n")
-    const lastRecoverableLine = content.endsWith("\n") ? -1 : lines.length
+    const isActiveFile = dataFile === this.filePath
+    const lastRecoverableLine = isActiveFile && !content.endsWith("\n") ? lines.length : -1
     let recoverToOffset: number | null = null
     let lineNo = 0
     let lineStartOffset = 0
@@ -106,34 +119,50 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
         }
         throw new InvalidNamespaceDataError(
           this.name,
-          `line ${lineNo} is not valid JSON: ${(err as Error).message}`,
+          `${path.basename(dataFile)} line ${lineNo} is not valid JSON: ${(err as Error).message}`,
         )
       }
       if (lineNo === 1 && isHeader(parsed)) {
-        this.headerWritten = true
+        if (isActiveFile) this.headerWritten = true
         lineStartOffset = nextLineStartOffset
         continue
       }
       if (!isRecordWithId(parsed)) {
         throw new InvalidNamespaceDataError(
           this.name,
-          `line ${lineNo} missing required string "id" field`,
+          `${path.basename(dataFile)} line ${lineNo} missing required string "id" field`,
         )
       }
       if (this.validate && !this.validate(parsed)) {
         throw new InvalidNamespaceDataError(
           this.name,
-          `line ${lineNo} failed validate()`,
+          `${path.basename(dataFile)} line ${lineNo} failed validate()`,
         )
       }
       cache.set(parsed.id, parsed as T)
       lineStartOffset = nextLineStartOffset
     }
     if (recoverToOffset !== null) {
-      await writeTextFileAtomic(this.filePath, content.slice(0, recoverToOffset))
+      await writeTextFileAtomic(dataFile, content.slice(0, recoverToOffset))
     }
-    this.cache = cache
-    return cache
+  }
+
+  private async listDataFiles(): Promise<string[]> {
+    const directory = path.dirname(this.filePath)
+    const baseName = path.basename(this.filePath)
+    let names: string[]
+    try {
+      names = await readdir(directory)
+    } catch (error) {
+      if (isFileNotFoundError(error)) return []
+      throw error
+    }
+    const segments = names
+      .filter((name) => name.startsWith(`${baseName}.segment-`))
+      .sort()
+      .map((name) => path.join(directory, name))
+    if (names.includes(baseName)) segments.push(this.filePath)
+    return segments
   }
 
   private async ensureHeader(): Promise<void> {
@@ -224,12 +253,31 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
   }
 
   async upsert(item: T & { id: string }): Promise<void> {
+    const operation = this.writeQueue.then(() => this.appendItem(item))
+    this.writeQueue = operation.catch(() => undefined)
+    await operation
+  }
+
+  private async appendItem(item: T & { id: string }): Promise<void> {
     const line = JSON.stringify(item) + "\n"
     await this.ensureHeader()
+    await this.rotateIfNeeded(Buffer.byteLength(line, "utf8"))
     await appendFile(this.filePath, line, "utf8")
     const previous = this.cache?.get(item.id)
     this.cache?.set(item.id, item)
     this.emit({ kind: "upsert", id: item.id, value: item, previous })
+  }
+
+  private async rotateIfNeeded(nextLineBytes: number): Promise<void> {
+    if (!this.maxFileBytes) return
+    const current = await stat(this.filePath)
+    if (current.size + nextLineBytes <= this.maxFileBytes) return
+
+    const sequence = String(this.rotationSequence++).padStart(6, "0")
+    const segmentPath = `${this.filePath}.segment-${new Date().toISOString().replace(/[-:.]/g, "")}-${process.pid}-${sequence}`
+    await rename(this.filePath, segmentPath)
+    this.headerWritten = false
+    await this.ensureHeader()
   }
 
   async remove(id: string): Promise<void> {
@@ -299,4 +347,9 @@ function isRecordWithId(value: unknown): value is { id: string } & Record<string
   if (typeof value !== "object" || value === null) return false
   const v = value as Record<string, unknown>
   return typeof v.id === "string" && v.id.length > 0
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error
+    && (error as { code?: unknown }).code === "ENOENT"
 }

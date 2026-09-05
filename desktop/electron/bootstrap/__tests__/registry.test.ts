@@ -100,6 +100,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.config",
         "core.connectors",
         "core.data-repository",
+        "core.data-maintenance",
         "core.database",
         "core.diagnostics",
         "core.text-extractor",
@@ -173,6 +174,12 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.logging")?.dependsOn).toEqual([])
     expect(byId.get("core.audit-sink")?.dependsOn).toEqual(["core.data-repository"])
     expect(byId.get("core.data-repository")?.dependsOn).toEqual([])
+    expect(byId.get("core.data-maintenance")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(byId.get("core.data-maintenance")?.startupPhase).toBe("background")
     expect(byId.get("core.connectors")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
