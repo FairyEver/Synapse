@@ -145,7 +145,7 @@ DOCUMENT_PUBLIC_URL=
 # API 在容器内部监听 3001，由容器内 Nginx 统一从 3000 对外暴露
 PORT=3001
 
-# 腾讯云 COS 存储（可选；Drive 用于用户云盘文件，Platform Media 用于头像等平台媒体，Backup 用于后台备份）
+# 腾讯云 COS 存储（Drive 可按部署方式选择；Platform Media 生产环境必填，用于头像和文档公共图床；Backup 用于后台备份）
 DRIVE_COS_SECRET_ID=用户文件桶 SecretId
 DRIVE_COS_SECRET_KEY=用户文件桶 SecretKey
 DRIVE_COS_BUCKET=用户文件桶名称，如 synapse-drive-1250000000
@@ -169,6 +169,7 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 - `APP_PUBLIC_URL` 不是用户可访问的站点根地址，或误填成了 `/api` 地址
 - `DOCUMENT_PUBLIC_URL` 不是合法的 HTTP(S) URL；同域部署可以留空，独立部署时填写文档站根地址
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
+- `PLATFORM_MEDIA_COS_*` 在生产环境必须四项完整配置，Bucket 必须保持私有读写
 - `DRIVE_COLLABORATION_ENABLED` 只接受 `true` 或 `false`；启用后 `/api/drive/collaboration` 必须允许 WebSocket Upgrade
 
 ---

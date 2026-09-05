@@ -35,7 +35,6 @@ import {
   DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
   syncDriveHierarchicalListMarkers,
 } from './drive-hierarchical-list-markers'
-import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { renderMarkdownAnnotationHtml, resolveMarkdownAnnotationTextRange } from './markdown-annotation-render'
 import { createMarkdownAnnotationAnchorFromSelection, createMarkdownImageAnnotationAnchor } from './markdown-annotation-target'
@@ -84,7 +83,6 @@ type DriveMarkdownRendererProps = {
   readonly edit?: DriveBrowserEditDto | null
   readonly annotationContext?: DriveAnnotationContext
   readonly editContext?: DriveRendererEditContext
-  readonly imageSourceContext?: DriveMarkdownImageSourceContext
   readonly collaboration?: DriveBrowserCollaborationCapabilityDto | null
   readonly collaborationContext?: DriveCollaborationJoinContext
 }
@@ -103,7 +101,6 @@ function DriveMarkdownBody({
   edit,
   annotationContext,
   editContext,
-  imageSourceContext,
   collaboration,
   collaborationContext,
   renderedHtml,
@@ -146,15 +143,6 @@ function DriveMarkdownBody({
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
   const annotationStateKey = driveMarkdownAnnotationStateKey(current.id, edit?.currentVersionId ?? null, effectiveAnnotationContext)
   const annotations = useDriveAnnotations(effectiveAnnotationContext)
-  const resolvedImageSourceContext = useMemo(
-    () => imageSourceContext ?? driveMarkdownImageSourceContextFromAnnotation(current, annotationContext),
-    [annotationContext, current, imageSourceContext]
-  )
-  const imageSources = useDriveMarkdownImageSources({
-    context: resolvedImageSourceContext,
-    edit,
-    editContext,
-  })
   const [outlineOpen, setOutlineOpen] = useState(true)
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [compactPanel, setCompactPanel] = useState<'outline' | 'comments' | null>(null)
@@ -508,14 +496,12 @@ function DriveMarkdownBody({
         }
       )
     }
-    if (imageSources.toolbarItem) items.push(imageSources.toolbarItem)
     return items
   }, [
     annotationsEnabled,
     commentCount,
     commentsOpen,
     compactPanel,
-    imageSources.toolbarItem,
     isCompact,
     outline.length,
     outlineOpen,
@@ -1016,7 +1002,6 @@ function DriveMarkdownBody({
       {annotations.error ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
       ) : null}
-      {imageSources.panel}
       {previewImage ? <ImageLightbox preview={previewImage} onClose={closeImagePreview} /> : null}
       {annotated.resolved.some((item) => item.anchorStatus === 'orphaned') ? (
         <div className='sr-only'>原文已修改或删除</div>
@@ -1068,21 +1053,6 @@ function normalizeWheelDelta(event: Pick<WheelEvent, 'deltaMode' | 'deltaY'>, pa
 
 function resizablePanelPercent(value: number): ResizablePanelPercent {
   return `${value}%`
-}
-
-function driveMarkdownImageSourceContextFromAnnotation(
-  current: DriveBrowserItemDto,
-  annotationContext?: DriveAnnotationContext
-): DriveMarkdownImageSourceContext | undefined {
-  if (current.type !== 'file') return undefined
-  if (annotationContext?.context === 'share') {
-    return {
-      context: 'share',
-      shareId: annotationContext.shareId,
-      itemId: annotationContext.itemId ?? current.id,
-    }
-  }
-  return { context: 'owner', itemId: current.id }
 }
 
 function driveMarkdownAnnotationStateKey(

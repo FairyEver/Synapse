@@ -142,16 +142,22 @@ if [ -n "$DRIVE_COS_SECRET_ID" ]; then
 fi
 
 echo ""
-echo ">>> Platform Media COS 存储配置（可选，回车跳过）"
-echo "  配置后用户头像、智能体头像等平台媒体资源将保存到腾讯云 COS"
-echo "  请填写已存在且服务端有权限访问的平台媒体 bucket，Bucket 建议保持私有读写"
+echo ">>> Platform Media COS 存储配置（必填）"
+echo "  用户头像、智能体头像和文档公共图床等平台媒体资源将保存到腾讯云 COS"
+echo "  请填写已存在且服务端有权限访问的平台媒体 bucket，Bucket 必须保持私有读写"
 echo ""
-read -p "Platform Media COS SecretId (回车跳过): " PLATFORM_MEDIA_COS_SECRET_ID
-if [ -n "$PLATFORM_MEDIA_COS_SECRET_ID" ]; then
+while [ -z "$PLATFORM_MEDIA_COS_SECRET_ID" ]; do
+  read -p "Platform Media COS SecretId: " PLATFORM_MEDIA_COS_SECRET_ID
+done
+while [ -z "$PLATFORM_MEDIA_COS_SECRET_KEY" ]; do
   read -p "Platform Media COS SecretKey: " PLATFORM_MEDIA_COS_SECRET_KEY
+done
+while [ -z "$PLATFORM_MEDIA_COS_BUCKET" ]; do
   read -p "Platform Media COS 存储桶名称 (如 synapse-file-platform-1250000000): " PLATFORM_MEDIA_COS_BUCKET
+done
+while [ -z "$PLATFORM_MEDIA_COS_REGION" ]; do
   read -p "Platform Media COS 地域 (如 ap-guangzhou): " PLATFORM_MEDIA_COS_REGION
-fi
+done
 
 echo ""
 echo ">>> Backup COS 存储配置（可选，回车跳过）"
@@ -200,7 +206,6 @@ DRIVE_COLLABORATION_ENABLED=false
 EOF
 fi
 
-if [ -n "$PLATFORM_MEDIA_COS_SECRET_ID" ]; then
 cat >> .env << EOF
 
 PLATFORM_MEDIA_COS_SECRET_ID=$PLATFORM_MEDIA_COS_SECRET_ID
@@ -208,7 +213,6 @@ PLATFORM_MEDIA_COS_SECRET_KEY=$PLATFORM_MEDIA_COS_SECRET_KEY
 PLATFORM_MEDIA_COS_BUCKET=$PLATFORM_MEDIA_COS_BUCKET
 PLATFORM_MEDIA_COS_REGION=$PLATFORM_MEDIA_COS_REGION
 EOF
-fi
 
 if [ -n "$BACKUP_COS_SECRET_ID" ]; then
 cat >> .env << EOF

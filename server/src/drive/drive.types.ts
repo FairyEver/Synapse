@@ -117,6 +117,10 @@ export type DriveAdminStorageSummaryDto = {
     readonly count: number
     readonly bytes: string
   }
+  readonly documentImages: {
+    readonly count: number
+    readonly bytes: string
+  }
   readonly total: {
     readonly quotaBytes: string
     readonly adminVisibleBytes: string

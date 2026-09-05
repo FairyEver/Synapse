@@ -25,7 +25,7 @@ Add a very small toolbar at the bottom of the active terminal pane, inside the d
 │                  │                                         │
 │ zsh              │                 xterm                   │
 │ dev              ├─────────────────────────────────────────┤
-│                  │ Ctrl+C  Clear  │  /exit  /clear          │
+│                  │ Ctrl+C  Clear  │ /exit /clear │ Custom Edit│
 └──────────────────┴─────────────────────────────────────────┘
 ```
 
@@ -36,18 +36,13 @@ Reasons:
 - A fixed-height bottom row remains visible while terminal output scrolls.
 - The toolbar can horizontally scroll on narrow screens without wrapping.
 
-The first version should ship only built-in toolbar actions defined in code. Do not add user customization, storage schema, command management UI, or MCP tools for toolbar actions yet.
+Built-in and user-defined actions are two independent collections. Built-ins remain defined in code and never enter the management UI. User-defined actions are app-global records stored separately, so adding, removing, or changing a built-in in a later release cannot mutate user data.
 
-Reasons:
-
-- The current request is for common, global operations.
-- Existing group commands already cover user-defined project commands, but they intentionally create new sessions.
-- Adding persistent custom toolbar actions would require schema, IPC, migration, settings UI, and MCP documentation before the core interaction has been validated.
-- A code-level registry still gives a clean extension point for future customization.
+User-defined actions intentionally differ from group commands: they write into the active session instead of creating a new session.
 
 ## Action Model
 
-Represent each button as a registry item. The registry is renderer-owned in the first version because all initial actions can be implemented with existing renderer state, xterm APIs, and current bridge methods.
+Represent each built-in button as a renderer-owned registry item because built-ins use existing renderer state, xterm APIs, and bridge methods.
 
 ```ts
 type TerminalToolbarPlatform = "darwin" | "win32" | "linux"
@@ -85,6 +80,25 @@ type TerminalToolbarAction =
       command: string | Partial<Record<TerminalToolbarPlatform, string>>
     }
 ```
+
+User-defined actions use a separate persisted model:
+
+```ts
+type TerminalCustomToolbarAction = {
+  id: string
+  label: string
+  content: string
+  pressEnter: boolean
+  createdAt: string
+  updatedAt: string
+  actionRevision: number
+}
+```
+
+- `label`: required toolbar label, trimmed, at most 32 characters.
+- `content`: required single-line terminal input, trimmed, at most 4096 characters.
+- `pressEnter`: when enabled, submit a separate carriage return after the text settles; when disabled, only insert text at the cursor.
+- The app stores at most 50 user-defined actions and preserves creation order.
 
 Do not model these actions as keyboard shortcut simulation. The app should perform terminal semantics directly:
 
@@ -139,6 +153,10 @@ Layout details:
 - Disabled actions stay visible when a session is not running, so users learn what exists.
 - No helper copy, marketing copy, or feature explanation is shown.
 - Tooltips are optional. If added, they must only name the action, not explain terminal basics.
+- User-defined buttons follow the built-ins after a separator. A compact edit icon stays at the far right.
+- The edit icon opens `自定义快捷输入`. The dialog lists only user-defined actions and supports add, edit, and delete.
+- Add and edit use only `名称`, `输入内容`, and `输入后按回车`; no colors, groups, icons, platforms, or advanced options are introduced.
+- Custom write buttons follow running-session availability. The edit icon remains enabled for a lost or exited active session.
 
 Accessibility:
 
@@ -160,19 +178,18 @@ Action execution:
 5. For `xterm-local: clear`, call `xterm.clear()` for the active xterm.
 6. On failure, log through `createRendererLogger` and show a short toast.
 
+For a user-defined action, write `content` to the active running session. If `pressEnter` is enabled, use the same settled, separate `\r` write as built-in shell commands.
+
 Use `\r` for submitted shell commands because xterm input currently forwards Enter as carriage return from user input. Command text and Enter must use separate writes so child TUIs do not treat the complete sequence as pasted multiline input. Continue to preserve existing chunking helpers if a future action payload could exceed the bridge limit; the initial built-ins are small and do not require chunking.
 
 ## Boundaries
 
-No new main-process service method is needed for the first version.
-
-No shared schema changes are needed.
-
-No DataRepository namespace is needed.
-
-No MCP capability update is needed because the toolbar is a renderer convenience over existing terminal write behavior. Existing MCP callers can already write raw input or stop sessions through current terminal tools.
-
-No release-note entry is needed for this Spike alone. The implementation should update `RELEASE_NOTES_PENDING.md` because the toolbar is a user-facing terminal improvement.
+- The main Terminal service owns user-defined action CRUD. Renderer access uses narrow, typed UI IPC methods.
+- `app.terminal.toolbar-actions` is a dedicated encrypted DataRepository namespace. It never contains built-in actions and does not reuse the standalone Quick Input app's records.
+- Safe storage is mandatory; the app must not fall back to plaintext persistence.
+- Ordinary configuration backup excludes action labels and contents along with other Terminal bodies.
+- No MCP capability update is needed because this is UI configuration over existing terminal input behavior. Existing MCP callers use the current session input tools, and the Terminal tool count remains 43.
+- The implementation updates `RELEASE_NOTES_PENDING.md` because the change is user-visible.
 
 ## Error Handling
 
@@ -181,6 +198,8 @@ No release-note entry is needed for this Spike alone. The implementation should 
 - If `writeSession` rejects, log the error and show `写入终端失败`.
 - If a local xterm operation is unavailable because the instance has just been disposed, do nothing.
 - Shell command failures are visible in terminal output and are not interpreted by Synapse.
+- Invalid or multiline custom content is rejected. Create is disabled at the 50-item limit.
+- A failed custom-action save or delete keeps the dialog state and shows a concise error.
 
 ## Testing
 
@@ -194,6 +213,10 @@ Renderer tests should cover:
 - `Clear` remains enabled for non-running sessions and calls the xterm clear method without calling `writeSession`.
 - Toolbar row uses horizontal overflow behavior and does not add terminal-pane marketing or helper copy.
 - A rejected write logs and shows the existing concise toast.
+- Built-ins are absent from the management dialog and cannot be edited or deleted.
+- Custom actions create, update, delete, and reload through encrypted persistence.
+- Custom actions submit a separate Enter only when `pressEnter` is enabled.
+- Custom write actions are disabled for non-running sessions while the management icon remains available.
 
 Manual verification should include:
 
@@ -204,9 +227,9 @@ Manual verification should include:
 
 ## Future Extensions
 
-Possible later additions, outside this first implementation:
+Possible later additions, outside this implementation:
 
-- User-defined toolbar actions stored per app or per group.
+- Optional per-group action scope if app-global actions prove insufficient.
 - A cautious `Stop` action with confirmation or separated danger placement.
 - A copy/paste action group if clipboard integration becomes a frequent terminal workflow.
 - Platform-specific command variants when real user need appears.

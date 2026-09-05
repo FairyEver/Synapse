@@ -292,6 +292,37 @@ describe('adminApi.drive', () => {
     )
   })
 
+  it('uses admin document image management endpoints', async () => {
+    const fetchMock = mockJsonResponse({ data: [], total: 0, page: 1, pageSize: 20 })
+
+    await adminApi.listDocumentImages({ page: 2, search: 'diagram', status: 'quarantined' })
+    await adminApi.quarantineDocumentImage('img/id')
+    await adminApi.restoreDocumentImage('img/id')
+    await adminApi.deleteDocumentImage('img/id')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/admin/drive/document-images?page=2&search=diagram&status=quarantined',
+      expect.objectContaining({ credentials: 'include' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/admin/drive/document-images/img%2Fid/quarantine',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/admin/drive/document-images/img%2Fid/restore',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/admin/drive/document-images/img%2Fid',
+      expect.objectContaining({ credentials: 'include', method: 'DELETE' })
+    )
+    expect(adminApi.documentImageOpenUrl('img/id')).toBe('/api/admin/drive/document-images/img%2Fid/open')
+  })
+
   it('downloads admin Drive files through authenticated preflight requests', async () => {
     const links: Array<{
       click: ReturnType<typeof vi.fn>
@@ -758,59 +789,53 @@ describe('driveBrowserApi', () => {
     )
   })
 
-  it('uses markdown image source endpoints', async () => {
-    const fetchMock = mockJsonResponse({ ok: true })
-
-    await driveBrowserApi.scanOwnerImageSources('item/id')
-    await driveBrowserApi.importOwnerImageSources('item/id', {
-      baseVersionId: 'version-1',
-      sources: [{ src: 'https://example.test/a.png' }],
+  it('uploads browser markdown images through owner and share endpoints', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/prepare')) {
+        return new Response(JSON.stringify({
+          sessionId: 'session/id',
+          imageId: 'img_00000000000000000000000000000000',
+          upload: {
+            method: 'PUT',
+            url: 'https://cos.example/upload',
+            expiresAt: '2026-09-05T00:00:00.000Z',
+            headers: { 'Content-Type': 'image/png' },
+          },
+        }), { headers: { 'Content-Type': 'application/json' }, status: 200 })
+      }
+      if (url === 'https://cos.example/upload') return new Response(null, { status: 200 })
+      if (url.endsWith('/complete')) {
+        return new Response(JSON.stringify({
+          imageId: 'img_00000000000000000000000000000000',
+          name: 'image.png',
+          size: '5',
+          mimeType: 'image/png',
+          url: '/object/img_00000000000000000000000000000000',
+        }), { headers: { 'Content-Type': 'application/json' }, status: 200 })
+      }
+      throw new Error(`Unexpected fetch ${url}`)
     })
-    await driveBrowserApi.scanShareImageSources('shr/id')
-    await driveBrowserApi.scanShareImageSources('shr/id', 'child/id')
-    await driveBrowserApi.importShareImageSources('shr/id', 'child/id', {
-      baseVersionId: 'version-2',
-      sources: [{ src: 'https://example.test/b.png' }],
+    const file = new File(['image'], 'image.png', { type: 'image/png' })
+
+    await driveBrowserApi.uploadHostedDocumentImage(file, { kind: 'owner', itemId: 'item/id' }, {
+      name: 'image.png',
+      mimeType: 'image/png',
+    })
+    await driveBrowserApi.uploadHostedDocumentImage(file, { kind: 'share', shareId: 'shr/id', itemId: 'child/id' }, {
+      name: 'image.png',
+      mimeType: 'image/png',
     })
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/drive/browser/owner/items/item%2Fid/image-sources',
-      expect.objectContaining({ credentials: 'include' })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      '/api/drive/browser/owner/items/item%2Fid/image-sources/import',
-      expect.objectContaining({
-        body: JSON.stringify({
-          baseVersionId: 'version-1',
-          sources: [{ src: 'https://example.test/a.png' }],
-        }),
-        credentials: 'include',
-        method: 'POST',
-      })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      '/api/drive/browser/shares/shr%2Fid/image-sources',
-      expect.objectContaining({ credentials: 'include' })
+      '/api/drive/browser/owner/items/item%2Fid/document-images/uploads/prepare',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources',
-      expect.objectContaining({ credentials: 'include' })
-    )
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      5,
-      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources/import',
-      expect.objectContaining({
-        body: JSON.stringify({
-          baseVersionId: 'version-2',
-          sources: [{ src: 'https://example.test/b.png' }],
-        }),
-        credentials: 'include',
-        method: 'POST',
-      })
+      '/api/drive/browser/shares/shr%2Fid/items/child%2Fid/document-images/uploads/prepare',
+      expect.objectContaining({ credentials: 'include', method: 'POST' })
     )
   })
 
@@ -888,14 +913,19 @@ describe('driveBrowserApi', () => {
       expect(authExpired).toHaveBeenCalledOnce()
 
       authExpired.mockClear()
-      await expect(driveBrowserApi.scanShareImageSources('shr/id')).rejects.toMatchObject({ status: 401 })
+      await expect(driveBrowserApi.uploadHostedDocumentImage(
+        new File(['image'], 'image.png', { type: 'image/png' }),
+        { kind: 'share', shareId: 'shr/id' },
+        { name: 'image.png', mimeType: 'image/png' }
+      )).rejects.toMatchObject({ status: 401 })
       expect(authExpired).toHaveBeenCalledOnce()
 
       authExpired.mockClear()
-      await expect(driveBrowserApi.importShareImageSources('shr/id', 'child/id', {
-        baseVersionId: 'version-1',
-        sources: [{ src: 'https://example.test/image.png' }],
-      })).rejects.toMatchObject({ status: 401 })
+      await expect(driveBrowserApi.uploadHostedDocumentImage(
+        new File(['image'], 'image.png', { type: 'image/png' }),
+        { kind: 'share', shareId: 'shr/id', itemId: 'child/id' },
+        { name: 'image.png', mimeType: 'image/png' }
+      )).rejects.toMatchObject({ status: 401 })
       expect(authExpired).toHaveBeenCalledOnce()
 
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid', 401)).toBe(false)
@@ -903,10 +933,8 @@ describe('driveBrowserApi', () => {
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/content', 401)).toBe(true)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/content', 401, 'DRIVE_SHARE_UNLOCK_REQUIRED')).toBe(false)
       expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/content', 401)).toBe(true)
-      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/image-sources', 401)).toBe(true)
-      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/image-sources/import', 401)).toBe(true)
-      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources', 401)).toBe(true)
-      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/image-sources/import', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/document-images/uploads/prepare', 401)).toBe(true)
+      expect(shouldNotifyAuthExpired('/api/drive/browser/shares/shr%2Fid/items/child%2Fid/document-images/uploads/session%2Fid/complete', 401)).toBe(true)
     } finally {
       unsubscribe()
     }

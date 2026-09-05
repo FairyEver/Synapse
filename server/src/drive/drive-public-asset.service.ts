@@ -375,61 +375,6 @@ export class DrivePublicAssetService {
     }
   }
 
-  async importImageBuffer(userId: string, publicAppUrl: string, input: {
-    readonly name: string
-    readonly mimeType: string
-    readonly body: Buffer
-  }): Promise<DrivePublicAssetDto> {
-    if (drivePublicAssetContentKind(input.mimeType) !== "image") {
-      throw new BadRequestException(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
-    }
-    let session: PublicAssetUploadSession | null = null
-    try {
-      const prepared = await this.prepareUpload(userId, {
-        name: input.name,
-        mimeType: input.mimeType,
-        size: input.body.byteLength.toString(),
-        publicAppUrl,
-      })
-      session = await this.requireUploadSession(userId, prepared.sessionId, DRIVE_UPLOAD_PURPOSE.publicAssetUpload)
-      await this.storage.putObject({
-        key: session.storageKey,
-        body: input.body,
-        contentType: input.mimeType,
-      })
-      return await this.completeUpload(userId, session.id, { publicAppUrl })
-    } catch (error) {
-      if (session) await this.failSessionSafely(userId, session)
-      throw error
-    }
-  }
-
-  async copyPublicAssetToUser(userId: string, sourceAssetId: string, publicAppUrl: string): Promise<DrivePublicAssetDto> {
-    const source = await this.requireActivePublicAsset(sourceAssetId)
-    if (drivePublicAssetContentKind(source.mimeType) !== "image") {
-      throw new BadRequestException(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
-    }
-    let session: PublicAssetUploadSession | null = null
-    try {
-      const prepared = await this.prepareUpload(userId, {
-        name: source.name,
-        mimeType: source.mimeType,
-        size: source.size.toString(),
-        publicAppUrl,
-      })
-      session = await this.requireUploadSession(userId, prepared.sessionId, DRIVE_UPLOAD_PURPOSE.publicAssetUpload)
-      await this.storage.copyObject({
-        fromKey: source.storageKey,
-        toKey: session.storageKey,
-        contentType: source.mimeType,
-      })
-      return await this.completeUpload(userId, session.id, { publicAppUrl })
-    } catch (error) {
-      if (session) await this.failSessionSafely(userId, session)
-      throw error
-    }
-  }
-
   async cancelUpload(userId: string, sessionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
     const session = await this.requirePendingSession(userId, sessionId, DRIVE_UPLOAD_PURPOSE.publicAssetUpload)
     await this.failSession(userId, session, DRIVE_UPLOAD_STATUS.cancelled)
@@ -637,26 +582,6 @@ export class DrivePublicAssetService {
       allowPublicAsset: true,
     })
     return toDrivePublicAssetDto(await this.requireOwnedAsset(userId, assetId), resolveDtoPublicAppUrl(auditContext))
-  }
-
-  async cleanupImportedAsset(userId: string, assetId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true }> {
-    const asset = await this.requireOwnedAsset(userId, assetId)
-    const lifecycle = this.lifecycleService()
-    await lifecycle.trashItem({
-      userId,
-      itemId: asset.itemId,
-      actorId: userId,
-      ipAddress: auditContext.ipAddress ?? "system",
-      allowPublicAsset: true,
-    })
-    await lifecycle.hideTrashedItem({
-      userId,
-      itemId: asset.itemId,
-      actorId: userId,
-      ipAddress: auditContext.ipAddress ?? "system",
-      allowPublicAsset: true,
-    })
-    return { ok: true }
   }
 
   async openAssetDownload(userId: string, assetId: string) {

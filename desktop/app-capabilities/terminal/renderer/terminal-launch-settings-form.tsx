@@ -3,8 +3,8 @@ import { FolderOpen } from "lucide-react"
 import { Button } from "../../../src/components/ui/button"
 import { Field, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "../../../src/components/ui/native-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../src/components/ui/tabs"
+import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import type { SynapseTerminalLaunchLayer } from "../../../src/types/terminal"
 import type { TerminalAppearanceSize } from "./terminal-appearance"
 import { TerminalEnvironmentEditor } from "./terminal-environment-editor"
@@ -82,18 +82,21 @@ export function TerminalLaunchSettingsForm({
       {appearanceSize && onAppearanceSizeChange ? (
         <TabsContent value="appearance" className="pt-3">
           <Field orientation="horizontal">
-            <FieldLabel htmlFor="terminal-appearance-size">字号</FieldLabel>
-            <NativeSelect
-              id="terminal-appearance-size"
+            <FieldLabel>字号</FieldLabel>
+            <ToggleGroup
+              type="single"
+              variant="outline"
               aria-label="字号"
               data-track="terminal-appearance-size"
               value={appearanceSize}
-              onChange={(event) => onAppearanceSizeChange(event.target.value as TerminalAppearanceSize)}
+              onValueChange={(size) => {
+                if (size) onAppearanceSizeChange(size as TerminalAppearanceSize)
+              }}
             >
-              <NativeSelectOption value="small">小</NativeSelectOption>
-              <NativeSelectOption value="medium">中</NativeSelectOption>
-              <NativeSelectOption value="large">大</NativeSelectOption>
-            </NativeSelect>
+              <ToggleGroupItem value="small">小</ToggleGroupItem>
+              <ToggleGroupItem value="medium">中</ToggleGroupItem>
+              <ToggleGroupItem value="large">大</ToggleGroupItem>
+            </ToggleGroup>
           </Field>
         </TabsContent>
       ) : null}

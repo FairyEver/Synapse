@@ -49,12 +49,13 @@
 - 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane。
 - Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。
 - Terminal pane 文件树允许按系统平台使用 `Cmd/Ctrl` 切换选择、`Shift` 连续选择，并把全部选中路径拖入当前 session；路径必须由文件树 scope 在主进程解析，按现有终端路径规则转义后写入，不得伪造成外部文件或新增 MCP 工具。
+- Terminal 底部内置快捷输入由代码定义且只读；用户快捷输入是独立的应用级数据，只允许名称、单行输入内容和是否回车，通过 UI 私有 IPC 管理并加密存入 `app.terminal.toolbar-actions`。两者不得混存，也不得注册 MCP 工具。
 - 启动设置只属于 Terminal：全局入口位于 Terminal Header，分组和快捷命令入口位于对应对象；不得在系统设置中增加重复入口。解析顺序固定为安全系统环境、Synapse 内置、全局、分组、快捷命令、一次性覆盖，配置变化只影响新 PTY。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
 - 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
 - 结构元数据使用已注册 `app.terminal.*` DataRepository；原始输出/检查点只进入专属有界加密块存储，安全存储不可用时不得回退明文。
-- 普通备份排除输出、检查点、命令正文、活动租约、删除意图和短期幂等记录；恢复中的运行会话转为 `lost`，不得重投生命周期操作。
+- 普通备份排除输出、检查点、命令正文、用户快捷输入正文、活动租约、删除意图和短期幂等记录；恢复中的运行会话转为 `lost`，不得重投生命周期操作。
 
 ### Notifier
 
@@ -90,6 +91,8 @@
 
 - `公开素材`使用稳定、匿名、不过期 `/files/<assetId>`。允许 JPG/JPEG/PNG/WebP/GIF/AVIF/ICO 和 PDF/DOCX/XLSX/PPTX/TXT/MD/CSV；禁止 SVG、主动网页内容、压缩包、可执行、旧 Office 和宏格式。
 - 图片 inline，文档 attachment；替换只允许同一大类。需要密码、有效期或敏感控制时使用普通 Drive 分享，不得绕过。
+- 浏览器 Markdown/MDX 在线编辑中粘贴、拖入或选择的图片使用平台托管 `/object/<objectId>`，不属于任何用户、不进入用户公开素材列表且不计用户云盘配额。`/object` 不限定未来对象类型；当前仅允许 PNG/JPG/JPEG/GIF/WebP/AVIF/ICO，单图 20 MB。临时对象 24 小时未随原文档保存激活则清理，激活后不因移除引用或删除文档自动删除。既有相对图片、`/files/` 与外部 URL 不迁移、不改写，也不提供迁移操作。
+- 本地 Markdown/文件夹上传仍将引用图片作为普通用户 Drive 文件并保留相对路径；HTML 及其依赖仍走 Drive 文件或 Site；用户明确要求图床、直链或公开素材时仍创建计入其配额的 `/files/<assetId>`。平台托管文档图片不注册 MCP 上传、列表或管理工具。
 - 独立 HTML 在用户未明确发布整个文件夹时默认 `/share/...`；多文件站点或明确发布文件夹时使用 `/sites/...`。文件夹即使只有 `index.html` 也可发布为 Site；仅指定上传目标文件夹或泛称网站不等于发布整个文件夹。
 - 单文件 HTML 分享预览保留 `allow-same-origin`，允许分享页面使用 `localStorage` / `sessionStorage`；因此它与 Synapse 主站同源，不是账号会话隔离边界，只应分享可信 HTML。
 - Markdown 源文本是协同与版本历史的权威数据。Yjs 更新先进入协同日志，只有检查点进入 `DriveFileVersion`；上传覆盖、历史恢复和 MDXEditor 整文保存必须经过同一 item 级协调器并切换协同代际。

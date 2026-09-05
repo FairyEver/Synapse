@@ -31,6 +31,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AdminDriveStorageSummary } from '@/features/drive-browser/admin-drive-storage-summary'
 import { AdminPublicAssets } from '@/features/drive-browser/admin-public-assets'
+import { AdminDocumentImages } from '@/features/drive-browser/admin-document-images'
 
 const allTypesValue = 'all'
 const allSharedValue = 'all'
@@ -261,6 +262,7 @@ export default function DriveAdminPage() {
           <TabsList>
             <TabsTrigger value='items'>文件</TabsTrigger>
             <TabsTrigger value='public-assets'>公开素材</TabsTrigger>
+            <TabsTrigger value='document-images'>文档图片</TabsTrigger>
             <TabsTrigger value='storage'>存储</TabsTrigger>
           </TabsList>
           <TabsContent value='items' className='flex min-h-0 flex-col'>
@@ -371,6 +373,9 @@ export default function DriveAdminPage() {
           </TabsContent>
           <TabsContent value='public-assets' className='flex min-h-0 flex-col'>
             <AdminPublicAssets />
+          </TabsContent>
+          <TabsContent value='document-images' className='flex min-h-0 flex-col'>
+            <AdminDocumentImages />
           </TabsContent>
           <TabsContent value='storage'>
             <AdminDriveStorageSummary />

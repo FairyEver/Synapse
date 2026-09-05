@@ -14,6 +14,7 @@ describe("Terminal DataRepository store", () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-data-repo-"))
     const groupId = randomUUID()
     const commandId = randomUUID()
+    const toolbarActionId = randomUUID()
     const sessionId = randomUUID()
     const workspaceId = randomUUID()
     const paneId = randomUUID()
@@ -33,6 +34,15 @@ describe("Terminal DataRepository store", () => {
         settings: { shell: "/bin/zsh", environment: { GLOBAL_SECRET: "global-private", GLOBAL_UNSET: null } },
       },
       terminalDomainRevision: 3,
+      toolbarActions: [{
+        id: toolbarActionId,
+        label: "Private deploy",
+        content: "deploy --token private-toolbar-token",
+        pressEnter: true,
+        createdAt: timestamp(),
+        updatedAt: timestamp(),
+        actionRevision: 1,
+      }],
       groups: [{
         id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
         groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1,
@@ -87,6 +97,12 @@ describe("Terminal DataRepository store", () => {
       revision: 2,
       settings: { environment: { GLOBAL_SECRET: "global-private", GLOBAL_UNSET: null } },
     })
+    expect(loaded.toolbarActions).toEqual([expect.objectContaining({
+      id: toolbarActionId,
+      label: "Private deploy",
+      content: "deploy --token private-toolbar-token",
+      pressEnter: true,
+    })])
     expect(loaded.groups[0]?.settings?.environment).toEqual({ GROUP_SECRET: "group-private", GROUP_UNSET: null })
     expect(loaded.groups[0]?.settings?.commands?.[0]?.command).toBe("printf private")
     expect(loaded.groups[0]?.settings?.commands?.[0]?.launch).toEqual({
@@ -106,6 +122,8 @@ describe("Terminal DataRepository store", () => {
     expect(persisted).not.toContain("global-private")
     expect(persisted).not.toContain("group-private")
     expect(persisted).not.toContain("command-private")
+    expect(persisted).not.toContain("Private deploy")
+    expect(persisted).not.toContain("private-toolbar-token")
   })
 
   it("rejects sensitive configuration before writing when safe storage is unavailable", async () => {
@@ -116,6 +134,15 @@ describe("Terminal DataRepository store", () => {
     const groupId = randomUUID()
     await expect(store.saveState({
       terminalDomainRevision: 1,
+      toolbarActions: [{
+        id: randomUUID(),
+        label: "Secret action",
+        content: "echo secret",
+        pressEnter: true,
+        createdAt: timestamp(),
+        updatedAt: timestamp(),
+        actionRevision: 1,
+      }],
       groups: [{
         id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
         groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1,
@@ -183,6 +210,65 @@ describe("Terminal DataRepository store", () => {
     const loaded = await store.loadState()
     expect(loaded.output.map((chunk) => [chunk.seq, chunk.data])).toEqual([[1, "one"], [2, "two"]])
     expect(loaded.sessions[0]).toMatchObject({ id: sessionId, lastOutputSeq: 2, stateRevision: 3 })
+  })
+
+  it("packs small runtime chunks into bounded blocks and filters an evicted block prefix", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-output-batches-"))
+    const safeStorage = reversibleSafeStorage()
+    const repository = createTerminalRepository(createFileBackedDataRepository({ rootDir: path.join(root, "data-v1"), safeStorage }))
+    const store = createTerminalDataRepositoryStore({
+      repository,
+      blocks: createTerminalEncryptedBlockStore({ baseDir: path.join(root, "terminal"), safeStorage }),
+    })
+    const groupId = randomUUID()
+    const sessionId = randomUUID()
+    const session = terminalSession(groupId, sessionId)
+    await store.saveState({
+      terminalDomainRevision: 1,
+      groups: [{
+        id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0,
+        groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1,
+      }],
+      sessions: [session], output: [], operations: [], idempotency: [], checkpoints: [],
+    })
+    const output = Array.from({ length: 100 }, (_, index) => ({
+      sessionId,
+      seq: index + 1,
+      data: `line-${index}\n`,
+      createdAt: timestamp(),
+      source: "pty" as const,
+    }))
+
+    await store.saveRuntimeState!({
+      sessions: [{
+        session: { ...session, lastOutputSeq: 100, stateRevision: 101 },
+        output,
+        firstRetainedOutputSeq: 1,
+      }],
+    })
+
+    expect((await repository.blocks.list()).filter((block) => block.type === "output")).toHaveLength(1)
+    expect((await store.loadState()).output.map((chunk) => chunk.seq)).toEqual(output.map((chunk) => chunk.seq))
+
+    await store.saveRuntimeState!({
+      sessions: [{
+        session: { ...session, lastOutputSeq: 100, stateRevision: 102, discardedOutputChunks: 49 },
+        output: [],
+        firstRetainedOutputSeq: 50,
+      }],
+    })
+    expect((await store.loadState()).output.map((chunk) => chunk.seq)).toEqual(
+      Array.from({ length: 51 }, (_, index) => index + 50),
+    )
+
+    await store.saveRuntimeState!({
+      sessions: [{
+        session: { ...session, lastOutputSeq: 100, stateRevision: 103, discardedOutputChunks: 100 },
+        output: [],
+        firstRetainedOutputSeq: 101,
+      }],
+    })
+    expect((await repository.blocks.list()).filter((block) => block.type === "output")).toHaveLength(0)
   })
 
   it("writes only records changed by a structural workspace save", async () => {

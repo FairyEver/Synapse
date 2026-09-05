@@ -84,6 +84,14 @@ export function AdminDriveStorageSummary() {
               <TableCell className='text-right text-muted-foreground'>-</TableCell>
               <TableCell className='text-right text-muted-foreground'>-</TableCell>
             </TableRow>
+            <TableRow>
+              <TableCell className='font-medium'>文档图片</TableCell>
+              <TableCell className='text-right tabular-nums'>
+                {data ? formatStorageValue(data.documentImages.count, data.documentImages.bytes) : '-'}
+              </TableCell>
+              <TableCell className='text-right text-muted-foreground'>-</TableCell>
+              <TableCell className='text-right text-muted-foreground'>-</TableCell>
+            </TableRow>
           </TableBody>
         </Table>
       </div>

@@ -4,7 +4,6 @@ import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_DEFAULT_SITE_ACCESS_SETTINGS,
   DRIVE_CHANGE_TYPES,
-  DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_BYTES,
   DRIVE_LINK_INTAKE_DEFAULT_MAX_FILES,
   DRIVE_LINK_INTAKE_SCOPES,
@@ -15,6 +14,7 @@ import {
   DRIVE_MAX_FILE_BYTES,
   DRIVE_CONSOLE_BROWSER_PATH_PREFIX,
   DRIVE_OWNER_BROWSER_PATH_PREFIX,
+  PLATFORM_OBJECT_PATH_PREFIX,
   DRIVE_SITE_DEFAULT_PAGE_SIZE,
   DRIVE_SITE_MAX_PAGE_SIZE,
   DRIVE_SITE_PATH_PREFIX,
@@ -45,7 +45,6 @@ import {
   isDriveMarkdownItem,
   isDrivePublicAssetId,
   parseDrivePublicAssetUrl,
-  type DriveDocumentImageSource,
   type DriveAnnotationAnchorStatus,
   type DriveAnnotationCommentDto,
   type DriveAnnotationCreateInput,
@@ -59,6 +58,10 @@ import {
 } from "./drive"
 
 describe("drive URL helpers", () => {
+  it("uses a type-neutral namespace for platform objects", () => {
+    expect(PLATFORM_OBJECT_PATH_PREFIX).toBe("/object")
+  })
+
   it("builds public drive share URLs", () => {
     expect(buildDriveShareUrl({ publicAppUrl: "https://synapse.d2.pub/", shareId: "shr_abc" }))
       .toBe("https://synapse.d2.pub/share/shr_abc")
@@ -98,26 +101,6 @@ describe("drive URL helpers", () => {
     expect(parseDrivePublicAssetUrl(`file:///files/${assetId}`)).toBeNull()
     expect(parseDrivePublicAssetUrl(`ftp://synapse.test/files/${assetId}`)).toBeNull()
     expect(parseDrivePublicAssetUrl(`mailto:${assetId}@synapse.test`)).toBeNull()
-  })
-
-  it("keeps image source DTO fields stable", () => {
-    const source: DriveDocumentImageSource = {
-      id: "img_1",
-      imageKey: "img_hash",
-      src: "https://example.test/a.png",
-      kind: "external",
-      occurrenceCount: 2,
-      altText: "diagram",
-      previewUrl: "https://example.test/a.png",
-      canImport: true,
-      status: "ready",
-    }
-    expect(source.kind).toBe("external")
-    expect(source.occurrenceCount).toBe(2)
-  })
-
-  it("sets a bounded image import source limit", () => {
-    expect(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES).toBe(20)
   })
 
   it("builds canonical site root URLs", () => {

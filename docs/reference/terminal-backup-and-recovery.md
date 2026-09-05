@@ -15,6 +15,7 @@ Excluded data:
 - raw PTY output;
 - emulator checkpoints and derived scrollback;
 - saved-command bodies and recoverable environment values;
+- user-defined toolbar action labels and input contents;
 - active leases and pending observations;
 - pending deletion intents and short-lived idempotency records.
 

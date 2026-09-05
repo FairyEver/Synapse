@@ -11,16 +11,16 @@ export type TerminalAppearanceSize = (typeof TERMINAL_APPEARANCE_SIZES)[number]
 export const DEFAULT_TERMINAL_APPEARANCE_SIZE: TerminalAppearanceSize = "medium"
 
 const TERMINAL_APPEARANCE_OPTIONS = {
-  small: { fontSize: 12 },
-  medium: { fontSize: 14 },
-  large: { fontSize: 16 },
-} as const satisfies Record<TerminalAppearanceSize, Pick<ITerminalOptions, "fontSize">>
+  small: { fontSize: 12, lineHeight: 1.05 },
+  medium: { fontSize: 14, lineHeight: 1.1 },
+  large: { fontSize: 16, lineHeight: 1.1 },
+} as const satisfies Record<TerminalAppearanceSize, Pick<ITerminalOptions, "fontSize" | "lineHeight">>
 
 const logger = createRendererLogger("terminal.appearance")
 
 export function getTerminalAppearanceOptions(
   size: TerminalAppearanceSize,
-): Pick<ITerminalOptions, "fontSize"> {
+): Pick<ITerminalOptions, "fontSize" | "lineHeight"> {
   return TERMINAL_APPEARANCE_OPTIONS[size]
 }
 

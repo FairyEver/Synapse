@@ -14,10 +14,9 @@ import { auditActors, AuditLogService } from "../common/audit-log.service"
 import { attachmentContentDisposition, inlineContentDisposition } from "../common/content-disposition"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../common/public-app-url"
-import { DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
+import { DOCUMENT_IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE, DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { badRequestFromZodError } from "../common/zod-validation"
 import {
-  DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES,
   DRIVE_ANNOTATION_COMMENT_MAX_LENGTH,
   DRIVE_ANNOTATION_QUOTE_CONTEXT_MAX_LENGTH,
   DRIVE_ANNOTATION_QUOTE_EXACT_MAX_LENGTH,
@@ -31,7 +30,7 @@ import {
 import { DriveService } from "./drive.service"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
-import { DriveDocumentImageService } from "./drive-document-image.service"
+import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import {
   parseDriveAnnotationCommentUpdateBody,
@@ -43,6 +42,7 @@ import { driveSiteCacheControl, driveSiteContentType, renderDriveSiteNotFoundPag
 import { DriveSiteService } from "./drive-site.service"
 import { isDriveSiteHtmlPath } from "./drive-site-path"
 import { DriveUploadTooLargeError, type DriveStoragePort, LocalDriveStorage } from "./drive-storage"
+import { PlatformMediaStorage } from "./platform-media-storage"
 import { sendDriveZip } from "./drive-download-stream"
 
 const driveAccessCookieNamePrefix = "synapse_drive_access"
@@ -107,16 +107,18 @@ const publicAssetPrepareUploadSchema = z.object({
   mimeType: z.string().trim().max(255).nullable().optional(),
 }).strict()
 const driveUploadThrottle = { default: { ttl: RATE_LIMIT_TTL_MS, limit: DRIVE_UPLOAD_RATE_LIMIT_PER_MINUTE } } as const
+const documentImageUploadThrottle = { default: { ttl: RATE_LIMIT_TTL_MS, limit: DOCUMENT_IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE } } as const
+const documentImagePrepareUploadSchema = z.object({
+  name: z.string().min(1).max(255),
+  size: z.string().regex(/^\d+$/u),
+  mimeType: z.string().trim().min(1).max(255),
+}).strict()
 const moveSchema = z.object({ parentId: z.string().nullable() }).strict()
 const versionPinSchema = z.object({ isPinned: z.boolean() }).strict()
 const driveFileTextUpdateSchema = z.object({
   contentType: z.literal("text"),
   text: z.string(),
   baseVersionId: z.string().min(1),
-}).strict()
-const driveDocumentImageImportSchema = z.object({
-  baseVersionId: z.string().min(1),
-  sources: z.array(z.object({ src: z.string().min(1) }).strict()).max(DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES),
 }).strict()
 const driveLinkResolveSchema = z.object({
   url: z.string().url(),
@@ -201,6 +203,8 @@ const adminSortFields = ["createdAt", "updatedAt", "name", "size", "storageStatu
 const adminPublicAssetSortFields = ["createdAt", "updatedAt", "name", "size", "lifecycleStatus", "lastAccessedAt"] as const
 const adminPublicAssetAccessLogSortFields = ["accessedAt", "statusCode", "method", "bytes"] as const
 const adminPublicAssetRevisionSortFields = ["replacedAt", "createdAt", "name", "size"] as const
+const adminDocumentImageSortFields = ["createdAt", "updatedAt", "originalName", "size", "status"] as const
+const adminDocumentImageStatuses = new Set(["temporary", "active", "quarantined", "delete_pending"])
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
 @UseGuards(UserAuthGuard)
@@ -211,7 +215,6 @@ export class DriveUserController {
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
-    @Optional() private readonly documentImages?: DriveDocumentImageService,
     @Optional() private readonly changes?: DriveChangeLogService,
   ) {}
 
@@ -420,28 +423,26 @@ export class DriveUserController {
     return this.drive.getItem(request.user!.id, id)
   }
 
-  @Get(["/items/:itemId/image-sources", "/browser/owner/items/:itemId/image-sources"])
-  scanOwnerItemImages(@Param("itemId") itemId: string, @Req() request: AuthenticatedUserRequest) {
-    return requireDriveDocumentImageService(this.documentImages).scanOwnerItemImages({
-      actorUserId: request.user!.id,
+  @Post("/browser/owner/items/:itemId/document-images/uploads/prepare")
+  @Throttle(documentImageUploadThrottle)
+  prepareOwnerDocumentImageUpload(@Param("itemId") itemId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.prepareOwnerDocumentImageUpload(
+      request.user!.id,
       itemId,
-    })
+      parseBody(documentImagePrepareUploadSchema, body, "图片上传请求无效。"),
+    )
   }
 
-  @Post(["/items/:itemId/image-sources/import", "/browser/owner/items/:itemId/image-sources/import"])
-  importOwnerItemImages(
-    @Param("itemId") itemId: string,
-    @Body() body: unknown,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    const parsed = parseBody(driveDocumentImageImportSchema, body, "图片转存请求无效。")
-    return requireDriveDocumentImageService(this.documentImages).importOwnerItemImages({
-      actorUserId: request.user!.id,
-      itemId,
-      body: parsed,
-      publicAppUrl: resolveRequestPublicAppUrl(request),
-      auditContext: driveAuditContext(request),
-    })
+  @Post("/browser/owner/items/:itemId/document-images/uploads/:sessionId/complete")
+  @Throttle(documentImageUploadThrottle)
+  completeOwnerDocumentImageUpload(@Param("itemId") itemId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.completeOwnerDocumentImageUpload(request.user!.id, itemId, sessionId)
+  }
+
+  @Post("/browser/owner/items/:itemId/document-images/uploads/:sessionId/cancel")
+  @Throttle(documentImageUploadThrottle)
+  cancelOwnerDocumentImageUpload(@Param("itemId") itemId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.cancelOwnerDocumentImageUpload(request.user!.id, itemId, sessionId)
   }
 
   @Get("/items/:id/versions")
@@ -798,6 +799,7 @@ export class DriveAdminController {
     private readonly drive: DriveService,
     @Optional() private readonly publicAssets?: DrivePublicAssetService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly hostedDocumentImages?: DriveDocumentHostedImageService,
   ) {}
 
   @Get("/items")
@@ -872,6 +874,7 @@ export class DriveAdminController {
           + result.publicAssets.trashed.count
           + result.publicAssets.hidden.count,
         publicAssetRevisionCount: result.publicAssetRevisions.count,
+        documentImageCount: result.documentImages?.count ?? 0,
       },
       ipAddress: request.ip ?? "system",
     })
@@ -906,6 +909,67 @@ export class DriveAdminController {
       },
       ipAddress: request.ip ?? "system",
     })
+    return result
+  }
+
+  @Get("/document-images")
+  async listDocumentImages(@Query() query: Record<string, unknown>, @Req() request: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: adminDocumentImageSortFields })
+    const status = typeof query.status === "string" && adminDocumentImageStatuses.has(query.status) ? query.status : undefined
+    const result = await requireHostedDocumentImageService(this.hostedDocumentImages).listAdminImages({
+      pagination,
+      search: typeof query.search === "string" ? query.search.trim() || undefined : undefined,
+      status,
+    })
+    await this.recordAuditSafely({
+      actor: auditActors.platformAdmin(request.admin!.sessionId),
+      action: "admin.drive.document_images.list",
+      targetType: "drive_document_image",
+      targetId: "list",
+      detail: { count: result.data.length, total: result.total },
+      ipAddress: request.ip ?? "system",
+    })
+    return result
+  }
+
+  @Get("/document-images/:imageId/open")
+  async openDocumentImage(@Param("imageId") imageId: string, @Req() request: AdminRequest, @Res() response: Response) {
+    const service = requireHostedDocumentImageService(this.hostedDocumentImages)
+    const image = await service.resolveAdminImage(imageId)
+    response.setHeader("Content-Type", image.mimeType)
+    response.setHeader("Content-Disposition", inlineContentDisposition(image.name))
+    response.setHeader("Content-Length", image.size.toString())
+    response.setHeader("X-Content-Type-Options", "nosniff")
+    const object = await service.openImage(image.storageKey)
+    await pipeline(object.stream as Readable, response)
+    await this.recordAuditSafely({
+      adminEmail: request.admin!.email,
+      action: "admin.drive.document_image.open",
+      targetType: "drive_document_image",
+      targetId: imageId,
+      detail: { imageId },
+      ipAddress: request.ip ?? "system",
+    })
+  }
+
+  @Post("/document-images/:imageId/quarantine")
+  async quarantineDocumentImage(@Param("imageId") imageId: string, @Req() request: AdminRequest) {
+    const result = await requireHostedDocumentImageService(this.hostedDocumentImages).quarantineImage(imageId, request.admin!.email)
+    await this.recordDocumentImageMutationAudit(request, "quarantine", imageId)
+    return result
+  }
+
+  @Post("/document-images/:imageId/restore")
+  async restoreDocumentImage(@Param("imageId") imageId: string, @Req() request: AdminRequest) {
+    const result = await requireHostedDocumentImageService(this.hostedDocumentImages).restoreImage(imageId)
+    await this.recordDocumentImageMutationAudit(request, "restore", imageId)
+    return result
+  }
+
+  @Delete("/document-images/:imageId")
+  async deleteDocumentImage(@Param("imageId") imageId: string, @Req() request: AdminRequest) {
+    const result = await requireHostedDocumentImageService(this.hostedDocumentImages).deleteImage(imageId, request.admin!.email)
+    await this.recordDocumentImageMutationAudit(request, "delete", imageId, { deletePending: result.deletePending ?? false })
     return result
   }
 
@@ -1036,6 +1100,22 @@ export class DriveAdminController {
       }, "Failed to record drive admin audit log")
     }
   }
+
+  private recordDocumentImageMutationAudit(
+    request: AdminRequest,
+    operation: "quarantine" | "restore" | "delete",
+    imageId: string,
+    detail: Record<string, unknown> = {},
+  ): Promise<void> {
+    return this.recordAuditSafely({
+      adminEmail: request.admin!.email,
+      action: `admin.drive.document_image.${operation}`,
+      targetType: "drive_document_image",
+      targetId: imageId,
+      detail: { imageId, ...detail },
+      ipAddress: request.ip ?? "system",
+    })
+  }
 }
 
 function downloadTransferErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
@@ -1055,7 +1135,7 @@ export class DrivePublicController {
     @Optional() private readonly userAuth?: UserAuthService,
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
-    @Optional() private readonly documentImages?: DriveDocumentImageService,
+    @Optional() private readonly hostedDocumentImages?: DriveDocumentHostedImageService,
     @Optional() private readonly linkIntake?: DriveLinkIntakeService,
   ) {}
 
@@ -1234,6 +1314,48 @@ export class DrivePublicController {
       response.setHeader("Cache-Control", "no-store")
       response.status(404).send("Not Found")
       void publicAssets.recordAccessSafely({ ...accessBase, statusCode: 404, bytes: 0n })
+    }
+  }
+
+  @Get("/object/:objectId")
+  @Head("/object/:objectId")
+  async sendHostedDocumentImage(@Param("objectId") objectId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
+    response.setHeader("Cross-Origin-Resource-Policy", "cross-origin")
+    const service = requireHostedDocumentImageService(this.hostedDocumentImages)
+    const image = await service.resolveImage(objectId)
+    if (!image) {
+      response.setHeader("Cache-Control", "no-store")
+      response.status(404).send("Not Found")
+      return
+    }
+    response.setHeader("Cache-Control", "no-cache, must-revalidate")
+    response.setHeader("Content-Type", image.mimeType)
+    response.setHeader("Content-Disposition", inlineContentDisposition(image.name))
+    response.setHeader("Content-Length", image.size.toString())
+    response.setHeader("X-Content-Type-Options", "nosniff")
+    if (image.etag) response.setHeader("ETag", image.etag)
+    if (image.etag && request.headers["if-none-match"] === image.etag) {
+      response.status(304).end()
+      return
+    }
+    if (request.method.toUpperCase() === "HEAD") {
+      response.status(200).end()
+      return
+    }
+    try {
+      const object = await service.openImage(image.storageKey)
+      await pipeline(object.stream as Readable, response)
+    } catch (error) {
+      if (response.headersSent) {
+        if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+        return
+      }
+      response.removeHeader("Content-Type")
+      response.removeHeader("Content-Disposition")
+      response.removeHeader("Content-Length")
+      response.removeHeader("ETag")
+      response.setHeader("Cache-Control", "no-store")
+      response.status(404).send("Not Found")
     }
   }
 
@@ -1672,65 +1794,79 @@ export class DrivePublicController {
   }
 
   @UseGuards(UserAuthGuard)
-  @Get("/api/drive/browser/shares/:shareId/image-sources")
-  scanShareRootImages(@Param("shareId") shareId: string, @Req() request: AuthenticatedUserRequest) {
-    return requireDriveDocumentImageService(this.documentImages).scanShareItemImages({
+  @Post("/api/drive/browser/shares/:shareId/document-images/uploads/prepare")
+  @Throttle(documentImageUploadThrottle)
+  prepareShareRootDocumentImageUpload(@Param("shareId") shareId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(documentImagePrepareUploadSchema, body, "图片上传请求无效。")
+    return this.drive.prepareShareDocumentImageUpload({
       actorUserId: request.user!.id,
       shareId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      ...parsed,
     })
   }
 
   @UseGuards(UserAuthGuard)
-  @Get("/api/drive/browser/shares/:shareId/items/:itemId/image-sources")
-  scanShareItemImages(
-    @Param("shareId") shareId: string,
-    @Param("itemId") itemId: string,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    return requireDriveDocumentImageService(this.documentImages).scanShareItemImages({
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/document-images/uploads/prepare")
+  @Throttle(documentImageUploadThrottle)
+  prepareShareItemDocumentImageUpload(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const parsed = parseBody(documentImagePrepareUploadSchema, body, "图片上传请求无效。")
+    return this.drive.prepareShareDocumentImageUpload({
       actorUserId: request.user!.id,
       shareId,
       itemId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      ...parsed,
     })
   }
 
   @UseGuards(UserAuthGuard)
-  @Post("/api/drive/browser/shares/:shareId/image-sources/import")
-  importShareRootImages(
-    @Param("shareId") shareId: string,
-    @Body() body: unknown,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    const parsed = parseBody(driveDocumentImageImportSchema, body, "图片转存请求无效。")
-    return requireDriveDocumentImageService(this.documentImages).importShareItemImages({
+  @Post("/api/drive/browser/shares/:shareId/document-images/uploads/:sessionId/complete")
+  @Throttle(documentImageUploadThrottle)
+  completeShareRootDocumentImageUpload(@Param("shareId") shareId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.completeShareDocumentImageUpload({
       actorUserId: request.user!.id,
       shareId,
+      sessionId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-      body: parsed,
-      publicAppUrl: resolveRequestPublicAppUrl(request),
-      auditContext: driveAuditContext(request),
     })
   }
 
   @UseGuards(UserAuthGuard)
-  @Post("/api/drive/browser/shares/:shareId/items/:itemId/image-sources/import")
-  importShareItemImages(
-    @Param("shareId") shareId: string,
-    @Param("itemId") itemId: string,
-    @Body() body: unknown,
-    @Req() request: AuthenticatedUserRequest,
-  ) {
-    const parsed = parseBody(driveDocumentImageImportSchema, body, "图片转存请求无效。")
-    return requireDriveDocumentImageService(this.documentImages).importShareItemImages({
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/document-images/uploads/:sessionId/complete")
+  @Throttle(documentImageUploadThrottle)
+  completeShareItemDocumentImageUpload(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.completeShareDocumentImageUpload({
       actorUserId: request.user!.id,
       shareId,
       itemId,
+      sessionId,
       cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
-      body: parsed,
-      publicAppUrl: resolveRequestPublicAppUrl(request),
-      auditContext: driveAuditContext(request),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/document-images/uploads/:sessionId/cancel")
+  @Throttle(documentImageUploadThrottle)
+  cancelShareRootDocumentImageUpload(@Param("shareId") shareId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.cancelShareDocumentImageUpload({
+      actorUserId: request.user!.id,
+      shareId,
+      sessionId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/document-images/uploads/:sessionId/cancel")
+  @Throttle(documentImageUploadThrottle)
+  cancelShareItemDocumentImageUpload(@Param("shareId") shareId: string, @Param("itemId") itemId: string, @Param("sessionId") sessionId: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.cancelShareDocumentImageUpload({
+      actorUserId: request.user!.id,
+      shareId,
+      itemId,
+      sessionId,
+      cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
     })
   }
 
@@ -2019,6 +2155,18 @@ export class DriveLocalStorageController {
   }
 }
 
+@Controller("/api/platform-media")
+export class PlatformMediaLocalStorageController {
+  constructor(private readonly storage: PlatformMediaStorage) {}
+
+  @Put("/local-upload/:token")
+  @Throttle(documentImageUploadThrottle)
+  async upload(@Param("token") token: string, @Req() request: Request) {
+    await this.storage.acceptLocalUpload(token, request)
+    return { ok: true }
+  }
+}
+
 function isMissingLocalDriveObjectError(error: unknown): boolean {
   return error instanceof Error
     && "code" in error
@@ -2042,6 +2190,11 @@ function requirePublicAssetService(publicAssets: DrivePublicAssetService | undef
   return publicAssets
 }
 
+function requireHostedDocumentImageService(service: DriveDocumentHostedImageService | undefined): DriveDocumentHostedImageService {
+  if (!service) throw new Error("DriveDocumentHostedImageService is not available.")
+  return service
+}
+
 function requireDriveAnnotationService(annotations: DriveAnnotationService | undefined): DriveAnnotationService {
   if (!annotations) throw new Error("DriveAnnotationService is not available.")
   return annotations
@@ -2060,11 +2213,6 @@ function requireDriveChangeLog(changes: DriveChangeLogService | undefined): Driv
 function requireDriveLinkIntakeService(linkIntake: DriveLinkIntakeService | undefined): DriveLinkIntakeService {
   if (!linkIntake) throw new Error("DriveLinkIntakeService is not available.")
   return linkIntake
-}
-
-function requireDriveDocumentImageService(documentImages: DriveDocumentImageService | undefined): DriveDocumentImageService {
-  if (!documentImages) throw new Error("DriveDocumentImageService is not available.")
-  return documentImages
 }
 
 function parseAccessSettings(body: unknown): DriveAccessSettingsUpdateInput | undefined {

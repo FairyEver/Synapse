@@ -96,8 +96,6 @@ vi.mock("../../../services/account-service", () => ({
     getDrivePublicAsset: async () => ({}),
     uploadDrivePublicAssets: vi.fn(async () => ({ results: [] })),
     uploadDrivePublicAssetBinary: vi.fn(async () => ({})),
-    scanDriveDocumentImageSources: vi.fn(async () => ({})),
-    importDriveDocumentImages: vi.fn(async () => ({})),
     replaceDrivePublicAssetFile: vi.fn(async () => ({})),
     renameDrivePublicAsset: vi.fn(async () => ({})),
     trashDrivePublicAsset: vi.fn(async () => ({})),
@@ -772,80 +770,6 @@ describe("accountIpcModule", () => {
       data: body,
     })
     expect(permissionGuard.check).not.toHaveBeenCalled()
-  })
-
-  it("routes document image source scan and import requests", async () => {
-    const scanDriveDocumentImageSources = vi.mocked(accountService.scanDriveDocumentImageSources)
-    const importDriveDocumentImages = vi.mocked(accountService.importDriveDocumentImages)
-    scanDriveDocumentImageSources.mockResolvedValueOnce({
-      itemId: "item-1",
-      versionId: "version-1",
-      canImport: true,
-      sources: [],
-      summary: {
-        total: 0,
-        ownerAsset: 0,
-        collaboratorAsset: 0,
-        external: 0,
-        invalid: 0,
-        unsupported: 0,
-        importable: 0,
-      },
-    })
-    importDriveDocumentImages.mockResolvedValueOnce({
-      itemId: "item-1",
-      versionId: "version-2",
-      imported: [],
-      failed: [],
-      summary: {
-        importedCount: 0,
-        failedCount: 0,
-        replacedOccurrenceCount: 0,
-      },
-    })
-
-    await accountIpcModule.methods.scanDriveDocumentImageSources.handler({} as IpcHandlerContext, {
-      kind: "share",
-      shareId: "share-1",
-      itemId: "item-2",
-    })
-    await accountIpcModule.methods.importDriveDocumentImages.handler({} as IpcHandlerContext, {
-      kind: "owner",
-      itemId: "item-1",
-      baseVersionId: "version-1",
-      sources: [{ src: "https://example.test/logo.png" }],
-    })
-
-    expect(scanDriveDocumentImageSources).toHaveBeenCalledWith({
-      kind: "share",
-      shareId: "share-1",
-      itemId: "item-2",
-    })
-    expect(importDriveDocumentImages).toHaveBeenCalledWith({
-      kind: "owner",
-      itemId: "item-1",
-      baseVersionId: "version-1",
-      sources: [{ src: "https://example.test/logo.png" }],
-    })
-  })
-
-  it("rejects invalid document image source contexts", () => {
-    expect(accountIpcModule.methods.scanDriveDocumentImageSources.request?.safeParse({
-      kind: "workspace",
-      itemId: "item-1",
-    }).success).toBe(false)
-    expect(accountIpcModule.methods.importDriveDocumentImages.request?.safeParse({
-      kind: "workspace",
-      itemId: "item-1",
-      baseVersionId: "version-1",
-      sources: [],
-    }).success).toBe(false)
-    expect(accountIpcModule.methods.importDriveDocumentImages.request?.safeParse({
-      kind: "share",
-      itemId: "item-1",
-      baseVersionId: "version-1",
-      sources: [],
-    }).success).toBe(false)
   })
 
   it("stops public asset replacement when file read permission is denied", async () => {

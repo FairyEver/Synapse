@@ -58,6 +58,16 @@ describe("dashboard Vite dev proxy", () => {
     }))
   })
 
+  it("proxies platform object links through /object", () => {
+    const proxy = config.server?.proxy
+    const objectProxy = proxy && !Array.isArray(proxy) ? proxy["/object"] : undefined
+
+    expect(objectProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
+  })
+
   it("keeps direct drive responses behind focused proxy rules", () => {
     const proxy = config.server?.proxy
     const ownerDownloadPattern = "^/drive/items/[^/]+/(download|render)(?:\\?.*)?$"

@@ -12,9 +12,8 @@ import type {
   DriveBrowserSnapshotDto,
   DriveCollaborationCheckpointInput,
   DriveCollaborationCheckpointResultDto,
-  DriveDocumentImageImportRequest,
-  DriveDocumentImageImportResult,
-  DriveDocumentImageSourcesDto,
+  DriveDocumentImageUploadPrepareResult,
+  DriveHostedDocumentImageDto,
   DriveFileContentUpdateResult,
   DriveFileTextUpdateInput,
   DriveFileVersionDto,
@@ -456,10 +455,27 @@ export type AdminDriveStorageSummary = {
     count: number
     bytes: string
   }
+  documentImages: {
+    count: number
+    bytes: string
+  }
   total: {
     quotaBytes: string
     adminVisibleBytes: string
   }
+}
+
+export type AdminDocumentHostedImageRow = {
+  imageId: string
+  name: string
+  size: string
+  mimeType: string
+  status: 'temporary' | 'active' | 'quarantined' | 'delete_pending'
+  uploaderEmail: string | null
+  sourceItemName: string | null
+  createdAt: string
+  activatedAt: string | null
+  quarantinedAt: string | null
 }
 
 export type AdminDriveStorageBucket = {
@@ -558,7 +574,7 @@ function isProtectedDriveApiPath(path: string) {
 
 function isProtectedDriveShareBrowserPath(path: string) {
   return new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/content(?:[?#].*)?$`, 'u').test(path)
-    || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/image-sources(?:/import)?(?:[?#].*)?$`, 'u').test(path)
+    || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/document-images/uploads/[^?#]*(?:[?#].*)?$`, 'u').test(path)
     || new RegExp(`^${driveBrowserApiBasePath}/shares/[^/?#]+(?:/items/[^/?#]+)?/collaboration/checkpoint(?:[?#].*)?$`, 'u').test(path)
     || isProtectedDriveShareAnnotationPath(path)
 }
@@ -600,6 +616,11 @@ export type AdminDrivePublicAssetListQuery = PaginationOptions & {
   search?: string
   userId?: string
   lifecycleStatus?: DriveItemLifecycleStatus
+}
+
+export type AdminDocumentImageListQuery = PaginationOptions & {
+  search?: string
+  status?: AdminDocumentHostedImageRow['status']
 }
 
 export type WebhookDeliveryHistoryQuery = PaginationOptions & {
@@ -1168,34 +1189,6 @@ export const driveBrowserApi = {
         : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/collaboration/checkpoint`,
       { method: 'POST', body: JSON.stringify(input) }
     ),
-  scanOwnerImageSources: (itemId: string) =>
-    request<DriveDocumentImageSourcesDto>(
-      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/image-sources`
-    ),
-  importOwnerImageSources: (itemId: string, input: DriveDocumentImageImportRequest) =>
-    request<DriveDocumentImageImportResult>(
-      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/image-sources/import`,
-      {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }
-    ),
-  scanShareImageSources: (shareId: string, itemId?: string | null) =>
-    request<DriveDocumentImageSourcesDto>(
-      itemId
-        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/image-sources`
-        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/image-sources`
-    ),
-  importShareImageSources: (shareId: string, itemId: string | null | undefined, input: DriveDocumentImageImportRequest) =>
-    request<DriveDocumentImageImportResult>(
-      itemId
-        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/image-sources/import`
-        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/image-sources/import`,
-      {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }
-    ),
   uploadPublicAssetFile: async (file: File, input: { readonly name: string; readonly mimeType: string }) => {
     const prepared = await request<DriveUploadPrepareResult>(
       `${driveApiBasePath}/public-assets/uploads/prepare`,
@@ -1226,6 +1219,45 @@ export const driveBrowserApi = {
       throw error
     }
   },
+  uploadHostedDocumentImage: async (
+    file: File,
+    context: DriveDocumentImageUploadContext,
+    input: { readonly name: string; readonly mimeType: string }
+  ) => {
+    const basePath = documentImageUploadBasePath(context)
+    const prepared = await request<DriveDocumentImageUploadPrepareResult>(`${basePath}/prepare`, {
+      method: 'POST',
+      body: JSON.stringify({ name: input.name, size: String(file.size), mimeType: input.mimeType }),
+    })
+    try {
+      const uploadResponse = await fetch(prepared.upload.url, {
+        method: prepared.upload.method,
+        headers: prepared.upload.headers,
+        body: file,
+      })
+      if (!uploadResponse.ok) throw new ApiError(await readErrorMessage(uploadResponse), uploadResponse.status)
+      return await request<DriveHostedDocumentImageDto>(
+        `${basePath}/${encodeURIComponent(prepared.sessionId)}/complete`,
+        { method: 'POST' }
+      )
+    } catch (error) {
+      await request(`${basePath}/${encodeURIComponent(prepared.sessionId)}/cancel`, { method: 'POST' }).catch(() => undefined)
+      throw error
+    }
+  },
+}
+
+export type DriveDocumentImageUploadContext =
+  | { readonly kind: 'owner'; readonly itemId: string }
+  | { readonly kind: 'share'; readonly shareId: string; readonly itemId?: string | null }
+
+function documentImageUploadBasePath(context: DriveDocumentImageUploadContext): string {
+  if (context.kind === 'owner') {
+    return `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(context.itemId)}/document-images/uploads`
+  }
+  return context.itemId
+    ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}/items/${encodeURIComponent(context.itemId)}/document-images/uploads`
+    : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(context.shareId)}/document-images/uploads`
 }
 
 function ownerAnnotationPath(itemId: string, suffix = '') {
@@ -1460,6 +1492,18 @@ export const adminApi = {
     ),
   getDriveStorageSummary: () =>
     request<AdminDriveStorageSummary>(`${adminApiBasePath}/drive/storage-summary`),
+  listDocumentImages: (options: AdminDocumentImageListQuery = {}) =>
+    request<PaginatedResponse<AdminDocumentHostedImageRow>>(
+      `${adminApiBasePath}/drive/document-images${querySuffix(options)}`
+    ),
+  quarantineDocumentImage: (imageId: string) =>
+    request<AdminDocumentHostedImageRow>(`${adminApiBasePath}/drive/document-images/${encodeURIComponent(imageId)}/quarantine`, { method: 'POST' }),
+  restoreDocumentImage: (imageId: string) =>
+    request<AdminDocumentHostedImageRow>(`${adminApiBasePath}/drive/document-images/${encodeURIComponent(imageId)}/restore`, { method: 'POST' }),
+  deleteDocumentImage: (imageId: string) =>
+    request<{ ok: true; deletePending?: true }>(`${adminApiBasePath}/drive/document-images/${encodeURIComponent(imageId)}`, { method: 'DELETE' }),
+  documentImageOpenUrl: (imageId: string) =>
+    `${adminApiBasePath}/drive/document-images/${encodeURIComponent(imageId)}/open`,
   listDrivePublicAssets: (options: AdminDrivePublicAssetListQuery = {}) =>
     request<PaginatedResponse<AdminDrivePublicAssetRow>>(
       `${adminApiBasePath}/drive/public-assets${adminDrivePublicAssetQuerySuffix(options)}`

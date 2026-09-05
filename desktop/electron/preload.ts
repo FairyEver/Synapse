@@ -6,8 +6,6 @@
 
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type {
-  DriveDocumentImageImportBridgeRequest,
-  DriveDocumentImageSourceContext,
   DriveLocalUploadProgressEvent,
   DriveLocalUploadRequest,
   DrivePublicAssetBinaryUploadRequest,
@@ -284,28 +282,6 @@ function summarizeDrivePublicAssetBinaryUploadRequest(input: unknown): unknown {
   }
 }
 
-function summarizeDriveDocumentImageSourceContext(input: unknown): unknown {
-  if (!input || typeof input !== "object") {
-    return { inputType: typeof input }
-  }
-  const request = input as Partial<DriveDocumentImageSourceContext>
-  return {
-    kind: request.kind,
-    itemId: "itemId" in request ? request.itemId : undefined,
-    shareId: "shareId" in request ? request.shareId : undefined,
-  }
-}
-
-function summarizeDriveDocumentImageImportRequest(input: unknown): unknown {
-  const context = summarizeDriveDocumentImageSourceContext(input)
-  if (!input || typeof input !== "object") return context
-  const request = input as Partial<DriveDocumentImageImportBridgeRequest>
-  return {
-    ...(context as Record<string, unknown>),
-    sourceCount: Array.isArray(request.sources) ? request.sources.length : undefined,
-  }
-}
-
 function summarizeSecretsMutationRequest(input: unknown): unknown {
   if (!input || typeof input !== "object") {
     return { inputType: typeof input }
@@ -559,6 +535,12 @@ const synapseBridge: SynapseBridge = {
       get: () => invoke(IPC_CHANNELS.terminal.getGlobalLaunchSettings)(),
       update: (input) => invoke(IPC_CHANNELS.terminal.updateGlobalLaunchSettings)(input),
     },
+    toolbarAction: {
+      list: () => invoke(IPC_CHANNELS.terminal.listCustomToolbarActions)(),
+      create: (input) => invoke(IPC_CHANNELS.terminal.createCustomToolbarAction)(input),
+      update: (input) => invoke(IPC_CHANNELS.terminal.updateCustomToolbarAction)(input),
+      delete: (input) => invoke(IPC_CHANNELS.terminal.deleteCustomToolbarAction)(input),
+    },
     launch: {
       chooseCwd: () => invoke(IPC_CHANNELS.terminal.chooseCwd)(),
       revealEnvironmentValue: (input) => invoke(IPC_CHANNELS.terminal.revealEnvironmentValue)(input),
@@ -803,16 +785,6 @@ const synapseBridge: SynapseBridge = {
       rename: invoke(IPC_CHANNELS.account.renameDrivePublicAsset),
       delete: invoke(IPC_CHANNELS.account.trashDrivePublicAsset),
       restore: invoke(IPC_CHANNELS.account.restoreDrivePublicAsset),
-    },
-    documentImages: {
-      scan: invokeWithFailureLogRequest(
-        IPC_CHANNELS.account.scanDriveDocumentImageSources,
-        summarizeDriveDocumentImageSourceContext,
-      ),
-      import: invokeWithFailureLogRequest(
-        IPC_CHANNELS.account.importDriveDocumentImages,
-        summarizeDriveDocumentImageImportRequest,
-      ),
     },
     site: {
       preflight: invoke(IPC_CHANNELS.account.preflightDriveSite),

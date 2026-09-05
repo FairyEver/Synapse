@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type Ref,
 } from "react"
+import { createPortal } from "react-dom"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
@@ -102,6 +103,7 @@ export function TerminalWorkspaceView({
   platform,
   ref,
   sessions,
+  visible,
   workspace,
 }: {
   readonly activePaneId: string
@@ -121,10 +123,12 @@ export function TerminalWorkspaceView({
   readonly platform: string | undefined
   readonly ref?: Ref<TerminalWorkspaceViewHandle>
   readonly sessions: readonly SynapseTerminalSession[]
+  readonly visible: boolean
   readonly workspace: SynapseTerminalWorkspace
 }) {
   const paneElementsRef = useRef(new Map<string, HTMLDivElement>())
   const paneControlsRef = useRef(new Map<string, PaneControls>())
+  const paneHostsRef = useRef(new Map<string, HTMLDivElement>())
   const [fileTreePaneIds, setFileTreePaneIds] = useState<ReadonlySet<string>>(new Set())
   const [fileTreeWidth, setFileTreeWidth] = useState(() =>
     readWorkspacePanelWidth(TERMINAL_FILE_TREE_PERSISTENCE_ID, TERMINAL_FILE_TREE_WIDTH_CONSTRAINTS))
@@ -141,15 +145,13 @@ export function TerminalWorkspaceView({
     () => new Set(workspace.closingPaneIds),
     [workspace.closingPaneIds],
   )
-  const workspacePaneIds = useMemo(
-    () => new Set(collectTerminalPaneLeaves(workspace.layout).map((pane) => pane.paneId)),
-    [workspace.layout],
-  )
+  const workspacePanes = useMemo(() => collectTerminalPaneLeaves(workspace.layout), [workspace.layout])
+  const workspacePaneIds = useMemo(() => new Set(workspacePanes.map((pane) => pane.paneId)), [workspacePanes])
   const visiblePaneIds = useMemo(
-    () => collectTerminalPaneLeaves(workspace.layout)
+    () => workspacePanes
       .filter((pane) => sessionsById.has(pane.sessionId))
       .map((pane) => pane.paneId),
-    [sessionsById, workspace.layout],
+    [sessionsById, workspacePanes],
   )
   const dimInactivePanes = visiblePaneIds.length > 1 && visiblePaneIds.includes(activePaneId)
 
@@ -161,6 +163,19 @@ export function TerminalWorkspaceView({
         : next
     })
   }, [workspacePaneIds])
+
+  useEffect(() => {
+    for (const [paneId, host] of paneHostsRef.current) {
+      if (workspacePaneIds.has(paneId)) continue
+      host.remove()
+      paneHostsRef.current.delete(paneId)
+    }
+  }, [workspacePaneIds])
+
+  useEffect(() => () => {
+    for (const host of paneHostsRef.current.values()) host.remove()
+    paneHostsRef.current.clear()
+  }, [])
 
   useImperativeHandle(ref, () => ({
     clearActivePane() {
@@ -176,6 +191,16 @@ export function TerminalWorkspaceView({
   const registerPaneControls = useCallback((paneId: string, controls: PaneControls | null) => {
     if (controls) paneControlsRef.current.set(paneId, controls)
     else paneControlsRef.current.delete(paneId)
+  }, [])
+
+  const getPaneHost = useCallback((paneId: string) => {
+    const existing = paneHostsRef.current.get(paneId)
+    if (existing) return existing
+    // Split-tree changes move this stable host instead of remounting the pane's xterm instance.
+    const host = document.createElement("div")
+    host.className = "h-full min-h-0 min-w-0"
+    paneHostsRef.current.set(paneId, host)
+    return host
   }, [])
 
   const focusPane = useCallback((paneId: string, direction: FocusDirection) => {
@@ -238,169 +263,69 @@ export function TerminalWorkspaceView({
   }, [])
 
   return (
-    <TerminalLayout
-      activePaneId={activePaneId}
-      appearanceSize={appearanceSize}
-      layout={workspace.layout}
-      fileTreePaneIds={fileTreePaneIds}
-      fileTreeWidth={fileTreeWidth}
-      draggedPaneId={paneDrag?.sourcePaneId ?? null}
-      dimInactivePanes={dimInactivePanes}
-      dropEdge={paneDrag?.edge ?? null}
-      dropTargetPaneId={paneDrag?.targetPaneId ?? null}
-      onActivePaneChange={onActivePaneChange}
-      onMovePane={onMovePane}
-      onCloseFileTree={handleCloseFileTree}
-      onFileTreeWidthChange={setFileTreeWidth}
-      onFileTreeWidthCommit={handleFileTreeWidthCommit}
-      onPaneDragEnd={handlePaneDragEnd}
-      onPaneDragStart={handlePaneDragStart}
-      onPaneDragTargetChange={handlePaneDragTargetChange}
-      onSessionChanged={onSessionChanged}
-      onSessionDeleted={onSessionDeleted}
-      onShortcut={handleShortcut}
-      onSplitRatioChange={onSplitRatioChange}
-      onToggleFileTree={handleToggleFileTree}
-      pendingClosePaneIds={pendingClosePaneIds}
-      platform={platform}
-      registerPaneControls={registerPaneControls}
-      registerPaneElement={registerPaneElement}
-      sessionsById={sessionsById}
-      workspaceClosingPaneIds={workspaceClosingPaneIds}
-    />
+    <>
+      <TerminalLayout
+        getPaneHost={getPaneHost}
+        layout={workspace.layout}
+        onSplitRatioChange={onSplitRatioChange}
+      />
+      {workspacePanes.map((pane) => {
+        const session = sessionsById.get(pane.sessionId)
+        if (!session) return null
+        return createPortal(
+          <TerminalPane
+            active={pane.paneId === activePaneId}
+            appearanceSize={appearanceSize}
+            dimmed={dimInactivePanes && pane.paneId !== activePaneId}
+            dragSourcePaneId={paneDrag?.sourcePaneId ?? null}
+            dragged={pane.paneId === paneDrag?.sourcePaneId}
+            dropEdge={pane.paneId === paneDrag?.targetPaneId ? paneDrag.edge : null}
+            fileTreeOpen={fileTreePaneIds.has(pane.paneId)}
+            fileTreeWidth={fileTreeWidth}
+            onActive={() => onActivePaneChange(pane.paneId)}
+            onMovePane={onMovePane}
+            onCloseFileTree={() => handleCloseFileTree(pane.paneId)}
+            onFileTreeWidthChange={setFileTreeWidth}
+            onFileTreeWidthCommit={handleFileTreeWidthCommit}
+            onPaneDragEnd={handlePaneDragEnd}
+            onPaneDragStart={() => handlePaneDragStart(pane.paneId)}
+            onPaneDragTargetChange={(edge) => handlePaneDragTargetChange(pane.paneId, edge)}
+            onSessionChanged={onSessionChanged}
+            onSessionDeleted={onSessionDeleted}
+            onShortcut={(shortcut) => handleShortcut(pane.paneId, shortcut)}
+            onToggleFileTree={() => handleToggleFileTree(pane.paneId)}
+            paneId={pane.paneId}
+            closePending={pendingClosePaneIds.has(pane.paneId)}
+            closing={workspaceClosingPaneIds.has(pane.paneId)}
+            platform={platform}
+            registerControls={registerPaneControls}
+            registerElement={registerPaneElement}
+            session={session}
+            visible={visible}
+          />,
+          getPaneHost(pane.paneId),
+          pane.paneId,
+        )
+      })}
+    </>
   )
 }
 
 function TerminalLayout({
-  activePaneId,
-  appearanceSize,
-  dimInactivePanes,
-  draggedPaneId,
-  dropEdge,
-  dropTargetPaneId,
-  fileTreePaneIds,
-  fileTreeWidth,
+  getPaneHost,
   layout,
-  onActivePaneChange,
-  onMovePane,
-  onCloseFileTree,
-  onFileTreeWidthChange,
-  onFileTreeWidthCommit,
-  onPaneDragEnd,
-  onPaneDragStart,
-  onPaneDragTargetChange,
-  onSessionChanged,
-  onSessionDeleted,
-  onShortcut,
   onSplitRatioChange,
-  onToggleFileTree,
-  pendingClosePaneIds,
-  platform,
-  registerPaneControls,
-  registerPaneElement,
-  sessionsById,
-  workspaceClosingPaneIds,
 }: {
-  readonly activePaneId: string
-  readonly appearanceSize: TerminalAppearanceSize
-  readonly dimInactivePanes: boolean
-  readonly draggedPaneId: string | null
-  readonly dropEdge: SynapseTerminalPaneDropEdge | null
-  readonly dropTargetPaneId: string | null
-  readonly fileTreePaneIds: ReadonlySet<string>
-  readonly fileTreeWidth: number
+  readonly getPaneHost: (paneId: string) => HTMLDivElement
   readonly layout: SynapseTerminalLayoutNode
-  readonly onActivePaneChange: (paneId: string) => void
-  readonly onMovePane: (
-    sourcePaneId: string,
-    targetPaneId: string,
-    edge: SynapseTerminalPaneDropEdge,
-  ) => void
-  readonly onCloseFileTree: (paneId: string) => void
-  readonly onFileTreeWidthChange: (width: number) => void
-  readonly onFileTreeWidthCommit: (width: number) => void
-  readonly onPaneDragEnd: () => void
-  readonly onPaneDragStart: (paneId: string) => void
-  readonly onPaneDragTargetChange: (paneId: string, edge: SynapseTerminalPaneDropEdge | null) => void
-  readonly onSessionChanged: (session: SynapseTerminalSession) => void
-  readonly onSessionDeleted: (sessionId: string) => void
-  readonly onShortcut: (paneId: string, shortcut: TerminalPaneShortcut) => void
   readonly onSplitRatioChange: (splitId: string, ratio: number) => void
-  readonly onToggleFileTree: (paneId: string) => void
-  readonly pendingClosePaneIds: ReadonlySet<string>
-  readonly platform: string | undefined
-  readonly registerPaneControls: (paneId: string, controls: PaneControls | null) => void
-  readonly registerPaneElement: (paneId: string, element: HTMLDivElement | null) => void
-  readonly sessionsById: ReadonlyMap<string, SynapseTerminalSession>
-  readonly workspaceClosingPaneIds: ReadonlySet<string>
 }) {
   if (layout.type === "leaf") {
-    const session = sessionsById.get(layout.sessionId)
-    if (!session) return null
-    return (
-      <TerminalPane
-        active={layout.paneId === activePaneId}
-        appearanceSize={appearanceSize}
-        dimmed={dimInactivePanes && layout.paneId !== activePaneId}
-        dragSourcePaneId={draggedPaneId}
-        dragged={layout.paneId === draggedPaneId}
-        dropEdge={layout.paneId === dropTargetPaneId ? dropEdge : null}
-        fileTreeOpen={fileTreePaneIds.has(layout.paneId)}
-        fileTreeWidth={fileTreeWidth}
-        onActive={() => onActivePaneChange(layout.paneId)}
-        onMovePane={onMovePane}
-        onCloseFileTree={() => onCloseFileTree(layout.paneId)}
-        onFileTreeWidthChange={onFileTreeWidthChange}
-        onFileTreeWidthCommit={onFileTreeWidthCommit}
-        onPaneDragEnd={onPaneDragEnd}
-        onPaneDragStart={() => onPaneDragStart(layout.paneId)}
-        onPaneDragTargetChange={(edge) => onPaneDragTargetChange(layout.paneId, edge)}
-        onSessionChanged={onSessionChanged}
-        onSessionDeleted={onSessionDeleted}
-        onShortcut={(shortcut) => onShortcut(layout.paneId, shortcut)}
-        onToggleFileTree={() => onToggleFileTree(layout.paneId)}
-        paneId={layout.paneId}
-        closePending={pendingClosePaneIds.has(layout.paneId)}
-        closing={workspaceClosingPaneIds.has(layout.paneId)}
-        platform={platform}
-        registerControls={registerPaneControls}
-        registerElement={registerPaneElement}
-        session={session}
-      />
-    )
+    return <TerminalPaneSlot host={getPaneHost(layout.paneId)} />
   }
 
   const firstId = `${layout.splitId}:first`
   const secondId = `${layout.splitId}:second`
-  const sharedProps = {
-    activePaneId,
-    appearanceSize,
-    dimInactivePanes,
-    draggedPaneId,
-    dropEdge,
-    dropTargetPaneId,
-    fileTreePaneIds,
-    fileTreeWidth,
-    onActivePaneChange,
-    onMovePane,
-    onCloseFileTree,
-    onFileTreeWidthChange,
-    onFileTreeWidthCommit,
-    onPaneDragEnd,
-    onPaneDragStart,
-    onPaneDragTargetChange,
-    onSessionChanged,
-    onSessionDeleted,
-    onShortcut,
-    onSplitRatioChange,
-    onToggleFileTree,
-    pendingClosePaneIds,
-    platform,
-    registerPaneControls,
-    registerPaneElement,
-    sessionsById,
-    workspaceClosingPaneIds,
-  }
 
   return (
     <ResizablePanelGroup
@@ -420,14 +345,37 @@ function TerminalLayout({
       }}
     >
       <ResizablePanel id={firstId} minSize="10%">
-        <TerminalLayout {...sharedProps} layout={layout.first} />
+        <TerminalLayout
+          getPaneHost={getPaneHost}
+          layout={layout.first}
+          onSplitRatioChange={onSplitRatioChange}
+        />
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel id={secondId} minSize="10%">
-        <TerminalLayout {...sharedProps} layout={layout.second} />
+        <TerminalLayout
+          getPaneHost={getPaneHost}
+          layout={layout.second}
+          onSplitRatioChange={onSplitRatioChange}
+        />
       </ResizablePanel>
     </ResizablePanelGroup>
   )
+}
+
+function TerminalPaneSlot({ host }: { readonly host: HTMLDivElement }) {
+  const slotRef = useRef<HTMLDivElement | null>(null)
+  const attachHost = useCallback((element: HTMLDivElement | null) => {
+    const previousSlot = slotRef.current
+    slotRef.current = element
+    if (element) {
+      element.append(host)
+    } else if (previousSlot && host.parentElement === previousSlot) {
+      host.remove()
+    }
+  }, [host])
+
+  return <div ref={attachHost} className="h-full min-h-0 min-w-0 overflow-hidden" />
 }
 
 function TerminalPane({
@@ -458,6 +406,7 @@ function TerminalPane({
   registerControls,
   registerElement,
   session,
+  visible,
 }: {
   readonly active: boolean
   readonly appearanceSize: TerminalAppearanceSize
@@ -490,6 +439,7 @@ function TerminalPane({
   readonly registerControls: (paneId: string, controls: PaneControls | null) => void
   readonly registerElement: (paneId: string, element: HTMLDivElement | null) => void
   readonly session: SynapseTerminalSession
+  readonly visible: boolean
 }) {
   const terminalBridge = requireBridgeDomain("terminal")
   const workspaceTreeBridge = terminalBridge.workspaceTree
@@ -506,6 +456,7 @@ function TerminalPane({
   const onSessionDeletedRef = useRef(onSessionDeleted)
   const onShortcutRef = useRef(onShortcut)
   const [readError, setReadError] = useState<string | null>(null)
+  const [projectionReady, setProjectionReady] = useState(false)
   const [pathDropActive, setPathDropActive] = useState(false)
   const [fileTreeRootRevision, setFileTreeRootRevision] = useState(0)
   const fileTreeDataSource = useMemo<WorkspaceFileTreeDataSource | null>(() =>
@@ -520,6 +471,8 @@ function TerminalPane({
   onSessionChangedRef.current = onSessionChanged
   onSessionDeletedRef.current = onSessionDeleted
   onShortcutRef.current = onShortcut
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
 
   useDismissOnPointerDownOutside(
     fileTreeOpen,
@@ -535,8 +488,16 @@ function TerminalPane({
   }, [session.status])
 
   useEffect(() => {
-    if (active) xtermRef.current?.focus()
-  }, [active])
+    if (!visible || !projectionReady) return undefined
+    const frame = requestAnimationFrame(() => {
+      syncTerminalGeometryRef.current?.(true)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [projectionReady, visible])
+
+  useEffect(() => {
+    if (active && visible) xtermRef.current?.focus()
+  }, [active, visible])
 
   useEffect(() => {
     if (!fileTreeOpen) return undefined
@@ -557,6 +518,7 @@ function TerminalPane({
     if (!container) return undefined
 
     setReadError(null)
+    setProjectionReady(false)
     let disposed = false
     let deleted = false
     let lastSeq = 0
@@ -595,7 +557,7 @@ function TerminalPane({
     compositionTextarea?.addEventListener("compositionupdate", constrainComposition)
 
     const syncTerminalGeometry = (refreshRenderer = false) => {
-      if (disposed || !geometrySyncReady || !projectionAvailable) return
+      if (disposed || !visibleRef.current || !geometrySyncReady || !projectionAvailable) return
       if (refreshRenderer) xterm.refresh(0, xterm.rows - 1)
       const proposed = fitAddon.proposeDimensions()
       const cols = proposed?.cols ?? xterm.cols
@@ -612,17 +574,19 @@ function TerminalPane({
     syncTerminalGeometryRef.current = syncTerminalGeometry
 
     const controls: PaneControls = {
-      clear: () => {
-        xterm.clear()
-        syncTerminalGeometry(true)
-      },
+      clear: () => xterm.clear(),
       focus: () => xterm.focus(),
     }
     registerControls(paneId, controls)
 
+    let resizeFrame: number | undefined
     const resizeObserver = new ResizeObserver(() => {
-      syncTerminalGeometry()
-      constrainComposition()
+      if (resizeFrame !== undefined) return
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = undefined
+        syncTerminalGeometry()
+        constrainComposition()
+      })
     })
     resizeObserver.observe(container)
 
@@ -718,7 +682,6 @@ function TerminalPane({
             await writePendingChunksThrough(nextBarrier.throughOutputSeq)
             if (disposed) return
             xterm.resize(nextBarrier.cols, nextBarrier.rows)
-            xterm.refresh(0, xterm.rows - 1)
             appliedSizeRevision = nextBarrier.sizeRevision
             requestedResize = { cols: nextBarrier.cols, rows: nextBarrier.rows }
             resizeBarriers.delete(nextBarrier.sizeRevision)
@@ -767,6 +730,7 @@ function TerminalPane({
       if (snapshot.degraded) {
         setReadError("终端画面无法恢复")
         attached = true
+        setProjectionReady(true)
         return
       }
       xterm.resize(snapshot.cols, snapshot.rows)
@@ -784,12 +748,14 @@ function TerminalPane({
       await drainProjection()
       geometrySyncReady = true
       syncTerminalGeometry()
+      setProjectionReady(true)
     }
 
     void attachProjection().catch((error) => {
       logger.error("Failed to attach terminal projection.", error)
       if (!disposed && !deleted) {
         setReadError("终端画面无法恢复")
+        setProjectionReady(true)
         toast.error("终端画面无法恢复")
       }
     })
@@ -803,6 +769,7 @@ function TerminalPane({
       inputDisposable.dispose()
       webglRenderer?.dispose()
       resizeObserver.disconnect()
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
       compositionTextarea?.removeEventListener("compositionupdate", constrainComposition)
       registerControls(paneId, null)
       if (syncTerminalGeometryRef.current === syncTerminalGeometry) {
@@ -816,7 +783,9 @@ function TerminalPane({
   useEffect(() => {
     const xterm = xtermRef.current
     if (!xterm) return
-    xterm.options.fontSize = getTerminalAppearanceOptions(appearanceSize).fontSize
+    const appearanceOptions = getTerminalAppearanceOptions(appearanceSize)
+    xterm.options.fontSize = appearanceOptions.fontSize
+    xterm.options.lineHeight = appearanceOptions.lineHeight
     syncTerminalGeometryRef.current?.(true)
   }, [appearanceSize])
 
@@ -1060,7 +1029,10 @@ function TerminalPane({
         ) : null}
         <div
           data-terminal-xterm-frame
-          className="h-full min-h-0 min-w-0 overflow-hidden p-1"
+          className={cn(
+            "h-full min-h-0 min-w-0 overflow-hidden p-1",
+            !projectionReady && "invisible",
+          )}
         >
           <div
             ref={containerRef}

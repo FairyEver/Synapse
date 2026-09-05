@@ -52,6 +52,8 @@ model User {
   driveItems                     DriveItem[]
   driveUsage                     DriveUsage?
   driveUploadSessions            DriveUploadSession[]
+  documentImageUploads           DocumentImageUploadSession[]  @relation("DocumentImageUploadActor")
+  uploadedDocumentImages         DocumentHostedImage[]          @relation("DocumentImageUploader")
   driveFileVersions              DriveFileVersion[]
   driveFileVersionContributions  DriveFileVersionContributor[]
   driveChanges                   DriveChange[]
@@ -422,6 +424,8 @@ model DriveItem {
   markdownProjections   DriveMarkdownProjection[]
   publicAsset           PublicAsset?
   publicAssetRevisions  PublicAssetRevision[]
+  documentImageUploads DocumentImageUploadSession[]
+  hostedDocumentImages DocumentHostedImage[]
 
   @@index([userId, parentId, deletedAt, createdAt])
   @@index([userId, deletedAt, updatedAt])
@@ -608,6 +612,57 @@ model DriveUploadSession {
   @@index([itemId])
   @@index([purpose, status, createdAt])
   @@index([publicAssetId, status, createdAt])
+}
+
+model DocumentImageUploadSession {
+  id             String     @id @default(cuid())
+  imageId        String     @unique @db.VarChar(36)
+  actorUserId    String?
+  actor          User?      @relation("DocumentImageUploadActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  sourceItemId   String?
+  sourceItem     DriveItem? @relation(fields: [sourceItemId], references: [id], onDelete: SetNull)
+  storageKey     String     @unique
+  expectedName   String     @db.VarChar(255)
+  expectedSize   BigInt
+  expectedMime   String     @db.VarChar(255)
+  status         String     @db.VarChar(32)
+  expiresAt      DateTime
+  createdAt      DateTime   @default(now())
+  completedAt    DateTime?
+  failedAt       DateTime?
+
+  @@index([actorUserId, status, createdAt])
+  @@index([sourceItemId, status, createdAt])
+  @@index([expiresAt, status])
+}
+
+model DocumentHostedImage {
+  id                   String     @id @default(cuid())
+  imageId              String     @unique @db.VarChar(36)
+  uploadedByUserId     String?
+  uploadedBy           User?      @relation("DocumentImageUploader", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  sourceItemId         String?
+  sourceItem           DriveItem? @relation(fields: [sourceItemId], references: [id], onDelete: SetNull)
+  originalName         String     @db.VarChar(255)
+  size                 BigInt
+  mimeType             String     @db.VarChar(255)
+  storageKey           String     @unique
+  etag                 String?
+  status               String     @default("temporary") @db.VarChar(32)
+  expiresAt            DateTime?
+  activatedAt          DateTime?
+  quarantinedAt        DateTime?
+  quarantinedBy        String?
+  deletePending        Boolean    @default(false)
+  deletedAt            DateTime?
+  deletedBy            String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([sourceItemId, status, createdAt])
+  @@index([uploadedByUserId, status, createdAt])
+  @@index([deletePending, updatedAt])
 }
 
 model DriveFileVersion {

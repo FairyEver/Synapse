@@ -3,10 +3,10 @@ import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { UserAuthModule } from "../auth/user-auth.module"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaModule } from "../prisma/prisma.module"
-import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController } from "./drive.controller"
+import { DriveAdminController, DriveLocalStorageController, DrivePublicController, DriveUserController, PlatformMediaLocalStorageController } from "./drive.controller"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
-import { DriveDocumentImageService } from "./drive-document-image.service"
+import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import { DriveCollaborationGateway } from "./drive-collaboration.gateway"
@@ -14,14 +14,14 @@ import { DriveCollaborationService } from "./drive-collaboration.service"
 import { LocalDriveCollaborationBus } from "./drive-collaboration-bus"
 import { DriveLifecycleService } from "./drive-lifecycle.service"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
-import { DriveRemoteImageFetcher } from "./drive-remote-image-fetcher"
 import { DriveSiteService } from "./drive-site.service"
 import { DriveService } from "./drive.service"
 import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
+import { PlatformMediaStorage } from "./platform-media-storage"
 
 @Module({
   imports: [UserAuthModule, AdminAuthModule, PrismaModule],
-  controllers: [DriveUserController, DriveAdminController, DrivePublicController, DriveLocalStorageController],
+  controllers: [DriveUserController, DriveAdminController, DrivePublicController, DriveLocalStorageController, PlatformMediaLocalStorageController],
   providers: [
     DriveLifecycleService,
     DriveChangeLogService,
@@ -30,9 +30,9 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
     DriveCollaborationService,
     DriveCollaborationGateway,
     LocalDriveCollaborationBus,
-    DriveDocumentImageService,
+    DriveDocumentHostedImageService,
+    PlatformMediaStorage,
     DrivePublicAssetService,
-    DriveRemoteImageFetcher,
     DriveSiteService,
     DriveService,
     {
@@ -62,6 +62,6 @@ import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: ["DriveStoragePort", DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentImageService, DriveLinkIntakeService],
+  exports: ["DriveStoragePort", DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentHostedImageService, DriveLinkIntakeService],
 })
 export class DriveModule {}

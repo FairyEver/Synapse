@@ -1,5 +1,9 @@
 import type { DataNamespace, DataRepository } from "../../../electron/runtime/data-repo"
-import type { TerminalBlockManifestEntry, TerminalDeleteIntentEntry } from "../../../electron/runtime/data-repo/schemas"
+import type {
+  TerminalBlockManifestEntry,
+  TerminalDeleteIntentEntry,
+  TerminalToolbarActionsEntry,
+} from "../../../electron/runtime/data-repo/schemas"
 import type {
   TerminalCommandBodyRecord,
   TerminalCommandRecord,
@@ -35,6 +39,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
   const workspaces = dataRepository.namespace<TerminalWorkspaceRecord>("app.terminal.workspaces")
   const globalLaunch = dataRepository.namespace<TerminalGlobalLaunchRecord>("app.terminal.global-launch")
   const globalLaunchBodies = dataRepository.namespace<TerminalGlobalLaunchBodyRecord>("app.terminal.global-launch-bodies")
+  const toolbarActions = dataRepository.namespace<TerminalToolbarActionsEntry>("app.terminal.toolbar-actions")
   const commands = dataRepository.namespace<TerminalCommandRecord>("app.terminal.commands")
   const groupLaunchBodies = dataRepository.namespace<TerminalGroupLaunchBodyRecord>("app.terminal.group-launch-bodies")
   const commandBodies = dataRepository.namespace<TerminalCommandBodyRecord>("app.terminal.command-bodies")
@@ -94,6 +99,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
     workspaces,
     globalLaunch,
     globalLaunchBodies,
+    toolbarActions,
     commands,
     groupLaunchBodies,
     commandBodies,
@@ -110,6 +116,7 @@ export function createTerminalRepository(dataRepository: DataRepository) {
     workspaces: DataNamespace<TerminalWorkspaceRecord>
     globalLaunch: DataNamespace<TerminalGlobalLaunchRecord>
     globalLaunchBodies: DataNamespace<TerminalGlobalLaunchBodyRecord>
+    toolbarActions: DataNamespace<TerminalToolbarActionsEntry>
     commands: DataNamespace<TerminalCommandRecord>
     groupLaunchBodies: DataNamespace<TerminalGroupLaunchBodyRecord>
     commandBodies: DataNamespace<TerminalCommandBodyRecord>

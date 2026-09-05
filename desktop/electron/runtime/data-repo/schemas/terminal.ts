@@ -26,6 +26,10 @@ import {
   type TerminalSessionRecord,
   type TerminalWorkspaceRecord,
 } from "../../../../app-capabilities/terminal/shared/contract-schema"
+import {
+  TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT,
+  terminalCustomToolbarActionSchema,
+} from "../../../../app-capabilities/terminal/shared/schema"
 import type { NamespaceSchema } from "../types"
 
 const terminalBlockManifestEntrySchema = z.object({
@@ -57,6 +61,15 @@ const terminalDeleteIntentEntrySchema = z.object({
 
 export type TerminalDeleteIntentEntry = z.infer<typeof terminalDeleteIntentEntrySchema>
 
+const terminalToolbarActionsEntrySchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.literal("default"),
+  items: z.array(terminalCustomToolbarActionSchema).max(TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT),
+  updatedAt: z.string().datetime(),
+}).strict()
+
+export type TerminalToolbarActionsEntry = z.infer<typeof terminalToolbarActionsEntrySchema>
+
 const noMigrations = [] as const
 
 export const terminalGlobalLaunchSchema: NamespaceSchema<TerminalGlobalLaunchRecord> = {
@@ -74,6 +87,21 @@ export const terminalGlobalLaunchBodiesSchema: NamespaceSchema<TerminalGlobalLau
   migrations: noMigrations,
   encrypted: true,
   validate: (value): value is TerminalGlobalLaunchBodyRecord => terminalGlobalLaunchBodyRecordSchema.safeParse(value).success,
+}
+
+export const terminalToolbarActionsSchema: NamespaceSchema<TerminalToolbarActionsEntry> = {
+  name: "app.terminal.toolbar-actions",
+  backend: "encrypted-json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  encrypted: true,
+  validate: (value): value is TerminalToolbarActionsEntry => terminalToolbarActionsEntrySchema.safeParse(value).success,
+  defaults: () => ({
+    schemaVersion: 1,
+    id: "default",
+    items: [],
+    updatedAt: new Date(0).toISOString(),
+  }),
 }
 
 export const terminalGroupsSchema: NamespaceSchema<TerminalGroupRecord> = {

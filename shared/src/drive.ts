@@ -1,5 +1,6 @@
 export const DRIVE_PUBLIC_PATH_PREFIX = "/share"
 export const DRIVE_PUBLIC_ASSET_PATH_PREFIX = "/files"
+export const PLATFORM_OBJECT_PATH_PREFIX = "/object"
 export const DRIVE_SITE_PATH_PREFIX = "/sites"
 export const DRIVE_OWNER_BROWSER_PATH_PREFIX = "/drive/items"
 export const DRIVE_CONSOLE_BROWSER_PATH_PREFIX = "/console/drive"
@@ -10,7 +11,7 @@ export const DRIVE_SITE_DEFAULT_PAGE_SIZE = 50
 export const DRIVE_SITE_MAX_PAGE_SIZE = 200
 export const DRIVE_SITE_MAX_FILES = 1000
 export const DRIVE_SITE_MAX_TOTAL_BYTES = 200 * 1024 * 1024
-export const DRIVE_DOCUMENT_IMAGE_IMPORT_MAX_SOURCES = 20
+export const DRIVE_DOCUMENT_IMAGE_MAX_BYTES = 20 * 1024 * 1024
 export const DRIVE_MAX_FILE_SIZE_LABEL = "100MB"
 export const DRIVE_DEFAULT_QUOTA_LABEL = "5GB"
 export const DRIVE_SITE_MAX_TOTAL_SIZE_LABEL = "200MB"
@@ -37,6 +38,7 @@ export const DRIVE_PUBLIC_ASSET_MIME_BY_EXTENSION = {
   ...DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION,
 } as const
 export const DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE = "仅支持 PNG、JPG、JPEG、GIF、WebP、AVIF、ICO 图片；不支持 SVG。"
+export const DRIVE_DOCUMENT_IMAGE_MAX_SIZE_LABEL = "20MB"
 export const DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE = "仅支持 PNG、JPG、JPEG、GIF、WebP、AVIF、ICO、PDF、DOCX、XLSX、PPTX、TXT、MD、CSV 文件；不支持 SVG。"
 
 export type DriveItemType = "file" | "folder"
@@ -104,29 +106,6 @@ export const DRIVE_SYNC_CONFLICT_RESOLUTIONS = ["keep_local", "keep_remote", "ke
 export type DriveSyncConflictResolutionAction = typeof DRIVE_SYNC_CONFLICT_RESOLUTIONS[number]
 export const DRIVE_SYNC_HEALTH_STATUSES = ["idle", "syncing", "retrying", "paused", "error"] as const
 export type DriveSyncHealth = typeof DRIVE_SYNC_HEALTH_STATUSES[number]
-export type DriveDocumentImageSourceKind =
-  | "owner_asset"
-  | "collaborator_asset"
-  | "external"
-  | "relative"
-  | "data"
-  | "invalid"
-  | "unsupported"
-export type DriveDocumentImageSourceStatus =
-  | "ready"
-  | "checking"
-  | "unreachable"
-  | "importing"
-  | "imported"
-  | "failed"
-export type DriveDocumentImageImportDisabledReason =
-  | "not_owner"
-  | "already_owned"
-  | "unreachable"
-  | "unsupported"
-  | "quota"
-  | "too_large"
-
 export function isDriveMarkdownItem(item: {
   readonly type: DriveItemType | string
   readonly name: string
@@ -376,6 +355,20 @@ export interface DriveUploadPrepareResult {
   }
 }
 
+export interface DriveDocumentImageUploadPrepareResult {
+  readonly sessionId: string
+  readonly imageId: string
+  readonly upload: DriveUploadPrepareResult["upload"]
+}
+
+export interface DriveHostedDocumentImageDto {
+  readonly imageId: string
+  readonly name: string
+  readonly size: string
+  readonly mimeType: string
+  readonly url: string
+}
+
 export interface DriveFolderUploadPrepareFileInput {
   readonly relativePath: string
   readonly size: string
@@ -513,65 +506,6 @@ export interface DriveSiteListPageDto {
   readonly items: readonly DriveSiteDto[]
   readonly total: number
   readonly page: DriveBrowserChildrenPageDto
-}
-
-export interface DriveDocumentImageSource {
-  readonly id: string
-  readonly imageKey: string
-  readonly src: string
-  readonly kind: DriveDocumentImageSourceKind
-  readonly occurrenceCount: number
-  readonly altText?: string
-  readonly previewUrl?: string
-  readonly assetId?: string
-  readonly assetOwnerId?: string
-  readonly assetOwnerName?: string
-  readonly canImport: boolean
-  readonly status: DriveDocumentImageSourceStatus
-  readonly reason?: string
-  readonly importDisabledReason?: DriveDocumentImageImportDisabledReason
-}
-
-export interface DriveDocumentImageSourcesDto {
-  readonly itemId: string
-  readonly versionId: string | null
-  readonly canImport: boolean
-  readonly sources: readonly DriveDocumentImageSource[]
-  readonly summary: {
-    readonly total: number
-    readonly ownerAsset: number
-    readonly collaboratorAsset: number
-    readonly external: number
-    readonly invalid: number
-    readonly unsupported: number
-    readonly importable: number
-  }
-}
-
-export interface DriveDocumentImageImportRequest {
-  readonly baseVersionId: string
-  readonly sources: readonly { readonly src: string }[]
-}
-
-export interface DriveDocumentImageImportResult {
-  readonly itemId: string
-  readonly versionId: string
-  readonly imported: readonly {
-    readonly previousSrc: string
-    readonly nextSrc: string
-    readonly assetId: string
-    readonly size: string
-  }[]
-  readonly failed: readonly {
-    readonly src: string
-    readonly reason: "unreachable" | "unsupported" | "too_large" | "quota" | "changed" | "unknown"
-    readonly message: string
-  }[]
-  readonly summary: {
-    readonly importedCount: number
-    readonly failedCount: number
-    readonly replacedOccurrenceCount: number
-  }
 }
 
 export interface DriveSiteListInput {
@@ -1361,6 +1295,10 @@ export function buildDriveSiteUrl(input: {
 
 export function isDrivePublicAssetId(value: string): boolean {
   return /^asset_[0-9A-Za-z]{32}$/u.test(value)
+}
+
+export function isDriveDocumentImageId(value: string): boolean {
+  return /^img_[0-9A-Za-z]{32}$/u.test(value)
 }
 
 export function inferDrivePublicAssetMimeType(name: string): string | null {

@@ -30,12 +30,13 @@ import '@mdxeditor/editor/style.css'
 import type { JsxComponentDescriptor, MDXEditorMethods, ViewMode } from '@mdxeditor/editor'
 import {
   DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION,
+  DRIVE_DOCUMENT_IMAGE_MAX_BYTES,
+  DRIVE_DOCUMENT_IMAGE_MAX_SIZE_LABEL,
   inferDrivePublicAssetMimeType,
   isDriveCommentableMarkdownItem,
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
-  type DrivePublicAssetDto,
 } from '@synapse/shared'
 import { Download, ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
 import {
@@ -59,11 +60,8 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
-import { ApiError } from '@/lib/api'
-import {
-  trackedDriveApi as driveApi,
-  trackedDriveBrowserApi as driveBrowserApi,
-} from '../shared/drive-telemetry-api'
+import { ApiError, type DriveDocumentImageUploadContext } from '@/lib/api'
+import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
 import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { cn } from '@/lib/utils'
@@ -75,7 +73,6 @@ import {
   observeDriveHierarchicalListMarkers,
 } from './drive-hierarchical-list-markers'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
-import { useDriveMarkdownImageSources, type DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import {
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
@@ -89,7 +86,7 @@ import { trailingImageParagraphPlugin } from './mdxeditor-trailing-image-plugin'
 import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
-const PUBLIC_IMAGE_UPLOAD_CONSENT_STORAGE_KEY = 'synapse.drive.markdown.publicImageUploadConsent.v1'
+const DOCUMENT_IMAGE_UPLOAD_CONSENT_STORAGE_KEY = 'synapse.drive.markdown.documentImageUploadConsent.v1'
 const MDXEDITOR_COMMENTS_PANEL_DEFAULT_SIZE = 22
 const MDXEDITOR_COMMENTS_PANEL_MIN_SIZE = 17
 const MDXEDITOR_COMMENTS_PANEL_MAX_SIZE = 32
@@ -97,17 +94,11 @@ const COMMENT_SCROLL_SAFE_INSET = 24
 
 type ResizablePanelPercent = `${number}%`
 
-type PendingPublicImageUpload = {
+type PendingDocumentImageUpload = {
   readonly file: File
   readonly insertMarkdown: boolean
   readonly resolve?: (url: string) => void
   readonly reject?: (error: Error) => void
-}
-
-type DraftPublicImage = {
-  readonly file: File
-  readonly input: PublicImageUploadInput
-  readonly url: string
 }
 
 type PublicImageUploadInput = {
@@ -133,14 +124,14 @@ export function DriveMDXeditorRenderer({
   edit,
   editContext,
   annotationContext,
-  imageSourceContext,
+  imageUploadContext,
 }: {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
   readonly edit?: DriveBrowserEditDto | null
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: DriveAnnotationContext
-  readonly imageSourceContext?: DriveMarkdownImageSourceContext
+  readonly imageUploadContext?: DriveDocumentImageUploadContext
 }) {
   const sourceText = preview.text ?? ''
   const usesMdxSyntax = isMdxDocument(current.name)
@@ -167,14 +158,14 @@ export function DriveMDXeditorRenderer({
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
   const parseErrorRequestRef = useRef(0)
-  const draftPublicImagesRef = useRef<Map<string, DraftPublicImage>>(new Map())
+  const pendingImageUploadCountRef = useRef(0)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
-  const [pendingPublicImageUpload, setPendingPublicImageUpload] = useState<PendingPublicImageUpload | null>(null)
+  const [pendingDocumentImageUpload, setPendingDocumentImageUpload] = useState<PendingDocumentImageUpload | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [editorViewMode, setEditorViewMode] = useState<ViewMode>('rich-text')
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -197,12 +188,6 @@ export function DriveMDXeditorRenderer({
   const requiresSourceMode = preparedInitialDocument.requiresSourceMode
   const sourceMode = Boolean(parseError || requiresSourceMode || editorViewMode !== 'rich-text')
   const loginUrl = buildLoginUrl()
-  const imageSources = useDriveMarkdownImageSources({
-    context: imageSourceContext,
-    edit,
-    editContext,
-    disabled: dirty,
-  })
   const canSave = canEdit
     && dirty
     && !uploadingImage
@@ -303,16 +288,8 @@ export function DriveMDXeditorRenderer({
       })
     })
   }, [])
-  const clearDraftPublicImages = useCallback((urls?: readonly string[]) => {
-    const targetUrls = urls ?? Array.from(draftPublicImagesRef.current.keys())
-    for (const url of targetUrls) {
-      const draft = draftPublicImagesRef.current.get(url)
-      if (!draft) continue
-      URL.revokeObjectURL(draft.url)
-      draftPublicImagesRef.current.delete(url)
-    }
-  }, [])
-  const stageDraftImage = useCallback(async (file: File) => {
+  const uploadDocumentImage = useCallback(async (file: File) => {
+    if (!canEdit || !imageUploadContext) throw new Error('图片上传不可用。')
     const validationError = publicImageUploadValidationError(file)
     if (validationError) {
       setError(validationError)
@@ -324,14 +301,27 @@ export function DriveMDXeditorRenderer({
       throw new Error('格式不支持。')
     }
     setError(null)
-    const url = URL.createObjectURL(file)
-    draftPublicImagesRef.current.set(url, { file, input, url })
-    return url
-  }, [])
-  const confirmPublicImageUpload = useCallback((file: File | null) => {
+    const finishTracking = startDriveOperation('web.drive.editor.image-upload', 'drive-markdown-editor')
+    pendingImageUploadCountRef.current += 1
+    setUploadingImage(true)
+    try {
+      const uploaded = await driveBrowserApi.uploadHostedDocumentImage(file, imageUploadContext, input)
+      finishTracking('success')
+      return uploaded.url
+    } catch (uploadError) {
+      finishTracking('failure')
+      const message = uploadError instanceof Error ? uploadError.message : '图片上传失败。'
+      setError(message)
+      throw uploadError
+    } finally {
+      pendingImageUploadCountRef.current -= 1
+      if (pendingImageUploadCountRef.current === 0) setUploadingImage(false)
+    }
+  }, [canEdit, imageUploadContext])
+  const confirmDocumentImageUpload = useCallback((file: File | null) => {
     return new Promise<string>((resolve, reject) => {
-      if (!canEdit) {
-        reject(new Error('没有编辑权限。'))
+      if (!canEdit || !imageUploadContext) {
+        reject(new Error('图片上传不可用。'))
         return
       }
       const validationError = publicImageUploadValidationError(file)
@@ -346,14 +336,14 @@ export function DriveMDXeditorRenderer({
         reject(new Error('格式不支持。'))
         return
       }
-      if (hasPublicImageUploadConsent()) {
-        void stageDraftImage(file).then(resolve, reject)
+      if (hasDocumentImageUploadConsent()) {
+        void uploadDocumentImage(file).then(resolve, reject)
         return
       }
-      setPendingPublicImageUpload({ file, insertMarkdown: false, resolve, reject })
+      setPendingDocumentImageUpload({ file, insertMarkdown: false, resolve, reject })
     })
-  }, [canEdit, stageDraftImage])
-  const insertPublicImageMarkdown = useCallback((file: File, url: string) => {
+  }, [canEdit, imageUploadContext, uploadDocumentImage])
+  const insertDocumentImageMarkdown = useCallback((file: File, url: string) => {
     const markdown = `![${imageAltText(file.name)}](${url})`
     editorRef.current?.focus(() => {
       editorRef.current?.insertMarkdown(markdown)
@@ -362,7 +352,7 @@ export function DriveMDXeditorRenderer({
   const handleImageSelected = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
-    if (!file || !canEdit) return
+    if (!file || !canEdit || !imageUploadContext) return
     const validationError = publicImageUploadValidationError(file)
     if (validationError) {
       setError(validationError)
@@ -373,26 +363,24 @@ export function DriveMDXeditorRenderer({
       return
     }
     setError(null)
-    if (hasPublicImageUploadConsent()) {
-      void stageDraftImage(file).then((url) => {
-        insertPublicImageMarkdown(file, url)
-      }, () => {
-        // Error state is set by stageDraftImage.
-      })
+    if (hasDocumentImageUploadConsent()) {
+      void uploadDocumentImage(file).then((url) => {
+        insertDocumentImageMarkdown(file, url)
+      }, () => undefined)
       return
     }
-    setPendingPublicImageUpload({ file, insertMarkdown: true })
-  }, [canEdit, insertPublicImageMarkdown, stageDraftImage])
+    setPendingDocumentImageUpload({ file, insertMarkdown: true })
+  }, [canEdit, imageUploadContext, insertDocumentImageMarkdown, uploadDocumentImage])
   const insertMixedClipboardImages = useCallback(async (files: readonly File[]) => {
     for (const file of files) {
       try {
-        const url = await confirmPublicImageUpload(file)
-        insertPublicImageMarkdown(file, url)
+        const url = await confirmDocumentImageUpload(file)
+        insertDocumentImageMarkdown(file, url)
       } catch {
         return
       }
     }
-  }, [confirmPublicImageUpload, insertPublicImageMarkdown])
+  }, [confirmDocumentImageUpload, insertDocumentImageMarkdown])
   const handlePasteCapture = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
     if (!canEdit) return
     const items = Array.from(event.clipboardData.items)
@@ -410,31 +398,28 @@ export function DriveMDXeditorRenderer({
     }
     void insertMixedClipboardImages(files.filter((file): file is File => file !== null))
   }, [canEdit, insertMixedClipboardImages])
-  const cancelPendingPublicImageUpload = useCallback(() => {
-    pendingPublicImageUpload?.reject?.(new Error('已取消。'))
-    setPendingPublicImageUpload(null)
-  }, [pendingPublicImageUpload])
-  const uploadPendingPublicImage = useCallback(async () => {
-    const pending = pendingPublicImageUpload
+  const cancelPendingDocumentImageUpload = useCallback(() => {
+    pendingDocumentImageUpload?.reject?.(new Error('已取消。'))
+    setPendingDocumentImageUpload(null)
+  }, [pendingDocumentImageUpload])
+  const uploadPendingDocumentImage = useCallback(async () => {
+    const pending = pendingDocumentImageUpload
     if (!pending) return
-    if (!canEdit) {
-      pending.reject?.(new Error('没有编辑权限。'))
-      setPendingPublicImageUpload(null)
+    if (!canEdit || !imageUploadContext) {
+      pending.reject?.(new Error('图片上传不可用。'))
+      setPendingDocumentImageUpload(null)
       return
     }
-    const finishTracking = startDriveOperation('web.drive.editor.image-upload', 'drive-markdown-editor')
-    setPendingPublicImageUpload(null)
-    rememberPublicImageUploadConsent()
+    setPendingDocumentImageUpload(null)
+    rememberDocumentImageUploadConsent()
     try {
-      const url = await stageDraftImage(pending.file)
+      const url = await uploadDocumentImage(pending.file)
       pending.resolve?.(url)
-      if (pending.insertMarkdown) insertPublicImageMarkdown(pending.file, url)
-      finishTracking('success')
-    } catch (stageError) {
-      finishTracking('failure')
-      pending.reject?.(stageError instanceof Error ? stageError : new Error('图片插入失败。'))
+      if (pending.insertMarkdown) insertDocumentImageMarkdown(pending.file, url)
+    } catch (uploadError) {
+      pending.reject?.(uploadError instanceof Error ? uploadError : new Error('图片上传失败。'))
     }
-  }, [canEdit, insertPublicImageMarkdown, pendingPublicImageUpload, stageDraftImage])
+  }, [canEdit, imageUploadContext, insertDocumentImageMarkdown, pendingDocumentImageUpload, uploadDocumentImage])
   const plugins = useMemo(() => [
     toolbarPlugin({
       toolbarContents: () => (
@@ -470,7 +455,7 @@ export function DriveMDXeditorRenderer({
     linkPlugin(),
     linkDialogPlugin(),
     imagePlugin({
-      imageUploadHandler: confirmPublicImageUpload,
+      imageUploadHandler: confirmDocumentImageUpload,
       imagePreviewHandler: resolveImagePreview,
     }),
     trailingImageParagraphPlugin(),
@@ -486,7 +471,7 @@ export function DriveMDXeditorRenderer({
       onViewModeChange: handleEditorViewModeChange,
     }),
     markdownShortcutPlugin(),
-  ], [canEdit, confirmPublicImageUpload, handleEditorViewModeChange, notifyEditorUpdate, resolveImagePreview, uploadingImage, usesMdxSyntax])
+  ], [canEdit, confirmDocumentImageUpload, handleEditorViewModeChange, notifyEditorUpdate, resolveImagePreview, uploadingImage, usesMdxSyntax])
 
   const clearParseError = useCallback(() => {
     parseErrorRequestRef.current += 1
@@ -503,22 +488,20 @@ export function DriveMDXeditorRenderer({
     clearParseError()
     setConflictOpen(false)
     setReloadConfirmOpen(false)
-    setPendingPublicImageUpload(null)
+    setPendingDocumentImageUpload(null)
     setEditorViewMode('rich-text')
     setActiveThreadId(null)
     setCommentsOpen(false)
     setCompactCommentsOpen(false)
     setCommentAnchoredDocumentHeight(0)
     commentsTouchedRef.current = false
-    clearDraftPublicImages()
     beginExternalMarkdownSync(initialText)
     editorRef.current?.setMarkdown(initialText)
-  }, [beginExternalMarkdownSync, clearDraftPublicImages, clearParseError, current.id, edit?.currentVersionId, initialText])
+  }, [beginExternalMarkdownSync, clearParseError, current.id, edit?.currentVersionId, initialText])
 
   useEffect(() => () => {
     clearExternalMarkdownSync()
-    clearDraftPublicImages()
-  }, [clearDraftPublicImages, clearExternalMarkdownSync])
+  }, [clearExternalMarkdownSync])
 
   useLayoutEffect(() => {
     const root = editorContainerRef.current
@@ -547,21 +530,8 @@ export function DriveMDXeditorRenderer({
     saveInFlightRef.current = true
     setError(null)
     const submittedValue = valueRef.current
-    let normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
-    let uploadedAssets: DrivePublicAssetDto[] = []
-    let replacedDraftUrls: string[] = []
+    const normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
     try {
-      const materialized = await materializeDraftPublicImages(
-        normalizedValue,
-        draftPublicImagesRef.current,
-        uploadedAssets,
-        setUploadingImage,
-      )
-      normalizedValue = materialized.markdown
-      replacedDraftUrls = materialized.replacedDraftUrls
-      if (hasTemporaryImageSource(normalizedValue)) {
-        throw new Error('图片尚未完成上传，请重新粘贴或选择图片。')
-      }
       await editContext.saveText({ text: normalizedValue, baseVersionId: edit.currentVersionId })
       clearParseError()
       if (normalizedValue !== submittedValue && valueRef.current === submittedValue) {
@@ -569,35 +539,23 @@ export function DriveMDXeditorRenderer({
         setValue(normalizedValue)
         beginExternalMarkdownSync(normalizedValue)
         editorRef.current?.setMarkdown(normalizedValue)
-      } else if (materialized.replacements.length > 0 && valueRef.current !== submittedValue) {
-        const currentValue = valueRef.current
-        const nextCurrentValue = replaceDraftPublicImageUrls(currentValue, materialized.replacements)
-        if (nextCurrentValue !== currentValue) {
-          valueRef.current = nextCurrentValue
-          setValue(nextCurrentValue)
-          beginExternalMarkdownSync(nextCurrentValue)
-          editorRef.current?.setMarkdown(nextCurrentValue)
-        }
       }
       savedValueRef.current = normalizedValue
-      clearDraftPublicImages(replacedDraftUrls)
       setDirty(valueRef.current !== normalizedValue)
       await annotations.refresh()
       setCommentBaselineRevision((revision) => revision + 1)
       finishTracking('success')
     } catch (saveError) {
       finishTracking('failure')
-      const cleanupFailed = await cleanupUploadedPublicAssets(uploadedAssets)
       if (saveError instanceof ApiError && saveError.status === 409) {
         setConflictOpen(true)
-        if (cleanupFailed) setError('未保存图片清理失败。')
         return
       }
-      setError(cleanupFailed ? '保存失败，未保存图片清理失败。' : saveError instanceof Error ? saveError.message : '保存失败。')
+      setError(saveError instanceof Error ? saveError.message : '保存失败。')
     } finally {
       saveInFlightRef.current = false
     }
-  }, [annotations.refresh, beginExternalMarkdownSync, canSave, clearDraftPublicImages, clearParseError, edit?.currentVersionId, editContext])
+  }, [annotations.refresh, beginExternalMarkdownSync, canSave, clearParseError, edit?.currentVersionId, editContext])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key.toLowerCase() !== 's' || (!event.metaKey && !event.ctrlKey) || event.shiftKey || event.altKey) return
@@ -634,7 +592,6 @@ export function DriveMDXeditorRenderer({
       clearParseError()
       setConflictOpen(false)
       setReloadConfirmOpen(false)
-      clearDraftPublicImages()
       beginExternalMarkdownSync(nextText)
       editorRef.current?.setMarkdown(nextText)
       finishTracking('success')
@@ -642,7 +599,7 @@ export function DriveMDXeditorRenderer({
       finishTracking('failure')
       setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
     }
-  }, [beginExternalMarkdownSync, clearDraftPublicImages, clearParseError, editContext])
+  }, [beginExternalMarkdownSync, clearParseError, editContext])
 
   const requestReload = useCallback(() => {
     if (dirty) {
@@ -722,7 +679,6 @@ export function DriveMDXeditorRenderer({
         onPressedChange: setCommentPanelOpen,
       })
     }
-    if (imageSources.toolbarItem) items.push(imageSources.toolbarItem)
     if (loginRequired) {
       items.push({
         kind: 'button',
@@ -767,16 +723,13 @@ export function DriveMDXeditorRenderer({
     dirty,
     editContext?.reloading,
     editContext?.savingText,
-    handleReload,
     handleSave,
-    imageSources.toolbarItem,
     isCompact,
     loginRequired,
     loginUrl,
     railThreads.length,
     requestReload,
     setCommentPanelOpen,
-    uploadingImage,
     annotationsEnabled,
   ])
 
@@ -969,20 +922,19 @@ export function DriveMDXeditorRenderer({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {imageSources.panel}
-      <AlertDialog open={pendingPublicImageUpload !== null} onOpenChange={(open) => {
-        if (!open) cancelPendingPublicImageUpload()
+      <AlertDialog open={pendingDocumentImageUpload !== null} onOpenChange={(open) => {
+        if (!open) cancelPendingDocumentImageUpload()
       }}>
         <AlertDialogContent data-drive-telemetry-scope='portal'>
           <AlertDialogHeader>
-            <AlertDialogTitle>插入公开素材</AlertDialogTitle>
+            <AlertDialogTitle>公开上传图片</AlertDialogTitle>
             <AlertDialogDescription>
-              图片会在保存时作为公开素材生成可访问链接。
+              图片会立即上传到平台公共图床，不占用云盘空间。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.image-upload' type='button' onClick={() => { void uploadPendingPublicImage() }}>继续插入</Button>
+            <Button data-drive-telemetry-event='web.drive.editor.image-upload' type='button' onClick={() => { void uploadPendingDocumentImage() }}>继续上传</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1026,59 +978,6 @@ function resizablePanelPercent(value: number): ResizablePanelPercent {
 function buildLoginUrl(): string {
   if (typeof window === 'undefined') return buildDashboardSignInUrl(undefined)
   return buildDashboardSignInUrl(window.location)
-}
-
-async function materializeDraftPublicImages(
-  markdown: string,
-  drafts: ReadonlyMap<string, DraftPublicImage>,
-  uploadedAssets: DrivePublicAssetDto[],
-  setUploadingImage: (uploading: boolean) => void,
-): Promise<{
-  readonly markdown: string
-  readonly replacedDraftUrls: string[]
-  readonly replacements: readonly DraftPublicImageReplacement[]
-}> {
-  const referencedDrafts = Array.from(drafts.values()).filter((draft) => markdown.includes(draft.url))
-  if (referencedDrafts.length === 0) {
-    return { markdown, replacedDraftUrls: [], replacements: [] }
-  }
-
-  let nextMarkdown = markdown
-  const replacedDraftUrls: string[] = []
-  const replacements: DraftPublicImageReplacement[] = []
-  setUploadingImage(true)
-  try {
-    for (const draft of referencedDrafts) {
-      const asset = await driveBrowserApi.uploadPublicAssetFile(draft.file, draft.input)
-      uploadedAssets.push(asset)
-      replacedDraftUrls.push(draft.url)
-      replacements.push({ draftUrl: draft.url, assetUrl: asset.url })
-      nextMarkdown = nextMarkdown.split(draft.url).join(asset.url)
-    }
-  } finally {
-    setUploadingImage(false)
-  }
-
-  return { markdown: nextMarkdown, replacedDraftUrls, replacements }
-}
-
-type DraftPublicImageReplacement = {
-  readonly draftUrl: string
-  readonly assetUrl: string
-}
-
-function replaceDraftPublicImageUrls(markdown: string, replacements: readonly DraftPublicImageReplacement[]): string {
-  let nextMarkdown = markdown
-  for (const replacement of replacements) {
-    nextMarkdown = nextMarkdown.split(replacement.draftUrl).join(replacement.assetUrl)
-  }
-  return nextMarkdown
-}
-
-async function cleanupUploadedPublicAssets(assets: readonly DrivePublicAssetDto[]): Promise<boolean> {
-  if (assets.length === 0) return false
-  const results = await Promise.allSettled(assets.map((asset) => driveApi.trashPublicAsset(asset.assetId)))
-  return results.some((result) => result.status === 'rejected')
 }
 
 function downloadLocalVersion(name: string, value: string): void {
@@ -1134,37 +1033,26 @@ function resolvePublicImageUploadInput(file: File): { readonly name: string; rea
 
 function publicImageUploadValidationError(file: File | null | undefined): string | null {
   if (!file || file.size <= 0) return '图片内容为空，请重新复制或选择图片。'
+  if (file.size > DRIVE_DOCUMENT_IMAGE_MAX_BYTES) return `图片超过 ${DRIVE_DOCUMENT_IMAGE_MAX_SIZE_LABEL} 限制。`
   if (!resolvePublicImageUploadInput(file)) return '格式不支持。'
   return null
-}
-
-function hasTemporaryImageSource(markdown: string): boolean {
-  let found = false
-  transformMarkdownOutsideCode(markdown, (segment) => {
-    if (
-      /!\[[^\r\n]*\]\(\s*<?blob:/iu.test(segment)
-      || /^\s*\[[^\]\r\n]+\]:\s*<?blob:/imu.test(segment)
-    ) found = true
-    return segment
-  })
-  return found
 }
 
 function isDrivePublicAssetImageMimeType(value: string | null): value is DrivePublicAssetImageMimeType {
   return Boolean(value && DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES.includes(value as DrivePublicAssetImageMimeType))
 }
 
-function hasPublicImageUploadConsent(): boolean {
+function hasDocumentImageUploadConsent(): boolean {
   try {
-    return window.localStorage.getItem(PUBLIC_IMAGE_UPLOAD_CONSENT_STORAGE_KEY) === 'true'
+    return window.localStorage.getItem(DOCUMENT_IMAGE_UPLOAD_CONSENT_STORAGE_KEY) === 'true'
   } catch {
     return false
   }
 }
 
-function rememberPublicImageUploadConsent(): void {
+function rememberDocumentImageUploadConsent(): void {
   try {
-    window.localStorage.setItem(PUBLIC_IMAGE_UPLOAD_CONSENT_STORAGE_KEY, 'true')
+    window.localStorage.setItem(DOCUMENT_IMAGE_UPLOAD_CONSENT_STORAGE_KEY, 'true')
   } catch {
     // The current insertion can continue even if the browser refuses storage.
   }

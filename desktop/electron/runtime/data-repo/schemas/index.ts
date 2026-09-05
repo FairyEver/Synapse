@@ -135,9 +135,11 @@ export {
   terminalLaunchBodiesSchema,
   terminalOperationsSchema,
   terminalSessionsSchema,
+  terminalToolbarActionsSchema,
   terminalWorkspacesSchema,
   type TerminalBlockManifestEntry,
   type TerminalDeleteIntentEntry,
+  type TerminalToolbarActionsEntry,
 } from "./terminal"
 export {
   auditSchema,
@@ -247,6 +249,7 @@ import {
   terminalLaunchBodiesSchema,
   terminalOperationsSchema,
   terminalSessionsSchema,
+  terminalToolbarActionsSchema,
   terminalWorkspacesSchema,
 } from "./terminal"
 import {
@@ -306,6 +309,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   updateInstallRecoverySchema,
   terminalGlobalLaunchSchema,
   terminalGlobalLaunchBodiesSchema,
+  terminalToolbarActionsSchema,
   terminalGroupsSchema,
   terminalGroupLaunchBodiesSchema,
   terminalCommandsSchema,

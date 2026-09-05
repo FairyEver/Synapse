@@ -63,6 +63,8 @@ import { SystemAppTopBarActionButton } from "../../../src/modules/apps/component
 import type { SynapseSystemAppTerminalOpenRequest } from "../../../src/modules/apps/types"
 import type {
   SynapseTerminalGlobalLaunchSettings,
+  SynapseTerminalCreateCustomToolbarActionInput,
+  SynapseTerminalCustomToolbarAction,
   SynapseTerminalGroup,
   SynapseTerminalGroupCommand,
   SynapseTerminalGroupCommandSummary,
@@ -71,6 +73,7 @@ import type {
   SynapseTerminalLaunchLayer,
   SynapseTerminalPaneDropEdge,
   SynapseTerminalSession,
+  SynapseTerminalUpdateCustomToolbarActionInput,
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
 import { collectTerminalPaneLeaves } from "../shared/schema"
@@ -93,6 +96,7 @@ import {
   resolveTerminalToolbarPayload,
   type TerminalToolbarAction,
 } from "./terminal-toolbar-actions"
+import { TerminalToolbarManagerDialog } from "./terminal-toolbar-manager-dialog"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
@@ -110,6 +114,8 @@ export function TerminalModule({
   const [groups, setGroups] = useState<SynapseTerminalGroupSummary[]>([])
   const [workspaces, setWorkspaces] = useState<SynapseTerminalWorkspace[]>([])
   const [sessions, setSessions] = useState<SynapseTerminalSession[]>([])
+  const [customToolbarActions, setCustomToolbarActions] = useState<SynapseTerminalCustomToolbarAction[]>([])
+  const [toolbarManagerOpen, setToolbarManagerOpen] = useState(false)
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [activePaneIds, setActivePaneIds] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -152,13 +158,15 @@ export function TerminalModule({
   const [discardAction, setDiscardAction] = useState<(() => void) | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
-  const workspaceViewRef = useRef<TerminalWorkspaceViewHandle | null>(null)
+  const [mountedWorkspaceIds, setMountedWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
+  const workspaceViewRefs = useRef(new Map<string, TerminalWorkspaceViewHandle>())
   const renameReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
   const createGroupActionRef = useRef<HTMLButtonElement | null>(null)
   const pendingClosePaneIdsRef = useRef(new Set<string>())
   const refreshRequestIdRef = useRef(0)
+  const toolbarActionRefreshRequestIdRef = useRef(0)
   const workspaceMutationQueuesRef = useRef(new Map<string, Promise<void>>())
 
   const activeWorkspace = useMemo(() => {
@@ -176,6 +184,22 @@ export function TerminalModule({
     ? sessions.find((session) => session.id === activePane.sessionId) ?? null
     : null
   const terminalSessionStatus = activeSession?.status ?? null
+
+  useEffect(() => {
+    if (!activeWorkspace) return
+    setMountedWorkspaceIds((current) => {
+      if (current.has(activeWorkspace.id)) return current
+      return new Set(current).add(activeWorkspace.id)
+    })
+  }, [activeWorkspace])
+
+  useEffect(() => {
+    const workspaceIds = new Set(workspaces.map((workspace) => workspace.id))
+    setMountedWorkspaceIds((current) => {
+      const next = new Set([...current].filter((workspaceId) => workspaceIds.has(workspaceId)))
+      return next.size === current.size ? current : next
+    })
+  }, [workspaces])
 
   const workspaceGroups = useMemo(() => groupWorkspaces(groups, workspaces), [groups, workspaces])
   const activeHeaderWorkspaces = useMemo(() => {
@@ -230,6 +254,12 @@ export function TerminalModule({
     })
   }, [terminalBridge])
 
+  const refreshCustomToolbarActions = useCallback(async () => {
+    const requestId = ++toolbarActionRefreshRequestIdRef.current
+    const actions = await terminalBridge.toolbarAction.list()
+    if (requestId === toolbarActionRefreshRequestIdRef.current) setCustomToolbarActions(actions)
+  }, [terminalBridge])
+
   const enqueueWorkspaceMutation = useCallback(<T,>(
     workspaceId: string,
     mutation: () => Promise<T>,
@@ -268,7 +298,7 @@ export function TerminalModule({
     let active = true
     setLoading(true)
     setLoadError(null)
-    refreshSessions()
+    Promise.all([refreshSessions(), refreshCustomToolbarActions()])
       .catch((error) => {
         logger.error("Failed to load terminal sessions.", error)
         if (active) setLoadError("加载终端失败")
@@ -280,13 +310,16 @@ export function TerminalModule({
     return () => {
       active = false
     }
-  }, [refreshSessions])
+  }, [refreshCustomToolbarActions, refreshSessions])
 
-  useEffect(() => terminalBridge.operation.onDomainChanged(() => {
-    void refreshSessions().catch((error) => {
+  useEffect(() => terminalBridge.operation.onDomainChanged((event) => {
+    const refresh = event.eventType?.startsWith("toolbar_action.")
+      ? refreshCustomToolbarActions()
+      : refreshSessions()
+    void refresh.catch((error) => {
       logger.warn("Failed to refresh terminal objects after a domain change.", error)
     })
-  }), [refreshSessions, terminalBridge])
+  }), [refreshCustomToolbarActions, refreshSessions, terminalBridge])
 
   useEffect(() => {
     if (!openRequest) return
@@ -928,7 +961,9 @@ export function TerminalModule({
   const runToolbarAction = useCallback(async (action: TerminalToolbarAction) => {
     if (!activeSession || !isTerminalToolbarActionEnabled(action, activeSession.status)) return
     if (action.kind === "xterm-local") {
-      if (action.operation === "clear") workspaceViewRef.current?.clearActivePane()
+      if (action.operation === "clear" && activeWorkspace) {
+        workspaceViewRefs.current.get(activeWorkspace.id)?.clearActivePane()
+      }
       return
     }
     const payload = resolveTerminalToolbarPayload(action, rendererPlatform)
@@ -945,7 +980,52 @@ export function TerminalModule({
       logger.error("Failed to run terminal toolbar action.", error)
       toast.error("写入终端失败")
     }
-  }, [activeSession, rendererPlatform, terminalBridge])
+  }, [activeSession, activeWorkspace, rendererPlatform, terminalBridge])
+
+  const runCustomToolbarAction = useCallback(async (action: SynapseTerminalCustomToolbarAction) => {
+    if (!activeSession || activeSession.status !== "running") return
+    try {
+      await terminalBridge.session.write({ sessionId: activeSession.id, data: action.content })
+      if (action.pressEnter) {
+        await new Promise<void>((resolve) => setTimeout(resolve, TERMINAL_COMMAND_ENTER_DELAY_MS))
+        await terminalBridge.session.write({ sessionId: activeSession.id, data: "\r" })
+      }
+    } catch (error) {
+      logger.error("Failed to run a custom terminal toolbar action.", error)
+      toast.error("写入终端失败")
+    }
+  }, [activeSession, terminalBridge])
+
+  const createCustomToolbarAction = useCallback(async (
+    input: SynapseTerminalCreateCustomToolbarActionInput,
+  ) => {
+    const action = await runTrackedOperation(
+      { component: "terminal", eventKey: "terminal.toolbar_action.create" },
+      () => terminalBridge.toolbarAction.create(input),
+    )
+    toolbarActionRefreshRequestIdRef.current += 1
+    setCustomToolbarActions((current) => mergeCustomToolbarAction(current, action))
+  }, [terminalBridge])
+
+  const updateCustomToolbarAction = useCallback(async (
+    input: SynapseTerminalUpdateCustomToolbarActionInput,
+  ) => {
+    const action = await runTrackedOperation(
+      { component: "terminal", eventKey: "terminal.toolbar_action.update" },
+      () => terminalBridge.toolbarAction.update(input),
+    )
+    toolbarActionRefreshRequestIdRef.current += 1
+    setCustomToolbarActions((current) => mergeCustomToolbarAction(current, action))
+  }, [terminalBridge])
+
+  const deleteCustomToolbarAction = useCallback(async (id: string) => {
+    await runTrackedOperation(
+      { component: "terminal", eventKey: "terminal.toolbar_action.delete" },
+      () => terminalBridge.toolbarAction.delete({ id }),
+    )
+    toolbarActionRefreshRequestIdRef.current += 1
+    setCustomToolbarActions((current) => current.filter((item) => item.id !== id))
+  }, [terminalBridge])
 
   const handleSessionChanged = useCallback((session: SynapseTerminalSession) => {
     setSessions((current) => mergeSession(current, session))
@@ -957,11 +1037,6 @@ export function TerminalModule({
       workspace.layout.type !== "leaf" || workspace.layout.sessionId !== sessionId
     )))
   }, [])
-
-  const selectActivePane = useCallback((paneId: string) => {
-    if (!activeWorkspace) return
-    setActivePaneIds((current) => ({ ...current, [activeWorkspace.id]: paneId }))
-  }, [activeWorkspace])
 
   const selectWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId)
@@ -1172,22 +1247,45 @@ export function TerminalModule({
           {activeWorkspace && activePaneId ? (
             <div className="dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
               <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-                <TerminalWorkspaceView
-                  ref={workspaceViewRef}
-                  activePaneId={activePaneId}
-                  appearanceSize={terminalAppearanceSize}
-                  onActivePaneChange={selectActivePane}
-                  onClosePane={closePane}
-                  onMovePane={movePane}
-                  onSessionChanged={handleSessionChanged}
-                  onSessionDeleted={handleSessionDeleted}
-                  onSplitPane={splitPane}
-                  onSplitRatioChange={updateSplitRatio}
-                  pendingClosePaneIds={pendingClosePaneIds}
-                  platform={rendererPlatform}
-                  sessions={sessions}
-                  workspace={activeWorkspace}
-                />
+                {workspaces.map((workspace) => {
+                  if (workspace.id !== activeWorkspace.id && !mountedWorkspaceIds.has(workspace.id)) return null
+                  const paneLeaves = collectTerminalPaneLeaves(workspace.layout)
+                  const workspaceActivePaneId = activePaneIds[workspace.id]
+                    && paneLeaves.some((pane) => pane.paneId === activePaneIds[workspace.id])
+                    ? activePaneIds[workspace.id]!
+                    : paneLeaves[0]?.paneId
+                  if (!workspaceActivePaneId) return null
+                  const visible = workspace.id === activeWorkspace.id
+                  return (
+                    <div
+                      key={workspace.id}
+                      className={cn("h-full min-h-0 min-w-0", !visible && "hidden")}
+                    >
+                      <TerminalWorkspaceView
+                        ref={(handle) => {
+                          if (handle) workspaceViewRefs.current.set(workspace.id, handle)
+                          else workspaceViewRefs.current.delete(workspace.id)
+                        }}
+                        activePaneId={workspaceActivePaneId}
+                        appearanceSize={terminalAppearanceSize}
+                        onActivePaneChange={(paneId) => {
+                          setActivePaneIds((current) => ({ ...current, [workspace.id]: paneId }))
+                        }}
+                        onClosePane={closePane}
+                        onMovePane={movePane}
+                        onSessionChanged={handleSessionChanged}
+                        onSessionDeleted={handleSessionDeleted}
+                        onSplitPane={splitPane}
+                        onSplitRatioChange={updateSplitRatio}
+                        pendingClosePaneIds={pendingClosePaneIds}
+                        platform={rendererPlatform}
+                        sessions={sessions}
+                        visible={visible}
+                        workspace={workspace}
+                      />
+                    </div>
+                  )
+                })}
               </div>
               {toolbarActions.length ? (
                 <div
@@ -1212,6 +1310,32 @@ export function TerminalModule({
                       </Button>
                     </div>
                   ))}
+                  <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
+                  <div data-terminal-custom-toolbar-actions className="flex shrink-0 items-center gap-1">
+                    {customToolbarActions.map((action) => (
+                      <Button
+                        key={action.id}
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
+                        aria-label={`${action.pressEnter ? "运行" : "输入"}快捷输入：${action.label}`}
+                        disabled={terminalSessionStatus !== "running"}
+                        onClick={() => { void runCustomToolbarAction(action) }}
+                      >
+                        {action.label}
+                      </Button>
+                    ))}
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      aria-label="管理自定义快捷输入"
+                      onClick={() => setToolbarManagerOpen(true)}
+                    >
+                      <Pencil />
+                    </Button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1228,6 +1352,14 @@ export function TerminalModule({
           )}
         </main>
       </SidebarContentLayout>
+      <TerminalToolbarManagerDialog
+        actions={customToolbarActions}
+        open={toolbarManagerOpen}
+        onCreate={createCustomToolbarAction}
+        onDelete={deleteCustomToolbarAction}
+        onOpenChange={setToolbarManagerOpen}
+        onUpdate={updateCustomToolbarAction}
+      />
       <Dialog open={globalSettingsOpen} onOpenChange={(open) => {
         if (!open && !globalLaunchSaving) requestDiscard(globalLaunchDirty, () => setGlobalSettingsOpen(false))
       }}>
@@ -1728,6 +1860,15 @@ function mergeSession(
   return sessions.some((item) => item.id === session.id)
     ? sessions.map((item) => item.id === session.id ? session : item)
     : [...sessions, session]
+}
+
+function mergeCustomToolbarAction(
+  actions: SynapseTerminalCustomToolbarAction[],
+  action: SynapseTerminalCustomToolbarAction,
+): SynapseTerminalCustomToolbarAction[] {
+  return actions.some((item) => item.id === action.id)
+    ? actions.map((item) => item.id === action.id ? action : item)
+    : [...actions, action]
 }
 
 function mergeWorkspace(

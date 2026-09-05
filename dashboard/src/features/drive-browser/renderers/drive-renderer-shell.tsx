@@ -8,6 +8,7 @@ import {
 import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
+import type { DriveDocumentImageUploadContext } from '@/lib/api'
 import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
@@ -26,7 +27,6 @@ import {
 import { DriveDownloadRenderer } from './download-renderer'
 import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
-import type { DriveMarkdownImageSourceContext } from './drive-markdown-image-sources'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 
@@ -245,8 +245,8 @@ export function DriveRendererContent({
     [editUnavailableLabel]
   )
   useRegisterDriveRendererToolbarItems('drive-edit-unavailable', editUnavailableItems)
-  const imageSourceContext = useMemo(
-    () => getDriveMarkdownImageSourceContext(snapshot, annotationContext),
+  const imageUploadContext = useMemo(
+    () => getDriveDocumentImageUploadContext(snapshot, annotationContext),
     [annotationContext, snapshot]
   )
   const collaborationContext = useMemo(
@@ -279,7 +279,6 @@ export function DriveRendererContent({
         edit={snapshot.edit}
         editContext={editContext}
         annotationContext={annotationContext}
-        imageSourceContext={imageSourceContext}
         collaboration={snapshot.collaboration}
         collaborationContext={collaborationContext}
       />
@@ -293,7 +292,7 @@ export function DriveRendererContent({
         edit={snapshot.edit}
         editContext={editContext}
         annotationContext={annotationContext}
-        imageSourceContext={imageSourceContext}
+        imageUploadContext={imageUploadContext}
       />
     )
   }
@@ -314,18 +313,18 @@ function getDriveEditUnavailableLabel(snapshot: DriveBrowserSnapshotDto): string
   return reason ? DRIVE_EDIT_UNAVAILABLE_LABELS[reason] : null
 }
 
-function getDriveMarkdownImageSourceContext(
+function getDriveDocumentImageUploadContext(
   snapshot: DriveBrowserSnapshotDto,
   annotationContext?: DriveAnnotationContext
-): DriveMarkdownImageSourceContext | undefined {
+): DriveDocumentImageUploadContext | undefined {
   if (snapshot.current.type !== 'file' || snapshot.preview?.kind !== 'markdown') return undefined
   if (annotationContext?.context === 'share') {
     const rootItemId = snapshot.breadcrumbs[0]?.id ?? snapshot.current.id
     return {
-      context: 'share',
+      kind: 'share',
       shareId: annotationContext.shareId,
       itemId: snapshot.current.id === rootItemId ? null : snapshot.current.id,
     }
   }
-  return { context: 'owner', itemId: snapshot.current.id }
+  return { kind: 'owner', itemId: snapshot.current.id }
 }

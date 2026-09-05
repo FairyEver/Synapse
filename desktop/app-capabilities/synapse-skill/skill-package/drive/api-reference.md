@@ -55,6 +55,8 @@ Limits:
 
 Uploading a folder preserves the layout needed by relative images in `.md` and `.markdown`. Cloud preview, online editing, and Markdown file shares can resolve supported raster images from that Drive tree without rewriting the Markdown or converting images to public assets.
 
+Images pasted, dropped, or selected in the browser Markdown/MDX editor use a separate platform-owned `/object/<objectId>` store. It has no MCP upload, list, migration, or ownership operation. Local Markdown uploads through these tools still upload referenced images as ordinary Drive files with relative paths; explicit direct-link uploads still create user-owned `/files/<assetId>` assets and consume user quota.
+
 Output:
 
 - `root`: root Drive folder item.
@@ -570,7 +572,7 @@ Input:
 
 ## Public Asset Tools
 
-Use these tools for Drive-backed `公开素材`, `图床`, `外链`, `直链`, `public asset`, or `direct link` requests. Public assets support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO images and PDF/DOCX/XLSX/PPTX/TXT/MD/CSV documents, do not support SVG, are flat, allow duplicate names, and use stable `/files/<assetId>` URLs. Images open inline; documents download as attachments.
+Use these tools for explicit Drive-backed `公开素材`, `图床`, `外链`, `直链`, `public asset`, or `direct link` requests. These assets belong to the current user, consume Drive quota, appear in the user's public-asset list, and are distinct from browser-editor `/object/<objectId>` uploads. Public assets support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO images and PDF/DOCX/XLSX/PPTX/TXT/MD/CSV documents, do not support SVG, are flat, allow duplicate names, and use stable `/files/<assetId>` URLs.
 
 Natural language mapping:
 

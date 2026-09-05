@@ -76,4 +76,5 @@ Read `api-reference.md` before constructing requests. Read `examples.md` when tr
 - Retained output is bounded. Honor `firstSeq`, `nextSeq`, `gap`, `truncated`, `hasMore`, and recovery cursors. A missing retained interval is not proof that the session never produced output.
 - Saved command launch creates a new interactive shell and submits the saved logical lines as text plus Enter. It does not expose the command body and does not grant later control or output access.
 - Terminal runs as the current OS user without a process sandbox. A shell or saved command can have arbitrary file, network, credential, and process side effects within that user account.
+- User-defined toolbar actions are UI-private preferences and are not Terminal MCP resources. Use the existing session input tools instead of trying to list or mutate toolbar buttons.
 - Prefer a narrower MCP capability whenever it directly matches the requested task.

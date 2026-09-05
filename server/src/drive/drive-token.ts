@@ -12,6 +12,14 @@ export function createDriveSiteId(): string {
 }
 
 export function createDrivePublicAssetId(): string {
+  return createBase62Id("asset_")
+}
+
+export function createDriveDocumentImageId(): string {
+  return createBase62Id("img_")
+}
+
+function createBase62Id(prefix: string): string {
   let suffix = ""
   while (suffix.length < 32) {
     const bytes = randomBytes(32)
@@ -21,7 +29,7 @@ export function createDrivePublicAssetId(): string {
       if (suffix.length === 32) break
     }
   }
-  return `asset_${suffix}`
+  return `${prefix}${suffix}`
 }
 
 export function driveStorageKeyForItem(itemId: string): string {

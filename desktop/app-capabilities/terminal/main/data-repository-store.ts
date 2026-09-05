@@ -30,6 +30,8 @@ type PersistenceLogger = {
   warn(message: string, meta?: Record<string, unknown>): void
 }
 
+const TERMINAL_OUTPUT_BLOCK_MAX_BYTES = 64 * 1024
+
 export function createTerminalDataRepositoryStore(options: {
   readonly repository: TerminalRepository
   readonly blocks: TerminalEncryptedBlockStore
@@ -57,6 +59,7 @@ export function createTerminalDataRepositoryStore(options: {
     }
     const commandBodies = await safeList(options.repository.commandBodies, options.logger)
     const globalLaunchBody = await safeGetSingleton(options.repository.globalLaunchBodies, options.logger)
+    const toolbarActions = await safeGetSingleton(options.repository.toolbarActions, options.logger)
     const groupLaunchBodies = await safeList(options.repository.groupLaunchBodies, options.logger)
     const launchBodies = await safeList(options.repository.launchBodies, options.logger)
     const commandBodyById = new Map(commandBodies.map((item) => [item.commandId, item]))
@@ -112,8 +115,12 @@ export function createTerminalDataRepositoryStore(options: {
       }
     })
 
-    const output = []
+    const output: TerminalStoreState["output"][number][] = []
     const checkpoints: TerminalStoreState["checkpoints"] = []
+    const sessionRanges = new Map(snapshot.sessions.map((session) => [session.sessionId, {
+      first: session.firstRetainedOutputSeq,
+      next: session.nextOutputSeq,
+    }]))
     for (const manifest of [...snapshot.blocks].sort((a, b) => a.firstOutputSeq - b.firstOutputSeq)) {
       try {
         const plaintext = await options.blocks.readBlock({
@@ -123,8 +130,15 @@ export function createTerminalDataRepositoryStore(options: {
           expectedSha256: manifest.sha256,
         })
         const parsed = JSON.parse(plaintext.toString("utf8"))
-        if (manifest.type === "output") output.push(terminalOutputChunkSchema.parse(parsed))
-        else checkpoints.push(parseCheckpoint(parsed))
+        if (manifest.type === "output") {
+          const chunks = parseOutputBlock(parsed, manifest)
+          const retainedRange = sessionRanges.get(manifest.sessionId)
+          if (retainedRange) {
+            output.push(...chunks.filter((chunk) => (
+              chunk.seq >= retainedRange.first && chunk.seq < retainedRange.next
+            )))
+          }
+        } else checkpoints.push(parseCheckpoint(parsed))
       } catch (error) {
         options.logger?.warn("Terminal output block is unavailable or corrupt.", {
           sessionId: manifest.sessionId,
@@ -161,6 +175,7 @@ export function createTerminalDataRepositoryStore(options: {
           })(),
         },
       } : undefined,
+      toolbarActions: toolbarActions?.items ?? [],
       groups,
       workspaces: snapshot.workspaces.map(toServiceWorkspace),
       sessions,
@@ -186,12 +201,14 @@ export function createTerminalDataRepositoryStore(options: {
     const hasSensitiveConfiguration = state.groups.some((group) =>
       Boolean(group.settings?.commands?.length || hasSetEnvironmentValue(group.settings?.environment)))
       || hasSetEnvironmentValue(state.globalLaunch.settings?.environment)
+      || state.toolbarActions.length > 0
       || state.sessions.some((session) => Object.keys(session.launchEnvironment ?? {}).length > 0)
     if (hasSensitiveConfiguration && options.blocks.persistenceProtection !== "available") {
       throw new Error("Terminal persistence protection unavailable for sensitive configuration")
     }
     const deleteIntent = await createDeleteIntent(state)
     await syncGlobalLaunch(state)
+    await syncToolbarActions(state)
     await syncGroups(state)
     await syncWorkspaces(state)
     await syncSessions(state)
@@ -273,6 +290,30 @@ export function createTerminalDataRepositoryStore(options: {
       } else {
         await options.repository.globalLaunchBodies.remove("default")
       }
+    }
+  }
+
+  async function syncToolbarActions(state: TerminalStoreState): Promise<void> {
+    const existing = await options.repository.toolbarActions.getSingleton()
+    if (state.toolbarActions.length > 0) {
+      const updatedAt = state.toolbarActions.reduce(
+        (latest, item) => item.updatedAt > latest ? item.updatedAt : latest,
+        new Date(0).toISOString(),
+      )
+      const record = {
+        schemaVersion: 1,
+        id: "default",
+        items: state.toolbarActions,
+        updatedAt,
+      } as const
+      if (!sameRecord(existing, record)) await options.repository.toolbarActions.setSingleton(record)
+    } else if (existing && existing.items.length > 0) {
+      await options.repository.toolbarActions.setSingleton({
+        schemaVersion: 1,
+        id: "default",
+        items: [],
+        updatedAt: new Date().toISOString(),
+      })
     }
   }
 
@@ -498,15 +539,23 @@ export function createTerminalDataRepositoryStore(options: {
   async function syncOutput(state: TerminalStoreState): Promise<void> {
     await ensureBlockManifestIndex()
     const manifests = [...outputManifestsBySession!.values()].flatMap((items) => [...items.values()])
-    const wanted = new Set<string>()
+    const wantedRanges = new Map<string, { first: number; next: number }>()
+    const pending: TerminalStoreState["output"] = []
+    const persistedRanges = createOutputManifestRanges(outputManifestsBySession!)
     for (const chunk of state.output) {
-      const rangeKey = `${chunk.sessionId}:${chunk.seq}`
-      wanted.add(rangeKey)
-      if (outputManifestsBySession!.get(chunk.sessionId)?.has(chunk.seq)) continue
-      await persistOutputChunk(chunk)
+      const wantedRange = wantedRanges.get(chunk.sessionId)
+      wantedRanges.set(chunk.sessionId, wantedRange
+        ? { first: Math.min(wantedRange.first, chunk.seq), next: Math.max(wantedRange.next, chunk.seq + 1) }
+        : { first: chunk.seq, next: chunk.seq + 1 })
+      if (outputSeqIsPersisted(persistedRanges, chunk.sessionId, chunk.seq)) continue
+      pending.push(chunk)
     }
+    for (const chunks of batchOutputChunks(pending)) await persistOutputChunks(chunks)
     for (const manifest of manifests) {
-      if (manifest.type !== "output" || wanted.has(`${manifest.sessionId}:${manifest.firstOutputSeq}`)) continue
+      const wantedRange = wantedRanges.get(manifest.sessionId)
+      if (manifest.type !== "output" || (wantedRange
+        && manifest.firstOutputSeq < wantedRange.next
+        && manifest.nextOutputSeq > wantedRange.first)) continue
       await removeManifest(manifest)
     }
     persistedFirstOutputSeqBySession = new Map()
@@ -532,34 +581,38 @@ export function createTerminalDataRepositoryStore(options: {
   async function syncRuntimeOutput(updates: TerminalRuntimeStoreUpdate["sessions"]): Promise<void> {
     await ensureBlockManifestIndex()
     for (const update of updates) {
-      const previousFirst = persistedFirstOutputSeqBySession!.get(update.session.id) ?? update.firstRetainedOutputSeq
-      for (let seq = previousFirst; seq < update.firstRetainedOutputSeq; seq += 1) {
-        const manifest = outputManifestsBySession!.get(update.session.id)?.get(seq)
-        if (manifest) await removeManifest(manifest)
+      for (const manifest of outputManifestsBySession!.get(update.session.id)?.values() ?? []) {
+        if (manifest.nextOutputSeq <= update.firstRetainedOutputSeq) await removeManifest(manifest)
       }
       persistedFirstOutputSeqBySession!.set(update.session.id, update.firstRetainedOutputSeq)
-      for (const chunk of update.output) {
-        if (outputManifestsBySession!.get(chunk.sessionId)?.has(chunk.seq)) continue
-        await persistOutputChunk(chunk)
-      }
+      const persistedRanges = createOutputManifestRanges(outputManifestsBySession!)
+      const pending = update.output.filter((chunk) => (
+        !outputSeqIsPersisted(persistedRanges, chunk.sessionId, chunk.seq)
+      ))
+      for (const chunks of batchOutputChunks(pending)) await persistOutputChunks(chunks)
     }
   }
 
-  async function persistOutputChunk(chunk: TerminalStoreState["output"][number]): Promise<void> {
-    const plaintext = Buffer.from(JSON.stringify(chunk), "utf8")
-    const written = await options.blocks.writeBlock({ sessionId: chunk.sessionId, type: "output", plaintext })
+  async function persistOutputChunks(chunks: TerminalStoreState["output"]): Promise<void> {
+    const first = chunks[0]
+    const last = chunks.at(-1)
+    if (!first || !last) return
+    const plaintext = Buffer.from(JSON.stringify(chunks.length === 1
+      ? first
+      : { schemaVersion: 1, chunks }), "utf8")
+    const written = await options.blocks.writeBlock({ sessionId: first.sessionId, type: "output", plaintext })
     if (!written.persisted) return
     const manifest: TerminalBlockManifestEntry = {
       schemaVersion: 1,
       id: written.blockId,
       blockId: written.blockId,
-      sessionId: chunk.sessionId,
+      sessionId: first.sessionId,
       type: "output",
-      firstOutputSeq: chunk.seq,
-      nextOutputSeq: chunk.seq + 1,
+      firstOutputSeq: first.seq,
+      nextOutputSeq: last.seq + 1,
       byteLength: written.byteLength,
       sha256: written.sha256,
-      createdAt: chunk.createdAt,
+      createdAt: first.createdAt,
       encryptionSchemaVersion: 1,
     }
     await options.repository.blocks.upsert(manifest)
@@ -636,6 +689,85 @@ export function createTerminalDataRepositoryStore(options: {
     saveRuntimeState,
     get persistenceProtection() { return options.blocks.persistenceProtection },
   }
+}
+
+function parseOutputBlock(
+  value: unknown,
+  manifest: TerminalBlockManifestEntry,
+): TerminalStoreState["output"] {
+  const legacy = terminalOutputChunkSchema.safeParse(value)
+  const chunks = legacy.success
+    ? [legacy.data]
+    : terminalOutputChunkSchema.array().min(1).parse(
+        value && typeof value === "object" && "schemaVersion" in value && value.schemaVersion === 1
+          && "chunks" in value
+          ? value.chunks
+          : undefined,
+      )
+  const first = chunks[0]!
+  const last = chunks.at(-1)!
+  if (first.sessionId !== manifest.sessionId
+    || first.seq !== manifest.firstOutputSeq
+    || last.seq + 1 !== manifest.nextOutputSeq
+    || chunks.some((chunk, index) => (
+      chunk.sessionId !== manifest.sessionId
+      || (index > 0 && chunk.seq !== chunks[index - 1]!.seq + 1)
+    ))) {
+    throw new Error("Terminal output block manifest range does not match its contents")
+  }
+  return chunks
+}
+
+function batchOutputChunks(chunks: TerminalStoreState["output"]): TerminalStoreState["output"][] {
+  const batches: TerminalStoreState["output"][] = []
+  let current: TerminalStoreState["output"] = []
+  let currentBytes = 0
+  for (const chunk of chunks) {
+    const chunkBytes = Buffer.byteLength(JSON.stringify(chunk), "utf8")
+    const previous = current.at(-1)
+    const startsNewBatch = previous !== undefined && (
+      previous.sessionId !== chunk.sessionId
+      || previous.seq + 1 !== chunk.seq
+      || currentBytes + chunkBytes > TERMINAL_OUTPUT_BLOCK_MAX_BYTES
+    )
+    if (startsNewBatch) {
+      batches.push(current)
+      current = []
+      currentBytes = 0
+    }
+    current.push(chunk)
+    currentBytes += chunkBytes
+  }
+  if (current.length > 0) batches.push(current)
+  return batches
+}
+
+function createOutputManifestRanges(
+  manifestsBySession: Map<string, Map<number, TerminalBlockManifestEntry>>,
+): Map<string, TerminalBlockManifestEntry[]> {
+  return new Map([...manifestsBySession].map(([sessionId, manifests]) => [
+    sessionId,
+    [...manifests.values()].sort((left, right) => left.firstOutputSeq - right.firstOutputSeq),
+  ]))
+}
+
+function outputSeqIsPersisted(
+  rangesBySession: Map<string, TerminalBlockManifestEntry[]>,
+  sessionId: string,
+  seq: number,
+): boolean {
+  const ranges = rangesBySession.get(sessionId)
+  if (!ranges) return false
+  let low = 0
+  let high = ranges.length - 1
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2)
+    const manifest = ranges[middle]!
+    if (seq < manifest.firstOutputSeq) high = middle - 1
+    else if (seq >= manifest.nextOutputSeq) low = middle + 1
+    else return true
+  }
+  return false
 }
 
 function toServiceWorkspace(record: TerminalWorkspaceRecord): TerminalWorkspace {

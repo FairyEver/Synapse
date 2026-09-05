@@ -17,6 +17,8 @@ export interface BackupPackageManifestInput {
   readonly backupRegion: string
   readonly driveBucket?: string
   readonly driveRegion?: string
+  readonly platformMediaBucket?: string
+  readonly platformMediaRegion?: string
   readonly contents: BackupContentManifestItem[]
 }
 
@@ -41,10 +43,16 @@ export interface BackupPackageManifest {
       readonly region: string
       readonly prefix: "drive/"
     }
+    readonly platformMedia?: {
+      readonly bucket: string
+      readonly region: string
+      readonly prefix: "document-images/"
+    }
   }
   readonly contents: BackupContentManifestItem[]
   readonly secretsIncluded: false
   readonly driveObjectsIncluded: false
+  readonly platformMediaObjectsIncluded: false
 }
 
 export interface RestoreMarkdownInput {
@@ -85,10 +93,20 @@ export function createBackupManifest(input: BackupPackageManifestInput): BackupP
             },
           }
         : {}),
+      ...(input.platformMediaBucket && input.platformMediaRegion
+        ? {
+            platformMedia: {
+              bucket: input.platformMediaBucket,
+              region: input.platformMediaRegion,
+              prefix: "document-images/" as const,
+            },
+          }
+        : {}),
     },
     contents: input.contents,
     secretsIncluded: false,
     driveObjectsIncluded: false,
+    platformMediaObjectsIncluded: false,
   }
 }
 
@@ -123,7 +141,7 @@ export function createRestoreMarkdown(input: RestoreMarkdownInput): string {
     "## 恢复前提",
     "",
     "- 使用你电脑上保存的 `server/.env.server` 作为生产配置来源。",
-    "- 确认 Drive COS bucket 和对象仍存在。",
+    "- 确认 Drive COS 与 Platform Media COS bucket 和对象仍存在。",
     "- 准备一台新服务器、当前源码或可用 Docker 镜像。",
     "- 恢复数据库会覆盖目标环境数据。",
     "",
@@ -132,6 +150,7 @@ export function createRestoreMarkdown(input: RestoreMarkdownInput): string {
     "- `database.sql.gz`：业务数据库 dump，不包含问题反馈记录。",
     "- `postgres-globals.sql`：PostgreSQL 角色和全局权限。",
     "- `drive-cos-manifest.json`：Drive COS 对象清单，不包含文件内容。",
+    "- `platform-media-cos-manifest.json`：平台媒体文档图片对象清单，不包含文件内容。",
     "- `backup-manifest.json`：备份元信息和校验和。",
     "",
     "## 恢复步骤",
@@ -142,7 +161,7 @@ export function createRestoreMarkdown(input: RestoreMarkdownInput): string {
     "4. 按需导入 `postgres-globals.sql`。",
     "5. 解压并导入 `database.sql.gz`。",
     "6. 启动 Synapse server。",
-    "7. 对照 `drive-cos-manifest.json` 抽查 Drive COS 对象是否仍可访问。",
+    "7. 对照 Drive 与 Platform Media COS 清单抽查对象是否仍可访问。",
     "",
   ].join("\n")
 }

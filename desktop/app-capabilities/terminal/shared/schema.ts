@@ -61,6 +61,42 @@ export const terminalGlobalLaunchSettingsSchema = z.object({
   settings: terminalLaunchLayerSchema.optional(),
 }).strict()
 
+export const TERMINAL_CUSTOM_TOOLBAR_ACTION_LABEL_MAX_LENGTH = 32
+export const TERMINAL_CUSTOM_TOOLBAR_ACTION_CONTENT_MAX_LENGTH = 4 * 1024
+
+const terminalToolbarActionLabelSchema = z.string().trim().min(1).max(TERMINAL_CUSTOM_TOOLBAR_ACTION_LABEL_MAX_LENGTH)
+const terminalToolbarActionContentSchema = z.string()
+  .trim()
+  .min(1)
+  .max(TERMINAL_CUSTOM_TOOLBAR_ACTION_CONTENT_MAX_LENGTH)
+  .refine((value) => !/[\r\n]/.test(value), "Terminal toolbar action content must be a single line")
+
+export const TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT = 50
+
+export const terminalCustomToolbarActionSchema = z.object({
+  id: z.string().uuid(),
+  label: terminalToolbarActionLabelSchema,
+  content: terminalToolbarActionContentSchema,
+  pressEnter: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  actionRevision: z.number().int().positive().default(1),
+}).strict()
+
+export const terminalCreateCustomToolbarActionInputSchema = z.object({
+  label: terminalToolbarActionLabelSchema,
+  content: terminalToolbarActionContentSchema,
+  pressEnter: z.boolean(),
+}).strict()
+
+export const terminalUpdateCustomToolbarActionInputSchema = terminalCreateCustomToolbarActionInputSchema.extend({
+  id: z.string().uuid(),
+}).strict()
+
+export const terminalDeleteCustomToolbarActionInputSchema = z.object({
+  id: z.string().uuid(),
+}).strict()
+
 export const terminalGroupCommandSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(80),
@@ -335,6 +371,10 @@ export type TerminalEnvironment = z.infer<typeof terminalEnvironmentSchema>
 export type TerminalEnvironmentEntry = z.infer<typeof terminalEnvironmentEntrySchema>
 export type TerminalLaunchLayer = z.infer<typeof terminalLaunchLayerSchema>
 export type TerminalGlobalLaunchSettings = z.infer<typeof terminalGlobalLaunchSettingsSchema>
+export type TerminalCustomToolbarAction = z.infer<typeof terminalCustomToolbarActionSchema>
+export type TerminalCreateCustomToolbarActionInput = z.infer<typeof terminalCreateCustomToolbarActionInputSchema>
+export type TerminalUpdateCustomToolbarActionInput = z.infer<typeof terminalUpdateCustomToolbarActionInputSchema>
+export type TerminalDeleteCustomToolbarActionInput = z.infer<typeof terminalDeleteCustomToolbarActionInputSchema>
 export type TerminalGroupSettings = z.infer<typeof terminalGroupSettingsSchema>
 export type TerminalGroupCommand = z.infer<typeof terminalGroupCommandSchema>
 export type TerminalGroupCommandSummary = z.infer<typeof terminalGroupCommandSummarySchema>

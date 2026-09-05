@@ -433,6 +433,7 @@ describe("ConfigBackupService quick inputs", () => {
         "app.terminal.global-launch-bodies",
         "app.terminal.group-launch-bodies",
         "app.terminal.launch-bodies",
+        "app.terminal.toolbar-actions",
         "app.terminal.blocks",
         "app.terminal.delete-intents",
         "app.terminal.idempotency",
@@ -456,6 +457,7 @@ describe("ConfigBackupService quick inputs", () => {
         namespaces: [
           { name: "app.terminal.global-launch-bodies", schemaVersion: 1, encrypted: true, data: { items: [{ id: "default", environment: { SECRET: "global secret" } }] } },
           { name: "app.terminal.command-bodies", schemaVersion: 1, encrypted: true, data: { items: [{ id: "body", body: "secret command" }] } },
+          { name: "app.terminal.toolbar-actions", schemaVersion: 1, encrypted: true, data: { items: [{ id: "default", items: [{ label: "Private deploy", content: "deploy secret toolbar token" }] }] } },
           { name: "app.terminal.blocks", schemaVersion: 1, encrypted: false, data: { items: [{ id: "block", blockId: "block", sha256: "digest" }] } },
           { name: "app.terminal.sessions", schemaVersion: 2, encrypted: false, data: { items: [{ id: "session", launchBodyRef: "launch", lifecycle: "running", nextOutputSeq: 7 }] } },
         ],
@@ -468,12 +470,15 @@ describe("ConfigBackupService quick inputs", () => {
       .toEqual({ items: [] })
     expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.global-launch-bodies")?.data)
       .toEqual({ items: [] })
+    expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.toolbar-actions")?.data)
+      .toEqual({ items: [] })
     expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.blocks")?.data)
       .toEqual({ items: [] })
     expect(backup.dataRepository?.namespaces.find((entry) => entry.name === "app.terminal.sessions")?.data)
       .toEqual({ items: [{ id: "session", lifecycle: "running", nextOutputSeq: 7 }] })
     expect(JSON.stringify(backup)).not.toContain("secret command")
     expect(JSON.stringify(backup)).not.toContain("global secret")
+    expect(JSON.stringify(backup)).not.toContain("secret toolbar token")
   })
 
   it("imports DataRepository payloads from backups", async () => {

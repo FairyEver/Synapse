@@ -8,6 +8,12 @@ import {
 } from "./env"
 
 const productionUpdateIntentSecret = "Rv3kZ8nE1pT6yM4cH9qW2sF7uJ5xB0dG8iL3oA6vN1_r"
+const platformMediaCosEnv = {
+  PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
+  PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
+  PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
+  PLATFORM_MEDIA_COS_REGION: "ap-beijing",
+}
 
 describe("loadEnv", () => {
   it("parses required production settings", () => {
@@ -23,6 +29,10 @@ describe("loadEnv", () => {
       SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
       SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
       SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+      PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
+      PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
+      PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
+      PLATFORM_MEDIA_COS_REGION: "ap-beijing",
       PORT: "3000",
     })
 
@@ -119,6 +129,10 @@ describe("loadEnv", () => {
       SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
       SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
       SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+      PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
+      PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
+      PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
+      PLATFORM_MEDIA_COS_REGION: "ap-beijing",
     }
 
     expect(() => loadEnv({
@@ -143,6 +157,10 @@ describe("loadEnv", () => {
       SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
       SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
       SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+      PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
+      PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
+      PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
+      PLATFORM_MEDIA_COS_REGION: "ap-beijing",
     }
 
     expect(() => loadEnv({
@@ -163,6 +181,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        ...platformMediaCosEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -197,6 +216,7 @@ describe("loadEnv", () => {
   it("allows production Drive storage with complete COS settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
+      ...platformMediaCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -233,6 +253,7 @@ describe("loadEnv", () => {
   it("allows production Skill Repository storage with complete COS settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
+      ...platformMediaCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -344,6 +365,22 @@ describe("loadEnv", () => {
     expect(env.driveCosBucket).toBe("drive-bucket")
     expect(isPlatformMediaCosConfigured(env)).toBe(true)
     expect(isDriveCosConfigured(env)).toBe(true)
+  })
+
+  it("requires Platform Media COS in production", () => {
+    expect(() => loadEnv({
+      NODE_ENV: "production",
+      DATABASE_URL: baseEnv.DATABASE_URL,
+      ADMIN_ACCESS_SECRET: baseEnv.ADMIN_ACCESS_SECRET,
+      USER_ACCESS_JWT_SECRET: baseEnv.USER_ACCESS_JWT_SECRET,
+      DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
+      APP_PUBLIC_URL: "https://synapse.test",
+      SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
+      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
+      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
+      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
+      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+    })).toThrow("PLATFORM_MEDIA_COS_SECRET_ID")
   })
 
   it.each([

@@ -1,12 +1,15 @@
 import type {
   TerminalAttachSessionInput,
   TerminalAttachSessionResult,
+  TerminalCreateCustomToolbarActionInput,
   TerminalClosePaneInput,
   TerminalCloseWorkspaceInput,
   TerminalCloseWorkspaceResult,
   TerminalCreateGroupCommandInput,
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
+  TerminalCustomToolbarAction,
+  TerminalDeleteCustomToolbarActionInput,
   TerminalDeleteGroupCommandInput,
   TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
@@ -36,6 +39,7 @@ import type {
   TerminalSplitPaneInput,
   TerminalSplitPaneResult,
   TerminalUpdateGroupCommandInput,
+  TerminalUpdateCustomToolbarActionInput,
   TerminalUpdateGroupSettingsInput,
   TerminalUpdateGlobalLaunchSettingsInput,
   TerminalWriteSessionInput,
@@ -52,6 +56,7 @@ export type SynapseTerminalEnvironment = TerminalEnvironment
 export type SynapseTerminalEnvironmentValueInput = TerminalEnvironmentValueInput
 export type SynapseTerminalLaunchLayer = TerminalLaunchLayer
 export type SynapseTerminalGlobalLaunchSettings = TerminalGlobalLaunchSettings
+export type SynapseTerminalCustomToolbarAction = TerminalCustomToolbarAction
 export type SynapseTerminalSession = TerminalSession
 export type SynapseTerminalWorkspace = TerminalWorkspace
 export type SynapseTerminalLayoutNode = TerminalLayoutNode
@@ -61,6 +66,9 @@ export type SynapseTerminalCreateGroupInput = TerminalCreateGroupInput
 export type SynapseTerminalRenameGroupInput = TerminalRenameGroupInput
 export type SynapseTerminalUpdateGroupSettingsInput = TerminalUpdateGroupSettingsInput
 export type SynapseTerminalUpdateGlobalLaunchSettingsInput = TerminalUpdateGlobalLaunchSettingsInput
+export type SynapseTerminalCreateCustomToolbarActionInput = TerminalCreateCustomToolbarActionInput
+export type SynapseTerminalUpdateCustomToolbarActionInput = TerminalUpdateCustomToolbarActionInput
+export type SynapseTerminalDeleteCustomToolbarActionInput = TerminalDeleteCustomToolbarActionInput
 export type SynapseTerminalCreateGroupCommandInput = TerminalCreateGroupCommandInput
 export type SynapseTerminalUpdateGroupCommandInput = TerminalUpdateGroupCommandInput
 export type SynapseTerminalDeleteGroupCommandInput = TerminalDeleteGroupCommandInput

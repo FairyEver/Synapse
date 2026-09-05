@@ -32,7 +32,6 @@ const TERMINAL_VISUAL_OPTIONS = {
   cursorStyle: "block",
   fontFamily: TERMINAL_FONT_FAMILY,
   letterSpacing: 0,
-  lineHeight: 1.1,
   macOptionClickForcesSelection: true,
   scrollback: 5000,
   smoothScrollDuration: 80,

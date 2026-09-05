@@ -31,6 +31,7 @@ import type {
 } from "../shared/contract-schema"
 import { terminalContractError } from "../shared/errors"
 import type {
+  TerminalCreateCustomToolbarActionInput,
   TerminalCreateGroupCommandInput,
   TerminalCreateGroupInput,
   TerminalCreateSessionInput,
@@ -39,6 +40,8 @@ import type {
   TerminalDeleteGroupCommandInput,
   TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
+  TerminalCustomToolbarAction,
+  TerminalDeleteCustomToolbarActionInput,
   TerminalGroup,
   TerminalGroupCommand,
   TerminalGroupSettings,
@@ -55,8 +58,14 @@ import type {
   TerminalStopSessionInput,
   TerminalUpdateGroupCommandInput,
   TerminalUpdateGlobalLaunchSettingsInput,
+  TerminalUpdateCustomToolbarActionInput,
   TerminalUpdateGroupSettingsInput,
   TerminalWriteSessionInput,
+} from "../shared/schema"
+import {
+  TERMINAL_CUSTOM_TOOLBAR_ACTION_CONTENT_MAX_LENGTH,
+  TERMINAL_CUSTOM_TOOLBAR_ACTION_LABEL_MAX_LENGTH,
+  TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT,
 } from "../shared/schema"
 import {
   TERMINAL_WORKSPACE_PANE_LIMIT,
@@ -197,6 +206,7 @@ export function createTerminalService(deps: {
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
+  const toolbarActions = new Map<string, TerminalCustomToolbarAction>()
   const workspaces = new Map<string, TerminalWorkspace>()
   const sessions = new Map<string, TerminalSession>()
   const runtimes = new Map<string, TerminalRuntime>()
@@ -272,6 +282,7 @@ export function createTerminalService(deps: {
     })
     return {
       globalLaunch,
+      toolbarActions: [...toolbarActions.values()],
       groups: [...groups.values()],
       workspaces: [...workspaces.values()],
       sessions: [...sessions.values()],
@@ -364,10 +375,11 @@ export function createTerminalService(deps: {
       } while (persistPending)
     } finally {
       persistInFlight = undefined
-      if (runtimePersistTimer || persistPending) return
-      const waiters = persistIdleWaiters
-      persistIdleWaiters = []
-      for (const resolve of waiters) resolve()
+      if (!runtimePersistTimer && !persistPending) {
+        const waiters = persistIdleWaiters
+        persistIdleWaiters = []
+        for (const resolve of waiters) resolve()
+      }
     }
   }
 
@@ -893,6 +905,8 @@ export function createTerminalService(deps: {
       revision: 1,
       updatedAt: new Date(0).toISOString(),
     }
+    toolbarActions.clear()
+    for (const action of state.toolbarActions ?? []) toolbarActions.set(action.id, action)
     terminalDomainRevision = state.terminalDomainRevision
     groups.clear()
     workspaces.clear()
@@ -1020,6 +1034,71 @@ export function createTerminalService(deps: {
 
   function getGlobalLaunchSettings(): TerminalGlobalLaunchSettings {
     return globalLaunch
+  }
+
+  function listCustomToolbarActions(): TerminalCustomToolbarAction[] {
+    return [...toolbarActions.values()]
+  }
+
+  function getCustomToolbarAction(id: string): TerminalCustomToolbarAction {
+    const action = toolbarActions.get(id)
+    if (!action) throw terminalContractError("not_found", "not_found")
+    return action
+  }
+
+  async function createCustomToolbarAction(
+    input: TerminalCreateCustomToolbarActionInput,
+  ): Promise<TerminalCustomToolbarAction> {
+    requireSensitivePersistence()
+    if (toolbarActions.size >= TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT) {
+      throw terminalContractError("quota_exceeded", "quota", { details: { dimension: "toolbar_actions" } })
+    }
+    const normalized = normalizeCustomToolbarActionInput(input)
+    const timestamp = now()
+    const action: TerminalCustomToolbarAction = {
+      id: randomUUID(),
+      ...normalized,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      actionRevision: 1,
+    }
+    toolbarActions.set(action.id, action)
+    bumpDomain("toolbar_action.created", action.id, action.actionRevision)
+    await flushPersist()
+    return action
+  }
+
+  async function updateCustomToolbarAction(
+    input: TerminalUpdateCustomToolbarActionInput,
+  ): Promise<TerminalCustomToolbarAction> {
+    requireSensitivePersistence()
+    const existing = getCustomToolbarAction(input.id)
+    const normalized = normalizeCustomToolbarActionInput(input)
+    if (
+      existing.label === normalized.label
+      && existing.content === normalized.content
+      && existing.pressEnter === normalized.pressEnter
+    ) return existing
+    const updated: TerminalCustomToolbarAction = {
+      ...existing,
+      ...normalized,
+      updatedAt: now(),
+      actionRevision: existing.actionRevision + 1,
+    }
+    toolbarActions.set(updated.id, updated)
+    bumpDomain("toolbar_action.updated", updated.id, updated.actionRevision)
+    await flushPersist()
+    return updated
+  }
+
+  async function deleteCustomToolbarAction(
+    input: TerminalDeleteCustomToolbarActionInput,
+  ): Promise<void> {
+    requireSensitivePersistence()
+    const existing = getCustomToolbarAction(input.id)
+    toolbarActions.delete(existing.id)
+    bumpDomain("toolbar_action.deleted", existing.id, existing.actionRevision)
+    await flushPersist()
   }
 
   async function updateGlobalLaunchSettings(
@@ -2122,7 +2201,7 @@ export function createTerminalService(deps: {
       sizeRevision: barrier.sizeRevision,
       throughOutputSeq: barrier.throughOutputSeq,
     })
-    schedulePersist()
+    scheduleRuntimePersist(sessionId)
     return updated
   }
 
@@ -2528,6 +2607,10 @@ export function createTerminalService(deps: {
     start,
     stop,
     getGlobalLaunchSettings,
+    listCustomToolbarActions,
+    createCustomToolbarAction,
+    updateCustomToolbarAction,
+    deleteCustomToolbarAction,
     updateGlobalLaunchSettings,
     listGroups,
     listWorkspaces,
@@ -2705,6 +2788,24 @@ function normalizeSavedCommand(command: string): string {
     throw terminalContractError("invalid_argument", "validation")
   }
   return normalized.endsWith("\n") ? normalized.slice(0, -1) : normalized
+}
+
+function normalizeCustomToolbarActionInput(
+  input: TerminalCreateCustomToolbarActionInput | TerminalUpdateCustomToolbarActionInput,
+): Pick<TerminalCustomToolbarAction, "label" | "content" | "pressEnter"> {
+  const label = input.label.trim()
+  const content = input.content.trim()
+  if (
+    !label
+    || label.length > TERMINAL_CUSTOM_TOOLBAR_ACTION_LABEL_MAX_LENGTH
+    || !content
+    || content.length > TERMINAL_CUSTOM_TOOLBAR_ACTION_CONTENT_MAX_LENGTH
+    || /[\r\n]/.test(content)
+    || hasForbiddenTextControl(content, false)
+  ) {
+    throw terminalContractError("invalid_argument", "validation")
+  }
+  return { label, content, pressEnter: input.pressEnter }
 }
 
 function getCommand(group: TerminalGroup, commandId: string): TerminalGroupCommand {

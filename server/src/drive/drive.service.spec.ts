@@ -367,6 +367,7 @@ describe("DriveService", () => {
         hidden: { count: 1, bytes: "17" },
       },
       publicAssetRevisions: { count: 4, bytes: "19" },
+      documentImages: { count: 0, bytes: "0" },
       total: {
         quotaBytes: "29",
         adminVisibleBytes: "72",

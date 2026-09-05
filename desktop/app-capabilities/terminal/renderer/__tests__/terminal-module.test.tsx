@@ -11,6 +11,7 @@ import type {
   SynapseTerminalGroupCommand,
   SynapseTerminalOutputChunk,
   SynapseTerminalSession,
+  SynapseTerminalCustomToolbarAction,
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalWorkspace,
 } from "../../../../src/types/terminal"
@@ -27,6 +28,7 @@ const bridgeState = vi.hoisted(() => ({
   groups: [] as SynapseTerminalGroup[],
   workspaces: [] as SynapseTerminalWorkspace[],
   sessions: [] as SynapseTerminalSession[],
+  customToolbarActions: [] as SynapseTerminalCustomToolbarAction[],
   chunks: [] as SynapseTerminalOutputChunk[],
   nextSeq: 0,
   dataListener: null as ((event: SynapseTerminalDataEvent) => void) | null,
@@ -330,6 +332,47 @@ const terminalBridge = vi.hoisted(() => ({
   }),
   stopSession: vi.fn(async () => undefined),
   runStartupCommand: vi.fn(async () => undefined),
+  listCustomToolbarActions: vi.fn(async () => bridgeState.customToolbarActions),
+  createCustomToolbarAction: vi.fn(async ({ label, content, pressEnter }: {
+    label: string
+    content: string
+    pressEnter: boolean
+  }) => {
+    const action = {
+      id: `00000000-0000-4000-8000-${String(bridgeState.customToolbarActions.length + 1).padStart(12, "0")}`,
+      label: label.trim(),
+      content: content.trim(),
+      pressEnter,
+      createdAt: "2026-09-05T00:00:00.000Z",
+      updatedAt: "2026-09-05T00:00:00.000Z",
+      actionRevision: 1,
+    } satisfies SynapseTerminalCustomToolbarAction
+    bridgeState.customToolbarActions = [...bridgeState.customToolbarActions, action]
+    return action
+  }),
+  updateCustomToolbarAction: vi.fn(async ({ id, label, content, pressEnter }: {
+    id: string
+    label: string
+    content: string
+    pressEnter: boolean
+  }) => {
+    const current = bridgeState.customToolbarActions.find((item) => item.id === id)
+    if (!current) throw new Error("Toolbar action not found")
+    const action = {
+      ...current,
+      label: label.trim(),
+      content: content.trim(),
+      pressEnter,
+      updatedAt: "2026-09-05T00:01:00.000Z",
+      actionRevision: current.actionRevision + 1,
+    }
+    bridgeState.customToolbarActions = bridgeState.customToolbarActions.map((item) =>
+      item.id === id ? action : item)
+    return action
+  }),
+  deleteCustomToolbarAction: vi.fn(async ({ actionId }: { actionId: string }) => {
+    bridgeState.customToolbarActions = bridgeState.customToolbarActions.filter((item) => item.id !== actionId)
+  }),
   onData: vi.fn((listener: (event: SynapseTerminalDataEvent) => void) => {
     bridgeState.dataListener = listener
     return bridgeState.dataUnsubscribe
@@ -474,6 +517,12 @@ vi.mock("@/lib/electron-bridge", () => ({
         delete: terminalBridge.deleteSession,
         stop: terminalBridge.stopSession,
         runStartupCommand: terminalBridge.runStartupCommand,
+      },
+      toolbarAction: {
+        list: terminalBridge.listCustomToolbarActions,
+        create: terminalBridge.createCustomToolbarAction,
+        update: terminalBridge.updateCustomToolbarAction,
+        delete: terminalBridge.deleteCustomToolbarAction,
       },
       workspaceTree: {
         open: terminalBridge.openWorkspaceTree,
@@ -659,6 +708,7 @@ beforeEach(() => {
   bridgeState.groups = []
   bridgeState.workspaces = []
   bridgeState.sessions = []
+  bridgeState.customToolbarActions = []
   bridgeState.chunks = []
   bridgeState.nextSeq = 0
   bridgeState.dataListener = null
@@ -712,6 +762,10 @@ beforeEach(() => {
   terminalBridge.deleteSession.mockClear()
   terminalBridge.stopSession.mockClear()
   terminalBridge.runStartupCommand.mockClear()
+  terminalBridge.listCustomToolbarActions.mockClear()
+  terminalBridge.createCustomToolbarAction.mockClear()
+  terminalBridge.updateCustomToolbarAction.mockClear()
+  terminalBridge.deleteCustomToolbarAction.mockClear()
   shellBridge.openExternal.mockClear()
   shellBridge.filePathForDroppedFile.mockClear()
   droppedPathState.paths = new WeakMap<object, string | null>()
@@ -927,15 +981,17 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("外观")
     await selectTab("外观")
     expect(document.body.textContent).toContain("字号")
-    expect(document.body.querySelector<HTMLSelectElement>('select[aria-label="字号"]')?.value).toBe("medium")
+    const sizeSelector = document.body.querySelector('[data-slot="toggle-group"][aria-label="字号"]')
+    expect(sizeSelector).not.toBeNull()
+    expect(buttonForText("中", sizeSelector ?? undefined)?.getAttribute("data-state")).toBe("on")
 
-    await changeSelect("字号", "large")
+    await clickButton("小", sizeSelector ?? undefined)
     await clickButton("保存")
 
-    expect(window.localStorage.getItem("synapse:app:terminal:appearance_size:v1")).toBe("large")
+    expect(window.localStorage.getItem("synapse:app:terminal:appearance_size:v1")).toBe("small")
     expect(xtermState.instances).toHaveLength(1)
-    expect(xtermState.instances[0]?.options.fontSize).toBe(16)
-    expect(xtermState.instances[0]?.options.lineHeight).toBe(1.1)
+    expect(xtermState.instances[0]?.options.fontSize).toBe(12)
+    expect(xtermState.instances[0]?.options.lineHeight).toBe(1.05)
     expect(xtermState.instances[0]?.refresh).toHaveBeenCalledWith(0, xtermState.instances[0]!.rows - 1)
     expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
   })
@@ -1023,14 +1079,16 @@ describe("TerminalModule", () => {
     expect(document.body.textContent).toContain("/exit")
     expect(document.body.textContent).toContain("/clear")
 
-    const toolbarButtons = Array.from(toolbar.querySelectorAll("button"))
-    expect(toolbarButtons).toHaveLength(4)
-    for (const button of toolbarButtons) {
+    const builtInButtons = Array.from(toolbar.querySelectorAll("button")).filter((button) =>
+      ["Ctrl+C", "Clear", "/exit", "/clear"].includes(button.textContent ?? ""))
+    expect(builtInButtons).toHaveLength(4)
+    for (const button of builtInButtons) {
       expect(button.className).toContain("text-foreground/75")
       expect(button.className).toContain("transition-[scale,background-color,color]")
       expect(button.className).toContain("active:scale-[0.96]")
       expect(button.className).toContain("hover:text-foreground")
     }
+    expect(toolbar.querySelector("button[aria-label='管理自定义快捷输入']")).toBeTruthy()
     expect(toolbar.querySelector("[aria-hidden='true']")?.className).toContain("bg-border")
   })
 
@@ -1107,6 +1165,90 @@ describe("TerminalModule", () => {
     ])
   })
 
+  it("renders custom actions after built-ins and honors their Enter behavior", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    bridgeState.customToolbarActions = [
+      createToolbarAction({
+        id: "00000000-0000-4000-8000-000000000001",
+        label: "检查状态",
+        content: "git status",
+        pressEnter: true,
+      }),
+      createToolbarAction({
+        id: "00000000-0000-4000-8000-000000000002",
+        label: "输入路径",
+        content: "/repo/app",
+        pressEnter: false,
+      }),
+    ]
+
+    await renderModule()
+
+    const toolbar = document.body.querySelector("[data-terminal-toolbar]")
+    const labels = Array.from(toolbar?.querySelectorAll("button") ?? []).map((button) =>
+      button.getAttribute("aria-label") ?? button.textContent)
+    expect(labels).toEqual(["中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "运行快捷输入：检查状态", "输入快捷输入：输入路径", "管理自定义快捷输入"])
+
+    await clickButton("检查状态")
+    expect(terminalBridge.writeSession).toHaveBeenLastCalledWith({ sessionId: "session-1", data: "git status" })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15))
+    })
+    expect(terminalBridge.writeSession).toHaveBeenLastCalledWith({ sessionId: "session-1", data: "\r" })
+
+    terminalBridge.writeSession.mockClear()
+    await clickButton("输入路径")
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15))
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({ sessionId: "session-1", data: "/repo/app" })
+  })
+
+  it("creates edits and deletes only user-defined toolbar actions in the manager", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await clickButtonByAriaLabel("管理自定义快捷输入")
+
+    const dialog = document.body.querySelector("[role='dialog']")
+    expect(dialog?.textContent).toContain("自定义快捷输入")
+    expect(dialog?.textContent).not.toContain("Ctrl+C")
+    expect(dialog?.textContent).not.toContain("/exit")
+
+    await clickButton("新增快捷输入", dialog ?? document.body)
+    await changeInputById("terminal-toolbar-action-label", "  部署  ")
+    await changeInputById("terminal-toolbar-action-content", "  pnpm deploy  ")
+    await clickButton("保存")
+
+    expect(terminalBridge.createCustomToolbarAction).toHaveBeenCalledWith({
+      label: "部署",
+      content: "pnpm deploy",
+      pressEnter: true,
+    })
+    expect(document.body.textContent).toContain("部署")
+
+    await clickButtonByAriaLabel("编辑快捷输入：部署")
+    await changeInputById("terminal-toolbar-action-label", "发布")
+    await changeInputById("terminal-toolbar-action-content", "pnpm release")
+    await clickButton("保存")
+
+    expect(terminalBridge.updateCustomToolbarAction).toHaveBeenCalledWith(expect.objectContaining({
+      label: "发布",
+      content: "pnpm release",
+      pressEnter: true,
+    }))
+
+    await clickButtonByAriaLabel("删除快捷输入：发布")
+    expect(document.body.textContent).toContain("删除快捷输入？")
+    await clickButton("删除快捷输入")
+
+    expect(terminalBridge.deleteCustomToolbarAction).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain("暂无自定义快捷输入")
+  })
+
   it("keeps running-only toolbar actions disabled for a lost session while allowing local clear", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({
@@ -1115,6 +1257,7 @@ describe("TerminalModule", () => {
       title: "开发终端",
       status: "lost",
     })]
+    bridgeState.customToolbarActions = [createToolbarAction({ label: "检查状态", content: "git status" })]
 
     await renderModule()
 
@@ -1122,6 +1265,8 @@ describe("TerminalModule", () => {
     expect(buttonForText("/exit")?.disabled).toBe(true)
     expect(buttonForText("/clear")?.disabled).toBe(true)
     expect(buttonForText("Clear")?.disabled).toBe(false)
+    expect(buttonForText("检查状态")?.disabled).toBe(true)
+    expect(document.body.querySelector<HTMLButtonElement>("button[aria-label='管理自定义快捷输入']")?.disabled).toBe(false)
 
     await clickButton("Clear")
 
@@ -1773,6 +1918,74 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("keeps the surviving terminal mounted when a nested split collapses", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const topSession = createSession({ id: "session-1", groupId: "group-1", title: "顶部终端" })
+    const survivingSession = createSession({ id: "session-2", groupId: "group-1", title: "保留终端" })
+    const closingSession = createSession({ id: "session-3", groupId: "group-1", title: "关闭终端" })
+    const workspace = {
+      ...createWorkspace(topSession),
+      layout: {
+        type: "split" as const,
+        splitId: "split-vertical",
+        direction: "vertical" as const,
+        ratio: 0.5,
+        first: { type: "leaf" as const, paneId: "pane-session-1", sessionId: topSession.id },
+        second: {
+          type: "split" as const,
+          splitId: "split-horizontal",
+          direction: "horizontal" as const,
+          ratio: 0.5,
+          first: { type: "leaf" as const, paneId: "pane-session-2", sessionId: survivingSession.id },
+          second: { type: "leaf" as const, paneId: "pane-session-3", sessionId: closingSession.id },
+        },
+      },
+      layoutRevision: 3,
+    }
+    bridgeState.workspaces = [workspace]
+    terminalBridge.closePane.mockImplementationOnce(async ({ workspaceId }) => {
+      bridgeState.workspaces = [{
+        ...workspace,
+        layout: {
+          ...workspace.layout,
+          second: workspace.layout.second.first,
+        },
+        layoutRevision: 4,
+      }]
+      bridgeState.sessions = bridgeState.sessions.filter((session) => session.id !== closingSession.id)
+      return { workspaceId, state: "closing" as const, remainingSessionIds: [topSession.id, survivingSession.id] }
+    })
+
+    await renderModule()
+    const survivingXterm = xtermState.instances[1]
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>('[aria-label="关闭分屏：关闭终端"]')
+    await act(async () => {
+      closeButton?.click()
+      await flushPromises()
+    })
+
+    expect(terminalBridge.attachSession.mock.calls.filter(([input]) => input.sessionId === survivingSession.id))
+      .toHaveLength(1)
+    expect(xtermState.instances).toHaveLength(3)
+    expect(survivingXterm?.dispose).not.toHaveBeenCalled()
+
+    terminalBridge.resizeSession.mockClear()
+    xtermState.fitInstances[1]?.proposeDimensions.mockReturnValue({ cols: 160, rows: 30 })
+    await act(async () => {
+      for (const observer of resizeObservers) {
+        if (observer.disconnect.mock.calls.length === 0) observer.trigger()
+      }
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+
+    expect(terminalBridge.resizeSession).toHaveBeenCalledWith({
+      sessionId: survivingSession.id,
+      cols: 160,
+      rows: 30,
+    })
+  })
+
   it("dims only inactive panes when the workspace is split", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
@@ -2297,7 +2510,7 @@ describe("TerminalModule", () => {
     })
   })
 
-  it("redraws the terminal after local clear without clearing the shared WebGL atlas", async () => {
+  it("clears the terminal without forcing an extra redraw or clearing the shared WebGL atlas", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
@@ -2311,7 +2524,7 @@ describe("TerminalModule", () => {
 
     expect(xtermState.instances[0]?.clear).toHaveBeenCalled()
     expect(xtermState.fitInstances[0]?.fit).not.toHaveBeenCalled()
-    expect(xtermState.instances[0]?.refresh).toHaveBeenCalledWith(0, xtermState.instances[0]!.rows - 1)
+    expect(xtermState.instances[0]?.refresh).not.toHaveBeenCalled()
     expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
     expect(terminalBridge.resizeSession).not.toHaveBeenCalled()
   })
@@ -2511,7 +2724,7 @@ describe("TerminalModule", () => {
     expect(oldWriteOrder).toEqual(expect.any(Function))
     expect(oldWriteInvocation).toBeLessThan(resizeInvocation ?? 0)
     expect(resizeInvocation).toBeLessThan(newWriteInvocation ?? 0)
-    expect(xterm.refresh).toHaveBeenCalledWith(0, 29)
+    expect(xterm.refresh).not.toHaveBeenCalled()
     expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
     expect(xtermState.instances).toHaveLength(1)
   })
@@ -2544,6 +2757,8 @@ describe("TerminalModule", () => {
     bridgeState.deferredAttach = createDeferredAttach()
 
     await renderModule()
+    const terminalFrame = document.querySelector<HTMLElement>("[data-terminal-xterm-frame]")
+    expect(terminalFrame?.classList.contains("invisible")).toBe(true)
 
     act(() => {
       bridgeState.dataListener?.({
@@ -2573,6 +2788,7 @@ describe("TerminalModule", () => {
     expect(writes).toContain("ready\r\n")
     expect(writes).toContain("during-read\r\n")
     expect(writes?.filter((data) => data === "during-read\r\n")).toHaveLength(1)
+    expect(terminalFrame?.classList.contains("invisible")).toBe(false)
   })
 
   it("does not report an attach error when an MCP deletion races the active attach", async () => {
@@ -2593,7 +2809,7 @@ describe("TerminalModule", () => {
     expect(toastState.error).not.toHaveBeenCalledWith("终端画面无法恢复")
   })
 
-  it("restores a switched session from one authoritative snapshot without replaying raw history", async () => {
+  it("keeps a switched session mounted and applies hidden output without replaying a snapshot", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
       createSession({
@@ -2611,41 +2827,28 @@ describe("TerminalModule", () => {
     ]
 
     await renderModule()
+    const originalXterm = xtermState.instances[0]!
     await clickSession("日志终端")
 
-    bridgeState.sessions = bridgeState.sessions.map((session) => session.id === "session-1"
-      ? { ...session, lastOutputSeq: 3 }
-      : session)
-    bridgeState.chunks = [
+    const hiddenChunks = [
       createChunk({ sessionId: "session-1", seq: 1, data: "before-switch\r\n" }),
       createChunk({ sessionId: "session-1", seq: 2, data: "while-hidden-1\r\n" }),
       createChunk({ sessionId: "session-1", seq: 3, data: "while-hidden-2\r\n" }),
     ]
-    terminalBridge.attachSession.mockImplementation(async ({ sessionId }) => {
-      const session = getSession(sessionId)
-      const chunks = bridgeState.chunks.filter((chunk) => chunk.sessionId === sessionId)
-      return {
-        session,
-        degraded: false as const,
-        serialized: "restored-screen",
-        cols: session.cols,
-        rows: session.rows,
-        throughOutputSeq: chunks.at(-1)?.seq ?? 0,
-        sizeRevision: session.sizeRevision,
-        emulatorId: "xterm-headless" as const,
-        emulatorVersion: "6.0.0" as const,
-        scrollbackTruncated: false,
-        reasons: [] as [],
-      }
+    originalXterm.write.mockClear()
+    const hiddenSessionDataListener = terminalBridge.onData.mock.calls[0]?.[0]
+    await act(async () => {
+      for (const chunk of hiddenChunks) hiddenSessionDataListener?.({ sessionId: "session-1", chunk })
+      await flushPromises()
     })
     terminalBridge.attachSession.mockClear()
 
     await clickSession("构建终端")
 
-    const restoredWrites = xtermState.instances.at(-1)?.write.mock.calls.map(([data]) => data)
-    expect(restoredWrites).toEqual(["restored-screen"])
-    expect(terminalBridge.attachSession).toHaveBeenCalledTimes(1)
-    expect(terminalBridge.attachSession).toHaveBeenCalledWith({ sessionId: "session-1" })
+    expect(xtermState.instances).toHaveLength(2)
+    expect(originalXterm.dispose).not.toHaveBeenCalled()
+    expect(originalXterm.write.mock.calls.map(([data]) => data)).toEqual(hiddenChunks.map((chunk) => chunk.data))
+    expect(terminalBridge.attachSession).not.toHaveBeenCalled()
     expect(terminalBridge.readSession).not.toHaveBeenCalled()
   })
 })
@@ -2787,6 +2990,19 @@ async function changeInput(label: string, value: string): Promise<void> {
   })
 }
 
+async function changeInputById(id: string, value: string): Promise<void> {
+  const input = document.body.querySelector<HTMLInputElement>(`#${id}`)
+  await act(async () => {
+    if (input) {
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      valueSetter?.call(input, value)
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+    }
+    await Promise.resolve()
+  })
+}
+
 async function changeTextarea(label: string, value: string): Promise<void> {
   const textarea = document.body.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`)
   await act(async () => {
@@ -2795,18 +3011,6 @@ async function changeTextarea(label: string, value: string): Promise<void> {
       valueSetter?.call(textarea, value)
       textarea.dispatchEvent(new Event("input", { bubbles: true }))
       textarea.dispatchEvent(new Event("change", { bubbles: true }))
-    }
-    await Promise.resolve()
-  })
-}
-
-async function changeSelect(label: string, value: string): Promise<void> {
-  const select = document.body.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
-  await act(async () => {
-    if (select) {
-      const valueSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set
-      valueSetter?.call(select, value)
-      select.dispatchEvent(new Event("change", { bubbles: true }))
     }
     await Promise.resolve()
   })
@@ -2957,6 +3161,21 @@ function createGroup(overrides: Partial<SynapseTerminalGroup> = {}): SynapseTerm
     launchRevision: 1,
     membershipRevision: 1,
     commandCollectionRevision: 1,
+    ...overrides,
+  }
+}
+
+function createToolbarAction(
+  overrides: Partial<SynapseTerminalCustomToolbarAction> = {},
+): SynapseTerminalCustomToolbarAction {
+  return {
+    id: "00000000-0000-4000-8000-000000000001",
+    label: "检查状态",
+    content: "git status",
+    pressEnter: true,
+    createdAt: "2026-09-05T00:00:00.000Z",
+    updatedAt: "2026-09-05T00:00:00.000Z",
+    actionRevision: 1,
     ...overrides,
   }
 }

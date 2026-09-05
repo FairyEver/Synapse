@@ -113,9 +113,12 @@ import type {
   SynapseTerminalCloseWorkspaceInput,
   SynapseTerminalCloseWorkspaceResult,
   SynapseTerminalCreateGroupCommandInput,
+  SynapseTerminalCreateCustomToolbarActionInput,
   SynapseTerminalCreateGroupInput,
   SynapseTerminalCreateSessionInput,
   SynapseTerminalDataEvent,
+  SynapseTerminalCustomToolbarAction,
+  SynapseTerminalDeleteCustomToolbarActionInput,
   SynapseTerminalDomainChangedEvent,
   SynapseTerminalDeleteGroupCommandInput,
   SynapseTerminalDeleteGroupInput,
@@ -142,6 +145,7 @@ import type {
   SynapseTerminalSplitPaneInput,
   SynapseTerminalSplitPaneResult,
   SynapseTerminalUpdateGroupCommandInput,
+  SynapseTerminalUpdateCustomToolbarActionInput,
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalUpdateGlobalLaunchSettingsInput,
   SynapseTerminalWriteSessionInput,
@@ -171,9 +175,6 @@ import type {
 } from "./installers"
 import type {
   DashboardWebhookDto,
-  DriveDocumentImageImportRequest,
-  DriveDocumentImageImportResult,
-  DriveDocumentImageSourcesDto,
   DriveAccessSettingsUpdateInput,
   DriveFileVersionDto,
   DriveFileVersionListInput,
@@ -298,13 +299,6 @@ export type DrivePublicAssetUploadResultItem =
 export type DrivePublicAssetUploadResult = {
   readonly results: readonly DrivePublicAssetUploadResultItem[]
 }
-
-export type DriveDocumentImageSourceContext =
-  | { readonly kind: "owner"; readonly itemId: string }
-  | { readonly kind: "share"; readonly shareId: string; readonly itemId?: string | null }
-
-export type DriveDocumentImageImportBridgeRequest =
-  DriveDocumentImageSourceContext & DriveDocumentImageImportRequest
 
 import type {
   SynapseLiveState,
@@ -1180,6 +1174,12 @@ export type SynapseBridge = {
       get: () => Promise<SynapseTerminalGlobalLaunchSettings>
       update: (input: SynapseTerminalUpdateGlobalLaunchSettingsInput) => Promise<SynapseTerminalGlobalLaunchSettings>
     }
+    toolbarAction: {
+      list: () => Promise<SynapseTerminalCustomToolbarAction[]>
+      create: (input: SynapseTerminalCreateCustomToolbarActionInput) => Promise<SynapseTerminalCustomToolbarAction>
+      update: (input: SynapseTerminalUpdateCustomToolbarActionInput) => Promise<SynapseTerminalCustomToolbarAction>
+      delete: (input: SynapseTerminalDeleteCustomToolbarActionInput) => Promise<void>
+    }
     launch: {
       chooseCwd: () => Promise<string | null>
       revealEnvironmentValue: (input: SynapseTerminalEnvironmentValueInput) => Promise<string | null>
@@ -1386,10 +1386,6 @@ export type SynapseBridge = {
       rename: (input: { assetId: string; name: string }) => Promise<DrivePublicAssetDto>
       delete: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
       restore: (input: { assetId: string }) => Promise<DrivePublicAssetDto>
-    }
-    documentImages: {
-      scan: (input: DriveDocumentImageSourceContext) => Promise<DriveDocumentImageSourcesDto>
-      import: (input: DriveDocumentImageImportBridgeRequest) => Promise<DriveDocumentImageImportResult>
     }
     site: {
       preflight: (input: { sourceFolderItemId: string }) => Promise<DriveSitePreflightDto>

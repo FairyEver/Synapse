@@ -643,6 +643,7 @@ describe("BackupService", () => {
         "database.sql.gz",
         "postgres-globals.sql",
         "drive-cos-manifest.json",
+        "platform-media-cos-manifest.json",
         "restore.md",
       ])
     } finally {

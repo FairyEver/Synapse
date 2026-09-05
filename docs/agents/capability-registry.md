@@ -56,6 +56,7 @@
 - Terminal 分屏 workspace/pane 仅属于现有 System App 的 UI IPC：创建、调整与拖拽重排 pane 时，每个 pane 仍由一个既有 session 承载，因此 MCP 工具数量保持 43，不注册 workspace/pane MCP capability、tool 或 Deep Link。
 - Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取、监听并解析拖拽选中项；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。文件树路径拖拽只写入 Agent 草稿或当前 Terminal session，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
 - Terminal 图片剪贴板落盘仅属于现有 System App 的 UI 私有 IPC，用于把临时 PNG 路径交给当前 PTY；不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
+- Terminal 用户快捷输入的增删改查仅属于现有 System App 的 UI 私有 IPC；执行仍复用当前 session 输入，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
 
 ## 普通业务模块 System App
 
@@ -110,6 +111,8 @@ Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问�
 Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。
 
 Drive 分享评论通过 6 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论和删除线程。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下的 `.md` 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
+
+浏览器 Markdown/MDX 编辑器的平台托管图片属于现有 Drive Web UI 私有能力，使用 `/object/<objectId>`，不注册 System App、MCP capability/tool、Automation Action 或 Deep Link。`/object` 是平台托管对象的公共命名空间，不限定未来对象类型。Agent 处理本地 Markdown、HTML 与明确的图床/直链请求时仍使用既有 Drive 文件、Site 和 `app.drive.direct_link.*` 能力。
 
 ## 同步硬规则
 

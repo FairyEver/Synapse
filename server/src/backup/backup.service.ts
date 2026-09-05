@@ -12,7 +12,7 @@ import * as tar from "tar"
 import type COS from "cos-nodejs-sdk-v5"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
-import { isBackupCosConfigured, isDriveCosConfigured, loadEnv, type ServerEnv } from "../config/env"
+import { isBackupCosConfigured, isDriveCosConfigured, isPlatformMediaCosConfigured, loadEnv, type ServerEnv } from "../config/env"
 import {
   contentManifestItem,
   createBackupManifest,
@@ -161,6 +161,7 @@ export class BackupService {
       fs.copyFileSync(dbPath, path.join(packageDir, "database.sql.gz"))
       await this.dumpPostgresGlobals(path.join(packageDir, "postgres-globals.sql"))
       await this.writeDriveCosManifest(path.join(packageDir, "drive-cos-manifest.json"))
+      await this.writePlatformMediaCosManifest(path.join(packageDir, "platform-media-cos-manifest.json"))
 
       const restoreMarkdown = createRestoreMarkdown({ createdAt, filename })
       if (scanForSecretLikeText(restoreMarkdown)) {
@@ -176,10 +177,13 @@ export class BackupService {
         backupRegion: this.region,
         driveBucket: this.env.driveCosBucket,
         driveRegion: this.env.driveCosRegion,
+        platformMediaBucket: this.env.platformMediaCosBucket,
+        platformMediaRegion: this.env.platformMediaCosRegion,
         contents: [
           await contentManifestItem(packageDir, "database.sql.gz"),
           await contentManifestItem(packageDir, "postgres-globals.sql"),
           await contentManifestItem(packageDir, "drive-cos-manifest.json"),
+          await contentManifestItem(packageDir, "platform-media-cos-manifest.json"),
           await contentManifestItem(packageDir, "restore.md"),
         ],
       })
@@ -382,6 +386,74 @@ export class BackupService {
       SecretId: this.env.driveCosSecretId!,
       SecretKey: this.env.driveCosSecretKey!,
     })
+  }
+
+  private createPlatformMediaCosClient(): COS {
+    const CosClient = require("cos-nodejs-sdk-v5") as typeof COS
+    return new CosClient({
+      SecretId: this.env.platformMediaCosSecretId!,
+      SecretKey: this.env.platformMediaCosSecretKey!,
+    })
+  }
+
+  private async writePlatformMediaCosManifest(filePath: string): Promise<void> {
+    if (!isPlatformMediaCosConfigured(this.env)) {
+      await writeJsonFile(filePath, {
+        storage: "local",
+        included: false,
+        reason: "Platform media COS is not configured.",
+      })
+      return
+    }
+    await this.writeCosPrefixManifest({
+      filePath,
+      cos: this.createPlatformMediaCosClient(),
+      bucket: this.env.platformMediaCosBucket!,
+      region: this.env.platformMediaCosRegion!,
+      prefix: "document-images/",
+    })
+  }
+
+  private async writeCosPrefixManifest(input: {
+    readonly filePath: string
+    readonly cos: COS
+    readonly bucket: string
+    readonly region: string
+    readonly prefix: string
+  }): Promise<void> {
+    const stream = fs.createWriteStream(input.filePath, { encoding: "utf8" })
+    let marker: string | undefined
+    let completed = false
+    let firstObject = true
+    try {
+      await writeStreamChunk(stream, "{\n")
+      await writeStreamChunk(stream, `  "bucket": ${JSON.stringify(input.bucket)},\n`)
+      await writeStreamChunk(stream, `  "region": ${JSON.stringify(input.region)},\n`)
+      await writeStreamChunk(stream, `  "prefix": ${JSON.stringify(input.prefix)},\n`)
+      await writeStreamChunk(stream, '  "objects": [\n')
+      do {
+        const page = await new Promise<{ readonly Contents?: Array<{ readonly Key?: string; readonly Size?: string | number; readonly ETag?: string; readonly LastModified?: string }>; readonly IsTruncated?: string | boolean; readonly NextMarker?: string }>((resolve, reject) => {
+          input.cos.getBucket({ Bucket: input.bucket, Region: input.region, Prefix: input.prefix, ...(marker ? { Marker: marker } : {}) }, (error, data) => {
+            if (error) reject(error)
+            else resolve(data)
+          })
+        })
+        for (const item of page.Contents ?? []) {
+          if (!item.Key) continue
+          const object = { key: item.Key, size: Number(item.Size ?? 0), ...(item.ETag ? { etag: item.ETag } : {}), ...(item.LastModified ? { lastModified: item.LastModified } : {}) }
+          await writeStreamChunk(stream, `${firstObject ? "" : ",\n"}    ${JSON.stringify(object)}`)
+          firstObject = false
+        }
+        marker = page.NextMarker
+        if (page.IsTruncated !== true && page.IsTruncated !== "true") marker = undefined
+      } while (marker)
+      await writeStreamChunk(stream, "\n  ]\n}\n")
+      stream.end()
+      await finished(stream)
+      completed = true
+    } finally {
+      if (!completed) stream.destroy()
+    }
   }
 
   private async writeDriveCosManifest(filePath: string): Promise<void> {

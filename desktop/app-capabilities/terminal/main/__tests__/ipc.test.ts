@@ -74,6 +74,10 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.id).toBe("terminal")
     expect(terminalIpcModule.methods.getGlobalLaunchSettings.operationId).toBe("app.terminal.global_launch.get")
     expect(terminalIpcModule.methods.updateGlobalLaunchSettings.operationId).toBe("app.terminal.global_launch.update")
+    expect(terminalIpcModule.methods.listCustomToolbarActions.operationId).toBe("app.terminal.toolbar_action.list")
+    expect(terminalIpcModule.methods.createCustomToolbarAction.operationId).toBe("app.terminal.toolbar_action.create")
+    expect(terminalIpcModule.methods.updateCustomToolbarAction.operationId).toBe("app.terminal.toolbar_action.update")
+    expect(terminalIpcModule.methods.deleteCustomToolbarAction.operationId).toBe("app.terminal.toolbar_action.delete")
     expect(terminalIpcModule.methods.listGroups.operationId).toBe("app.terminal.group.list")
     expect(terminalIpcModule.methods.getGroup.operationId).toBe("app.terminal.group.get")
     expect(terminalIpcModule.methods.createGroup.operationId).toBe("app.terminal.group.create")
@@ -137,6 +141,40 @@ describe("terminalIpcModule", () => {
       title: "选择工作目录",
       properties: ["openDirectory"],
     })
+  })
+
+  it("forwards custom toolbar action management to the terminal service", async () => {
+    const service = createService()
+    const context = createContext(service)
+    const id = "00000000-0000-4000-8000-000000000001"
+
+    await terminalIpcModule.methods.listCustomToolbarActions.handler(context, undefined)
+    await terminalIpcModule.methods.createCustomToolbarAction.handler(context, {
+      label: "检查状态",
+      content: "git status",
+      pressEnter: true,
+    })
+    await terminalIpcModule.methods.updateCustomToolbarAction.handler(context, {
+      id,
+      label: "检查分支",
+      content: "git branch",
+      pressEnter: false,
+    })
+    await terminalIpcModule.methods.deleteCustomToolbarAction.handler(context, { id })
+
+    expect(service.listCustomToolbarActions).toHaveBeenCalledTimes(1)
+    expect(service.createCustomToolbarAction).toHaveBeenCalledWith({
+      label: "检查状态",
+      content: "git status",
+      pressEnter: true,
+    })
+    expect(service.updateCustomToolbarAction).toHaveBeenCalledWith({
+      id,
+      label: "检查分支",
+      content: "git branch",
+      pressEnter: false,
+    })
+    expect(service.deleteCustomToolbarAction).toHaveBeenCalledWith({ id })
   })
 
   it("renames and deletes groups plus sessions as the user actor", async () => {
@@ -525,6 +563,21 @@ function createService(): Partial<TerminalService> {
       updatedAt: "2026-06-24T00:00:00.000Z",
       settings: input.settings,
     })),
+    listCustomToolbarActions: vi.fn(() => []),
+    createCustomToolbarAction: vi.fn(async (input) => ({
+      id: "00000000-0000-4000-8000-000000000001",
+      ...input,
+      createdAt: "2026-09-05T00:00:00.000Z",
+      updatedAt: "2026-09-05T00:00:00.000Z",
+      actionRevision: 1,
+    })),
+    updateCustomToolbarAction: vi.fn(async (input) => ({
+      ...input,
+      createdAt: "2026-09-05T00:00:00.000Z",
+      updatedAt: "2026-09-05T00:01:00.000Z",
+      actionRevision: 2,
+    })),
+    deleteCustomToolbarAction: vi.fn(async () => undefined),
     listGroups: vi.fn(() => []),
     getGroup: vi.fn(() => ({
       id: "group-1",

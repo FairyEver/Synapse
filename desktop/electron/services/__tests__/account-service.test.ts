@@ -44,7 +44,7 @@ import {
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
 import type { SynapseAccountProfile } from "../../../src/types/account"
-import { DRIVE_MAX_FILE_BYTES, DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DashboardWebhookDto, type DriveDocumentImageImportResult, type DriveDocumentImageSourcesDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
+import { DRIVE_MAX_FILE_BYTES, DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DashboardWebhookDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
 
@@ -1543,89 +1543,6 @@ describe("AccountService", () => {
       expectedApiUrl("/drive/public-assets/uploads/upload-session/cancel"),
       undefined,
       "上传取消失败。",
-    )
-  })
-
-  it("builds owner and share URLs for document image source scans", async () => {
-    const { service } = await createTestAccountService()
-    const imageSources = driveDocumentImageSources()
-    const getAuthenticatedJson = vi.spyOn(service as unknown as {
-      getAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
-    }, "getAuthenticatedJson").mockResolvedValue(imageSources)
-
-    await expect(service.scanDriveDocumentImageSources({ kind: "owner", itemId: "item-1" }))
-      .resolves.toEqual(imageSources)
-    await expect(service.scanDriveDocumentImageSources({ kind: "share", shareId: "share-1" }))
-      .resolves.toEqual(imageSources)
-    await expect(service.scanDriveDocumentImageSources({ kind: "share", shareId: "share-1", itemId: "item-2" }))
-      .resolves.toEqual(imageSources)
-
-    expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
-      1,
-      expectedApiUrl("/drive/items/item-1/image-sources"),
-      "图片来源加载失败。",
-    )
-    expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
-      2,
-      expectedApiUrl("/drive/browser/shares/share-1/image-sources"),
-      "图片来源加载失败。",
-    )
-    expect(getAuthenticatedJson).toHaveBeenNthCalledWith(
-      3,
-      expectedApiUrl("/drive/browser/shares/share-1/items/item-2/image-sources"),
-      "图片来源加载失败。",
-    )
-  })
-
-  it("builds owner and share URLs and POST bodies for document image imports", async () => {
-    const { service } = await createTestAccountService()
-    const result = driveDocumentImageImportResult()
-    const requestAuthenticatedJson = vi.spyOn(service as unknown as {
-      requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
-    }, "requestAuthenticatedJson").mockResolvedValue(result)
-    const sources = [{ src: "https://example.test/logo.png" }]
-
-    await expect(service.importDriveDocumentImages({
-      kind: "owner",
-      itemId: "item-1",
-      baseVersionId: "version-1",
-      sources,
-    })).resolves.toEqual(result)
-    await expect(service.importDriveDocumentImages({
-      kind: "share",
-      shareId: "share-1",
-      baseVersionId: "version-1",
-      sources,
-    })).resolves.toEqual(result)
-    await expect(service.importDriveDocumentImages({
-      kind: "share",
-      shareId: "share-1",
-      itemId: "item-2",
-      baseVersionId: "version-1",
-      sources,
-    })).resolves.toEqual(result)
-
-    const body = { baseVersionId: "version-1", sources }
-    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
-      1,
-      "POST",
-      expectedApiUrl("/drive/items/item-1/image-sources/import"),
-      body,
-      "图片导入失败。",
-    )
-    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
-      2,
-      "POST",
-      expectedApiUrl("/drive/browser/shares/share-1/image-sources/import"),
-      body,
-      "图片导入失败。",
-    )
-    expect(requestAuthenticatedJson).toHaveBeenNthCalledWith(
-      3,
-      "POST",
-      expectedApiUrl("/drive/browser/shares/share-1/items/item-2/image-sources/import"),
-      body,
-      "图片导入失败。",
     )
   })
 
@@ -3684,51 +3601,6 @@ function drivePublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePu
     lastAccessedAt: overrides.lastAccessedAt ?? null,
     createdAt: overrides.createdAt ?? "2026-06-09T00:00:00.000Z",
     updatedAt: overrides.updatedAt ?? "2026-06-09T00:00:00.000Z",
-  }
-}
-
-function driveDocumentImageSources(overrides: Partial<DriveDocumentImageSourcesDto> = {}): DriveDocumentImageSourcesDto {
-  return {
-    itemId: overrides.itemId ?? "item-1",
-    versionId: overrides.versionId ?? "version-1",
-    canImport: overrides.canImport ?? true,
-    sources: overrides.sources ?? [{
-      id: "source-1",
-      imageKey: "external:https://example.test/logo.png",
-      src: "https://example.test/logo.png",
-      kind: "external",
-      occurrenceCount: 1,
-      canImport: true,
-      status: "ready",
-    }],
-    summary: overrides.summary ?? {
-      total: 1,
-      ownerAsset: 0,
-      collaboratorAsset: 0,
-      external: 1,
-      invalid: 0,
-      unsupported: 0,
-      importable: 1,
-    },
-  }
-}
-
-function driveDocumentImageImportResult(overrides: Partial<DriveDocumentImageImportResult> = {}): DriveDocumentImageImportResult {
-  return {
-    itemId: overrides.itemId ?? "item-1",
-    versionId: overrides.versionId ?? "version-2",
-    imported: overrides.imported ?? [{
-      previousSrc: "https://example.test/logo.png",
-      nextSrc: `${expectedPublicAppUrl}/files/asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ`,
-      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
-      size: "5",
-    }],
-    failed: overrides.failed ?? [],
-    summary: overrides.summary ?? {
-      importedCount: 1,
-      failedCount: 0,
-      replacedOccurrenceCount: 1,
-    },
   }
 }
 

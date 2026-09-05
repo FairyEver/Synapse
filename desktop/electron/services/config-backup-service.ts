@@ -1021,6 +1021,7 @@ const TERMINAL_BODY_NAMESPACES = new Set([
   "app.terminal.global-launch-bodies",
   "app.terminal.group-launch-bodies",
   "app.terminal.launch-bodies",
+  "app.terminal.toolbar-actions",
   "app.terminal.blocks",
   "app.terminal.delete-intents",
   "app.terminal.idempotency",

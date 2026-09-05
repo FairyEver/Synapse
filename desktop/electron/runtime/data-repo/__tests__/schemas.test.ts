@@ -100,6 +100,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.terminal.launch-bodies",
         "app.terminal.operations",
         "app.terminal.sessions",
+        "app.terminal.toolbar-actions",
         "app.terminal.workspaces",
         "automation.items",
         "automation.runs",
@@ -314,6 +315,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         || schema.name === "app.terminal.global-launch-bodies"
         || schema.name === "app.terminal.group-launch-bodies"
         || schema.name === "app.terminal.launch-bodies"
+        || schema.name === "app.terminal.toolbar-actions"
         || schema.name === "app.connectors.credentials"
         || schema.name === "webhook.config"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)

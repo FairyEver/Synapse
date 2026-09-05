@@ -50,7 +50,7 @@ server/                 # 服务端与管理后台
 
 - `DRIVE_COS_*`：用户云盘文件、版本、Drive 公开素材和 Drive Sites 资源；受 Drive 权限、生命周期和容量统计约束。
 - `SKILL_REPOSITORY_COS_*`：云端 Skill 仓库文件、安装包和分发产物；不提供本地 fallback。
-- `PLATFORM_MEDIA_COS_*`：用户/智能体/团队头像、系统图标、模板/分享封面、模型图标等平台媒体。默认私有读写，客户端不直接接触 COS bucket/key。
+- `PLATFORM_MEDIA_COS_*`：用户/智能体/团队头像、系统图标、模板/分享封面、模型图标，以及浏览器文档编辑产生的平台托管图片。默认私有读写，客户端不直接接触 COS bucket/key；文档图片使用 `document-images/` 前缀，由服务端 `/object/<objectId>` 代理公开读取。生产环境必须完整配置该组变量。
 - `BACKUP_COS_*`：服务端灾备归档，当前 key 前缀为 `backups/`，不得承载运行时业务文件。
 
 新增存储用途前先判断语义、权限、生命周期、计费归属和备份策略是否属于现有域。若不同，应新增明确的 storage domain，并同步 `server/src/config/env.ts`、测试、`server/compose.yml`、示例配置、部署脚本、README 和规则文档。COS 域配置必须完整校验 `SECRET_ID`、`SECRET_KEY`、`BUCKET`、`REGION`。

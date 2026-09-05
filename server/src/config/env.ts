@@ -163,6 +163,11 @@ const envSchema = z
     path: ["SKILL_REPOSITORY_COS_SECRET_ID"],
     message: "SKILL_REPOSITORY_COS_* is required in production",
   })
+  .refine((env) => env.NODE_ENV !== "production"
+    || !!(env.PLATFORM_MEDIA_COS_SECRET_ID && env.PLATFORM_MEDIA_COS_SECRET_KEY && env.PLATFORM_MEDIA_COS_BUCKET && env.PLATFORM_MEDIA_COS_REGION), {
+    path: ["PLATFORM_MEDIA_COS_SECRET_ID"],
+    message: "PLATFORM_MEDIA_COS_* is required in production",
+  })
   .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
     path: ["APP_PUBLIC_URL"],
     message: "APP_PUBLIC_URL must be the public app root, not the /api URL",

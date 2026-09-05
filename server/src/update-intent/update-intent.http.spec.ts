@@ -56,6 +56,10 @@ describe("update intent HTTP API", () => {
       SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
       SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
       SKILL_REPOSITORY_COS_REGION: "ap-beijing",
+      PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
+      PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
+      PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
+      PLATFORM_MEDIA_COS_REGION: "ap-beijing",
     }
 
     const moduleRef = await Test.createTestingModule({ imports: [UpdateIntentHttpTestModule] }).compile()

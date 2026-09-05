@@ -74,6 +74,8 @@ Do not use this skill for database records, Resource Repository resources, Autom
 
 Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared `.md` documents. These annotation calls do not join a browser collaboration room, and MCP file content writes continue to use the versioned file APIs.
 
+Images pasted, dropped, or selected in the browser Markdown/MDX editor use a separate platform-owned `/object/<objectId>` store and do not consume user Drive quota. This browser-only convenience has no MCP upload, list, migration, or ownership tool. MCP uploads continue to follow the local Markdown, HTML, and explicit public-asset rules below.
+
 ## One-Time Upload Versus Persistent Sync
 
 Choose the route from the user's actual intent before calling any write tool.
@@ -167,7 +169,7 @@ Choose one Drive destination before uploading and reuse it for every ordinary Dr
    - If there are multiple Markdown candidates with no primary one, or no meaningful common parent folder, ask one concise naming question before any remote write.
    - Create or reuse that Drive folder as the layout root. Upload directly contained files to it and recreate required subdirectories instead of flattening relative paths.
 5. Keep the Markdown, its referenced local images, standalone HTML files, explicitly included attachments, and HTML dependency source folders inside the selected Drive destination. A site URL or share URL is a public identity for an item in that destination, not a replacement storage location.
-6. For `.md` and `.markdown`, keep supported local image references unchanged and preserve the same relative layout between the Markdown and image files in Drive. Use `app_drive_direct_link_upload` only when the user explicitly asks for a public asset/direct link or asks to replace the Markdown references with public URLs.
+6. For `.md` and `.markdown`, keep supported local image references unchanged and preserve the same relative layout between the Markdown and image files in Drive. Do not send local Markdown dependencies to the browser-only `/object/` store. Use `app_drive_direct_link_upload` only when the user explicitly asks for a user-owned public asset/direct link or asks to replace the Markdown references with public URLs.
 
 ## Markdown Image Syntax
 
@@ -258,7 +260,7 @@ Updating either route does not live-reload pages already open in a visitor's bro
 4. To open or preview an item for the owner, call `app_drive_item_preview_get`. It returns the browser snapshot, preview metadata, children, and available download/render URLs without creating a share.
 5. To read a small previewable text file, call `app_drive_file_content_read`. Use `app_drive_file_download_create` instead for binary, oversized, or non-previewable files.
 6. To save Drive content locally, call `app_drive_file_download_create` for a file, `app_drive_file_version_download_create` for a specific file version, or `app_drive_folder_zip_create` for a folder. These tools write to the local filesystem and require write permission.
-7. If the user asks to upload to `公开素材`, upload to a `图床`, generate a `直链`, generate an `外链`, create a `public asset`, or create a `direct link`, call `app_drive_direct_link_upload`. Public assets support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO images and PDF/DOCX/XLSX/PPTX/TXT/MD/CSV documents, do not support SVG, are flat, and allow duplicate names; every upload creates a new asset id and `/files/<assetId>` URL. Images open inline and documents download as attachments.
+7. If the user explicitly asks to upload to `公开素材`, upload to a `图床`, generate a `直链`, generate an `外链`, create a `public asset`, or create a `direct link`, call `app_drive_direct_link_upload`. These assets belong to the user, consume Drive quota, appear in the user's public-asset list, and are distinct from browser-editor `/object/` uploads. Public assets support PNG/JPG/JPEG/GIF/WebP/AVIF/ICO images and PDF/DOCX/XLSX/PPTX/TXT/MD/CSV documents, do not support SVG, are flat, and allow duplicate names; every upload creates a new asset id and `/files/<assetId>` URL.
 8. If the user asks to replace an existing public asset, call `app_drive_direct_link_update` with `assetId` and `filePath`. The `/files/<assetId>` URL is preserved. Images can replace images, and documents can replace documents; the two categories cannot replace each other.
 9. If the user asks to rename an existing public asset, call `app_drive_direct_link_rename` with `assetId` and `name`. The `/files/<assetId>` URL is preserved.
 10. If the user asks to share an existing Drive file or folder, call `app_drive_share_create` for the item and return the `/share/...` public URL.

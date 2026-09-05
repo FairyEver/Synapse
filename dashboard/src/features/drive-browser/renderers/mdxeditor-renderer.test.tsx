@@ -4,16 +4,14 @@ import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
-  DrivePublicAssetDto,
   DriveBrowserEditDto,
   DriveBrowserItemDto,
   DriveBrowserPreviewDto,
   DriveBrowserSnapshotDto,
   DriveAnnotationThreadDto,
-  DriveDocumentImageSource,
-  DriveDocumentImageSourcesDto,
+  DriveHostedDocumentImageDto,
 } from '@synapse/shared'
-import { ApiError, driveApi, driveBrowserApi } from '@/lib/api'
+import { ApiError, driveBrowserApi } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
@@ -336,16 +334,16 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('does not submit again while a shortcut save is uploading an image', async () => {
-    let resolveUpload!: (asset: DrivePublicAssetDto) => void
-    const uploadPromise = new Promise<DrivePublicAssetDto>((resolve) => {
+    let resolveUpload!: (asset: DriveHostedDocumentImageDto) => void
+    const uploadPromise = new Promise<DriveHostedDocumentImageDto>((resolve) => {
       resolveUpload = resolve
     })
-    const upload = vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockReturnValue(uploadPromise)
+    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(uploadPromise)
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
-    await click(buttonWithText('继续插入'))
+    await click(buttonWithText('继续上传'))
     await pressKey(editor(), { key: 's', metaKey: true })
     await pressKey(editor(), { key: 's', ctrlKey: true })
 
@@ -353,10 +351,12 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editContext.saveText).not.toHaveBeenCalled()
 
     await act(async () => {
-      resolveUpload(createPublicAsset({ name: 'chart.png', url: 'https://synapse.test/files/asset_image' }))
+      resolveUpload(createHostedImage({ name: 'chart.png' }))
       await uploadPromise
-      await vi.waitFor(() => expect(editContext.saveText).toHaveBeenCalledTimes(1))
     })
+
+    await pressKey(editor(), { key: 's', metaKey: true })
+    expect(editContext.saveText).toHaveBeenCalledTimes(1)
   })
 
   it('saves recovered source markdown with Command+S', async () => {
@@ -460,42 +460,6 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().value).toBe('# Newer')
     expect(document.body.textContent).toContain('未保存')
     expect(document.body.textContent).not.toContain('已同步')
-  })
-
-  it('keeps materialized draft image urls when editing continues during a pending save', async () => {
-    let resolveSave!: () => void
-    const savePromise = new Promise<never>((resolve) => {
-      resolveSave = () => resolve({} as never)
-    })
-    const editContext = createEditContext({
-      saveText: vi.fn(() => savePromise),
-    })
-    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
-      name: 'chart.png',
-      url: 'https://synapse.test/files/asset_image',
-    }))
-    renderRenderer({ edit: editable(), editContext })
-
-    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
-    await click(buttonWithText('继续插入'))
-    await click(buttonWithText('保存'))
-    await inputValue(editor(), '# Notes![chart](blob:synapse-test-1)\n\nMore')
-
-    await act(async () => {
-      resolveSave()
-      await savePromise
-      await Promise.resolve()
-    })
-
-    expect(editor().value).toBe('# Notes![chart](https://synapse.test/files/asset_image)\n\nMore')
-    expect(document.body.textContent).toContain('未保存')
-
-    await click(buttonWithText('保存'))
-
-    expect(editContext.saveText).toHaveBeenLastCalledWith({
-      text: '# Notes![chart](https://synapse.test/files/asset_image)\n\nMore',
-      baseVersionId: 'version-1',
-    })
   })
 
   it('asks before reloading dirty markdown and clears dirty state after confirmation', async () => {
@@ -694,202 +658,93 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('已同步')
   })
 
-  it('disables image source import while markdown has unsaved edits', async () => {
-    const scanImages = vi.spyOn(driveBrowserApi, 'scanOwnerImageSources').mockResolvedValue(imageSources({
-      canImport: true,
-      sources: [
-        imageSource({
-          src: 'https://example.test/external.png',
-          canImport: true,
-          kind: 'external',
-        }),
-      ],
-    }))
-    const importImages = vi.spyOn(driveBrowserApi, 'importOwnerImageSources').mockResolvedValue(imageImportResult())
-    renderRenderer({ edit: editable(), imageSourceContext: { context: 'owner', itemId: 'file' } })
-
-    expect(scanImages).not.toHaveBeenCalled()
-
-    await inputValue(editor(), '# Draft')
-
-    expect(buttonWithText('图片来源').disabled).toBe(true)
-    expect(importImages).not.toHaveBeenCalled()
-  })
-
-  it('asks before uploading a selected image as a public asset', async () => {
+  it('asks once before uploading a selected image to the platform image host', async () => {
     const editContext = createEditContext()
-    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
-      name: 'chart.png',
-      url: 'https://synapse.test/files/asset_image',
-    }))
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(createHostedImage())
     renderRenderer({ edit: editable(), editContext })
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
 
-    expect(driveBrowserApi.uploadPublicAssetFile).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('公开素材')
+    expect(driveBrowserApi.uploadHostedDocumentImage).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('平台公共图床')
 
-    await click(buttonWithText('继续插入'))
+    await click(buttonWithText('继续上传'))
 
-    expect(driveBrowserApi.uploadPublicAssetFile).not.toHaveBeenCalled()
-    expect(editor().value).toBe('# Notes![chart](blob:synapse-test-1)')
+    expect(driveBrowserApi.uploadHostedDocumentImage).toHaveBeenCalledWith(
+      expect.any(File),
+      { kind: 'owner', itemId: 'file' },
+      { name: 'chart.png', mimeType: 'image/png' }
+    )
+    expect(editor().value).toBe(`# Notes![chart](${createHostedImage().url})`)
     expect(document.body.textContent).toContain('未保存')
 
     await click(buttonWithText('保存'))
 
-    expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledWith(
-      expect.any(File),
-      { name: 'chart.png', mimeType: 'image/png' }
-    )
     expect(editContext.saveText).toHaveBeenCalledWith({
-      text: '# Notes![chart](https://synapse.test/files/asset_image)',
+      text: `# Notes![chart](${createHostedImage().url})`,
       baseVersionId: 'version-1',
     })
-    expect(editor().value).toBe('# Notes![chart](https://synapse.test/files/asset_image)')
     expect(document.body.textContent).toContain('已同步')
   })
 
-  it('rejects empty selected images before creating a draft url', async () => {
+  it('rejects empty selected images before uploading', async () => {
+    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
     renderRenderer({ edit: editable() })
 
     await selectImage(new File([], 'empty.png', { type: 'image/png' }))
 
-    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(upload).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('图片内容为空，请重新复制或选择图片。')
-    expect(document.body.textContent).not.toContain('插入公开素材')
+    expect(document.body.textContent).not.toContain('公开上传图片')
   })
 
   it('rejects empty pasted images before the mdxeditor upload handler runs', async () => {
+    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
     renderRenderer({ edit: editable() })
 
     await pasteClipboardImage(new File([], 'empty.png', { type: 'image/png' }), false)
 
-    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(upload).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('图片内容为空，请重新复制或选择图片。')
   })
 
-  it('uploads image files from mixed clipboard payloads before saving markdown', async () => {
-    window.localStorage.setItem('synapse.drive.markdown.publicImageUploadConsent.v1', 'true')
+  it('uploads image files from mixed clipboard payloads immediately', async () => {
+    window.localStorage.setItem('synapse.drive.markdown.documentImageUploadConsent.v1', 'true')
     const file = new File(['image'], 'chart.png', { type: 'image/png' })
-    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
-      name: 'chart.png',
-      url: 'https://synapse.test/files/asset_image',
-    }))
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(createHostedImage())
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
     await pasteClipboardImage(file)
 
-    expect(editor().value).toBe('# Notes![chart](blob:synapse-test-1)')
-    await click(buttonWithText('保存'))
-    expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledWith(
+    expect(driveBrowserApi.uploadHostedDocumentImage).toHaveBeenCalledWith(
       file,
+      { kind: 'owner', itemId: 'file' },
       { name: 'chart.png', mimeType: 'image/png' }
     )
-    expect(editContext.saveText).toHaveBeenCalledWith({
-      text: '# Notes![chart](https://synapse.test/files/asset_image)',
-      baseVersionId: 'version-1',
-    })
-  })
-
-  it('does not save markdown containing unmatched temporary image urls', async () => {
-    const editContext = createEditContext()
-    renderRenderer({ edit: editable(), editContext })
-
-    await inputValue(editor(), '# Notes\n\n![chart](blob:https://synapse.d2.pub/missing)')
-    await click(buttonWithText('保存'))
-
+    expect(editor().value).toBe(`# Notes![chart](${createHostedImage().url})`)
     expect(editContext.saveText).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('图片尚未完成上传，请重新粘贴或选择图片。')
-    expect(document.body.textContent).toContain('未保存')
   })
 
-  it('allows temporary image urls shown only inside code examples', async () => {
-    const editContext = createEditContext()
-    renderRenderer({ edit: editable(), editContext })
-    const markdown = [
-      '# Notes',
-      '',
-      '`![inline](blob:https://synapse.d2.pub/example)`',
-      '',
-      '```md',
-      '![fenced](blob:https://synapse.d2.pub/example)',
-      '```',
-    ].join('\n')
-
-    await inputValue(editor(), markdown)
-    await click(buttonWithText('保存'))
-
-    expect(editContext.saveText).toHaveBeenCalledWith({
-      text: markdown,
-      baseVersionId: 'version-1',
-    })
-    expect(document.body.textContent).not.toContain('图片尚未完成上传')
-  })
-
-  it('remembers public image consent after the first confirmed insertion', async () => {
-    const editContext = createEditContext()
-    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
-      .mockResolvedValueOnce(createPublicAsset({
-        name: 'first.png',
-        url: 'https://synapse.test/files/first',
-      }))
-      .mockResolvedValueOnce(createPublicAsset({
-        name: 'second.png',
-        url: 'https://synapse.test/files/second',
-      }))
-    renderRenderer({ edit: editable(), editContext })
+  it('remembers platform image upload consent after the first confirmation', async () => {
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
+      .mockResolvedValueOnce(createHostedImage({ imageId: 'img_11111111111111111111111111111111', url: '/object/img_11111111111111111111111111111111' }))
+      .mockResolvedValueOnce(createHostedImage({ imageId: 'img_22222222222222222222222222222222', url: '/object/img_22222222222222222222222222222222' }))
+    renderRenderer({ edit: editable() })
 
     await selectImage(new File(['image'], 'first.png', { type: 'image/png' }))
-    await click(buttonWithText('继续插入'))
+    await click(buttonWithText('继续上传'))
     await selectImage(new File(['image'], 'second.png', { type: 'image/png' }))
 
-    expect(document.body.textContent).not.toContain('公开素材')
-    expect(driveBrowserApi.uploadPublicAssetFile).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('平台公共图床')
+    expect(driveBrowserApi.uploadHostedDocumentImage).toHaveBeenCalledTimes(2)
     expect(editor().value).toBe(
-      '# Notes![first](blob:synapse-test-1)![second](blob:synapse-test-2)'
-    )
-
-    await click(buttonWithText('保存'))
-
-    expect(driveBrowserApi.uploadPublicAssetFile).toHaveBeenCalledTimes(2)
-    expect(editor().value).toBe(
-      '# Notes![first](https://synapse.test/files/first)![second](https://synapse.test/files/second)'
+      '# Notes![first](/object/img_11111111111111111111111111111111)![second](/object/img_22222222222222222222222222222222)'
     )
   })
 
-  it('cleans up newly uploaded public images when markdown save fails', async () => {
-    const editContext = createEditContext({
-      saveText: vi.fn(async () => {
-        throw new Error('保存失败。')
-      }),
-    })
-    vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile').mockResolvedValue(createPublicAsset({
-      assetId: 'asset_unsaved',
-      name: 'chart.png',
-      url: 'https://synapse.test/files/asset_unsaved',
-    }))
-    const trash = vi.spyOn(driveApi, 'trashPublicAsset').mockResolvedValue(createPublicAsset({
-      assetId: 'asset_unsaved',
-      lifecycleStatus: 'trashed',
-    }))
-    renderRenderer({ edit: editable(), editContext })
-
-    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
-    await click(buttonWithText('继续插入'))
-    await click(buttonWithText('保存'))
-
-    expect(editContext.saveText).toHaveBeenCalledWith({
-      text: '# Notes![chart](https://synapse.test/files/asset_unsaved)',
-      baseVersionId: 'version-1',
-    })
-    expect(trash).toHaveBeenCalledWith('asset_unsaved')
-    expect(editor().value).toBe('# Notes![chart](blob:synapse-test-1)')
-    expect(document.body.textContent).toContain('保存失败。')
-  })
-
-  it('cancels public image insertion without uploading', async () => {
-    const upload = vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
+  it('cancels platform image insertion without uploading', async () => {
+    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
     renderRenderer({ edit: editable() })
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
@@ -900,7 +755,7 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('rejects unsupported selected image formats before uploading', async () => {
-    const upload = vi.spyOn(driveBrowserApi, 'uploadPublicAssetFile')
+    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
     renderRenderer({ edit: editable() })
 
     await selectImage(new File(['<svg />'], 'vector.svg', { type: 'image/svg+xml' }))
@@ -1257,7 +1112,7 @@ function renderRenderer(input: {
   readonly edit?: DriveBrowserEditDto | null
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: ComponentProps<typeof DriveMDXeditorRenderer>['annotationContext']
-  readonly imageSourceContext?: ComponentProps<typeof DriveMDXeditorRenderer>['imageSourceContext']
+  readonly imageUploadContext?: ComponentProps<typeof DriveMDXeditorRenderer>['imageUploadContext']
 } = {}) {
   host = document.createElement('div')
   document.body.append(host)
@@ -1273,7 +1128,7 @@ function renderRenderer(input: {
           edit={nextInput.edit === undefined ? editable() : nextInput.edit}
           editContext={nextInput.editContext ?? createEditContext()}
           annotationContext={nextInput.annotationContext}
-          imageSourceContext={nextInput.imageSourceContext}
+          imageUploadContext={nextInput.imageUploadContext ?? { kind: 'owner', itemId: 'file' }}
         />
       </DriveRendererToolbarProvider>
     )
@@ -1409,73 +1264,14 @@ function editable(): DriveBrowserEditDto {
   }
 }
 
-function createPublicAsset(overrides: Partial<DrivePublicAssetDto> = {}): DrivePublicAssetDto {
+function createHostedImage(overrides: Partial<DriveHostedDocumentImageDto> = {}): DriveHostedDocumentImageDto {
   return {
-    assetId: 'asset_image',
-    itemId: 'item_image',
+    imageId: 'img_00000000000000000000000000000000',
     name: 'image.png',
     size: '5',
     mimeType: 'image/png',
-    url: 'https://synapse.test/files/asset_image',
-    lifecycleStatus: 'active',
-    accessCount: '0',
-    responseBytes: '0',
-    lastAccessedAt: null,
-    createdAt: '2026-06-27T00:00:00.000Z',
-    updatedAt: '2026-06-27T00:00:00.000Z',
+    url: '/object/img_00000000000000000000000000000000',
     ...overrides,
-  }
-}
-
-function imageSources(overrides: Partial<DriveDocumentImageSourcesDto> = {}): DriveDocumentImageSourcesDto {
-  const sources = overrides.sources ?? []
-  return {
-    itemId: 'file',
-    versionId: 'version-1',
-    canImport: false,
-    sources,
-    summary: {
-      total: sources.length,
-      ownerAsset: sources.filter((source) => source.kind === 'owner_asset').length,
-      collaboratorAsset: sources.filter((source) => source.kind === 'collaborator_asset').length,
-      external: sources.filter((source) => source.kind === 'external').length,
-      invalid: sources.filter((source) => source.kind === 'invalid').length,
-      unsupported: sources.filter((source) => source.kind === 'unsupported').length,
-      importable: sources.filter((source) => source.canImport).length,
-    },
-    ...overrides,
-  }
-}
-
-function imageSource(overrides: Partial<DriveDocumentImageSource> = {}): DriveDocumentImageSource {
-  return {
-    id: 'source-1',
-    imageKey: 'source-1',
-    src: 'https://example.test/image.png',
-    kind: 'external',
-    occurrenceCount: 1,
-    canImport: true,
-    status: 'ready',
-    ...overrides,
-  }
-}
-
-function imageImportResult() {
-  return {
-    itemId: 'file',
-    versionId: 'version-2',
-    imported: [{
-      previousSrc: 'https://example.test/external.png',
-      nextSrc: 'https://synapse.test/files/asset',
-      assetId: 'asset-1',
-      size: '10',
-    }],
-    failed: [],
-    summary: {
-      importedCount: 1,
-      failedCount: 0,
-      replacedOccurrenceCount: 1,
-    },
   }
 }
 

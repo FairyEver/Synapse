@@ -17,9 +17,9 @@ describe("terminal appearance", () => {
 
   it("keeps the existing 14px terminal size as medium", () => {
     expect(DEFAULT_TERMINAL_APPEARANCE_SIZE).toBe("medium")
-    expect(getTerminalAppearanceOptions("small").fontSize).toBe(12)
-    expect(getTerminalAppearanceOptions("medium").fontSize).toBe(14)
-    expect(getTerminalAppearanceOptions("large").fontSize).toBe(16)
+    expect(getTerminalAppearanceOptions("small")).toEqual({ fontSize: 12, lineHeight: 1.05 })
+    expect(getTerminalAppearanceOptions("medium")).toEqual({ fontSize: 14, lineHeight: 1.1 })
+    expect(getTerminalAppearanceOptions("large")).toEqual({ fontSize: 16, lineHeight: 1.1 })
   })
 
   it("persists semantic size values and ignores invalid stored values", () => {

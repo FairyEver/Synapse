@@ -153,6 +153,7 @@ describe('drive browser view model', () => {
         hidden: { count: 6, bytes: '32768' },
       },
       publicAssetRevisions: { count: 7, bytes: '65536' },
+      documentImages: { count: 8, bytes: '131072' },
       total: {
         quotaBytes: '131072',
         adminVisibleBytes: '262144',
@@ -167,6 +168,7 @@ describe('drive browser view model', () => {
 
     expect(summaryHtml).toContain('配额计入')
     expect(summaryHtml).toContain('后台留存')
+    expect(summaryHtml).toContain('文档图片')
     expect(summaryHtml).not.toContain('>合计<')
   })
 

@@ -18,9 +18,12 @@ import {
   terminalClosePaneInputSchema,
   terminalCloseWorkspaceInputSchema,
   terminalCloseWorkspaceResultSchema,
+  terminalCreateCustomToolbarActionInputSchema,
   terminalCreateGroupCommandInputSchema,
   terminalCreateGroupInputSchema,
   terminalCreateSessionInputSchema,
+  terminalCustomToolbarActionSchema,
+  terminalDeleteCustomToolbarActionInputSchema,
   terminalDeleteGroupCommandInputSchema,
   terminalDeleteGroupInputSchema,
   terminalDeleteSessionInputSchema,
@@ -50,6 +53,7 @@ import {
   terminalSplitPaneInputSchema,
   terminalSplitPaneResultSchema,
   terminalUpdateGroupCommandInputSchema,
+  terminalUpdateCustomToolbarActionInputSchema,
   terminalUpdateGlobalLaunchSettingsInputSchema,
   terminalUpdateGroupSettingsInputSchema,
   terminalWriteSessionInputSchema,
@@ -140,6 +144,37 @@ export const terminalIpcModule: IpcModule = {
       response: terminalGlobalLaunchSettingsSchema,
       handler: (ctx, request: z.infer<typeof terminalUpdateGlobalLaunchSettingsInputSchema>) =>
         resolveTerminalService(ctx).updateGlobalLaunchSettings(request),
+    },
+    listCustomToolbarActions: {
+      operationId: "app.terminal.toolbar_action.list",
+      kind: "invoke",
+      request: z.void(),
+      response: z.array(terminalCustomToolbarActionSchema),
+      handler: (ctx) => resolveTerminalService(ctx).listCustomToolbarActions(),
+    },
+    createCustomToolbarAction: {
+      operationId: "app.terminal.toolbar_action.create",
+      kind: "invoke",
+      request: terminalCreateCustomToolbarActionInputSchema,
+      response: terminalCustomToolbarActionSchema,
+      handler: (ctx, request: z.infer<typeof terminalCreateCustomToolbarActionInputSchema>) =>
+        resolveTerminalService(ctx).createCustomToolbarAction(request),
+    },
+    updateCustomToolbarAction: {
+      operationId: "app.terminal.toolbar_action.update",
+      kind: "invoke",
+      request: terminalUpdateCustomToolbarActionInputSchema,
+      response: terminalCustomToolbarActionSchema,
+      handler: (ctx, request: z.infer<typeof terminalUpdateCustomToolbarActionInputSchema>) =>
+        resolveTerminalService(ctx).updateCustomToolbarAction(request),
+    },
+    deleteCustomToolbarAction: {
+      operationId: "app.terminal.toolbar_action.delete",
+      kind: "invoke",
+      request: terminalDeleteCustomToolbarActionInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof terminalDeleteCustomToolbarActionInputSchema>) =>
+        resolveTerminalService(ctx).deleteCustomToolbarAction(request),
     },
     listGroups: {
       operationId: "app.terminal.group.list",

@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
-import { DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE } from "@synapse/shared"
+import { DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
@@ -112,24 +112,6 @@ describe("DrivePublicAssetService", () => {
 
     await expect(service.completeUpload("user-1", prepared.sessionId, { publicAppUrl: "https://synapse.example" }))
       .resolves.toMatchObject({ name: "notes.txt", mimeType: "text/plain" })
-  })
-
-  it("keeps Markdown image import helpers image-only", async () => {
-    await expect(service.importImageBuffer("user-1", "https://synapse.example", {
-      name: "notes.txt",
-      mimeType: "text/plain",
-      body: Buffer.from("hello"),
-    })).rejects.toThrow(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
-
-    const document = await seedPublicAsset({
-      prisma,
-      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
-      name: "notes.txt",
-      size: 5n,
-      mimeType: "text/plain",
-    })
-    await expect(service.copyPublicAssetToUser("user-2", document.assetId, "https://synapse.example"))
-      .rejects.toThrow(DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE)
   })
 
   it("rejects unsupported public asset MIME types", async () => {
@@ -388,36 +370,6 @@ describe("DrivePublicAssetService", () => {
     expect(trashed.assetId).toBe(asset.assetId)
     expect(trashed.url).toBe(`https://assets.example/files/${asset.assetId}`)
     expect(trashed.lifecycleStatus).toBe("trashed")
-  })
-
-  it("cleans imported assets by hiding them through the lifecycle service", async () => {
-    const asset = await seedPublicAsset({
-      prisma,
-      assetId: "asset_4Fz8kQ2mNv7RbP6xAa91Lc0Dm7Tn5YuZ",
-      name: "logo.png",
-      size: 8n,
-    })
-
-    await expect(service.cleanupImportedAsset("user-1", asset.assetId, { ipAddress: "127.0.0.1" }))
-      .resolves.toEqual({ ok: true })
-
-    const current = await prisma.publicAsset.findFirst({ where: { assetId: asset.assetId }, include: { item: true } })
-    expect(current?.lifecycleStatus).toBe(DRIVE_ITEM_LIFECYCLE_STATUS.hidden)
-    expect(current?.item.lifecycleStatus).toBe(DRIVE_ITEM_LIFECYCLE_STATUS.hidden)
-    expect(lifecycle.trashItem).toHaveBeenCalledWith(expect.objectContaining({
-      userId: "user-1",
-      itemId: asset.itemId,
-      actorId: "user-1",
-      ipAddress: "127.0.0.1",
-      allowPublicAsset: true,
-    }))
-    expect(lifecycle.hideTrashedItem).toHaveBeenCalledWith(expect.objectContaining({
-      userId: "user-1",
-      itemId: asset.itemId,
-      actorId: "user-1",
-      ipAddress: "127.0.0.1",
-      allowPublicAsset: true,
-    }))
   })
 
   it("renames with caller publicAppUrl while keeping assetId and URL identity", async () => {

@@ -4,6 +4,7 @@ import path from "node:path"
 import { z } from "zod"
 import { terminalOperationSchema } from "../shared/contract-schema"
 import {
+  terminalCustomToolbarActionSchema,
   terminalGlobalLaunchSettingsSchema,
   terminalGroupSchema,
   terminalOutputChunkSchema,
@@ -20,6 +21,7 @@ export const terminalStoreStateSchema = z.object({
     revision: 1,
     updatedAt: new Date(0).toISOString(),
   }),
+  toolbarActions: z.array(terminalCustomToolbarActionSchema).default([]),
   groups: z.array(terminalGroupSchema),
   workspaces: z.array(terminalWorkspaceSchema).default([]),
   sessions: z.array(terminalSessionSchema),
@@ -62,6 +64,7 @@ export type TerminalStore = {
   loadState(): Promise<TerminalStoreState>
   saveState(state: {
     globalLaunch: TerminalGlobalLaunchSettings
+    toolbarActions?: TerminalStoreState["toolbarActions"]
     groups: TerminalGroup[]
     workspaces?: TerminalWorkspace[]
     sessions: TerminalSession[]
@@ -87,6 +90,7 @@ export function createTerminalStore(options: { baseDir: string }): TerminalStore
         if (isNodeError(error) && error.code === "ENOENT") {
           return {
             globalLaunch: { revision: 1, updatedAt: new Date(0).toISOString() },
+            toolbarActions: [],
             groups: [],
             workspaces: [],
             sessions: [],

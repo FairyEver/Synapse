@@ -385,6 +385,9 @@ describe("SynapseSkillService", () => {
     expect(driveIndex).toContain("Treat explicitly selected inputs and the Markdown's referenced local assets as one publishing transaction")
     expect(driveIndex).toContain("upload every supported referenced local image as an ordinary Drive file")
     expect(driveIndex).toContain("Do not create public assets")
+    expect(driveIndex).toContain("platform-owned `/object/<objectId>` store")
+    expect(driveIndex).toContain("Do not send local Markdown dependencies to the browser-only `/object/` store")
+    expect(driveIndex).toContain("These assets belong to the user, consume Drive quota")
     expect(driveIndex).toContain("## Markdown Image Syntax")
     expect(driveIndex).toContain("Use the standard inline form `![alt](images/diagram.png)` by default")
     expect(driveIndex).toContain("Bare relative paths such as `images/diagram.png`")
@@ -417,6 +420,8 @@ describe("SynapseSkillService", () => {
     expect(driveApiText).toContain("Explicit Windows-style `.\\` and `..\\` paths are accepted as compatibility input")
     expect(driveApiText).toContain("a bare path such as `images\\diagram.png` is not accepted")
     expect(driveApiText).toContain("without rewriting the Markdown or converting images to public assets")
+    expect(driveApiText).toContain("no MCP upload, list, migration, or ownership operation")
+    expect(driveApiText).toContain("distinct from browser-editor `/object/<objectId>` uploads")
   })
 
   it("documents persistent local Drive sync without confusing it with upload or site republish", async () => {

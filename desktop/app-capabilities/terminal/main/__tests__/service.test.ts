@@ -10,6 +10,38 @@ const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", acto
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
 describe("TerminalService core", () => {
+  it("persists custom toolbar actions independently from built-in actions", async () => {
+    const store = memoryStore()
+    const service = createTerminalService({
+      store,
+      spawnPty: () => fakePty(),
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await service.start()
+
+    const created = await service.createCustomToolbarAction({
+      label: "  检查状态  ",
+      content: "  git status  ",
+      pressEnter: false,
+    })
+    expect(created).toMatchObject({ label: "检查状态", content: "git status", pressEnter: false, actionRevision: 1 })
+    expect(service.listCustomToolbarActions()).toEqual([created])
+    expect(store.state.toolbarActions).toEqual([created])
+
+    const updated = await service.updateCustomToolbarAction({
+      id: created.id,
+      label: "检查分支",
+      content: "git branch",
+      pressEnter: true,
+    })
+    expect(updated).toMatchObject({ label: "检查分支", content: "git branch", pressEnter: true, actionRevision: 2 })
+
+    await service.deleteCustomToolbarAction({ id: created.id })
+    expect(service.listCustomToolbarActions()).toEqual([])
+    expect(store.state.toolbarActions).toEqual([])
+  })
+
   it("marks a present node-pty spawn helper as executable", () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-helper-"))
     const filePath = path.join(root, "spawn-helper")
@@ -584,6 +616,34 @@ describe("TerminalService core", () => {
     expect(result).toMatchObject({ noOp: false, sizeRevision: 2 })
     expect(pty.resize).toHaveBeenCalledWith(120, 40)
     expect(service.getSession({ sessionId: session.id }).inputRevision).toBe(0)
+  })
+
+  it("debounces renderer resize persistence through the runtime store", async () => {
+    vi.useFakeTimers()
+    try {
+      const store = memoryStore()
+      const fullSave = vi.spyOn(store, "saveState")
+      const runtimeSave = vi.fn(async () => undefined)
+      store.saveRuntimeState = runtimeSave
+      const { service } = await startedHarness(store)
+      const session = await service.createSession({})
+      await service.flushPersistQueue()
+      fullSave.mockClear()
+
+      await service.resizeSession({ sessionId: session.id, cols: 100, rows: 30 })
+      await service.resizeSession({ sessionId: session.id, cols: 120, rows: 40 })
+      expect(fullSave).not.toHaveBeenCalled()
+      expect(runtimeSave).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(250)
+      await service.flushPersistQueue()
+
+      expect(fullSave).not.toHaveBeenCalled()
+      expect(runtimeSave).toHaveBeenCalledTimes(1)
+      expect(runtimeSave.mock.calls[0]?.[0].sessions[0]?.session).toMatchObject({ cols: 120, rows: 40 })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("attaches the renderer to the authoritative emulator snapshot", async () => {

@@ -52,6 +52,8 @@ import {
   type DriveBrowserCollaborationCapabilityDto,
   type DriveCollaborationCheckpointInput,
   type DriveCollaborationCheckpointResultDto,
+  type DriveDocumentImageUploadPrepareResult,
+  type DriveHostedDocumentImageDto,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
@@ -69,6 +71,7 @@ import {
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 import { mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
+import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import {
   extractDriveMarkdownRelativeImages,
   isPlainDriveMarkdownName,
@@ -380,6 +383,7 @@ export class DriveService implements OnApplicationBootstrap {
     @Optional() private readonly changes?: DriveChangeLogService,
     @Optional() private readonly projections?: DriveMarkdownProjectionService,
     @Optional() private readonly collaboration?: DriveCollaborationService,
+    @Optional() private readonly hostedDocumentImages?: DriveDocumentHostedImageService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -545,29 +549,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly body: DriveFileTextUpdateInput
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveFileContentUpdateResult> {
-    const access = await this.resolvePublicShareAccess({
-      shareId: input.shareId,
-      password: input.password,
-      cookie: input.cookie ?? input.accessCookie,
-    })
-    if (access.status !== "ok") throw createDriveShareUnlockRequiredException()
-    const share = access.value
-    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
-    if (current.type !== DRIVE_ITEM_TYPE.file) throw new BadRequestException("目标不是文件。")
-    const actor = await this.prisma.user.findUnique({
-      where: { id: input.actorUserId },
-      select: { email: true },
-    })
-    if (!actor) throw new UnauthorizedException("未登录或登录已过期。")
-    if (!canUserEditShare({
-      accessMode: share.accessMode,
-      actorUserId: input.actorUserId,
-      actorEmail: actor.email,
-      ownerId: share.ownerId,
-      editorEmails: share.editorEmails,
-    })) {
-      throw new ForbiddenException("没有编辑权限。")
-    }
+    const { share, current } = await this.requireEditableShareFile(input)
     if (input.actorUserId !== share.ownerId && isPlainDriveMarkdownName(current.name)) {
       await this.assertShareMarkdownRelativeImageEditAllowed({
         share,
@@ -587,59 +569,64 @@ export class DriveService implements OnApplicationBootstrap {
     })
   }
 
-  async getOwnerMarkdownImageDocument(input: {
-    readonly actorUserId: string
-    readonly itemId: string
-  }): Promise<{ readonly itemId: string; readonly ownerId: string; readonly versionId: string | null; readonly markdown: string }> {
-    const item = await this.requireOwnedItem(input.actorUserId, input.itemId) as DriveItemRecordWithStorage
-    this.assertActiveBrowserItem(item)
-    this.assertEditableTextFile(item)
-    const storageKey = this.requireActiveFileStorage(item)
-    const markdown = await this.readInlineEditableTextFile(storageKey)
-    return {
-      itemId: item.id,
-      ownerId: item.userId,
-      versionId: await this.findCurrentDriveFileVersionId(item),
-      markdown,
-    }
+  async prepareOwnerDocumentImageUpload(userId: string, itemId: string, input: {
+    readonly name: string
+    readonly size: string
+    readonly mimeType: string
+  }): Promise<DriveDocumentImageUploadPrepareResult> {
+    const item = await this.requireOwnedFile(userId, itemId) as DriveItemRecordWithStorage
+    this.assertDocumentImageUploadTarget(item)
+    return this.requireHostedDocumentImages().prepareUpload({ actorUserId: userId, sourceItemId: item.id, ...input })
   }
 
-  async getShareMarkdownImageDocument(input: {
+  async completeOwnerDocumentImageUpload(userId: string, itemId: string, sessionId: string): Promise<DriveHostedDocumentImageDto> {
+    const item = await this.requireOwnedFile(userId, itemId) as DriveItemRecordWithStorage
+    this.assertDocumentImageUploadTarget(item)
+    return this.requireHostedDocumentImages().completeUpload({ actorUserId: userId, sourceItemId: item.id, sessionId })
+  }
+
+  async cancelOwnerDocumentImageUpload(userId: string, itemId: string, sessionId: string): Promise<{ readonly ok: true }> {
+    const item = await this.requireOwnedFile(userId, itemId) as DriveItemRecordWithStorage
+    this.assertDocumentImageUploadTarget(item)
+    return this.requireHostedDocumentImages().cancelUpload({ actorUserId: userId, sourceItemId: item.id, sessionId })
+  }
+
+  async prepareShareDocumentImageUpload(input: {
     readonly actorUserId: string
     readonly shareId: string
     readonly itemId?: string | null
     readonly cookie?: string
-    readonly accessCookie?: string
-  }): Promise<{ readonly itemId: string; readonly ownerId: string; readonly versionId: string | null; readonly markdown: string }> {
-    const access = await this.resolvePublicShareAccess({
-      shareId: input.shareId,
-      cookie: input.cookie ?? input.accessCookie,
-    })
-    if (access.status !== "ok") throw createDriveShareUnlockRequiredException()
-
-    const { current } = await this.resolveShareBrowserCurrent(access.value, input.itemId)
-    this.assertActiveBrowserItem(current)
-    this.assertEditableTextFile(current)
-    const storageKey = this.requireActiveFileStorage(current)
-    const markdown = await this.readInlineEditableTextFile(storageKey)
-    return {
-      itemId: current.id,
-      ownerId: access.value.ownerId,
-      versionId: await this.findCurrentDriveFileVersionId(current),
-      markdown,
-    }
+    readonly name: string
+    readonly size: string
+    readonly mimeType: string
+  }): Promise<DriveDocumentImageUploadPrepareResult> {
+    const { current } = await this.requireEditableShareFile(input)
+    this.assertDocumentImageUploadTarget(current)
+    return this.requireHostedDocumentImages().prepareUpload({ actorUserId: input.actorUserId, sourceItemId: current.id, name: input.name, size: input.size, mimeType: input.mimeType })
   }
 
-  async findPublicAssetOwner(assetId: string): Promise<string | null> {
-    const asset = await this.prisma.publicAsset.findFirst({
-      where: {
-        assetId,
-        deletedAt: null,
-        lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
-      },
-      select: { userId: true },
-    })
-    return asset?.userId ?? null
+  async completeShareDocumentImageUpload(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly cookie?: string
+    readonly sessionId: string
+  }): Promise<DriveHostedDocumentImageDto> {
+    const { current } = await this.requireEditableShareFile(input)
+    this.assertDocumentImageUploadTarget(current)
+    return this.requireHostedDocumentImages().completeUpload({ actorUserId: input.actorUserId, sourceItemId: current.id, sessionId: input.sessionId })
+  }
+
+  async cancelShareDocumentImageUpload(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly cookie?: string
+    readonly sessionId: string
+  }): Promise<{ readonly ok: true }> {
+    const { current } = await this.requireEditableShareFile(input)
+    this.assertDocumentImageUploadTarget(current)
+    return this.requireHostedDocumentImages().cancelUpload({ actorUserId: input.actorUserId, sourceItemId: current.id, sessionId: input.sessionId })
   }
 
   async deleteFileVersion(userId: string, itemId: string, versionId: string, auditContext: DriveAuditContext = {}): Promise<{ readonly ok: true; readonly deletePending?: boolean }> {
@@ -2602,7 +2589,10 @@ export class DriveService implements OnApplicationBootstrap {
     const publicAssetBucket = buildAdminStorageBucket(publicAssetGroups)
     const revisionBytes = publicAssetRevisionAggregate._sum.size ?? 0n
     const quotaBytes = bucketQuotaBytes(normalDrive) + bucketQuotaBytes(publicAssetBucket)
-    const adminVisibleBytes = quotaBytes + BigInt(normalDrive.hidden.bytes) + BigInt(publicAssetBucket.hidden.bytes) + revisionBytes
+    const documentImages = this.hostedDocumentImages
+      ? await this.hostedDocumentImages.getStorageSummary()
+      : { count: 0, bytes: "0" }
+    const adminVisibleBytes = quotaBytes + BigInt(normalDrive.hidden.bytes) + BigInt(publicAssetBucket.hidden.bytes) + revisionBytes + BigInt(documentImages.bytes)
     return {
       normalDrive,
       publicAssets: publicAssetBucket,
@@ -2610,6 +2600,7 @@ export class DriveService implements OnApplicationBootstrap {
         count: publicAssetRevisionAggregate._count._all,
         bytes: revisionBytes.toString(),
       },
+      documentImages,
       total: {
         quotaBytes: quotaBytes.toString(),
         adminVisibleBytes: adminVisibleBytes.toString(),
@@ -2951,6 +2942,9 @@ export class DriveService implements OnApplicationBootstrap {
           actor: input.actorUserId,
         }, tx)
         const collaborationEpoch = await this.collaboration?.replaceEpochInTransaction(tx, item.id, version.id)
+        if (resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item)) === "markdown") {
+          await this.hostedDocumentImages?.activateReferencedImages(tx, { sourceItemId: item.id, markdown: input.input.text })
+        }
         return { item, version, collaborationEpoch }
       })
       committed = true
@@ -2988,6 +2982,48 @@ export class DriveService implements OnApplicationBootstrap {
     if (item.type !== DRIVE_ITEM_TYPE.file || !item.storageKey) throw new BadRequestException("目标不是文件。")
     const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item))
     if (!isDriveTextEditablePreviewKind(previewKind)) throw new BadRequestException("文件类型暂不支持编辑。")
+  }
+
+  private assertDocumentImageUploadTarget(item: DriveItemRecordWithStorage): void {
+    this.assertActiveBrowserItem(item)
+    this.assertEditableTextFile(item)
+    if (resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(item)) !== "markdown") {
+      throw new BadRequestException("仅 Markdown 文档支持插入图片。")
+    }
+  }
+
+  private requireHostedDocumentImages(): DriveDocumentHostedImageService {
+    if (!this.hostedDocumentImages) throw new Error("DriveDocumentHostedImageService is not available.")
+    return this.hostedDocumentImages
+  }
+
+  private async requireEditableShareFile(input: {
+    readonly actorUserId: string
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly accessCookie?: string
+  }): Promise<{ readonly share: DrivePublicShareValue; readonly current: DriveItemRecordWithStorage }> {
+    const access = await this.resolvePublicShareAccess({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie ?? input.accessCookie,
+    })
+    if (access.status !== "ok") throw createDriveShareUnlockRequiredException()
+    const share = access.value
+    const { current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    if (current.type !== DRIVE_ITEM_TYPE.file) throw new BadRequestException("目标不是文件。")
+    const actor = await this.prisma.user.findUnique({ where: { id: input.actorUserId }, select: { email: true } })
+    if (!actor) throw new UnauthorizedException("未登录或登录已过期。")
+    if (!canUserEditShare({
+      accessMode: share.accessMode,
+      actorUserId: input.actorUserId,
+      actorEmail: actor.email,
+      ownerId: share.ownerId,
+      editorEmails: share.editorEmails,
+    })) throw new ForbiddenException("没有编辑权限。")
+    return { share, current }
   }
 
   private async buildCollaborationCapability(

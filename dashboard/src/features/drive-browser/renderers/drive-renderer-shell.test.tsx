@@ -222,7 +222,7 @@ describe('DriveRendererShell', () => {
     expect(html).not.toContain('overflow-auto"><div class="min-h-full bg-background"')
   })
 
-  it('keeps editable share markdown toolbar registration stable', () => {
+  it('does not render the retired image-source action for editable share markdown', () => {
     const snapshot = baseSnapshot({
       context: 'share',
       current: {
@@ -265,7 +265,7 @@ describe('DriveRendererShell', () => {
     })
 
     expect(document.body.textContent).toContain('Notes')
-    expect(Array.from(document.querySelectorAll('button')).filter((button) => button.textContent?.trim() === '图片来源')).toHaveLength(1)
+    expect(document.body.textContent).not.toContain('图片来源')
   })
 })
 
