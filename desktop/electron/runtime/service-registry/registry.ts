@@ -27,6 +27,7 @@ import type {
   ServiceInspectEntry,
   ServiceProcessKind,
   ServiceRegistry,
+  ServiceStartupPhase,
   ServiceStatus,
   StartAllResult,
 } from "./types"
@@ -37,6 +38,7 @@ export interface RegistryEntry {
   instance?: unknown
   lastError?: Error
   startedAt?: number
+  startupDurationMs?: number
 }
 
 export interface ServiceRegistryOptions {
@@ -48,6 +50,7 @@ export interface ServiceRegistryOptions {
 
 const DEFAULT_PER_SERVICE_STOP_TIMEOUT_MS = 5000
 const MIN_STOP_TIMEOUT_AFTER_DEADLINE_MS = 100
+const SLOW_SERVICE_START_MS = 1_000
 
 export class ServiceRegistryImpl implements ServiceRegistry {
   protected readonly entries = new Map<string, RegistryEntry>()
@@ -56,6 +59,9 @@ export class ServiceRegistryImpl implements ServiceRegistry {
   protected readonly perServiceStopTimeoutMs: number
   protected sealed = false
   protected cachedContext: ServiceContext | null = null
+  private blockingStartPromise: Promise<StartAllResult> | null = null
+  private backgroundStartPromise: Promise<StartAllResult> | null = null
+  private allStartPromise: Promise<StartAllResult> | null = null
 
   constructor(options: ServiceRegistryOptions) {
     this.contextProvider = options.contextProvider
@@ -105,9 +111,11 @@ export class ServiceRegistryImpl implements ServiceRegistry {
         id,
         status: entry.status,
         criticality: entry.descriptor.criticality,
+        startupPhase: entry.descriptor.startupPhase ?? "blocking",
         dependsOn: entry.descriptor.dependsOn ?? [],
         startAfter: entry.descriptor.startAfter ?? [],
         runIn,
+        startupDurationMs: entry.startupDurationMs,
         lastError: entry.lastError,
       }
     })
@@ -119,7 +127,29 @@ export class ServiceRegistryImpl implements ServiceRegistry {
     return sorted.map((n) => this.requireEntry(n.id).descriptor)
   }
 
-  async startAll(): Promise<StartAllResult> {
+  startBlocking(): Promise<StartAllResult> {
+    this.blockingStartPromise ??= this.startPhase("blocking")
+    return this.blockingStartPromise
+  }
+
+  startBackground(): Promise<StartAllResult> {
+    this.backgroundStartPromise ??= (async () => {
+      await this.startBlocking()
+      return this.startPhase("background")
+    })()
+    return this.backgroundStartPromise
+  }
+
+  startAll(): Promise<StartAllResult> {
+    this.allStartPromise ??= (async () => {
+      const blocking = await this.startBlocking()
+      const background = await this.startBackground()
+      return { degraded: [...blocking.degraded, ...background.degraded] }
+    })()
+    return this.allStartPromise
+  }
+
+  private async startPhase(phase: ServiceStartupPhase): Promise<StartAllResult> {
     this.sealed = true
     const order = this.planStartOrder()
     const context = this.getContext()
@@ -129,12 +159,13 @@ export class ServiceRegistryImpl implements ServiceRegistry {
     const failedOrSkippedIds = new Set<string>()
 
     for (const descriptor of order) {
+      if ((descriptor.startupPhase ?? "blocking") !== phase) continue
       const entry = this.requireEntry(descriptor.id)
 
       // Only hard dependency failures propagate. startAfter edges constrain
       // ordering without propagating a degraded failure through this edge.
       const depFailed = (descriptor.dependsOn ?? []).some((dep) =>
-        failedOrSkippedIds.has(dep),
+        failedOrSkippedIds.has(dep) || this.requireEntry(dep).status === "failed",
       )
       if (depFailed) {
         const cause = new Error(`dependency failed for "${descriptor.id}"`)
@@ -151,6 +182,11 @@ export class ServiceRegistryImpl implements ServiceRegistry {
       }
 
       entry.status = "starting"
+      const startTime = Date.now()
+      context.logger.info("Service startup started.", {
+        serviceId: descriptor.id,
+        startupPhase: phase,
+      })
       try {
         const instance = await descriptor.create(context)
         entry.instance = instance
@@ -159,10 +195,26 @@ export class ServiceRegistryImpl implements ServiceRegistry {
         }
         entry.status = "running"
         entry.startedAt = Date.now()
+        entry.startupDurationMs = entry.startedAt - startTime
+        const log = entry.startupDurationMs >= SLOW_SERVICE_START_MS
+          ? context.logger.warn.bind(context.logger)
+          : context.logger.info.bind(context.logger)
+        log("Service startup completed.", {
+          serviceId: descriptor.id,
+          startupPhase: phase,
+          durationMs: entry.startupDurationMs,
+        })
       } catch (rawErr) {
         const err = rawErr instanceof Error ? rawErr : new Error(String(rawErr))
         entry.status = "failed"
         entry.lastError = err
+        entry.startupDurationMs = Date.now() - startTime
+        context.logger.warn("Service startup failed.", {
+          serviceId: descriptor.id,
+          startupPhase: phase,
+          durationMs: entry.startupDurationMs,
+          ...errorLogMeta(err),
+        })
         if (descriptor.criticality === "fatal") {
           failedFatalIds.add(descriptor.id)
           failedOrSkippedIds.add(descriptor.id)

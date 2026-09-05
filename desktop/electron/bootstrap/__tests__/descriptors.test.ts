@@ -2220,6 +2220,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { coreUpdateDescriptor } = await importBootstrap()
     expect(coreUpdateDescriptor.id).toBe("core.update")
     expect(coreUpdateDescriptor.criticality).toBe("degraded")
+    expect(coreUpdateDescriptor.startupPhase).toBe("background")
     expect(coreUpdateDescriptor.dependsOn).toEqual([
       "core.config",
       "core.window-manager",
@@ -2286,6 +2287,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { repoWatchDescriptor } = await importBootstrap()
     expect(repoWatchDescriptor.id).toBe("repo.watch")
     expect(repoWatchDescriptor.criticality).toBe("degraded")
+    expect(repoWatchDescriptor.startupPhase).toBe("background")
     expect(repoWatchDescriptor.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(repoWatchDescriptor.stop).toBeTypeOf("function")
   })
@@ -2294,6 +2296,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { repoMaintenanceDescriptor } = await importBootstrap()
     expect(repoMaintenanceDescriptor.id).toBe("repo.maintenance")
     expect(repoMaintenanceDescriptor.criticality).toBe("degraded")
+    expect(repoMaintenanceDescriptor.startupPhase).toBe("background")
     expect(repoMaintenanceDescriptor.dependsOn).toEqual(["repo.watch", "repo.pending-pushes"])
   })
 
@@ -2341,6 +2344,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const desc = createUiTrayDescriptor(cb)
     expect(desc.id).toBe("ui.tray")
     expect(desc.criticality).toBe("degraded")
+    expect(desc.startupPhase).toBe("background")
     expect(desc.dependsOn).toEqual(["core.app-icon"])
     expect(desc.stop).toBeTypeOf("function")
   })

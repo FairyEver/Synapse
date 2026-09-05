@@ -67,7 +67,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     logger.warn("Install status cache initialization failed.", { error })
   })
 
-  const result = await registry.startAll().catch(async (startErr) => {
+  const result = await registry.startBlocking().catch(async (startErr) => {
     await registry.stopAll(10_000).catch((stopErr) => {
       logger.error("stopAll failed during fatal startup cleanup.", { error: stopErr })
     })
@@ -168,6 +168,19 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     setAllowQuit: deps.setAllowAppQuit,
     isAllowedToQuit: deps.isAppQuitting,
   })
+
+  void registry.startBackground()
+    .then((backgroundResult) => {
+      for (const failure of backgroundResult.degraded) {
+        logger.warn("Background service started in degraded state.", {
+          id: failure.id,
+          error: failure.error,
+        })
+      }
+    })
+    .catch((error) => {
+      logger.error("Background service startup failed.", { error })
+    })
 }
 
 export { initializeReadyApp }

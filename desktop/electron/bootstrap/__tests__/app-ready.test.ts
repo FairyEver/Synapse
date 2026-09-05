@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => {
       if (id === "knowledge-base.storage-migration-service") return {}
       throw new Error(`Unknown service: ${id}`)
     }),
-    startAll: vi.fn(async () => ({ degraded: [] })),
+    startBlocking: vi.fn(async () => ({ degraded: [] })),
+    startBackground: vi.fn(async () => ({ degraded: [] })),
     stopAll: vi.fn(async () => undefined),
   }
 
@@ -150,6 +151,7 @@ describe("initializeReadyApp", () => {
     })
     expect(mocks.editorInstallService.addPreparedSourceProvider).toHaveBeenCalledOnce()
     expect(mocks.registry.get).toHaveBeenCalledWith("core.synapse-skill")
+    expect(mocks.registry.startBackground).toHaveBeenCalledOnce()
   })
 
   it("skips the normal main window before routing a cold-start install protocol URL", async () => {

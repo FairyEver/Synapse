@@ -32,9 +32,11 @@ describe("ServiceRegistry register/inspect (T1.3)", () => {
       id: "a",
       status: "pending",
       criticality: "fatal",
+      startupPhase: "blocking",
       dependsOn: [],
       startAfter: [],
       runIn: "main",
+      startupDurationMs: undefined,
       lastError: undefined,
     })
   })

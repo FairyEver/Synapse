@@ -1563,6 +1563,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
  */
 export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
   id: "core.update",
+  startupPhase: "background",
   criticality: "degraded",
   dependsOn: [
     "core.config",
@@ -1608,6 +1609,7 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
  */
 export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
   id: "repo.watch",
+  startupPhase: "background",
   criticality: "degraded",
   dependsOn: ["core.config", "core.event-bus"],
   async create(ctx) {
@@ -1666,6 +1668,7 @@ export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
  */
 export const repoMaintenanceDescriptor: ServiceDescriptor<typeof repositoryMaintenanceService> = {
   id: "repo.maintenance",
+  startupPhase: "background",
   criticality: "degraded",
   dependsOn: ["repo.watch", "repo.pending-pushes"],
   create(ctx) {
@@ -1731,6 +1734,7 @@ export function createUiTrayDescriptor(
 ): ServiceDescriptor<{ initialized: true }> {
   return {
     id: "ui.tray",
+    startupPhase: "background",
     criticality: "degraded",
     dependsOn: ["core.app-icon"],
     create() {
@@ -1861,6 +1865,7 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
 
 export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = {
   id: "core.diagnostics",
+  startupPhase: "background",
   criticality: "degraded",
   dependsOn: [
     "core.process-environment",

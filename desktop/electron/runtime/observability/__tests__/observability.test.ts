@@ -181,6 +181,7 @@ describe("DiagnosticsCollector (T6.5)", () => {
           id: "core.config",
           status: "running",
           criticality: "fatal",
+          startupPhase: "blocking",
           dependsOn: [],
           startAfter: [],
           runIn: "main",

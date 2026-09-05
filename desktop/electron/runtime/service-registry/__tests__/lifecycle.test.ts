@@ -43,6 +43,30 @@ const tracingDescriptor = (
 })
 
 describe("ServiceRegistry.startAll lifecycle (T1.4)", () => {
+  it("starts blocking services before background services", async () => {
+    const trace = makeTrace()
+    const registry = createServiceRegistry()
+    registry.register(tracingDescriptor(trace, "blocking"))
+    registry.register(tracingDescriptor(trace, "background", [], {
+      startupPhase: "background",
+    }))
+
+    await registry.startBlocking()
+    expect(trace.events).toEqual(["create:blocking", "start:blocking"])
+    expect(registry.inspect()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "blocking", status: "running", startupPhase: "blocking" }),
+      expect.objectContaining({ id: "background", status: "pending", startupPhase: "background" }),
+    ]))
+
+    await registry.startBackground()
+    expect(trace.events).toEqual([
+      "create:blocking",
+      "start:blocking",
+      "create:background",
+      "start:background",
+    ])
+  })
+
   it("creates and starts services in dependency order", async () => {
     const trace = makeTrace()
     const registry = createServiceRegistry()

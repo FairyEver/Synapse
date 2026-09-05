@@ -33,6 +33,8 @@ export interface HealthStatus {
 
 export type ServiceCriticality = "fatal" | "degraded"
 
+export type ServiceStartupPhase = "blocking" | "background"
+
 export type ServiceStatus =
   | "pending"
   | "starting"
@@ -56,6 +58,8 @@ export interface ServiceContext {
 
 export interface ServiceDescriptor<Instance = unknown> {
   readonly id: string
+  /** Default "blocking". Background services start after the main window is created. */
+  readonly startupPhase?: ServiceStartupPhase
   /** Hard dependencies control start order and propagate startup failures. */
   readonly dependsOn?: readonly string[]
   /**
@@ -79,9 +83,11 @@ export interface ServiceInspectEntry {
   readonly id: string
   readonly status: ServiceStatus
   readonly criticality: ServiceCriticality
+  readonly startupPhase: ServiceStartupPhase
   readonly dependsOn: readonly string[]
   readonly startAfter: readonly string[]
   readonly runIn: ServiceProcessKind
+  readonly startupDurationMs?: number
   readonly lastError?: Error
 }
 
@@ -96,6 +102,8 @@ export interface StartAllResult {
 
 export interface ServiceRegistry {
   register<T>(descriptor: ServiceDescriptor<T>): void
+  startBlocking(): Promise<StartAllResult>
+  startBackground(): Promise<StartAllResult>
   startAll(): Promise<StartAllResult>
   stopAll(timeoutMs: number): Promise<void>
   get<T>(id: string): T
