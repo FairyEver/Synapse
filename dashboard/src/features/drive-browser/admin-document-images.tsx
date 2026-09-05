@@ -88,7 +88,7 @@ export function AdminDocumentImages() {
     {
       accessorKey: 'createdAt',
       header: ({ column }) => <DataTableColumnHeader column={column} title='上传时间' />,
-      cell: ({ row }) => <RelativeTime date={row.original.createdAt} />,
+      cell: ({ row }) => <RelativeTime className='tabular-nums' value={row.original.createdAt} />,
       meta: { className: 'w-36' },
     },
     {
@@ -97,16 +97,16 @@ export function AdminDocumentImages() {
       enableSorting: false,
       cell: ({ row }) => (
         <div className='flex justify-end gap-1'>
-          <Button type='button' variant='ghost' size='icon-sm' aria-label='打开图片' onClick={() => window.open(adminApi.documentImageOpenUrl(row.original.imageId), '_blank', 'noopener,noreferrer')}>
+          <Button type='button' variant='ghost' size='icon' className='size-8' aria-label='打开图片' onClick={() => window.open(adminApi.documentImageOpenUrl(row.original.imageId), '_blank', 'noopener,noreferrer')}>
             <Eye />
           </Button>
           {row.original.status === 'quarantined' ? (
             <>
-              <Button type='button' variant='ghost' size='icon-sm' aria-label='恢复图片' disabled={restore.isPending} onClick={() => restore.mutate(row.original.imageId)}><RotateCcw /></Button>
-              <Button type='button' variant='ghost' size='icon-sm' aria-label='删除图片' disabled={remove.isPending} onClick={() => setDeleteTarget(row.original)}><Trash2 /></Button>
+              <Button type='button' variant='ghost' size='icon' className='size-8' aria-label='恢复图片' disabled={restore.isPending} onClick={() => restore.mutate(row.original.imageId)}><RotateCcw /></Button>
+              <Button type='button' variant='ghost' size='icon' className='size-8' aria-label='删除图片' disabled={remove.isPending} onClick={() => setDeleteTarget(row.original)}><Trash2 /></Button>
             </>
           ) : (
-            <Button type='button' variant='ghost' size='icon-sm' aria-label='隔离图片' disabled={quarantine.isPending || row.original.status === 'delete_pending'} onClick={() => quarantine.mutate(row.original.imageId)}><ShieldBan /></Button>
+            <Button type='button' variant='ghost' size='icon' className='size-8' aria-label='隔离图片' disabled={quarantine.isPending || row.original.status === 'delete_pending'} onClick={() => quarantine.mutate(row.original.imageId)}><ShieldBan /></Button>
           )}
         </div>
       ),
@@ -133,6 +133,7 @@ export function AdminDocumentImages() {
       />
       <ConfirmDialog
         open={Boolean(deleteTarget)}
+        contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
         onOpenChange={(open) => { if (!open && !remove.isPending) setDeleteTarget(null) }}
         title='永久删除图片'
         desc={deleteTarget ? `永久删除「${deleteTarget.name}」？` : ''}

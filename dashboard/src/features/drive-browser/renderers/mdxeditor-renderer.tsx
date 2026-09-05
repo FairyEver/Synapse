@@ -101,11 +101,6 @@ type PendingDocumentImageUpload = {
   readonly reject?: (error: Error) => void
 }
 
-type PublicImageUploadInput = {
-  readonly name: string
-  readonly mimeType: DrivePublicAssetImageMimeType
-}
-
 type DrivePublicAssetImageMimeType = typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION[keyof typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION]
 
 const DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES = Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION) as readonly DrivePublicAssetImageMimeType[]
