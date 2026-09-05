@@ -29,6 +29,10 @@ export function createFileBackedDataRepository(
 
   const repo = new DataRepositoryImpl()
   let sqliteDb: ReturnType<typeof openSqliteDatabase> | null = null
+  const getSqliteDb = () => {
+    sqliteDb ??= openSqliteDatabase(path.join(options.rootDir, "runtime.sqlite"))
+    return sqliteDb
+  }
 
   for (const schema of allSchemas) {
     const recordSchema = schema as NamespaceSchema<RecordValue>
@@ -68,13 +72,12 @@ export function createFileBackedDataRepository(
         }))
         break
       case "sqlite": {
-        sqliteDb ??= openSqliteDatabase(path.join(options.rootDir, "runtime.sqlite"))
         const identifiedSchema = schema as NamespaceSchema<IdentifiedRecordValue>
         repo.register(identifiedSchema, new SqliteNamespace({
           name: schema.name,
           schemaVersion: schema.currentVersion,
           backend: "sqlite",
-          database: sqliteDb,
+          database: getSqliteDb,
           indexes: sqliteIndexesFor(schema.name),
           defaults: identifiedSchema.defaults,
           validate: identifiedSchema.validate,

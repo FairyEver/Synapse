@@ -76,3 +76,4 @@
 - shell、userData 外写文件、网络连接、扩展加载、agent spawn、secret 访问等敏感操作必须经过 `PermissionGuard.check()` 并写入 `AuditSink`。
 - 生产日志使用结构化 logger，不记录正文、token、Authorization、Cookie、secret、未脱敏输入或原始异常堆栈中可能包含的敏感数据。
 - 日志和审计需要保留排障所需普通路径与资源身份，但不能把脱敏摘要误当作运行输入。
+- Agent 回复 Outbox 只保存已有外部 dispatcher 接管的投递事件；本地 Renderer 通过 EventBus 接收事件，不得为其复制 Outbox 记录。已发送记录按回复目标保留最近 500 条，清理必须覆盖先前进程留下的数据，待发送和失败记录不得随已发送记录一起删除。

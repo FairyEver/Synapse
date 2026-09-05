@@ -220,6 +220,30 @@ describe("JsonLinesNamespace (T2.4)", () => {
     }
   })
 
+  it("appends without parsing existing history", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "audit.jsonl")
+    try {
+      await writeFile(
+        file,
+        '{"__synapse_jsonl__":1,"schemaVersion":1}\nNOT_JSON\n',
+        "utf8",
+      )
+      const ns = new JsonLinesNamespace<AuditEvent>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: file,
+      })
+
+      await expect(ns.upsert({ id: "new", action: "y", outcome: "denied" }))
+        .resolves.toBeUndefined()
+      await expect(ns.list()).rejects.toBeInstanceOf(InvalidNamespaceDataError)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("missing id field on a non-header line is rejected", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "audit.jsonl")

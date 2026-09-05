@@ -162,6 +162,7 @@ describe("ConversationRouter", () => {
     } as unknown as NonNullable<ConversationRouterDeps["outbox"]>
     const replyTargets = {
       rememberReplyTarget: vi.fn(),
+      canDispatchAgentEvent: vi.fn(() => true),
       dispatchAgentEvent: vi.fn(async () => {}),
     }
     const { router } = createRouter({
@@ -178,6 +179,31 @@ describe("ConversationRouter", () => {
     expect(outbox.recordAgentEvent).toHaveBeenCalled()
     expect(replyTargets.dispatchAgentEvent).not.toHaveBeenCalled()
     expect(outbox.updateRecordStatus).not.toHaveBeenCalled()
+  })
+
+  it("does not create outbox rows when no external dispatcher owns the target", async () => {
+    const outbox = {
+      recordAgentEvent: vi.fn(async () => "outbox-1"),
+      updateRecordStatus: vi.fn(),
+    } as unknown as NonNullable<ConversationRouterDeps["outbox"]>
+    const replyTargets = {
+      rememberReplyTarget: vi.fn(),
+      canDispatchAgentEvent: vi.fn(() => false),
+      dispatchAgentEvent: vi.fn(async () => {}),
+    }
+    const { router } = createRouter({
+      outbox,
+      replyTargets,
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true },
+      ]),
+    })
+
+    await router.send(baseMessage("hello"))
+    await flushAsync()
+
+    expect(outbox.recordAgentEvent).not.toHaveBeenCalled()
+    expect(replyTargets.dispatchAgentEvent).not.toHaveBeenCalled()
   })
 
   it("returns an error event when governance blocks a message", async () => {

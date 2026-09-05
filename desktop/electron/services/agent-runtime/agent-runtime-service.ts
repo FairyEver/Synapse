@@ -209,6 +209,7 @@ export interface AgentRuntimeServiceDeps {
     void | AgentProjectAfterTurnOutput | Promise<void | AgentProjectAfterTurnOutput>
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
+    canDispatchAgentEvent?(target: ReplyTarget): boolean
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
     getAgentEnv(projectId: string, sessionKey: string): Record<string, string> | undefined
   }

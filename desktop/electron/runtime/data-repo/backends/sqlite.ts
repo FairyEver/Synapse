@@ -44,7 +44,7 @@ const SAFE_JSON_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 export interface SqliteBackendDeps<T> extends NamespaceBaseDeps<T> {
   /** Shared database handle. Multiple namespaces can share the same db. */
-  readonly database: DatabaseSync
+  readonly database: DatabaseSync | (() => DatabaseSync)
   readonly indexes?: readonly string[]
   readonly validate?: (data: unknown) => data is T
 }
@@ -52,7 +52,9 @@ export interface SqliteBackendDeps<T> extends NamespaceBaseDeps<T> {
 export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   extends AbstractDataNamespace<T>
 {
-  private readonly database: DatabaseSync
+  private readonly databaseProvider: () => DatabaseSync
+  private database: DatabaseSync | null = null
+  private schemaReady = false
   private readonly tableName: string
   private readonly indexes: readonly string[]
   private readonly validate?: (data: unknown) => data is T
@@ -66,15 +68,18 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
 
   constructor(deps: SqliteBackendDeps<T>) {
     super({ ...deps, backend: "sqlite" })
-    this.database = deps.database
+    this.databaseProvider = typeof deps.database === "function"
+      ? deps.database
+      : () => deps.database as DatabaseSync
     this.tableName = sanitizeTableName(deps.name)
     this.indexes = deps.indexes ?? []
     this.validate = deps.validate
-    this.ensureSchema()
   }
 
   private ensureSchema(): void {
-    this.database.exec(`
+    if (this.schemaReady) return
+    const database = this.getDatabase()
+    database.exec(`
       CREATE TABLE IF NOT EXISTS ${META_TABLE} (
         namespace TEXT PRIMARY KEY,
         schema_version INTEGER NOT NULL
@@ -89,36 +94,44 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     let i = 0
     for (const expr of this.indexes) {
       const indexName = `idx_${this.tableName}_${i++}`
-      this.database.exec(
+      database.exec(
         `CREATE INDEX IF NOT EXISTS ${indexName} ON ${this.tableName}(${expr});`,
       )
     }
 
-    const upsertMeta = this.database.prepare(
+    const upsertMeta = database.prepare(
       `INSERT INTO ${META_TABLE}(namespace, schema_version) VALUES (?, ?)
        ON CONFLICT(namespace) DO UPDATE SET schema_version=excluded.schema_version;`,
     )
     upsertMeta.run(this.name, this.schemaVersion)
+    this.schemaReady = true
+  }
+
+  private getDatabase(): DatabaseSync {
+    this.database ??= this.databaseProvider()
+    return this.database
   }
 
   private prep() {
     if (this.prepared) return this.prepared
+    this.ensureSchema()
+    const database = this.getDatabase()
     this.prepared = {
-      upsert: this.database.prepare(
+      upsert: database.prepare(
         `INSERT INTO ${this.tableName}(id, value, created_at, updated_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;`,
       ),
-      get: this.database.prepare(
+      get: database.prepare(
         `SELECT value FROM ${this.tableName} WHERE id = ? LIMIT 1;`,
       ),
-      delete: this.database.prepare(
+      delete: database.prepare(
         `DELETE FROM ${this.tableName} WHERE id = ?;`,
       ),
-      list: this.database.prepare(
+      list: database.prepare(
         `SELECT value FROM ${this.tableName} WHERE id != ? ORDER BY id;`,
       ),
-      count: this.database.prepare(
+      count: database.prepare(
         `SELECT COUNT(*) as n FROM ${this.tableName};`,
       ),
     }
@@ -178,6 +191,7 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   }
 
   async listWindow(options: DataListWindowOptions<T>): Promise<DataListWindowItem<T>[]> {
+    this.ensureSchema()
     if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 1_000) {
       throw new InvalidNamespaceDataError(this.name, "list window limit must be between 1 and 1000")
     }
@@ -236,7 +250,7 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     const lengthExpression = arrayTail
       ? `json_array_length(value, '$.${arrayTail}')`
       : "NULL"
-    const rows = this.database.prepare(
+    const rows = this.getDatabase().prepare(
       `SELECT ${valueExpression} AS value, ${lengthExpression} AS array_length
        FROM ${this.tableName}
        WHERE ${clauses.join(" AND ")}
@@ -251,17 +265,18 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   }
 
   async count(filter?: Partial<T>): Promise<number> {
+    this.ensureSchema()
     const pushedFilter = buildSqliteFilter(filter)
     if (filter && !pushedFilter) {
       return super.count(filter)
     }
     if (!pushedFilter) {
-      const row = this.database
+      const row = this.getDatabase()
         .prepare(`SELECT COUNT(*) as n FROM ${this.tableName} WHERE id != ?;`)
         .get(SINGLETON_ID) as { n?: number } | undefined
       return row?.n ?? 0
     }
-    const statement = this.database.prepare(
+    const statement = this.getDatabase().prepare(
       `SELECT COUNT(*) as n FROM ${this.tableName}
        WHERE id != ? AND ${pushedFilter.where};`,
     )
@@ -270,11 +285,12 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   }
 
   private listRows(filter?: Partial<T>): Array<{ value?: unknown }> {
+    this.ensureSchema()
     const pushedFilter = buildSqliteFilter(filter)
     if (!pushedFilter) {
       return this.prep().list.all(SINGLETON_ID) as Array<{ value?: unknown }>
     }
-    const statement = this.database.prepare(
+    const statement = this.getDatabase().prepare(
       `SELECT value FROM ${this.tableName}
        WHERE id != ? AND ${pushedFilter.where}
        ORDER BY id;`,

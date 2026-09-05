@@ -18,6 +18,33 @@ interface Conversation extends Record<string, unknown> {
 const tempDir = () => mkdtemp(path.join(tmpdir(), "synapse-sqlite-"))
 
 describe("SqliteNamespace (T2.5)", () => {
+  it("does not open or initialize SQLite until the namespace is used", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "data.db")
+    let opened = 0
+    let closeDb: (() => void) | undefined
+    try {
+      const ns = new SqliteNamespace<Conversation>({
+        name: "conversations",
+        schemaVersion: 1,
+        backend: "sqlite",
+        database: () => {
+          opened += 1
+          const db = openSqliteDatabase(file)
+          closeDb = () => db.close()
+          return db
+        },
+      })
+
+      expect(opened).toBe(0)
+      await ns.count()
+      expect(opened).toBe(1)
+    } finally {
+      closeDb?.()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("upsert/get/list/remove roundtrip survives reopen", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "data.db")
@@ -234,7 +261,7 @@ describe("SqliteNamespace (T2.5)", () => {
         database: db,
         indexes: ["json_extract(value, '$.archived')"],
       })
-      void _ns
+      await _ns.count()
       const indexes = db
         .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='ns_conversations'`)
         .all() as Array<{ name: string }>
@@ -256,7 +283,7 @@ describe("SqliteNamespace (T2.5)", () => {
         database: db,
         indexes: sqliteIndexesFor("agent.events"),
       })
-      void _ns
+      await _ns.count()
 
       const plan = db
         .prepare(`
@@ -286,7 +313,7 @@ describe("SqliteNamespace (T2.5)", () => {
         database: db,
         indexes: sqliteIndexesFor("agent.artifacts"),
       })
-      void _ns
+      await _ns.count()
 
       const plan = db
         .prepare(`
@@ -318,7 +345,7 @@ describe("SqliteNamespace (T2.5)", () => {
         database: db,
         indexes: sqliteIndexesFor("outbox"),
       })
-      void _ns
+      await _ns.count()
 
       const plan = db
         .prepare(`

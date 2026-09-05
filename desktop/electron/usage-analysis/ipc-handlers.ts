@@ -294,20 +294,27 @@ export function registerUsageAnalysisHandlers(): void {
   if (registered) return
   const logger = createMainLogger("usage-analysis.ipc")
   const userDataPath = app.getPath("userData")
-  const db = getUsageAnalysisDb(userDataPath)
   const dbPath = getUsageAnalysisDbPath(userDataPath)
   const home = os.homedir()
   const ccRoots = resolveClaudeUsageRoots({ home, includeDesktopRoots: false })
-  const cc = new CcUsageAnalysisService({
-    db,
-    roots: ccRoots,
-  })
+  let cc: CcUsageAnalysisService | null = null
+  const getCc = () => {
+    cc ??= new CcUsageAnalysisService({
+      db: getUsageAnalysisDb(userDataPath),
+      roots: ccRoots,
+    })
+    return cc
+  }
   const codexHome = process.env.CODEX_HOME || path.join(home, ".codex")
   const codexRoots = [path.join(codexHome, "sessions"), path.join(codexHome, "archived_sessions")]
-  const codex = new CodexUsageAnalysisService({
-    db,
-    roots: codexRoots,
-  })
+  let codex: CodexUsageAnalysisService | null = null
+  const getCodex = () => {
+    codex ??= new CodexUsageAnalysisService({
+      db: getUsageAnalysisDb(userDataPath),
+      roots: codexRoots,
+    })
+    return codex
+  }
 
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async (_event, input?: UsageRefreshInput) => {
     const scope = normalizeUsageRefreshInput(input)
@@ -323,27 +330,27 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccOverview, async (_event, range?: UsageRangeInput) => {
     const normalized = normalizeUsageRangeForIpc(range)
     logger.info("Usage Analysis CC overview requested.", normalized)
-    return cc.getOverview(normalized)
+    return getCc().getOverview(normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTime, async (_event, range?: UsageRangeInput) => {
     const normalized = normalizeUsageRangeForIpc(range)
     logger.info("Usage Analysis CC time series requested.", normalized)
-    return cc.getTime(normalized)
+    return getCc().getTime(normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccModels, async (_event, range?: UsageRangeInput) => {
     const normalized = normalizeUsageRangeForIpc(range)
     logger.info("Usage Analysis CC models requested.", normalized)
-    return cc.getModels(normalized)
+    return getCc().getModels(normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccProjects, async (_event, range?: UsageRangeInput) => {
     const normalized = normalizeUsageRangeForIpc(range)
     logger.info("Usage Analysis CC projects requested.", normalized)
-    return cc.getProjects(normalized)
+    return getCc().getProjects(normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTools, async (_event, range?: UsageRangeInput) => {
     const normalized = normalizeUsageRangeForIpc(range)
     logger.info("Usage Analysis CC tools requested.", normalized)
-    return cc.getTools(normalized)
+    return getCc().getTools(normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccDetails, async (_event, range?: UsageDetailInput) => {
     const normalized = normalizeDetailsRange(range)
@@ -353,7 +360,7 @@ export function registerUsageAnalysisHandlers(): void {
       limit: normalized.limit,
       offset: normalized.offset,
     })
-    return cc.getDetails(normalized)
+    return getCc().getDetails(normalized)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRecordsList, async (_event, input?: CcConversationListInput) => {
     const normalized = normalizeConversationListInput(input)
@@ -423,11 +430,11 @@ export function registerUsageAnalysisHandlers(): void {
     roots: codexRoots,
     scope: normalizeUsageRefreshInput(input),
   }))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexOverview, async (_event, range?: UsageRangeInput) => codex.getOverview(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTime, async (_event, range?: UsageRangeInput) => codex.getTime(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexModels, async (_event, range?: UsageRangeInput) => codex.getModels(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexProjects, async (_event, range?: UsageRangeInput) => codex.getProjects(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTools, async (_event, range?: UsageRangeInput) => codex.getTools(normalizeUsageRangeForIpc(range)))
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexDetails, async (_event, range?: UsageDetailInput) => codex.getDetails(normalizeDetailsRange(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexOverview, async (_event, range?: UsageRangeInput) => getCodex().getOverview(normalizeUsageRangeForIpc(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTime, async (_event, range?: UsageRangeInput) => getCodex().getTime(normalizeUsageRangeForIpc(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexModels, async (_event, range?: UsageRangeInput) => getCodex().getModels(normalizeUsageRangeForIpc(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexProjects, async (_event, range?: UsageRangeInput) => getCodex().getProjects(normalizeUsageRangeForIpc(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTools, async (_event, range?: UsageRangeInput) => getCodex().getTools(normalizeUsageRangeForIpc(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexDetails, async (_event, range?: UsageDetailInput) => getCodex().getDetails(normalizeDetailsRange(range)))
   registered = true
 }

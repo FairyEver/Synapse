@@ -159,7 +159,7 @@ describe("ReplyOutboxService", () => {
     }
     await service.flushForTests()
 
-    expect(listSpy).not.toHaveBeenCalled()
+    expect(listSpy).toHaveBeenCalledOnce()
     expect((await outbox.list()).map((entry) => entry.id).sort()).toEqual([
       "outbox-0",
       "outbox-1",
@@ -205,6 +205,50 @@ describe("ReplyOutboxService", () => {
       projectId: "project-1",
       sdkSessionId: "sdk-1",
     }))
+  })
+
+  it("applies sent retention to rows created by an earlier service instance", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const target = {
+      projectId: "project-1",
+      sessionKey: "external:chat",
+      transport: { kind: "external" },
+    }
+    for (let index = 0; index < 4; index += 1) {
+      const timestamp = new Date(Date.parse("2026-04-26T00:00:00.000Z") + index * 1000).toISOString()
+      await outbox.upsert({
+        id: `legacy-${index}`,
+        schemaVersion: 1,
+        projectId: "project-1",
+        destination: {
+          platform: "external",
+          sessionKey: "external:chat",
+        },
+        payload: { kind: "text", content: `legacy-${index}` },
+        attempts: 1,
+        status: "sent",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    }
+    const service = new ReplyOutboxService({
+      projectId: "project-1",
+      outbox,
+      sentRetentionLimit: 2,
+      idFactory: () => "current",
+      now: () => new Date("2026-04-26T00:01:00.000Z"),
+    })
+
+    await service.record({
+      target,
+      payload: { kind: "text", content: "current" },
+      status: "sent",
+    })
+
+    expect((await outbox.list()).map((entry) => entry.id).sort()).toEqual([
+      "current",
+      "legacy-3",
+    ])
   })
 
   it("logs outbox persistence failures without raw error text", async () => {
@@ -271,6 +315,23 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
         (value as Record<string, unknown>)[key] === expected,
       ),
     )
+  }
+
+  async listWindow(options: Parameters<NonNullable<DataNamespace<T>["listWindow"]>>[0]) {
+    const values = await this.list(options.filter as Partial<T>)
+    const orderKeys: Array<keyof T> = Array.isArray(options.orderBy)
+      ? [...options.orderBy]
+      : [options.orderBy ?? "updatedAt" as keyof T]
+    const direction = options.order === "asc" ? 1 : -1
+    values.sort((left, right) => {
+      for (const key of orderKeys) {
+        const compared = String(left[key] ?? "").localeCompare(String(right[key] ?? ""))
+        if (compared !== 0) return compared * direction
+      }
+      return 0
+    })
+    const offset = options.offset ?? 0
+    return values.slice(offset, offset + options.limit).map((value) => ({ value }))
   }
 
   async get(id: string): Promise<T | null> {

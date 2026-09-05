@@ -1429,7 +1429,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       },
     })
     const modelPriceDispatcher = createModelPriceCapabilityDispatcher({
-      db: getUsageAnalysisDb(app.getPath("userData")),
+      getDb: () => getUsageAnalysisDb(app.getPath("userData")),
       permissionGuard,
       auditSink,
     })

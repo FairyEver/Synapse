@@ -42,28 +42,31 @@ export function normalizeModelPriceCoverageInput(input: ModelPriceCoverageInput 
 export function registerModelPriceHandlers(): void {
   if (registered) return
   const logger = createMainLogger("model-price.ipc")
-  const db = getUsageAnalysisDb(app.getPath("userData"))
-  const modelPrice = new ModelPriceService(db)
+  let modelPrice: ModelPriceService | null = null
+  const getModelPrice = () => {
+    modelPrice ??= new ModelPriceService(getUsageAnalysisDb(app.getPath("userData")))
+    return modelPrice
+  }
 
   handleValidatedIpc(MODEL_PRICE_CHANNELS.coverageList, async (_event, input?: ModelPriceCoverageInput) => {
     const normalized = normalizeModelPriceCoverageInput(input)
     logger.info("Model price coverage requested.", normalized)
-    return modelPrice.listCoverage(normalized)
+    return getModelPrice().listCoverage(normalized)
   })
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsList, async () => modelPrice.listPresets())
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsList, async () => getModelPrice().listPresets())
   handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsImport, async (_event, input?: unknown) => {
     const presetIds = validateModelPricePresetImportInput(input)
-    const importedRules = modelPrice.importPresets(presetIds)
+    const importedRules = getModelPrice().importPresets(presetIds)
     logger.info("Model price preset import completed.", {
       presetIds,
       resultingRuleCount: importedRules.length,
     })
     return importedRules
   })
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesGet, async () => modelPrice.listRules())
+  handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesGet, async () => getModelPrice().listRules())
   handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesSave, async (_event, rules?: unknown) => {
     const validatedRules = validateModelPriceRuleInputs(rules)
-    const savedRules = modelPrice.saveRules(validatedRules)
+    const savedRules = getModelPrice().saveRules(validatedRules)
     logger.info("Model price rules save completed.", {
       requestedRuleCount: validatedRules.length,
       savedRuleCount: savedRules.length,
@@ -71,8 +74,8 @@ export function registerModelPriceHandlers(): void {
     return savedRules
   })
   handleValidatedIpc(MODEL_PRICE_CHANNELS.rulesClear, async () => {
-    const previousRuleCount = modelPrice.listRules().length
-    const clearedRules = modelPrice.clearRules()
+    const previousRuleCount = getModelPrice().listRules().length
+    const clearedRules = getModelPrice().clearRules()
     logger.info("Model price rules clear completed.", {
       operation: "rulesClear",
       previousRuleCount,

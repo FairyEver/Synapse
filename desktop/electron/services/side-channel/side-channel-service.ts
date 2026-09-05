@@ -183,6 +183,10 @@ export class SideChannelService implements ReplyTargetRuntime {
     }
   }
 
+  canDispatchAgentEvent(target: ReplyTarget): boolean {
+    return this.dispatchers.has(target.transport.kind)
+  }
+
   dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void> {
     const dispatcher = this.dispatchers.get(target.transport.kind)
     const conversationId = event.conversationId ?? target.conversationId

@@ -5,6 +5,8 @@ import type { DataNamespace, OutboxEntryV1, OutboxPayloadV1 } from "../../runtim
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { AgentEvent } from "../agent-runtime"
 
+const OUTBOX_RETENTION_SCAN_LIMIT = 1_000
+
 export interface ReplyTarget {
   readonly projectId: string
   readonly sessionKey: string
@@ -41,6 +43,7 @@ export class ReplyOutboxService {
   private readonly deps: ReplyOutboxServiceDeps
   private readonly sentRetentionLimit: number
   private readonly retainedSentIdsByDestination = new Map<string, string[]>()
+  private readonly initializedDestinations = new Set<string>()
   private pendingWrite: Promise<void> = Promise.resolve()
 
   constructor(deps: ReplyOutboxServiceDeps) {
@@ -163,11 +166,36 @@ export class ReplyOutboxService {
 
   private async pruneSentEntries(entry: OutboxEntryV1): Promise<void> {
     const destinationKey = outboxDestinationKey(entry)
+    if (!this.initializedDestinations.has(destinationKey)) {
+      const historicalIds = await this.loadRecentSentIds(entry)
+      this.retainedSentIdsByDestination.set(destinationKey, historicalIds)
+      this.initializedDestinations.add(destinationKey)
+    }
     const retainedIds = this.retainedSentIdsByDestination.get(destinationKey) ?? []
     const nextRetainedIds = [entry.id, ...retainedIds.filter((id) => id !== entry.id)]
     const staleIds = nextRetainedIds.slice(this.sentRetentionLimit)
     this.retainedSentIdsByDestination.set(destinationKey, nextRetainedIds.slice(0, this.sentRetentionLimit))
     await Promise.all(staleIds.map((id) => this.deps.outbox.remove(id)))
+  }
+
+  private async loadRecentSentIds(entry: OutboxEntryV1): Promise<string[]> {
+    if (!this.deps.outbox.listWindow) return []
+    const rows = await this.deps.outbox.listWindow({
+      filter: {
+        projectId: entry.projectId,
+        status: "sent",
+      },
+      orderBy: "updatedAt",
+      order: "desc",
+      limit: OUTBOX_RETENTION_SCAN_LIMIT,
+    })
+    const matchingIds = rows
+      .map((row) => row.value)
+      .filter((candidate) => outboxDestinationKey(candidate) === outboxDestinationKey(entry))
+      .map((candidate) => candidate.id)
+    const staleIds = matchingIds.slice(this.sentRetentionLimit)
+    await Promise.all(staleIds.map((id) => this.deps.outbox.remove(id)))
+    return matchingIds.slice(0, this.sentRetentionLimit)
   }
 
   private nextId(): string {

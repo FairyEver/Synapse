@@ -100,6 +100,7 @@ export interface ConversationRouterDeps {
   readonly outbox?: ReplyOutboxService
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
+    canDispatchAgentEvent?(target: ReplyTarget): boolean
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
   }
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
@@ -2209,11 +2210,10 @@ export class ConversationRouter {
     // (or fails), update the status to "sent" or "failed" so outbox accurately
     // reflects delivery outcome rather than pre-emptively marking as "sent".
     const outbox = this.deps.outbox
-    if (!outbox) return
     const replyTargets = this.deps.replyTargets
+    if (!outbox || !replyTargets?.canDispatchAgentEvent?.(target)) return
     void outbox.recordAgentEvent(target, event)
       .then((outboxId) => {
-        if (!replyTargets) return undefined
         return replyTargets.dispatchAgentEvent(target, event).then(
           () => outbox.updateRecordStatus(outboxId, "sent"),
           (error: unknown) => outbox.updateRecordStatus(

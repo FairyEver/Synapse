@@ -17,7 +17,7 @@
  * leave the default.
  */
 
-import { appendFile } from "node:fs/promises"
+import { appendFile, open } from "node:fs/promises"
 import path from "node:path"
 
 import { AbstractDataNamespace, type NamespaceBaseDeps } from "../namespace-base"
@@ -32,6 +32,7 @@ import {
 } from "../errors"
 
 const HEADER_KEY = "__synapse_jsonl__"
+const TAIL_SCAN_CHUNK_BYTES = 64 * 1024
 
 interface JsonlHeader {
   readonly [HEADER_KEY]: 1
@@ -137,17 +138,50 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
 
   private async ensureHeader(): Promise<void> {
     if (this.headerWritten) return
-    if (await fileExists(this.filePath)) {
-      // Existing file — `load()` already read or skipped the header.
-      this.headerWritten = true
-      return
-    }
     const header: JsonlHeader = {
       [HEADER_KEY]: 1,
       schemaVersion: this.schemaVersion,
     }
-    // First write of the file: use atomic write to seed the header line.
-    await writeTextFileAtomic(this.filePath, JSON.stringify(header) + "\n")
+    const headerLine = JSON.stringify(header) + "\n"
+    if (!(await fileExists(this.filePath))) {
+      await writeTextFileAtomic(this.filePath, headerLine)
+      this.headerWritten = true
+      return
+    }
+
+    const handle = await open(this.filePath, "r+")
+    try {
+      const { size } = await handle.stat()
+      if (size === 0) {
+        await handle.writeFile(headerLine, "utf8")
+        this.headerWritten = true
+        return
+      }
+
+      let scanEnd = size
+      while (scanEnd > 0) {
+        const scanStart = Math.max(0, scanEnd - TAIL_SCAN_CHUNK_BYTES)
+        const buffer = Buffer.allocUnsafe(scanEnd - scanStart)
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, scanStart)
+        const chunk = buffer.subarray(0, bytesRead)
+        if (scanEnd === size && chunk.at(-1) === 0x0a) {
+          this.headerWritten = true
+          return
+        }
+        const newlineIndex = chunk.lastIndexOf(0x0a)
+        if (newlineIndex >= 0) {
+          await handle.truncate(scanStart + newlineIndex + 1)
+          this.headerWritten = true
+          return
+        }
+        scanEnd = scanStart
+      }
+
+      await handle.truncate(0)
+      await handle.writeFile(headerLine, "utf8")
+    } finally {
+      await handle.close()
+    }
     this.headerWritten = true
   }
 
@@ -190,12 +224,11 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
   }
 
   async upsert(item: T & { id: string }): Promise<void> {
-    await this.load()
-    await this.ensureHeader()
-    const previous = this.cache!.get(item.id)
     const line = JSON.stringify(item) + "\n"
+    await this.ensureHeader()
     await appendFile(this.filePath, line, "utf8")
-    this.cache!.set(item.id, item)
+    const previous = this.cache?.get(item.id)
+    this.cache?.set(item.id, item)
     this.emit({ kind: "upsert", id: item.id, value: item, previous })
   }
 

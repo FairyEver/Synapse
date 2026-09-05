@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   handleValidatedIpc: vi.fn((channel: string, handler: (event: unknown, params?: unknown) => unknown) => {
     mocks.handlers.set(channel, handler)
   }),
+  getUsageAnalysisDb: vi.fn(() => ({ database: "mock" })),
   logger: {
     info: vi.fn(),
   },
@@ -35,7 +36,7 @@ vi.mock("../../services/log-store", () => ({
 }))
 
 vi.mock("../../services/usage-analysis", () => ({
-  getUsageAnalysisDb: vi.fn(() => ({ database: "mock" })),
+  getUsageAnalysisDb: mocks.getUsageAnalysisDb,
 }))
 
 vi.mock("../../services/model-price", () => ({
@@ -52,6 +53,7 @@ describe("model price IPC handlers", () => {
     vi.resetModules()
     mocks.handlers.clear()
     mocks.handleValidatedIpc.mockClear()
+    mocks.getUsageAnalysisDb.mockClear()
     mocks.logger.info.mockClear()
     mocks.modelPriceService.clearRules.mockReset()
     mocks.modelPriceService.importPreset.mockReset()
@@ -71,7 +73,9 @@ describe("model price IPC handlers", () => {
     const { registerModelPriceHandlers } = await import("../ipc-handlers")
     registerModelPriceHandlers()
 
+    expect(mocks.getUsageAnalysisDb).not.toHaveBeenCalled()
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsList)?.({})).toBe(presetSummaries)
+    expect(mocks.getUsageAnalysisDb).toHaveBeenCalledOnce()
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsImport)?.({}, "deepseek-official")).toBe(importedRules)
     expect(mocks.modelPriceService.importPresets).toHaveBeenCalledWith(["deepseek-official"])
     expect(mocks.logger.info).toHaveBeenCalledWith("Model price preset import completed.", {

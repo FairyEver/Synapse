@@ -18,12 +18,14 @@ import {
 import { checkCapabilityPermission } from "./permission-audit"
 
 type ModelPriceDispatcherDeps = {
-  readonly db: DatabaseSync
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly actor?: ActorIdentity
   readonly logger?: ModelPriceDispatcherLogger
-}
+} & (
+  | { readonly db: DatabaseSync; readonly getDb?: never }
+  | { readonly db?: never; readonly getDb: () => DatabaseSync }
+)
 
 type ModelPriceDispatcherLogger = Pick<ReturnType<typeof createMainLogger>, "info" | "warn">
 
@@ -60,7 +62,7 @@ export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherD
       const security = modelPriceDispatchSecurity(deps, action, params, context)
       if (security) await authorizeModelPriceDispatch(deps, security)
       try {
-        const result = dispatchModelPriceAction(deps.db, action, params)
+        const result = dispatchModelPriceAction(resolveModelPriceDb(deps), action, params)
         if (security) {
           deps.auditSink?.record({
             action: security.action,
@@ -94,6 +96,10 @@ export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherD
       }
     },
   }
+}
+
+function resolveModelPriceDb(deps: ModelPriceDispatcherDeps): DatabaseSync {
+  return deps.getDb ? deps.getDb() : deps.db
 }
 
 function dispatchCorrelation(
