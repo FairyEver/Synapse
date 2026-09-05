@@ -1385,6 +1385,7 @@ export function TerminalModule({
                       type="button"
                       size="icon-xs"
                       variant="ghost"
+                      className="text-foreground/75 hover:text-foreground"
                       aria-label="管理自定义快捷输入"
                       onClick={() => setToolbarManagerOpen(true)}
                     >

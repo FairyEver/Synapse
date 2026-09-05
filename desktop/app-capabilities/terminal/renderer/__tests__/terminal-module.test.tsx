@@ -1139,7 +1139,9 @@ describe("TerminalModule", () => {
       expect(button.className).toContain("active:scale-[0.96]")
       expect(button.className).toContain("hover:text-foreground")
     }
-    expect(toolbar.querySelector("button[aria-label='管理自定义快捷输入']")).toBeTruthy()
+    const manageButton = toolbar.querySelector("button[aria-label='管理自定义快捷输入']")
+    expect(manageButton?.className).toContain("text-foreground/75")
+    expect(manageButton?.className).toContain("hover:text-foreground")
     expect(toolbar.querySelector("[aria-hidden='true']")?.className).toContain("bg-border")
   })
 
