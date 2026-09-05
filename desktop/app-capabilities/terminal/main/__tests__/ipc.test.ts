@@ -5,6 +5,7 @@ import { createIpcRegistry, registeredIpcModules } from "../../../../electron/bo
 import type { IpcHandlerContext } from "../../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../../electron/runtime/window"
 import type { TerminalService } from "../service"
+import type { TerminalAgentNotificationService } from "../agent-notification-service"
 import { terminalIpcModule } from "../ipc"
 
 const electronDialogMock = vi.hoisted(() => ({
@@ -72,6 +73,12 @@ vi.mock("electron-updater", () => ({
 describe("terminalIpcModule", () => {
   it("declares stable method and event channels", () => {
     expect(terminalIpcModule.id).toBe("terminal")
+    expect(terminalIpcModule.methods.getAgentNotificationSettings.operationId)
+      .toBe("app.terminal.agent_notifications.get")
+    expect(terminalIpcModule.methods.updateAgentNotificationSettings.operationId)
+      .toBe("app.terminal.agent_notifications.update")
+    expect(terminalIpcModule.methods.reportActiveSession.operationId)
+      .toBe("app.terminal.agent_notifications.report_active_session")
     expect(terminalIpcModule.methods.getGlobalLaunchSettings.operationId).toBe("app.terminal.global_launch.get")
     expect(terminalIpcModule.methods.updateGlobalLaunchSettings.operationId).toBe("app.terminal.global_launch.update")
     expect(terminalIpcModule.methods.listCustomToolbarActions.operationId).toBe("app.terminal.toolbar_action.list")
@@ -141,6 +148,49 @@ describe("terminalIpcModule", () => {
       title: "选择工作目录",
       properties: ["openDirectory"],
     })
+  })
+
+  it("manages notification settings and clears renderer activity on destruction", async () => {
+    const agentNotifications = {
+      getSettings: vi.fn(() => ({
+        schemaVersion: 1 as const,
+        id: "default" as const,
+        enabled: false,
+        revision: 1,
+        updatedAt: "2026-09-05T00:00:00.000Z",
+      })),
+      updateSettings: vi.fn(async () => ({
+        schemaVersion: 1 as const,
+        id: "default" as const,
+        enabled: true,
+        revision: 2,
+        updatedAt: "2026-09-05T00:01:00.000Z",
+      })),
+      reportActiveSession: vi.fn(),
+      forgetRenderer: vi.fn(),
+    }
+    let destroyedListener: (() => void) | undefined
+    const ctx = createContext(createService(), createWindowManager(), agentNotifications, {
+      id: 4129,
+      isDestroyed: () => false,
+      onDestroyed: (listener) => {
+        destroyedListener = listener
+        return () => undefined
+      },
+    })
+
+    await terminalIpcModule.methods.getAgentNotificationSettings.handler(ctx, undefined)
+    await terminalIpcModule.methods.updateAgentNotificationSettings.handler(ctx, {
+      enabled: true,
+      expectedRevision: 1,
+    })
+    await terminalIpcModule.methods.reportActiveSession.handler(ctx, { sessionId: "session-1" })
+
+    expect(agentNotifications.getSettings).toHaveBeenCalledOnce()
+    expect(agentNotifications.updateSettings).toHaveBeenCalledWith({ enabled: true, expectedRevision: 1 })
+    expect(agentNotifications.reportActiveSession).toHaveBeenCalledWith(4129, "session-1")
+    destroyedListener?.()
+    expect(agentNotifications.forgetRenderer).toHaveBeenCalledWith(4129)
   })
 
   it("forwards custom toolbar action management to the terminal service", async () => {
@@ -539,15 +589,21 @@ describe("terminalIpcModule", () => {
 function createContext(
   service: Partial<TerminalService>,
   windowManager: Partial<WindowManager> = createWindowManager(),
+  agentNotifications?: Partial<TerminalAgentNotificationService>,
+  sender?: IpcHandlerContext["sender"],
 ): IpcHandlerContext {
   return {
     moduleId: "terminal",
+    ...(sender ? { sender } : {}),
     resolve: <T>(serviceId: string): T => {
       if (serviceId === "core.terminal") {
         return service as T
       }
       if (serviceId === "core.window-manager") {
         return windowManager as T
+      }
+      if (serviceId === "core.terminal-agent-notifications" && agentNotifications) {
+        return agentNotifications as T
       }
       throw new Error(`Unexpected service: ${serviceId}`)
     },

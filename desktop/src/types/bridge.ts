@@ -109,6 +109,7 @@ import type {
 import type {
   SynapseTerminalAttachSessionInput,
   SynapseTerminalAttachSessionResult,
+  SynapseTerminalAgentNotificationSettings,
   SynapseTerminalClosePaneInput,
   SynapseTerminalCloseWorkspaceInput,
   SynapseTerminalCloseWorkspaceResult,
@@ -148,6 +149,7 @@ import type {
   SynapseTerminalUpdateCustomToolbarActionInput,
   SynapseTerminalUpdateGroupSettingsInput,
   SynapseTerminalUpdateGlobalLaunchSettingsInput,
+  SynapseTerminalUpdateAgentNotificationSettingsInput,
   SynapseTerminalWriteSessionInput,
   SynapseTerminalWorkspace,
   SynapseTerminalWorkingDirectoryChangedEvent,
@@ -1170,6 +1172,11 @@ export type SynapseBridge = {
     }
   }
   terminal: {
+    agentNotifications: {
+      get: () => Promise<SynapseTerminalAgentNotificationSettings>
+      update: (input: SynapseTerminalUpdateAgentNotificationSettingsInput) => Promise<SynapseTerminalAgentNotificationSettings>
+      reportActiveSession: (input: { sessionId: string | null }) => Promise<void>
+    }
     globalLaunch: {
       get: () => Promise<SynapseTerminalGlobalLaunchSettings>
       update: (input: SynapseTerminalUpdateGlobalLaunchSettingsInput) => Promise<SynapseTerminalGlobalLaunchSettings>

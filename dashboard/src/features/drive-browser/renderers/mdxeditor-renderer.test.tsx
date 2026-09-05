@@ -136,6 +136,8 @@ vi.mock('@mdxeditor/editor', async () => {
       React.useImperativeHandle(ref, () => ({
         getMarkdown: () => valueRef.current,
         setMarkdown: (nextValue: string) => {
+          const scroller = document.querySelector('[data-drive-mdxeditor-scroll="true"]')
+          if (nextValue.includes('|') && scroller instanceof HTMLElement) scroller.scrollTop = 0
           valueRef.current = nextValue
           setValue(nextValue)
           reportParseError(nextValue)
@@ -656,6 +658,41 @@ describe('DriveMDXeditorRenderer', () => {
 
     expect(editor().value).toBe(markdown)
     expect(document.body.textContent).toContain('已同步')
+  })
+
+  it('keeps the table editor scroll position when the saved version is acknowledged', async () => {
+    let resolveSave!: () => void
+    const savePromise = new Promise<never>((resolve) => {
+      resolveSave = () => resolve({} as never)
+    })
+    const editContext = createEditContext({
+      saveText: vi.fn(() => savePromise),
+    })
+    const renderer = renderRenderer({ edit: editable(), editContext })
+    const markdown = '| Name | Value |\n| --- | --- |\n| Synapse | 1 |'
+
+    await inputValue(editor(), markdown)
+    const scroller = mdxEditorScroller()
+    scroller.scrollTop = 320
+    await click(buttonWithText('保存'))
+    const newerMarkdown = `${markdown}\n| Local | 2 |`
+    await inputValue(editor(), newerMarkdown)
+
+    renderer.rerender({
+      preview: { ...basePreview(), text: markdown },
+      edit: { ...editable(), currentVersionId: 'version-2' },
+      editContext,
+    })
+
+    expect(scroller.scrollTop).toBe(320)
+    expect(editor().value).toBe(newerMarkdown)
+    expect(document.body.textContent).toContain('未保存')
+
+    await act(async () => {
+      resolveSave()
+      await savePromise
+      await Promise.resolve()
+    })
   })
 
   it('asks once before uploading a selected image to the platform image host', async () => {
@@ -1366,6 +1403,12 @@ function sourceEditor(): HTMLTextAreaElement {
 function mdxEditorRoot(): HTMLElement {
   const element = document.querySelector('[data-testid="mdx-editor-root"]')
   if (!(element instanceof HTMLElement)) throw new Error('mdx editor root not found')
+  return element
+}
+
+function mdxEditorScroller(): HTMLElement {
+  const element = document.querySelector('[data-drive-mdxeditor-scroll="true"]')
+  if (!(element instanceof HTMLElement)) throw new Error('mdx editor scroller not found')
   return element
 }
 

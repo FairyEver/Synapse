@@ -80,6 +80,7 @@ export {
   reviveSoundNotifierSettingsEnvelope,
   soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
+  terminalAgentNotificationSettingsSchemaDefinition,
   updateInstallRecoverySchema,
   relayBindingsSchema,
   relayRunsSchema,

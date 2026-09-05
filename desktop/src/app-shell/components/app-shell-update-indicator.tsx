@@ -2,12 +2,10 @@ import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { runTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseAppUpdateState } from "@/types/update"
-
-type AppShellUpdateIndicatorProps = {
-  readonly onOpen: () => void
-}
 
 const logger = createRendererLogger("app-shell.update-indicator")
 
@@ -15,8 +13,10 @@ function isVisibleUpdateStatus(status: SynapseAppUpdateState["status"]): boolean
   return status === "available" || status === "downloading" || status === "downloaded"
 }
 
-function AppShellUpdateIndicator({ onOpen }: AppShellUpdateIndicatorProps) {
+function AppShellUpdateIndicator() {
   const [updateState, setUpdateState] = useState<SynapseAppUpdateState | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [isActionPending, setIsActionPending] = useState(false)
 
   useEffect(() => {
     const updater = getSynapseBridge()?.updater
@@ -43,21 +43,86 @@ function AppShellUpdateIndicator({ onOpen }: AppShellUpdateIndicatorProps) {
     return null
   }
 
+  const versionLabel = updateState.releaseVersion ? ` v${updateState.releaseVersion}` : ""
+
+  if (updateState.status === "downloading") {
+    const downloadPercent = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
+
+    return (
+      <div className="flex w-full max-w-56 flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <DownloadIcon className="size-3.5 shrink-0" />
+          <span className="truncate">正在下载{versionLabel}</span>
+          <span className="ml-auto tabular-nums">{Math.round(downloadPercent)}%</span>
+        </div>
+        <Progress
+          value={downloadPercent}
+          aria-label="更新下载进度"
+          aria-valuenow={downloadPercent}
+        />
+      </div>
+    )
+  }
+
   const isDownloaded = updateState.status === "downloaded"
-  const label = isDownloaded
-    ? `新版本 v${updateState.releaseVersion ?? ""} 已准备安装`
-    : updateState.status === "downloading"
-      ? "正在下载更新..."
-      : `发现新版本 v${updateState.releaseVersion ?? ""}`
+  const error = actionError ?? updateState.error
+  const label = isActionPending
+    ? isDownloaded ? "正在安装..." : "正在开始下载..."
+    : error
+      ? isDownloaded ? "安装失败，重试" : "下载失败，重试"
+      : isDownloaded
+        ? "安装并重启"
+        : `发现新版本${versionLabel}`
+
+  const handleAction = async () => {
+    const updater = getSynapseBridge()?.updater
+    if (!updater || isActionPending) return
+
+    setActionError(null)
+    setIsActionPending(true)
+
+    try {
+      if (isDownloaded) {
+        await runTrackedOperation(
+          { component: "update", eventKey: "update.install" },
+          () => updater.installUpdate(),
+        )
+      } else {
+        const state = await runTrackedOperation(
+          { component: "update", eventKey: "update.download" },
+          () => updater.downloadUpdate(),
+        )
+        setUpdateState(state)
+      }
+    } catch (caughtError) {
+      const message = caughtError instanceof Error
+        ? caughtError.message
+        : isDownloaded ? "安装更新失败。" : "下载更新失败。"
+      logger.error("App shell update action failed.", {
+        action: isDownloaded ? "install" : "download",
+        error: caughtError,
+      })
+      setActionError(message)
+    } finally {
+      setIsActionPending(false)
+    }
+  }
 
   return (
     <Button
       type="button"
-      variant="ghost"
+      variant={isDownloaded ? "default" : "ghost"}
       size="sm"
-      className="max-w-full justify-start text-muted-foreground"
-      onClick={onOpen}
-      aria-label={label}
+      className={isDownloaded
+        ? "max-w-full min-w-0 justify-start"
+        : "max-w-full min-w-0 justify-start text-muted-foreground"}
+      disabled={isActionPending}
+      onClick={() => {
+        void handleAction()
+      }}
+      aria-label={isDownloaded ? `${label}${versionLabel}` : label}
+      title={error ?? undefined}
+      data-track={isDownloaded ? "update.install" : "update.download"}
     >
       {isDownloaded ? <RefreshCwIcon /> : <DownloadIcon />}
       <span className="truncate">{label}</span>

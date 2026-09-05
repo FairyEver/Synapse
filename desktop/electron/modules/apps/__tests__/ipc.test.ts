@@ -6,21 +6,17 @@ import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "../../../../src/lib/cheat-codes/
 const systemAppWindowServiceMock = vi.hoisted(() => ({
   open: vi.fn(async () => undefined),
 }))
-const createDefaultSystemAppWindowServiceMock = vi.hoisted(() =>
-  vi.fn(() => systemAppWindowServiceMock),
-)
 const cheatCodeStateServiceMock = vi.hoisted(() => ({
   getStates: vi.fn(async () => ({})),
 }))
 
 vi.mock("../../../services/system-app-window-service", () => ({
-  createDefaultSystemAppWindowService: createDefaultSystemAppWindowServiceMock,
+  SYSTEM_APP_WINDOW_SERVICE_ID: "core.system-app-window",
 }))
 
 describe("appsIpcModule", () => {
   beforeEach(() => {
     systemAppWindowServiceMock.open.mockClear()
-    createDefaultSystemAppWindowServiceMock.mockClear()
     cheatCodeStateServiceMock.getStates.mockReset()
     cheatCodeStateServiceMock.getStates.mockResolvedValue({})
   })
@@ -55,7 +51,6 @@ describe("appsIpcModule", () => {
 
     await appsIpcModule.methods.openSystemApp.handler(createContext(windowManager), { appId: "database" })
 
-    expect(createDefaultSystemAppWindowServiceMock).toHaveBeenCalledWith(windowManager)
     expect(systemAppWindowServiceMock.open).toHaveBeenCalledWith("database", undefined)
   })
 
@@ -137,6 +132,7 @@ describe("appsIpcModule", () => {
 function createContext(windowManager: unknown): IpcHandlerContext {
   const resolve = <T,>(serviceId: string): T => {
     if (serviceId === "core.window-manager") return windowManager as T
+    if (serviceId === "core.system-app-window") return systemAppWindowServiceMock as T
     if (serviceId === "core.cheat-code-state") return cheatCodeStateServiceMock as T
     throw new Error(`Unexpected service id: ${serviceId}`)
   }

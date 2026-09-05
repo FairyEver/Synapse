@@ -18,6 +18,7 @@ import type {
   TerminalGroupCommandSummary,
   TerminalGroupListItem,
   TerminalGlobalLaunchSettings,
+  TerminalAgentNotificationSettings,
   TerminalEnvironment,
   TerminalEnvironmentValueInput,
   TerminalLaunchLayer,
@@ -42,6 +43,7 @@ import type {
   TerminalUpdateCustomToolbarActionInput,
   TerminalUpdateGroupSettingsInput,
   TerminalUpdateGlobalLaunchSettingsInput,
+  TerminalUpdateAgentNotificationSettingsInput,
   TerminalWriteSessionInput,
   TerminalWorkspace,
   TerminalLayoutNode,
@@ -56,6 +58,7 @@ export type SynapseTerminalEnvironment = TerminalEnvironment
 export type SynapseTerminalEnvironmentValueInput = TerminalEnvironmentValueInput
 export type SynapseTerminalLaunchLayer = TerminalLaunchLayer
 export type SynapseTerminalGlobalLaunchSettings = TerminalGlobalLaunchSettings
+export type SynapseTerminalAgentNotificationSettings = TerminalAgentNotificationSettings
 export type SynapseTerminalCustomToolbarAction = TerminalCustomToolbarAction
 export type SynapseTerminalSession = TerminalSession
 export type SynapseTerminalWorkspace = TerminalWorkspace
@@ -66,6 +69,7 @@ export type SynapseTerminalCreateGroupInput = TerminalCreateGroupInput
 export type SynapseTerminalRenameGroupInput = TerminalRenameGroupInput
 export type SynapseTerminalUpdateGroupSettingsInput = TerminalUpdateGroupSettingsInput
 export type SynapseTerminalUpdateGlobalLaunchSettingsInput = TerminalUpdateGlobalLaunchSettingsInput
+export type SynapseTerminalUpdateAgentNotificationSettingsInput = TerminalUpdateAgentNotificationSettingsInput
 export type SynapseTerminalCreateCustomToolbarActionInput = TerminalCreateCustomToolbarActionInput
 export type SynapseTerminalUpdateCustomToolbarActionInput = TerminalUpdateCustomToolbarActionInput
 export type SynapseTerminalDeleteCustomToolbarActionInput = TerminalDeleteCustomToolbarActionInput

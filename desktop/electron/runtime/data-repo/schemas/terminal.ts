@@ -29,6 +29,8 @@ import {
 import {
   TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT,
   terminalCustomToolbarActionSchema,
+  terminalAgentNotificationSettingsSchema,
+  type TerminalAgentNotificationSettings,
 } from "../../../../app-capabilities/terminal/shared/schema"
 import type { NamespaceSchema } from "../types"
 
@@ -71,6 +73,23 @@ const terminalToolbarActionsEntrySchema = z.object({
 export type TerminalToolbarActionsEntry = z.infer<typeof terminalToolbarActionsEntrySchema>
 
 const noMigrations = [] as const
+
+export const terminalAgentNotificationSettingsSchemaDefinition: NamespaceSchema<TerminalAgentNotificationSettings> = {
+  name: "app.terminal.agent-notification-settings",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  encrypted: false,
+  validate: (value): value is TerminalAgentNotificationSettings =>
+    terminalAgentNotificationSettingsSchema.safeParse(value).success,
+  defaults: () => ({
+    schemaVersion: 1,
+    id: "default",
+    enabled: false,
+    revision: 1,
+    updatedAt: new Date(0).toISOString(),
+  }),
+}
 
 export const terminalGlobalLaunchSchema: NamespaceSchema<TerminalGlobalLaunchRecord> = {
   name: "app.terminal.global-launch",

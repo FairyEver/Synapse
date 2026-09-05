@@ -61,6 +61,23 @@ export const terminalGlobalLaunchSettingsSchema = z.object({
   settings: terminalLaunchLayerSchema.optional(),
 }).strict()
 
+export const terminalAgentNotificationSettingsSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.literal("default"),
+  enabled: z.boolean(),
+  revision: z.number().int().positive(),
+  updatedAt: z.string().datetime(),
+}).strict()
+
+export const terminalUpdateAgentNotificationSettingsInputSchema = z.object({
+  enabled: z.boolean(),
+  expectedRevision: z.number().int().positive(),
+}).strict()
+
+export const terminalReportActiveSessionInputSchema = z.object({
+  sessionId: z.string().uuid().nullable(),
+}).strict()
+
 export const TERMINAL_CUSTOM_TOOLBAR_ACTION_LABEL_MAX_LENGTH = 32
 export const TERMINAL_CUSTOM_TOOLBAR_ACTION_CONTENT_MAX_LENGTH = 4 * 1024
 
@@ -371,6 +388,7 @@ export type TerminalEnvironment = z.infer<typeof terminalEnvironmentSchema>
 export type TerminalEnvironmentEntry = z.infer<typeof terminalEnvironmentEntrySchema>
 export type TerminalLaunchLayer = z.infer<typeof terminalLaunchLayerSchema>
 export type TerminalGlobalLaunchSettings = z.infer<typeof terminalGlobalLaunchSettingsSchema>
+export type TerminalAgentNotificationSettings = z.infer<typeof terminalAgentNotificationSettingsSchema>
 export type TerminalCustomToolbarAction = z.infer<typeof terminalCustomToolbarActionSchema>
 export type TerminalCreateCustomToolbarActionInput = z.infer<typeof terminalCreateCustomToolbarActionInputSchema>
 export type TerminalUpdateCustomToolbarActionInput = z.infer<typeof terminalUpdateCustomToolbarActionInputSchema>
@@ -384,6 +402,7 @@ export type TerminalCreateGroupInput = z.infer<typeof terminalCreateGroupInputSc
 export type TerminalRenameGroupInput = z.infer<typeof terminalRenameGroupInputSchema>
 export type TerminalUpdateGroupSettingsInput = z.infer<typeof terminalUpdateGroupSettingsInputSchema>
 export type TerminalUpdateGlobalLaunchSettingsInput = z.infer<typeof terminalUpdateGlobalLaunchSettingsInputSchema>
+export type TerminalUpdateAgentNotificationSettingsInput = z.infer<typeof terminalUpdateAgentNotificationSettingsInputSchema>
 export type TerminalEnvironmentValueInput = z.infer<typeof terminalEnvironmentValueInputSchema>
 export type TerminalCreateGroupCommandInput = z.infer<typeof terminalCreateGroupCommandInputSchema>
 export type TerminalUpdateGroupCommandInput = z.infer<typeof terminalUpdateGroupCommandInputSchema>

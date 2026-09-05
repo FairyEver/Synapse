@@ -23,7 +23,7 @@
  * T1.7 adds repo.* + ui.tray.
  */
 
-import { app, clipboard, Notification, safeStorage, shell } from "electron"
+import { app, BrowserWindow, clipboard, Notification, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -84,6 +84,11 @@ import { createTerminalEncryptedBlockStore } from "../../app-capabilities/termin
 import { withLegacyTerminalMigration } from "../../app-capabilities/terminal/main/legacy-migration"
 import { createTerminalRepository } from "../../app-capabilities/terminal/main/repository"
 import { createTerminalService, type TerminalService } from "../../app-capabilities/terminal/main/service"
+import {
+  TerminalAgentNotificationService,
+  TERMINAL_AGENT_NOTIFICATION_SERVICE_ID,
+} from "../../app-capabilities/terminal/main/agent-notification-service"
+import type { TerminalAgentNotificationSettings } from "../../app-capabilities/terminal/shared/schema"
 import {
   createWorkspaceFileTreeService,
   WORKSPACE_FILE_TREE_SERVICE_ID,
@@ -233,6 +238,10 @@ import { createGitSyncService, type GitSyncService } from "../services/git-clien
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { WindowManager } from "../runtime/window"
 import { createWindowManager } from "../runtime/window"
+import {
+  createDefaultSystemAppWindowService,
+  SYSTEM_APP_WINDOW_SERVICE_ID,
+} from "../services/system-app-window-service"
 import type { EventBus } from "../runtime/event-bus"
 import { createEventBus } from "../runtime/event-bus/bus"
 import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
@@ -446,7 +455,7 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
 export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   id: "core.terminal",
   criticality: "degraded",
-  dependsOn: ["core.data-repository"],
+  dependsOn: ["core.data-repository", TERMINAL_AGENT_NOTIFICATION_SERVICE_ID],
   create(ctx) {
     const baseDir = path.join(app.getPath("userData"), "terminal")
     const repository = createTerminalRepository(ctx.registry.get<DataRepository>("core.data-repository"))
@@ -466,6 +475,7 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
       }),
       logger: ctx.logger.child("terminal"),
       appVersion: SYNAPSE_APP_VERSION,
+      agentNotifications: ctx.registry.get<TerminalAgentNotificationService>(TERMINAL_AGENT_NOTIFICATION_SERVICE_ID),
     })
   },
   async start(instance) {
@@ -1759,6 +1769,61 @@ export const coreWindowManagerDescriptor: ServiceDescriptor<WindowManager> = {
   criticality: "fatal",
   create() {
     return createWindowManager()
+  },
+}
+
+export const coreSystemAppWindowDescriptor: ServiceDescriptor<ReturnType<typeof createDefaultSystemAppWindowService>> = {
+  id: SYSTEM_APP_WINDOW_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.window-manager"],
+  create(ctx) {
+    return createDefaultSystemAppWindowService(
+      ctx.registry.get<WindowManager>("core.window-manager"),
+    )
+  },
+}
+
+export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<TerminalAgentNotificationService> = {
+  id: TERMINAL_AGENT_NOTIFICATION_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: [
+    "core.data-repository",
+    "core.network-registry",
+    "core.permission-guard",
+    "core.audit-sink",
+    "core.process-environment",
+    SYSTEM_APP_WINDOW_SERVICE_ID,
+  ],
+  create(ctx) {
+    const processEnvironment = ctx.registry.get<ProcessEnvironmentService>("core.process-environment")
+    const systemAppWindows = ctx.registry.get<ReturnType<typeof createDefaultSystemAppWindowService>>(
+      SYSTEM_APP_WINDOW_SERVICE_ID,
+    )
+    return new TerminalAgentNotificationService({
+      settings: ctx.registry.get<DataRepository>("core.data-repository")
+        .namespace<TerminalAgentNotificationSettings>("app.terminal.agent-notification-settings"),
+      networkRegistry: ctx.registry.get<NetworkServiceRegistry>("core.network-registry"),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("terminal-agent-notifications"),
+      runtimeDir: path.join(app.getPath("userData"), "terminal", "agent-notifications"),
+      nodePath: processEnvironment.nodePath ?? "",
+      createNotification: (input) => {
+        if (!Notification.isSupported()) return null
+        return new Notification(input)
+      },
+      focusedWebContentsId: () => BrowserWindow.getFocusedWindow()?.webContents.id ?? null,
+      focusApp: () => app.focus({ steal: true }),
+      openTerminalSession: (sessionId) => systemAppWindows.open("terminal", {
+        terminalOpenRequest: { requestId: randomUUID(), sessionId },
+      }),
+    })
+  },
+  start(instance) {
+    return instance.start()
+  },
+  stop(instance) {
+    return instance.stop()
   },
 }
 

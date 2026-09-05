@@ -87,6 +87,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.secrets.settings",
         "app.sound-notifier.settings",
         "app.system-notifier.settings",
+        "app.terminal.agent-notification-settings",
         "app.terminal.blocks",
         "app.terminal.command-bodies",
         "app.terminal.commands",

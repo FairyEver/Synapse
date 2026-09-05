@@ -4,6 +4,23 @@ import { describe, expect, it, vi } from "vitest"
 import { createTerminalCoreEmulator } from "../emulator"
 
 describe("TerminalCoreEmulator renderer snapshots", () => {
+  it("reports standard terminal notification OSC sequences without exposing their content", async () => {
+    const onNotification = vi.fn()
+    const emulator = createTerminalCoreEmulator({
+      cols: 80,
+      rows: 24,
+      sizeRevision: 1,
+      onNotification,
+    })
+    try {
+      await emulator.accept("\u001b]9;finished\u0007\u001b]777;notify;Agent;done\u0007", 1)
+      expect(onNotification).toHaveBeenCalledWith({ protocol: 9, value: "finished" })
+      expect(onNotification).toHaveBeenCalledWith({ protocol: 777, value: "notify;Agent;done" })
+    } finally {
+      emulator.dispose()
+    }
+  })
+
   it("tracks an OSC 7 working directory for subsequent pane creation", async () => {
     const onWorkingDirectoryChanged = vi.fn()
     const emulator = createTerminalCoreEmulator({

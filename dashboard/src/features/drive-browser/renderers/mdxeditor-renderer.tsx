@@ -130,14 +130,10 @@ export function DriveMDXeditorRenderer({
 }) {
   const sourceText = preview.text ?? ''
   const usesMdxSyntax = isMdxDocument(current.name)
-  const preparedInitialDocument = useMemo(() => {
-    if (!usesMdxSyntax) return prepareCommonMarkForMdxEditor(sourceText)
-    const requiresSourceMode = containsTopLevelMdxEsm(sourceText)
-    return {
-      markdown: requiresSourceMode ? sourceText : normalizeMdxEditorBreakTags(sourceText),
-      requiresSourceMode,
-    }
-  }, [sourceText, usesMdxSyntax])
+  const preparedInitialDocument = useMemo(
+    () => prepareMdxEditorDocument(sourceText, usesMdxSyntax),
+    [sourceText, usesMdxSyntax]
+  )
   const initialText = preparedInitialDocument.markdown
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
@@ -149,6 +145,7 @@ export function DriveMDXeditorRenderer({
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
   const saveInFlightRef = useRef(false)
+  const pendingSaveRef = useRef<{ readonly itemId: string; readonly initialText: string } | null>(null)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
@@ -475,6 +472,12 @@ export function DriveMDXeditorRenderer({
 
   useEffect(() => {
     savedValueRef.current = initialText
+    const savedVersionAcknowledged = pendingSaveRef.current?.itemId === current.id
+      && pendingSaveRef.current.initialText === initialText
+    if (savedVersionAcknowledged) {
+      setDirty(valueRef.current !== initialText)
+      return
+    }
     valueRef.current = initialText
     setValue(initialText)
     setDirty(false)
@@ -526,6 +529,11 @@ export function DriveMDXeditorRenderer({
     setError(null)
     const submittedValue = valueRef.current
     const normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
+    const saveAttempt = {
+      itemId: current.id,
+      initialText: prepareMdxEditorDocument(normalizedValue, usesMdxSyntax).markdown,
+    }
+    pendingSaveRef.current = saveAttempt
     try {
       await editContext.saveText({ text: normalizedValue, baseVersionId: edit.currentVersionId })
       clearParseError()
@@ -548,9 +556,10 @@ export function DriveMDXeditorRenderer({
       }
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     } finally {
+      if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
       saveInFlightRef.current = false
     }
-  }, [annotations.refresh, beginExternalMarkdownSync, canSave, clearParseError, edit?.currentVersionId, editContext])
+  }, [annotations.refresh, beginExternalMarkdownSync, canSave, clearParseError, current.id, edit?.currentVersionId, editContext, usesMdxSyntax])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key.toLowerCase() !== 's' || (!event.metaKey && !event.ctrlKey) || event.shiftKey || event.altKey) return
@@ -993,6 +1002,15 @@ function imageAltText(name: string): string {
 
 function isMdxDocument(name: string): boolean {
   return /\.mdx$/iu.test(name)
+}
+
+function prepareMdxEditorDocument(sourceText: string, usesMdxSyntax: boolean) {
+  if (!usesMdxSyntax) return prepareCommonMarkForMdxEditor(sourceText)
+  const requiresSourceMode = containsTopLevelMdxEsm(sourceText)
+  return {
+    markdown: requiresSourceMode ? sourceText : normalizeMdxEditorBreakTags(sourceText),
+    requiresSourceMode,
+  }
 }
 
 function containsTopLevelMdxEsm(markdown: string): boolean {

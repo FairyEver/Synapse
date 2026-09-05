@@ -33,6 +33,7 @@ type DetachedViewWindowServiceDeps = {
 
 export function focusDetachedViewWindow(window: BrowserWindow): void {
   if (window.isMinimized()) window.restore()
+  if (typeof window.isVisible === "function" && !window.isVisible()) window.show()
   window.focus()
 }
 

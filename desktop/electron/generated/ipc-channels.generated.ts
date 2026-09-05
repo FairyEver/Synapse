@@ -405,6 +405,9 @@ export const IPC_CHANNELS = {
     "repairText": "synapse:app:json_repair:text:repair",
   },
   "terminal": {
+    "getAgentNotificationSettings": "synapse:app:terminal:agent_notifications:get",
+    "updateAgentNotificationSettings": "synapse:app:terminal:agent_notifications:update",
+    "reportActiveSession": "synapse:app:terminal:agent_notifications:report_active_session",
     "getGlobalLaunchSettings": "synapse:app:terminal:global_launch:get",
     "updateGlobalLaunchSettings": "synapse:app:terminal:global_launch:update",
     "listCustomToolbarActions": "synapse:app:terminal:toolbar_action:list",

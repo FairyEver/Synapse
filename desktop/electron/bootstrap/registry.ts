@@ -59,8 +59,10 @@ import {
   coreSoundNotifierDescriptor,
   coreSystemNotifierDescriptor,
   coreSystemNotifierIntegrationDescriptor,
+  coreSystemAppWindowDescriptor,
   coreSynapseSkillDescriptor,
   coreTerminalDescriptor,
+  coreTerminalAgentNotificationsDescriptor,
   coreWorkspaceFileTreeDescriptor,
   coreUsageAnalysisDescriptor,
   coreHttpTestDescriptor,
@@ -126,12 +128,14 @@ export function buildServiceRegistry(
   registry.register(coreNetworkRegistryDescriptor)
   registry.register(coreAppIconDescriptor)
   registry.register(coreWindowManagerDescriptor)
+  registry.register(coreSystemAppWindowDescriptor)
   registry.register(coreAgentConversationWindowDescriptor)
   registry.register(coreEventBusDescriptor)
   registry.register(coreCheatCodeStateDescriptor)
   registry.register(coreProjectContainerRegistryDescriptor)
   registry.register(coreExecutionIsolationDescriptor)
   registry.register(coreSideChannelDescriptor)
+  registry.register(coreTerminalAgentNotificationsDescriptor)
   registry.register(coreTerminalDescriptor)
   registry.register(coreWorkspaceFileTreeDescriptor)
   registry.register(coreSynapseSkillDescriptor)

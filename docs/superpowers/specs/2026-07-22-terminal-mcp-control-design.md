@@ -101,7 +101,7 @@ Initial attention detection is passive:
 - Any accepted input invalidates old waiting evidence to unknown.
 - Output, resize, degraded rendering, or mode change invalidates dependent evidence until reconfirmed.
 - Non-running lifecycle has unknown attention.
-- No Shell integration is injected by default.
+- No Shell integration is injected by default. The optional, default-off Terminal Agent native-notification setting may inject session-local `codex`/`claude` PATH shims and official Hooks for newly created UI terminals; it does not change attention evidence or any MCP contract.
 
 Asynchronous operation status is `pending_delivery | delivered | delivery_uncertain | completed | failed` and remains separate from lifecycle. Completion includes final lifecycle and cause. `operation.get` requires current state-read authorization over the original resource; an operation id alone cannot probe existence.
 

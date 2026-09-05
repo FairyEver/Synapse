@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
   SynapseTerminalDataEvent,
+  SynapseTerminalAgentNotificationSettings,
   SynapseTerminalGlobalLaunchSettings,
   SynapseTerminalGroup,
   SynapseTerminalGroupCommand,
@@ -25,6 +26,13 @@ const bridgeState = vi.hoisted(() => ({
     revision: 1,
     updatedAt: "2026-08-08T00:00:00.000Z",
   } as SynapseTerminalGlobalLaunchSettings,
+  agentNotifications: {
+    schemaVersion: 1,
+    id: "default",
+    enabled: false,
+    revision: 1,
+    updatedAt: "2026-08-08T00:00:00.000Z",
+  } as SynapseTerminalAgentNotificationSettings,
   groups: [] as SynapseTerminalGroup[],
   workspaces: [] as SynapseTerminalWorkspace[],
   sessions: [] as SynapseTerminalSession[],
@@ -73,6 +81,17 @@ const terminalBridge = vi.hoisted(() => ({
     }
     return bridgeState.globalLaunch
   }),
+  getAgentNotificationSettings: vi.fn(async () => bridgeState.agentNotifications),
+  updateAgentNotificationSettings: vi.fn(async ({ enabled, expectedRevision }: { enabled: boolean; expectedRevision: number }) => {
+    bridgeState.agentNotifications = {
+      ...bridgeState.agentNotifications,
+      enabled,
+      revision: expectedRevision + 1,
+      updatedAt: "2026-08-08T00:01:00.000Z",
+    }
+    return bridgeState.agentNotifications
+  }),
+  reportActiveSession: vi.fn(async () => undefined),
   listGroups: vi.fn(async () => bridgeState.groups),
   getGroup: vi.fn(async ({ groupId }: { groupId: string }) => {
     const group = bridgeState.groups.find((item) => item.id === groupId)
@@ -424,6 +443,7 @@ const xtermState = vi.hoisted(() => ({
     focus: ReturnType<typeof vi.fn>
     write: ReturnType<typeof vi.fn>
     clear: ReturnType<typeof vi.fn>
+    reset: ReturnType<typeof vi.fn>
     getSelection: ReturnType<typeof vi.fn>
     hasSelection: ReturnType<typeof vi.fn>
     paste: ReturnType<typeof vi.fn>
@@ -465,6 +485,11 @@ const toastState = vi.hoisted(() => ({
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "terminal") return terminalDomainCache.value ??= {
+      agentNotifications: {
+        get: terminalBridge.getAgentNotificationSettings,
+        update: terminalBridge.updateAgentNotificationSettings,
+        reportActiveSession: terminalBridge.reportActiveSession,
+      },
       globalLaunch: {
         get: terminalBridge.getGlobalLaunchSettings,
         update: terminalBridge.updateGlobalLaunchSettings,
@@ -577,6 +602,7 @@ vi.mock("@xterm/xterm", () => ({
         callback?.()
       }),
       clear: vi.fn(),
+      reset: vi.fn(),
       getSelection: vi.fn(() => ""),
       hasSelection: vi.fn(() => false),
       paste: vi.fn(),
@@ -702,9 +728,17 @@ const resizeObservers: Array<{ disconnect: ReturnType<typeof vi.fn>; trigger: ()
 let roots: Root[] = []
 
 beforeEach(() => {
+  setDocumentVisibility("visible")
   window.synapse = { platform: "darwin" } as typeof window.synapse
   window.localStorage.clear()
   bridgeState.globalLaunch = { revision: 1, updatedAt: "2026-08-08T00:00:00.000Z" }
+  bridgeState.agentNotifications = {
+    schemaVersion: 1,
+    id: "default",
+    enabled: false,
+    revision: 1,
+    updatedAt: "2026-08-08T00:00:00.000Z",
+  }
   bridgeState.groups = []
   bridgeState.workspaces = []
   bridgeState.sessions = []
@@ -994,6 +1028,23 @@ describe("TerminalModule", () => {
     expect(xtermState.instances[0]?.options.lineHeight).toBe(1.05)
     expect(xtermState.instances[0]?.refresh).toHaveBeenCalledWith(0, xtermState.instances[0]!.rows - 1)
     expect(webglState.instances[0]?.clearTextureAtlas).not.toHaveBeenCalled()
+  })
+
+  it("enables Agent notifications from the notification category", async () => {
+    await renderEmbeddedModule()
+
+    await clickButton("设置")
+    await selectTab("通知")
+    expect(document.body.textContent).toContain("仅对新建终端生效")
+    const notificationSwitch = document.querySelector<HTMLButtonElement>("#terminal-agent-notifications")
+    expect(notificationSwitch).not.toBeNull()
+    await act(async () => notificationSwitch?.click())
+    await clickButton("保存")
+
+    expect(terminalBridge.updateAgentNotificationSettings).toHaveBeenCalledWith({
+      enabled: true,
+      expectedRevision: 1,
+    })
   })
 
   it("marks the discard action for unsaved terminal settings as destructive", async () => {
@@ -2812,7 +2863,7 @@ describe("TerminalModule", () => {
     expect(toastState.error).not.toHaveBeenCalledWith("终端画面无法恢复")
   })
 
-  it("keeps a switched session mounted and applies hidden output without replaying a snapshot", async () => {
+  it("keeps a switched session mounted and resumes it from an authoritative snapshot", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
       createSession({
@@ -2844,15 +2895,75 @@ describe("TerminalModule", () => {
       for (const chunk of hiddenChunks) hiddenSessionDataListener?.({ sessionId: "session-1", chunk })
       await flushPromises()
     })
+    bridgeState.chunks = hiddenChunks
     terminalBridge.attachSession.mockClear()
 
     await clickSession("构建终端")
 
     expect(xtermState.instances).toHaveLength(2)
     expect(originalXterm.dispose).not.toHaveBeenCalled()
-    expect(originalXterm.write.mock.calls.map(([data]) => data)).toEqual(hiddenChunks.map((chunk) => chunk.data))
-    expect(terminalBridge.attachSession).not.toHaveBeenCalled()
+    expect(originalXterm.reset).toHaveBeenCalledTimes(1)
+    expect(originalXterm.write.mock.calls.map(([data]) => data)).toEqual([
+      hiddenChunks.map((chunk) => chunk.data).join(""),
+    ])
+    expect(terminalBridge.attachSession).toHaveBeenCalledWith({ sessionId: "session-1" })
     expect(terminalBridge.readSession).not.toHaveBeenCalled()
+  })
+
+  it("resumes from a snapshot after document visibility returns without losing newer output", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [
+      createSession({ id: "session-1", groupId: "group-1", title: "构建终端" }),
+    ]
+
+    await renderModule()
+    const xterm = xtermState.instances[0]!
+    const backgroundListener = terminalBridge.onData.mock.calls[0]?.[0]
+    xterm.write.mockClear()
+    terminalBridge.attachSession.mockClear()
+
+    act(() => {
+      setDocumentVisibility("hidden")
+      backgroundListener?.({
+        sessionId: "session-1",
+        chunk: createChunk({ sessionId: "session-1", seq: 1, data: "while-hidden\r\n" }),
+      })
+    })
+    expect(xterm.write).not.toHaveBeenCalled()
+
+    bridgeState.deferredAttach = createDeferredAttach()
+    act(() => setDocumentVisibility("visible"))
+    const resumedListener = terminalBridge.onData.mock.calls.at(-1)?.[0]
+    act(() => {
+      resumedListener?.({
+        sessionId: "session-1",
+        chunk: createChunk({ sessionId: "session-1", seq: 2, data: "after-snapshot\r\n" }),
+      })
+    })
+
+    await act(async () => {
+      bridgeState.deferredAttach?.resolve({
+        session: getSession("session-1"),
+        degraded: false,
+        serialized: "while-hidden\r\n",
+        cols: 80,
+        rows: 24,
+        throughOutputSeq: 1,
+        sizeRevision: 1,
+        emulatorId: "xterm-headless",
+        emulatorVersion: "6.0.0",
+        scrollbackTruncated: false,
+        reasons: [],
+      })
+      await flushPromises()
+    })
+
+    expect(terminalBridge.attachSession).toHaveBeenCalledTimes(1)
+    expect(xterm.reset).toHaveBeenCalledTimes(1)
+    expect(xterm.write.mock.calls.map(([data]) => data)).toEqual([
+      "while-hidden\r\n",
+      "after-snapshot\r\n",
+    ])
   })
 })
 
@@ -3263,6 +3374,14 @@ function createDeferredAttach(): NonNullable<typeof bridgeState.deferredAttach> 
     reject = nextReject
   })
   return { promise, resolve, reject }
+}
+
+function setDocumentVisibility(visibilityState: DocumentVisibilityState): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: visibilityState,
+  })
+  document.dispatchEvent(new Event("visibilitychange"))
 }
 
 function createDeferred<T>(): {

@@ -531,6 +531,11 @@ const synapseBridge: SynapseBridge = {
     },
   },
   terminal: {
+    agentNotifications: {
+      get: () => invoke(IPC_CHANNELS.terminal.getAgentNotificationSettings)(),
+      update: (input) => invoke(IPC_CHANNELS.terminal.updateAgentNotificationSettings)(input),
+      reportActiveSession: (input) => invoke(IPC_CHANNELS.terminal.reportActiveSession)(input),
+    },
     globalLaunch: {
       get: () => invoke(IPC_CHANNELS.terminal.getGlobalLaunchSettings)(),
       update: (input) => invoke(IPC_CHANNELS.terminal.updateGlobalLaunchSettings)(input),

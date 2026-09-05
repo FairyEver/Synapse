@@ -9,11 +9,16 @@ import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/na
 import { materializeTerminalClipboardImage } from "./clipboard-image"
 import type { TerminalService } from "./service"
 import {
+  TERMINAL_AGENT_NOTIFICATION_SERVICE_ID,
+  type TerminalAgentNotificationService,
+} from "./agent-notification-service"
+import {
   terminalWorkspaceTreeEvents,
   terminalWorkspaceTreeMethods,
 } from "./workspace-tree-ipc"
 import {
   terminalAttachSessionInputSchema,
+  terminalAgentNotificationSettingsSchema,
   terminalAttachSessionResultSchema,
   terminalClosePaneInputSchema,
   terminalCloseWorkspaceInputSchema,
@@ -40,6 +45,7 @@ import {
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
   terminalReadSessionResultSchema,
+  terminalReportActiveSessionInputSchema,
   terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
   terminalRenameWorkspaceInputSchema,
@@ -55,6 +61,7 @@ import {
   terminalUpdateGroupCommandInputSchema,
   terminalUpdateCustomToolbarActionInputSchema,
   terminalUpdateGlobalLaunchSettingsInputSchema,
+  terminalUpdateAgentNotificationSettingsInputSchema,
   terminalUpdateGroupSettingsInputSchema,
   terminalWriteSessionInputSchema,
   terminalWorkspaceIdInputSchema,
@@ -85,12 +92,19 @@ const terminalDomainChangedEventPayloadSchema = z.object({
 })
 
 const terminalEventWiredServices = new WeakSet<TerminalService>()
+const terminalNotificationRendererCleanupIds = new Set<number>()
 const logger = createMainLogger("app.terminal.ipc")
 
 function resolveTerminalService(ctx: Parameters<IpcModule["methods"][string]["handler"]>[0]): TerminalService {
   const service = ctx.resolve<TerminalService>("core.terminal")
   wireTerminalEvents(ctx, service)
   return service
+}
+
+function resolveAgentNotificationService(
+  ctx: Parameters<IpcModule["methods"][string]["handler"]>[0],
+): TerminalAgentNotificationService {
+  return ctx.resolve<TerminalAgentNotificationService>(TERMINAL_AGENT_NOTIFICATION_SERVICE_ID)
 }
 
 function wireTerminalEvents(
@@ -130,6 +144,40 @@ function wireTerminalEvents(
 export const terminalIpcModule: IpcModule = {
   id: "terminal",
   methods: {
+    getAgentNotificationSettings: {
+      operationId: "app.terminal.agent_notifications.get",
+      kind: "invoke",
+      request: z.void(),
+      response: terminalAgentNotificationSettingsSchema,
+      handler: (ctx) => resolveAgentNotificationService(ctx).getSettings(),
+    },
+    updateAgentNotificationSettings: {
+      operationId: "app.terminal.agent_notifications.update",
+      kind: "invoke",
+      request: terminalUpdateAgentNotificationSettingsInputSchema,
+      response: terminalAgentNotificationSettingsSchema,
+      handler: (ctx, request: z.infer<typeof terminalUpdateAgentNotificationSettingsInputSchema>) =>
+        resolveAgentNotificationService(ctx).updateSettings(request),
+    },
+    reportActiveSession: {
+      operationId: "app.terminal.agent_notifications.report_active_session",
+      kind: "invoke",
+      request: terminalReportActiveSessionInputSchema,
+      response: z.void(),
+      handler: (ctx, request: z.infer<typeof terminalReportActiveSessionInputSchema>) => {
+        const sender = ctx.sender
+        if (!sender) return
+        const service = resolveAgentNotificationService(ctx)
+        service.reportActiveSession(sender.id, request.sessionId)
+        if (!terminalNotificationRendererCleanupIds.has(sender.id)) {
+          terminalNotificationRendererCleanupIds.add(sender.id)
+          sender.onDestroyed(() => {
+            terminalNotificationRendererCleanupIds.delete(sender.id)
+            service.forgetRenderer(sender.id)
+          })
+        }
+      },
+    },
     getGlobalLaunchSettings: {
       operationId: "app.terminal.global_launch.get",
       kind: "invoke",

@@ -45,6 +45,7 @@ export function createTerminalCoreEmulator(input: {
   readonly throughOutputSeq?: number
   readonly sizeRevision: number
   readonly onWorkingDirectoryChanged?: () => void
+  readonly onNotification?: (input: { readonly protocol: 9 | 99 | 777; readonly value: string }) => void
 }) {
   const terminal = new Terminal({
     cols: input.cols,
@@ -74,6 +75,13 @@ export function createTerminalCoreEmulator(input: {
       return false
     }
   })
+
+  for (const protocol of [9, 99, 777] as const) {
+    terminal.parser.registerOscHandler(protocol, (value) => {
+      input.onNotification?.({ protocol, value })
+      return true
+    })
+  }
 
   function accept(data: string, outputSeq: number): Promise<void> {
     writeChain = writeChain.then(() => new Promise<void>((resolve) => {

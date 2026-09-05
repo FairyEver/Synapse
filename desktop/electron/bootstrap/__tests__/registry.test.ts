@@ -127,9 +127,11 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.side-channel",
         "core.sound-notifier",
         "core.synapse-skill",
+        "core.system-app-window",
         "core.system-notifier",
         "core.system-notifier.integration",
         "core.terminal",
+        "core.terminal-agent-notifications",
         "core.update",
         "core.usage-analysis",
         "core.window-manager",
@@ -199,7 +201,19 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.agent-personas",
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
-    expect(byId.get("core.terminal")?.dependsOn).toEqual(["core.data-repository"])
+    expect(byId.get("core.system-app-window")?.dependsOn).toEqual(["core.window-manager"])
+    expect(byId.get("core.terminal-agent-notifications")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.network-registry",
+      "core.permission-guard",
+      "core.audit-sink",
+      "core.process-environment",
+      "core.system-app-window",
+    ])
+    expect(byId.get("core.terminal")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.terminal-agent-notifications",
+    ])
     expect(byId.get("git.command-runner")?.dependsOn).toEqual([])
     expect(byId.get("git.operation-coordinator")?.dependsOn).toEqual(["core.event-bus"])
     expect(byId.get("core.sound-notifier")?.dependsOn).toEqual(["core.data-repository", "core.window-manager"])

@@ -1,9 +1,10 @@
 import { FolderOpen } from "lucide-react"
 
 import { Button } from "../../../src/components/ui/button"
-import { Field, FieldLabel } from "../../../src/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../src/components/ui/tabs"
+import { Switch } from "../../../src/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import type { SynapseTerminalLaunchLayer } from "../../../src/types/terminal"
 import type { TerminalAppearanceSize } from "./terminal-appearance"
@@ -21,6 +22,8 @@ export function TerminalLaunchSettingsForm({
   onChange,
   appearanceSize,
   onAppearanceSizeChange,
+  agentNotificationsEnabled,
+  onAgentNotificationsEnabledChange,
 }: {
   readonly value: SynapseTerminalLaunchLayer
   readonly inheritedValue?: SynapseTerminalLaunchLayer
@@ -32,6 +35,8 @@ export function TerminalLaunchSettingsForm({
   readonly onChange: (value: SynapseTerminalLaunchLayer) => void
   readonly appearanceSize?: TerminalAppearanceSize
   readonly onAppearanceSizeChange?: (size: TerminalAppearanceSize) => void
+  readonly agentNotificationsEnabled?: boolean
+  readonly onAgentNotificationsEnabledChange?: (enabled: boolean) => void
 }) {
   const update = <K extends keyof SynapseTerminalLaunchLayer>(key: K, next: SynapseTerminalLaunchLayer[K]) => {
     const result = { ...value }
@@ -46,6 +51,9 @@ export function TerminalLaunchSettingsForm({
         <TabsTrigger value="general">常规</TabsTrigger>
         <TabsTrigger value="environment">环境变量</TabsTrigger>
         {appearanceSize && onAppearanceSizeChange ? <TabsTrigger value="appearance">外观</TabsTrigger> : null}
+        {agentNotificationsEnabled !== undefined && onAgentNotificationsEnabledChange
+          ? <TabsTrigger value="notifications">通知</TabsTrigger>
+          : null}
       </TabsList>
       <TabsContent value="general" className="grid gap-4 pt-3">
         <Field>
@@ -97,6 +105,24 @@ export function TerminalLaunchSettingsForm({
               <ToggleGroupItem value="medium">中</ToggleGroupItem>
               <ToggleGroupItem value="large">大</ToggleGroupItem>
             </ToggleGroup>
+          </Field>
+        </TabsContent>
+      ) : null}
+      {agentNotificationsEnabled !== undefined && onAgentNotificationsEnabledChange ? (
+        <TabsContent value="notifications" className="pt-3">
+          <Field orientation="horizontal" className="items-start justify-between gap-4">
+            <FieldContent>
+              <FieldLabel htmlFor="terminal-agent-notifications">Agent 原生通知</FieldLabel>
+              <FieldDescription>
+                仅对新建终端生效。Codex 首次使用需在 /hooks 中信任 Synapse Hook。
+              </FieldDescription>
+            </FieldContent>
+            <Switch
+              id="terminal-agent-notifications"
+              data-track="terminal-agent-notifications"
+              checked={agentNotificationsEnabled}
+              onCheckedChange={onAgentNotificationsEnabledChange}
+            />
           </Field>
         </TabsContent>
       ) : null}

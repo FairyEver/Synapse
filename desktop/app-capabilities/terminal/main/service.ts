@@ -86,6 +86,7 @@ import {
   type TerminalWorkspace,
 } from "../shared/workspace"
 import { createTerminalCoreEmulator, type TerminalCoreEmulator } from "./emulator"
+import type { TerminalAgentNotificationService } from "./agent-notification-service"
 import {
   resolveTerminalEnvironment,
   resolveTerminalLaunchConfiguration,
@@ -106,6 +107,7 @@ export type PtyLike = {
 
 type SpawnPtyInput = {
   readonly shell: string
+  readonly shellArgs?: readonly string[]
   readonly cwd: string
   readonly cols: number
   readonly rows: number
@@ -203,6 +205,8 @@ export function createTerminalService(deps: {
   readonly appVersion?: string
   readonly spawnPty?: (input: SpawnPtyInput) => PtyLike
   readonly logger?: TerminalServiceLogger
+  readonly agentNotifications?: Pick<TerminalAgentNotificationService,
+    "prepareSession" | "renameSession" | "handleUserInput" | "unregisterSession" | "handleOscNotification">
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
@@ -663,6 +667,7 @@ export function createTerminalService(deps: {
           events.emit("workingDirectoryChanged", { sessionId: session.id })
         }
       },
+      onNotification: () => deps.agentNotifications?.handleOscNotification(session.id),
     })
     const dataDisposable = child.onData((data) => {
       const current = sessions.get(session.id)
@@ -726,6 +731,7 @@ export function createTerminalService(deps: {
         attention: unknownAttention(current, "not_running"),
       }
       sessions.set(session.id, updated)
+      deps.agentNotifications?.unregisterSession(session.id)
       if (operationId) completeOperation(operationId, updated.status, cause)
       if (!unpublishedSessions.has(session.id)) {
         events.emit("sessionChanged", updated)
@@ -805,6 +811,7 @@ export function createTerminalService(deps: {
         ...(launchOverrides?.environment ? { environment: launchOverrides.environment } : {}),
       },
     })
+    const sessionId = randomUUID()
     const environment = resolveTerminalEnvironment({
       shell: resolvedLaunch.shell ?? deps.resolveDefaultShell?.(),
       cwd: resolvedLaunch.cwd ?? deps.resolveDefaultCwd?.() ?? os.homedir(),
@@ -815,7 +822,6 @@ export function createTerminalService(deps: {
     const launchEnvironment = Object.fromEntries(Object.entries(resolvedLaunch.environment)
       .filter((entry): entry is [string, string] => entry[1] !== null))
     const timestamp = now()
-    const sessionId = randomUUID()
     const session: TerminalSession = {
       id: sessionId,
       groupId: group.id,
@@ -872,12 +878,21 @@ export function createTerminalService(deps: {
     bumpDomain("session.created", session.id, session.metadataRevision)
     unpublishedSessions.set(session.id, terminalDomainRevision)
     try {
+      const defaultShellArgs = resolveTerminalShellArgs(environment.shell)
+      const integration = deps.agentNotifications?.prepareSession({
+        sessionId,
+        title: session.title,
+        shell: environment.shell,
+        env: environment.env,
+        defaultShellArgs,
+      })
       const child = (deps.spawnPty ?? spawnNodePty)({
         shell: environment.shell,
+        shellArgs: integration?.shellArgs ?? defaultShellArgs,
         cwd: environment.cwd,
         cols: session.cols,
         rows: session.rows,
-        env: environment.env,
+        env: integration?.env ?? environment.env,
       })
       attachRuntime(session, child, buffer)
       await flushPersist()
@@ -894,6 +909,7 @@ export function createTerminalService(deps: {
         attention: unknownAttention(session, "not_running"),
       }
       sessions.set(session.id, failed)
+      deps.agentNotifications?.unregisterSession(session.id)
       await flushPersist()
       return getSessionOrThrow(session.id)
     }
@@ -1398,6 +1414,7 @@ export function createTerminalService(deps: {
   }
 
   function removeSessionResources(sessionId: string): void {
+    deps.agentNotifications?.unregisterSession(sessionId)
     cleanupRuntime(sessionId)
     sessions.delete(sessionId)
     buffers.delete(sessionId)
@@ -1879,6 +1896,7 @@ export function createTerminalService(deps: {
       updatedAt: now(),
     }
     sessions.set(current.id, updated)
+    deps.agentNotifications?.renameSession(updated.id, updated.title)
     bumpDomain("session.renamed", updated.id, updated.metadataRevision)
     await flushPersist()
     if (!lastPersistError) events.emit("sessionChanged", updated)
@@ -2506,6 +2524,7 @@ export function createTerminalService(deps: {
   }
 
   function advanceInputRevision(sessionId: string, reason: string): TerminalSession {
+    deps.agentNotifications?.handleUserInput(sessionId)
     return updateSessionState(sessionId, (session) => ({
       ...session,
       inputRevision: session.inputRevision + 1,
@@ -2682,7 +2701,7 @@ export function createTerminalService(deps: {
 function spawnNodePty(input: SpawnPtyInput): PtyLike {
   ensureNodePtySpawnHelperExecutable()
   const pty = loadNodePty()
-  return pty.spawn(input.shell, resolveTerminalShellArgs(input.shell), {
+  return pty.spawn(input.shell, [...(input.shellArgs ?? resolveTerminalShellArgs(input.shell))], {
     name: "xterm-256color",
     cols: input.cols,
     rows: input.rows,

@@ -1,8 +1,10 @@
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
-import type { WindowManager } from "../../runtime/window"
 import { CHEAT_CODE_STATE_SERVICE_ID, type CheatCodeStateService } from "../../services/cheat-code-state-service"
-import { createDefaultSystemAppWindowService } from "../../services/system-app-window-service"
+import {
+  SYSTEM_APP_WINDOW_SERVICE_ID,
+  type createDefaultSystemAppWindowService,
+} from "../../services/system-app-window-service"
 import { WORKFLOW_ENTRY_VISIBLE_BY_DEFAULT } from "../../../config"
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "../../../src/lib/cheat-codes/names"
 import { getSystemAppDefinition } from "../../../src/modules/apps/definitions"
@@ -68,17 +70,6 @@ const openSystemAppRequestSchema = z.object({
 type OpenSystemAppRequest = z.infer<typeof openSystemAppRequestSchema>
 type SystemAppWindowService = ReturnType<typeof createDefaultSystemAppWindowService>
 
-let cachedWindowManager: WindowManager | null = null
-let cachedSystemAppWindowService: SystemAppWindowService | null = null
-
-function getSystemAppWindowService(windowManager: WindowManager): SystemAppWindowService {
-  if (!cachedSystemAppWindowService || cachedWindowManager !== windowManager) {
-    cachedWindowManager = windowManager
-    cachedSystemAppWindowService = createDefaultSystemAppWindowService(windowManager)
-  }
-  return cachedSystemAppWindowService
-}
-
 async function assertSystemAppVisible(ctx: IpcHandlerContext, appId: OpenSystemAppRequest["appId"]): Promise<void> {
   const definition = getSystemAppDefinition(appId)
   if (!definition) {
@@ -109,7 +100,7 @@ export const appsIpcModule: IpcModule = {
       response: z.void(),
       handler: async (ctx, request: OpenSystemAppRequest) => {
         await assertSystemAppVisible(ctx, request.appId)
-        const service = getSystemAppWindowService(ctx.resolve<WindowManager>("core.window-manager"))
+        const service = ctx.resolve<SystemAppWindowService>(SYSTEM_APP_WINDOW_SERVICE_ID)
         await service.open(request.appId, request.options)
       },
     },

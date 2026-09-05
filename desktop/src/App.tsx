@@ -256,11 +256,6 @@ function MainApp() {
     })
   }, [setActiveAppId])
 
-  const handleOpenUpdateIndicator = useCallback(() => {
-    setActiveAppId("settings", "notification")
-    requestOpenSettingsAbout()
-  }, [setActiveAppId])
-
   useUpdateOpenRequest(handleUpdateOpenRequest)
 
   useEffect(() => {
@@ -292,7 +287,7 @@ function MainApp() {
     <IdentityGate>
       <SoundNotifierHost />
       <AppShellLayout
-        leading={<AppShellUpdateIndicator onOpen={handleOpenUpdateIndicator} />}
+        leading={<AppShellUpdateIndicator />}
         dock={
           <AppShellDock
             apps={dock.pinnedApps}

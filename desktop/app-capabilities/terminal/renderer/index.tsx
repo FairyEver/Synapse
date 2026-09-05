@@ -63,6 +63,7 @@ import { SystemAppTopBarActionButton } from "../../../src/modules/apps/component
 import type { SynapseSystemAppTerminalOpenRequest } from "../../../src/modules/apps/types"
 import type {
   SynapseTerminalGlobalLaunchSettings,
+  SynapseTerminalAgentNotificationSettings,
   SynapseTerminalCreateCustomToolbarActionInput,
   SynapseTerminalCustomToolbarAction,
   SynapseTerminalGroup,
@@ -121,6 +122,8 @@ export function TerminalModule({
   const [loading, setLoading] = useState(true)
   const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false)
   const [globalLaunchSettings, setGlobalLaunchSettings] = useState<SynapseTerminalGlobalLaunchSettings | null>(null)
+  const [agentNotificationSettings, setAgentNotificationSettings] = useState<SynapseTerminalAgentNotificationSettings | null>(null)
+  const [agentNotificationsEnabledDraft, setAgentNotificationsEnabledDraft] = useState(false)
   const [globalLaunchDraft, setGlobalLaunchDraft] = useState<SynapseTerminalLaunchLayer>({})
   const [terminalAppearanceSize, setTerminalAppearanceSize] = useState(readTerminalAppearanceSize)
   const [terminalAppearanceSizeDraft, setTerminalAppearanceSizeDraft] = useState(terminalAppearanceSize)
@@ -186,6 +189,18 @@ export function TerminalModule({
   const terminalSessionStatus = activeSession?.status ?? null
 
   useEffect(() => {
+    void terminalBridge.agentNotifications.reportActiveSession({
+      sessionId: activeSession?.id ?? null,
+    }).catch((error) => {
+      logger.warn("Failed to report the active Terminal session.", error)
+    })
+  }, [activeSession?.id, terminalBridge])
+
+  useEffect(() => () => {
+    void terminalBridge.agentNotifications.reportActiveSession({ sessionId: null }).catch(() => undefined)
+  }, [terminalBridge])
+
+  useEffect(() => {
     if (!activeWorkspace) return
     setMountedWorkspaceIds((current) => {
       if (current.has(activeWorkspace.id)) return current
@@ -218,6 +233,7 @@ export function TerminalModule({
     && (
       JSON.stringify(globalLaunchDraft) !== JSON.stringify(globalLaunchSettings?.settings ?? {})
       || terminalAppearanceSizeDraft !== terminalAppearanceSize
+      || agentNotificationsEnabledDraft !== agentNotificationSettings?.enabled
     )
   const groupSettingsDirty = Boolean(groupSettingsTarget) && (
     groupSettingsName !== groupSettingsTarget?.name
@@ -429,9 +445,14 @@ export function TerminalModule({
 
   const openGlobalSettingsDialog = useCallback(async () => {
     try {
-      const settings = await terminalBridge.globalLaunch.get()
-      setGlobalLaunchSettings(settings)
-      setGlobalLaunchDraft(settings.settings ?? {})
+      const [launchSettings, notificationSettings] = await Promise.all([
+        terminalBridge.globalLaunch.get(),
+        terminalBridge.agentNotifications.get(),
+      ])
+      setGlobalLaunchSettings(launchSettings)
+      setGlobalLaunchDraft(launchSettings.settings ?? {})
+      setAgentNotificationSettings(notificationSettings)
+      setAgentNotificationsEnabledDraft(notificationSettings.enabled)
       setTerminalAppearanceSizeDraft(terminalAppearanceSize)
       setGlobalSettingsOpen(true)
     } catch (error) {
@@ -457,22 +478,49 @@ export function TerminalModule({
   }, [terminalBridge])
 
   const saveGlobalLaunchSettings = useCallback(async () => {
-    if (!globalLaunchSettings) return
+    if (!globalLaunchSettings || !agentNotificationSettings) return
     setGlobalLaunchSaving(true)
     try {
-      const updated = await runTrackedOperation(
+      const launchSettingsChanged = JSON.stringify(globalLaunchDraft)
+        !== JSON.stringify(globalLaunchSettings.settings ?? {})
+      const notificationSettingsChanged = agentNotificationsEnabledDraft
+        !== agentNotificationSettings.enabled
+      const [updatedLaunch, updatedNotifications] = await runTrackedOperation(
         { component: "terminal", eventKey: "terminal.settings.update" },
-        () => terminalBridge.globalLaunch.update({
-          expectedRevision: globalLaunchSettings.revision,
-          settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
-        }),
+        () => Promise.all([
+          launchSettingsChanged
+            ? terminalBridge.globalLaunch.update({
+                expectedRevision: globalLaunchSettings.revision,
+                settings: Object.keys(globalLaunchDraft).length ? globalLaunchDraft : undefined,
+              })
+            : Promise.resolve(globalLaunchSettings),
+          notificationSettingsChanged
+            ? terminalBridge.agentNotifications.update({
+                enabled: agentNotificationsEnabledDraft,
+                expectedRevision: agentNotificationSettings.revision,
+              })
+            : Promise.resolve(agentNotificationSettings),
+        ]),
       )
       writeTerminalAppearanceSize(terminalAppearanceSizeDraft)
       setTerminalAppearanceSize(terminalAppearanceSizeDraft)
-      setGlobalLaunchSettings(updated)
+      setGlobalLaunchSettings(updatedLaunch)
+      setAgentNotificationSettings(updatedNotifications)
       setGlobalSettingsOpen(false)
       toast.success("终端设置已保存")
     } catch (error) {
+      try {
+        const [launchSettings, notificationSettings] = await Promise.all([
+          terminalBridge.globalLaunch.get(),
+          terminalBridge.agentNotifications.get(),
+        ])
+        setGlobalLaunchSettings(launchSettings)
+        setGlobalLaunchDraft(launchSettings.settings ?? {})
+        setAgentNotificationSettings(notificationSettings)
+        setAgentNotificationsEnabledDraft(notificationSettings.enabled)
+      } catch (reloadError) {
+        logger.warn("Failed to reload terminal settings after save failure.", reloadError)
+      }
       logger.error("Failed to save global terminal launch settings.", error)
       toast.error(error instanceof Error && error.message.includes("revision_conflict")
         ? "设置已被其他操作更新，请重新打开后再保存"
@@ -480,7 +528,14 @@ export function TerminalModule({
     } finally {
       setGlobalLaunchSaving(false)
     }
-  }, [globalLaunchDraft, globalLaunchSettings, terminalAppearanceSizeDraft, terminalBridge])
+  }, [
+    agentNotificationSettings,
+    agentNotificationsEnabledDraft,
+    globalLaunchDraft,
+    globalLaunchSettings,
+    terminalAppearanceSizeDraft,
+    terminalBridge,
+  ])
 
   const saveGroup = useCallback(async () => {
     const name = groupName.trim()
@@ -1382,6 +1437,8 @@ export function TerminalModule({
                   onChange={setGlobalLaunchDraft}
                   appearanceSize={terminalAppearanceSizeDraft}
                   onAppearanceSizeChange={setTerminalAppearanceSizeDraft}
+                  agentNotificationsEnabled={agentNotificationsEnabledDraft}
+                  onAgentNotificationsEnabledChange={setAgentNotificationsEnabledDraft}
                 />
               </ScrollArea>
             </DialogFrameBody>

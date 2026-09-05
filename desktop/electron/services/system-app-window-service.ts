@@ -20,6 +20,7 @@ import { createMainLogger } from "./log-store"
 const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:content_open_request"
 const SYSTEM_APP_GIT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:git_open_request"
 const SYSTEM_APP_TERMINAL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:terminal_open_request"
+export const SYSTEM_APP_WINDOW_SERVICE_ID = "core.system-app-window"
 
 type SystemAppWindowLogger = {
   readonly info: (message: string, metadata?: Record<string, unknown>) => void
