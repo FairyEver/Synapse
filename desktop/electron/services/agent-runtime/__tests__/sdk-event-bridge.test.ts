@@ -59,6 +59,117 @@ describe("SDK event bridge", () => {
     })
   })
 
+  it("treats terminal API disconnect results as recoverable errors", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-disconnected",
+      uuid: "result-disconnected",
+      is_error: true,
+      result: "API Error: Connection lost mid-response. The response above may be incomplete.",
+      terminal_reason: "api_error",
+      api_error_status: null,
+      total_cost_usd: 0.25,
+      usage: { input_tokens: 8, output_tokens: 3 },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "模型连接中断，任务尚未完成。",
+      errorKind: "connection_interrupted",
+      recoverable: true,
+      sdkSessionId: "sdk-disconnected",
+      sdkResultUuid: "result-disconnected",
+      costUsd: 0.25,
+      payload: expect.objectContaining({
+        is_error: true,
+        terminal_reason: "api_error",
+        api_error_status: null,
+      }),
+      ...baseEnvelope,
+    })
+  })
+
+  it("prioritizes terminal API disconnects when the SDK also reports generic errors", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-disconnected-with-errors",
+      uuid: "result-disconnected-with-errors",
+      is_error: true,
+      errors: ["server_error"],
+      result: "API Error: Connection lost mid-response. The response above may be incomplete.",
+      terminal_reason: "api_error",
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "模型连接中断，任务尚未完成。",
+      errorKind: "connection_interrupted",
+      recoverable: true,
+      sdkSessionId: "sdk-disconnected-with-errors",
+    })
+  })
+
+  it("treats terminal API disconnects as errors without the SDK is_error flag", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-terminal-disconnect",
+      uuid: "result-terminal-disconnect",
+      result: "API Error: Connection lost mid-response. The response above may be incomplete.",
+      terminal_reason: "api_error",
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "模型连接中断，任务尚未完成。",
+      errorKind: "connection_interrupted",
+      recoverable: true,
+      sdkSessionId: "sdk-terminal-disconnect",
+    })
+  })
+
+  it("does not render synthetic API errors as assistant replies", () => {
+    expect(bridgeSdkMessage({
+      type: "assistant",
+      session_id: "sdk-disconnected",
+      error: "server_error",
+      is_api_error_message: true,
+      message: {
+        role: "assistant",
+        content: [{
+          type: "text",
+          text: "API Error: Connection lost mid-response. The response above may be incomplete.",
+        }],
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toEqual([])
+  })
+
+  it("does not render standard SDK assistant errors as assistant replies", () => {
+    expect(bridgeSdkMessage({
+      type: "assistant",
+      session_id: "sdk-assistant-error",
+      error: "server_error",
+      message: {
+        role: "assistant",
+        content: [{
+          type: "text",
+          text: "API Error: Connection lost mid-response. The response above may be incomplete.",
+        }],
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toEqual([])
+  })
+
+  it("does not treat an SDK result marked as an error as success without diagnostics", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-error-without-details",
+      uuid: "result-error-without-details",
+      is_error: true,
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "Agent 执行失败。",
+      recoverable: false,
+      sdkSessionId: "sdk-error-without-details",
+    })
+  })
+
   it("treats max turn result subtypes without errors as errors", () => {
     expect(bridgeSdkMessage({
       type: "result",
@@ -585,6 +696,34 @@ describe("SDK event bridge", () => {
         ...baseEnvelope,
       }),
     ])
+  })
+
+  it("omits embedded image data URLs from persisted tool result text", () => {
+    const encodedImage = "A".repeat(2_000)
+    const events = bridgeSdkMessage({
+      type: "user",
+      session_id: "sdk-tools",
+      message: {
+        role: "user",
+        content: [{
+          type: "tool_result",
+          tool_use_id: "toolu-read-html",
+          content: `1705 <img src="data:image/jpeg;base64,${encodedImage}">`,
+          is_error: false,
+        }],
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "toolResult",
+        content: "1705 <img src=\"[embedded image omitted]\">",
+        contentDiagnostics: expect.objectContaining({
+          textCharCount: expect.any(Number),
+        }),
+      }),
+    ])
+    expect(JSON.stringify(events)).not.toContain(encodedImage)
   })
 
   it("extracts image SDK tool_result blocks into runtime-only imageBlocks", () => {

@@ -813,6 +813,48 @@ describe("useAgentChat", () => {
     expect(chat?.timeline[0]).toMatchObject({ kind: "message", role: "user", content: "stop me" })
   })
 
+  it("keeps a recoverable interrupted send accepted", async () => {
+    const bridge = (window as unknown as {
+      synapse: { agent: { send: ReturnType<typeof vi.fn> } }
+    }).synapse.agent
+    bridge.send.mockResolvedValue({
+      conversationId: session.id,
+      resultText: "",
+      error: "模型连接中断，任务尚未完成。",
+      events: [{
+        type: "error",
+        message: "模型连接中断，任务尚未完成。",
+        errorKind: "connection_interrupted",
+        recoverable: true,
+      }],
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<HookProbe onChange={(next) => { chat = next }} />)
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    const sent = await act(async () => chat?.sendMessage("continue later", {
+      projectId: session.projectId,
+      conversationId: session.id,
+      sessionKey: session.sessionKey,
+    }))
+
+    expect(sent).toBe(true)
+    expect(chat?.error).toBeNull()
+    expect(chat?.timeline).toHaveLength(1)
+    expect(chat?.timeline[0]).toMatchObject({
+      kind: "message",
+      role: "user",
+      content: "continue later",
+    })
+  })
+
   it("shows safe attachment send errors without keeping the optimistic message", async () => {
     const bridge = (window as unknown as {
       synapse: {

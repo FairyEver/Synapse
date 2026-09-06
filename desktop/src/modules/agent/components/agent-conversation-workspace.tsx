@@ -26,10 +26,7 @@ import type { AgentConversationTarget as ImportedAgentConversationTarget } from 
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
 import type { WorkspaceFileTreeDataSource } from "@/types/workspace-file-tree"
-import {
-  type AgentDraftAttachment,
-  formatDraftAttachmentsForMessage,
-} from "../attachments"
+import { type AgentDraftAttachment } from "../attachments"
 import { formatCreateSessionName } from "../create-session-name"
 import {
   toKnowledgeBaseComposerActions,
@@ -334,11 +331,12 @@ function AgentConversationWorkspace({
     content: string,
     options: {
       attachments?: readonly AgentDraftAttachment[]
+      preserveDraft?: boolean
     } = {},
   ): Promise<boolean> => {
     const attachments = options.attachments ?? []
     if (!content.trim() && attachments.length === 0) return false
-    setDraft("")
+    if (!options.preserveDraft) setDraft("")
     stick.forcePin()
     if (chat.sending) {
       return queueMessage(content, target, attachments)
@@ -347,7 +345,7 @@ function AgentConversationWorkspace({
       ? await chat.sendMessage(content, target, { attachments })
       : await chat.sendMessage(content, target)
     if (!sent) {
-      setDraft(content)
+      if (!options.preserveDraft) setDraft(content)
       return false
     }
     recordRecentSlashSkill(content)
@@ -757,6 +755,7 @@ function AgentConversationWorkspace({
         referenceActions={referenceActions}
         onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
           chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
+        onContinue={() => void submitContent("继续", { preserveDraft: true })}
         viewportRef={stick.viewportRef}
         loadingOlder={chat.loadingOlder}
         historyError={chat.timelineHistoryError}

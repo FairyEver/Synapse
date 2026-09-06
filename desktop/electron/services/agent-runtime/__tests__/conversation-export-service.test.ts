@@ -71,6 +71,7 @@ describe("AgentConversationExportService", () => {
           httpUrl: "http://example.test/assets/path",
           relativePath: "docs/setup.md",
           ANTHROPIC_AUTH_TOKEN: "sk-secret",
+          legacyImage: "data:image/png;base64,aGVsbG8=",
         },
       },
       createdAt: "2026-06-08T08:00:01.000Z",
@@ -92,6 +93,25 @@ describe("AgentConversationExportService", () => {
         },
       },
       createdAt: "2026-06-08T08:00:00.750Z",
+    })
+    await agentEvents.upsert({
+      id: "event-api-error",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: "conv-1",
+      turnId: "turn-2",
+      eventType: "error",
+      payload: {
+        type: "error",
+        message: "模型连接中断，任务尚未完成。",
+        errorKind: "execution_failed",
+        recoverable: true,
+        payload: {
+          terminal_reason: "api_error",
+          api_error_status: null,
+        },
+      },
+      createdAt: "2026-06-08T08:00:01.250Z",
     })
     await agentEvents.upsert({
       id: "conv-1:turn-1:stream-diagnostics",
@@ -159,6 +179,11 @@ describe("AgentConversationExportService", () => {
         sessionKey?: string
         toolCallCount: number
         failedToolCount: number
+        failedTurnCount: number
+        recoverableFailureCount: number
+        apiErrorCount: number
+        costUsd: number
+        costCny: number
         usageSummary: { totalTokens: number }
       }
       const attachments = JSON.parse(await readPackageFile("attachments.json")) as {
@@ -190,6 +215,7 @@ describe("AgentConversationExportService", () => {
         events: Array<{ turnId: string; sequence: number; payload: Record<string, unknown> }>
       }
       const timelineText = await readPackageFile("timeline.json")
+      const timeline = JSON.parse(timelineText) as { entries: unknown[] }
       const transcript = await readPackageFile("transcript.md")
       const packageText = [
         conversationText,
@@ -216,6 +242,11 @@ describe("AgentConversationExportService", () => {
         sessionKey: "[redacted]",
         toolCallCount: 1,
         failedToolCount: 1,
+        failedTurnCount: 1,
+        recoverableFailureCount: 1,
+        apiErrorCount: 1,
+        costUsd: 0.75,
+        costCny: 0.6,
         usageSummary: { totalTokens: 14 },
       })
       expect(manifest.sessionKey).toBe("[redacted]")
@@ -287,6 +318,9 @@ describe("AgentConversationExportService", () => {
         relativePath: "docs/setup.md",
       })
       expect(eventsText).not.toContain("sk-secret")
+      expect(packageText).not.toContain("data:image/png;base64")
+      expect(packageText).not.toContain("aGVsbG8=")
+      expect(packageText).toContain("[embedded image omitted]")
       expect(eventsText).not.toContain("streamDiagnostics")
       expect(eventsText).not.toContain("[key]")
       expect(sdkStream).toMatchObject({
@@ -310,6 +344,7 @@ describe("AgentConversationExportService", () => {
       })
       expect(sdkStreamText).not.toContain("sk-stream-secret")
       expect(timelineText).toContain("toolu-read-1")
+      expect(timeline.entries).toHaveLength(2)
       expect(transcript).toContain("Read")
       expect(transcript).toContain("输出")
       expect(transcript).not.toContain("/tmp")
@@ -838,6 +873,7 @@ function createConversation(): ConversationEntryV1 {
       outputTokens: 4,
       totalTokens: 14,
     },
+    costUsd: 0.25,
     costCny: 0.01,
     costCurrency: "CNY",
     agentType: "claude-code",
@@ -867,16 +903,29 @@ function createConversation(): ConversationEntryV1 {
         content: [
           "Read",
           "{\"file_path\":\"/Users/liyang/project/file.ts\"}",
+          "Bash\\n{\"command\":\"ls -la \\\"/Users/liyang/Library/Application Support/Synapse/workspace/\\\"\",\"description\":\"列出工作区文件\"}",
           "Top-level /tmp /etc /foo and multi-level /var/lib/app/config.json.",
           "Quoted \"/Users/liyang/Project Space/source.ts\" and `C:\\Users\\liyang\\Project Space\\source.ts`.",
           "File URL file:///Users/liyang/Project%20Space/source.ts.",
           "Keep https://example.test/api/v1/items, docs/setup.md, and/or, and //cdn.example.test/app.js.",
+          "Legacy image data:image/png;base64,aGVsbG8= should be omitted.",
         ].join("\n"),
         timestamp: "2026-06-08T08:00:01.000Z",
         metadata: {
           agentEventType: "toolUse",
           toolUseId: "toolu-read-1",
           toolName: "Read",
+        },
+      },
+      {
+        role: "assistant",
+        content: "已完成",
+        timestamp: "2026-06-08T08:00:02.000Z",
+        metadata: {
+          costUsd: 0.25,
+          costCny: 0.2,
+          totalCostUsd: 0.75,
+          totalCostCny: 0.6,
         },
       },
     ],

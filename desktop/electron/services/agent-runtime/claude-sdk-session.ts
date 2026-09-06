@@ -959,6 +959,23 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
     const bridged = bridgeSdkMessage(message, envelope)
     const events = Array.isArray(bridged) ? bridged : [bridged as AgentEvent]
+    for (const event of events) {
+      if (event.type !== "error" || event.errorKind !== "connection_interrupted") continue
+      this.logger?.warn("Claude SDK connection interrupted.", {
+        boundary: "claude-sdk-query.connection-interrupted",
+        projectId: this.projectId,
+        conversationId: this.conversationId,
+        providerId: this.providerId,
+        sdkSessionId: this.sdkSessionId,
+        sdkResultUuid: event.sdkResultUuid,
+        terminalReason: typeof event.payload?.terminal_reason === "string"
+          ? event.payload.terminal_reason
+          : undefined,
+        apiErrorStatus: typeof event.payload?.api_error_status === "number"
+          ? event.payload.api_error_status
+          : undefined,
+      })
+    }
     return events.map((event) => {
       const enriched = contextUsage && event.type === "result"
         ? { ...event, metadata: { ...(event.metadata ?? {}), contextUsage } }
@@ -1171,7 +1188,8 @@ function projectAttachmentPathText(
 }
 
 function stripStreamInputJson(event: Extract<AgentEvent, { readonly type: "stream" }>): AgentEvent {
-  const { partialJson: _partialJson, ...rest } = event
+  const { partialJson, ...rest } = event
+  void partialJson
   return {
     ...rest,
     event: removePartialJsonFields(event.event) as Record<string, unknown>,

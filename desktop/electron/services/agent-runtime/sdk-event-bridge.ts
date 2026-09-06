@@ -12,6 +12,7 @@ import type {
 import { isSensitiveKey, redactSensitiveText, REDACTED } from "./redaction"
 
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
+const EMBEDDED_IMAGE_DATA_URL_PATTERN = /data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/gi
 const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -41,20 +42,40 @@ export function bridgeSdkMessage(
     const usage = recordValue(raw.usage)
     const modelUsage = recordValue(raw.modelUsage)
     const sdkResultUuid = stringValue(raw.uuid)
-    if (raw.subtype !== "success" || raw.is_error === true) {
+    const resultDiagnostic = stringValue(raw.result)
+    const terminalReason = stringValue(raw.terminal_reason)
+    const resultPresentation = resultDiagnostic
+      ? sdkResultErrorPresentation(undefined, [sanitizeDiagnosticText(resultDiagnostic)])
+      : undefined
+    const hasConnectionInterruption = resultPresentation?.errorKind === "connection_interrupted"
+    if (
+      raw.subtype !== "success"
+      || raw.is_error === true
+      || terminalReason === "api_error"
+      || hasConnectionInterruption
+    ) {
       const errors = Array.isArray(raw.errors)
         ? raw.errors.filter((error): error is string => typeof error === "string")
         : []
+      const diagnostics = [
+        ...(errors.length > 0 ? errors : [resultDiagnostic]),
+        terminalReason ? `terminal_reason=${terminalReason}` : undefined,
+      ].filter((value): value is string => Boolean(value))
       const presentation = sdkResultErrorPresentation(
         stringValue(raw.subtype),
-        errors.map(sanitizeDiagnosticText),
+        diagnostics.map(sanitizeDiagnosticText),
       )
-      if (presentation) {
+      if (presentation || raw.is_error === true) {
+        const resolvedPresentation = presentation ?? {
+          message: "Agent 执行失败。",
+          errorKind: "execution_failed" as const,
+          recoverable: false,
+        }
         return {
           type: "error",
-          message: presentation.message,
-          errorKind: presentation.errorKind,
-          recoverable: presentation.recoverable,
+          message: resolvedPresentation.message,
+          errorKind: resolvedPresentation.errorKind,
+          recoverable: resolvedPresentation.recoverable,
           sdkSessionId,
           usage,
           modelUsage,
@@ -100,6 +121,7 @@ export function bridgeSdkMessage(
   }
 
   if (raw.type === "assistant") {
+    if (raw.is_api_error_message === true || stringValue(raw.error)) return []
     const message = recordValue(raw.message) ?? {}
     const contentBlocks = Array.isArray(message.content) ? message.content : undefined
     const assistantEvent: AgentEvent = {
@@ -173,6 +195,9 @@ function sanitizeResultSuccessPayload(payload: Record<string, unknown>): Record<
 
 function sanitizeResultErrorPayload(payload: Record<string, unknown>): Record<string, unknown> {
   const sanitized = { ...payload }
+  if (typeof sanitized.result === "string") {
+    sanitized.result = sanitizeDiagnosticText(sanitized.result)
+  }
   if (Array.isArray(sanitized.errors)) {
     sanitized.errors = sanitized.errors.map((error) =>
       typeof error === "string" ? sanitizeDiagnosticText(error) : error
@@ -286,14 +311,18 @@ function redactToolInputStrings(value: unknown): unknown {
 }
 
 function toolResultContent(value: unknown): string | undefined {
-  if (typeof value === "string") return redactDiagnosticText(value)
+  if (typeof value === "string") return sanitizeToolResultText(value)
   if (!Array.isArray(value)) return undefined
   const text = value.map((item) => {
     if (typeof item === "string") return item
     const record = isRecord(item) ? item : undefined
     return stringValue(record?.text) ?? ""
   }).join("")
-  return text.length > 0 ? redactDiagnosticText(text) : undefined
+  return text.length > 0 ? sanitizeToolResultText(text) : undefined
+}
+
+function sanitizeToolResultText(value: string): string {
+  return redactDiagnosticText(value.replace(EMBEDDED_IMAGE_DATA_URL_PATTERN, "[embedded image omitted]"))
 }
 
 function toolResultContentDiagnostics(value: unknown): AgentToolResultContentDiagnostics {

@@ -113,6 +113,77 @@ function renderInteractiveTimeline(overrides: Partial<ComponentProps<typeof Agen
 }
 
 describe("AgentTimeline", () => {
+  it("lets users continue a recoverable interruption", () => {
+    const onContinue = vi.fn()
+    const { container } = renderInteractiveTimeline({
+      items: [{
+        id: "recoverable-error",
+        kind: "error",
+        message: "模型连接中断，任务尚未完成。",
+        recoverable: true,
+        timestamp: "2026-09-06T01:40:42.000Z",
+      }],
+      onContinue,
+    })
+
+    const button = Array.from(container.querySelectorAll("button"))
+      .find((candidate) => candidate.textContent === "继续")
+    expect(button).toBeTruthy()
+
+    act(() => button?.click())
+    expect(onContinue).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not offer continue after a recoverable interruption has been consumed", () => {
+    const { container } = renderInteractiveTimeline({
+      items: [
+        {
+          id: "recoverable-error",
+          kind: "error",
+          message: "模型连接中断，任务尚未完成。",
+          recoverable: true,
+          timestamp: "2026-09-06T01:40:42.000Z",
+        },
+        {
+          id: "continued-message",
+          kind: "message",
+          role: "user",
+          content: "继续",
+          timestamp: "2026-09-06T01:41:00.000Z",
+        },
+      ],
+      onContinue: vi.fn(),
+    })
+
+    expect(Array.from(container.querySelectorAll("button"))
+      .some((candidate) => candidate.textContent === "继续")).toBe(false)
+  })
+
+  it("offers continue only on the latest unconsumed recoverable interruption", () => {
+    const { container } = renderInteractiveTimeline({
+      items: [
+        {
+          id: "older-recoverable-error",
+          kind: "error",
+          message: "模型连接中断，任务尚未完成。",
+          recoverable: true,
+          timestamp: "2026-09-06T01:40:42.000Z",
+        },
+        {
+          id: "newer-recoverable-error",
+          kind: "error",
+          message: "模型连接中断，任务尚未完成。",
+          recoverable: true,
+          timestamp: "2026-09-06T01:41:42.000Z",
+        },
+      ],
+      onContinue: vi.fn(),
+    })
+
+    expect(Array.from(container.querySelectorAll("button"))
+      .filter((candidate) => candidate.textContent === "继续")).toHaveLength(1)
+  })
+
   it("shows only the older-history loading and retry actions", () => {
     expect(textFromMarkup(renderTimeline({
       items: [{

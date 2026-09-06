@@ -1092,6 +1092,7 @@ function errorKindMetadata(
 ): SynapseAgentErrorKind | undefined {
   const value = stringMetadata(metadata, key)
   return value === "execution_failed"
+    || value === "connection_interrupted"
     || value === "tool_use_interrupted"
     || value === "webfetch_preflight_failed"
     ? value

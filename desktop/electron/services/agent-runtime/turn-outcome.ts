@@ -10,6 +10,7 @@ export type AgentTurnOutcomeStatus =
 export type AgentTurnDiagnosticKind =
   | "aborted"
   | "closed"
+  | "connection_interrupted"
   | "error"
   | "tool_use_interrupted"
 
@@ -51,7 +52,7 @@ export type AgentTurnOutcome =
   }
   | {
     readonly status: "interrupted"
-    readonly reason: "tool_use_interrupted"
+    readonly reason: "network_interrupted" | "tool_use_interrupted"
     readonly recoverable: true
     readonly message: string
     readonly diagnostics?: readonly AgentTurnDiagnostic[]
@@ -191,6 +192,15 @@ function outcomeForEvent(
     }
   }
 
+  if (diagnostic?.kind === "connection_interrupted") {
+    return {
+      status: "interrupted",
+      reason: "network_interrupted",
+      recoverable: true,
+      message: "模型连接中断，任务尚未完成。",
+    }
+  }
+
   return {
     status: "failed",
     reason: failureReason(diagnostic),
@@ -232,9 +242,11 @@ export function diagnosticFromAgentError(event: AgentErrorEvent): AgentTurnDiagn
   const message = unwrapAgentDiagnosticMessage(event.message)
   return {
     source: "claude-sdk",
-    kind: isToolUseInterruptedMessage(message)
-      ? "tool_use_interrupted"
-      : /Request was aborted/i.test(message) ? "aborted" : "error",
+    kind: event.errorKind === "connection_interrupted"
+      ? "connection_interrupted"
+      : isToolUseInterruptedMessage(message)
+        ? "tool_use_interrupted"
+        : /Request was aborted/i.test(message) ? "aborted" : "error",
     message,
   }
 }
@@ -275,7 +287,9 @@ export function outcomeToAgentEvent(input: {
       ...base,
       type: "error",
       message: input.outcome.message,
-      errorKind: "tool_use_interrupted",
+      errorKind: input.outcome.reason === "network_interrupted"
+        ? "connection_interrupted"
+        : "tool_use_interrupted",
       recoverable: true,
       turnOutcome: input.outcome,
     } satisfies AgentErrorEvent

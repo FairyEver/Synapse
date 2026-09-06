@@ -800,55 +800,52 @@ export class ConversationRouter {
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: resultUsage as ConversationEntryV1["usage"] | undefined,
-          costUsd: resultCostUsd,
-          costCny: resultCostCny,
+          costUsd: metadataNumber(resultMetadata, "totalCostUsd") ?? resultCostUsd,
+          costCny: metadataNumber(resultMetadata, "totalCostCny") ?? resultCostCny,
           costCurrency: resultCostCurrency,
         })
         break
       }
 
       if (event.type === "error") {
-        const sdkResultUsage = sdkResultUsageFromError(event)
-        if (sdkResultUsage) {
-          const sdkSessionId = event.sdkSessionId ?? liveSession.currentSessionId()
-          const turnUsage = this.normalizedTurnUsage(
-            conversation,
-            sdkResultUsage,
-            event.modelUsage,
-            sdkSessionId,
-          )
-          resultUsage = sdkResultUsage
-          resultCostUsd = this.normalizedEventCostUsd(conversation, event.costUsd, event.payload)
-          resultCostCny = this.estimateLocalCostCny(
-            state,
-            sdkResultUsage,
-            turnUsage.modelUsage,
-          )?.total
-          resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
-          await this.repository.recordSdkResultUsage({
-            conversationId: conversation.id,
-            turnId,
-            sdkResultUuid: event.sdkResultUuid,
-            sdkSessionId,
-            usage: sdkResultUsage,
-            usageSummary: turnUsage.summary,
-            modelUsage: event.modelUsage,
-            userMeta: message.userMeta ?? conversation.userMeta,
-          })
-        }
+        const finalized = await this.finalizeErrorUsage({
+          state,
+          conversation,
+          event,
+          turnId,
+          sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+          userMeta: message.userMeta ?? conversation.userMeta,
+        })
+        resultUsage = finalized.usage
+        resultCostUsd = finalized.costUsd
+        resultCostCny = finalized.costCny
+        resultCostCurrency = finalized.costCurrency
+        const enrichedError = finalized.event
         const lifecycle = state.activeLifecycle
         if (lifecycle) {
           const outcome = normalizeExecutorEvent(lifecycle, {
             type: "executor.error",
-            diagnostic: diagnosticFromAgentError(event),
+            diagnostic: diagnosticFromAgentError(enrichedError),
           })
-          const projected = outcomeToAgentEvent({
+          const projectedOutcome = outcomeToAgentEvent({
             outcome,
             conversationId: conversation.id,
             providerId: message.providerId ?? conversation.providerId,
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
             timestamp: this.isoNow(),
           })
+          const projected = projectedOutcome.type === "error"
+            ? {
+                ...projectedOutcome,
+                usage: enrichedError.usage,
+                modelUsage: enrichedError.modelUsage,
+                sdkResultUuid: enrichedError.sdkResultUuid,
+                costUsd: enrichedError.costUsd,
+                costCny: enrichedError.costCny,
+                costCurrency: enrichedError.costCurrency,
+                payload: enrichedError.payload,
+              }
+            : projectedOutcome
           events.push(projected)
           this.emitEvent(message, conversation.id, projected)
           await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
@@ -859,12 +856,12 @@ export class ConversationRouter {
           error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
           break
         }
-        events.push(event)
-        this.emitEvent(message, conversation.id, event)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-        await this.saveEventSdkSession(conversation.id, event, liveSession)
-        await this.saveEventHistory(conversation.id, event)
-        error = event.message
+        events.push(enrichedError)
+        this.emitEvent(message, conversation.id, enrichedError)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, enrichedError)
+        await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
+        await this.saveEventHistory(conversation.id, enrichedError)
+        error = enrichedError.message
         break
       }
 
@@ -1179,81 +1176,78 @@ export class ConversationRouter {
           await this.repository.saveUsage({
             conversationId: conversation.id,
             usage: resultUsage as ConversationEntryV1["usage"] | undefined,
-            costUsd: resultCostUsd,
-            costCny: resultCostCny,
+            costUsd: metadataNumber(resultMetadata, "totalCostUsd") ?? resultCostUsd,
+            costCny: metadataNumber(resultMetadata, "totalCostCny") ?? resultCostCny,
             costCurrency: resultCostCurrency,
           })
           break
         }
         if (event.type === "error") {
-          const sdkResultUsage = sdkResultUsageFromError(event)
-          if (sdkResultUsage) {
-            const sdkSessionId = event.sdkSessionId ?? liveSession.currentSessionId()
-            const turnUsage = this.normalizedTurnUsage(
-              conversation,
-              sdkResultUsage,
-              event.modelUsage,
-              sdkSessionId,
-            )
-            resultUsage = sdkResultUsage
-            resultCostUsd = this.normalizedEventCostUsd(conversation, event.costUsd, event.payload)
-            resultCostCny = this.estimateLocalCostCny(
-              state,
-              sdkResultUsage,
-              turnUsage.modelUsage,
-            )?.total
-            resultCostCurrency = resultCostCny === undefined ? undefined : "CNY"
-            await this.repository.recordSdkResultUsage({
-              conversationId: conversation.id,
-              turnId,
-              sdkResultUuid: event.sdkResultUuid,
-              sdkSessionId,
-              usage: sdkResultUsage,
-              usageSummary: turnUsage.summary,
-              modelUsage: event.modelUsage,
-              userMeta: message.userMeta ?? conversation.userMeta,
-            })
-          }
+          const finalized = await this.finalizeErrorUsage({
+            state,
+            conversation,
+            event,
+            turnId,
+            sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+            userMeta: message.userMeta ?? conversation.userMeta,
+          })
+          resultUsage = finalized.usage
+          resultCostUsd = finalized.costUsd
+          resultCostCny = finalized.costCny
+          resultCostCurrency = finalized.costCurrency
+          const enrichedError = finalized.event
           const lifecycle = state.activeLifecycle
           if (lifecycle) {
             const outcome = normalizeExecutorEvent(lifecycle, {
               type: "executor.error",
-              diagnostic: diagnosticFromAgentError(event),
+              diagnostic: diagnosticFromAgentError(enrichedError),
             })
-            const projected = outcomeToAgentEvent({
+            const projectedOutcome = outcomeToAgentEvent({
               outcome,
               conversationId: conversation.id,
               providerId: message.providerId ?? conversation.providerId,
               sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
               timestamp: this.isoNow(),
             })
+            const projected = projectedOutcome.type === "error"
+              ? {
+                  ...projectedOutcome,
+                  usage: enrichedError.usage,
+                  modelUsage: enrichedError.modelUsage,
+                  sdkResultUuid: enrichedError.sdkResultUuid,
+                  costUsd: enrichedError.costUsd,
+                  costCny: enrichedError.costCny,
+                  costCurrency: enrichedError.costCurrency,
+                  payload: enrichedError.payload,
+                }
+              : projectedOutcome
             events.push(projected)
             partialText = appendRelayText(partialText, projected)
-          this.emitEvent(message, conversation.id, projected)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
-          await this.saveEventSdkSession(conversation.id, projected, liveSession)
-          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
-            assistantHistoryPersisted,
-          }) || assistantHistoryPersisted
-          error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
+            this.emitEvent(message, conversation.id, projected)
+            await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+            await this.saveEventSdkSession(conversation.id, projected, liveSession)
+            assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
+              assistantHistoryPersisted,
+            }) || assistantHistoryPersisted
+            error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
             break
           }
-          events.push(event)
-          partialText = appendRelayText(partialText, event)
-        this.emitEvent(message, conversation.id, event)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-        await this.saveEventSdkSession(conversation.id, event, liveSession)
-        assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
-        error = event.message
+          events.push(enrichedError)
+          partialText = appendRelayText(partialText, enrichedError)
+          this.emitEvent(message, conversation.id, enrichedError)
+          await this.persistAgentEvent(conversation.id, turnId, events.length, enrichedError)
+          await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
+          assistantHistoryPersisted = await this.saveEventHistory(conversation.id, enrichedError) || assistantHistoryPersisted
+          error = enrichedError.message
           break
         }
         events.push(event)
         partialText = appendRelayText(partialText, event)
-      this.emitEvent(message, conversation.id, event)
-      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
-      await this.saveEventSdkSession(conversation.id, event, liveSession)
-      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
-      if (event.type === "permissionRequest") {
+        this.emitEvent(message, conversation.id, event)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+        await this.saveEventSdkSession(conversation.id, event, liveSession)
+        assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
+        if (event.type === "permissionRequest") {
           await liveSession.respondPermission(event.requestId, {
             behavior: "deny",
             message: permissionRelayDenyMessage(event),
@@ -1752,6 +1746,77 @@ export class ConversationRouter {
     }
   }
 
+  private async finalizeErrorUsage(input: {
+    readonly state: RuntimeSessionState
+    readonly conversation: ConversationEntryV1
+    readonly event: Extract<AgentEvent, { type: "error" }>
+    readonly turnId: string
+    readonly sdkSessionId?: string
+    readonly userMeta?: ConversationEntryV1["userMeta"]
+  }): Promise<{
+    readonly event: Extract<AgentEvent, { type: "error" }>
+    readonly usage: Record<string, unknown> | undefined
+    readonly costUsd: number | undefined
+    readonly costCny: number | undefined
+    readonly costCurrency: "CNY" | undefined
+  }> {
+    const turnCostUsd = this.normalizedEventCostUsd(
+      input.conversation,
+      input.event.costUsd,
+      input.event.payload,
+    )
+    const usage = sdkResultUsageFromError(input.event)
+    let turnCostCny: number | undefined
+    if (usage) {
+      const turnUsage = this.normalizedTurnUsage(
+        input.conversation,
+        usage,
+        input.event.modelUsage,
+        input.sdkSessionId,
+      )
+      turnCostCny = this.estimateLocalCostCny(
+        input.state,
+        usage,
+        turnUsage.modelUsage,
+      )?.total
+      await this.repository.recordSdkResultUsage({
+        conversationId: input.conversation.id,
+        turnId: input.turnId,
+        sdkResultUuid: input.event.sdkResultUuid,
+        sdkSessionId: input.sdkSessionId,
+        usage,
+        usageSummary: turnUsage.summary,
+        modelUsage: input.event.modelUsage,
+        userMeta: input.userMeta ?? input.conversation.userMeta,
+      })
+    }
+    if (turnCostUsd !== undefined || turnCostCny !== undefined) {
+      await this.repository.saveUsage({
+        conversationId: input.conversation.id,
+        costUsd: turnCostUsd === undefined
+          ? undefined
+          : roundCost(sumHistoryMetadataNumber(input.conversation.history, "costUsd") + turnCostUsd),
+        costCny: turnCostCny === undefined
+          ? undefined
+          : roundCost(sumHistoryMetadataNumber(input.conversation.history, "costCny") + turnCostCny),
+        costCurrency: turnCostCny === undefined ? undefined : "CNY",
+      })
+    }
+    const costCurrency = turnCostCny === undefined ? undefined : "CNY"
+    return {
+      event: {
+        ...input.event,
+        costUsd: turnCostUsd,
+        costCny: turnCostCny,
+        costCurrency,
+      },
+      usage,
+      costUsd: usage ? turnCostUsd : undefined,
+      costCny: turnCostCny,
+      costCurrency,
+    }
+  }
+
   private async cumulativeCostMetadata(
     conversationId: string,
     metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
@@ -1760,8 +1825,8 @@ export class ConversationRouter {
     const turnCostUsd = metadataNumber(metadata, "costUsd")
     if (turnCostCny === undefined && turnCostUsd === undefined) return metadata
     const conversation = await this.repository.get(conversationId)
-    const previousCostCny = conversation ? sumAssistantMetadataNumber(conversation.history, "costCny") : 0
-    const previousCostUsd = conversation ? sumAssistantMetadataNumber(conversation.history, "costUsd") : 0
+    const previousCostCny = conversation ? sumHistoryMetadataNumber(conversation.history, "costCny") : 0
+    const previousCostUsd = conversation ? sumHistoryMetadataNumber(conversation.history, "costUsd") : 0
     const turnCostBreakdownCny = metadataCostBreakdown(metadata, "costBreakdownCny")
     const previousCostBreakdownCny = conversation ? sumAssistantMetadataCostBreakdown(conversation.history, "costBreakdownCny") : undefined
     return compactMetadata({
@@ -1871,7 +1936,7 @@ export class ConversationRouter {
   ): Record<string, ModelUsageBreakdown> | undefined {
     for (let index = conversation.history.length - 1; index >= 0; index -= 1) {
       const entry = conversation.history[index]
-      if (entry?.role !== "assistant") continue
+      if (!entry) continue
       const modelUsage = normalizedModelUsageRecords(recordMetadataValue(entry.metadata, "modelUsage"))
       if (!modelUsage) continue
       if (!sdkSessionId) return modelUsage
@@ -1910,7 +1975,7 @@ export class ConversationRouter {
     payload: Record<string, unknown> | undefined,
   ): number | undefined {
     if (costUsd === undefined || !isSdkTotalCostPayload(payload)) return costUsd
-    const previousCostUsd = sumAssistantMetadataNumber(conversation.history, "costUsd")
+    const previousCostUsd = sumHistoryMetadataNumber(conversation.history, "costUsd")
     if (costUsd + COST_EPSILON < previousCostUsd) return undefined
     return roundCost(Math.max(0, costUsd - previousCostUsd))
   }
@@ -2474,6 +2539,12 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           sdkSessionId: event.sdkSessionId,
           errorKind: event.errorKind,
           recoverable: event.recoverable,
+          usage: event.usage,
+          modelUsage: event.modelUsage,
+          sdkResultUuid: event.sdkResultUuid,
+          costUsd: event.costUsd,
+          costCny: event.costCny,
+          costCurrency: event.costCurrency,
         }),
       }
     case "assistant": {
@@ -2686,12 +2757,11 @@ function metadataString(metadata: Record<string, unknown> | undefined, key: stri
   return typeof value === "string" && value.trim().length > 0 ? value : undefined
 }
 
-function sumAssistantMetadataNumber(
+function sumHistoryMetadataNumber(
   history: readonly ConversationEntryV1["history"][number][],
   key: string,
 ): number {
   return history.reduce((total, entry) => {
-    if (entry.role !== "assistant") return total
     return total + (metadataNumber(entry.metadata, key) ?? 0)
   }, 0)
 }

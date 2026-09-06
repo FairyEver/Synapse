@@ -217,6 +217,7 @@ export interface AgentResultMetadata {
 
 export type AgentErrorKind =
   | "execution_failed"
+  | "connection_interrupted"
   | "tool_use_interrupted"
   | "webfetch_preflight_failed"
 

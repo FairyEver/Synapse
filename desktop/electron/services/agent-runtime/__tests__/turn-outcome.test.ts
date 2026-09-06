@@ -199,4 +199,27 @@ describe("turn outcome normalization", () => {
     })
     expect(outcomeMessage(outcome)).toBe("Agent 在工具调用后中断，发送“继续”可接着执行。")
   })
+
+  it("keeps connection interruptions recoverable", () => {
+    const lifecycle = createTurnLifecycle({
+      turnId: "turn-1",
+      conversationId: "conversation-1",
+    })
+
+    const outcome = normalizeExecutorEvent(lifecycle, {
+      type: "executor.error",
+      diagnostic: {
+        source: "claude-sdk",
+        kind: "connection_interrupted",
+        message: "Connection lost mid-response",
+      },
+    })
+
+    expect(outcome).toMatchObject({
+      status: "interrupted",
+      reason: "network_interrupted",
+      recoverable: true,
+      message: "模型连接中断，任务尚未完成。",
+    })
+  })
 })

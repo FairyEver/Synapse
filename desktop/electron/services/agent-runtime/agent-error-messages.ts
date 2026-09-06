@@ -46,9 +46,11 @@ export const AGENT_RELAY_QUESTION_ERROR_MESSAGE = "中继会话请求了用户�
 const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
 const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
 export const AGENT_TOOL_USE_INTERRUPTED_MESSAGE = "Agent 在工具调用后中断，发送“继续”可接着执行。"
+export const AGENT_CONNECTION_INTERRUPTED_MESSAGE = "模型连接中断，任务尚未完成。"
 
 export type AgentErrorKind =
   | "execution_failed"
+  | "connection_interrupted"
   | "tool_use_interrupted"
   | "webfetch_preflight_failed"
 
@@ -100,6 +102,13 @@ export function sdkQueryErrorPresentation(diagnostic: string | undefined): Agent
 }
 
 export function agentDiagnosticPresentation(diagnostic: string | undefined): AgentErrorPresentation {
+  if (isConnectionInterruptedDiagnostic(diagnostic)) {
+    return {
+      message: AGENT_CONNECTION_INTERRUPTED_MESSAGE,
+      errorKind: "connection_interrupted",
+      recoverable: true,
+    }
+  }
   if (isToolUseInterruptedDiagnostic(diagnostic)) {
     return {
       message: AGENT_TOOL_USE_INTERRUPTED_MESSAGE,
@@ -119,6 +128,12 @@ export function agentDiagnosticPresentation(diagnostic: string | undefined): Age
     errorKind: "execution_failed",
     recoverable: false,
   }
+}
+
+function isConnectionInterruptedDiagnostic(diagnostic: string | undefined): boolean {
+  if (!diagnostic) return false
+  return /\bterminal_reason=api_error\b/i.test(diagnostic)
+    || /\bConnection lost mid-response\b/i.test(diagnostic)
 }
 
 export function webFetchPreflightFailureMeta(diagnostic: string | undefined): Record<string, unknown> {

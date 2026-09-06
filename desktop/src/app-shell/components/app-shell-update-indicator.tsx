@@ -49,7 +49,7 @@ function AppShellUpdateIndicator() {
     const downloadPercent = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
 
     return (
-      <div className="flex w-full max-w-56 flex-col gap-1">
+      <div className="flex w-full max-w-52 flex-col gap-0.5">
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <DownloadIcon className="size-3.5 shrink-0" />
           <span className="truncate">正在下载{versionLabel}</span>

@@ -86,12 +86,13 @@ const timelineBaseSchema = {
 const jsonRecordSchema = z.record(z.string(), z.unknown())
 const agentErrorKindSchema = z.enum([
   "execution_failed",
+  "connection_interrupted",
   "tool_use_interrupted",
   "webfetch_preflight_failed",
 ])
 const agentTurnDiagnosticSchema = z.object({
   source: z.enum(["claude-sdk", "agent-runtime", "process-runner"]),
-  kind: z.enum(["aborted", "closed", "error", "tool_use_interrupted"]),
+  kind: z.enum(["aborted", "closed", "connection_interrupted", "error", "tool_use_interrupted"]),
   message: z.string().optional(),
 })
 const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
@@ -120,7 +121,7 @@ const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     status: z.literal("interrupted"),
-    reason: z.literal("tool_use_interrupted"),
+    reason: z.enum(["network_interrupted", "tool_use_interrupted"]),
     recoverable: z.literal(true),
     message: z.string(),
     diagnostics: z.array(agentTurnDiagnosticSchema).optional(),

@@ -124,6 +124,14 @@ describe("sanitizeError", () => {
 })
 
 describe("redactAbsolutePathsInText", () => {
+  it("redacts an escaped quoted path with spaces inside serialized tool text", () => {
+    const input = String.raw`Bash\n{"command":"ls -la \"/Users/liyang/Library/Application Support/Synapse/workspace/\""}`
+
+    expect(redactAbsolutePathsInText(input)).toBe(
+      String.raw`Bash\n{"command":"ls -la \"[path]\""}`,
+    )
+  })
+
   it("redacts top-level, multi-level, file URL, quoted-space, and Windows paths", () => {
     const input = [
       "/tmp /etc /foo /var/lib/app/config.json",

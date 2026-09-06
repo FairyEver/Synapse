@@ -1283,7 +1283,7 @@ describe("ClaudeSDKSession", () => {
         index: 0,
         delta: {
           type: "input_json_delta",
-          partial_json: `{\"file_path\":\"${controlledPath}\"}`,
+          partial_json: `{"file_path":"${controlledPath}"}`,
         },
       },
     } as unknown as SDKMessage)
@@ -1912,6 +1912,45 @@ describe("ClaudeSDKSession", () => {
       sdkSessionId: "sdk-1",
     })
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sdk exploded")
+  })
+
+  it("logs connection interruptions without raw SDK diagnostics", async () => {
+    const { factory, query } = createQueryFactory()
+    const logger = { warn: vi.fn() }
+    const session = createSession(factory, {
+      logger,
+      sdkSessionId: "sdk-1",
+    })
+
+    const event = session.nextEvent()
+    query.push({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-1",
+      uuid: "result-disconnected",
+      is_error: true,
+      result: "API Error: Connection lost mid-response. Authorization: Bearer sk-secret",
+      terminal_reason: "api_error",
+      api_error_status: null,
+    } as unknown as SDKMessage)
+
+    await expect(event).resolves.toMatchObject({
+      type: "error",
+      errorKind: "connection_interrupted",
+      recoverable: true,
+    })
+    expect(logger.warn).toHaveBeenCalledWith("Claude SDK connection interrupted.", {
+      boundary: "claude-sdk-query.connection-interrupted",
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      providerId: "claude-sdk",
+      sdkSessionId: "sdk-1",
+      sdkResultUuid: "result-disconnected",
+      terminalReason: "api_error",
+      apiErrorStatus: undefined,
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("Connection lost mid-response")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-secret")
   })
 
   it("stays alive until queued terminal events are drained", async () => {

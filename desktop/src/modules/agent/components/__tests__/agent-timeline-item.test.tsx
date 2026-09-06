@@ -73,6 +73,7 @@ describe("AgentTimelineItem", () => {
   })
 
   it("renders recoverable Agent interruptions as neutral guidance", () => {
+    const onContinue = vi.fn()
     const html = renderToStaticMarkup(
       <AgentTimelineItem
         item={{
@@ -87,10 +88,13 @@ describe("AgentTimelineItem", () => {
         pendingPermissions={[]}
         onOpenReference={vi.fn()}
         onRespondPermission={vi.fn()}
+        onContinue={onContinue}
       />,
     )
 
     expect(html).toContain("Agent 在工具调用后中断")
+    expect(html).toContain("继续")
+    expect(html).toContain("type=\"button\"")
     expect(html).not.toContain("text-destructive")
   })
 

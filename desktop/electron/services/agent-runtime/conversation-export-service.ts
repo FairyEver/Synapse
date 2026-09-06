@@ -392,7 +392,12 @@ class AgentConversationExportService {
     value: unknown,
     included?: string[],
   ): Promise<void> {
-    await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportOutputValue(value), null, 2)}\n`, included)
+    await this.writePreparedText(
+      packageRoot,
+      relativePath,
+      `${JSON.stringify(sanitizeExportOutputValue(value), null, 2)}\n`,
+      included,
+    )
   }
 
   private async writeCompactJson(
@@ -401,7 +406,12 @@ class AgentConversationExportService {
     value: unknown,
     included?: string[],
   ): Promise<void> {
-    await this.writeText(packageRoot, relativePath, `${JSON.stringify(sanitizeExportOutputValue(value))}\n`, included)
+    await this.writePreparedText(
+      packageRoot,
+      relativePath,
+      `${JSON.stringify(sanitizeExportOutputValue(value))}\n`,
+      included,
+    )
   }
 
   private async writeText(
@@ -410,7 +420,16 @@ class AgentConversationExportService {
     content: string,
     included?: string[],
   ): Promise<void> {
-    await this.writeTextFile(path.join(packageRoot, relativePath), normalizeExportText(content))
+    await this.writePreparedText(packageRoot, relativePath, normalizeExportText(content), included)
+  }
+
+  private async writePreparedText(
+    packageRoot: string,
+    relativePath: string,
+    content: string,
+    included?: string[],
+  ): Promise<void> {
+    await this.writeTextFile(path.join(packageRoot, relativePath), content)
     included?.push(relativePath)
   }
 
@@ -666,6 +685,14 @@ function buildSummary(input: {
   readonly agentUsage: readonly AgentUsageEntryV1[]
 }) {
   const usageSummary = summarizeUsage(input.conversation, input.agentUsage)
+  const errorEvents = input.agentEvents.filter((entry) => entry.eventType === "error")
+  const failedTurnIds = uniqueEventTurnIds(errorEvents)
+  const recoverableTurnIds = uniqueEventTurnIds(
+    errorEvents.filter((entry) => entry.payload.recoverable === true),
+  )
+  const apiErrorTurnIds = uniqueEventTurnIds(
+    errorEvents.filter(hasTerminalApiError),
+  )
   return sanitizeExportValue({
     conversationId: input.conversation.id,
     projectId: input.conversation.projectId,
@@ -675,15 +702,49 @@ function buildSummary(input: {
     toolCallCount: input.timeline.filter((entry) => entry.kind === "toolCall").length,
     toolResultCount: input.timeline.filter((entry) => entry.kind === "toolResult").length,
     failedToolCount: input.timeline.filter(isFailedToolResult).length,
+    failedTurnCount: failedTurnIds.size,
+    recoverableFailureCount: recoverableTurnIds.size,
+    apiErrorCount: apiErrorTurnIds.size,
     eventCount: input.agentEvents.length,
     usageRowCount: input.agentUsage.length,
     usageSummary,
-    costUsd: input.conversation.costUsd,
-    costCny: input.conversation.costCny,
+    costUsd: maximumDefinedCost(
+      latestHistoryMetadataNumber(input.conversation, "totalCostUsd"),
+      input.conversation.costUsd,
+    ),
+    costCny: maximumDefinedCost(
+      latestHistoryMetadataNumber(input.conversation, "totalCostCny"),
+      input.conversation.costCny,
+    ),
     costCurrency: input.conversation.costCurrency,
     createdAt: input.conversation.createdAt,
     updatedAt: input.conversation.updatedAt,
   })
+}
+
+function uniqueEventTurnIds(events: readonly AgentEventEntryV1[]): Set<string> {
+  return new Set(events.map((entry) => entry.turnId).filter((turnId): turnId is string => Boolean(turnId)))
+}
+
+function hasTerminalApiError(entry: AgentEventEntryV1): boolean {
+  const nestedPayload = isRecord(entry.payload.payload) ? entry.payload.payload : undefined
+  return nestedPayload?.terminal_reason === "api_error"
+}
+
+function latestHistoryMetadataNumber(
+  conversation: ConversationEntryV1,
+  key: "totalCostUsd" | "totalCostCny",
+): number | undefined {
+  for (let index = conversation.history.length - 1; index >= 0; index -= 1) {
+    const value = conversation.history[index]?.metadata?.[key]
+    if (typeof value === "number" && Number.isFinite(value)) return value
+  }
+  return undefined
+}
+
+function maximumDefinedCost(...values: readonly (number | undefined)[]): number | undefined {
+  const costs = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+  return costs.length > 0 ? Math.max(...costs) : undefined
 }
 
 function buildAttachmentExportIndex(conversation: ConversationEntryV1): AttachmentExportIndex {
@@ -796,7 +857,8 @@ function createDefaultFileName(rawName: string, now: Date): string {
 
 function createSafeFileNameSegment(rawName: string): string {
   const safeName = rawName
-    .replace(/[\\/:*?"<>|\u0000-\u001F]/g, "-")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\p{Cc}/gu, "-")
     .replace(/\s+/g, " ")
     .trim()
     || "conversation"
@@ -873,7 +935,7 @@ function sanitizeAttachmentPaths(
 }
 
 function normalizeExportMarkers(value: unknown): unknown {
-  if (typeof value === "string") return value.replace(/\[key\]/g, "[redacted]")
+  if (typeof value === "string") return omitEmbeddedImageData(value).replace(/\[key\]/g, "[redacted]")
   if (Array.isArray(value)) return value.map((item) => normalizeExportMarkers(item))
   if (!value || typeof value !== "object") return value
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, normalizeExportMarkers(item)]))
@@ -918,7 +980,11 @@ function isStructuredPathContainerField(normalizedFieldName: string): boolean {
 }
 
 function normalizeExportText(value: string): string {
-  return redactAbsolutePathsInText(value).replace(/\[key\]/g, "[redacted]")
+  return redactAbsolutePathsInText(omitEmbeddedImageData(value)).replace(/\[key\]/g, "[redacted]")
+}
+
+function omitEmbeddedImageData(value: string): string {
+  return value.replace(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+/gi, "[embedded image omitted]")
 }
 
 function auditRequestMetadata(request: AgentConversationExportRequest): Record<string, unknown> {

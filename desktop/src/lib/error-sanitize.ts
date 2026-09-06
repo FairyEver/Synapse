@@ -6,9 +6,10 @@ const URL_USERINFO_PATTERN = /([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^@/\s?#]+@/g
 // Quoted and backticked paths can safely include spaces. Unquoted free-text paths
 // intentionally stop at whitespace instead of guessing where prose ends.
 const DELIMITED_LOCAL_PATH_PATTERN = /(["'`])([^\r\n]*?)\1/g
-const FILE_URL_PATH_PATTERN = /\bfile:\/\/\/[^\s<>()\[\]{}"'`,;]+/gi
-const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:[\\/][^\s<>()\[\]{}"'`,;]+/g
-const POSIX_PATH_PATTERN = /(^|[\s(=\[])\/(?!\/)[^\s<>()\[\]{}"'`,;]+/g
+const ESCAPED_DELIMITED_LOCAL_PATH_PATTERN = /(\\)(["'`])([^\r\n]*?)\1\2/g
+const FILE_URL_PATH_PATTERN = /\bfile:\/\/\/[^\s<>()[\]{}"'`,;]+/gi
+const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:[\\/][^\s<>()[\]{}"'`,;]+/g
+const POSIX_PATH_PATTERN = /(^|[\s(=]|\[)\/(?!\/)[^\s<>()[\]{}"'`,;]+/g
 
 export interface ErrorLogMetaOptions {
   readonly includeMessage?: boolean
@@ -33,6 +34,8 @@ export function isAbsoluteLocalPath(value: string): boolean {
 
 export function redactAbsolutePathsInText(value: string): string {
   return value
+    .replace(ESCAPED_DELIMITED_LOCAL_PATH_PATTERN, (match, escape: string, delimiter: string, content: string) =>
+      isAbsoluteLocalPath(content) ? `${escape}${delimiter}[path]${escape}${delimiter}` : match)
     .replace(DELIMITED_LOCAL_PATH_PATTERN, (match, delimiter: string, content: string) =>
       isAbsoluteLocalPath(content) ? `${delimiter}[path]${delimiter}` : match)
     .replace(FILE_URL_PATH_PATTERN, "[path]")

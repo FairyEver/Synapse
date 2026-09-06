@@ -9,6 +9,7 @@
 - `Options.settings.env` 只能放 provider 的 `ANTHROPIC_*`，不得放 `SYNAPSE_SIDE_CHANNEL_TOKEN`、data-server token、普通 shell env 或其它 runtime secret。
 - 回归测试必须证明 provider 配置进入 `settings.env`，side-channel 等非 provider secret 不进入。
 - 历史回归：提交 `6778d598e` 曾删除 `settings.env: options.env`，导致用户本机配置其它 Claude provider 时混用旧 base URL 与当前模型。遇到 `model not found or not supported`，先检查 `desktop/electron/services/agent-runtime/claude-sdk-session.ts` 的覆盖层。
+- SDK 终态只要标记 `is_error` 或 `terminal_reason=api_error`，即使 `subtype=success`、`errors` 为空，也必须按失败结束；SDK 合成的 `is_api_error_message` 不得作为普通 Assistant 回复写入 history。网络中断应投影为可恢复状态并允许用户显式继续，不得自动重放整轮请求，因为已执行工具可能产生不可重复的副作用。
 - Agent 用户附件只在主进程受控目录暂存；Renderer 与发送 IPC 只携带版本化 attachment id/metadata，history 只保存用户正文与结构化附件元数据，不得携带原始字节、Base64、data URL 或受控绝对路径。
 - 图片只通过“受控原图路径 + Read”进入既有主 query。不得创建图片 content block、附件子 query、隐藏批次会话、摘要回灌、附件 MCP 或读取完整性循环。
 - 附件处理不得读取 Provider 类别、模型名称、base URL 或自定义能力覆盖，不按白名单启停。百炼 Kimi、Qwen 和自定义兼容模型使用同一路径清单；模型或 Provider 拒绝时保留原生错误。
@@ -59,6 +60,7 @@
 - Usage Analysis 只对 Synapse 内部展示、详情 JSON、事件预览和搜索 snippet 使用脱敏投影；不得改写用户机器上的外部原始 JSONL/日志，rawText 搜索不得返回真实 secret。
 - Provider 预览、Agent 环境和 MCP/side-channel 诊断不得展示 `buildEnv`、`getAgentEnv` 或 data-server 配置中的值，只显示 key 是否存在、来源或 `[redacted]`。
 - Agent 对话导出可附带 Claude Agent SDK 暴露的脱敏 API StreamEvent，但不得宣称为线级 HTTP 响应或原始 SSE 文本。高频 delta 只在内存中按轮次缓冲，单轮最多 1000 条、512 KiB，完成或失败时批量持久化；单个导出最多包含 8 MiB，超限必须在导出元数据中标记。旧会话未持久化的 delta 不得伪造或声称可恢复。
+- JSON 诊断导出必须先对结构化值脱敏再序列化，不得对序列化后的 JSON 字符串做路径替换；所有导出的 JSON 文件必须保持可解析。工具结果中的内嵌 Base64 图片只保留省略标记，不得进入 timeline、history 或诊断正文。
 - 相关修改必须用假 canary 回归测试 provider/side-channel token、Authorization/Bearer、Cookie、JSON `token`/`apiKey`、data-server token、`--env KEY=value` 不出现，普通 `/Users/...` 路径仍保留。
 - 手工验证只用假 canary，优先只打印、不 export、不写文件、不改配置；不得要求用户提供真实 token。
 

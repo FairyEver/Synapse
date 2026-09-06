@@ -2,6 +2,7 @@ import { useState } from "react"
 import { AlertCircle, FileDiff, Info } from "lucide-react"
 import {
   Alert,
+  AlertAction,
   AlertDescription,
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +34,7 @@ function AgentTimelineItem({
   onOpenReference,
   referenceActions,
   onRespondPermission,
+  onContinue,
   toolResult,
   toolCancelled,
 }: {
@@ -52,6 +54,7 @@ function AgentTimelineItem({
     message?: string,
     scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
+  readonly onContinue?: () => void
 }) {
   switch (item.kind) {
     case "message":
@@ -102,6 +105,13 @@ function AgentTimelineItem({
           <Alert>
             <Info data-icon="inline-start" />
             <AlertDescription className="whitespace-pre-wrap break-words">{item.message}</AlertDescription>
+            {onContinue ? (
+              <AlertAction>
+                <Button type="button" variant="outline" size="sm" onClick={onContinue}>
+                  继续
+                </Button>
+              </AlertAction>
+            ) : null}
           </Alert>
         )
       }

@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
     openDefault: vi.fn(),
     showInFolder: vi.fn(),
   },
-  timelineProps: [] as Array<{ readonly referenceActions?: unknown }>,
+  timelineProps: [] as Array<{
+    readonly referenceActions?: unknown
+    readonly onContinue?: () => void
+  }>,
   composerProps: [] as Array<{
     readonly draft: string
     readonly onDraftChange: (value: string) => void
@@ -74,7 +77,10 @@ vi.mock("../components/agent-composer", () => ({
 }))
 
 vi.mock("../components/agent-timeline", () => ({
-  AgentTimeline: (props: { readonly referenceActions?: unknown }) => {
+  AgentTimeline: (props: {
+    readonly referenceActions?: unknown
+    readonly onContinue?: () => void
+  }) => {
     mocks.timelineProps.push(props)
     return <div data-testid="agent-timeline" />
   },
@@ -144,6 +150,55 @@ afterEach(() => {
 })
 
 describe("AgentConversationWorkspace", () => {
+  it("sends an explicit continue message for a recoverable interruption", async () => {
+    const sendMessage = vi.fn(async () => true)
+    renderWorkspace({ mode: "embedded", chat: createController({ sendMessage }) })
+
+    await act(async () => {
+      mocks.timelineProps.at(-1)?.onContinue?.()
+      await Promise.resolve()
+    })
+
+    expect(sendMessage).toHaveBeenCalledWith("继续", {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })
+  })
+
+  it("preserves the composer draft when continuing a recoverable interruption", async () => {
+    const sendMessage = vi.fn(async () => true)
+    renderWorkspace({ mode: "embedded", chat: createController({ sendMessage }) })
+
+    await act(async () => {
+      mocks.composerProps.at(-1)?.onDraftChange("尚未发送的草稿")
+    })
+    await act(async () => {
+      mocks.timelineProps.at(-1)?.onContinue?.()
+      await Promise.resolve()
+    })
+
+    expect(sendMessage).toHaveBeenCalledWith("继续", {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    })
+    expect(mocks.composerProps.at(-1)?.draft).toBe("尚未发送的草稿")
+  })
+
+  it("preserves the composer draft when continuing fails", async () => {
+    const sendMessage = vi.fn(async () => false)
+    renderWorkspace({ mode: "embedded", chat: createController({ sendMessage }) })
+
+    await act(async () => {
+      mocks.composerProps.at(-1)?.onDraftChange("尚未发送的草稿")
+      mocks.timelineProps.at(-1)?.onContinue?.()
+      await Promise.resolve()
+    })
+
+    expect(mocks.composerProps.at(-1)?.draft).toBe("尚未发送的草稿")
+  })
+
   it("injects the same reference actions into the shared main and detached timeline path", () => {
     renderWorkspace({ mode: "embedded" })
     const embeddedProps = mocks.timelineProps.at(-1)

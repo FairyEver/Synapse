@@ -28,6 +28,7 @@ function AgentTimeline({
   onOpenReference,
   referenceActions,
   onRespondPermission,
+  onContinue,
   viewportRef,
   loadingOlder,
   historyError,
@@ -47,6 +48,7 @@ function AgentTimeline({
     message?: string,
     scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
+  readonly onContinue?: () => void
   readonly viewportRef: Ref<HTMLDivElement>
   readonly loadingOlder: boolean
   readonly historyError: string | null
@@ -56,6 +58,7 @@ function AgentTimeline({
   useActivePhaseTicker(items)
   const now = Date.now()
   const latestPendingItemIds = latestPendingTimelineItemIds(items, pendingPermissions)
+  const continuableInterruptionId = latestContinuableInterruptionId(items)
   const pendingPermissionRequestIds = new Set(pendingPermissions.map((permission) => permission.requestId))
   const displayEntries = timelineDisplayEntries(items)
   const displayNodes = groupTimelineDisplayEntries(displayEntries, {
@@ -122,6 +125,7 @@ function AgentTimeline({
                           onOpenReference={onOpenReference}
                           referenceActions={referenceActions}
                           onRespondPermission={onRespondPermission}
+                          onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
                         />
                       )
                     ))}
@@ -144,6 +148,7 @@ function AgentTimeline({
                   onOpenReference={onOpenReference}
                   referenceActions={referenceActions}
                   onRespondPermission={onRespondPermission}
+                  onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
                 />
               )
             })}
@@ -169,6 +174,17 @@ function latestPendingTimelineItemIds(
     latestItemIds.add(item.id)
   }
   return latestItemIds
+}
+
+function latestContinuableInterruptionId(
+  items: readonly SynapseAgentTimelineItem[],
+): string | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind === "message" && item.role === "user") return undefined
+    if (item?.kind === "error" && item.recoverable) return item.id
+  }
+  return undefined
 }
 
 export { AgentTimeline }

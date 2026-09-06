@@ -249,9 +249,7 @@ function isRequiredMainlineEntry(
   const item = entry.item
   if (isUserMessage(entry)) return true
   if (item.kind === "permissionRequest" && context.pendingPermissionRequestIds.has(item.requestId)) return true
-  if (item.kind === "error") {
-    return !item.recoverable || (item.turnOutcome !== undefined && item.turnOutcome.status !== "completed")
-  }
+  if (item.kind === "error") return true
   if (item.kind === "result") {
     const status = item.metadata?.turnOutcome?.status
     return status === "cancelled" || status === "failed" || status === "timed_out" || status === "interrupted"

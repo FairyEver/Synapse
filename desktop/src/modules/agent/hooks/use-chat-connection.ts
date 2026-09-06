@@ -710,7 +710,7 @@ function useChatConnection(
         attachments: serializeDraftAttachments(attachments),
         clientSubmittedAt: now,
       })
-      if (result?.error && !isCancelledSendResult(result)) throw new Error(result.error)
+      if (result?.error && !isAcceptedTerminalSendResult(result)) throw new Error(result.error)
       // NOTE: send() resolves when the message is enqueued, NOT when the turn
       // completes.  REMOVE_SENDING_CONVERSATION is handled by the terminal
       // phase event handler in use-chat-events (cancelled / completed / failed)
@@ -1324,6 +1324,11 @@ function isCancelledSendResult(result: SynapseAgentSendResult): boolean {
     event.metadata?.cancelled === true
     || event.metadata?.turnOutcome?.status === "cancelled"
   ))
+}
+
+function isAcceptedTerminalSendResult(result: SynapseAgentSendResult): boolean {
+  return isCancelledSendResult(result)
+    || result.events.some((event) => event.type === "error" && event.recoverable === true)
 }
 
 function isAttachmentFailureMessage(message: string): boolean {

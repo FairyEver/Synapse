@@ -67,6 +67,34 @@ async function renderSidebar() {
 }
 
 describe("ModuleSidebar", () => {
+  it("does not reserve content spacing for an empty open group", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ModuleSidebarGroup
+          open
+          onOpenChange={vi.fn()}
+          title="Empty project"
+        >
+          {[]}
+        </ModuleSidebarGroup>,
+      )
+    })
+
+    const group = container.querySelector('[data-slot="collapsible"]')
+    const content = group?.querySelector('[data-slot="collapsible-content"]')
+    const contentList = content?.firstElementChild
+
+    expect(group?.className).not.toContain("gap-0.5")
+    expect(contentList?.childElementCount).toBe(0)
+    expect(contentList?.className).toContain("empty:hidden")
+    expect(contentList?.className).toContain("pt-0.5")
+  })
+
   it("keeps group actions visible when project and row labels are long", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

@@ -991,6 +991,39 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("keeps recoverable API interruptions out of assistant history", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "error",
+          message: "模型连接中断，任务尚未完成。",
+          errorKind: "connection_interrupted",
+          recoverable: true,
+          sdkSessionId: "sdk-1",
+          payload: {
+            terminal_reason: "api_error",
+            api_error_status: null,
+          },
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(result.error).toBe("模型连接中断，任务尚未完成。")
+    expect(result.resultText).toBe("")
+    expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([])
+    expect(savedConversation?.history).toContainEqual(expect.objectContaining({
+      role: "system",
+      content: "模型连接中断，任务尚未完成。",
+      metadata: expect.objectContaining({
+        agentEventType: "error",
+        recoverable: true,
+      }),
+    }))
+  })
+
   it("persists result usage on the assistant history entry", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
     const { conversations, router, repository } = createRouter({
@@ -1330,6 +1363,10 @@ describe("ConversationRouter", () => {
       .map((event) => event.payload?.event as AgentResultEvent)
 
     expect(first.conversationId).toBe(second.conversationId)
+    expect(savedConversation).toEqual(expect.objectContaining({
+      costUsd: 1.914729,
+      costCny: 17.599236,
+    }))
     expect(assistantEntries?.[0]?.metadata).toEqual(expect.objectContaining({
       costCny: 9.808732,
       totalCostCny: 9.808732,
@@ -2451,6 +2488,47 @@ describe("ConversationRouter", () => {
       costCny: 3.988628,
       costCurrency: "CNY",
     }))
+  })
+
+  it("preserves recoverable side-session interruption usage and cost", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([{
+        type: "error",
+        message: "模型连接中断，任务尚未完成。",
+        errorKind: "connection_interrupted",
+        recoverable: true,
+        sdkResultUuid: "result-side-error",
+        sdkSessionId: "sdk-side",
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+        },
+        costUsd: 0.25,
+        payload: {
+          terminal_reason: "api_error",
+          total_cost_usd: 0.25,
+        },
+      }], "sdk-side"),
+    })
+
+    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+    const savedConversation = await conversations.get(result.conversationId)
+    const errorEvent = result.events.find((event) => event.type === "error")
+    const errorHistory = savedConversation?.history.find((entry) => entry.metadata?.agentEventType === "error")
+
+    expect(errorEvent).toEqual(expect.objectContaining({
+      errorKind: "connection_interrupted",
+      recoverable: true,
+      costUsd: 0.25,
+      usage: expect.objectContaining({ input_tokens: 5, output_tokens: 1 }),
+    }))
+    expect(errorHistory?.metadata).toEqual(expect.objectContaining({
+      errorKind: "connection_interrupted",
+      recoverable: true,
+      costUsd: 0.25,
+      usage: expect.objectContaining({ input_tokens: 5, output_tokens: 1 }),
+    }))
+    expect(savedConversation?.costUsd).toBe(0.25)
   })
 
   it("persists a terminal error when a side session relay times out", async () => {

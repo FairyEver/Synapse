@@ -239,12 +239,13 @@ export type SynapseAgentPhaseStatus = "in-progress" | "done" | "failed"
 
 export type SynapseAgentErrorKind =
   | "execution_failed"
+  | "connection_interrupted"
   | "tool_use_interrupted"
   | "webfetch_preflight_failed"
 
 export interface SynapseAgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
-  readonly kind: "aborted" | "closed" | "error" | "tool_use_interrupted"
+  readonly kind: "aborted" | "closed" | "connection_interrupted" | "error" | "tool_use_interrupted"
   readonly message?: string
 }
 
@@ -271,7 +272,7 @@ export type SynapseAgentTurnOutcome =
   }
   | {
     readonly status: "interrupted"
-    readonly reason: "tool_use_interrupted"
+    readonly reason: "network_interrupted" | "tool_use_interrupted"
     readonly recoverable: true
     readonly message: string
     readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
