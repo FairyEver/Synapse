@@ -578,6 +578,20 @@ describe('DriveMarkdownRenderer', () => {
     expect(radioMenuItemWithText('宽屏').getAttribute('data-state')).toBe('checked')
   })
 
+  it('hides the width menu in compact preview layouts', async () => {
+    renderMarkdown()
+
+    expect(buttonWithText('宽度')).not.toBeNull()
+
+    await setPreviewWidth(390)
+
+    expect(queryButtonWithText('宽度')).toBeNull()
+
+    await setPreviewWidth(1280)
+
+    expect(buttonWithText('宽度')).not.toBeNull()
+  })
+
   it('enables comments for .md files', () => {
     renderMarkdown({ currentItem: current({ name: 'notes.md', mimeType: null }) })
 

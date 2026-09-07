@@ -487,18 +487,20 @@ function DriveMarkdownBody({
         }
       )
     }
-    items.push({
-      kind: 'menu',
-      id: 'markdown-width-mode',
-      label: '宽度',
-      compactPlacement: 'primary',
-      variant: 'ghost',
-      selectedItemId: widthMode,
-      items: [
-        { id: 'reading', label: '阅读', onSelect: () => setWidthMode('reading') },
-        { id: 'wide', label: '宽屏', onSelect: () => setWidthMode('wide') },
-      ],
-    })
+    if (!isCompact) {
+      items.push({
+        kind: 'menu',
+        id: 'markdown-width-mode',
+        label: '宽度',
+        compactPlacement: 'primary',
+        variant: 'ghost',
+        selectedItemId: widthMode,
+        items: [
+          { id: 'reading', label: '阅读', onSelect: () => setWidthMode('reading') },
+          { id: 'wide', label: '宽屏', onSelect: () => setWidthMode('wide') },
+        ],
+      })
+    }
     return items
   }, [
     annotationsEnabled,
