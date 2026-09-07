@@ -232,6 +232,48 @@ describe("TerminalService core", () => {
     expect(ptys.every((pty) => pty.kill.mock.calls.length === 0)).toBe(true)
   })
 
+  it("persists a pane group equalization as one layout revision", async () => {
+    const ptys = [fakePty(), fakePty(), fakePty()]
+    let spawnIndex = 0
+    const store = memoryStore()
+    const service = createTerminalService({
+      store,
+      spawnPty: () => ptys[spawnIndex++]!,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await service.start()
+    const rootSession = await service.createSession({ title: "Workspace" })
+    const initial = service.getWorkspaceForSession({ sessionId: rootSession.id })
+    const rootPaneId = initial.layout.type === "leaf" ? initial.layout.paneId : ""
+    const second = await service.splitPane({
+      workspaceId: initial.id,
+      paneId: rootPaneId,
+      direction: "right",
+      expectedLayoutRevision: initial.layoutRevision,
+    })
+    const third = await service.splitPane({
+      workspaceId: initial.id,
+      paneId: second.paneId,
+      direction: "right",
+      expectedLayoutRevision: second.workspace.layoutRevision,
+    })
+
+    const equalized = await service.equalizePane({
+      workspaceId: initial.id,
+      paneId: third.paneId,
+      expectedLayoutRevision: third.workspace.layoutRevision,
+    })
+
+    expect(equalized.layoutRevision).toBe(third.workspace.layoutRevision + 1)
+    expect(equalized.layout).toMatchObject({
+      type: "split",
+      ratio: 1 / 3,
+      second: { type: "split", ratio: 0.5 },
+    })
+    expect(store.state.workspaces).toContainEqual(equalized)
+  })
+
   it("closes one pane after its PTY exits and deletes the whole workspace from the sidebar", async () => {
     const ptys = [fakePty(), fakePty()]
     let spawnIndex = 0

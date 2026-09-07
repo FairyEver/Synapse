@@ -70,6 +70,7 @@ import {
 import {
   TERMINAL_WORKSPACE_PANE_LIMIT,
   collectTerminalPaneLeaves,
+  equalizeTerminalPaneGroup,
   findTerminalPane,
   moveTerminalPane,
   removeTerminalPane,
@@ -78,6 +79,7 @@ import {
   type TerminalClosePaneInput,
   type TerminalCloseWorkspaceInput,
   type TerminalCloseWorkspaceResult,
+  type TerminalEqualizePaneInput,
   type TerminalMovePaneInput,
   type TerminalRenameWorkspaceInput,
   type TerminalSetSplitRatioInput,
@@ -1215,6 +1217,27 @@ export function createTerminalService(deps: {
     assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
     const ratio = Math.min(0.95, Math.max(0.05, input.ratio))
     const layout = setTerminalSplitRatio(workspace.layout, input.splitId, ratio)
+    if (!layout) throw terminalContractError("not_found", "not_found")
+    if (stableJson(layout) === stableJson(workspace.layout)) return workspace
+    const updated = {
+      ...workspace,
+      layout,
+      layoutRevision: workspace.layoutRevision + 1,
+      updatedAt: now(),
+    }
+    workspaces.set(updated.id, updated)
+    bumpDomain("workspace.layout_changed", updated.id, updated.layoutRevision)
+    await flushPersist()
+    return updated
+  }
+
+  async function equalizePane(input: TerminalEqualizePaneInput): Promise<TerminalWorkspace> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    if (workspace.closing || workspace.closingPaneIds.includes(input.paneId)) {
+      throw terminalContractError("lifecycle_conflict", "lifecycle")
+    }
+    const layout = equalizeTerminalPaneGroup(workspace.layout, input.paneId)
     if (!layout) throw terminalContractError("not_found", "not_found")
     if (stableJson(layout) === stableJson(workspace.layout)) return workspace
     const updated = {
@@ -2638,6 +2661,7 @@ export function createTerminalService(deps: {
     renameWorkspace,
     splitPane,
     movePane,
+    equalizePane,
     updateSplitRatio,
     closePane,
     closeWorkspace,

@@ -284,6 +284,12 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
     return workspace
   }),
+  equalizePane: vi.fn(async ({ workspaceId }: { workspaceId: string }) => {
+    const current = getWorkspace(workspaceId)
+    const workspace = { ...current, layoutRevision: current.layoutRevision + 1 }
+    bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
+    return workspace
+  }),
   updateSplitRatio: vi.fn(async ({ workspaceId }: { workspaceId: string }) => getWorkspace(workspaceId)),
   closePane: vi.fn(async ({ workspaceId }: { workspaceId: string }) => ({
     workspaceId,
@@ -527,6 +533,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       pane: {
         split: terminalBridge.splitPane,
         move: terminalBridge.movePane,
+        equalize: terminalBridge.equalizePane,
         updateRatio: terminalBridge.updateSplitRatio,
         close: terminalBridge.closePane,
       },
@@ -783,6 +790,7 @@ beforeEach(() => {
   terminalBridge.closeWorkspace.mockClear()
   terminalBridge.splitPane.mockClear()
   terminalBridge.movePane.mockClear()
+  terminalBridge.equalizePane.mockClear()
   terminalBridge.updateSplitRatio.mockClear()
   terminalBridge.closePane.mockClear()
   terminalBridge.listSessions.mockClear()
@@ -2061,6 +2069,44 @@ describe("TerminalModule", () => {
     expect(document.querySelector('button[aria-label="最大化分屏：Session 2"]')).toBeTruthy()
     expect(document.querySelectorAll('[data-terminal-split-locked="true"]')).toHaveLength(0)
     expect(terminalBridge.updateSplitRatio).not.toHaveBeenCalled()
+  })
+
+  it("equalizes the focused pane group and exits maximize mode", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const leftSession = createSession({ id: "session-1", groupId: "group-1", title: "左侧终端" })
+    const middleSession = createSession({ id: "session-2", groupId: "group-1", title: "中间终端" })
+    const rightSession = createSession({ id: "session-3", groupId: "group-1", title: "右侧终端" })
+    bridgeState.workspaces = [{
+      ...createWorkspace(leftSession),
+      layout: {
+        type: "split",
+        splitId: "split-left-rest",
+        direction: "horizontal",
+        ratio: 0.2,
+        first: { type: "leaf", paneId: "pane-session-1", sessionId: leftSession.id },
+        second: {
+          type: "split",
+          splitId: "split-middle-right",
+          direction: "horizontal",
+          ratio: 0.75,
+          first: { type: "leaf", paneId: "pane-session-2", sessionId: middleSession.id },
+          second: { type: "leaf", paneId: "pane-session-3", sessionId: rightSession.id },
+        },
+      },
+      layoutRevision: 3,
+    }]
+
+    await renderModule()
+    await clickButtonByAriaLabel("最大化分屏：中间终端")
+    await clickButtonByAriaLabel("平分宽度：中间终端")
+
+    expect(terminalBridge.equalizePane).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      paneId: "pane-session-2",
+      expectedLayoutRevision: 3,
+    })
+    expect(document.querySelector('button[aria-label="最大化分屏：中间终端"]')).toBeTruthy()
+    expect(document.querySelectorAll('[data-terminal-split-locked="true"]')).toHaveLength(0)
   })
 
   it("disables maximize when the workspace contains one pane", async () => {

@@ -20,7 +20,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Folder, Maximize2, Minimize2, Square, X } from "lucide-react"
+import { Columns3, Folder, Maximize2, Minimize2, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
@@ -56,7 +56,11 @@ import type {
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
 import type { WorkspaceFileTreeDataSource } from "../../../src/types/workspace-file-tree"
-import { collectTerminalPaneLeaves, findTerminalPaneSplitPath } from "../shared/schema"
+import {
+  collectTerminalPaneLeaves,
+  findTerminalPaneParentDirection,
+  findTerminalPaneSplitPath,
+} from "../shared/schema"
 import {
   getTerminalClipboardShortcut,
   getTerminalPaneShortcut,
@@ -106,6 +110,7 @@ export function TerminalWorkspaceView({
   appearanceSize,
   onActivePaneChange,
   onClosePane,
+  onEqualizePane,
   onMovePane,
   onSessionChanged,
   onSessionDeleted,
@@ -122,6 +127,7 @@ export function TerminalWorkspaceView({
   readonly appearanceSize: TerminalAppearanceSize
   readonly onActivePaneChange: (paneId: string) => void
   readonly onClosePane: (paneId: string) => void
+  readonly onEqualizePane: (paneId: string) => void
   readonly onMovePane: (
     sourcePaneId: string,
     targetPaneId: string,
@@ -229,6 +235,11 @@ export function TerminalWorkspaceView({
     maximizedPaneIdRef.current = paneId
     setMaximizedPaneId(paneId)
   }, [restoreMaximizedPane, workspace.layout, workspaceLayoutSignature, workspacePanes.length])
+
+  const equalizePane = useCallback((paneId: string) => {
+    restoreMaximizedPane()
+    onEqualizePane(paneId)
+  }, [onEqualizePane, restoreMaximizedPane])
 
   const registerSplitLayoutControls = useCallback((
     splitId: string,
@@ -434,6 +445,7 @@ export function TerminalWorkspaceView({
       {workspacePanes.map((pane) => {
         const session = sessionsById.get(pane.sessionId)
         if (!session) return null
+        const equalizeDirection = findTerminalPaneParentDirection(workspace.layout, pane.paneId)
         return createPortal(
           <TerminalPane
             active={pane.paneId === activePaneId}
@@ -444,11 +456,14 @@ export function TerminalWorkspaceView({
             dropEdge={pane.paneId === paneDrag?.targetPaneId ? paneDrag.edge : null}
             fileTreeOpen={fileTreePaneIds.has(pane.paneId)}
             fileTreeWidth={fileTreeWidth}
+            equalizeDirection={equalizeDirection}
+            equalizeDisabled={!equalizeDirection || pendingClosePaneIds.has(pane.paneId) || workspaceClosingPaneIds.has(pane.paneId)}
             maximized={pane.paneId === maximizedPaneId}
             maximizeDisabled={workspacePanes.length <= 1 || pendingClosePaneIds.has(pane.paneId) || workspaceClosingPaneIds.has(pane.paneId)}
             onActive={() => activatePane(pane.paneId)}
             onMovePane={handleMovePane}
             onCloseFileTree={() => handleCloseFileTree(pane.paneId)}
+            onEqualize={() => equalizePane(pane.paneId)}
             onFileTreeWidthChange={setFileTreeWidth}
             onFileTreeWidthCommit={handleFileTreeWidthCommit}
             onPaneDragEnd={handlePaneDragEnd}
@@ -656,10 +671,13 @@ function TerminalPane({
   dropEdge,
   fileTreeOpen,
   fileTreeWidth,
+  equalizeDirection,
+  equalizeDisabled,
   maximized,
   maximizeDisabled,
   onActive,
   onCloseFileTree,
+  onEqualize,
   onFileTreeWidthChange,
   onFileTreeWidthCommit,
   onMovePane,
@@ -688,10 +706,13 @@ function TerminalPane({
   readonly dropEdge: SynapseTerminalPaneDropEdge | null
   readonly fileTreeOpen: boolean
   readonly fileTreeWidth: number
+  readonly equalizeDirection: "horizontal" | "vertical" | null
+  readonly equalizeDisabled: boolean
   readonly maximized: boolean
   readonly maximizeDisabled: boolean
   readonly onActive: () => void
   readonly onCloseFileTree: () => void
+  readonly onEqualize: () => void
   readonly onFileTreeWidthChange: (width: number) => void
   readonly onFileTreeWidthCommit: (width: number) => void
   readonly onMovePane: (
@@ -1272,6 +1293,9 @@ function TerminalPane({
   const closeActionLabel = closePending || (closing && platform !== "darwin")
     ? "正在关闭分屏"
     : closing ? "强制关闭分屏" : "关闭分屏"
+  const equalizeActionLabel = equalizeDirection === "horizontal"
+    ? "平分宽度"
+    : equalizeDirection === "vertical" ? "平分高度" : "平分分屏"
 
   return (
     <div
@@ -1330,6 +1354,26 @@ function TerminalPane({
           </Button> : null}
         </div>
         <div className="flex shrink-0 items-center">
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={`${equalizeActionLabel}：${session.title}`}
+            title={equalizeActionLabel}
+            data-track="terminal-pane-equalize"
+            className="text-muted-foreground"
+            disabled={equalizeDisabled}
+            onClick={(event) => {
+              event.stopPropagation()
+              onActive()
+              onEqualize()
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {equalizeDirection === "vertical"
+              ? <Rows3 className="size-3.5" />
+              : <Columns3 className="size-3.5" />}
+          </Button>
           <Button
             type="button"
             size="icon-xs"

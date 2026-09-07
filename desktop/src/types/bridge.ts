@@ -124,6 +124,7 @@ import type {
   SynapseTerminalDeleteGroupCommandInput,
   SynapseTerminalDeleteGroupInput,
   SynapseTerminalDeleteSessionInput,
+  SynapseTerminalEqualizePaneInput,
   SynapseTerminalEnvironmentValueInput,
   SynapseTerminalGroup,
   SynapseTerminalGroupCommand,
@@ -1227,6 +1228,7 @@ export type SynapseBridge = {
     pane: {
       split: (input: SynapseTerminalSplitPaneInput) => Promise<SynapseTerminalSplitPaneResult>
       move: (input: SynapseTerminalMovePaneInput) => Promise<SynapseTerminalWorkspace>
+      equalize: (input: SynapseTerminalEqualizePaneInput) => Promise<SynapseTerminalWorkspace>
       updateRatio: (input: SynapseTerminalSetSplitRatioInput) => Promise<SynapseTerminalWorkspace>
       close: (input: SynapseTerminalClosePaneInput) => Promise<SynapseTerminalCloseWorkspaceResult>
     }

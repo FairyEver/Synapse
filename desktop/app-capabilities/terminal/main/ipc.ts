@@ -32,6 +32,7 @@ import {
   terminalDeleteGroupCommandInputSchema,
   terminalDeleteGroupInputSchema,
   terminalDeleteSessionInputSchema,
+  terminalEqualizePaneInputSchema,
   terminalEnvironmentValueInputSchema,
   terminalGroupCommandSchema,
   terminalGroupCommandIdInputSchema,
@@ -411,6 +412,14 @@ export const terminalIpcModule: IpcModule = {
       response: terminalWorkspaceSchema,
       handler: (ctx, request: z.infer<typeof terminalMovePaneInputSchema>) =>
         resolveTerminalService(ctx).movePane(request),
+    },
+    equalizePane: {
+      operationId: "app.terminal.pane.equalize",
+      kind: "invoke",
+      request: terminalEqualizePaneInputSchema,
+      response: terminalWorkspaceSchema,
+      handler: (ctx, request: z.infer<typeof terminalEqualizePaneInputSchema>) =>
+        resolveTerminalService(ctx).equalizePane(request),
     },
     updateSplitRatio: {
       operationId: "app.terminal.split.resize",

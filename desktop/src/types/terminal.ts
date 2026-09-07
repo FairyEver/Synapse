@@ -13,6 +13,7 @@ import type {
   TerminalDeleteGroupCommandInput,
   TerminalDeleteGroupInput,
   TerminalDeleteSessionInput,
+  TerminalEqualizePaneInput,
   TerminalGroup,
   TerminalGroupCommand,
   TerminalGroupCommandSummary,
@@ -94,6 +95,7 @@ export type SynapseTerminalRunStartupCommandInput = TerminalRunStartupCommandInp
 export type SynapseTerminalSplitPaneInput = TerminalSplitPaneInput
 export type SynapseTerminalSplitPaneResult = TerminalSplitPaneResult
 export type SynapseTerminalMovePaneInput = TerminalMovePaneInput
+export type SynapseTerminalEqualizePaneInput = TerminalEqualizePaneInput
 export type SynapseTerminalPaneDropEdge = TerminalPaneDropEdge
 export type SynapseTerminalSetSplitRatioInput = TerminalSetSplitRatioInput
 export type SynapseTerminalClosePaneInput = TerminalClosePaneInput

@@ -106,6 +106,7 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.renameWorkspace.operationId).toBe("app.terminal.workspace.rename")
     expect(terminalIpcModule.methods.splitPane.operationId).toBe("app.terminal.pane.split")
     expect(terminalIpcModule.methods.movePane.operationId).toBe("app.terminal.pane.move")
+    expect(terminalIpcModule.methods.equalizePane.operationId).toBe("app.terminal.pane.equalize")
     expect(terminalIpcModule.methods.updateSplitRatio.operationId).toBe("app.terminal.split.resize")
     expect(terminalIpcModule.methods.closePane.operationId).toBe("app.terminal.pane.close")
     expect(terminalIpcModule.methods.closeWorkspace.operationId).toBe("app.terminal.workspace.close")

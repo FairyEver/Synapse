@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   collectTerminalPaneLeaves,
+  equalizeTerminalPaneGroup,
+  findTerminalPaneParentDirection,
   findTerminalPaneSplitPath,
   moveTerminalPane,
   removeTerminalPane,
@@ -89,6 +91,80 @@ describe("terminal workspace layout", () => {
       { splitId: "split-c", paneSide: "second" },
     ])
     expect(findTerminalPaneSplitPath(nested, "missing")).toBeNull()
+  })
+
+  it("equalizes every pane in the same continuous horizontal group", () => {
+    const first = splitTerminalPane(root, "pane-a", {
+      splitId: "split-a",
+      direction: "horizontal",
+      ratio: 0.2,
+    }, { type: "leaf", paneId: "pane-b", sessionId: "session-b" })!
+    const nested = splitTerminalPane(first, "pane-b", {
+      splitId: "split-b",
+      direction: "horizontal",
+      ratio: 0.75,
+    }, { type: "leaf", paneId: "pane-c", sessionId: "session-c" })!
+
+    expect(findTerminalPaneParentDirection(nested, "pane-c")).toBe("horizontal")
+    expect(equalizeTerminalPaneGroup(nested, "pane-c")).toMatchObject({
+      type: "split",
+      splitId: "split-a",
+      ratio: 1 / 3,
+      second: {
+        type: "split",
+        splitId: "split-b",
+        ratio: 0.5,
+      },
+    })
+  })
+
+  it("equalizes a continuous horizontal group when the nested split is on the left", () => {
+    const first = splitTerminalPane(root, "pane-a", {
+      splitId: "split-a",
+      direction: "horizontal",
+      ratio: 0.8,
+    }, { type: "leaf", paneId: "pane-b", sessionId: "session-b" })!
+    const nested = splitTerminalPane(first, "pane-a", {
+      splitId: "split-b",
+      direction: "horizontal",
+      ratio: 0.25,
+    }, { type: "leaf", paneId: "pane-c", sessionId: "session-c" })!
+
+    expect(equalizeTerminalPaneGroup(nested, "pane-c")).toMatchObject({
+      type: "split",
+      splitId: "split-a",
+      ratio: 2 / 3,
+      first: {
+        type: "split",
+        splitId: "split-b",
+        ratio: 0.5,
+      },
+    })
+  })
+
+  it("equalizes only the direct vertical group inside a mixed layout", () => {
+    const columns = splitTerminalPane(root, "pane-a", {
+      splitId: "split-columns",
+      direction: "horizontal",
+      ratio: 0.3,
+    }, { type: "leaf", paneId: "pane-b", sessionId: "session-b" })!
+    const mixed = splitTerminalPane(columns, "pane-b", {
+      splitId: "split-rows",
+      direction: "vertical",
+      ratio: 0.8,
+    }, { type: "leaf", paneId: "pane-c", sessionId: "session-c" })!
+
+    expect(findTerminalPaneParentDirection(mixed, "pane-c")).toBe("vertical")
+    expect(equalizeTerminalPaneGroup(mixed, "pane-c")).toMatchObject({
+      type: "split",
+      splitId: "split-columns",
+      ratio: 0.3,
+      second: {
+        type: "split",
+        splitId: "split-rows",
+        ratio: 0.5,
+      },
+    })
   })
 
   it("moves a pane from a right split to the bottom of its target", () => {

@@ -89,6 +89,12 @@ export const terminalMovePaneInputSchema = z.object({
   expectedLayoutRevision: z.number().int().positive(),
 }).strict()
 
+export const terminalEqualizePaneInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  paneId: z.string().min(1),
+  expectedLayoutRevision: z.number().int().positive(),
+}).strict()
+
 export const terminalSetSplitRatioInputSchema = z.object({
   workspaceId: z.string().min(1),
   splitId: z.string().min(1),
@@ -121,6 +127,7 @@ export type TerminalSplitPaneInput = z.infer<typeof terminalSplitPaneInputSchema
 export type TerminalSplitPaneResult = z.infer<typeof terminalSplitPaneResultSchema>
 export type TerminalPaneDropEdge = z.infer<typeof terminalPaneDropEdgeSchema>
 export type TerminalMovePaneInput = z.infer<typeof terminalMovePaneInputSchema>
+export type TerminalEqualizePaneInput = z.infer<typeof terminalEqualizePaneInputSchema>
 export type TerminalSetSplitRatioInput = z.infer<typeof terminalSetSplitRatioInputSchema>
 export type TerminalClosePaneInput = z.infer<typeof terminalClosePaneInputSchema>
 export type TerminalCloseWorkspaceInput = z.infer<typeof terminalCloseWorkspaceInputSchema>
@@ -147,6 +154,82 @@ export function findTerminalPaneSplitPath(
   return secondPath
     ? [{ splitId: layout.splitId, paneSide: "second" }, ...secondPath]
     : null
+}
+
+export function findTerminalPaneParentDirection(
+  layout: TerminalLayoutNode,
+  paneId: string,
+): TerminalSplitNode["direction"] | null {
+  const ancestors = findTerminalPaneAncestors(layout, paneId)
+  return ancestors?.at(-1)?.direction ?? null
+}
+
+export function equalizeTerminalPaneGroup(
+  layout: TerminalLayoutNode,
+  paneId: string,
+): TerminalLayoutNode | null {
+  const ancestors = findTerminalPaneAncestors(layout, paneId)
+  if (!ancestors) return null
+  if (ancestors.length === 0) return layout
+
+  let groupRootIndex = ancestors.length - 1
+  const direction = ancestors[groupRootIndex]!.direction
+  while (groupRootIndex > 0 && ancestors[groupRootIndex - 1]!.direction === direction) {
+    groupRootIndex -= 1
+  }
+  const groupRootId = ancestors[groupRootIndex]!.splitId
+  return replaceTerminalSplit(layout, groupRootId, (split) => equalizeTerminalSplit(split, direction))
+}
+
+function findTerminalPaneAncestors(
+  layout: TerminalLayoutNode,
+  paneId: string,
+): TerminalSplitNode[] | null {
+  if (layout.type === "leaf") return layout.paneId === paneId ? [] : null
+  const firstAncestors = findTerminalPaneAncestors(layout.first, paneId)
+  if (firstAncestors) return [layout, ...firstAncestors]
+  const secondAncestors = findTerminalPaneAncestors(layout.second, paneId)
+  return secondAncestors ? [layout, ...secondAncestors] : null
+}
+
+function countTerminalSplitSegments(
+  layout: TerminalLayoutNode,
+  direction: TerminalSplitNode["direction"],
+): number {
+  if (layout.type === "leaf" || layout.direction !== direction) return 1
+  return countTerminalSplitSegments(layout.first, direction)
+    + countTerminalSplitSegments(layout.second, direction)
+}
+
+function equalizeTerminalSplit(
+  layout: TerminalSplitNode,
+  direction: TerminalSplitNode["direction"],
+): TerminalSplitNode {
+  const firstSegmentCount = countTerminalSplitSegments(layout.first, direction)
+  const secondSegmentCount = countTerminalSplitSegments(layout.second, direction)
+  return {
+    ...layout,
+    ratio: firstSegmentCount / (firstSegmentCount + secondSegmentCount),
+    first: layout.first.type === "split" && layout.first.direction === direction
+      ? equalizeTerminalSplit(layout.first, direction)
+      : layout.first,
+    second: layout.second.type === "split" && layout.second.direction === direction
+      ? equalizeTerminalSplit(layout.second, direction)
+      : layout.second,
+  }
+}
+
+function replaceTerminalSplit(
+  layout: TerminalLayoutNode,
+  splitId: string,
+  replace: (split: TerminalSplitNode) => TerminalSplitNode,
+): TerminalLayoutNode {
+  if (layout.type === "leaf") return layout
+  if (layout.splitId === splitId) return replace(layout)
+  const first = replaceTerminalSplit(layout.first, splitId, replace)
+  if (first !== layout.first) return { ...layout, first }
+  const second = replaceTerminalSplit(layout.second, splitId, replace)
+  return second !== layout.second ? { ...layout, second } : layout
 }
 
 export function splitTerminalPane(

@@ -751,6 +751,30 @@ export function TerminalModule({
     }
   }, [activeWorkspace, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
 
+  const equalizePane = useCallback(async (paneId: string) => {
+    if (!activeWorkspace) return
+    const workspaceId = activeWorkspace.id
+    try {
+      const workspace = await enqueueWorkspaceMutation(workspaceId, async () => {
+        const current = await getCurrentWorkspace(workspaceId)
+        if (!current) throw new Error("Terminal workspace not found")
+        return runTrackedOperation(
+          { component: "terminal", eventKey: "terminal.pane.equalize" },
+          () => terminalBridge.pane.equalize({
+            workspaceId,
+            paneId,
+            expectedLayoutRevision: current.layoutRevision,
+          }),
+        )
+      })
+      setWorkspaces((current) => mergeWorkspace(current, workspace))
+    } catch (error) {
+      logger.error("Failed to equalize terminal panes.", error)
+      toast.error("平分分屏失败")
+      void refreshAfterWorkspaceMutation("Failed to refresh terminal objects after a pane equalize error.")
+    }
+  }, [activeWorkspace, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
+
   const deleteGroup = useCallback(async (target = deleteGroupTarget) => {
     if (!target) return
     const groupId = target.id
@@ -1327,6 +1351,7 @@ export function TerminalModule({
                           setActivePaneIds((current) => ({ ...current, [workspace.id]: paneId }))
                         }}
                         onClosePane={closePane}
+                        onEqualizePane={equalizePane}
                         onMovePane={movePane}
                         onSessionChanged={handleSessionChanged}
                         onSessionDeleted={handleSessionDeleted}
