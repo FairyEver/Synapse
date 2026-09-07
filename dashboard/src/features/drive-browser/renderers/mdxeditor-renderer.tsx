@@ -86,20 +86,12 @@ import { trailingImageParagraphPlugin } from './mdxeditor-trailing-image-plugin'
 import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
-const DOCUMENT_IMAGE_UPLOAD_CONSENT_STORAGE_KEY = 'synapse.drive.markdown.documentImageUploadConsent.v1'
 const MDXEDITOR_COMMENTS_PANEL_DEFAULT_SIZE = 22
 const MDXEDITOR_COMMENTS_PANEL_MIN_SIZE = 17
 const MDXEDITOR_COMMENTS_PANEL_MAX_SIZE = 32
 const COMMENT_SCROLL_SAFE_INSET = 24
 
 type ResizablePanelPercent = `${number}%`
-
-type PendingDocumentImageUpload = {
-  readonly file: File
-  readonly insertMarkdown: boolean
-  readonly resolve?: (url: string) => void
-  readonly reject?: (error: Error) => void
-}
 
 type DrivePublicAssetImageMimeType = typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION[keyof typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION]
 
@@ -157,7 +149,6 @@ export function DriveMDXeditorRenderer({
   const [uploadingImage, setUploadingImage] = useState(false)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
-  const [pendingDocumentImageUpload, setPendingDocumentImageUpload] = useState<PendingDocumentImageUpload | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [editorViewMode, setEditorViewMode] = useState<ViewMode>('rich-text')
   const [commentsOpen, setCommentsOpen] = useState(false)
@@ -310,31 +301,12 @@ export function DriveMDXeditorRenderer({
       if (pendingImageUploadCountRef.current === 0) setUploadingImage(false)
     }
   }, [canEdit, imageUploadContext])
-  const confirmDocumentImageUpload = useCallback((file: File | null) => {
-    return new Promise<string>((resolve, reject) => {
-      if (!canEdit || !imageUploadContext) {
-        reject(new Error('图片上传不可用。'))
-        return
-      }
-      const validationError = publicImageUploadValidationError(file)
-      if (validationError || !file) {
-        const message = validationError ?? '图片内容为空，请重新复制或选择图片。'
-        setError(message)
-        reject(new Error(message))
-        return
-      }
-      if (!resolvePublicImageUploadInput(file)) {
-        setError('格式不支持。')
-        reject(new Error('格式不支持。'))
-        return
-      }
-      if (hasDocumentImageUploadConsent()) {
-        void uploadDocumentImage(file).then(resolve, reject)
-        return
-      }
-      setPendingDocumentImageUpload({ file, insertMarkdown: false, resolve, reject })
-    })
-  }, [canEdit, imageUploadContext, uploadDocumentImage])
+  const handleDocumentImageUpload = useCallback((file: File | null) => {
+    if (file) return uploadDocumentImage(file)
+    const message = '图片内容为空，请重新复制或选择图片。'
+    setError(message)
+    return Promise.reject(new Error(message))
+  }, [uploadDocumentImage])
   const insertDocumentImageMarkdown = useCallback((file: File, url: string) => {
     const markdown = `![${imageAltText(file.name)}](${url})`
     editorRef.current?.focus(() => {
@@ -355,24 +327,20 @@ export function DriveMDXeditorRenderer({
       return
     }
     setError(null)
-    if (hasDocumentImageUploadConsent()) {
-      void uploadDocumentImage(file).then((url) => {
-        insertDocumentImageMarkdown(file, url)
-      }, () => undefined)
-      return
-    }
-    setPendingDocumentImageUpload({ file, insertMarkdown: true })
+    void uploadDocumentImage(file).then((url) => {
+      insertDocumentImageMarkdown(file, url)
+    }, () => undefined)
   }, [canEdit, imageUploadContext, insertDocumentImageMarkdown, uploadDocumentImage])
   const insertMixedClipboardImages = useCallback(async (files: readonly File[]) => {
     for (const file of files) {
       try {
-        const url = await confirmDocumentImageUpload(file)
+        const url = await handleDocumentImageUpload(file)
         insertDocumentImageMarkdown(file, url)
       } catch {
         return
       }
     }
-  }, [confirmDocumentImageUpload, insertDocumentImageMarkdown])
+  }, [handleDocumentImageUpload, insertDocumentImageMarkdown])
   const handlePasteCapture = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
     if (!canEdit) return
     const items = Array.from(event.clipboardData.items)
@@ -390,28 +358,6 @@ export function DriveMDXeditorRenderer({
     }
     void insertMixedClipboardImages(files.filter((file): file is File => file !== null))
   }, [canEdit, insertMixedClipboardImages])
-  const cancelPendingDocumentImageUpload = useCallback(() => {
-    pendingDocumentImageUpload?.reject?.(new Error('已取消。'))
-    setPendingDocumentImageUpload(null)
-  }, [pendingDocumentImageUpload])
-  const uploadPendingDocumentImage = useCallback(async () => {
-    const pending = pendingDocumentImageUpload
-    if (!pending) return
-    if (!canEdit || !imageUploadContext) {
-      pending.reject?.(new Error('图片上传不可用。'))
-      setPendingDocumentImageUpload(null)
-      return
-    }
-    setPendingDocumentImageUpload(null)
-    rememberDocumentImageUploadConsent()
-    try {
-      const url = await uploadDocumentImage(pending.file)
-      pending.resolve?.(url)
-      if (pending.insertMarkdown) insertDocumentImageMarkdown(pending.file, url)
-    } catch (uploadError) {
-      pending.reject?.(uploadError instanceof Error ? uploadError : new Error('图片上传失败。'))
-    }
-  }, [canEdit, imageUploadContext, insertDocumentImageMarkdown, pendingDocumentImageUpload, uploadDocumentImage])
   const plugins = useMemo(() => [
     toolbarPlugin({
       toolbarContents: () => (
@@ -447,7 +393,7 @@ export function DriveMDXeditorRenderer({
     linkPlugin(),
     linkDialogPlugin(),
     imagePlugin({
-      imageUploadHandler: confirmDocumentImageUpload,
+      imageUploadHandler: handleDocumentImageUpload,
       imagePreviewHandler: resolveImagePreview,
     }),
     trailingImageParagraphPlugin(),
@@ -463,7 +409,7 @@ export function DriveMDXeditorRenderer({
       onViewModeChange: handleEditorViewModeChange,
     }),
     markdownShortcutPlugin(),
-  ], [canEdit, confirmDocumentImageUpload, handleEditorViewModeChange, notifyEditorUpdate, resolveImagePreview, uploadingImage, usesMdxSyntax])
+  ], [canEdit, handleDocumentImageUpload, handleEditorViewModeChange, notifyEditorUpdate, resolveImagePreview, uploadingImage, usesMdxSyntax])
 
   const clearParseError = useCallback(() => {
     parseErrorRequestRef.current += 1
@@ -486,7 +432,6 @@ export function DriveMDXeditorRenderer({
     clearParseError()
     setConflictOpen(false)
     setReloadConfirmOpen(false)
-    setPendingDocumentImageUpload(null)
     setEditorViewMode('rich-text')
     setActiveThreadId(null)
     setCommentsOpen(false)
@@ -926,22 +871,6 @@ export function DriveMDXeditorRenderer({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog open={pendingDocumentImageUpload !== null} onOpenChange={(open) => {
-        if (!open) cancelPendingDocumentImageUpload()
-      }}>
-        <AlertDialogContent data-drive-telemetry-scope='portal'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>公开上传图片</AlertDialogTitle>
-            <AlertDialogDescription>
-              图片会立即上传到平台公共图床，不占用云盘空间。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.image-upload' type='button' onClick={() => { void uploadPendingDocumentImage() }}>继续上传</Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
         <AlertDialogContent data-drive-telemetry-scope='portal'>
           <AlertDialogHeader>
@@ -1053,22 +982,6 @@ function publicImageUploadValidationError(file: File | null | undefined): string
 
 function isDrivePublicAssetImageMimeType(value: string | null): value is DrivePublicAssetImageMimeType {
   return Boolean(value && DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES.includes(value as DrivePublicAssetImageMimeType))
-}
-
-function hasDocumentImageUploadConsent(): boolean {
-  try {
-    return window.localStorage.getItem(DOCUMENT_IMAGE_UPLOAD_CONSENT_STORAGE_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-function rememberDocumentImageUploadConsent(): void {
-  try {
-    window.localStorage.setItem(DOCUMENT_IMAGE_UPLOAD_CONSENT_STORAGE_KEY, 'true')
-  } catch {
-    // The current insertion can continue even if the browser refuses storage.
-  }
 }
 
 function normalizeMdxEditorImageMarkdown(markdown: string): string {

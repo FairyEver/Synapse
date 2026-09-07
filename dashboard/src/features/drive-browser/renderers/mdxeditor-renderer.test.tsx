@@ -345,7 +345,6 @@ describe('DriveMDXeditorRenderer', () => {
     renderRenderer({ edit: editable(), editContext })
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
-    await click(buttonWithText('继续上传'))
     await pressKey(editor(), { key: 's', metaKey: true })
     await pressKey(editor(), { key: 's', ctrlKey: true })
 
@@ -695,23 +694,19 @@ describe('DriveMDXeditorRenderer', () => {
     })
   })
 
-  it('asks once before uploading a selected image to the platform image host', async () => {
+  it('uploads a selected image to the platform image host without confirmation', async () => {
     const editContext = createEditContext()
     vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(createHostedImage())
     renderRenderer({ edit: editable(), editContext })
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
 
-    expect(driveBrowserApi.uploadHostedDocumentImage).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('平台公共图床')
-
-    await click(buttonWithText('继续上传'))
-
     expect(driveBrowserApi.uploadHostedDocumentImage).toHaveBeenCalledWith(
       expect.any(File),
       { kind: 'owner', itemId: 'file' },
       { name: 'chart.png', mimeType: 'image/png' }
     )
+    expect(document.body.textContent).not.toContain('公开上传图片')
     expect(editor().value).toBe(`# Notes![chart](${createHostedImage().url})`)
     expect(document.body.textContent).toContain('未保存')
 
@@ -746,7 +741,6 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('uploads image files from mixed clipboard payloads immediately', async () => {
-    window.localStorage.setItem('synapse.drive.markdown.documentImageUploadConsent.v1', 'true')
     const file = new File(['image'], 'chart.png', { type: 'image/png' })
     vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(createHostedImage())
     const editContext = createEditContext()
@@ -763,32 +757,20 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editContext.saveText).not.toHaveBeenCalled()
   })
 
-  it('remembers platform image upload consent after the first confirmation', async () => {
+  it('uploads consecutive selected images without confirmation', async () => {
     vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
       .mockResolvedValueOnce(createHostedImage({ imageId: 'img_11111111111111111111111111111111', url: '/object/img_11111111111111111111111111111111' }))
       .mockResolvedValueOnce(createHostedImage({ imageId: 'img_22222222222222222222222222222222', url: '/object/img_22222222222222222222222222222222' }))
     renderRenderer({ edit: editable() })
 
     await selectImage(new File(['image'], 'first.png', { type: 'image/png' }))
-    await click(buttonWithText('继续上传'))
     await selectImage(new File(['image'], 'second.png', { type: 'image/png' }))
 
-    expect(document.body.textContent).not.toContain('平台公共图床')
+    expect(document.body.textContent).not.toContain('公开上传图片')
     expect(driveBrowserApi.uploadHostedDocumentImage).toHaveBeenCalledTimes(2)
     expect(editor().value).toBe(
       '# Notes![first](/object/img_11111111111111111111111111111111)![second](/object/img_22222222222222222222222222222222)'
     )
-  })
-
-  it('cancels platform image insertion without uploading', async () => {
-    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
-    renderRenderer({ edit: editable() })
-
-    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
-    await click(buttonWithText('取消'))
-
-    expect(upload).not.toHaveBeenCalled()
-    expect(editor().value).toBe('# Notes')
   })
 
   it('rejects unsupported selected image formats before uploading', async () => {
