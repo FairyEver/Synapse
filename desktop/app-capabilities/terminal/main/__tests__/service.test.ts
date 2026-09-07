@@ -66,6 +66,8 @@ describe("TerminalService core", () => {
     const session = await service.createSession({})
 
     expect(session.status).toBe("failed")
+    expect(service.listSessions()).toEqual([])
+    expect(service.listWorkspaces()).toEqual([])
     expect(logger.warn).toHaveBeenCalledWith(
       "Terminal PTY process failed to start.",
       { sessionId: session.id, error: launchError },
@@ -316,7 +318,7 @@ describe("TerminalService core", () => {
     expect(service.listSessions()).toEqual([])
   })
 
-  it("finishes a persisted pane close after restart", async () => {
+  it("removes every persisted session and workspace after restart", async () => {
     const store = memoryStore()
     const ptys = [fakePty(), fakePty()]
     let spawnIndex = 0
@@ -348,9 +350,77 @@ describe("TerminalService core", () => {
     })
     await recovered.start()
 
-    expect(recovered.listWorkspaces()).toHaveLength(1)
-    expect(recovered.listWorkspaces()[0]?.layout).toMatchObject({ type: "leaf", sessionId: root.id })
-    expect(recovered.listSessions().map((session) => session.id)).toEqual([root.id])
+    expect(recovered.listWorkspaces()).toEqual([])
+    expect(recovered.listSessions()).toEqual([])
+    expect(store.state.workspaces).toEqual([])
+    expect(store.state.sessions).toEqual([])
+    expect(store.state.output).toEqual([])
+    expect(store.state.checkpoints).toEqual([])
+  })
+
+  it("purges legacy ended, failed, and lost sessions during startup", async () => {
+    const store = memoryStore()
+    const ptys = [fakePty(), fakePty(), fakePty()]
+    let spawnIndex = 0
+    const first = createTerminalService({
+      store,
+      spawnPty: () => ptys[spawnIndex++]!,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await first.start()
+    await first.createSession({ title: "Ended" })
+    await first.createSession({ title: "Failed" })
+    await first.createSession({ title: "Lost" })
+    await first.flushPersistQueue()
+    const terminalStatuses = ["ended", "failed", "lost"] as const
+    store.state.sessions = store.state.sessions.map((session, index) => ({
+      ...session,
+      status: terminalStatuses[index]!,
+      endCause: "legacy_terminal_record",
+      endedAt: "2026-09-07T00:00:00.000Z",
+    }))
+
+    const recovered = createTerminalService({
+      store,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await recovered.start()
+
+    expect(recovered.listSessions()).toEqual([])
+    expect(recovered.listWorkspaces()).toEqual([])
+    expect(store.state.sessions).toEqual([])
+    expect(store.state.workspaces).toEqual([])
+  })
+
+  it("destroys all terminal sessions while stopping the application service", async () => {
+    const store = memoryStore()
+    const ptys = [fakePty(), fakePty()]
+    let spawnIndex = 0
+    const service = createTerminalService({
+      store,
+      spawnPty: () => ptys[spawnIndex++]!,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => os.tmpdir(),
+    })
+    await service.start()
+    await service.createSession({ title: "First" })
+    await service.createSession({ title: "Second" })
+    ptys[0]!.emitData("first output")
+    ptys[1]!.emitData("second output")
+
+    await service.stop()
+
+    expect(ptys.every((pty) => pty.kill.mock.calls.length === 1)).toBe(true)
+    expect(service.listSessions()).toEqual([])
+    expect(service.listWorkspaces()).toEqual([])
+    expect(store.state.sessions).toEqual([])
+    expect(store.state.workspaces).toEqual([])
+    expect(store.state.output).toEqual([])
+    expect(store.state.operations).toEqual([])
+    expect(store.state.idempotency).toEqual([])
+    expect(store.state.checkpoints).toEqual([])
   })
 
   it("creates an ungrouped UI session in the first terminal group", async () => {
@@ -728,7 +798,7 @@ describe("TerminalService core", () => {
     })
   })
 
-  it("keeps normal stop asynchronous and marks ended only after the PTY exit event", async () => {
+  it("keeps normal stop asynchronous, reports the terminal transition, then destroys the session", async () => {
     const { service, pty } = await startedHarness()
     const session = await service.createSession({})
     const operation = await service.stopControlledSession({
@@ -738,16 +808,47 @@ describe("TerminalService core", () => {
     expect(operation).toMatchObject({ status: "delivered", kind: "stop" })
     expect(service.getSession({ sessionId: session.id }).status).toBe("stopping")
     expect(pty.kill).toHaveBeenCalledWith(process.platform === "win32" ? undefined : "SIGHUP")
+    const terminalState = service.observe({
+      sessionId: session.id,
+      afterStateRevision: service.getSession({ sessionId: session.id }).stateRevision,
+      afterOutputSeq: 0,
+      maxWaitMs: 1_000,
+    }, false, controllerA.clientId)
     pty.emitExit({ exitCode: 2, signal: 1 })
-    expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "ended", endCause: "normal_stop_confirmed", exitCode: 2, signal: 1 })
-    expect(service.getSessionState(session.id, controllerA).endFacts).toMatchObject({
-      stopOperationId: (operation as { operationId: string }).operationId,
-      requestedBy: "self",
+    await expect(terminalState).resolves.toMatchObject({
+      state: {
+        lifecycle: "ended",
+        endFacts: {
+          cause: "normal_stop_confirmed",
+          exitCode: 2,
+          signal: 1,
+        },
+      },
     })
-    expect(service.getOperation((operation as { operationId: string }).operationId)).toMatchObject({ status: "completed", finalLifecycle: "ended" })
+    await service.flushPersistQueue()
+    expect(() => service.getSession({ sessionId: session.id })).toThrow("not_found")
+    expect(() => service.getOperation((operation as { operationId: string }).operationId)).toThrow("not_found")
   })
 
-  it("recovers a delivered stop without replay and records the session as lost", async () => {
+  it("returns completed termination facts when PTY exit is delivered synchronously", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    pty.kill.mockImplementationOnce(() => pty.emitExit({ exitCode: 0 }))
+
+    const operation = await service.stopControlledSession({
+      sessionId: session.id,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000075",
+    }, controllerA)
+
+    expect(operation).toMatchObject({
+      status: "completed",
+      finalLifecycle: "ended",
+      finalCause: "normal_stop_confirmed",
+    })
+    expect(() => service.getSession({ sessionId: session.id })).toThrow("not_found")
+  })
+
+  it("removes a delivered stop after restart without respawning or replaying it", async () => {
     const first = await startedHarness()
     const session = await first.service.createSession({})
     const operation = await first.service.stopControlledSession({
@@ -763,15 +864,10 @@ describe("TerminalService core", () => {
       resolveEffectivePath: () => "/usr/bin:/bin",
     })
     await recovered.start()
-    expect(recovered.getSession({ sessionId: session.id })).toMatchObject({
-      status: "lost",
-      endCause: "runtime_unrecoverable_after_restart",
-    })
-    expect(recovered.getOperation((operation as { operationId: string }).operationId)).toMatchObject({
-      status: "completed",
-      finalLifecycle: "lost",
-      finalCause: "runtime_unrecoverable_after_restart",
-    })
+    expect(() => recovered.getSession({ sessionId: session.id })).toThrow("not_found")
+    expect(() => recovered.getOperation((operation as { operationId: string }).operationId)).toThrow("not_found")
+    expect(first.store.state.sessions).toEqual([])
+    expect(first.store.state.operations).toEqual([])
   })
 
   it("rejects delete for running/stopping sessions and never hides termination", async () => {
@@ -781,28 +877,48 @@ describe("TerminalService core", () => {
     expect(service.getSession({ sessionId: session.id }).status).toBe("running")
   })
 
-  it("persists a bounded delete operation tombstone for a terminal session", async () => {
-    const { service, pty } = await startedHarness()
+  it("removes session metadata, history, checkpoints, and operations when the PTY exits", async () => {
+    const { service, pty, store } = await startedHarness()
     const session = await service.createSession({})
+    pty.emitData("completed output\r\n")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const lease = service.acquireControl({
+      sessionId: session.id,
+      requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000073",
+    }, controllerA)
+    service.sendSemanticInput({
+      sessionId: session.id,
+      leaseId: lease.leaseId,
+      expectedInputRevision: 0,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000074",
+      actions: [{ type: "text", text: "exit" }, { type: "key", key: "Enter" }],
+    }, controllerA)
+    await service.stopControlledSession({
+      sessionId: session.id,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000072",
+    }, controllerA)
     pty.emitExit({ exitCode: 0 })
-    const result = await service.deleteTerminalSession(session.id, "client-a")
-    expect(result.deleteOperationId).not.toBe(session.id)
-    expect(service.getOperation(result.deleteOperationId)).toMatchObject({
-      kind: "delete",
-      status: "completed",
-      finalLifecycle: "ended",
-      finalCause: "session_deleted",
-    })
+    await service.flushPersistQueue()
+
     expect(() => service.getSession({ sessionId: session.id })).toThrow("not_found")
+    expect(service.listWorkspaces()).toEqual([])
+    expect(service.listSessions()).toEqual([])
+    expect(service.getPersistDiagnostics()).toMatchObject({ pending: false, inFlight: false })
+    expect(store.state.sessions).toEqual([])
+    expect(store.state.workspaces).toEqual([])
+    expect(store.state.output).toEqual([])
+    expect(store.state.operations).toEqual([])
+    expect(store.state.idempotency).toEqual([])
+    expect(store.state.checkpoints).toEqual([])
   })
 
-  it("deletes a non-empty group only through an unchanged terminal-session plan", async () => {
+  it("makes a group empty when its final terminal exits", async () => {
     const { service, pty } = await startedHarness()
     const session = await service.createSession({})
     pty.emitExit({ exitCode: 0 })
-    const plan = service.previewGroupDelete(session.groupId)
-    const result = await service.commitGroupDelete(plan.deletePlanId)
-    expect(result.sessionCount).toBe(1)
+    await service.flushPersistQueue()
+    await service.deleteGroup({ groupId: session.groupId })
     expect(service.listGroups().some((group) => group.id === session.groupId)).toBe(false)
   })
 
@@ -854,16 +970,15 @@ describe("TerminalService core", () => {
     expect(first.nextOutputSeq).toBe(1)
   })
 
-  it("serves an ended session view from a bounded core checkpoint plus retained output", async () => {
+  it("does not retain a rendered view after the process exits", async () => {
     const { service, pty } = await startedHarness()
     const session = await service.createSession({})
     pty.emitData("checkpoint-view\r\n")
     await new Promise((resolve) => setTimeout(resolve, 0))
     pty.emitExit({ exitCode: 0 })
-    const view = await service.getView({ sessionId: session.id, kind: "screen", maxBytes: 64 * 1024 })
-    expect(view.degraded).toBe(false)
-    expect(view.lines.join("\n")).toContain("checkpoint-view")
-    expect(view.throughOutputSeq).toBe(1)
+    await service.flushPersistQueue()
+    await expect(service.getView({ sessionId: session.id, kind: "screen", maxBytes: 64 * 1024 }))
+      .rejects.toThrow("not_found")
   })
 })
 

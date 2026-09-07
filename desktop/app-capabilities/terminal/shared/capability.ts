@@ -105,7 +105,7 @@ export const TERMINAL_CAPABILITY_CATALOG = [
   C({ id: "app.terminal.session.stop", title: "Normally stop terminal session", description: "Request platform-supported normal termination without automatic force escalation.", mutates: true, risk: "high", permissions: ["session.stop"] }),
   C({ id: "app.terminal.session.force_stop", title: "Force stop terminal session", description: "Explicitly request a distinct platform-supported forced termination path.", mutates: true, risk: "high", permissions: ["session.forceStop"] }),
   C({ id: "app.terminal.operation.get", title: "Get terminal operation", description: "Read a termination or deletion operation through authorization to its original resource.", mutates: false, risk: "normal", permissions: ["state.read"] }),
-  C({ id: "app.terminal.session.delete", title: "Delete terminal session", description: "Delete a terminal-state session and retained data; running and stopping sessions conflict.", mutates: true, risk: "high", permissions: ["session.delete"] }),
+  C({ id: "app.terminal.session.delete", title: "Delete terminal session", description: "Compatibility cleanup for a still-present terminal-state session; terminal transitions normally auto-delete it, while running and stopping sessions conflict.", mutates: true, risk: "high", permissions: ["session.delete"] }),
 ] as const
 
 export const TERMINAL_CAPABILITY_IDS = TERMINAL_CAPABILITY_CATALOG.map((item) => item.id)

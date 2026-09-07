@@ -1,5 +1,7 @@
 # Exclude Terminal bodies from ordinary desktop backups
 
+> Restoration of session structure, lifecycle, and operation facts is superseded by [ADR 0215](./0215-auto-destroy-terminal-sessions.md); any such records in a backup are discarded during restore.
+
 The initial ordinary desktop backup restores Terminal structure and configuration but excludes Terminal bodies. It includes groups, session structure, revisions, lifecycle and termination facts, redacted launch facts, and necessary completed-operation facts. It excludes raw output, emulator checkpoints and derived scrollback, active leases, pending observations, and expired or short-lived idempotency records. No exported manifest claims an omitted block is available.
 
 The projection preserves `nextOutputSeq`, accumulated discard facts, and other evidence that output previously existed. After restore, the retained interval is empty and reads report `gap`, `truncated`, and `reason=backup_excluded`; rendered views without reconstructible data are degraded. Restored `running` and `stopping` sessions become `lost` with an explicit restore cause. Pending or delivered operations are never replayed and recover as `delivery_uncertain` or complete consistently with the new lost fact.

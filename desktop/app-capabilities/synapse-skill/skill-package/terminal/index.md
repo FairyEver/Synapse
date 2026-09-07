@@ -71,9 +71,9 @@ Read `api-reference.md` before constructing requests. Read `examples.md` when tr
 - `text` rejects control characters. Use fixed key actions for Enter, Tab, Escape, arrows, Backspace, Ctrl+C, and Ctrl+D. `command` is only text plus Enter and rejects multiline text.
 - Use bracketed paste only through `app_terminal_session_input_paste`; unavailable or stale mode evidence has no literal fallback. Use raw input only when necessary for the user's request.
 - Raw Base64 transport does not promise arbitrary binary transparency. Follow the current `supportedEncoding` and limitations returned by capability discovery.
-- Normal stop and force stop are separate operations. Stop success means delivery was accepted; observe until `ended`, `failed`, or `lost`. Never auto-escalate a timeout to force stop.
-- Delete only terminal sessions. Running or stopping sessions must be stopped and observed to terminal state first. Nonempty groups require preview and commit; no delete operation implicitly stops a session.
-- Retained output is bounded. Honor `firstSeq`, `nextSeq`, `gap`, `truncated`, `hasMore`, and recovery cursors. A missing retained interval is not proof that the session never produced output.
+- Normal stop and force stop are separate operations. Stop success means delivery was accepted; observe until `ended`, `failed`, `lost`, or `not_found` after automatic cleanup. Never auto-escalate a timeout to force stop.
+- Terminal transitions automatically delete the session and its retained data. Use session delete only if a terminal-state object is still present during that transition. Running or stopping sessions still conflict, and no delete operation implicitly stops a session. Nonempty groups require preview and commit.
+- Retained output is bounded and exists only while a session is running or stopping. Honor `firstSeq`, `nextSeq`, `gap`, `truncated`, `hasMore`, and recovery cursors. A missing retained interval is not proof that the session never produced output.
 - Saved command launch creates a new interactive shell and submits the saved logical lines as text plus Enter. It does not expose the command body and does not grant later control or output access.
 - Terminal runs as the current OS user without a process sandbox. A shell or saved command can have arbitrary file, network, credential, and process side effects within that user account.
 - User-defined toolbar actions are UI-private preferences and are not Terminal MCP resources. Use the existing session input tools instead of trying to list or mutate toolbar buttons.

@@ -52,6 +52,7 @@
 - Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
 - Terminal 的 43 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
+- Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 43。
 - Agent 已配置项目可通过现有 Terminal UI IPC 在项目目录新建会话，并以仅含 `sessionId` 的 System App 请求打开或聚焦 Terminal；该入口不新增 MCP capability、tool 或 Deep Link。
 - Terminal 分屏 workspace/pane 仅属于现有 System App 的 UI IPC：创建、调整、平分与拖拽重排 pane 时，每个 pane 仍由一个既有 session 承载，因此 MCP 工具数量保持 43，不注册 workspace/pane MCP capability、tool 或 Deep Link。
 - Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取、监听并解析拖拽选中项；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。文件树路径拖拽只写入 Agent 草稿或当前 Terminal session，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。

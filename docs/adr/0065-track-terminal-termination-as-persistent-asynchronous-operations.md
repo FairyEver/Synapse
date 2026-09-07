@@ -1,5 +1,7 @@
 # Track Terminal termination as persistent asynchronous operations
 
+> Persistence and restart recovery of session-scoped termination operations are superseded by [ADR 0215](./0215-auto-destroy-terminal-sessions.md).
+
 `app.terminal.session.stop` requires `session.stop` and sends normal termination only for a `running` session without requiring an input lease. An existing same-level request returns its original `stopOperationId`. `app.terminal.session.force_stop` requires `session.forceStop` and may target `running` directly or explicitly upgrade `stopping`; an upgrade creates a new `forceOperationId` linked to the original stop operation.
 
 Termination operation state is persisted separately from session lifecycle as `pending_delivery`, `delivered`, `delivery_uncertain`, `completed`, or `failed`. Only confirmed platform delivery moves the session to `stopping`. Actual transition to `ended`, `failed`, or `lost` completes the operation, and the completed result carries `finalLifecycle`, `finalCause`, and applicable termination facts rather than hiding their distinction.

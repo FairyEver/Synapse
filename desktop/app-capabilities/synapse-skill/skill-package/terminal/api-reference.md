@@ -35,7 +35,7 @@ Ordinary creation resolves protected Synapse identity, global settings, group se
 
 Saved command bodies normalize CRLF to LF. Empty bodies are rejected, interior empty lines become Enter-only actions, one final LF only terminates the preceding line, and each additional final LF preserves one intentional empty line. Launch writes every logical line as `text` then `Enter`; it is not `shell -c` or a script transaction.
 
-Permission checks, revisions, resolution, and predictable validation complete before identity creation. A PTY failure after identity creation returns `failed_after_identity_created` with the new `sessionId`.
+Permission checks, revisions, resolution, and predictable validation complete before identity creation. A PTY failure after identity creation returns `failed_after_identity_created` with the new `sessionId`, then automatically removes the failed session and workspace. The id is diagnostic only and later reads return `not_found`.
 
 ## Observation and output
 
@@ -57,7 +57,7 @@ Maintain `afterStateRevision` and `afterOutputSeq` independently. A normal timeo
 - `app_terminal_session_input_raw`: one canonical Base64 payload; requires control and raw-input permissions.
 - `app_terminal_session_resize`: exact expected size revision plus current lease and resize/control permissions.
 
-Input and resize require caller-scoped idempotency keys. A fresh descriptive literal that identifies the current task, action, and sequence is sufficient; do not invoke helper code or another tool only to generate randomness. Same key and canonical request returns the stored result during the retention window; a changed request conflicts. Outside that window, inspect current revisions and decide again rather than replaying blindly.
+Input and resize require caller-scoped idempotency keys. A fresh descriptive literal that identifies the current task, action, and sequence is sufficient; do not invoke helper code or another tool only to generate randomness. Same key and canonical request returns the stored result during the retention window while its session exists; a changed request conflicts. Automatic session cleanup removes session-scoped idempotency, so a later retry is a new decision and creation uses a new identity. Outside that window, inspect current revisions and decide again rather than replaying blindly.
 
 An accepted input result proves only that Synapse delivered bytes to the PTY. Before reporting that an interactive foreground program submitted the instruction or started work, observe fresh output or a rendered view. If the complete instruction remains in the input area, send one Enter key and observe again without resending the text.
 
@@ -66,11 +66,11 @@ An accepted input result proves only that Synapse delivered bytes to the PTY. Be
 - `app_terminal_session_stop`: normal termination, running only.
 - `app_terminal_session_force_stop`: explicit higher-risk force operation where the platform proves a distinct path.
 - `app_terminal_operation_get`: redacted operation status; pass both `sessionId` and `operationId` so state permission is checked on the original session before operation lookup.
-- `app_terminal_session_delete`: terminal-state session only.
+- `app_terminal_session_delete`: compatibility cleanup for a terminal-state session that is still observable during its final transition; normal termination already deletes the session.
 - `app_terminal_group_delete`: empty group only with exact group revision.
 - `app_terminal_group_delete_preview`, `app_terminal_group_delete_commit`: bounded plan and unchanged-plan commit for nonempty groups whose sessions are all terminal.
 
-Termination operations progress independently through `pending_delivery`, `delivered`, `delivery_uncertain`, `completed`, or `failed`. Session lifecycle remains `running`, `stopping`, `ended`, `failed`, or `lost` and is the authoritative runtime fact.
+Termination operations progress independently through `pending_delivery`, `delivered`, `delivery_uncertain`, `completed`, or `failed`. Session lifecycle remains `running`, `stopping`, `ended`, `failed`, or `lost` and is the authoritative runtime fact while the object exists. `ended`, `failed`, and `lost` wake pending observers and then trigger automatic deletion of the session, operation, output, checkpoint, pane, and empty workspace. Treat a subsequent `not_found` as completed cleanup. Synapse shutdown removes every session; restart does not restore old terminals.
 
 ## Management
 

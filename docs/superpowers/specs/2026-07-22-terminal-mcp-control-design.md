@@ -42,9 +42,9 @@ Product requirements are the object, authorization, lifecycle, observation, inpu
 UI and MCP share the same groups, commands, sessions, histories, revisions, and immutable `sessionId`. There is no MCP-only Terminal.
 
 - A `sessionId` identifies one runtime attempt and is never reused.
-- A terminal session that ends or is lost retains metadata and retained history but cannot be restarted under the same id.
+- A terminal session is retained only while it is running or stopping. `ended`, `failed`, and `lost` are final transition facts for pending observers; Synapse then destroys the session metadata, retained history, and workspace pane.
 - Starting again creates another session.
-- Explicit deletion invalidates identity, metadata, and retained bodies after the bounded tombstone window.
+- Destruction invalidates identity, metadata, and retained bodies immediately; the old id is never reused and subsequent reads return `not_found`.
 - Creation source and actor are audit and quota metadata, not ownership isolation.
 - UI sees MCP mutations and local MCP can discover UI-created objects in the shared local user space.
 
@@ -105,7 +105,7 @@ Initial attention detection is passive:
 
 Asynchronous operation status is `pending_delivery | delivered | delivery_uncertain | completed | failed` and remains separate from lifecycle. Completion includes final lifecycle and cause. `operation.get` requires current state-read authorization over the original resource; an operation id alone cannot probe existence.
 
-On graceful application shutdown, Synapse may attempt only the proven normal-stop path and never silently force. Confirmed exits become `ended` with an application-shutdown cause. Runtimes not confirmed before shutdown become `lost` with an application-shutdown-unconfirmed cause. A stale running record found after crash or restart uses a distinct unexpected-restart cause. Recovery never retransmits termination actions.
+On application shutdown, Synapse disposes and terminates every PTY, destroys all session-scoped state, and persists no sessions or workspaces. Startup purges any session, workspace, output, checkpoint, operation, or session-scoped idempotency record left by an older version, crash, or incomplete shutdown. Recovery never reconstructs a PTY, converts a saved session to `lost`, or retransmits termination actions.
 
 ## Revisions and watermarks
 
@@ -133,9 +133,9 @@ Three creation paths exist:
 - `session_override.create`: explicit override intent and fields in the override-create permission category. Cwd, shell, environment, and initial dimensions are individually recorded in redacted launch facts. Initial dimensions also require the resize permission check.
 - `group_command.launch`: exact group and command ids, expected launch and command revisions, and idempotency identity only. It accepts no command body or launch override.
 
-Permission checks, revisions, resolution, and predictable validation complete before identity creation. A PTY infrastructure failure after identity creation retains a failed session and returns its traceable id. Success means the session reached running, not that the shell is ready or any command succeeded.
+Permission checks, revisions, resolution, and predictable validation complete before identity creation. A PTY infrastructure failure after identity creation returns the failed transition with its traceable id, then destroys that session and its workspace so it is not discoverable or retained. Success means the session reached running, not that the shell is ready or any command succeeded.
 
-Create idempotency binds client, capability, caller key, and canonical request digest for a bounded window. Same key and request returns the original session; a changed request conflicts; keys do not collide across clients.
+Create idempotency binds client, capability, caller key, and canonical request digest for a bounded window while the created session exists. Same key and request returns the original live session; a changed request conflicts; keys do not collide across clients. Automatic session destruction removes its idempotency entry, so retrying after a failed or ended creation is a new runtime attempt with a new identity.
 
 Command launch is an independent restricted creation operation. It pins the requested command and launch revisions for that call; changed executable content produces a revision conflict and requires the Agent to reread facts and reconsider the action. Creating the session does not itself acquire an input lease or prove that later control, stop, or delete actions are within the user's request.
 
@@ -180,7 +180,7 @@ The headless emulator and serialization path require a technical spike in Electr
 
 ## Output retention and persistence
 
-Retention has configurable per-session rolling limits and a global Terminal-output quota. Global eviction is deterministic: prefer oldest output of ended or lost sessions and affect running sessions last. Eviction deletes bodies, not identity or necessary metadata. Empty retention still reports policy, first and next sequence, cumulative loss, last eviction, and gap/truncation. There is no default time-based expiry.
+While a session is running or stopping, output retention has configurable per-session rolling limits and a global Terminal-output quota. Global eviction is deterministic and affects the oldest retained output first. Eviction deletes bodies, not the live identity or necessary metadata. Empty retention still reports policy, first and next sequence, cumulative loss, last eviction, and gap/truncation. There is no time-based expiry for a live session; terminal transition or application shutdown destroys all of its retained output and checkpoints.
 
 Structured records live in registered versioned DataRepository namespaces:
 
@@ -208,7 +208,7 @@ When secure encryption is unavailable:
 - Capability and diagnostics expose only safe protection availability and functional limitations.
 - There is no plaintext fallback.
 
-The ordinary desktop backup contains Terminal structure, revisions, lifecycle and end facts, redacted launch facts, and necessary completed-operation facts. It excludes output, checkpoints, derived scrollback, leases, pending observations, and short-lived idempotency. Plaintext ordinary backup excludes command bodies. It preserves historical output watermarks and restores an empty interval with `gap`, `truncated`, and `reason=backup_excluded`; views without reconstruction are degraded. Restored running or stopping sessions become lost with a restore cause, and pending termination is never replayed.
+The ordinary desktop backup excludes output, checkpoints, derived scrollback, leases, pending observations, and short-lived idempotency. Plaintext ordinary backup excludes command bodies. A restore keeps Terminal configuration such as groups and launch settings but discards every session, workspace, lifecycle fact, and session operation present in the backup; it creates no PTY and never replays termination.
 
 Terminal restore has a dedicated validated plan and atomic or recoverable commit rather than generic partial import. A future full-history backup is a separate encrypted, size-disclosed format.
 
@@ -270,11 +270,11 @@ Termination covers the managed PTY and only the process or process tree the plat
 
 ## Deletion
 
-Session delete accepts only ended, failed, or lost sessions, rechecks permission and lifecycle, and transactionally or recoverably removes identity, metadata, and retained bodies. Running or stopping conflicts and triggers no stop.
+Terminal transition automatically and recoverably removes identity, metadata, retained bodies, operations, and the owning pane; no ordinary follow-up delete is required. `session.delete` remains for current-contract compatibility with a narrow terminal-transition race, accepts only a still-present `ended`, `failed`, or `lost` session, and otherwise returns `not_found`. Running or stopping conflicts and triggers no stop.
 
 Empty-group delete requires expected group revision. Nonempty group deletion requires a bounded redacted preview and a server-side plan containing complete member and command sets, revisions, lifecycle facts, expected ranges, and expiry. Commit rechecks caller identity, permission, expiry, sets, revisions, and terminal state and deletes atomically or recoverably. Automatic output eviction may safely narrow deleted bytes; any expansion or unknown change invalidates the plan.
 
-Delete idempotency and operation query survive only a bounded tombstone window. There is no delete-and-kill convenience operation.
+Session-scoped idempotency and operation records are removed with the session. There is no delete-and-kill convenience operation.
 
 ## Structural synchronization
 
@@ -378,7 +378,7 @@ Implementation is inside the existing Terminal App Capability architecture and t
 - DataRepository schemas, encrypted block store, recovery, migration, retention, backup projection, and restore planning.
 - Lifecycle, operation, revision, event, observation, lease, semantic input, raw, paste, resize, termination, and deletion behavior.
 - Renderer synchronization and explicit user takeover/emergency paths.
-- Renderer workspaces persist a recursive split tree whose leaf panes reference immutable sessions. This layout is UI/IPC-only: closing a pane deletes its session, closing the sidebar workspace deletes every referenced session, and MCP continues to address sessions without controlling pane layout.
+- Renderer workspaces persist a recursive split tree only while its leaf sessions are running or stopping. This layout is UI/IPC-only: a terminal transition removes its pane, removing the last pane removes the sidebar workspace, closing a pane deletes its session, closing the sidebar workspace deletes every referenced session, and MCP continues to address live sessions without controlling pane layout.
 - One canonical development-time MCP tool set without compatibility aliases.
 - MCP capability registration, dispatch, schemas, permission and risk declarations.
 

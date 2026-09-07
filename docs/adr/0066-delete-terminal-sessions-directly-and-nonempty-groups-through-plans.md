@@ -1,5 +1,7 @@
 # Delete Terminal sessions directly and nonempty groups through plans
 
+> Direct terminal-state session deletion remains only as a compatibility race; automatic cleanup and removal of tombstones are defined by [ADR 0215](./0215-auto-destroy-terminal-sessions.md).
+
 `app.terminal.session.delete` targets one exact `sessionId` with a caller-scoped idempotency key. It rechecks `session.delete` and requires `ended`, `failed`, or `lost` at commit time. A transactional or equivalently recoverable operation removes identity, metadata, and retained output without partial completion and returns `deleteOperationId` plus a redacted actual-deletion summary.
 
 `app.terminal.group.delete` deletes only an empty group and requires `expectedGroupRevision` plus a caller-scoped idempotency key. A nonempty group returns `group_not_empty`; it never cascades implicitly.

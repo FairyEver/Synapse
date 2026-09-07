@@ -162,6 +162,7 @@ type IdempotencyEntry = {
   readonly digest: string
   readonly expiresAtMs: number
   readonly result: unknown
+  readonly resourceSessionId?: string
 }
 
 type TerminalServiceLogger = {
@@ -455,10 +456,10 @@ export function createTerminalService(deps: {
     readonly attemptedCheckpoint: boolean
   }): void {
     for (const update of snapshot.update.sessions) {
-      const persistedSeq = update.output.at(-1)?.seq
-      if (persistedSeq !== undefined) persistedOutputSeqBySession.set(update.session.id, persistedSeq)
-      if (update.checkpoint) checkpoints.set(update.session.id, update.checkpoint)
       const current = sessions.get(update.session.id)
+      const persistedSeq = update.output.at(-1)?.seq
+      if (persistedSeq !== undefined && current) persistedOutputSeqBySession.set(update.session.id, persistedSeq)
+      if (update.checkpoint && current) checkpoints.set(update.session.id, update.checkpoint)
       if (current?.stateRevision === snapshot.stateRevisionBySession.get(update.session.id)) {
         dirtyRuntimeSessionIds.delete(update.session.id)
       }
@@ -481,7 +482,9 @@ export function createTerminalService(deps: {
       if (!retainedSessionIds.has(sessionId)) dirtyRuntimeSessionIds.delete(sessionId)
     }
     checkpoints.clear()
-    for (const checkpoint of snapshot.checkpoints) checkpoints.set(checkpoint.sessionId, checkpoint)
+    for (const checkpoint of snapshot.checkpoints) {
+      if (sessions.has(checkpoint.sessionId)) checkpoints.set(checkpoint.sessionId, checkpoint)
+    }
     lastRuntimeCheckpointAt = Date.now()
   }
 
@@ -706,7 +709,11 @@ export function createTerminalService(deps: {
       const current = sessions.get(session.id)
       if (!current) return
       cleanupRuntime(session.id)
-      expireLease(session.id, "session_ended")
+      const lease = leases.get(session.id)
+      if (lease) {
+        leases.delete(session.id)
+        leaseRevisions.set(session.id, lease.leaseRevision + 1)
+      }
       const timestamp = now()
       const active = activeStopOperations.get(session.id)
       const operationId = active?.force ?? active?.stop
@@ -735,7 +742,8 @@ export function createTerminalService(deps: {
       sessions.set(session.id, updated)
       deps.agentNotifications?.unregisterSession(session.id)
       if (operationId) completeOperation(operationId, updated.status, cause)
-      if (!unpublishedSessions.has(session.id)) {
+      const published = !unpublishedSessions.has(session.id)
+      if (published) {
         events.emit("sessionChanged", updated)
         events.emit("stateChanged", {
           sessionId: session.id,
@@ -744,7 +752,9 @@ export function createTerminalService(deps: {
           changeTypes: ["lifecycle", "operation", "attention", "lease"],
         })
       }
-      void finalizeWorkspaceClosures(session.id)
+      const removed = removeTerminalSessionInMemory(session.id)
+      if (published && removed) events.emit("sessionDeleted", { sessionId: session.id })
+      void flushPersist()
     })
     runtimes.set(session.id, { pty: child, buffer, emulator, disposables: [dataDisposable, exitDisposable] })
   }
@@ -912,8 +922,9 @@ export function createTerminalService(deps: {
       }
       sessions.set(session.id, failed)
       deps.agentNotifications?.unregisterSession(session.id)
+      removeTerminalSessionInMemory(session.id)
       await flushPersist()
-      return getSessionOrThrow(session.id)
+      return failed
     }
   }
 
@@ -934,105 +945,47 @@ export function createTerminalService(deps: {
     operations.clear()
     idempotency.clear()
     for (const group of state.groups) groups.set(group.id, group)
-    for (const session of state.sessions) {
-      const restored = session.status === "running" || session.status === "stopping"
-        ? {
-            ...session,
-            status: "lost" as const,
-            endCause: "runtime_unrecoverable_after_restart",
-            stateRevision: session.stateRevision + 1,
-            updatedAt: now(),
-            endedAt: now(),
-            endTimeUnknown: false,
-            attention: unknownAttention(session, "runtime_unrecoverable_after_restart"),
-          }
-        : session
-      sessions.set(restored.id, restored)
-      const chunks = state.output.filter((chunk) => chunk.sessionId === restored.id)
-      buffers.set(restored.id, createTerminalOutputBuffer({
-        maxBytes: outputRetentionBytes,
-        initialChunks: chunks,
-        initialDiscardedBytes: restored.discardedOutputBytes,
-        initialDiscardedChunks: restored.discardedOutputChunks,
-      }))
-    }
-    const assignedSessionIds = new Set<string>()
+    for (const session of state.sessions) sessions.set(session.id, session)
     for (const workspace of state.workspaces ?? []) {
       const panes = collectTerminalPaneLeaves(workspace.layout)
       if (panes.some((pane) => !sessions.has(pane.sessionId))) continue
       workspaces.set(workspace.id, workspace)
-      for (const pane of panes) assignedSessionIds.add(pane.sessionId)
     }
-    for (const session of sessions.values()) {
-      if (!assignedSessionIds.has(session.id)) createWorkspaceForSession(session)
-    }
-    for (const operation of state.operations) {
-      const restoredSession = sessions.get(operation.resourceId)
-      const recoveredStatus = operation.status === "pending_delivery"
-        ? "delivery_uncertain" as const
-        : operation.status === "delivered" && restoredSession?.status === "lost"
-          ? "completed" as const
-          : operation.status
-      operations.set(operation.operationId, {
-        operationId: operation.operationId,
-        kind: operation.kind,
-        sessionId: operation.resourceId,
-        status: recoveredStatus,
-        requestedAt: operation.createdAt,
-        requestedBy: operation.requestedBy,
-        updatedAt: recoveredStatus === operation.status ? operation.updatedAt : now(),
-        relatedOperationId: operation.relatedOperationId,
-        finalLifecycle: recoveredStatus === "completed" ? "lost" : operation.finalLifecycle,
-        finalCause: recoveredStatus === "completed" ? "runtime_unrecoverable_after_restart" : operation.finalCause,
-        errorCode: recoveredStatus === "delivery_uncertain" ? "recovery_delivery_unknown" : operation.errorCode,
-        acceptedActionCount: operation.acceptedActionCount,
-        acceptedBytes: operation.acceptedBytes,
-        failedActionIndex: operation.failedActionIndex,
-      })
-      if (recoveredStatus === "completed" && restoredSession?.status === "lost") {
-        sessions.set(restoredSession.id, {
-          ...restoredSession,
-          stopOperationId: operation.operationId,
-          stopRequestedBy: operation.requestedBy,
-          stopRequestedAt: operation.createdAt,
+    for (const sessionId of [...sessions.keys()]) removeTerminalSessionInMemory(sessionId)
+    for (const entry of state.idempotency) {
+      if (
+        entry.expiresAtMs > Date.now()
+        && !isSessionIdempotencyCapability(entry.capability)
+        && !readStringProperty(entry.result, "sessionId")
+      ) {
+        idempotency.set(entry.scope, {
+          clientId: entry.clientId,
+          capability: entry.capability,
+          idempotencyKey: entry.idempotencyKey,
+          digest: entry.digest,
+          expiresAtMs: entry.expiresAtMs,
+          result: entry.result,
         })
       }
     }
-    for (const checkpoint of state.checkpoints) checkpoints.set(checkpoint.sessionId, checkpoint)
-    for (const entry of state.idempotency) {
-      if (entry.expiresAtMs > Date.now()) idempotency.set(entry.scope, {
-        clientId: entry.clientId,
-        capability: entry.capability,
-        idempotencyKey: entry.idempotencyKey,
-        digest: entry.digest,
-        expiresAtMs: entry.expiresAtMs,
-        result: entry.result,
-      })
-    }
     ensureDefaultGroup()
-    for (const workspace of [...workspaces.values()]) finalizeWorkspaceClosuresInMemory(workspace.id)
     await flushPersist()
   }
 
   async function stop(): Promise<void> {
+    const sessionIds = [...sessions.keys()]
     for (const [sessionId, runtime] of runtimes) {
-      const current = sessions.get(sessionId)
-      if (current && (current.status === "running" || current.status === "stopping")) {
-        sessions.set(sessionId, {
-          ...current,
-          status: "lost",
-          endCause: "application_shutdown",
-          endedAt: now(),
-          endTimeUnknown: false,
-          stateRevision: current.stateRevision + 1,
-          updatedAt: now(),
-          attention: unknownAttention(current, "application_shutdown"),
-        })
-      }
       cleanupRuntime(sessionId)
       try { runtime.pty.kill() } catch (error) {
         deps.logger?.warn("Terminal runtime shutdown failed.", { sessionId, error })
       }
+    }
+    for (const sessionId of sessionIds) removeTerminalSessionInMemory(sessionId)
+    workspaces.clear()
+    operations.clear()
+    deletePlans.clear()
+    for (const [scope, entry] of idempotency) {
+      if (entry.resourceSessionId || isSessionIdempotencyCapability(entry.capability)) idempotency.delete(scope)
     }
     leases.clear()
     await flushPersist()
@@ -1442,9 +1395,49 @@ export function createTerminalService(deps: {
     sessions.delete(sessionId)
     buffers.delete(sessionId)
     checkpoints.delete(sessionId)
+    dirtyRuntimeSessionIds.delete(sessionId)
+    persistedOutputSeqBySession.delete(sessionId)
+    unpublishedSessions.delete(sessionId)
     leases.delete(sessionId)
     leaseRevisions.delete(sessionId)
     activeStopOperations.delete(sessionId)
+  }
+
+  function removeTerminalSessionInMemory(sessionId: string): boolean {
+    const session = sessions.get(sessionId)
+    if (!session) return false
+    const workspace = getWorkspaceBySessionId(sessionId)
+    if (workspace) {
+      const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === sessionId)
+      const layout = pane ? removeTerminalPane(workspace.layout, pane.paneId) : undefined
+      if (layout === null) {
+        workspaces.delete(workspace.id)
+        bumpDomain("workspace.deleted", workspace.id, workspace.layoutRevision)
+      } else if (layout) {
+        const updated = {
+          ...workspace,
+          layout,
+          closingPaneIds: workspace.closingPaneIds.filter((paneId) => paneId !== pane?.paneId),
+          layoutRevision: workspace.layoutRevision + 1,
+          updatedAt: now(),
+        }
+        workspaces.set(updated.id, updated)
+        bumpDomain("workspace.layout_changed", updated.id, updated.layoutRevision)
+      }
+    }
+    removeSessionResources(sessionId)
+    updateGroupMembership(session.groupId)
+    for (const [operationId, operation] of operations) {
+      if (operation.sessionId === sessionId) operations.delete(operationId)
+    }
+    for (const [scope, entry] of idempotency) {
+      if (entry.resourceSessionId === sessionId) idempotency.delete(scope)
+    }
+    for (const [deletePlanId, plan] of deletePlans) {
+      if (plan.sessionFacts.some((fact) => fact.sessionId === sessionId)) deletePlans.delete(deletePlanId)
+    }
+    bumpDomain("session.deleted", session.id, session.metadataRevision)
+    return true
   }
 
   function removeWorkspaceSession(sessionId: string): void {
@@ -1602,20 +1595,15 @@ export function createTerminalService(deps: {
       cols: input.cols,
       rows: input.rows,
     }, origin.source, undefined, origin.clientId, command.launch)
+    if (session.status !== "running") return session
     const operation = createOperation("command_delivery", session.id, "terminal-command-launch")
-    if (session.status !== "running") {
-      operation.status = "failed"
-      operation.errorCode = "session_start_failed"
-      operation.updatedAt = now()
-    } else {
-      const delivery = deliverSavedCommand(session.id, command.command)
-      operation.status = delivery.status
-      operation.acceptedActionCount = delivery.acceptedActionCount
-      operation.acceptedBytes = delivery.acceptedBytes
-      operation.failedActionIndex = delivery.failedActionIndex
-      operation.errorCode = delivery.status === "delivered" ? undefined : delivery.status === "failed" ? "command_delivery_failed" : "delivery_uncertain"
-      operation.updatedAt = now()
-    }
+    const delivery = deliverSavedCommand(session.id, command.command)
+    operation.status = delivery.status
+    operation.acceptedActionCount = delivery.acceptedActionCount
+    operation.acceptedBytes = delivery.acceptedBytes
+    operation.failedActionIndex = delivery.failedActionIndex
+    operation.errorCode = delivery.status === "delivered" ? undefined : delivery.status === "failed" ? "command_delivery_failed" : "delivery_uncertain"
+    operation.updatedAt = now()
     operations.set(operation.operationId, operation)
     const updated = {
       ...getSessionOrThrow(session.id),
@@ -2279,6 +2267,7 @@ export function createTerminalService(deps: {
       const runtime = runtimes.get(session.id)
       if (!runtime) throw new Error("missing runtime")
       runtime.pty.kill(force ? "SIGKILL" : process.platform === "win32" ? undefined : "SIGHUP")
+      if (!sessions.has(session.id)) return operation
       operation.status = "delivered"
       operation.updatedAt = now()
       if (session.status === "running") {
@@ -2571,8 +2560,19 @@ export function createTerminalService(deps: {
       return existing.result as T
     }
     const result = operation()
-    idempotency.set(scope, { clientId, capability, idempotencyKey: key, digest, expiresAtMs: Date.now() + IDEMPOTENCY_RETENTION_MS, result })
-    schedulePersist()
+    const resourceSessionId = resolveIdempotencySessionId(request, result)
+    if (!resourceSessionId || sessions.has(resourceSessionId)) {
+      idempotency.set(scope, {
+        clientId,
+        capability,
+        idempotencyKey: key,
+        digest,
+        expiresAtMs: Date.now() + IDEMPOTENCY_RETENTION_MS,
+        result,
+        ...(resourceSessionId ? { resourceSessionId } : {}),
+      })
+      schedulePersist()
+    }
     return result
   }
 
@@ -2598,8 +2598,19 @@ export function createTerminalService(deps: {
     }
     const promise = (async () => {
       const result = await operation()
-      idempotency.set(scope, { clientId, capability, idempotencyKey: key, digest, expiresAtMs: Date.now() + IDEMPOTENCY_RETENTION_MS, result })
-      schedulePersist()
+      const resourceSessionId = resolveIdempotencySessionId(request, result)
+      if (!resourceSessionId || sessions.has(resourceSessionId)) {
+        idempotency.set(scope, {
+          clientId,
+          capability,
+          idempotencyKey: key,
+          digest,
+          expiresAtMs: Date.now() + IDEMPOTENCY_RETENTION_MS,
+          result,
+          ...(resourceSessionId ? { resourceSessionId } : {}),
+        })
+        schedulePersist()
+      }
       return result
     })()
     idempotencyInFlight.set(scope, { digest, promise })
@@ -2917,6 +2928,20 @@ function decrementCounter(counts: Map<string, number>, key: string): void {
   const next = (counts.get(key) ?? 0) - 1
   if (next > 0) counts.set(key, next)
   else counts.delete(key)
+}
+
+function resolveIdempotencySessionId(request: unknown, result: unknown): string | undefined {
+  return readStringProperty(request, "sessionId") ?? readStringProperty(result, "sessionId")
+}
+
+function readStringProperty(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const property = (value as Record<string, unknown>)[key]
+  return typeof property === "string" && property ? property : undefined
+}
+
+function isSessionIdempotencyCapability(capability: string): boolean {
+  return capability.startsWith("session") || capability.includes(".session")
 }
 
 function stableJson(value: unknown): string {

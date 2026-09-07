@@ -1,5 +1,7 @@
 # Migrate legacy Terminal state with explicit unknown facts
 
+> Migrated session records are now purged when Terminal starts, as defined by [ADR 0215](./0215-auto-destroy-terminal-sessions.md); the mappings below remain the historical migration contract.
+
 Unversioned `terminal-state.json` maps lifecycle explicitly: `running` becomes `lost` with `legacy_runtime_unrecoverable_after_restart`; `exited` becomes `ended` with `legacy_process_exit`; `killed` becomes `ended` with `legacy_killed_unclassified`; `failed` remains `failed` with `legacy_infrastructure_failure_unclassified`; and `lost` remains `lost` with `legacy_runtime_lost`.
 
 Existing exit code, signal, and end time are preserved only when present. Missing time is represented by `endTimeUnknown`, never the migration time. Migration synthesizes no stop or force operation, actor, authorization, lease, attention, or idempotency record, and records `creationSource=legacy_unknown`.

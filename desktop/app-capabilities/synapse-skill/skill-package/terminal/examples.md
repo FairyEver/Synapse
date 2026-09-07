@@ -96,12 +96,12 @@ Example request: "Stop the current build but keep the terminal."
 
 Example request: "Close the terminal normally."
 
-- Call `app_terminal_session_stop` without acquiring a lease. Observe until lifecycle is `ended`, `failed`, or `lost`; an accepted stop operation alone is not final termination.
+- Call `app_terminal_session_stop` without acquiring a lease. Observe until lifecycle is `ended`, `failed`, or `lost`, or until the same `sessionId` returns `not_found` because automatic cleanup already completed. An accepted stop operation alone is not final termination.
 - Do not escalate a timeout or uncertain delivery to `app_terminal_session_force_stop`. Force stop requires an explicit user request.
 
 Example request: "Delete that test terminal."
 
-- Confirm the exact `sessionId` and terminal lifecycle, then call `app_terminal_session_delete`. A `running` or `stopping` conflict means stop, observe, and delete are three separate user-requested steps.
+- Confirm the exact `sessionId`. If it is `running` or `stopping`, deletion conflicts and does not stop it. If it has already reached a terminal lifecycle, automatic cleanup normally makes it `not_found`; call `app_terminal_session_delete` only when that terminal-state object is still present during the final transition.
 - For a nonempty group, use `app_terminal_group_delete_preview`, present the bounded impact when confirmation is needed, then commit the unchanged, unexpired plan. No delete tool implicitly stops sessions.
 
 ## Launch a saved group command
