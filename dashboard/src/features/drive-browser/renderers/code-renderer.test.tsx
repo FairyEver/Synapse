@@ -93,6 +93,9 @@ describe('DriveCodeRenderer', () => {
 
     expect(monacoMockState.saveCommand?.keybinding).toBe(monacoMockState.ctrlCmd | monacoMockState.keyS)
     expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe('Meta+S Control+S')
+    expect(buttonWithText('保存').className).toContain('bg-primary')
+    expect(buttonWithText('重新加载').className).toContain('hover:bg-accent')
+    expect(buttonWithText('重新加载').className.split(/\s+/u)).not.toContain('border')
 
     monacoMockState.saveCommand?.handler()
     expect(editContext.saveText).not.toHaveBeenCalled()

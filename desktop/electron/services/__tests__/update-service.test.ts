@@ -313,7 +313,7 @@ describe("UpdateService", () => {
       status: "available",
     }))
 
-    const downloadingState = updateService.downloadUpdate()
+    const downloadingState = await updateService.downloadUpdate()
 
     expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
     expect(downloadingState.status).toBe("downloading")
@@ -333,7 +333,7 @@ describe("UpdateService", () => {
       status: "available",
     }))
 
-    const retryState = updateService.downloadUpdate()
+    const retryState = await updateService.downloadUpdate()
     expect(retryState).toEqual(expect.objectContaining({
       releaseVersion: "0.2.32",
       status: "downloading",
@@ -490,20 +490,53 @@ describe("UpdateService", () => {
     expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
-  it("keeps an available update ready to retry after download failure", async () => {
+  it("refreshes stale update metadata before starting a download", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-07T00:00:00.000Z"))
+    const { updateService } = await importUpdateService()
+
+    await updateService.checkForUpdates()
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(async () => {
+      updaterMock.autoUpdater.emit("checking-for-update")
+      updaterMock.autoUpdater.emit("update-available", {
+        version: "0.2.33",
+        files: [{ url: "v0.2.33/Synapse-0.2.33-mac-arm64.zip" }],
+      })
+      return {
+        isUpdateAvailable: true,
+        updateInfo: { version: "0.2.33" },
+        versionInfo: { version: "0.2.33" },
+      }
+    })
+
+    const state = await updateService.downloadUpdate()
+
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
+    expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(state).toEqual(expect.objectContaining({
+      releaseVersion: "0.2.33",
+      status: "downloading",
+    }))
+  })
+
+  it("invalidates available update metadata after download failure", async () => {
     const { updateService } = await importUpdateService()
     updaterMock.autoUpdater.downloadUpdate.mockRejectedValueOnce(new Error("network failed"))
 
     await updateService.checkForUpdates()
-    updateService.downloadUpdate()
+    await updateService.downloadUpdate()
     await Promise.resolve()
     await Promise.resolve()
 
     expect(updateService.getState()).toEqual(expect.objectContaining({
-      error: "下载更新失败，请重试。",
-      releaseVersion: "0.2.32",
-      status: "available",
+      error: "下载更新失败，请重新检查更新。",
+      releaseVersion: null,
+      status: "error",
+      canCheck: true,
     }))
+    await expect(updateService.downloadUpdate()).rejects.toThrow("没有可下载的新版本，请先检查更新。")
+    expect(updaterMock.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
   })
 
   it("keeps automatic update check failures out of visible update state", async () => {

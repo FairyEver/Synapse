@@ -5,6 +5,7 @@ import { z } from "zod"
 import type {
   AppUpdater,
   ProgressInfo,
+  UpdateCheckResult,
   UpdateDownloadedEvent,
   UpdateInfo,
 } from "electron-updater"
@@ -41,7 +42,7 @@ const logger = createMainLogger("updater")
 const AUTO_CHECK_INTERVAL_MS = 10 * 60 * 1000
 const PAGE_ENTRY_CHECK_COOLDOWN_MS = 30_000
 const UPDATE_ERROR_MESSAGE = "检查更新失败，请稍后再试。"
-const UPDATE_DOWNLOAD_ERROR_MESSAGE = "下载更新失败，请重试。"
+const UPDATE_DOWNLOAD_ERROR_MESSAGE = "下载更新失败，请重新检查更新。"
 const UPDATE_INSTALL_HANDOFF_TIMEOUT_MESSAGE = "无法启动更新安装程序，请重新打开 Synapse 后重试。"
 const updateIntentVerificationResponseSchema = z.object({
   authorized: z.literal(true),
@@ -807,7 +808,7 @@ class UpdateService {
     }
   }
 
-  downloadUpdate(): SynapseAppUpdateState {
+  async downloadUpdate(): Promise<SynapseAppUpdateState> {
     this.initialize()
 
     if (!isUpdateSupportedInCurrentEnvironment()) {
@@ -822,9 +823,34 @@ class UpdateService {
       return this.getState()
     }
 
-    const updateInfo = this.availableUpdateInfo
+    let updateInfo = this.availableUpdateInfo
     if (this.state.status !== "available" || !updateInfo) {
       throw new Error("没有可下载的新版本，请先检查更新。")
+    }
+
+    if (this.isAvailableUpdateMetadataStale()) {
+      const previousVersion = updateInfo.version
+      const refreshFlowId = this.beginUpdateFlow("manual")
+      this.availableUpdateInfo = null
+
+      let refreshResult: UpdateCheckResult | null
+      try {
+        refreshResult = await autoUpdater.checkForUpdates()
+      } catch (error) {
+        if (this.isManualUpdateFlow(refreshFlowId)) {
+          this.handleError(error, refreshFlowId)
+        }
+        return this.getState()
+      }
+
+      updateInfo = this.availableUpdateInfo ?? refreshResult?.updateInfo ?? null
+      if (this.state.status !== "available" || !updateInfo) {
+        return this.getState()
+      }
+      logger.info("Refreshed stale update metadata before download.", {
+        previousVersion,
+        refreshedVersion: updateInfo.version,
+      })
     }
 
     const flowId = this.beginUpdateFlow("manual")
@@ -842,6 +868,14 @@ class UpdateService {
     })
 
     return this.getState()
+  }
+
+  private isAvailableUpdateMetadataStale(): boolean {
+    const checkedAt = this.state.lastCheckedAt === null
+      ? Number.NaN
+      : Date.parse(this.state.lastCheckedAt)
+    const ageMs = Date.now() - checkedAt
+    return !Number.isFinite(checkedAt) || ageMs < 0 || ageMs >= AUTO_CHECK_INTERVAL_MS
   }
 
   private handleUpdateAvailable(updateInfo: UpdateInfo): void {
@@ -1027,16 +1061,19 @@ class UpdateService {
   private handleDownloadError(flowId: number): void {
     this.clearDownloadTracking(undefined, flowId)
     this.clearUpdateFlow("manual", flowId)
+    this.availableUpdateInfo = null
 
     this.setState({
-      status: "available",
+      status: "error",
       message: UPDATE_DOWNLOAD_ERROR_MESSAGE,
       error: UPDATE_DOWNLOAD_ERROR_MESSAGE,
+      releaseVersion: null,
       downloadPercent: null,
       bytesPerSecond: null,
       transferredBytes: null,
       totalBytes: null,
-      canCheck: false,
+      lastCheckedAt: null,
+      canCheck: isUpdateSupportedInCurrentEnvironment(),
     })
   }
 

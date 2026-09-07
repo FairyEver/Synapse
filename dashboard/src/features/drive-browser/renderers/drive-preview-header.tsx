@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import {
   FilePreviewToolbarItemView,
@@ -69,20 +70,31 @@ export function DrivePreviewHeader({
   }
 
   return (
-    <header data-drive-preview-header='true' data-file-preview-header='regular' className='flex shrink-0 flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between'>
-      <div className='flex min-w-0 flex-col gap-1'>
-        <div className='flex min-w-0 items-center gap-2 text-sm font-medium'>
-          <DriveBrowserItemIcon item={snapshot.current} />
-          <span className='min-w-0 truncate'>{identity.name}</span>
-        </div>
-        <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
-          <span>{identity.sizeLabel}</span>
-          <span>{identity.kindLabel}</span>
-          <RelativeTime value={identity.updatedAt} />
-        </div>
+    <header data-drive-preview-header='true' data-file-preview-header='regular' className='flex shrink-0 items-center justify-between gap-2 border-b p-2'>
+      <div className='flex min-w-0 flex-1 items-center gap-2 text-sm font-medium'>
+        <DriveBrowserItemIcon item={snapshot.current} />
+        <Tooltip>
+          <TooltipTrigger
+            data-drive-preview-file-name='true'
+            className='min-w-0 truncate text-left focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+          >
+            {identity.name}
+          </TooltipTrigger>
+          <TooltipContent side='bottom' align='start' sideOffset={6}>
+            <span data-drive-preview-file-metadata='true' className='flex items-center gap-2 whitespace-nowrap'>
+              <span>{identity.sizeLabel}</span>
+              <span>{identity.kindLabel}</span>
+              <RelativeTime value={identity.updatedAt} />
+            </span>
+          </TooltipContent>
+        </Tooltip>
       </div>
       <div className='flex shrink-0 flex-wrap items-center gap-2'>
-        {rendererItems.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+        {rendererItems.length > 0 ? (
+          <div data-drive-preview-renderer-actions='true' className='flex items-center gap-1'>
+            {rendererItems.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+          </div>
+        ) : null}
         {showActionSeparator ? (
           <Separator
             orientation='vertical'
@@ -102,7 +114,14 @@ export function DrivePreviewHeader({
         {overflowActions.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button data-drive-telemetry-event='web.drive.preview.menu' type='button' variant='outline' size='icon' className='h-8 w-8' aria-label='更多操作'>
+              <Button
+                data-drive-telemetry-event='web.drive.preview.menu'
+                type='button'
+                variant='ghost'
+                size='icon'
+                className="relative h-8 w-8 shadow-none after:absolute after:-inset-1 after:content-['']"
+                aria-label='更多操作'
+              >
                 <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
@@ -204,7 +223,7 @@ function DrivePreviewCompactHeader({
       {primaryItems.length > 0 ? (
         <div className='flex min-h-14 max-w-full items-center gap-2 overflow-x-auto border-t px-3 py-1.5'>
           {primaryItems.map((item) => (
-            <FilePreviewToolbarItemView key={item.id} item={item} compact />
+            <DrivePreviewToolbarItemView key={item.id} item={item} compact />
           ))}
         </div>
       ) : null}
@@ -244,7 +263,13 @@ function DrivePreviewHeaderAction({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button data-drive-telemetry-event='web.drive.preview.renderer-menu' type='button' variant='outline' size='sm'>
+        <Button
+          data-drive-telemetry-event='web.drive.preview.renderer-menu'
+          type='button'
+          variant='ghost'
+          size='sm'
+          className="relative pl-2.5 pr-2 shadow-none after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']"
+        >
           {action.label}
           <ChevronDown data-icon='inline-end' />
         </Button>
@@ -322,6 +347,12 @@ export function DriveRendererOptionMenuLabel({ option }: { readonly option: Driv
   )
 }
 
-export function DrivePreviewToolbarItemView({ item }: { readonly item: DriveRendererToolbarItem }) {
-  return <FilePreviewToolbarItemView item={item} />
+export function DrivePreviewToolbarItemView({
+  item,
+  compact = false,
+}: {
+  readonly item: DriveRendererToolbarItem
+  readonly compact?: boolean
+}) {
+  return <FilePreviewToolbarItemView item={item} compact={compact} defaultButtonVariant='ghost' />
 }

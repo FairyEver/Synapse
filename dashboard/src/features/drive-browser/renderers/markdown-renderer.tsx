@@ -468,7 +468,7 @@ function DriveMarkdownBody({
         id: 'markdown-width-mode',
         label: widthMode === 'reading' ? '宽屏' : '阅读',
         icon: Maximize2,
-        variant: widthMode === 'wide' ? 'secondary' : 'ghost',
+        variant: 'ghost',
         onClick: () => setWidthMode((current) => current === 'reading' ? 'wide' : 'reading'),
       },
     ]

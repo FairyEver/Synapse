@@ -62,9 +62,15 @@ export function FilePreviewToolbarItemView({
 }: {
   readonly item: FilePreviewToolbarItem
   readonly compact?: boolean
-  readonly defaultButtonVariant?: 'default' | 'outline'
+  readonly defaultButtonVariant?: 'default' | 'outline' | 'ghost'
 }) {
-  if (item.kind === 'status') return <span className='text-xs text-muted-foreground'>{item.label}</span>
+  if (item.kind === 'status') {
+    return <span className='inline-flex h-8 items-center px-1 text-xs text-muted-foreground tabular-nums'>{item.label}</span>
+  }
+  const buttonClassName = cn(
+    'shadow-none tabular-nums has-[>svg]:pl-2 has-[>svg]:pr-2.5',
+    compact ? 'min-h-11' : "relative after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']"
+  )
   if (item.kind === 'button') {
     const content = (
       <>
@@ -83,7 +89,7 @@ export function FilePreviewToolbarItemView({
           size='sm'
           disabled={item.disabled}
           aria-keyshortcuts={item.ariaKeyShortcuts}
-          className={cn(compact && 'min-h-11')}
+          className={buttonClassName}
         >
           <a href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
             {content}
@@ -98,7 +104,7 @@ export function FilePreviewToolbarItemView({
         size='sm'
         disabled={item.disabled || item.loading}
         aria-keyshortcuts={item.ariaKeyShortcuts}
-        className={cn(compact && 'min-h-11')}
+        className={buttonClassName}
         onClick={item.onClick}
       >
         {content}
@@ -113,7 +119,7 @@ export function FilePreviewToolbarItemView({
         size='sm'
         disabled={item.disabled}
         aria-pressed={item.pressed}
-        className={cn(compact && 'min-h-11')}
+        className={buttonClassName}
         onClick={() => item.onPressedChange(!item.pressed)}
       >
         {item.icon ? <item.icon data-icon='inline-start' /> : null}
@@ -128,7 +134,7 @@ export function FilePreviewToolbarItemView({
           type='button'
           variant='outline'
           size='sm'
-          className={cn(compact && 'min-h-11')}
+          className={buttonClassName}
         >
           {item.icon ? <item.icon data-icon='inline-start' /> : null}
           {item.label}

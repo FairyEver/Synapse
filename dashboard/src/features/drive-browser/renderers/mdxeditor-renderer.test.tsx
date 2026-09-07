@@ -296,6 +296,9 @@ describe('DriveMDXeditorRenderer', () => {
     renderRenderer({ edit: editable(), editContext })
 
     expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe('Meta+S Control+S')
+    expect(buttonWithText('保存').className).toContain('bg-primary')
+    expect(buttonWithText('重新加载').className).toContain('hover:bg-accent')
+    expect(buttonWithText('重新加载').className.split(/\s+/u)).not.toContain('border')
     await inputValue(editor(), '# Shortcut')
     const accepted = await pressKey(editor(), { key: 's', ...modifiers })
 

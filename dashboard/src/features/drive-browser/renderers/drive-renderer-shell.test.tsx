@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererSwitch } from './drive-renderer-shell'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -111,6 +112,62 @@ afterEach(() => {
 })
 
 describe('DriveRendererShell', () => {
+  it('keeps the regular preview header compact and reveals file metadata from the file name', async () => {
+    renderShell({
+      snapshot: baseSnapshot({
+        current: {
+          ...baseSnapshot().current,
+          name: 'notes.txt',
+          previewKind: 'text',
+        },
+      }),
+      rendererId: 'code',
+    })
+
+    const header = document.querySelector<HTMLElement>('[data-file-preview-header="regular"]')
+    const fileName = document.querySelector<HTMLElement>('[data-drive-preview-file-name="true"]')
+    if (!header || !fileName) throw new Error('regular preview header not found')
+
+    expect(header.className).toContain('p-2')
+    expect(header.className).not.toContain('flex-col')
+    expect(header.textContent).not.toContain('18 B')
+
+    await act(async () => {
+      fileName.focus()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    const metadata = document.querySelector<HTMLElement>('[data-drive-preview-file-metadata="true"]')
+    expect(metadata?.textContent).toContain('18 B')
+    expect(metadata?.textContent).toContain('文本')
+    expect(metadata?.querySelector('time')?.dateTime).toBe('2026-06-09T00:00:00.000Z')
+  })
+
+  it('uses a flat active state and stable numerals for preview toggles', () => {
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => {
+      root?.render(
+        <DrivePreviewToolbarItemView
+          item={{
+            kind: 'toggle',
+            id: 'comments',
+            label: '评论 5',
+            pressed: true,
+            onPressedChange: vi.fn(),
+          }}
+        />
+      )
+    })
+
+    const comments = buttonWithText('评论 5')
+    expect(comments.getAttribute('aria-pressed')).toBe('true')
+    expect(comments.className).toContain('bg-secondary')
+    expect(comments.className).toContain('shadow-none')
+    expect(comments.className).toContain('tabular-nums')
+  })
+
   it('refreshes the latest checkpoint before entering MDXEditor from collaboration', async () => {
     const reload = vi.fn(async () => baseSnapshot())
 
@@ -165,6 +222,8 @@ describe('DriveRendererShell', () => {
     })
 
     expect(buttonWithText('打开方式')).not.toBeNull()
+    expect(document.querySelector<HTMLElement>('[data-drive-preview-renderer-actions="true"]')?.className).toContain('gap-1')
+    expect(buttonWithText('打开方式').className.split(/\s+/u)).not.toContain('border')
     expect(document.body.textContent).not.toContain('在云盘中查看')
     expect(document.body.textContent).not.toContain('历史版本')
 
