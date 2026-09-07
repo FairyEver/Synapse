@@ -121,6 +121,8 @@ jobs:
 
       - name: Package Windows installer
         if: matrix.label == 'Windows'
+        env:
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
         run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
 
       - name: Remove Apple signing keychain
