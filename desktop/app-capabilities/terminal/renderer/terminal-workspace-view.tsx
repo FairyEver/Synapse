@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,11 +11,16 @@ import {
   type Ref,
 } from "react"
 import { createPortal } from "react-dom"
+import {
+  useGroupRef,
+  usePanelRef,
+  type Layout,
+} from "react-resizable-panels"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Folder, Square, X } from "lucide-react"
+import { Folder, Maximize2, Minimize2, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
@@ -50,7 +56,7 @@ import type {
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
 import type { WorkspaceFileTreeDataSource } from "../../../src/types/workspace-file-tree"
-import { collectTerminalPaneLeaves } from "../shared/schema"
+import { collectTerminalPaneLeaves, findTerminalPaneSplitPath } from "../shared/schema"
 import {
   getTerminalClipboardShortcut,
   getTerminalPaneShortcut,
@@ -87,6 +93,12 @@ export type TerminalWorkspaceViewHandle = {
 type PaneControls = {
   clear(): void
   focus(): void
+}
+
+type SplitLayoutControls = {
+  getLayout(): Layout
+  resizeSibling(paneSide: "first" | "second"): void
+  setLayout(layout: Layout): void
 }
 
 export function TerminalWorkspaceView({
@@ -129,6 +141,14 @@ export function TerminalWorkspaceView({
   const paneElementsRef = useRef(new Map<string, HTMLDivElement>())
   const paneControlsRef = useRef(new Map<string, PaneControls>())
   const paneHostsRef = useRef(new Map<string, HTMLDivElement>())
+  const splitLayoutControlsRef = useRef(new Map<string, SplitLayoutControls>())
+  const maximizedPaneIdRef = useRef<string | null>(null)
+  const maximizedLayoutBaselineRef = useRef<Map<string, Layout> | null>(null)
+  const maximizedLayoutSignatureRef = useRef<string | null>(null)
+  const pendingMaximizeRestoreRef = useRef(false)
+  const suppressSplitRatioPersistenceRef = useRef(false)
+  const persistenceReleaseFrameRef = useRef<number | null>(null)
+  const [maximizedPaneId, setMaximizedPaneId] = useState<string | null>(null)
   const [fileTreePaneIds, setFileTreePaneIds] = useState<ReadonlySet<string>>(new Set())
   const [fileTreeWidth, setFileTreeWidth] = useState(() =>
     readWorkspacePanelWidth(TERMINAL_FILE_TREE_PERSISTENCE_ID, TERMINAL_FILE_TREE_WIDTH_CONSTRAINTS))
@@ -146,6 +166,7 @@ export function TerminalWorkspaceView({
     [workspace.closingPaneIds],
   )
   const workspacePanes = useMemo(() => collectTerminalPaneLeaves(workspace.layout), [workspace.layout])
+  const workspaceLayoutSignature = useMemo(() => JSON.stringify(workspace.layout), [workspace.layout])
   const workspacePaneIds = useMemo(() => new Set(workspacePanes.map((pane) => pane.paneId)), [workspacePanes])
   const visiblePaneIds = useMemo(
     () => workspacePanes
@@ -154,6 +175,119 @@ export function TerminalWorkspaceView({
     [sessionsById, workspacePanes],
   )
   const dimInactivePanes = visiblePaneIds.length > 1 && visiblePaneIds.includes(activePaneId)
+  const maximizedSplitPath = useMemo(
+    () => maximizedPaneId ? findTerminalPaneSplitPath(workspace.layout, maximizedPaneId) : null,
+    [maximizedPaneId, workspace.layout],
+  )
+  const maximizedPaneSides = useMemo(
+    () => new Map(maximizedSplitPath?.map(({ splitId, paneSide }) => [splitId, paneSide]) ?? []),
+    [maximizedSplitPath],
+  )
+
+  const releaseSplitRatioPersistence = useCallback(() => {
+    if (persistenceReleaseFrameRef.current !== null) {
+      cancelAnimationFrame(persistenceReleaseFrameRef.current)
+    }
+    persistenceReleaseFrameRef.current = requestAnimationFrame(() => {
+      persistenceReleaseFrameRef.current = null
+      if (!maximizedPaneIdRef.current && !pendingMaximizeRestoreRef.current) {
+        suppressSplitRatioPersistenceRef.current = false
+      }
+    })
+  }, [])
+
+  const restoreMaximizedPane = useCallback(() => {
+    if (!maximizedPaneIdRef.current) return
+    suppressSplitRatioPersistenceRef.current = true
+    pendingMaximizeRestoreRef.current = true
+    maximizedPaneIdRef.current = null
+    setMaximizedPaneId(null)
+  }, [])
+
+  const activatePane = useCallback((paneId: string) => {
+    if (maximizedPaneIdRef.current && maximizedPaneIdRef.current !== paneId) {
+      restoreMaximizedPane()
+    }
+    onActivePaneChange(paneId)
+  }, [onActivePaneChange, restoreMaximizedPane])
+
+  const togglePaneMaximize = useCallback((paneId: string) => {
+    if (workspacePanes.length <= 1) return
+    if (maximizedPaneIdRef.current === paneId) {
+      restoreMaximizedPane()
+      return
+    }
+    if (!maximizedLayoutBaselineRef.current) {
+      maximizedLayoutBaselineRef.current = captureTerminalSplitLayouts(
+        workspace.layout,
+        splitLayoutControlsRef.current,
+      )
+      maximizedLayoutSignatureRef.current = workspaceLayoutSignature
+    }
+    pendingMaximizeRestoreRef.current = false
+    suppressSplitRatioPersistenceRef.current = true
+    maximizedPaneIdRef.current = paneId
+    setMaximizedPaneId(paneId)
+  }, [restoreMaximizedPane, workspace.layout, workspaceLayoutSignature, workspacePanes.length])
+
+  const registerSplitLayoutControls = useCallback((
+    splitId: string,
+    controls: SplitLayoutControls | null,
+  ) => {
+    if (controls) splitLayoutControlsRef.current.set(splitId, controls)
+    else splitLayoutControlsRef.current.delete(splitId)
+  }, [])
+
+  const handleSplitRatioChange = useCallback((splitId: string, ratio: number) => {
+    if (suppressSplitRatioPersistenceRef.current) return
+    onSplitRatioChange(splitId, ratio)
+  }, [onSplitRatioChange])
+
+  useLayoutEffect(() => {
+    if (maximizedPaneIdRef.current
+      && maximizedLayoutSignatureRef.current !== workspaceLayoutSignature) {
+      suppressSplitRatioPersistenceRef.current = true
+      maximizedPaneIdRef.current = null
+      maximizedLayoutBaselineRef.current = null
+      maximizedLayoutSignatureRef.current = null
+      pendingMaximizeRestoreRef.current = false
+      setMaximizedPaneId(null)
+      releaseSplitRatioPersistence()
+      return
+    }
+
+    const baseline = maximizedLayoutBaselineRef.current
+    if (maximizedPaneId && maximizedSplitPath && baseline) {
+      for (const [splitId, layout] of baseline) {
+        splitLayoutControlsRef.current.get(splitId)?.setLayout(layout)
+      }
+      for (const { splitId, paneSide } of maximizedSplitPath) {
+        splitLayoutControlsRef.current.get(splitId)?.resizeSibling(paneSide)
+      }
+      return
+    }
+
+    if (!pendingMaximizeRestoreRef.current || !baseline) return
+    for (const [splitId, layout] of baseline) {
+      splitLayoutControlsRef.current.get(splitId)?.setLayout(layout)
+    }
+    pendingMaximizeRestoreRef.current = false
+    maximizedLayoutBaselineRef.current = null
+    maximizedLayoutSignatureRef.current = null
+    releaseSplitRatioPersistence()
+  }, [maximizedPaneId, maximizedSplitPath, releaseSplitRatioPersistence, workspaceLayoutSignature])
+
+  useLayoutEffect(() => {
+    if (!visible || (maximizedPaneIdRef.current && activePaneId !== maximizedPaneIdRef.current)) {
+      restoreMaximizedPane()
+    }
+  }, [activePaneId, restoreMaximizedPane, visible])
+
+  useEffect(() => () => {
+    if (persistenceReleaseFrameRef.current !== null) {
+      cancelAnimationFrame(persistenceReleaseFrameRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     setFileTreePaneIds((current) => {
@@ -206,20 +340,39 @@ export function TerminalWorkspaceView({
   const focusPane = useCallback((paneId: string, direction: FocusDirection) => {
     const nextPaneId = findPaneInDirection(paneId, direction, paneElementsRef.current)
     if (!nextPaneId) return
-    onActivePaneChange(nextPaneId)
+    activatePane(nextPaneId)
     paneControlsRef.current.get(nextPaneId)?.focus()
-  }, [onActivePaneChange])
+  }, [activatePane])
 
   const handleShortcut = useCallback((paneId: string, shortcut: TerminalPaneShortcut) => {
-    if (shortcut === "split-right") return onSplitPane(paneId, "right")
-    if (shortcut === "split-down") return onSplitPane(paneId, "down")
-    if (shortcut === "close-pane") return onClosePane(paneId)
+    if (shortcut === "split-right") {
+      restoreMaximizedPane()
+      return onSplitPane(paneId, "right")
+    }
+    if (shortcut === "split-down") {
+      restoreMaximizedPane()
+      return onSplitPane(paneId, "down")
+    }
+    if (shortcut === "close-pane") {
+      restoreMaximizedPane()
+      return onClosePane(paneId)
+    }
     focusPane(paneId, shortcut.slice("focus-".length) as FocusDirection)
-  }, [focusPane, onClosePane, onSplitPane])
+  }, [focusPane, onClosePane, onSplitPane, restoreMaximizedPane])
 
   const handlePaneDragStart = useCallback((sourcePaneId: string) => {
+    restoreMaximizedPane()
     setPaneDrag({ sourcePaneId, targetPaneId: null, edge: null })
-  }, [])
+  }, [restoreMaximizedPane])
+
+  const handleMovePane = useCallback((
+    sourcePaneId: string,
+    targetPaneId: string,
+    edge: SynapseTerminalPaneDropEdge,
+  ) => {
+    restoreMaximizedPane()
+    onMovePane(sourcePaneId, targetPaneId, edge)
+  }, [onMovePane, restoreMaximizedPane])
 
   const handlePaneDragTargetChange = useCallback((
     targetPaneId: string,
@@ -267,7 +420,10 @@ export function TerminalWorkspaceView({
       <TerminalLayout
         getPaneHost={getPaneHost}
         layout={workspace.layout}
-        onSplitRatioChange={onSplitRatioChange}
+        maximizedPaneSides={maximizedPaneSides}
+        maximized={maximizedPaneId !== null}
+        onSplitRatioChange={handleSplitRatioChange}
+        registerSplitLayoutControls={registerSplitLayoutControls}
       />
       {workspacePanes.map((pane) => {
         const session = sessionsById.get(pane.sessionId)
@@ -282,8 +438,10 @@ export function TerminalWorkspaceView({
             dropEdge={pane.paneId === paneDrag?.targetPaneId ? paneDrag.edge : null}
             fileTreeOpen={fileTreePaneIds.has(pane.paneId)}
             fileTreeWidth={fileTreeWidth}
-            onActive={() => onActivePaneChange(pane.paneId)}
-            onMovePane={onMovePane}
+            maximized={pane.paneId === maximizedPaneId}
+            maximizeDisabled={workspacePanes.length <= 1 || pendingClosePaneIds.has(pane.paneId) || workspaceClosingPaneIds.has(pane.paneId)}
+            onActive={() => activatePane(pane.paneId)}
+            onMovePane={handleMovePane}
             onCloseFileTree={() => handleCloseFileTree(pane.paneId)}
             onFileTreeWidthChange={setFileTreeWidth}
             onFileTreeWidthCommit={handleFileTreeWidthCommit}
@@ -294,6 +452,7 @@ export function TerminalWorkspaceView({
             onSessionDeleted={onSessionDeleted}
             onShortcut={(shortcut) => handleShortcut(pane.paneId, shortcut)}
             onToggleFileTree={() => handleToggleFileTree(pane.paneId)}
+            onToggleMaximize={() => togglePaneMaximize(pane.paneId)}
             paneId={pane.paneId}
             closePending={pendingClosePaneIds.has(pane.paneId)}
             closing={workspaceClosingPaneIds.has(pane.paneId)}
@@ -314,22 +473,81 @@ export function TerminalWorkspaceView({
 function TerminalLayout({
   getPaneHost,
   layout,
+  maximized,
+  maximizedPaneSides,
   onSplitRatioChange,
+  registerSplitLayoutControls,
 }: {
   readonly getPaneHost: (paneId: string) => HTMLDivElement
   readonly layout: SynapseTerminalLayoutNode
+  readonly maximized: boolean
+  readonly maximizedPaneSides: ReadonlyMap<string, "first" | "second">
   readonly onSplitRatioChange: (splitId: string, ratio: number) => void
+  readonly registerSplitLayoutControls: (splitId: string, controls: SplitLayoutControls | null) => void
 }) {
   if (layout.type === "leaf") {
     return <TerminalPaneSlot host={getPaneHost(layout.paneId)} />
   }
 
+  return (
+    <TerminalSplitLayout
+      getPaneHost={getPaneHost}
+      layout={layout}
+      maximized={maximized}
+      maximizedPaneSides={maximizedPaneSides}
+      onSplitRatioChange={onSplitRatioChange}
+      registerSplitLayoutControls={registerSplitLayoutControls}
+    />
+  )
+}
+
+function TerminalSplitLayout({
+  getPaneHost,
+  layout,
+  maximized,
+  maximizedPaneSides,
+  onSplitRatioChange,
+  registerSplitLayoutControls,
+}: {
+  readonly getPaneHost: (paneId: string) => HTMLDivElement
+  readonly layout: Extract<SynapseTerminalLayoutNode, { type: "split" }>
+  readonly maximized: boolean
+  readonly maximizedPaneSides: ReadonlyMap<string, "first" | "second">
+  readonly onSplitRatioChange: (splitId: string, ratio: number) => void
+  readonly registerSplitLayoutControls: (splitId: string, controls: SplitLayoutControls | null) => void
+}) {
+  const groupRef = useGroupRef()
+  const firstPanelRef = usePanelRef()
+  const secondPanelRef = usePanelRef()
+
   const firstId = `${layout.splitId}:first`
   const secondId = `${layout.splitId}:second`
+  const maximizedPaneSide = maximizedPaneSides.get(layout.splitId)
+  const firstIsSibling = maximizedPaneSide === "second"
+  const secondIsSibling = maximizedPaneSide === "first"
+
+  useLayoutEffect(() => {
+    const controls: SplitLayoutControls = {
+      getLayout: () => groupRef.current?.getLayout() ?? {
+        [firstId]: layout.ratio * 100,
+        [secondId]: (1 - layout.ratio) * 100,
+      },
+      resizeSibling: (paneSide) => {
+        const siblingPanel = paneSide === "first" ? secondPanelRef.current : firstPanelRef.current
+        siblingPanel?.resize("100px")
+      },
+      setLayout: (nextLayout) => {
+        groupRef.current?.setLayout(nextLayout)
+      },
+    }
+    registerSplitLayoutControls(layout.splitId, controls)
+    return () => registerSplitLayoutControls(layout.splitId, null)
+  }, [firstId, groupRef, layout.ratio, layout.splitId, registerSplitLayoutControls, secondId, firstPanelRef, secondPanelRef])
 
   return (
     <ResizablePanelGroup
       id={layout.splitId}
+      groupRef={groupRef}
       orientation={layout.direction}
       defaultLayout={{
         [firstId]: layout.ratio * 100,
@@ -344,19 +562,42 @@ function TerminalLayout({
         onSplitRatioChange(layout.splitId, ratio)
       }}
     >
-      <ResizablePanel id={firstId} minSize="10%">
+      <ResizablePanel
+        id={firstId}
+        panelRef={firstPanelRef}
+        minSize={firstIsSibling ? "100px" : "10%"}
+        maxSize={firstIsSibling ? "100px" : undefined}
+        groupResizeBehavior={firstIsSibling ? "preserve-pixel-size" : undefined}
+        data-terminal-maximized-sibling={firstIsSibling ? "first" : undefined}
+      >
         <TerminalLayout
           getPaneHost={getPaneHost}
           layout={layout.first}
+          maximized={maximized}
+          maximizedPaneSides={maximizedPaneSides}
           onSplitRatioChange={onSplitRatioChange}
+          registerSplitLayoutControls={registerSplitLayoutControls}
         />
       </ResizablePanel>
-      <ResizableHandle />
-      <ResizablePanel id={secondId} minSize="10%">
+      <ResizableHandle
+        disabled={maximized}
+        data-terminal-split-locked={maximized ? "true" : undefined}
+      />
+      <ResizablePanel
+        id={secondId}
+        panelRef={secondPanelRef}
+        minSize={secondIsSibling ? "100px" : "10%"}
+        maxSize={secondIsSibling ? "100px" : undefined}
+        groupResizeBehavior={secondIsSibling ? "preserve-pixel-size" : undefined}
+        data-terminal-maximized-sibling={secondIsSibling ? "second" : undefined}
+      >
         <TerminalLayout
           getPaneHost={getPaneHost}
           layout={layout.second}
+          maximized={maximized}
+          maximizedPaneSides={maximizedPaneSides}
           onSplitRatioChange={onSplitRatioChange}
+          registerSplitLayoutControls={registerSplitLayoutControls}
         />
       </ResizablePanel>
     </ResizablePanelGroup>
@@ -378,6 +619,26 @@ function TerminalPaneSlot({ host }: { readonly host: HTMLDivElement }) {
   return <div ref={attachHost} className="h-full min-h-0 min-w-0 overflow-hidden" />
 }
 
+function captureTerminalSplitLayouts(
+  layout: SynapseTerminalLayoutNode,
+  controlsBySplitId: ReadonlyMap<string, SplitLayoutControls>,
+  snapshot = new Map<string, Layout>(),
+): Map<string, Layout> {
+  if (layout.type === "leaf") return snapshot
+  const firstId = `${layout.splitId}:first`
+  const secondId = `${layout.splitId}:second`
+  const liveLayout = controlsBySplitId.get(layout.splitId)?.getLayout()
+  snapshot.set(layout.splitId, liveLayout?.[firstId] !== undefined && liveLayout[secondId] !== undefined
+    ? { ...liveLayout }
+    : {
+        [firstId]: layout.ratio * 100,
+        [secondId]: (1 - layout.ratio) * 100,
+      })
+  captureTerminalSplitLayouts(layout.first, controlsBySplitId, snapshot)
+  captureTerminalSplitLayouts(layout.second, controlsBySplitId, snapshot)
+  return snapshot
+}
+
 function TerminalPane({
   active,
   appearanceSize,
@@ -389,6 +650,8 @@ function TerminalPane({
   dropEdge,
   fileTreeOpen,
   fileTreeWidth,
+  maximized,
+  maximizeDisabled,
   onActive,
   onCloseFileTree,
   onFileTreeWidthChange,
@@ -401,6 +664,7 @@ function TerminalPane({
   onSessionDeleted,
   onShortcut,
   onToggleFileTree,
+  onToggleMaximize,
   paneId,
   platform,
   registerControls,
@@ -418,6 +682,8 @@ function TerminalPane({
   readonly dropEdge: SynapseTerminalPaneDropEdge | null
   readonly fileTreeOpen: boolean
   readonly fileTreeWidth: number
+  readonly maximized: boolean
+  readonly maximizeDisabled: boolean
   readonly onActive: () => void
   readonly onCloseFileTree: () => void
   readonly onFileTreeWidthChange: (width: number) => void
@@ -434,6 +700,7 @@ function TerminalPane({
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onShortcut: (shortcut: TerminalPaneShortcut) => void
   readonly onToggleFileTree: () => void
+  readonly onToggleMaximize: () => void
   readonly paneId: string
   readonly platform: string | undefined
   readonly registerControls: (paneId: string, controls: PaneControls | null) => void
@@ -1005,6 +1272,7 @@ function TerminalPane({
       ref={(element) => registerElement(paneId, element)}
       role="region"
       aria-label={`终端输出与输入：${session.title}`}
+      data-terminal-pane-maximized={maximized ? "true" : undefined}
       data-track="terminal.pane.surface"
       data-track-native="true"
       tabIndex={0}
@@ -1055,24 +1323,47 @@ function TerminalPane({
             <Folder className="size-3.5" />
           </Button> : null}
         </div>
-        <Button
-          type="button"
-          size="icon-xs"
-          variant="ghost"
-          aria-label={`${closeActionLabel}：${session.title}`}
-          title={closeActionLabel}
-          className="text-muted-foreground hover:text-destructive"
-          disabled={closePending || (closing && platform !== "darwin")}
-          onClick={(event) => {
-            event.stopPropagation()
-            onShortcut("close-pane")
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          {closePending
-            ? <Spinner className="size-3.5" aria-hidden="true" />
-            : closing ? <Square className="size-3.5" /> : <X className="size-3.5" />}
-        </Button>
+        <div className="flex shrink-0 items-center">
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={`${maximized ? "还原分屏" : "最大化分屏"}：${session.title}`}
+            title={maximized ? "还原分屏" : "最大化分屏"}
+            aria-pressed={maximized}
+            data-track="terminal-pane-maximize"
+            className="text-muted-foreground"
+            disabled={maximizeDisabled}
+            onClick={(event) => {
+              event.stopPropagation()
+              onActive()
+              onToggleMaximize()
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {maximized
+              ? <Minimize2 className="size-3.5" />
+              : <Maximize2 className="size-3.5" />}
+          </Button>
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={`${closeActionLabel}：${session.title}`}
+            title={closeActionLabel}
+            className="text-muted-foreground hover:text-destructive"
+            disabled={closePending || (closing && platform !== "darwin")}
+            onClick={(event) => {
+              event.stopPropagation()
+              onShortcut("close-pane")
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {closePending
+              ? <Spinner className="size-3.5" aria-hidden="true" />
+              : closing ? <Square className="size-3.5" /> : <X className="size-3.5" />}
+          </Button>
+        </div>
       </div>
       {dropEdge ? (
         <div

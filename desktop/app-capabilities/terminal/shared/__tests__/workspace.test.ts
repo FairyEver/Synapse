@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   collectTerminalPaneLeaves,
+  findTerminalPaneSplitPath,
   moveTerminalPane,
   removeTerminalPane,
   setTerminalSplitRatio,
@@ -63,6 +64,31 @@ describe("terminal workspace layout", () => {
       ratio: 0.65,
     })
     expect(setTerminalSplitRatio(layout, "missing", 0.65)).toBeNull()
+  })
+
+  it("finds every ancestor split needed to maximize a nested pane", () => {
+    const right = splitTerminalPane(root, "pane-a", {
+      splitId: "split-a",
+      direction: "vertical",
+      ratio: 0.4,
+    }, { type: "leaf", paneId: "pane-b", sessionId: "session-b" })!
+    const middleAndRight = splitTerminalPane(right, "pane-b", {
+      splitId: "split-b",
+      direction: "horizontal",
+      ratio: 0.7,
+    }, { type: "leaf", paneId: "pane-c", sessionId: "session-c" })!
+    const nested = splitTerminalPane(middleAndRight, "pane-b", {
+      splitId: "split-c",
+      direction: "horizontal",
+      ratio: 0.2,
+    }, { type: "leaf", paneId: "pane-d", sessionId: "session-d" })!
+
+    expect(findTerminalPaneSplitPath(nested, "pane-d")).toEqual([
+      { splitId: "split-a", paneSide: "second" },
+      { splitId: "split-b", paneSide: "first" },
+      { splitId: "split-c", paneSide: "second" },
+    ])
+    expect(findTerminalPaneSplitPath(nested, "missing")).toBeNull()
   })
 
   it("moves a pane from a right split to the bottom of its target", () => {

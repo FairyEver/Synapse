@@ -19,6 +19,11 @@ export type TerminalSplitNode = {
 
 export type TerminalLayoutNode = TerminalPaneLeaf | TerminalSplitNode
 
+export type TerminalPaneSplitPathEntry = {
+  readonly splitId: string
+  readonly paneSide: "first" | "second"
+}
+
 export const terminalPaneLeafSchema = z.object({
   type: z.literal("leaf"),
   paneId: z.string().min(1),
@@ -129,6 +134,19 @@ export function collectTerminalPaneLeaves(layout: TerminalLayoutNode): TerminalP
 export function findTerminalPane(layout: TerminalLayoutNode, paneId: string): TerminalPaneLeaf | null {
   if (layout.type === "leaf") return layout.paneId === paneId ? layout : null
   return findTerminalPane(layout.first, paneId) ?? findTerminalPane(layout.second, paneId)
+}
+
+export function findTerminalPaneSplitPath(
+  layout: TerminalLayoutNode,
+  paneId: string,
+): TerminalPaneSplitPathEntry[] | null {
+  if (layout.type === "leaf") return layout.paneId === paneId ? [] : null
+  const firstPath = findTerminalPaneSplitPath(layout.first, paneId)
+  if (firstPath) return [{ splitId: layout.splitId, paneSide: "first" }, ...firstPath]
+  const secondPath = findTerminalPaneSplitPath(layout.second, paneId)
+  return secondPath
+    ? [{ splitId: layout.splitId, paneSide: "second" }, ...secondPath]
+    : null
 }
 
 export function splitTerminalPane(

@@ -1971,6 +1971,99 @@ describe("TerminalModule", () => {
     })
   })
 
+  it("maximizes a nested pane with fixed sibling strips and restores when another pane is focused", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const topSession = createSession({ id: "session-1", groupId: "group-1", title: "上方终端" })
+    const leftSession = createSession({ id: "session-2", groupId: "group-1", title: "左侧终端" })
+    const middleSession = createSession({ id: "session-3", groupId: "group-1", title: "中间终端" })
+    const rightSession = createSession({ id: "session-4", groupId: "group-1", title: "右侧终端" })
+    bridgeState.workspaces = [{
+      ...createWorkspace(topSession),
+      layout: {
+        type: "split",
+        splitId: "split-vertical",
+        direction: "vertical",
+        ratio: 0.35,
+        first: { type: "leaf", paneId: "pane-session-1", sessionId: topSession.id },
+        second: {
+          type: "split",
+          splitId: "split-left-rest",
+          direction: "horizontal",
+          ratio: 0.2,
+          first: { type: "leaf", paneId: "pane-session-2", sessionId: leftSession.id },
+          second: {
+            type: "split",
+            splitId: "split-middle-right",
+            direction: "horizontal",
+            ratio: 0.75,
+            first: { type: "leaf", paneId: "pane-session-3", sessionId: middleSession.id },
+            second: { type: "leaf", paneId: "pane-session-4", sessionId: rightSession.id },
+          },
+        },
+      },
+      layoutRevision: 4,
+    }]
+
+    await renderModule()
+
+    await clickButtonByAriaLabel("最大化分屏：中间终端")
+
+    expect(document.querySelector('button[aria-label="还原分屏：中间终端"]')).toBeTruthy()
+    expect(document.querySelector('[aria-label="终端输出与输入：中间终端"]')
+      ?.getAttribute("data-terminal-pane-maximized")).toBe("true")
+    expect(Array.from(document.querySelectorAll("[data-terminal-maximized-sibling]"))
+      .map((element) => element.getAttribute("data-terminal-maximized-sibling"))).toEqual([
+      "first",
+      "first",
+      "second",
+    ])
+    expect(document.querySelectorAll('[data-terminal-split-locked="true"]')).toHaveLength(3)
+    expect(terminalBridge.updateSplitRatio).not.toHaveBeenCalled()
+
+    await act(async () => {
+      document.querySelector<HTMLElement>('[aria-label="终端输出与输入：左侧终端"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('button[aria-label="最大化分屏：中间终端"]')).toBeTruthy()
+    expect(document.querySelectorAll("[data-terminal-maximized-sibling]")).toHaveLength(0)
+    expect(document.querySelectorAll('[data-terminal-split-locked="true"]')).toHaveLength(0)
+    expect(terminalBridge.updateSplitRatio).not.toHaveBeenCalled()
+  })
+
+  it("switches maximization directly when another pane maximize button is clicked", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "d", metaKey: true }))
+      await flushPromises()
+    })
+
+    await clickButtonByAriaLabel("最大化分屏：开发终端")
+    await clickButtonByAriaLabel("最大化分屏：Session 2")
+
+    expect(document.querySelector('button[aria-label="最大化分屏：开发终端"]')).toBeTruthy()
+    expect(document.querySelector('button[aria-label="还原分屏：Session 2"]')).toBeTruthy()
+    expect(terminalBridge.updateSplitRatio).not.toHaveBeenCalled()
+
+    await clickButtonByAriaLabel("还原分屏：Session 2")
+
+    expect(document.querySelector('button[aria-label="最大化分屏：Session 2"]')).toBeTruthy()
+    expect(document.querySelectorAll('[data-terminal-split-locked="true"]')).toHaveLength(0)
+    expect(terminalBridge.updateSplitRatio).not.toHaveBeenCalled()
+  })
+
+  it("disables maximize when the workspace contains one pane", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="最大化分屏：开发终端"]')?.disabled).toBe(true)
+  })
+
   it("keeps the surviving terminal mounted when a nested split collapses", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     const topSession = createSession({ id: "session-1", groupId: "group-1", title: "顶部终端" })
