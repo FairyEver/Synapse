@@ -183,6 +183,54 @@ describe('MDXEditor list integration', () => {
     expect(savedMarkdown).toContain('<Callout value={a <= b} />')
   })
 
+  it('round-trips source-mode precheck constructs through the rich editor', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onError = vi.fn()
+    const markdown = [
+      '    indented code',
+      '',
+      '<span>raw html</span>',
+      '',
+      '正文 <!-- keep inline comment -->',
+      '',
+      '<!-- keep block',
+      'comment -->',
+      '',
+      '   1. 一级',
+      '      1. 二级',
+      '         二级说明',
+      '      2.',
+      '',
+      '   2. 一级第二项',
+    ].join('\n')
+    const prepared = prepareCommonMarkForMdxEditor(markdown)
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={prepared.markdown}
+          onError={onError}
+          toMarkdownOptions={commonMarkToMarkdownOptions}
+          plugins={[commonMarkTextCompatibilityPlugin(), codeBlockPlugin(), codeMirrorPlugin(), listsPlugin()]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
+    expect(prepared.requiresSourceMode).toBe(false)
+    expect(onError).not.toHaveBeenCalled()
+    expect(savedMarkdown).toContain('2.')
+    expect(savedMarkdown).toContain('indented code')
+    expect(savedMarkdown).toContain('<span>raw html</span>')
+    expect(savedMarkdown).toContain('<!-- keep inline comment -->')
+    expect(savedMarkdown).toContain(['<!-- keep block', 'comment -->'].join('\n'))
+  })
+
   it('parses and preserves a valid MDX component with the generic JSX editor', async () => {
     const editorRef = createRef<MDXEditorMethods>()
     const onError = vi.fn()

@@ -23,10 +23,10 @@ This is an adapter for the current Drive render pipeline. It is not a new deskto
 - `.mdx` files should be recognized as Markdown-compatible Drive browser files.
 - Ordinary `.md` and `.markdown` files should treat the `<=` comparison operator as CommonMark text before MDX JSX parsing. `.mdx` files keep strict MDX parsing.
 - Ordinary `.md` and `.markdown` URI/email autolinks should be adapted to MDXEditor-compatible links before rich parsing and serialized back as CommonMark autolinks.
-- CommonMark constructs that MDXEditor cannot round-trip without changing meaning, including indented code blocks and unsupported raw HTML, stay in source mode with their original text intact.
+- Ordinary `.md` and `.markdown` files enter rich mode without a pre-emptive source-mode check for indentation or raw HTML. Only an actual parser failure falls back to source mode.
 - Compatibility normalization and save-time image checks must ignore inline and fenced code examples.
 - `.mdx` files with JSX, attributes, expressions, and MDX comments may use rich mode. Files with top-level MDX ESM `import` or `export` stay in source mode because MDXEditor does not round-trip arbitrary ESM declarations.
-- CommonMark files containing HTML comments outside code spans or fenced code stay in source mode because MDXEditor does not round-trip those comments.
+- CommonMark HTML comments are represented by an invisible compatibility node so rich editing preserves and serializes them instead of dropping them.
 - Ordered lists must preserve their explicit starting number across rich editing and source serialization.
 - Ordered lists must use structure-derived hierarchical decimal markers in both rich editing and rendered preview: top-level items render as `1.`, `2.`, while nested ordered items render as `2.1`, `2.2`, `2.2.1`. Unordered ancestors do not add a numbering level, explicit `start` values remain authoritative, and generated markers must never enter Markdown serialization.
 - In MDXEditor tables, `Enter` keeps the existing next-row cell navigation and `Shift + Enter` inserts an inline `<br />` break in the current cell.

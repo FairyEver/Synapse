@@ -236,7 +236,10 @@ vi.mock('@mdxeditor/editor', async () => {
     createActiveEditorSubscription$: Symbol('createActiveEditorSubscription$'),
     createRootEditorSubscription$: Symbol('createRootEditorSubscription$'),
     viewMode$: Symbol('viewMode$'),
-    lexical: { LineBreakNode: class {} },
+    lexical: {
+      DecoratorNode: class {},
+      LineBreakNode: class {},
+    },
     $createGenericHTMLNode: () => null,
     $isImageNode: () => false,
     tablePlugin: () => ({ name: 'tablePlugin' }),
@@ -927,10 +930,10 @@ describe('DriveMDXeditorRenderer', () => {
     '    <https://example.com/code>',
     '<span>raw html</span>',
     '<!doctype html>',
-  ])('keeps CommonMark syntax that MDXEditor cannot round-trip in source mode: %s', (markdown) => {
+  ])('lets MDXEditor parse CommonMark before using source fallback: %s', (markdown) => {
     renderRenderer({ preview: { ...basePreview(), text: markdown } })
 
-    expect(sourceEditor().value).toBe(markdown)
+    expect(editor().value).toBe(markdown)
     expect(document.body.textContent).not.toContain('解析失败')
   })
 
@@ -990,15 +993,6 @@ describe('DriveMDXeditorRenderer', () => {
 
     expect(editor().value).toBe(markdown)
     expect(document.body.textContent).not.toContain('解析失败')
-  })
-
-  it('keeps CommonMark HTML comments in source mode instead of dropping them', async () => {
-    const markdown = ['正文', '', '<!-- keep this comment -->'].join('\n')
-    renderRenderer({ preview: { ...basePreview(), text: markdown } })
-
-    expect(sourceEditor().value).toBe(markdown)
-    expect(document.body.textContent).not.toContain('解析失败')
-    expect(document.querySelector('[data-mdxeditor="true"]')).toBeNull()
   })
 
   it('does not mistake fenced or inline HTML comment examples for source comments', async () => {
@@ -1075,12 +1069,14 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).not.toContain('原文已修改或删除')
   })
 
-  it('shows comments directly as a list while the Markdown editor is in source mode', () => {
+  it('shows comments directly as a list after Markdown parsing falls back to source mode', async () => {
     annotationsMock.threads = [commentThread()]
     renderRenderer({
-      preview: { ...basePreview(), text: ['正文', '', '<!-- keep this comment -->'].join('\n') },
+      preview: { ...basePreview(), text: '# broken-mdx' },
       annotationContext: { context: 'owner', itemId: 'file' },
     })
+
+    await act(async () => { await Promise.resolve() })
 
     expect(sourceEditor()).not.toBeNull()
     expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()

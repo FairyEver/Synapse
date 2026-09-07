@@ -1,9 +1,19 @@
-import { addSyntaxExtension$ } from '@mdxeditor/editor'
+import {
+  addExportVisitor$,
+  addImportVisitor$,
+  addLexicalNode$,
+  addMdastExtension$,
+  addSyntaxExtension$,
+} from '@mdxeditor/editor'
 import { describe, expect, it, vi } from 'vitest'
 import {
   commonMarkLessThanOrEqualSyntaxExtension,
+  commonMarkHtmlCommentFromMarkdownExtension,
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
+  htmlCommentExportVisitor,
+  htmlCommentImportVisitor,
+  HtmlCommentNode,
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
 
@@ -15,6 +25,10 @@ describe('MDXEditor CommonMark compatibility', () => {
     plugin.init?.({ pub } as never)
 
     expect(pub).toHaveBeenCalledWith(addSyntaxExtension$, commonMarkLessThanOrEqualSyntaxExtension)
+    expect(pub).toHaveBeenCalledWith(addMdastExtension$, commonMarkHtmlCommentFromMarkdownExtension)
+    expect(pub).toHaveBeenCalledWith(addLexicalNode$, HtmlCommentNode)
+    expect(pub).toHaveBeenCalledWith(addImportVisitor$, htmlCommentImportVisitor)
+    expect(pub).toHaveBeenCalledWith(addExportVisitor$, htmlCommentExportVisitor)
   })
 
   it('claims a less-than sign only when it starts a less-than-or-equal operator', () => {
@@ -80,7 +94,7 @@ describe('MDXEditor CommonMark compatibility', () => {
     })
   })
 
-  it('keeps indented code and unsupported raw HTML in source mode', () => {
+  it('lets MDXEditor parse indented code and raw HTML before falling back to source mode', () => {
     for (const markdown of [
       '    <https://example.com>',
       '1. list item\n\n       indented code',
@@ -92,13 +106,35 @@ describe('MDXEditor CommonMark compatibility', () => {
     ]) {
       expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
         markdown,
-        requiresSourceMode: true,
+        requiresSourceMode: false,
       })
     }
   })
 
-  it('does not mistake nested list indentation for an indented code block', () => {
-    const markdown = '1. 一级\n   * 二级\n      1. 三级'
+  it('does not force marker-only nested list items into source mode', () => {
+    const markdown = [
+      '   1. 一级',
+      '      1. 二级',
+      '         二级说明',
+      '      2.',
+      '',
+      '   2. 一级第二项',
+    ].join('\n')
+
+    expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
+      markdown,
+      requiresSourceMode: false,
+    })
+  })
+
+  it('keeps HTML comments eligible for rich mode', () => {
+    const markdown = [
+      '正文 <!-- <https://example.com> <= <br> -->',
+      '',
+      '<!-- block',
+      '<user@example.com> <= <br>',
+      'comment -->',
+    ].join('\n')
 
     expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
       markdown,
