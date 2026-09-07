@@ -560,15 +560,22 @@ describe('DriveMarkdownRenderer', () => {
     const documentColumn = () => document.querySelector('[data-testid="markdown-body"]')?.parentElement
     expect(documentColumn()?.className).toContain('max-w-3xl')
     expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('reading')
-    expect(buttonWithText('宽屏')).not.toBeNull()
+    expect(buttonWithText('宽度')).not.toBeNull()
 
-    await click(buttonWithText('宽屏'))
+    await openDropdown(buttonWithText('宽度'))
+    expect(radioMenuItemWithText('阅读').getAttribute('data-state')).toBe('checked')
+    expect(radioMenuItemWithText('宽屏').getAttribute('data-state')).toBe('unchecked')
+    await click(radioMenuItemWithText('宽屏'))
 
     expect(documentColumn()?.className).not.toContain('max-w-3xl')
     expect(documentColumn()?.className).toContain('max-w-none')
     expect(documentColumn()?.className).toContain('w-full')
     expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('wide')
-    expect(buttonWithText('阅读')).not.toBeNull()
+    expect(buttonWithText('宽度')).not.toBeNull()
+
+    await openDropdown(buttonWithText('宽度'))
+    expect(radioMenuItemWithText('阅读').getAttribute('data-state')).toBe('unchecked')
+    expect(radioMenuItemWithText('宽屏').getAttribute('data-state')).toBe('checked')
   })
 
   it('enables comments for .md files', () => {
@@ -705,7 +712,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).toContain('评论')
     expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('Comment body')
-    expect(toolbarButtonTexts()).toEqual(['宽屏', '目录', '评论 1'])
+    expect(toolbarButtonTexts()).toEqual(['目录', '评论 1', '宽度'])
     expect(commentRailTitle()?.querySelector('button[aria-label="刷新评论"]')).not.toBeNull()
     expect(commentRailShell()?.className).toContain('border-l')
     expect(commentRailPanelGroup()?.getAttribute('data-slot')).toBe('resizable-panel')
@@ -905,7 +912,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(toolbarButtonTexts()).toEqual(['宽屏', '评论 1'])
+    expect(toolbarButtonTexts()).toEqual(['评论 1', '宽度'])
     expect(document.body.textContent).toContain('Reply body')
   })
 
@@ -2008,10 +2015,23 @@ async function click(element: HTMLElement) {
   })
 }
 
+async function openDropdown(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+  })
+}
+
 function buttonWithText(text: string) {
   const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.trim() === text)
   if (!button) throw new Error(`Missing button ${text}`)
   return button as HTMLButtonElement
+}
+
+function radioMenuItemWithText(text: string) {
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
+    .find((element) => element.textContent?.trim() === text)
+  if (!item) throw new Error(`Missing radio menu item ${text}`)
+  return item
 }
 
 function queryButtonWithText(text: string) {

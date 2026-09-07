@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Loader2 } from 'lucide-react'
+import { ChevronDown, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -7,6 +7,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
@@ -44,6 +46,8 @@ export type FilePreviewToolbarItem =
     | {
         readonly kind: 'menu'
         readonly icon?: LucideIcon
+        readonly variant?: 'outline' | 'ghost'
+        readonly selectedItemId?: string
         readonly items: readonly FilePreviewToolbarMenuItem[]
       }
   )
@@ -132,20 +136,17 @@ export function FilePreviewToolbarItemView({
       <DropdownMenuTrigger asChild>
         <Button
           type='button'
-          variant='outline'
+          variant={item.variant ?? 'outline'}
           size='sm'
-          className={buttonClassName}
+          className={cn(buttonClassName, 'has-[>svg]:pl-2.5 has-[>svg]:pr-2')}
         >
           {item.icon ? <item.icon data-icon='inline-start' /> : null}
           {item.label}
+          <ChevronDown data-icon='inline-end' />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end'>
-        {item.items.map((menuItem) => (
-          <DropdownMenuItem key={menuItem.id} disabled={menuItem.disabled} onSelect={menuItem.onSelect}>
-            {menuItem.label}
-          </DropdownMenuItem>
-        ))}
+        <FilePreviewToolbarMenuOptions item={item} />
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -210,14 +211,36 @@ export function FilePreviewToolbarMenuItems({
           {item.icon ? <item.icon className='size-4' /> : null}
           {item.label}
         </DropdownMenuLabel>
-        {item.items.map((menuItem) => (
-          <DropdownMenuItem key={menuItem.id} disabled={menuItem.disabled} onSelect={menuItem.onSelect}>
-            {menuItem.label}
-          </DropdownMenuItem>
-        ))}
+        <FilePreviewToolbarMenuOptions item={item} />
       </div>
     )
   })
+}
+
+function FilePreviewToolbarMenuOptions({
+  item,
+}: {
+  readonly item: Extract<FilePreviewToolbarItem, { readonly kind: 'menu' }>
+}) {
+  if (item.selectedItemId) {
+    return (
+      <DropdownMenuRadioGroup
+        value={item.selectedItemId}
+        onValueChange={(itemId) => item.items.find((option) => option.id === itemId)?.onSelect()}
+      >
+        {item.items.map((option) => (
+          <DropdownMenuRadioItem key={option.id} value={option.id} disabled={option.disabled}>
+            {option.label}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    )
+  }
+  return item.items.map((option) => (
+    <DropdownMenuItem key={option.id} disabled={option.disabled} onSelect={option.onSelect}>
+      {option.label}
+    </DropdownMenuItem>
+  ))
 }
 
 export function getCompactPrimaryToolbarItems(

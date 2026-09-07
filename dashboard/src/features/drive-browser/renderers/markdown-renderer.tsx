@@ -12,7 +12,7 @@ import {
   type DriveMarkdownProjectionImageDto,
   type DriveCollaborationJoinContext,
 } from '@synapse/shared'
-import { ListTree, Maximize2, MessageSquare, MessageSquarePlus } from 'lucide-react'
+import { ListTree, MessageSquare, MessageSquarePlus } from 'lucide-react'
 import * as Y from 'yjs'
 import { ImageLightbox, type ImageLightboxPreview } from '@/components/image-lightbox'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -462,16 +462,7 @@ function DriveMarkdownBody({
   }], [])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
-    const items: DriveRendererToolbarItem[] = [
-      {
-        kind: 'button',
-        id: 'markdown-width-mode',
-        label: widthMode === 'reading' ? '宽屏' : '阅读',
-        icon: Maximize2,
-        variant: 'ghost',
-        onClick: () => setWidthMode((current) => current === 'reading' ? 'wide' : 'reading'),
-      },
-    ]
+    const items: DriveRendererToolbarItem[] = []
     if (outline.length > 0) {
       items.push({
         kind: 'toggle',
@@ -496,6 +487,18 @@ function DriveMarkdownBody({
         }
       )
     }
+    items.push({
+      kind: 'menu',
+      id: 'markdown-width-mode',
+      label: '宽度',
+      compactPlacement: 'primary',
+      variant: 'ghost',
+      selectedItemId: widthMode,
+      items: [
+        { id: 'reading', label: '阅读', onSelect: () => setWidthMode('reading') },
+        { id: 'wide', label: '宽屏', onSelect: () => setWidthMode('wide') },
+      ],
+    })
     return items
   }, [
     annotationsEnabled,
