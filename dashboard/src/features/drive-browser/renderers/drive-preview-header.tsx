@@ -28,8 +28,6 @@ import type { DriveRendererId, DriveRendererOption } from './drive-renderer-regi
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const DRIVE_PREVIEW_PRIMARY_ACTION_IDS = new Set<DrivePreviewSystemAction['id']>([
-  'open-in-drive',
-  'versions',
   'renderer-select',
 ])
 

@@ -240,7 +240,7 @@ describe('drive browser view model', () => {
     expect(getDrivePreviewSystemMenuSections(standaloneFile).flatMap((section) => section.items.map((item) => item.id))).toContain('open-in-drive')
   })
 
-  it('renders shared toolbar and floating menu from the same action model', () => {
+  it('keeps renderer selection primary and file actions in the shared overflow menu', () => {
     const snapshot = createSnapshot({
       surface: 'standalone',
       current: {
@@ -272,13 +272,16 @@ describe('drive browser view model', () => {
     expect(headerHtml).toContain('已同步')
     expect(headerHtml).toContain('data-drive-preview-action-separator="true"')
     expect(headerHtml).not.toContain('下载')
-    expect(headerHtml).toContain('在云盘中查看')
-    expect(headerHtml).toContain('历史版本')
+    expect(headerHtml).not.toContain('在云盘中查看')
+    expect(headerHtml).not.toContain('历史版本')
     expect(headerHtml).toContain('打开方式')
     expect(headerHtml).toContain('aria-label="更多操作"')
-    expect(headerHtml.indexOf('在云盘中查看')).toBeLessThan(headerHtml.indexOf('历史版本'))
-    expect(headerHtml.indexOf('历史版本')).toBeLessThan(headerHtml.indexOf('打开方式'))
     expect(headerHtml.indexOf('打开方式')).toBeLessThan(headerHtml.indexOf('aria-label="更多操作"'))
+    expect(getDrivePreviewSystemMenuSections(snapshot, 'markdown')[0]?.items.map((item) => item.id)).toEqual([
+      'download',
+      'open-in-drive',
+      'versions',
+    ])
     expect(floatingHtml).toContain('文件操作')
     expect(floatingHtml).not.toContain('data-drive-preview-header')
   })
@@ -917,7 +920,8 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-preview-header="true"')
     expect(html).not.toContain('文件操作')
-    expect(html).toContain('在云盘中查看')
+    expect(html).not.toContain('在云盘中查看')
+    expect(html).toContain('aria-label="更多操作"')
     expect(html).toContain('<h1>Notes</h1>')
     expect(html).toContain('max-w-3xl')
     expect(html).not.toContain('data-reader-toolbar="true"')

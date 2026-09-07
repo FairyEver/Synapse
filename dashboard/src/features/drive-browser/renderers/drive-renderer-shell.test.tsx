@@ -141,6 +141,38 @@ describe('DriveRendererShell', () => {
     expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
   })
 
+  it('keeps file actions in the shared overflow menu', async () => {
+    renderShell({
+      snapshot: baseSnapshot({
+        current: {
+          ...baseSnapshot().current,
+          name: 'notes.md',
+          mimeType: 'text/markdown',
+          previewKind: 'markdown',
+        },
+        preview: {
+          kind: 'markdown',
+          text: '# Notes',
+          html: '<h1>Notes</h1>',
+          outline: [],
+          truncated: false,
+          imageUrl: null,
+          visitUrl: null,
+          relativeImages: [],
+        },
+      }),
+      rendererId: 'markdown',
+    })
+
+    expect(buttonWithText('打开方式')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('在云盘中查看')
+    expect(document.body.textContent).not.toContain('历史版本')
+
+    await click(buttonWithLabel('更多操作'))
+
+    expect(menuItemTexts()).toEqual(['下载', '在云盘中查看', '历史版本'])
+  })
+
   it('shows the edit unavailable reason in the shared header', () => {
     renderShell({
       snapshot: baseSnapshot({
@@ -322,4 +354,29 @@ function anchorWithText(text: string): HTMLAnchorElement {
   const element = Array.from(document.querySelectorAll('a')).find((anchor) => anchor.textContent?.includes(text))
   if (!(element instanceof HTMLAnchorElement)) throw new Error(`anchor not found: ${text}`)
   return element
+}
+
+async function click(element: HTMLElement) {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+    element.click()
+  })
+}
+
+function buttonWithLabel(label: string): HTMLButtonElement {
+  const element = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!element) throw new Error(`button not found: ${label}`)
+  return element
+}
+
+function buttonWithText(text: string): HTMLButtonElement {
+  const element = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+    .find((button) => button.textContent?.includes(text))
+  if (!element) throw new Error(`button not found: ${text}`)
+  return element
+}
+
+function menuItemTexts(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    .map((item) => item.textContent?.trim() ?? '')
 }
