@@ -20,6 +20,7 @@ import {
   WORKSPACE_FILE_TREE_DRAG_TYPE,
   writeWorkspaceFileTreeDrag,
 } from "../../../../src/lib/workspace-file-tree-drag"
+import { equalizeTerminalPaneGroup } from "../../shared/schema"
 
 const bridgeState = vi.hoisted(() => ({
   globalLaunch: {
@@ -284,9 +285,11 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
     return workspace
   }),
-  equalizePane: vi.fn(async ({ workspaceId }: { workspaceId: string }) => {
+  equalizePane: vi.fn(async ({ workspaceId, paneId }: { workspaceId: string; paneId: string }) => {
     const current = getWorkspace(workspaceId)
-    const workspace = { ...current, layoutRevision: current.layoutRevision + 1 }
+    const layout = equalizeTerminalPaneGroup(current.layout, paneId)
+    if (!layout) throw new Error("Pane not found")
+    const workspace = { ...current, layout, layoutRevision: current.layoutRevision + 1 }
     bridgeState.workspaces = bridgeState.workspaces.map((item) => item.id === workspaceId ? workspace : item)
     return workspace
   }),
@@ -2072,6 +2075,8 @@ describe("TerminalModule", () => {
   })
 
   it("equalizes the focused pane group and exits maximize mode", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(1_000)
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(800)
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     const leftSession = createSession({ id: "session-1", groupId: "group-1", title: "左侧终端" })
     const middleSession = createSession({ id: "session-2", groupId: "group-1", title: "中间终端" })
@@ -2107,6 +2112,8 @@ describe("TerminalModule", () => {
     })
     expect(document.querySelector('button[aria-label="最大化分屏：中间终端"]')).toBeTruthy()
     expect(document.querySelectorAll('[data-terminal-split-locked="true"]')).toHaveLength(0)
+    expect(getPanelFlexGrow("split-left-rest:first")).toBeCloseTo(100 / 3)
+    expect(getPanelFlexGrow("split-middle-right:first")).toBeCloseTo(50)
   })
 
   it("disables maximize when the workspace contains one pane", async () => {

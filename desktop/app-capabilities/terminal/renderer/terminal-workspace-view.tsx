@@ -255,7 +255,7 @@ export function TerminalWorkspaceView({
   }, [onSplitRatioChange])
 
   useLayoutEffect(() => {
-    if (maximizedPaneIdRef.current
+    if ((maximizedPaneIdRef.current || pendingMaximizeRestoreRef.current)
       && maximizedLayoutSignatureRef.current !== workspaceLayoutSignature) {
       suppressSplitRatioPersistenceRef.current = true
       maximizedPaneIdRef.current = null
@@ -564,6 +564,19 @@ function TerminalSplitLayout({
     registerSplitLayoutControls(layout.splitId, controls)
     return () => registerSplitLayoutControls(layout.splitId, null)
   }, [firstId, groupRef, layout.ratio, layout.splitId, registerSplitLayoutControls, secondId, firstPanelRef, secondPanelRef])
+
+  useLayoutEffect(() => {
+    if (maximized) return
+    const currentLayout = groupRef.current?.getLayout()
+    const first = currentLayout?.[firstId]
+    const second = currentLayout?.[secondId]
+    if (first === undefined || second === undefined || first + second === 0) return
+    if (Math.abs(first / (first + second) - layout.ratio) < 0.001) return
+    groupRef.current?.setLayout({
+      [firstId]: layout.ratio * 100,
+      [secondId]: (1 - layout.ratio) * 100,
+    })
+  }, [firstId, groupRef, layout.ratio, maximized, secondId])
 
   return (
     <ResizablePanelGroup
