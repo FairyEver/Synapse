@@ -834,6 +834,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  vi.restoreAllMocks()
 })
 
 describe("TerminalModule", () => {
@@ -1972,6 +1973,8 @@ describe("TerminalModule", () => {
   })
 
   it("maximizes a nested pane with fixed sibling strips and restores when another pane is focused", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(1_000)
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(800)
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     const topSession = createSession({ id: "session-1", groupId: "group-1", title: "上方终端" })
     const leftSession = createSession({ id: "session-2", groupId: "group-1", title: "左侧终端" })
@@ -2006,6 +2009,9 @@ describe("TerminalModule", () => {
 
     await renderModule()
 
+    expect(getPanelFlexGrow("split-left-rest:first")).toBe(20)
+    expect(getPanelFlexGrow("split-middle-right:second")).toBe(25)
+
     await clickButtonByAriaLabel("最大化分屏：中间终端")
 
     expect(document.querySelector('button[aria-label="还原分屏：中间终端"]')).toBeTruthy()
@@ -2029,6 +2035,8 @@ describe("TerminalModule", () => {
     expect(document.querySelectorAll("[data-terminal-maximized-sibling]")).toHaveLength(0)
     expect(document.querySelectorAll('[data-terminal-split-locked="true"]')).toHaveLength(0)
     expect(terminalBridge.updateSplitRatio).not.toHaveBeenCalled()
+    expect(getPanelFlexGrow("split-left-rest:first")).toBe(20)
+    expect(getPanelFlexGrow("split-middle-right:second")).toBe(25)
   })
 
   it("switches maximization directly when another pane maximize button is clicked", async () => {
@@ -3072,6 +3080,10 @@ async function renderModule(
     await Promise.resolve()
     await Promise.resolve()
   })
+}
+
+function getPanelFlexGrow(id: string): number {
+  return Number(document.getElementById(id)?.style.flexGrow)
 }
 
 async function renderEmbeddedModule(): Promise<void> {

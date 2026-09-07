@@ -268,13 +268,19 @@ export function TerminalWorkspaceView({
     }
 
     if (!pendingMaximizeRestoreRef.current || !baseline) return
-    for (const [splitId, layout] of baseline) {
-      splitLayoutControlsRef.current.get(splitId)?.setLayout(layout)
-    }
-    pendingMaximizeRestoreRef.current = false
-    maximizedLayoutBaselineRef.current = null
-    maximizedLayoutSignatureRef.current = null
-    releaseSplitRatioPersistence()
+    queueMicrotask(() => {
+      if (!pendingMaximizeRestoreRef.current
+        || maximizedPaneIdRef.current
+        || maximizedLayoutBaselineRef.current !== baseline) return
+      // Removing the 100px constraints re-registers panels; restore after that commit settles.
+      for (const [splitId, layout] of baseline) {
+        splitLayoutControlsRef.current.get(splitId)?.setLayout(layout)
+      }
+      pendingMaximizeRestoreRef.current = false
+      maximizedLayoutBaselineRef.current = null
+      maximizedLayoutSignatureRef.current = null
+      releaseSplitRatioPersistence()
+    })
   }, [maximizedPaneId, maximizedSplitPath, releaseSplitRatioPersistence, workspaceLayoutSignature])
 
   useLayoutEffect(() => {
