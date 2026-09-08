@@ -126,6 +126,16 @@ describe('DriveConsolePage', () => {
     expect(document.body.textContent).not.toContain('同步')
   })
 
+  it('keeps the active drive view vertically scrollable', async () => {
+    mockReadySnapshot(folderSnapshot())
+    vi.mocked(driveApi.getUsage).mockResolvedValue(usage())
+
+    await render(<DriveConsolePage />)
+
+    expect(document.querySelector('[data-slot="tabs-content"][data-state="active"]')?.className)
+      .toContain('overflow-y-auto')
+  })
+
   it('loads additional files from a paged console folder', async () => {
     const snapshot = {
       ...folderSnapshot(),

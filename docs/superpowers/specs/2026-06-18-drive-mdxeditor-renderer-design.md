@@ -23,6 +23,7 @@ This is an adapter for the current Drive render pipeline. It is not a new deskto
 - `.mdx` files should be recognized as Markdown-compatible Drive browser files.
 - Ordinary `.md` and `.markdown` files should treat the `<=` comparison operator as CommonMark text before MDX JSX parsing. `.mdx` files keep strict MDX parsing.
 - Ordinary `.md` and `.markdown` URI/email autolinks should be adapted to MDXEditor-compatible links before rich parsing and serialized back as CommonMark autolinks.
+- Ordinary `.md` and `.markdown` programming-language generic types such as `List<OrderDTO>` and `CommonResult<PageResult<RespVO>>` should remain plain text in rich mode and serialize back without compatibility escapes.
 - Ordinary `.md` and `.markdown` files enter rich mode without a pre-emptive source-mode check for indentation or raw HTML. Only an actual parser failure falls back to source mode.
 - Compatibility normalization and save-time image checks must ignore inline and fenced code examples.
 - `.mdx` files with JSX, attributes, expressions, and MDX comments may use rich mode. Files with top-level MDX ESM `import` or `export` stay in source mode because MDXEditor does not round-trip arbitrary ESM declarations.

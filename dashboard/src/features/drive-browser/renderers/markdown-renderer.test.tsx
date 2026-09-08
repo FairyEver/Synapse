@@ -449,6 +449,18 @@ describe('DriveMarkdownRenderer', () => {
     expect(outlineNav?.className).toContain('md:px-6')
   })
 
+  it('shows the outline resize line only while the outline rail is active', () => {
+    renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
+
+    const outlinePanel = document.querySelector('[data-markdown-resizable-panel="outline"]')
+    const outlineHandle = outlinePanel?.nextElementSibling
+
+    expect(outlineHandle?.getAttribute('data-slot')).toBe('resizable-handle')
+    expect(outlineHandle?.className).toContain('bg-transparent')
+    expect(outlineHandle?.className).toContain('[[data-panel]:hover+&]:bg-border')
+    expect(outlineHandle?.childElementCount).toBe(0)
+  })
+
   it('keeps the rails fixed while only the markdown document scrolls', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
@@ -734,7 +746,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.body.textContent).toContain('Comment body')
     expect(toolbarButtonTexts()).toEqual(['目录', '评论 1', '宽度'])
     expect(commentRailTitle()?.querySelector('button[aria-label="刷新评论"]')).not.toBeNull()
-    expect(commentRailShell()?.className).toContain('border-l')
+    expect(commentRailShell()?.className).not.toContain('border-l')
+    expect(commentRailPanelGroup()?.previousElementSibling?.childElementCount).toBe(0)
     expect(commentRailPanelGroup()?.getAttribute('data-slot')).toBe('resizable-panel')
     expect(commentRailPanelGroup()?.getAttribute('data-panel-size')).toBe('22%')
     expect(commentRailPanelGroup()?.getAttribute('data-panel-min-size')).toBe('17%')

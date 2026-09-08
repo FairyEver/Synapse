@@ -94,6 +94,37 @@ describe('MDXEditor CommonMark compatibility', () => {
     })
   })
 
+  it('escapes programming-language generics only for rich-text parsing', () => {
+    const source = [
+      'Controller 返回 CommonResult<PageResult<VehicleCallOrderRespVO>>。',
+      '字段为 List<OrderDTO> orderList 和 Map<String, List<OrderDTO>>。',
+      '普通比较 a<b 保持不变。',
+      '<span>raw html</span>',
+      '',
+      '`CommonResult<PageResult<VehicleCallOrderRespVO>>`',
+      '',
+      '```java',
+      'CommonResult<PageResult<VehicleCallOrderRespVO>> result;',
+      '```',
+    ].join('\n')
+
+    expect(prepareCommonMarkForMdxEditor(source)).toEqual({
+      markdown: [
+        'Controller 返回 CommonResult\\<PageResult\\<VehicleCallOrderRespVO>>。',
+        '字段为 List\\<OrderDTO> orderList 和 Map\\<String, List\\<OrderDTO>>。',
+        '普通比较 a<b 保持不变。',
+        '<span>raw html</span>',
+        '',
+        '`CommonResult<PageResult<VehicleCallOrderRespVO>>`',
+        '',
+        '```java',
+        'CommonResult<PageResult<VehicleCallOrderRespVO>> result;',
+        '```',
+      ].join('\n'),
+      requiresSourceMode: false,
+    })
+  })
+
   it('lets MDXEditor parse indented code and raw HTML before falling back to source mode', () => {
     for (const markdown of [
       '    <https://example.com>',

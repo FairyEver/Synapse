@@ -816,7 +816,7 @@ export function DriveMDXeditorRenderer({
             >
               {editorView}
             </ResizablePanel>
-            <ResizableHandle withHandle />
+            <ResizableHandle />
             <ResizablePanel
               defaultSize={commentsPanelDefaultSize}
               minSize={commentsPanelMinSize}
@@ -824,7 +824,7 @@ export function DriveMDXeditorRenderer({
               data-mdxeditor-resizable-panel='comments'
               className='h-full min-h-0 overflow-hidden'
             >
-              <aside className='h-full min-h-0 overflow-hidden border-l bg-background'>
+              <aside className='h-full min-h-0 overflow-hidden bg-background'>
                 {renderCommentsRail(sourceMode ? 'list' : 'anchored')}
               </aside>
             </ResizablePanel>

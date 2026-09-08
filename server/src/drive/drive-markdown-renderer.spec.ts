@@ -132,6 +132,8 @@ describe("drive markdown renderer", () => {
       "[local doc](../guide.md)",
       "",
       "![public](/files/asset_123)",
+      "",
+      "![hosted](/object/img_123)",
     ].join("\n"), {
       allowStandaloneRawImages: true,
       relativeImageUrls: new Map([
@@ -155,6 +157,7 @@ describe("drive markdown renderer", () => {
     expect(result.html).not.toContain("srcset=")
     expect(result.html).not.toContain("../guide.md")
     expect(result.html).toContain('src="/files/asset_123"')
+    expect(result.html).toContain('src="/object/img_123"')
   })
 
   it("matches resolved image URLs after remark encodes Unicode path segments", async () => {

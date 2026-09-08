@@ -334,17 +334,17 @@ function DriveConsoleContent({
       </TabsList>
       {state.browser.status === 'loading' ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
       {state.browser.status === 'error' ? <div className='text-sm text-destructive'>{state.browser.message}</div> : null}
-      <TabsContent value='public-assets' className='min-h-0'>
+      <TabsContent value='public-assets' className='min-h-0 overflow-y-auto'>
         {state.browser.status === 'ready' ? (
           <DrivePublicAssetsView onChanged={state.refresh} />
         ) : null}
       </TabsContent>
-      <TabsContent value='trash' className='min-h-0'>
+      <TabsContent value='trash' className='min-h-0 overflow-y-auto'>
         {state.browser.status === 'ready' ? (
           <DriveTrashView onChanged={state.refresh} />
         ) : null}
       </TabsContent>
-      <TabsContent value='files' className='min-h-0'>
+      <TabsContent value='files' className='min-h-0 overflow-y-auto'>
         {state.browser.status === 'ready' ? (
           <DriveFileTable
             snapshot={state.browser.snapshot}

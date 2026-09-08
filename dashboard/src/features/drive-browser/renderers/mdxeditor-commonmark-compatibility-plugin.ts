@@ -277,6 +277,12 @@ export function prepareCommonMarkForMdxEditor(markdown: string): PreparedCommonM
         }
       }
 
+      if (isProgrammingLanguageGenericOpening(line, index)) {
+        result += '\\<'
+        index += 1
+        continue
+      }
+
       result += line[index]
       index += 1
     }
@@ -293,6 +299,7 @@ export const commonMarkToMarkdownOptions = {
       return state.safe(node.value, info)
         .replace(/\\<\\=/gu, '<=')
         .replace(/\\<=/gu, '<=')
+        .replace(/([A-Z_$][A-Za-z\d_$]*)\\</gu, '$1<')
     },
   },
 } satisfies ToMarkdownOptions
@@ -329,6 +336,26 @@ function isCommonMarkEmailAutolink(value: string): boolean {
 
 function escapeMarkdownLinkLabel(value: string): string {
   return value.replace(/[\\\[\]]/gu, '\\$&')
+}
+
+function isProgrammingLanguageGenericOpening(value: string, index: number): boolean {
+  if (!/([A-Z_$][A-Za-z\d_$]*)$/u.test(value.slice(0, index))) return false
+
+  let depth = 1
+  for (let cursor = index + 1; cursor < value.length; cursor += 1) {
+    const character = value[cursor]
+    if (character === '<') {
+      depth += 1
+      continue
+    }
+    if (character === '>') {
+      depth -= 1
+      if (depth === 0) return true
+      continue
+    }
+    if (!/[A-Za-z\d_$.,?&\s\[\]]/u.test(character)) return false
+  }
+  return false
 }
 
 function isEscaped(value: string, index: number): boolean {

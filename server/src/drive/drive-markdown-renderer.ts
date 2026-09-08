@@ -1,4 +1,4 @@
-import type { DriveMarkdownOutlineItemDto, DriveMarkdownProjectionDto } from "@synapse/shared"
+import { PLATFORM_OBJECT_PATH_PREFIX, type DriveMarkdownOutlineItemDto, type DriveMarkdownProjectionDto } from "@synapse/shared"
 import {
   annotateMarkdownProjectionTree,
   buildDriveMarkdownProjection,
@@ -363,7 +363,7 @@ function resolveRelativeImageProperty(
   const value = properties.src
   if (typeof value !== "string") return
   const trimmed = value.trim()
-  if (trimmed.startsWith("/files/")) return
+  if (trimmed.startsWith("/files/") || trimmed.startsWith(`${PLATFORM_OBJECT_PATH_PREFIX}/`)) return
   if (!isRelativeMarkdownUrl(trimmed)) return
   const resolved = relativeImageUrls.get(relativeImageLookupKey(trimmed, true))
   properties["data-drive-markdown-relative-src"] = resolved?.windowsStyle ? resolved.source : trimmed

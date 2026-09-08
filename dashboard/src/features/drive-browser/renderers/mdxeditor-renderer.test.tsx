@@ -1059,7 +1059,10 @@ describe('DriveMDXeditorRenderer', () => {
 
     expect(annotationsMock.input).toEqual({ context: 'owner', itemId: 'file' })
     expect(buttonWithText('评论 1')).not.toBeNull()
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
+    const commentsPanel = document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    expect(commentsPanel).not.toBeNull()
+    expect(commentsPanel?.querySelector('aside')?.className).not.toContain('border-l')
+    expect(commentsPanel?.previousElementSibling?.childElementCount).toBe(0)
     expect(document.body.textContent).toContain('编辑中暂未定位')
 
     await click(buttonWithText('编辑中暂未定位'))

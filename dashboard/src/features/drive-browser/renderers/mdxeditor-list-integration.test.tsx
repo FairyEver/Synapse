@@ -14,6 +14,7 @@ import {
   type MDXEditorMethods,
   listsPlugin,
   quotePlugin,
+  tablePlugin,
   toolbarPlugin,
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
@@ -27,6 +28,7 @@ import {
   observeDriveHierarchicalListMarkers,
 } from './drive-hierarchical-list-markers'
 import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
+import { tableCellLineBreakPlugin } from './mdxeditor-table-cell-line-break-plugin'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -142,6 +144,38 @@ describe('MDXEditor list integration', () => {
     expect(editorRef.current?.getMarkdown()).toContain('<https://example.com/a?q=1>')
     expect(editorRef.current?.getMarkdown()).toContain('<user@example.com>')
     expect(editorRef.current?.getMarkdown()).toContain('* <https://example.com/list>')
+  })
+
+  it('parses and round-trips programming-language generics in Markdown text', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onError = vi.fn()
+    const source = [
+      '| 接口 | 说明 |',
+      '|---|---|',
+      '| /vehicle-call-order/page<br>VehicleCallOrderController.page | Controller 返回 CommonResult<PageResult<VehicleCallOrderRespVO>>；字段为 List<OrderDTO> orderList。 |',
+    ].join('\n')
+    const prepared = prepareCommonMarkForMdxEditor(source)
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={prepared.markdown}
+          onError={onError}
+          toMarkdownOptions={commonMarkToMarkdownOptions}
+          plugins={[commonMarkTextCompatibilityPlugin(), tablePlugin(), tableCellLineBreakPlugin()]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
+    expect(onError).not.toHaveBeenCalled()
+    expect(savedMarkdown).toContain('CommonResult<PageResult<VehicleCallOrderRespVO>>')
+    expect(savedMarkdown).toContain('List<OrderDTO> orderList')
   })
 
   it('keeps CommonMark HTML, escapes, comments, and JSX-looking code in Markdown mode', async () => {
