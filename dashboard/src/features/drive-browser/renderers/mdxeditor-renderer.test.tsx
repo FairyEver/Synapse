@@ -1111,16 +1111,16 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
   })
 
-  it('does not enable comments for .mdx files', () => {
+  it('enables comments for Markdown MIME without a .md extension', () => {
     annotationsMock.threads = [commentThread()]
     renderRenderer({
-      current: { ...baseCurrent(), name: 'notes.mdx' },
+      current: { ...baseCurrent(), name: 'notes', mimeType: 'text/markdown' },
       annotationContext: { context: 'owner', itemId: 'file' },
     })
 
-    expect(annotationsMock.input).toBeUndefined()
-    expect(document.body.textContent).not.toContain('评论 1')
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
+    expect(annotationsMock.input).toEqual({ context: 'owner', itemId: 'file' })
+    expect(buttonWithText('评论 1')).not.toBeNull()
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
   })
 })
 

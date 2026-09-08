@@ -181,6 +181,7 @@ describe("Drive capability domain", () => {
     expect(tools.has("app_drive_link_annotation_anchor_update")).toBe(false)
     expect(tools.get("app_drive_link_annotation_thread_list")?.description).toContain("Author emails are redacted")
     expect(tools.get("app_drive_link_annotation_thread_list")?.description).toContain("anchor field is the current authority")
+    expect(tools.get("app_drive_link_annotation_thread_list")?.description).toContain("Markdown MIME type")
     expect(tools.get("app_drive_link_read_text")?.description).toContain("markdownImages")
     expect(tools.get("app_drive_link_annotation_thread_create")?.description).toContain("imageId")
   })

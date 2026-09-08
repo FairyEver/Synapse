@@ -598,6 +598,12 @@ describe('DriveMarkdownRenderer', () => {
     expect(buttonWithText('评论 0')).not.toBeNull()
   })
 
+  it('enables comments for Markdown MIME without a .md extension', () => {
+    renderMarkdown({ currentItem: current({ name: 'notes', mimeType: 'text/markdown' }) })
+
+    expect(buttonWithText('评论 0')).not.toBeNull()
+  })
+
   it('does not enable comments for non-markdown files', () => {
     renderMarkdown({ currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }) })
 
@@ -1249,8 +1255,8 @@ describe('DriveMarkdownRenderer', () => {
     expect(pendingOverlay()).toBeNull()
   })
 
-  it('does not show .md-only comment controls for MDX previews', async () => {
-    renderMarkdown({ currentItem: current({ name: 'notes.mdx', mimeType: 'text/markdown' }) })
+  it('does not show comment controls when neither the extension nor MIME is Markdown', async () => {
+    renderMarkdown({ currentItem: current({ name: 'notes.mdx', mimeType: null }) })
     selectStrongText()
 
     await act(async () => {

@@ -595,7 +595,7 @@ export class DriveLinkIntakeService {
       actorUserId,
     })
     if (!isDriveCommentableMarkdownItem(snapshot.current)) {
-      throw new BadRequestException("评论管理仅支持 .md 文档。")
+      throw new BadRequestException("评论管理仅支持 .md 或 Markdown MIME 文档。")
     }
     return { shareId: parsed.shareId, itemId: snapshot.current.id, password }
   }

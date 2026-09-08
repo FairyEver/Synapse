@@ -404,12 +404,12 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_thread_list",
-      description: "List every visible annotation thread on a shared .md document, including anchors, authors, nested comments, and per-comment permissions. Returns itemId and canComment. Author emails are redacted. The anchor field is the current authority; target preserves the original quote snapshot.",
+      description: "List every visible annotation thread on a shared Markdown document identified by a .md name or Markdown MIME type, including anchors, authors, nested comments, and per-comment permissions. Returns itemId and canComment. Author emails are redacted. The anchor field is the current authority; target preserves the original quote snapshot.",
       inputSchema: { type: "object", properties: driveLinkAnnotationBaseProperties, required: ["url"] },
     },
     {
       name: "drive_link_annotation_thread_create",
-      description: "Create an annotation thread on visible text or one whole projected image in a shared .md document. For an image, first call drive_link_read_text and pass { kind: image, imageId } from markdownImages. The server rejects stale, missing, or ambiguous targets instead of guessing.",
+      description: "Create an annotation thread on visible text or one whole projected image in a shared Markdown document identified by a .md name or Markdown MIME type. For an image, first call drive_link_read_text and pass { kind: image, imageId } from markdownImages. The server rejects stale, missing, or ambiguous targets instead of guessing.",
       inputSchema: {
         type: "object",
         properties: {
@@ -423,7 +423,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_comment_create",
-      description: "Add a comment to a shared .md annotation thread. Supply parentCommentId to reply to a specific visible comment.",
+      description: "Add a comment to a shared Markdown annotation thread. Supply parentCommentId to reply to a specific visible comment.",
       inputSchema: {
         type: "object",
         properties: {
@@ -437,7 +437,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_comment_update",
-      description: "Edit one annotation comment authored by the current user on a shared .md document.",
+      description: "Edit one annotation comment authored by the current user on a shared Markdown document.",
       inputSchema: {
         type: "object",
         properties: {
@@ -450,7 +450,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_comment_delete",
-      description: "Delete one permitted annotation comment and all of its descendant replies on a shared .md document. Deleting the first comment removes the entire thread. Call only when the user explicitly identifies the deletion target.",
+      description: "Delete one permitted annotation comment and all of its descendant replies on a shared Markdown document. Deleting the first comment removes the entire thread. Call only when the user explicitly identifies the deletion target.",
       inputSchema: {
         type: "object",
         properties: { ...driveLinkAnnotationBaseProperties, commentId: stringField("Annotation comment id to delete.") },
@@ -459,7 +459,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_link_annotation_thread_delete",
-      description: "Delete one annotation thread on a shared .md document when permitted. Call only when the user explicitly identifies the deletion target.",
+      description: "Delete one annotation thread on a shared Markdown document when permitted. Call only when the user explicitly identifies the deletion target.",
       inputSchema: {
         type: "object",
         properties: { ...driveLinkAnnotationBaseProperties, threadId: stringField("Annotation thread id to delete.") },

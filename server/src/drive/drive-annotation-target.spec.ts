@@ -7,13 +7,14 @@ import {
 } from "./drive-annotation-target"
 
 describe("drive annotation target helpers", () => {
-  it("allows only .md files for comment creation", () => {
+  it("allows comment creation for .md files and Markdown MIME types", () => {
     expect(isCommentableMarkdownItem({ name: "notes.md", type: "file", mimeType: "text/markdown" })).toBe(true)
     expect(isCommentableMarkdownItem({ name: "NOTES.MD", type: "file", mimeType: null })).toBe(true)
+    expect(isCommentableMarkdownItem({ name: "notes", type: "file", mimeType: "text/markdown" })).toBe(true)
+    expect(isCommentableMarkdownItem({ name: "upload.bin", type: "file", mimeType: "text/x-markdown" })).toBe(true)
     expect(isCommentableMarkdownItem({ name: "notes.markdown", type: "file", mimeType: null })).toBe(false)
     expect(isCommentableMarkdownItem({ name: "notes.mdx", type: "file", mimeType: null })).toBe(false)
-    expect(isCommentableMarkdownItem({ name: "upload.bin", type: "file", mimeType: "text/markdown" })).toBe(false)
-    expect(isCommentableMarkdownItem({ name: "folder.md", type: "folder", mimeType: null })).toBe(false)
+    expect(isCommentableMarkdownItem({ name: "folder.md", type: "folder", mimeType: "text/markdown" })).toBe(false)
     expect(isCommentableMarkdownItem({ name: "notes.txt", type: "file", mimeType: "text/plain" })).toBe(false)
   })
 

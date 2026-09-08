@@ -2,11 +2,11 @@
 
 ## Summary
 
-This design adds public discussion comments with conservative stable anchors to cloud drive `.md` files. Comments stay outside the Markdown source. Markdown Render owns comment creation and its authoritative browsing geometry; MDXEditor can display and operate existing comments through a separate editing geometry model. Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and targets outside Markdown rendered text and whole images remain out of scope.
+This design adds public discussion comments with conservative stable anchors to cloud drive Markdown files identified by a `.md` name or a Markdown MIME type (`text/markdown` or `text/x-markdown`). Comments stay outside the Markdown source. Markdown Render owns comment creation and its authoritative browsing geometry; MDXEditor can display and operate existing comments through a separate editing geometry model. Monaco may edit the same source through realtime Yjs collaboration. Comment workflow status, cross-renderer controls, and targets outside Markdown rendered text and whole images remain out of scope.
 
 The implementation scope is intentionally small:
 
-- Only `.md` files are commentable.
+- Files are commentable when their name ends in `.md` or their MIME type is `text/markdown` or `text/x-markdown`.
 - Markdown Render and MDXEditor expose existing comment threads; only Markdown Render creates threads.
 - Users create comments by selecting rendered text or targeting a whole rendered image.
 - Comments are plain text.
@@ -42,7 +42,7 @@ Important boundary:
 
 ### In Scope
 
-- `.md` files in Markdown Render and MDXEditor.
+- Commentable Markdown files in Markdown Render and MDXEditor, including extensionless files with a Markdown MIME type.
 - Internal sticky Markdown Render header.
 - Toggle heading outline.
 - Toggle comment rail.
@@ -68,7 +68,7 @@ Important boundary:
 
 ### Out of Scope
 
-- `.mdx`, `.markdown`, plain text, HTML, PDF, standalone image files, and Code Render comments.
+- Files without a `.md` name or Markdown MIME type, plain text, HTML, PDF, standalone image files, and Code Render comments.
 - Creating a comment from an MDXEditor selection.
 - Image point or region selection and Mermaid comments.
 - Insert-point comment UI.
@@ -178,7 +178,7 @@ Comment rail:
 
 MDXEditor behavior:
 
-- The renderer toolbar exposes `评论 N` for `.md` only. Existing comments open the rail on first load; after the user closes it, the current mount does not reopen it automatically.
+- The renderer toolbar exposes `评论 N` for commentable Markdown files. Existing comments open the rail on first load; after the user closes it, the current mount does not reopen it automatically.
 - Wide layouts use a resizable editor/comment split. Compact layouts use a right-side sheet and list presentation.
 - Rich-text mode supports highlight, rail alignment, navigation, replies, edit, and delete.
 - Source and forced Textarea modes use list presentation. CodeMirror text remains part of the offset stream so later content keeps stable offsets, but ranges touching CodeMirror are not measured precisely.
@@ -432,7 +432,7 @@ DELETE /api/drive/link-intake/annotations/comments
 DELETE /api/drive/link-intake/annotations/threads
 ```
 
-These routes accept only current-origin `/share/...` `.md` targets and reuse password checks, child-item resolution, logged-in identity, annotation permissions, anchor validation, visibility projection, email redaction for list and mutation responses, and audit behavior. Text creation identifies visible text with `{ exact, prefix?, suffix? }`. Image creation uses `{ kind: "image", imageId }`, where `imageId` must come from the current complete `read_text.markdownImages` response; stale or unknown IDs return target-not-found without positional guessing. The server generates V2 selectors against the current Markdown projection/version and rejects missing or ambiguous targets. The API does not expose reassociation, source offsets, CRDT coordinates, file editing, presence, or collaboration-room control.
+These routes accept only current-origin `/share/...` Markdown targets whose name ends in `.md` or whose MIME type is `text/markdown` or `text/x-markdown`. They reuse password checks, child-item resolution, logged-in identity, annotation permissions, anchor validation, visibility projection, email redaction for list and mutation responses, and audit behavior. Text creation identifies visible text with `{ exact, prefix?, suffix? }`. Image creation uses `{ kind: "image", imageId }`, where `imageId` must come from the current complete `read_text.markdownImages` response; stale or unknown IDs return target-not-found without positional guessing. The server generates V2 selectors against the current Markdown projection/version and rejects missing or ambiguous targets. The API does not expose reassociation, source offsets, CRDT coordinates, file editing, presence, or collaboration-room control.
 
 The custom WebSocket endpoint is `/api/drive/collaboration`. Its first message is a versioned JSON join containing owner/share context, item identity, client identity, Epoch, and state vector; credentials remain in existing cookies and the server requires the exact configured public Origin. Binary messages carry Yjs sync/update/awareness. Control messages carry durable acknowledgement, permission changes, Epoch replacement, preview changes, and comment invalidation. Message payloads are capped at 256 KiB and awareness never carries email, document content, or comment content.
 
@@ -638,7 +638,7 @@ Responsibilities:
 
 - Resolve owner item access.
 - Resolve share item access.
-- Validate `.md` support for first version.
+- Validate support through a `.md` name or Markdown MIME type.
 - Validate text/image `targetKind` and target schema.
 - Create thread plus first comment transactionally.
 - Add replies.
@@ -692,7 +692,7 @@ Server tests:
 - Anonymous share viewer can list annotations.
 - Anonymous share viewer cannot create annotations.
 - Logged-in share viewer can create annotations with read-only document access.
-- `.mdx`, `.markdown`, and non-Markdown files reject comment creation in first version.
+- Extensionless and non-`.md` files with a Markdown MIME type accept comment creation; files without either signal reject it.
 - Deleted comments and all of their descendants are omitted from responses.
 - Legacy threads whose first comment was deleted are omitted from responses.
 - Threads created on older versions remain visible and writable after later saves or restores.
@@ -729,7 +729,7 @@ Frontend tests:
 - Image action does not open the lightbox; image click still does.
 - Attached image thread markers stay clickable and count threads.
 - Broken and empty-alt images remain commentable; replaced/deleted images show `图片已替换或删除` without reassociation.
-- Existing `.md` comments appear in MDXEditor, while `.mdx` remains excluded.
+- Existing comments appear in MDXEditor for `.md` files and files identified by a Markdown MIME type.
 - Rich-text comments reposition after editor and rail width changes without changing Markdown Render positioning behavior.
 - Insertions/deletions before a comment shift the local range; edits after it do not; overlapping edits show `编辑中暂未定位`.
 - Source and Textarea modes show comments as a list, and CodeMirror ranges do not claim precise placement.

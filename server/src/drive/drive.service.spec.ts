@@ -3397,7 +3397,7 @@ describe("DriveService", () => {
     })
   })
 
-  it("builds share browser snapshots with rendered markdown previews", async () => {
+  it("builds share browser snapshots with comments for Markdown MIME without a .md extension", async () => {
     const prisma = createPrismaMemory()
     const storage: DriveStoragePort = {
       ...storageMock,
@@ -3408,7 +3408,7 @@ describe("DriveService", () => {
     await prisma.user.create({ data: { id: "reader-1", email: "reader@example.com", passwordHash: "hash" } })
     const file = await createCompletedUpload(service, "user-1", {
       parentId: null,
-      name: "notes.md",
+      name: "notes",
       mimeType: "text/markdown",
     })
     const share = await service.createShare("user-1", file.id, "https://synapse.test")

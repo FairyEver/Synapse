@@ -322,12 +322,15 @@ describe("drive URL helpers", () => {
     expect(isDriveMarkdownItem({ name: "notes.txt", type: "file", mimeType: "text/plain" })).toBe(false)
   })
 
-  it("keeps Drive comments limited to .md files", () => {
-    expect(isDriveCommentableMarkdownItem({ name: "notes.md", type: "file" })).toBe(true)
-    expect(isDriveCommentableMarkdownItem({ name: "NOTES.MD", type: "file" })).toBe(true)
-    expect(isDriveCommentableMarkdownItem({ name: "notes.markdown", type: "file" })).toBe(false)
-    expect(isDriveCommentableMarkdownItem({ name: "component.mdx", type: "file" })).toBe(false)
-    expect(isDriveCommentableMarkdownItem({ name: "folder.md", type: "folder" })).toBe(false)
+  it("recognizes commentable Markdown files by .md extension or MIME type", () => {
+    expect(isDriveCommentableMarkdownItem({ name: "notes.md", type: "file", mimeType: null })).toBe(true)
+    expect(isDriveCommentableMarkdownItem({ name: "NOTES.MD", type: "file", mimeType: null })).toBe(true)
+    expect(isDriveCommentableMarkdownItem({ name: "notes", type: "file", mimeType: "text/markdown" })).toBe(true)
+    expect(isDriveCommentableMarkdownItem({ name: "legacy.bin", type: "file", mimeType: "text/x-markdown" })).toBe(true)
+    expect(isDriveCommentableMarkdownItem({ name: "notes.markdown", type: "file", mimeType: null })).toBe(false)
+    expect(isDriveCommentableMarkdownItem({ name: "component.mdx", type: "file", mimeType: null })).toBe(false)
+    expect(isDriveCommentableMarkdownItem({ name: "folder.md", type: "folder", mimeType: "text/markdown" })).toBe(false)
+    expect(isDriveCommentableMarkdownItem({ name: "notes.txt", type: "file", mimeType: "text/plain" })).toBe(false)
   })
 
   it("defines drive annotation DTOs for text range comments", () => {

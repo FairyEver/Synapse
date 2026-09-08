@@ -124,8 +124,13 @@ export function isDriveMarkdownItem(item: {
 export function isDriveCommentableMarkdownItem(item: {
   readonly type: DriveItemType | string
   readonly name: string
+  readonly mimeType: string | null
 }): boolean {
-  return item.type === "file" && /\.md$/iu.test(item.name)
+  if (item.type !== "file") return false
+  const mimeType = item.mimeType?.toLowerCase() ?? ""
+  return /\.md$/iu.test(item.name)
+    || mimeType === "text/markdown"
+    || mimeType === "text/x-markdown"
 }
 
 export interface DriveAccessSettingsInput {

@@ -307,7 +307,20 @@ describe("DriveLinkIntakeService", () => {
     expect(annotations.getShareAnnotationSnapshot).toHaveBeenCalledWith(expect.objectContaining({ itemId: "item-prd" }))
   })
 
-  it("rejects annotation management for non-share links and non-md items", async () => {
+  it("accepts annotation management for Markdown MIME without a .md extension", async () => {
+    const { service, drive, annotations } = createService()
+    drive.getShareBrowserSnapshot.mockResolvedValueOnce({
+      current: { id: "item-markdown", name: "产品设计说明书", type: "file", mimeType: "text/markdown" },
+      children: [],
+    } as never)
+    annotations.getShareAnnotationSnapshot.mockResolvedValueOnce({ itemId: "item-markdown", canComment: true, threads: [] })
+
+    await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/share/shr_123` }, "user-1"))
+      .resolves.toEqual({ itemId: "item-markdown", canComment: true, threads: [] })
+    expect(annotations.getShareAnnotationSnapshot).toHaveBeenCalledWith(expect.objectContaining({ itemId: "item-markdown" }))
+  })
+
+  it("rejects annotation management for non-share links and non-Markdown items", async () => {
     const { service, drive, annotations } = createService()
     await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/sites/site_123/` }, "user-1"))
       .rejects.toThrow("评论管理仅支持 Synapse 分享链接。")
@@ -317,14 +330,14 @@ describe("DriveLinkIntakeService", () => {
       children: [],
     } as never)
     await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/share/shr_123` }, "user-1"))
-      .rejects.toThrow("评论管理仅支持 .md 文档。")
+      .rejects.toThrow("评论管理仅支持 .md 或 Markdown MIME 文档。")
 
     drive.getShareBrowserSnapshot.mockResolvedValueOnce({
-      current: { id: "item-mdx", name: "notes.mdx", type: "file", mimeType: "text/markdown" },
+      current: { id: "item-mdx", name: "notes.mdx", type: "file", mimeType: null },
       children: [],
     } as never)
     await expect(service.listAnnotationThreads({ url: `${publicAppUrl}/share/shr_123` }, "user-1"))
-      .rejects.toThrow("评论管理仅支持 .md 文档。")
+      .rejects.toThrow("评论管理仅支持 .md 或 Markdown MIME 文档。")
     expect(annotations.getShareAnnotationSnapshot).not.toHaveBeenCalled()
   })
 

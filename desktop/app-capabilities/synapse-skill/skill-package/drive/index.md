@@ -72,7 +72,7 @@ Use these tools only for Synapse Drive:
 
 Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing unrelated to a Drive operation.
 
-Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared `.md` documents. These annotation calls do not join a browser collaboration room, and MCP file content writes continue to use the versioned file APIs.
+Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared Markdown documents identified by a `.md` name or `text/markdown` / `text/x-markdown` MIME type. These annotation calls do not join a browser collaboration room, and MCP file content writes continue to use the versioned file APIs.
 
 Images pasted, dropped, or selected in the browser Markdown/MDX editor use a separate platform-owned `/object/<objectId>` store and do not consume user Drive quota. This browser-only convenience has no MCP upload, list, migration, or ownership tool. MCP uploads continue to follow the local Markdown, HTML, and explicit public-asset rules below.
 
@@ -141,7 +141,7 @@ When the user provides a Synapse `/share/...`, `/sites/...`, or `/files/...` URL
 4. For HTML prototypes, folders, images, or binary attachments that need local inspection, call `app_drive_link_materialize`. The returned `files` and manifest include materialized folders, including empty folders. This writes to the local Drive link intake cache and is subject to local write permission and audit.
 5. For one specific linked file or public asset, call `app_drive_link_download_file`. For `/share` children, prefer the listed `itemId`; for `/sites`, pass the site-relative `path`.
 
-For comments on a `/share/...` `.md` document, use the annotation tools with the same `url`, optional `password`, and optional `itemId` or `path`. `itemId` takes precedence over `path`.
+For comments on a `/share/...` Markdown document identified by a `.md` name or Markdown MIME type, use the annotation tools with the same `url`, optional `password`, and optional `itemId` or `path`. `itemId` takes precedence over `path`.
 
 - List threads before acting so ids and current permissions are fresh. The list includes all visible cross-version threads, nested comments, anchors, and per-comment permissions.
 - Treat `thread.anchor` as the current authoritative position. `thread.target` preserves the original text or image snapshot. Link annotation list and mutation results always return `author.email: null`; use the author id or handle for identity.
@@ -150,7 +150,7 @@ For comments on a `/share/...` `.md` document, use the annotation tools with the
 - Comments cannot be manually reassociated. When text is deleted or an image resource is replaced or deleted, the thread remains visible as unlocated.
 - Reply with `parentCommentId` only when targeting a specific comment. Comment bodies are limited to 4000 characters.
 - Edit only comments whose returned permissions allow editing. Delete only after the user explicitly identifies the exact comment or thread target, even though deletion is registered as an ordinary mutation.
-- Do not use annotation tools for `/sites`, `/files`, folders, non-`.md` files, document editing, presence, or collaboration-room control.
+- Do not use annotation tools for `/sites`, `/files`, folders, files without either a `.md` name or Markdown MIME type, document editing, presence, or collaboration-room control.
 
 Do not use Drive Link tools to edit shared files, import shared content into the user's Drive, or crawl arbitrary websites.
 Do not repeat passwords in the final answer.

@@ -278,7 +278,7 @@ All six tools accept:
 - `itemId` optional: shared Markdown item id; takes precedence over `path`.
 - `path` optional: share-relative Markdown path fallback.
 
-They reject `/sites`, `/files`, folders, and files whose name is not `.md`. They do not expose document editing, presence, or collaboration-room controls.
+They reject `/sites`, `/files`, folders, and files without either a `.md` name or `text/markdown` / `text/x-markdown` MIME type. They do not expose document editing, presence, or collaboration-room controls.
 
 All list and mutation results redact author email addresses as `author.email: null`. In every returned thread, `anchor` is the current authoritative position and `target` preserves the original text or image snapshot. Use `anchor.selectors`, `anchor.positionStatus`, and `anchor.quoteStatus` to inspect the current anchor. There is no manual reassociation operation.
 
