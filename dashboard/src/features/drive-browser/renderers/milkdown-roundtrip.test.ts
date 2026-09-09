@@ -6,7 +6,7 @@ import { schemaCtx } from '@milkdown/kit/core'
 import { uploadConfig } from '@milkdown/kit/plugin/upload'
 import { createDriveEditorTextModel, MILKDOWN_COMMENT_IGNORED_SELECTOR } from './drive-editor-comment-geometry'
 import { configureMilkdownCommonMarkImages } from './milkdown-commonmark-images'
-import { requiresMilkdownSourceMode } from './milkdown-renderer'
+import { preserveMilkdownCommonMarkAutolinks, requiresMilkdownSourceMode } from './milkdown-renderer'
 
 let root: HTMLDivElement | null = null
 let crepe: Crepe | null = null
@@ -77,6 +77,52 @@ describe('Milkdown Markdown round trip', () => {
     ].join('\n')
 
     expect(requiresMilkdownSourceMode(source)).toBe(true)
+  })
+
+  it('restores bare URI and email text without changing explicit autolinks or code', async () => {
+    const source = [
+      'See https://example.com now',
+      'Email test@example.com',
+      'Keep <https://explicit.example/path>',
+      '',
+      '`https://inline.example test@example.com`',
+      '',
+      '```md',
+      'https://fenced.example test@example.com',
+      '```',
+    ].join('\n')
+    crepe = new Crepe({ root, defaultValue: source, features: disabledVisualFeatures() })
+    await crepe.create()
+
+    const serialized = crepe.getMarkdown()
+    expect(serialized).toContain('<https://example.com>')
+    expect(serialized).toContain('<test@example.com>')
+    expect(preserveMilkdownCommonMarkAutolinks(serialized, source)).toContain([
+      'See https://example.com now',
+      'Email test@example.com',
+      'Keep <https://explicit.example/path>',
+      '',
+      '`https://inline.example test@example.com`',
+      '',
+      '```md',
+      'https://fenced.example test@example.com',
+      '```',
+    ].join('\n'))
+  })
+
+  it('does not rewrite a duplicate explicit autolink after the matching bare URI is deleted', () => {
+    const source = [
+      'Same https://example.com',
+      'Same <https://example.com>',
+    ].join('\n')
+
+    expect(preserveMilkdownCommonMarkAutolinks([
+      'Same <https://example.com>',
+      'Same <https://example.com>',
+    ].join('\n'), source)).toBe(source)
+    expect(preserveMilkdownCommonMarkAutolinks('Same <https://example.com>\n', source)).toBe(
+      'Same <https://example.com>\n',
+    )
   })
 
   it('preserves the supported CommonMark and GFM document structures', async () => {

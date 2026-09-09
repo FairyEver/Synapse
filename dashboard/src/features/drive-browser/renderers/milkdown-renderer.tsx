@@ -226,7 +226,7 @@ export function DriveMilkdownRenderer({
     }
     beginExternalMarkdownSync(markdown)
     crepe.editor.action(replaceAll(markdown, true))
-    const normalizedMarkdown = crepe.getMarkdown()
+    const normalizedMarkdown = preserveMilkdownCommonMarkAutolinks(crepe.getMarkdown(), markdown)
     externalMarkdownTargetRef.current = normalizedMarkdown
     savedValueRef.current = normalizedMarkdown
     valueRef.current = normalizedMarkdown
@@ -241,14 +241,14 @@ export function DriveMilkdownRenderer({
     if (pendingMarkdown !== null && pendingMarkdown !== crepe.getMarkdown()) {
       replaceEditorMarkdown(pendingMarkdown)
     } else {
-      const normalizedMarkdown = crepe.getMarkdown()
+      const normalizedMarkdown = preserveMilkdownCommonMarkAutolinks(crepe.getMarkdown(), initialText)
       savedValueRef.current = normalizedMarkdown
       valueRef.current = normalizedMarkdown
       setValue(normalizedMarkdown)
       setDirty(false)
     }
     scheduleGeometry()
-  }, [canEdit, replaceEditorMarkdown, scheduleGeometry])
+  }, [canEdit, initialText, replaceEditorMarkdown, scheduleGeometry])
   const handleCrepeFailure = useCallback(() => {
     crepeRef.current = null
     setParseError('Milkdown 无法安全解析此文档。')
@@ -318,18 +318,19 @@ export function DriveMilkdownRenderer({
 
   const handleMarkdownChange = useCallback((nextValue: string) => {
     if (!canEdit) return
-    valueRef.current = nextValue
-    setValue(nextValue)
+    const sourcePreservedValue = preserveMilkdownCommonMarkAutolinks(nextValue, valueRef.current)
+    valueRef.current = sourcePreservedValue
+    setValue(sourcePreservedValue)
     const matchesExternalTarget = applyingExternalMarkdownRef.current
-      && externalMarkdownTargetRef.current === nextValue
+      && externalMarkdownTargetRef.current === sourcePreservedValue
     if (matchesExternalTarget) {
-      savedValueRef.current = nextValue
+      savedValueRef.current = sourcePreservedValue
       setDirty(false)
       notifyEditorUpdate()
       return
     }
     clearExternalMarkdownSync()
-    setDirty(nextValue !== savedValueRef.current)
+    setDirty(sourcePreservedValue !== savedValueRef.current)
     notifyEditorUpdate()
   }, [canEdit, clearExternalMarkdownSync, notifyEditorUpdate])
 
@@ -450,16 +451,15 @@ export function DriveMilkdownRenderer({
     void uploadDocumentImage(file).then((url) => insertDocumentImageMarkdown(file, url, sourceSelection), () => undefined)
   }, [canEdit, captureSourceSelection, imageUploadContext, insertDocumentImageMarkdown, sourceMode, uploadDocumentImage])
   const insertUploadedImages = useCallback(async (files: readonly File[], sourceSelection?: SourceTextareaSelection) => {
+    const results = await Promise.allSettled(files.map((file) => uploadOptionalDocumentImage(file)))
     const uploadedMarkdown: string[] = []
-    for (const file of files) {
-      try {
-        const url = await uploadOptionalDocumentImage(file)
-        if (sourceSelection) uploadedMarkdown.push(createMilkdownImageMarkdown(file, url))
-        else insertDocumentImageMarkdown(file, url)
-      } catch {
-        return
-      }
-    }
+    results.forEach((result, index) => {
+      if (result.status !== 'fulfilled') return
+      const file = files[index]
+      if (!file) return
+      if (sourceSelection) uploadedMarkdown.push(createMilkdownImageMarkdown(file, result.value))
+      else insertDocumentImageMarkdown(file, result.value)
+    })
     if (sourceSelection && uploadedMarkdown.length > 0) insertSourceMarkdown(uploadedMarkdown.join(''), sourceSelection)
   }, [insertDocumentImageMarkdown, insertSourceMarkdown, uploadOptionalDocumentImage])
   const handlePasteCapture = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
@@ -928,16 +928,176 @@ function escapeMarkdownImageAlt(value: string): string {
 function hasLinkReferenceDefinition(lines: readonly string[]): boolean {
   let fence: { readonly marker: '`' | '~'; readonly length: number } | null = null
   for (const line of lines) {
-    const fenceMatch = /^(?: {0,3})(`{3,}|~{3,})/u.exec(line)
+    const content = stripMarkdownContainerPrefix(line)
+    const fenceMatch = /^(`{3,}|~{3,})(.*)$/u.exec(content)
     if (fenceMatch?.[1]) {
       const marker = fenceMatch[1][0] as '`' | '~'
       if (!fence) fence = { marker, length: fenceMatch[1].length }
-      else if (fence.marker === marker && fenceMatch[1].length >= fence.length) fence = null
+      else if (
+        fence.marker === marker
+        && fenceMatch[1].length >= fence.length
+        && /^\s*$/u.test(fenceMatch[2] ?? '')
+      ) fence = null
       continue
     }
-    if (!fence && /^(?: {0,3})\[(?:\\.|[^\]\\])+\]:/u.test(line)) return true
+    if (!fence && /^\[(?:\\.|[^\]\\])+\]:/u.test(content)) return true
   }
   return false
+}
+
+function stripMarkdownContainerPrefix(line: string): string {
+  let content = line
+  while (true) {
+    const indented = /^ {0,3}/u.exec(content)?.[0] ?? ''
+    content = content.slice(indented.length)
+    const quote = /^> ?/u.exec(content)?.[0]
+    if (quote) {
+      content = content.slice(quote.length)
+      continue
+    }
+    const list = /^(?:[-+*]|\d{1,9}[.)])(?:[ \t]+)/u.exec(content)?.[0]
+    if (list) {
+      content = content.slice(list.length)
+      continue
+    }
+    return content
+  }
+}
+
+export function preserveMilkdownCommonMarkAutolinks(markdown: string, sourceMarkdown: string): string {
+  const sourceLines = sourceMarkdown.split(/\r?\n/u)
+  const markdownParts = markdown.split(/(\r?\n)/u)
+  const markdownLines = markdownParts.filter((_, index) => index % 2 === 0)
+  const sourceCanonicalLines = canonicalizeMilkdownAutolinks(sourceMarkdown).split(/\r?\n/u)
+  const markdownCanonicalLines = canonicalizeMilkdownAutolinks(markdown).split(/\r?\n/u)
+  const sourceLineByMarkdownLine = matchMilkdownAutolinkSourceLines(
+    sourceLines,
+    markdownLines,
+    sourceCanonicalLines,
+    markdownCanonicalLines,
+  )
+
+  return markdownParts.map((part, partIndex) => {
+    if (partIndex % 2 === 1) return part
+    const sourceLineIndex = sourceLineByMarkdownLine.get(partIndex / 2)
+    if (sourceLineIndex === undefined) return part
+    const preferences = collectCommonMarkAutolinkPreferences(sourceLines[sourceLineIndex] ?? '')
+    return transformMilkdownInlineProse(part, (prose) => prose.replace(
+      /<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)>/gu,
+      (autolink, value: string) => preferences.get(value)?.shift() === 'bare' ? value : autolink,
+    ))
+  }).join('')
+}
+
+function canonicalizeMilkdownAutolinks(markdown: string): string {
+  return transformMilkdownMarkdownProse(markdown, (prose) => prose.replace(
+    /<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)>/gu,
+    '$1',
+  ))
+}
+
+function matchMilkdownAutolinkSourceLines(
+  sourceLines: readonly string[],
+  markdownLines: readonly string[],
+  sourceCanonicalLines: readonly string[],
+  markdownCanonicalLines: readonly string[],
+): Map<number, number> {
+  const sourceLineByMarkdownLine = new Map<number, number>()
+  const sourceGroups = new Map<string, number[]>()
+  const markdownCounts = new Map<string, number>()
+  const markdownOccurrences = new Map<string, number>()
+  sourceCanonicalLines.forEach((line, index) => {
+    const indexes = sourceGroups.get(line) ?? []
+    indexes.push(index)
+    sourceGroups.set(line, indexes)
+  })
+  markdownCanonicalLines.forEach((line) => markdownCounts.set(line, (markdownCounts.get(line) ?? 0) + 1))
+
+  markdownCanonicalLines.forEach((canonicalLine, markdownIndex) => {
+    const sourceIndexes = sourceGroups.get(canonicalLine) ?? []
+    if (sourceIndexes.length === 0) return
+    const occurrence = markdownOccurrences.get(canonicalLine) ?? 0
+    markdownOccurrences.set(canonicalLine, occurrence + 1)
+    if (sourceIndexes.length === markdownCounts.get(canonicalLine)) {
+      const sourceIndex = sourceIndexes[occurrence]
+      if (sourceIndex !== undefined) sourceLineByMarkdownLine.set(markdownIndex, sourceIndex)
+      return
+    }
+    const exactSourceIndexes = sourceIndexes.filter((sourceIndex) => sourceLines[sourceIndex] === markdownLines[markdownIndex])
+    if (exactSourceIndexes.length === 1) {
+      sourceLineByMarkdownLine.set(markdownIndex, exactSourceIndexes[0] as number)
+      return
+    }
+    const preferenceSignatures = new Set(sourceIndexes.map((sourceIndex) => (
+      JSON.stringify(Array.from(collectCommonMarkAutolinkPreferences(sourceLines[sourceIndex] ?? '').entries()))
+    )))
+    if (preferenceSignatures.size !== 1) return
+    const sourceIndex = sourceIndexes[Math.min(occurrence, sourceIndexes.length - 1)]
+    if (sourceIndex !== undefined) sourceLineByMarkdownLine.set(markdownIndex, sourceIndex)
+  })
+  return sourceLineByMarkdownLine
+}
+
+function collectCommonMarkAutolinkPreferences(markdown: string): Map<string, Array<'bare' | 'explicit'>> {
+  const preferences = new Map<string, Array<'bare' | 'explicit'>>()
+  transformMilkdownMarkdownProse(markdown, (prose) => {
+    const tokenPattern = /<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)>|https?:\/\/[^\s<>()]*[^\s<>()\].,!?:;]|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?/gu
+    for (const match of prose.matchAll(tokenPattern)) {
+      const token = match[1] ?? match[0]
+      const explicit = match[1] !== undefined
+      const previousCharacter = prose[(match.index ?? 0) - 1] ?? ''
+      if (!explicit && /[:<(]/u.test(previousCharacter)) continue
+      const entries = preferences.get(token) ?? []
+      entries.push(explicit ? 'explicit' : 'bare')
+      preferences.set(token, entries)
+    }
+    return prose
+  })
+  return preferences
+}
+
+function transformMilkdownMarkdownProse(markdown: string, transform: (prose: string) => string): string {
+  let fence: { readonly marker: '`' | '~'; readonly length: number } | null = null
+  return markdown.split(/(\r?\n)/u).map((line) => {
+    if (/^\r?\n$/u.test(line)) return line
+    const content = stripMarkdownContainerPrefix(line)
+    const fenceMatch = /^(`{3,}|~{3,})(.*)$/u.exec(content)
+    if (fenceMatch?.[1]) {
+      const marker = fenceMatch[1][0] as '`' | '~'
+      if (!fence) fence = { marker, length: fenceMatch[1].length }
+      else if (
+        marker === fence.marker
+        && fenceMatch[1].length >= fence.length
+        && /^\s*$/u.test(fenceMatch[2] ?? '')
+      ) fence = null
+      return line
+    }
+    if (fence) return line
+    return transformMilkdownInlineProse(line, transform)
+  }).join('')
+}
+
+function transformMilkdownInlineProse(line: string, transform: (prose: string) => string): string {
+  let result = ''
+  let cursor = 0
+  while (cursor < line.length) {
+    const openingIndex = line.indexOf('`', cursor)
+    if (openingIndex < 0) return result + transform(line.slice(cursor))
+    result += transform(line.slice(cursor, openingIndex))
+    const marker = /^`+/u.exec(line.slice(openingIndex))?.[0] ?? '`'
+    let closingIndex = openingIndex + marker.length
+    while (closingIndex < line.length) {
+      closingIndex = line.indexOf(marker, closingIndex)
+      if (closingIndex < 0) return result + transform(line.slice(openingIndex))
+      const beforeIsBacktick = line[closingIndex - 1] === '`'
+      const afterIsBacktick = line[closingIndex + marker.length] === '`'
+      if (!beforeIsBacktick && !afterIsBacktick) break
+      closingIndex += marker.length
+    }
+    result += line.slice(openingIndex, closingIndex + marker.length)
+    cursor = closingIndex + marker.length
+  }
+  return result
 }
 
 function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {

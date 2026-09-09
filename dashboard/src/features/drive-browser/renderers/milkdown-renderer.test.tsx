@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Crepe } from '@milkdown/crepe'
+import { replaceAll } from '@milkdown/kit/utils'
 import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto, DriveHostedDocumentImageDto } from '@synapse/shared'
 import { ApiError, driveBrowserApi } from '@/lib/api'
 import { DriveMilkdownRenderer, requiresMilkdownSourceMode } from './milkdown-renderer'
@@ -28,6 +29,15 @@ beforeEach(() => {
     observe() {}
     unobserve() {}
     disconnect() {}
+  })
+  vi.stubGlobal('IntersectionObserver', class IntersectionObserver {
+    readonly root = null
+    readonly rootMargin = '0px'
+    readonly thresholds = [0]
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return [] }
   })
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
     matches: false,
@@ -97,6 +107,42 @@ describe('DriveMilkdownRenderer', () => {
       text: `${source}\n`,
       baseVersionId: 'version-1',
     })
+  })
+
+  it.each([
+    '> [unused]: /keep',
+    '> > [unused]: /keep',
+    '- > [unused]: /keep',
+  ])('keeps container-nested link reference definitions byte-for-byte: %s', async (source) => {
+    const saveText = vi.fn(async () => ({} as never))
+    renderRenderer({
+      preview: preview(source),
+      editContext: {
+        reload: vi.fn(async () => ({} as never)),
+        reloading: false,
+        saveText,
+        savingText: false,
+      },
+    })
+
+    expect(requiresMilkdownSourceMode(source)).toBe(true)
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.value).toBe(source)
+
+    await inputTextarea(textarea, `${source}\n`)
+    await pressSaveShortcut()
+
+    expect(saveText).toHaveBeenCalledWith({
+      text: `${source}\n`,
+      baseVersionId: 'version-1',
+    })
+  })
+
+  it.each([
+    '> ```md\n> [docs]: /inside-code\n> ```',
+    '- ```md\n  [docs]: /inside-code\n  ```',
+  ])('does not mistake fenced container content for a link reference definition: %s', (source) => {
+    expect(requiresMilkdownSourceMode(source)).toBe(false)
   })
 
   it('keeps source fallback editable and saves it with the current version', async () => {
@@ -316,6 +362,53 @@ describe('DriveMilkdownRenderer', () => {
     expect(document.querySelector('[data-drive-milkdown-renderer="true"] textarea')).toBeNull()
   })
 
+  it('preserves bare URI and email source text when another rich-text change is saved', async () => {
+    const source = [
+      'See https://example.com now',
+      'Email test@example.com',
+      'Keep <https://explicit.example/path>',
+      '',
+      '`https://inline.example test@example.com`',
+    ].join('\n')
+    const saveText = vi.fn(async () => ({} as never))
+    const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
+    const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
+    if (!editorDescriptor?.get) throw new Error('Expected Crepe editor getter')
+    let crepe: Crepe | null = null
+    vi.spyOn(builderPrototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
+      crepe = this
+      return editorDescriptor.get?.call(this)
+    })
+
+    const renderer = renderRenderer({
+      preview: preview(source),
+      editContext: {
+        reload: vi.fn(async () => ({} as never)),
+        reloading: false,
+        saveText,
+        savingText: false,
+      },
+    })
+    await waitForEditor()
+
+    await pressSaveShortcut()
+    expect(saveText).not.toHaveBeenCalled()
+
+    await act(async () => {
+      if (!crepe) throw new Error('Expected Crepe instance')
+      crepe.editor.action(replaceAll(`Changed\n\n${crepe.getMarkdown()}`))
+      await new Promise((resolve) => window.setTimeout(resolve, 250))
+    })
+    await pressSaveShortcut()
+
+    const submitted = saveText.mock.calls[0]?.[0].text
+    expect(submitted).toContain('See https://example.com now')
+    expect(submitted).toContain('Email test@example.com')
+    expect(submitted).toContain('Keep <https://explicit.example/path>')
+    expect(submitted).toContain('`https://inline.example test@example.com`')
+    await renderer.unmount()
+  })
+
   it('applies external Markdown with replaceAll without recreating the editor', async () => {
     const renderer = renderRenderer({ preview: preview('# First'), editContext: editContext() })
     await waitForEditor()
@@ -463,6 +556,68 @@ describe('DriveMilkdownRenderer', () => {
     expect(document.body.textContent).toContain('上传服务不可用。')
   })
 
+  it('inserts successful source images when another image in the batch fails', async () => {
+    const source = '[docs]: /guide\n\nBody'
+    const first = new File(['first'], 'first.png', { type: 'image/png' })
+    const second = new File(['second'], 'second.png', { type: 'image/png' })
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockImplementation(async (file) => {
+      if (file === second) throw new Error('第二张上传失败。')
+      return hostedImage('/object/first')
+    })
+    renderRenderer({
+      preview: preview(source),
+      editContext: editContext(),
+      imageUploadContext: { kind: 'owner', itemId: 'file' },
+    })
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    textarea.setSelectionRange(source.length, source.length)
+
+    await pasteSourceImages([first, second])
+
+    expect(textarea.value).toBe(`${source}![first](/object/first)`)
+    expect(document.body.textContent).toContain('第二张上传失败。')
+    expect(document.body.textContent).not.toContain('上传中')
+  })
+
+  it('uploads source images concurrently and inserts them in selection order', async () => {
+    const source = '[docs]: /guide\n\nBody'
+    const first = new File(['first'], 'first.png', { type: 'image/png' })
+    const second = new File(['second'], 'second.png', { type: 'image/png' })
+    const firstUpload = deferred<DriveHostedDocumentImageDto>()
+    const secondUpload = deferred<DriveHostedDocumentImageDto>()
+    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockImplementation((file) => (
+      file === first ? firstUpload.promise : secondUpload.promise
+    ))
+    renderRenderer({
+      preview: preview(source),
+      editContext: editContext(),
+      imageUploadContext: { kind: 'owner', itemId: 'file' },
+    })
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    textarea.setSelectionRange(source.length, source.length)
+
+    dispatchSourceImages([first, second])
+    await act(async () => { await Promise.resolve() })
+    expect(upload).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain('上传中')
+
+    await act(async () => {
+      secondUpload.resolve(hostedImage('/object/second'))
+      await secondUpload.promise
+    })
+    expect(textarea.value).toBe(source)
+    expect(document.body.textContent).toContain('上传中')
+
+    await act(async () => {
+      firstUpload.resolve(hostedImage('/object/first'))
+      await firstUpload.promise
+      await new Promise((resolve) => window.setTimeout(resolve, 20))
+    })
+
+    expect(textarea.value).toBe(`${source}![first](/object/first)![second](/object/second)`)
+    expect(document.body.textContent).not.toContain('上传中')
+  })
+
   it('infers an image MIME type from its extension when the browser leaves it empty', async () => {
     const file = new File(['image'], 'camera.jpg', { type: '' })
     const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(hostedImage())
@@ -601,13 +756,13 @@ function editContext(): NonNullable<React.ComponentProps<typeof DriveMilkdownRen
   }
 }
 
-function hostedImage(): DriveHostedDocumentImageDto {
+function hostedImage(url = '/object/img_00000000000000000000000000000000'): DriveHostedDocumentImageDto {
   return {
     imageId: 'img_00000000000000000000000000000000',
     name: 'chart.png',
     size: '5',
     mimeType: 'image/png',
-    url: '/object/img_00000000000000000000000000000000',
+    url,
   }
 }
 
@@ -640,6 +795,30 @@ async function selectImage(file: File): Promise<void> {
     input.dispatchEvent(new Event('change', { bubbles: true }))
     await new Promise((resolve) => window.setTimeout(resolve, 20))
   })
+}
+
+async function pasteSourceImages(files: readonly File[]): Promise<void> {
+  await act(async () => {
+    dispatchSourceImages(files)
+    await new Promise((resolve) => window.setTimeout(resolve, 20))
+  })
+}
+
+function dispatchSourceImages(files: readonly File[]): void {
+  const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+  const event = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', {
+    value: { items: files.map((file) => ({ type: file.type, getAsFile: () => file })) },
+  })
+  textarea.dispatchEvent(event)
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+  return { promise, resolve }
 }
 
 async function waitForEditor(): Promise<void> {
