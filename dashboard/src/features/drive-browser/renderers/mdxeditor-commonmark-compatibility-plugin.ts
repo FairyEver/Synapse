@@ -4,22 +4,38 @@ import {
   addLexicalNode$,
   addMdastExtension$,
   addSyntaxExtension$,
+  GenericHTMLNode,
+  isMdastHTMLNode,
   lexical,
   realmPlugin,
 } from '@mdxeditor/editor'
 import type {
   FromMarkdownOptions,
+  KnownHTMLTagType,
   LexicalExportVisitor,
+  MdastHTMLNode,
   MdastImportVisitor,
+  MdxNodeType,
+  SerializedGenericHTMLNode,
   ToMarkdownOptions,
 } from '@mdxeditor/editor'
 
 type MarkdownSyntaxExtension = NonNullable<FromMarkdownOptions['extensions']>[number]
 type MarkdownMdastExtension = NonNullable<FromMarkdownOptions['mdastExtensions']>[number]
+type MdxJsxAttributes = ReturnType<GenericHTMLNode['getAttributes']>
 type MdastHtmlComment = {
   readonly type: 'html'
   readonly value: string
 }
+type MdastHardBreak = {
+  readonly type: 'break'
+}
+type MdastText = {
+  readonly type: 'text'
+  readonly value: string
+}
+type MdastNode = Parameters<Exclude<MdastImportVisitor<MdastHTMLNode>['testNode'], string>>[0]
+type MdastParagraph = Extract<MdastNode, { readonly type: 'paragraph' }>
 type SerializedHtmlCommentNode = lexical.SerializedLexicalNode & {
   readonly type: 'html-comment'
   readonly version: 1
@@ -131,6 +147,136 @@ export class HtmlCommentNode extends lexical.DecoratorNode<null> {
   }
 }
 
+export class CommentExcludedHtmlBlockNode extends GenericHTMLNode {
+  static getType(): string {
+    return 'comment-excluded-html-block'
+  }
+
+  static clone(node: CommentExcludedHtmlBlockNode): CommentExcludedHtmlBlockNode {
+    return new CommentExcludedHtmlBlockNode(
+      node.getTag(),
+      node.getNodeType(),
+      node.getAttributes(),
+      node.getKey(),
+    )
+  }
+
+  static importJSON(serializedNode: SerializedGenericHTMLNode): CommentExcludedHtmlBlockNode {
+    return $createCommentExcludedHtmlBlockNode(
+      serializedNode.tag,
+      serializedNode.mdxType,
+      serializedNode.attributes,
+    )
+  }
+
+  constructor(tag: KnownHTMLTagType, type: MdxNodeType, attributes: MdxJsxAttributes, key?: lexical.NodeKey) {
+    super(tag, type, attributes, key)
+  }
+
+  createDOM(): HTMLElement {
+    const element = super.createDOM()
+    element.dataset.driveMarkdownCommentExcluded = 'true'
+    return element
+  }
+
+  exportJSON(): SerializedGenericHTMLNode {
+    return {
+      ...super.exportJSON(),
+      type: 'comment-excluded-html-block' as 'generic-html',
+    }
+  }
+}
+
+export class CommentExcludedParagraphBreakNode extends lexical.LineBreakNode {
+  static getType(): string {
+    return 'comment-excluded-paragraph-break'
+  }
+
+  static clone(node: CommentExcludedParagraphBreakNode): CommentExcludedParagraphBreakNode {
+    return new CommentExcludedParagraphBreakNode(node.getKey())
+  }
+
+  static importJSON(): CommentExcludedParagraphBreakNode {
+    return $createCommentExcludedParagraphBreakNode()
+  }
+
+  createDOM(): HTMLElement {
+    const element = document.createElement('br')
+    element.dataset.driveMarkdownCommentExcluded = 'true'
+    return element
+  }
+
+  exportJSON(): lexical.SerializedLineBreakNode {
+    return {
+      ...super.exportJSON(),
+      type: 'comment-excluded-paragraph-break' as 'linebreak',
+    }
+  }
+}
+
+function $createCommentExcludedParagraphBreakNode(): CommentExcludedParagraphBreakNode {
+  return lexical.$applyNodeReplacement(new CommentExcludedParagraphBreakNode())
+}
+
+function $createCommentExcludedHtmlBlockNode(
+  tag: KnownHTMLTagType,
+  type: MdxNodeType,
+  attributes: MdxJsxAttributes,
+): CommentExcludedHtmlBlockNode {
+  return lexical.$applyNodeReplacement(new CommentExcludedHtmlBlockNode(tag, type, attributes))
+}
+
+function requireNamedMdxJsxAttributes(attributes: MdastHTMLNode['attributes']): MdxJsxAttributes {
+  if (attributes.every(
+    (attribute): attribute is MdxJsxAttributes[number] => attribute.type === 'mdxJsxAttribute',
+  )) return attributes
+  throw new Error('CommonMark HTML elements cannot contain spread attributes')
+}
+
+export const commentExcludedHtmlBlockImportVisitor: MdastImportVisitor<MdastHTMLNode> = {
+  testNode: (node): node is MdastHTMLNode => isMdastHTMLNode(node) && node.type === 'mdxJsxFlowElement',
+  visitNode({ mdastNode, actions }) {
+    actions.addAndStepInto($createCommentExcludedHtmlBlockNode(
+      mdastNode.name,
+      mdastNode.type,
+      requireNamedMdxJsxAttributes(mdastNode.attributes),
+    ))
+  },
+  priority: 100,
+}
+
+export const commentAwareParagraphImportVisitor: MdastImportVisitor<MdastParagraph> = {
+  testNode: 'paragraph',
+  visitNode({ mdastNode, mdastParent, lexicalParent, actions }) {
+    const parentType = lexicalParent.getType()
+    if (
+      (parentType === 'listitem' || parentType === 'admonition')
+      && lexical.$isElementNode(lexicalParent)
+    ) {
+      const nodeIndex = mdastParent?.children.indexOf(mdastNode) ?? -1
+      const previousSibling = nodeIndex > 0 ? mdastParent?.children[nodeIndex - 1] : undefined
+      if (parentType === 'listitem' && previousSibling?.type === 'paragraph') {
+        lexicalParent.append(
+          $createCommentExcludedParagraphBreakNode(),
+          $createCommentExcludedParagraphBreakNode(),
+        )
+      }
+      actions.visitChildren(mdastNode, lexicalParent)
+      return
+    }
+    actions.addAndStepInto(lexical.$createParagraphNode())
+  },
+  priority: 100,
+}
+
+export const commentExcludedParagraphBreakExportVisitor: LexicalExportVisitor<CommentExcludedParagraphBreakNode, MdastText> = {
+  testLexicalNode: (node): node is CommentExcludedParagraphBreakNode => node instanceof CommentExcludedParagraphBreakNode,
+  visitLexicalNode({ mdastParent, actions }) {
+    actions.appendToParent(mdastParent, { type: 'text', value: '\n' })
+  },
+  priority: 200,
+}
+
 export const htmlCommentImportVisitor: MdastImportVisitor<MdastHtmlComment> = {
   testNode: (node): node is MdastHtmlComment => node.type === 'html' && /^<!--[\s\S]*-->$/u.test(node.value),
   visitNode({ mdastNode, mdastParent, actions }) {
@@ -150,17 +296,33 @@ export const htmlCommentExportVisitor: LexicalExportVisitor<HtmlCommentNode, Mda
   priority: 100,
 }
 
+export const commonMarkHardBreakExportVisitor: LexicalExportVisitor<lexical.LineBreakNode, MdastHardBreak> = {
+  testLexicalNode: lexical.$isLineBreakNode,
+  visitLexicalNode({ mdastParent, actions }) {
+    actions.appendToParent(mdastParent, { type: 'break' })
+  },
+  priority: 100,
+}
+
 export const commonMarkTextCompatibilityPlugin = realmPlugin({
   init(realm) {
     realm.pub(addSyntaxExtension$, commonMarkLessThanOrEqualSyntaxExtension)
     realm.pub(addMdastExtension$, commonMarkHtmlCommentFromMarkdownExtension)
     realm.pub(addLexicalNode$, HtmlCommentNode)
+    realm.pub(addLexicalNode$, CommentExcludedHtmlBlockNode)
+    realm.pub(addLexicalNode$, CommentExcludedParagraphBreakNode)
     realm.pub(addImportVisitor$, htmlCommentImportVisitor)
+    realm.pub(addImportVisitor$, commentExcludedHtmlBlockImportVisitor)
+    realm.pub(addImportVisitor$, commentAwareParagraphImportVisitor)
     realm.pub(addExportVisitor$, htmlCommentExportVisitor)
+    realm.pub(addExportVisitor$, commonMarkHardBreakExportVisitor)
+    realm.pub(addExportVisitor$, commentExcludedParagraphBreakExportVisitor)
   },
 })
 
 export function prepareCommonMarkForMdxEditor(markdown: string): PreparedCommonMark {
+  if (containsMixedTaskList(markdown)) return { markdown, requiresSourceMode: true }
+
   let fence: { readonly marker: '`' | '~'; readonly length: number } | null = null
   let inlineCodeMarker: string | null = null
   let htmlCommentOpen = false
@@ -290,6 +452,43 @@ export function prepareCommonMarkForMdxEditor(markdown: string): PreparedCommonM
   }).join('')
 
   return { markdown: prepared, requiresSourceMode: false }
+}
+
+function containsMixedTaskList(markdown: string): boolean {
+  const listStates = new Map<number, { hasPlainItem: boolean; hasTaskItem: boolean }>()
+  let fence: { readonly marker: '`' | '~'; readonly length: number } | null = null
+
+  for (const line of markdown.split(/\r?\n/u)) {
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/u.exec(line)
+    if (fenceMatch) {
+      const sequence = fenceMatch[1]
+      const marker = sequence[0] as '`' | '~'
+      if (!fence) fence = { marker, length: sequence.length }
+      else if (marker === fence.marker && sequence.length >= fence.length) fence = null
+      continue
+    }
+    if (fence) continue
+
+    const itemMatch = /^([ \t]*)[*+-][ \t]+(?:\[([ xX])\](?:[ \t]+|$))?/u.exec(line)
+    if (itemMatch) {
+      const indent = markdownIndentWidth(itemMatch[1])
+      for (const existingIndent of listStates.keys()) {
+        if (existingIndent > indent) listStates.delete(existingIndent)
+      }
+      const state = listStates.get(indent) ?? { hasPlainItem: false, hasTaskItem: false }
+      if (itemMatch[2] === undefined) state.hasPlainItem = true
+      else state.hasTaskItem = true
+      if (state.hasPlainItem && state.hasTaskItem) return true
+      listStates.set(indent, state)
+      continue
+    }
+
+    if (!line.trim()) continue
+    const indent = markdownLeadingIndent(line)
+    if ([...listStates.keys()].some((listIndent) => indent > listIndent)) continue
+    listStates.clear()
+  }
+  return false
 }
 
 export const commonMarkToMarkdownOptions = {

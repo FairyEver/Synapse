@@ -4,6 +4,7 @@ import {
   addLexicalNode$,
   addMdastExtension$,
   addSyntaxExtension$,
+  lexical,
 } from '@mdxeditor/editor'
 import { describe, expect, it, vi } from 'vitest'
 import {
@@ -14,6 +15,12 @@ import {
   htmlCommentExportVisitor,
   htmlCommentImportVisitor,
   HtmlCommentNode,
+  CommentExcludedHtmlBlockNode,
+  commentExcludedHtmlBlockImportVisitor,
+  commonMarkHardBreakExportVisitor,
+  CommentExcludedParagraphBreakNode,
+  commentAwareParagraphImportVisitor,
+  commentExcludedParagraphBreakExportVisitor,
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
 
@@ -27,8 +34,14 @@ describe('MDXEditor CommonMark compatibility', () => {
     expect(pub).toHaveBeenCalledWith(addSyntaxExtension$, commonMarkLessThanOrEqualSyntaxExtension)
     expect(pub).toHaveBeenCalledWith(addMdastExtension$, commonMarkHtmlCommentFromMarkdownExtension)
     expect(pub).toHaveBeenCalledWith(addLexicalNode$, HtmlCommentNode)
+    expect(pub).toHaveBeenCalledWith(addLexicalNode$, CommentExcludedHtmlBlockNode)
+    expect(pub).toHaveBeenCalledWith(addLexicalNode$, CommentExcludedParagraphBreakNode)
     expect(pub).toHaveBeenCalledWith(addImportVisitor$, htmlCommentImportVisitor)
+    expect(pub).toHaveBeenCalledWith(addImportVisitor$, commentExcludedHtmlBlockImportVisitor)
+    expect(pub).toHaveBeenCalledWith(addImportVisitor$, commentAwareParagraphImportVisitor)
     expect(pub).toHaveBeenCalledWith(addExportVisitor$, htmlCommentExportVisitor)
+    expect(pub).toHaveBeenCalledWith(addExportVisitor$, commonMarkHardBreakExportVisitor)
+    expect(pub).toHaveBeenCalledWith(addExportVisitor$, commentExcludedParagraphBreakExportVisitor)
   })
 
   it('claims a less-than sign only when it starts a less-than-or-equal operator', () => {
@@ -196,6 +209,59 @@ describe('MDXEditor CommonMark compatibility', () => {
       ].join('\n'),
       requiresSourceMode: false,
     })
+  })
+
+  it('uses source mode when one list mixes plain and task items', () => {
+    const markdown = [
+      '- plain item',
+      '- [x] task item',
+    ].join('\n')
+
+    expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
+      markdown,
+      requiresSourceMode: true,
+    })
+    expect(prepareCommonMarkForMdxEditor([
+      '- plain item',
+      '',
+      'Separate paragraph',
+      '',
+      '- [x] task item',
+    ].join('\n')).requiresSourceMode).toBe(false)
+  })
+
+  it('adds comment-excluded separators between loose list item paragraphs', () => {
+    const editor = lexical.createEditor({
+      nodes: [CommentExcludedParagraphBreakNode],
+      onError(error) {
+        throw error
+      },
+    })
+    const visitChildren = vi.fn()
+    const paragraph = { type: 'paragraph', children: [] }
+    const mdastParent = {
+      type: 'listItem',
+      children: [{ type: 'paragraph', children: [] }, paragraph],
+    }
+
+    editor.update(() => {
+      const lexicalParent = lexical.$createParagraphNode()
+      lexical.$getRoot().append(lexicalParent)
+      vi.spyOn(lexicalParent, 'getType').mockReturnValue('listitem')
+
+      commentAwareParagraphImportVisitor.visitNode({
+        mdastNode: paragraph,
+        mdastParent,
+        lexicalParent,
+        actions: { visitChildren },
+      } as never)
+
+      expect(lexicalParent.getChildren()).toHaveLength(2)
+      expect(lexicalParent.getChildren().every(
+        (node) => node instanceof CommentExcludedParagraphBreakNode,
+      )).toBe(true)
+      expect(visitChildren).toHaveBeenCalledWith(paragraph, lexicalParent)
+    }, { discrete: true })
   })
 })
 
