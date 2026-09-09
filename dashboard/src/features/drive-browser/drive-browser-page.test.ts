@@ -775,7 +775,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-code-renderer="true"')
   })
 
-  it('renders Milkdown content without falling back to code renderer', () => {
+  it('renders a loading state for a persisted Milkdown selection during SSR', () => {
     const snapshot = createSnapshot({
       current: {
         ...baseCurrent(),
@@ -792,15 +792,12 @@ describe('drive browser view model', () => {
       },
     })
 
-    const html = renderDriveRendererContent({
-      snapshot,
-      selected: { id: 'milkdown', label: 'Milkdown', container: 'full' },
-      body: true,
-    })
+    const html = renderToStaticMarkup(
+      createElement(DriveSingleFileReaderView, { snapshot, initialRendererId: 'milkdown' })
+    )
 
-    expect(html).toContain('data-drive-milkdown-renderer="true"')
-    expect(html).toContain('data-milkdown="true"')
-    expect(html).not.toContain('data-drive-code-renderer="true"')
+    expect(html).toContain('role="status"')
+    expect(html).toContain('加载中')
   })
 
   it('renders markdown outline links when preview contains headings', () => {
