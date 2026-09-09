@@ -39,4 +39,15 @@ describe('drive markdown list markers in Chromium', () => {
       '"3. "',
     ])
   })
+
+  it('keeps the native decimal marker until a generated marker is available', () => {
+    root = document.createElement('main')
+    root.className = `markdown-body [&_ol]:list-decimal! ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`
+    root.innerHTML = '<ol><li>一级一</li></ol>'
+    document.body.append(root)
+
+    const item = root.querySelector('li')
+    expect(item).not.toBeNull()
+    expect(getComputedStyle(item!, '::marker').content).toBe('normal')
+  })
 })

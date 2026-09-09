@@ -125,6 +125,7 @@ export function DriveMDXeditorRenderer({
   const initialText = preparedInitialDocument.markdown
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
+  const listMarkerObserverCleanupRef = useRef<(() => void) | null>(null)
   const editorContentHostRef = useRef<HTMLDivElement | null>(null)
   const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
   const editorScrollFrameRef = useRef<number | null>(null)
@@ -145,6 +146,12 @@ export function DriveMDXeditorRenderer({
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   const [editorViewMode, setEditorViewMode] = useState<ViewMode>('rich-text')
+  const setEditorContainerRef = useCallback((root: HTMLDivElement | null) => {
+    listMarkerObserverCleanupRef.current?.()
+    listMarkerObserverCleanupRef.current = null
+    editorContainerRef.current = root
+    if (root) listMarkerObserverCleanupRef.current = observeDriveHierarchicalListMarkers(root)
+  }, [])
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [compactCommentsOpen, setCompactCommentsOpen] = useState(false)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -406,10 +413,9 @@ export function DriveMDXeditorRenderer({
     clearExternalMarkdownSync()
   }, [clearExternalMarkdownSync])
 
-  useLayoutEffect(() => {
-    const root = editorContainerRef.current
-    if (!root) return
-    return observeDriveHierarchicalListMarkers(root)
+  useEffect(() => () => {
+    listMarkerObserverCleanupRef.current?.()
+    listMarkerObserverCleanupRef.current = null
   }, [])
 
   useEffect(() => {
@@ -674,7 +680,7 @@ export function DriveMDXeditorRenderer({
   )
   const editorView = (
     <div
-      ref={editorContainerRef}
+      ref={setEditorContainerRef}
       data-drive-mdxeditor-scroll='true'
       className='h-full min-h-0 overflow-auto overscroll-contain'
       onScroll={handleEditorScroll}

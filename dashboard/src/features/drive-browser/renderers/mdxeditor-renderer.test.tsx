@@ -171,7 +171,10 @@ vi.mock('@mdxeditor/editor', async () => {
             onChange?.(event.currentTarget.value, event.currentTarget.dataset.initialNormalize === 'true')
             reportParseError(event.currentTarget.value)
           },
-        })
+        }),
+        value.includes('盘点创建')
+          ? React.createElement('ol', { 'data-mdx-list-fixture': 'true' }, React.createElement('li', null, '盘点创建'))
+          : null,
       )
     }),
     BlockTypeSelect: () => {
@@ -646,7 +649,7 @@ describe('DriveMDXeditorRenderer', () => {
 
     const contentClasses = editor().dataset.contentEditableClass?.split(' ') ?? []
     expect(contentClasses).toContain('drive-mdxeditor-content')
-    expect(contentClasses).toContain('[&_ol>li::marker]:content-[attr(data-drive-list-marker)_"_"]!')
+    expect(contentClasses).toContain('[&_ol>li[data-drive-list-marker]::marker]:content-[attr(data-drive-list-marker)_"_"]!')
     expect(contentClasses).not.toContain('[&_ul]:list-disc')
     expect(contentClasses).not.toContain('[&_ol]:list-decimal')
     expect(contentClasses).not.toContain('[&_ul]:pl-6')
@@ -1113,6 +1116,18 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('First comment')
     expect(document.body.textContent).toContain('编辑中暂未定位')
     expect(document.body.textContent).not.toContain('原文已修改或删除')
+  })
+
+  it('keeps ordered-list markers after opening comments remounts the editor view', () => {
+    annotationsMock.threads = [commentThread()]
+    renderRenderer({
+      preview: { ...basePreview(), text: '1. 盘点创建' },
+      annotationContext: { context: 'owner', itemId: 'file' },
+    })
+
+    const listItem = document.querySelector('[data-mdx-list-fixture="true"] > li')
+    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
+    expect(listItem?.getAttribute('data-drive-list-marker')).toBe('1.')
   })
 
   it('shows comments directly as a list after Markdown parsing falls back to source mode', async () => {
