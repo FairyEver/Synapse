@@ -146,6 +146,31 @@ describe('MDXEditor list integration', () => {
     expect(editorRef.current?.getMarkdown()).toContain('* <https://example.com/list>')
   })
 
+  it('keeps bare URLs as source text when automatic linking is disabled', async () => {
+    const editorRef = createRef<MDXEditorMethods>()
+    const onChange = vi.fn()
+    const markdown = '来源：https://example.com/docs'
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+
+    await act(async () => {
+      root?.render(
+        <MDXEditor
+          ref={editorRef}
+          markdown={markdown}
+          onChange={onChange}
+          toMarkdownOptions={commonMarkToMarkdownOptions}
+          plugins={[commonMarkTextCompatibilityPlugin(), linkPlugin({ disableAutoLink: true })]}
+        />
+      )
+      await Promise.resolve()
+    })
+
+    expect(editorRef.current?.getMarkdown()).toBe(markdown)
+    expect(onChange.mock.calls.every(([, initialMarkdownNormalize]) => initialMarkdownNormalize)).toBe(true)
+  })
+
   it('parses and round-trips programming-language generics in Markdown text', async () => {
     const editorRef = createRef<MDXEditorMethods>()
     const onError = vi.fn()

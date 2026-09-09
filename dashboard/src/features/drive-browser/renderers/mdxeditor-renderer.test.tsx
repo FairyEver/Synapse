@@ -22,6 +22,7 @@ import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-r
 let objectUrlIndex = 0
 const mdxEditorMockState = vi.hoisted(() => ({
   imagePreviewHandler: null as ((imageSource: string) => Promise<string>) | null,
+  linkAutoLinkDisabled: null as boolean | null,
 }))
 const layoutModeMock = vi.hoisted(() => ({ value: 'regular' as 'regular' | 'compact' }))
 const annotationsMock = vi.hoisted(() => ({
@@ -226,7 +227,10 @@ vi.mock('@mdxeditor/editor', async () => {
       }
     },
     linkDialogPlugin: () => ({ name: 'linkDialogPlugin' }),
-    linkPlugin: () => ({ name: 'linkPlugin' }),
+    linkPlugin: (input?: { readonly disableAutoLink?: boolean }) => {
+      mdxEditorMockState.linkAutoLinkDisabled = Boolean(input?.disableAutoLink)
+      return { name: 'linkPlugin' }
+    },
     listsPlugin: () => ({ name: 'listsPlugin' }),
     markdownShortcutPlugin: () => ({ name: 'markdownShortcutPlugin' }),
     GenericHTMLNode: class {},
@@ -273,6 +277,7 @@ beforeEach(() => {
   annotationsMock.loading = false
   annotationsMock.error = null
   layoutModeMock.value = 'regular'
+  mdxEditorMockState.linkAutoLinkDisabled = null
 })
 
 afterEach(() => {
@@ -610,6 +615,12 @@ describe('DriveMDXeditorRenderer', () => {
       'InsertThematicBreak',
     ]))
     expect(buttonWithText('插入图片')).toBeInstanceOf(HTMLButtonElement)
+  })
+
+  it('disables automatic bare URL rewriting', () => {
+    renderRenderer({ edit: editable() })
+
+    expect(mdxEditorMockState.linkAutoLinkDisabled).toBe(true)
   })
 
   it('localizes mdxeditor toolbar labels through the translation prop', () => {

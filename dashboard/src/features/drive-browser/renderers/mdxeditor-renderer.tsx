@@ -352,7 +352,7 @@ export function DriveMDXeditorRenderer({
     orderedListStartPlugin(),
     quotePlugin(),
     thematicBreakPlugin(),
-    linkPlugin(),
+    linkPlugin({ disableAutoLink: true }),
     linkDialogPlugin(),
     imagePlugin({
       imageUploadHandler: handleDocumentImageUpload,
