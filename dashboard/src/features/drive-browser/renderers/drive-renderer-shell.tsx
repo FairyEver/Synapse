@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   type DriveCollaborationJoinContext,
   type DriveBrowserEditUnavailableReason,
@@ -7,6 +7,7 @@ import {
 } from '@synapse/shared'
 import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { cn } from '@/lib/utils'
 import type { DriveDocumentImageUploadContext } from '@/lib/api'
 import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
@@ -29,6 +30,7 @@ import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
+import { DriveMilkdownRenderer } from './milkdown-renderer'
 
 const READING_CONTAINER_CLASSNAME = 'mx-auto h-full w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
@@ -92,6 +94,9 @@ export function DriveRendererShell({
     initialRenderer?.id ?? options[0]?.id ?? null
   )
   const [rendererChangeError, setRendererChangeError] = useState<string | null>(null)
+  const rendererRefreshQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const rendererRefreshesRef = useRef(new Map<string, Promise<void>>())
+  const rendererRefreshCountRef = useRef(0)
   const activeRendererId = rendererId === undefined ? internalRendererId : rendererId
   const selected = findDriveRendererOption(snapshot, activeRendererId)
   const applyRenderer = (id: DriveRendererId) => {
@@ -102,20 +107,35 @@ export function DriveRendererShell({
     setInternalRendererId(id)
   }
   const setRenderer = (id: DriveRendererId) => {
+    if (id === selected?.id || editContext?.reloading || editContext?.savingText || rendererRefreshCountRef.current > 0) return
     setRendererChangeError(null)
     trackDriveEvent({
       eventKey: 'web.drive.renderer.select',
       component: 'drive-renderer',
       action: 'select',
     })
-    void refreshBeforeDriveRendererSwitch({
-      id,
-      collaborationEnabled: Boolean(snapshot.collaboration?.enabled),
-      reload: editContext?.reload,
-    }).then(() => applyRenderer(id)).catch(() => {
-      setRendererChangeError('无法加载最新版本。')
-    })
+    applyRenderer(id)
   }
+  const refreshRendererMount = useCallback((id: DriveRendererId, mountKey: string) => {
+    const existingRefresh = rendererRefreshesRef.current.get(mountKey)
+    if (existingRefresh) return existingRefresh
+    rendererRefreshCountRef.current += 1
+    const refresh = rendererRefreshQueueRef.current
+      .catch(() => undefined)
+      .then(() => refreshBeforeDriveRendererMount({
+        id,
+        collaborationEnabled: Boolean(snapshot.collaboration?.enabled),
+        reload: editContext?.reload,
+      }))
+    rendererRefreshQueueRef.current = refresh
+    rendererRefreshesRef.current.set(mountKey, refresh)
+    const clearRefresh = () => {
+      if (rendererRefreshesRef.current.get(mountKey) === refresh) rendererRefreshesRef.current.delete(mountKey)
+      rendererRefreshCountRef.current -= 1
+    }
+    void refresh.then(clearRefresh, clearRefresh)
+    return refresh
+  }, [editContext?.reload, snapshot.collaboration?.enabled])
 
   useEffect(() => {
     if (rendererId !== undefined) return
@@ -123,11 +143,14 @@ export function DriveRendererShell({
       findDriveRendererOption(snapshot, current)?.id ?? findDriveRendererOption(snapshot, initialRendererId)?.id ?? null
     )
   }, [initialRendererId, rendererId, snapshot])
+  useEffect(() => {
+    setRendererChangeError(null)
+  }, [selected?.id, snapshot.current.id])
 
   if (!selected) return null
 
   return (
-    <DriveRendererToolbarProvider key={selected.id}>
+    <DriveRendererToolbarProvider key={`${snapshot.current.id}:${selected.id}`}>
       <DriveRendererShellChrome
         snapshot={snapshot}
         body={body}
@@ -137,6 +160,8 @@ export function DriveRendererShell({
         editContext={editContext}
         annotationContext={annotationContext}
         rendererChangeError={rendererChangeError}
+        onRendererMountRefresh={refreshRendererMount}
+        onRendererMountRefreshError={() => setRendererChangeError('无法加载最新版本。')}
       />
     </DriveRendererToolbarProvider>
   )
@@ -151,6 +176,8 @@ function DriveRendererShellChrome({
   editContext,
   annotationContext,
   rendererChangeError,
+  onRendererMountRefresh,
+  onRendererMountRefreshError,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly body: boolean
@@ -160,11 +187,28 @@ function DriveRendererShellChrome({
   readonly editContext?: DriveRendererEditContext
   readonly annotationContext?: DriveAnnotationContext
   readonly rendererChangeError: string | null
+  readonly onRendererMountRefresh: (id: DriveRendererId, mountKey: string) => Promise<void>
+  readonly onRendererMountRefreshError: () => void
 }) {
   const { hasUnsavedChanges, items } = useDriveRendererToolbar()
   const [versionsOpen, setVersionsOpen] = useState(false)
+  const [pendingRendererId, setPendingRendererId] = useState<DriveRendererId | null>(null)
   const versionItemId = getDriveFileVersionItemId(snapshot)
   const useFloatingChrome = body && selected.id === 'iframe'
+  const requestRendererChange = (id: DriveRendererId) => {
+    if (id === selected.id || editContext?.reloading || editContext?.savingText) return
+    if (hasUnsavedChanges) {
+      setPendingRendererId(id)
+      return
+    }
+    onSelect(id)
+  }
+  const confirmRendererChange = () => {
+    if (!pendingRendererId || editContext?.reloading || editContext?.savingText) return
+    const nextRendererId = pendingRendererId
+    setPendingRendererId(null)
+    onSelect(nextRendererId)
+  }
 
   return (
     <FilePreviewLayout className='flex h-full min-h-0 w-full flex-col overflow-hidden bg-background'>
@@ -174,7 +218,7 @@ function DriveRendererShellChrome({
           rendererItems={items}
           rendererOptions={options}
           selectedRendererId={selected.id}
-          onRendererChange={onSelect}
+          onRendererChange={requestRendererChange}
           onOpenVersions={() => setVersionsOpen(true)}
         />
       ) : (
@@ -183,7 +227,7 @@ function DriveRendererShellChrome({
           rendererItems={items}
           rendererOptions={options}
           selectedRendererId={selected.id}
-          onRendererChange={onSelect}
+          onRendererChange={requestRendererChange}
           onOpenVersions={() => setVersionsOpen(true)}
         />
       )}
@@ -193,12 +237,14 @@ function DriveRendererShellChrome({
         </Alert>
       ) : null}
       <div className='min-h-0 flex-1 overflow-hidden'>
-        <DriveRendererContent
+        <DriveRendererMountGate
           snapshot={snapshot}
           selected={selected}
           body={body}
           editContext={editContext}
           annotationContext={annotationContext}
+          onRefresh={onRendererMountRefresh}
+          onRefreshError={onRendererMountRefreshError}
         />
       </div>
       {versionsOpen && versionItemId ? (
@@ -210,16 +256,85 @@ function DriveRendererShellChrome({
           onOpenChange={setVersionsOpen}
         />
       ) : null}
+      <ConfirmDialog
+        contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
+        open={pendingRendererId !== null}
+        onOpenChange={(open) => { if (!open) setPendingRendererId(null) }}
+        title='放弃本地修改？'
+        desc='切换打开方式会放弃当前未保存编辑。'
+        cancelBtnText='取消'
+        confirmText='放弃并切换'
+        disabled={Boolean(editContext?.reloading || editContext?.savingText)}
+        isLoading={Boolean(editContext?.reloading || editContext?.savingText)}
+        handleConfirm={confirmRendererChange}
+      />
     </FilePreviewLayout>
   )
 }
 
-export async function refreshBeforeDriveRendererSwitch(input: {
+function DriveRendererMountGate({
+  snapshot,
+  selected,
+  body,
+  editContext,
+  annotationContext,
+  onRefresh,
+  onRefreshError,
+}: {
+  readonly snapshot: DriveBrowserSnapshotDto
+  readonly selected: DriveRendererOption
+  readonly body: boolean
+  readonly editContext?: DriveRendererEditContext
+  readonly annotationContext?: DriveAnnotationContext
+  readonly onRefresh: (id: DriveRendererId, mountKey: string) => Promise<void>
+  readonly onRefreshError: () => void
+}) {
+  const refreshRequired = (selected.id === 'mdxeditor' || selected.id === 'milkdown')
+    && Boolean(snapshot.collaboration?.enabled && editContext?.reload)
+  const [ready, setReady] = useState(!refreshRequired)
+  const refreshRequestedRef = useRef(false)
+  const waitingForExistingReloadRef = useRef(false)
+  const refreshRef = useRef(onRefresh)
+  const refreshErrorRef = useRef(onRefreshError)
+  refreshRef.current = onRefresh
+  refreshErrorRef.current = onRefreshError
+
+  useEffect(() => {
+    if (!refreshRequired || ready || refreshRequestedRef.current) return
+    if (editContext?.reloading) {
+      waitingForExistingReloadRef.current = true
+      return
+    }
+    if (waitingForExistingReloadRef.current) {
+      setReady(true)
+      return
+    }
+    refreshRequestedRef.current = true
+    void refreshRef.current(selected.id, `${snapshot.current.id}:${selected.id}`).then(() => {
+      setReady(true)
+    }).catch(() => {
+      refreshErrorRef.current()
+    })
+  }, [editContext?.reloading, ready, refreshRequired, selected.id, snapshot.current.id])
+
+  if (!ready) return null
+  return (
+    <DriveRendererContent
+      snapshot={snapshot}
+      selected={selected}
+      body={body}
+      editContext={editContext}
+      annotationContext={annotationContext}
+    />
+  )
+}
+
+export async function refreshBeforeDriveRendererMount(input: {
   readonly id: DriveRendererId
   readonly collaborationEnabled: boolean
   readonly reload?: () => Promise<DriveBrowserSnapshotDto>
 }): Promise<void> {
-  if (input.id !== 'mdxeditor' || !input.collaborationEnabled || !input.reload) return
+  if ((input.id !== 'mdxeditor' && input.id !== 'milkdown') || !input.collaborationEnabled || !input.reload) return
   await input.reload()
 }
 
@@ -287,6 +402,18 @@ export function DriveRendererContent({
   if (selected.id === 'mdxeditor') {
     return renderContent(
       <DriveMDXeditorRenderer
+        current={snapshot.current}
+        preview={preview}
+        edit={snapshot.edit}
+        editContext={editContext}
+        annotationContext={annotationContext}
+        imageUploadContext={imageUploadContext}
+      />
+    )
+  }
+  if (selected.id === 'milkdown') {
+    return renderContent(
+      <DriveMilkdownRenderer
         current={snapshot.current}
         preview={preview}
         edit={snapshot.edit}

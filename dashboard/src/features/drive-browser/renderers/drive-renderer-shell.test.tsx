@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
-import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererSwitch } from './drive-renderer-shell'
+import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererMount } from './drive-renderer-shell'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
@@ -69,12 +69,13 @@ vi.mock('@mdxeditor/editor', async () => {
     linkPlugin: () => ({ name: 'linkPlugin' }),
     listsPlugin: () => ({ name: 'listsPlugin' }),
     markdownShortcutPlugin: () => ({ name: 'markdownShortcutPlugin' }),
+    GenericHTMLNode: class {},
     GenericJsxEditor: () => null,
     quotePlugin: () => ({ name: 'quotePlugin' }),
     realmPlugin: () => () => ({ name: 'realmPlugin' }),
     createActiveEditorSubscription$: Symbol('createActiveEditorSubscription$'),
     createRootEditorSubscription$: Symbol('createRootEditorSubscription$'),
-    lexical: { LineBreakNode: class {} },
+    lexical: { DecoratorNode: class {}, LineBreakNode: class {} },
     $createGenericHTMLNode: () => null,
     $isImageNode: () => false,
     tablePlugin: () => ({ name: 'tablePlugin' }),
@@ -83,22 +84,52 @@ vi.mock('@mdxeditor/editor', async () => {
   }
 })
 
-vi.mock('../use-drive-annotations', () => ({
-  useDriveAnnotations: () => ({
-    threads: [],
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
-    createThread: vi.fn(),
-    creatingThread: false,
-    reply: vi.fn(),
-    replying: false,
-    updateComment: vi.fn(),
-    updatingComment: false,
-    deleteComment: vi.fn(),
-    deletingComment: false,
-  }),
+const annotationsMock = vi.hoisted(() => ({
+  threads: [],
+  loading: false,
+  error: null,
+  refresh: vi.fn(),
+  createThread: vi.fn(),
+  creatingThread: false,
+  reply: vi.fn(),
+  replying: false,
+  updateComment: vi.fn(),
+  updatingComment: false,
+  deleteComment: vi.fn(),
+  deletingComment: false,
 }))
+
+vi.mock('../use-drive-annotations', () => ({
+  useDriveAnnotations: () => annotationsMock,
+}))
+
+vi.mock('@milkdown/crepe/theme/common/style.css', () => ({}))
+
+vi.mock('@milkdown/crepe', () => ({
+  Crepe: class {},
+  CrepeFeature: {
+    AI: 'ai',
+    BlockEdit: 'block-edit',
+    CodeMirror: 'code-mirror',
+    ImageBlock: 'image-block',
+    Latex: 'latex',
+    LinkTooltip: 'link-tooltip',
+    Placeholder: 'placeholder',
+    Toolbar: 'toolbar',
+    TopBar: 'top-bar',
+  },
+}))
+
+vi.mock('@milkdown/kit/utils', () => ({ insert: () => () => undefined, replaceAll: () => () => undefined }))
+
+vi.mock('@milkdown/react', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  return {
+    MilkdownProvider: ({ children }: { readonly children: React.ReactNode }) => children,
+    Milkdown: () => React.createElement('div', { 'data-milkdown': 'true' }),
+    useEditor: () => ({ loading: true, get: () => undefined }),
+  }
+})
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -168,21 +199,108 @@ describe('DriveRendererShell', () => {
     expect(comments.className).toContain('tabular-nums')
   })
 
-  it('refreshes the latest checkpoint before entering MDXEditor from collaboration', async () => {
+  it('refreshes the latest checkpoint before entering rich Markdown editors from collaboration', async () => {
     const reload = vi.fn(async () => baseSnapshot())
 
-    await refreshBeforeDriveRendererSwitch({ id: 'mdxeditor', collaborationEnabled: true, reload })
+    await refreshBeforeDriveRendererMount({ id: 'mdxeditor', collaborationEnabled: true, reload })
+    await refreshBeforeDriveRendererMount({ id: 'milkdown', collaborationEnabled: true, reload })
 
-    expect(reload).toHaveBeenCalledOnce()
+    expect(reload).toHaveBeenCalledTimes(2)
   })
 
   it('does not reload when switching between collaboration-aware renderers', async () => {
     const reload = vi.fn(async () => baseSnapshot())
 
-    await refreshBeforeDriveRendererSwitch({ id: 'code', collaborationEnabled: true, reload })
-    await refreshBeforeDriveRendererSwitch({ id: 'markdown', collaborationEnabled: true, reload })
+    await refreshBeforeDriveRendererMount({ id: 'code', collaborationEnabled: true, reload })
+    await refreshBeforeDriveRendererMount({ id: 'markdown', collaborationEnabled: true, reload })
 
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('keeps an unsaved draft when renderer switching is cancelled', async () => {
+    renderShell({
+      snapshot: markdownSnapshot({ text: '---\ntitle: Draft\n---\n# Notes', collaborationEnabled: false }),
+      initialRendererId: 'milkdown',
+      editContext: createEditContext(),
+    })
+    await changeMilkdownSource('---\ntitle: Changed\n---\n# Notes')
+
+    await selectRenderer('代码')
+
+    expect(document.body.textContent).toContain('放弃本地修改？')
+    await click(buttonWithText('取消'))
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
+    expect(document.querySelector<HTMLTextAreaElement>('textarea')?.value).toContain('Changed')
+  })
+
+  it('switches renderer after confirming that an unsaved draft can be discarded', async () => {
+    renderShell({
+      snapshot: markdownSnapshot({ text: '---\ntitle: Draft\n---\n# Notes', collaborationEnabled: false }),
+      initialRendererId: 'milkdown',
+      editContext: createEditContext(),
+    })
+    await changeMilkdownSource('---\ntitle: Changed\n---\n# Notes')
+
+    await selectRenderer('代码')
+    await click(buttonWithText('放弃并切换'))
+
+    expect(document.querySelector('[data-drive-code-renderer="true"]')).not.toBeNull()
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).toBeNull()
+  })
+
+  it('refreshes before mounting a persisted Milkdown renderer for each Markdown file', async () => {
+    const secondReload = deferred<DriveBrowserSnapshotDto>()
+    const firstSnapshot = markdownSnapshot({ id: 'first' })
+    const secondSnapshot = markdownSnapshot({ id: 'second' })
+    const reload = vi.fn()
+      .mockResolvedValueOnce(firstSnapshot)
+      .mockImplementationOnce(() => secondReload.promise)
+    const editContext = createEditContext({ reload })
+
+    renderShell({ snapshot: firstSnapshot, initialRendererId: 'milkdown', editContext })
+    await act(async () => undefined)
+
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
+
+    rerenderShell({ snapshot: secondSnapshot, initialRendererId: 'milkdown', editContext })
+    await act(async () => undefined)
+
+    expect(reload).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).toBeNull()
+
+    secondReload.resolve(secondSnapshot)
+    await act(async () => secondReload.promise)
+
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not duplicate or race renderer changes during a Milkdown mount refresh', async () => {
+    const refresh = deferred<DriveBrowserSnapshotDto>()
+    const snapshot = markdownSnapshot()
+    const reload = vi.fn(() => refresh.promise)
+
+    renderShell({
+      snapshot,
+      initialRendererId: 'markdown',
+      editContext: createEditContext({ reload }),
+    })
+    await selectRenderer('Milkdown')
+    await act(async () => undefined)
+
+    expect(reload).toHaveBeenCalledOnce()
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).toBeNull()
+
+    await selectRenderer('代码')
+    expect(document.querySelector('[data-drive-code-renderer="true"]')).toBeNull()
+    expect(reload).toHaveBeenCalledOnce()
+
+    refresh.resolve(snapshot)
+    await act(async () => refresh.promise)
+
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
+    expect(reload).toHaveBeenCalledOnce()
   })
 
   it('renders registered code actions in the shared header', () => {
@@ -369,6 +487,61 @@ function renderShell(props: ComponentProps<typeof DriveRendererShell>) {
   })
 }
 
+function rerenderShell(props: ComponentProps<typeof DriveRendererShell>) {
+  act(() => {
+    root?.render(<DriveRendererShell {...props} />)
+  })
+}
+
+function markdownSnapshot({
+  id = 'file',
+  text = '# Notes',
+  collaborationEnabled = true,
+}: {
+  readonly id?: string
+  readonly text?: string
+  readonly collaborationEnabled?: boolean
+} = {}): DriveBrowserSnapshotDto {
+  return baseSnapshot({
+    current: {
+      ...baseSnapshot().current,
+      id,
+      name: `${id}.md`,
+      mimeType: 'text/markdown',
+      previewKind: 'markdown',
+    },
+    preview: {
+      kind: 'markdown',
+      text,
+      html: '<h1>Notes</h1>',
+      outline: [],
+      truncated: false,
+      imageUrl: null,
+      visitUrl: null,
+      relativeImages: [],
+    },
+    collaboration: collaborationEnabled ? {
+      enabled: true,
+      canRead: true,
+      canWrite: true,
+      epoch: 'epoch-1',
+      checkpointVersionId: 'version-1',
+      websocketPath: '/api/drive/collaboration',
+      reason: null,
+    } : null,
+  })
+}
+
+function createEditContext(input: Partial<NonNullable<ComponentProps<typeof DriveRendererShell>['editContext']>> = {}) {
+  return {
+    reload: vi.fn(async () => baseSnapshot()),
+    reloading: false,
+    saveText: vi.fn(),
+    savingText: false,
+    ...input,
+  }
+}
+
 function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
   return {
     context: 'owner',
@@ -420,6 +593,32 @@ async function click(element: HTMLElement) {
     element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
     element.click()
   })
+}
+
+async function changeMilkdownSource(value: string) {
+  const textarea = document.querySelector<HTMLTextAreaElement>('textarea')
+  if (!textarea) throw new Error('Milkdown source textarea not found')
+  await act(async () => {
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+    valueSetter?.call(textarea, value)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+async function selectRenderer(label: string) {
+  await click(buttonWithText('打开方式'))
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'))
+    .find((item) => item.textContent?.includes(label))
+  if (!option) throw new Error(`renderer option not found: ${label}`)
+  await click(option)
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
 }
 
 function buttonWithLabel(label: string): HTMLButtonElement {

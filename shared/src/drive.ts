@@ -106,6 +106,12 @@ export const DRIVE_SYNC_CONFLICT_RESOLUTIONS = ["keep_local", "keep_remote", "ke
 export type DriveSyncConflictResolutionAction = typeof DRIVE_SYNC_CONFLICT_RESOLUTIONS[number]
 export const DRIVE_SYNC_HEALTH_STATUSES = ["idle", "syncing", "retrying", "paused", "error"] as const
 export type DriveSyncHealth = typeof DRIVE_SYNC_HEALTH_STATUSES[number]
+
+function isDriveMarkdownMimeType(mimeType: string | null): boolean {
+  const normalizedMimeType = mimeType?.split(";", 1)[0]?.trim().toLowerCase() ?? ""
+  return normalizedMimeType === "text/markdown" || normalizedMimeType === "text/x-markdown"
+}
+
 export function isDriveMarkdownItem(item: {
   readonly type: DriveItemType | string
   readonly name: string
@@ -113,12 +119,10 @@ export function isDriveMarkdownItem(item: {
 }): boolean {
   if (item.type !== "file") return false
   const lowerName = item.name.toLowerCase()
-  const mimeType = item.mimeType?.toLowerCase() ?? ""
   return lowerName.endsWith(".md")
     || lowerName.endsWith(".markdown")
     || lowerName.endsWith(".mdx")
-    || mimeType === "text/markdown"
-    || mimeType === "text/x-markdown"
+    || isDriveMarkdownMimeType(item.mimeType)
 }
 
 export function isDriveCommentableMarkdownItem(item: {
@@ -127,10 +131,8 @@ export function isDriveCommentableMarkdownItem(item: {
   readonly mimeType: string | null
 }): boolean {
   if (item.type !== "file") return false
-  const mimeType = item.mimeType?.toLowerCase() ?? ""
   return /\.md$/iu.test(item.name)
-    || mimeType === "text/markdown"
-    || mimeType === "text/x-markdown"
+    || isDriveMarkdownMimeType(item.mimeType)
 }
 
 export interface DriveAccessSettingsInput {

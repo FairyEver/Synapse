@@ -1,6 +1,6 @@
-import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import { isDriveMarkdownItem, type DriveBrowserSnapshotDto } from '@synapse/shared'
 
-export type DriveRendererId = 'mdxeditor' | 'markdown' | 'code' | 'image' | 'iframe' | 'download'
+export type DriveRendererId = 'mdxeditor' | 'milkdown' | 'markdown' | 'code' | 'image' | 'iframe' | 'download'
 export type DriveRendererContainer = 'reading' | 'media' | 'full'
 
 export type DriveRendererOption = {
@@ -12,6 +12,7 @@ export type DriveRendererOption = {
 
 const RENDERERS: Record<DriveRendererId, DriveRendererOption> = {
   mdxeditor: { id: 'mdxeditor', label: 'MDXeditor', container: 'full' },
+  milkdown: { id: 'milkdown', label: 'Milkdown', container: 'full' },
   markdown: { id: 'markdown', label: '预览', container: 'reading' },
   code: { id: 'code', label: '代码', container: 'full' },
   image: { id: 'image', label: '图片', container: 'media' },
@@ -26,6 +27,7 @@ export function getDriveRendererOptions(snapshot: DriveBrowserSnapshotDto): read
   if (preview.kind === 'markdown') return [
     RENDERERS.markdown,
     driveMdxEditorRendererOption(snapshot),
+    ...(isPlainDriveMarkdown(snapshot) ? [driveMilkdownRendererOption(snapshot)] : []),
     RENDERERS.code,
   ]
   if (preview.kind === 'image') return [RENDERERS.image]
@@ -65,4 +67,20 @@ function driveMdxEditorRendererOption(snapshot: DriveBrowserSnapshotDto): DriveR
 function canRenderDriveMdxEditor(snapshot: DriveBrowserSnapshotDto): boolean {
   const preview = snapshot.preview
   return Boolean(preview && preview.kind === 'markdown' && !preview.truncated && preview.text !== null)
+}
+
+function driveMilkdownRendererOption(snapshot: DriveBrowserSnapshotDto): DriveRendererOption {
+  const disabledReason = canRenderDriveMilkdown(snapshot) ? undefined : '超过富文本限制'
+  return disabledReason ? { ...RENDERERS.milkdown, disabledReason } : RENDERERS.milkdown
+}
+
+function canRenderDriveMilkdown(snapshot: DriveBrowserSnapshotDto): boolean {
+  const preview = snapshot.preview
+  return Boolean(preview && preview.kind === 'markdown' && !preview.truncated && preview.text !== null)
+}
+
+export function isPlainDriveMarkdown(snapshot: DriveBrowserSnapshotDto): boolean {
+  const name = snapshot.current.name.toLowerCase()
+  if (name.endsWith('.mdx')) return false
+  return isDriveMarkdownItem(snapshot.current)
 }
