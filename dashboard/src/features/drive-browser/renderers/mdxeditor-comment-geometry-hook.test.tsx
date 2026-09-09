@@ -3,8 +3,8 @@
 import { act, useRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DriveAnnotationThreadDto } from '@synapse/shared'
-import { useMdxEditorCommentGeometry } from './mdxeditor-comment-geometry'
+import type { DriveAnnotationThreadDto, DriveMarkdownProjectionDto } from '@synapse/shared'
+import { useMdxEditorCommentGeometry, useMilkdownCommentGeometry } from './mdxeditor-comment-geometry'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -18,6 +18,7 @@ afterEach(() => {
   host = null
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  Reflect.deleteProperty(document, 'fonts')
 })
 
 describe('useMdxEditorCommentGeometry', () => {
@@ -118,6 +119,161 @@ describe('useMdxEditorCommentGeometry', () => {
 
     expect(resultElement().dataset.anchors).toBe('thread-1:70')
   })
+
+  it('measures Milkdown ProseMirror text with the same Unicode range contract', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = frames.size + 1
+      frames.set(id, callback)
+      return id
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value: () => [rect({ top: 80, left: 20, width: 50, height: 18 })],
+    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
+      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
+      return rect({})
+    })
+
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => root?.render(<MilkdownGeometryHarness threads={[commentThread('thread-1')]} />))
+    await flushFrames(frames)
+
+    expect(resultElement().dataset.anchors).toBe('thread-1:70')
+  })
+
+  it('excludes Milkdown ordered-list labels from comment offsets', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = frames.size + 1
+      frames.set(id, callback)
+      return id
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value: () => [rect({ top: 80, left: 20, width: 50, height: 18 })],
+    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
+      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
+      return rect({})
+    })
+
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => root?.render(
+      <MilkdownGeometryHarness
+        threads={[commentThread('thread-1', { start: 15, end: 20 }, 'After')]}
+        withOrderedList
+      />
+    ))
+    await flushFrames(frames)
+
+    expect(resultElement().dataset.anchors).toBe('thread-1:70')
+  })
+
+  it('discovers a delayed ProseMirror root and observes its layout changes until unmount', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let frameId = 0
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    TestMutationObserver.instances = []
+    TestResizeObserver.instances = []
+    vi.stubGlobal('MutationObserver', TestMutationObserver)
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    const fonts = new EventTarget()
+    Object.defineProperty(document, 'fonts', { configurable: true, value: fonts })
+    const getClientRects = vi.fn(() => [rect({ top: 80, left: 20, width: 50, height: 18 })])
+    Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: getClientRects })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
+      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
+      return rect({ top: 80, left: 20, width: 50, height: 18 })
+    })
+
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => root?.render(<MilkdownGeometryHarness threads={[commentThread('thread-1')]} mounted={false} />))
+
+    const mutationObserver = TestMutationObserver.instances[0]
+    const resizeObserver = TestResizeObserver.instances[0]
+    if (!mutationObserver || !resizeObserver) throw new Error('Missing geometry observers')
+    expect(mutationObserver.observedTargets).toContain(document.querySelector('[data-test-host="true"]'))
+    expect(frames.size).toBe(0)
+
+    act(() => root?.render(<MilkdownGeometryHarness threads={[commentThread('thread-1')]} withImage />))
+    mutationObserver.emit(document.querySelector('[data-test-host="true"]'))
+    await flushFrames(frames)
+    expect(getClientRects).toHaveBeenCalledTimes(1)
+
+    const image = document.querySelector<HTMLImageElement>('.ProseMirror img')
+    const contentRoot = document.querySelector<HTMLElement>('.ProseMirror')
+    if (!image || !contentRoot) throw new Error('Missing delayed Milkdown content')
+    expect(resizeObserver.observedTargets).toEqual(expect.arrayContaining([contentRoot, image]))
+    image.dispatchEvent(new Event('load'))
+    await flushFrames(frames)
+    expect(getClientRects).toHaveBeenCalledTimes(2)
+
+    resizeObserver.emit()
+    await flushFrames(frames)
+    expect(getClientRects).toHaveBeenCalledTimes(3)
+
+    mutationObserver.emit(contentRoot)
+    await flushFrames(frames)
+    expect(getClientRects).toHaveBeenCalledTimes(4)
+
+    fonts.dispatchEvent(new Event('loadingdone'))
+    await flushFrames(frames)
+    expect(getClientRects).toHaveBeenCalledTimes(5)
+
+    act(() => root?.unmount())
+    root = null
+    expect(mutationObserver.disconnected).toBe(true)
+    expect(resizeObserver.disconnected).toBe(true)
+    image.dispatchEvent(new Event('load'))
+    fonts.dispatchEvent(new Event('loadingdone'))
+    expect(frames.size).toBe(0)
+  })
+
+  it('does not attach an image comment by URL when its projected image is missing', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let frameId = 0
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => root?.render(
+      <MilkdownGeometryHarness
+        threads={[imageCommentThread()]}
+        projection={duplicateImageProjection()}
+        withDuplicateImages
+      />
+    ))
+    await flushFrames(frames)
+
+    expect(resultElement().dataset.anchors).toBe('thread-image:null')
+  })
 })
 
 function GeometryHarness({ threads }: { readonly threads: readonly DriveAnnotationThreadDto[] }) {
@@ -153,13 +309,83 @@ function renderHook(threads: readonly DriveAnnotationThreadDto[]) {
   act(() => root?.render(<GeometryHarness threads={threads} />))
 }
 
+function MilkdownGeometryHarness({
+  threads,
+  mounted = true,
+  projection = null,
+  withDuplicateImages = false,
+  withImage = false,
+  withOrderedList = false,
+}: {
+  readonly threads: readonly DriveAnnotationThreadDto[]
+  readonly mounted?: boolean
+  readonly projection?: DriveMarkdownProjectionDto | null
+  readonly withDuplicateImages?: boolean
+  readonly withImage?: boolean
+  readonly withOrderedList?: boolean
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const contentHostRef = useRef<HTMLDivElement | null>(null)
+  const { geometry } = useMilkdownCommentGeometry({
+    enabled: true,
+    layoutKey: 'wide:open',
+    resetKey: 'version-1',
+    threads,
+    projection,
+    imagePreviewUrls: new Map(),
+    scrollRef,
+    contentHostRef,
+  })
+  const anchors = Object.entries(geometry.anchorTopByThreadId)
+    .map(([threadId, top]) => `${threadId}:${top}`)
+    .join(',')
+  return (
+    <div ref={scrollRef} data-test-scroll='true'>
+      <div ref={contentHostRef} data-test-host='true'>
+        <div className='milkdown'>
+          {mounted ? <div className='ProseMirror'>
+            {withOrderedList ? (
+              <>
+                <p>Before</p>
+                <ol>
+                  <li className='list-item'>
+                    <div className='label-wrapper' contentEditable={false}><span className='label'>1.</span></div>
+                    <div className='children'><p>List item</p></div>
+                  </li>
+                </ol>
+                <p>After</p>
+              </>
+            ) : (
+              <>
+                Notes
+                {withImage ? <img src='/files/layout.png' alt='layout' /> : null}
+                {withDuplicateImages ? (
+                  <>
+                    <img src='/files/duplicate.png' alt='first' />
+                    <img src='/files/duplicate.png' alt='second' />
+                  </>
+                ) : null}
+              </>
+            )}
+          </div> : null}
+        </div>
+      </div>
+      <output data-test-result='true' data-anchors={anchors} />
+    </div>
+  )
+}
+
 function resultElement(): HTMLOutputElement {
   const element = document.querySelector('[data-test-result="true"]')
   if (!(element instanceof HTMLOutputElement)) throw new Error('Missing result element')
   return element
 }
 
-function commentThread(id: string): DriveAnnotationThreadDto {
+function commentThread(
+  id: string,
+  range: { readonly start: number; readonly end: number } = { start: 0, end: 5 },
+  quote = 'Notes',
+): DriveAnnotationThreadDto {
   return {
     id,
     itemId: 'file',
@@ -169,8 +395,8 @@ function commentThread(id: string): DriveAnnotationThreadDto {
       schemaVersion: 1,
       kind: 'textRange',
       surface: 'markdownRenderedText',
-      range: { start: 0, end: 5 },
-      quote: { exact: 'Notes', prefix: '', suffix: '' },
+      range,
+      quote: { exact: quote, prefix: '', suffix: '' },
     },
     anchorStatus: 'attached',
     anchor: {
@@ -180,13 +406,13 @@ function commentThread(id: string): DriveAnnotationThreadDto {
         schemaVersion: 2,
         kind: 'textRange',
         position: { start: 0, end: 7 },
-        quote: { exact: 'Notes', prefix: '', suffix: '' },
-        semantic: { blockId: 'block-1', blockLocalRange: { start: 0, end: 5 }, headingPath: [] },
+        quote: { exact: quote, prefix: '', suffix: '' },
+        semantic: { blockId: 'block-1', blockLocalRange: range, headingPath: [] },
       },
       positionStatus: 'attached',
       quoteStatus: 'exact',
       resolvedSourceRange: { start: 2, end: 7 },
-      resolvedRenderedRange: { start: 0, end: 5 },
+      resolvedRenderedRange: range,
       confidence: 1,
       lastResolvedVersionId: 'version-1',
     },
@@ -198,9 +424,72 @@ function commentThread(id: string): DriveAnnotationThreadDto {
   }
 }
 
+function imageCommentThread(): DriveAnnotationThreadDto {
+  return {
+    ...commentThread('thread-image'),
+    targetKind: 'image',
+    target: {
+      schemaVersion: 1,
+      kind: 'image',
+      surface: 'markdownRenderedImage',
+      imageId: 'deleted-image',
+      resourceKey: 'file:duplicate',
+      source: { startOffset: 0, endOffset: 24 },
+      snapshot: { src: '/files/duplicate.png', alt: 'deleted', title: null },
+      blockHint: { blockId: 'block-image', blockIndex: 0, imageIndex: 0, headingPath: [] },
+    },
+  }
+}
+
+function duplicateImageProjection(): DriveMarkdownProjectionDto {
+  return {
+    schemaVersion: 1,
+    parserVersion: 'test',
+    sourceSha256: 'hash',
+    blocks: [],
+    segments: [],
+    imageAnchorsVersion: 1,
+    images: [0, 1].map((documentIndex) => ({
+      imageId: `current-image-${documentIndex}`,
+      segmentId: `segment-${documentIndex}`,
+      blockId: `block-${documentIndex}`,
+      imageIndex: 0,
+      documentIndex,
+      sourceStart: documentIndex * 24,
+      sourceEnd: (documentIndex + 1) * 24,
+      renderedStart: 0,
+      renderedEnd: 0,
+      source: '/files/duplicate.png',
+      resourceKey: 'file:duplicate',
+      alt: documentIndex === 0 ? 'first' : 'second',
+      title: null,
+    })),
+  }
+}
+
+class TestMutationObserver implements MutationObserver {
+  static instances: TestMutationObserver[] = []
+  disconnected = false
+  readonly observedTargets: Node[] = []
+  private readonly callback: MutationCallback
+
+  constructor(callback: MutationCallback) {
+    this.callback = callback
+    TestMutationObserver.instances.push(this)
+  }
+
+  observe(target: Node) { this.observedTargets.push(target) }
+  disconnect() { this.disconnected = true }
+  takeRecords() { return [] }
+  emit(target: Node | null) {
+    if (!this.disconnected && target) this.callback([{ target } as MutationRecord], this)
+  }
+}
+
 class TestResizeObserver implements ResizeObserver {
   static instances: TestResizeObserver[] = []
   disconnected = false
+  readonly observedTargets: Element[] = []
   private readonly callback: ResizeObserverCallback
 
   constructor(callback: ResizeObserverCallback) {
@@ -208,7 +497,7 @@ class TestResizeObserver implements ResizeObserver {
     TestResizeObserver.instances.push(this)
   }
 
-  observe() {}
+  observe(target: Element) { this.observedTargets.push(target) }
   unobserve() {}
   disconnect() { this.disconnected = true }
   emit() { this.callback([], this) }

@@ -5,6 +5,16 @@ import type {
 } from '@synapse/shared'
 
 const GEOMETRY_EPSILON = 0.5
+export const MDXEDITOR_COMMENT_IGNORED_SELECTOR = [
+  '[data-toolbar-item="true"]',
+  '[data-drive-markdown-comment-excluded="true"]',
+].join(', ')
+export const MILKDOWN_COMMENT_IGNORED_SELECTOR = [
+  '.list-item > .label-wrapper',
+  '.milkdown-code-block > .tools',
+  '.milkdown-code-block > .preview-panel',
+  '[data-type="html"]',
+].join(', ')
 
 type TextRange = { readonly start: number; readonly end: number }
 
@@ -39,6 +49,8 @@ type GeometryInput = {
   readonly imagePreviewUrls: ReadonlyMap<string, string | null>
   readonly scrollRef: RefObject<HTMLDivElement | null>
   readonly contentHostRef: RefObject<HTMLDivElement | null>
+  readonly contentRootSelector?: string
+  readonly ignoredElementSelector?: string
 }
 
 const EMPTY_GEOMETRY: MdxEditorCommentGeometry = {
@@ -64,7 +76,7 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
     const current = inputRef.current
     const scroller = current.scrollRef.current
     const contentHost = current.contentHostRef.current
-    const contentRoot = contentHost?.querySelector<HTMLElement>('.drive-mdxeditor-content') ?? null
+    const contentRoot = contentHost?.querySelector<HTMLElement>(current.contentRootSelector ?? '.drive-mdxeditor-content') ?? null
     if (!current.enabled || !scroller || !contentHost || !contentRoot) {
       setGeometry((existing) => sameGeometry(existing, EMPTY_GEOMETRY) ? existing : EMPTY_GEOMETRY)
       return
@@ -79,7 +91,10 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
     }
 
     if (modelDirtyRef.current || !modelRef.current) {
-      const nextModel = createMdxEditorTextModel(contentRoot)
+      const nextModel = createMdxEditorTextModel(
+        contentRoot,
+        current.ignoredElementSelector ?? MDXEDITOR_COMMENT_IGNORED_SELECTOR,
+      )
       contentRoot.querySelectorAll('img').forEach((image) => resizeObserverRef.current?.observe(image))
       const previousText = previousTextRef.current
       if (previousText === null) {
@@ -125,8 +140,7 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
     const current = inputRef.current
     const scroller = current.scrollRef.current
     const contentHost = current.contentHostRef.current
-    const contentRoot = contentHost?.querySelector<HTMLElement>('.drive-mdxeditor-content') ?? null
-    if (!current.enabled || !scroller || !contentHost || !contentRoot) {
+    if (!current.enabled || !scroller || !contentHost) {
       previousTextRef.current = null
       workingRangesRef.current = new Map()
       modelRef.current = null
@@ -136,30 +150,56 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
       return
     }
 
-    const mutationObserver = new MutationObserver(() => schedule(true))
-    mutationObserver.observe(contentRoot, { characterData: true, childList: true, subtree: true })
-
     const resizeObserver = typeof ResizeObserver === 'undefined'
       ? null
       : new ResizeObserver(() => schedule(false))
     resizeObserverRef.current = resizeObserver
     resizeObserver?.observe(scroller)
     resizeObserver?.observe(contentHost)
-    resizeObserver?.observe(contentRoot)
-    contentRoot.querySelectorAll('img').forEach((image) => resizeObserver?.observe(image))
+
+    const contentRootSelector = current.contentRootSelector ?? '.drive-mdxeditor-content'
+    let observedContentRoot: HTMLElement | null = null
+    const updateObservedContentRoot = () => {
+      const nextContentRoot = contentHost.querySelector<HTMLElement>(contentRootSelector)
+      if (nextContentRoot === observedContentRoot) {
+        nextContentRoot?.querySelectorAll('img').forEach((image) => resizeObserver?.observe(image))
+        return false
+      }
+      if (observedContentRoot) {
+        resizeObserver?.unobserve(observedContentRoot)
+        observedContentRoot.querySelectorAll('img').forEach((image) => resizeObserver?.unobserve(image))
+      }
+      observedContentRoot = nextContentRoot
+      if (nextContentRoot) {
+        resizeObserver?.observe(nextContentRoot)
+        nextContentRoot.querySelectorAll('img').forEach((image) => resizeObserver?.observe(image))
+      }
+      return true
+    }
+    const mutationObserver = new MutationObserver((records) => {
+      const rootChanged = updateObservedContentRoot()
+      const contentChanged = observedContentRoot !== null && records.some((record) => (
+        record.target === observedContentRoot || observedContentRoot?.contains(record.target)
+      ))
+      if (rootChanged || contentChanged) schedule(true)
+    })
+    mutationObserver.observe(contentHost, { characterData: true, childList: true, subtree: true })
 
     const handleAssetLayout = () => schedule(false)
-    contentRoot.addEventListener('load', handleAssetLayout, true)
-    contentRoot.addEventListener('error', handleAssetLayout, true)
+    const handleContentAssetLayout = (event: Event) => {
+      if (event.target instanceof Node && observedContentRoot?.contains(event.target)) handleAssetLayout()
+    }
+    contentHost.addEventListener('load', handleContentAssetLayout, true)
+    contentHost.addEventListener('error', handleContentAssetLayout, true)
     document.fonts?.addEventListener?.('loadingdone', handleAssetLayout)
-    schedule(true)
+    if (updateObservedContentRoot()) schedule(true)
 
     return () => {
       mutationObserver.disconnect()
       resizeObserver?.disconnect()
       resizeObserverRef.current = null
-      contentRoot.removeEventListener('load', handleAssetLayout, true)
-      contentRoot.removeEventListener('error', handleAssetLayout, true)
+      contentHost.removeEventListener('load', handleContentAssetLayout, true)
+      contentHost.removeEventListener('error', handleContentAssetLayout, true)
       document.fonts?.removeEventListener?.('loadingdone', handleAssetLayout)
       if (frameRef.current !== null) {
         window.cancelAnimationFrame(frameRef.current)
@@ -171,12 +211,23 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
   return { geometry, notifyEditorUpdate, scheduleGeometry }
 }
 
+export function useMilkdownCommentGeometry(input: Omit<GeometryInput, 'contentRootSelector' | 'ignoredElementSelector'>) {
+  return useMdxEditorCommentGeometry({
+    ...input,
+    contentRootSelector: '.milkdown .ProseMirror',
+    ignoredElementSelector: MILKDOWN_COMMENT_IGNORED_SELECTOR,
+  })
+}
+
 type MdxEditorTextModel = {
   readonly text: string
   readonly segments: readonly MdxEditorTextSegment[]
 }
 
-export function createMdxEditorTextModel(root: HTMLElement): MdxEditorTextModel {
+export function createMdxEditorTextModel(
+  root: HTMLElement,
+  ignoredElementSelector = MDXEDITOR_COMMENT_IGNORED_SELECTOR,
+): MdxEditorTextModel {
   const values: string[] = []
   const segments: MdxEditorTextSegment[] = []
   let cursor = 0
@@ -203,12 +254,18 @@ export function createMdxEditorTextModel(root: HTMLElement): MdxEditorTextModel 
       return
     }
     if (!(node instanceof HTMLElement)) return
-    if (node.hidden || node.getAttribute('aria-hidden') === 'true' || node.matches('.cm-gutters, textarea')) return
+    if (
+      node.hidden
+      || node.getAttribute('aria-hidden') === 'true'
+      || node.matches('.cm-gutters, textarea')
+      || (ignoredElementSelector && node.matches(ignoredElementSelector))
+    ) return
     if (node instanceof HTMLImageElement) {
       appendSynthetic(node.alt)
       return
     }
     if (node.tagName === 'BR') {
+      if (isEditorPlaceholderBreak(node, ignoredElementSelector)) return
       appendSynthetic('\n')
       return
     }
@@ -222,6 +279,21 @@ export function createMdxEditorTextModel(root: HTMLElement): MdxEditorTextModel 
 
   root.childNodes.forEach(visit)
   return { text: values.join(''), segments }
+}
+
+function isEditorPlaceholderBreak(node: HTMLElement, ignoredElementSelector: string): boolean {
+  if (node.classList.contains('ProseMirror-trailingBreak')) return true
+  const parent = node.parentElement
+  if (!parent || parent.tagName !== 'P') return false
+  const siblings = Array.from(parent.childNodes).filter((sibling) => sibling !== node)
+  if (siblings.length === 0) return true
+  return siblings.every((sibling) => (
+    sibling instanceof HTMLElement
+    && (
+      sibling.matches('[data-lexical-decorator="true"]')
+      || sibling.matches(ignoredElementSelector)
+    )
+  ))
 }
 
 export function mapWorkingRange(
@@ -382,11 +454,11 @@ function findCommentImage(
   if (thread.target.kind !== 'image') return null
   const target = thread.target
   const projectionImage = projection?.images?.find((image) => image.imageId === target.imageId)
-  const authoredSource = projectionImage?.source ?? target.snapshot.src
+  if (!projectionImage || !projection?.images) return null
+  const authoredSource = projectionImage.source
   const previewSource = imagePreviewUrls.get(authoredSource) ?? authoredSource
   const matching = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]'))
     .filter((image) => sameImageSource(image, previewSource))
-  if (!projectionImage || !projection?.images) return matching[0] ?? null
   const ordinal = projection.images
     .filter((image) => image.documentIndex < projectionImage.documentIndex && image.resourceKey === projectionImage.resourceKey)
     .length
