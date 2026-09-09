@@ -371,7 +371,7 @@ function measureGeometry(input: {
       continue
     }
     if (thread.target.kind === 'image') {
-      const image = findCommentImage(input.contentRoot, thread, input.projection, input.imagePreviewUrls)
+      const image = findDriveEditorCommentImage(input.contentRoot, thread, input.projection, input.imagePreviewUrls)
       if (!image) {
         anchorTopByThreadId[thread.id] = null
         continue
@@ -445,7 +445,7 @@ function findBoundary(
   return null
 }
 
-function findCommentImage(
+export function findDriveEditorCommentImage(
   root: HTMLElement,
   thread: DriveAnnotationThreadDto,
   projection: DriveMarkdownProjectionDto | null | undefined,
@@ -455,21 +455,59 @@ function findCommentImage(
   const target = thread.target
   const projectionImage = projection?.images?.find((image) => image.imageId === target.imageId)
   if (!projectionImage || !projection?.images) return null
+  if (projectionImage.resourceKey !== target.resourceKey) return null
   const authoredSource = projectionImage.source
   const previewSource = imagePreviewUrls.get(authoredSource) ?? authoredSource
   const matching = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]'))
     .filter((image) => sameImageSource(image, previewSource))
-  const ordinal = projection.images
-    .filter((image) => image.documentIndex < projectionImage.documentIndex && image.resourceKey === projectionImage.resourceKey)
+  const projectedMatches = projection.images
+    .filter((image) => image.resourceKey === projectionImage.resourceKey)
+  if (matching.length !== projectedMatches.length) return null
+  if (projectedMatches.length === 1) return matching[0] ?? null
+  // Editor DOM has no imageId. Metadata only proves that a distinguishable duplicate sequence is unchanged.
+  const targetDescriptorMatches = projectedMatches
+    .filter((image) => sameProjectedImageDescriptor(image, projectionImage, imagePreviewUrls))
+  if (targetDescriptorMatches.length !== 1) return null
+  if (projectedMatches.some((image, index) => !sameProjectedImage(matching[index], image, imagePreviewUrls))) return null
+  const ordinal = projectedMatches
+    .filter((image) => image.documentIndex < projectionImage.documentIndex)
     .length
   return matching[ordinal] ?? null
+}
+
+function sameProjectedImageDescriptor(
+  left: NonNullable<DriveMarkdownProjectionDto['images']>[number],
+  right: NonNullable<DriveMarkdownProjectionDto['images']>[number],
+  imagePreviewUrls: ReadonlyMap<string, string | null>,
+): boolean {
+  const leftSource = imagePreviewUrls.get(left.source) ?? left.source
+  const rightSource = imagePreviewUrls.get(right.source) ?? right.source
+  return sameImageSourceValue(leftSource, rightSource)
+    && left.alt === right.alt
+    && left.title === right.title
+}
+
+function sameProjectedImage(
+  image: HTMLImageElement | undefined,
+  projected: NonNullable<DriveMarkdownProjectionDto['images']>[number],
+  imagePreviewUrls: ReadonlyMap<string, string | null>,
+): boolean {
+  if (!image) return false
+  const previewSource = imagePreviewUrls.get(projected.source) ?? projected.source
+  return sameImageSource(image, previewSource)
+    && image.alt === projected.alt
+    && image.getAttribute('title') === projected.title
 }
 
 function sameImageSource(image: HTMLImageElement, expected: string): boolean {
   const authored = image.getAttribute('src') ?? ''
   if (authored === expected || image.currentSrc === expected) return true
+  return sameImageSourceValue(authored, expected)
+}
+
+function sameImageSourceValue(actual: string, expected: string): boolean {
   try {
-    return new URL(authored, document.baseURI).href === new URL(expected, document.baseURI).href
+    return new URL(actual, document.baseURI).href === new URL(expected, document.baseURI).href
   } catch {
     return false
   }
