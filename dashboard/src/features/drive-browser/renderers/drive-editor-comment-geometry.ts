@@ -366,7 +366,10 @@ function measureGeometry(input: {
   const measuredRanges = new Map<string, readonly DOMRect[]>()
 
   for (const thread of input.threads) {
-    if (thread.anchorStatus === 'orphaned') {
+    const positionUnavailable = thread.anchor
+      ? thread.anchor.positionStatus !== 'attached'
+      : thread.anchorStatus === 'orphaned'
+    if (positionUnavailable) {
       anchorTopByThreadId[thread.id] = null
       continue
     }
@@ -453,15 +456,37 @@ export function findDriveEditorCommentImage(
 ): HTMLImageElement | null {
   if (thread.target.kind !== 'image') return null
   const target = thread.target
-  const projectionImage = projection?.images?.find((image) => image.imageId === target.imageId)
-  if (!projectionImage || !projection?.images) return null
-  if (projectionImage.resourceKey !== target.resourceKey) return null
+  const projectionImages = projection?.images
+  if (!projectionImages) return null
+  const anchor = thread.anchor
+  const resourceKey = anchor?.selectors.kind === 'image'
+    ? anchor.selectors.identity.resourceKey
+    : target.resourceKey
+  let projectionImage: NonNullable<DriveMarkdownProjectionDto['images']>[number] | undefined
+  if (anchor) {
+    const resolvedSourceRange = anchor.resolvedSourceRange
+    if (anchor.selectors.kind !== 'image'
+      || anchor.positionStatus !== 'attached'
+      || anchor.quoteStatus !== 'exact'
+      || !resolvedSourceRange) return null
+    const resolvedMatches = projectionImages.filter((image) => (
+      image.sourceStart === resolvedSourceRange.start
+      && image.sourceEnd === resolvedSourceRange.end
+      && image.resourceKey === resourceKey
+    ))
+    if (resolvedMatches.length !== 1) return null
+    projectionImage = resolvedMatches[0]
+  } else {
+    projectionImage = projectionImages.find((image) => image.imageId === target.imageId)
+    if (!projectionImage || projectionImage.resourceKey !== resourceKey) return null
+  }
+  if (!projectionImage) return null
   const authoredSource = projectionImage.source
   const previewSource = imagePreviewUrls.get(authoredSource) ?? authoredSource
   const matching = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]'))
     .filter((image) => sameImageSource(image, previewSource))
-  const projectedMatches = projection.images
-    .filter((image) => image.resourceKey === projectionImage.resourceKey)
+  const projectedMatches = projectionImages
+    .filter((image) => image.resourceKey === resourceKey)
   if (matching.length !== projectedMatches.length) return null
   if (projectedMatches.length === 1) return matching[0] ?? null
   // Editor DOM has no imageId. Metadata only proves that a distinguishable duplicate sequence is unchanged.

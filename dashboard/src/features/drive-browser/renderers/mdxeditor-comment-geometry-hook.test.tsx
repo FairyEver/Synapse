@@ -274,6 +274,40 @@ describe('useDriveEditorCommentGeometry', () => {
 
     expect(resultElement().dataset.anchors).toBe('thread-image:null')
   })
+
+  it('uses the shared Anchor V2 image geometry in Milkdown', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let frameId = 0
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frameId += 1
+      frames.set(frameId, callback)
+      return frameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
+      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
+      if (this instanceof HTMLImageElement && this.alt === 'second') {
+        return rect({ top: 80, left: 20, width: 50, height: 40 })
+      }
+      return rect({ top: 40, left: 20, width: 50, height: 40 })
+    })
+
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => root?.render(
+      <MilkdownGeometryHarness
+        threads={[anchoredImageCommentThread()]}
+        projection={duplicateImageProjection()}
+        withDuplicateImages
+      />
+    ))
+    await flushFrames(frames)
+
+    expect(resultElement().dataset.anchors).toBe('thread-image:70')
+  })
 })
 
 function GeometryHarness({ threads }: { readonly threads: readonly DriveAnnotationThreadDto[] }) {
@@ -437,6 +471,33 @@ function imageCommentThread(): DriveAnnotationThreadDto {
       source: { startOffset: 0, endOffset: 24 },
       snapshot: { src: '/files/duplicate.png', alt: 'deleted', title: null },
       blockHint: { blockId: 'block-image', blockIndex: 0, imageIndex: 0, headingPath: [] },
+    },
+    anchor: null,
+  }
+}
+
+function anchoredImageCommentThread(): DriveAnnotationThreadDto {
+  const thread = imageCommentThread()
+  if (thread.target.kind !== 'image') throw new Error('Expected image thread')
+  return {
+    ...thread,
+    anchorStatus: 'orphaned',
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: thread.baseVersionId,
+      selectors: {
+        schemaVersion: 2,
+        kind: 'image',
+        position: { start: 0, end: 24 },
+        semantic: { blockId: 'block-image', imageIndex: 0, headingPath: [] },
+        identity: { imageId: thread.target.imageId, resourceKey: thread.target.resourceKey },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 24, end: 48 },
+      resolvedRenderedRange: null,
+      confidence: 0.96,
+      lastResolvedVersionId: 'version-2',
     },
   }
 }
