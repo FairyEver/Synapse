@@ -297,7 +297,7 @@ function DriveRendererMountGate({
     && Boolean(snapshot.collaboration?.enabled && editContext?.reload)
   const [ready, setReady] = useState(!refreshRequired)
   const refreshRequestedRef = useRef(false)
-  const waitingForExistingReloadRef = useRef(false)
+  const snapshotBeforeExistingReloadRef = useRef<DriveBrowserSnapshotDto | null>(null)
   const refreshRef = useRef(onRefresh)
   const refreshErrorRef = useRef(onRefreshError)
   refreshRef.current = onRefresh
@@ -306,12 +306,16 @@ function DriveRendererMountGate({
   useEffect(() => {
     if (!refreshRequired || ready || refreshRequestedRef.current) return
     if (editContext?.reloading) {
-      waitingForExistingReloadRef.current = true
+      snapshotBeforeExistingReloadRef.current ??= snapshot
       return
     }
-    if (waitingForExistingReloadRef.current) {
-      setReady(true)
-      return
+    if (snapshotBeforeExistingReloadRef.current) {
+      const reloadUpdatedSnapshot = snapshotBeforeExistingReloadRef.current !== snapshot
+      snapshotBeforeExistingReloadRef.current = null
+      if (reloadUpdatedSnapshot) {
+        setReady(true)
+        return
+      }
     }
     refreshRequestedRef.current = true
     void refreshRef.current(selected.id, `${snapshot.current.id}:${selected.id}`).then(() => {

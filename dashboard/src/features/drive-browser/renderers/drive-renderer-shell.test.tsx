@@ -258,6 +258,71 @@ describe('DriveRendererShell', () => {
     expect(reload).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { rendererId: 'mdxeditor' as const, selector: '[data-mdxeditor="true"]' },
+    { rendererId: 'milkdown' as const, selector: '[data-drive-milkdown-renderer="true"]' },
+  ])('waits for an existing successful reload before mounting $rendererId', async ({ rendererId, selector }) => {
+    const snapshot = markdownSnapshot()
+    const refreshedSnapshot = markdownSnapshot({ text: '# Refreshed' })
+    const existingReload = deferred<DriveBrowserSnapshotDto>()
+    const reload = vi.fn(() => existingReload.promise)
+    const reloadingEditContext = createEditContext({ reload, reloading: true })
+
+    const reloadPromise = reload()
+    renderShell({ snapshot, initialRendererId: rendererId, editContext: reloadingEditContext })
+    await act(async () => undefined)
+
+    expect(document.querySelector(selector)).toBeNull()
+    expect(reload).toHaveBeenCalledOnce()
+
+    existingReload.resolve(refreshedSnapshot)
+    await act(async () => reloadPromise)
+    rerenderShell({
+      snapshot: refreshedSnapshot,
+      initialRendererId: rendererId,
+      editContext: createEditContext({ reload, reloading: false }),
+    })
+    await waitForSelector(selector)
+
+    expect(reload).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    { rendererId: 'mdxeditor' as const, selector: '[data-mdxeditor="true"]' },
+    { rendererId: 'milkdown' as const, selector: '[data-drive-milkdown-renderer="true"]' },
+  ])('retries after an existing reload fails before mounting $rendererId', async ({ rendererId, selector }) => {
+    const snapshot = markdownSnapshot()
+    const retriedSnapshot = markdownSnapshot({ text: '# Retried' })
+    const retry = deferred<DriveBrowserSnapshotDto>()
+    const reload = vi.fn()
+      .mockRejectedValueOnce(new Error('reload failed'))
+      .mockImplementationOnce(() => retry.promise)
+    const failedReload = reload()
+
+    renderShell({
+      snapshot,
+      initialRendererId: rendererId,
+      editContext: createEditContext({ reload, reloading: true }),
+    })
+    await expect(failedReload).rejects.toThrow('reload failed')
+    rerenderShell({
+      snapshot,
+      initialRendererId: rendererId,
+      editContext: createEditContext({ reload, reloading: false }),
+    })
+    await act(async () => undefined)
+
+    expect(reload).toHaveBeenCalledTimes(2)
+    expect(document.querySelector(selector)).toBeNull()
+
+    retry.resolve(retriedSnapshot)
+    await act(async () => retry.promise)
+    await waitForSelector(selector)
+
+    expect(document.querySelector(selector)).not.toBeNull()
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps an unsaved draft when renderer switching is cancelled', async () => {
     renderShell({
       snapshot: markdownSnapshot({ text: '---\ntitle: Draft\n---\n# Notes', collaborationEnabled: false }),
@@ -320,7 +385,10 @@ describe('DriveRendererShell', () => {
     expect(reload).toHaveBeenCalledTimes(2)
   })
 
-  it('does not duplicate or race renderer changes during a Milkdown mount refresh', async () => {
+  it.each([
+    { label: 'MDXeditor', selector: '[data-mdxeditor="true"]' },
+    { label: 'Milkdown', selector: '[data-drive-milkdown-renderer="true"]' },
+  ])('does not duplicate or race renderer changes during a $label mount refresh', async ({ label, selector }) => {
     const refresh = deferred<DriveBrowserSnapshotDto>()
     const snapshot = markdownSnapshot()
     const reload = vi.fn(() => refresh.promise)
@@ -330,11 +398,11 @@ describe('DriveRendererShell', () => {
       initialRendererId: 'markdown',
       editContext: createEditContext({ reload }),
     })
-    await selectRenderer('Milkdown')
+    await selectRenderer(label)
     await act(async () => undefined)
 
     expect(reload).toHaveBeenCalledOnce()
-    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).toBeNull()
+    expect(document.querySelector(selector)).toBeNull()
 
     await selectRenderer('代码')
     expect(document.querySelector('[data-drive-code-renderer="true"]')).toBeNull()
@@ -342,9 +410,9 @@ describe('DriveRendererShell', () => {
 
     refresh.resolve(snapshot)
     await act(async () => refresh.promise)
-    await waitForSelector('[data-drive-milkdown-renderer="true"]')
+    await waitForSelector(selector)
 
-    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
+    expect(document.querySelector(selector)).not.toBeNull()
     expect(reload).toHaveBeenCalledOnce()
   })
 
