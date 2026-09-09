@@ -8,6 +8,20 @@ import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererMount } from './drive-renderer-shell'
 
+const milkdownModuleMock = vi.hoisted(() => {
+  let resolveLoad!: () => void
+  const loadPromise = new Promise<void>((resolve) => {
+    resolveLoad = resolve
+  })
+  return { loadCount: 0, loadPromise, resolveLoad }
+})
+
+vi.mock('./milkdown-renderer', async () => {
+  milkdownModuleMock.loadCount += 1
+  await milkdownModuleMock.loadPromise
+  return vi.importActual<typeof import('./milkdown-renderer')>('./milkdown-renderer')
+});
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
   observe() {}
@@ -58,13 +72,18 @@ vi.mock('@mdxeditor/editor', async () => {
     BlockTypeSelect: () => null,
     BoldItalicUnderlineToggles: () => null,
     CreateLink: () => null,
+    DiffSourceToggleWrapper: ({ children }: { readonly children: React.ReactNode }) => children,
+    InsertCodeBlock: () => null,
     InsertTable: () => null,
     InsertThematicBreak: () => null,
     ListsToggle: () => null,
     UndoRedo: () => null,
     codeBlockPlugin: () => ({ name: 'codeBlockPlugin' }),
     codeMirrorPlugin: () => ({ name: 'codeMirrorPlugin' }),
+    diffSourcePlugin: () => ({ name: 'diffSourcePlugin' }),
     headingsPlugin: () => ({ name: 'headingsPlugin' }),
+    imagePlugin: () => ({ name: 'imagePlugin' }),
+    jsxPlugin: () => ({ name: 'jsxPlugin' }),
     linkDialogPlugin: () => ({ name: 'linkDialogPlugin' }),
     linkPlugin: () => ({ name: 'linkPlugin' }),
     listsPlugin: () => ({ name: 'listsPlugin' }),
@@ -143,6 +162,28 @@ afterEach(() => {
 })
 
 describe('DriveRendererShell', () => {
+  it('loads Milkdown only after it is selected', async () => {
+    const snapshot = markdownSnapshot({ collaborationEnabled: false })
+    const editContext = createEditContext()
+    renderShell({ snapshot, rendererId: 'markdown', editContext })
+
+    expect(milkdownModuleMock.loadCount).toBe(0)
+
+    rerenderShell({ snapshot, rendererId: 'mdxeditor', editContext })
+    expect(milkdownModuleMock.loadCount).toBe(0)
+
+    rerenderShell({ snapshot, rendererId: 'milkdown', editContext })
+    await waitForSelector('[role="status"]')
+
+    expect(milkdownModuleMock.loadCount).toBe(1)
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('加载中')
+
+    milkdownModuleMock.resolveLoad()
+    await waitForSelector('[data-drive-milkdown-renderer="true"]')
+
+    expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
+  })
+
   it('keeps the regular preview header compact and reveals file metadata from the file name', async () => {
     renderShell({
       snapshot: baseSnapshot({
@@ -223,6 +264,7 @@ describe('DriveRendererShell', () => {
       initialRendererId: 'milkdown',
       editContext: createEditContext(),
     })
+    await waitForSelector('[data-drive-milkdown-renderer="true"]')
     await changeMilkdownSource('---\ntitle: Changed\n---\n# Notes')
 
     await selectRenderer('代码')
@@ -239,6 +281,7 @@ describe('DriveRendererShell', () => {
       initialRendererId: 'milkdown',
       editContext: createEditContext(),
     })
+    await waitForSelector('[data-drive-milkdown-renderer="true"]')
     await changeMilkdownSource('---\ntitle: Changed\n---\n# Notes')
 
     await selectRenderer('代码')
@@ -258,7 +301,7 @@ describe('DriveRendererShell', () => {
     const editContext = createEditContext({ reload })
 
     renderShell({ snapshot: firstSnapshot, initialRendererId: 'milkdown', editContext })
-    await act(async () => undefined)
+    await waitForSelector('[data-drive-milkdown-renderer="true"]')
 
     expect(reload).toHaveBeenCalledTimes(1)
     expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
@@ -271,6 +314,7 @@ describe('DriveRendererShell', () => {
 
     secondReload.resolve(secondSnapshot)
     await act(async () => secondReload.promise)
+    await waitForSelector('[data-drive-milkdown-renderer="true"]')
 
     expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
     expect(reload).toHaveBeenCalledTimes(2)
@@ -298,6 +342,7 @@ describe('DriveRendererShell', () => {
 
     refresh.resolve(snapshot)
     await act(async () => refresh.promise)
+    await waitForSelector('[data-drive-milkdown-renderer="true"]')
 
     expect(document.querySelector('[data-drive-milkdown-renderer="true"]')).not.toBeNull()
     expect(reload).toHaveBeenCalledOnce()
@@ -611,6 +656,14 @@ async function selectRenderer(label: string) {
     .find((item) => item.textContent?.includes(label))
   if (!option) throw new Error(`renderer option not found: ${label}`)
   await click(option)
+}
+
+async function waitForSelector(selector: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)))
+    if (document.querySelector(selector)) return
+  }
+  throw new Error(`element not found: ${selector}`)
 }
 
 function deferred<T>() {
