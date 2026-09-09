@@ -5,7 +5,7 @@ import type {
 } from '@synapse/shared'
 
 const GEOMETRY_EPSILON = 0.5
-export const MDXEDITOR_COMMENT_IGNORED_SELECTOR = [
+export const DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR = [
   '[data-toolbar-item="true"]',
   '[data-drive-markdown-comment-excluded="true"]',
 ].join(', ')
@@ -18,14 +18,14 @@ export const MILKDOWN_COMMENT_IGNORED_SELECTOR = [
 
 type TextRange = { readonly start: number; readonly end: number }
 
-type MdxEditorTextSegment = {
+type DriveEditorTextSegment = {
   readonly start: number
   readonly end: number
   readonly node: Text | null
   readonly utf16Offsets: readonly number[]
 }
 
-export type MdxEditorCommentOverlayRect = {
+export type DriveEditorCommentOverlayRect = {
   readonly key: string
   readonly threadId: string
   readonly top: number
@@ -34,13 +34,13 @@ export type MdxEditorCommentOverlayRect = {
   readonly height: number
 }
 
-export type MdxEditorCommentGeometry = {
+export type DriveEditorCommentGeometry = {
   readonly anchorTopByThreadId: Readonly<Record<string, number | null>>
-  readonly overlayRects: readonly MdxEditorCommentOverlayRect[]
+  readonly overlayRects: readonly DriveEditorCommentOverlayRect[]
   readonly naturalHeight: number
 }
 
-type GeometryInput = {
+export type DriveEditorCommentGeometryInput = {
   readonly enabled: boolean
   readonly layoutKey: string
   readonly resetKey: string
@@ -53,13 +53,13 @@ type GeometryInput = {
   readonly ignoredElementSelector?: string
 }
 
-const EMPTY_GEOMETRY: MdxEditorCommentGeometry = {
+const EMPTY_GEOMETRY: DriveEditorCommentGeometry = {
   anchorTopByThreadId: {},
   overlayRects: [],
   naturalHeight: 0,
 }
 
-export function useMdxEditorCommentGeometry(input: GeometryInput) {
+export function useDriveEditorCommentGeometry(input: DriveEditorCommentGeometryInput) {
   const inputRef = useRef(input)
   inputRef.current = input
   const frameRef = useRef<number | null>(null)
@@ -67,10 +67,10 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
   const geometryDirtyRef = useRef(true)
   const previousTextRef = useRef<string | null>(null)
   const workingRangesRef = useRef(new Map<string, TextRange | null>())
-  const modelRef = useRef<MdxEditorTextModel | null>(null)
+  const modelRef = useRef<DriveEditorTextModel | null>(null)
   const resetKeyRef = useRef(input.resetKey)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
-  const [geometry, setGeometry] = useState<MdxEditorCommentGeometry>(EMPTY_GEOMETRY)
+  const [geometry, setGeometry] = useState<DriveEditorCommentGeometry>(EMPTY_GEOMETRY)
 
   const measure = useCallback(() => {
     const current = inputRef.current
@@ -91,9 +91,9 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
     }
 
     if (modelDirtyRef.current || !modelRef.current) {
-      const nextModel = createMdxEditorTextModel(
+      const nextModel = createDriveEditorTextModel(
         contentRoot,
-        current.ignoredElementSelector ?? MDXEDITOR_COMMENT_IGNORED_SELECTOR,
+        current.ignoredElementSelector ?? DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR,
       )
       contentRoot.querySelectorAll('img').forEach((image) => resizeObserverRef.current?.observe(image))
       const previousText = previousTextRef.current
@@ -211,25 +211,25 @@ export function useMdxEditorCommentGeometry(input: GeometryInput) {
   return { geometry, notifyEditorUpdate, scheduleGeometry }
 }
 
-export function useMilkdownCommentGeometry(input: Omit<GeometryInput, 'contentRootSelector' | 'ignoredElementSelector'>) {
-  return useMdxEditorCommentGeometry({
+export function useMilkdownCommentGeometry(input: Omit<DriveEditorCommentGeometryInput, 'contentRootSelector' | 'ignoredElementSelector'>) {
+  return useDriveEditorCommentGeometry({
     ...input,
     contentRootSelector: '.milkdown .ProseMirror',
     ignoredElementSelector: MILKDOWN_COMMENT_IGNORED_SELECTOR,
   })
 }
 
-type MdxEditorTextModel = {
+export type DriveEditorTextModel = {
   readonly text: string
-  readonly segments: readonly MdxEditorTextSegment[]
+  readonly segments: readonly DriveEditorTextSegment[]
 }
 
-export function createMdxEditorTextModel(
+export function createDriveEditorTextModel(
   root: HTMLElement,
-  ignoredElementSelector = MDXEDITOR_COMMENT_IGNORED_SELECTOR,
-): MdxEditorTextModel {
+  ignoredElementSelector = DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR,
+): DriveEditorTextModel {
   const values: string[] = []
-  const segments: MdxEditorTextSegment[] = []
+  const segments: DriveEditorTextSegment[] = []
   let cursor = 0
 
   const appendText = (node: Text) => {
@@ -353,16 +353,16 @@ function measureGeometry(input: {
   readonly contentHost: HTMLElement
   readonly contentRoot: HTMLElement
   readonly imagePreviewUrls: ReadonlyMap<string, string | null>
-  readonly model: MdxEditorTextModel
+  readonly model: DriveEditorTextModel
   readonly projection: DriveMarkdownProjectionDto | null | undefined
   readonly scroller: HTMLElement
   readonly threads: readonly DriveAnnotationThreadDto[]
   readonly workingRanges: ReadonlyMap<string, TextRange | null>
-}): MdxEditorCommentGeometry {
+}): DriveEditorCommentGeometry {
   const hostRect = input.contentHost.getBoundingClientRect()
   const scrollerRect = input.scroller.getBoundingClientRect()
   const anchorTopByThreadId: Record<string, number | null> = {}
-  const overlayRects: MdxEditorCommentOverlayRect[] = []
+  const overlayRects: DriveEditorCommentOverlayRect[] = []
   const measuredRanges = new Map<string, readonly DOMRect[]>()
 
   for (const thread of input.threads) {
@@ -411,7 +411,7 @@ function measureGeometry(input: {
   }
 }
 
-function measureTextRange(model: MdxEditorTextModel, range: TextRange): readonly DOMRect[] {
+function measureTextRange(model: DriveEditorTextModel, range: TextRange): readonly DOMRect[] {
   const start = findBoundary(model.segments, range.start, 'start')
   const end = findBoundary(model.segments, range.end, 'end')
   if (!start || !end || !start.segment.node || !end.segment.node) return []
@@ -424,10 +424,10 @@ function measureTextRange(model: MdxEditorTextModel, range: TextRange): readonly
 }
 
 function findBoundary(
-  segments: readonly MdxEditorTextSegment[],
+  segments: readonly DriveEditorTextSegment[],
   offset: number,
   bias: 'start' | 'end',
-): { readonly segment: MdxEditorTextSegment; readonly offset: number } | null {
+): { readonly segment: DriveEditorTextSegment; readonly offset: number } | null {
   let low = 0
   let high = segments.length - 1
   while (low <= high) {
@@ -480,7 +480,7 @@ function toOverlayRect(
   threadId: string,
   rect: Pick<DOMRect, 'top' | 'left' | 'width' | 'height'>,
   hostRect: Pick<DOMRect, 'top' | 'left'>,
-): MdxEditorCommentOverlayRect {
+): DriveEditorCommentOverlayRect {
   return {
     key,
     threadId,
@@ -501,7 +501,7 @@ function codePointUtf16Offsets(value: string): readonly number[] {
   return offsets
 }
 
-function sameGeometry(left: MdxEditorCommentGeometry, right: MdxEditorCommentGeometry): boolean {
+function sameGeometry(left: DriveEditorCommentGeometry, right: DriveEditorCommentGeometry): boolean {
   if (!near(left.naturalHeight, right.naturalHeight)) return false
   const leftEntries = Object.entries(left.anchorTopByThreadId)
   const rightEntries = Object.entries(right.anchorTopByThreadId)

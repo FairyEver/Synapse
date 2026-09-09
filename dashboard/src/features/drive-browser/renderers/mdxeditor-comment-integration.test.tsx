@@ -17,7 +17,7 @@ import {
   thematicBreakPlugin,
 } from '@mdxeditor/editor'
 import '@mdxeditor/editor/style.css'
-import { createMdxEditorTextModel } from './mdxeditor-comment-geometry'
+import { createDriveEditorTextModel } from './drive-editor-comment-geometry'
 import {
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
@@ -88,7 +88,7 @@ describe('MDXEditor comment text integration', () => {
 
     const content = document.querySelector<HTMLElement>('.drive-mdxeditor-content')
     if (!content) throw new Error('MDXEditor did not render the content editable')
-    const model = createMdxEditorTextModel(content)
+    const model = createDriveEditorTextModel(content)
 
     expect(model.text).toContain('标题普通 目标🙂列表项引用')
     expect(model.text).toContain('第一列第二列单元格尾部')
@@ -181,7 +181,7 @@ describe('MDXEditor comment text integration', () => {
 
     const content = document.querySelector<HTMLElement>('.drive-mdxeditor-content')
     if (!content) throw new Error('MDXEditor did not render the content editable')
-    const model = createMdxEditorTextModel(content)
+    const model = createDriveEditorTextModel(content)
 
     expect(model.text).toBe('HeadingBefore bold🙂orderedsecondparentnestedloose firstloose secondList separatortaskquoteHeadValueCellEndconst value = "😀"\nreturn valueEscaped *plain* & link goneBefore image inline after.blockBefore break\nAfter breakFormula $x + 1$ endraw htmlAfter')
     const roundTripped = editorRef.current?.getMarkdown() ?? ''

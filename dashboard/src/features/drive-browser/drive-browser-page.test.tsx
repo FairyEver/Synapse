@@ -433,6 +433,36 @@ describe('DriveBrowserPage', () => {
     expect(document.querySelector('[data-testid="markdown-document-scroll"]')?.className).toContain('overflow-y-auto')
   })
 
+  it('opens the renderer menu without applying modal side effects to the document', async () => {
+    renderPage(
+      <DriveSingleFileReaderView
+        snapshot={createSnapshot({
+          surface: 'standalone',
+          current: {
+            ...baseCurrent(),
+            name: 'notes.md',
+            previewKind: 'markdown',
+          },
+        })}
+      />
+    )
+
+    const trigger = buttonWithText('打开方式')
+    if (!trigger) throw new Error('Missing renderer menu trigger.')
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        ctrlKey: false,
+      }))
+    })
+
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    expect(host?.getAttribute('aria-hidden')).toBeNull()
+    expect(document.body.style.overflow).not.toBe('hidden')
+  })
+
   it('uses injected client navigation for finder rows and breadcrumbs', () => {
     const onNavigate = vi.fn()
     mockDriveBrowserState({

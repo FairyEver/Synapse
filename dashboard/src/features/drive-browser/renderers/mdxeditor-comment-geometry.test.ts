@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { createMdxEditorTextModel, mapWorkingRange } from './mdxeditor-comment-geometry'
+import { createDriveEditorTextModel, mapWorkingRange } from './drive-editor-comment-geometry'
 
 describe('MDXEditor comment geometry', () => {
   it('builds Unicode code-point offsets across formatted and nested editor text', () => {
     const root = document.createElement('div')
     root.innerHTML = '<p>前缀<strong>目标🙂</strong></p><table><tbody><tr><td>单元格</td></tr></tbody></table>'
 
-    const model = createMdxEditorTextModel(root)
+    const model = createDriveEditorTextModel(root)
 
     expect(model.text).toBe('前缀目标🙂单元格')
     expect(model.segments.at(-1)?.end).toBe(Array.from(model.text).length)
@@ -18,7 +18,7 @@ describe('MDXEditor comment geometry', () => {
     const root = document.createElement('div')
     root.innerHTML = '<p>之前<img src="/asset.png" alt="示意图">之后<br>末尾</p>'
 
-    const model = createMdxEditorTextModel(root)
+    const model = createDriveEditorTextModel(root)
 
     expect(model.text).toBe('之前示意图之后\n末尾')
     expect(model.segments.filter((segment) => segment.node === null)).toHaveLength(2)
@@ -28,7 +28,7 @@ describe('MDXEditor comment geometry', () => {
     const root = document.createElement('div')
     root.innerHTML = '<p>之前</p><div class="cm-content"><div class="cm-line"><span>const value = 1</span></div><div class="cm-line">return value</div></div><p>之后</p>'
 
-    const model = createMdxEditorTextModel(root)
+    const model = createDriveEditorTextModel(root)
 
     expect(model.text).toBe('之前const value = 1\nreturn value之后')
     expect(model.segments.find((segment) => segment.start === 2)?.node).toBeNull()

@@ -85,7 +85,8 @@ vi.mock('@mdxeditor/editor', async () => {
     realmPlugin: () => () => ({ name: 'realmPlugin' }),
     createActiveEditorSubscription$: Symbol('createActiveEditorSubscription$'),
     createRootEditorSubscription$: Symbol('createRootEditorSubscription$'),
-    lexical: { LineBreakNode: class {} },
+    GenericHTMLNode: class {},
+    lexical: { DecoratorNode: class {}, LineBreakNode: class {} },
     $createGenericHTMLNode: () => null,
     $isImageNode: () => false,
     tablePlugin: () => null,
@@ -111,6 +112,33 @@ vi.mock('./use-drive-annotations', () => ({
   }),
 }))
 
+vi.mock('@milkdown/crepe/theme/common/style.css', () => ({}))
+
+vi.mock('@milkdown/crepe', () => ({
+  Crepe: class {},
+  CrepeFeature: {
+    AI: 'ai',
+    BlockEdit: 'block-edit',
+    CodeMirror: 'code-mirror',
+    ImageBlock: 'image-block',
+    LinkTooltip: 'link-tooltip',
+    Placeholder: 'placeholder',
+    Toolbar: 'toolbar',
+    TopBar: 'top-bar',
+  },
+}))
+
+vi.mock('@milkdown/kit/utils', () => ({ insert: () => () => undefined, replaceAll: () => () => undefined }))
+
+vi.mock('@milkdown/react', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  return {
+    MilkdownProvider: ({ children }: { readonly children: React.ReactNode }) => children,
+    Milkdown: () => React.createElement('div', { 'data-milkdown': 'true' }),
+    useEditor: () => ({ loading: true, get: () => undefined }),
+  }
+})
+
 describe('drive browser view model', () => {
   it('renders admin public asset controls without marketing copy', () => {
     const queryClient = new QueryClient()
@@ -125,7 +153,7 @@ describe('drive browser view model', () => {
       )
     )
 
-    expect(assetsHtml).toContain('搜索')
+    expect(assetsHtml).toContain('按名称筛选...')
     expect(assetsHtml).toContain('访问')
     expect(assetsHtml).not.toContain('让您的')
     expect(summaryHtml).toContain('普通文件')
@@ -420,7 +448,7 @@ describe('drive browser view model', () => {
     }))).toBe(false)
   })
 
-  it('returns markdown preview, MDXeditor, and code renderer options with preview as default', () => {
+  it('returns markdown preview, MDXeditor, Milkdown, and code renderer options with preview as default', () => {
     const snapshot = createSnapshot({
       current: { ...baseCurrent(), name: 'notes.md', previewKind: 'markdown' },
       preview: { ...basePreview(), kind: 'markdown', html: '<h1>Notes</h1>', text: '# Notes' },
@@ -428,8 +456,8 @@ describe('drive browser view model', () => {
 
     const options = getDriveRendererOptions(snapshot)
 
-    expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'code'])
-    expect(options.map((option) => option.label)).toEqual(['预览', 'MDXeditor', '代码'])
+    expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'milkdown', 'code'])
+    expect(options.map((option) => option.label)).toEqual(['预览', 'MDXeditor', 'Milkdown', '代码'])
     expect(selectDefaultDriveRenderer(snapshot)?.id).toBe('markdown')
   })
 
@@ -468,7 +496,7 @@ describe('drive browser view model', () => {
     const options = getDriveRendererOptions(snapshot)
     const mdxeditor = options.find((option) => option.id === 'mdxeditor')
 
-    expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'code'])
+    expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'milkdown', 'code'])
     expect(mdxeditor?.disabledReason).toBeUndefined()
     expect(findDriveRendererOption(snapshot, 'mdxeditor')?.id).toBe('mdxeditor')
 
@@ -478,6 +506,15 @@ describe('drive browser view model', () => {
     }))
 
     expect(html).toContain('data-mdxeditor="true"')
+  })
+
+  it('does not offer Milkdown for MDX files even when the MIME type is Markdown', () => {
+    const snapshot = createSnapshot({
+      current: { ...baseCurrent(), name: 'component.mdx', mimeType: 'text/markdown', previewKind: 'markdown' },
+      preview: { ...basePreview(), kind: 'markdown', text: '# Component', html: '<h1>Component</h1>' },
+    })
+
+    expect(getDriveRendererOptions(snapshot).map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'code'])
   })
 
   it('uses iframe as the default renderer for html files with visit urls', () => {
@@ -738,6 +775,34 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('data-drive-code-renderer="true"')
   })
 
+  it('renders Milkdown content without falling back to code renderer', () => {
+    const snapshot = createSnapshot({
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        mimeType: 'text/markdown',
+        previewKind: 'markdown',
+      },
+      preview: {
+        ...basePreview(),
+        kind: 'markdown',
+        text: '# Notes',
+        html: '<h1>Notes</h1>',
+        visitUrl: null,
+      },
+    })
+
+    const html = renderDriveRendererContent({
+      snapshot,
+      selected: { id: 'milkdown', label: 'Milkdown', container: 'full' },
+      body: true,
+    })
+
+    expect(html).toContain('data-drive-milkdown-renderer="true"')
+    expect(html).toContain('data-milkdown="true"')
+    expect(html).not.toContain('data-drive-code-renderer="true"')
+  })
+
   it('renders markdown outline links when preview contains headings', () => {
     const snapshot = createSnapshot({
       current: {
@@ -775,9 +840,7 @@ describe('drive browser view model', () => {
     )
 
     expect(html).toContain('aria-label="目录"')
-    expect(html).toContain('class="h-full overflow-hidden px-4 py-6 md:px-6"')
-    expect(html).toContain('max-h-[calc(100vh-3rem)] overflow-auto')
-    expect(html).not.toContain('overflow-auto border-l')
+    expect(html).toContain('data-testid="markdown-document-scroll"')
     expect(html).toContain('href="#notes"')
     expect(html).toContain('href="#details"')
     expect(html).toContain('<h1 id="notes">Notes</h1>')

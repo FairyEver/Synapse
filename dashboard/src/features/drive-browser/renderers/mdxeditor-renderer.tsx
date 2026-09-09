@@ -29,26 +29,12 @@ import {
 import '@mdxeditor/editor/style.css'
 import type { JsxComponentDescriptor, MDXEditorMethods, ViewMode } from '@mdxeditor/editor'
 import {
-  DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION,
-  DRIVE_DOCUMENT_IMAGE_MAX_BYTES,
-  DRIVE_DOCUMENT_IMAGE_MAX_SIZE_LABEL,
-  inferDrivePublicAssetMimeType,
   isDriveCommentableMarkdownItem,
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
 } from '@synapse/shared'
-import { Download, ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import {
@@ -60,10 +46,8 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
-import { ApiError, type DriveDocumentImageUploadContext } from '@/lib/api'
-import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
+import type { DriveDocumentImageUploadContext } from '@/lib/api'
 import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
-import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { DriveCommentsRail, type DriveCommentsRailItem } from '../drive-comments-rail'
@@ -72,13 +56,29 @@ import {
   DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
   observeDriveHierarchicalListMarkers,
 } from './drive-hierarchical-list-markers'
+import {
+  DRIVE_DOCUMENT_IMAGE_ACCEPT,
+  driveDocumentImageAltText,
+  driveDocumentImageValidationError,
+  useDriveDocumentImageUpload,
+} from './drive-document-image-upload'
+import {
+  DriveDocumentEditorRecoveryDialogs,
+  buildDriveDocumentEditorLoginUrl,
+  driveDocumentEditorErrorMessage,
+  isDriveDocumentSaveAcknowledged,
+  isDriveDocumentSaveShortcut,
+  reloadDriveDocumentText,
+  saveDriveDocumentText,
+  type DriveDocumentSaveAttempt,
+} from './drive-document-editor-lifecycle'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import {
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
-import { useMdxEditorCommentGeometry } from './mdxeditor-comment-geometry'
+import { useDriveEditorCommentGeometry } from './drive-editor-comment-geometry'
 import { mdxEditorCommentObserverPlugin } from './mdxeditor-comment-observer-plugin'
 import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
 import { tableCellLineBreakPlugin } from './mdxeditor-table-cell-line-break-plugin'
@@ -92,10 +92,6 @@ const MDXEDITOR_COMMENTS_PANEL_MAX_SIZE = 32
 const COMMENT_SCROLL_SAFE_INSET = 24
 
 type ResizablePanelPercent = `${number}%`
-
-type DrivePublicAssetImageMimeType = typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION[keyof typeof DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION]
-
-const DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES = Object.values(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION) as readonly DrivePublicAssetImageMimeType[]
 
 const GENERIC_MDX_COMPONENT_DESCRIPTOR = {
   name: '*',
@@ -137,16 +133,14 @@ export function DriveMDXeditorRenderer({
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
   const saveInFlightRef = useRef(false)
-  const pendingSaveRef = useRef<{ readonly itemId: string; readonly initialText: string } | null>(null)
+  const pendingSaveRef = useRef<DriveDocumentSaveAttempt | null>(null)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
   const parseErrorRequestRef = useRef(0)
-  const pendingImageUploadCountRef = useRef(0)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [uploadingImage, setUploadingImage] = useState(false)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -170,7 +164,14 @@ export function DriveMDXeditorRenderer({
   const loginRequired = edit?.reason === 'login_required'
   const requiresSourceMode = preparedInitialDocument.requiresSourceMode
   const sourceMode = Boolean(parseError || requiresSourceMode || editorViewMode !== 'rich-text')
-  const loginUrl = buildLoginUrl()
+  const loginUrl = buildDriveDocumentEditorLoginUrl()
+  const { uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
+    canEdit,
+    imageUploadContext,
+    lifecycleKey: current.id,
+    telemetryComponent: 'drive-markdown-editor',
+    onError: setError,
+  })
   const canSave = canEdit
     && dirty
     && !uploadingImage
@@ -202,7 +203,7 @@ export function DriveMDXeditorRenderer({
       thread.anchor?.resolvedRenderedRange?.end ?? '',
     ].join(':')),
   ].join('|'), [annotationThreads, commentBaselineRevision, current.id, edit?.currentVersionId])
-  const { geometry, notifyEditorUpdate, scheduleGeometry } = useMdxEditorCommentGeometry({
+  const { geometry, notifyEditorUpdate, scheduleGeometry } = useDriveEditorCommentGeometry({
     enabled: annotationsEnabled && !sourceMode,
     layoutKey: `${layoutMode}:${commentsOpen}`,
     resetKey: annotationGeometryResetKey,
@@ -271,44 +272,9 @@ export function DriveMDXeditorRenderer({
       })
     })
   }, [])
-  const uploadDocumentImage = useCallback(async (file: File) => {
-    if (!canEdit || !imageUploadContext) throw new Error('图片上传不可用。')
-    const validationError = publicImageUploadValidationError(file)
-    if (validationError) {
-      setError(validationError)
-      throw new Error(validationError)
-    }
-    const input = resolvePublicImageUploadInput(file)
-    if (!input) {
-      setError('格式不支持。')
-      throw new Error('格式不支持。')
-    }
-    setError(null)
-    const finishTracking = startDriveOperation('web.drive.editor.image-upload', 'drive-markdown-editor')
-    pendingImageUploadCountRef.current += 1
-    setUploadingImage(true)
-    try {
-      const uploaded = await driveBrowserApi.uploadHostedDocumentImage(file, imageUploadContext, input)
-      finishTracking('success')
-      return uploaded.url
-    } catch (uploadError) {
-      finishTracking('failure')
-      const message = uploadError instanceof Error ? uploadError.message : '图片上传失败。'
-      setError(message)
-      throw uploadError
-    } finally {
-      pendingImageUploadCountRef.current -= 1
-      if (pendingImageUploadCountRef.current === 0) setUploadingImage(false)
-    }
-  }, [canEdit, imageUploadContext])
-  const handleDocumentImageUpload = useCallback((file: File | null) => {
-    if (file) return uploadDocumentImage(file)
-    const message = '图片内容为空，请重新复制或选择图片。'
-    setError(message)
-    return Promise.reject(new Error(message))
-  }, [uploadDocumentImage])
+  const handleDocumentImageUpload = uploadOptionalDocumentImage
   const insertDocumentImageMarkdown = useCallback((file: File, url: string) => {
-    const markdown = `![${imageAltText(file.name)}](${url})`
+    const markdown = `![${driveDocumentImageAltText(file.name)}](${url})`
     editorRef.current?.focus(() => {
       editorRef.current?.insertMarkdown(markdown)
     }, { defaultSelection: 'rootEnd' })
@@ -317,13 +283,9 @@ export function DriveMDXeditorRenderer({
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
     if (!file || !canEdit || !imageUploadContext) return
-    const validationError = publicImageUploadValidationError(file)
+    const validationError = driveDocumentImageValidationError(file)
     if (validationError) {
       setError(validationError)
-      return
-    }
-    if (!resolvePublicImageUploadInput(file)) {
-      setError('格式不支持。')
       return
     }
     setError(null)
@@ -347,7 +309,7 @@ export function DriveMDXeditorRenderer({
     const imageItems = items.filter((item) => item.type.startsWith('image/'))
     if (imageItems.length === 0) return
     const files = imageItems.map((item) => item.getAsFile())
-    const validationError = files.map((file) => publicImageUploadValidationError(file)).find((message) => message !== null) ?? null
+    const validationError = files.map((file) => driveDocumentImageValidationError(file)).find((message) => message !== null) ?? null
     const mixedPayload = items.some((item) => !item.type.startsWith('image/'))
     if (!validationError && !mixedPayload) return
     event.preventDefault()
@@ -418,8 +380,7 @@ export function DriveMDXeditorRenderer({
 
   useEffect(() => {
     savedValueRef.current = initialText
-    const savedVersionAcknowledged = pendingSaveRef.current?.itemId === current.id
-      && pendingSaveRef.current.initialText === initialText
+    const savedVersionAcknowledged = isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText)
     if (savedVersionAcknowledged) {
       setDirty(valueRef.current !== initialText)
       return
@@ -428,7 +389,6 @@ export function DriveMDXeditorRenderer({
     setValue(initialText)
     setDirty(false)
     setError(null)
-    setUploadingImage(false)
     clearParseError()
     setConflictOpen(false)
     setReloadConfirmOpen(false)
@@ -480,7 +440,12 @@ export function DriveMDXeditorRenderer({
     }
     pendingSaveRef.current = saveAttempt
     try {
-      await editContext.saveText({ text: normalizedValue, baseVersionId: edit.currentVersionId })
+      const result = await saveDriveDocumentText(editContext, normalizedValue, edit.currentVersionId)
+      if (result === 'conflict') {
+        finishTracking('failure')
+        setConflictOpen(true)
+        return
+      }
       clearParseError()
       if (normalizedValue !== submittedValue && valueRef.current === submittedValue) {
         valueRef.current = normalizedValue
@@ -495,11 +460,7 @@ export function DriveMDXeditorRenderer({
       finishTracking('success')
     } catch (saveError) {
       finishTracking('failure')
-      if (saveError instanceof ApiError && saveError.status === 409) {
-        setConflictOpen(true)
-        return
-      }
-      setError(saveError instanceof Error ? saveError.message : '保存失败。')
+      setError(driveDocumentEditorErrorMessage(saveError, '保存失败。'))
     } finally {
       if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
       saveInFlightRef.current = false
@@ -507,7 +468,7 @@ export function DriveMDXeditorRenderer({
   }, [annotations.refresh, beginExternalMarkdownSync, canSave, clearParseError, current.id, edit?.currentVersionId, editContext, usesMdxSyntax])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key.toLowerCase() !== 's' || (!event.metaKey && !event.ctrlKey) || event.shiftKey || event.altKey) return
+    if (!isDriveDocumentSaveShortcut(event)) return
     event.preventDefault()
     if (canSave) void handleSave()
   }, [canSave, handleSave])
@@ -532,8 +493,7 @@ export function DriveMDXeditorRenderer({
     const finishTracking = startDriveOperation('web.drive.editor.reload', 'drive-markdown-editor')
     setError(null)
     try {
-      const nextSnapshot = await editContext.reload()
-      const nextText = nextSnapshot.preview?.text ?? ''
+      const nextText = await reloadDriveDocumentText(editContext)
       savedValueRef.current = nextText
       valueRef.current = nextText
       setValue(nextText)
@@ -546,7 +506,7 @@ export function DriveMDXeditorRenderer({
       finishTracking('success')
     } catch (reloadError) {
       finishTracking('failure')
-      setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
+      setError(driveDocumentEditorErrorMessage(reloadError, '重新加载失败。'))
     }
   }, [beginExternalMarkdownSync, clearParseError, editContext])
 
@@ -763,7 +723,7 @@ export function DriveMDXeditorRenderer({
             plugins={plugins}
             translation={mdxEditorZhCnTranslation}
             className='min-h-full'
-            contentEditableClassName={`drive-mdxeditor-content mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
+            contentEditableClassName={`drive-mdxeditor-content mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
           />
         )}
         {!sourceMode && geometry.overlayRects.length > 0 ? (
@@ -801,7 +761,7 @@ export function DriveMDXeditorRenderer({
         ref={imageInputRef}
         type='file'
         className='hidden'
-        accept={Object.keys(DRIVE_PUBLIC_ASSET_IMAGE_MIME_BY_EXTENSION).map((extension) => `.${extension}`).join(',')}
+        accept={DRIVE_DOCUMENT_IMAGE_ACCEPT}
         disabled={!canEdit || uploadingImage}
         onChange={(event) => { void handleImageSelected(event) }}
       />
@@ -854,42 +814,15 @@ export function DriveMDXeditorRenderer({
       {preview.truncated ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div>
       ) : null}
-      <AlertDialog open={reloadConfirmOpen} onOpenChange={setReloadConfirmOpen}>
-        <AlertDialogContent data-drive-telemetry-scope='portal'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>放弃本地修改？</AlertDialogTitle>
-            <AlertDialogDescription>
-              重新加载会用服务器内容覆盖当前未保存编辑。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.conflict-reload' onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
-        <AlertDialogContent data-drive-telemetry-scope='portal'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>文件已有新内容</AlertDialogTitle>
-            <AlertDialogDescription>
-              你的编辑仍保留，可以下载到本地或重新加载。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.reload' onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DriveDocumentEditorRecoveryDialogs
+        conflictOpen={conflictOpen}
+        fileName={current.name}
+        localValue={value}
+        onConflictOpenChange={setConflictOpen}
+        onReload={() => { void handleReload() }}
+        onReloadConfirmOpenChange={setReloadConfirmOpen}
+        reloadConfirmOpen={reloadConfirmOpen}
+      />
     </div>
   )
 }
@@ -907,27 +840,6 @@ function normalizeWheelDelta(event: Pick<WheelEvent, 'deltaMode' | 'deltaY'>, pa
 
 function resizablePanelPercent(value: number): ResizablePanelPercent {
   return `${value}%`
-}
-
-function buildLoginUrl(): string {
-  if (typeof window === 'undefined') return buildDashboardSignInUrl(undefined)
-  return buildDashboardSignInUrl(window.location)
-}
-
-function downloadLocalVersion(name: string, value: string): void {
-  const url = URL.createObjectURL(new Blob([value], { type: 'text/plain;charset=utf-8' }))
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = name
-  anchor.click()
-  URL.revokeObjectURL(url)
-}
-
-function imageAltText(name: string): string {
-  const fallback = 'image'
-  const trimmed = name.trim()
-  if (!trimmed) return fallback
-  return trimmed.replace(/\.(?:png|jpe?g|gif|webp|avif|ico)$/iu, '') || fallback
 }
 
 function isMdxDocument(name: string): boolean {
@@ -965,24 +877,6 @@ function someLineOutsideFencedCode(markdown: string, predicate: (line: string) =
     if (predicate(line)) return true
   }
   return false
-}
-
-function resolvePublicImageUploadInput(file: File): { readonly name: string; readonly mimeType: DrivePublicAssetImageMimeType } | null {
-  const name = file.name || 'image.png'
-  const mimeType = file.type || inferDrivePublicAssetMimeType(name)
-  if (!isDrivePublicAssetImageMimeType(mimeType)) return null
-  return { name, mimeType }
-}
-
-function publicImageUploadValidationError(file: File | null | undefined): string | null {
-  if (!file || file.size <= 0) return '图片内容为空，请重新复制或选择图片。'
-  if (file.size > DRIVE_DOCUMENT_IMAGE_MAX_BYTES) return `图片超过 ${DRIVE_DOCUMENT_IMAGE_MAX_SIZE_LABEL} 限制。`
-  if (!resolvePublicImageUploadInput(file)) return '格式不支持。'
-  return null
-}
-
-function isDrivePublicAssetImageMimeType(value: string | null): value is DrivePublicAssetImageMimeType {
-  return Boolean(value && DRIVE_PUBLIC_ASSET_IMAGE_MIME_TYPES.includes(value as DrivePublicAssetImageMimeType))
 }
 
 function normalizeMdxEditorImageMarkdown(markdown: string): string {

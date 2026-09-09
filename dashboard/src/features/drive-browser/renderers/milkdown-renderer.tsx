@@ -10,24 +10,12 @@ import {
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
 } from '@synapse/shared'
-import { Download, ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
-import { ApiError, type DriveDocumentImageUploadContext } from '@/lib/api'
-import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
+import type { DriveDocumentImageUploadContext } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { DriveCommentsRail, type DriveCommentsRailItem } from '../drive-comments-rail'
@@ -39,8 +27,18 @@ import {
   driveDocumentImageValidationError,
   useDriveDocumentImageUpload,
 } from './drive-document-image-upload'
+import {
+  DriveDocumentEditorRecoveryDialogs,
+  buildDriveDocumentEditorLoginUrl,
+  driveDocumentEditorErrorMessage,
+  isDriveDocumentSaveAcknowledged,
+  isDriveDocumentSaveShortcut,
+  reloadDriveDocumentText,
+  saveDriveDocumentText,
+  type DriveDocumentSaveAttempt,
+} from './drive-document-editor-lifecycle'
 import { configureMilkdownCommonMarkImages } from './milkdown-commonmark-images'
-import { useMilkdownCommentGeometry } from './mdxeditor-comment-geometry'
+import { useMilkdownCommentGeometry } from './drive-editor-comment-geometry'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -88,7 +86,7 @@ export function DriveMilkdownRenderer({
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
   const saveInFlightRef = useRef(false)
-  const pendingSaveRef = useRef<{ readonly itemId: string; readonly initialText: string } | null>(null)
+  const pendingSaveRef = useRef<DriveDocumentSaveAttempt | null>(null)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
@@ -118,7 +116,7 @@ export function DriveMilkdownRenderer({
   const loginRequired = edit?.reason === 'login_required'
   const requiresSourceMode = requiresMilkdownSourceMode(initialText)
   const sourceMode = Boolean(parseError || requiresSourceMode)
-  const loginUrl = buildLoginUrl()
+  const loginUrl = buildDriveDocumentEditorLoginUrl()
   const { uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
     canEdit,
     imageUploadContext,
@@ -265,8 +263,7 @@ export function DriveMilkdownRenderer({
 
   useEffect(() => {
     savedValueRef.current = initialText
-    const savedVersionAcknowledged = pendingSaveRef.current?.itemId === current.id
-      && pendingSaveRef.current.initialText === initialText
+    const savedVersionAcknowledged = isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText)
     if (savedVersionAcknowledged) {
       setDirty(valueRef.current !== initialText)
       return
@@ -345,7 +342,12 @@ export function DriveMilkdownRenderer({
     const saveAttempt = { itemId: current.id, initialText: submittedValue }
     pendingSaveRef.current = saveAttempt
     try {
-      await editContext.saveText({ text: submittedValue, baseVersionId: edit.currentVersionId })
+      const result = await saveDriveDocumentText(editContext, submittedValue, edit.currentVersionId)
+      if (result === 'conflict') {
+        finishTracking('failure')
+        setConflictOpen(true)
+        return
+      }
       savedValueRef.current = submittedValue
       setDirty(valueRef.current !== submittedValue)
       await annotations.refresh()
@@ -353,11 +355,7 @@ export function DriveMilkdownRenderer({
       finishTracking('success')
     } catch (saveError) {
       finishTracking('failure')
-      if (saveError instanceof ApiError && saveError.status === 409) {
-        setConflictOpen(true)
-        return
-      }
-      setError(saveError instanceof Error ? saveError.message : '保存失败。')
+      setError(driveDocumentEditorErrorMessage(saveError, '保存失败。'))
     } finally {
       if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
       saveInFlightRef.current = false
@@ -365,7 +363,7 @@ export function DriveMilkdownRenderer({
   }, [annotations.refresh, canSave, current.id, edit?.currentVersionId, editContext])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key.toLowerCase() !== 's' || (!event.metaKey && !event.ctrlKey) || event.shiftKey || event.altKey) return
+    if (!isDriveDocumentSaveShortcut(event)) return
     event.preventDefault()
     if (canSave) void handleSave()
   }, [canSave, handleSave])
@@ -375,8 +373,7 @@ export function DriveMilkdownRenderer({
     const finishTracking = startDriveOperation('web.drive.editor.reload', 'drive-milkdown-editor')
     setError(null)
     try {
-      const nextSnapshot = await editContext.reload()
-      const nextText = nextSnapshot.preview?.text ?? ''
+      const nextText = await reloadDriveDocumentText(editContext)
       savedValueRef.current = nextText
       valueRef.current = nextText
       setValue(nextText)
@@ -388,7 +385,7 @@ export function DriveMilkdownRenderer({
       finishTracking('success')
     } catch (reloadError) {
       finishTracking('failure')
-      setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
+      setError(driveDocumentEditorErrorMessage(reloadError, '重新加载失败。'))
     }
   }, [editContext, replaceEditorMarkdown])
 
@@ -759,38 +756,15 @@ export function DriveMilkdownRenderer({
       {error ? <div className='border-t px-3 py-2 text-xs text-destructive'>{error}</div> : null}
       {uploadingImage ? <div className='border-t px-3 py-2 text-xs text-muted-foreground'>上传中</div> : null}
       {preview.truncated ? <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div> : null}
-      <AlertDialog open={reloadConfirmOpen} onOpenChange={setReloadConfirmOpen}>
-        <AlertDialogContent data-drive-telemetry-scope='portal'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>放弃本地修改？</AlertDialogTitle>
-            <AlertDialogDescription>重新加载会用服务器内容覆盖当前未保存编辑。</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.conflict-reload' onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
-        <AlertDialogContent data-drive-telemetry-scope='portal'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>文件已有新内容</AlertDialogTitle>
-            <AlertDialogDescription>你的编辑仍保留，可以下载到本地或重新加载。</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, value)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.reload' onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DriveDocumentEditorRecoveryDialogs
+        conflictOpen={conflictOpen}
+        fileName={current.name}
+        localValue={value}
+        onConflictOpenChange={setConflictOpen}
+        onReload={() => { void handleReload() }}
+        onReloadConfirmOpenChange={setReloadConfirmOpen}
+        reloadConfirmOpen={reloadConfirmOpen}
+      />
     </div>
   )
 }
@@ -971,18 +945,4 @@ function normalizeWheelDelta(event: Pick<WheelEvent, 'deltaMode' | 'deltaY'>, pa
 
 function resizablePanelPercent(value: number): ResizablePanelPercent {
   return `${value}%`
-}
-
-function buildLoginUrl(): string {
-  if (typeof window === 'undefined') return buildDashboardSignInUrl(undefined)
-  return buildDashboardSignInUrl(window.location)
-}
-
-function downloadLocalVersion(name: string, value: string): void {
-  const url = URL.createObjectURL(new Blob([value], { type: 'text/plain;charset=utf-8' }))
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = name
-  anchor.click()
-  URL.revokeObjectURL(url)
 }

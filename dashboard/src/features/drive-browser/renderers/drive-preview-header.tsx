@@ -261,7 +261,7 @@ function DrivePreviewHeaderAction({
     )
   }
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           data-drive-telemetry-event='web.drive.preview.renderer-menu'

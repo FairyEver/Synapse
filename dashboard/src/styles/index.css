@@ -73,6 +73,255 @@
   animation: slideUp 300ms ease-out;
 }
 
+.drive-milkdown-editor .milkdown {
+  --crepe-color-background: var(--background);
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--popover);
+  --crepe-color-surface-low: var(--muted);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--muted-foreground);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--secondary);
+  --crepe-color-on-secondary: var(--secondary-foreground);
+  --crepe-color-inverse: var(--foreground);
+  --crepe-color-on-inverse: var(--background);
+  --crepe-color-inline-code: var(--foreground);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: var(--accent);
+  --crepe-color-selected: var(--secondary);
+  --crepe-color-inline-area: var(--muted);
+  --crepe-base-font-size: 1rem;
+  --crepe-font-title: var(--font-inter);
+  --crepe-font-default: var(--font-inter);
+  --crepe-font-code: var(--font-mono);
+  --crepe-shadow-1: var(--shadow-md);
+  --crepe-shadow-2: var(--shadow-md);
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) {
+  color: var(--foreground);
+  font-family: var(--font-inter);
+  font-size: 1rem;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  line-height: 1.5;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) > :first-child {
+  margin-block-start: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) > :last-child {
+  margin-block-end: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--foreground);
+  font-family: var(--font-inter);
+  font-weight: 600;
+  line-height: 1.25;
+  margin-block: 1.5rem 1rem;
+  padding: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) h1 {
+  font-size: 2rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) h2 {
+  font-size: 1.5rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) h3 {
+  font-size: 1.25rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) :is(h4, h5, h6) {
+  font-size: 1rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) :is(h1, h2) {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3em;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) h6 {
+  color: var(--muted-foreground);
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) p {
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) :is(ul, ol) {
+  list-style-position: outside;
+  margin: 0 0 1rem;
+  padding-inline-start: 1.5rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) ul {
+  list-style-type: disc;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) ol {
+  list-style-type: decimal;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) :is(ul, ol) :is(ul, ol) {
+  margin-block: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) li + li {
+  margin-top: 0.25rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) li p {
+  margin-bottom: 0;
+}
+
+.drive-milkdown-editor .milkdown .ProseMirror :is(ul, ol) {
+  padding-inline-start: 0;
+}
+
+.drive-milkdown-editor .milkdown .milkdown-list-item-block li {
+  gap: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) blockquote {
+  border-inline-start: 1px solid var(--border);
+  box-sizing: border-box;
+  color: var(--muted-foreground);
+  margin: 0 0 1rem;
+  padding: 0 1rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) blockquote::before {
+  content: none;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) code:not(pre code) {
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  display: inline;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  font-variant-ligatures: none;
+  line-height: inherit;
+  padding: 0.125rem 0.25rem;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) pre {
+  background: var(--muted);
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-variant-ligatures: none;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  overflow: auto;
+  padding: 1rem;
+}
+
+:is(
+  .drive-milkdown-editor .milkdown .milkdown-code-block,
+  .drive-mdxeditor-content div:has(> div > .cm-editor)
+) {
+  background: var(--muted);
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  margin: 0 0 1rem;
+  overflow: hidden;
+  padding: 1rem;
+  position: relative;
+}
+
+:is(
+  .drive-milkdown-editor .milkdown .milkdown-code-block,
+  .drive-mdxeditor-content div:has(> div > .cm-editor)
+) :is(.cm-editor, .cm-gutters) {
+  background: transparent;
+}
+
+:is(
+  .drive-milkdown-editor .milkdown .milkdown-code-block,
+  .drive-mdxeditor-content div:has(> div > .cm-editor)
+) .cm-scroller {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-variant-ligatures: none;
+  line-height: 1.5;
+}
+
+:is(
+  .drive-milkdown-editor .milkdown .milkdown-code-block,
+  .drive-mdxeditor-content div:has(> div > .cm-editor)
+) .cm-content {
+  padding-block: 0;
+}
+
+.drive-milkdown-editor .milkdown .milkdown-code-block pre {
+  background: transparent;
+  border-radius: 0;
+  margin: 0;
+  overflow: visible;
+  padding: 0;
+}
+
+.drive-milkdown-editor .milkdown .milkdown-code-block-placeholder code {
+  color: var(--muted-foreground);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: inherit;
+  font-variant-ligatures: none;
+  line-height: inherit;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  width: 100%;
+}
+
+.drive-milkdown-editor .milkdown .milkdown-table-block {
+  margin: 0 0 1rem;
+}
+
+.drive-milkdown-editor .milkdown .milkdown-table-block table {
+  margin: 0;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) :is(th, td):not([data-tool-cell]) {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) th:not([data-tool-cell]) {
+  background: var(--muted);
+  font-weight: 600;
+  text-align: start;
+}
+
+:is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) :is(th, td):not([data-tool-cell]) p {
+  margin: 0;
+}
+
 @keyframes slideDown {
   from {
     height: 0;

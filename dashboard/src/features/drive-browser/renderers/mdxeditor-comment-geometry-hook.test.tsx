@@ -4,7 +4,7 @@ import { act, useRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveAnnotationThreadDto, DriveMarkdownProjectionDto } from '@synapse/shared'
-import { useMdxEditorCommentGeometry, useMilkdownCommentGeometry } from './mdxeditor-comment-geometry'
+import { useDriveEditorCommentGeometry, useMilkdownCommentGeometry } from './drive-editor-comment-geometry'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -21,7 +21,7 @@ afterEach(() => {
   Reflect.deleteProperty(document, 'fonts')
 })
 
-describe('useMdxEditorCommentGeometry', () => {
+describe('useDriveEditorCommentGeometry', () => {
   it('batches resize work by frame and measures duplicate ranges once', async () => {
     const frames = new Map<number, FrameRequestCallback>()
     let frameId = 0
@@ -279,7 +279,7 @@ describe('useMdxEditorCommentGeometry', () => {
 function GeometryHarness({ threads }: { readonly threads: readonly DriveAnnotationThreadDto[] }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const contentHostRef = useRef<HTMLDivElement | null>(null)
-  const { geometry } = useMdxEditorCommentGeometry({
+  const { geometry } = useDriveEditorCommentGeometry({
     enabled: true,
     layoutKey: 'wide:open',
     resetKey: 'version-1',

@@ -229,6 +229,7 @@ vi.mock('@mdxeditor/editor', async () => {
     linkPlugin: () => ({ name: 'linkPlugin' }),
     listsPlugin: () => ({ name: 'listsPlugin' }),
     markdownShortcutPlugin: () => ({ name: 'markdownShortcutPlugin' }),
+    GenericHTMLNode: class {},
     GenericJsxEditor: () => null,
     jsxPlugin: () => ({ name: 'jsxPlugin' }),
     quotePlugin: () => ({ name: 'quotePlugin' }),
@@ -629,17 +630,16 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().dataset.contentEditableClass?.split(' ')).toContain('pb-12')
   })
 
-  it('restores ordered, unordered, and nested list markers inside the editor', () => {
+  it('uses the shared editor typography rules for list layout and keeps hierarchical markers', () => {
     renderRenderer({ edit: editable() })
 
     const contentClasses = editor().dataset.contentEditableClass?.split(' ') ?? []
-    expect(contentClasses).toEqual(expect.arrayContaining([
-      '[&_ul]:list-disc',
-      '[&_ol]:list-decimal',
-      '[&_ol>li::marker]:content-[attr(data-drive-list-marker)_"_"]!',
-      '[&_ul]:pl-6',
-      '[&_ol]:pl-6',
-    ]))
+    expect(contentClasses).toContain('drive-mdxeditor-content')
+    expect(contentClasses).toContain('[&_ol>li::marker]:content-[attr(data-drive-list-marker)_"_"]!')
+    expect(contentClasses).not.toContain('[&_ul]:list-disc')
+    expect(contentClasses).not.toContain('[&_ol]:list-decimal')
+    expect(contentClasses).not.toContain('[&_ul]:pl-6')
+    expect(contentClasses).not.toContain('[&_ol]:pl-6')
   })
 
   it('saves and reloads nested list Markdown without flattening its hierarchy', async () => {
@@ -777,6 +777,38 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().value).toBe(
       '# Notes![first](/object/img_11111111111111111111111111111111)![second](/object/img_22222222222222222222222222222222)'
     )
+  })
+
+  it('does not insert an upload that finishes after switching documents', async () => {
+    let resolveUpload!: (value: DriveHostedDocumentImageDto) => void
+    const uploadPromise = new Promise<DriveHostedDocumentImageDto>((resolve) => {
+      resolveUpload = resolve
+    })
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(uploadPromise)
+    const editContext = createEditContext()
+    const renderer = renderRenderer({ editContext })
+
+    await selectImage(new File(['image'], 'old.png', { type: 'image/png' }))
+    expect(document.body.textContent).toContain('上传中')
+
+    renderer.rerender({
+      current: { ...baseCurrent(), id: 'second', name: 'second.md' },
+      preview: { ...basePreview(), text: '# Second', html: '<h1>Second</h1>' },
+      editContext,
+      imageUploadContext: { kind: 'owner', itemId: 'second' },
+    })
+
+    expect(editor().value).toBe('# Second')
+    expect(document.body.textContent).not.toContain('上传中')
+    await act(async () => {
+      resolveUpload(createHostedImage())
+      await uploadPromise
+      await Promise.resolve()
+    })
+
+    expect(editor().value).toBe('# Second')
+    expect(editor().value).not.toContain(createHostedImage().url)
+    expect(document.body.textContent).not.toContain('图片上传已失效')
   })
 
   it('rejects unsupported selected image formats before uploading', async () => {

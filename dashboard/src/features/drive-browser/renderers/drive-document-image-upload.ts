@@ -26,7 +26,7 @@ export function useDriveDocumentImageUpload({
 }: {
   readonly canEdit: boolean
   readonly imageUploadContext?: DriveDocumentImageUploadContext
-  readonly lifecycleKey?: string
+  readonly lifecycleKey: string
   readonly telemetryComponent: string
   readonly onError: (message: string | null) => void
 }) {
@@ -98,11 +98,11 @@ export function useDriveDocumentImageUpload({
 
 function driveDocumentImageUploadScope(
   context: DriveDocumentImageUploadContext | undefined,
-  lifecycleKey: string | undefined,
+  lifecycleKey: string,
 ): string {
-  if (!context) return `${lifecycleKey ?? ''}:unavailable`
-  if (context.kind === 'owner') return `${lifecycleKey ?? ''}:owner:${context.itemId}`
-  return `${lifecycleKey ?? ''}:share:${context.shareId}:${context.itemId ?? ''}`
+  if (!context) return `${lifecycleKey}:unavailable`
+  if (context.kind === 'owner') return `${lifecycleKey}:owner:${context.itemId}`
+  return `${lifecycleKey}:share:${context.shareId}:${context.itemId ?? ''}`
 }
 
 export function driveDocumentImageValidationError(file: File | null | undefined): string | null {

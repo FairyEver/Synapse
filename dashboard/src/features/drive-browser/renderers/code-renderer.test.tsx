@@ -185,6 +185,36 @@ describe('DriveCodeRenderer', () => {
     expect(document.body.textContent).not.toContain('已同步')
   })
 
+  it('does not replace newer source edits when the saved version is acknowledged', async () => {
+    let resolveSave!: () => void
+    const savePromise = new Promise<never>((resolve) => {
+      resolveSave = () => resolve({} as never)
+    })
+    const editContext = createEditContext({
+      saveText: vi.fn(() => savePromise),
+    })
+    const renderer = renderRenderer({ editContext })
+
+    await inputValue(editor(), 'const submitted = true')
+    await click(buttonWithText('保存'))
+    await inputValue(editor(), 'const newer = true')
+
+    renderer.rerender({
+      preview: { ...basePreview(), text: 'const submitted = true' },
+      edit: { ...editable(), currentVersionId: 'version-2' },
+      editContext,
+    })
+
+    expect(editor().value).toBe('const newer = true')
+    expect(document.body.textContent).toContain('未保存')
+
+    await act(async () => {
+      resolveSave()
+      await savePromise
+      await Promise.resolve()
+    })
+  })
+
   it('registers dirty source text for external restore confirmations', async () => {
     renderRenderer()
 

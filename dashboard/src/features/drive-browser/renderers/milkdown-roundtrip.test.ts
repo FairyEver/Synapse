@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import { schemaCtx } from '@milkdown/kit/core'
 import { uploadConfig } from '@milkdown/kit/plugin/upload'
-import { createMdxEditorTextModel, MILKDOWN_COMMENT_IGNORED_SELECTOR } from './mdxeditor-comment-geometry'
+import { createDriveEditorTextModel, MILKDOWN_COMMENT_IGNORED_SELECTOR } from './drive-editor-comment-geometry'
 import { configureMilkdownCommonMarkImages } from './milkdown-commonmark-images'
 import { requiresMilkdownSourceMode } from './milkdown-renderer'
 
@@ -198,7 +198,7 @@ describe('Milkdown Markdown round trip', () => {
 
     const content = root?.querySelector<HTMLElement>('.ProseMirror')
     if (!content) throw new Error('Milkdown did not render the content editable')
-    const model = createMdxEditorTextModel(content, MILKDOWN_COMMENT_IGNORED_SELECTOR)
+    const model = createDriveEditorTextModel(content, MILKDOWN_COMMENT_IGNORED_SELECTOR)
 
     expect(model.text).toBe('HeadingBefore bold🙂orderedsecondparentnestedloose firstloose secondList separatortaskquoteHeadValueCellEndconst value = "😀"\nreturn valueEscaped *plain* & link goneBefore image inline after.blockBefore break\nAfter breakFormula $x + 1$ endraw htmlAfter')
     expect(crepe.getMarkdown()).toContain('![block](block.png "Caption")')

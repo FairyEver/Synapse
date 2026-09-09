@@ -2,24 +2,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type { DriveBrowserCollaborationCapabilityDto, DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto, DriveCollaborationJoinContext } from '@synapse/shared'
 import { Download, LogIn, RefreshCw, Save } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
-import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
-import { ApiError } from '@/lib/api'
 import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
 import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
 import { createMonacoCollaborationBinding } from './monaco-collaboration-binding'
+import {
+  DriveDocumentEditorRecoveryDialogs,
+  buildDriveDocumentEditorLoginUrl,
+  downloadDriveDocumentLocalVersion,
+  driveDocumentEditorErrorMessage,
+  isDriveDocumentSaveAcknowledged,
+  reloadDriveDocumentText,
+  saveDriveDocumentText,
+  type DriveDocumentSaveAttempt,
+} from './drive-document-editor-lifecycle'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -43,6 +41,7 @@ export function DriveCodeRenderer({
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
   const saveInFlightRef = useRef(false)
+  const pendingSaveRef = useRef<DriveDocumentSaveAttempt | null>(null)
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +64,7 @@ export function DriveCodeRenderer({
     ? Boolean(collaborationState.state?.canWrite)
     : Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
-  const loginUrl = buildLoginUrl()
+  const loginUrl = buildDriveDocumentEditorLoginUrl()
   const canSave = collaborationEnabled
     ? canEdit
       && collaborationState.state?.status !== 'connecting'
@@ -84,6 +83,11 @@ export function DriveCodeRenderer({
 
   useEffect(() => {
     savedValueRef.current = initialText
+    const savedVersionAcknowledged = isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText)
+    if (savedVersionAcknowledged) {
+      setDirty(valueRef.current !== initialText)
+      return
+    }
     valueRef.current = initialText
     setValue(initialText)
     setDirty(false)
@@ -167,19 +171,23 @@ export function DriveCodeRenderer({
     }
     setError(null)
     const submittedValue = valueRef.current
+    const saveAttempt = { itemId: current.id, initialText: submittedValue }
+    pendingSaveRef.current = saveAttempt
     try {
-      await editContext.saveText({ text: submittedValue, baseVersionId: edit.currentVersionId })
+      const result = await saveDriveDocumentText(editContext, submittedValue, edit.currentVersionId)
+      if (result === 'conflict') {
+        finishTracking('failure')
+        setConflictOpen(true)
+        return
+      }
       finishTracking('success')
       savedValueRef.current = submittedValue
       setDirty(valueRef.current !== submittedValue)
     } catch (saveError) {
       finishTracking('failure')
-      if (saveError instanceof ApiError && saveError.status === 409) {
-        setConflictOpen(true)
-        return
-      }
-      setError(saveError instanceof Error ? saveError.message : '保存失败。')
+      setError(driveDocumentEditorErrorMessage(saveError, '保存失败。'))
     } finally {
+      if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
       saveInFlightRef.current = false
     }
   }, [canSave, collaborationContext, collaborationEnabled, collaborationState.state?.canWrite, collaborationState.state?.epoch, current.id, edit?.currentVersionId, editContext])
@@ -193,8 +201,7 @@ export function DriveCodeRenderer({
     const finishTracking = startDriveOperation('web.drive.editor.reload', 'drive-code-editor')
     setError(null)
     try {
-      const nextSnapshot = await editContext.reload()
-      const nextText = nextSnapshot.preview?.text ?? ''
+      const nextText = await reloadDriveDocumentText(editContext)
       savedValueRef.current = nextText
       valueRef.current = nextText
       setValue(nextText)
@@ -204,7 +211,7 @@ export function DriveCodeRenderer({
       finishTracking('success')
     } catch (reloadError) {
       finishTracking('failure')
-      setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
+      setError(driveDocumentEditorErrorMessage(reloadError, '重新加载失败。'))
     }
   }, [editContext])
 
@@ -348,7 +355,7 @@ export function DriveCodeRenderer({
         <div className='flex items-center justify-between gap-3 border-t px-3 py-2 text-xs text-destructive'>
           <span>{displayedError}</span>
           {collaborationEnabled ? (
-            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' size='sm' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
+            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' size='sm' variant='outline' onClick={() => downloadDriveDocumentLocalVersion(current.name, downloadValue)}>
               <Download data-icon='inline-start' />
               下载本地版本
             </Button>
@@ -358,42 +365,15 @@ export function DriveCodeRenderer({
       {preview.truncated ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div>
       ) : null}
-      <AlertDialog open={reloadConfirmOpen} onOpenChange={setReloadConfirmOpen}>
-        <AlertDialogContent data-drive-telemetry-scope='portal'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>放弃本地修改？</AlertDialogTitle>
-            <AlertDialogDescription>
-              重新加载会用服务器内容覆盖当前未保存编辑。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.conflict-reload' onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
-        <AlertDialogContent data-drive-telemetry-scope='portal'>
-          <AlertDialogHeader>
-            <AlertDialogTitle>文件已有新内容</AlertDialogTitle>
-            <AlertDialogDescription>
-              你的编辑仍保留，可以下载到本地或重新加载。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button data-drive-telemetry-event='web.drive.editor.download-local' type='button' variant='outline' onClick={() => downloadLocalVersion(current.name, downloadValue)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction data-drive-telemetry-event='web.drive.editor.reload' onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DriveDocumentEditorRecoveryDialogs
+        conflictOpen={conflictOpen}
+        fileName={current.name}
+        localValue={downloadValue}
+        onConflictOpenChange={setConflictOpen}
+        onReload={() => { void handleReload() }}
+        onReloadConfirmOpenChange={setReloadConfirmOpen}
+        reloadConfirmOpen={reloadConfirmOpen}
+      />
     </div>
   )
 }
@@ -404,18 +384,4 @@ function collaborationStatusLabel(status: ReturnType<typeof useDriveCollaboratio
   if (status === 'synced') return '已同步'
   if (status === 'failed') return '同步失败'
   return '只读'
-}
-
-function buildLoginUrl(): string {
-  if (typeof window === 'undefined') return buildDashboardSignInUrl(undefined)
-  return buildDashboardSignInUrl(window.location)
-}
-
-function downloadLocalVersion(name: string, value: string): void {
-  const url = URL.createObjectURL(new Blob([value], { type: 'text/plain;charset=utf-8' }))
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = name
-  anchor.click()
-  URL.revokeObjectURL(url)
 }
