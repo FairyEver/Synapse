@@ -125,6 +125,13 @@ describe('Milkdown Markdown round trip', () => {
     )
   })
 
+  it('restores a unique bare URI when other text on the same line changes', () => {
+    expect(preserveMilkdownCommonMarkAutolinks(
+      'See <https://example.com> later\n',
+      'See https://example.com now',
+    )).toBe('See https://example.com later\n')
+  })
+
   it('preserves the supported CommonMark and GFM document structures', async () => {
     const source = [
       '# 标题',

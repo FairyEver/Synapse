@@ -396,13 +396,16 @@ describe('DriveMilkdownRenderer', () => {
 
     await act(async () => {
       if (!crepe) throw new Error('Expected Crepe instance')
-      crepe.editor.action(replaceAll(`Changed\n\n${crepe.getMarkdown()}`))
+      crepe.editor.action(replaceAll(crepe.getMarkdown().replace(
+        'See <https://example.com> now',
+        'See <https://example.com> later',
+      )))
       await new Promise((resolve) => window.setTimeout(resolve, 250))
     })
     await pressSaveShortcut()
 
     const submitted = saveText.mock.calls[0]?.[0].text
-    expect(submitted).toContain('See https://example.com now')
+    expect(submitted).toContain('See https://example.com later')
     expect(submitted).toContain('Email test@example.com')
     expect(submitted).toContain('Keep <https://explicit.example/path>')
     expect(submitted).toContain('`https://inline.example test@example.com`')

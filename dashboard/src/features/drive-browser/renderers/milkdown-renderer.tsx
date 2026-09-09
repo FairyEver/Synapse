@@ -976,15 +976,27 @@ export function preserveMilkdownCommonMarkAutolinks(markdown: string, sourceMark
     sourceCanonicalLines,
     markdownCanonicalLines,
   )
+  const sourcePreferences = collectCommonMarkAutolinkPreferences(sourceMarkdown)
+  const markdownPreferences = collectCommonMarkAutolinkPreferences(markdown)
+  const uniquePreferences = new Map(Array.from(sourcePreferences.entries()).flatMap(([value, preferences]) => (
+    preferences.length === 1 && markdownPreferences.get(value)?.length === 1
+      ? [[value, preferences[0]] as const]
+      : []
+  )))
 
   return markdownParts.map((part, partIndex) => {
     if (partIndex % 2 === 1) return part
     const sourceLineIndex = sourceLineByMarkdownLine.get(partIndex / 2)
-    if (sourceLineIndex === undefined) return part
-    const preferences = collectCommonMarkAutolinkPreferences(sourceLines[sourceLineIndex] ?? '')
+    const preferences = sourceLineIndex === undefined
+      ? null
+      : collectCommonMarkAutolinkPreferences(sourceLines[sourceLineIndex] ?? '')
     return transformMilkdownInlineProse(part, (prose) => prose.replace(
       /<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)>/gu,
-      (autolink, value: string) => preferences.get(value)?.shift() === 'bare' ? value : autolink,
+      (autolink, value: string) => (
+        preferences?.get(value)?.shift() === 'bare' || (!preferences && uniquePreferences.get(value) === 'bare')
+          ? value
+          : autolink
+      ),
     ))
   }).join('')
 }
