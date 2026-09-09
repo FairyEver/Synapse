@@ -54,6 +54,13 @@ describe('DriveMilkdownRenderer', () => {
   it('uses source fallback for YAML and TOML frontmatter without mistaking a thematic break for frontmatter', () => {
     expect(requiresMilkdownSourceMode('---\ntitle: Notes\n---\n# Notes')).toBe(true)
     expect(requiresMilkdownSourceMode('+++\ntitle = "Notes"\n+++\n# Notes')).toBe(true)
+    expect(requiresMilkdownSourceMode('---\n"quoted key": Notes\n---\n# Notes')).toBe(true)
+    expect(requiresMilkdownSourceMode('---\n- first\n- second\n---\n# Notes')).toBe(true)
+    expect(requiresMilkdownSourceMode('---\n---\n# Notes')).toBe(true)
+    expect(requiresMilkdownSourceMode('+++\n[table]\n+++\n# Notes')).toBe(true)
+    expect(requiresMilkdownSourceMode('+++\n# comment\n\n+++\n# Notes')).toBe(true)
+    expect(requiresMilkdownSourceMode('\uFEFF  ---  \n# comment\n  ...  \n# Notes')).toBe(true)
+    expect(requiresMilkdownSourceMode('\n---\ntitle: Notes\n---\n# Notes')).toBe(false)
     expect(requiresMilkdownSourceMode('---\n\nParagraph')).toBe(false)
     expect(requiresMilkdownSourceMode('```yaml\n---\ntitle: Notes\n---\n```')).toBe(false)
     expect(requiresMilkdownSourceMode('```md\n[docs]: /inside-code\n```')).toBe(false)
@@ -152,11 +159,31 @@ describe('DriveMilkdownRenderer', () => {
   })
 
   it.each([
+    ['a].png', `![a\\]](${hostedImage().url})`],
+    ['a[.png', `![a\\[](${hostedImage().url})`],
+    ['a\\b.png', `![a\\\\b](${hostedImage().url})`],
+  ])('escapes the selected image alt text in source mode for %s', async (fileName, markdown) => {
+    const source = '---\n---\n'
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(hostedImage())
+    renderRenderer({
+      preview: preview(source),
+      editContext: editContext(),
+      imageUploadContext: { kind: 'owner', itemId: 'file' },
+    })
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    textarea.setSelectionRange(source.length, source.length)
+
+    await selectImage(new File(['image'], fileName, { type: 'image/png' }))
+
+    expect(textarea.value).toBe(`${source}${markdown}`)
+  })
+
+  it.each([
     ['image-only', false],
     ['mixed', true],
   ] as const)('uploads and inserts %s clipboard images in source mode', async (_label, mixed) => {
     const source = '[docs]: /guide\n\nBody'
-    const file = new File(['image'], 'chart.png', { type: 'image/png' })
+    const file = new File(['image'], 'a].png', { type: 'image/png' })
     vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(hostedImage())
     renderRenderer({
       preview: preview(source),
@@ -178,12 +205,12 @@ describe('DriveMilkdownRenderer', () => {
     })
 
     expect(event.defaultPrevented).toBe(true)
-    expect(textarea.value).toBe(`${source}![chart](${hostedImage().url})`)
+    expect(textarea.value).toBe(`${source}![a\\]](${hostedImage().url})`)
   })
 
   it('uploads and inserts dropped images at the source textarea selection', async () => {
     const source = '[docs]: /guide\n\nBody'
-    const file = new File(['image'], 'chart.png', { type: 'image/png' })
+    const file = new File(['image'], 'a\\b.png', { type: 'image/png' })
     vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(hostedImage())
     renderRenderer({
       preview: preview(source),
@@ -203,7 +230,7 @@ describe('DriveMilkdownRenderer', () => {
     })
 
     expect(event.defaultPrevented).toBe(true)
-    expect(textarea.value).toBe(`${source.slice(0, insertionPoint)}![chart](${hostedImage().url})${source.slice(insertionPoint)}`)
+    expect(textarea.value).toBe(`${source.slice(0, insertionPoint)}![a\\\\b](${hostedImage().url})${source.slice(insertionPoint)}`)
   })
 
   it('does not carry an old document upload or its insertion into the next document', async () => {
@@ -359,7 +386,7 @@ describe('DriveMilkdownRenderer', () => {
   })
 
   it('uploads mixed clipboard images through the hosted document image API', async () => {
-    const file = new File(['image'], 'chart.png', { type: 'image/png' })
+    const file = new File(['image'], 'a].png', { type: 'image/png' })
     const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(hostedImage())
     renderRenderer({
       editContext: editContext(),
@@ -386,9 +413,39 @@ describe('DriveMilkdownRenderer', () => {
     expect(upload).toHaveBeenCalledWith(
       file,
       { kind: 'owner', itemId: 'file' },
-      { name: 'chart.png', mimeType: 'image/png' }
+      { name: 'a].png', mimeType: 'image/png' }
     )
     expect(document.querySelector('.milkdown img')?.getAttribute('src')).toBe(hostedImage().url)
+    expect(document.querySelector('.milkdown img')?.getAttribute('alt')).toBe('a]')
+  })
+
+  it('keeps image-only clipboard alt text intact in rich mode', async () => {
+    const file = new File(['image'], 'a]\\b.png', { type: 'image/png' })
+    class TestClipboardEvent extends Event {}
+    class TestDragEvent extends Event {}
+    vi.stubGlobal('ClipboardEvent', TestClipboardEvent)
+    vi.stubGlobal('DragEvent', TestDragEvent)
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(hostedImage())
+    renderRenderer({
+      editContext: editContext(),
+      imageUploadContext: { kind: 'owner', itemId: 'file' },
+    })
+    await waitForEditor()
+
+    const event = new TestClipboardEvent('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      value: {
+        files: [file],
+        getData: () => '',
+        items: [{ type: 'image/png', getAsFile: () => file }],
+      },
+    })
+    await act(async () => {
+      document.querySelector('.milkdown .ProseMirror')?.dispatchEvent(event)
+      await new Promise((resolve) => window.setTimeout(resolve, 20))
+    })
+
+    expect(document.querySelector('.milkdown img')?.getAttribute('alt')).toBe('a]\\b')
   })
 
   it('keeps source content unchanged and reports hosted image upload failures', async () => {

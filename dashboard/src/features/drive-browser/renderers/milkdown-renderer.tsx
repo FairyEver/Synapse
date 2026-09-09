@@ -424,7 +424,7 @@ export function DriveMilkdownRenderer({
     setDirty(nextValue !== savedValueRef.current)
   }, [])
   const insertDocumentImageMarkdown = useCallback((file: File, url: string, sourceSelection?: SourceTextareaSelection) => {
-    const markdown = `![${driveDocumentImageAltText(file.name)}](${url})`
+    const markdown = createMilkdownImageMarkdown(file, url)
     if (sourceSelection) {
       insertSourceMarkdown(markdown, sourceSelection)
       return
@@ -454,7 +454,7 @@ export function DriveMilkdownRenderer({
     for (const file of files) {
       try {
         const url = await uploadOptionalDocumentImage(file)
-        if (sourceSelection) uploadedMarkdown.push(`![${driveDocumentImageAltText(file.name)}](${url})`)
+        if (sourceSelection) uploadedMarkdown.push(createMilkdownImageMarkdown(file, url))
         else insertDocumentImageMarkdown(file, url)
       } catch {
         return
@@ -861,7 +861,7 @@ function MilkdownCrepeEditor({
       },
     })
     configureMilkdownCommonMarkImages(crepe, {
-      altText: (file) => driveDocumentImageAltText(file.name),
+      altText: milkdownImageAltText,
       confirmButton: '确认',
       onUpload: (file) => propsRef.current.onUpload(file),
       proxyDomURL: (url) => propsRef.current.proxyDomURL(url),
@@ -910,11 +910,19 @@ export function requiresMilkdownSourceMode(markdown: string): boolean {
     const value = line.trim()
     return value === marker || (marker === '---' && value === '...')
   })
-  if (closingIndex < 0) return false
-  const body = lines.slice(1, closingIndex + 1)
-  return marker === '---'
-    ? body.some((line) => /^\s*[\w.-]+\s*:/u.test(line))
-    : body.some((line) => /^\s*[\w.-]+\s*=/u.test(line))
+  return closingIndex >= 0
+}
+
+function createMilkdownImageMarkdown(file: File, url: string): string {
+  return `![${escapeMarkdownImageAlt(milkdownImageAltText(file))}](${url})`
+}
+
+function milkdownImageAltText(file: File): string {
+  return driveDocumentImageAltText(file.name)
+}
+
+function escapeMarkdownImageAlt(value: string): string {
+  return value.replace(/[\\[\]]/gu, '\\$&')
 }
 
 function hasLinkReferenceDefinition(lines: readonly string[]): boolean {

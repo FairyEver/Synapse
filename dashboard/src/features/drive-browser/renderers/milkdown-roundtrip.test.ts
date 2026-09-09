@@ -120,6 +120,15 @@ describe('Milkdown Markdown round trip', () => {
     expect(result).toContain('![image](./image.png)')
   })
 
+  it('round-trips escaped brackets and backslashes in image alt text', async () => {
+    const source = '![a\\[b\\]\\\\c](./image.png)'
+    crepe = new Crepe({ root, defaultValue: source, features: disabledVisualFeatures() })
+    await crepe.create()
+
+    expect(root?.querySelector('img')?.getAttribute('alt')).toBe('a[b]\\c')
+    expect(crepe.getMarkdown()).toContain('![a\\[b\\]\\c](./image.png)')
+  })
+
   it('keeps the comment text stream aligned across rich Markdown structures', async () => {
     const source = [
       '# Heading',
