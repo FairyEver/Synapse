@@ -62,6 +62,9 @@ const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = 22
 const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = 17
 const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = 32
 const COMMENT_SCROLL_SAFE_INSET = 24
+const USER_DOCUMENT_SCROLL_IDLE_DELAY_MS = 160
+
+type MarkdownDocumentScrollSource = 'idle' | 'user' | 'outline'
 
 type ResizablePanelPercent = `${number}%`
 type MarkdownWidthMode = 'reading' | 'wide'
@@ -131,6 +134,8 @@ function DriveMarkdownBody({
   const outlineScrollRef = useRef<HTMLElement | null>(null)
   const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
   const documentScrollFrameRef = useRef<number | null>(null)
+  const documentScrollSourceRef = useRef<MarkdownDocumentScrollSource>('idle')
+  const userDocumentScrollIdleTimerRef = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const selectionRangeRef = useRef<Range | null>(null)
   const commentsTouchedRef = useRef(false)
@@ -587,20 +592,65 @@ function DriveMarkdownBody({
     return () => document.removeEventListener('selectionchange', syncTextSelectionState)
   }, [])
 
+  const updateActiveOutline = useCallback(() => {
+    const scroller = documentScrollRef.current
+    const body = bodyRef.current
+    if (!scroller || !body || outlineItems.length === 0) return
+    const threshold = scroller.getBoundingClientRect().top + 24
+    let nextActiveId = outlineItems[0]?.id ?? null
+    for (const item of outlineItems) {
+      const heading = findMarkdownHeadingById(body, item.id)
+      if (!heading) continue
+      if (heading.getBoundingClientRect().top > threshold) break
+      nextActiveId = item.id
+    }
+    if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1) {
+      nextActiveId = outlineItems[outlineItems.length - 1]?.id ?? nextActiveId
+    }
+    setActiveOutlineId((current) => current === nextActiveId ? current : nextActiveId)
+  }, [outlineItems])
+
+  const scheduleUserDocumentScrollIdle = useCallback(() => {
+    if (userDocumentScrollIdleTimerRef.current !== null) {
+      window.clearTimeout(userDocumentScrollIdleTimerRef.current)
+    }
+    userDocumentScrollIdleTimerRef.current = window.setTimeout(() => {
+      userDocumentScrollIdleTimerRef.current = null
+      if (documentScrollSourceRef.current === 'user') documentScrollSourceRef.current = 'idle'
+    }, USER_DOCUMENT_SCROLL_IDLE_DELAY_MS)
+  }, [])
+
+  const markDocumentScrollAsUserControlled = useCallback(() => {
+    documentScrollSourceRef.current = 'user'
+    scheduleUserDocumentScrollIdle()
+  }, [scheduleUserDocumentScrollIdle])
+
   const flushDocumentScrollEffects = useCallback(() => {
     documentScrollFrameRef.current = null
     const scroller = documentScrollRef.current
     if (!scroller) return
     setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, scroller.scrollTop)
-  }, [])
+    if (documentScrollSourceRef.current === 'user') updateActiveOutline()
+    if (documentScrollSourceRef.current === 'outline') documentScrollSourceRef.current = 'idle'
+  }, [updateActiveOutline])
 
   const scheduleDocumentScrollEffects = useCallback(() => {
     if (documentScrollFrameRef.current !== null) return
     documentScrollFrameRef.current = window.requestAnimationFrame(flushDocumentScrollEffects)
   }, [flushDocumentScrollEffects])
 
+  const handleDocumentScroll = useCallback(() => {
+    if (documentScrollSourceRef.current === 'user') scheduleUserDocumentScrollIdle()
+    scheduleDocumentScrollEffects()
+  }, [scheduleDocumentScrollEffects, scheduleUserDocumentScrollIdle])
+
+  const handleDocumentScrollKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (isMarkdownDocumentScrollKey(event.key)) markDocumentScrollAsUserControlled()
+  }, [markDocumentScrollAsUserControlled])
+
   useEffect(() => () => {
     if (documentScrollFrameRef.current !== null) window.cancelAnimationFrame(documentScrollFrameRef.current)
+    if (userDocumentScrollIdleTimerRef.current !== null) window.clearTimeout(userDocumentScrollIdleTimerRef.current)
   }, [])
 
   useLayoutEffect(() => {
@@ -635,12 +685,18 @@ function DriveMarkdownBody({
         - 24
     )
     setActiveOutlineId(itemId)
+    if (userDocumentScrollIdleTimerRef.current !== null) {
+      window.clearTimeout(userDocumentScrollIdleTimerRef.current)
+      userDocumentScrollIdleTimerRef.current = null
+    }
+    documentScrollSourceRef.current = 'outline'
     if (typeof scroller.scrollTo === 'function') {
       scroller.scrollTo({ top: targetTop, behavior: 'instant' })
     } else {
       scroller.scrollTop = targetTop
     }
-  }, [])
+    scheduleDocumentScrollEffects()
+  }, [scheduleDocumentScrollEffects])
 
   const setCommentAnchorLayerRef = useCallback((element: HTMLDivElement | null) => {
     commentAnchorLayerRef.current = element
@@ -766,7 +822,13 @@ function DriveMarkdownBody({
       ref={documentScrollRef}
       data-testid='markdown-document-scroll'
       className='h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain'
-      onScroll={scheduleDocumentScrollEffects}
+      onScroll={handleDocumentScroll}
+      onWheelCapture={markDocumentScrollAsUserControlled}
+      onTouchMoveCapture={markDocumentScrollAsUserControlled}
+      onKeyDownCapture={handleDocumentScrollKeyDown}
+      onPointerDownCapture={(event) => {
+        if (event.target === event.currentTarget) markDocumentScrollAsUserControlled()
+      }}
     >
       <div ref={documentInnerRef} className='min-h-full px-4 py-6 md:px-6'>
         <div
@@ -1019,6 +1081,16 @@ function findMarkdownPreviewImage(target: EventTarget | null, root: HTMLElement)
   return target instanceof HTMLImageElement && root.contains(target) && target.hasAttribute('src')
     ? target
     : null
+}
+
+function isMarkdownDocumentScrollKey(key: string): boolean {
+  return key === 'ArrowUp'
+    || key === 'ArrowDown'
+    || key === 'PageUp'
+    || key === 'PageDown'
+    || key === 'Home'
+    || key === 'End'
+    || key === ' '
 }
 
 function findVisibleMarkdownCommentImage(root: HTMLElement, imageId: string): HTMLElement | null {

@@ -513,7 +513,7 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentColumn?.getAttribute('data-markdown-width-mode')).toBe('reading')
   })
 
-  it('keeps the selected outline item active when the markdown document scrolls', async () => {
+  it('activates and reveals the current outline item when the user scrolls the markdown document', async () => {
     renderMarkdown({
       previewData: preview({
         html: '<h1 id="heading-1">First</h1><h2 id="heading-2">Second</h2>',
@@ -526,20 +526,63 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     const scroller = markdownDocumentScroller()
+    const outlineScroller = document.querySelector<HTMLElement>('nav[aria-label="目录"]')
     const firstHeading = document.getElementById('heading-1')
     const secondHeading = document.getElementById('heading-2')
     const secondLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-2"]')
-    if (!firstHeading || !secondHeading || !secondLink) throw new Error('Missing outline fixtures')
+    if (!outlineScroller || !firstHeading || !secondHeading || !secondLink) throw new Error('Missing outline fixtures')
     Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
     vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
-    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 500, height: 20 }))
+    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: -20, height: 20 }))
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
+    vi.spyOn(outlineScroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
+    vi.spyOn(secondLink, 'getBoundingClientRect').mockReturnValue(domRect({ top: 120, height: 20 }))
+    scrollIntoViewMock.mockClear()
 
-    await click(secondLink)
-    scroller.dispatchEvent(new Event('scroll'))
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }))
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     await flushAnimationFrames()
 
     expect(secondLink.getAttribute('aria-current')).toBe('location')
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest', behavior: 'instant' })
+  })
+
+  it('keeps the clicked outline item active during its programmatic document jump', async () => {
+    renderMarkdown({
+      previewData: preview({
+        html: '<h1 id="heading-1">First</h1><h2 id="heading-2">Second</h2><h2 id="heading-3">Third</h2>',
+        text: 'FirstSecondThird',
+        outline: [
+          { id: 'heading-1', text: 'First', depth: 1, children: [] },
+          { id: 'heading-2', text: 'Second', depth: 2, children: [] },
+          { id: 'heading-3', text: 'Third', depth: 2, children: [] },
+        ],
+      }),
+    })
+
+    const scroller = markdownDocumentScroller()
+    const firstHeading = document.getElementById('heading-1')
+    const secondHeading = document.getElementById('heading-2')
+    const thirdHeading = document.getElementById('heading-3')
+    const thirdLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-3"]')
+    if (!firstHeading || !secondHeading || !thirdHeading || !thirdLink) throw new Error('Missing outline fixtures')
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
+    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: -200, height: 20 }))
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
+    vi.spyOn(thirdHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 500, height: 20 }))
+
+    await click(thirdLink)
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    await flushAnimationFrames()
+
+    expect(thirdLink.getAttribute('aria-current')).toBe('location')
+
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }))
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    await flushAnimationFrames()
+
+    expect(document.querySelector('[data-markdown-outline-id="heading-2"]')?.getAttribute('aria-current')).toBe('location')
   })
 
   it('scrolls the markdown document instead of the page when an outline item is selected', async () => {
