@@ -1,4 +1,4 @@
-import { isDriveMarkdownItem, type DriveBrowserSnapshotDto } from '@synapse/shared'
+import { isPlainDriveMarkdownItem, type DriveBrowserSnapshotDto } from '@synapse/shared'
 
 export type DriveRendererId = 'mdxeditor' | 'milkdown' | 'markdown' | 'code' | 'image' | 'iframe' | 'download'
 export type DriveRendererContainer = 'reading' | 'media' | 'full'
@@ -27,7 +27,7 @@ export function getDriveRendererOptions(snapshot: DriveBrowserSnapshotDto): read
   if (preview.kind === 'markdown') return [
     RENDERERS.markdown,
     driveMdxEditorRendererOption(snapshot),
-    ...(isPlainDriveMarkdown(snapshot) ? [driveMilkdownRendererOption(snapshot)] : []),
+    ...(isPlainDriveMarkdownItem(snapshot.current) ? [driveMilkdownRendererOption(snapshot)] : []),
     RENDERERS.code,
   ]
   if (preview.kind === 'image') return [RENDERERS.image]
@@ -77,10 +77,4 @@ function driveMilkdownRendererOption(snapshot: DriveBrowserSnapshotDto): DriveRe
 function canRenderDriveMilkdown(snapshot: DriveBrowserSnapshotDto): boolean {
   const preview = snapshot.preview
   return Boolean(preview && preview.kind === 'markdown' && !preview.truncated && preview.text !== null)
-}
-
-export function isPlainDriveMarkdown(snapshot: DriveBrowserSnapshotDto): boolean {
-  const name = snapshot.current.name.toLowerCase()
-  if (name.endsWith('.mdx')) return false
-  return isDriveMarkdownItem(snapshot.current)
 }

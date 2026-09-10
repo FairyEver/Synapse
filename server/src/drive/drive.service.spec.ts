@@ -2990,7 +2990,11 @@ describe("DriveService", () => {
     expect(snapshot.preview?.text).toBe(`![赠品](${source})`)
   })
 
-  it("limits a single Markdown file share to its currently referenced images", async () => {
+  it.each([
+    { name: "readme.md", mimeType: "text/plain" },
+    { name: "README", mimeType: "text/markdown" },
+    { name: "README", mimeType: "text/x-markdown" },
+  ])("limits a single $name ($mimeType) file share to its currently referenced images", async ({ name, mimeType }) => {
     const prisma = createPrismaMemory()
     const objects = new Map<string, DriveTestObject>()
     const storage = createDriveObjectStorage(objects)
@@ -2999,8 +3003,8 @@ describe("DriveService", () => {
     const folder = await service.createFolder("user-1", { parentId: null, name: "导出文档" })
     const markdown = await createCompletedUpload(service, "user-1", {
       parentId: folder.id,
-      name: "readme.md",
-      mimeType: "text/markdown",
+      name,
+      mimeType,
     })
     const referenced = await createCompletedUpload(service, "user-1", {
       parentId: folder.id,
@@ -3036,6 +3040,39 @@ describe("DriveService", () => {
     await expect(service.openShareBrowserItemDownload({
       shareId: share.shareId,
       itemId: sibling.id,
+      password: share.password ?? undefined,
+    })).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("does not authorize relative image downloads for MDX file shares with a Markdown MIME type", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "组件" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "component.MDX",
+      mimeType: "text/markdown",
+    })
+    const image = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "private.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, { body: "![private](./private.png)", contentType: "text/markdown" })
+    const share = await service.createShare("user-1", markdown.id, "https://synapse.test")
+
+    const snapshot = await service.getShareBrowserSnapshot({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+    })
+    expect(snapshot.preview?.relativeImages).toEqual([])
+    await expect(service.openShareBrowserItemDownload({
+      shareId: share.shareId,
+      itemId: image.id,
       password: share.password ?? undefined,
     })).rejects.toBeInstanceOf(NotFoundException)
   })
@@ -3224,7 +3261,11 @@ describe("DriveService", () => {
     expect(snapshot.preview?.html).toMatch(/<img alt="outside"[^>]*>/u)
   })
 
-  it("rejects collaborator edits that expand a single-file share image scope", async () => {
+  it.each([
+    { name: "readme.md", mimeType: "text/plain" },
+    { name: "README", mimeType: "text/markdown" },
+    { name: "README", mimeType: "text/x-markdown" },
+  ])("rejects collaborator edits that expand a single $name ($mimeType) file share image scope", async ({ name, mimeType }) => {
     const prisma = createPrismaMemory()
     const objects = new Map<string, DriveTestObject>()
     const storage = createDriveObjectStorage(objects, {
@@ -3236,8 +3277,8 @@ describe("DriveService", () => {
     const folder = await service.createFolder("user-1", { parentId: null, name: "资料" })
     const markdown = await createCompletedUpload(service, "user-1", {
       parentId: folder.id,
-      name: "readme.md",
-      mimeType: "text/markdown",
+      name,
+      mimeType,
     })
     await createCompletedUpload(service, "user-1", {
       parentId: folder.id,

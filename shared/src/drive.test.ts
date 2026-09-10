@@ -43,6 +43,7 @@ import {
   isDrivePublicAssetTextMimeType,
   isDriveCommentableMarkdownItem,
   isDriveMarkdownItem,
+  isPlainDriveMarkdownItem,
   isDrivePublicAssetId,
   parseDrivePublicAssetUrl,
   type DriveAnnotationAnchorStatus,
@@ -322,6 +323,17 @@ describe("drive URL helpers", () => {
     expect(isDriveMarkdownItem({ name: "legacy.bin", type: "file", mimeType: " TEXT/X-MARKDOWN ; charset=utf-8" })).toBe(true)
     expect(isDriveMarkdownItem({ name: "folder.md", type: "folder", mimeType: "text/markdown" })).toBe(false)
     expect(isDriveMarkdownItem({ name: "notes.txt", type: "file", mimeType: "text/plain" })).toBe(false)
+  })
+
+  it("recognizes plain Markdown files while excluding MDX names", () => {
+    expect(isPlainDriveMarkdownItem({ name: "notes.md", type: "file", mimeType: null })).toBe(true)
+    expect(isPlainDriveMarkdownItem({ name: "NOTES.MARKDOWN", type: "file", mimeType: null })).toBe(true)
+    expect(isPlainDriveMarkdownItem({ name: "README", type: "file", mimeType: "text/markdown" })).toBe(true)
+    expect(isPlainDriveMarkdownItem({ name: "README", type: "file", mimeType: " TEXT/X-MARKDOWN ; charset=utf-8" })).toBe(true)
+    expect(isPlainDriveMarkdownItem({ name: "component.mdx", type: "file", mimeType: "text/markdown" })).toBe(false)
+    expect(isPlainDriveMarkdownItem({ name: "component.MDX", type: "file", mimeType: "text/x-markdown" })).toBe(false)
+    expect(isPlainDriveMarkdownItem({ name: "folder.md", type: "folder", mimeType: "text/markdown" })).toBe(false)
+    expect(isPlainDriveMarkdownItem({ name: "notes.txt", type: "file", mimeType: "text/plain" })).toBe(false)
   })
 
   it("recognizes commentable Markdown files by .md extension or MIME type", () => {

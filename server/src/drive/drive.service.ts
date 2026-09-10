@@ -54,7 +54,7 @@ import {
   type DriveCollaborationCheckpointResultDto,
   type DriveDocumentImageUploadPrepareResult,
   type DriveHostedDocumentImageDto,
-  isDriveMarkdownItem,
+  isPlainDriveMarkdownItem,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
@@ -75,7 +75,6 @@ import { DriveMarkdownProjectionService } from "./drive-markdown-projection.serv
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import {
   extractDriveMarkdownRelativeImages,
-  isPlainDriveMarkdownName,
   isSafeDriveMarkdownRasterName,
   type DriveMarkdownRelativeImageReference,
 } from "./drive-markdown-relative-images"
@@ -551,7 +550,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly auditContext?: DriveAuditContext
   }): Promise<DriveFileContentUpdateResult> {
     const { share, current } = await this.requireEditableShareFile(input)
-    if (input.actorUserId !== share.ownerId && isPlainDriveMarkdownName(current.name)) {
+    if (input.actorUserId !== share.ownerId && isPlainDriveMarkdownItem(current)) {
       await this.assertShareMarkdownRelativeImageEditAllowed({
         share,
         item: current,
@@ -3355,7 +3354,7 @@ export class DriveService implements OnApplicationBootstrap {
     const imageItem = await this.findActiveDriveItem(share.ownerId, itemId)
     if (
       !markdownItem
-      || !isPlainDriveMarkdownName(markdownItem.name)
+      || !isPlainDriveMarkdownItem(markdownItem)
       || !imageItem
       || imageItem.type !== DRIVE_ITEM_TYPE.file
       || !isSafeDriveMarkdownRasterName(imageItem.name)
@@ -4345,10 +4344,6 @@ function toDriveBrowserSourceItem(item: DriveItemRecord): DriveBrowserSourceItem
     mimeType: dto.mimeType,
     updatedAt: dto.updatedAt,
   }
-}
-
-function isPlainDriveMarkdownItem(item: Pick<DriveBrowserSourceItem, "type" | "name" | "mimeType">): boolean {
-  return !item.name.toLowerCase().endsWith(".mdx") && isDriveMarkdownItem(item)
 }
 
 async function readStreamTextPrefix(

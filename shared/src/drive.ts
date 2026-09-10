@@ -125,6 +125,15 @@ export function isDriveMarkdownItem(item: {
     || isDriveMarkdownMimeType(item.mimeType)
 }
 
+export function isPlainDriveMarkdownItem(item: {
+  readonly type: DriveItemType | string
+  readonly name: string
+  readonly mimeType: string | null
+}): boolean {
+  if (item.name.toLowerCase().endsWith(".mdx")) return false
+  return isDriveMarkdownItem(item)
+}
+
 export function isDriveCommentableMarkdownItem(item: {
   readonly type: DriveItemType | string
   readonly name: string
