@@ -434,10 +434,11 @@ function browserEditable(currentVersionId = 'version-1'): DriveBrowserEditDto {
 }
 
 function browserEditContext() {
+  const saveText = vi.fn<BrowserRendererOptions['editContext']['saveText']>(async () => ({} as never))
   return {
     reload: vi.fn(async () => ({} as never)),
     reloading: false,
-    saveText: vi.fn(async () => ({} as never)),
+    saveText,
     savingText: false,
   }
 }

@@ -218,7 +218,7 @@ function nestOutlineItems(flatItems: readonly MutableOutlineItem[]): readonly Dr
   for (const item of flatItems) {
     let siblings = roots
     while (true) {
-      const parent = siblings.at(-1)
+      const parent = siblings[siblings.length - 1]
       if (!parent || parent.depth >= item.depth) {
         siblings.push(item)
         break

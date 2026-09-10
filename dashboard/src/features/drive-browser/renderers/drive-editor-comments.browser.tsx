@@ -176,7 +176,7 @@ function commentThread(range: { readonly start: number; readonly end: number }):
         kind: 'textRange',
         position: range,
         quote: { exact: 'Target', prefix: '', suffix: '' },
-        semantic: { blockId: 'target-block', blockLocalRange: { start: 0, end: 6 }, headingPath: [] },
+        semantic: { blockId: 'target-block', start: 0, end: 6, headingPath: [] },
       },
       positionStatus: 'attached',
       quoteStatus: 'exact',

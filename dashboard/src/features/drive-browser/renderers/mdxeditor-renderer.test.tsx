@@ -1507,7 +1507,7 @@ function commentThread(): DriveAnnotationThreadDto {
         kind: 'textRange',
         position: { start: 0, end: 7 },
         quote: { exact: 'Notes', prefix: '', suffix: '' },
-        semantic: { blockId: 'block-1', blockLocalRange: { start: 0, end: 5 }, headingPath: [] },
+        semantic: { blockId: 'block-1', start: 0, end: 5, headingPath: [] },
       },
       positionStatus: 'attached',
       quoteStatus: 'exact',

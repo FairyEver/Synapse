@@ -386,7 +386,7 @@ function commentThread(
         kind: 'textRange',
         position: range,
         quote: { exact, prefix: '', suffix: '' },
-        semantic: { blockId: `block-${id}`, blockLocalRange: range, headingPath: [] },
+        semantic: { blockId: `block-${id}`, start: range.start, end: range.end, headingPath: [] },
       },
       positionStatus: 'attached',
       quoteStatus: 'exact',
