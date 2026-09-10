@@ -52,12 +52,9 @@ import {
 import {
   DriveDocumentEditorRecoveryDialogs,
   buildDriveDocumentEditorLoginUrl,
-  driveDocumentEditorErrorMessage,
   isDriveDocumentSaveAcknowledged,
   isDriveDocumentSaveShortcut,
-  reloadDriveDocumentText,
-  saveDriveDocumentText,
-  type DriveDocumentSaveAttempt,
+  useDriveDocumentEditorLifecycle,
 } from './drive-document-editor-lifecycle'
 import {
   DriveDocumentEditorCommentsFrame,
@@ -122,19 +119,10 @@ export function DriveMDXeditorRenderer({
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const listMarkerObserverCleanupRef = useRef<(() => void) | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
-  const savedValueRef = useRef(initialText)
-  const valueRef = useRef(initialText)
-  const saveInFlightRef = useRef(false)
-  const pendingSaveRef = useRef<DriveDocumentSaveAttempt | null>(null)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
   const parseErrorRequestRef = useRef(0)
-  const [value, setValue] = useState(initialText)
-  const [dirty, setDirty] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [conflictOpen, setConflictOpen] = useState(false)
-  const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   const [editorViewMode, setEditorViewMode] = useState<ViewMode>('rich-text')
   const handleEditorContainerChange = useCallback((root: HTMLDivElement | null) => {
@@ -147,6 +135,64 @@ export function DriveMDXeditorRenderer({
   const requiresSourceMode = preparedInitialDocument.requiresSourceMode
   const sourceMode = Boolean(parseError || requiresSourceMode || editorViewMode !== 'rich-text')
   const loginUrl = buildDriveDocumentEditorLoginUrl()
+  const clearExternalMarkdownSync = useCallback(() => {
+    applyingExternalMarkdownRef.current = false
+    externalMarkdownTargetRef.current = null
+    if (externalMarkdownFrameRef.current !== null) {
+      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
+      externalMarkdownFrameRef.current = null
+    }
+  }, [])
+  const beginExternalMarkdownSync = useCallback((target: string) => {
+    applyingExternalMarkdownRef.current = true
+    externalMarkdownTargetRef.current = target
+    if (externalMarkdownFrameRef.current !== null) {
+      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
+    }
+    externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
+      externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
+        applyingExternalMarkdownRef.current = false
+        externalMarkdownFrameRef.current = null
+      })
+    })
+  }, [])
+  const clearParseError = useCallback(() => {
+    parseErrorRequestRef.current += 1
+    setParseError(null)
+  }, [])
+  const handleReplaceValue = useCallback((markdown: string, reason: 'external' | 'reload' | 'save') => {
+    clearParseError()
+    if (reason !== 'save') setEditorViewMode('rich-text')
+    beginExternalMarkdownSync(markdown)
+    editorRef.current?.setMarkdown(markdown)
+    return markdown
+  }, [beginExternalMarkdownSync, clearParseError])
+  const lifecycle = useDriveDocumentEditorLifecycle({
+    itemId: current.id,
+    initialText,
+    currentVersionId: edit?.currentVersionId,
+    editContext,
+    canEdit,
+    telemetryComponent: 'drive-markdown-editor',
+    onReplaceValue: handleReplaceValue,
+    replaceInitialValue: true,
+  })
+  const {
+    value,
+    pendingSaveRef,
+    dirty,
+    error,
+    setError,
+    conflictOpen,
+    setConflictOpen,
+    reloadConfirmOpen,
+    setReloadConfirmOpen,
+    updateValue,
+    acceptValue,
+    replaceValueWithoutDirtyChange,
+    reload: handleReload,
+    requestReload,
+  } = lifecycle
   const { uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
     canEdit,
     imageUploadContext,
@@ -154,11 +200,7 @@ export function DriveMDXeditorRenderer({
     telemetryComponent: 'drive-markdown-editor',
     onError: setError,
   })
-  const canSave = canEdit
-    && dirty
-    && !uploadingImage
-    && !editContext?.savingText
-    && !editContext?.reloading
+  const canSave = lifecycle.canSave && !uploadingImage
 
   useEffect(() => {
     trackDriveEvent({ eventKey: 'web.drive.editor.open', component: 'drive-markdown-editor', action: 'open' })
@@ -187,27 +229,6 @@ export function DriveMDXeditorRenderer({
     setEditorViewMode(mode)
     comments.scheduleGeometry()
   }, [comments.scheduleGeometry])
-  const clearExternalMarkdownSync = useCallback(() => {
-    applyingExternalMarkdownRef.current = false
-    externalMarkdownTargetRef.current = null
-    if (externalMarkdownFrameRef.current !== null) {
-      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
-      externalMarkdownFrameRef.current = null
-    }
-  }, [])
-  const beginExternalMarkdownSync = useCallback((target: string) => {
-    applyingExternalMarkdownRef.current = true
-    externalMarkdownTargetRef.current = target
-    if (externalMarkdownFrameRef.current !== null) {
-      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
-    }
-    externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
-      externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
-        applyingExternalMarkdownRef.current = false
-        externalMarkdownFrameRef.current = null
-      })
-    })
-  }, [])
   const handleDocumentImageUpload = uploadOptionalDocumentImage
   const insertDocumentImageMarkdown = useCallback((file: File, url: string) => {
     const markdown = `![${driveDocumentImageAltText(file.name)}](${url})`
@@ -309,30 +330,6 @@ export function DriveMDXeditorRenderer({
     markdownShortcutPlugin(),
   ], [canEdit, comments.notifyEditorUpdate, handleDocumentImageUpload, handleEditorViewModeChange, resolveImagePreview, uploadingImage, usesMdxSyntax])
 
-  const clearParseError = useCallback(() => {
-    parseErrorRequestRef.current += 1
-    setParseError(null)
-  }, [])
-
-  useEffect(() => {
-    savedValueRef.current = initialText
-    const savedVersionAcknowledged = isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText)
-    if (savedVersionAcknowledged) {
-      setDirty(valueRef.current !== initialText)
-      return
-    }
-    valueRef.current = initialText
-    setValue(initialText)
-    setDirty(false)
-    setError(null)
-    clearParseError()
-    setConflictOpen(false)
-    setReloadConfirmOpen(false)
-    setEditorViewMode('rich-text')
-    beginExternalMarkdownSync(initialText)
-    editorRef.current?.setMarkdown(initialText)
-  }, [beginExternalMarkdownSync, clearParseError, current.id, edit?.currentVersionId, initialText])
-
   useEffect(() => () => {
     clearExternalMarkdownSync()
   }, [clearExternalMarkdownSync])
@@ -343,43 +340,22 @@ export function DriveMDXeditorRenderer({
   }, [])
 
   const handleSave = useCallback(async () => {
-    if (!canSave || saveInFlightRef.current || !edit?.currentVersionId || !editContext) return
-    const finishTracking = startDriveOperation('web.drive.editor.save', 'drive-markdown-editor')
-    saveInFlightRef.current = true
-    setError(null)
-    const submittedValue = valueRef.current
-    const normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
-    const saveAttempt = {
-      itemId: current.id,
-      initialText: prepareMdxEditorDocument(normalizedValue, usesMdxSyntax).markdown,
-    }
-    pendingSaveRef.current = saveAttempt
-    try {
-      const result = await saveDriveDocumentText(editContext, normalizedValue, edit.currentVersionId)
-      if (result === 'conflict') {
-        finishTracking('failure')
-        setConflictOpen(true)
-        return
-      }
-      clearParseError()
-      if (normalizedValue !== submittedValue && valueRef.current === submittedValue) {
-        valueRef.current = normalizedValue
-        setValue(normalizedValue)
-        beginExternalMarkdownSync(normalizedValue)
-        editorRef.current?.setMarkdown(normalizedValue)
-      }
-      savedValueRef.current = normalizedValue
-      setDirty(valueRef.current !== normalizedValue)
-      await comments.refreshAfterSave()
-      finishTracking('success')
-    } catch (saveError) {
-      finishTracking('failure')
-      setError(driveDocumentEditorErrorMessage(saveError, '保存失败。'))
-    } finally {
-      if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
-      saveInFlightRef.current = false
-    }
-  }, [beginExternalMarkdownSync, canSave, clearParseError, comments.refreshAfterSave, current.id, edit?.currentVersionId, editContext, usesMdxSyntax])
+    await lifecycle.save({
+      blocked: uploadingImage,
+      prepare: (submittedValue) => {
+        const normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
+        return {
+          text: normalizedValue,
+          savedValue: normalizedValue,
+          acknowledgedText: prepareMdxEditorDocument(normalizedValue, usesMdxSyntax).markdown,
+        }
+      },
+      onSaved: async () => {
+        clearParseError()
+        await comments.refreshAfterSave()
+      },
+    })
+  }, [clearParseError, comments.refreshAfterSave, lifecycle.save, uploadingImage, usesMdxSyntax])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!isDriveDocumentSaveShortcut(event)) return
@@ -396,41 +372,10 @@ export function DriveMDXeditorRenderer({
     const request = ++parseErrorRequestRef.current
     queueMicrotask(() => {
       if (parseErrorRequestRef.current !== request) return
-      setValue(payload.source)
-      valueRef.current = payload.source
+      replaceValueWithoutDirtyChange(payload.source)
       setParseError(message || '解析失败。')
     })
-  }, [])
-
-  const handleReload = useCallback(async () => {
-    if (!editContext) return
-    const finishTracking = startDriveOperation('web.drive.editor.reload', 'drive-markdown-editor')
-    setError(null)
-    try {
-      const nextText = await reloadDriveDocumentText(editContext)
-      savedValueRef.current = nextText
-      valueRef.current = nextText
-      setValue(nextText)
-      setDirty(false)
-      clearParseError()
-      setConflictOpen(false)
-      setReloadConfirmOpen(false)
-      beginExternalMarkdownSync(nextText)
-      editorRef.current?.setMarkdown(nextText)
-      finishTracking('success')
-    } catch (reloadError) {
-      finishTracking('failure')
-      setError(driveDocumentEditorErrorMessage(reloadError, '重新加载失败。'))
-    }
-  }, [beginExternalMarkdownSync, clearParseError, editContext])
-
-  const requestReload = useCallback(() => {
-    if (dirty) {
-      setReloadConfirmOpen(true)
-      return
-    }
-    void handleReload()
-  }, [dirty, handleReload])
+  }, [replaceValueWithoutDirtyChange])
 
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [{
@@ -520,10 +465,7 @@ export function DriveMDXeditorRenderer({
           className='min-h-96 flex-1 font-mono text-sm'
           onChange={(event) => {
             if (!canEdit) return
-            const nextValue = event.currentTarget.value
-            valueRef.current = nextValue
-            setValue(nextValue)
-            setDirty(nextValue !== savedValueRef.current)
+            updateValue(event.currentTarget.value)
           }}
         />
       </div>
@@ -536,17 +478,14 @@ export function DriveMDXeditorRenderer({
         toMarkdownOptions={usesMdxSyntax ? undefined : commonMarkToMarkdownOptions}
         onChange={(nextValue, initialMarkdownNormalize) => {
           if (!canEdit) return
-          valueRef.current = nextValue
-          setValue(nextValue)
           const matchesExternalMarkdownTarget = applyingExternalMarkdownRef.current
             && externalMarkdownTargetRef.current === nextValue
           if (initialMarkdownNormalize || matchesExternalMarkdownTarget) {
-            savedValueRef.current = nextValue
-            setDirty(false)
+            acceptValue(nextValue)
             return
           }
           clearExternalMarkdownSync()
-          setDirty(nextValue !== savedValueRef.current)
+          updateValue(nextValue)
         }}
         plugins={plugins}
         translation={mdxEditorZhCnTranslation}

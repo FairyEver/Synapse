@@ -1,4 +1,4 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Download } from 'lucide-react'
 import { ApiError } from '@/lib/api'
 import { buildDashboardSignInUrl } from '@/lib/dashboard-redirect'
@@ -13,11 +13,194 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { startDriveOperation } from '../shared/drive-telemetry'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 
 export type DriveDocumentSaveAttempt = {
   readonly itemId: string
   readonly initialText: string
+}
+
+type DriveDocumentEditorReplaceReason = 'external' | 'reload' | 'save'
+
+type DriveDocumentPreparedSave = {
+  readonly text: string
+  readonly savedValue?: string
+  readonly acknowledgedText?: string
+}
+
+type DriveDocumentEditorSaveOptions = {
+  readonly blocked?: boolean
+  readonly prepare?: (submittedValue: string) => DriveDocumentPreparedSave
+  readonly onSaved?: () => void | Promise<void>
+}
+
+export function useDriveDocumentEditorLifecycle({
+  itemId,
+  initialText,
+  currentVersionId,
+  editContext,
+  canEdit,
+  telemetryComponent,
+  onReplaceValue,
+  replaceInitialValue = false,
+}: {
+  readonly itemId: string
+  readonly initialText: string
+  readonly currentVersionId?: string | null
+  readonly editContext?: DriveRendererEditContext
+  readonly canEdit: boolean
+  readonly telemetryComponent: string
+  readonly onReplaceValue?: (value: string, reason: DriveDocumentEditorReplaceReason) => string | void
+  readonly replaceInitialValue?: boolean
+}) {
+  const savedValueRef = useRef(initialText)
+  const valueRef = useRef(initialText)
+  const pendingSaveRef = useRef<DriveDocumentSaveAttempt | null>(null)
+  const operationInFlightRef = useRef<'save' | 'reload' | null>(null)
+  const externalSourceRef = useRef({ itemId, currentVersionId, initialText })
+  const onReplaceValueRef = useRef(onReplaceValue)
+  onReplaceValueRef.current = onReplaceValue
+  const [value, setValue] = useState(initialText)
+  const [dirty, setDirty] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [conflictOpen, setConflictOpen] = useState(false)
+  const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
+  const canSave = canEdit
+    && dirty
+    && !editContext?.savingText
+    && !editContext?.reloading
+
+  const applyReplacement = useCallback((nextValue: string, reason: DriveDocumentEditorReplaceReason) => {
+    valueRef.current = nextValue
+    savedValueRef.current = nextValue
+    const appliedValue = onReplaceValueRef.current?.(nextValue, reason) ?? nextValue
+    valueRef.current = appliedValue
+    savedValueRef.current = appliedValue
+    setValue(appliedValue)
+    setDirty(false)
+    return appliedValue
+  }, [])
+
+  useEffect(() => {
+    const previousSource = externalSourceRef.current
+    const sourceChanged = previousSource.itemId !== itemId
+      || previousSource.currentVersionId !== currentVersionId
+      || previousSource.initialText !== initialText
+    externalSourceRef.current = { itemId, currentVersionId, initialText }
+    savedValueRef.current = initialText
+    if (isDriveDocumentSaveAcknowledged(pendingSaveRef.current, itemId, initialText)) {
+      setDirty(valueRef.current !== initialText)
+      return
+    }
+    if (!sourceChanged && !replaceInitialValue) return
+    applyReplacement(initialText, 'external')
+    setError(null)
+    setConflictOpen(false)
+    setReloadConfirmOpen(false)
+  }, [applyReplacement, currentVersionId, initialText, itemId, replaceInitialValue])
+
+  const updateValue = useCallback((nextValue: string) => {
+    valueRef.current = nextValue
+    setValue(nextValue)
+    setDirty(nextValue !== savedValueRef.current)
+  }, [])
+
+  const acceptValue = useCallback((nextValue: string) => {
+    valueRef.current = nextValue
+    savedValueRef.current = nextValue
+    setValue(nextValue)
+    setDirty(false)
+  }, [])
+
+  const replaceValueWithoutDirtyChange = useCallback((nextValue: string) => {
+    valueRef.current = nextValue
+    setValue(nextValue)
+  }, [])
+
+  const save = useCallback(async ({ blocked, prepare, onSaved }: DriveDocumentEditorSaveOptions = {}) => {
+    if (!canSave || blocked || operationInFlightRef.current || !currentVersionId || !editContext) return
+    const finishTracking = startDriveOperation('web.drive.editor.save', telemetryComponent)
+    operationInFlightRef.current = 'save'
+    setError(null)
+    const submittedValue = valueRef.current
+    const prepared = prepare?.(submittedValue) ?? { text: submittedValue }
+    const savedValue = prepared.savedValue ?? prepared.text
+    const saveAttempt = {
+      itemId,
+      initialText: prepared.acknowledgedText ?? savedValue,
+    }
+    pendingSaveRef.current = saveAttempt
+    try {
+      const result = await saveDriveDocumentText(editContext, prepared.text, currentVersionId)
+      if (result === 'conflict') {
+        finishTracking('failure')
+        setConflictOpen(true)
+        return
+      }
+      if (savedValue !== submittedValue && valueRef.current === submittedValue) {
+        valueRef.current = onReplaceValueRef.current?.(savedValue, 'save') ?? savedValue
+        setValue(valueRef.current)
+      }
+      savedValueRef.current = savedValue
+      setDirty(valueRef.current !== savedValue)
+      await onSaved?.()
+      finishTracking('success')
+    } catch (saveError) {
+      finishTracking('failure')
+      setError(driveDocumentEditorErrorMessage(saveError, '保存失败。'))
+    } finally {
+      if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
+      operationInFlightRef.current = null
+    }
+  }, [canSave, currentVersionId, editContext, itemId, telemetryComponent])
+
+  const reload = useCallback(async () => {
+    if (!editContext || editContext.savingText || editContext.reloading || operationInFlightRef.current) return
+    const finishTracking = startDriveOperation('web.drive.editor.reload', telemetryComponent)
+    operationInFlightRef.current = 'reload'
+    setError(null)
+    try {
+      const nextText = await reloadDriveDocumentText(editContext)
+      applyReplacement(nextText, 'reload')
+      setConflictOpen(false)
+      setReloadConfirmOpen(false)
+      finishTracking('success')
+    } catch (reloadError) {
+      finishTracking('failure')
+      setError(driveDocumentEditorErrorMessage(reloadError, '重新加载失败。'))
+    } finally {
+      operationInFlightRef.current = null
+    }
+  }, [applyReplacement, editContext, telemetryComponent])
+
+  const requestReload = useCallback(() => {
+    if (dirty) {
+      setReloadConfirmOpen(true)
+      return
+    }
+    void reload()
+  }, [dirty, reload])
+
+  return {
+    value,
+    valueRef,
+    pendingSaveRef,
+    dirty,
+    error,
+    setError,
+    conflictOpen,
+    setConflictOpen,
+    reloadConfirmOpen,
+    setReloadConfirmOpen,
+    canSave,
+    updateValue,
+    acceptValue,
+    replaceValueWithoutDirtyChange,
+    save,
+    reload,
+    requestReload,
+  }
 }
 
 export async function saveDriveDocumentText(

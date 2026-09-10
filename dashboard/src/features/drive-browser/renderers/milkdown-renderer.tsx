@@ -23,12 +23,9 @@ import {
 import {
   DriveDocumentEditorRecoveryDialogs,
   buildDriveDocumentEditorLoginUrl,
-  driveDocumentEditorErrorMessage,
   isDriveDocumentSaveAcknowledged,
   isDriveDocumentSaveShortcut,
-  reloadDriveDocumentText,
-  saveDriveDocumentText,
-  type DriveDocumentSaveAttempt,
+  useDriveDocumentEditorLifecycle,
 } from './drive-document-editor-lifecycle'
 import {
   DriveDocumentEditorCommentsFrame,
@@ -83,30 +80,78 @@ export function DriveMilkdownRenderer({
   const pendingSourceFocusRef = useRef<SourceTextareaSelection | null>(null)
   const activeDocumentIdRef = useRef(current.id)
   activeDocumentIdRef.current = current.id
-  const savedValueRef = useRef(initialText)
-  const valueRef = useRef(initialText)
-  const saveInFlightRef = useRef(false)
-  const pendingSaveRef = useRef<DriveDocumentSaveAttempt | null>(null)
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
   const pendingExternalMarkdownRef = useRef<string | null>(null)
-  const externalMarkdownSourceRef = useRef({
-    documentId: current.id,
-    versionId: edit?.currentVersionId ?? null,
-    text: initialText,
-  })
-  const [value, setValue] = useState(initialText)
-  const [dirty, setDirty] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
-  const [conflictOpen, setConflictOpen] = useState(false)
-  const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const requiresSourceMode = requiresMilkdownSourceMode(initialText)
   const sourceMode = Boolean(parseError || requiresSourceMode)
   const loginUrl = buildDriveDocumentEditorLoginUrl()
+  const clearExternalMarkdownSync = useCallback(() => {
+    applyingExternalMarkdownRef.current = false
+    externalMarkdownTargetRef.current = null
+    if (externalMarkdownFrameRef.current !== null) {
+      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
+      externalMarkdownFrameRef.current = null
+    }
+  }, [])
+  const beginExternalMarkdownSync = useCallback((target: string) => {
+    applyingExternalMarkdownRef.current = true
+    externalMarkdownTargetRef.current = target
+    if (externalMarkdownFrameRef.current !== null) window.cancelAnimationFrame(externalMarkdownFrameRef.current)
+    externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
+      externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
+        applyingExternalMarkdownRef.current = false
+        externalMarkdownFrameRef.current = null
+      })
+    })
+  }, [])
+  const replaceEditorMarkdown = useCallback((markdown: string) => {
+    const crepe = crepeRef.current
+    if (!crepe) {
+      pendingExternalMarkdownRef.current = markdown
+      return markdown
+    }
+    beginExternalMarkdownSync(markdown)
+    crepe.editor.action(replaceAll(markdown, true))
+    const normalizedMarkdown = preserveMilkdownCommonMarkAutolinks(crepe.getMarkdown(), markdown)
+    externalMarkdownTargetRef.current = normalizedMarkdown
+    return normalizedMarkdown
+  }, [beginExternalMarkdownSync])
+  const handleReplaceValue = useCallback((markdown: string) => {
+    setParseError(null)
+    pendingSourceImageSelectionRef.current = null
+    pendingSourceFocusRef.current = null
+    return replaceEditorMarkdown(markdown)
+  }, [replaceEditorMarkdown])
+  const lifecycle = useDriveDocumentEditorLifecycle({
+    itemId: current.id,
+    initialText,
+    currentVersionId: edit?.currentVersionId,
+    editContext,
+    canEdit,
+    telemetryComponent: 'drive-milkdown-editor',
+    onReplaceValue: handleReplaceValue,
+  })
+  const {
+    value,
+    valueRef,
+    pendingSaveRef,
+    dirty,
+    error,
+    setError,
+    conflictOpen,
+    setConflictOpen,
+    reloadConfirmOpen,
+    setReloadConfirmOpen,
+    updateValue,
+    acceptValue,
+    reload: handleReload,
+    requestReload,
+  } = lifecycle
   const { uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
     canEdit,
     imageUploadContext,
@@ -114,11 +159,7 @@ export function DriveMilkdownRenderer({
     telemetryComponent: 'drive-milkdown-editor',
     onError: setError,
   })
-  const canSave = canEdit
-    && dirty
-    && !uploadingImage
-    && !editContext?.savingText
-    && !editContext?.reloading
+  const canSave = lifecycle.canSave && !uploadingImage
 
   useEffect(() => {
     trackDriveEvent({ eventKey: 'web.drive.editor.open', component: 'drive-milkdown-editor', action: 'open' })
@@ -147,56 +188,19 @@ export function DriveMilkdownRenderer({
     return relativeImagePreviewUrls.get(imageSource) ?? ''
   }, [relativeImagePreviewUrls])
 
-  const clearExternalMarkdownSync = useCallback(() => {
-    applyingExternalMarkdownRef.current = false
-    externalMarkdownTargetRef.current = null
-    if (externalMarkdownFrameRef.current !== null) {
-      window.cancelAnimationFrame(externalMarkdownFrameRef.current)
-      externalMarkdownFrameRef.current = null
-    }
-  }, [])
-  const beginExternalMarkdownSync = useCallback((target: string) => {
-    applyingExternalMarkdownRef.current = true
-    externalMarkdownTargetRef.current = target
-    if (externalMarkdownFrameRef.current !== null) window.cancelAnimationFrame(externalMarkdownFrameRef.current)
-    externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
-      externalMarkdownFrameRef.current = window.requestAnimationFrame(() => {
-        applyingExternalMarkdownRef.current = false
-        externalMarkdownFrameRef.current = null
-      })
-    })
-  }, [])
-  const replaceEditorMarkdown = useCallback((markdown: string) => {
-    const crepe = crepeRef.current
-    if (!crepe) {
-      pendingExternalMarkdownRef.current = markdown
-      return
-    }
-    beginExternalMarkdownSync(markdown)
-    crepe.editor.action(replaceAll(markdown, true))
-    const normalizedMarkdown = preserveMilkdownCommonMarkAutolinks(crepe.getMarkdown(), markdown)
-    externalMarkdownTargetRef.current = normalizedMarkdown
-    savedValueRef.current = normalizedMarkdown
-    valueRef.current = normalizedMarkdown
-    setValue(normalizedMarkdown)
-    setDirty(false)
-  }, [beginExternalMarkdownSync])
   const handleCrepeReady = useCallback((crepe: Crepe) => {
     crepeRef.current = crepe
     crepe.setReadonly(!canEdit)
     const pendingMarkdown = pendingExternalMarkdownRef.current
     pendingExternalMarkdownRef.current = null
     if (pendingMarkdown !== null && pendingMarkdown !== crepe.getMarkdown()) {
-      replaceEditorMarkdown(pendingMarkdown)
+      acceptValue(replaceEditorMarkdown(pendingMarkdown))
     } else {
       const normalizedMarkdown = preserveMilkdownCommonMarkAutolinks(crepe.getMarkdown(), initialText)
-      savedValueRef.current = normalizedMarkdown
-      valueRef.current = normalizedMarkdown
-      setValue(normalizedMarkdown)
-      setDirty(false)
+      acceptValue(normalizedMarkdown)
     }
     comments.scheduleGeometry()
-  }, [canEdit, comments.scheduleGeometry, initialText, replaceEditorMarkdown])
+  }, [acceptValue, canEdit, comments.scheduleGeometry, initialText, replaceEditorMarkdown])
   const handleCrepeFailure = useCallback(() => {
     crepeRef.current = null
     setParseError('Milkdown 无法安全解析此文档。')
@@ -214,35 +218,6 @@ export function DriveMilkdownRenderer({
     if (!root || sourceMode) return
     return observeDriveHierarchicalListMarkers(root)
   }, [comments.editorContentHostRef, current.id, sourceMode])
-
-  useEffect(() => {
-    const previousExternalMarkdownSource = externalMarkdownSourceRef.current
-    const externalMarkdownChanged = previousExternalMarkdownSource.documentId !== current.id
-      || previousExternalMarkdownSource.versionId !== (edit?.currentVersionId ?? null)
-      || previousExternalMarkdownSource.text !== initialText
-    externalMarkdownSourceRef.current = {
-      documentId: current.id,
-      versionId: edit?.currentVersionId ?? null,
-      text: initialText,
-    }
-    savedValueRef.current = initialText
-    const savedVersionAcknowledged = isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText)
-    if (savedVersionAcknowledged) {
-      setDirty(valueRef.current !== initialText)
-      return
-    }
-    valueRef.current = initialText
-    setValue(initialText)
-    setDirty(false)
-    setError(null)
-    setParseError(null)
-    setConflictOpen(false)
-    setReloadConfirmOpen(false)
-    pendingSourceImageSelectionRef.current = null
-    pendingSourceFocusRef.current = null
-    if (crepeRef.current) replaceEditorMarkdown(initialText)
-    else if (externalMarkdownChanged) pendingExternalMarkdownRef.current = initialText
-  }, [current.id, edit?.currentVersionId, initialText, replaceEditorMarkdown])
 
   useEffect(() => () => {
     clearExternalMarkdownSync()
@@ -262,83 +237,27 @@ export function DriveMilkdownRenderer({
   const handleMarkdownChange = useCallback((nextValue: string) => {
     if (!canEdit) return
     const sourcePreservedValue = preserveMilkdownCommonMarkAutolinks(nextValue, valueRef.current)
-    valueRef.current = sourcePreservedValue
-    setValue(sourcePreservedValue)
     const matchesExternalTarget = applyingExternalMarkdownRef.current
       && externalMarkdownTargetRef.current === sourcePreservedValue
     if (matchesExternalTarget) {
-      savedValueRef.current = sourcePreservedValue
-      setDirty(false)
+      acceptValue(sourcePreservedValue)
       comments.notifyEditorUpdate()
       return
     }
     clearExternalMarkdownSync()
-    setDirty(sourcePreservedValue !== savedValueRef.current)
+    updateValue(sourcePreservedValue)
     comments.notifyEditorUpdate()
-  }, [canEdit, clearExternalMarkdownSync, comments.notifyEditorUpdate])
+  }, [acceptValue, canEdit, clearExternalMarkdownSync, comments.notifyEditorUpdate, updateValue, valueRef])
 
   const handleSave = useCallback(async () => {
-    if (!canSave || saveInFlightRef.current || !edit?.currentVersionId || !editContext) return
-    const finishTracking = startDriveOperation('web.drive.editor.save', 'drive-milkdown-editor')
-    saveInFlightRef.current = true
-    setError(null)
-    const submittedValue = valueRef.current
-    const saveAttempt = { itemId: current.id, initialText: submittedValue }
-    pendingSaveRef.current = saveAttempt
-    try {
-      const result = await saveDriveDocumentText(editContext, submittedValue, edit.currentVersionId)
-      if (result === 'conflict') {
-        finishTracking('failure')
-        setConflictOpen(true)
-        return
-      }
-      savedValueRef.current = submittedValue
-      setDirty(valueRef.current !== submittedValue)
-      await comments.refreshAfterSave()
-      finishTracking('success')
-    } catch (saveError) {
-      finishTracking('failure')
-      setError(driveDocumentEditorErrorMessage(saveError, '保存失败。'))
-    } finally {
-      if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
-      saveInFlightRef.current = false
-    }
-  }, [canSave, comments.refreshAfterSave, current.id, edit?.currentVersionId, editContext])
+    await lifecycle.save({ blocked: uploadingImage, onSaved: comments.refreshAfterSave })
+  }, [comments.refreshAfterSave, lifecycle.save, uploadingImage])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!isDriveDocumentSaveShortcut(event)) return
     event.preventDefault()
     if (canSave) void handleSave()
   }, [canSave, handleSave])
-
-  const handleReload = useCallback(async () => {
-    if (!editContext) return
-    const finishTracking = startDriveOperation('web.drive.editor.reload', 'drive-milkdown-editor')
-    setError(null)
-    try {
-      const nextText = await reloadDriveDocumentText(editContext)
-      savedValueRef.current = nextText
-      valueRef.current = nextText
-      setValue(nextText)
-      setDirty(false)
-      setParseError(null)
-      setConflictOpen(false)
-      setReloadConfirmOpen(false)
-      replaceEditorMarkdown(nextText)
-      finishTracking('success')
-    } catch (reloadError) {
-      finishTracking('failure')
-      setError(driveDocumentEditorErrorMessage(reloadError, '重新加载失败。'))
-    }
-  }, [editContext, replaceEditorMarkdown])
-
-  const requestReload = useCallback(() => {
-    if (dirty) {
-      setReloadConfirmOpen(true)
-      return
-    }
-    void handleReload()
-  }, [dirty, handleReload])
 
   const captureSourceSelection = useCallback((): SourceTextareaSelection => {
     const textarea = sourceTextareaRef.current
@@ -362,10 +281,8 @@ export function DriveMilkdownRenderer({
       end: nextCursor,
       direction: selection.direction,
     }
-    valueRef.current = nextValue
-    setValue(nextValue)
-    setDirty(nextValue !== savedValueRef.current)
-  }, [])
+    updateValue(nextValue)
+  }, [updateValue, valueRef])
   const insertDocumentImageMarkdown = useCallback((file: File, url: string, sourceSelection?: SourceTextareaSelection) => {
     const markdown = createMilkdownImageMarkdown(file, url)
     if (sourceSelection) {
@@ -528,10 +445,7 @@ export function DriveMilkdownRenderer({
           onDrop={handleSourceDrop}
           onChange={(event) => {
             if (!canEdit) return
-            const nextValue = event.currentTarget.value
-            valueRef.current = nextValue
-            setValue(nextValue)
-            setDirty(nextValue !== savedValueRef.current)
+            updateValue(event.currentTarget.value)
           }}
         />
       </div>
