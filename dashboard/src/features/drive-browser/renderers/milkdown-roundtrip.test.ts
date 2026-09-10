@@ -303,7 +303,107 @@ describe('Milkdown Markdown round trip', () => {
     expect(upload).toHaveBeenCalledWith(file)
     expect(uploadedNodes).toHaveLength(1)
   })
+
+  it('keeps successful image nodes when a concurrent upload fails', async () => {
+    crepe = new Crepe({ root, defaultValue: '', features: disabledVisualFeatures() })
+    const pendingUploads = new Map<string, {
+      reject: (reason?: unknown) => void
+      resolve: (url: string) => void
+    }>()
+    const upload = vi.fn((file: File) => new Promise<string>((resolve, reject) => {
+      pendingUploads.set(file.name, { reject, resolve })
+    }))
+    configureCommonMarkImageUploads(crepe, upload)
+    await crepe.create()
+
+    const firstFile = new File(['first'], 'first.png', { type: 'image/png' })
+    const secondFile = new File(['second'], 'second.png', { type: 'image/png' })
+    const fileList = createFileList(firstFile, secondFile)
+    const uploadedNodesPromise = uploadImageNodes(crepe, fileList)
+
+    expect(upload).toHaveBeenCalledTimes(2)
+    pendingUploads.get('second.png')?.resolve('/object/second')
+    pendingUploads.get('first.png')?.reject(new Error('upload failed'))
+
+    const uploadedNodes = await uploadedNodesPromise
+    expect(uploadedNodes).toHaveLength(1)
+    expect(uploadedNodes[0]?.attrs).toMatchObject({
+      alt: 'second.png',
+      src: '/object/second',
+      title: '',
+    })
+  })
+
+  it('returns no image nodes when every concurrent upload fails', async () => {
+    crepe = new Crepe({ root, defaultValue: '', features: disabledVisualFeatures() })
+    const upload = vi.fn(async (file: File) => {
+      throw new Error(`Failed to upload ${file.name}`)
+    })
+    configureCommonMarkImageUploads(crepe, upload)
+    await crepe.create()
+
+    const firstFile = new File(['first'], 'first.png', { type: 'image/png' })
+    const secondFile = new File(['second'], 'second.png', { type: 'image/png' })
+    const fileList = createFileList(firstFile, secondFile)
+    const uploadedNodes = await uploadImageNodes(crepe, fileList)
+
+    expect(upload).toHaveBeenCalledTimes(2)
+    expect(uploadedNodes).toEqual([])
+  })
+
+  it('keeps uploaded image nodes in file order when uploads finish out of order', async () => {
+    crepe = new Crepe({ root, defaultValue: '', features: disabledVisualFeatures() })
+    const pendingUploads = new Map<string, (url: string) => void>()
+    const upload = vi.fn((file: File) => new Promise<string>((resolve) => {
+      pendingUploads.set(file.name, resolve)
+    }))
+    configureCommonMarkImageUploads(crepe, upload)
+    await crepe.create()
+
+    const firstFile = new File(['first'], 'first.png', { type: 'image/png' })
+    const secondFile = new File(['second'], 'second.png', { type: 'image/png' })
+    const fileList = createFileList(firstFile, secondFile)
+    const uploadedNodesPromise = uploadImageNodes(crepe, fileList)
+
+    expect(upload).toHaveBeenCalledTimes(2)
+    pendingUploads.get('second.png')?.('/object/second')
+    pendingUploads.get('first.png')?.('/object/first')
+
+    const uploadedNodes = await uploadedNodesPromise
+    expect(uploadedNodes.map((node) => node.attrs.src)).toEqual(['/object/first', '/object/second'])
+  })
 })
+
+function configureCommonMarkImageUploads(
+  targetCrepe: Crepe,
+  onUpload: (file: File) => Promise<string>,
+): void {
+  configureMilkdownCommonMarkImages(targetCrepe, {
+    altText: (file) => file.name,
+    confirmButton: 'Confirm',
+    onUpload,
+    proxyDomURL: (url) => url,
+    uploadButton: 'Upload',
+    uploadPlaceholderText: 'Paste image URL',
+  })
+}
+
+function createFileList(...files: File[]): FileList {
+  return Object.assign(files, {
+    item: (index: number) => files[index] ?? null,
+  }) as unknown as FileList
+}
+
+async function uploadImageNodes(targetCrepe: Crepe, files: FileList) {
+  const uploadedNodes = await targetCrepe.editor.action((ctx) => ctx.get(uploadConfig.key).uploader(
+    files,
+    ctx.get(schemaCtx),
+    ctx,
+    0,
+  ))
+  if (!Array.isArray(uploadedNodes)) throw new Error('Expected uploaded image nodes')
+  return uploadedNodes
+}
 
 function disabledVisualFeatures(): Partial<Record<CrepeFeature, boolean>> {
   return {

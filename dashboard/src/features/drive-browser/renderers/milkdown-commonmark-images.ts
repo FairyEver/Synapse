@@ -30,12 +30,14 @@ export function configureMilkdownCommonMarkImages(
         uploader: async (files, schema) => {
           const imageType = schema.nodes.image
           if (!imageType) return []
-          const nodes = await Promise.all(Array.from(files).map(async (file) => imageType.createAndFill({
+          const results = await Promise.allSettled(Array.from(files).map(async (file) => imageType.createAndFill({
             alt: options.altText(file),
             src: await options.onUpload(file),
             title: '',
           })))
-          return nodes.filter((node): node is NonNullable<typeof node> => node !== null)
+          return results.flatMap((result) => (
+            result.status === 'fulfilled' && result.value !== null ? [result.value] : []
+          ))
         },
       }))
     })
