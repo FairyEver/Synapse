@@ -87,8 +87,39 @@ describe('Drive hierarchical list markers', () => {
     expect(root.textContent).toBe('一级一一级二')
     stop()
   })
+
+  it('updates Milkdown labels after ordered start and item value changes', async () => {
+    root = document.createElement('div')
+    root.innerHTML = [
+      '<ol start="2"><div class="milkdown-list-item-block"><li>',
+      '<div class="label-wrapper"><span class="label ordered">2.</span></div>',
+      '<div><p>一级</p><ol start="4">',
+      '<div class="milkdown-list-item-block"><li><div class="label-wrapper"><span class="label ordered">4.</span></div><p>二级一</p></li></div>',
+      '<div class="milkdown-list-item-block"><li><div class="label-wrapper"><span class="label ordered">5.</span></div><p>二级二</p></li></div>',
+      '</ol></div></li></div></ol>',
+    ].join('')
+    const stop = observeDriveHierarchicalListMarkers(root)
+
+    expect(markers(root)).toEqual(['2.', '2.4', '2.5'])
+    expect(renderedLabels(root)).toEqual(['2.', '2.4', '2.5'])
+
+    const lists = root.querySelectorAll('ol')
+    const nestedItems = lists[1]?.querySelectorAll('li')
+    lists[1]?.setAttribute('start', '6')
+    nestedItems?.[1]?.setAttribute('value', '8')
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(markers(root)).toEqual(['2.', '2.6', '2.8'])
+    expect(renderedLabels(root)).toEqual(['2.', '2.6', '2.8'])
+    stop()
+  })
 })
 
 function markers(container: ParentNode) {
   return Array.from(container.querySelectorAll('li'), (item) => item.getAttribute('data-drive-list-marker'))
+}
+
+function renderedLabels(container: ParentNode) {
+  return Array.from(container.querySelectorAll('.label.ordered'), (label) => label.textContent)
 }

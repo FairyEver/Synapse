@@ -1,5 +1,6 @@
 export const DRIVE_HIERARCHICAL_LIST_MARKER_ATTRIBUTE = 'data-drive-list-marker'
 export const DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME = '[&_ol>li[data-drive-list-marker]::marker]:content-[attr(data-drive-list-marker)_"_"]!'
+const DRIVE_MILKDOWN_ORDERED_LABEL_SELECTOR = ':scope > .label-wrapper > .label.ordered'
 
 export function syncDriveHierarchicalListMarkers(root: ParentNode): void {
   const markerPaths = new Map<HTMLLIElement, readonly number[]>()
@@ -10,7 +11,7 @@ export function syncDriveHierarchicalListMarkers(root: ParentNode): void {
 
   for (const list of root.querySelectorAll<HTMLOListElement>('ol')) {
     const ancestorPath = findOrderedAncestorPath(list, markerPaths, root)
-    const items = Array.from(list.children).filter((child): child is HTMLLIElement => child instanceof HTMLLIElement)
+    const items = Array.from(list.children, findListItem).filter((item): item is HTMLLIElement => item !== null)
     let current = list.start
     let renderedItemCount = 0
     let previousPath: readonly number[] | undefined
@@ -29,12 +30,17 @@ export function syncDriveHierarchicalListMarkers(root: ParentNode): void {
       markerPaths.set(item, path)
       previousPath = path
       renderedItemCount += 1
-      item.setAttribute(
-        DRIVE_HIERARCHICAL_LIST_MARKER_ATTRIBUTE,
-        path.length === 1 ? `${current}.` : path.join('.')
-      )
+      const marker = path.length === 1 ? `${current}.` : path.join('.')
+      item.setAttribute(DRIVE_HIERARCHICAL_LIST_MARKER_ATTRIBUTE, marker)
+      const renderedLabel = item.querySelector<HTMLElement>(DRIVE_MILKDOWN_ORDERED_LABEL_SELECTOR)
+      if (renderedLabel && renderedLabel.textContent !== marker) renderedLabel.textContent = marker
     })
   }
+}
+
+function findListItem(child: Element): HTMLLIElement | null {
+  if (child instanceof HTMLLIElement) return child
+  return child.firstElementChild instanceof HTMLLIElement ? child.firstElementChild : null
 }
 
 export function observeDriveHierarchicalListMarkers(root: HTMLElement): () => void {

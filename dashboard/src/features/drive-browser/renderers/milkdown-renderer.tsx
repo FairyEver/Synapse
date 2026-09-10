@@ -37,6 +37,7 @@ import {
   saveDriveDocumentText,
   type DriveDocumentSaveAttempt,
 } from './drive-document-editor-lifecycle'
+import { observeDriveHierarchicalListMarkers } from './drive-hierarchical-list-markers'
 import { configureMilkdownCommonMarkImages } from './milkdown-commonmark-images'
 import { useMilkdownCommentGeometry } from './drive-editor-comment-geometry'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
@@ -91,6 +92,11 @@ export function DriveMilkdownRenderer({
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
   const pendingExternalMarkdownRef = useRef<string | null>(null)
+  const externalMarkdownSourceRef = useRef({
+    documentId: current.id,
+    versionId: edit?.currentVersionId ?? null,
+    text: initialText,
+  })
   const [value, setValue] = useState(initialText)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -262,6 +268,21 @@ export function DriveMilkdownRenderer({
   }, [canEdit])
 
   useEffect(() => {
+    const root = editorContentHostRef.current
+    if (!root || sourceMode) return
+    return observeDriveHierarchicalListMarkers(root)
+  }, [current.id, sourceMode])
+
+  useEffect(() => {
+    const previousExternalMarkdownSource = externalMarkdownSourceRef.current
+    const externalMarkdownChanged = previousExternalMarkdownSource.documentId !== current.id
+      || previousExternalMarkdownSource.versionId !== (edit?.currentVersionId ?? null)
+      || previousExternalMarkdownSource.text !== initialText
+    externalMarkdownSourceRef.current = {
+      documentId: current.id,
+      versionId: edit?.currentVersionId ?? null,
+      text: initialText,
+    }
     savedValueRef.current = initialText
     const savedVersionAcknowledged = isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText)
     if (savedVersionAcknowledged) {
@@ -283,7 +304,7 @@ export function DriveMilkdownRenderer({
     pendingSourceImageSelectionRef.current = null
     pendingSourceFocusRef.current = null
     if (crepeRef.current) replaceEditorMarkdown(initialText)
-    else pendingExternalMarkdownRef.current = null
+    else if (externalMarkdownChanged) pendingExternalMarkdownRef.current = initialText
   }, [current.id, edit?.currentVersionId, initialText, replaceEditorMarkdown])
 
   useEffect(() => () => {

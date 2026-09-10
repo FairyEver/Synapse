@@ -428,6 +428,86 @@ describe('DriveMilkdownRenderer', () => {
     expect(editor?.textContent).not.toContain('First')
   })
 
+  it('applies the latest confirmed version when it arrives before Crepe is ready', async () => {
+    const saveText = vi.fn(async () => ({} as never))
+    const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
+    const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
+    if (!editorDescriptor?.get) throw new Error('Expected Crepe editor getter')
+    let crepe: Crepe | null = null
+    vi.spyOn(builderPrototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
+      crepe = this
+      return editorDescriptor.get?.call(this)
+    })
+    const context = {
+      reload: vi.fn(async () => ({} as never)),
+      reloading: false,
+      saveText,
+      savingText: false,
+    }
+    const renderer = renderRenderer({ preview: preview('# First'), editContext: context })
+    expect(document.querySelector('.milkdown .ProseMirror')).toBeNull()
+
+    renderer.rerender({
+      preview: preview('# Intermediate'),
+      edit: { ...editable(), currentVersionId: 'version-2' },
+    })
+    expect(document.querySelector('.milkdown .ProseMirror')).toBeNull()
+    renderer.rerender({
+      preview: preview('# Latest'),
+      edit: { ...editable(), currentVersionId: 'version-3' },
+    })
+    await waitForEditor()
+
+    const editor = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
+    expect(editor?.textContent).toContain('Latest')
+    expect(editor?.textContent).not.toContain('First')
+
+    await act(async () => {
+      if (!crepe) throw new Error('Expected Crepe instance')
+      crepe.editor.action(replaceAll(crepe.getMarkdown().replace('# Latest', '# Latest updated')))
+      await new Promise((resolve) => window.setTimeout(resolve, 250))
+    })
+    await pressSaveShortcut()
+
+    expect(saveText).toHaveBeenCalledOnce()
+    expect(saveText.mock.calls[0]?.[0].baseVersionId).toBe('version-3')
+    expect(saveText.mock.calls[0]?.[0].text).toContain('# Latest updated')
+    expect(saveText.mock.calls[0]?.[0].text).not.toContain('First')
+  })
+
+  it('shows hierarchical ordered markers without changing Milkdown Markdown', async () => {
+    const source = '2. Parent\n\n   4. Child\n   5. Next'
+    const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
+    const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
+    if (!editorDescriptor?.get) throw new Error('Expected Crepe editor getter')
+    let crepe: Crepe | null = null
+    vi.spyOn(builderPrototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
+      crepe = this
+      return editorDescriptor.get?.call(this)
+    })
+
+    renderRenderer({ preview: preview(source), editContext: editContext() })
+    await waitForEditor()
+
+    const content = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
+    expect(content).not.toBeNull()
+    expect(Array.from(content?.querySelectorAll('li') ?? [], (item) => item.getAttribute('data-drive-list-marker'))).toEqual([
+      '2.',
+      '2.4',
+      '2.5',
+    ])
+    expect(Array.from(content?.querySelectorAll('.label.ordered') ?? [], (label) => label.textContent)).toEqual([
+      '2.',
+      '2.4',
+      '2.5',
+    ])
+    if (!crepe) throw new Error('Expected Crepe instance')
+    const serialized = crepe.getMarkdown()
+    expect(serialized).toContain('2. Parent')
+    expect(serialized).not.toContain('data-drive-list-marker')
+    expect(serialized).not.toContain('2.4 Child')
+  })
+
   it('updates readonly state and destroys Crepe during cleanup', async () => {
     const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
     const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
