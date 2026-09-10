@@ -4,7 +4,10 @@ import { act, useRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveAnnotationThreadDto, DriveMarkdownProjectionDto } from '@synapse/shared'
-import { useDriveEditorCommentGeometry, useMilkdownCommentGeometry } from './drive-editor-comment-geometry'
+import {
+  MILKDOWN_COMMENT_IGNORED_SELECTOR,
+  useDriveEditorCommentGeometry,
+} from './drive-editor-comment-geometry'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -181,6 +184,70 @@ describe('useDriveEditorCommentGeometry', () => {
     expect(resultElement().dataset.anchors).toBe('thread-1:70')
   })
 
+  it('positions a Milkdown range across an inline hardbreak', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = frames.size + 1
+      frames.set(id, callback)
+      return id
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    const getClientRects = vi.fn(() => [rect({ top: 80, left: 20, width: 50, height: 18 })])
+    Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: getClientRects })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
+      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
+      return rect({})
+    })
+
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => root?.render(
+      <MilkdownGeometryHarness
+        threads={[commentThread('thread-1', { start: 1, end: 18 }, 'line one\nline two')]}
+        withHardbreak
+      />
+    ))
+    await flushFrames(frames)
+
+    expect(getClientRects).toHaveBeenCalledOnce()
+    expect(resultElement().dataset.anchors).toBe('thread-1:70')
+  })
+
+  it('positions Milkdown text after a raw HTML image alt', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = frames.size + 1
+      frames.set(id, callback)
+      return id
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id))
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    const getClientRects = vi.fn(() => [rect({ top: 80, left: 20, width: 50, height: 18 })])
+    Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: getClientRects })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
+      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
+      return rect({})
+    })
+
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => root?.render(
+      <MilkdownGeometryHarness
+        threads={[commentThread('thread-1', { start: 15, end: 20 }, 'after')]}
+        withRawHtmlImage
+      />
+    ))
+    await flushFrames(frames)
+
+    expect(getClientRects).toHaveBeenCalledOnce()
+    expect(resultElement().dataset.anchors).toBe('thread-1:70')
+  })
+
   it('discovers a delayed ProseMirror root and observes its layout changes until unmount', async () => {
     const frames = new Map<number, FrameRequestCallback>()
     let frameId = 0
@@ -348,19 +415,23 @@ function MilkdownGeometryHarness({
   mounted = true,
   projection = null,
   withDuplicateImages = false,
+  withHardbreak = false,
   withImage = false,
   withOrderedList = false,
+  withRawHtmlImage = false,
 }: {
   readonly threads: readonly DriveAnnotationThreadDto[]
   readonly mounted?: boolean
   readonly projection?: DriveMarkdownProjectionDto | null
   readonly withDuplicateImages?: boolean
+  readonly withHardbreak?: boolean
   readonly withImage?: boolean
   readonly withOrderedList?: boolean
+  readonly withRawHtmlImage?: boolean
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const contentHostRef = useRef<HTMLDivElement | null>(null)
-  const { geometry } = useMilkdownCommentGeometry({
+  const { geometry } = useDriveEditorCommentGeometry({
     enabled: true,
     layoutKey: 'wide:open',
     resetKey: 'version-1',
@@ -369,6 +440,8 @@ function MilkdownGeometryHarness({
     imagePreviewUrls: new Map(),
     scrollRef,
     contentHostRef,
+    contentRootSelector: '.milkdown .ProseMirror',
+    ignoredElementSelector: MILKDOWN_COMMENT_IGNORED_SELECTOR,
   })
   const anchors = Object.entries(geometry.anchorTopByThreadId)
     .map(([threadId, top]) => `${threadId}:${top}`)
@@ -378,7 +451,11 @@ function MilkdownGeometryHarness({
       <div ref={contentHostRef} data-test-host='true'>
         <div className='milkdown'>
           {mounted ? <div className='ProseMirror'>
-            {withOrderedList ? (
+            {withRawHtmlImage ? (
+              <p>Before <span data-type='html' data-value='<img src="/object/x" alt="Raw alt">'>{'<img src="/object/x" alt="Raw alt">'}</span> after</p>
+            ) : withHardbreak ? (
+              <p>🙂line one<span data-type='hardbreak' data-is-inline='true'> </span>line two</p>
+            ) : withOrderedList ? (
               <>
                 <p>Before</p>
                 <ol>

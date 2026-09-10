@@ -15,6 +15,8 @@ export const MILKDOWN_COMMENT_IGNORED_SELECTOR = [
   '.milkdown-code-block > .preview-panel',
   '[data-type="html"]',
 ].join(', ')
+const STANDALONE_HTML_IMAGE_PATTERN = /^\s*<img\b((?:[^"'<>]|"[^"]*"|'[^']*')*)\/?>\s*$/iu
+const QUOTED_HTML_ATTRIBUTE_PATTERN = /\b([a-z][a-z\d:-]*)\s*=\s*(["'])(.*?)\2/giu
 
 type TextRange = { readonly start: number; readonly end: number }
 
@@ -211,14 +213,6 @@ export function useDriveEditorCommentGeometry(input: DriveEditorCommentGeometryI
   return { geometry, notifyEditorUpdate, scheduleGeometry }
 }
 
-export function useMilkdownCommentGeometry(input: Omit<DriveEditorCommentGeometryInput, 'contentRootSelector' | 'ignoredElementSelector'>) {
-  return useDriveEditorCommentGeometry({
-    ...input,
-    contentRootSelector: '.milkdown .ProseMirror',
-    ignoredElementSelector: MILKDOWN_COMMENT_IGNORED_SELECTOR,
-  })
-}
-
 export type DriveEditorTextModel = {
   readonly text: string
   readonly segments: readonly DriveEditorTextSegment[]
@@ -232,10 +226,9 @@ export function createDriveEditorTextModel(
   const segments: DriveEditorTextSegment[] = []
   let cursor = 0
 
-  const appendText = (node: Text) => {
-    const value = node.data
+  const appendText = (node: Text, value = node.data) => {
     if (!value) return
-    const utf16Offsets = codePointUtf16Offsets(value)
+    const utf16Offsets = codePointUtf16Offsets(node.data)
     const length = utf16Offsets.length - 1
     segments.push({ start: cursor, end: cursor + length, node, utf16Offsets })
     values.push(value)
@@ -258,8 +251,21 @@ export function createDriveEditorTextModel(
       node.hidden
       || node.getAttribute('aria-hidden') === 'true'
       || node.matches('.cm-gutters, textarea')
-      || (ignoredElementSelector && node.matches(ignoredElementSelector))
     ) return
+    if (node.matches('[data-type="html"]')) {
+      appendSynthetic(rawHtmlImageAlt(node.getAttribute('data-value') ?? node.textContent ?? ''))
+      return
+    }
+    if (node.matches('[data-type="hardbreak"]')) {
+      const placeholder = node.firstChild
+      if (placeholder instanceof Text && Array.from(placeholder.data).length === 1) {
+        appendText(placeholder, '\n')
+      } else {
+        appendSynthetic('\n')
+      }
+      return
+    }
+    if (ignoredElementSelector && node.matches(ignoredElementSelector)) return
     if (node instanceof HTMLImageElement) {
       appendSynthetic(node.alt)
       return
@@ -279,6 +285,17 @@ export function createDriveEditorTextModel(
 
   root.childNodes.forEach(visit)
   return { text: values.join(''), segments }
+}
+
+function rawHtmlImageAlt(value: string): string {
+  const tag = STANDALONE_HTML_IMAGE_PATTERN.exec(value)
+  if (!tag) return ''
+  const attributes = new Map<string, string>()
+  for (const match of tag[1].matchAll(QUOTED_HTML_ATTRIBUTE_PATTERN)) {
+    attributes.set(match[1].toLowerCase(), match[3])
+  }
+  if (!attributes.get('src')?.trim()) return ''
+  return attributes.get('alt') ?? ''
 }
 
 function isEditorPlaceholderBreak(node: HTMLElement, ignoredElementSelector: string): boolean {
