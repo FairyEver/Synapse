@@ -31,6 +31,8 @@ describe("drive markdown renderer", () => {
     expect(html).not.toContain("<script>")
     expect(html).not.toContain("onerror")
     expect(html).toContain("script>alert(1)")
+    expect(result.renderedText).toContain('<img src="x">')
+    expect(result.renderedText).not.toContain("onerror")
   })
 
   it("preserves sanitized Mermaid fences for client-side diagram rendering", async () => {
@@ -77,6 +79,7 @@ describe("drive markdown renderer", () => {
     expect(result.html).toMatch(/第一行<br[^>]*>\s*第二行 &#x3C;em>保持转义&#x3C;\/em>/u)
     expect(result.html).toContain("表外&#x3C;br>保持转义")
     expect(result.renderedText).toContain("借：管理费用\n贷：应付职工薪酬")
+    expect(result.renderedText).toContain("表外<br>保持转义")
     expect(result.projection.segments.filter((segment) => segment.mapping === "generated")).toHaveLength(3)
   })
 

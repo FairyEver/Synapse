@@ -107,6 +107,82 @@ describe('Drive Markdown projection', () => {
     expect(rendered.renderedText).toBe('前 图标 后\n下一行')
   })
 
+  it('keeps text anchors aligned after escaped raw HTML', async () => {
+    const source = '前文<u>g</u>后文唯一评论文本。'
+    const quote = '后文唯一评论文本。'
+    const rendered = await renderDriveMarkdownFragment(source)
+    const paragraph = rendered.projection.blocks.find((block) => block.type === 'paragraph')
+    if (!paragraph) throw new Error('Missing paragraph projection')
+    const renderedStart = Array.from('前文<u>g</u>').length
+    const renderedEnd = renderedStart + Array.from(quote).length
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: renderedStart, end: renderedEnd },
+        renderedPosition: { start: renderedStart, end: renderedEnd },
+        semantic: {
+          blockId: paragraph.blockId,
+          start: renderedStart,
+          end: renderedEnd,
+          headingPath: [],
+        },
+        quote: { exact: quote, prefix: '<u>g</u>', suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+    })
+
+    expect(rendered.html).toContain('前文&#x3C;u>g&#x3C;/u>后文唯一评论文本。')
+    expect(rendered.renderedText).toBe(source)
+    expect(sliceByCodePoints(rendered.renderedText, renderedStart, renderedEnd)).toBe(quote)
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      renderedRange: { start: renderedStart, end: renderedEnd },
+    })
+  })
+
+  it('keeps text anchors aligned after escaped raw HTML blocks', async () => {
+    const source = '<div onclick="run()">块内容</div>\n\n后文唯一评论文本。'
+    const quote = '后文唯一评论文本。'
+    const rendered = await renderDriveMarkdownFragment(source)
+    const paragraph = rendered.projection.blocks.find((block) => block.type === 'paragraph')
+    if (!paragraph) throw new Error('Missing paragraph projection')
+    const escapedBlock = '<div>块内容</div>'
+    const renderedStart = Array.from(escapedBlock).length
+    const renderedEnd = renderedStart + Array.from(quote).length
+    const sourceStart = Array.from(source.slice(0, source.indexOf(quote))).length
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: {
+        schemaVersion: 2,
+        position: { start: sourceStart, end: sourceStart + Array.from(quote).length },
+        renderedPosition: { start: renderedStart, end: renderedEnd },
+        semantic: {
+          blockId: paragraph.blockId,
+          start: renderedStart,
+          end: renderedEnd,
+          headingPath: [],
+        },
+        quote: { exact: quote, prefix: escapedBlock, suffix: '' },
+      },
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+    })
+
+    expect(rendered.html).toContain('&#x3C;div>块内容&#x3C;/div>')
+    expect(rendered.renderedText).toBe(`${escapedBlock}${quote}`)
+    expect(rendered.projection.blocks.some((block) => block.type === 'html')).toBe(true)
+    expect(paragraph).toMatchObject({ renderedStart, renderedEnd })
+    expect(sliceByCodePoints(rendered.renderedText, renderedStart, renderedEnd)).toBe(quote)
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      renderedRange: { start: renderedStart, end: renderedEnd },
+    })
+  })
+
   it('keeps text anchors aligned after a reference image alternative', async () => {
     const quote = '后文唯一评论文本。'
     const rendered = await renderDriveMarkdownFragment([

@@ -10,7 +10,7 @@ import type { DriveAnnotationTextPositionSelector } from "@synapse/shared"
 import { parseDriveMarkdownRelativeImageSrc } from "./drive-markdown-relative-images"
 
 export const DRIVE_MARKDOWN_PROJECTION_SCHEMA_VERSION = 1
-export const DRIVE_MARKDOWN_PARSER_VERSION = "remark-15-gfm-4-space-image-1-html-table-break-1"
+export const DRIVE_MARKDOWN_PARSER_VERSION = "remark-15-gfm-4-space-image-1-html-table-break-2"
 
 type MarkdownPosition = {
   readonly start: { readonly offset?: number }
@@ -57,7 +57,7 @@ const markdownBlockTypes = new Set([
   "thematicBreak",
 ])
 
-const markdownSegmentTypes = new Set(["text", "inlineCode", "code", "image", "break"])
+const markdownSegmentTypes = new Set(["text", "inlineCode", "code", "image", "break", "html"])
 const markdownImageTypes = new Set(["image", "imageReference"])
 
 export function buildDriveMarkdownProjection(
@@ -86,7 +86,8 @@ export function buildDriveMarkdownProjection(
   const visit = (node: MarkdownProjectionNode, parentBlockIndex: number | null): void => {
     const type = node.type ?? "unknown"
     let currentParentBlockIndex = parentBlockIndex
-    if ((markdownBlockTypes.has(type) || (markdownImageTypes.has(type) && parentBlockIndex === null)) && hasOffsets(node)) {
+    const isRootLeafBlock = parentBlockIndex === null && (markdownImageTypes.has(type) || type === "html")
+    if ((markdownBlockTypes.has(type) || isRootLeafBlock) && hasOffsets(node)) {
       if (type === "heading") {
         const depth = typeof node.depth === "number" ? node.depth : 1
         headingStack.splice(Math.max(0, depth - 1))

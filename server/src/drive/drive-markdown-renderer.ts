@@ -135,6 +135,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
   normalizeDriveMarkdownLooseImageNodes(tree)
   if (options.allowStandaloneRawImages === true) visitRawImageAst(tree)
   normalizeSafeTableHtmlBreaks(tree)
+  normalizeEscapedRawHtmlNodes(tree)
   const renderedText = extractDriveMarkdownRenderedText(tree)
   const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
   annotateMarkdownProjectionTree(tree, projection, markdown)
@@ -276,10 +277,17 @@ function escapeRawHtmlPlugin() {
   }
 }
 
+function normalizeEscapedRawHtmlNodes(node: MarkdownAstNode): void {
+  if (node.type === "html" && typeof node.value === "string") {
+    node.value = stripInlineEventAttributes(node.value)
+    return
+  }
+  for (const child of node.children ?? []) normalizeEscapedRawHtmlNodes(child)
+}
+
 function visitMarkdownAst(node: MarkdownAstNode): void {
   if (node.type === "html" && typeof node.value === "string") {
     node.type = "text"
-    node.value = stripInlineEventAttributes(node.value)
     return
   }
   for (const child of node.children ?? []) visitMarkdownAst(child)

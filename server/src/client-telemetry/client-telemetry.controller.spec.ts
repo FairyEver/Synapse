@@ -22,7 +22,7 @@ const event = {
   sessionId: "session-1",
   appVersion: "0.2.419",
   platform: "darwin-arm64",
-  occurredAt: "2026-09-01T00:00:00.000Z",
+  occurredAt: new Date().toISOString(),
 }
 
 describe("ClientTelemetryController", () => {

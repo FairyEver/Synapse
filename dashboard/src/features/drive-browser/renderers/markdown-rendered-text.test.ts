@@ -105,6 +105,25 @@ describe('markdown rendered text model', () => {
 
     expect(createMarkdownRenderedTextModel(root).text).toBe('Before客户管理After')
   })
+
+  it('keeps escaped raw HTML literals in the server projection text stream', () => {
+    document.body.innerHTML = [
+      '<main>',
+      '<p>前文&#x3C;u>g&#x3C;/u>后文</p>',
+      '&#x3C;div>块内容&#x3C;/div>',
+      '<p>结尾评论</p>',
+      '</main>',
+    ].join('')
+    const root = document.querySelector<HTMLElement>('main')
+    if (!root) throw new Error('missing fixture')
+
+    const model = createMarkdownRenderedTextModel(root)
+    const commentStart = Array.from('前文<u>g</u>后文<div>块内容</div>').length
+    const commentEnd = commentStart + Array.from('结尾评论').length
+
+    expect(model.text).toBe('前文<u>g</u>后文<div>块内容</div>结尾评论')
+    expect(createMarkdownRenderedDomRange(root, model.segments, commentStart, commentEnd)?.toString()).toBe('结尾评论')
+  })
 })
 
 function projection(): DriveMarkdownProjectionDto {
