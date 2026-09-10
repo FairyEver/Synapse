@@ -2,8 +2,6 @@
 
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { Crepe, CrepeBuilder } from '@milkdown/crepe'
-import { replaceAll } from '@milkdown/kit/utils'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type {
   DriveAnnotationThreadDto,
@@ -79,42 +77,38 @@ afterEach(async () => {
 
 describe('DriveMilkdownRenderer comment integration', () => {
   it('keeps an unsaved Milkdown draft dirty while closing and reopening the wide comment rail', async () => {
-    let crepe: Crepe | null = null
-    const editorGetter = Object.getOwnPropertyDescriptor(CrepeBuilder.prototype, 'editor')?.get
-    if (!editorGetter) throw new Error('Missing Crepe editor getter')
-    vi.spyOn(CrepeBuilder.prototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
-      crepe = this
-      return editorGetter.call(this)
-    })
     vi.spyOn(driveAnnotationApi, 'listOwner').mockResolvedValue([
       commentThread('thread-first', 'First', { start: 0, end: 5 }, 'First comment'),
     ])
     const context = editContext()
-    renderRenderer({ editContext: context })
+    renderRenderer({
+      editContext: context,
+      preview: preview('---\ntitle: Notes\n---\n# First\n\nSecond'),
+    })
 
     await waitFor(() => {
-      expect(document.querySelector('.milkdown .ProseMirror')).not.toBeNull()
+      expect(document.querySelector('textarea[aria-label="Markdown 源码"]')).not.toBeNull()
       expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).not.toBeNull()
     })
-    const editor = milkdownEditor()
-    if (!crepe) throw new Error('Missing Milkdown instance')
-    await replaceMilkdownMarkdown(crepe, '# Unsaved draft\n\nSecond')
+    const editor = sourceEditor()
+    const draft = '---\ntitle: Notes\n---\n# Unsaved draft\n\nSecond'
+    await inputTextarea(editor, draft)
     await waitFor(() => {
-      expect(editor.textContent).toContain('Unsaved draft')
+      expect(editor.value).toBe(draft)
       expect(document.body.textContent).toContain('未保存')
       expect(document.body.textContent).not.toContain('已同步')
     })
 
     await click(buttonWithText('评论 1'))
     expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).toBeNull()
-    expect(milkdownEditor()).toBe(editor)
-    expect(editor.textContent).toContain('Unsaved draft')
+    expect(sourceEditor()).toBe(editor)
+    expect(editor.value).toBe(draft)
     expect(document.body.textContent).toContain('未保存')
 
     await click(buttonWithText('评论 1'))
     expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).not.toBeNull()
-    expect(milkdownEditor()).toBe(editor)
-    expect(editor.textContent).toContain('Unsaved draft')
+    expect(sourceEditor()).toBe(editor)
+    expect(editor.value).toBe(draft)
     expect(document.body.textContent).toContain('未保存')
     expect(document.body.textContent).not.toContain('已同步')
 
@@ -128,7 +122,54 @@ describe('DriveMilkdownRenderer comment integration', () => {
       await Promise.resolve()
     })
     expect(context.saveText).toHaveBeenCalledWith({
-      text: '# Unsaved draft\n\nSecond\n',
+      text: draft,
+      baseVersionId: 'version-1',
+    })
+  })
+
+  it('keeps an unsaved Milkdown draft dirty across regular and compact comment layouts', async () => {
+    vi.spyOn(driveAnnotationApi, 'listOwner').mockResolvedValue([
+      commentThread('thread-first', 'First', { start: 0, end: 5 }, 'First comment'),
+    ])
+    const context = editContext()
+    const renderer = renderRenderer({
+      editContext: context,
+      preview: preview('---\ntitle: Notes\n---\n# First\n\nSecond'),
+    })
+
+    await waitFor(() => {
+      expect(document.querySelector('textarea[aria-label="Markdown 源码"]')).not.toBeNull()
+      expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).not.toBeNull()
+    })
+    const editor = sourceEditor()
+    const draft = '---\ntitle: Notes\n---\n# Responsive draft\n\nSecond'
+    await inputTextarea(editor, draft)
+    await waitFor(() => {
+      expect(editor.value).toBe(draft)
+      expect(document.body.textContent).toContain('未保存')
+    })
+
+    layoutMode.value = 'compact'
+    renderer.rerender()
+    await waitFor(() => {
+      expect(document.querySelector('[data-milkdown-sheet="comments"]')).not.toBeNull()
+      expect(sourceEditor()).toBe(editor)
+      expect(editor.value).toBe(draft)
+      expect(document.body.textContent).toContain('未保存')
+    })
+
+    layoutMode.value = 'regular'
+    renderer.rerender()
+    await waitFor(() => {
+      expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).not.toBeNull()
+      expect(sourceEditor()).toBe(editor)
+      expect(editor.value).toBe(draft)
+      expect(document.body.textContent).toContain('未保存')
+    })
+
+    await saveWithKeyboardShortcut()
+    expect(context.saveText).toHaveBeenCalledWith({
+      text: draft,
       baseVersionId: 'version-1',
     })
   })
@@ -232,7 +273,7 @@ function renderRenderer({
     },
   })
 
-  act(() => {
+  const render = () => {
     root?.render(
       <QueryClientProvider client={queryClient as QueryClient}>
         <DriveRendererToolbarProvider>
@@ -247,7 +288,15 @@ function renderRenderer({
         </DriveRendererToolbarProvider>
       </QueryClientProvider>
     )
+  }
+  act(() => {
+    render()
   })
+  return {
+    rerender() {
+      act(() => render())
+    },
+  }
 }
 
 function ToolbarHost() {
@@ -387,15 +436,31 @@ function milkdownScroller(): HTMLDivElement {
   return scroller
 }
 
-function milkdownEditor(): HTMLElement {
-  const editor = document.querySelector('.milkdown .ProseMirror')
-  if (!(editor instanceof HTMLElement)) throw new Error('Missing Milkdown editor')
+function sourceEditor(): HTMLTextAreaElement {
+  const editor = document.querySelector('textarea[aria-label="Markdown 源码"]')
+  if (!(editor instanceof HTMLTextAreaElement)) throw new Error('Missing Markdown source editor')
   return editor
 }
 
-async function replaceMilkdownMarkdown(crepe: Crepe, value: string): Promise<void> {
+async function inputTextarea(editor: HTMLTextAreaElement, value: string): Promise<void> {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!valueSetter) throw new Error('Missing textarea value setter')
   await act(async () => {
-    crepe.editor.action(replaceAll(value))
-    await new Promise((resolve) => window.setTimeout(resolve, 250))
+    editor.focus()
+    valueSetter.call(editor, value)
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function saveWithKeyboardShortcut(): Promise<void> {
+  await act(async () => {
+    document.querySelector<HTMLElement>('[data-drive-milkdown-renderer="true"]')?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 's',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    }))
+    await Promise.resolve()
   })
 }

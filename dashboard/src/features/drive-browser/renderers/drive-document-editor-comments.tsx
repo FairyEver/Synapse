@@ -325,41 +325,40 @@ export function DriveDocumentEditorCommentsFrame({
   const commentsPanelDefaultSize = resizablePanelPercent(COMMENTS_PANEL_DEFAULT_SIZE)
   const commentsPanelMinSize = resizablePanelPercent(COMMENTS_PANEL_MIN_SIZE)
   const commentsPanelMaxSize = resizablePanelPercent(COMMENTS_PANEL_MAX_SIZE)
+  const commentsPanelOpen = !comments.isCompact && comments.commentsOpen
   const editorPanelDefaultSize = resizablePanelPercent(
-    comments.commentsOpen ? 100 - COMMENTS_PANEL_DEFAULT_SIZE : 100
+    commentsPanelOpen ? 100 - COMMENTS_PANEL_DEFAULT_SIZE : 100
   )
 
   return (
     <>
       <div {...{ [dataAttributes.layout]: 'true' }} className='min-h-0 flex-1 overflow-hidden'>
-        {comments.isCompact ? editorSurface : (
-          <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
-            <ResizablePanel
-              defaultSize={editorPanelDefaultSize}
-              minSize='35%'
-              {...{ [dataAttributes.editorPanel]: 'editor' }}
-              className='h-full min-h-0 min-w-0 overflow-hidden'
-            >
-              {editorSurface}
-            </ResizablePanel>
-            {comments.commentsOpen ? (
-              <>
-                <ResizableHandle />
-                <ResizablePanel
-                  defaultSize={commentsPanelDefaultSize}
-                  minSize={commentsPanelMinSize}
-                  maxSize={commentsPanelMaxSize}
-                  {...{ [dataAttributes.commentsPanel]: 'comments' }}
-                  className='h-full min-h-0 overflow-hidden'
-                >
-                  <aside className='h-full min-h-0 overflow-hidden bg-background'>
-                    {renderCommentsRail(comments.sourceMode ? 'list' : 'anchored')}
-                  </aside>
-                </ResizablePanel>
-              </>
-            ) : null}
-          </ResizablePanelGroup>
-        )}
+        <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
+          <ResizablePanel
+            defaultSize={editorPanelDefaultSize}
+            minSize='35%'
+            {...{ [dataAttributes.editorPanel]: 'editor' }}
+            className='h-full min-h-0 min-w-0 overflow-hidden'
+          >
+            {editorSurface}
+          </ResizablePanel>
+          {commentsPanelOpen ? (
+            <>
+              <ResizableHandle />
+              <ResizablePanel
+                defaultSize={commentsPanelDefaultSize}
+                minSize={commentsPanelMinSize}
+                maxSize={commentsPanelMaxSize}
+                {...{ [dataAttributes.commentsPanel]: 'comments' }}
+                className='h-full min-h-0 overflow-hidden'
+              >
+                <aside className='h-full min-h-0 overflow-hidden bg-background'>
+                  {renderCommentsRail(comments.sourceMode ? 'list' : 'anchored')}
+                </aside>
+              </ResizablePanel>
+            </>
+          ) : null}
+        </ResizablePanelGroup>
       </div>
       {comments.isCompact && comments.annotationsEnabled ? (
         <Sheet open={comments.compactCommentsOpen} onOpenChange={comments.setCommentPanelOpen}>
