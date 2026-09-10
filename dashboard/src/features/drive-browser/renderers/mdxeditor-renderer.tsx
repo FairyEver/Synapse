@@ -561,6 +561,7 @@ export function DriveMDXeditorRenderer({
         onEditorContentHostChange={outline.handleContentHostChange}
         onEditorContainerChange={handleEditorContainerChange}
         outline={{ ...outline, setPanelOpen: setOutlinePanelOpen }}
+        outlineDividerAlwaysVisible
       />
       {comments.annotationError ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{comments.annotationError}</div>

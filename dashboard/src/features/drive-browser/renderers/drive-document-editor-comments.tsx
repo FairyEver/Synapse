@@ -282,6 +282,7 @@ export function DriveDocumentEditorCommentsFrame({
   onEditorContentHostChange,
   onEditorContainerChange,
   outline,
+  outlineDividerAlwaysVisible = false,
 }: {
   readonly comments: DriveDocumentEditorCommentsController
   readonly dataAttributes: DriveDocumentEditorCommentsDataAttributes
@@ -289,6 +290,7 @@ export function DriveDocumentEditorCommentsFrame({
   readonly onEditorContentHostChange?: (element: HTMLDivElement | null) => void
   readonly onEditorContainerChange?: (element: HTMLDivElement | null) => void
   readonly outline?: DriveDocumentEditorOutlineController
+  readonly outlineDividerAlwaysVisible?: boolean
 }) {
   const setEditorContainerRef = useCallback((element: HTMLDivElement | null) => {
     comments.editorContainerRef.current = element
@@ -395,7 +397,7 @@ export function DriveDocumentEditorCommentsFrame({
                   </nav>
                 </aside>
               </ResizablePanel>
-              <ResizableHandle autoHide />
+              <ResizableHandle autoHide={!outlineDividerAlwaysVisible} />
             </>
           ) : null}
           <ResizablePanel
