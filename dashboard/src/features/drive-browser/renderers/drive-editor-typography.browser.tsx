@@ -7,6 +7,7 @@ import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto }
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { render } from 'vitest-browser-react'
+import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import { DriveMilkdownRenderer } from './milkdown-renderer'
 import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 
@@ -21,21 +22,26 @@ afterEach(() => {
 })
 
 describe('drive editor typography in Chromium', () => {
-  it('keeps semantic typography identical across Milkdown and MDXEditor', () => {
-    const roots = renderEditorFixtures()
+  it('keeps semantic typography identical across real Milkdown and MDXEditor mounts', async () => {
+    const screen = await render(browserEditorPair())
+    try {
+      const roots = await waitForRealEditorRoots()
 
-    for (const selector of ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'code', 'pre', 'table', 'th', 'td']) {
-      expectComparableStyles(roots.milkdown, roots.mdxeditor, selector)
+      for (const selector of REAL_COMPARABLE_SELECTORS) {
+        expectComparableStyles(roots.milkdown, roots.mdxeditor, selector)
+      }
+
+      expect(getComputedStyle(roots.milkdown.querySelector('h1')!).fontSize).toBe('32px')
+      expect(getComputedStyle(roots.milkdown.querySelector('h6')!).fontSize).toBe('16px')
+      expect(getComputedStyle(roots.milkdown.querySelector('p')!).lineHeight).toBe('24px')
+      expect(getComputedStyle(roots.milkdown.querySelector('code')!).color).toBe(getComputedStyle(roots.mdxeditor).color)
+    } finally {
+      await screen.unmount()
     }
-
-    expect(getComputedStyle(roots.milkdown.querySelector('h1')!).fontSize).toBe('32px')
-    expect(getComputedStyle(roots.milkdown.querySelector('h6')!).fontSize).toBe('16px')
-    expect(getComputedStyle(roots.milkdown.querySelector('p')!).lineHeight).toBe('24px')
-    expect(getComputedStyle(roots.milkdown.querySelector('code')!).color).toBe(getComputedStyle(roots.mdxeditor).color)
   })
 
   it('wins over editor styles that are injected after the project stylesheet', () => {
-    const roots = renderEditorFixtures()
+    const roots = renderSyntheticEditorFixtures()
     const before = snapshotStyles(roots)
     lateVendorStyle = document.createElement('style')
     lateVendorStyle.textContent = `
@@ -50,7 +56,7 @@ describe('drive editor typography in Chromium', () => {
   })
 
   it('keeps code block placeholders aligned with the initialized CodeMirror shell', () => {
-    const roots = renderEditorFixtures()
+    const roots = renderSyntheticEditorFixtures()
     const placeholder = roots.milkdown.querySelector<HTMLElement>('.milkdown-code-block-placeholder code')!
     const milkdownScroller = roots.milkdown.querySelector<HTMLElement>('.cm-scroller')!
     const mdxeditorEditor = roots.mdxeditor.querySelector<HTMLElement>('.cm-editor')!
@@ -67,7 +73,7 @@ describe('drive editor typography in Chromium', () => {
   })
 
   it('normalizes list rhythm while preserving each editor marker implementation', () => {
-    const roots = renderEditorFixtures()
+    const roots = renderSyntheticEditorFixtures()
     const milkdownList = roots.milkdown.querySelector<HTMLElement>('ul')!
     const mdxeditorList = roots.mdxeditor.querySelector<HTMLElement>('ul')!
     const milkdownLabel = roots.milkdown.querySelector<HTMLElement>('.label-wrapper')!
@@ -79,7 +85,7 @@ describe('drive editor typography in Chromium', () => {
   })
 
   it('does not apply document-cell styling to MDXEditor table controls', () => {
-    const { mdxeditor } = renderEditorFixtures()
+    const { mdxeditor } = renderSyntheticEditorFixtures()
     const contentCell = mdxeditor.querySelector<HTMLElement>('td:not([data-tool-cell])')!
     const toolCell = mdxeditor.querySelector<HTMLElement>('td[data-tool-cell]')!
 
@@ -88,7 +94,7 @@ describe('drive editor typography in Chromium', () => {
   })
 
   it('restores themed keyboard focus after the Crepe reset without outlining the editor surface', async () => {
-    const { milkdown } = renderEditorFixtures()
+    const { milkdown } = renderSyntheticEditorFixtures()
     const shell = milkdown.closest<HTMLElement>('.milkdown')!
     const controls = [
       shell.querySelector<HTMLElement>('button')!,
@@ -208,7 +214,7 @@ describe('DriveMilkdownRenderer in Chromium', () => {
   })
 })
 
-function renderEditorFixtures(): { readonly milkdown: HTMLElement; readonly mdxeditor: HTMLElement } {
+function renderSyntheticEditorFixtures(): { readonly milkdown: HTMLElement; readonly mdxeditor: HTMLElement } {
   host = document.createElement('main')
   host.innerHTML = `
     <section class="drive-milkdown-editor">
@@ -231,6 +237,76 @@ function renderEditorFixtures(): { readonly milkdown: HTMLElement; readonly mdxe
     mdxeditor: host.querySelector('.drive-mdxeditor-content')!,
   }
 }
+
+function browserEditorPair() {
+  const current = browserCurrent()
+  const preview = browserPreview(REAL_EDITOR_MARKDOWN)
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      <DriveRendererToolbarProvider>
+        <div className='grid h-screen grid-cols-2'>
+          <section data-browser-editor='milkdown' className='min-h-0 overflow-hidden'>
+            <DriveMilkdownRenderer
+              current={current}
+              preview={preview}
+              edit={browserEditable()}
+              editContext={browserEditContext()}
+            />
+          </section>
+          <section data-browser-editor='mdxeditor' className='min-h-0 overflow-hidden'>
+            <DriveMDXeditorRenderer
+              current={current}
+              preview={preview}
+              edit={browserEditable()}
+              editContext={browserEditContext()}
+            />
+          </section>
+        </div>
+      </DriveRendererToolbarProvider>
+    </QueryClientProvider>
+  )
+}
+
+async function waitForRealEditorRoots(): Promise<{ readonly milkdown: HTMLElement; readonly mdxeditor: HTMLElement }> {
+  await expect.poll(() => {
+    const milkdown = document.querySelector<HTMLElement>('[data-browser-editor="milkdown"] .ProseMirror')
+    const mdxeditor = document.querySelector<HTMLElement>('[data-browser-editor="mdxeditor"] .drive-mdxeditor-content')
+    return Boolean(milkdown && mdxeditor && REAL_COMPARABLE_SELECTORS.every((selector) => (
+      milkdown.querySelector(selector) && mdxeditor.querySelector(selector)
+    )))
+  }).toBe(true)
+  return {
+    milkdown: document.querySelector<HTMLElement>('[data-browser-editor="milkdown"] .ProseMirror')!,
+    mdxeditor: document.querySelector<HTMLElement>('[data-browser-editor="mdxeditor"] .drive-mdxeditor-content')!,
+  }
+}
+
+const REAL_COMPARABLE_SELECTORS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'code', 'table', 'th', 'td'] as const
+
+const REAL_EDITOR_MARKDOWN = [
+  '# Heading 1',
+  '## Heading 2',
+  '### Heading 3',
+  '#### Heading 4',
+  '##### Heading 5',
+  '###### Heading 6',
+  '',
+  'Paragraph with `inline code`.',
+  '',
+  '- Bullet',
+  '',
+  '1. Ordered',
+  '',
+  '> Quote',
+  '',
+  '```ts',
+  'const value = 1',
+  '```',
+  '',
+  '| Heading | Value |',
+  '| --- | --- |',
+  '| Cell | End |',
+].join('\n')
 
 function semanticContent(editor: 'milkdown' | 'mdxeditor'): string {
   const codeBlock = editor === 'milkdown'

@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
-import { schemaCtx } from '@milkdown/kit/core'
+import { editorViewCtx, schemaCtx } from '@milkdown/kit/core'
 import { uploadConfig } from '@milkdown/kit/plugin/upload'
 import { createDriveEditorTextModel, MILKDOWN_COMMENT_IGNORED_SELECTOR } from './drive-editor-comment-geometry'
 import { configureMilkdownCommonMarkImages } from './milkdown-commonmark-images'
@@ -97,7 +97,7 @@ describe('Milkdown Markdown round trip', () => {
     const serialized = crepe.getMarkdown()
     expect(serialized).toContain('<https://example.com>')
     expect(serialized).toContain('<test@example.com>')
-    expect(preserveMilkdownCommonMarkAutolinks(serialized, source)).toContain([
+    expect(withoutOptionalFinalNewline(preserveMilkdownCommonMarkAutolinks(serialized, source))).toBe([
       'See https://example.com now',
       'Email test@example.com',
       'Keep <https://explicit.example/path>',
@@ -161,16 +161,11 @@ describe('Milkdown Markdown round trip', () => {
 
     crepe = new Crepe({ root, defaultValue: source, features: disabledVisualFeatures() })
     await crepe.create()
+    const before = getDocumentJson(crepe)
     const result = crepe.getMarkdown()
+    const after = await parseDocumentJson(result)
 
-    expect(result).toContain('# 标题')
-    expect(result).toContain('3. third')
-    expect(result).toMatch(/^[*-] \[x\] done$/mu)
-    expect(result).toContain('| Name')
-    expect(result).toContain('const value = "😀"')
-    expect(result).toContain('<span data-kind="note">raw</span>')
-    expect(result).toContain('<!-- keep this comment -->')
-    expect(result).toContain('![image](./image.png)')
+    expect(after).toEqual(before)
   })
 
   it('round-trips escaped brackets and backslashes in image alt text', async () => {
@@ -179,7 +174,7 @@ describe('Milkdown Markdown round trip', () => {
     await crepe.create()
 
     expect(root?.querySelector('img')?.getAttribute('alt')).toBe('a[b]\\c')
-    expect(crepe.getMarkdown()).toContain('![a\\[b\\]\\c](./image.png)')
+    expect(withoutOptionalFinalNewline(crepe.getMarkdown())).toBe('![a\\[b\\]\\c](./image.png)')
   })
 
   it('keeps the comment text stream aligned across rich Markdown structures', async () => {
@@ -263,7 +258,8 @@ describe('Milkdown Markdown round trip', () => {
     const model = createDriveEditorTextModel(content, MILKDOWN_COMMENT_IGNORED_SELECTOR)
 
     expect(model.text).toBe('HeadingBefore bold🙂orderedsecondparentnestedloose firstloose secondList separatortaskquoteHeadValueCellEndconst value = "😀"\nreturn valueEscaped *plain* & link goneBefore image inline after.blockBefore break\nAfter breakFormula $x + 1$ endraw htmlAfter')
-    expect(crepe.getMarkdown()).toContain('![block](block.png "Caption")')
+    const serialized = crepe.getMarkdown()
+    expect(await parseDocumentJson(serialized)).toEqual(getDocumentJson(crepe))
 
     const file = new File(['image'], 'new-image.png', { type: 'image/png' })
     const fileList = Object.assign([file], { item: (index: number) => index === 0 ? file : null }) as unknown as FileList
@@ -420,4 +416,25 @@ function disabledVisualFeatures(): Partial<Record<CrepeFeature, boolean>> {
     [CrepeFeature.Toolbar]: false,
     [CrepeFeature.TopBar]: false,
   }
+}
+
+function getDocumentJson(targetCrepe: Crepe): unknown {
+  return targetCrepe.editor.action((ctx) => ctx.get(editorViewCtx).state.doc.toJSON())
+}
+
+async function parseDocumentJson(markdown: string): Promise<unknown> {
+  const parserRoot = document.createElement('div')
+  document.body.append(parserRoot)
+  const parser = new Crepe({ root: parserRoot, defaultValue: markdown, features: disabledVisualFeatures() })
+  try {
+    await parser.create()
+    return getDocumentJson(parser)
+  } finally {
+    await parser.destroy()
+    parserRoot.remove()
+  }
+}
+
+function withoutOptionalFinalNewline(markdown: string): string {
+  return markdown.endsWith('\n') ? markdown.slice(0, -1) : markdown
 }
