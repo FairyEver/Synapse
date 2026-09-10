@@ -127,6 +127,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DriveItemIcon } from "./drive-item-icon"
+import { DriveItemInfoDialog } from "./drive-item-info-dialog"
 import { DriveUploadTaskPanel } from "./drive-upload-task-panel"
 import {
   applyDriveUploadProgressEvent,
@@ -1747,6 +1748,7 @@ function DriveFileList({
   readonly uploadDisabled: boolean
 }) {
   const [dragDepth, setDragDepth] = useState(0)
+  const [infoTarget, setInfoTarget] = useState<{ readonly item: DriveItemDto; readonly path: string } | null>(null)
   const currentFolderName = path.at(-1)?.name ?? "根目录"
   const dragActive = dragDepth > 0 && !uploadDisabled
   const syncBindingIds = new Set(syncBindings.map((binding) => binding.driveItemId))
@@ -1826,6 +1828,7 @@ function DriveFileList({
                   onOpenItem={onOpenItem}
                   onShare={onShare}
                   onOpenSyncBinding={onOpenSyncBinding}
+                  onOpenInfo={(selectedItem, selectedPath) => setInfoTarget({ item: selectedItem, path: selectedPath })}
                   onOpenShareDetails={onOpenShareDetails}
                   onDisableShare={onDisableShare}
                   disablingShare={item.activeShareId ? disablingShareIds.has(item.activeShareId) : false}
@@ -1864,6 +1867,13 @@ function DriveFileList({
           </div>
         </div>
       ) : null}
+      <DriveItemInfoDialog
+        item={infoTarget?.item ?? null}
+        path={infoTarget?.path ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setInfoTarget(null)
+        }}
+      />
     </div>
   )
 }
@@ -1873,7 +1883,6 @@ function DriveFileTableHeader() {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         <TableHead>名称</TableHead>
-        <TableHead className="text-right">大小</TableHead>
         <TableHead className="text-right">更新时间</TableHead>
         <TableHead className="text-right" aria-label="操作" />
       </TableRow>
@@ -1895,9 +1904,6 @@ function DriveFileTableSkeleton() {
                 <Skeleton className="h-4 w-48" />
                 <Skeleton className="h-5 w-14" />
               </div>
-            </TableCell>
-            <TableCell>
-              <Skeleton className="ml-auto h-4 w-16" />
             </TableCell>
             <TableCell>
               <Skeleton className="ml-auto h-4 w-32" />
@@ -2014,23 +2020,29 @@ function DriveShareInlineSummary({
   readonly item: DriveItemDto
   readonly onOpenShareDetails: (item: DriveItemDto) => void
 }) {
-  const summary = formatDriveItemShareSummary(item)
-  if (!summary) return null
+  if (!item.shared && !item.activeShareId) return null
+  const details = formatDriveItemShareDetails(item)
   if (!item.activeShareId) {
-    return <span className="min-w-0 truncate text-xs text-muted-foreground">{summary}</span>
+    return <span className="shrink-0 text-xs text-muted-foreground">已分享</span>
   }
-  return (
+  const trigger = (
     <button
       type="button"
-      className="min-w-0 truncate text-left text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-      title={summary}
+      className="shrink-0 text-left text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       onClick={(event) => {
         event.stopPropagation()
         onOpenShareDetails(item)
       }}
     >
-      {summary}
+      已分享
     </button>
+  )
+  if (!details) return trigger
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+      <TooltipContent>{details}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -2056,7 +2068,6 @@ function DriveSystemEntryRow({
           </span>
         </div>
       </TableCell>
-      <TableCell className="text-right tabular-nums text-muted-foreground">-</TableCell>
       <TableCell className="truncate text-right tabular-nums text-muted-foreground">-</TableCell>
       <TableCell aria-label={`${entry.name} 操作`} />
     </TableRow>
@@ -2075,6 +2086,7 @@ function DriveFileListRow({
   onOpenItem,
   onShare,
   onOpenSyncBinding,
+  onOpenInfo,
   onOpenShareDetails,
   onDisableShare,
   disablingShare,
@@ -2093,6 +2105,7 @@ function DriveFileListRow({
   readonly onOpenItem: (item: DriveItemDto) => void
   readonly onShare: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: (item: DriveItemDto, drivePathHint: string) => void
+  readonly onOpenInfo: (item: DriveItemDto, path: string) => void
   readonly onOpenShareDetails: (item: DriveItemDto) => void
   readonly onDisableShare: (item: DriveItemDto) => void
   readonly disablingShare: boolean
@@ -2150,8 +2163,14 @@ function DriveFileListRow({
           <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <DriveItemNameContextMenu
+                downloading={downloading}
                 drivePath={drivePath}
+                hasSyncBinding={hasSyncBinding}
                 item={item}
+                onDownload={() => onDownload(item)}
+                onMove={() => onMove(item)}
+                onOpenInfo={() => onOpenInfo(item, drivePath)}
+                onOpenSyncBinding={() => onOpenSyncBinding(item, drivePath)}
                 onRename={onRename}
               >
                 {isFolder ? (
@@ -2196,9 +2215,6 @@ function DriveFileListRow({
           </div>
         </div>
       </TableCell>
-      <TableCell className="text-right tabular-nums text-muted-foreground">
-        {isFolder ? "-" : formatBytes(item.size)}
-      </TableCell>
       <TableCell className="truncate text-right tabular-nums text-muted-foreground">
         <RelativeTime value={item.updatedAt} />
       </TableCell>
@@ -2225,6 +2241,7 @@ function DriveFileListRow({
             删除
           </Button>
           <DriveItemMenu
+            drivePath={drivePath}
             item={item}
             hasSyncBinding={hasSyncBinding}
             downloading={downloading}
@@ -2232,6 +2249,7 @@ function DriveFileListRow({
             onRename={onRename}
             onMove={onMove}
             onOpenSyncBinding={() => onOpenSyncBinding(item, drivePath)}
+            onOpenInfo={() => onOpenInfo(item, drivePath)}
           />
         </div>
       </TableCell>
@@ -2258,13 +2276,25 @@ function hasSelectedTextInside(element: HTMLElement): boolean {
 
 function DriveItemNameContextMenu({
   children,
+  downloading,
   drivePath,
+  hasSyncBinding,
   item,
+  onDownload,
+  onMove,
+  onOpenInfo,
+  onOpenSyncBinding,
   onRename,
 }: {
   readonly children: ReactNode
+  readonly downloading: boolean
   readonly drivePath: string
+  readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
+  readonly onDownload: () => void
+  readonly onMove: () => void
+  readonly onOpenInfo: () => void
+  readonly onOpenSyncBinding: () => void
   readonly onRename: (item: DriveItemDto) => void
 }) {
   return (
@@ -2276,21 +2306,29 @@ function DriveItemNameContextMenu({
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <ContextMenuItem onSelect={() => { void copyDriveText(item.name, "名称已复制") }}>
-          复制名称
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => { void copyDriveText(drivePath, "路径已复制") }}>
-          复制路径
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => onRename(item)}>
-          重命名
-        </ContextMenuItem>
+        <DriveItemMenuItems
+          downloading={downloading}
+          drivePath={drivePath}
+          hasSyncBinding={hasSyncBinding}
+          item={item}
+          onDownload={onDownload}
+          onMove={onMove}
+          onOpenInfo={onOpenInfo}
+          onOpenSyncBinding={onOpenSyncBinding}
+          onRename={() => onRename(item)}
+          renderItem={(action) => (
+            <ContextMenuItem key={action.id} disabled={action.disabled} onSelect={action.onSelect}>
+              {action.label}
+            </ContextMenuItem>
+          )}
+        />
       </ContextMenuContent>
     </ContextMenu>
   )
 }
 
 function DriveItemMenu({
+  drivePath,
   hasSyncBinding,
   item,
   downloading,
@@ -2298,7 +2336,9 @@ function DriveItemMenu({
   onRename,
   onMove,
   onOpenSyncBinding,
+  onOpenInfo,
 }: {
+  readonly drivePath: string
   readonly hasSyncBinding: boolean
   readonly item: DriveItemDto
   readonly downloading: boolean
@@ -2306,6 +2346,7 @@ function DriveItemMenu({
   readonly onRename: (item: DriveItemDto) => void
   readonly onMove: (item: DriveItemDto) => void
   readonly onOpenSyncBinding: () => void
+  readonly onOpenInfo: () => void
 }) {
   return (
     <DropdownMenu>
@@ -2316,14 +2357,86 @@ function DriveItemMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuGroup>
-          <DropdownMenuItem disabled={item.storageStatus !== "active" || downloading} onSelect={onDownload}>下载</DropdownMenuItem>
-          <DropdownMenuItem onClick={onOpenSyncBinding}>{hasSyncBinding ? "同步详情" : "同步"}</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onRename(item)}>重命名</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onMove(item)}>移动</DropdownMenuItem>
+          <DriveItemMenuItems
+            downloading={downloading}
+            drivePath={drivePath}
+            hasSyncBinding={hasSyncBinding}
+            item={item}
+            onDownload={onDownload}
+            onMove={() => onMove(item)}
+            onOpenInfo={onOpenInfo}
+            onOpenSyncBinding={onOpenSyncBinding}
+            onRename={() => onRename(item)}
+            renderItem={(action) => (
+              <DropdownMenuItem key={action.id} disabled={action.disabled} onSelect={action.onSelect}>
+                {action.label}
+              </DropdownMenuItem>
+            )}
+          />
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+type DriveItemMenuAction = {
+  readonly id: string
+  readonly label: string
+  readonly disabled?: boolean
+  readonly onSelect: () => void
+}
+
+function DriveItemMenuItems({
+  downloading,
+  drivePath,
+  hasSyncBinding,
+  item,
+  onDownload,
+  onMove,
+  onOpenInfo,
+  onOpenSyncBinding,
+  onRename,
+  renderItem,
+}: {
+  readonly downloading: boolean
+  readonly drivePath: string
+  readonly hasSyncBinding: boolean
+  readonly item: DriveItemDto
+  readonly onDownload: () => void
+  readonly onMove: () => void
+  readonly onOpenInfo: () => void
+  readonly onOpenSyncBinding: () => void
+  readonly onRename: () => void
+  readonly renderItem: (action: DriveItemMenuAction) => ReactNode
+}) {
+  const actions: readonly DriveItemMenuAction[] = [
+    {
+      id: "download",
+      label: "下载",
+      disabled: item.storageStatus !== "active" || downloading,
+      onSelect: onDownload,
+    },
+    {
+      id: "sync",
+      label: hasSyncBinding ? "同步详情" : "同步",
+      onSelect: onOpenSyncBinding,
+    },
+    {
+      id: "copy-name",
+      label: "复制名称",
+      onSelect: () => { void copyDriveText(item.name, "名称已复制") },
+    },
+    {
+      id: "copy-path",
+      label: "复制路径",
+      onSelect: () => { void copyDriveText(drivePath, "路径已复制") },
+    },
+    { id: "rename", label: "重命名", onSelect: onRename },
+    { id: "move", label: "移动", onSelect: onMove },
+    { id: "info", label: "信息", onSelect: onOpenInfo },
+  ]
+
+  return <>{actions.map(renderItem)}</>
 }
 
 type DriveLocalUploadBuildResult = {
@@ -3104,17 +3217,18 @@ function DriveShareSuccessDialog({
     <Dialog open={true} onOpenChange={onOpenChange}>
       <FormDialog
         title={isFolder ? "文件夹已分享" : "文件已分享"}
-        description={<span className="block truncate">{share.name}</span>}
+        description={<span className="block whitespace-normal break-all">{share.name}</span>}
+        bodyClassName="min-w-0 max-w-full"
         contentClassName="sm:max-w-lg"
         onSubmit={(event) => event.preventDefault()}
         footer={(
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
         )}
       >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 max-w-full flex-col gap-4">
+          <div className="flex min-w-0 max-w-full flex-col gap-2">
             <Label htmlFor="drive-share-success-url">访问链接</Label>
-            <InputGroup>
+            <InputGroup className="max-w-full overflow-hidden">
               <InputGroupInput id="drive-share-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
             </InputGroup>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -3704,12 +3818,11 @@ function canOpenDriveItem(item: DriveItemDto): boolean {
   return item.storageStatus === "active"
 }
 
-function formatDriveItemShareSummary(item: DriveItemDto): string | null {
-  if (!item.shared && !item.activeShareId) return null
+function formatDriveItemShareDetails(item: DriveItemDto): string | null {
   const activeShare = item.activeShare
-  if (!activeShare) return "已分享"
+  if (!activeShare) return null
   return [
-    `分享：${formatDriveShareExpiresInline(activeShare.expiresAt)}`,
+    formatDriveShareExpiresInline(activeShare.expiresAt),
     activeShare.passwordEnabled ? "密码" : "无密码",
     formatDriveShareAccessModeLabel(activeShare.accessMode, activeShare.editorCount),
   ].join(" · ")

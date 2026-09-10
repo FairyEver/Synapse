@@ -1969,14 +1969,15 @@ describe("DriveModule", () => {
     expect(document.body.textContent).toContain("上传中")
     expect(document.body.textContent).toContain("上传失败")
     expect(document.body.textContent).toContain("删除中")
-    expect(document.body.textContent).toContain("分享：3天 · 密码 · 登录可编辑")
-    expect(tableHeaderTexts()).toEqual(["名称", "大小", "更新时间", ""])
+    expect(document.body.textContent).toContain("已分享")
+    expect(document.body.textContent).not.toContain("3天 · 密码 · 登录可编辑")
+    expect(tableHeaderTexts()).toEqual(["名称", "更新时间", ""])
     expect(actionColumnHeader()?.getAttribute("aria-label")).toBe("操作")
     expect(getTableRow("pending.txt").querySelector("td")?.textContent).toContain("上传中")
     expect(getTableRow("failed.txt").querySelector("td")?.textContent).toContain("上传失败")
     expect(getTableRow("failed-folder").querySelector("td")?.textContent).toContain("上传失败")
     expect(getTableRow("deleting.txt").querySelector("td")?.textContent).toContain("删除中")
-    expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("分享：3天 · 密码 · 登录可编辑")
+    expect(getTableRow("shared.txt").querySelector("td")?.textContent).toContain("已分享")
     const failedBadge = Array.from(document.querySelectorAll<HTMLElement>("[data-slot='badge']"))
       .find((element) => element.textContent === "上传失败")
     expect(failedBadge?.dataset.variant).toBe("destructive")
@@ -2020,7 +2021,14 @@ describe("DriveModule", () => {
     const reportBadges = Array.from(nameCell?.querySelectorAll<HTMLElement>("[data-slot='badge']") ?? [])
       .map((element) => element.textContent)
     expect(reportBadges).toEqual([])
-    expect(nameCell?.textContent).toContain("分享：7天 · 密码 · 2人可编辑")
+    expect(nameCell?.textContent).toContain("已分享")
+    expect(nameCell?.textContent).not.toContain("7天 · 密码 · 2人可编辑")
+
+    const shareSummary = rowButton("report.html", "已分享")
+    if (!shareSummary) throw new Error("Share summary not found")
+    await hoverElement(shareSummary)
+
+    expect(document.body.textContent).toContain("7天 · 密码 · 2人可编辑")
   })
 
   it("renders the full current folder without a local search input", async () => {
@@ -2211,7 +2219,7 @@ describe("DriveModule", () => {
 
     await openDriveNameContextMenu("作业范文")
 
-    expect(menuItemTexts()).toEqual(["复制名称", "复制路径", "重命名"])
+    expect(menuItemTexts()).toEqual(["下载", "同步", "复制名称", "复制路径", "重命名", "移动", "信息"])
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(1)
   })
 
@@ -2336,7 +2344,7 @@ describe("DriveModule", () => {
 
     await openDriveNameContextMenu("cui.md")
 
-    expect(menuItemTexts()).toEqual(["复制名称", "复制路径", "重命名"])
+    expect(menuItemTexts()).toEqual(["下载", "同步", "复制名称", "复制路径", "重命名", "移动", "信息"])
 
     await clickText("复制名称")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("cui.md")
@@ -2347,6 +2355,11 @@ describe("DriveModule", () => {
 
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("/作业范文/cui.md")
     expect(mocks.toast).toHaveBeenCalledWith("路径已复制")
+
+    await openRowMenu("cui.md")
+    await clickMenuItemText("复制路径")
+
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("/作业范文/cui.md")
     expect(mocks.listDriveItems).toHaveBeenCalledTimes(2)
   })
 
@@ -2365,7 +2378,7 @@ describe("DriveModule", () => {
     expect(document.querySelector<HTMLInputElement>("#drive-item-name")?.value).toBe("cui.md")
   })
 
-  it("uses distinct drive item icons, table columns, and a compact breadcrumb trail", async () => {
+  it("uses the supplied file and folder icons, table columns, and a compact breadcrumb trail", async () => {
     mocks.listDriveItems
       .mockResolvedValueOnce([
         createDriveItem({ id: "file-1", name: "2.png", type: "file" }),
@@ -2378,15 +2391,13 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(document.querySelector(".lucide-archive")).not.toBeNull()
-    expect(document.querySelector(".lucide-trash-2")).not.toBeNull()
-    expect(document.querySelector(".lucide-file")).not.toBeNull()
-    expect(document.querySelector(".lucide-folder-closed")).not.toBeNull()
-    expect(driveItemNameElement("公开素材").closest("tr")?.querySelector(".lucide-folder-closed")).toBeNull()
-    expect(driveItemNameElement("回收站").closest("tr")?.querySelector(".lucide-folder-closed")).toBeNull()
+    expect(driveItemNameElement("2.png").closest("tr")?.querySelector('[data-drive-item-icon="file"]')).not.toBeNull()
+    expect(driveItemNameElement("作业范文").closest("tr")?.querySelector('[data-drive-item-icon="folder"]')).not.toBeNull()
+    expect(driveItemNameElement("公开素材").closest("tr")?.querySelector('[data-drive-item-icon="folder"]')).not.toBeNull()
+    expect(driveItemNameElement("回收站").closest("tr")?.querySelector('[data-drive-item-icon="folder"]')).not.toBeNull()
     expect(driveItemNameElement("作业范文").className).toContain("select-text")
     expect(document.querySelector("table")).not.toBeNull()
-    expect(tableHeaderTexts()).toEqual(["名称", "大小", "更新时间", ""])
+    expect(tableHeaderTexts()).toEqual(["名称", "更新时间", ""])
     expect(actionColumnHeader()?.getAttribute("aria-label")).toBe("操作")
 
     await clickDriveRow("作业范文")
@@ -2416,9 +2427,9 @@ describe("DriveModule", () => {
 
     const table = document.querySelector<HTMLTableElement>("table")
     expect(table?.className).toContain("table-fixed")
-    expect(tableColumnClasses()).toEqual(["w-auto", "w-24", "w-40", "w-52"])
+    expect(tableColumnClasses()).toEqual(["w-auto", "w-40", "w-52"])
     expect(tableContainer()?.className).not.toContain("overflow-x-hidden")
-    expect(document.body.textContent).toContain("1.5 KB")
+    expect(document.body.textContent).not.toContain("1.5 KB")
 
     const nameCellText = document.querySelector<HTMLElement>(`td span[title="${longName}"]`)
     expect(nameCellText?.className).toContain("truncate")
@@ -3147,6 +3158,42 @@ describe("DriveModule", () => {
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
   })
 
+  it("keeps long share names and URLs inside the success dialog", async () => {
+    const longName = "synapse-drive-annotation-e2e-b9c52f57-a52f-43b4-b1fb-0a5c03728cc9.markdown"
+    const longUrl = `https://synapse.test/share/${"long-unbroken-share-token-".repeat(8)}`
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "file-1", name: longName, type: "file" }),
+    ])
+    mocks.shareDriveItem.mockResolvedValue({
+      id: "share-row-1",
+      shareId: "shr_long",
+      itemId: "file-1",
+      enabled: true,
+      url: longUrl,
+      urlWithPassword: longUrl,
+      passwordEnabled: false,
+      password: null,
+      expiresAt: null,
+      accessMode: "link_read",
+      editorEmails: [],
+      createdAt: "2026-06-07T00:00:00.000Z",
+    })
+    await render(<DriveModule />)
+    await flushAct()
+
+    await clickButtonText("分享")
+    await clickButtonText("创建分享")
+
+    const name = getDialogContent().querySelector<HTMLElement>("[data-slot='dialog-description'] > span")
+    const inputGroup = getShareUrlInput().closest<HTMLElement>("[data-slot='input-group']")
+    expect(name?.textContent).toBe(longName)
+    expect(name?.className).toContain("break-all")
+    expect(name?.className).not.toContain("truncate")
+    expect(inputGroup?.className).toContain("max-w-full")
+    expect(inputGroup?.className).toContain("overflow-hidden")
+    expect(getShareUrlInput().value).toBe(longUrl)
+  })
+
   it("keeps row actions focused on sharing, previewing, and deleting", async () => {
     mocks.listDriveItems.mockResolvedValue([
       createDriveItem({ id: "file-1", name: "notes.md", type: "file", mimeType: "text/markdown" }),
@@ -3166,6 +3213,53 @@ describe("DriveModule", () => {
     expect(rowButtonTexts("notes.md")).toEqual(["分享", "预览", "删除", "更多"])
     expect(actionColumnHeader()?.className).not.toContain("w-")
     expect(queryButtonByLabel("更多 notes.md")).not.toBeNull()
+  })
+
+  it("shows file properties from the row more menu", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({
+        id: "file-1",
+        name: "notes.md",
+        type: "file",
+        size: "1536",
+        mimeType: "text/markdown",
+        shared: true,
+        createdAt: "2026-06-07T00:00:00.000Z",
+        updatedAt: "2026-06-08T00:00:00.000Z",
+      }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+
+    expect(document.body.textContent).not.toContain("1.5 KB")
+    await openRowMenu("notes.md")
+    await clickMenuItemText("信息")
+
+    const dialog = getDialogContent()
+    expect(dialog.textContent).toContain("信息")
+    expect(dialog.textContent).toContain("notes.md")
+    expect(dialog.textContent).toContain("文件")
+    expect(dialog.textContent).toContain("1.5 KB")
+    expect(dialog.textContent).toContain("/notes.md")
+    expect(dialog.textContent).toContain("text/markdown")
+    expect(dialog.textContent).toContain("已分享")
+  })
+
+  it("does not present the placeholder folder byte count as a measured size", async () => {
+    mocks.listDriveItems.mockResolvedValue([
+      createDriveItem({ id: "folder-1", name: "设计稿", type: "folder", size: "0" }),
+    ])
+
+    await render(<DriveModule />)
+    await flushAct()
+    await openRowMenu("设计稿")
+    await clickMenuItemText("信息")
+
+    const dialog = getDialogContent()
+    expect(dialog.textContent).toContain("文件夹")
+    expect(dialog.textContent).toContain("未统计")
+    expect(dialog.textContent).not.toContain("内容类型")
   })
 
   it("keeps trailing row actions aligned when share labels differ", async () => {
@@ -3357,9 +3451,18 @@ describe("DriveModule", () => {
     expect(menuItemTexts()).toEqual([
       "下载",
       "同步",
+      "复制名称",
+      "复制路径",
       "重命名",
       "移动",
+      "信息",
     ])
+    const moreMenuItems = menuItemTexts()
+
+    await closeMenus()
+    await openDriveNameContextMenu("report.html")
+
+    expect(menuItemTexts()).toEqual(moreMenuItems)
     expect(rowButton("report.html", "删除")).not.toBeUndefined()
   })
 
@@ -3372,7 +3475,7 @@ describe("DriveModule", () => {
 
     await openFirstMenu()
 
-    expect(menuItemTexts()).toEqual(["下载", "同步", "重命名", "移动"])
+    expect(menuItemTexts()).toEqual(["下载", "同步", "复制名称", "复制路径", "重命名", "移动", "信息"])
     expect(rowButton("shared.txt", "删除")).not.toBeUndefined()
   })
 
@@ -3771,14 +3874,20 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(getTableRow("report.txt").textContent).toContain("分享：3天 · 密码 · 可阅读")
+    const shareSummary = rowButton("report.txt", "已分享")
+    if (!shareSummary) throw new Error("Share summary not found")
+    expect(getTableRow("report.txt").textContent).not.toContain("3天 · 密码 · 可阅读")
+
+    await hoverElement(shareSummary)
+
+    expect(document.body.textContent).toContain("3天 · 密码 · 可阅读")
 
     await clickDriveToolbarMenuItem("更多", "分享管理")
     await flushAct()
     await clickButtonByLabel("取消分享 report.txt")
     await clickButtonText("关闭")
 
-    expect(getTableRow("report.txt").textContent).not.toContain("分享：")
+    expect(getTableRow("report.txt").textContent).not.toContain("已分享")
   })
 
   it("shows share loading, empty, and retry states in the public links dialog", async () => {
@@ -4252,6 +4361,7 @@ async function clickButtonText(text: string): Promise<void> {
 async function hoverElement(element: HTMLElement): Promise<void> {
   await act(async () => {
     element.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
+    element.dispatchEvent(new MouseEvent("pointermove", { bubbles: true }))
     element.dispatchEvent(new MouseEvent("pointerenter", { bubbles: false }))
     element.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }))
     element.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }))
@@ -4289,7 +4399,7 @@ async function clickRowButtonText(rowText: string, buttonText: string, eventInit
 
 async function clickInlineShareSummary(rowText: string): Promise<void> {
   const element = Array.from(getTableRow(rowText).querySelectorAll<HTMLButtonElement>("td:first-child button"))
-    .find((button) => button.textContent?.includes("分享："))
+    .find((button) => button.textContent?.trim() === "已分享")
   if (!element) throw new Error(`Share summary not found in row ${rowText}`)
   await act(async () => {
     element.click()
