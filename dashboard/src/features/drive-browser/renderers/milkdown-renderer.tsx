@@ -160,8 +160,9 @@ export function DriveMilkdownRenderer({
   } = lifecycle
   const { invalidatePendingUploads, uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
     canEdit,
+    itemId: current.id,
+    currentVersionId: edit?.currentVersionId,
     imageUploadContext,
-    lifecycleKey: `${current.id}\0${edit?.currentVersionId ?? ''}`,
     telemetryComponent: 'drive-milkdown-editor',
     onError: setError,
   })

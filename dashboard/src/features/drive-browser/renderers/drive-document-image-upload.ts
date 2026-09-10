@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DRIVE_DOCUMENT_IMAGE_MAX_BYTES,
   DRIVE_DOCUMENT_IMAGE_MAX_SIZE_LABEL,
@@ -19,18 +19,29 @@ export const DRIVE_DOCUMENT_IMAGE_ACCEPT = Object.keys(DRIVE_PUBLIC_ASSET_IMAGE_
 
 export function useDriveDocumentImageUpload({
   canEdit,
+  itemId,
+  currentVersionId,
   imageUploadContext,
-  lifecycleKey,
   telemetryComponent,
   onError,
 }: {
   readonly canEdit: boolean
+  readonly itemId: string
+  readonly currentVersionId?: string | null
   readonly imageUploadContext?: DriveDocumentImageUploadContext
-  readonly lifecycleKey: string
   readonly telemetryComponent: string
   readonly onError: (message: string | null) => void
 }) {
-  const uploadScope = driveDocumentImageUploadScope(imageUploadContext, lifecycleKey)
+  const uploadScope = useMemo(
+    () => driveDocumentImageUploadScope(itemId, currentVersionId, imageUploadContext),
+    [
+      currentVersionId,
+      imageUploadContext?.itemId,
+      imageUploadContext?.kind,
+      imageUploadContext?.kind === 'share' ? imageUploadContext.shareId : null,
+      itemId,
+    ],
+  )
   const activeScopeRef = useRef(uploadScope)
   const generationRef = useRef(0)
   const pendingCountRef = useRef(0)
@@ -101,12 +112,21 @@ export function useDriveDocumentImageUpload({
 }
 
 function driveDocumentImageUploadScope(
+  itemId: string,
+  currentVersionId: string | null | undefined,
   context: DriveDocumentImageUploadContext | undefined,
-  lifecycleKey: string,
-): string {
-  if (!context) return `${lifecycleKey}:unavailable`
-  if (context.kind === 'owner') return `${lifecycleKey}:owner:${context.itemId}`
-  return `${lifecycleKey}:share:${context.shareId}:${context.itemId ?? ''}`
+): DriveDocumentImageUploadScope {
+  return {
+    itemId,
+    currentVersionId: currentVersionId ?? null,
+    destination: context ?? null,
+  }
+}
+
+type DriveDocumentImageUploadScope = {
+  readonly itemId: string
+  readonly currentVersionId: string | null
+  readonly destination: DriveDocumentImageUploadContext | null
 }
 
 export function driveDocumentImageValidationError(file: File | null | undefined): string | null {
