@@ -325,12 +325,14 @@ export function DriveDocumentEditorCommentsFrame({
   const commentsPanelDefaultSize = resizablePanelPercent(COMMENTS_PANEL_DEFAULT_SIZE)
   const commentsPanelMinSize = resizablePanelPercent(COMMENTS_PANEL_MIN_SIZE)
   const commentsPanelMaxSize = resizablePanelPercent(COMMENTS_PANEL_MAX_SIZE)
-  const editorPanelDefaultSize = resizablePanelPercent(100 - COMMENTS_PANEL_DEFAULT_SIZE)
+  const editorPanelDefaultSize = resizablePanelPercent(
+    comments.commentsOpen ? 100 - COMMENTS_PANEL_DEFAULT_SIZE : 100
+  )
 
   return (
     <>
       <div {...{ [dataAttributes.layout]: 'true' }} className='min-h-0 flex-1 overflow-hidden'>
-        {comments.isCompact || !comments.commentsOpen ? editorSurface : (
+        {comments.isCompact ? editorSurface : (
           <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
             <ResizablePanel
               defaultSize={editorPanelDefaultSize}
@@ -340,18 +342,22 @@ export function DriveDocumentEditorCommentsFrame({
             >
               {editorSurface}
             </ResizablePanel>
-            <ResizableHandle />
-            <ResizablePanel
-              defaultSize={commentsPanelDefaultSize}
-              minSize={commentsPanelMinSize}
-              maxSize={commentsPanelMaxSize}
-              {...{ [dataAttributes.commentsPanel]: 'comments' }}
-              className='h-full min-h-0 overflow-hidden'
-            >
-              <aside className='h-full min-h-0 overflow-hidden bg-background'>
-                {renderCommentsRail(comments.sourceMode ? 'list' : 'anchored')}
-              </aside>
-            </ResizablePanel>
+            {comments.commentsOpen ? (
+              <>
+                <ResizableHandle />
+                <ResizablePanel
+                  defaultSize={commentsPanelDefaultSize}
+                  minSize={commentsPanelMinSize}
+                  maxSize={commentsPanelMaxSize}
+                  {...{ [dataAttributes.commentsPanel]: 'comments' }}
+                  className='h-full min-h-0 overflow-hidden'
+                >
+                  <aside className='h-full min-h-0 overflow-hidden bg-background'>
+                    {renderCommentsRail(comments.sourceMode ? 'list' : 'anchored')}
+                  </aside>
+                </ResizablePanel>
+              </>
+            ) : null}
           </ResizablePanelGroup>
         )}
       </div>

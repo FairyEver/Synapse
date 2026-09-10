@@ -2,6 +2,8 @@
 
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { Crepe, CrepeBuilder } from '@milkdown/crepe'
+import { replaceAll } from '@milkdown/kit/utils'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type {
   DriveAnnotationThreadDto,
@@ -76,6 +78,61 @@ afterEach(async () => {
 })
 
 describe('DriveMilkdownRenderer comment integration', () => {
+  it('keeps an unsaved Milkdown draft dirty while closing and reopening the wide comment rail', async () => {
+    let crepe: Crepe | null = null
+    const editorGetter = Object.getOwnPropertyDescriptor(CrepeBuilder.prototype, 'editor')?.get
+    if (!editorGetter) throw new Error('Missing Crepe editor getter')
+    vi.spyOn(CrepeBuilder.prototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
+      crepe = this
+      return editorGetter.call(this)
+    })
+    vi.spyOn(driveAnnotationApi, 'listOwner').mockResolvedValue([
+      commentThread('thread-first', 'First', { start: 0, end: 5 }, 'First comment'),
+    ])
+    const context = editContext()
+    renderRenderer({ editContext: context })
+
+    await waitFor(() => {
+      expect(document.querySelector('.milkdown .ProseMirror')).not.toBeNull()
+      expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).not.toBeNull()
+    })
+    const editor = milkdownEditor()
+    if (!crepe) throw new Error('Missing Milkdown instance')
+    await replaceMilkdownMarkdown(crepe, '# Unsaved draft\n\nSecond')
+    await waitFor(() => {
+      expect(editor.textContent).toContain('Unsaved draft')
+      expect(document.body.textContent).toContain('未保存')
+      expect(document.body.textContent).not.toContain('已同步')
+    })
+
+    await click(buttonWithText('评论 1'))
+    expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).toBeNull()
+    expect(milkdownEditor()).toBe(editor)
+    expect(editor.textContent).toContain('Unsaved draft')
+    expect(document.body.textContent).toContain('未保存')
+
+    await click(buttonWithText('评论 1'))
+    expect(document.querySelector('[data-milkdown-resizable-panel="comments"]')).not.toBeNull()
+    expect(milkdownEditor()).toBe(editor)
+    expect(editor.textContent).toContain('Unsaved draft')
+    expect(document.body.textContent).toContain('未保存')
+    expect(document.body.textContent).not.toContain('已同步')
+
+    await act(async () => {
+      document.querySelector<HTMLElement>('[data-drive-milkdown-renderer="true"]')?.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 's',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+      await Promise.resolve()
+    })
+    expect(context.saveText).toHaveBeenCalledWith({
+      text: '# Unsaved draft\n\nSecond\n',
+      baseVersionId: 'version-1',
+    })
+  })
+
   it('opens a resizable wide comment rail and navigates positioned Milkdown comments', async () => {
     vi.spyOn(driveAnnotationApi, 'listOwner').mockResolvedValue([
       commentThread('thread-first', 'First', { start: 0, end: 5 }, 'First comment'),
@@ -160,8 +217,10 @@ describe('DriveMilkdownRenderer comment integration', () => {
 
 function renderRenderer({
   preview: nextPreview = preview('# First\n\nSecond'),
+  editContext: nextEditContext = editContext(),
 }: {
   readonly preview?: DriveBrowserPreviewDto
+  readonly editContext?: NonNullable<ComponentProps<typeof DriveMilkdownRenderer>['editContext']>
 } = {}) {
   host = document.createElement('div')
   document.body.append(host)
@@ -182,7 +241,7 @@ function renderRenderer({
             current={current()}
             preview={nextPreview}
             edit={editable()}
-            editContext={editContext()}
+            editContext={nextEditContext}
             annotationContext={{ context: 'owner', itemId: 'file' }}
           />
         </DriveRendererToolbarProvider>
@@ -326,4 +385,17 @@ function milkdownScroller(): HTMLDivElement {
   const scroller = document.querySelector('[data-drive-milkdown-scroll="true"]')
   if (!(scroller instanceof HTMLDivElement)) throw new Error('Missing Milkdown scroller')
   return scroller
+}
+
+function milkdownEditor(): HTMLElement {
+  const editor = document.querySelector('.milkdown .ProseMirror')
+  if (!(editor instanceof HTMLElement)) throw new Error('Missing Milkdown editor')
+  return editor
+}
+
+async function replaceMilkdownMarkdown(crepe: Crepe, value: string): Promise<void> {
+  await act(async () => {
+    crepe.editor.action(replaceAll(value))
+    await new Promise((resolve) => window.setTimeout(resolve, 250))
+  })
 }
