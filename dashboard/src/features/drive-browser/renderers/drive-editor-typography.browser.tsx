@@ -48,11 +48,16 @@ describe('drive editor typography in Chromium', () => {
     const placeholder = roots.milkdown.querySelector<HTMLElement>('.milkdown-code-block-placeholder code')!
     const milkdownScroller = roots.milkdown.querySelector<HTMLElement>('.cm-scroller')!
     const mdxeditorEditor = roots.mdxeditor.querySelector<HTMLElement>('.cm-editor')!
+    const mutedReference = roots.milkdown.closest<HTMLElement>('.milkdown')?.querySelector<HTMLElement>('[data-muted-reference]')
+    if (!mutedReference) throw new Error('Missing muted color reference')
+    const placeholderStyles = getComputedStyle(placeholder)
 
-    expect(getComputedStyle(placeholder).fontSize).toBe(getComputedStyle(milkdownScroller).fontSize)
-    expect(getComputedStyle(placeholder).lineHeight).toBe(getComputedStyle(milkdownScroller).lineHeight)
+    expect(placeholderStyles.display).toBe('block')
+    expect(placeholderStyles.fontFamily).toBe(getComputedStyle(milkdownScroller).fontFamily)
+    expect(placeholderStyles.fontSize).toBe(getComputedStyle(milkdownScroller).fontSize)
+    expect(placeholderStyles.lineHeight).toBe(getComputedStyle(milkdownScroller).lineHeight)
+    expect(placeholderStyles.color).toBe(getComputedStyle(mutedReference).color)
     expect(getComputedStyle(roots.milkdown.querySelector('.cm-editor')!).backgroundColor).toBe(getComputedStyle(mdxeditorEditor).backgroundColor)
-    expect(getComputedStyle(placeholder).color).not.toBe('rgb(255, 0, 0)')
   })
 
   it('normalizes list rhythm while preserving each editor marker implementation', () => {
@@ -118,6 +123,7 @@ function renderEditorFixtures(): { readonly milkdown: HTMLElement; readonly mdxe
         <div class="milkdown-code-block">
           <div class="search-box"><input class="search-input" aria-label="Search languages"></div>
         </div>
+        <span class="text-muted-foreground" data-muted-reference></span>
         <div class="ProseMirror" contenteditable="true" tabindex="0">${semanticContent('milkdown')}</div>
       </div>
     </section>

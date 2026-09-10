@@ -2,11 +2,8 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Crepe } from '@milkdown/crepe'
-import { replaceAll } from '@milkdown/kit/utils'
 import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto, DriveHostedDocumentImageDto } from '@synapse/shared'
 import { ApiError, driveBrowserApi } from '@/lib/api'
 import { DriveMilkdownRenderer, requiresMilkdownSourceMode } from './milkdown-renderer'
@@ -371,15 +368,6 @@ describe('DriveMilkdownRenderer', () => {
       '`https://inline.example test@example.com`',
     ].join('\n')
     const saveText = vi.fn(async () => ({} as never))
-    const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
-    const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
-    if (!editorDescriptor?.get) throw new Error('Expected Crepe editor getter')
-    let crepe: Crepe | null = null
-    vi.spyOn(builderPrototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
-      crepe = this
-      return editorDescriptor.get?.call(this)
-    })
-
     const renderer = renderRenderer({
       preview: preview(source),
       editContext: {
@@ -394,14 +382,7 @@ describe('DriveMilkdownRenderer', () => {
     await pressSaveShortcut()
     expect(saveText).not.toHaveBeenCalled()
 
-    await act(async () => {
-      if (!crepe) throw new Error('Expected Crepe instance')
-      crepe.editor.action(replaceAll(crepe.getMarkdown().replace(
-        'See <https://example.com> now',
-        'See <https://example.com> later',
-      )))
-      await new Promise((resolve) => window.setTimeout(resolve, 250))
-    })
+    await replaceRichText('now', 'later')
     await pressSaveShortcut()
 
     const submitted = saveText.mock.calls[0]?.[0].text
@@ -412,7 +393,7 @@ describe('DriveMilkdownRenderer', () => {
     await renderer.unmount()
   })
 
-  it('applies external Markdown with replaceAll without recreating the editor', async () => {
+  it('shows external Markdown updates in the existing editor', async () => {
     const renderer = renderRenderer({ preview: preview('# First'), editContext: editContext() })
     await waitForEditor()
     const editor = document.querySelector('.milkdown .ProseMirror')
@@ -430,14 +411,6 @@ describe('DriveMilkdownRenderer', () => {
 
   it('applies the latest confirmed version when it arrives before Crepe is ready', async () => {
     const saveText = vi.fn(async () => ({} as never))
-    const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
-    const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
-    if (!editorDescriptor?.get) throw new Error('Expected Crepe editor getter')
-    let crepe: Crepe | null = null
-    vi.spyOn(builderPrototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
-      crepe = this
-      return editorDescriptor.get?.call(this)
-    })
     const context = {
       reload: vi.fn(async () => ({} as never)),
       reloading: false,
@@ -462,11 +435,7 @@ describe('DriveMilkdownRenderer', () => {
     expect(editor?.textContent).toContain('Latest')
     expect(editor?.textContent).not.toContain('First')
 
-    await act(async () => {
-      if (!crepe) throw new Error('Expected Crepe instance')
-      crepe.editor.action(replaceAll(crepe.getMarkdown().replace('# Latest', '# Latest updated')))
-      await new Promise((resolve) => window.setTimeout(resolve, 250))
-    })
+    await replaceRichText('Latest', 'Latest updated')
     await pressSaveShortcut()
 
     expect(saveText).toHaveBeenCalledOnce()
@@ -477,16 +446,8 @@ describe('DriveMilkdownRenderer', () => {
 
   it('shows hierarchical ordered markers without changing Milkdown Markdown', async () => {
     const source = '2. Parent\n\n   4. Child\n   5. Next'
-    const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
-    const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
-    if (!editorDescriptor?.get) throw new Error('Expected Crepe editor getter')
-    let crepe: Crepe | null = null
-    vi.spyOn(builderPrototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
-      crepe = this
-      return editorDescriptor.get?.call(this)
-    })
-
-    renderRenderer({ preview: preview(source), editContext: editContext() })
+    const context = editContext()
+    renderRenderer({ preview: preview(source), editContext: context })
     await waitForEditor()
 
     const content = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
@@ -501,30 +462,18 @@ describe('DriveMilkdownRenderer', () => {
       '2.4',
       '2.5',
     ])
-    if (!crepe) throw new Error('Expected Crepe instance')
-    const serialized = crepe.getMarkdown()
-    expect(serialized).toContain('2. Parent')
-    expect(serialized).not.toContain('data-drive-list-marker')
-    expect(serialized).not.toContain('2.4 Child')
+
+    await replaceRichText('Parent', 'Parent updated')
+    await pressSaveShortcut()
+
+    const saved = context.saveText.mock.calls[0]?.[0].text
+    expect(saved).toContain('2. Parent updated')
+    expect(saved).toMatch(/\n\s+4\. Child\n\s+5\. Next/u)
+    expect(saved).not.toContain('data-drive-list-marker')
+    expect(saved).not.toContain('2.4 Child')
   })
 
-  it('updates readonly state and destroys Crepe during cleanup', async () => {
-    const builderPrototype = Object.getPrototypeOf(Crepe.prototype) as object
-    const editorDescriptor = Object.getOwnPropertyDescriptor(builderPrototype, 'editor')
-    if (!editorDescriptor?.get) throw new Error('Expected Crepe editor getter')
-    const wrapped = new WeakSet<object>()
-    let destroyCalls = 0
-    vi.spyOn(builderPrototype, 'editor', 'get').mockImplementation(function (this: Crepe) {
-      if (!wrapped.has(this)) {
-        wrapped.add(this)
-        const destroy = this.destroy
-        this.destroy = async () => {
-          destroyCalls += 1
-          return await destroy()
-        }
-      }
-      return editorDescriptor.get?.call(this)
-    })
+  it('updates readonly state and unmounts the editor cleanly', async () => {
     const renderer = renderRenderer({ preview: preview('# Notes'), editContext: editContext() })
     await waitForEditor()
     const editor = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
@@ -535,13 +484,7 @@ describe('DriveMilkdownRenderer', () => {
     expect(editor?.getAttribute('contenteditable')).toBe('false')
 
     await renderer.unmount()
-    expect(destroyCalls).toBe(1)
-  })
-
-  it('keeps the lazy code block placeholder consistent with editor typography', () => {
-    const styles = readFileSync('src/styles/index.css', 'utf8')
-
-    expect(styles).toMatch(/\.drive-milkdown-editor \.milkdown \.milkdown-code-block-placeholder code\s*{[^}]*color: var\(--muted-foreground\);[^}]*display: block;[^}]*font-size: inherit;[^}]*line-height: inherit;/s)
+    expect(host?.querySelector('[data-drive-milkdown-renderer="true"]')).toBeNull()
   })
 
   it('proxies relative image previews without changing the Markdown source', async () => {
@@ -907,5 +850,24 @@ function deferred<T>() {
 async function waitForEditor(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => window.setTimeout(resolve, 20))
+  })
+}
+
+async function replaceRichText(search: string, replacement: string): Promise<void> {
+  const editor = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
+  if (!editor) throw new Error('Expected Milkdown editor')
+  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+  let textNode = walker.nextNode()
+  while (textNode && !textNode.textContent?.includes(search)) textNode = walker.nextNode()
+  if (!textNode?.textContent) throw new Error(`Expected editor text: ${search}`)
+
+  await act(async () => {
+    textNode.textContent = textNode.textContent?.replace(search, replacement) ?? null
+    editor.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      data: replacement,
+      inputType: 'insertText',
+    }))
+    await new Promise((resolve) => window.setTimeout(resolve, 250))
   })
 }
