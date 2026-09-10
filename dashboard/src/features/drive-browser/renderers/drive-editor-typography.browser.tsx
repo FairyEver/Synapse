@@ -281,7 +281,26 @@ async function waitForRealEditorRoots(): Promise<{ readonly milkdown: HTMLElemen
   }
 }
 
-const REAL_COMPARABLE_SELECTORS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'code', 'table', 'th', 'td'] as const
+const REAL_COMPARABLE_SELECTORS = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'ul',
+  'ol',
+  'li',
+  'blockquote',
+  'code',
+  '.cm-editor',
+  '.cm-scroller',
+  '.cm-content',
+  'table',
+  'th',
+  'td',
+] as const
 
 const REAL_EDITOR_MARKDOWN = [
   '# Heading 1',
