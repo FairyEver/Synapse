@@ -122,6 +122,7 @@ export function DriveMDXeditorRenderer({
   const externalMarkdownTargetRef = useRef<string | null>(null)
   const externalMarkdownFrameRef = useRef<number | null>(null)
   const parseErrorRequestRef = useRef(0)
+  const invalidateImageUploadsRef = useRef<() => void>(() => undefined)
   const [parseError, setParseError] = useState<string | null>(null)
   const [editorViewMode, setEditorViewMode] = useState<ViewMode>('rich-text')
   const handleEditorContainerChange = useCallback((root: HTMLDivElement | null) => {
@@ -160,6 +161,7 @@ export function DriveMDXeditorRenderer({
     setParseError(null)
   }, [])
   const handleReplaceValue = useCallback((markdown: string, reason: 'external' | 'reload' | 'save') => {
+    invalidateImageUploadsRef.current()
     clearParseError()
     if (reason !== 'save') setEditorViewMode('rich-text')
     beginExternalMarkdownSync(markdown)
@@ -192,13 +194,14 @@ export function DriveMDXeditorRenderer({
     reload: handleReload,
     requestReload,
   } = lifecycle
-  const { uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
+  const { invalidatePendingUploads, uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
     canEdit,
     imageUploadContext,
-    lifecycleKey: current.id,
+    lifecycleKey: `${current.id}\0${edit?.currentVersionId ?? ''}`,
     telemetryComponent: 'drive-markdown-editor',
     onError: setError,
   })
+  invalidateImageUploadsRef.current = invalidatePendingUploads
   const canSave = lifecycle.canSave && !uploadingImage
 
   useEffect(() => {

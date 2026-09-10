@@ -37,15 +37,19 @@ export function useDriveDocumentImageUpload({
   const [uploadState, setUploadState] = useState({ scope: uploadScope, uploading: false })
   const uploadingImage = uploadState.scope === uploadScope && uploadState.uploading
 
-  useEffect(() => {
-    activeScopeRef.current = uploadScope
+  const invalidatePendingUploads = useCallback(() => {
     generationRef.current += 1
     pendingCountRef.current = 0
-    setUploadState({ scope: uploadScope, uploading: false })
+    setUploadState({ scope: activeScopeRef.current, uploading: false })
+  }, [])
+
+  useEffect(() => {
+    activeScopeRef.current = uploadScope
+    invalidatePendingUploads()
     return () => {
       generationRef.current += 1
     }
-  }, [uploadScope])
+  }, [invalidatePendingUploads, uploadScope])
 
   const uploadDocumentImage = useCallback(async (file: File) => {
     if (!canEdit || !imageUploadContext) throw new Error('图片上传不可用。')
@@ -93,7 +97,7 @@ export function useDriveDocumentImageUpload({
     return Promise.reject(new Error(message))
   }, [onError, uploadDocumentImage])
 
-  return { uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage }
+  return { invalidatePendingUploads, uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage }
 }
 
 function driveDocumentImageUploadScope(

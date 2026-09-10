@@ -310,6 +310,58 @@ describe('DriveMilkdownRenderer', () => {
     expect(document.body.textContent).not.toContain('图片上传已失效')
   })
 
+  it('does not insert an upload that finishes after the current document version is replaced', async () => {
+    const upload = deferred<DriveHostedDocumentImageDto>()
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    const originalSource = '[docs]: /guide\n\nOriginal'
+    const replacementSource = '[docs]: /guide\n\nReplacement'
+    const renderer = renderRenderer({
+      preview: preview(originalSource),
+      editContext: editContext(),
+      imageUploadContext: { kind: 'owner', itemId: 'file' },
+    })
+
+    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
+    renderer.rerender({
+      preview: preview(replacementSource),
+      edit: { ...editable(), currentVersionId: 'version-2' },
+    })
+
+    await act(async () => {
+      upload.resolve(hostedImage())
+      await upload.promise
+      await Promise.resolve()
+    })
+
+    expect((document.querySelector('textarea') as HTMLTextAreaElement).value).toBe(replacementSource)
+  })
+
+  it('uses the current source selection when the document changes during an upload', async () => {
+    const upload = deferred<DriveHostedDocumentImageDto>()
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    const source = '[docs]: /guide\n\nBody'
+    renderRenderer({
+      preview: preview(source),
+      editContext: editContext(),
+      imageUploadContext: { kind: 'owner', itemId: 'file' },
+    })
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    textarea.setSelectionRange(source.indexOf('Body'), source.indexOf('Body'))
+
+    await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
+    const editedSource = `${source}\nContinued`
+    await inputTextarea(textarea, editedSource)
+    textarea.setSelectionRange(editedSource.length, editedSource.length)
+
+    await act(async () => {
+      upload.resolve(hostedImage())
+      await upload.promise
+      await Promise.resolve()
+    })
+
+    expect(textarea.value).toBe(`${editedSource}![chart](${hostedImage().url})`)
+  })
+
   it('keeps local source after a version conflict and can reload the server copy', async () => {
     const reload = vi.fn(async () => ({ preview: preview('---\ntitle: Server\n---\n# Notes') } as never))
     const saveText = vi.fn(async () => {

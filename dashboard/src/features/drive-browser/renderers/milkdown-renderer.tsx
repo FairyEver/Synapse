@@ -51,6 +51,7 @@ const MILKDOWN_COMMENTS_DATA_ATTRIBUTES = {
 
 type SourceTextareaSelection = {
   readonly documentId: string
+  readonly value: string
   readonly start: number
   readonly end: number
   readonly direction: 'forward' | 'backward' | 'none'
@@ -78,6 +79,7 @@ export function DriveMilkdownRenderer({
   const pendingSourceImageSelectionRef = useRef<SourceTextareaSelection | null>(null)
   const pendingSourceFocusRef = useRef<SourceTextareaSelection | null>(null)
   const activeDocumentIdRef = useRef(current.id)
+  const invalidateImageUploadsRef = useRef<() => void>(() => undefined)
   activeDocumentIdRef.current = current.id
   const applyingExternalMarkdownRef = useRef(false)
   const externalMarkdownTargetRef = useRef<string | null>(null)
@@ -121,6 +123,7 @@ export function DriveMilkdownRenderer({
     return normalizedMarkdown
   }, [beginExternalMarkdownSync])
   const handleReplaceValue = useCallback((markdown: string) => {
+    invalidateImageUploadsRef.current()
     setParseError(null)
     pendingSourceImageSelectionRef.current = null
     pendingSourceFocusRef.current = null
@@ -151,13 +154,14 @@ export function DriveMilkdownRenderer({
     reload: handleReload,
     requestReload,
   } = lifecycle
-  const { uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
+  const { invalidatePendingUploads, uploadingImage, uploadDocumentImage, uploadOptionalDocumentImage } = useDriveDocumentImageUpload({
     canEdit,
     imageUploadContext,
-    lifecycleKey: current.id,
+    lifecycleKey: `${current.id}\0${edit?.currentVersionId ?? ''}`,
     telemetryComponent: 'drive-milkdown-editor',
     onError: setError,
   })
+  invalidateImageUploadsRef.current = invalidatePendingUploads
   const canSave = lifecycle.canSave && !uploadingImage
 
   useEffect(() => {
@@ -262,6 +266,7 @@ export function DriveMilkdownRenderer({
     const textarea = sourceTextareaRef.current
     return {
       documentId: current.id,
+      value: valueRef.current,
       start: textarea?.selectionStart ?? valueRef.current.length,
       end: textarea?.selectionEnd ?? valueRef.current.length,
       direction: textarea?.selectionDirection ?? 'none',
@@ -270,18 +275,20 @@ export function DriveMilkdownRenderer({
   const insertSourceMarkdown = useCallback((markdown: string, selection: SourceTextareaSelection) => {
     if (activeDocumentIdRef.current !== selection.documentId) return
     const currentValue = valueRef.current
-    const start = Math.min(selection.start, currentValue.length)
-    const end = Math.min(Math.max(selection.end, start), currentValue.length)
+    const activeSelection = selection.value === currentValue ? selection : captureSourceSelection()
+    const start = Math.min(activeSelection.start, currentValue.length)
+    const end = Math.min(Math.max(activeSelection.end, start), currentValue.length)
     const nextValue = `${currentValue.slice(0, start)}${markdown}${currentValue.slice(end)}`
     const nextCursor = start + markdown.length
     pendingSourceFocusRef.current = {
-      documentId: selection.documentId,
+      documentId: activeSelection.documentId,
+      value: nextValue,
       start: nextCursor,
       end: nextCursor,
-      direction: selection.direction,
+      direction: activeSelection.direction,
     }
     updateValue(nextValue)
-  }, [updateValue, valueRef])
+  }, [captureSourceSelection, updateValue, valueRef])
   const insertDocumentImageMarkdown = useCallback((file: File, url: string, sourceSelection?: SourceTextareaSelection) => {
     const markdown = createMilkdownImageMarkdown(file, url)
     if (sourceSelection) {

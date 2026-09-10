@@ -825,6 +825,49 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).not.toContain('图片上传已失效')
   })
 
+  it('does not insert an upload that finishes after the current document version is replaced', async () => {
+    const upload = deferred<DriveHostedDocumentImageDto>()
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    const renderer = renderRenderer()
+
+    await selectImage(new File(['image'], 'old.png', { type: 'image/png' }))
+    renderer.rerender({
+      preview: { ...basePreview(), text: '# Replacement', html: '<h1>Replacement</h1>' },
+      edit: { ...editable(), currentVersionId: 'version-2' },
+    })
+
+    await act(async () => {
+      upload.resolve(createHostedImage())
+      await upload.promise
+      await Promise.resolve()
+    })
+
+    expect(editor().value).toBe('# Replacement')
+  })
+
+  it('does not insert an upload that finishes after reloading the current version', async () => {
+    const upload = deferred<DriveHostedDocumentImageDto>()
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    const editContext = createEditContext({
+      reload: vi.fn(async () => baseSnapshot({
+        preview: { ...basePreview(), text: '# Reloaded', html: '<h1>Reloaded</h1>' },
+      })),
+    })
+    renderRenderer({ editContext })
+
+    await selectImage(new File(['image'], 'old.png', { type: 'image/png' }))
+    await click(buttonWithText('重新加载'))
+    expect(editor().value).toBe('# Reloaded')
+
+    await act(async () => {
+      upload.resolve(createHostedImage())
+      await upload.promise
+      await Promise.resolve()
+    })
+
+    expect(editor().value).toBe('# Reloaded')
+  })
+
   it('rejects unsupported selected image formats before uploading', async () => {
     const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
     renderRenderer({ edit: editable() })
@@ -1362,6 +1405,14 @@ function createEditContext(input: Partial<DriveRendererEditContext> = {}) {
     savingText: false,
     ...input,
   }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+  return { promise, resolve }
 }
 
 async function inputValue(input: HTMLTextAreaElement, value: string, initialNormalize = false) {
