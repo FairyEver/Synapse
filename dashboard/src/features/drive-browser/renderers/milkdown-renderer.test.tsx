@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto, DriveHostedDocumentImageDto } from '@synapse/shared'
 import { ApiError, driveBrowserApi } from '@/lib/api'
-import { DriveMilkdownRenderer, requiresMilkdownSourceMode } from './milkdown-renderer'
+import { requiresMilkdownSourceMode } from './milkdown-markdown-compatibility'
+import { DriveMilkdownRenderer } from './milkdown-renderer'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

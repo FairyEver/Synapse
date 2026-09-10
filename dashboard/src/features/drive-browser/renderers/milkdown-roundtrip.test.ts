@@ -6,7 +6,7 @@ import { editorViewCtx, schemaCtx } from '@milkdown/kit/core'
 import { uploadConfig } from '@milkdown/kit/plugin/upload'
 import { createDriveEditorTextModel, MILKDOWN_COMMENT_IGNORED_SELECTOR } from './drive-editor-comment-geometry'
 import { configureMilkdownCommonMarkImages } from './milkdown-commonmark-images'
-import { preserveMilkdownCommonMarkAutolinks, requiresMilkdownSourceMode } from './milkdown-renderer'
+import { preserveMilkdownCommonMarkAutolinks, requiresMilkdownSourceMode } from './milkdown-markdown-compatibility'
 
 let root: HTMLDivElement | null = null
 let crepe: Crepe | null = null
