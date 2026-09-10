@@ -54,6 +54,7 @@ import {
   type DriveCollaborationCheckpointResultDto,
   type DriveDocumentImageUploadPrepareResult,
   type DriveHostedDocumentImageDto,
+  isDriveMarkdownItem,
 } from "@synapse/shared"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
@@ -3203,9 +3204,10 @@ export class DriveService implements OnApplicationBootstrap {
     const storageKey = this.requireActiveFileStorage(current)
     if (shouldReadDriveBrowserTextPreview(kind)) {
       if (kind === "markdown") {
+        const plainMarkdown = isPlainDriveMarkdownItem(item)
         const preview = await this.readTextPreview(storageKey)
         const versionId = await this.findCurrentDriveFileVersionId(current)
-        const relativeImages = isPlainDriveMarkdownName(current.name)
+        const relativeImages = plainMarkdown
           ? await this.resolveDriveMarkdownRelativeImages(preview.text, current, route)
           : []
         const relativeImageUrls = new Map(relativeImages.map(({ reference, item: image }) => [
@@ -3219,7 +3221,7 @@ export class DriveService implements OnApplicationBootstrap {
         ]))
         const rendered = await renderDriveMarkdownFragment(preview.text, {
           relativeImageUrls,
-          allowStandaloneRawImages: isPlainDriveMarkdownName(current.name),
+          allowStandaloneRawImages: plainMarkdown,
           previousProjection: versionId && this.projections
             ? await this.projections.loadPrevious({ itemId: current.id, versionId })
             : null,
@@ -4343,6 +4345,10 @@ function toDriveBrowserSourceItem(item: DriveItemRecord): DriveBrowserSourceItem
     mimeType: dto.mimeType,
     updatedAt: dto.updatedAt,
   }
+}
+
+function isPlainDriveMarkdownItem(item: Pick<DriveBrowserSourceItem, "type" | "name" | "mimeType">): boolean {
+  return !item.name.toLowerCase().endsWith(".mdx") && isDriveMarkdownItem(item)
 }
 
 async function readStreamTextPrefix(

@@ -2883,6 +2883,76 @@ describe("DriveService", () => {
     expect(snapshot.preview?.text).toContain("../images/%E6%9E%B6%E6%9E%84%20%E5%9B%BE.png?version=1#preview")
   })
 
+  it.each(["text/markdown", "text/x-markdown"])("resolves relative images for extensionless %s files", async (mimeType) => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "docs" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "README",
+      mimeType,
+    })
+    const image = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "diagram.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, {
+      body: "![diagram](./diagram.png)\n\n<img src=\"./diagram.png\" alt=\"raw\">",
+      contentType: mimeType,
+    })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      itemId: markdown.id,
+      surface: "standalone",
+    })
+
+    const resolvedUrl = `/drive/items/${image.id}/download`
+    expect(snapshot.preview?.html).toContain(`src="${resolvedUrl}"`)
+    expect(snapshot.preview?.html).toContain('alt="raw"')
+    expect(snapshot.preview?.relativeImages).toEqual([{ src: "./diagram.png", resolvedUrl }])
+  })
+
+  it("does not resolve relative images for MDX files with a Markdown MIME type", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "docs" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "component.mdx",
+      mimeType: "text/markdown",
+    })
+    const image = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "diagram.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, {
+      body: "![diagram](./diagram.png)\n\n<img src=\"./raw.png\" alt=\"raw\">",
+      contentType: "text/markdown",
+    })
+
+    const snapshot = await service.getOwnerBrowserSnapshot({
+      userId: "user-1",
+      itemId: markdown.id,
+      surface: "standalone",
+    })
+
+    expect(snapshot.current.previewKind).toBe("markdown")
+    expect(snapshot.preview?.relativeImages).toEqual([])
+    expect(snapshot.preview?.html).not.toContain(`/drive/items/${image.id}/download`)
+    expect(snapshot.preview?.html).not.toContain('data-drive-markdown-relative-src="./raw.png"')
+  })
+
   it("resolves explicit Windows Markdown image paths without rewriting the preview source", async () => {
     const prisma = createPrismaMemory()
     const objects = new Map<string, DriveTestObject>()
