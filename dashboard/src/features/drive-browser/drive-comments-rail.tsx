@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn, getDisplayNameInitials } from '@/lib/utils'
 
 const COMMENT_CARD_ESTIMATED_HEIGHT = 128
-const COMMENT_CARD_GAP = 12
+const COMMENT_CARD_GAP = 8
 const COMMENT_DRAFT_CARD_ID = '__comment-draft__'
 const COMMENT_COMPOSER_EVENT_KEYS = {
   draft: 'web.drive.comment.create',
@@ -221,7 +221,7 @@ export function DriveCommentsRail({
             {threads.length === 0 ? '暂无评论' : '暂无已定位评论'}
           </div>
         ) : (
-          <div className='space-y-3 p-3'>
+          <div className='space-y-2 p-3'>
             {draft ? <CommentDraftCard draft={draft} compact /> : null}
             {listThreads.map((item) => (
               <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
@@ -388,7 +388,7 @@ function UnlocatedCommentsDialog({
           />
           <DialogFrameBody>
             <ScrollArea className='h-full'>
-              <div className='space-y-3 p-4'>
+              <div className='space-y-2 p-4'>
                 {threads.map((item) => (
                   <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
                     <ThreadView
@@ -482,10 +482,10 @@ function CommentDraftCard({ draft, compact }: { readonly draft: MarkdownCommentD
   return (
     <section
       data-markdown-comment-draft-card='true'
-      className='relative overflow-hidden rounded-lg border border-amber-400/70 bg-muted/30 p-3 pt-4 text-sm dark:border-amber-600/70'
+      className='relative overflow-hidden rounded-lg border border-amber-400/70 bg-muted/30 px-3 pb-2 pt-3 text-sm dark:border-amber-600/70'
     >
       <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' />
-      <div className='mb-3 line-clamp-2 text-xs font-medium text-muted-foreground'>“{draft.quote}”</div>
+      <div className='mb-2 line-clamp-2 text-xs font-medium text-muted-foreground'>“{draft.quote}”</div>
       <CommentComposer
         dataAttribute='draft'
         value={draft.value}
@@ -603,7 +603,7 @@ function ThreadView({
   return (
     <section
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card p-3 pt-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
+        'relative cursor-default overflow-hidden rounded-lg border border-border bg-card px-3 pb-2 pt-3 text-sm transition-colors hover:border-ring/60 focus-within:border-ring',
         emphasized && 'border-amber-400/70 bg-muted/30 dark:border-amber-600/70'
       )}
       onClick={(event) => {
@@ -613,7 +613,7 @@ function ThreadView({
     >
       {active ? <span className='sr-only'>当前评论</span> : null}
       {emphasized ? <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400 dark:bg-amber-600' /> : null}
-      <div className='mb-3 space-y-1'>
+      <div className='mb-2 space-y-1'>
         <div className='flex items-center gap-2'>
           <span aria-hidden className='h-4 w-0.5 shrink-0 rounded-full bg-border' />
           <Button
@@ -639,7 +639,7 @@ function ThreadView({
           </div>
         ) : null}
       </div>
-      <div className='space-y-4'>
+      <div className='space-y-3'>
         {thread.comments.map((comment) => (
           <CommentView
             key={comment.id}
@@ -741,7 +741,7 @@ function CommentView({
             {getDisplayNameInitials(authorName)}
           </AvatarFallback>
         </Avatar>
-        <div className='min-w-0 flex-1 space-y-1.5'>
+        <div className='min-w-0 flex-1 space-y-1'>
           <div className='flex items-start justify-between gap-2'>
             <div className='flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5'>
               <span className='truncate text-sm font-medium'>{authorName}</span>

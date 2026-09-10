@@ -8,7 +8,6 @@ import {
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
-  type DriveMarkdownOutlineItemDto,
   type DriveMarkdownProjectionImageDto,
   type DriveCollaborationJoinContext,
 } from '@synapse/shared'
@@ -49,15 +48,19 @@ import {
   createMarkdownRenderedTextModel,
   type MarkdownRenderedTextSegment,
 } from './markdown-rendered-text'
+import {
+  DRIVE_DOCUMENT_OUTLINE_PANEL_DEFAULT_SIZE as MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE,
+  DRIVE_DOCUMENT_OUTLINE_PANEL_MAX_SIZE as MARKDOWN_OUTLINE_PANEL_MAX_SIZE,
+  DRIVE_DOCUMENT_OUTLINE_PANEL_MIN_SIZE as MARKDOWN_OUTLINE_PANEL_MIN_SIZE,
+  DriveDocumentOutlineTree,
+  flattenDriveDocumentOutline,
+} from './drive-document-outline'
 import { useRegisterDriveRendererToolbarItems, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
 const MARKDOWN_BODY_CLASSNAME = cn(
   'markdown-body max-w-full [&_ul]:list-disc [&_ol]:list-decimal! [&_ul]:pl-6 [&_ol]:pl-6 [&_[data-drive-markdown-table-scroll="true"]]:max-w-full [&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto [&_table]:w-max [&_table]:min-w-full [&_table]:max-w-none [&_td:first-child]:whitespace-nowrap [&_th:first-child]:whitespace-nowrap [&_td:not(:first-child)]:min-w-56 [&_th:not(:first-child)]:min-w-56 [&_h4]:text-base! [&_h4]:leading-tight! [&_h5]:text-base! [&_h5]:leading-tight! [&_h6]:text-base! [&_h6]:leading-tight! [&_img[role="button"]]:cursor-zoom-in [&_img[role="button"]]:focus-visible:outline-none [&_img[role="button"]]:focus-visible:ring-2 [&_img[role="button"]]:focus-visible:ring-ring [&_img[role="button"]]:focus-visible:ring-offset-2',
   DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
 )
-const MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE = 16
-const MARKDOWN_OUTLINE_PANEL_MIN_SIZE = 12
-const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = 22
 const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = 22
 const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = 17
 const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = 32
@@ -142,7 +145,7 @@ function DriveMarkdownBody({
   const layoutMode = useFilePreviewLayoutMode()
   const isCompact = layoutMode === 'compact'
   const { resolvedTheme } = useTheme()
-  const outlineItems = useMemo(() => flattenMarkdownOutline(outline), [outline])
+  const outlineItems = useMemo(() => flattenDriveDocumentOutline(outline), [outline])
   const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
   const annotationsEnabled = isDriveCommentableMarkdownItem(current)
   const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
@@ -977,7 +980,7 @@ function DriveMarkdownBody({
                   <aside className='flex h-full min-h-0 flex-col overflow-hidden py-6'>
                     <p className='mb-2 shrink-0 px-4 text-xs font-medium text-muted-foreground md:px-6'>目录</p>
                     <nav ref={outlineScrollRef} className='min-h-0 flex-1 overflow-y-auto px-4 md:px-6' aria-label='目录'>
-                      <MarkdownOutlineTree
+                      <DriveDocumentOutlineTree
                         items={outline}
                         activeItemId={activeOutlineId}
                         onSelect={scrollToOutlineItem}
@@ -1029,7 +1032,7 @@ function DriveMarkdownBody({
               <SheetDescription className='sr-only'>跳转到文档标题</SheetDescription>
             </SheetHeader>
             <nav className='min-h-0 flex-1 overflow-auto px-4 pb-4' aria-label='目录'>
-              <MarkdownOutlineTree
+              <DriveDocumentOutlineTree
                 items={outline}
                 compact
                 activeItemId={activeOutlineId}
@@ -1106,10 +1109,6 @@ function encodeStateVector(doc: Y.Doc): string {
   let binary = ''
   for (let index = 0; index < value.length; index += 1) binary += String.fromCharCode(value[index] ?? 0)
   return btoa(binary)
-}
-
-function flattenMarkdownOutline(items: readonly DriveMarkdownOutlineItemDto[]): DriveMarkdownOutlineItemDto[] {
-  return items.flatMap((item) => [item, ...flattenMarkdownOutline(item.children)])
 }
 
 function findMarkdownHeadingById(root: HTMLElement, itemId: string): HTMLElement | null {
@@ -1404,83 +1403,4 @@ function sameOverlayRects(left: readonly MarkdownAnnotationOverlayRect[], right:
       && item.width === other.width
       && item.height === other.height
   })
-}
-
-export function MarkdownOutlineTree({
-  items,
-  compact = false,
-  activeItemId,
-  onSelect,
-}: {
-  readonly items: readonly DriveMarkdownOutlineItemDto[]
-  readonly compact?: boolean
-  readonly activeItemId?: string | null
-  readonly onSelect?: (itemId: string) => void
-}) {
-  return (
-    <ul className='space-y-1'>
-      {items.map((item) => (
-        <MarkdownOutlineNode
-          key={item.id}
-          item={item}
-          compact={compact}
-          activeItemId={activeItemId}
-          onSelect={onSelect}
-        />
-      ))}
-    </ul>
-  )
-}
-
-function MarkdownOutlineNode({
-  item,
-  compact,
-  activeItemId,
-  onSelect,
-}: {
-  readonly item: DriveMarkdownOutlineItemDto
-  readonly compact: boolean
-  readonly activeItemId?: string | null
-  readonly onSelect?: (itemId: string) => void
-}) {
-  const active = item.id === activeItemId
-  return (
-    <li>
-      <a
-        className={cn(
-          'truncate rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          compact ? 'flex min-h-11 items-center py-2 text-sm' : 'block py-1 text-xs',
-          active && 'bg-muted font-medium text-foreground',
-          outlineDepthClassName(item.depth)
-        )}
-        data-markdown-outline-id={item.id}
-        href={`#${item.id}`}
-        aria-current={active ? 'location' : undefined}
-        onClick={(event) => {
-          if (!onSelect) return
-          event.preventDefault()
-          onSelect(item.id)
-        }}
-      >
-        {item.text}
-      </a>
-      {item.children.length > 0 ? (
-        <MarkdownOutlineTree
-          items={item.children}
-          compact={compact}
-          activeItemId={activeItemId}
-          onSelect={onSelect}
-        />
-      ) : null}
-    </li>
-  )
-}
-
-function outlineDepthClassName(depth: number): string {
-  if (depth <= 1) return 'pl-0'
-  if (depth === 2) return 'pl-3'
-  if (depth === 3) return 'pl-6'
-  if (depth === 4) return 'pl-9'
-  if (depth === 5) return 'pl-12'
-  return 'pl-14'
 }

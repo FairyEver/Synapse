@@ -569,7 +569,7 @@ describe('DriveCommentsRail', () => {
       ],
     })
 
-    expect(threadTop('thread-2')).toBeGreaterThan(threadTop('thread-1') + 12)
+    expect(threadTop('thread-2')).toBeGreaterThan(threadTop('thread-1') + 8)
   })
 
   it('reports the anchored document height for markdown bottom compensation', () => {
@@ -612,7 +612,7 @@ describe('DriveCommentsRail', () => {
     await flushAnimationFrames(frames)
 
     expect(threadTop('thread-1')).toBe(44)
-    expect(threadTop('thread-2')).toBe(136)
+    expect(threadTop('thread-2')).toBe(132)
   })
 
   it('reflows anchored comments from live card sizes and batches resize work by frame', async () => {
@@ -647,15 +647,15 @@ describe('DriveCommentsRail', () => {
     ])
     expect(requestAnimationFrame).toHaveBeenCalledTimes(1)
     await flushAnimationFrames(frames)
-    expect(threadTop('thread-2')).toBe(92)
+    expect(threadTop('thread-2')).toBe(88)
 
     observer.emit([resizeEntry(threadSection('thread-1'), 180)])
     observer.emit([resizeEntry(threadSection('thread-1'), 200)])
     expect(requestAnimationFrame).toHaveBeenCalledTimes(2)
-    expect(threadTop('thread-2')).toBe(92)
+    expect(threadTop('thread-2')).toBe(88)
 
     await flushAnimationFrames(frames)
-    expect(threadTop('thread-2')).toBe(212)
+    expect(threadTop('thread-2')).toBe(208)
 
     observer.emit([resizeEntry(threadSection('thread-1'), 240)])
     expect(frames.size).toBe(1)
@@ -690,14 +690,14 @@ describe('DriveCommentsRail', () => {
       resizeEntry(threadSection('thread-2'), 40),
     ])
     await flushAnimationFrames(frames)
-    expect(threadTop('thread-2')).toBe(92)
+    expect(threadTop('thread-2')).toBe(88)
 
     await click(commentReplyButtons('thread-1')[0])
     observer.emit([resizeEntry(threadSection('thread-1'), 180)])
     await flushAnimationFrames(frames)
 
     expect(replyComposer('thread-1')).not.toBeNull()
-    expect(threadTop('thread-2')).toBe(192)
+    expect(threadTop('thread-2')).toBe(188)
   })
 
   it('keeps the last measured card sizes while anchored cards are temporarily detached', async () => {
@@ -725,13 +725,13 @@ describe('DriveCommentsRail', () => {
       resizeEntry(threadSection('thread-2'), 40),
     ])
     await flushAnimationFrames(frames)
-    expect(threadTop('thread-2')).toBe(92)
+    expect(threadTop('thread-2')).toBe(88)
 
     rerenderRail({ mode: 'list', threads })
     await flushAnimationFrames(frames)
     rerenderRail({ threads })
 
-    expect(threadTop('thread-2')).toBe(92)
+    expect(threadTop('thread-2')).toBe(88)
   })
 
   it('drops cached card sizes after a thread is actually removed', async () => {
@@ -757,12 +757,12 @@ describe('DriveCommentsRail', () => {
       resizeEntry(threadSection('thread-2'), 40),
     ])
     await flushAnimationFrames(frames)
-    expect(threadTop('thread-2')).toBe(212)
+    expect(threadTop('thread-2')).toBe(208)
 
     rerenderRail({ threads: [second] })
     rerenderRail({ threads: [first, second] })
 
-    expect(threadTop('thread-2')).toBe(140)
+    expect(threadTop('thread-2')).toBe(136)
   })
 
   it('shows a direct delete icon and requires a second click to delete', async () => {

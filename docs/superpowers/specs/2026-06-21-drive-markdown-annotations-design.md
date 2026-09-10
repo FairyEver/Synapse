@@ -178,6 +178,9 @@ Comment rail:
 
 MDXEditor behavior:
 
+- Rich-text mode exposes the same heading outline presentation as Markdown Render. The desktop outline opens by default, supports resizing, click-to-scroll, scroll-linked active state, and updates from unsaved editor headings on the next animation frame.
+- Compact layouts present the MDXEditor outline in a left-side sheet. Opening the outline closes the comments sheet, and selecting a heading closes the outline sheet after scrolling the editor.
+- Source, diff, forced Textarea, and parser-fallback modes do not expose the outline. Returning to rich-text mode rebuilds it from the current editor DOM.
 - The renderer toolbar exposes `评论 N` for commentable Markdown files. Existing comments open the rail on first load; after the user closes it, the current mount does not reopen it automatically.
 - Wide layouts use a resizable editor/comment split. Compact layouts use a right-side sheet and list presentation.
 - Rich-text mode supports highlight, rail alignment, navigation, replies, edit, and delete.

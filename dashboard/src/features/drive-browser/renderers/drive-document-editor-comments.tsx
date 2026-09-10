@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   isDriveCommentableMarkdownItem,
   type DriveBrowserItemDto,
+  type DriveMarkdownOutlineItemDto,
   type DriveMarkdownProjectionDto,
 } from '@synapse/shared'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
@@ -10,6 +11,12 @@ import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-p
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import { DriveCommentsRail, type DriveCommentsRailItem } from '../drive-comments-rail'
+import {
+  DRIVE_DOCUMENT_OUTLINE_PANEL_DEFAULT_SIZE,
+  DRIVE_DOCUMENT_OUTLINE_PANEL_MAX_SIZE,
+  DRIVE_DOCUMENT_OUTLINE_PANEL_MIN_SIZE,
+  DriveDocumentOutlineTree,
+} from './drive-document-outline'
 import { useDriveAnnotations, type DriveAnnotationContext } from '../use-drive-annotations'
 import {
   useDriveEditorCommentGeometry,
@@ -34,6 +41,20 @@ export type DriveDocumentEditorCommentsDataAttributes = {
   readonly editorPanel: DataAttributeName
   readonly commentsPanel: DataAttributeName
   readonly sheet: DataAttributeName
+  readonly outlinePanel?: DataAttributeName
+  readonly outlineSheet?: DataAttributeName
+}
+
+export type DriveDocumentEditorOutlineController = {
+  readonly activeItemId: string | null
+  readonly compactOpen: boolean
+  readonly enabled: boolean
+  readonly items: readonly DriveMarkdownOutlineItemDto[]
+  readonly open: boolean
+  readonly outlineScrollRef: RefObject<HTMLElement | null>
+  readonly handleEditorScroll: () => void
+  readonly selectItem: (itemId: string) => void
+  readonly setPanelOpen: (open: boolean) => void
 }
 
 export function useDriveDocumentEditorComments({
@@ -258,17 +279,25 @@ export function DriveDocumentEditorCommentsFrame({
   comments,
   dataAttributes,
   editorView,
+  onEditorContentHostChange,
   onEditorContainerChange,
+  outline,
 }: {
   readonly comments: DriveDocumentEditorCommentsController
   readonly dataAttributes: DriveDocumentEditorCommentsDataAttributes
   readonly editorView: ReactNode
+  readonly onEditorContentHostChange?: (element: HTMLDivElement | null) => void
   readonly onEditorContainerChange?: (element: HTMLDivElement | null) => void
+  readonly outline?: DriveDocumentEditorOutlineController
 }) {
   const setEditorContainerRef = useCallback((element: HTMLDivElement | null) => {
     comments.editorContainerRef.current = element
     onEditorContainerChange?.(element)
   }, [comments.editorContainerRef, onEditorContainerChange])
+  const setEditorContentHostRef = useCallback((element: HTMLDivElement | null) => {
+    comments.editorContentHostRef.current = element
+    onEditorContentHostChange?.(element)
+  }, [comments.editorContentHostRef, onEditorContentHostChange])
   const renderCommentsRail = (mode: 'anchored' | 'list') => (
     <DriveCommentsRail
       {...comments.renderRailProps}
@@ -283,10 +312,13 @@ export function DriveDocumentEditorCommentsFrame({
       ref={setEditorContainerRef}
       {...{ [dataAttributes.scroll]: 'true' }}
       className='h-full min-h-0 overflow-auto overscroll-contain'
-      onScroll={comments.handleEditorScroll}
+      onScroll={() => {
+        comments.handleEditorScroll()
+        outline?.handleEditorScroll()
+      }}
     >
       <div
-        ref={comments.editorContentHostRef}
+        ref={setEditorContentHostRef}
         {...{ [dataAttributes.contentHost]: 'true' }}
         className='relative min-h-full'
       >
@@ -325,15 +357,47 @@ export function DriveDocumentEditorCommentsFrame({
   const commentsPanelDefaultSize = resizablePanelPercent(COMMENTS_PANEL_DEFAULT_SIZE)
   const commentsPanelMinSize = resizablePanelPercent(COMMENTS_PANEL_MIN_SIZE)
   const commentsPanelMaxSize = resizablePanelPercent(COMMENTS_PANEL_MAX_SIZE)
+  const outlinePanelDefaultSize = resizablePanelPercent(DRIVE_DOCUMENT_OUTLINE_PANEL_DEFAULT_SIZE)
+  const outlinePanelMinSize = resizablePanelPercent(DRIVE_DOCUMENT_OUTLINE_PANEL_MIN_SIZE)
+  const outlinePanelMaxSize = resizablePanelPercent(DRIVE_DOCUMENT_OUTLINE_PANEL_MAX_SIZE)
+  const outlinePanelOpen = Boolean(!comments.isCompact && outline?.enabled && outline.open)
   const commentsPanelOpen = !comments.isCompact && comments.commentsOpen
   const editorPanelDefaultSize = resizablePanelPercent(
-    commentsPanelOpen ? 100 - COMMENTS_PANEL_DEFAULT_SIZE : 100
+    100
+      - (outlinePanelOpen ? DRIVE_DOCUMENT_OUTLINE_PANEL_DEFAULT_SIZE : 0)
+      - (commentsPanelOpen ? COMMENTS_PANEL_DEFAULT_SIZE : 0),
   )
 
   return (
     <>
       <div {...{ [dataAttributes.layout]: 'true' }} className='min-h-0 flex-1 overflow-hidden'>
         <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
+          {outlinePanelOpen && outline ? (
+            <>
+              <ResizablePanel
+                defaultSize={outlinePanelDefaultSize}
+                minSize={outlinePanelMinSize}
+                maxSize={outlinePanelMaxSize}
+                data-panel-size={outlinePanelDefaultSize}
+                data-panel-min-size={outlinePanelMinSize}
+                data-panel-max-size={outlinePanelMaxSize}
+                {...(dataAttributes.outlinePanel ? { [dataAttributes.outlinePanel]: 'outline' } : {})}
+                className='h-full min-h-0 overflow-hidden'
+              >
+                <aside className='flex h-full min-h-0 flex-col overflow-hidden py-6'>
+                  <p className='mb-2 shrink-0 px-4 text-xs font-medium text-muted-foreground md:px-6'>目录</p>
+                  <nav ref={outline.outlineScrollRef} className='min-h-0 flex-1 overflow-y-auto px-4 md:px-6' aria-label='目录'>
+                    <DriveDocumentOutlineTree
+                      items={outline.items}
+                      activeItemId={outline.activeItemId}
+                      onSelect={outline.selectItem}
+                    />
+                  </nav>
+                </aside>
+              </ResizablePanel>
+              <ResizableHandle autoHide />
+            </>
+          ) : null}
           <ResizablePanel
             defaultSize={editorPanelDefaultSize}
             minSize='35%'
@@ -360,6 +424,29 @@ export function DriveDocumentEditorCommentsFrame({
           ) : null}
         </ResizablePanelGroup>
       </div>
+      {comments.isCompact && outline?.enabled ? (
+        <Sheet open={outline.compactOpen} onOpenChange={outline.setPanelOpen}>
+          <SheetContent
+            data-drive-telemetry-scope='portal'
+            side='left'
+            {...(dataAttributes.outlineSheet ? { [dataAttributes.outlineSheet]: 'outline' } : {})}
+            className='gap-0 overflow-hidden'
+          >
+            <SheetHeader className='pr-14'>
+              <SheetTitle>目录</SheetTitle>
+              <SheetDescription className='sr-only'>跳转到文档标题</SheetDescription>
+            </SheetHeader>
+            <nav ref={outline.outlineScrollRef} className='min-h-0 flex-1 overflow-auto px-4 pb-4' aria-label='目录'>
+              <DriveDocumentOutlineTree
+                items={outline.items}
+                compact
+                activeItemId={outline.activeItemId}
+                onSelect={outline.selectItem}
+              />
+            </nav>
+          </SheetContent>
+        </Sheet>
+      ) : null}
       {comments.isCompact && comments.annotationsEnabled ? (
         <Sheet open={comments.compactCommentsOpen} onOpenChange={comments.setCommentPanelOpen}>
           <SheetContent

@@ -33,7 +33,7 @@ import {
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
 } from '@synapse/shared'
-import { ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
+import { ImagePlus, ListTree, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import type { DriveDocumentImageUploadContext } from '@/lib/api'
@@ -67,6 +67,7 @@ import {
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
 import { mdxEditorCommentObserverPlugin } from './mdxeditor-comment-observer-plugin'
+import { useDriveMdxEditorOutline } from './mdxeditor-outline'
 import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
 import { tableCellLineBreakPlugin } from './mdxeditor-table-cell-line-break-plugin'
 import { trailingImageParagraphPlugin } from './mdxeditor-trailing-image-plugin'
@@ -83,6 +84,8 @@ const MDXEDITOR_COMMENTS_DATA_ATTRIBUTES = {
   editorPanel: 'data-mdxeditor-resizable-panel',
   commentsPanel: 'data-mdxeditor-resizable-panel',
   sheet: 'data-mdxeditor-sheet',
+  outlinePanel: 'data-mdxeditor-resizable-panel',
+  outlineSheet: 'data-mdxeditor-sheet',
 } satisfies DriveDocumentEditorCommentsDataAttributes
 
 const GENERIC_MDX_COMPONENT_DESCRIPTOR = {
@@ -125,11 +128,6 @@ export function DriveMDXeditorRenderer({
   const invalidateImageUploadsRef = useRef<() => void>(() => undefined)
   const [parseError, setParseError] = useState<string | null>(null)
   const [editorViewMode, setEditorViewMode] = useState<ViewMode>('rich-text')
-  const handleEditorContainerChange = useCallback((root: HTMLDivElement | null) => {
-    listMarkerObserverCleanupRef.current?.()
-    listMarkerObserverCleanupRef.current = null
-    if (root) listMarkerObserverCleanupRef.current = observeDriveHierarchicalListMarkers(root)
-  }, [])
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const requiresSourceMode = preparedInitialDocument.requiresSourceMode
@@ -224,6 +222,18 @@ export function DriveMDXeditorRenderer({
     stateResetKey: initialText,
     preserveStateOnReset: saveAcknowledged,
   })
+  const outline = useDriveMdxEditorOutline({
+    enabled: !sourceMode,
+    isCompact: comments.isCompact,
+    scrollRef: comments.editorContainerRef,
+    stateResetKey: current.id,
+  })
+  const handleEditorContainerChange = useCallback((root: HTMLDivElement | null) => {
+    listMarkerObserverCleanupRef.current?.()
+    listMarkerObserverCleanupRef.current = null
+    if (root) listMarkerObserverCleanupRef.current = observeDriveHierarchicalListMarkers(root)
+    outline.notifyEditorUpdate()
+  }, [outline.notifyEditorUpdate])
   const resolveImagePreview = useCallback(async (imageSource: string) => {
     if (!relativeImagePreviewUrls.has(imageSource)) return imageSource
     return relativeImagePreviewUrls.get(imageSource) ?? ''
@@ -231,7 +241,12 @@ export function DriveMDXeditorRenderer({
   const handleEditorViewModeChange = useCallback((mode: ViewMode) => {
     setEditorViewMode(mode)
     comments.scheduleGeometry()
-  }, [comments.scheduleGeometry])
+    outline.notifyEditorUpdate()
+  }, [comments.scheduleGeometry, outline.notifyEditorUpdate])
+  const handleEditorUpdate = useCallback(() => {
+    comments.notifyEditorUpdate()
+    outline.notifyEditorUpdate()
+  }, [comments.notifyEditorUpdate, outline.notifyEditorUpdate])
   const handleDocumentImageUpload = uploadOptionalDocumentImage
   const insertDocumentImageMarkdown = useCallback((file: File, url: string) => {
     const markdown = `![${driveDocumentImageAltText(file.name)}](${url})`
@@ -282,6 +297,7 @@ export function DriveMDXeditorRenderer({
   }, [canEdit, insertMixedClipboardImages])
   const plugins = useMemo(() => [
     toolbarPlugin({
+      toolbarClassName: 'rounded-none! p-1!',
       toolbarContents: () => (
         <>
           <UndoRedo />
@@ -327,11 +343,11 @@ export function DriveMDXeditorRenderer({
     ...(!usesMdxSyntax ? [commonMarkTextCompatibilityPlugin()] : []),
     diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
     mdxEditorCommentObserverPlugin({
-      onEditorUpdate: comments.notifyEditorUpdate,
+      onEditorUpdate: handleEditorUpdate,
       onViewModeChange: handleEditorViewModeChange,
     }),
     markdownShortcutPlugin(),
-  ], [canEdit, comments.notifyEditorUpdate, handleDocumentImageUpload, handleEditorViewModeChange, resolveImagePreview, uploadingImage, usesMdxSyntax])
+  ], [canEdit, handleDocumentImageUpload, handleEditorUpdate, handleEditorViewModeChange, resolveImagePreview, uploadingImage, usesMdxSyntax])
 
   useEffect(() => () => {
     clearExternalMarkdownSync()
@@ -380,12 +396,32 @@ export function DriveMDXeditorRenderer({
     })
   }, [replaceValueWithoutDirtyChange])
 
+  const setOutlinePanelOpen = useCallback((open: boolean) => {
+    if (open && comments.isCompact) comments.setCommentPanelOpen(false)
+    outline.setPanelOpen(open)
+  }, [comments.isCompact, comments.setCommentPanelOpen, outline.setPanelOpen])
+  const setCommentPanelOpen = useCallback((open: boolean) => {
+    if (open && comments.isCompact) outline.setPanelOpen(false)
+    comments.setCommentPanelOpen(open)
+  }, [comments.isCompact, comments.setCommentPanelOpen, outline.setPanelOpen])
+
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [{
       kind: 'status',
       id: 'mdxeditor-edit-status',
       label: dirty ? '未保存' : canEdit ? '已同步' : '只读',
     }]
+    if (outline.enabled) {
+      items.push({
+        kind: 'toggle',
+        id: 'mdxeditor-outline',
+        label: '目录',
+        icon: ListTree,
+        compactPlacement: 'primary',
+        pressed: comments.isCompact ? outline.compactOpen : outline.open,
+        onPressedChange: setOutlinePanelOpen,
+      })
+    }
     if (comments.annotationsEnabled) {
       items.push({
         kind: 'toggle',
@@ -394,7 +430,7 @@ export function DriveMDXeditorRenderer({
         icon: MessageSquare,
         compactPlacement: 'primary',
         pressed: comments.isCompact ? comments.compactCommentsOpen : comments.commentsOpen,
-        onPressedChange: comments.setCommentPanelOpen,
+        onPressedChange: setCommentPanelOpen,
       })
     }
     if (loginRequired) {
@@ -442,14 +478,18 @@ export function DriveMDXeditorRenderer({
     comments.compactCommentsOpen,
     comments.isCompact,
     comments.railThreads.length,
-    comments.setCommentPanelOpen,
     dirty,
     editContext?.reloading,
     editContext?.savingText,
     handleSave,
     loginRequired,
     loginUrl,
+    outline.compactOpen,
+    outline.enabled,
+    outline.open,
     requestReload,
+    setCommentPanelOpen,
+    setOutlinePanelOpen,
   ])
 
   useRegisterDriveRendererToolbarItems('mdxeditor', toolbarItems)
@@ -489,6 +529,7 @@ export function DriveMDXeditorRenderer({
           }
           clearExternalMarkdownSync()
           updateValue(nextValue)
+          outline.notifyEditorUpdate()
         }}
         plugins={plugins}
         translation={mdxEditorZhCnTranslation}
@@ -517,7 +558,9 @@ export function DriveMDXeditorRenderer({
         comments={comments}
         dataAttributes={MDXEDITOR_COMMENTS_DATA_ATTRIBUTES}
         editorView={editorView}
+        onEditorContentHostChange={outline.handleContentHostChange}
         onEditorContainerChange={handleEditorContainerChange}
+        outline={{ ...outline, setPanelOpen: setOutlinePanelOpen }}
       />
       {comments.annotationError ? (
         <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{comments.annotationError}</div>
