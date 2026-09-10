@@ -192,6 +192,9 @@ describe('DriveMilkdownRenderer comment integration', () => {
     expect(document.querySelector('[data-slot="resizable-handle"]')).not.toBeNull()
     expect(buttonWithText('评论 3').getAttribute('aria-pressed')).toBe('true')
     expect(document.body.textContent).toContain('编辑中暂未定位')
+    await waitFor(() => {
+      expect(buttonByLabel('下一条评论').disabled).toBe(false)
+    })
 
     const scroller = milkdownScroller()
     const scrollTo = vi.fn()
