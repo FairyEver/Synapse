@@ -198,18 +198,26 @@ describe('DriveMilkdownRenderer comment integration', () => {
     scroller.scrollTo = scrollTo
 
     await click(buttonByLabel('下一条评论'))
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 96, behavior: 'instant' })
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 96, behavior: 'instant' })
+    })
     expect(buttonByLabel('查看评论：First').getAttribute('aria-current')).toBe('true')
 
     await click(buttonByLabel('下一条评论'))
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 336, behavior: 'instant' })
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 336, behavior: 'instant' })
+    })
     expect(buttonByLabel('查看评论：Second').getAttribute('aria-current')).toBe('true')
 
     await click(buttonByLabel('上一条评论'))
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 96, behavior: 'instant' })
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 96, behavior: 'instant' })
+    })
 
     await click(buttonByLabel('查看评论：Second'))
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 336, behavior: 'instant' })
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 336, behavior: 'instant' })
+    })
   })
 
   it('opens existing comments in a compact list Sheet without mounting the wide rail', async () => {
