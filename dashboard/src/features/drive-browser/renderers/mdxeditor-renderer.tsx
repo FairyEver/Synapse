@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent as ReactClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -29,29 +29,16 @@ import {
 import '@mdxeditor/editor/style.css'
 import type { JsxComponentDescriptor, MDXEditorMethods, ViewMode } from '@mdxeditor/editor'
 import {
-  isDriveCommentableMarkdownItem,
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
 } from '@synapse/shared'
 import { ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
-import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import type { DriveDocumentImageUploadContext } from '@/lib/api'
 import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
-import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
-import { DriveCommentsRail, type DriveCommentsRailItem } from '../drive-comments-rail'
-import { useDriveAnnotations, type DriveAnnotationContext } from '../use-drive-annotations'
+import type { DriveAnnotationContext } from '../use-drive-annotations'
 import {
   DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
   observeDriveHierarchicalListMarkers,
@@ -72,13 +59,17 @@ import {
   saveDriveDocumentText,
   type DriveDocumentSaveAttempt,
 } from './drive-document-editor-lifecycle'
+import {
+  DriveDocumentEditorCommentsFrame,
+  useDriveDocumentEditorComments,
+  type DriveDocumentEditorCommentsDataAttributes,
+} from './drive-document-editor-comments'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import {
   commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
-import { useDriveEditorCommentGeometry } from './drive-editor-comment-geometry'
 import { mdxEditorCommentObserverPlugin } from './mdxeditor-comment-observer-plugin'
 import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
 import { tableCellLineBreakPlugin } from './mdxeditor-table-cell-line-break-plugin'
@@ -86,12 +77,17 @@ import { trailingImageParagraphPlugin } from './mdxeditor-trailing-image-plugin'
 import { mdxEditorZhCnTranslation } from './mdxeditor-zh-cn'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
-const MDXEDITOR_COMMENTS_PANEL_DEFAULT_SIZE = 22
-const MDXEDITOR_COMMENTS_PANEL_MIN_SIZE = 17
-const MDXEDITOR_COMMENTS_PANEL_MAX_SIZE = 32
-const COMMENT_SCROLL_SAFE_INSET = 24
-
-type ResizablePanelPercent = `${number}%`
+const MDXEDITOR_COMMENTS_DATA_ATTRIBUTES = {
+  layout: 'data-drive-mdxeditor-layout',
+  scroll: 'data-drive-mdxeditor-scroll',
+  contentHost: 'data-drive-mdxeditor-content-host',
+  overlay: 'data-drive-mdxeditor-comment-overlay',
+  overlayThreadId: 'data-drive-mdxeditor-comment-thread-id',
+  bottomCompensation: 'data-drive-mdxeditor-comment-bottom-compensation',
+  editorPanel: 'data-mdxeditor-resizable-panel',
+  commentsPanel: 'data-mdxeditor-resizable-panel',
+  sheet: 'data-mdxeditor-sheet',
+} satisfies DriveDocumentEditorCommentsDataAttributes
 
 const GENERIC_MDX_COMPONENT_DESCRIPTOR = {
   name: '*',
@@ -124,12 +120,7 @@ export function DriveMDXeditorRenderer({
   )
   const initialText = preparedInitialDocument.markdown
   const editorRef = useRef<MDXEditorMethods | null>(null)
-  const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const listMarkerObserverCleanupRef = useRef<(() => void) | null>(null)
-  const editorContentHostRef = useRef<HTMLDivElement | null>(null)
-  const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
-  const editorScrollFrameRef = useRef<number | null>(null)
-  const commentsTouchedRef = useRef(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const savedValueRef = useRef(initialText)
   const valueRef = useRef(initialText)
@@ -146,27 +137,11 @@ export function DriveMDXeditorRenderer({
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   const [editorViewMode, setEditorViewMode] = useState<ViewMode>('rich-text')
-  const setEditorContainerRef = useCallback((root: HTMLDivElement | null) => {
+  const handleEditorContainerChange = useCallback((root: HTMLDivElement | null) => {
     listMarkerObserverCleanupRef.current?.()
     listMarkerObserverCleanupRef.current = null
-    editorContainerRef.current = root
     if (root) listMarkerObserverCleanupRef.current = observeDriveHierarchicalListMarkers(root)
   }, [])
-  const [commentsOpen, setCommentsOpen] = useState(false)
-  const [compactCommentsOpen, setCompactCommentsOpen] = useState(false)
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
-  const [commentAnchoredDocumentHeight, setCommentAnchoredDocumentHeight] = useState(0)
-  const [commentBaselineRevision, setCommentBaselineRevision] = useState(0)
-  const layoutMode = useFilePreviewLayoutMode()
-  const isCompact = layoutMode === 'compact'
-  const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
-  const annotationsEnabled = isDriveCommentableMarkdownItem(current)
-  const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
-  const annotations = useDriveAnnotations(effectiveAnnotationContext)
-  const annotationThreads = useMemo(
-    () => annotationsEnabled ? annotations.threads : [],
-    [annotations.threads, annotationsEnabled]
-  )
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const requiresSourceMode = preparedInitialDocument.requiresSourceMode
@@ -194,70 +169,24 @@ export function DriveMDXeditorRenderer({
     () => new Map((preview.relativeImages ?? []).map(({ src, resolvedUrl }) => [src, resolvedUrl])),
     [preview.relativeImages],
   )
+  const comments = useDriveDocumentEditorComments({
+    current,
+    currentVersionId: edit?.currentVersionId,
+    annotationContext,
+    projection: preview.markdownProjection,
+    imagePreviewUrls: relativeImagePreviewUrls,
+    sourceMode,
+    stateResetKey: initialText,
+    preserveStateOnReset: isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText),
+  })
   const resolveImagePreview = useCallback(async (imageSource: string) => {
     if (!relativeImagePreviewUrls.has(imageSource)) return imageSource
     return relativeImagePreviewUrls.get(imageSource) ?? ''
   }, [relativeImagePreviewUrls])
-  const annotationGeometryResetKey = useMemo(() => [
-    current.id,
-    edit?.currentVersionId ?? '',
-    commentBaselineRevision,
-    ...annotationThreads.map((thread) => [
-      thread.id,
-      thread.anchorStatus,
-      thread.anchor?.lastResolvedVersionId ?? '',
-      thread.anchor?.resolvedRenderedRange?.start ?? '',
-      thread.anchor?.resolvedRenderedRange?.end ?? '',
-    ].join(':')),
-  ].join('|'), [annotationThreads, commentBaselineRevision, current.id, edit?.currentVersionId])
-  const { geometry, notifyEditorUpdate, scheduleGeometry } = useDriveEditorCommentGeometry({
-    enabled: annotationsEnabled && !sourceMode,
-    layoutKey: `${layoutMode}:${commentsOpen}`,
-    resetKey: annotationGeometryResetKey,
-    threads: annotationThreads,
-    projection: preview.markdownProjection,
-    imagePreviewUrls: relativeImagePreviewUrls,
-    scrollRef: editorContainerRef,
-    contentHostRef: editorContentHostRef,
-  })
   const handleEditorViewModeChange = useCallback((mode: ViewMode) => {
     setEditorViewMode(mode)
-    scheduleGeometry()
-  }, [scheduleGeometry])
-  const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner'
-    || Boolean(effectiveAnnotationContext?.canComment)
-  const canReplyToAnnotations = annotationsEnabled
-    && Boolean(effectiveAnnotationContext)
-    && canCommentAnnotations
-    && (effectiveAnnotationContext?.context === 'owner' || isAuthenticated)
-  const railThreads = useMemo<readonly DriveCommentsRailItem[]>(() => {
-    return annotationThreads
-      .map((thread) => {
-        const anchorTop = sourceMode ? null : geometry.anchorTopByThreadId[thread.id] ?? null
-        return {
-          thread,
-          placement: typeof anchorTop === 'number'
-            ? { status: 'positioned' as const, anchorTop }
-            : { status: 'unavailable' as const },
-        }
-      })
-      .sort((left, right) => {
-        const leftTop = left.placement.status === 'positioned' ? left.placement.anchorTop : null
-        const rightTop = right.placement.status === 'positioned' ? right.placement.anchorTop : null
-        if (leftTop !== null && rightTop !== null && leftTop !== rightTop) return leftTop - rightTop
-        if (leftTop !== null) return -1
-        if (rightTop !== null) return 1
-        return Date.parse(left.thread.createdAt) - Date.parse(right.thread.createdAt)
-      })
-  }, [annotationThreads, geometry.anchorTopByThreadId, sourceMode])
-  const navigableThreadIds = useMemo(() => railThreads
-    .filter((item) => item.placement.status === 'positioned' && item.thread.anchorStatus !== 'orphaned')
-    .map((item) => item.thread.id), [railThreads])
-  const activeNavigableIndex = activeThreadId ? navigableThreadIds.indexOf(activeThreadId) : -1
-  const previousThreadId = activeNavigableIndex > 0 ? navigableThreadIds[activeNavigableIndex - 1] ?? null : null
-  const nextThreadId = activeNavigableIndex === -1
-    ? navigableThreadIds[0] ?? null
-    : navigableThreadIds[activeNavigableIndex + 1] ?? null
+    comments.scheduleGeometry()
+  }, [comments.scheduleGeometry])
   const clearExternalMarkdownSync = useCallback(() => {
     applyingExternalMarkdownRef.current = false
     externalMarkdownTargetRef.current = null
@@ -374,11 +303,11 @@ export function DriveMDXeditorRenderer({
     ...(!usesMdxSyntax ? [commonMarkTextCompatibilityPlugin()] : []),
     diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
     mdxEditorCommentObserverPlugin({
-      onEditorUpdate: notifyEditorUpdate,
+      onEditorUpdate: comments.notifyEditorUpdate,
       onViewModeChange: handleEditorViewModeChange,
     }),
     markdownShortcutPlugin(),
-  ], [canEdit, handleDocumentImageUpload, handleEditorViewModeChange, notifyEditorUpdate, resolveImagePreview, uploadingImage, usesMdxSyntax])
+  ], [canEdit, comments.notifyEditorUpdate, handleDocumentImageUpload, handleEditorViewModeChange, resolveImagePreview, uploadingImage, usesMdxSyntax])
 
   const clearParseError = useCallback(() => {
     parseErrorRequestRef.current += 1
@@ -400,11 +329,6 @@ export function DriveMDXeditorRenderer({
     setConflictOpen(false)
     setReloadConfirmOpen(false)
     setEditorViewMode('rich-text')
-    setActiveThreadId(null)
-    setCommentsOpen(false)
-    setCompactCommentsOpen(false)
-    setCommentAnchoredDocumentHeight(0)
-    commentsTouchedRef.current = false
     beginExternalMarkdownSync(initialText)
     editorRef.current?.setMarkdown(initialText)
   }, [beginExternalMarkdownSync, clearParseError, current.id, edit?.currentVersionId, initialText])
@@ -417,21 +341,6 @@ export function DriveMDXeditorRenderer({
     listMarkerObserverCleanupRef.current?.()
     listMarkerObserverCleanupRef.current = null
   }, [])
-
-  useEffect(() => {
-    if (commentsTouchedRef.current || annotationThreads.length === 0) return
-    if (isCompact) setCompactCommentsOpen(true)
-    else setCommentsOpen(true)
-  }, [annotationThreads.length, isCompact])
-
-  useEffect(() => {
-    if (!activeThreadId || annotationThreads.some((thread) => thread.id === activeThreadId)) return
-    setActiveThreadId(null)
-  }, [activeThreadId, annotationThreads])
-
-  useLayoutEffect(() => {
-    scheduleGeometry()
-  }, [commentsOpen, isCompact, scheduleGeometry])
 
   const handleSave = useCallback(async () => {
     if (!canSave || saveInFlightRef.current || !edit?.currentVersionId || !editContext) return
@@ -461,8 +370,7 @@ export function DriveMDXeditorRenderer({
       }
       savedValueRef.current = normalizedValue
       setDirty(valueRef.current !== normalizedValue)
-      await annotations.refresh()
-      setCommentBaselineRevision((revision) => revision + 1)
+      await comments.refreshAfterSave()
       finishTracking('success')
     } catch (saveError) {
       finishTracking('failure')
@@ -471,7 +379,7 @@ export function DriveMDXeditorRenderer({
       if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
       saveInFlightRef.current = false
     }
-  }, [annotations.refresh, beginExternalMarkdownSync, canSave, clearParseError, current.id, edit?.currentVersionId, editContext, usesMdxSyntax])
+  }, [beginExternalMarkdownSync, canSave, clearParseError, comments.refreshAfterSave, current.id, edit?.currentVersionId, editContext, usesMdxSyntax])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!isDriveDocumentSaveShortcut(event)) return
@@ -524,74 +432,21 @@ export function DriveMDXeditorRenderer({
     void handleReload()
   }, [dirty, handleReload])
 
-  const setCommentPanelOpen = useCallback((open: boolean) => {
-    commentsTouchedRef.current = true
-    if (isCompact) {
-      setCompactCommentsOpen(open)
-      return
-    }
-    setCommentsOpen(open)
-  }, [isCompact])
-
-  const scrollToThread = useCallback((threadId: string) => {
-    const scroller = editorContainerRef.current
-    const anchorTop = geometry.anchorTopByThreadId[threadId]
-    if (!scroller || typeof anchorTop !== 'number') return
-    const top = Math.max(0, anchorTop - COMMENT_SCROLL_SAFE_INSET)
-    setActiveThreadId(threadId)
-    if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top, behavior: 'instant' })
-    else scroller.scrollTop = top
-    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, top)
-  }, [geometry.anchorTopByThreadId])
-
-  const focusThreadFromRail = useCallback((threadId: string) => {
-    setActiveThreadId(threadId)
-    scrollToThread(threadId)
-  }, [scrollToThread])
-
-  const setCommentAnchorLayerRef = useCallback((element: HTMLDivElement | null) => {
-    commentAnchorLayerRef.current = element
-    setCommentAnchorLayerScrollTransform(element, editorContainerRef.current?.scrollTop ?? 0)
-  }, [])
-
-  const flushEditorScroll = useCallback(() => {
-    editorScrollFrameRef.current = null
-    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, editorContainerRef.current?.scrollTop ?? 0)
-  }, [])
-
-  const handleEditorScroll = useCallback(() => {
-    if (editorScrollFrameRef.current !== null) return
-    editorScrollFrameRef.current = window.requestAnimationFrame(flushEditorScroll)
-  }, [flushEditorScroll])
-
-  useEffect(() => () => {
-    if (editorScrollFrameRef.current !== null) window.cancelAnimationFrame(editorScrollFrameRef.current)
-  }, [])
-
-  const handleCommentsWheel = useCallback((event: WheelEvent) => {
-    if (event.deltaY === 0) return
-    const scroller = editorContainerRef.current
-    if (!scroller) return
-    event.preventDefault()
-    scroller.scrollTop += normalizeWheelDelta(event, scroller.clientHeight)
-    handleEditorScroll()
-  }, [handleEditorScroll])
-
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [{
       kind: 'status',
       id: 'mdxeditor-edit-status',
       label: dirty ? '未保存' : canEdit ? '已同步' : '只读',
     }]
-    if (annotationsEnabled) {
+    if (comments.annotationsEnabled) {
       items.push({
         kind: 'toggle',
         id: 'mdxeditor-comments',
-        label: `评论 ${railThreads.length}`,
+        label: `评论 ${comments.railThreads.length}`,
         icon: MessageSquare,
         compactPlacement: 'primary',
-        pressed: isCompact ? compactCommentsOpen : commentsOpen,
-        onPressedChange: setCommentPanelOpen,
+        pressed: comments.isCompact ? comments.compactCommentsOpen : comments.commentsOpen,
+        onPressedChange: comments.setCommentPanelOpen,
       })
     }
     if (loginRequired) {
@@ -634,126 +489,71 @@ export function DriveMDXeditorRenderer({
   }, [
     canEdit,
     canSave,
-    compactCommentsOpen,
-    commentsOpen,
+    comments.annotationsEnabled,
+    comments.commentsOpen,
+    comments.compactCommentsOpen,
+    comments.isCompact,
+    comments.railThreads.length,
+    comments.setCommentPanelOpen,
     dirty,
     editContext?.reloading,
     editContext?.savingText,
     handleSave,
-    isCompact,
     loginRequired,
     loginUrl,
-    railThreads.length,
     requestReload,
-    setCommentPanelOpen,
-    annotationsEnabled,
   ])
 
   useRegisterDriveRendererToolbarItems('mdxeditor', toolbarItems)
   useRegisterDriveRendererUnsavedState('mdxeditor-unsaved', canEdit && dirty)
 
-  const commentsPanelDefaultSize = resizablePanelPercent(MDXEDITOR_COMMENTS_PANEL_DEFAULT_SIZE)
-  const commentsPanelMinSize = resizablePanelPercent(MDXEDITOR_COMMENTS_PANEL_MIN_SIZE)
-  const commentsPanelMaxSize = resizablePanelPercent(MDXEDITOR_COMMENTS_PANEL_MAX_SIZE)
-  const editorPanelDefaultSize = resizablePanelPercent(100 - MDXEDITOR_COMMENTS_PANEL_DEFAULT_SIZE)
-  const commentBottomCompensation = commentsOpen && !isCompact && !sourceMode
-    ? Math.max(0, Math.ceil(commentAnchoredDocumentHeight - geometry.naturalHeight))
-    : 0
-  const renderCommentsRail = (mode: 'anchored' | 'list') => (
-    <DriveCommentsRail
-      mode={mode}
-      threads={railThreads}
-      activeThreadId={activeThreadId}
-      canReply={canReplyToAnnotations}
-      loading={annotations.loading}
-      anchorLayerRef={mode === 'anchored' ? setCommentAnchorLayerRef : undefined}
-      onAnchoredHeightChange={mode === 'anchored' ? setCommentAnchoredDocumentHeight : undefined}
-      onAnchoredWheel={mode === 'anchored' ? handleCommentsWheel : undefined}
-      onFocusThread={focusThreadFromRail}
-      onNavigatePrevious={previousThreadId ? () => scrollToThread(previousThreadId) : undefined}
-      onNavigateNext={nextThreadId ? () => scrollToThread(nextThreadId) : undefined}
-      onRefresh={() => { void annotations.refresh() }}
-      onReply={annotations.reply}
-      onUpdateComment={annotations.updateComment}
-      onDeleteComment={annotations.deleteComment}
-    />
-  )
   const editorView = (
-    <div
-      ref={setEditorContainerRef}
-      data-drive-mdxeditor-scroll='true'
-      className='h-full min-h-0 overflow-auto overscroll-contain'
-      onScroll={handleEditorScroll}
-    >
-      <div ref={editorContentHostRef} data-drive-mdxeditor-content-host='true' className='relative min-h-full'>
-        {parseError || requiresSourceMode ? (
-          <div className='mx-auto flex min-h-full max-w-4xl flex-col gap-3 px-4 py-6 md:px-6'>
-            <div className='flex items-center justify-between gap-2'>
-              <span className='text-sm font-medium text-foreground'>源码</span>
-              {parseError ? <span className='text-xs text-destructive'>解析失败</span> : null}
-            </div>
-            <Textarea
-              value={value}
-              readOnly={!canEdit}
-              className='min-h-96 flex-1 font-mono text-sm'
-              onChange={(event) => {
-                if (!canEdit) return
-                const nextValue = event.currentTarget.value
-                valueRef.current = nextValue
-                setValue(nextValue)
-                setDirty(nextValue !== savedValueRef.current)
-              }}
-            />
-          </div>
-        ) : (
-          <MDXEditor
-            ref={editorRef}
-            markdown={value}
-            readOnly={!canEdit}
-            onError={handleEditorError}
-            toMarkdownOptions={usesMdxSyntax ? undefined : commonMarkToMarkdownOptions}
-            onChange={(nextValue, initialMarkdownNormalize) => {
-              if (!canEdit) return
-              valueRef.current = nextValue
-              setValue(nextValue)
-              const matchesExternalMarkdownTarget = applyingExternalMarkdownRef.current
-                && externalMarkdownTargetRef.current === nextValue
-              if (initialMarkdownNormalize || matchesExternalMarkdownTarget) {
-                savedValueRef.current = nextValue
-                setDirty(false)
-                return
-              }
-              clearExternalMarkdownSync()
-              setDirty(nextValue !== savedValueRef.current)
-            }}
-            plugins={plugins}
-            translation={mdxEditorZhCnTranslation}
-            className='min-h-full'
-            contentEditableClassName={`drive-mdxeditor-content mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
-          />
-        )}
-        {!sourceMode && geometry.overlayRects.length > 0 ? (
-          <div aria-hidden data-drive-mdxeditor-comment-overlay='true' className='pointer-events-none absolute inset-0'>
-            {geometry.overlayRects.map((rect) => (
-              <div
-                key={rect.key}
-                data-drive-mdxeditor-comment-thread-id={rect.threadId}
-                className={cn(
-                  'absolute mix-blend-multiply dark:mix-blend-screen',
-                  rect.threadId === activeThreadId
-                    ? 'bg-amber-300/80 ring-2 ring-amber-500/90 dark:bg-amber-700/55 dark:ring-amber-400/90'
-                    : 'bg-amber-200/45 dark:bg-amber-800/30'
-                )}
-                style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
-              />
-            ))}
-          </div>
-        ) : null}
+    parseError || requiresSourceMode ? (
+      <div className='mx-auto flex min-h-full max-w-4xl flex-col gap-3 px-4 py-6 md:px-6'>
+        <div className='flex items-center justify-between gap-2'>
+          <span className='text-sm font-medium text-foreground'>源码</span>
+          {parseError ? <span className='text-xs text-destructive'>解析失败</span> : null}
+        </div>
+        <Textarea
+          value={value}
+          readOnly={!canEdit}
+          className='min-h-96 flex-1 font-mono text-sm'
+          onChange={(event) => {
+            if (!canEdit) return
+            const nextValue = event.currentTarget.value
+            valueRef.current = nextValue
+            setValue(nextValue)
+            setDirty(nextValue !== savedValueRef.current)
+          }}
+        />
       </div>
-      {commentBottomCompensation > 0 ? (
-        <div aria-hidden data-drive-mdxeditor-comment-bottom-compensation='true' style={{ height: commentBottomCompensation }} />
-      ) : null}
-    </div>
+    ) : (
+      <MDXEditor
+        ref={editorRef}
+        markdown={value}
+        readOnly={!canEdit}
+        onError={handleEditorError}
+        toMarkdownOptions={usesMdxSyntax ? undefined : commonMarkToMarkdownOptions}
+        onChange={(nextValue, initialMarkdownNormalize) => {
+          if (!canEdit) return
+          valueRef.current = nextValue
+          setValue(nextValue)
+          const matchesExternalMarkdownTarget = applyingExternalMarkdownRef.current
+            && externalMarkdownTargetRef.current === nextValue
+          if (initialMarkdownNormalize || matchesExternalMarkdownTarget) {
+            savedValueRef.current = nextValue
+            setDirty(false)
+            return
+          }
+          clearExternalMarkdownSync()
+          setDirty(nextValue !== savedValueRef.current)
+        }}
+        plugins={plugins}
+        translation={mdxEditorZhCnTranslation}
+        className='min-h-full'
+        contentEditableClassName={`drive-mdxeditor-content mx-auto min-h-full max-w-4xl px-4 pt-6 pb-12 md:px-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
+      />
+    )
   )
 
   return (
@@ -771,45 +571,14 @@ export function DriveMDXeditorRenderer({
         disabled={!canEdit || uploadingImage}
         onChange={(event) => { void handleImageSelected(event) }}
       />
-      <div data-drive-mdxeditor-layout='true' className='min-h-0 flex-1 overflow-hidden'>
-        {isCompact || !commentsOpen ? editorView : (
-          <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
-            <ResizablePanel
-              defaultSize={editorPanelDefaultSize}
-              minSize='35%'
-              data-mdxeditor-resizable-panel='editor'
-              className='h-full min-h-0 min-w-0 overflow-hidden'
-            >
-              {editorView}
-            </ResizablePanel>
-            <ResizableHandle />
-            <ResizablePanel
-              defaultSize={commentsPanelDefaultSize}
-              minSize={commentsPanelMinSize}
-              maxSize={commentsPanelMaxSize}
-              data-mdxeditor-resizable-panel='comments'
-              className='h-full min-h-0 overflow-hidden'
-            >
-              <aside className='h-full min-h-0 overflow-hidden bg-background'>
-                {renderCommentsRail(sourceMode ? 'list' : 'anchored')}
-              </aside>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        )}
-      </div>
-      {isCompact && annotationsEnabled ? (
-        <Sheet open={compactCommentsOpen} onOpenChange={setCommentPanelOpen}>
-          <SheetContent data-drive-telemetry-scope='portal' side='right' data-mdxeditor-sheet='comments' className='gap-0 overflow-hidden'>
-            <SheetHeader className='sr-only'>
-              <SheetTitle>评论</SheetTitle>
-              <SheetDescription>查看和管理文档评论</SheetDescription>
-            </SheetHeader>
-            <div className='min-h-0 flex-1 overflow-auto'>{renderCommentsRail('list')}</div>
-          </SheetContent>
-        </Sheet>
-      ) : null}
-      {annotations.error ? (
-        <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div>
+      <DriveDocumentEditorCommentsFrame
+        comments={comments}
+        dataAttributes={MDXEDITOR_COMMENTS_DATA_ATTRIBUTES}
+        editorView={editorView}
+        onEditorContainerChange={handleEditorContainerChange}
+      />
+      {comments.annotationError ? (
+        <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{comments.annotationError}</div>
       ) : null}
       {error ? (
         <div className='border-t px-3 py-2 text-xs text-destructive'>{error}</div>
@@ -831,21 +600,6 @@ export function DriveMDXeditorRenderer({
       />
     </div>
   )
-}
-
-function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {
-  if (!element) return
-  element.style.transform = `translate3d(0, ${-scrollTop}px, 0)`
-}
-
-function normalizeWheelDelta(event: Pick<WheelEvent, 'deltaMode' | 'deltaY'>, pageHeight: number): number {
-  if (event.deltaMode === 1) return event.deltaY * 16
-  if (event.deltaMode === 2) return event.deltaY * pageHeight
-  return event.deltaY
-}
-
-function resizablePanelPercent(value: number): ResizablePanelPercent {
-  return `${value}%`
 }
 
 function isMdxDocument(name: string): boolean {

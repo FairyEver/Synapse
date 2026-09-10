@@ -5,21 +5,14 @@ import { EditorStatus } from '@milkdown/kit/core'
 import { insert, replaceAll } from '@milkdown/kit/utils'
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react'
 import {
-  isDriveCommentableMarkdownItem,
   type DriveBrowserEditDto,
   type DriveBrowserItemDto,
   type DriveBrowserPreviewDto,
 } from '@synapse/shared'
 import { ImagePlus, LogIn, MessageSquare, RefreshCw, Save } from 'lucide-react'
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
-import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import type { DriveDocumentImageUploadContext } from '@/lib/api'
-import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
-import { DriveCommentsRail, type DriveCommentsRailItem } from '../drive-comments-rail'
-import { useDriveAnnotations, type DriveAnnotationContext } from '../use-drive-annotations'
+import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
 import {
   DRIVE_DOCUMENT_IMAGE_ACCEPT,
@@ -37,18 +30,29 @@ import {
   saveDriveDocumentText,
   type DriveDocumentSaveAttempt,
 } from './drive-document-editor-lifecycle'
+import {
+  DriveDocumentEditorCommentsFrame,
+  useDriveDocumentEditorComments,
+  type DriveDocumentEditorCommentsDataAttributes,
+} from './drive-document-editor-comments'
+import { MILKDOWN_COMMENT_IGNORED_SELECTOR } from './drive-editor-comment-geometry'
 import { observeDriveHierarchicalListMarkers } from './drive-hierarchical-list-markers'
 import { configureMilkdownCommonMarkImages } from './milkdown-commonmark-images'
-import { useMilkdownCommentGeometry } from './drive-editor-comment-geometry'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { useRegisterDriveRendererToolbarItems, useRegisterDriveRendererUnsavedState, type DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
-const MILKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = 22
-const MILKDOWN_COMMENTS_PANEL_MIN_SIZE = 17
-const MILKDOWN_COMMENTS_PANEL_MAX_SIZE = 32
-const COMMENT_SCROLL_SAFE_INSET = 24
+const MILKDOWN_COMMENTS_DATA_ATTRIBUTES = {
+  layout: 'data-drive-milkdown-layout',
+  scroll: 'data-drive-milkdown-scroll',
+  contentHost: 'data-drive-milkdown-content-host',
+  overlay: 'data-drive-milkdown-comment-overlay',
+  overlayThreadId: 'data-drive-milkdown-comment-thread-id',
+  bottomCompensation: 'data-drive-milkdown-comment-bottom-compensation',
+  editorPanel: 'data-milkdown-resizable-panel',
+  commentsPanel: 'data-milkdown-resizable-panel',
+  sheet: 'data-milkdown-sheet',
+} satisfies DriveDocumentEditorCommentsDataAttributes
 
-type ResizablePanelPercent = `${number}%`
 type SourceTextareaSelection = {
   readonly documentId: string
   readonly start: number
@@ -73,11 +77,6 @@ export function DriveMilkdownRenderer({
 }) {
   const initialText = preview.text ?? ''
   const crepeRef = useRef<Crepe | null>(null)
-  const editorContainerRef = useRef<HTMLDivElement | null>(null)
-  const editorContentHostRef = useRef<HTMLDivElement | null>(null)
-  const commentAnchorLayerRef = useRef<HTMLDivElement | null>(null)
-  const editorScrollFrameRef = useRef<number | null>(null)
-  const commentsTouchedRef = useRef(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const sourceTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const pendingSourceImageSelectionRef = useRef<SourceTextareaSelection | null>(null)
@@ -103,21 +102,6 @@ export function DriveMilkdownRenderer({
   const [parseError, setParseError] = useState<string | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
-  const [commentsOpen, setCommentsOpen] = useState(false)
-  const [compactCommentsOpen, setCompactCommentsOpen] = useState(false)
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
-  const [commentAnchoredDocumentHeight, setCommentAnchoredDocumentHeight] = useState(0)
-  const [commentBaselineRevision, setCommentBaselineRevision] = useState(0)
-  const layoutMode = useFilePreviewLayoutMode()
-  const isCompact = layoutMode === 'compact'
-  const isAuthenticated = useAuthStore((state) => state.auth.isAuthenticated)
-  const annotationsEnabled = isDriveCommentableMarkdownItem(current)
-  const effectiveAnnotationContext = annotationsEnabled ? annotationContext : undefined
-  const annotations = useDriveAnnotations(effectiveAnnotationContext)
-  const annotationThreads = useMemo(
-    () => annotationsEnabled ? annotations.threads : [],
-    [annotations.threads, annotationsEnabled]
-  )
   const canEdit = Boolean(edit?.canEdit && edit.currentVersionId && editContext)
   const loginRequired = edit?.reason === 'login_required'
   const requiresSourceMode = requiresMilkdownSourceMode(initialText)
@@ -146,64 +130,22 @@ export function DriveMilkdownRenderer({
     () => new Map((preview.relativeImages ?? []).map(({ src, resolvedUrl }) => [src, resolvedUrl])),
     [preview.relativeImages]
   )
+  const comments = useDriveDocumentEditorComments({
+    current,
+    currentVersionId: edit?.currentVersionId,
+    annotationContext,
+    projection: preview.markdownProjection,
+    imagePreviewUrls: relativeImagePreviewUrls,
+    sourceMode,
+    stateResetKey: initialText,
+    preserveStateOnReset: isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText),
+    contentRootSelector: '.milkdown .ProseMirror',
+    ignoredElementSelector: MILKDOWN_COMMENT_IGNORED_SELECTOR,
+  })
   const resolveImagePreview = useCallback((imageSource: string) => {
     if (!relativeImagePreviewUrls.has(imageSource)) return imageSource
     return relativeImagePreviewUrls.get(imageSource) ?? ''
   }, [relativeImagePreviewUrls])
-  const annotationGeometryResetKey = useMemo(() => [
-    current.id,
-    edit?.currentVersionId ?? '',
-    commentBaselineRevision,
-    ...annotationThreads.map((thread) => [
-      thread.id,
-      thread.anchorStatus,
-      thread.anchor?.lastResolvedVersionId ?? '',
-      thread.anchor?.resolvedRenderedRange?.start ?? '',
-      thread.anchor?.resolvedRenderedRange?.end ?? '',
-    ].join(':')),
-  ].join('|'), [annotationThreads, commentBaselineRevision, current.id, edit?.currentVersionId])
-  const { geometry, notifyEditorUpdate, scheduleGeometry } = useMilkdownCommentGeometry({
-    enabled: annotationsEnabled && !sourceMode,
-    layoutKey: `${layoutMode}:${commentsOpen}`,
-    resetKey: annotationGeometryResetKey,
-    threads: annotationThreads,
-    projection: preview.markdownProjection,
-    imagePreviewUrls: relativeImagePreviewUrls,
-    scrollRef: editorContainerRef,
-    contentHostRef: editorContentHostRef,
-  })
-  const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner'
-    || Boolean(effectiveAnnotationContext?.canComment)
-  const canReplyToAnnotations = annotationsEnabled
-    && Boolean(effectiveAnnotationContext)
-    && canCommentAnnotations
-    && (effectiveAnnotationContext?.context === 'owner' || isAuthenticated)
-  const railThreads = useMemo<readonly DriveCommentsRailItem[]>(() => annotationThreads
-    .map((thread) => {
-      const anchorTop = sourceMode ? null : geometry.anchorTopByThreadId[thread.id] ?? null
-      return {
-        thread,
-        placement: typeof anchorTop === 'number'
-          ? { status: 'positioned' as const, anchorTop }
-          : { status: 'unavailable' as const },
-      }
-    })
-    .sort((left, right) => {
-      const leftTop = left.placement.status === 'positioned' ? left.placement.anchorTop : null
-      const rightTop = right.placement.status === 'positioned' ? right.placement.anchorTop : null
-      if (leftTop !== null && rightTop !== null && leftTop !== rightTop) return leftTop - rightTop
-      if (leftTop !== null) return -1
-      if (rightTop !== null) return 1
-      return Date.parse(left.thread.createdAt) - Date.parse(right.thread.createdAt)
-    }), [annotationThreads, geometry.anchorTopByThreadId, sourceMode])
-  const navigableThreadIds = useMemo(() => railThreads
-    .filter((item) => item.placement.status === 'positioned' && item.thread.anchorStatus !== 'orphaned')
-    .map((item) => item.thread.id), [railThreads])
-  const activeNavigableIndex = activeThreadId ? navigableThreadIds.indexOf(activeThreadId) : -1
-  const previousThreadId = activeNavigableIndex > 0 ? navigableThreadIds[activeNavigableIndex - 1] ?? null : null
-  const nextThreadId = activeNavigableIndex === -1
-    ? navigableThreadIds[0] ?? null
-    : navigableThreadIds[activeNavigableIndex + 1] ?? null
 
   const clearExternalMarkdownSync = useCallback(() => {
     applyingExternalMarkdownRef.current = false
@@ -253,8 +195,8 @@ export function DriveMilkdownRenderer({
       setValue(normalizedMarkdown)
       setDirty(false)
     }
-    scheduleGeometry()
-  }, [canEdit, initialText, replaceEditorMarkdown, scheduleGeometry])
+    comments.scheduleGeometry()
+  }, [canEdit, comments.scheduleGeometry, initialText, replaceEditorMarkdown])
   const handleCrepeFailure = useCallback(() => {
     crepeRef.current = null
     setParseError('Milkdown 无法安全解析此文档。')
@@ -268,10 +210,10 @@ export function DriveMilkdownRenderer({
   }, [canEdit])
 
   useEffect(() => {
-    const root = editorContentHostRef.current
+    const root = comments.editorContentHostRef.current
     if (!root || sourceMode) return
     return observeDriveHierarchicalListMarkers(root)
-  }, [current.id, sourceMode])
+  }, [comments.editorContentHostRef, current.id, sourceMode])
 
   useEffect(() => {
     const previousExternalMarkdownSource = externalMarkdownSourceRef.current
@@ -296,11 +238,6 @@ export function DriveMilkdownRenderer({
     setParseError(null)
     setConflictOpen(false)
     setReloadConfirmOpen(false)
-    setActiveThreadId(null)
-    setCommentsOpen(false)
-    setCompactCommentsOpen(false)
-    setCommentAnchoredDocumentHeight(0)
-    commentsTouchedRef.current = false
     pendingSourceImageSelectionRef.current = null
     pendingSourceFocusRef.current = null
     if (crepeRef.current) replaceEditorMarkdown(initialText)
@@ -311,21 +248,6 @@ export function DriveMilkdownRenderer({
     clearExternalMarkdownSync()
     crepeRef.current = null
   }, [clearExternalMarkdownSync])
-
-  useEffect(() => {
-    if (commentsTouchedRef.current || annotationThreads.length === 0) return
-    if (isCompact) setCompactCommentsOpen(true)
-    else setCommentsOpen(true)
-  }, [annotationThreads.length, isCompact])
-
-  useEffect(() => {
-    if (!activeThreadId || annotationThreads.some((thread) => thread.id === activeThreadId)) return
-    setActiveThreadId(null)
-  }, [activeThreadId, annotationThreads])
-
-  useLayoutEffect(() => {
-    scheduleGeometry()
-  }, [commentsOpen, isCompact, scheduleGeometry])
 
   useLayoutEffect(() => {
     const selection = pendingSourceFocusRef.current
@@ -347,13 +269,13 @@ export function DriveMilkdownRenderer({
     if (matchesExternalTarget) {
       savedValueRef.current = sourcePreservedValue
       setDirty(false)
-      notifyEditorUpdate()
+      comments.notifyEditorUpdate()
       return
     }
     clearExternalMarkdownSync()
     setDirty(sourcePreservedValue !== savedValueRef.current)
-    notifyEditorUpdate()
-  }, [canEdit, clearExternalMarkdownSync, notifyEditorUpdate])
+    comments.notifyEditorUpdate()
+  }, [canEdit, clearExternalMarkdownSync, comments.notifyEditorUpdate])
 
   const handleSave = useCallback(async () => {
     if (!canSave || saveInFlightRef.current || !edit?.currentVersionId || !editContext) return
@@ -372,8 +294,7 @@ export function DriveMilkdownRenderer({
       }
       savedValueRef.current = submittedValue
       setDirty(valueRef.current !== submittedValue)
-      await annotations.refresh()
-      setCommentBaselineRevision((revision) => revision + 1)
+      await comments.refreshAfterSave()
       finishTracking('success')
     } catch (saveError) {
       finishTracking('failure')
@@ -382,7 +303,7 @@ export function DriveMilkdownRenderer({
       if (pendingSaveRef.current === saveAttempt) pendingSaveRef.current = null
       saveInFlightRef.current = false
     }
-  }, [annotations.refresh, canSave, current.id, edit?.currentVersionId, editContext])
+  }, [canSave, comments.refreshAfterSave, current.id, edit?.currentVersionId, editContext])
 
   const handleSaveShortcut = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!isDriveDocumentSaveShortcut(event)) return
@@ -515,64 +436,21 @@ export function DriveMilkdownRenderer({
     void insertUploadedImages(files, captureSourceSelection())
   }, [canEdit, captureSourceSelection, insertUploadedImages])
 
-  const setCommentPanelOpen = useCallback((open: boolean) => {
-    commentsTouchedRef.current = true
-    if (isCompact) setCompactCommentsOpen(open)
-    else setCommentsOpen(open)
-  }, [isCompact])
-  const scrollToThread = useCallback((threadId: string) => {
-    const scroller = editorContainerRef.current
-    const anchorTop = geometry.anchorTopByThreadId[threadId]
-    if (!scroller || typeof anchorTop !== 'number') return
-    const top = Math.max(0, anchorTop - COMMENT_SCROLL_SAFE_INSET)
-    setActiveThreadId(threadId)
-    if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top, behavior: 'instant' })
-    else scroller.scrollTop = top
-    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, top)
-  }, [geometry.anchorTopByThreadId])
-  const focusThreadFromRail = useCallback((threadId: string) => {
-    setActiveThreadId(threadId)
-    scrollToThread(threadId)
-  }, [scrollToThread])
-  const setCommentAnchorLayerRef = useCallback((element: HTMLDivElement | null) => {
-    commentAnchorLayerRef.current = element
-    setCommentAnchorLayerScrollTransform(element, editorContainerRef.current?.scrollTop ?? 0)
-  }, [])
-  const flushEditorScroll = useCallback(() => {
-    editorScrollFrameRef.current = null
-    setCommentAnchorLayerScrollTransform(commentAnchorLayerRef.current, editorContainerRef.current?.scrollTop ?? 0)
-  }, [])
-  const handleEditorScroll = useCallback(() => {
-    if (editorScrollFrameRef.current !== null) return
-    editorScrollFrameRef.current = window.requestAnimationFrame(flushEditorScroll)
-  }, [flushEditorScroll])
-  useEffect(() => () => {
-    if (editorScrollFrameRef.current !== null) window.cancelAnimationFrame(editorScrollFrameRef.current)
-  }, [])
-  const handleCommentsWheel = useCallback((event: WheelEvent) => {
-    if (event.deltaY === 0) return
-    const scroller = editorContainerRef.current
-    if (!scroller) return
-    event.preventDefault()
-    scroller.scrollTop += normalizeWheelDelta(event, scroller.clientHeight)
-    handleEditorScroll()
-  }, [handleEditorScroll])
-
   const toolbarItems = useMemo<readonly DriveRendererToolbarItem[]>(() => {
     const items: DriveRendererToolbarItem[] = [{
       kind: 'status',
       id: 'milkdown-edit-status',
       label: dirty ? '未保存' : canEdit ? '已同步' : '只读',
     }]
-    if (annotationsEnabled) {
+    if (comments.annotationsEnabled) {
       items.push({
         kind: 'toggle',
         id: 'milkdown-comments',
-        label: `评论 ${railThreads.length}`,
+        label: `评论 ${comments.railThreads.length}`,
         icon: MessageSquare,
         compactPlacement: 'primary',
-        pressed: isCompact ? compactCommentsOpen : commentsOpen,
-        onPressedChange: setCommentPanelOpen,
+        pressed: comments.isCompact ? comments.compactCommentsOpen : comments.commentsOpen,
+        onPressedChange: comments.setCommentPanelOpen,
       })
     }
     if (loginRequired) {
@@ -626,110 +504,55 @@ export function DriveMilkdownRenderer({
       )
     }
     return items
-  }, [annotationsEnabled, canEdit, canSave, captureSourceSelection, compactCommentsOpen, commentsOpen, dirty, editContext?.reloading, editContext?.savingText, handleSave, isCompact, loginRequired, loginUrl, railThreads.length, requestReload, setCommentPanelOpen, sourceMode, uploadingImage])
+  }, [canEdit, canSave, captureSourceSelection, comments.annotationsEnabled, comments.commentsOpen, comments.compactCommentsOpen, comments.isCompact, comments.railThreads.length, comments.setCommentPanelOpen, dirty, editContext?.reloading, editContext?.savingText, handleSave, loginRequired, loginUrl, requestReload, sourceMode, uploadingImage])
 
   useRegisterDriveRendererToolbarItems('milkdown', toolbarItems)
   useRegisterDriveRendererUnsavedState('milkdown-unsaved', canEdit && dirty)
 
-  const commentsPanelDefaultSize = resizablePanelPercent(MILKDOWN_COMMENTS_PANEL_DEFAULT_SIZE)
-  const commentsPanelMinSize = resizablePanelPercent(MILKDOWN_COMMENTS_PANEL_MIN_SIZE)
-  const commentsPanelMaxSize = resizablePanelPercent(MILKDOWN_COMMENTS_PANEL_MAX_SIZE)
-  const editorPanelDefaultSize = resizablePanelPercent(100 - MILKDOWN_COMMENTS_PANEL_DEFAULT_SIZE)
-  const commentBottomCompensation = commentsOpen && !isCompact && !sourceMode
-    ? Math.max(0, Math.ceil(commentAnchoredDocumentHeight - geometry.naturalHeight))
-    : 0
-  const renderCommentsRail = (mode: 'anchored' | 'list') => (
-    <DriveCommentsRail
-      mode={mode}
-      threads={railThreads}
-      activeThreadId={activeThreadId}
-      canReply={canReplyToAnnotations}
-      loading={annotations.loading}
-      anchorLayerRef={mode === 'anchored' ? setCommentAnchorLayerRef : undefined}
-      onAnchoredHeightChange={mode === 'anchored' ? setCommentAnchoredDocumentHeight : undefined}
-      onAnchoredWheel={mode === 'anchored' ? handleCommentsWheel : undefined}
-      onFocusThread={focusThreadFromRail}
-      onNavigatePrevious={previousThreadId ? () => scrollToThread(previousThreadId) : undefined}
-      onNavigateNext={nextThreadId ? () => scrollToThread(nextThreadId) : undefined}
-      onRefresh={() => { void annotations.refresh() }}
-      onReply={annotations.reply}
-      onUpdateComment={annotations.updateComment}
-      onDeleteComment={annotations.deleteComment}
-    />
-  )
   const editorView = (
-    <div
-      ref={editorContainerRef}
-      data-drive-milkdown-scroll='true'
-      className='h-full min-h-0 overflow-auto overscroll-contain'
-      onScroll={handleEditorScroll}
-    >
-      <div ref={editorContentHostRef} data-drive-milkdown-content-host='true' className='relative min-h-full'>
-        {sourceMode ? (
-          <div className='mx-auto flex min-h-full max-w-4xl flex-col gap-3 px-4 py-6 md:px-6'>
-            <div className='flex items-center justify-between gap-2'>
-              <span className='text-sm font-medium text-foreground'>源码</span>
-              {parseError ? <span className='text-xs text-destructive'>解析失败</span> : null}
-            </div>
-            <Textarea
-              ref={sourceTextareaRef}
-              aria-label='Markdown 源码'
-              value={value}
-              readOnly={!canEdit}
-              className='min-h-96 flex-1 font-mono text-sm'
-              onDragOver={(event) => {
-                if (canEdit && event.dataTransfer.types.includes('Files')) event.preventDefault()
-              }}
-              onDrop={handleSourceDrop}
-              onChange={(event) => {
-                if (!canEdit) return
-                const nextValue = event.currentTarget.value
-                valueRef.current = nextValue
-                setValue(nextValue)
-                setDirty(nextValue !== savedValueRef.current)
-              }}
-            />
-          </div>
-        ) : (
-          <div className='drive-milkdown-editor min-h-full [&_.milkdown]:min-h-full [&_.ProseMirror]:mx-auto [&_.ProseMirror]:min-h-full [&_.ProseMirror]:max-w-4xl [&_.ProseMirror]:px-4 [&_.ProseMirror]:pt-6 [&_.ProseMirror]:pb-12 md:[&_.ProseMirror]:px-6'>
-            <MilkdownProvider>
-              <MilkdownCrepeEditor
-                documentKey={current.id}
-                defaultValue={initialText}
-                readOnly={!canEdit}
-                onChange={handleMarkdownChange}
-                onEditorUpdate={notifyEditorUpdate}
-                onReady={handleCrepeReady}
-                onFailure={handleCrepeFailure}
-                onDestroy={handleCrepeDestroy}
-                onUpload={uploadDocumentImage}
-                proxyDomURL={resolveImagePreview}
-              />
-            </MilkdownProvider>
-          </div>
-        )}
-        {!sourceMode && geometry.overlayRects.length > 0 ? (
-          <div aria-hidden data-drive-milkdown-comment-overlay='true' className='pointer-events-none absolute inset-0'>
-            {geometry.overlayRects.map((rect) => (
-              <div
-                key={rect.key}
-                data-drive-milkdown-comment-thread-id={rect.threadId}
-                className={cn(
-                  'absolute mix-blend-multiply dark:mix-blend-screen',
-                  rect.threadId === activeThreadId
-                    ? 'bg-amber-300/80 ring-2 ring-amber-500/90 dark:bg-amber-700/55 dark:ring-amber-400/90'
-                    : 'bg-amber-200/45 dark:bg-amber-800/30'
-                )}
-                style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
-              />
-            ))}
-          </div>
-        ) : null}
+    sourceMode ? (
+      <div className='mx-auto flex min-h-full max-w-4xl flex-col gap-3 px-4 py-6 md:px-6'>
+        <div className='flex items-center justify-between gap-2'>
+          <span className='text-sm font-medium text-foreground'>源码</span>
+          {parseError ? <span className='text-xs text-destructive'>解析失败</span> : null}
+        </div>
+        <Textarea
+          ref={sourceTextareaRef}
+          aria-label='Markdown 源码'
+          value={value}
+          readOnly={!canEdit}
+          className='min-h-96 flex-1 font-mono text-sm'
+          onDragOver={(event) => {
+            if (canEdit && event.dataTransfer.types.includes('Files')) event.preventDefault()
+          }}
+          onDrop={handleSourceDrop}
+          onChange={(event) => {
+            if (!canEdit) return
+            const nextValue = event.currentTarget.value
+            valueRef.current = nextValue
+            setValue(nextValue)
+            setDirty(nextValue !== savedValueRef.current)
+          }}
+        />
       </div>
-      {commentBottomCompensation > 0 ? (
-        <div aria-hidden data-drive-milkdown-comment-bottom-compensation='true' style={{ height: commentBottomCompensation }} />
-      ) : null}
-    </div>
+    ) : (
+      <div className='drive-milkdown-editor min-h-full [&_.milkdown]:min-h-full [&_.ProseMirror]:mx-auto [&_.ProseMirror]:min-h-full [&_.ProseMirror]:max-w-4xl [&_.ProseMirror]:px-4 [&_.ProseMirror]:pt-6 [&_.ProseMirror]:pb-12 md:[&_.ProseMirror]:px-6'>
+        <MilkdownProvider>
+          <MilkdownCrepeEditor
+            documentKey={current.id}
+            defaultValue={initialText}
+            readOnly={!canEdit}
+            onChange={handleMarkdownChange}
+            onEditorUpdate={comments.notifyEditorUpdate}
+            onReady={handleCrepeReady}
+            onFailure={handleCrepeFailure}
+            onDestroy={handleCrepeDestroy}
+            onUpload={uploadDocumentImage}
+            proxyDomURL={resolveImagePreview}
+          />
+        </MilkdownProvider>
+      </div>
+    )
   )
 
   return (
@@ -747,33 +570,12 @@ export function DriveMilkdownRenderer({
         disabled={!canEdit || uploadingImage}
         onChange={(event) => { void handleImageSelected(event) }}
       />
-      <div data-drive-milkdown-layout='true' className='min-h-0 flex-1 overflow-hidden'>
-        {isCompact || !commentsOpen ? editorView : (
-          <ResizablePanelGroup orientation='horizontal' className='h-full min-h-0 overflow-hidden'>
-            <ResizablePanel defaultSize={editorPanelDefaultSize} minSize='35%' data-milkdown-resizable-panel='editor' className='h-full min-h-0 min-w-0 overflow-hidden'>
-              {editorView}
-            </ResizablePanel>
-            <ResizableHandle />
-            <ResizablePanel defaultSize={commentsPanelDefaultSize} minSize={commentsPanelMinSize} maxSize={commentsPanelMaxSize} data-milkdown-resizable-panel='comments' className='h-full min-h-0 overflow-hidden'>
-              <aside className='h-full min-h-0 overflow-hidden bg-background'>
-                {renderCommentsRail(sourceMode ? 'list' : 'anchored')}
-              </aside>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        )}
-      </div>
-      {isCompact && annotationsEnabled ? (
-        <Sheet open={compactCommentsOpen} onOpenChange={setCommentPanelOpen}>
-          <SheetContent data-drive-telemetry-scope='portal' side='right' data-milkdown-sheet='comments' className='gap-0 overflow-hidden'>
-            <SheetHeader className='sr-only'>
-              <SheetTitle>评论</SheetTitle>
-              <SheetDescription>查看和管理文档评论</SheetDescription>
-            </SheetHeader>
-            <div className='min-h-0 flex-1 overflow-auto'>{renderCommentsRail('list')}</div>
-          </SheetContent>
-        </Sheet>
-      ) : null}
-      {annotations.error ? <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{annotations.error}</div> : null}
+      <DriveDocumentEditorCommentsFrame
+        comments={comments}
+        dataAttributes={MILKDOWN_COMMENTS_DATA_ATTRIBUTES}
+        editorView={editorView}
+      />
+      {comments.annotationError ? <div className='border-t px-3 py-2 text-xs text-muted-foreground'>{comments.annotationError}</div> : null}
       {error ? <div className='border-t px-3 py-2 text-xs text-destructive'>{error}</div> : null}
       {uploadingImage ? <div className='border-t px-3 py-2 text-xs text-muted-foreground'>上传中</div> : null}
       {preview.truncated ? <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div> : null}
@@ -1131,19 +933,4 @@ function transformMilkdownInlineProse(line: string, transform: (prose: string) =
     cursor = closingIndex + marker.length
   }
   return result
-}
-
-function setCommentAnchorLayerScrollTransform(element: HTMLElement | null, scrollTop: number): void {
-  if (!element) return
-  element.style.transform = `translate3d(0, ${-scrollTop}px, 0)`
-}
-
-function normalizeWheelDelta(event: Pick<WheelEvent, 'deltaMode' | 'deltaY'>, pageHeight: number): number {
-  if (event.deltaMode === 1) return event.deltaY * 16
-  if (event.deltaMode === 2) return event.deltaY * pageHeight
-  return event.deltaY
-}
-
-function resizablePanelPercent(value: number): ResizablePanelPercent {
-  return `${value}%`
 }
