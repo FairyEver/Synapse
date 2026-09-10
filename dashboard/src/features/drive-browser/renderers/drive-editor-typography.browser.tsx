@@ -2,6 +2,7 @@ import '@/styles/index.css'
 import '@milkdown/crepe/theme/common/style.css'
 import '@mdxeditor/editor/style.css'
 import { afterEach, describe, expect, it } from 'vitest'
+import { userEvent } from 'vitest/browser'
 
 let host: HTMLElement | null = null
 let lateVendorStyle: HTMLStyleElement | null = null
@@ -74,6 +75,36 @@ describe('drive editor typography in Chromium', () => {
     expect(getComputedStyle(contentCell).paddingInlineStart).toBe('12px')
     expect(getComputedStyle(toolCell).paddingInlineStart).not.toBe('12px')
   })
+
+  it('restores themed keyboard focus after the Crepe reset without outlining the editor surface', async () => {
+    const { milkdown } = renderEditorFixtures()
+    const shell = milkdown.closest<HTMLElement>('.milkdown')!
+    const controls = [
+      shell.querySelector<HTMLElement>('button')!,
+      shell.querySelector<HTMLElement>('input[aria-label="Edit link"]')!,
+      shell.querySelector<HTMLElement>('.language-list-item')!,
+    ]
+
+    for (const control of controls) {
+      await userEvent.tab()
+      expect(document.activeElement).toBe(control)
+      expect(control.matches(':focus-visible')).toBe(true)
+      expectFocusRing(control, shell)
+    }
+
+    const searchInput = shell.querySelector<HTMLInputElement>('.search-input')!
+    const searchBox = searchInput.closest<HTMLElement>('.search-box')!
+    await userEvent.tab()
+    expect(document.activeElement).toBe(searchInput)
+    expect(getComputedStyle(searchInput).outlineStyle).toBe('none')
+    expect(getComputedStyle(searchBox).outlineStyle).toBe('solid')
+    expect(getComputedStyle(searchBox).outlineWidth).toBe('2px')
+
+    await userEvent.tab()
+    expect(document.activeElement).toBe(milkdown)
+    expect(milkdown.matches(':focus-visible')).toBe(true)
+    expect(getComputedStyle(milkdown).outlineStyle).toBe('none')
+  })
 })
 
 function renderEditorFixtures(): { readonly milkdown: HTMLElement; readonly mdxeditor: HTMLElement } {
@@ -81,7 +112,13 @@ function renderEditorFixtures(): { readonly milkdown: HTMLElement; readonly mdxe
   host.innerHTML = `
     <section class="drive-milkdown-editor">
       <div class="milkdown">
-        <div class="ProseMirror">${semanticContent('milkdown')}</div>
+        <button type="button">Format</button>
+        <input aria-label="Edit link">
+        <div class="language-list-item" tabindex="0">JavaScript</div>
+        <div class="milkdown-code-block">
+          <div class="search-box"><input class="search-input" aria-label="Search languages"></div>
+        </div>
+        <div class="ProseMirror" contenteditable="true" tabindex="0">${semanticContent('milkdown')}</div>
       </div>
     </section>
     <section class="drive-mdxeditor-content">${semanticContent('mdxeditor')}</section>
@@ -125,4 +162,12 @@ function snapshotStyles(roots: { readonly milkdown: HTMLElement; readonly mdxedi
     const styles = getComputedStyle(root.querySelector(selector)!)
     return [styles.color, styles.fontSize, styles.fontWeight]
   }))
+}
+
+function expectFocusRing(control: HTMLElement, shell: HTMLElement): void {
+  const styles = getComputedStyle(control)
+  expect(styles.outlineStyle).toBe('solid')
+  expect(styles.outlineWidth).toBe('2px')
+  expect(styles.outlineColor).toBe(getComputedStyle(shell).getPropertyValue('--ring').trim())
+  expect(styles.outlineOffset).toBe('2px')
 }

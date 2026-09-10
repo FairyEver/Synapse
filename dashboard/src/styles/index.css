@@ -99,6 +99,12 @@
   --crepe-shadow-2: var(--shadow-md);
 }
 
+.drive-milkdown-editor .milkdown
+  :is(button, input, [tabindex]):not(.ProseMirror, .search-input):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 :is(.drive-milkdown-editor .milkdown .ProseMirror, .drive-mdxeditor-content) {
   color: var(--foreground);
   font-family: var(--font-inter);
