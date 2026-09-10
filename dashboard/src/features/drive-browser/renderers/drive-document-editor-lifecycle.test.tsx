@@ -69,6 +69,7 @@ describe('useDriveDocumentEditorLifecycle', () => {
     renderHarness({ ...props, initialText: '# Submitted', currentVersionId: 'version-2' })
 
     expect(status()).toEqual({ value: '# Newer draft', dirty: 'true', conflict: 'false', reloadConfirm: 'false' })
+    expect(saveAcknowledged()).toBe(true)
     expect(saveText).toHaveBeenCalledWith({ text: '# Submitted', baseVersionId: 'version-1' })
     expect(props.editContext.reload).not.toHaveBeenCalled()
 
@@ -76,8 +77,10 @@ describe('useDriveDocumentEditorLifecycle', () => {
       pendingSave.resolve()
       await savePromise
     })
+    renderHarness({ ...props, initialText: '# Submitted', currentVersionId: 'version-2' })
 
     expect(status()).toEqual({ value: '# Newer draft', dirty: 'true', conflict: 'false', reloadConfirm: 'false' })
+    expect(saveAcknowledged()).toBe(false)
     expect(telemetry.finish).toHaveBeenCalledWith('success')
   })
 
@@ -151,6 +154,7 @@ function LifecycleHarness({
       data-dirty={lifecycle.dirty}
       data-conflict={lifecycle.conflictOpen}
       data-reload-confirm={lifecycle.reloadConfirmOpen}
+      data-save-acknowledged={lifecycle.saveAcknowledged}
     />
   )
 }
@@ -185,6 +189,10 @@ function status() {
     conflict: state.dataset.conflict,
     reloadConfirm: state.dataset.reloadConfirm,
   }
+}
+
+function saveAcknowledged() {
+  return (host.firstElementChild as HTMLDivElement).dataset.saveAcknowledged === 'true'
 }
 
 function deferred<T>() {

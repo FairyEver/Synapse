@@ -70,6 +70,7 @@ export function useDriveDocumentEditorLifecycle({
     && dirty
     && !editContext?.savingText
     && !editContext?.reloading
+  const saveAcknowledged = isDriveDocumentSaveAcknowledged(pendingSaveRef.current, itemId, initialText)
 
   const applyReplacement = useCallback((nextValue: string, reason: DriveDocumentEditorReplaceReason) => {
     valueRef.current = nextValue
@@ -89,7 +90,7 @@ export function useDriveDocumentEditorLifecycle({
       || previousSource.initialText !== initialText
     externalSourceRef.current = { itemId, currentVersionId, initialText }
     savedValueRef.current = initialText
-    if (isDriveDocumentSaveAcknowledged(pendingSaveRef.current, itemId, initialText)) {
+    if (saveAcknowledged) {
       setDirty(valueRef.current !== initialText)
       return
     }
@@ -98,7 +99,7 @@ export function useDriveDocumentEditorLifecycle({
     setError(null)
     setConflictOpen(false)
     setReloadConfirmOpen(false)
-  }, [applyReplacement, currentVersionId, initialText, itemId, replaceInitialValue])
+  }, [applyReplacement, currentVersionId, initialText, itemId, replaceInitialValue, saveAcknowledged])
 
   const updateValue = useCallback((nextValue: string) => {
     valueRef.current = nextValue
@@ -185,7 +186,7 @@ export function useDriveDocumentEditorLifecycle({
   return {
     value,
     valueRef,
-    pendingSaveRef,
+    saveAcknowledged,
     dirty,
     error,
     setError,

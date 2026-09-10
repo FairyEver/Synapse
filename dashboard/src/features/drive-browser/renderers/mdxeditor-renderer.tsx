@@ -52,7 +52,6 @@ import {
 import {
   DriveDocumentEditorRecoveryDialogs,
   buildDriveDocumentEditorLoginUrl,
-  isDriveDocumentSaveAcknowledged,
   isDriveDocumentSaveShortcut,
   useDriveDocumentEditorLifecycle,
 } from './drive-document-editor-lifecycle'
@@ -179,7 +178,7 @@ export function DriveMDXeditorRenderer({
   })
   const {
     value,
-    pendingSaveRef,
+    saveAcknowledged,
     dirty,
     error,
     setError,
@@ -219,7 +218,7 @@ export function DriveMDXeditorRenderer({
     imagePreviewUrls: relativeImagePreviewUrls,
     sourceMode,
     stateResetKey: initialText,
-    preserveStateOnReset: isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText),
+    preserveStateOnReset: saveAcknowledged,
   })
   const resolveImagePreview = useCallback(async (imageSource: string) => {
     if (!relativeImagePreviewUrls.has(imageSource)) return imageSource

@@ -23,7 +23,6 @@ import {
 import {
   DriveDocumentEditorRecoveryDialogs,
   buildDriveDocumentEditorLoginUrl,
-  isDriveDocumentSaveAcknowledged,
   isDriveDocumentSaveShortcut,
   useDriveDocumentEditorLifecycle,
 } from './drive-document-editor-lifecycle'
@@ -139,7 +138,7 @@ export function DriveMilkdownRenderer({
   const {
     value,
     valueRef,
-    pendingSaveRef,
+    saveAcknowledged,
     dirty,
     error,
     setError,
@@ -179,7 +178,7 @@ export function DriveMilkdownRenderer({
     imagePreviewUrls: relativeImagePreviewUrls,
     sourceMode,
     stateResetKey: initialText,
-    preserveStateOnReset: isDriveDocumentSaveAcknowledged(pendingSaveRef.current, current.id, initialText),
+    preserveStateOnReset: saveAcknowledged,
     contentRootSelector: '.milkdown .ProseMirror',
     ignoredElementSelector: MILKDOWN_COMMENT_IGNORED_SELECTOR,
   })
