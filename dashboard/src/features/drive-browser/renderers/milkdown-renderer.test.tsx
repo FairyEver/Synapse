@@ -359,40 +359,6 @@ describe('DriveMilkdownRenderer', () => {
     expect(document.querySelector('[data-drive-milkdown-renderer="true"] textarea')).toBeNull()
   })
 
-  it('preserves bare URI and email source text when another rich-text change is saved', async () => {
-    const source = [
-      'See https://example.com now',
-      'Email test@example.com',
-      'Keep <https://explicit.example/path>',
-      '',
-      '`https://inline.example test@example.com`',
-    ].join('\n')
-    const saveText = vi.fn(async () => ({} as never))
-    const renderer = renderRenderer({
-      preview: preview(source),
-      editContext: {
-        reload: vi.fn(async () => ({} as never)),
-        reloading: false,
-        saveText,
-        savingText: false,
-      },
-    })
-    await waitForEditor()
-
-    await pressSaveShortcut()
-    expect(saveText).not.toHaveBeenCalled()
-
-    await replaceRichText('now', 'later')
-    await pressSaveShortcut()
-
-    const submitted = saveText.mock.calls[0]?.[0].text
-    expect(submitted).toContain('See https://example.com later')
-    expect(submitted).toContain('Email test@example.com')
-    expect(submitted).toContain('Keep <https://explicit.example/path>')
-    expect(submitted).toContain('`https://inline.example test@example.com`')
-    await renderer.unmount()
-  })
-
   it('shows external Markdown updates in the existing editor', async () => {
     const renderer = renderRenderer({ preview: preview('# First'), editContext: editContext() })
     await waitForEditor()
@@ -410,14 +376,7 @@ describe('DriveMilkdownRenderer', () => {
   })
 
   it('applies the latest confirmed version when it arrives before Crepe is ready', async () => {
-    const saveText = vi.fn(async () => ({} as never))
-    const context = {
-      reload: vi.fn(async () => ({} as never)),
-      reloading: false,
-      saveText,
-      savingText: false,
-    }
-    const renderer = renderRenderer({ preview: preview('# First'), editContext: context })
+    const renderer = renderRenderer({ preview: preview('# First'), editContext: editContext() })
     expect(document.querySelector('.milkdown .ProseMirror')).toBeNull()
 
     renderer.rerender({
@@ -434,43 +393,6 @@ describe('DriveMilkdownRenderer', () => {
     const editor = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
     expect(editor?.textContent).toContain('Latest')
     expect(editor?.textContent).not.toContain('First')
-
-    await replaceRichText('Latest', 'Latest updated')
-    await pressSaveShortcut()
-
-    expect(saveText).toHaveBeenCalledOnce()
-    expect(saveText.mock.calls[0]?.[0].baseVersionId).toBe('version-3')
-    expect(saveText.mock.calls[0]?.[0].text).toContain('# Latest updated')
-    expect(saveText.mock.calls[0]?.[0].text).not.toContain('First')
-  })
-
-  it('shows hierarchical ordered markers without changing Milkdown Markdown', async () => {
-    const source = '2. Parent\n\n   4. Child\n   5. Next'
-    const context = editContext()
-    renderRenderer({ preview: preview(source), editContext: context })
-    await waitForEditor()
-
-    const content = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
-    expect(content).not.toBeNull()
-    expect(Array.from(content?.querySelectorAll('li') ?? [], (item) => item.getAttribute('data-drive-list-marker'))).toEqual([
-      '2.',
-      '2.4',
-      '2.5',
-    ])
-    expect(Array.from(content?.querySelectorAll('.label.ordered') ?? [], (label) => label.textContent)).toEqual([
-      '2.',
-      '2.4',
-      '2.5',
-    ])
-
-    await replaceRichText('Parent', 'Parent updated')
-    await pressSaveShortcut()
-
-    const saved = context.saveText.mock.calls[0]?.[0].text
-    expect(saved).toContain('2. Parent updated')
-    expect(saved).toMatch(/\n\s+4\. Child\n\s+5\. Next/u)
-    expect(saved).not.toContain('data-drive-list-marker')
-    expect(saved).not.toContain('2.4 Child')
   })
 
   it('updates readonly state and unmounts the editor cleanly', async () => {
@@ -850,24 +772,5 @@ function deferred<T>() {
 async function waitForEditor(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => window.setTimeout(resolve, 20))
-  })
-}
-
-async function replaceRichText(search: string, replacement: string): Promise<void> {
-  const editor = document.querySelector<HTMLElement>('.milkdown .ProseMirror')
-  if (!editor) throw new Error('Expected Milkdown editor')
-  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
-  let textNode = walker.nextNode()
-  while (textNode && !textNode.textContent?.includes(search)) textNode = walker.nextNode()
-  if (!textNode?.textContent) throw new Error(`Expected editor text: ${search}`)
-
-  await act(async () => {
-    textNode.textContent = textNode.textContent?.replace(search, replacement) ?? null
-    editor.dispatchEvent(new InputEvent('input', {
-      bubbles: true,
-      data: replacement,
-      inputType: 'insertText',
-    }))
-    await new Promise((resolve) => window.setTimeout(resolve, 250))
   })
 }

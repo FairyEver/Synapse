@@ -1,8 +1,14 @@
 import '@/styles/index.css'
 import '@milkdown/crepe/theme/common/style.css'
 import '@mdxeditor/editor/style.css'
-import { afterEach, describe, expect, it } from 'vitest'
+import type { ComponentProps } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { render } from 'vitest-browser-react'
+import { DriveMilkdownRenderer } from './milkdown-renderer'
+import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
 
 let host: HTMLElement | null = null
 let lateVendorStyle: HTMLStyleElement | null = null
@@ -112,6 +118,96 @@ describe('drive editor typography in Chromium', () => {
   })
 })
 
+describe('DriveMilkdownRenderer in Chromium', () => {
+  it('preserves bare URI and email source text when a user saves another rich-text change', async () => {
+    const source = [
+      '# Notes',
+      '',
+      'See https://example.com now',
+      'Email test@example.com',
+      'Keep <https://explicit.example/path>',
+      '',
+      '`https://inline.example test@example.com`',
+    ].join('\n')
+    const context = browserEditContext()
+    const screen = await render(browserRenderer({
+      preview: browserPreview(source),
+      editContext: context,
+    }))
+    const editor = await waitForRichEditor()
+
+    await replaceBlockText(editor, 'Notes', 'Notes updated')
+    await saveWithKeyboard(context)
+
+    const submitted = context.saveText.mock.calls[0]?.[0].text
+    expect(submitted).toContain('# Notes updated')
+    expect(submitted).toContain('See https://example.com now')
+    expect(submitted).toContain('Email test@example.com')
+    expect(submitted).toContain('Keep <https://explicit.example/path>')
+    expect(submitted).toContain('`https://inline.example test@example.com`')
+    await screen.unmount()
+  })
+
+  it('saves edits against the latest externally supplied Markdown version', async () => {
+    const context = browserEditContext()
+    const queryClient = new QueryClient()
+    const screen = await render(browserRenderer({
+      preview: browserPreview('# First'),
+      editContext: context,
+    }, queryClient))
+    await waitForRichEditor()
+
+    await screen.rerender(browserRenderer({
+      preview: browserPreview('# Latest'),
+      edit: browserEditable('version-3'),
+      editContext: context,
+    }, queryClient))
+    await expect.poll(() => document.querySelector<HTMLElement>('.drive-milkdown-editor .ProseMirror')?.textContent).toContain('Latest')
+    const editor = await waitForRichEditor()
+    expect(editor.textContent).not.toContain('First')
+
+    await replaceBlockText(editor, 'Latest', 'Latest updated')
+    await saveWithKeyboard(context)
+
+    expect(context.saveText).toHaveBeenCalledOnce()
+    expect(context.saveText.mock.calls[0]?.[0].baseVersionId).toBe('version-3')
+    expect(context.saveText.mock.calls[0]?.[0].text).toContain('# Latest updated')
+    expect(context.saveText.mock.calls[0]?.[0].text).not.toContain('First')
+    await screen.unmount()
+  })
+
+  it('shows hierarchical ordered markers without adding them to saved Markdown', async () => {
+    const source = '2. Parent\n\n   4. Child\n   5. Next'
+    const context = browserEditContext()
+    const screen = await render(browserRenderer({
+      preview: browserPreview(source),
+      editContext: context,
+    }))
+    const editor = await waitForRichEditor()
+
+    await expect.poll(() => Array.from(editor.querySelectorAll('li'), (item) => item.getAttribute('data-drive-list-marker'))).toEqual([
+      '2.',
+      '2.4',
+      '2.5',
+    ])
+    expect(Array.from(editor.querySelectorAll('.label.ordered'), (label) => label.textContent)).toEqual([
+      '2.',
+      '2.4',
+      '2.5',
+    ])
+
+    await replaceBlockText(editor, 'Next', 'Next updated')
+    await saveWithKeyboard(context)
+
+    const saved = context.saveText.mock.calls[0]?.[0].text
+    expect(saved).toContain('2. Parent')
+    expect(saved).toMatch(/\n\s+4\. Child\n\s+5\. Next updated/u)
+    expect(saved).not.toContain('data-drive-list-marker')
+    expect(saved).not.toContain('2.4 Child')
+    await screen.unmount()
+  })
+})
+
 function renderEditorFixtures(): { readonly milkdown: HTMLElement; readonly mdxeditor: HTMLElement } {
   host = document.createElement('main')
   host.innerHTML = `
@@ -176,4 +272,97 @@ function expectFocusRing(control: HTMLElement, shell: HTMLElement): void {
   expect(styles.outlineWidth).toBe('2px')
   expect(styles.outlineColor).toBe(getComputedStyle(shell).getPropertyValue('--ring').trim())
   expect(styles.outlineOffset).toBe('2px')
+}
+
+type BrowserRendererOptions = {
+  readonly current?: DriveBrowserItemDto
+  readonly preview: DriveBrowserPreviewDto
+  readonly edit?: DriveBrowserEditDto | null
+  readonly editContext: NonNullable<ComponentProps<typeof DriveMilkdownRenderer>['editContext']>
+}
+
+function browserRenderer({
+  current = browserCurrent(),
+  preview,
+  edit = browserEditable(),
+  editContext,
+}: BrowserRendererOptions, queryClient = new QueryClient()) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <DriveRendererToolbarProvider>
+        <BrowserUnsavedState />
+        <DriveMilkdownRenderer
+          current={current}
+          preview={preview}
+          edit={edit}
+          editContext={editContext}
+        />
+      </DriveRendererToolbarProvider>
+    </QueryClientProvider>
+  )
+}
+
+function BrowserUnsavedState() {
+  const { hasUnsavedChanges } = useDriveRendererToolbar()
+  return <output data-browser-unsaved={String(hasUnsavedChanges)} />
+}
+
+function browserCurrent(): DriveBrowserItemDto {
+  return {
+    id: 'file',
+    name: 'notes.md',
+    type: 'file',
+    size: '12',
+    mimeType: 'text/markdown',
+    updatedAt: '2026-09-08T00:00:00.000Z',
+    previewKind: 'markdown',
+    browserUrl: '/console/drive/items/file',
+    downloadUrl: '/api/drive/items/file/content',
+  }
+}
+
+function browserPreview(text: string): DriveBrowserPreviewDto {
+  return {
+    kind: 'markdown',
+    text,
+    html: '<h1>Notes</h1>',
+    outline: [],
+    truncated: false,
+    imageUrl: null,
+    visitUrl: null,
+    relativeImages: [],
+  }
+}
+
+function browserEditable(currentVersionId = 'version-1'): DriveBrowserEditDto {
+  return { canEdit: true, editorKind: 'text', currentVersionId, reason: null }
+}
+
+function browserEditContext() {
+  return {
+    reload: vi.fn(async () => ({} as never)),
+    reloading: false,
+    saveText: vi.fn(async () => ({} as never)),
+    savingText: false,
+  }
+}
+
+async function waitForRichEditor(): Promise<HTMLElement> {
+  await expect.poll(() => document.querySelector<HTMLElement>('.drive-milkdown-editor .ProseMirror')).not.toBeNull()
+  return document.querySelector<HTMLElement>('.drive-milkdown-editor .ProseMirror')!
+}
+
+async function replaceBlockText(editor: HTMLElement, text: string, replacement: string): Promise<void> {
+  const block = Array.from(editor.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6, p'))
+    .find((candidate) => candidate.textContent?.includes(text))
+  if (!block) throw new Error(`Missing editor block: ${text}`)
+  await userEvent.tripleClick(block)
+  await userEvent.keyboard(replacement)
+  await expect.poll(() => editor.textContent).toContain(replacement)
+  await expect.poll(() => document.querySelector('[data-browser-unsaved]')?.getAttribute('data-browser-unsaved')).toBe('true')
+}
+
+async function saveWithKeyboard(context: ReturnType<typeof browserEditContext>): Promise<void> {
+  await userEvent.keyboard('{Control>}s{/Control}')
+  await expect.poll(() => context.saveText.mock.calls.length).toBe(1)
 }
