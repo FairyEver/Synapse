@@ -3,7 +3,7 @@ import { createElement, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import { buildDriveShareClipboardText, type DriveBrowserSnapshotDto } from '@synapse/shared'
 import {
   DriveBrowserView,
   DriveSingleFileReaderView,
@@ -24,7 +24,6 @@ import {
   shouldSuppressDriveFloatingMenuOpen,
 } from './renderers/drive-renderer-shell'
 import {
-  buildDriveShareClipboardText,
   getDrivePreviewFileIdentity,
   getDrivePreviewSystemActions,
   getDrivePreviewSystemMenuSections,

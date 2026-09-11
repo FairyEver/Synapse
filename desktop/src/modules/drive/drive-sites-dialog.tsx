@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react"
 import { Copy, ExternalLink, KeyRound, LoaderCircle, MoreHorizontal, RefreshCw, Settings2 } from "lucide-react"
 import { toast } from "sonner"
-import type { DriveAccessExpiresIn, DriveSiteDto } from "@synapse/shared"
+import { buildDriveShareClipboardText, type DriveAccessExpiresIn, type DriveSiteDto } from "@synapse/shared"
 import { FormDialog } from "@/components/form-dialog"
 import { RelativeTime } from "@/components/relative-time"
 import { Badge } from "@/components/ui/badge"
@@ -398,7 +398,7 @@ function DriveSiteRow({
           >
             <Settings2 />
           </DriveSiteIconAction>
-          <DriveSiteIconAction label={`复制 ${site.name}`} tooltip="复制链接" onClick={() => { void copyText(site.urlWithPassword, "链接已复制") }}>
+          <DriveSiteIconAction label={`复制 ${site.name}`} tooltip="复制链接" onClick={() => { void copySiteUrl(site) }}>
             <Copy />
           </DriveSiteIconAction>
           {password ? (
@@ -605,6 +605,10 @@ async function copyText(value: string, successMessage: string): Promise<void> {
   } catch {
     toast("复制失败")
   }
+}
+
+async function copySiteUrl(site: DriveSiteDto): Promise<void> {
+  await copyText(buildDriveShareClipboardText(site.name, "site", site.urlWithPassword), "链接已复制")
 }
 
 async function openExternal(url: string): Promise<void> {

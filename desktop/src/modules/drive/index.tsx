@@ -14,6 +14,8 @@ import {
 } from "lucide-react"
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
+  buildDriveShareClipboardText,
+  resolveDriveShareClipboardKind,
   type DriveAccessSettingsInput,
   type DriveAccessSettingsUpdateInput,
   type DriveBrowserChildrenPageDto,
@@ -906,7 +908,7 @@ function DriveModuleContent() {
         editorEmails: share.editorEmails,
       })
       afterCreate = async () => {
-        await copySharedUrlAfterShare(getDriveAccessUrl(share))
+        await copySharedUrlAfterShare(target.item.name, target.item.type, getDriveAccessUrl(share))
         await reloadDriveItemsAfterAccessChange(loadItems)
       }
       finishTracking("success")
@@ -3061,7 +3063,7 @@ function DriveShareActions({
         <DriveIconAction
           label={`复制 ${item.itemName}`}
           tooltip="复制链接"
-          onClick={() => { void copyDriveUrl(getDriveAccessUrl(item)) }}
+          onClick={() => { void copyDriveUrl(item.itemName, item.itemType, getDriveAccessUrl(item)) }}
         >
           <Copy />
         </DriveIconAction>
@@ -3232,7 +3234,7 @@ function DriveShareSuccessDialog({
               <InputGroupInput id="drive-share-success-url" className="font-mono text-sm" value={accessUrl} readOnly />
             </InputGroup>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyDriveUrl(accessUrl) }}>
+              <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyDriveUrl(share.name, share.type, accessUrl) }}>
                 复制链接
               </Button>
               <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void openDriveUrl(accessUrl) }}>
@@ -3686,9 +3688,13 @@ function assertDriveLocalUploadRelativePathDepth(relativePath: string): void {
   }
 }
 
-async function copyDriveUrl(url: string): Promise<void> {
+async function copyDriveUrl(name: string, type: DriveItemDto["type"], url: string): Promise<void> {
   try {
-    await navigator.clipboard.writeText(url)
+    await navigator.clipboard.writeText(buildDriveShareClipboardText(
+      name,
+      resolveDriveShareClipboardKind({ name, type }),
+      url,
+    ))
     toast("链接已复制")
   } catch (rawError) {
     toast(errorMessage(rawError, "复制失败"))
@@ -3713,9 +3719,13 @@ async function copyDrivePassword(password: string): Promise<void> {
   }
 }
 
-async function copySharedUrlAfterShare(url: string): Promise<void> {
+async function copySharedUrlAfterShare(name: string, type: DriveItemDto["type"], url: string): Promise<void> {
   try {
-    await navigator.clipboard.writeText(url)
+    await navigator.clipboard.writeText(buildDriveShareClipboardText(
+      name,
+      resolveDriveShareClipboardKind({ name, type }),
+      url,
+    ))
     toast("链接已复制")
   } catch {
     toast("分享成功，复制失败")

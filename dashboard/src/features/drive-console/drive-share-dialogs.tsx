@@ -3,6 +3,8 @@ import { X } from 'lucide-react'
 import {
   DRIVE_DEFAULT_ACCESS_SETTINGS,
   DRIVE_DEFAULT_SITE_ACCESS_SETTINGS,
+  buildDriveShareClipboardText,
+  resolveDriveShareClipboardKind,
   type DriveAccessExpiresIn,
   type DriveAccessSettingsInput,
   type DriveAccessSettingsUpdateInput,
@@ -10,6 +12,7 @@ import {
   type DriveBrowserItemDto,
   type DriveShareAccessMode,
   type DriveShareListItemDto,
+  type DriveShareClipboardKind,
   type DriveSitePreflightDto,
 } from '@synapse/shared'
 import { toast } from 'sonner'
@@ -33,7 +36,7 @@ import { DriveWebSharesPanel } from './drive-sites-dialogs'
 
 type ShareCreateMode = 'drive' | 'web'
 type ShareFilter = 'file' | 'folder' | 'web'
-type ShareCreatedResult = { readonly name: string; readonly url: string }
+type ShareCreatedResult = { readonly name: string; readonly kind: DriveShareClipboardKind; readonly url: string }
 const DRIVE_SHARE_LIST_PAGE_LIMIT = 50
 
 function createDefaultAccessSettings(): DriveAccessSettingsInput {
@@ -110,7 +113,11 @@ export function DriveShareSettingsDialog({
     }
     setEditorEmailError(null)
     const result = await driveApi.createShare(item.id, prepared.settings)
-    setCreated({ name: item.name, url: result.password ? result.urlWithPassword : result.url })
+    setCreated({
+      name: item.name,
+      kind: resolveDriveShareClipboardKind(item),
+      url: result.password ? result.urlWithPassword : result.url,
+    })
     return true
   }
 
@@ -123,7 +130,7 @@ export function DriveShareSettingsDialog({
       accessMode: webPasswordEnabled ? 'password' : 'public',
       expiresIn: webExpiresIn,
     })
-    setCreated({ name: item.name, url: result.password ? result.urlWithPassword : result.url })
+    setCreated({ name: item.name, kind: 'site', url: result.password ? result.urlWithPassword : result.url })
     return true
   }
 
@@ -168,7 +175,7 @@ export function DriveShareSettingsDialog({
             <div className='text-sm text-muted-foreground'>{created.name}</div>
             <div className='flex gap-2'>
               <Input value={created.url} readOnly className='font-mono text-xs' onFocus={(event) => event.currentTarget.select()} />
-              <Button data-drive-telemetry-event='web.drive.share.copy-url' type='button' variant='outline' onClick={() => { void copyShareUrl(created.url) }}>复制链接</Button>
+              <Button data-drive-telemetry-event='web.drive.share.copy-url' type='button' variant='outline' onClick={() => { void copyShareUrl(created.name, created.kind, created.url) }}>复制链接</Button>
             </div>
           </div>
         ) : (
@@ -364,7 +371,11 @@ export function DriveSharesDialog({
           </TabsList>
         </Tabs>
         {filter === 'web' ? (
-          <DriveWebSharesPanel active={open} onChanged={onChanged} onCopyUrl={copyShareUrl} />
+          <DriveWebSharesPanel
+            active={open}
+            onChanged={onChanged}
+            onCopyUrl={(name, url) => copyShareUrl(name, 'site', url)}
+          />
         ) : (
           <div className='grid gap-2'>
             {loading && items.length === 0 ? <div className='text-sm text-muted-foreground'>加载中</div> : null}
@@ -376,7 +387,19 @@ export function DriveSharesDialog({
                   <Input value={item.password ? item.urlWithPassword : item.url} readOnly className='mt-1 font-mono text-xs' />
                 </div>
                 <div className='flex shrink-0 items-center gap-1'>
-                  <Button data-drive-telemetry-event='web.drive.share.copy-url' type='button' variant='ghost' size='sm' onClick={() => { void copyShareUrl(item.password ? item.urlWithPassword : item.url) }}>复制链接</Button>
+                  <Button
+                    data-drive-telemetry-event='web.drive.share.copy-url'
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    onClick={() => {
+                      void copyShareUrl(
+                        item.itemName,
+                        resolveDriveShareClipboardKind({ name: item.itemName, type: item.itemType }),
+                        item.password ? item.urlWithPassword : item.url,
+                      )
+                    }}
+                  >复制链接</Button>
                   <Button data-drive-telemetry-event='web.drive.share.access-open' type='button' variant='ghost' size='sm' disabled={actionShareId === item.id} onClick={() => openAccessSettings(item)}>访问设置</Button>
                   <Button data-drive-telemetry-event='web.drive.share.disable' type='button' variant='ghost' size='sm' disabled={actionShareId === item.id} onClick={() => { void disableShare(item) }}>取消分享</Button>
                 </div>
@@ -642,10 +665,10 @@ export function mergeDriveShareEditorEmails(
   return { emails, error: null }
 }
 
-async function copyShareUrl(url: string): Promise<void> {
+async function copyShareUrl(name: string, kind: DriveShareClipboardKind, url: string): Promise<void> {
   try {
     if (!navigator.clipboard) throw new Error('clipboard unavailable')
-    await navigator.clipboard.writeText(url)
+    await navigator.clipboard.writeText(buildDriveShareClipboardText(name, kind, url, window.location.origin))
     toast('已复制链接')
   } catch {
     toast('复制失败，请手动复制')

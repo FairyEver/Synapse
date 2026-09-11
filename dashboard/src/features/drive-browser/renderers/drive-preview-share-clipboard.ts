@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
-import { buildDriveShareClipboardText, type DrivePreviewCopyShareLinkAction } from './drive-preview-actions'
+import { buildDriveShareClipboardText } from '@synapse/shared'
+import type { DrivePreviewCopyShareLinkAction } from './drive-preview-actions'
 
 export async function copyDrivePreviewShareLink(action: DrivePreviewCopyShareLinkAction): Promise<void> {
   try {

@@ -484,7 +484,7 @@ describe("DriveModule", () => {
     expect(getSiteCreatedPasswordInput().value).toBe("SitePw1")
 
     await clickButtonText("复制链接")
-    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/sites/site_abc/?password=SitePw1")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("网页分享：原型\nhttps://synapse.test/sites/site_abc/?password=SitePw1")
 
     await clickButtonByLabel("复制密码")
     expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("SitePw1")
@@ -625,7 +625,7 @@ describe("DriveModule", () => {
 
     await clickButtonByLabel("复制 001")
 
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.d2.pub/sites/site_AZYoLz4O/?password=SitePw1")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("网页分享：001\nhttps://synapse.d2.pub/sites/site_AZYoLz4O/?password=SitePw1")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
   })
 
@@ -3138,7 +3138,7 @@ describe("DriveModule", () => {
       accessMode: "link_read",
       editorEmails: [],
     })
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_test")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("文件分享：report\nhttps://synapse.test/share/shr_test")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
     expect(document.body.textContent).toContain("文件已分享")
     expect(getDialogContent().className).toContain("sm:max-w-lg")
@@ -3153,7 +3153,7 @@ describe("DriveModule", () => {
     expect(mocks.openExternal).toHaveBeenCalledWith("https://synapse.test/share/shr_test")
 
     await clickButtonText("复制链接")
-    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("https://synapse.test/share/shr_test")
+    expect(mocks.writeClipboardText).toHaveBeenLastCalledWith("文件分享：report\nhttps://synapse.test/share/shr_test")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
     expect(getDialogFooterButtonTexts()).toEqual(["关闭"])
   })
@@ -3398,7 +3398,7 @@ describe("DriveModule", () => {
       itemId: "folder-1",
       ...DRIVE_DEFAULT_ACCESS_SETTINGS,
     })
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_folder")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("文件夹分享：site\nhttps://synapse.test/share/shr_folder")
     expect(document.body.textContent).toContain("文件夹已分享")
     expect(getDialogContent().className).toContain("sm:max-w-lg")
     expect(getShareUrlInput().value).toBe("https://synapse.test/share/shr_folder")
@@ -3780,7 +3780,7 @@ describe("DriveModule", () => {
 
     await clickTabText("文件")
     await clickButtonByLabel("复制 report.txt")
-    expect(mocks.writeClipboardText).toHaveBeenCalledWith("https://synapse.test/share/shr_test?password=AbC234xy")
+    expect(mocks.writeClipboardText).toHaveBeenCalledWith("文件分享：report\nhttps://synapse.test/share/shr_test?password=AbC234xy")
     expect(mocks.toast).toHaveBeenCalledWith("链接已复制")
 
     await clickButtonByLabel("复制 report.txt 密码")

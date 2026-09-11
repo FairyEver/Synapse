@@ -2,7 +2,9 @@ import {
   buildConsoleDriveBrowserUrl,
   buildConsoleDriveItemBrowserUrl,
   buildOwnerDriveBrowserUrl,
+  resolveDriveShareClipboardKind,
   type DriveBrowserSnapshotDto,
+  type DriveShareClipboardKind,
 } from '@synapse/shared'
 import { Copy, Download, ExternalLink, History, ListFilter, type LucideIcon } from 'lucide-react'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from '../shared/drive-format'
@@ -23,8 +25,6 @@ export type DrivePreviewFileIdentity = {
   readonly kindLabel: string
   readonly updatedAt: string
 }
-
-export type DrivePreviewShareKind = 'file' | 'folder' | 'webpage'
 
 export type DrivePreviewLinkAction = {
   readonly kind: 'link'
@@ -48,7 +48,7 @@ export type DrivePreviewCopyShareLinkAction = {
   readonly id: 'copy-share-link'
   readonly label: string
   readonly itemName: string
-  readonly shareKind: DrivePreviewShareKind
+  readonly shareKind: Exclude<DriveShareClipboardKind, 'site'>
   readonly shareUrl: string
   readonly icon: LucideIcon
 }
@@ -156,24 +156,10 @@ export function getDriveCopyShareLinkAction(snapshot: DriveBrowserSnapshotDto): 
     id: 'copy-share-link',
     label: '复制分享链接',
     itemName: snapshot.current.name,
-    shareKind: snapshot.current.type === 'folder'
-      ? 'folder'
-      : snapshot.current.previewKind === 'html-source' ? 'webpage' : 'file',
+    shareKind: resolveDriveShareClipboardKind(snapshot.current),
     shareUrl: snapshot.current.shareUrl,
     icon: Copy,
   }
-}
-
-export function buildDriveShareClipboardText(
-  itemName: string,
-  shareKind: DrivePreviewShareKind,
-  shareUrl: string,
-  origin: string,
-): string {
-  const extensionIndex = itemName.lastIndexOf('.')
-  const displayName = shareKind !== 'folder' && extensionIndex > 0 ? itemName.slice(0, extensionIndex) : itemName
-  const label = shareKind === 'folder' ? '文件夹分享' : shareKind === 'webpage' ? '网页分享' : '文件分享'
-  return `${label}：${displayName}\n${new URL(shareUrl, origin).href}`
 }
 
 export function getDrivePreviewSystemMenuSections(

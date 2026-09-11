@@ -29,6 +29,7 @@ import {
   buildConsoleDriveItemBrowserUrl,
   buildConsoleDriveRootUrl,
   buildDrivePublicAssetUrl,
+  buildDriveShareClipboardText,
   buildDriveSiteUrl,
   buildDriveShareUrl,
   buildDriveUrlWithPassword,
@@ -46,6 +47,7 @@ import {
   isPlainDriveMarkdownItem,
   isDrivePublicAssetId,
   parseDrivePublicAssetUrl,
+  resolveDriveShareClipboardKind,
   type DriveAnnotationAnchorStatus,
   type DriveAnnotationCommentDto,
   type DriveAnnotationCreateInput,
@@ -59,6 +61,34 @@ import {
 } from "./drive"
 
 describe("drive URL helpers", () => {
+  it("formats file, folder, HTML page, and website share clipboard text", () => {
+    expect(resolveDriveShareClipboardKind({ name: "notes.md", type: "file" })).toBe("file")
+    expect(resolveDriveShareClipboardKind({ name: "产品介绍.html", type: "file" })).toBe("webpage")
+    expect(resolveDriveShareClipboardKind({ name: "download", type: "file", previewKind: "html-source" })).toBe("webpage")
+    expect(resolveDriveShareClipboardKind({ name: "产品资料.v1", type: "folder" })).toBe("folder")
+    expect(buildDriveShareClipboardText(
+      "版本号规则.md",
+      "file",
+      "/share/shr_file",
+      "https://synapse.d2.pub",
+    )).toBe("文件分享：版本号规则\nhttps://synapse.d2.pub/share/shr_file")
+    expect(buildDriveShareClipboardText(
+      "产品资料.v1",
+      "folder",
+      "https://synapse.d2.pub/share/shr_folder",
+    )).toBe("文件夹分享：产品资料.v1\nhttps://synapse.d2.pub/share/shr_folder")
+    expect(buildDriveShareClipboardText(
+      "产品介绍.html",
+      "webpage",
+      "https://synapse.d2.pub/share/shr_webpage",
+    )).toBe("网页分享：产品介绍\nhttps://synapse.d2.pub/share/shr_webpage")
+    expect(buildDriveShareClipboardText(
+      "产品站点.v1",
+      "site",
+      "https://synapse.d2.pub/sites/site_1/",
+    )).toBe("网页分享：产品站点.v1\nhttps://synapse.d2.pub/sites/site_1/")
+  })
+
   it("uses a type-neutral namespace for platform objects", () => {
     expect(PLATFORM_OBJECT_PATH_PREFIX).toBe("/object")
   })

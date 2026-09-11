@@ -115,6 +115,7 @@ The creation dialog should be one dialog with clear sections, not a multi-page w
 5. **Completion**
    - Show `/sites/<siteId>/` URL.
    - Actions: copy link, open site, close.
+   - Copy link uses the shared Drive clipboard format: `网页分享：<站点名称>` followed by the absolute site URL on the next line.
 
 ## Webpage Share Management
 
@@ -151,7 +152,7 @@ Top controls:
 Row action menu:
 
 - Open.
-- Copy link.
+- Copy link using the same shared Drive clipboard format as the completion dialog.
 - Access settings.
 - Republish.
 - Disable / enable.

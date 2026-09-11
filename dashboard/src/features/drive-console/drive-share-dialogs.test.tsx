@@ -17,6 +17,7 @@ import {
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/lib/api', () => ({
+  driveAnnotationApi: {},
   driveApi: {
     createShare: vi.fn(),
     listShares: vi.fn(),
@@ -30,6 +31,8 @@ vi.mock('@/lib/api', () => ({
     republishSite: vi.fn(),
     deleteSite: vi.fn(),
   },
+  driveBrowserApi: {},
+  driveFileVersionsApi: {},
 }))
 
 vi.mock('sonner', () => ({
@@ -73,10 +76,12 @@ describe('DriveShareSettingsDialog', () => {
     expect(document.body.textContent).toContain('分享已创建')
     expect((document.querySelector('input') as HTMLInputElement | null)?.value).toBe('https://example.com/share/shr_1')
     await click(textButton('复制链接'))
-    expect(writeText).toHaveBeenCalledWith('https://example.com/share/shr_1')
+    expect(writeText).toHaveBeenCalledWith('文件分享：notes\nhttps://example.com/share/shr_1')
   })
 
   it('offers webpage sharing only for folders and uses public non-expiring defaults', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     vi.mocked(driveApi.preflightSite).mockResolvedValue({
       sourceFolderItemId: 'folder-1',
       sourceFolderName: '网页',
@@ -107,6 +112,8 @@ describe('DriveShareSettingsDialog', () => {
       accessMode: 'public',
       expiresIn: 'forever',
     })
+    await click(textButton('复制链接'))
+    expect(writeText).toHaveBeenCalledWith('网页分享：网页\nhttps://example.com/sites/site_1')
   })
 
   it('keeps standalone HTML in ordinary file sharing', () => {
@@ -174,6 +181,8 @@ describe('DriveShareSettingsDialog', () => {
 
 describe('DriveSharesDialog', () => {
   it('lists shares and cancels a share', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     vi.mocked(driveApi.listShares).mockResolvedValue({
       items: [{
         id: 'share-db-id',
@@ -198,6 +207,8 @@ describe('DriveSharesDialog', () => {
     await flush()
 
     expect(document.body.textContent).toContain('notes.md')
+    await click(textButton('复制链接'))
+    expect(writeText).toHaveBeenCalledWith('文件分享：notes\nhttps://example.com/share/shr_1?p=abc')
     await click(textButton('取消分享'))
     expect(driveApi.disableShare).toHaveBeenCalledWith('share-db-id')
   })
@@ -278,6 +289,8 @@ describe('DriveSharesDialog', () => {
   })
 
   it('opens webpage shares from the unified management dialog', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     vi.mocked(driveApi.listShares).mockResolvedValue({
       items: [],
       page: { offset: 0, limit: 50, hasMore: false, nextOffset: null },
@@ -317,6 +330,8 @@ describe('DriveSharesDialog', () => {
     expect(document.body.textContent).toContain('产品网页')
     expect(document.body.textContent).toContain('更新网页')
     expect(document.body.textContent).toContain('停止分享')
+    await click(textButton('复制链接'))
+    expect(writeText).toHaveBeenCalledWith('网页分享：产品网页\nhttp://localhost:3000/sites/site-1?password=abc')
   })
 })
 

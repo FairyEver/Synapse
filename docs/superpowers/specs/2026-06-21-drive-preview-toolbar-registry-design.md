@@ -111,15 +111,16 @@ The exact filenames can be adjusted during implementation, but responsibilities 
 
 `DrivePreviewFloatingMenu` owns only floating position and dropdown presentation. It must not duplicate action decisions.
 
-`drive-preview-actions.ts` owns pure helpers:
+`drive-preview-actions.ts` owns preview action helpers:
 
 - file identity view model,
 - system action view model,
-- copy-share-link text (`文件分享：` plus the filename without its final extension, `网页分享：` plus the HTML filename without its final extension, or `文件夹分享：` plus the folder name, followed by the share URL on the next line),
 - open-in-drive URL,
 - open-in-new-window URL,
 - version item id,
 - renderer selector options.
+
+`@synapse/shared` owns the copy-share-link text formatter so web preview, web management, and desktop management use one contract: `文件分享：` plus the filename without its final extension, `网页分享：` plus the HTML filename without its final extension or the site name, or `文件夹分享：` plus the folder name, followed by the absolute share URL on the next line.
 
 ### Finder Responsibilities
 

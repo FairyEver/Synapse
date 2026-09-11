@@ -25,7 +25,7 @@ export function DriveWebSharesPanel({
 }: {
   readonly active: boolean
   readonly onChanged: () => Promise<void>
-  readonly onCopyUrl: (url: string) => Promise<void>
+  readonly onCopyUrl: (name: string, url: string) => Promise<void>
 }) {
   const [sites, setSites] = useState<DriveSiteDto[]>([])
   const [accessTarget, setAccessTarget] = useState<DriveSiteDto | null>(null)
@@ -135,7 +135,7 @@ export function DriveWebSharesPanel({
               <Input value={site.password ? site.urlWithPassword : site.url} readOnly className='mt-1 font-mono text-xs' />
             </div>
             <div className='flex shrink-0 flex-wrap items-center justify-end gap-1'>
-              <Button data-drive-telemetry-event='web.drive.site.copy-url' type='button' variant='ghost' size='sm' onClick={() => { void onCopyUrl(site.password ? site.urlWithPassword : site.url) }}>
+              <Button data-drive-telemetry-event='web.drive.site.copy-url' type='button' variant='ghost' size='sm' onClick={() => { void onCopyUrl(site.name, site.password ? site.urlWithPassword : site.url) }}>
                 复制链接
               </Button>
               <Button data-drive-telemetry-event='web.drive.site.republish' type='button' variant='ghost' size='sm' disabled={submitting} onClick={() => { void runSiteAction(() => driveApi.republishSite(site.siteId, { entryPath: site.entryPath }), '更新网页失败') }}>

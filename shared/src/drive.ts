@@ -43,6 +43,7 @@ export const DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE = "仅支持 PNG、JP
 
 export type DriveItemType = "file" | "folder"
 export type DriveShareItemType = "file" | "folder"
+export type DriveShareClipboardKind = DriveShareItemType | "webpage" | "site"
 export type DriveStorageStatus = "pending" | "active" | "delete_pending" | "deleted" | "failed"
 export type DriveUploadSessionStatus = "pending" | "completed" | "cancelled" | "expired" | "failed"
 export type DriveAccessExpiresIn = "3d" | "7d" | "30d" | "1y" | "forever"
@@ -166,6 +167,28 @@ export const DRIVE_DEFAULT_SITE_ACCESS_SETTINGS = {
 } as const satisfies {
   readonly accessMode: DriveSiteAccessMode
   readonly expiresIn: DriveAccessExpiresIn
+}
+
+export function resolveDriveShareClipboardKind(item: {
+  readonly name: string
+  readonly type: DriveItemType | string
+  readonly previewKind?: DriveBrowserPreviewKind | null
+}): Exclude<DriveShareClipboardKind, "site"> {
+  if (item.type === "folder") return "folder"
+  return item.previewKind === "html-source" || /\.html?$/iu.test(item.name) ? "webpage" : "file"
+}
+
+export function buildDriveShareClipboardText(
+  itemName: string,
+  shareKind: DriveShareClipboardKind,
+  shareUrl: string,
+  baseUrl?: string,
+): string {
+  const extensionIndex = itemName.lastIndexOf(".")
+  const shouldStripExtension = shareKind === "file" || shareKind === "webpage"
+  const displayName = shouldStripExtension && extensionIndex > 0 ? itemName.slice(0, extensionIndex) : itemName
+  const label = shareKind === "folder" ? "文件夹分享" : shareKind === "file" ? "文件分享" : "网页分享"
+  return `${label}：${displayName}\n${new URL(shareUrl, baseUrl).href}`
 }
 
 export interface DriveItemDto {

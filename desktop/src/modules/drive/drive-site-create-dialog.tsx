@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { Check, Copy, ExternalLink, Info, LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
-import { DRIVE_DEFAULT_SITE_ACCESS_SETTINGS, type DriveAccessExpiresIn, type DriveItemDto, type DriveSiteDto, type DriveSitePreflightDto } from "@synapse/shared"
+import { DRIVE_DEFAULT_SITE_ACCESS_SETTINGS, buildDriveShareClipboardText, type DriveAccessExpiresIn, type DriveItemDto, type DriveSiteDto, type DriveSitePreflightDto } from "@synapse/shared"
 import { FormDialog } from "@/components/form-dialog"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -362,7 +362,7 @@ function DriveSiteCreatedContent({ site }: { readonly site: DriveSiteDto }) {
         </div>
       ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copyText(site.urlWithPassword, "链接已复制") }}>
+        <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => { void copySiteUrl(site) }}>
           <Copy data-icon="inline-start" />
           复制链接
         </Button>
@@ -391,6 +391,10 @@ async function copyText(value: string, successMessage: string): Promise<void> {
   } catch {
     toast("复制失败")
   }
+}
+
+async function copySiteUrl(site: DriveSiteDto): Promise<void> {
+  await copyText(buildDriveShareClipboardText(site.name, "site", site.urlWithPassword), "链接已复制")
 }
 
 async function openExternal(url: string): Promise<void> {
