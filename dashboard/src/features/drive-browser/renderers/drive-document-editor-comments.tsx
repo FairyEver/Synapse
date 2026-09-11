@@ -66,8 +66,6 @@ export function useDriveDocumentEditorComments({
   sourceMode,
   stateResetKey,
   preserveStateOnReset,
-  contentRootSelector,
-  ignoredElementSelector,
 }: {
   readonly current: DriveBrowserItemDto
   readonly currentVersionId?: string | null
@@ -77,8 +75,6 @@ export function useDriveDocumentEditorComments({
   readonly sourceMode: boolean
   readonly stateResetKey: string
   readonly preserveStateOnReset: boolean
-  readonly contentRootSelector?: string
-  readonly ignoredElementSelector?: string
 }) {
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const editorContentHostRef = useRef<HTMLDivElement | null>(null)
@@ -123,8 +119,6 @@ export function useDriveDocumentEditorComments({
     imagePreviewUrls,
     scrollRef: editorContainerRef,
     contentHostRef: editorContentHostRef,
-    contentRootSelector,
-    ignoredElementSelector,
   }
   const { geometry, notifyEditorUpdate, scheduleGeometry } = useDriveEditorCommentGeometry(geometryInput)
   const canCommentAnnotations = effectiveAnnotationContext?.context === 'owner'

@@ -9,14 +9,6 @@ export const DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR = [
   '[data-toolbar-item="true"]',
   '[data-drive-markdown-comment-excluded="true"]',
 ].join(', ')
-export const MILKDOWN_COMMENT_IGNORED_SELECTOR = [
-  '.list-item > .label-wrapper',
-  '.milkdown-code-block > .tools',
-  '.milkdown-code-block > .preview-panel',
-  '[data-type="html"]',
-].join(', ')
-const STANDALONE_HTML_IMAGE_PATTERN = /^\s*<img\b((?:[^"'<>]|"[^"]*"|'[^']*')*)\/?>\s*$/iu
-const QUOTED_HTML_ATTRIBUTE_PATTERN = /\b([a-z][a-z\d:-]*)\s*=\s*(["'])(.*?)\2/giu
 
 type TextRange = { readonly start: number; readonly end: number }
 
@@ -51,8 +43,6 @@ export type DriveEditorCommentGeometryInput = {
   readonly imagePreviewUrls: ReadonlyMap<string, string | null>
   readonly scrollRef: RefObject<HTMLDivElement | null>
   readonly contentHostRef: RefObject<HTMLDivElement | null>
-  readonly contentRootSelector?: string
-  readonly ignoredElementSelector?: string
 }
 
 const EMPTY_GEOMETRY: DriveEditorCommentGeometry = {
@@ -78,7 +68,7 @@ export function useDriveEditorCommentGeometry(input: DriveEditorCommentGeometryI
     const current = inputRef.current
     const scroller = current.scrollRef.current
     const contentHost = current.contentHostRef.current
-    const contentRoot = contentHost?.querySelector<HTMLElement>(current.contentRootSelector ?? '.drive-mdxeditor-content') ?? null
+    const contentRoot = contentHost?.querySelector<HTMLElement>('.drive-mdxeditor-content') ?? null
     if (!current.enabled || !scroller || !contentHost || !contentRoot) {
       setGeometry((existing) => sameGeometry(existing, EMPTY_GEOMETRY) ? existing : EMPTY_GEOMETRY)
       return
@@ -93,10 +83,7 @@ export function useDriveEditorCommentGeometry(input: DriveEditorCommentGeometryI
     }
 
     if (modelDirtyRef.current || !modelRef.current) {
-      const nextModel = createDriveEditorTextModel(
-        contentRoot,
-        current.ignoredElementSelector ?? DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR,
-      )
+      const nextModel = createDriveEditorTextModel(contentRoot)
       contentRoot.querySelectorAll('img').forEach((image) => resizeObserverRef.current?.observe(image))
       const previousText = previousTextRef.current
       if (previousText === null) {
@@ -159,10 +146,9 @@ export function useDriveEditorCommentGeometry(input: DriveEditorCommentGeometryI
     resizeObserver?.observe(scroller)
     resizeObserver?.observe(contentHost)
 
-    const contentRootSelector = current.contentRootSelector ?? '.drive-mdxeditor-content'
     let observedContentRoot: HTMLElement | null = null
     const updateObservedContentRoot = () => {
-      const nextContentRoot = contentHost.querySelector<HTMLElement>(contentRootSelector)
+      const nextContentRoot = contentHost.querySelector<HTMLElement>('.drive-mdxeditor-content')
       if (nextContentRoot === observedContentRoot) {
         nextContentRoot?.querySelectorAll('img').forEach((image) => resizeObserver?.observe(image))
         return false
@@ -220,7 +206,6 @@ export type DriveEditorTextModel = {
 
 export function createDriveEditorTextModel(
   root: HTMLElement,
-  ignoredElementSelector = DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR,
 ): DriveEditorTextModel {
   const values: string[] = []
   const segments: DriveEditorTextSegment[] = []
@@ -252,26 +237,13 @@ export function createDriveEditorTextModel(
       || node.getAttribute('aria-hidden') === 'true'
       || node.matches('.cm-gutters, textarea')
     ) return
-    if (node.matches('[data-type="html"]')) {
-      appendSynthetic(rawHtmlImageAlt(node.getAttribute('data-value') ?? node.textContent ?? ''))
-      return
-    }
-    if (node.matches('[data-type="hardbreak"]')) {
-      const placeholder = node.firstChild
-      if (placeholder instanceof Text && Array.from(placeholder.data).length === 1) {
-        appendText(placeholder, '\n')
-      } else {
-        appendSynthetic('\n')
-      }
-      return
-    }
-    if (ignoredElementSelector && node.matches(ignoredElementSelector)) return
+    if (node.matches(DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR)) return
     if (node instanceof HTMLImageElement) {
       appendSynthetic(node.alt)
       return
     }
     if (node.tagName === 'BR') {
-      if (isEditorPlaceholderBreak(node, ignoredElementSelector)) return
+      if (isEditorPlaceholderBreak(node)) return
       appendSynthetic('\n')
       return
     }
@@ -287,19 +259,7 @@ export function createDriveEditorTextModel(
   return { text: values.join(''), segments }
 }
 
-function rawHtmlImageAlt(value: string): string {
-  const tag = STANDALONE_HTML_IMAGE_PATTERN.exec(value)
-  if (!tag) return ''
-  const attributes = new Map<string, string>()
-  for (const match of tag[1].matchAll(QUOTED_HTML_ATTRIBUTE_PATTERN)) {
-    attributes.set(match[1].toLowerCase(), match[3])
-  }
-  if (!attributes.get('src')?.trim()) return ''
-  return attributes.get('alt') ?? ''
-}
-
-function isEditorPlaceholderBreak(node: HTMLElement, ignoredElementSelector: string): boolean {
-  if (node.classList.contains('ProseMirror-trailingBreak')) return true
+function isEditorPlaceholderBreak(node: HTMLElement): boolean {
   const parent = node.parentElement
   if (!parent || parent.tagName !== 'P') return false
   const siblings = Array.from(parent.childNodes).filter((sibling) => sibling !== node)
@@ -308,7 +268,7 @@ function isEditorPlaceholderBreak(node: HTMLElement, ignoredElementSelector: str
     sibling instanceof HTMLElement
     && (
       sibling.matches('[data-lexical-decorator="true"]')
-      || sibling.matches(ignoredElementSelector)
+      || sibling.matches(DRIVE_EDITOR_COMMENT_IGNORED_SELECTOR)
     )
   ))
 }

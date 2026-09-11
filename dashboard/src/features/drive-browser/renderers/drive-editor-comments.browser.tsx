@@ -1,5 +1,4 @@
 import '@/styles/index.css'
-import '@milkdown/crepe/theme/common/style.css'
 import '@mdxeditor/editor/style.css'
 import type { ComponentProps } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -14,7 +13,6 @@ import { userEvent } from 'vitest/browser'
 import { render } from 'vitest-browser-react'
 import { driveAnnotationApi } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
-import { DriveMilkdownRenderer } from './milkdown-renderer'
 import { DriveRendererToolbarProvider } from './drive-renderer-toolbar-context'
 
 afterEach(() => {
@@ -22,13 +20,6 @@ afterEach(() => {
 })
 
 const editorCases = [
-  {
-    name: 'Milkdown',
-    contentSelector: '.milkdown .ProseMirror',
-    overlaySelector: '[data-drive-milkdown-comment-thread-id="thread-target"]',
-    scrollSelector: '[data-drive-milkdown-scroll="true"]',
-    render: (props: EditorProps) => <DriveMilkdownRenderer {...props} />,
-  },
   {
     name: 'MDXEditor',
     contentSelector: '.drive-mdxeditor-content',
@@ -96,8 +87,8 @@ type EditorProps = {
   readonly current: DriveBrowserItemDto
   readonly preview: DriveBrowserPreviewDto
   readonly edit: DriveBrowserEditDto
-  readonly editContext: NonNullable<ComponentProps<typeof DriveMilkdownRenderer>['editContext']>
-  readonly annotationContext: NonNullable<ComponentProps<typeof DriveMilkdownRenderer>['annotationContext']>
+  readonly editContext: NonNullable<ComponentProps<typeof DriveMDXeditorRenderer>['editContext']>
+  readonly annotationContext: NonNullable<ComponentProps<typeof DriveMDXeditorRenderer>['annotationContext']>
 }
 
 function commentDocument(): {
@@ -145,7 +136,7 @@ function editable(): DriveBrowserEditDto {
   return { canEdit: true, editorKind: 'text', currentVersionId: 'version-1', reason: null }
 }
 
-function editContext(): NonNullable<ComponentProps<typeof DriveMilkdownRenderer>['editContext']> {
+function editContext(): NonNullable<ComponentProps<typeof DriveMDXeditorRenderer>['editContext']> {
   return {
     reload: vi.fn(async () => ({} as never)),
     reloading: false,

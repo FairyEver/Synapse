@@ -168,6 +168,19 @@ describe('DriveMarkdownRenderer', () => {
     expect(document.querySelector('img')?.getAttribute('src')).toBe('/drive/items/image-1/download')
   })
 
+  it('keeps markdown images within a centered square capped at the reading width', () => {
+    renderMarkdown({ previewData: preview({ html: '<p><img src="/phone.png" alt="手机截图"></p>' }) })
+
+    const body = markdownBody()
+    expect(body.className).toContain('@container')
+    expect(body.className).toContain('[&_img]:mx-auto')
+    expect(body.className).toContain('[&_img]:block')
+    expect(body.className).toContain('[&_img]:h-auto')
+    expect(body.className).toContain('[&_img]:max-h-[min(100cqi,var(--container-3xl))]')
+    expect(body.className).toContain('[&_img]:max-w-full')
+    expect(body.className).toContain('[&_img]:object-contain')
+  })
+
   it('does not restore collaboration image sources without a server mapping', () => {
     collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="./images/private.png" src="/drive/items/private/download" alt="private"></p>'
     renderMarkdown({ previewData: preview() })

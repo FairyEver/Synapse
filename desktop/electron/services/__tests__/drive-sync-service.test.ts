@@ -3630,11 +3630,11 @@ describe("DriveSyncService", () => {
         rawEvent = listener
         return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
       }
-      const uploadDriveLocalItems = vi.fn(async () => ({ completed: 1, failed: 0, skipped: 0 }))
+      const uploadDriveSyncFile = vi.fn(async () => mockDriveItem("remote-spec"))
       const harness = createHarness({
         watch,
         accountService: {
-          uploadDriveLocalItems,
+          uploadDriveSyncFile,
           listDriveChanges: vi.fn()
             .mockResolvedValueOnce({
               items: [{
@@ -3691,12 +3691,136 @@ describe("DriveSyncService", () => {
 
       await service.pollRemoteChanges(binding.id)
       emitRawEvent(rawEvent, "change", "Project/notes/spec.md")
+      emitRawEvent(rawEvent, "change", "Project/notes/spec.md")
       await waitForTimeout(650)
 
-      expect(uploadDriveLocalItems).not.toHaveBeenCalled()
+      expect(uploadDriveSyncFile).not.toHaveBeenCalled()
       await expect(harness.operations.list()).resolves.not.toContainEqual(
         expect.objectContaining({ bindingId: binding.id, kind: "upload", relativePath: "Project/notes/spec.md" }),
       )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("does not upload a remote file download when the filesystem emits multiple watcher events", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "before", "utf8")
+      let rawEvent: ((eventType: string, filename: string | Buffer | null) => void) | null = null
+      const watch: DriveSyncWatchFactory = (_rootPath, _options, listener) => {
+        rawEvent = listener
+        return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
+      }
+      const uploadDriveSyncFile = vi.fn(async () => mockDriveItem("remote-file"))
+      const harness = createHarness({
+        watch,
+        accountService: {
+          uploadDriveSyncFile,
+          listDriveChanges: vi.fn()
+            .mockResolvedValueOnce({
+              items: [{
+                id: "change-1",
+                sequence: "43",
+                itemId: "remote-file",
+                parentId: null,
+                type: "content_updated",
+                versionId: "version-2",
+                etag: null,
+                name: "spec.md",
+                pathHint: "/spec.md",
+                actor: "user",
+                occurredAt: "2026-06-28T00:00:00.000Z",
+              }],
+              nextCursor: "43",
+              hasMore: false,
+              resyncRequired: false,
+            })
+            .mockResolvedValue({
+              items: [],
+              nextCursor: "43",
+              hasMore: false,
+              resyncRequired: false,
+            }),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "remote", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-file",
+        driveItemName: "spec.md",
+        kind: "file",
+        drivePathHint: "/spec.md",
+        localPath,
+        remoteCursor: "41",
+      })
+      await seedFileBaseline(harness, binding.id, localPath, "remote-file")
+
+      await service.pollRemoteChanges(binding.id)
+      emitRawEvent(rawEvent, "rename", "spec.md")
+      emitRawEvent(rawEvent, "change", "spec.md")
+      await waitForTimeout(650)
+
+      await expect(readFile(localPath, "utf8")).resolves.toBe("remote")
+      expect(uploadDriveSyncFile).not.toHaveBeenCalled()
+      await expect(harness.operations.list()).resolves.not.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "upload", relativePath: "" }),
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("uploads a real local file edit after revalidating its watcher event", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const localPath = path.join(tempDir, "spec.md")
+      await writeFile(localPath, "before", "utf8")
+      let rawEvent: ((eventType: string, filename: string | Buffer | null) => void) | null = null
+      const watch: DriveSyncWatchFactory = (_rootPath, _options, listener) => {
+        rawEvent = listener
+        return { close: vi.fn(), on: vi.fn() } as unknown as ReturnType<DriveSyncWatchFactory>
+      }
+      const uploadDriveSyncFile = vi.fn(async () => mockDriveItem("remote-spec"))
+      const harness = createHarness({ watch, accountService: { uploadDriveSyncFile } })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        kind: "folder",
+        drivePathHint: "/Docs",
+        localPath: tempDir,
+      })
+      const stats = await lstat(localPath)
+      await harness.baseline.upsert({
+        id: `${binding.id}:spec.md`,
+        schemaVersion: 1,
+        bindingId: binding.id,
+        relativePath: "spec.md",
+        kind: "file",
+        remoteItemId: "remote-spec",
+        remoteVersionId: null,
+        remoteEtag: null,
+        localSize: stats.size,
+        localMtimeMs: stats.mtimeMs,
+        localHash: await hashDriveSyncFile(localPath),
+        lastSyncedAt: "2026-06-28T00:00:00.000Z",
+        deletedAt: null,
+      })
+
+      await writeFile(localPath, "after", "utf8")
+      emitRawEvent(rawEvent, "change", "spec.md")
+
+      await waitForExpect(() => {
+        expect(uploadDriveSyncFile).toHaveBeenCalledWith(expect.objectContaining({
+          expectedItemId: "remote-spec",
+          name: "spec.md",
+        }))
+      }, 1000)
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }

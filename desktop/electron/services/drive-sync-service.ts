@@ -2534,12 +2534,55 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     baseline: readonly DriveSyncBaselineEntryV1[],
     changes: readonly DriveSyncLocalChange[],
   ): Promise<readonly DriveSyncLocalChange[]> {
-    if (binding.kind !== "folder" || !hasLocalRescanSignal(changes)) return changes
-    return localWatcher.scanBinding({
-      binding,
-      baseline,
-      forceHashPaths: new Set(changes.map((change) => change.relativePath)),
-    })
+    if (binding.kind === "file" || hasLocalRescanSignal(changes)) {
+      return localWatcher.scanBinding({
+        binding,
+        baseline,
+        forceHashPaths: new Set(changes.map((change) => change.relativePath)),
+      })
+    }
+
+    const baselineByPath = new Map(
+      baseline
+        .filter((entry) => entry.deletedAt === null)
+        .map((entry) => [entry.relativePath, entry] as const),
+    )
+    const revalidated = await Promise.all(changes.map((change) =>
+      revalidateSimpleLocalChange(change, baselineByPath.get(change.relativePath)),
+    ))
+    return revalidated.filter((change): change is DriveSyncLocalChange => change !== null)
+  }
+
+  async function revalidateSimpleLocalChange(
+    change: DriveSyncLocalChange,
+    baseline: DriveSyncBaselineEntryV1 | undefined,
+  ): Promise<DriveSyncLocalChange | null> {
+    const current = await inspectDriveSyncLocalPath(change.localPath)
+    if (current.kind === "missing") {
+      return baseline
+        ? { ...change, kind: "deleted", localKind: "missing" }
+        : null
+    }
+    if (current.kind === "folder") {
+      return baseline?.kind === "folder"
+        ? null
+        : { ...change, kind: baseline ? "modified" : "created", localKind: "folder" }
+    }
+    if (current.kind !== "file") {
+      return { ...change, kind: baseline ? "modified" : "created", localKind: current.kind }
+    }
+
+    const stats = await lstat(change.localPath)
+    const localHash = await hashDriveSyncFile(change.localPath)
+    if (baseline?.kind === "file" && baseline.localHash === localHash) return null
+    return {
+      ...change,
+      kind: baseline ? "modified" : "created",
+      localKind: "file",
+      localSize: stats.size,
+      localMtimeMs: stats.mtimeMs,
+      localHash,
+    }
   }
 
   function hasLocalRescanSignal(changes: readonly DriveSyncLocalChange[]): boolean {

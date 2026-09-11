@@ -2,34 +2,21 @@ import { describe, expect, it } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { getDriveRendererOptions, selectDefaultDriveRenderer } from './drive-renderer-registry'
 
-describe('Drive Milkdown renderer registration', () => {
-  it('offers Milkdown for plain Markdown without changing the default renderer', () => {
+describe('Drive renderer registration', () => {
+  it('offers one rich-text editor for Markdown without changing the default renderer', () => {
     const options = getDriveRendererOptions(snapshot({ name: 'notes.md', mimeType: 'text/markdown' }))
 
-    expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'milkdown', 'code'])
-    expect(options.map((option) => option.label)).toEqual(['预览', 'MDXeditor', 'Milkdown', '代码'])
+    expect(options.map((option) => option.id)).toEqual(['markdown', 'mdxeditor', 'code'])
+    expect(options.map((option) => option.label)).toEqual(['预览', 'MDXeditor', '代码'])
     expect(selectDefaultDriveRenderer(snapshot({ name: 'notes.md' }))?.id).toBe('markdown')
   })
 
-  it('accepts Markdown extensions and normalized MIME types but excludes .mdx names', () => {
-    expect(rendererIds({ name: 'guide.markdown', mimeType: null })).toContain('milkdown')
-    expect(rendererIds({ name: 'README', mimeType: 'text/markdown; charset=utf-8' })).toContain('milkdown')
-    expect(rendererIds({ name: 'README', mimeType: 'text/x-markdown' })).toContain('milkdown')
-    expect(rendererIds({ name: 'README', mimeType: ' TEXT/X-MARKDOWN ; charset=utf-8' })).toContain('milkdown')
-    expect(rendererIds({ name: 'component.mdx', mimeType: 'text/markdown' })).not.toContain('milkdown')
-    expect(rendererIds({ name: 'component.MDX', mimeType: 'text/x-markdown; charset=utf-8' })).not.toContain('milkdown')
-  })
+  it('disables the rich-text editor when the Markdown preview is truncated', () => {
+    const editor = getDriveRendererOptions(snapshot({ truncated: true })).find((option) => option.id === 'mdxeditor')
 
-  it('disables Milkdown when the Markdown preview is truncated', () => {
-    const milkdown = getDriveRendererOptions(snapshot({ truncated: true })).find((option) => option.id === 'milkdown')
-
-    expect(milkdown?.disabledReason).toBe('超过富文本限制')
+    expect(editor?.disabledReason).toBe('超过富文本限制')
   })
 })
-
-function rendererIds(overrides: SnapshotOverrides): readonly string[] {
-  return getDriveRendererOptions(snapshot(overrides)).map((option) => option.id)
-}
 
 type SnapshotOverrides = {
   readonly name?: string

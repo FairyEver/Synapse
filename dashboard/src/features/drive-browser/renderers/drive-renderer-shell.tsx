@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   type DriveCollaborationJoinContext,
   type DriveBrowserEditUnavailableReason,
@@ -30,11 +30,6 @@ import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
-
-const DriveMilkdownRenderer = lazy(async () => {
-  const module = await import('./milkdown-renderer')
-  return { default: module.DriveMilkdownRenderer }
-})
 
 const READING_CONTAINER_CLASSNAME = 'mx-auto h-full w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
@@ -293,7 +288,7 @@ function DriveRendererMountGate({
   readonly onRefresh: (id: DriveRendererId, mountKey: string) => Promise<void>
   readonly onRefreshError: () => void
 }) {
-  const refreshRequired = (selected.id === 'mdxeditor' || selected.id === 'milkdown')
+  const refreshRequired = selected.id === 'mdxeditor'
     && Boolean(snapshot.collaboration?.enabled && editContext?.reload)
   const [ready, setReady] = useState(!refreshRequired)
   const refreshRequestedRef = useRef(false)
@@ -342,7 +337,7 @@ export async function refreshBeforeDriveRendererMount(input: {
   readonly collaborationEnabled: boolean
   readonly reload?: () => Promise<DriveBrowserSnapshotDto>
 }): Promise<void> {
-  if ((input.id !== 'mdxeditor' && input.id !== 'milkdown') || !input.collaborationEnabled || !input.reload) return
+  if (input.id !== 'mdxeditor' || !input.collaborationEnabled || !input.reload) return
   await input.reload()
 }
 
@@ -419,22 +414,6 @@ export function DriveRendererContent({
       />
     )
   }
-  if (selected.id === 'milkdown') {
-    return renderContent(
-      <DriveRendererLoadBoundary>
-        <Suspense fallback={<DriveRendererLoading />}>
-          <DriveMilkdownRenderer
-            current={snapshot.current}
-            preview={preview}
-            edit={snapshot.edit}
-            editContext={editContext}
-            annotationContext={annotationContext}
-            imageUploadContext={imageUploadContext}
-          />
-        </Suspense>
-      </DriveRendererLoadBoundary>
-    )
-  }
   if (selected.id === 'code') {
     return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} collaboration={snapshot.collaboration} collaborationContext={collaborationContext} />)
   }
@@ -445,36 +424,6 @@ export function DriveRendererContent({
     return renderContent(<DriveIframeRenderer current={snapshot.current} visitUrl={preview.visitUrl} />)
   }
   return renderContent(<DriveCodeRenderer current={snapshot.current} preview={preview} edit={snapshot.edit} editContext={editContext} collaboration={snapshot.collaboration} collaborationContext={collaborationContext} />)
-}
-
-function DriveRendererLoading() {
-  return (
-    <div className='flex h-full items-center justify-center text-sm text-muted-foreground' role='status'>
-      加载中
-    </div>
-  )
-}
-
-class DriveRendererLoadBoundary extends Component<
-  { readonly children: ReactNode },
-  { readonly failed: boolean }
-> {
-  state = { failed: false }
-
-  static getDerivedStateFromError() {
-    return { failed: true }
-  }
-
-  render() {
-    if (this.state.failed) {
-      return (
-        <div className='flex h-full items-center justify-center text-sm text-destructive' role='alert'>
-          无法加载编辑器
-        </div>
-      )
-    }
-    return this.props.children
-  }
 }
 
 function getDriveEditUnavailableLabel(snapshot: DriveBrowserSnapshotDto): string | null {

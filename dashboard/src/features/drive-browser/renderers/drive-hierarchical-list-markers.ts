@@ -1,6 +1,5 @@
 export const DRIVE_HIERARCHICAL_LIST_MARKER_ATTRIBUTE = 'data-drive-list-marker'
 export const DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME = '[&_ol>li[data-drive-list-marker]::marker]:content-[attr(data-drive-list-marker)_"_"]!'
-const DRIVE_MILKDOWN_ORDERED_LABEL_SELECTOR = ':scope > .label-wrapper > .label.ordered'
 
 export function syncDriveHierarchicalListMarkers(root: ParentNode): void {
   const markerPaths = new Map<HTMLLIElement, readonly number[]>()
@@ -32,8 +31,6 @@ export function syncDriveHierarchicalListMarkers(root: ParentNode): void {
       renderedItemCount += 1
       const marker = path.length === 1 ? `${current}.` : path.join('.')
       item.setAttribute(DRIVE_HIERARCHICAL_LIST_MARKER_ATTRIBUTE, marker)
-      const renderedLabel = item.querySelector<HTMLElement>(DRIVE_MILKDOWN_ORDERED_LABEL_SELECTOR)
-      if (renderedLabel && renderedLabel.textContent !== marker) renderedLabel.textContent = marker
     })
   }
 }

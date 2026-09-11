@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import {
   createDriveEditorTextModel,
   mapWorkingRange,
-  MILKDOWN_COMMENT_IGNORED_SELECTOR,
 } from './drive-editor-comment-geometry'
 
 describe('MDXEditor comment geometry', () => {
@@ -49,30 +48,5 @@ describe('MDXEditor comment geometry', () => {
 
   it('uses code-point rather than UTF-16 offsets', () => {
     expect(mapWorkingRange('🙂目标', '前🙂目标', { start: 1, end: 3 })).toEqual({ start: 2, end: 4 })
-  })
-})
-
-describe('Milkdown comment text model', () => {
-  it('uses raw HTML image alt text without including other HTML controls', () => {
-    const root = document.createElement('div')
-    root.innerHTML = [
-      '<p>Before <span data-type="html" data-value=\'<img src="/object/x" alt="Raw alt">\'>&lt;img src="/object/x" alt="Raw alt"&gt;</span> after',
-      '<span data-type="html" data-value=\'<button>Ignore me</button>\'>&lt;button&gt;Ignore me&lt;/button&gt;</span>🙂</p>',
-    ].join('')
-
-    const model = createDriveEditorTextModel(root, MILKDOWN_COMMENT_IGNORED_SELECTOR)
-
-    expect(model.text).toBe('Before Raw alt after🙂')
-    expect(model.segments.at(-1)?.end).toBe(Array.from(model.text).length)
-  })
-
-  it('maps an inline hardbreak placeholder to a code-point newline', () => {
-    const root = document.createElement('div')
-    root.innerHTML = '<p>🙂line one<span data-type="hardbreak" data-is-inline="true"> </span>line two</p>'
-
-    const model = createDriveEditorTextModel(root, MILKDOWN_COMMENT_IGNORED_SELECTOR)
-
-    expect(model.text).toBe('🙂line one\nline two')
-    expect(model.segments.at(-1)?.end).toBe(Array.from(model.text).length)
   })
 })
