@@ -227,7 +227,10 @@ export class DriveMarkdownPdfExportService {
       }
       if (!response.ok) throw new BadGatewayException("PDF 导出服务暂不可用。")
       const declaredLength = Number(response.headers.get("content-length") ?? 0)
-      if (declaredLength > DRIVE_PDF_OUTPUT_MAX_BYTES) throw new PayloadTooLargeException("生成的 PDF 超过 64 MiB。")
+      if (declaredLength > DRIVE_PDF_OUTPUT_MAX_BYTES) {
+        await response.body?.cancel().catch(() => undefined)
+        throw new PayloadTooLargeException("生成的 PDF 超过 64 MiB。")
+      }
       const bytes = await readLimitedWebResponse(response, DRIVE_PDF_OUTPUT_MAX_BYTES)
       if (!bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new BadGatewayException("PDF 导出结果无效。")
       return {

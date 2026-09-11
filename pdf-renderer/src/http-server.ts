@@ -11,6 +11,7 @@ import {
 // 64 MiB of images expand to roughly 86 MiB after Base64 encoding, while 10 MiB
 // of Markdown can expand severalfold during safe HTML escaping. Keep headroom for JSON framing.
 export const PDF_RENDERER_MAX_REQUEST_BYTES = 192 * 1024 * 1024
+export const PDF_RENDERER_MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 export const PDF_RENDERER_MAX_ACTIVE = 2
 export const PDF_RENDERER_MAX_QUEUED = 8
 
@@ -21,11 +22,13 @@ export function createPdfRendererServer(input: {
   readonly renderer: Renderer
   readonly internalSecret: string
   readonly maxRequestBytes?: number
+  readonly maxOutputBytes?: number
   readonly maxActive?: number
   readonly maxQueued?: number
   readonly log?: Log
 }): Server {
   const maxRequestBytes = input.maxRequestBytes ?? PDF_RENDERER_MAX_REQUEST_BYTES
+  const maxOutputBytes = input.maxOutputBytes ?? PDF_RENDERER_MAX_OUTPUT_BYTES
   const maxActive = input.maxActive ?? PDF_RENDERER_MAX_ACTIVE
   const maxQueued = input.maxQueued ?? PDF_RENDERER_MAX_QUEUED
   const log = input.log ?? (() => undefined)
@@ -75,6 +78,7 @@ export function createPdfRendererServer(input: {
     try {
       const renderInput = parseRenderRequest(await readRequestBody(request, maxRequestBytes))
       const result = await input.renderer.render(renderInput, disconnectController.signal)
+      if (result.bytes.length > maxOutputBytes) throw new RequestError(413)
       response.writeHead(200, {
         "Content-Type": "application/pdf",
         "Content-Length": String(result.bytes.length),

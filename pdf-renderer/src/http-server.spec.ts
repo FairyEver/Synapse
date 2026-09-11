@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   createPdfRendererServer,
   PDF_RENDERER_MAX_ACTIVE,
+  PDF_RENDERER_MAX_OUTPUT_BYTES,
   PDF_RENDERER_MAX_QUEUED,
   type PdfRendererHttpTestRenderer,
 } from "./http-server"
@@ -22,6 +23,7 @@ describe("PDF renderer HTTP server", () => {
   it("uses the documented two-active and eight-queued defaults", () => {
     expect(PDF_RENDERER_MAX_ACTIVE).toBe(2)
     expect(PDF_RENDERER_MAX_QUEUED).toBe(8)
+    expect(PDF_RENDERER_MAX_OUTPUT_BYTES).toBe(64 * 1024 * 1024)
   })
 
   it("rejects unauthenticated render requests", async () => {
@@ -61,6 +63,20 @@ describe("PDF renderer HTTP server", () => {
     expect(response.headers.get("x-synapse-pdf-image-warnings")).toBe("1")
     expect(response.headers.get("x-synapse-pdf-diagram-warnings")).toBe("2")
     expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString("ascii")).toBe("%PDF-")
+  })
+
+  it("rejects renderer output above the configured limit", async () => {
+    const renderer = fakeRenderer()
+    renderer.render.mockResolvedValueOnce({
+      bytes: Buffer.from("%PDF-oversized"),
+      imageWarnings: 0,
+      diagramWarnings: 0,
+    })
+    const { url } = await startServer({ renderer, maxOutputBytes: 8 })
+
+    const response = await renderRequest(url)
+
+    expect(response.status).toBe(413)
   })
 
   it("rejects a full queue and removes a queued request when its client disconnects", async () => {
@@ -107,6 +123,7 @@ function fakeRenderer(): PdfRendererHttpTestRenderer & {
 async function startServer(options: {
   renderer?: ReturnType<typeof fakeRenderer>
   maxRequestBytes?: number
+  maxOutputBytes?: number
   maxActive?: number
   maxQueued?: number
 } = {}) {
@@ -115,6 +132,7 @@ async function startServer(options: {
     renderer,
     internalSecret: secret,
     maxRequestBytes: options.maxRequestBytes,
+    maxOutputBytes: options.maxOutputBytes,
     maxActive: options.maxActive,
     maxQueued: options.maxQueued,
   })

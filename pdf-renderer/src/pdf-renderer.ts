@@ -239,6 +239,23 @@ function hydratePdfResources(): void {
 async function renderDocumentEnhancements(): Promise<{ readonly imageWarnings: number; readonly diagramWarnings: number }> {
   const root = document.querySelector<HTMLElement>(".markdown-body")
   if (!root) return { imageWarnings: 0, diagramWarnings: 0 }
+  const findListItem = (child: Element): HTMLLIElement | null => {
+    if (child instanceof HTMLLIElement) return child
+    return child.firstElementChild instanceof HTMLLIElement ? child.firstElementChild : null
+  }
+  const isNestedListContainer = (item: HTMLLIElement): boolean => {
+    let containsNestedList = false
+    for (const child of item.childNodes) {
+      if (child instanceof HTMLOListElement || child instanceof HTMLUListElement) {
+        containsNestedList = true
+        continue
+      }
+      if (child.nodeType === Node.TEXT_NODE && !child.textContent?.trim()) continue
+      if (child.nodeType === Node.COMMENT_NODE) continue
+      return false
+    }
+    return containsNestedList
+  }
   const markerPaths = new Map<HTMLLIElement, number[]>()
   for (const list of root.querySelectorAll<HTMLOListElement>("ol")) {
     let ancestor = list.parentElement
@@ -250,12 +267,21 @@ async function renderDocumentEnhancements(): Promise<{ readonly imageWarnings: n
       }
       ancestor = ancestor.parentElement
     }
+    const items = Array.from(list.children, findListItem).filter((item): item is HTMLLIElement => item !== null)
     let current = list.start
-    Array.from(list.children).filter((child): child is HTMLLIElement => child instanceof HTMLLIElement).forEach((item, index) => {
+    let renderedItemCount = 0
+    let previousPath: number[] | undefined
+    items.forEach((item) => {
+      if (isNestedListContainer(item)) {
+        markerPaths.set(item, previousPath ?? ancestorPath)
+        return
+      }
       if (item.hasAttribute("value")) current = item.value
-      else if (index > 0) current += 1
+      else if (renderedItemCount > 0) current += 1
       const path = [...ancestorPath, current]
       markerPaths.set(item, path)
+      previousPath = path
+      renderedItemCount += 1
       item.dataset.driveListMarker = path.length === 1 ? `${current}.` : path.join(".")
     })
   }

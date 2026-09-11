@@ -181,6 +181,23 @@ describe("DriveMarkdownPdfExportService", () => {
     })).rejects.toMatchObject({ status: 413 })
   })
 
+  it("cancels a renderer response whose declared PDF size exceeds the limit", async () => {
+    configureRendererEnv()
+    const cancel = vi.fn()
+    const body = new ReadableStream<Uint8Array>({ cancel })
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, {
+      status: 200,
+      headers: { "Content-Length": String(64 * 1024 * 1024 + 1) },
+    })))
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+
+    await expect(service.export({
+      rateLimitKey: "user:oversized-renderer-response",
+      resolveSource: async () => emptySource("oversized-response.md"),
+    })).rejects.toMatchObject({ status: 413 })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
   it("limits one rate-limit key to five exports per minute", async () => {
     configureRendererEnv()
     const render = vi.fn(async () => new Response(Buffer.from("%PDF-test"), { status: 200 }))

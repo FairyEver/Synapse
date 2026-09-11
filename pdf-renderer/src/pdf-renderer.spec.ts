@@ -17,6 +17,25 @@ describe.sequential("PdfRenderer", () => {
     expect(result.diagramWarnings).toBe(0)
   }, 30_000)
 
+  it("does not count wrapper-only ordered-list items in hierarchical markers", async () => {
+    const listRenderer = new PdfRenderer(55_000, async (page) => {
+      expect(await page.locator("li").evaluateAll((items) => items.map((item) => (
+        item.getAttribute("data-drive-list-marker")
+      )))).toEqual(["3.", null, "3.1", "4."])
+    })
+    try {
+      const result = await listRenderer.render({
+        schemaVersion: 1,
+        title: "分级列表",
+        html: '<main class="markdown-body"><ol start="3"><li>第一项</li><li><ol><li>嵌套项</li></ol></li><li>第二项</li></ol></main>',
+      })
+
+      expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
+    } finally {
+      await listRenderer.close()
+    }
+  }, 30_000)
+
   it("continues when Mermaid source is invalid", async () => {
     const result = await renderer.render({
       schemaVersion: 1,
