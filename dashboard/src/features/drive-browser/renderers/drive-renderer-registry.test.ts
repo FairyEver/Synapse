@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { getDriveRendererOptions, selectDefaultDriveRenderer } from './drive-renderer-registry'
 
 describe('Drive renderer registration', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('offers one rich-text editor for Markdown without changing the default renderer', () => {
     const options = getDriveRendererOptions(snapshot({ name: 'notes.md', mimeType: 'text/markdown' }))
 
@@ -15,6 +19,15 @@ describe('Drive renderer registration', () => {
     const editor = getDriveRendererOptions(snapshot({ truncated: true })).find((option) => option.id === 'mdxeditor')
 
     expect(editor?.disabledReason).toBe('超过富文本限制')
+  })
+
+  it('disables the rich-text editor when the browser lacks structured cloning', () => {
+    vi.stubGlobal('structuredClone', undefined)
+
+    const editor = getDriveRendererOptions(snapshot()).find((option) => option.id === 'mdxeditor')
+
+    expect(editor?.disabledReason).toBe('当前浏览器不支持')
+    expect(selectDefaultDriveRenderer(snapshot())?.id).toBe('markdown')
   })
 })
 

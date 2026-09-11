@@ -1,4 +1,5 @@
 import { sendClientTelemetryBatch } from '@/lib/api-client'
+import { createBrowserUuid } from '@/lib/browser-compat'
 import { useAuthStore } from '@/stores/auth-store'
 
 export type DriveTelemetryCategory = 'lifecycle' | 'navigation' | 'interaction' | 'operation' | 'error'
@@ -288,11 +289,7 @@ function readOrCreateStorageId(storage: Storage, key: string): string {
 }
 
 function createId(): string {
-  try {
-    return crypto.randomUUID()
-  } catch {
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-  }
+  return createBrowserUuid()
 }
 
 function normalizeAppVersion(value: unknown): string {

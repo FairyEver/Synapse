@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/sheet'
 import { useTheme } from '@/context/theme-provider'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
+import { createBrowserUuid } from '@/lib/browser-compat'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
@@ -803,7 +804,7 @@ function DriveMarkdownBody({
         epoch: liveCollaboration.state?.epoch ?? null,
         stateVector: liveCollaboration.session ? encodeStateVector(liveCollaboration.session.doc) : null,
         selectors: pendingTarget.selectors,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: createBrowserUuid(),
         targetKind: pendingTarget.target.kind,
         target: pendingTarget.target,
         body: commentBody,

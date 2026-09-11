@@ -15,11 +15,12 @@ import * as syncProtocol from 'y-protocols/sync'
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import { IndexeddbPersistence } from 'y-indexeddb'
+import { createBrowserUuid } from '@/lib/browser-compat'
 
 const messageSync = 0
 const messageAwareness = 1
 const maximumReconnectDelayMs = 10_000
-const collaborationTabClientId = crypto.randomUUID()
+const collaborationTabClientId = createBrowserUuid()
 
 export type DriveCollaborationStatus = 'connecting' | 'syncing' | 'synced' | 'failed' | 'readonly'
 

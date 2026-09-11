@@ -149,6 +149,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: 'chrome80',
     rollupOptions: {
       input: {
         dashboard: path.resolve(__dirname, 'index.html'),

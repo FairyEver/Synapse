@@ -3,6 +3,7 @@ import Editor, { type OnMount } from '@monaco-editor/react'
 import type { DriveBrowserCollaborationCapabilityDto, DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto, DriveCollaborationJoinContext } from '@synapse/shared'
 import { Download, LogIn, RefreshCw, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { createBrowserUuid } from '@/lib/browser-compat'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import { trackedDriveBrowserApi as driveBrowserApi } from '../shared/drive-telemetry-api'
 import { startDriveOperation, trackDriveEvent } from '../shared/drive-telemetry'
@@ -146,7 +147,7 @@ export function DriveCodeRenderer({
       try {
         const input = {
           epoch: collaborationState.state.epoch ?? '',
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: createBrowserUuid(),
         }
         if (collaborationContext.kind === 'owner') {
           await driveBrowserApi.checkpointOwner(current.id, input)

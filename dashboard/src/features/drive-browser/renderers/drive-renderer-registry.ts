@@ -58,11 +58,20 @@ function firstEnabledDriveRendererOption(options: readonly DriveRendererOption[]
 }
 
 function driveMdxEditorRendererOption(snapshot: DriveBrowserSnapshotDto): DriveRendererOption {
-  const disabledReason = canRenderDriveMdxEditor(snapshot) ? undefined : '超过富文本限制'
+  const disabledReason = !canRenderDriveMdxEditor(snapshot)
+    ? '超过富文本限制'
+    : canUseDriveMdxEditor()
+      ? undefined
+      : '当前浏览器不支持'
   return disabledReason ? { ...RENDERERS.mdxeditor, disabledReason } : RENDERERS.mdxeditor
 }
 
 function canRenderDriveMdxEditor(snapshot: DriveBrowserSnapshotDto): boolean {
   const preview = snapshot.preview
   return Boolean(preview && preview.kind === 'markdown' && !preview.truncated && preview.text !== null)
+}
+
+function canUseDriveMdxEditor(): boolean {
+  return typeof globalThis.structuredClone === 'function'
+    && typeof Reflect.get(String.prototype, 'replaceAll') === 'function'
 }

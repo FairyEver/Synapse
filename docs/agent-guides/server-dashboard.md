@@ -23,6 +23,7 @@ Synapse 服务端产品界面仍由一个工作区和一套部署产物提供：
 ## 前端实现纪律
 
 - 普通用户文件路由位于 `dashboard/src/routes/`；管理应用使用独立的 `dashboard/src/admin-routes.tsx` 路由树和 `admin-main.tsx` 入口。
+- Dashboard 生产构建的最低语法目标为 Chrome 80；公开分享首屏不得依赖更新版本才提供且未经过兼容处理的浏览器 API。高级编辑器可以基于能力检测降级，但不得阻断只读预览。
 - API 调用集中在 `dashboard/src/lib/api.ts`，并按用户/管理员会话分别处理 401。
 - 管理 401 只回到 `/admin/access`，保留白名单内的站内目标；不得自动重放失败请求。
 - 页面使用现有 shadcn/ui、共享组件、主题 token 和克制的 Tailwind 布局，不新增并行组件系统或自定义颜色。
