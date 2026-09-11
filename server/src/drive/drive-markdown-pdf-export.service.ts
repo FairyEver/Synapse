@@ -45,21 +45,22 @@ export class DriveMarkdownPdfExportService {
   ) {}
 
   async export(input: {
-    readonly resolveSource: () => Promise<DriveMarkdownPdfSource>
+    readonly resolveSource: (signal: AbortSignal) => Promise<DriveMarkdownPdfSource>
     readonly rateLimitKey: string
   }): Promise<DriveMarkdownPdfExportResult> {
     this.assertRateLimit(input.rateLimitKey)
     const startedAt = Date.now()
-    return enforceExportDeadline((async () => {
-      const source = await input.resolveSource()
+    return enforceExportDeadline(async (signal) => {
+      const source = await input.resolveSource(signal)
       this.assertDeadline(startedAt)
-      return this.performExport(source, startedAt)
-    })())
+      return this.performExport(source, startedAt, signal)
+    })
   }
 
   private async performExport(
     source: DriveMarkdownPdfSource,
     startedAt: number,
+    signal: AbortSignal,
   ): Promise<DriveMarkdownPdfExportResult> {
     const initial = await renderDriveMarkdownFragment(source.sourceText, {
       allowStandaloneRawImages: source.allowStandaloneRawImages,
@@ -74,7 +75,7 @@ export class DriveMarkdownPdfExportService {
     for (const image of images) {
       this.assertDeadline(startedAt)
       try {
-        const resolved = await this.resolveImage(image, source, remainingTime(startedAt))
+        const resolved = await this.resolveImage(image, source, remainingTime(startedAt), signal)
         this.assertDeadline(startedAt)
         imageBytes += resolved.bytes.length
         if (imageBytes > DRIVE_PDF_IMAGES_MAX_BYTES) {
@@ -105,6 +106,7 @@ export class DriveMarkdownPdfExportService {
       title: stripMarkdownExtension(source.name),
       html: `<main class="markdown-body">${rendered.html}</main>`,
       timeoutMs: remainingTime(startedAt),
+      signal,
     })
     if (response.bytes.length > DRIVE_PDF_OUTPUT_MAX_BYTES) {
       throw new PayloadTooLargeException("生成的 PDF 超过 64 MiB。")
@@ -112,7 +114,7 @@ export class DriveMarkdownPdfExportService {
     return {
       bytes: response.bytes,
       fileName: `${safeFileStem(source.name)}.pdf`,
-      imageWarnings,
+      imageWarnings: imageWarnings + response.imageWarnings,
       diagramWarnings: response.diagramWarnings,
     }
   }
@@ -121,23 +123,24 @@ export class DriveMarkdownPdfExportService {
     image: DriveMarkdownProjectionImageDto,
     source: DriveMarkdownPdfSource,
     remainingMs: number,
+    signal: AbortSignal,
   ): Promise<{ readonly bytes: Buffer; readonly mimeType: string }> {
     if (image.resourceKey.startsWith("relative:")) {
       const relative = source.relativeImages.get(image.resourceKey)
       if (!relative) throw new Error("PDF_IMAGE_NOT_FOUND")
-      return this.readStorageImage(relative.storageKey, relative.size)
+      return this.readStorageImage(relative.storageKey, relative.size, signal)
     }
     if (image.resourceKey.startsWith("object:")) {
       const hosted = await this.hostedImages.resolveImage(image.resourceKey.slice("object:".length))
       if (!hosted) throw new Error("PDF_IMAGE_NOT_FOUND")
       if (hosted.size > BigInt(DRIVE_PDF_IMAGE_MAX_BYTES)) throw imageTooLarge()
       const object = await this.hostedImages.openImage(hosted.storageKey)
-      return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES))
+      return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES, signal))
     }
     if (image.resourceKey.startsWith("file:")) {
       const asset = await this.publicAssets.resolvePublicAsset(image.resourceKey.slice("file:".length), {})
       if (asset.status !== "ok") throw new Error("PDF_IMAGE_NOT_FOUND")
-      return this.readStorageImage(asset.storageKey, asset.size)
+      return this.readStorageImage(asset.storageKey, asset.size, signal)
     }
     if (image.resourceKey.startsWith("data:")) return parseDataImage(image.source)
     if (/^https?:\/\//iu.test(image.source.trim())) {
@@ -146,6 +149,7 @@ export class DriveMarkdownPdfExportService {
           maxBytes: DRIVE_PDF_IMAGE_MAX_BYTES,
           timeoutMs: Math.max(1, Math.min(10_000, remainingMs)),
           maxRedirects: 3,
+          signal,
         })
       } catch (error) {
         if (error instanceof Error && error.message === "EXTERNAL_IMAGE_TOO_LARGE") throw imageTooLarge()
@@ -156,18 +160,26 @@ export class DriveMarkdownPdfExportService {
     throw new Error("PDF_IMAGE_UNSUPPORTED")
   }
 
-  private async readStorageImage(storageKey: string, declaredSize: bigint) {
+  private async readStorageImage(storageKey: string, declaredSize: bigint, signal: AbortSignal) {
     if (declaredSize > BigInt(DRIVE_PDF_IMAGE_MAX_BYTES)) throw imageTooLarge()
     const object = await this.storage.getObjectStream({ key: storageKey })
-    return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES))
+    return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES, signal))
   }
 
-  private async renderPdf(input: { readonly title: string; readonly html: string; readonly timeoutMs: number }) {
+  private async renderPdf(input: {
+    readonly title: string
+    readonly html: string
+    readonly timeoutMs: number
+    readonly signal: AbortSignal
+  }) {
     const env = loadEnv(process.env)
     if (!env.pdfRendererUrl || !env.pdfRendererInternalSecret) {
       throw new BadGatewayException("PDF 导出服务暂不可用。")
     }
     const controller = new AbortController()
+    const abort = () => controller.abort()
+    if (input.signal.aborted) abort()
+    else input.signal.addEventListener("abort", abort, { once: true })
     const timeout = setTimeout(() => controller.abort(), Math.max(1, input.timeoutMs))
     try {
       const response = await fetch(`${env.pdfRendererUrl.replace(/\/+$/u, "")}/render`, {
@@ -192,6 +204,7 @@ export class DriveMarkdownPdfExportService {
       if (!bytes.subarray(0, 5).equals(Buffer.from("%PDF-"))) throw new BadGatewayException("PDF 导出结果无效。")
       return {
         bytes,
+        imageWarnings: parseWarningCount(response.headers.get("x-synapse-pdf-image-warnings")),
         diagramWarnings: parseWarningCount(response.headers.get("x-synapse-pdf-diagram-warnings")),
       }
     } catch (error) {
@@ -200,6 +213,7 @@ export class DriveMarkdownPdfExportService {
       throw new BadGatewayException("PDF 导出服务暂不可用。")
     } finally {
       clearTimeout(timeout)
+      input.signal.removeEventListener("abort", abort)
     }
   }
 
@@ -223,17 +237,22 @@ export class DriveMarkdownPdfExportService {
   }
 }
 
-async function enforceExportDeadline<T>(operation: Promise<T>): Promise<T> {
+async function enforceExportDeadline<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
+  const controller = new AbortController()
   try {
     return await Promise.race([
-      operation,
+      operation(controller.signal),
       new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(() => reject(new GatewayTimeoutException("PDF 导出超时。")), DRIVE_PDF_TIMEOUT_MS)
+        timeout = setTimeout(() => {
+          reject(new GatewayTimeoutException("PDF 导出超时。"))
+          controller.abort()
+        }, DRIVE_PDF_TIMEOUT_MS)
       }),
     ])
   } finally {
     if (timeout) clearTimeout(timeout)
+    controller.abort()
   }
 }
 
@@ -249,17 +268,27 @@ function imageTooLarge(): PayloadTooLargeException {
   return new PayloadTooLargeException("单张图片超过 10 MiB，无法导出。")
 }
 
-async function readLimitedStream(stream: NodeJS.ReadableStream, maxBytes: number): Promise<Buffer> {
+async function readLimitedStream(
+  stream: NodeJS.ReadableStream,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Buffer> {
   const chunks: Buffer[] = []
   let total = 0
-  for await (const chunk of stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>) {
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    total += bytes.length
-    if (total > maxBytes) {
-      ;(stream as { destroy?: () => void }).destroy?.()
-      throw imageTooLarge()
+  const destroy = () => (stream as { destroy?: (error?: Error) => void }).destroy?.(new Error("PDF_EXPORT_ABORTED"))
+  signal.addEventListener("abort", destroy, { once: true })
+  try {
+    for await (const chunk of stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      total += bytes.length
+      if (total > maxBytes) {
+        ;(stream as { destroy?: () => void }).destroy?.()
+        throw imageTooLarge()
+      }
+      chunks.push(bytes)
     }
-    chunks.push(bytes)
+  } finally {
+    signal.removeEventListener("abort", destroy)
   }
   return Buffer.concat(chunks, total)
 }
@@ -279,7 +308,8 @@ function parseDataImage(source: string): { readonly bytes: Buffer; readonly mime
 }
 
 function stripMarkdownExtension(name: string): string {
-  return name.replace(/\.(?:md|markdown|mdown|mkd|mdx)$/iu, "") || "文档"
+  const extensionStart = name.lastIndexOf(".")
+  return (extensionStart > 0 ? name.slice(0, extensionStart) : name) || "文档"
 }
 
 function safeFileStem(name: string): string {
@@ -305,7 +335,10 @@ async function readLimitedWebResponse(response: Response, maxBytes: number): Pro
       const { done, value } = await reader.read()
       if (done) break
       total += value.byteLength
-      if (total > maxBytes) throw new PayloadTooLargeException("生成的 PDF 超过 64 MiB。")
+      if (total > maxBytes) {
+        await reader.cancel()
+        throw new PayloadTooLargeException("生成的 PDF 超过 64 MiB。")
+      }
       chunks.push(Buffer.from(value))
     }
   } finally {

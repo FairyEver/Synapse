@@ -682,11 +682,12 @@ export class DriveUserController {
     const exporter = requireDrivePdfExportService(this.pdfExports)
     sendDrivePdfExport(response, await exporter.export({
       rateLimitKey: `user:${request.user!.id}`,
-      resolveSource: () => this.drive.resolveOwnerMarkdownPdfSource({
+      resolveSource: (signal) => this.drive.resolveOwnerMarkdownPdfSource({
         userId: request.user!.id,
         itemId,
         maxBytes: DRIVE_PDF_SOURCE_MAX_BYTES,
         maxImages: DRIVE_PDF_MAX_IMAGES,
+        signal,
       }),
     }))
   }
@@ -2134,12 +2135,13 @@ export class DrivePublicController {
     const exporter = requireDrivePdfExportService(this.pdfExports)
     sendDrivePdfExport(input.response, await exporter.export({
       rateLimitKey: `share-ip:${input.request.ip || "unknown"}`,
-      resolveSource: () => this.drive.resolveShareMarkdownPdfSource({
+      resolveSource: (signal) => this.drive.resolveShareMarkdownPdfSource({
         shareId: input.shareId,
         itemId: input.itemId,
         cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
         maxBytes: DRIVE_PDF_SOURCE_MAX_BYTES,
         maxImages: DRIVE_PDF_MAX_IMAGES,
+        signal,
       }),
     }))
   }

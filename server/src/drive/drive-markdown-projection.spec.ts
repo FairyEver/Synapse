@@ -272,6 +272,9 @@ describe('Drive Markdown projection', () => {
   it('normalizes file assets independently from query and fragment while hashing data urls', () => {
     expect(driveMarkdownImageResourceKey('/files/asset_123?v=1#one')).toBe('file:asset_123')
     expect(driveMarkdownImageResourceKey('/files/asset_123?v=2#two')).toBe('file:asset_123')
+    expect(driveMarkdownImageResourceKey('/files/asset_123/extra')).toBe('opaque:/files/asset_123/extra')
+    expect(driveMarkdownImageResourceKey('/object/hosted_123?v=1')).toBe('object:hosted_123')
+    expect(driveMarkdownImageResourceKey('/object/hosted_123/extra')).toBe('opaque:/object/hosted_123/extra')
     expect(driveMarkdownImageResourceKey('data:image/png;base64,abc')).toMatch(/^data:[a-f0-9]{64}$/u)
     expect(driveMarkdownImageResourceKey('https://EXAMPLE.com/a.png?q=1#x')).toBe('https://example.com/a.png?q=1#x')
   })

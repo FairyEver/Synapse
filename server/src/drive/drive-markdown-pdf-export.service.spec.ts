@@ -23,7 +23,10 @@ describe("DriveMarkdownPdfExportService", () => {
       expect(payload.html).not.toContain("https://")
       return new Response(Buffer.from("%PDF-test"), {
         status: 200,
-        headers: { "X-Synapse-Pdf-Diagram-Warnings": "2" },
+        headers: {
+          "X-Synapse-Pdf-Image-Warnings": "1",
+          "X-Synapse-Pdf-Diagram-Warnings": "2",
+        },
       })
     })
     vi.stubGlobal("fetch", fetchMock)
@@ -32,7 +35,7 @@ describe("DriveMarkdownPdfExportService", () => {
       {} as never,
       {} as never,
     )
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const png = validPng()
     const result = await service.export({
       rateLimitKey: "user:test",
       resolveSource: async () => ({
@@ -45,7 +48,7 @@ describe("DriveMarkdownPdfExportService", () => {
     })
 
     expect(result.fileName).toBe("报告.pdf")
-    expect(result.imageWarnings).toBe(1)
+    expect(result.imageWarnings).toBe(2)
     expect(result.diagramWarnings).toBe(2)
     expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
   })
@@ -53,7 +56,7 @@ describe("DriveMarkdownPdfExportService", () => {
   it("resolves a repeated relative image only once", async () => {
     configureRendererEnv()
     vi.stubGlobal("fetch", vi.fn(async () => new Response(Buffer.from("%PDF-test"), { status: 200 })))
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const png = validPng()
     const getObjectStream = vi.fn(async () => ({ stream: Readable.from([png]), size: BigInt(png.length) }))
     const service = new DriveMarkdownPdfExportService(
       { getObjectStream } as never,
@@ -185,6 +188,53 @@ describe("DriveMarkdownPdfExportService", () => {
     await vi.advanceTimersByTimeAsync(60_000)
     await rejection
   })
+
+  it("aborts an open image stream when the export deadline expires", async () => {
+    vi.useFakeTimers()
+    const stream = new Readable({ read() {} })
+    const destroy = vi.spyOn(stream, "destroy")
+    const service = new DriveMarkdownPdfExportService(
+      { getObjectStream: vi.fn(async () => ({ stream, size: 8n })) } as never,
+      {} as never,
+      {} as never,
+    )
+    const operation = service.export({
+      rateLimitKey: "user:stream-timeout",
+      resolveSource: async () => ({
+        itemId: "item",
+        name: "超时.md",
+        sourceText: "![超时](image.png)",
+        allowStandaloneRawImages: true,
+        relativeImages: new Map([["relative:image.png", {
+          storageKey: "drive/image.png",
+          size: 8n,
+          mimeType: "image/png",
+        }]]),
+      }),
+    })
+    const rejection = expect(operation).rejects.toMatchObject({ status: 504 })
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    await rejection
+    expect(destroy).toHaveBeenCalled()
+  })
+
+  it("removes the final extension from MIME-recognized Markdown filenames", async () => {
+    configureRendererEnv()
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ title: "report" })
+      return new Response(Buffer.from("%PDF-test"), { status: 200 })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+
+    const result = await service.export({
+      rateLimitKey: "user:mime-markdown",
+      resolveSource: async () => emptySource("report.bin"),
+    })
+
+    expect(result.fileName).toBe("report.pdf")
+  })
 })
 
 function configureRendererEnv(): void {
@@ -203,4 +253,8 @@ function emptySource(name: string) {
     allowStandaloneRawImages: true,
     relativeImages: new Map(),
   }
+}
+
+function validPng(): Buffer {
+  return Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64")
 }

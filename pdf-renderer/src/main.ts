@@ -1,10 +1,15 @@
 import { timingSafeEqual } from "node:crypto"
 import { createServer, type ServerResponse } from "node:http"
-import { PdfRenderer, PdfRenderTimeoutError, type PdfRenderRequest } from "./pdf-renderer"
+import {
+  PdfRenderer,
+  PdfRenderCancelledError,
+  PdfRenderTimeoutError,
+  type PdfRenderRequest,
+} from "./pdf-renderer"
 
-// 64 MiB of binary image resources expand to roughly 86 MiB after Base64 encoding;
-// leave room for the Markdown HTML, JSON framing, and metadata at the documented limit.
-const maxRequestBytes = 128 * 1024 * 1024
+// 64 MiB of images expand to roughly 86 MiB after Base64 encoding, while 10 MiB
+// of Markdown can expand severalfold during safe HTML escaping. Keep headroom for JSON framing.
+const maxRequestBytes = 192 * 1024 * 1024
 const maxActive = 2
 const maxQueued = 8
 const port = parsePort(process.env.PORT)
@@ -12,11 +17,17 @@ const internalSecret = requireSecret(process.env.PDF_RENDERER_INTERNAL_SECRET)
 const renderer = new PdfRenderer()
 let active = 0
 let queued = 0
-const waiters: Array<() => void> = []
+const waiters: Array<{ readonly grant: () => void; readonly cancel: () => void }> = []
 
 const server = createServer(async (request, response) => {
   if (request.method === "GET" && request.url === "/healthz") {
-    response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end('{"ok":true}')
+    try {
+      await renderer.warmup()
+      response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end('{"ok":true}')
+    } catch (error) {
+      writeJsonError(response, 503)
+      log("pdf_renderer_health_failed", error)
+    }
     return
   }
   if (request.method !== "POST" || request.url !== "/render") {
@@ -31,18 +42,26 @@ const server = createServer(async (request, response) => {
     response.writeHead(429, { "Retry-After": "5" }).end()
     return
   }
-  await acquireSlot()
+  const disconnectController = new AbortController()
+  const cancelDisconnectedRequest = () => {
+    if (!response.writableEnded) disconnectController.abort()
+  }
+  response.once("close", cancelDisconnectedRequest)
+  const acquired = await acquireSlot(disconnectController.signal)
+  if (!acquired) return
   try {
     const input = parseRenderRequest(await readRequestBody(request, maxRequestBytes))
-    const result = await renderer.render(input)
+    const result = await renderer.render(input, disconnectController.signal)
     response.writeHead(200, {
       "Content-Type": "application/pdf",
       "Content-Length": String(result.bytes.length),
       "Cache-Control": "no-store",
+      "X-Synapse-Pdf-Image-Warnings": String(result.imageWarnings),
       "X-Synapse-Pdf-Diagram-Warnings": String(result.diagramWarnings),
     })
     response.end(result.bytes)
   } catch (error) {
+    if (error instanceof PdfRenderCancelledError) return
     const status = error instanceof RequestError
       ? error.status
       : error instanceof PdfRenderTimeoutError
@@ -51,6 +70,7 @@ const server = createServer(async (request, response) => {
     writeJsonError(response, status)
     log("pdf_render_failed", error)
   } finally {
+    response.removeListener("close", cancelDisconnectedRequest)
     releaseSlot()
   }
 })
@@ -65,20 +85,45 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   })
 }
 
-async function acquireSlot(): Promise<void> {
+async function acquireSlot(signal: AbortSignal): Promise<boolean> {
   if (active < maxActive) {
     active += 1
-    return
+    return true
   }
   queued += 1
-  await new Promise<void>((resolve) => waiters.push(resolve))
-  queued -= 1
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const abort = () => waiter.cancel()
+    const waiter = {
+      grant: () => {
+        if (settled) return
+        settled = true
+        queued -= 1
+        signal.removeEventListener("abort", abort)
+        resolve(true)
+      },
+      cancel: () => {
+        if (settled) return
+        settled = true
+        queued -= 1
+        const index = waiters.indexOf(waiter)
+        if (index >= 0) waiters.splice(index, 1)
+        signal.removeEventListener("abort", abort)
+        resolve(false)
+      },
+    }
+    if (signal.aborted) waiter.cancel()
+    else {
+      signal.addEventListener("abort", abort, { once: true })
+      waiters.push(waiter)
+    }
+  })
 }
 
 function releaseSlot(): void {
   const next = waiters.shift()
   if (next) {
-    next()
+    next.grant()
     return
   }
   active -= 1

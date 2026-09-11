@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "commonjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json && cp src/print.css dist/print.css",
+    "build": "tsc -p tsconfig.build.json && cp src/print.css dist/print.css",
     "start": "node dist/main.js",
-    "test": "vitest run",
+    "test": "vitest run src",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

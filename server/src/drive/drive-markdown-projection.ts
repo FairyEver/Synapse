@@ -252,7 +252,7 @@ export function driveMarkdownImageResourceKey(source: string): string {
   const trimmed = source.trim()
   if (/^data:/iu.test(trimmed)) return `data:${sha256(trimmed)}`
 
-  const fileMatch = /^\/files\/([^/?#]+)/u.exec(trimmed)
+  const fileMatch = /^\/files\/([^/?#]+)(?:[?#]|$)/u.exec(trimmed)
   if (fileMatch) {
     let assetId = fileMatch[1]
     try {
@@ -263,7 +263,7 @@ export function driveMarkdownImageResourceKey(source: string): string {
     return `file:${assetId.normalize("NFC")}`
   }
 
-  const objectMatch = new RegExp(`^${PLATFORM_OBJECT_PATH_PREFIX}/([^/?#]+)`, "u").exec(trimmed)
+  const objectMatch = new RegExp(`^${PLATFORM_OBJECT_PATH_PREFIX}/([^/?#]+)(?:[?#]|$)`, "u").exec(trimmed)
   if (objectMatch) {
     let objectId = objectMatch[1]
     try {

@@ -16,6 +16,7 @@ export type PdfRenderRequest = {
 
 export type PdfRenderResult = {
   readonly bytes: Buffer
+  readonly imageWarnings: number
   readonly diagramWarnings: number
 }
 
@@ -26,48 +27,66 @@ export class PdfRenderTimeoutError extends Error {
   }
 }
 
+export class PdfRenderCancelledError extends Error {
+  constructor() {
+    super("PDF render cancelled")
+    this.name = "PdfRenderCancelledError"
+  }
+}
+
 export class PdfRenderer {
   private browserPromise: Promise<Browser> | null = null
   private assetsPromise: Promise<{ readonly css: string; readonly mermaid: string }> | null = null
 
-  async render(input: PdfRenderRequest): Promise<PdfRenderResult> {
-    const [browser, assets] = await Promise.all([this.browser(), this.assets()])
-    const context = await browser.newContext({ colorScheme: "light", javaScriptEnabled: true })
-    let timedOut = false
-    const timeout = setTimeout(() => {
-      timedOut = true
-      void closeContext(context, "timeout")
-    }, 55_000)
-    await context.route("**/*", (route) => route.abort("blockedbyclient"))
-    const page = await context.newPage()
+  constructor(private readonly renderTimeoutMs = 55_000) {}
+
+  async warmup(timeoutMs = 4_000): Promise<void> {
+    let timeout: NodeJS.Timeout | undefined
     try {
-      await page.setContent(documentHtml(input.title, input.html, assets.css), { waitUntil: "load" })
-      await page.addScriptTag({ content: assets.mermaid })
-      const diagramWarnings = await page.evaluate(renderDocumentEnhancements)
-      await page.evaluate(async () => {
-        await document.fonts.ready
-        await Promise.all(Array.from(document.images).map((image) => image.complete
-          ? Promise.resolve()
-          : new Promise<void>((resolve) => {
-              image.addEventListener("load", () => resolve(), { once: true })
-              image.addEventListener("error", () => resolve(), { once: true })
-            })))
-      })
-      const bytes = await page.pdf({
-        format: "A4",
-        landscape: false,
-        printBackground: true,
-        displayHeaderFooter: false,
-        margin: { top: "16mm", right: "16mm", bottom: "16mm", left: "16mm" },
-        preferCSSPageSize: true,
-      })
-      return { bytes: Buffer.from(bytes), diagramWarnings }
+      await Promise.race([
+        Promise.all([this.browser(), this.assets()]),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => reject(new Error("PDF renderer warmup timed out")), timeoutMs)
+        }),
+      ])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
+  }
+
+  async render(input: PdfRenderRequest, signal?: AbortSignal): Promise<PdfRenderResult> {
+    let context: BrowserContext | undefined
+    let termination: "timeout" | "cancelled" | null = null
+    let timeout: NodeJS.Timeout | undefined
+    let rejectTermination: ((error: Error) => void) | undefined
+    const terminationResult = new Promise<never>((_resolve, reject) => {
+      rejectTermination = reject
+    })
+    const terminate = (reason: "timeout" | "cancelled") => {
+      if (termination) return
+      termination = reason
+      if (context) void closeContext(context, reason)
+      rejectTermination?.(reason === "timeout" ? new PdfRenderTimeoutError() : new PdfRenderCancelledError())
+    }
+    timeout = setTimeout(() => {
+      terminate("timeout")
+    }, this.renderTimeoutMs)
+    const cancel = () => terminate("cancelled")
+    if (signal?.aborted) cancel()
+    else signal?.addEventListener("abort", cancel, { once: true })
+    try {
+      return await Promise.race([
+        this.renderPage(input, (value) => { context = value }, () => termination),
+        terminationResult,
+      ])
     } catch (error) {
-      if (timedOut) throw new PdfRenderTimeoutError()
+      if (termination === "timeout") throw new PdfRenderTimeoutError()
+      if (termination === "cancelled") throw new PdfRenderCancelledError()
       throw error
     } finally {
-      clearTimeout(timeout)
-      await closeContext(context, "finalize")
+      if (timeout) clearTimeout(timeout)
+      signal?.removeEventListener("abort", cancel)
+      if (context) await closeContext(context, "finalize")
     }
   }
 
@@ -77,8 +96,50 @@ export class PdfRenderer {
   }
 
   private browser(): Promise<Browser> {
-    this.browserPromise ??= chromium.launch({ headless: true })
+    if (!this.browserPromise) {
+      const launch = chromium.launch({ headless: true })
+      this.browserPromise = launch
+      void launch.then((browser) => {
+        browser.once("disconnected", () => {
+          if (this.browserPromise === launch) this.browserPromise = null
+        })
+      }, () => {
+        if (this.browserPromise === launch) this.browserPromise = null
+      })
+    }
     return this.browserPromise
+  }
+
+  private async renderPage(
+    input: PdfRenderRequest,
+    setContext: (context: BrowserContext) => void,
+    termination: () => "timeout" | "cancelled" | null,
+  ): Promise<PdfRenderResult> {
+    const [browser, assets] = await Promise.all([this.browser(), this.assets()])
+    const beforeContext = termination()
+    if (beforeContext) throw renderTerminationError(beforeContext)
+    const context = await browser.newContext({ colorScheme: "light", javaScriptEnabled: true })
+    setContext(context)
+    const afterContext = termination()
+    if (afterContext) {
+      await closeContext(context, afterContext)
+      throw renderTerminationError(afterContext)
+    }
+    await context.route("**/*", (route) => route.abort("blockedbyclient"))
+    const page = await context.newPage()
+    await page.setContent(documentHtml(input.title, input.html, assets.css), { waitUntil: "load" })
+    await page.addScriptTag({ content: assets.mermaid })
+    await page.evaluate(waitForDocumentResources)
+    const warnings = await page.evaluate(renderDocumentEnhancements)
+    const bytes = await page.pdf({
+      format: "A4",
+      landscape: false,
+      printBackground: true,
+      displayHeaderFooter: false,
+      margin: { top: "16mm", right: "16mm", bottom: "16mm", left: "16mm" },
+      preferCSSPageSize: true,
+    })
+    return { bytes: Buffer.from(bytes), ...warnings }
   }
 
   private assets(): Promise<{ readonly css: string; readonly mermaid: string }> {
@@ -109,9 +170,19 @@ function escapeHtml(value: string): string {
   })[character] ?? character)
 }
 
-async function renderDocumentEnhancements(): Promise<number> {
+async function waitForDocumentResources(): Promise<void> {
+  await document.fonts.ready
+  await Promise.all(Array.from(document.images).map((image) => image.complete
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true })
+        image.addEventListener("error", () => resolve(), { once: true })
+      })))
+}
+
+async function renderDocumentEnhancements(): Promise<{ readonly imageWarnings: number; readonly diagramWarnings: number }> {
   const root = document.querySelector<HTMLElement>(".markdown-body")
-  if (!root) return 0
+  if (!root) return { imageWarnings: 0, diagramWarnings: 0 }
   const markerPaths = new Map<HTMLLIElement, number[]>()
   for (const list of root.querySelectorAll<HTMLOListElement>("ol")) {
     let ancestor = list.parentElement
@@ -133,6 +204,16 @@ async function renderDocumentEnhancements(): Promise<number> {
     })
   }
 
+  let imageWarnings = 0
+  for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
+    if (image.naturalWidth > 0 && image.naturalHeight > 0) continue
+    imageWarnings += 1
+    const placeholder = document.createElement("span")
+    placeholder.dataset.drivePdfImageMissing = "true"
+    placeholder.textContent = image.alt ? `图片无法加载：${image.alt}` : "图片无法加载"
+    image.replaceWith(placeholder)
+  }
+
   for (const image of root.querySelectorAll<HTMLImageElement>('img[src^="data:image/gif"]')) {
     try {
       const canvas = document.createElement("canvas")
@@ -149,7 +230,9 @@ async function renderDocumentEnhancements(): Promise<number> {
     mermaid?: { initialize(config: unknown): void; render(id: string, source: string): Promise<{ svg: string }> }
   }).mermaid
   const diagrams = Array.from(root.querySelectorAll<HTMLElement>("pre > code.language-mermaid"))
-  if (!mermaidApi || diagrams.length === 0) return diagrams.length
+  if (!mermaidApi || diagrams.length === 0) {
+    return { imageWarnings, diagramWarnings: diagrams.length }
+  }
   mermaidApi.initialize({
     startOnLoad: false,
     securityLevel: "strict",
@@ -183,12 +266,25 @@ async function renderDocumentEnhancements(): Promise<number> {
       pre.replaceWith(placeholder)
     }
   }
-  return warnings
+  return { imageWarnings, diagramWarnings: warnings }
 }
 
-async function closeContext(context: BrowserContext, phase: "timeout" | "finalize"): Promise<void> {
+function renderTerminationError(reason: "timeout" | "cancelled"): Error {
+  return reason === "timeout" ? new PdfRenderTimeoutError() : new PdfRenderCancelledError()
+}
+
+async function closeContext(
+  context: BrowserContext,
+  phase: "timeout" | "cancelled" | "finalize",
+): Promise<void> {
+  let timeout: NodeJS.Timeout | undefined
   try {
-    await context.close()
+    await Promise.race([
+      context.close(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("PDF context close timed out")), 2_000)
+      }),
+    ])
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       level: "warn",
@@ -197,5 +293,7 @@ async function closeContext(context: BrowserContext, phase: "timeout" | "finaliz
       errorName: error instanceof Error ? error.name : "UnknownError",
       at: new Date().toISOString(),
     })}\n`)
+  } finally {
+    if (timeout) clearTimeout(timeout)
   }
 }

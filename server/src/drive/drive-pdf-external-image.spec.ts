@@ -31,6 +31,18 @@ describe("Drive PDF external image address policy", () => {
     expect(isPublicAddress(address)).toBe(true)
   })
 
+  it("accepts and pins a public IPv6 URL literal without a DNS lookup", async () => {
+    const lookup = vi.spyOn(dns, "lookup")
+    const get = mockHttpResponses([response(200, png, { "content-type": "image/png" })])
+
+    await expect(fetchSafeExternalImage("http://[2606:4700:4700::1111]/image.png", {
+      maxBytes: 1024,
+      timeoutMs: 1_000,
+    })).resolves.toEqual({ bytes: png, mimeType: "image/png" })
+    expect(lookup).not.toHaveBeenCalled()
+    expectPinnedLookup(get, 0, "2606:4700:4700::1111", 6)
+  })
+
   it("re-resolves and pins every redirect hop", async () => {
     const lookup = mockLookup([
       [{ address: "93.184.216.34", family: 4 }],
@@ -168,9 +180,9 @@ function fakeRequest(): http.ClientRequest {
   return request
 }
 
-function expectPinnedLookup(get: ReturnType<typeof vi.spyOn>, call: number, address: string): void {
+function expectPinnedLookup(get: ReturnType<typeof vi.spyOn>, call: number, address: string, family: 4 | 6 = 4): void {
   const options = get.mock.calls[call]?.[1] as http.RequestOptions
   const callback = vi.fn()
   options.lookup?.("ignored.example", {}, callback)
-  expect(callback).toHaveBeenCalledWith(null, address, 4)
+  expect(callback).toHaveBeenCalledWith(null, address, family)
 }

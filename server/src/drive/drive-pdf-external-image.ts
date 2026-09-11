@@ -12,6 +12,7 @@ export type ExternalImageFetchOptions = {
   readonly maxBytes: number
   readonly timeoutMs: number
   readonly maxRedirects?: number
+  readonly signal?: AbortSignal
 }
 
 export async function fetchSafeExternalImage(
@@ -24,7 +25,7 @@ export async function fetchSafeExternalImage(
   for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
     const remainingMs = options.timeoutMs - (Date.now() - startedAt)
     if (remainingMs <= 0) throw new Error("EXTERNAL_IMAGE_TIMEOUT")
-    const address = await resolvePublicAddress(url.hostname, remainingMs)
+    const address = await resolvePublicAddress(normalizeUrlHostname(url.hostname), remainingMs, options.signal)
     const response = await requestPinned(url, address, { ...options, timeoutMs: remainingMs })
     if (redirectStatuses.has(response.statusCode)) {
       response.stream.resume()
@@ -56,10 +57,14 @@ function parseExternalImageUrl(source: string): URL {
   return url
 }
 
-async function resolvePublicAddress(hostname: string, timeoutMs: number): Promise<{ readonly address: string; readonly family: 4 | 6 }> {
+async function resolvePublicAddress(
+  hostname: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<{ readonly address: string; readonly family: 4 | 6 }> {
   const candidates = isIP(hostname)
     ? [{ address: hostname, family: isIP(hostname) as 4 | 6 }]
-    : await withTimeout(dns.lookup(hostname, { all: true, verbatim: true }), timeoutMs)
+    : await withTimeout(dns.lookup(hostname, { all: true, verbatim: true }), timeoutMs, signal)
   if (candidates.length === 0 || candidates.some((candidate) => !isPublicAddress(candidate.address))) {
     throw new Error("EXTERNAL_IMAGE_ADDRESS_BLOCKED")
   }
@@ -87,6 +92,10 @@ function requestPinned(
   readonly stream: http.IncomingMessage
 }> {
   return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new Error("EXTERNAL_IMAGE_ABORTED"))
+      return
+    }
     const client = url.protocol === "https:" ? https : http
     let deadline: NodeJS.Timeout | undefined
     const request = client.get(url, {
@@ -107,12 +116,20 @@ function requestPinned(
       })
     })
     deadline = setTimeout(() => request.destroy(new Error("EXTERNAL_IMAGE_TIMEOUT")), options.timeoutMs)
+    const abort = () => request.destroy(new Error("EXTERNAL_IMAGE_ABORTED"))
+    options.signal?.addEventListener("abort", abort, { once: true })
     request.setTimeout(options.timeoutMs, () => request.destroy(new Error("EXTERNAL_IMAGE_TIMEOUT")))
     request.once("error", (error) => {
       if (deadline) clearTimeout(deadline)
+      options.signal?.removeEventListener("abort", abort)
       reject(error)
     })
+    request.once("close", () => options.signal?.removeEventListener("abort", abort))
   })
+}
+
+function normalizeUrlHostname(hostname: string): string {
+  return hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname
 }
 
 function normalizeImageMimeType(value: string): string {
@@ -122,17 +139,24 @@ function normalizeImageMimeType(value: string): string {
   return mimeType
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
+  let abort: (() => void) | undefined
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(() => reject(new Error("EXTERNAL_IMAGE_TIMEOUT")), timeoutMs)
       }),
+      new Promise<never>((_resolve, reject) => {
+        abort = () => reject(new Error("EXTERNAL_IMAGE_ABORTED"))
+        if (signal?.aborted) abort()
+        else signal?.addEventListener("abort", abort, { once: true })
+      }),
     ])
   } finally {
     if (timeout) clearTimeout(timeout)
+    if (abort) signal?.removeEventListener("abort", abort)
   }
 }
 

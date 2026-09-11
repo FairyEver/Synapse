@@ -2047,9 +2047,16 @@ export class DriveService implements OnApplicationBootstrap {
     readonly itemId: string
     readonly maxBytes: number
     readonly maxImages: number
+    readonly signal?: AbortSignal
   }): Promise<DriveMarkdownPdfSource> {
     const { current } = await this.resolveOwnedBrowserCurrent(input)
-    return this.buildMarkdownPdfSource(current, { context: "owner", surface: "standalone" }, input.maxBytes, input.maxImages)
+    return this.buildMarkdownPdfSource(
+      current,
+      { context: "owner", surface: "standalone" },
+      input.maxBytes,
+      input.maxImages,
+      input.signal,
+    )
   }
 
   async resolveOwnerRenderAccess(input: {
@@ -2350,6 +2357,7 @@ export class DriveService implements OnApplicationBootstrap {
     readonly cookie?: string
     readonly maxBytes: number
     readonly maxImages: number
+    readonly signal?: AbortSignal
   }): Promise<DriveMarkdownPdfSource> {
     const share = await this.resolvePublicShare({
       shareId: input.shareId,
@@ -2362,7 +2370,7 @@ export class DriveService implements OnApplicationBootstrap {
       surface: "standalone",
       shareId: input.shareId,
       rootItemId: root.id,
-    }, input.maxBytes, input.maxImages)
+    }, input.maxBytes, input.maxImages, input.signal)
   }
 
   async prepareOpenApiShareDownload(input: {
@@ -3243,6 +3251,7 @@ export class DriveService implements OnApplicationBootstrap {
     route: DriveBrowserRouteContext,
     maxBytes: number,
     maxImages: number,
+    signal?: AbortSignal,
   ): Promise<DriveMarkdownPdfSource> {
     const item = toDriveBrowserSourceItem(current)
     if (current.type !== DRIVE_ITEM_TYPE.file || resolveDriveBrowserPreviewKind(item) !== "markdown") {
@@ -3252,7 +3261,7 @@ export class DriveService implements OnApplicationBootstrap {
     const liveDocument = this.collaboration?.getLiveDocument(current.id) ?? null
     const source = liveDocument
       ? { text: liveDocument.sourceText, truncated: Buffer.byteLength(liveDocument.sourceText, "utf8") > maxBytes }
-      : await readStreamTextPrefix((await this.storage.getObjectStream({ key: storageKey })).stream, maxBytes)
+      : await readStreamTextPrefix((await this.storage.getObjectStream({ key: storageKey })).stream, maxBytes, signal)
     if (source.truncated) throw new PayloadTooLargeException("Markdown 文件超过 10 MiB，无法导出。")
 
     const allowStandaloneRawImages = isPlainDriveMarkdownItem(item)
@@ -4470,25 +4479,33 @@ function toDriveBrowserSourceItem(item: DriveItemRecord): DriveBrowserSourceItem
 async function readStreamTextPrefix(
   stream: NodeJS.ReadableStream,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<{ readonly text: string; readonly truncated: boolean }> {
   const chunks: Buffer[] = []
   let bytes = 0
   let truncated = false
   const readable = stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>
+  const destroy = () => (stream as { destroy?: (error?: Error) => void }).destroy?.(new Error("DRIVE_READ_ABORTED"))
+  if (signal?.aborted) destroy()
+  else signal?.addEventListener("abort", destroy, { once: true })
 
-  for await (const chunk of readable) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    const available = maxBytes - bytes
-    if (buffer.length > available) {
-      if (available > 0) chunks.push(buffer.subarray(0, available))
-      bytes = maxBytes
-      truncated = true
-      const destroyable = stream as { destroy?: () => void }
-      destroyable.destroy?.()
-      break
+  try {
+    for await (const chunk of readable) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      const available = maxBytes - bytes
+      if (buffer.length > available) {
+        if (available > 0) chunks.push(buffer.subarray(0, available))
+        bytes = maxBytes
+        truncated = true
+        const destroyable = stream as { destroy?: () => void }
+        destroyable.destroy?.()
+        break
+      }
+      chunks.push(buffer)
+      bytes += buffer.length
     }
-    chunks.push(buffer)
-    bytes += buffer.length
+  } finally {
+    signal?.removeEventListener("abort", destroy)
   }
 
   return { text: decodeUtf8Prefix(Buffer.concat(chunks, bytes), bytes), truncated }

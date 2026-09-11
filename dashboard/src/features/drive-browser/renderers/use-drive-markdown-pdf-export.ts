@@ -55,8 +55,9 @@ export function useDriveMarkdownPdfExport(input: {
   }
 }
 
-function pdfFilename(name: string): string {
-  const stem = name.replace(/\.(?:md|markdown|mdown|mkd|mdx)$/iu, '') || '文档'
+export function pdfFilename(name: string): string {
+  const extensionStart = name.lastIndexOf('.')
+  const stem = (extensionStart > 0 ? name.slice(0, extensionStart) : name) || '文档'
   return `${stem}.pdf`
 }
 
