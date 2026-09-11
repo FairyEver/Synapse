@@ -1929,7 +1929,7 @@ export class DrivePublicController {
   }
 
   @Get("/share/:shareId/reader")
-  async readShare(
+  async renderShareReader(
     @Param("shareId") shareId: string,
     @Query("childrenOffset") childrenOffset: string | undefined,
     @Req() request: Request,
@@ -1944,7 +1944,7 @@ export class DrivePublicController {
   }
 
   @Get("/share/:shareId/items/:itemId/reader")
-  async readShareItem(
+  async renderShareItemReader(
     @Param("shareId") shareId: string,
     @Param("itemId") itemId: string,
     @Query("childrenOffset") childrenOffset: string | undefined,
