@@ -15,6 +15,7 @@ GLOBALS_BACKUP_FILE="$BACKUP_DIR/globals/synapse-globals-before-deploy-${DEPLOY_
 ONLINE_BACKUP_FILE="$BACKUP_DIR/synapse-online-before-deploy-${DEPLOY_ID}.sql"
 FINAL_BACKUP_FILE="$BACKUP_DIR/synapse-final-before-switch-${DEPLOY_ID}.sql"
 DRIVE_BACKUP_FILE="$BACKUP_DIR/drive/synapse-drive-final-before-switch-${DEPLOY_ID}.tar.gz"
+PDF_RENDERER_ROLLBACK_STATE_FILE="$BACKUP_DIR/pdf-renderer-rollback-${DEPLOY_ID}.state"
 APPLIED_MIGRATIONS_FILE=$(mktemp)
 DRIVE_BACKUP_STATUS_FILE=$(mktemp)
 TOTAL_STEPS=19
@@ -332,30 +333,100 @@ build_remote_image() {
 }
 
 tag_remote_rollback_image() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && NEW_IMAGE_TAG='$NEW_IMAGE_TAG' ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "cd $REMOTE_DIR/server && ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' PDF_RENDERER_ROLLBACK_STATE_FILE='$PDF_RENDERER_ROLLBACK_STATE_FILE' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 tag_running_image() {
-  local service=$1 image_name=$2 required=$3
+  local service=$1 image_name=$2
   local container_id image_id
   container_id=$(docker compose --env-file .env ps -q "$service" || true)
   if [ -z "$container_id" ]; then
-    if [ "$required" = "true" ]; then
-      echo "$service container is not running; cannot create rollback image"
-      exit 1
-    fi
-    docker tag "${image_name}:${NEW_IMAGE_TAG}" "${image_name}:${ROLLBACK_IMAGE_TAG}"
-    echo "$service has no previous container; the newly built image will accompany an API rollback"
-    return
+    echo "$service container is not running; cannot create rollback image"
+    exit 1
   fi
   image_id=$(docker inspect -f '{{.Image}}' "$container_id")
   docker tag "$image_id" "${image_name}:${ROLLBACK_IMAGE_TAG}"
   printf "rollback image tagged: %s:%s\n" "$image_name" "$ROLLBACK_IMAGE_TAG"
 }
 
-tag_running_image server synapse-server true
-tag_running_image pdf-renderer synapse-pdf-renderer false
+tag_running_image server synapse-server
+pdf_renderer_container_id=$(docker compose --env-file .env ps -q pdf-renderer || true)
+if [ -n "$pdf_renderer_container_id" ]; then
+  pdf_renderer_image_id=$(docker inspect -f '{{.Image}}' "$pdf_renderer_container_id")
+  docker tag "$pdf_renderer_image_id" "synapse-pdf-renderer:${ROLLBACK_IMAGE_TAG}"
+  printf "present\n" > "$PDF_RENDERER_ROLLBACK_STATE_FILE"
+  printf "rollback image tagged: synapse-pdf-renderer:%s\n" "$ROLLBACK_IMAGE_TAG"
+else
+  printf "absent\n" > "$PDF_RENDERER_ROLLBACK_STATE_FILE"
+  echo "pdf-renderer has no previous container; rollback will restore the API without it"
+fi
+chmod 600 "$PDF_RENDERER_ROLLBACK_STATE_FILE"
 REMOTE_SCRIPT
+}
+
+start_and_verify_new_pdf_renderer() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && NEW_IMAGE_TAG='$NEW_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env up -d --no-build --no-deps pdf-renderer
+deadline=$((SECONDS + 90))
+while true; do
+  container_id=$(docker compose --env-file .env ps -q pdf-renderer || true)
+  health=$([ -n "$container_id" ] && docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id" 2>/dev/null || true)
+  if [ "$health" = "healthy" ]; then
+    echo "new pdf-renderer preflight ok"
+    exit 0
+  fi
+  if [ "$health" = "unhealthy" ] || [ "$SECONDS" -ge "$deadline" ]; then
+    docker compose --env-file .env logs --tail=80 pdf-renderer || true
+    echo "new pdf-renderer preflight failed (health: ${health:-missing})"
+    exit 1
+  fi
+  sleep 3
+done
+REMOTE_SCRIPT
+}
+
+restore_previous_pdf_renderer() {
+  ssh "$SERVER" "cd $REMOTE_DIR/server && ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' PDF_RENDERER_ROLLBACK_STATE_FILE='$PDF_RENDERER_ROLLBACK_STATE_FILE' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+state=$(cat "$PDF_RENDERER_ROLLBACK_STATE_FILE")
+if [ "$state" = "present" ]; then
+  SYNAPSE_SERVER_IMAGE_TAG="$ROLLBACK_IMAGE_TAG" docker compose --env-file .env up -d --no-build --no-deps pdf-renderer
+  deadline=$((SECONDS + 90))
+  while true; do
+    container_id=$(docker compose --env-file .env ps -q pdf-renderer || true)
+    health=$([ -n "$container_id" ] && docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id" 2>/dev/null || true)
+    if [ "$health" = "healthy" ]; then
+      break
+    fi
+    if [ "$health" = "unhealthy" ] || [ "$SECONDS" -ge "$deadline" ]; then
+      echo "previous pdf-renderer restore failed (health: ${health:-missing})"
+      exit 1
+    fi
+    sleep 3
+  done
+  echo "previous pdf-renderer restored"
+elif [ "$state" = "absent" ]; then
+  docker compose --env-file .env rm -f -s pdf-renderer >/dev/null 2>&1 || true
+  echo "new pdf-renderer removed; no previous renderer existed"
+else
+  echo "invalid pdf-renderer rollback state"
+  exit 1
+fi
+REMOTE_SCRIPT
+}
+
+preflight_remote_release() {
+  if ! start_and_verify_new_pdf_renderer; then
+    restore_previous_pdf_renderer
+    return 1
+  fi
+  if ! preflight_remote_migrations; then
+    restore_previous_pdf_renderer
+    return 1
+  fi
 }
 
 preflight_remote_migrations() {
@@ -452,7 +523,20 @@ start_new_remote_server() {
 }
 
 rollback_remote_service() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' docker compose --env-file .env up -d --no-build pdf-renderer server"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' PDF_RENDERER_ROLLBACK_STATE_FILE='$PDF_RENDERER_ROLLBACK_STATE_FILE' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+state=$(cat "$PDF_RENDERER_ROLLBACK_STATE_FILE")
+if [ "$state" = "present" ]; then
+  SYNAPSE_SERVER_IMAGE_TAG="$ROLLBACK_IMAGE_TAG" docker compose --env-file .env up -d --no-build pdf-renderer server
+elif [ "$state" = "absent" ]; then
+  docker compose --env-file .env rm -f -s pdf-renderer >/dev/null 2>&1 || true
+  SYNAPSE_SERVER_IMAGE_TAG="$ROLLBACK_IMAGE_TAG" docker compose --env-file .env up -d --no-build --no-deps server
+else
+  echo "invalid pdf-renderer rollback state"
+  exit 1
+fi
+REMOTE_SCRIPT
 }
 
 print_manual_database_restore_instructions() {
@@ -467,13 +551,19 @@ print_manual_database_restore_instructions() {
   docker compose --env-file .env stop server pdf-renderer
   docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
   docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" < $FINAL_BACKUP_FILE
-  SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build pdf-renderer server
+  rollback_pdf_renderer_state=\$(cat $PDF_RENDERER_ROLLBACK_STATE_FILE)
+  if [ "\$rollback_pdf_renderer_state" = "present" ]; then
+    SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build pdf-renderer server
+  else
+    docker compose --env-file .env rm -f -s pdf-renderer
+    SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build --no-deps server
+  fi
 
 最终切换前备份：$FINAL_BACKUP_FILE
 Postgres globals 备份：$GLOBALS_BACKUP_FILE
 远端 .env 备份：$ENV_BACKUP_FILE
 回滚服务镜像：synapse-server:$ROLLBACK_IMAGE_TAG
-PDF 渲染器回滚镜像：synapse-pdf-renderer:$ROLLBACK_IMAGE_TAG
+PDF 渲染器回滚状态：$PDF_RENDERER_ROLLBACK_STATE_FILE
 EOF
 }
 
@@ -496,13 +586,14 @@ print_deployment_artifacts() {
   echo "最终切换前备份: $FINAL_BACKUP_FILE"
   echo "本地 Drive 备份: $(drive_backup_summary)"
   echo "回滚服务镜像: synapse-server:$ROLLBACK_IMAGE_TAG"
-  echo "PDF 渲染器回滚镜像: synapse-pdf-renderer:$ROLLBACK_IMAGE_TAG"
+  echo "PDF 渲染器回滚状态: $PDF_RENDERER_ROLLBACK_STATE_FILE"
 }
 
 run_remote_health_check() {
   local check_document=${1:-false}
+  local check_pdf_renderer=${2:-true}
 
-  ssh "$SERVER" "cd $REMOTE_DIR/server && CHECK_DOCUMENT='$check_document' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "cd $REMOTE_DIR/server && CHECK_DOCUMENT='$check_document' CHECK_PDF_RENDERER='$check_pdf_renderer' bash -s" <<'REMOTE_SCRIPT'
 set -uo pipefail
 
 failed=0
@@ -714,13 +805,15 @@ PDF_RENDERER_NODE
 
 run_checks_once() {
   failed=0
-  if docker compose --env-file .env exec -T pdf-renderer node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
-    echo "pdf renderer ok"
-  else
-    echo "pdf renderer FAILED"
-    record_failure
+  if [ "$CHECK_PDF_RENDERER" = "true" ]; then
+    if docker compose --env-file .env exec -T pdf-renderer node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+      echo "pdf renderer ok"
+    else
+      echo "pdf renderer FAILED"
+      record_failure
+    fi
+    check_pdf_renderer_connection
   fi
-  check_pdf_renderer_connection
   check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
   check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
   check_body_contains "admin" "http://127.0.0.1:3000/admin/" '<title>Synapse 管理</title>'
@@ -846,6 +939,14 @@ run_deployed_health_check() {
   run_remote_health_check true && check_public_desktop_update_page && check_public_document_page
 }
 
+run_remote_rollback_health_check() {
+  if ssh "$SERVER" "test \"\$(cat '$PDF_RENDERER_ROLLBACK_STATE_FILE')\" = present"; then
+    run_remote_health_check false true
+  else
+    run_remote_health_check false false
+  fi
+}
+
 run_cutover_steps() {
   step 13 "停止旧服务" \
     stop_remote_server || return 1
@@ -864,7 +965,7 @@ run_cutover_steps() {
 recover_previous_service_after_failure() {
   echo ""
   echo "正在回滚到上一版服务镜像，不自动恢复数据库..."
-  if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_health_check 2>&1 | sed 's/^/  /'; then
+  if rollback_remote_service 2>&1 | sed 's/^/  /' && run_remote_rollback_health_check 2>&1 | sed 's/^/  /'; then
     echo "服务镜像已回滚。"
   else
     echo "服务镜像回滚后健康检查仍失败，请立即查看日志。"
@@ -937,9 +1038,9 @@ step 10 "构建 Docker 镜像" \
 step 11 "标记回滚镜像" \
   tag_remote_rollback_image
 
-# [12/19] 用在线备份恢复临时库并预演迁移
-step 12 "临时数据库预演迁移" \
-  preflight_remote_migrations
+# [12/19] 切换前验证新渲染器，并用在线备份恢复临时库预演迁移
+step 12 "预检 PDF 渲染器和数据库迁移" \
+  preflight_remote_release
 
 # [13/19] - [18/19] 停服、最终备份、迁移并启动新服务
 if ! run_cutover_steps; then
