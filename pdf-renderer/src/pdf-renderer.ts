@@ -36,6 +36,7 @@ export class PdfRenderCancelledError extends Error {
 
 export class PdfRenderer {
   private browserPromise: Promise<Browser> | null = null
+  private browserInstance: Browser | null = null
   private assetsPromise: Promise<{ readonly css: string; readonly mermaid: string }> | null = null
 
   constructor(private readonly renderTimeoutMs = 55_000) {}
@@ -109,11 +110,18 @@ export class PdfRenderer {
       const launch = chromium.launch({ headless: true })
       this.browserPromise = launch
       void launch.then((browser) => {
+        if (this.browserPromise === launch) this.browserInstance = browser
         browser.once("disconnected", () => {
-          if (this.browserPromise === launch) this.browserPromise = null
+          if (this.browserPromise === launch) {
+            this.browserPromise = null
+            this.browserInstance = null
+          }
         })
       }, () => {
-        if (this.browserPromise === launch) this.browserPromise = null
+        if (this.browserPromise === launch) {
+          this.browserPromise = null
+          this.browserInstance = null
+        }
       })
     }
     return this.browserPromise
@@ -170,7 +178,10 @@ export class PdfRenderer {
     if (await closeContext(context, phase)) return
     const browser = context.browser()
     if (!browser) return
-    this.browserPromise = null
+    if (this.browserInstance === browser) {
+      this.browserPromise = null
+      this.browserInstance = null
+    }
     await closeBrowser(browser)
   }
 }
@@ -238,10 +249,16 @@ async function renderDocumentEnhancements(): Promise<{ readonly imageWarnings: n
       const canvas = document.createElement("canvas")
       canvas.width = image.naturalWidth
       canvas.height = image.naturalHeight
-      canvas.getContext("2d")?.drawImage(image, 0, 0)
+      const context = canvas.getContext("2d")
+      if (!context) throw new Error("GIF_CANVAS_UNAVAILABLE")
+      context.drawImage(image, 0, 0)
       image.src = canvas.toDataURL("image/png")
     } catch {
-      image.dataset.drivePdfGifFrame = "browser-decoded"
+      imageWarnings += 1
+      const placeholder = document.createElement("span")
+      placeholder.dataset.drivePdfImageMissing = "true"
+      placeholder.textContent = image.alt ? `图片无法加载：${image.alt}` : "图片无法加载"
+      image.replaceWith(placeholder)
     }
   }
 

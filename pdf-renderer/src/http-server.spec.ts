@@ -69,21 +69,23 @@ describe("PDF renderer HTTP server", () => {
     renderer.render.mockImplementationOnce(() => new Promise((resolve) => {
       finishFirst = resolve
     }))
-    const { url } = await startServer({ renderer, maxActive: 1, maxQueued: 1 })
+    const { url, server } = await startServer({ renderer, maxActive: 1, maxQueued: 1 })
     const first = renderRequest(url)
     await waitFor(() => renderer.render.mock.calls.length === 1)
 
+    const queuedAccepted = new Promise<import("node:http").ServerResponse>((resolve) => {
+      server.once("request", (_request, response) => resolve(response))
+    })
     const queued = startAbortableRenderRequest(url)
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    const queuedResponse = await queuedAccepted
     const rejected = await renderRequest(url)
     expect(rejected.status).toBe(429)
 
+    const queuedClosed = new Promise<void>((resolve) => queuedResponse.once("close", resolve))
     queued.abort()
-    await queued.closed
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await Promise.all([queued.closed, queuedClosed])
     finishFirst?.({ bytes: Buffer.from("%PDF-test"), imageWarnings: 0, diagramWarnings: 0 })
     expect((await first).status).toBe(200)
-    await new Promise((resolve) => setTimeout(resolve, 25))
     expect(renderer.render).toHaveBeenCalledTimes(1)
   })
 })
@@ -119,7 +121,7 @@ async function startServer(options: {
   servers.push(server)
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address() as AddressInfo
-  return { url: `http://127.0.0.1:${address.port}`, renderer }
+  return { url: `http://127.0.0.1:${address.port}`, renderer, server }
 }
 
 function renderRequest(url: string, signal?: AbortSignal): Promise<Response> {

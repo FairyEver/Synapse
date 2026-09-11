@@ -41,9 +41,22 @@ export function detectPublicAssetImageType(bytes: Buffer): string | null {
   if (bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP") {
     return "image/webp"
   }
-  if (bytes.subarray(4, 12).toString("ascii") === "ftypavif") return "image/avif"
+  if (hasAvifBrand(bytes)) return "image/avif"
   if (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01 && bytes[3] === 0x00) return "image/x-icon"
   return null
+}
+
+function hasAvifBrand(bytes: Buffer): boolean {
+  if (bytes.length < 16 || bytes.subarray(4, 8).toString("ascii") !== "ftyp") return false
+  const declaredSize = bytes.readUInt32BE(0)
+  const boxSize = declaredSize === 0 ? bytes.length : declaredSize
+  if (boxSize < 16 || boxSize > bytes.length) return false
+  const avifBrands = new Set(["avif", "avis"])
+  if (avifBrands.has(bytes.subarray(8, 12).toString("ascii"))) return true
+  for (let offset = 16; offset + 4 <= boxSize; offset += 4) {
+    if (avifBrands.has(bytes.subarray(offset, offset + 4).toString("ascii"))) return true
+  }
+  return false
 }
 
 export function matchesPublicAssetContentSignature(bytes: Buffer, mimeType: string): boolean {

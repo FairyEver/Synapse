@@ -1,5 +1,7 @@
+import { EventEmitter } from "node:events"
 import { describe, expect, it, vi } from "vitest"
 import { DrivePublicController, DriveUserController } from "./drive.controller"
+import { DriveMarkdownPdfExportCancelledError } from "./drive-markdown-pdf-export.service"
 
 const source = {
   itemId: "item-1",
@@ -18,8 +20,8 @@ const pdf = {
 describe("Drive Markdown PDF export controllers", () => {
   it("exports an owned Markdown item with download headers", async () => {
     const drive = { resolveOwnerMarkdownPdfSource: vi.fn(async () => source) }
-    const exporter = { export: vi.fn(async (input: { resolveSource: () => Promise<typeof source> }) => {
-      await input.resolveSource()
+    const exporter = { export: vi.fn(async (input: { signal: AbortSignal; resolveSource: (signal: AbortSignal) => Promise<typeof source> }) => {
+      await input.resolveSource(input.signal)
       return pdf
     }) }
     const controller = new DriveUserController(
@@ -34,7 +36,7 @@ describe("Drive Markdown PDF export controllers", () => {
 
     await controller.exportOwnerItemPdf(
       "item-1",
-      { user: { id: "user-1" } } as never,
+      createRequest({ user: { id: "user-1" } }) as never,
       response as never,
     )
 
@@ -43,8 +45,10 @@ describe("Drive Markdown PDF export controllers", () => {
       itemId: "item-1",
       maxBytes: 10 * 1024 * 1024,
       maxImages: 256,
+      signal: expect.anything(),
     })
     expect(exporter.export).toHaveBeenCalledWith({
+      signal: expect.anything(),
       rateLimitKey: "user:user-1",
       resolveSource: expect.any(Function),
     })
@@ -59,8 +63,8 @@ describe("Drive Markdown PDF export controllers", () => {
 
   it("routes a shared child through share access resolution", async () => {
     const drive = { resolveShareMarkdownPdfSource: vi.fn(async () => source) }
-    const exporter = { export: vi.fn(async (input: { resolveSource: () => Promise<typeof source> }) => {
-      await input.resolveSource()
+    const exporter = { export: vi.fn(async (input: { signal: AbortSignal; resolveSource: (signal: AbortSignal) => Promise<typeof source> }) => {
+      await input.resolveSource(input.signal)
       return pdf
     }) }
     const controller = new DrivePublicController(
@@ -79,7 +83,7 @@ describe("Drive Markdown PDF export controllers", () => {
     await controller.exportShareItemPdf(
       "share-1",
       "item-1",
-      { ip: "203.0.113.10", headers: {} } as never,
+      createRequest({ ip: "203.0.113.10", headers: {} }) as never,
       response as never,
     )
 
@@ -89,23 +93,61 @@ describe("Drive Markdown PDF export controllers", () => {
       cookie: undefined,
       maxBytes: 10 * 1024 * 1024,
       maxImages: 256,
+      signal: expect.anything(),
     })
     expect(exporter.export).toHaveBeenCalledWith({
+      signal: expect.anything(),
       rateLimitKey: "share-ip:203.0.113.10",
       resolveSource: expect.any(Function),
     })
   })
+
+  it("cancels an export without writing a response when the client disconnects", async () => {
+    let exportSignal: AbortSignal | undefined
+    const exporter = { export: vi.fn((input: { signal: AbortSignal }) => {
+      exportSignal = input.signal
+      return new Promise((_resolve, reject) => {
+        input.signal.addEventListener("abort", () => reject(new DriveMarkdownPdfExportCancelledError()), { once: true })
+      })
+    }) }
+    const controller = new DriveUserController(
+      {} as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      exporter as never,
+    )
+    const request = createRequest({ user: { id: "user-1" } })
+    const response = createResponse()
+
+    const operation = controller.exportOwnerItemPdf("item-1", request as never, response as never)
+    request.emit("aborted")
+    await operation
+
+    expect(exportSignal?.aborted).toBe(true)
+    expect(response.send).not.toHaveBeenCalled()
+  })
 })
 
+function createRequest(properties: Record<string, unknown>) {
+  return Object.assign(new EventEmitter(), { aborted: false }, properties)
+}
+
 function createResponse() {
-  const response = {
+  const response = Object.assign(new EventEmitter(), {
+    destroyed: false,
+    writableEnded: false,
     headers: {} as Record<string, string>,
     setHeader: vi.fn((name: string, value: string) => {
       response.headers[name] = value
       return response
     }),
     status: vi.fn(() => response),
-    send: vi.fn(() => response),
-  }
+    send: vi.fn(() => {
+      response.writableEnded = true
+      return response
+    }),
+  })
   return response
 }

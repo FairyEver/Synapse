@@ -56,6 +56,7 @@ export class DriveMarkdownPdfExportService {
     readonly rateLimitKey: string
     readonly signal?: AbortSignal
   }): Promise<DriveMarkdownPdfExportResult> {
+    if (input.signal?.aborted) throw new DriveMarkdownPdfExportCancelledError()
     this.assertRateLimit(input.rateLimitKey)
     const startedAt = Date.now()
     return enforceExportDeadline(async (signal) => {
@@ -70,6 +71,7 @@ export class DriveMarkdownPdfExportService {
     startedAt: number,
     signal: AbortSignal,
   ): Promise<DriveMarkdownPdfExportResult> {
+    assertExportActive(signal)
     const initial = await renderDriveMarkdownFragment(source.sourceText, {
       allowStandaloneRawImages: source.allowStandaloneRawImages,
     })
@@ -81,6 +83,7 @@ export class DriveMarkdownPdfExportService {
     const resourceUrls = new Map<string, string | null>()
     let imageBytes = 0
     for (const image of images) {
+      assertExportActive(signal)
       this.assertDeadline(startedAt)
       try {
         const resolved = await this.resolveImage(image, source, remainingTime(startedAt), signal)
@@ -91,11 +94,13 @@ export class DriveMarkdownPdfExportService {
         }
         resourceUrls.set(image.resourceKey, `data:${resolved.mimeType};base64,${resolved.bytes.toString("base64")}`)
       } catch (error) {
+        assertExportActive(signal)
         if (error instanceof PayloadTooLargeException || error instanceof GatewayTimeoutException) throw error
         resourceUrls.set(image.resourceKey, null)
       }
     }
 
+    assertExportActive(signal)
     const imageWarnings = (initial.projection.images ?? [])
       .filter((image) => resourceUrls.get(image.resourceKey) === null)
       .length
@@ -249,6 +254,7 @@ async function enforceExportDeadline<T>(
   operation: (signal: AbortSignal) => Promise<T>,
   externalSignal?: AbortSignal,
 ): Promise<T> {
+  if (externalSignal?.aborted) throw new DriveMarkdownPdfExportCancelledError()
   let timeout: NodeJS.Timeout | undefined
   const controller = new AbortController()
   let rejectCancellation: ((error: Error) => void) | undefined
@@ -259,8 +265,7 @@ async function enforceExportDeadline<T>(
     rejectCancellation?.(new DriveMarkdownPdfExportCancelledError())
     controller.abort()
   }
-  if (externalSignal?.aborted) cancel()
-  else externalSignal?.addEventListener("abort", cancel, { once: true })
+  externalSignal?.addEventListener("abort", cancel, { once: true })
   try {
     return await Promise.race([
       operation(controller.signal),
@@ -289,6 +294,10 @@ function remainingTime(startedAt: number): number {
 
 function imageTooLarge(): PayloadTooLargeException {
   return new PayloadTooLargeException("单张图片超过 10 MiB，无法导出。")
+}
+
+function assertExportActive(signal: AbortSignal): void {
+  if (signal.aborted) throw new DriveMarkdownPdfExportCancelledError()
 }
 
 async function readLimitedStream(

@@ -184,6 +184,21 @@ describe("DriveMarkdownPdfExportService", () => {
     expect(receivedSignal?.aborted).toBe(true)
   })
 
+  it("does not consume rate limit or resolve a source for an already disconnected client", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const resolveSource = vi.fn(async () => emptySource("cancelled.md"))
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+
+    await expect(service.export({
+      signal: controller.signal,
+      rateLimitKey: "user:already-disconnected",
+      resolveSource,
+    })).rejects.toBeInstanceOf(DriveMarkdownPdfExportCancelledError)
+
+    expect(resolveSource).not.toHaveBeenCalled()
+  })
+
   it("ends the whole export after sixty seconds even when storage stalls", async () => {
     vi.useFakeTimers()
     const service = new DriveMarkdownPdfExportService(

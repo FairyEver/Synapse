@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest"
+import { afterAll, describe, expect, it, vi } from "vitest"
 import { createServer } from "node:http"
 import { PdfRenderer, PdfRenderCancelledError, PdfRenderTimeoutError } from "./pdf-renderer"
 
@@ -26,6 +26,32 @@ describe.sequential("PdfRenderer", () => {
 
     expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
     expect(result.diagramWarnings).toBe(1)
+  }, 30_000)
+
+  it("prints task lists, quotes, code, wide tables, long links, large images, and multiple pages", async () => {
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    const rows = Array.from({ length: 180 }, (_, index) => `<p>分页内容 ${index + 1}：中英文 mixed content</p>`).join("")
+    const result = await renderer.render({
+      schemaVersion: 1,
+      title: "打印版式",
+      html: `<main class="markdown-body"><h1>验收</h1><ul class="contains-task-list"><li class="task-list-item"><input type="checkbox" checked disabled>任务</li></ul><blockquote><p>引用</p></blockquote><pre><code>const longValue = "abcdefghijklmnopqrstuvwxyz";</code></pre><table><thead><tr><th>很宽的列一</th><th>很宽的列二</th><th>很宽的列三</th></tr></thead><tbody><tr><td>内容一</td><td>内容二</td><td>内容三</td></tr></tbody></table><p><a href="https://example.com/${"long-segment/".repeat(30)}">${"long-link-text-".repeat(30)}</a></p><img src="data:image/png;base64,${png}" alt="超大图片" width="100000" height="100000">${rows}</main>`,
+    })
+
+    expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
+    expect(result.imageWarnings).toBe(0)
+    expect(countPdfPages(result.bytes)).toBeGreaterThan(1)
+  }, 30_000)
+
+  it("freezes a GIF to a printable static frame", async () => {
+    const gif = "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+    const result = await renderer.render({
+      schemaVersion: 1,
+      title: "GIF",
+      html: `<main class="markdown-body"><img src="data:image/gif;base64,${gif}" alt="动图"></main>`,
+    })
+
+    expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
+    expect(result.imageWarnings).toBe(0)
   }, 30_000)
 
   it("replaces an undecodable image with a visible warning", async () => {
@@ -64,6 +90,33 @@ describe.sequential("PdfRenderer", () => {
     }, controller.signal)).rejects.toBeInstanceOf(PdfRenderCancelledError)
   })
 
+  it("does not evict a replacement browser while recovering a stale context", async () => {
+    const localRenderer = new PdfRenderer()
+    const oldBrowser = { close: vi.fn(async () => undefined) }
+    const replacementBrowser = { close: vi.fn(async () => undefined) }
+    const staleContext = {
+      close: vi.fn(async () => { throw new Error("stale context") }),
+      browser: () => oldBrowser,
+    }
+    const state = localRenderer as unknown as {
+      browserPromise: Promise<typeof replacementBrowser> | null
+      browserInstance: typeof replacementBrowser | null
+      closeContextAndRecover: (context: unknown, phase: "finalize") => Promise<void>
+    }
+    state.browserPromise = Promise.resolve(replacementBrowser)
+    state.browserInstance = replacementBrowser
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true)
+    try {
+      await state.closeContextAndRecover(staleContext, "finalize")
+
+      expect(await state.browserPromise).toBe(replacementBrowser)
+      expect(oldBrowser.close).toHaveBeenCalledOnce()
+    } finally {
+      stderr.mockRestore()
+      await localRenderer.close()
+    }
+  })
+
   it("blocks every network request from document HTML", async () => {
     let requests = 0
     const imageServer = createServer((_request, response) => {
@@ -92,3 +145,7 @@ describe.sequential("PdfRenderer", () => {
 afterAll(async () => {
   await renderer.close()
 })
+
+function countPdfPages(bytes: Buffer): number {
+  return bytes.toString("latin1").match(/\/Type\s*\/Page\b/gu)?.length ?? 0
+}

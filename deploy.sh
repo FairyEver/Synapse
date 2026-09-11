@@ -665,6 +665,52 @@ UPDATE_INTENT_NODE
   rm -f "$error_file"
 }
 
+check_pdf_renderer_connection() {
+  local error_file
+
+  error_file=$(mktemp)
+  if docker compose --env-file .env exec -T server node --input-type=module - \
+    >/dev/null 2>"$error_file" <<'PDF_RENDERER_NODE'
+const rendererUrl = process.env.PDF_RENDERER_URL
+const secret = process.env.PDF_RENDERER_INTERNAL_SECRET
+
+if (!rendererUrl || !secret) {
+  throw new Error("PDF renderer connection is not configured")
+}
+
+const response = await fetch(`${rendererUrl.replace(/\/+$/, "")}/render`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${secret}`,
+  },
+  body: JSON.stringify({
+    schemaVersion: 1,
+    title: "health",
+    html: '<main class="markdown-body"><p>health</p></main>',
+  }),
+})
+if (!response.ok) {
+  throw new Error(`PDF renderer returned HTTP ${response.status}`)
+}
+const bytes = new Uint8Array(await response.arrayBuffer())
+if (new TextDecoder("ascii").decode(bytes.subarray(0, 5)) !== "%PDF-") {
+  throw new Error("PDF renderer returned an invalid document")
+}
+PDF_RENDERER_NODE
+  then
+    echo "pdf renderer API connection ok"
+  else
+    echo "pdf renderer API connection FAILED"
+    if [ -s "$error_file" ]; then
+      sed -n '1,4p' "$error_file"
+    fi
+    record_failure
+  fi
+
+  rm -f "$error_file"
+}
+
 run_checks_once() {
   failed=0
   if docker compose --env-file .env exec -T pdf-renderer node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
@@ -673,6 +719,7 @@ run_checks_once() {
     echo "pdf renderer FAILED"
     record_failure
   fi
+  check_pdf_renderer_connection
   check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
   check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
   check_body_contains "admin" "http://127.0.0.1:3000/admin/" '<title>Synapse 管理</title>'

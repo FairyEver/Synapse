@@ -1192,6 +1192,7 @@ async function runDrivePdfExport(
   }
   request.once("aborted", cancel)
   response.once("close", cancelClosedResponse)
+  if (request.aborted || response.destroyed) cancel()
   try {
     const result = await exportPdf(controller.signal)
     if (!response.destroyed) sendDrivePdfExport(response, result)

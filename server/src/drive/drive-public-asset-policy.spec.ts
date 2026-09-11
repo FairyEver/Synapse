@@ -47,6 +47,19 @@ describe("public asset policy", () => {
     )
   })
 
+  it.each([
+    ["avif", []],
+    ["avis", []],
+    ["mif1", ["mif1", "avif"]],
+    ["msf1", ["msf1", "avis"]],
+  ])("detects AVIF brand %s from ISO-BMFF metadata", (majorBrand, compatibleBrands) => {
+    expect(detectPublicAssetImageType(avifFtyp(majorBrand, compatibleBrands))).toBe("image/avif")
+  })
+
+  it("does not treat generic HEIF without an AVIF brand as AVIF", () => {
+    expect(detectPublicAssetImageType(avifFtyp("mif1", ["mif1", "heic"]))).toBeNull()
+  })
+
   it("validates PDF, Office Open XML, and UTF-8 text signatures", () => {
     expect(matchesPublicAssetContentSignature(Buffer.from("%PDF-1.7\n"), DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION.pdf)).toBe(true)
     expect(matchesPublicAssetContentSignature(Buffer.from([0x50, 0x4b, 0x03, 0x04]), DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION.docx)).toBe(true)
@@ -60,3 +73,13 @@ describe("public asset policy", () => {
     expect(matchesPublicAssetContentSignature(Buffer.from([0xff, 0xfe, 0xfd]), DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION.csv)).toBe(false)
   })
 })
+
+function avifFtyp(majorBrand: string, compatibleBrands: readonly string[]): Buffer {
+  const size = 16 + compatibleBrands.length * 4
+  const bytes = Buffer.alloc(size)
+  bytes.writeUInt32BE(size, 0)
+  bytes.write("ftyp", 4, "ascii")
+  bytes.write(majorBrand, 8, "ascii")
+  for (const [index, brand] of compatibleBrands.entries()) bytes.write(brand, 16 + index * 4, "ascii")
+  return bytes
+}
