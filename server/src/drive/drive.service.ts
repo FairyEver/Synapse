@@ -2359,11 +2359,13 @@ export class DriveService implements OnApplicationBootstrap {
     readonly maxImages: number
     readonly signal?: AbortSignal
   }): Promise<DriveMarkdownPdfSource> {
-    const share = await this.resolvePublicShare({
+    const access = await this.resolvePublicShareAccess({
       shareId: input.shareId,
       password: input.password,
       cookie: input.cookie,
     })
+    if (access.status !== "ok") throw createDriveShareUnlockRequiredException()
+    const share = access.value
     const { root, current } = await this.resolveShareBrowserCurrent(share, input.itemId)
     return this.buildMarkdownPdfSource(current, {
       context: "share",

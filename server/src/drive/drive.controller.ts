@@ -32,7 +32,13 @@ import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
-import { DRIVE_PDF_MAX_IMAGES, DRIVE_PDF_SOURCE_MAX_BYTES, DriveMarkdownPdfExportService } from "./drive-markdown-pdf-export.service"
+import {
+  DRIVE_PDF_MAX_IMAGES,
+  DRIVE_PDF_SOURCE_MAX_BYTES,
+  DriveMarkdownPdfExportCancelledError,
+  type DriveMarkdownPdfExportResult,
+  DriveMarkdownPdfExportService,
+} from "./drive-markdown-pdf-export.service"
 import {
   renderDriveShareReaderPage,
   renderDriveShareReaderPasswordPage,
@@ -680,14 +686,15 @@ export class DriveUserController {
     @Res() response: Response,
   ): Promise<void> {
     const exporter = requireDrivePdfExportService(this.pdfExports)
-    sendDrivePdfExport(response, await exporter.export({
+    await runDrivePdfExport(request, response, (signal) => exporter.export({
+      signal,
       rateLimitKey: `user:${request.user!.id}`,
-      resolveSource: (signal) => this.drive.resolveOwnerMarkdownPdfSource({
+      resolveSource: (deadlineSignal) => this.drive.resolveOwnerMarkdownPdfSource({
         userId: request.user!.id,
         itemId,
         maxBytes: DRIVE_PDF_SOURCE_MAX_BYTES,
         maxImages: DRIVE_PDF_MAX_IMAGES,
-        signal,
+        signal: deadlineSignal,
       }),
     }))
   }
@@ -1171,6 +1178,29 @@ function sendDrivePdfExport(
   response.setHeader("X-Synapse-Pdf-Diagram-Warnings", String(result.diagramWarnings))
   response.setHeader("Content-Length", String(result.bytes.length))
   response.status(HttpStatus.OK).send(result.bytes)
+}
+
+async function runDrivePdfExport(
+  request: Request,
+  response: Response,
+  exportPdf: (signal: AbortSignal) => Promise<DriveMarkdownPdfExportResult>,
+): Promise<void> {
+  const controller = new AbortController()
+  const cancel = () => controller.abort()
+  const cancelClosedResponse = () => {
+    if (!response.writableEnded) cancel()
+  }
+  request.once("aborted", cancel)
+  response.once("close", cancelClosedResponse)
+  try {
+    const result = await exportPdf(controller.signal)
+    if (!response.destroyed) sendDrivePdfExport(response, result)
+  } catch (error) {
+    if (!(error instanceof DriveMarkdownPdfExportCancelledError)) throw error
+  } finally {
+    request.removeListener("aborted", cancel)
+    response.removeListener("close", cancelClosedResponse)
+  }
 }
 
 @Controller()
@@ -2133,15 +2163,16 @@ export class DrivePublicController {
     readonly response: Response
   }): Promise<void> {
     const exporter = requireDrivePdfExportService(this.pdfExports)
-    sendDrivePdfExport(input.response, await exporter.export({
+    await runDrivePdfExport(input.request, input.response, (signal) => exporter.export({
+      signal,
       rateLimitKey: `share-ip:${input.request.ip || "unknown"}`,
-      resolveSource: (signal) => this.drive.resolveShareMarkdownPdfSource({
+      resolveSource: (deadlineSignal) => this.drive.resolveShareMarkdownPdfSource({
         shareId: input.shareId,
         itemId: input.itemId,
         cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
         maxBytes: DRIVE_PDF_SOURCE_MAX_BYTES,
         maxImages: DRIVE_PDF_MAX_IMAGES,
-        signal,
+        signal: deadlineSignal,
       }),
     }))
   }

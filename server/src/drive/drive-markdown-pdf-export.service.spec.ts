@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Readable } from "node:stream"
-import { DriveMarkdownPdfExportService } from "./drive-markdown-pdf-export.service"
+import {
+  DriveMarkdownPdfExportCancelledError,
+  DriveMarkdownPdfExportService,
+} from "./drive-markdown-pdf-export.service"
 
 const originalEnv = { ...process.env }
 
@@ -160,6 +163,25 @@ describe("DriveMarkdownPdfExportService", () => {
 
     await vi.advanceTimersByTimeAsync(60_000)
     await rejection
+  })
+
+  it("cancels source resolution when the HTTP client disconnects", async () => {
+    const controller = new AbortController()
+    let receivedSignal: AbortSignal | undefined
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+    const operation = service.export({
+      signal: controller.signal,
+      rateLimitKey: "user:client-disconnect",
+      resolveSource: (signal) => {
+        receivedSignal = signal
+        return new Promise(() => undefined)
+      },
+    })
+
+    controller.abort()
+
+    await expect(operation).rejects.toBeInstanceOf(DriveMarkdownPdfExportCancelledError)
+    expect(receivedSignal?.aborted).toBe(true)
   })
 
   it("ends the whole export after sixty seconds even when storage stalls", async () => {

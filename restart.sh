@@ -158,8 +158,8 @@ if [ "$failed" -ne 0 ]; then
   echo "docker compose status:"
   docker compose --env-file .env ps || true
   echo ""
-  echo "recent server logs:"
-  docker compose --env-file .env logs --tail=80 server || true
+  echo "recent server and PDF renderer logs:"
+  docker compose --env-file .env logs --tail=80 server pdf-renderer || true
   exit 1
 fi
 REMOTE_SCRIPT

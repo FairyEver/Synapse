@@ -56,16 +56,22 @@ export class PdfRenderer {
 
   async render(input: PdfRenderRequest, signal?: AbortSignal): Promise<PdfRenderResult> {
     let context: BrowserContext | undefined
+    let closePromise: Promise<void> | undefined
     let termination: "timeout" | "cancelled" | null = null
     let timeout: NodeJS.Timeout | undefined
     let rejectTermination: ((error: Error) => void) | undefined
     const terminationResult = new Promise<never>((_resolve, reject) => {
       rejectTermination = reject
     })
+    const close = (phase: "timeout" | "cancelled" | "finalize"): Promise<void> => {
+      if (!context) return Promise.resolve()
+      closePromise ??= this.closeContextAndRecover(context, phase)
+      return closePromise
+    }
     const terminate = (reason: "timeout" | "cancelled") => {
       if (termination) return
       termination = reason
-      if (context) void closeContext(context, reason)
+      void close(reason)
       rejectTermination?.(reason === "timeout" ? new PdfRenderTimeoutError() : new PdfRenderCancelledError())
     }
     timeout = setTimeout(() => {
@@ -76,7 +82,10 @@ export class PdfRenderer {
     else signal?.addEventListener("abort", cancel, { once: true })
     try {
       return await Promise.race([
-        this.renderPage(input, (value) => { context = value }, () => termination),
+        this.renderPage(input, (value) => {
+          context = value
+          if (termination) void close(termination)
+        }, () => termination),
         terminationResult,
       ])
     } catch (error) {
@@ -86,7 +95,7 @@ export class PdfRenderer {
     } finally {
       if (timeout) clearTimeout(timeout)
       signal?.removeEventListener("abort", cancel)
-      if (context) await closeContext(context, "finalize")
+      await close("finalize")
     }
   }
 
@@ -122,7 +131,6 @@ export class PdfRenderer {
     setContext(context)
     const afterContext = termination()
     if (afterContext) {
-      await closeContext(context, afterContext)
       throw renderTerminationError(afterContext)
     }
     await context.route("**/*", (route) => route.abort("blockedbyclient"))
@@ -153,6 +161,17 @@ export class PdfRenderer {
       mermaid,
     }))
     return this.assetsPromise
+  }
+
+  private async closeContextAndRecover(
+    context: BrowserContext,
+    phase: "timeout" | "cancelled" | "finalize",
+  ): Promise<void> {
+    if (await closeContext(context, phase)) return
+    const browser = context.browser()
+    if (!browser) return
+    this.browserPromise = null
+    await closeBrowser(browser)
   }
 }
 
@@ -276,7 +295,7 @@ function renderTerminationError(reason: "timeout" | "cancelled"): Error {
 async function closeContext(
   context: BrowserContext,
   phase: "timeout" | "cancelled" | "finalize",
-): Promise<void> {
+): Promise<boolean> {
   let timeout: NodeJS.Timeout | undefined
   try {
     await Promise.race([
@@ -285,11 +304,34 @@ async function closeContext(
         timeout = setTimeout(() => reject(new Error("PDF context close timed out")), 2_000)
       }),
     ])
+    return true
   } catch (error) {
     process.stderr.write(`${JSON.stringify({
       level: "warn",
       event: "pdf_context_close_failed",
       phase,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      at: new Date().toISOString(),
+    })}\n`)
+    return false
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+async function closeBrowser(browser: Browser): Promise<void> {
+  let timeout: NodeJS.Timeout | undefined
+  try {
+    await Promise.race([
+      browser.close(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error("PDF browser close timed out")), 2_000)
+      }),
+    ])
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({
+      level: "warn",
+      event: "pdf_browser_close_failed",
       errorName: error instanceof Error ? error.name : "UnknownError",
       at: new Date().toISOString(),
     })}\n`)

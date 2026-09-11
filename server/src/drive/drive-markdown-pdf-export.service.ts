@@ -34,6 +34,13 @@ export type DriveMarkdownPdfExportResult = {
   readonly diagramWarnings: number
 }
 
+export class DriveMarkdownPdfExportCancelledError extends Error {
+  constructor() {
+    super("Drive Markdown PDF export cancelled")
+    this.name = "DriveMarkdownPdfExportCancelledError"
+  }
+}
+
 @Injectable()
 export class DriveMarkdownPdfExportService {
   private readonly attempts = new Map<string, number[]>()
@@ -47,6 +54,7 @@ export class DriveMarkdownPdfExportService {
   async export(input: {
     readonly resolveSource: (signal: AbortSignal) => Promise<DriveMarkdownPdfSource>
     readonly rateLimitKey: string
+    readonly signal?: AbortSignal
   }): Promise<DriveMarkdownPdfExportResult> {
     this.assertRateLimit(input.rateLimitKey)
     const startedAt = Date.now()
@@ -54,7 +62,7 @@ export class DriveMarkdownPdfExportService {
       const source = await input.resolveSource(signal)
       this.assertDeadline(startedAt)
       return this.performExport(source, startedAt, signal)
-    })
+    }, input.signal)
   }
 
   private async performExport(
@@ -237,12 +245,26 @@ export class DriveMarkdownPdfExportService {
   }
 }
 
-async function enforceExportDeadline<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function enforceExportDeadline<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  externalSignal?: AbortSignal,
+): Promise<T> {
   let timeout: NodeJS.Timeout | undefined
   const controller = new AbortController()
+  let rejectCancellation: ((error: Error) => void) | undefined
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    rejectCancellation = reject
+  })
+  const cancel = () => {
+    rejectCancellation?.(new DriveMarkdownPdfExportCancelledError())
+    controller.abort()
+  }
+  if (externalSignal?.aborted) cancel()
+  else externalSignal?.addEventListener("abort", cancel, { once: true })
   try {
     return await Promise.race([
       operation(controller.signal),
+      cancellation,
       new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(() => {
           reject(new GatewayTimeoutException("PDF 导出超时。"))
@@ -252,6 +274,7 @@ async function enforceExportDeadline<T>(operation: (signal: AbortSignal) => Prom
     ])
   } finally {
     if (timeout) clearTimeout(timeout)
+    externalSignal?.removeEventListener("abort", cancel)
     controller.abort()
   }
 }
@@ -276,7 +299,8 @@ async function readLimitedStream(
   const chunks: Buffer[] = []
   let total = 0
   const destroy = () => (stream as { destroy?: (error?: Error) => void }).destroy?.(new Error("PDF_EXPORT_ABORTED"))
-  signal.addEventListener("abort", destroy, { once: true })
+  if (signal.aborted) destroy()
+  else signal.addEventListener("abort", destroy, { once: true })
   try {
     for await (const chunk of stream as NodeJS.ReadableStream & AsyncIterable<Buffer | string>) {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)

@@ -3057,7 +3057,19 @@ describe("DriveService", () => {
     const allowedRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: allowed.id } })
     const privateRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: privateImage.id } })
     objects.set(markdownRecord.storageKey, { body: "![allowed](./allowed.png)", contentType: "text/markdown" })
-    const share = await service.createShare("user-1", markdown.id, "https://synapse.test")
+    const share = await service.createShare("user-1", markdown.id, "https://synapse.test", {
+      passwordEnabled: true,
+      expiresIn: "forever",
+    })
+
+    await expect(service.resolveShareMarkdownPdfSource({
+      shareId: share.shareId,
+      maxBytes: 10 * 1024 * 1024,
+      maxImages: 256,
+    })).rejects.toMatchObject({
+      status: 401,
+      response: { code: "DRIVE_SHARE_UNLOCK_REQUIRED" },
+    })
 
     const source = await service.resolveShareMarkdownPdfSource({
       shareId: share.shareId,
