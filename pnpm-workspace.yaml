@@ -9,15 +9,25 @@ packages:
   - auto/web
   - templates/shadcn-admin
 
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - electron
+  - electron-winstaller
+  - esbuild
+  - node-pty
+  - prisma
+
+ignoredBuiltDependencies:
+  - '@clerk/shared'
+  - '@nestjs/core'
+  - msw
+
 overrides:
   js-yaml: 4.2.0
 
 patchedDependencies:
   node-pty@1.1.0: patches/node-pty@1.1.0.patch
-
-onlyBuiltDependencies:
-  - electron
-  - node-pty
 
 allowBuilds:
   '@clerk/shared': set this to true or false
