@@ -5,6 +5,18 @@ import {
   DriveMarkdownPdfExportService,
 } from "./drive-markdown-pdf-export.service"
 
+vi.mock("./drive-markdown-pdf-render-worker", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./drive-markdown-pdf-render-worker")>()
+  const { renderDriveMarkdownFragment } = await import("./drive-markdown-renderer.js")
+  return {
+    ...actual,
+    renderDriveMarkdownPdfInWorker: (
+      markdown: string,
+      options: Parameters<typeof renderDriveMarkdownFragment>[1],
+    ) => renderDriveMarkdownFragment(markdown, options),
+  }
+})
+
 const originalEnv = { ...process.env }
 
 describe("DriveMarkdownPdfExportService", () => {

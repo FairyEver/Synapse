@@ -10,7 +10,12 @@ import {
 import { Buffer } from "node:buffer"
 import type { DriveMarkdownProjectionImageDto } from "@synapse/shared"
 import { loadEnv } from "../config/env"
-import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import type { DriveMarkdownRenderOptions } from "./drive-markdown-renderer"
+import {
+  DriveMarkdownPdfRenderCancelledError,
+  DriveMarkdownPdfRenderTimeoutError,
+  renderDriveMarkdownPdfInWorker,
+} from "./drive-markdown-pdf-render-worker"
 import type { DriveMarkdownPdfSource } from "./drive.service"
 import type { DriveStoragePort } from "./drive-storage"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
@@ -72,9 +77,9 @@ export class DriveMarkdownPdfExportService {
     signal: AbortSignal,
   ): Promise<DriveMarkdownPdfExportResult> {
     assertExportActive(signal)
-    const initial = await renderDriveMarkdownFragment(source.sourceText, {
+    const initial = await this.renderMarkdown(source.sourceText, {
       allowStandaloneRawImages: source.allowStandaloneRawImages,
-    })
+    }, startedAt, signal)
     const images = uniqueProjectionImages(initial.projection.images ?? [])
     if (images.length > DRIVE_PDF_MAX_IMAGES) {
       throw new PayloadTooLargeException(`Markdown 图片超过 ${DRIVE_PDF_MAX_IMAGES} 个，无法导出。`)
@@ -115,11 +120,11 @@ export class DriveMarkdownPdfExportService {
       resourceKeysById.set(image.imageId, resourceTokens.get(image.resourceKey) ?? null)
     }
     this.assertDeadline(startedAt)
-    const rendered = await renderDriveMarkdownFragment(source.sourceText, {
+    const rendered = await this.renderMarkdown(source.sourceText, {
       allowStandaloneRawImages: source.allowStandaloneRawImages,
       projection: initial.projection,
       pdfImageResourceKeysById: resourceKeysById,
-    })
+    }, startedAt, signal)
     const response = await this.renderPdf({
       title: stripMarkdownExtension(source.name),
       html: `<main class="markdown-body">${rendered.html}${pdfResourceMapScript(resourceData)}</main>`,
@@ -178,6 +183,28 @@ export class DriveMarkdownPdfExportService {
       }
     }
     throw new Error("PDF_IMAGE_UNSUPPORTED")
+  }
+
+  private async renderMarkdown(
+    markdown: string,
+    options: DriveMarkdownRenderOptions,
+    startedAt: number,
+    signal: AbortSignal,
+  ) {
+    try {
+      return await renderDriveMarkdownPdfInWorker(markdown, options, {
+        signal,
+        timeoutMs: remainingTime(startedAt),
+      })
+    } catch (error) {
+      if (error instanceof DriveMarkdownPdfRenderTimeoutError) {
+        throw new GatewayTimeoutException("PDF 导出超时。")
+      }
+      if (error instanceof DriveMarkdownPdfRenderCancelledError) {
+        assertExportActive(signal)
+      }
+      throw error
+    }
   }
 
   private async readStorageImage(

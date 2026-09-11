@@ -365,68 +365,71 @@ REMOTE_SCRIPT
 }
 
 start_and_verify_new_pdf_renderer() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && NEW_IMAGE_TAG='$NEW_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "cd $REMOTE_DIR/server && DEPLOY_ID='$DEPLOY_ID' NEW_IMAGE_TAG='$NEW_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env up -d --no-build --no-deps pdf-renderer
+container_name="synapse-pdf-renderer-preflight-${DEPLOY_ID}"
+cleanup_pdf_renderer_preflight() {
+  docker rm -f "$container_name" >/dev/null 2>&1 || true
+}
+trap cleanup_pdf_renderer_preflight EXIT
+
+pdf_renderer_secret=$(sed -n 's/^PDF_RENDERER_INTERNAL_SECRET=//p' .env | tail -n 1)
+if [ -z "$pdf_renderer_secret" ]; then
+  echo "PDF_RENDERER_INTERNAL_SECRET missing"
+  exit 1
+fi
+export PDF_RENDERER_INTERNAL_SECRET="$pdf_renderer_secret"
+cleanup_pdf_renderer_preflight
+docker run -d \
+  --name "$container_name" \
+  --network none \
+  --read-only \
+  --tmpfs /tmp:size=256m,mode=1777 \
+  --security-opt no-new-privileges:true \
+  --pids-limit 256 \
+  --cpus 2.0 \
+  --memory 2g \
+  --env PDF_RENDERER_INTERNAL_SECRET \
+  --env PORT=3010 \
+  "synapse-pdf-renderer:${NEW_IMAGE_TAG}" >/dev/null
 deadline=$((SECONDS + 90))
 while true; do
-  container_id=$(docker compose --env-file .env ps -q pdf-renderer || true)
-  health=$([ -n "$container_id" ] && docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id" 2>/dev/null || true)
-  if [ "$health" = "healthy" ]; then
-    echo "new pdf-renderer preflight ok"
-    exit 0
+  state=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null || true)
+  if [ "$state" = "running" ] && docker exec "$container_name" node -e "fetch('http://127.0.0.1:3010/healthz', { signal: AbortSignal.timeout(5000) }).then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+    break
   fi
-  if [ "$health" = "unhealthy" ] || [ "$SECONDS" -ge "$deadline" ]; then
-    docker compose --env-file .env logs --tail=80 pdf-renderer || true
-    echo "new pdf-renderer preflight failed (health: ${health:-missing})"
+  if [ "$state" = "exited" ] || [ "$state" = "dead" ] || [ "$SECONDS" -ge "$deadline" ]; then
+    docker logs --tail=80 "$container_name" || true
+    echo "new pdf-renderer preflight failed (state: ${state:-missing})"
     exit 1
   fi
   sleep 3
 done
-REMOTE_SCRIPT
-}
 
-restore_previous_pdf_renderer() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' PDF_RENDERER_ROLLBACK_STATE_FILE='$PDF_RENDERER_ROLLBACK_STATE_FILE' bash -s" <<'REMOTE_SCRIPT'
-set -euo pipefail
+docker exec -i "$container_name" node - <<'PDF_RENDERER_PREFLIGHT'
+const secret = process.env.PDF_RENDERER_INTERNAL_SECRET
+fetch("http://127.0.0.1:3010/render", {
+  method: "POST",
+  signal: AbortSignal.timeout(60_000),
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${secret}`,
+  },
+  body: JSON.stringify({ schemaVersion: 1, title: "Preflight", html: "<main><h1>PDF preflight</h1></main>" }),
+}).then(async (response) => {
+  const body = Buffer.from(await response.arrayBuffer())
+  const validPdf = body.subarray(0, 5).toString("ascii") === "%PDF-"
+  process.exit(response.ok && validPdf ? 0 : 1)
+}).catch(() => process.exit(1))
+PDF_RENDERER_PREFLIGHT
 
-state=$(cat "$PDF_RENDERER_ROLLBACK_STATE_FILE")
-if [ "$state" = "present" ]; then
-  SYNAPSE_SERVER_IMAGE_TAG="$ROLLBACK_IMAGE_TAG" docker compose --env-file .env up -d --no-build --no-deps pdf-renderer
-  deadline=$((SECONDS + 90))
-  while true; do
-    container_id=$(docker compose --env-file .env ps -q pdf-renderer || true)
-    health=$([ -n "$container_id" ] && docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id" 2>/dev/null || true)
-    if [ "$health" = "healthy" ]; then
-      break
-    fi
-    if [ "$health" = "unhealthy" ] || [ "$SECONDS" -ge "$deadline" ]; then
-      echo "previous pdf-renderer restore failed (health: ${health:-missing})"
-      exit 1
-    fi
-    sleep 3
-  done
-  echo "previous pdf-renderer restored"
-elif [ "$state" = "absent" ]; then
-  docker compose --env-file .env rm -f -s pdf-renderer >/dev/null 2>&1 || true
-  echo "new pdf-renderer removed; no previous renderer existed"
-else
-  echo "invalid pdf-renderer rollback state"
-  exit 1
-fi
+echo "new pdf-renderer isolated preflight ok"
 REMOTE_SCRIPT
 }
 
 preflight_remote_release() {
-  if ! start_and_verify_new_pdf_renderer; then
-    restore_previous_pdf_renderer
-    return 1
-  fi
-  if ! preflight_remote_migrations; then
-    restore_previous_pdf_renderer
-    return 1
-  fi
+  start_and_verify_new_pdf_renderer && preflight_remote_migrations
 }
 
 preflight_remote_migrations() {

@@ -334,7 +334,7 @@ bash deploy.sh
 
 部署会生成这些切换备份：远端 `.env` 备份保存到 `/www/wwwroot/synapse/backups/env/`，Postgres 角色和权限 globals 备份保存到 `/www/wwwroot/synapse/backups/globals/`，在线数据库备份用于临时数据库预演，停旧服务后的最终数据库备份会先恢复到 `synapse_final_verify_*` 临时库验证成功后才启动新服务。临时数据库预演会把在线备份恢复到 `synapse_preflight_*` 临时库，并在新镜像里执行 `prisma migrate deploy`；预演失败时不会停旧服务。未配置 Drive COS 且存在 `server/data/drive` 时，部署还会在切换窗口打包本地 Drive 数据到 `/www/wwwroot/synapse/backups/drive/`。
 
-真正切换前脚本会先通过 Docker 网络验证 `.env` 中的数据库密码能连接 `postgres:5432`，并在旧 API 仍运行时独立启动和健康检查新 PDF 渲染器；任一预检失败都会在停服前中止并恢复原渲染器状态。切换时脚本停止 `server` 和 `pdf-renderer` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、PDF 渲染链路、`/console/`、`/document/`、独立 `/desktop/update` 页面、更新凭证签发/验证链路、`/dashboard` 到 `/console/` 的重定向，以及公共 Webhook 和 Drive 分享路由不会被导向管理后台；内部检查通过后，再确认稳定公网文档页和独立更新页均可访问。凭证只在容器内健康检查进程内短暂使用，不作为 shell 参数或日志输出。停服后的备份、迁移、启动或健康检查失败时自动回滚 API 与原 PDF 渲染器；若升级前没有渲染器，则删除本次新容器并以 `--no-deps` 恢复旧 API。回滚不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近日志、最终备份路径和人工恢复命令。
+真正切换前脚本会先通过 Docker 网络验证 `.env` 中的数据库密码能连接 `postgres:5432`，并在旧 API 与渲染器保持不动时，用无网络的临时容器对新 PDF 渲染器执行健康检查和带鉴权的真实 PDF 生成；任一预检失败都会在停服前中止。切换时脚本停止 `server` 和 `pdf-renderer` 容器，不会执行 `docker compose down` 或删除 Postgres volume。新服务启动后会轮询检查 `/healthz`、PDF 渲染链路、`/console/`、`/document/`、独立 `/desktop/update` 页面、更新凭证签发/验证链路、`/dashboard` 到 `/console/` 的重定向，以及公共 Webhook 和 Drive 分享路由不会被导向管理后台；内部检查通过后，再确认稳定公网文档页和独立更新页均可访问。凭证只在容器内健康检查进程内短暂使用，不作为 shell 参数或日志输出。停服后的备份、迁移、启动或健康检查失败时自动回滚 API 与原 PDF 渲染器；若升级前没有渲染器，则删除本次新容器并以 `--no-deps` 恢复旧 API。回滚不会自动覆盖恢复数据库，避免误删部署窗口里的新写入；脚本会打印失败检查项、HTTP 状态、响应摘要、容器状态、最近日志、最终备份路径和人工恢复命令。
 
 如果是在服务器上手动更新，也必须先备份，再构建启动：
 

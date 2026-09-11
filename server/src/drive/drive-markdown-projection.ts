@@ -46,6 +46,10 @@ type MutableProjectionBlock = Omit<DriveMarkdownProjectionBlockDto, "blockId" | 
   parentBlockIndex: number | null
 }
 
+type MutableProjectionSegment = Omit<DriveMarkdownProjectionSegmentDto, "blockId" | "segmentId"> & {
+  readonly blockIndex: number
+}
+
 const markdownBlockTypes = new Set([
   "heading",
   "paragraph",
@@ -68,8 +72,10 @@ export function buildDriveMarkdownProjection(
 ): DriveMarkdownProjectionDto {
   const sourceSha256 = sha256(markdown)
   const blocks: MutableProjectionBlock[] = []
-  const segments: DriveMarkdownProjectionSegmentDto[] = []
+  const segments: MutableProjectionSegment[] = []
   const pendingImages: Array<{
+    readonly blockIndex: number
+    readonly segmentIndex: number
     readonly sourceStart: number
     readonly sourceEnd: number
     readonly renderedStart: number
@@ -127,9 +133,9 @@ export function buildDriveMarkdownProjection(
     const block = blocks[blockIndex]
     const sourceStart = utf16ToCodePoint(node.position.start.offset ?? 0)
     const sourceEnd = utf16ToCodePoint(node.position.end.offset ?? 0)
+    const segmentIndex = segments.length
     segments.push({
-      segmentId: "",
-      blockId: "",
+      blockIndex,
       sourceStart,
       sourceEnd,
       renderedStart: renderedCursor,
@@ -138,6 +144,8 @@ export function buildDriveMarkdownProjection(
     })
     if (imageSource !== null) {
       pendingImages.push({
+        blockIndex,
+        segmentIndex,
         sourceStart,
         sourceEnd,
         renderedStart: renderedCursor,
@@ -166,20 +174,21 @@ export function buildDriveMarkdownProjection(
     textFingerprint: block.textFingerprint,
   }))
   const finalizedSegments = segments.map((segment, index) => {
-    const block = narrowestContainingBlock(finalizedBlocks, segment.sourceStart, segment.sourceEnd)
-    const blockId = block?.blockId ?? finalizedBlocks[0]?.blockId ?? "mdb_root"
+    const blockId = finalizedBlocks[segment.blockIndex]?.blockId ?? finalizedBlocks[0]?.blockId ?? "mdb_root"
     return {
-      ...segment,
+      sourceStart: segment.sourceStart,
+      sourceEnd: segment.sourceEnd,
+      renderedStart: segment.renderedStart,
+      renderedEnd: segment.renderedEnd,
+      mapping: segment.mapping,
       blockId,
       segmentId: `mds_${sha256(`${blockId}\0${segment.sourceStart}\0${segment.sourceEnd}\0${index}`).slice(0, 20)}`,
     }
   })
   const blockImageCounts = new Map<string, number>()
   const images: DriveMarkdownProjectionImageDto[] = pendingImages.map((image, documentIndex) => {
-    const segment = finalizedSegments.find((candidate) =>
-      candidate.sourceStart === image.sourceStart && candidate.sourceEnd === image.sourceEnd)
-    const block = narrowestContainingBlock(finalizedBlocks, image.sourceStart, image.sourceEnd)
-    const blockId = block?.blockId ?? segment?.blockId ?? finalizedBlocks[0]?.blockId ?? "mdb_root"
+    const segment = finalizedSegments[image.segmentIndex]
+    const blockId = finalizedBlocks[image.blockIndex]?.blockId ?? segment?.blockId ?? finalizedBlocks[0]?.blockId ?? "mdb_root"
     const imageIndex = blockImageCounts.get(blockId) ?? 0
     blockImageCounts.set(blockId, imageIndex + 1)
     return {
@@ -216,16 +225,31 @@ export function annotateMarkdownProjectionTree(
   markdown: string,
 ): void {
   const utf16ToCodePoint = createUtf16ToCodePointMap(markdown)
+  const blocksByRange = new Map<string, DriveMarkdownProjectionBlockDto>()
+  const segmentsByRange = new Map<string, DriveMarkdownProjectionSegmentDto>()
+  const imagesByRange = new Map<string, DriveMarkdownProjectionImageDto>()
+  for (const block of projection.blocks) {
+    const key = blockRangeKey(block.type, block.sourceStart, block.sourceEnd)
+    if (!blocksByRange.has(key)) blocksByRange.set(key, block)
+  }
+  for (const segment of projection.segments) {
+    const key = projectionRangeKey(segment.sourceStart, segment.sourceEnd)
+    if (!segmentsByRange.has(key)) segmentsByRange.set(key, segment)
+  }
+  for (const image of projection.images ?? []) {
+    const key = projectionRangeKey(image.sourceStart, image.sourceEnd)
+    if (!imagesByRange.has(key)) imagesByRange.set(key, image)
+  }
   const visit = (node: MarkdownProjectionNode): void => {
     if (hasOffsets(node)) {
       const sourceStart = utf16ToCodePoint(node.position.start.offset ?? 0)
       const sourceEnd = utf16ToCodePoint(node.position.end.offset ?? 0)
-      const block = projection.blocks.find((candidate) => candidate.type === node.type && candidate.sourceStart === sourceStart && candidate.sourceEnd === sourceEnd)
+      const block = blocksByRange.get(blockRangeKey(node.type ?? "unknown", sourceStart, sourceEnd))
       const segment = (node.children?.length ?? 0) === 0
-        ? projection.segments.find((candidate) => candidate.sourceStart === sourceStart && candidate.sourceEnd === sourceEnd)
+        ? segmentsByRange.get(projectionRangeKey(sourceStart, sourceEnd))
         : undefined
       const image = markdownImageTypes.has(node.type ?? "")
-        ? projection.images?.find((candidate) => candidate.sourceStart === sourceStart && candidate.sourceEnd === sourceEnd)
+        ? imagesByRange.get(projectionRangeKey(sourceStart, sourceEnd))
         : undefined
       if (block || segment || image) {
         node.data = {
@@ -401,6 +425,10 @@ function blockRangeKey(type: string, sourceStart: number, sourceEnd: number): st
   return `${type}\0${sourceStart}\0${sourceEnd}`
 }
 
+function projectionRangeKey(sourceStart: number, sourceEnd: number): string {
+  return `${sourceStart}\0${sourceEnd}`
+}
+
 function blockFingerprintKey(block: Pick<
   DriveMarkdownProjectionBlockDto,
   "type" | "textFingerprint" | "headingPath"
@@ -473,16 +501,6 @@ function nearestContainingBlock(blocks: readonly MutableProjectionBlock[], sourc
     if (block.sourceStart <= sourceStart && block.sourceEnd >= sourceStart) return index
   }
   return null
-}
-
-function narrowestContainingBlock(
-  blocks: readonly DriveMarkdownProjectionBlockDto[],
-  sourceStart: number,
-  sourceEnd: number,
-): DriveMarkdownProjectionBlockDto | null {
-  return blocks
-    .filter((block) => block.sourceStart <= sourceStart && block.sourceEnd >= sourceEnd)
-    .sort((left, right) => (left.sourceEnd - left.sourceStart) - (right.sourceEnd - right.sourceStart))[0] ?? null
 }
 
 function hasOffsets(node: MarkdownProjectionNode): node is MarkdownProjectionNode & { position: MarkdownPosition } {
