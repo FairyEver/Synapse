@@ -3368,11 +3368,14 @@ export class DriveService implements OnApplicationBootstrap {
     const extracted = extractDriveMarkdownRelativeImages(
       markdown,
       options?.maxUnique === undefined ? undefined : options.maxUnique + 1,
-      { includeStandaloneRawImages: options?.includeStandaloneRawImages },
+      {
+        includeStandaloneRawImages: options?.includeStandaloneRawImages,
+        dedupeKey: options?.unique
+          ? (reference) => driveMarkdownImageResourceKey(reference.src)
+          : undefined,
+      },
     )
-    const references = options?.unique
-      ? [...new Map(extracted.map((reference) => [driveMarkdownImageResourceKey(reference.src), reference])).values()]
-      : extracted
+    const references = extracted
     if (options?.maxUnique !== undefined && references.length > options.maxUnique) {
       throw new PayloadTooLargeException(`Markdown 图片超过 ${options.maxUnique} 个，无法导出。`)
     }

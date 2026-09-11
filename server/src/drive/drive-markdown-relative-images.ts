@@ -51,7 +51,10 @@ const LOOSE_INLINE_IMAGE_PATTERN = /!\[([^\]\r\n]*)\]\(([^()\r\n]* [^()\r\n]*)\)
 export function extractDriveMarkdownRelativeImages(
   markdown: string,
   limit = DRIVE_MARKDOWN_RELATIVE_IMAGE_LIMIT,
-  options: { readonly includeStandaloneRawImages?: boolean } = {},
+  options: {
+    readonly includeStandaloneRawImages?: boolean
+    readonly dedupeKey?: (reference: DriveMarkdownRelativeImageReference) => string
+  } = {},
 ): DriveMarkdownRelativeImageReference[] {
   const tree = unified().use(remarkParse).parse(markdown) as MarkdownAstNode
   normalizeDriveMarkdownLooseImageNodes(tree)
@@ -61,9 +64,11 @@ export function extractDriveMarkdownRelativeImages(
   visitMarkdownAst(tree, (node) => {
     if (references.size >= limit) return
     const src = imageNodeSource(node, definitions, options.includeStandaloneRawImages !== false)
-    if (!src || references.has(src)) return
+    if (!src) return
     const parsed = parseDriveMarkdownRelativeImageSrc(src)
-    if (parsed) references.set(src, parsed)
+    if (!parsed) return
+    const key = options.dedupeKey?.(parsed) ?? src
+    if (!references.has(key)) references.set(key, parsed)
   })
 
   return [...references.values()]

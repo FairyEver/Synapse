@@ -19,15 +19,37 @@ describe("Drive PDF external image address policy", () => {
     "172.16.0.1",
     "192.168.1.1",
     "169.254.169.254",
+    "168.63.129.16",
+    "198.18.0.1",
     "0.0.0.0",
     "::1",
     "fe80::1",
     "fc00::1",
+    "64:ff9b:1::1",
+    "100::1",
+    "100:0:0:1::1",
+    "2001:5::1",
+    "2001:2::1",
+    "2001:10::1",
+    "3fff::1",
+    "5f00::1",
   ])("rejects non-public address %s", (address) => {
     expect(isPublicAddress(address)).toBe(false)
   })
 
   it.each(["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"])("accepts public address %s", (address) => {
+    expect(isPublicAddress(address)).toBe(true)
+  })
+
+  it.each([
+    "2001:1::1",
+    "2001:1::2",
+    "2001:1::3",
+    "2001:3::1",
+    "2001:4:112::1",
+    "2001:20::1",
+    "2001:30::1",
+  ])("accepts an IANA globally reachable special address %s", (address) => {
     expect(isPublicAddress(address)).toBe(true)
   })
 

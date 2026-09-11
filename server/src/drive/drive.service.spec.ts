@@ -3016,6 +3016,47 @@ describe("DriveService", () => {
     })).rejects.toMatchObject({ status: 413 })
   })
 
+  it("counts normalized relative image resources before applying the PDF image limit", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "encoded-images.md",
+      mimeType: "text/markdown",
+    })
+    const target = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "target.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    const targetRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: target.id } })
+    const equivalentSources = Array.from({ length: 257 }, (_, variant) => {
+      const name = [..."abcdefghi"].map((character, index) => (
+        variant & (1 << index) ? `%${character.charCodeAt(0).toString(16)}` : character
+      )).join("")
+      return `![duplicate ${variant}](${name}.png)`
+    })
+    objects.set(markdownRecord.storageKey, {
+      body: [...equivalentSources, "![target](target.png)"].join("\n"),
+      contentType: "text/markdown",
+    })
+
+    const source = await service.resolveOwnerMarkdownPdfSource({
+      userId: "user-1",
+      itemId: markdown.id,
+      maxBytes: 10 * 1024 * 1024,
+      maxImages: 256,
+    })
+
+    expect([...source.relativeImages.values()]).toEqual([
+      expect.objectContaining({ storageKey: targetRecord.storageKey }),
+    ])
+  })
+
   it("keeps live single-file share PDF images inside the stored-version authorization set", async () => {
     const prisma = createPrismaMemory()
     const objects = new Map<string, DriveTestObject>()

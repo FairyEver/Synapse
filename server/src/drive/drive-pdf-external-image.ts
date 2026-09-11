@@ -7,6 +7,27 @@ import { detectPublicAssetImageType } from "./drive-public-asset-policy"
 
 const allowedPorts = new Set(["", "80", "443"])
 const redirectStatuses = new Set([301, 302, 303, 307, 308])
+const blockedUnicastIpv4Ranges = [
+  ipaddr.IPv4.parseCIDR("168.63.129.16/32"),
+  ipaddr.IPv4.parseCIDR("198.18.0.0/15"),
+]
+const blockedUnicastIpv6Ranges = [
+  ipaddr.IPv6.parseCIDR("64:ff9b:1::/48"),
+  ipaddr.IPv6.parseCIDR("100::/64"),
+  ipaddr.IPv6.parseCIDR("100:0:0:1::/64"),
+  ipaddr.IPv6.parseCIDR("2001::/23"),
+  ipaddr.IPv6.parseCIDR("3fff::/20"),
+  ipaddr.IPv6.parseCIDR("5f00::/16"),
+]
+const globallyReachableIpv6SpecialRanges = [
+  ipaddr.IPv6.parseCIDR("2001:1::1/128"),
+  ipaddr.IPv6.parseCIDR("2001:1::2/128"),
+  ipaddr.IPv6.parseCIDR("2001:1::3/128"),
+  ipaddr.IPv6.parseCIDR("2001:3::/32"),
+  ipaddr.IPv6.parseCIDR("2001:4:112::/48"),
+  ipaddr.IPv6.parseCIDR("2001:20::/28"),
+  ipaddr.IPv6.parseCIDR("2001:30::/28"),
+]
 
 export type ExternalImageFetchOptions = {
   readonly maxBytes: number
@@ -75,7 +96,12 @@ async function resolvePublicAddress(
 export function isPublicAddress(address: string): boolean {
   try {
     const parsed = ipaddr.process(address)
-    return parsed.range() === "unicast"
+    if (parsed.range() !== "unicast") return false
+    if (parsed instanceof ipaddr.IPv4) {
+      return !blockedUnicastIpv4Ranges.some((range) => parsed.match(range))
+    }
+    if (globallyReachableIpv6SpecialRanges.some((range) => parsed.match(range))) return true
+    return !blockedUnicastIpv6Ranges.some((range) => parsed.match(range))
   } catch {
     return false
   }
