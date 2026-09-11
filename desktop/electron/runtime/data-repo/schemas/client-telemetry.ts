@@ -28,6 +28,14 @@ export interface ClientTelemetryOutboxEntryV1 extends Record<string, unknown> {
   occurredAt: string
 }
 
+export interface ClientTelemetryEnvironmentEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  osName?: string
+  osVersion?: string
+  occurredAt: string
+}
+
 const noMigrations: readonly Migration[] = []
 
 export const clientTelemetryOutboxSchema: NamespaceSchema<ClientTelemetryOutboxEntryV1> = {
@@ -36,6 +44,15 @@ export const clientTelemetryOutboxSchema: NamespaceSchema<ClientTelemetryOutboxE
   currentVersion: 1,
   migrations: noMigrations,
   validate: isClientTelemetryOutboxEntryV1,
+  encrypted: false,
+}
+
+export const clientTelemetryEnvironmentSchema: NamespaceSchema<ClientTelemetryEnvironmentEntryV1> = {
+  name: "telemetry.event-environments",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: isClientTelemetryEnvironmentEntryV1,
   encrypted: false,
 }
 
@@ -57,6 +74,23 @@ function isClientTelemetryOutboxEntryV1(value: unknown): value is ClientTelemetr
     && isNonEmptyString(value.appVersion)
     && isNonEmptyString(value.platform)
     && isIsoDateString(value.occurredAt)
+}
+
+function isClientTelemetryEnvironmentEntryV1(value: unknown): value is ClientTelemetryEnvironmentEntryV1 {
+  if (!isRecord(value)) return false
+  return value.schemaVersion === 1
+    && isNonEmptyString(value.id)
+    && (value.osName === undefined || isStableName(value.osName))
+    && (value.osVersion === undefined || isStableVersion(value.osVersion))
+    && isIsoDateString(value.occurredAt)
+}
+
+function isStableName(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/u.test(value)
+}
+
+function isStableVersion(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9._+-]{1,32}$/u.test(value)
 }
 
 function isCategory(value: unknown): value is ClientTelemetryCategory {

@@ -47,6 +47,7 @@ export { createDataMaintenanceExecutor, resolveDataMaintenanceWorkerPath } from 
 export {
   allSchemas,
   clientTelemetryOutboxSchema,
+  clientTelemetryEnvironmentSchema,
   auditSchema,
   agentArtifactsSchema,
   agentCompressStateSchema,

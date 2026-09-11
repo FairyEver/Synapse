@@ -178,6 +178,9 @@ export const DATA_MAINTENANCE_INTERVAL_MS = 6 * ONE_HOUR_MS
 // Agent 原始 SDK 与流诊断事件保留时长：会话正文和语义事件不受影响。
 export const AGENT_RAW_DIAGNOSTIC_RETENTION_MS = 30 * 24 * ONE_HOUR_MS
 
+/** Grace period before the maintenance Worker removes an environment without a telemetry event. */
+export const CLIENT_TELEMETRY_ENVIRONMENT_ORPHAN_GRACE_MS = ONE_HOUR_MS
+
 // 审计日志当前活动分段上限：超过后无损轮转，旧分段继续参与读取和诊断导出。
 export const AUDIT_ACTIVE_SEGMENT_MAX_BYTES = 64 * 1024 * 1024
 

@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto"
+import { release as osRelease } from "node:os"
 import type { DataNamespace } from "../runtime/data-repo"
 import type {
   ClientTelemetryCategory,
+  ClientTelemetryEnvironmentEntryV1,
   ClientTelemetryOutboxEntryV1,
   ClientTelemetryOutcome,
 } from "../runtime/data-repo/schemas/client-telemetry"
@@ -21,6 +23,8 @@ const retryBaseMs = 5_000
 const retryMaxMs = 15 * 60 * 1000
 const identityFlushTimeoutMs = 250
 const stopFlushTimeoutMs = 2_000
+const osNameHeader = "X-Synapse-Telemetry-OS-Name"
+const osVersionHeader = "X-Synapse-Telemetry-OS-Version"
 const stableKeyPattern = /^[a-z][a-z0-9._-]{0,63}$/u
 const stableDimensionPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/u
 const uuidLikePattern = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/iu
@@ -38,10 +42,13 @@ type AccountClient = Pick<
 
 type ClientTelemetryServiceDeps = {
   readonly outbox: DataNamespace<ClientTelemetryOutboxEntryV1>
+  readonly environments: DataNamespace<ClientTelemetryEnvironmentEntryV1>
   readonly account: AccountClient
   readonly clientIdStore?: Pick<LiveClientIdStore, "getOrCreate">
   readonly appVersion: string
   readonly platform: string
+  readonly osName?: string
+  readonly osVersion?: string
   readonly createId?: () => string
   readonly now?: () => Date
 }
@@ -59,10 +66,13 @@ type RemoteTelemetryDetails = {
 
 export class ClientTelemetryService {
   private readonly outbox: DataNamespace<ClientTelemetryOutboxEntryV1>
+  private readonly environments: DataNamespace<ClientTelemetryEnvironmentEntryV1>
   private readonly account: AccountClient
   private readonly clientIdStore: Pick<LiveClientIdStore, "getOrCreate">
   private readonly appVersion: string
   private readonly platform: string
+  private readonly osName?: string
+  private readonly osVersion?: string
   private readonly createId: () => string
   private readonly now: () => Date
   private readonly sessionId: string
@@ -75,10 +85,13 @@ export class ClientTelemetryService {
 
   constructor(deps: ClientTelemetryServiceDeps) {
     this.outbox = deps.outbox
+    this.environments = deps.environments
     this.account = deps.account
     this.clientIdStore = deps.clientIdStore ?? new LiveClientIdStore()
     this.appVersion = deps.appVersion
     this.platform = deps.platform
+    this.osName = deps.osName
+    this.osVersion = deps.osVersion
     this.createId = deps.createId ?? randomUUID
     this.now = deps.now ?? (() => new Date())
     this.sessionId = this.createId()
@@ -151,17 +164,29 @@ export class ClientTelemetryService {
     const accountUserId = accountUserIdFromState(state)
     const occurredAt = this.now().toISOString()
     const id = this.createId()
-    await this.outbox.upsert({
+    await this.environments.upsert({
       id,
       schemaVersion: 1,
-      accountUserId,
-      ...details,
-      clientInstanceId,
-      sessionId: this.sessionId,
-      appVersion: this.appVersion,
-      platform: this.platform,
+      ...(this.osName ? { osName: this.osName } : {}),
+      ...(this.osVersion ? { osVersion: this.osVersion } : {}),
       occurredAt,
     })
+    try {
+      await this.outbox.upsert({
+        id,
+        schemaVersion: 1,
+        accountUserId,
+        ...details,
+        clientInstanceId,
+        sessionId: this.sessionId,
+        appVersion: this.appVersion,
+        platform: this.platform,
+        occurredAt,
+      })
+    } catch (error) {
+      await this.removeEnvironment(id)
+      throw error
+    }
     const count = await this.outbox.count?.()
     if (count !== undefined && count >= flushThreshold) this.scheduleFlush(0)
     if (count !== undefined && count > localQueueLimit) await this.pruneQueue()
@@ -215,10 +240,22 @@ export class ClientTelemetryService {
     const eligible = entries.filter((entry) => entry.accountUserId === null || entry.accountUserId === currentUserId)
     if (eligible.length === 0) return
     const accountUserId = eligible[0].accountUserId
-    const batch = eligible.filter((entry) => entry.accountUserId === accountUserId).slice(0, batchLimit)
+    const candidates = eligible
+      .filter((entry) => entry.accountUserId === accountUserId)
+      .slice(0, batchLimit)
+    const candidateEnvironments = await Promise.all(candidates.map((entry) => this.environments.get(entry.id)))
+    const batchEnvironment = candidateEnvironments[0] ?? undefined
+    const batch = candidates.filter((_entry, index) => sameEnvironment(
+      candidateEnvironments[index] ?? undefined,
+      batchEnvironment,
+    ))
     const request = {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(batchEnvironment?.osName ? { [osNameHeader]: batchEnvironment.osName } : {}),
+        ...(batchEnvironment?.osVersion ? { [osVersionHeader]: batchEnvironment.osVersion } : {}),
+      },
       body: JSON.stringify({ events: batch.map(toRemoteEvent) }),
     }
     try {
@@ -226,13 +263,13 @@ export class ClientTelemetryService {
         ? await this.account.fetchPublic("/client-telemetry/events", request)
         : await this.account.fetchAuthenticated("/client-telemetry/events", request, "埋点发送失败。")
       if (response.ok) {
-        await Promise.all(batch.map((entry) => this.outbox.remove(entry.id)))
+        await this.removeBatch(batch)
         this.retryAttempt = 0
         if (entries.length > batch.length) this.scheduleFlush(0)
         return
       }
       if (response.status >= 400 && response.status < 500 && response.status !== 401 && response.status !== 429) {
-        await Promise.all(batch.map((entry) => this.outbox.remove(entry.id)))
+        await this.removeBatch(batch)
         logger.warn("Dropped invalid client telemetry batch.", { status: response.status, count: batch.length })
         return
       }
@@ -257,8 +294,64 @@ export class ClientTelemetryService {
     const expired = entries.filter((entry) => Date.parse(entry.occurredAt) < minimumTime)
     const remaining = entries.filter((entry) => Date.parse(entry.occurredAt) >= minimumTime)
     const overflow = remaining.slice(0, Math.max(0, remaining.length - localQueueLimit))
-    await Promise.all([...expired, ...overflow].map((entry) => this.outbox.remove(entry.id)))
+    await this.removeBatch([...expired, ...overflow])
   }
+
+  private async removeBatch(entries: readonly ClientTelemetryOutboxEntryV1[]): Promise<void> {
+    await Promise.all(entries.map(async (entry) => {
+      await this.outbox.remove(entry.id)
+      await this.removeEnvironment(entry.id)
+    }))
+  }
+
+  private async removeEnvironment(id: string): Promise<void> {
+    try {
+      await this.environments.remove(id)
+    } catch (error) {
+      logger.warn("Failed to remove client telemetry environment.", failureMetadata(error))
+    }
+  }
+}
+
+export function detectDesktopOperatingSystem(
+  platform: NodeJS.Platform | string = process.platform,
+  systemVersion = readSystemVersion(),
+): { readonly osName: string; readonly osVersion: string } {
+  const osVersion = normalizeOperatingSystemVersion(systemVersion)
+  if (platform === "win32") {
+    return { osName: windowsName(osVersion), osVersion }
+  }
+  if (platform === "darwin") return { osName: "macos", osVersion }
+  if (platform === "linux") return { osName: "linux", osVersion }
+  return { osName: normalizeOperatingSystemName(platform), osVersion }
+}
+
+function readSystemVersion(): string {
+  const electronProcess = process as NodeJS.Process & { readonly getSystemVersion?: () => string }
+  const version = electronProcess.getSystemVersion?.() ?? osRelease()
+  return normalizeOperatingSystemVersion(version)
+}
+
+function windowsName(version: string): string {
+  const [major, minor, build] = version.split(".").map(Number)
+  if (major === 6 && minor === 1) return "windows-7"
+  if (major === 6 && minor === 2) return "windows-8"
+  if (major === 6 && minor === 3) return "windows-8.1"
+  if (major === 10 && minor === 0) {
+    if (!Number.isFinite(build)) return "windows-10-or-11"
+    return build >= 22_000 ? "windows-11" : "windows-10"
+  }
+  return "windows"
+}
+
+function normalizeOperatingSystemName(value: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9._-]/gu, "-").slice(0, 64)
+  return normalized || "unknown"
+}
+
+function normalizeOperatingSystemVersion(value: string | undefined): string {
+  const normalized = value?.replace(/[^A-Za-z0-9._+-]/gu, "-").slice(0, 32)
+  return normalized || "unknown"
 }
 
 function projectTelemetryDetails(payload: SynapseRendererLogPayload): RemoteTelemetryDetails | null {
@@ -316,8 +409,20 @@ function accountUserIdFromState(state: SynapseAccountState): string | null {
   return "profile" in state && state.profile ? state.profile.user.id : null
 }
 
+function sameEnvironment(
+  left: ClientTelemetryEnvironmentEntryV1 | undefined,
+  right: ClientTelemetryEnvironmentEntryV1 | undefined,
+): boolean {
+  return left?.osName === right?.osName && left?.osVersion === right?.osVersion
+}
+
 function toRemoteEvent(entry: ClientTelemetryOutboxEntryV1) {
-  const { id, schemaVersion: _schemaVersion, accountUserId: _accountUserId, ...event } = entry
+  const {
+    id,
+    schemaVersion: _schemaVersion,
+    accountUserId: _accountUserId,
+    ...event
+  } = entry
   return { eventId: id, ...event }
 }
 

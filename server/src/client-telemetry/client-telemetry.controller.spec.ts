@@ -35,7 +35,53 @@ describe("ClientTelemetryController", () => {
 
     await controller.ingest({ body: { events: [event] }, headers: {} } as never)
 
-    expect(ingest).toHaveBeenCalledWith(null, [event])
+    expect(ingest).toHaveBeenCalledWith(null, [event], {}, {})
+  })
+
+  it("derives desktop operating-system dimensions from compatibility-safe headers", async () => {
+    const ingest = vi.fn().mockResolvedValue({ accepted: 1, duplicates: 0 })
+    const controller = new ClientTelemetryController(
+      { ingest } as unknown as ClientTelemetryService,
+      { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+    )
+
+    await controller.ingest({
+      body: { events: [event] },
+      headers: {
+        "x-synapse-telemetry-os-name": "macos",
+        "x-synapse-telemetry-os-version": "15.6.1",
+      },
+    } as never)
+
+    expect(ingest).toHaveBeenCalledWith(null, [event], {}, {
+      osName: "macos",
+      osVersion: "15.6.1",
+    })
+  })
+
+  it("derives normalized browser and operating-system dimensions for Web events", async () => {
+    const ingest = vi.fn().mockResolvedValue({ accepted: 1, duplicates: 0 })
+    const controller = new ClientTelemetryController(
+      { ingest } as unknown as ClientTelemetryService,
+      { verifyAccessToken: vi.fn() } as unknown as UserAuthService,
+    )
+    const webEvent = { ...event, platform: "web", windowType: "web-drive" }
+
+    await controller.ingest({
+      body: { events: [webEvent] },
+      headers: {
+        "sec-ch-ua": '"Chromium";v="140", "Google Chrome";v="140"',
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-ch-ua-platform-version": '"15.0.0"',
+      },
+    } as never)
+
+    expect(ingest).toHaveBeenCalledWith(null, [webEvent], {
+      browserName: "chrome",
+      browserVersion: "140",
+      osName: "windows-11",
+      osVersion: "15.0.0",
+    }, {})
   })
 
   it("derives the user from a valid Web session cookie", async () => {
@@ -53,7 +99,7 @@ describe("ClientTelemetryController", () => {
     } as never)
 
     expect(verifyWebSession).toHaveBeenCalledWith("web-token")
-    expect(ingest).toHaveBeenCalledWith("user-web", [event])
+    expect(ingest).toHaveBeenCalledWith("user-web", [event], {}, {})
   })
 
   it("rejects an expired Web session instead of treating it as anonymous", async () => {
@@ -85,7 +131,7 @@ describe("ClientTelemetryController", () => {
     } as never)
 
     expect(verifyAccessToken).toHaveBeenCalledWith("token-1")
-    expect(ingest).toHaveBeenCalledWith("user-1", [event])
+    expect(ingest).toHaveBeenCalledWith("user-1", [event], {}, {})
   })
 
   it("rejects malformed authorization instead of treating it as anonymous", async () => {

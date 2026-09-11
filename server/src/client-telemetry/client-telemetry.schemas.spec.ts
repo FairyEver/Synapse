@@ -24,7 +24,15 @@ function validEvent() {
 
 describe("client telemetry schemas", () => {
   it("accepts fixed categorical event fields", () => {
-    expect(parseClientTelemetryBatch({ events: [validEvent()] }, now)).toHaveLength(1)
+    expect(parseClientTelemetryBatch({
+      events: [validEvent()],
+    }, now)).toHaveLength(1)
+  })
+
+  it("keeps environment information out of the event body", () => {
+    expect(() => parseClientTelemetryBatch({
+      events: [{ ...validEvent(), osName: "windows-11", osVersion: "10.0.26100" }],
+    }, now)).toThrow(/不支持的字段/u)
   })
 
   it("rejects user identity and arbitrary metadata in the request body", () => {
@@ -58,5 +66,26 @@ describe("client telemetry schemas", () => {
       identity: "anonymous",
       userId: "user-1",
     }, now)).toThrow("匿名统计不能指定用户。")
+  })
+
+  it("accepts browser and operating-system aggregate filters", () => {
+    expect(parseClientTelemetryStatsQuery({
+      browserName: "chrome",
+      browserVersion: "140.0.7339.81",
+      osName: "windows-11",
+      osVersion: "10.0.26100",
+    }, now)).toMatchObject({
+      browserName: "chrome",
+      browserVersion: "140.0.7339.81",
+      osName: "windows-11",
+      osVersion: "10.0.26100",
+    })
+  })
+
+  it("requires an environment name before filtering by its version", () => {
+    expect(() => parseClientTelemetryStatsQuery({ browserVersion: "140.0" }, now))
+      .toThrow("浏览器版本筛选必须指定浏览器。")
+    expect(() => parseClientTelemetryStatsQuery({ osVersion: "15.0.0" }, now))
+      .toThrow("系统版本筛选必须指定操作系统。")
   })
 })

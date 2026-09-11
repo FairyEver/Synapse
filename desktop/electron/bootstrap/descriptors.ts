@@ -207,7 +207,7 @@ import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
 import { accountService } from "../services/account-service"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
-import { ClientTelemetryService } from "../services/client-telemetry-service"
+import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { SkillRepositoryUploadService } from "../services/skill-repository-upload-service"
 import { createDriveSyncService, type DriveSyncService } from "../services/drive-sync-service"
@@ -1875,11 +1875,14 @@ export const coreClientTelemetryDescriptor: ServiceDescriptor<ClientTelemetrySer
   dependsOn: ["core.data-repository"],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    const operatingSystem = detectDesktopOperatingSystem()
     return new ClientTelemetryService({
       outbox: dataRepository.namespace("telemetry.outbox"),
+      environments: dataRepository.namespace("telemetry.event-environments"),
       account: accountService,
       appVersion: SYNAPSE_APP_VERSION,
       platform: `${process.platform}-${process.arch}`,
+      ...operatingSystem,
     })
   },
   start(service) {

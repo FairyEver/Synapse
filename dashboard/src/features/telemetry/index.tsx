@@ -54,6 +54,10 @@ type Filters = {
   eventKey?: string
   appVersion?: string
   platform?: string
+  browserName?: string
+  browserVersion?: string
+  osName?: string
+  osVersion?: string
   windowType?: string
 }
 
@@ -170,6 +174,44 @@ function TelemetryFilters({
         onChange={(platform) => onChange((current) => ({ ...current, platform }))}
       />
       <DimensionFilter
+        label='全部浏览器'
+        value={filters.browserName}
+        options={filterOptions?.browserNames}
+        formatLabel={browserLabel}
+        onChange={(browserName) => onChange((current) => ({
+          ...current,
+          browserName,
+          browserVersion: browserName === current.browserName ? current.browserVersion : undefined,
+        }))}
+      />
+      {filters.browserName ? (
+        <DimensionFilter
+          label='全部浏览器版本'
+          value={filters.browserVersion}
+          options={filterOptions?.browserVersions}
+          onChange={(browserVersion) => onChange((current) => ({ ...current, browserVersion }))}
+        />
+      ) : null}
+      <DimensionFilter
+        label='全部系统'
+        value={filters.osName}
+        options={filterOptions?.osNames}
+        formatLabel={operatingSystemLabel}
+        onChange={(osName) => onChange((current) => ({
+          ...current,
+          osName,
+          osVersion: osName === current.osName ? current.osVersion : undefined,
+        }))}
+      />
+      {filters.osName ? (
+        <DimensionFilter
+          label='全部系统版本'
+          value={filters.osVersion}
+          options={filterOptions?.osVersions}
+          onChange={(osVersion) => onChange((current) => ({ ...current, osVersion }))}
+        />
+      ) : null}
+      <DimensionFilter
         label='全部窗口'
         value={filters.windowType}
         options={filterOptions?.windowTypes}
@@ -210,11 +252,13 @@ function DimensionFilter({
   label,
   value,
   options = [],
+  formatLabel = (option) => option,
   onChange,
 }: {
   label: string
   value?: string
   options?: TelemetryDimension[]
+  formatLabel?: (value: string) => string
   onChange: (value: string | undefined) => void
 }) {
   const available = value && !options.some((option) => option.value === value)
@@ -226,7 +270,7 @@ function DimensionFilter({
       value={value ?? allValue}
       options={[
         { value: allValue, label },
-        ...available.map((option) => ({ value: option.value, label: option.value })),
+        ...available.map((option) => ({ value: option.value, label: formatLabel(option.value) })),
       ]}
       onChange={(next) => onChange(next === allValue ? undefined : next)}
     />
@@ -388,6 +432,18 @@ function TelemetryDashboard({ data }: { data: TelemetryStats }) {
         <DimensionChart title='操作结果' items={data.dimensions.outcomes} label={outcomeLabel} />
         <DimensionChart title='应用版本' items={data.dimensions.versions} />
         <DimensionChart title='平台' items={data.dimensions.platforms} />
+        <DimensionChart title='浏览器（会话）' items={data.dimensions.browserNames} label={browserLabel} />
+        <DimensionChart
+          title='浏览器版本（会话）'
+          items={data.dimensions.browserVersions}
+          label={(value) => environmentVersionLabel(value, browserLabel)}
+        />
+        <DimensionChart title='操作系统（会话）' items={data.dimensions.osNames} label={operatingSystemLabel} />
+        <DimensionChart
+          title='系统版本（会话）'
+          items={data.dimensions.osVersions}
+          label={(value) => environmentVersionLabel(value, operatingSystemLabel)}
+        />
         <DimensionChart title='窗口类型' items={data.dimensions.windowTypes} />
       </div>
 
@@ -579,6 +635,10 @@ function buildStatsQuery(filters: Filters): TelemetryStatsOptions {
     eventKey: filters.eventKey,
     appVersion: filters.appVersion,
     platform: filters.platform,
+    browserName: filters.browserName,
+    browserVersion: filters.browserVersion,
+    osName: filters.osName,
+    osVersion: filters.osVersion,
     windowType: filters.windowType,
   }
 }
@@ -606,6 +666,44 @@ function outcomeLabel(value: string) {
   if (value === 'failure') return '失败'
   if (value === 'cancelled') return '取消'
   return value
+}
+
+function browserLabel(value: string) {
+  const labels: Record<string, string> = {
+    chrome: 'Chrome',
+    chromium: 'Chromium',
+    edge: 'Edge',
+    firefox: 'Firefox',
+    opera: 'Opera',
+    safari: 'Safari',
+    'samsung-internet': 'Samsung Internet',
+    unknown: '未知',
+  }
+  return labels[value] ?? value
+}
+
+function operatingSystemLabel(value: string) {
+  const labels: Record<string, string> = {
+    android: 'Android',
+    chromeos: 'ChromeOS',
+    ios: 'iOS',
+    linux: 'Linux',
+    macos: 'macOS',
+    windows: 'Windows',
+    'windows-7': 'Windows 7',
+    'windows-8': 'Windows 8',
+    'windows-8.1': 'Windows 8.1',
+    'windows-10': 'Windows 10',
+    'windows-10-or-11': 'Windows 10 / 11',
+    'windows-11': 'Windows 11',
+    unknown: '未知',
+  }
+  return labels[value] ?? value
+}
+
+function environmentVersionLabel(value: string, nameLabel: (name: string) => string) {
+  const separator = value.indexOf(':')
+  return separator > 0 ? `${nameLabel(value.slice(0, separator))} ${value.slice(separator + 1)}` : value
 }
 
 function nullablePercent(value: number | null) {

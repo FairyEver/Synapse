@@ -1,5 +1,6 @@
 import {
   AGENT_RAW_DIAGNOSTIC_RETENTION_MS,
+  CLIENT_TELEMETRY_ENVIRONMENT_ORPHAN_GRACE_MS,
   DATA_MAINTENANCE_DELETE_BATCH_SIZE,
   DATA_MAINTENANCE_INTERVAL_MS,
   DATA_MAINTENANCE_MAX_DELETIONS_PER_RUN,
@@ -133,6 +134,9 @@ export class DataMaintenanceService {
         rawAgentDiagnosticCutoff: new Date(
           this.options.now().getTime() - AGENT_RAW_DIAGNOSTIC_RETENTION_MS,
         ).toISOString(),
+        telemetryEnvironmentOrphanCutoff: new Date(
+          this.options.now().getTime() - CLIENT_TELEMETRY_ENVIRONMENT_ORPHAN_GRACE_MS,
+        ).toISOString(),
         outboxSentRetentionLimit: REPLY_OUTBOX_SENT_RETENTION_LIMIT,
       }, (progress) => this.updateProgress(progress))
       this.currentExecution = execution
@@ -225,6 +229,7 @@ function emptyCounts(): DataMaintenanceCounts {
   return {
     localOutbox: 0,
     retainedOutbox: 0,
+    telemetryEnvironmentOrphans: 0,
     rawAgentDiagnostics: 0,
     orphanAgentEvents: 0,
   }

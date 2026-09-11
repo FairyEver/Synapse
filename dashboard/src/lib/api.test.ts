@@ -205,10 +205,15 @@ describe('adminApi.telemetry', () => {
       })
     )
 
-    await adminApi.getTelemetryStats({ identity: 'anonymous', timezoneOffsetMinutes: 480 })
+    await adminApi.getTelemetryStats({
+      identity: 'anonymous',
+      timezoneOffsetMinutes: 480,
+      browserName: 'chrome',
+      osName: 'windows-11',
+    })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/admin/telemetry/stats?identity=anonymous&timezoneOffsetMinutes=480',
+      '/api/admin/telemetry/stats?identity=anonymous&timezoneOffsetMinutes=480&browserName=chrome&osName=windows-11',
       expect.objectContaining({ cache: 'no-store', credentials: 'include' })
     )
   })

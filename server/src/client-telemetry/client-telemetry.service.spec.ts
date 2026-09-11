@@ -31,6 +31,67 @@ describe("ClientTelemetryService", () => {
     }))
   })
 
+  it("stores server-derived browser information for Web events", async () => {
+    const createMany = vi.fn().mockResolvedValue({ count: 1 })
+    const service = new ClientTelemetryService({
+      clientTelemetryEvent: { createMany },
+    } as unknown as PrismaService)
+    await service.ingest(null, [{
+      eventId: "event-web",
+      category: "navigation",
+      eventKey: "web.drive.page.open",
+      component: "drive-browser",
+      action: "open",
+      windowType: "web-drive",
+      clientInstanceId: "client-web",
+      sessionId: "session-web",
+      appVersion: "web",
+      platform: "web",
+      occurredAt: "2026-09-01T00:00:00.000Z",
+    }], {
+      browserName: "chrome",
+      browserVersion: "140.0.7339.81",
+      osName: "windows-11",
+      osVersion: "15.0.0",
+    })
+
+    expect(createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({
+        browserName: "chrome",
+        browserVersion: "140.0.7339.81",
+        osName: "windows-11",
+        osVersion: "15.0.0",
+      })],
+    }))
+  })
+
+  it("stores header-derived operating-system information for desktop events", async () => {
+    const createMany = vi.fn().mockResolvedValue({ count: 1 })
+    const service = new ClientTelemetryService({
+      clientTelemetryEvent: { createMany },
+    } as unknown as PrismaService)
+    await service.ingest(null, [{
+      eventId: "event-desktop",
+      category: "navigation",
+      eventKey: "app.page.open",
+      component: "app-shell",
+      action: "open",
+      windowType: "main",
+      clientInstanceId: "client-desktop",
+      sessionId: "session-desktop",
+      appVersion: "0.2.419",
+      platform: "darwin-arm64",
+      occurredAt: "2026-09-01T00:00:00.000Z",
+    }], {}, {
+      osName: "macos",
+      osVersion: "15.6.1",
+    })
+
+    expect(createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: [expect.objectContaining({ osName: "macos", osVersion: "15.6.1" })],
+    }))
+  })
+
   it("returns only aggregate metrics and distributions", async () => {
     const queryRaw = vi.fn()
       .mockResolvedValueOnce([{
@@ -52,9 +113,25 @@ describe("ClientTelemetryService", () => {
         sessions: 5n,
         failures: 1n,
       }])
-    for (let index = 0; index < 12; index += 1) {
+    for (let index = 0; index < 6; index += 1) {
       queryRaw.mockResolvedValueOnce([{ value: `value-${index}`, count: 2n }])
     }
+    queryRaw.mockResolvedValueOnce([
+      { bucket: "browserNames", value: "chrome", count: 3n },
+      { bucket: "browserVersions", value: "chrome:140.0.7339.81", count: 2n },
+      { bucket: "osNames", value: "windows-11", count: 3n },
+      { bucket: "osVersions", value: "windows-11:15.0.0", count: 2n },
+    ])
+    for (let index = 6; index < 11; index += 1) {
+      queryRaw.mockResolvedValueOnce([{ value: `value-${index}`, count: 2n }])
+    }
+    queryRaw.mockResolvedValueOnce([
+      { bucket: "browserNames", value: "chrome", count: 3n },
+      { bucket: "browserVersions", value: "140.0.7339.81", count: 2n },
+      { bucket: "osNames", value: "windows-11", count: 3n },
+      { bucket: "osVersions", value: "15.0.0", count: 2n },
+    ])
+    queryRaw.mockResolvedValueOnce([{ value: "value-11", count: 2n }])
     queryRaw
       .mockResolvedValueOnce([{ dau: 2n, wau: 4n, mau: 5n }])
       .mockResolvedValueOnce([{ averageDurationMs: 1_500.2, p95DurationMs: 4_200.8 }])
@@ -90,6 +167,8 @@ describe("ClientTelemetryService", () => {
       to: new Date("2026-09-01T00:00:00.000Z"),
       timezoneOffsetMinutes: 480,
       identity: "all",
+      browserName: "chrome",
+      osName: "windows-11",
     })
 
     expect(result.summary).toEqual({
@@ -102,7 +181,14 @@ describe("ClientTelemetryService", () => {
       p95DurationMs: 245,
     })
     expect(result.trend).toEqual([expect.objectContaining({ date: "2026-09-01", events: 12 })])
+    expect(result.dimensions.browserNames).toEqual([{ value: "chrome", count: 3 }])
+    expect(result.dimensions.browserVersions).toEqual([{ value: "chrome:140.0.7339.81", count: 2 }])
+    expect(result.dimensions.osNames).toEqual([{ value: "windows-11", count: 3 }])
+    expect(result.dimensions.osVersions).toEqual([{ value: "windows-11:15.0.0", count: 2 }])
     expect(result.filterOptions.modules).toEqual([{ value: "value-7", count: 2 }])
+    expect(result.filterOptions.browserNames).toEqual([{ value: "chrome", count: 3 }])
+    expect(result.filterOptions.browserVersions).toEqual([{ value: "140.0.7339.81", count: 2 }])
+    expect(result.filterOptions.osVersions).toEqual([{ value: "15.0.0", count: 2 }])
     expect(result.insights).toEqual({
       active: { dau: 2, wau: 4, mau: 5, stickiness: 0.4 },
       sessions: { averageDurationMs: 1_500, p95DurationMs: 4_201 },
@@ -130,9 +216,13 @@ describe("ClientTelemetryService", () => {
       }],
     })
     expect(result).not.toHaveProperty("rawEvents")
-    const activeQuery = queryRaw.mock.calls[14]?.[0] as { strings?: readonly string[] }
+    const environmentQuery = queryRaw.mock.calls[8]?.[0] as { strings?: readonly string[] }
+    const environmentSql = environmentQuery.strings?.join(" ") ?? ""
+    expect(environmentSql).toContain("GROUPING SETS")
+    expect(environmentSql).toContain('COUNT(DISTINCT "sessionId")')
+    const activeQuery = queryRaw.mock.calls[16]?.[0] as { strings?: readonly string[] }
     expect(activeQuery.strings?.join(" ")).toContain('"occurredAt" >=')
-    const funnelQuery = queryRaw.mock.calls[18]?.[0] as { strings?: readonly string[] }
+    const funnelQuery = queryRaw.mock.calls[20]?.[0] as { strings?: readonly string[] }
     const funnelSql = funnelQuery.strings?.join(" ") ?? ""
     expect(funnelSql).toContain("generate_series")
     expect(funnelSql).toContain("git.repository.clone")

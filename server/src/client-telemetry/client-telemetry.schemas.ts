@@ -10,6 +10,7 @@ import {
 
 const stableEventKey = /^[a-z][a-z0-9._-]{0,63}$/u
 const stableDimension = /^[a-z0-9][a-z0-9._-]{0,63}$/u
+const environmentVersion = /^[A-Za-z0-9._+-]{1,32}$/u
 const uuidLike = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/iu
 
 export const clientTelemetryEventSchema = z.object({
@@ -61,8 +62,19 @@ const telemetryStatsQuerySchema = z.object({
   eventKey: z.string().regex(stableEventKey).optional(),
   appVersion: z.string().min(1).max(32).optional(),
   platform: z.string().min(1).max(32).optional(),
+  browserName: z.string().regex(stableDimension).optional(),
+  browserVersion: z.string().regex(environmentVersion).optional(),
+  osName: z.string().regex(stableDimension).optional(),
+  osVersion: z.string().regex(environmentVersion).optional(),
   windowType: z.string().regex(stableDimension).max(32).optional(),
-}).strict()
+}).strict().superRefine((value, context) => {
+  if (value.browserVersion && !value.browserName) {
+    context.addIssue({ code: "custom", path: ["browserVersion"], message: "浏览器版本筛选必须指定浏览器。" })
+  }
+  if (value.osVersion && !value.osName) {
+    context.addIssue({ code: "custom", path: ["osVersion"], message: "系统版本筛选必须指定操作系统。" })
+  }
+})
 
 export type ClientTelemetryStatsQuery = {
   readonly from: Date
@@ -74,6 +86,10 @@ export type ClientTelemetryStatsQuery = {
   readonly eventKey?: string
   readonly appVersion?: string
   readonly platform?: string
+  readonly browserName?: string
+  readonly browserVersion?: string
+  readonly osName?: string
+  readonly osVersion?: string
   readonly windowType?: string
 }
 

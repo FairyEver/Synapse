@@ -131,6 +131,10 @@ export type TelemetryStats = {
     outcomes: TelemetryDimension[]
     versions: TelemetryDimension[]
     platforms: TelemetryDimension[]
+    browserNames: TelemetryDimension[]
+    browserVersions: TelemetryDimension[]
+    osNames: TelemetryDimension[]
+    osVersions: TelemetryDimension[]
     windowTypes: TelemetryDimension[]
   }
   insights: {
@@ -177,6 +181,10 @@ export type TelemetryStats = {
     events: TelemetryDimension[]
     versions: TelemetryDimension[]
     platforms: TelemetryDimension[]
+    browserNames: TelemetryDimension[]
+    browserVersions: TelemetryDimension[]
+    osNames: TelemetryDimension[]
+    osVersions: TelemetryDimension[]
     windowTypes: TelemetryDimension[]
   }
 }
@@ -191,6 +199,10 @@ export type TelemetryStatsOptions = {
   eventKey?: string
   appVersion?: string
   platform?: string
+  browserName?: string
+  browserVersion?: string
+  osName?: string
+  osVersion?: string
   windowType?: string
 }
 

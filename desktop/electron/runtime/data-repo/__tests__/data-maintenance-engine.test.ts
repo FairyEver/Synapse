@@ -11,6 +11,7 @@ import type { DataMaintenancePolicy } from "../types"
 const NOW = "2026-09-05T12:00:00.000Z"
 const OLD = "2026-07-01T00:00:00.000Z"
 const RECENT = "2026-09-01T00:00:00.000Z"
+const TELEMETRY_RECENT = "2026-09-05T11:30:00.000Z"
 
 describe("runtime data maintenance engine", () => {
   it("removes only redundant rows and preserves delivery failures and conversation history", async () => {
@@ -20,6 +21,10 @@ describe("runtime data maintenance engine", () => {
       seedOutbox(fixture.database, outbox("local-sent", "local-renderer", "sent", OLD))
       seedOutbox(fixture.database, outbox("local-pending", "local-renderer", "pending", OLD))
       seedOutbox(fixture.database, outbox("external-failed", "wecom", "failed", OLD))
+      seedTelemetryOutbox(fixture.database, { id: "telemetry-live", occurredAt: OLD })
+      seedTelemetryEnvironment(fixture.database, { id: "telemetry-live", occurredAt: OLD })
+      seedTelemetryEnvironment(fixture.database, { id: "telemetry-orphan-old", occurredAt: OLD })
+      seedTelemetryEnvironment(fixture.database, { id: "telemetry-orphan-recent", occurredAt: TELEMETRY_RECENT })
       for (let index = 0; index < 520; index++) {
         seedOutbox(fixture.database, outbox(`external-${index}`, "wecom", "sent", isoAt(index)))
       }
@@ -39,6 +44,7 @@ describe("runtime data maintenance engine", () => {
       expect(result.deleted).toEqual({
         localOutbox: 1,
         retainedOutbox: 20,
+        telemetryEnvironmentOrphans: 1,
         rawAgentDiagnostics: 1,
         orphanAgentEvents: 1,
       })
@@ -48,6 +54,10 @@ describe("runtime data maintenance engine", () => {
       expect(count(database, "ns_outbox")).toBe(502)
       expect(ids(database, "ns_agent_events").sort()).toEqual(["recent-sdk", "semantic"])
       expect(ids(database, "ns_conversations")).toEqual(["conversation-live"])
+      expect(ids(database, "ns_telemetry_event_environments").sort()).toEqual([
+        "telemetry-live",
+        "telemetry-orphan-recent",
+      ])
       database.close()
     } finally {
       await rm(fixture.directory, { recursive: true, force: true })
@@ -140,6 +150,18 @@ async function createFixture() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE ns_telemetry_outbox (
+      id TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE ns_telemetry_event_environments (
+      id TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `)
   return { directory, databasePath, database }
 }
@@ -150,6 +172,14 @@ function seedOutbox(database: DatabaseSync, value: Record<string, unknown>): voi
 
 function seedEvent(database: DatabaseSync, value: Record<string, unknown>): void {
   insert(database, "ns_agent_events", value)
+}
+
+function seedTelemetryOutbox(database: DatabaseSync, value: Record<string, unknown>): void {
+  insert(database, "ns_telemetry_outbox", value)
+}
+
+function seedTelemetryEnvironment(database: DatabaseSync, value: Record<string, unknown>): void {
+  insert(database, "ns_telemetry_event_environments", value)
 }
 
 function seedConversation(database: DatabaseSync, id: string): void {
@@ -187,6 +217,7 @@ function policy(overrides: Partial<DataMaintenancePolicy> = {}): DataMaintenance
     maxDeletions: 10_000,
     batchSize: 100,
     rawAgentDiagnosticCutoff: "2026-08-06T12:00:00.000Z",
+    telemetryEnvironmentOrphanCutoff: "2026-09-05T11:00:00.000Z",
     outboxSentRetentionLimit: 500,
     ...overrides,
   }

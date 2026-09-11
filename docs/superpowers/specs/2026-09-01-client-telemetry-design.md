@@ -6,14 +6,15 @@
 
 ## 数据边界
 
-远程事件固定字段为：
+服务端持久化事件固定字段为：
 
-`eventId, category, eventKey, component, action, outcome?, durationMs?, moduleId?, windowType, clientInstanceId, sessionId, appVersion, platform, occurredAt`
+`eventId, category, eventKey, component, action, outcome?, durationMs?, moduleId?, windowType, clientInstanceId, sessionId, appVersion, platform, browserName?, browserVersion?, osName?, osVersion?, occurredAt`
 
 - `eventKey` 必须是代码提供的稳定标识；没有稳定标识时使用通用的 `组件.动作`。
 - 不上传输入值、显示标题、正文、URL、路径、文件名、错误消息、堆栈、仓库/资源 ID、任意 metadata 或 IP。
 - 桌面端 `clientInstanceId` 是加密保存在本机的稳定客户端实例标识，`sessionId` 每次应用进程重新生成。网页云盘使用浏览器本地存储中的随机实例标识和会话存储中的随机会话标识；存储不可用时仅在当前页面内保留随机值。
 - 请求体永远没有 `userId`。服务端以桌面 Bearer Token 或普通用户 Web 会话 Cookie 的验证结果写入用户关联；没有认证时 `userId` 为空。
+- 桌面端在采集事件时把规范化系统信息按事件写入独立本地 sidecar，发送时按相同系统环境分批，并使用固定的 `X-Synapse-Telemetry-OS-Name` 与 `X-Synapse-Telemetry-OS-Version` 请求头上报；事件体保持与旧服务端兼容，离线期间升级系统不会改变旧事件归属。Windows 名称区分 7、8、8.1、10、11，macOS 记录系统版本。网页端不在事件体上传环境字段，网页入口响应先声明 Client Hints，服务端再从 User-Agent 与 Client Hints 归一化浏览器、版本和操作系统后写入事件，不持久化原始请求头。
 
 ## 桌面端投递
 
@@ -22,7 +23,7 @@
 - 语义事件统一使用 `{domain}.{entity}.{action}`。桌面主窗口、Workflow 编辑器与 Runner、Automation 编辑器、知识库来源管理器及独立 System App 使用准确的稳定 `moduleId` 和 `windowType`。
 - 覆盖范围包括 17 个能力 Renderer，以及 Git、Drive、更新与深链入口、Workflow、Automation、Agent、Launcher/Dock、安装、Content、Knowledge Base、Database、Settings、Usage Analysis 和模型价格。搜索、筛选、排序、分页、视图模式等只记录固定动作或固定枚举，不上传自由输入。
 - 静态覆盖检查按具体 JSX/TypeScript 处理器校验桌面 Renderer 与 `desktop/app-capabilities/*/renderer` 的共享组件、原生交互、显式 `eventKey`、异步完成和稳定语义键；白名单只允许纯关闭、焦点恢复、事件传播和非用户触发加载。
-- 主进程只投影白名单字段到 `telemetry.outbox`，本地队列最多 5,000 条并保留 7 天，普通配置备份不包含该 namespace。
+- 主进程只投影白名单字段到 `telemetry.outbox`，并在 `telemetry.event-environments` 保存以事件 ID 关联的系统 sidecar；本地队列最多 5,000 条并保留 7 天，普通配置备份不包含这两个 namespace。已失去 outbox 引用的 sidecar 由主窗口创建后的 DataRepository 维护 Worker 分批清理，启动链不扫描 sidecar。
 - 20 条待发送或 15 秒触发刷新，服务端单批最多 50 条；失败从 5 秒指数退避至 15 分钟。
 - 队列记录采集时账户。登录事件只允许同一账户的认证请求发送，退出或切换账户后保留等待，不得匿名补发。
 - `eventId` 用于服务端幂等。埋点是单向 best-effort 副作用：Renderer 日志 IPC、队列读取/写入/删除、身份初始化和网络发送失败全部在埋点边界内隔离，不弹错误、不递归写日志、不抛回业务回调。身份切换刷新最多等待 250ms，退出刷新最多等待 2 秒。
@@ -41,7 +42,7 @@
 
 - `POST /api/client-telemetry/events` 接受匿名请求、桌面 Bearer Token 或普通用户 Web 会话 Cookie，请求严格拒绝未知字段和客户端提供的用户身份。
 - `ClientTelemetryEvent` 原始事件保留 180 天，每日分批清理；用户删除时级联删除关联事件。
-- `GET /api/admin/telemetry/stats` 仅受平台管理员会话保护并记录审计，只返回聚合指标、趋势、分布与洞察；所有筛选同时作用于洞察，最大查询跨度为 180 天。
+- `GET /api/admin/telemetry/stats` 仅受平台管理员会话保护并记录审计，只返回聚合指标、趋势、浏览器/操作系统等分布与洞察；环境分布按访问会话去重，版本分布按名称与版本组合聚合，版本筛选必须先指定对应名称。所有筛选同时作用于洞察，最大查询跨度为 180 天。
 - 失败率为失败操作数除以成功与失败操作总数；P95 只计算已完成且包含耗时的操作。
 - 登录身份使用 `userId`，匿名身份使用 `clientInstanceId`，会话使用 `sessionId`。活跃洞察按查询结束前 1/7/30 天计算 DAU/WAU/MAU，粘性为 DAU 除以 MAU；会话深度返回平均与 P95 时长；身份洞察区分新身份和回访身份。
 - 固定采用率覆盖 Drive 上传、分享、编辑与同步，以及 Git、Workflow、Agent、Automation、Terminal、Secrets 和安装器。固定漏斗在同一身份、同一会话内按发生顺序聚合 Drive 上传/分享/编辑/同步、Git 发布、Workflow 运行和 Agent 响应。留存按 cohort 日期返回 D1/D7/D30，观察窗口未成熟时返回 `null`。

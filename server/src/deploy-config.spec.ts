@@ -228,6 +228,31 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_buffering off")
   })
 
+  it("keeps raw browser headers out of telemetry access logs", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const location = nginx.match(/location = \/api\/client-telemetry\/events \{([\s\S]*?)\n  \}/u)?.[1]
+
+    expect(location).toBeDefined()
+    expect(location).toContain("access_log off")
+    expect(location).toContain("proxy_pass http://127.0.0.1:3001")
+  })
+
+  it("requests high-entropy client hints before Drive telemetry starts", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const acceptClientHints = 'add_header Accept-CH "Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version" always;'
+    const locations = [
+      /location \/console\/ \{([\s\S]*?)\n  \}/u,
+      /location \/drive\/items\/ \{([\s\S]*?)\n  \}/u,
+      /location = \/drive \{([\s\S]*?)\n  \}/u,
+      /location = \/drive\/ \{([\s\S]*?)\n  \}/u,
+      /location \/share\/ \{([\s\S]*?)\n  \}/u,
+    ]
+
+    for (const pattern of locations) {
+      expect(nginx.match(pattern)?.[1]).toContain(acceptClientHints)
+    }
+  })
+
   it("streams opaque Open API downloads without logging token queries", () => {
     const nginx = readRepoFile("server/nginx.conf")
     const location = nginx.match(/location \^~ \/api\/open\/v1\/downloads\/ \{([\s\S]*?)\n  \}/u)?.[1]

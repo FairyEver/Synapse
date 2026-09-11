@@ -268,6 +268,7 @@ describe("DiagnosticsService.collect", () => {
         deleted: {
           localOutbox: 1_500_000,
           retainedOutbox: 0,
+          telemetryEnvironmentOrphans: 50,
           rawAgentDiagnostics: 20_000,
           orphanAgentEvents: 100,
         },
@@ -301,6 +302,7 @@ describe("DiagnosticsService.collect", () => {
         deleted: {
           localOutbox: 0,
           retainedOutbox: 0,
+          telemetryEnvironmentOrphans: 0,
           rawAgentDiagnostics: 0,
           orphanAgentEvents: 0,
         },

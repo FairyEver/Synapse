@@ -10,6 +10,7 @@ import type {
   ClientTelemetryEventInput,
   ClientTelemetryStatsQuery,
 } from "./client-telemetry.schemas"
+import type { ClientTelemetryEnvironment } from "./client-telemetry-environment"
 
 type SummaryRow = {
   events: bigint
@@ -33,6 +34,8 @@ type TrendRow = {
 }
 
 type DimensionRow = { value: string; count: bigint }
+type EnvironmentBucket = "browserNames" | "browserVersions" | "osNames" | "osVersions"
+type EnvironmentDimensionRow = DimensionRow & { bucket: EnvironmentBucket }
 
 type ActiveInsightRow = {
   dau: bigint
@@ -81,10 +84,16 @@ type RetentionInsightRow = {
 export class ClientTelemetryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async ingest(userId: string | null, events: readonly ClientTelemetryEventInput[]) {
+  async ingest(
+    userId: string | null,
+    events: readonly ClientTelemetryEventInput[],
+    webEnvironment: ClientTelemetryEnvironment = {},
+    desktopEnvironment: ClientTelemetryEnvironment = {},
+  ) {
     const result = await this.prisma.clientTelemetryEvent.createMany({
       data: events.map((event) => ({
         ...event,
+        ...(event.platform === "web" ? webEnvironment : desktopEnvironment),
         userId,
         occurredAt: new Date(event.occurredAt),
       })),
@@ -134,18 +143,8 @@ export class ClientTelemetryService {
       outcomes,
       versions,
       platforms,
+      environmentDimensions,
       windowTypes,
-      moduleOptions,
-      eventOptions,
-      versionOptions,
-      platformOptions,
-      windowTypeOptions,
-      activeInsightRows,
-      sessionInsightRows,
-      identityInsightRows,
-      adoptionInsightRows,
-      funnelInsightRows,
-      retentionInsightRows,
     ] = await Promise.all([
       this.topDimension("moduleId", where),
       this.topDimension("eventKey", where),
@@ -153,12 +152,32 @@ export class ClientTelemetryService {
       this.topDimension("outcome", where),
       this.topDimension("appVersion", where),
       this.topDimension("platform", where),
+      this.environmentDimensions(where),
       this.topDimension("windowType", where),
+    ])
+    const [
+      moduleOptions,
+      eventOptions,
+      versionOptions,
+      platformOptions,
+      environmentOptions,
+      windowTypeOptions,
+    ] = await Promise.all([
       this.filterOptions("moduleId", query),
       this.filterOptions("eventKey", query),
       this.filterOptions("appVersion", query),
       this.filterOptions("platform", query),
+      this.environmentFilterOptions(query),
       this.filterOptions("windowType", query),
+    ])
+    const [
+      activeInsightRows,
+      sessionInsightRows,
+      identityInsightRows,
+      adoptionInsightRows,
+      funnelInsightRows,
+      retentionInsightRows,
+    ] = await Promise.all([
       this.activeInsights(query),
       this.sessionInsights(query),
       this.identityInsights(query),
@@ -175,6 +194,13 @@ export class ClientTelemetryService {
     const identities = identityInsightRows[0]
     const dau = Number(active?.dau ?? 0)
     const mau = Number(active?.mau ?? 0)
+    const { browserNames, browserVersions, osNames, osVersions } = environmentDimensions
+    const {
+      browserNames: browserNameOptions,
+      browserVersions: browserVersionOptions,
+      osNames: osNameOptions,
+      osVersions: osVersionOptions,
+    } = environmentOptions
     return {
       range: {
         from: query.from.toISOString(),
@@ -203,7 +229,19 @@ export class ClientTelemetryService {
         sessions: Number(row.sessions),
         failures: Number(row.failures),
       })),
-      dimensions: { modules, events, actions, outcomes, versions, platforms, windowTypes },
+      dimensions: {
+        modules,
+        events,
+        actions,
+        outcomes,
+        versions,
+        platforms,
+        browserNames,
+        browserVersions,
+        osNames,
+        osVersions,
+        windowTypes,
+      },
       insights: {
         active: {
           dau,
@@ -243,6 +281,10 @@ export class ClientTelemetryService {
         events: eventOptions,
         versions: versionOptions,
         platforms: platformOptions,
+        browserNames: browserNameOptions,
+        browserVersions: browserVersionOptions,
+        osNames: osNameOptions,
+        osVersions: osVersionOptions,
         windowTypes: windowTypeOptions,
       },
     }
@@ -273,6 +315,68 @@ export class ClientTelemetryService {
       LIMIT ${CLIENT_TELEMETRY_FILTER_OPTION_LIMIT}
     `)
     return rows.map((row) => ({ value: row.value, count: Number(row.count) }))
+  }
+
+  private async environmentDimensions(where: Prisma.Sql) {
+    const rows = await this.prisma.$queryRaw<EnvironmentDimensionRow[]>(Prisma.sql`
+      WITH grouped AS (
+        SELECT
+          CASE
+            WHEN GROUPING("browserName") = 0 AND GROUPING("browserVersion") = 1 THEN 'browserNames'
+            WHEN GROUPING("browserName") = 0 THEN 'browserVersions'
+            WHEN GROUPING("osName") = 0 AND GROUPING("osVersion") = 1 THEN 'osNames'
+            ELSE 'osVersions'
+          END AS "bucket",
+          CASE
+            WHEN GROUPING("browserName") = 0 AND GROUPING("browserVersion") = 1 THEN "browserName"
+            WHEN GROUPING("browserName") = 0 THEN "browserName" || ':' || "browserVersion"
+            WHEN GROUPING("osName") = 0 AND GROUPING("osVersion") = 1 THEN "osName"
+            ELSE "osName" || ':' || "osVersion"
+          END AS "value",
+          COUNT(DISTINCT "sessionId") AS "count"
+        FROM "ClientTelemetryEvent"
+        ${where}
+        GROUP BY GROUPING SETS (
+          ("browserName"),
+          ("browserName", "browserVersion"),
+          ("osName"),
+          ("osName", "osVersion")
+        )
+      ), ranked AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY "bucket" ORDER BY "count" DESC, "value" ASC) AS "rank"
+        FROM grouped
+        WHERE "value" IS NOT NULL
+      )
+      SELECT "bucket", "value", "count"
+      FROM ranked
+      WHERE "rank" <= ${CLIENT_TELEMETRY_STATS_TOP_LIMIT}
+      ORDER BY "bucket" ASC, "count" DESC, "value" ASC
+    `)
+    return groupEnvironmentRows(rows)
+  }
+
+  private async environmentFilterOptions(query: ClientTelemetryStatsQuery) {
+    const queries: Prisma.Sql[] = [
+      environmentOptionSql("browserNames", "browserName", buildWhere(query, "browserName")),
+      environmentOptionSql("osNames", "osName", buildWhere(query, "osName")),
+    ]
+    if (query.browserName) {
+      queries.push(environmentOptionSql("browserVersions", "browserVersion", buildWhere(query, "browserVersion")))
+    }
+    if (query.osName) {
+      queries.push(environmentOptionSql("osVersions", "osVersion", buildWhere(query, "osVersion")))
+    }
+    const rows = await this.prisma.$queryRaw<EnvironmentDimensionRow[]>(Prisma.sql`
+      WITH options AS (${Prisma.join(queries, " UNION ALL ")}), ranked AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY "bucket" ORDER BY "count" DESC, "value" ASC) AS "rank"
+        FROM options
+      )
+      SELECT "bucket", "value", "count"
+      FROM ranked
+      WHERE "rank" <= ${CLIENT_TELEMETRY_FILTER_OPTION_LIMIT}
+      ORDER BY "bucket" ASC, "count" DESC, "value" ASC
+    `)
+    return groupEnvironmentRows(rows)
   }
 
   private activeInsights(query: ClientTelemetryStatsQuery) {
@@ -474,9 +578,40 @@ type DimensionColumn =
   | "outcome"
   | "appVersion"
   | "platform"
+  | "browserName"
+  | "browserVersion"
+  | "osName"
+  | "osVersion"
   | "windowType"
 
-type FilterColumn = "moduleId" | "eventKey" | "appVersion" | "platform" | "windowType"
+type FilterColumn = DimensionColumn
+type EnvironmentColumn = "browserName" | "browserVersion" | "osName" | "osVersion"
+
+function environmentOptionSql(
+  bucket: EnvironmentBucket,
+  column: EnvironmentColumn,
+  where: Prisma.Sql,
+): Prisma.Sql {
+  const value = Prisma.raw(`"${column}"`)
+  return Prisma.sql`
+    SELECT ${bucket} AS "bucket", ${value} AS "value", COUNT(DISTINCT "sessionId") AS "count"
+    FROM "ClientTelemetryEvent"
+    ${where}
+    AND ${value} IS NOT NULL
+    GROUP BY ${value}
+  `
+}
+
+function groupEnvironmentRows(rows: readonly EnvironmentDimensionRow[]) {
+  const grouped: Record<EnvironmentBucket, Array<{ value: string; count: number }>> = {
+    browserNames: [],
+    browserVersions: [],
+    osNames: [],
+    osVersions: [],
+  }
+  for (const row of rows) grouped[row.bucket].push({ value: row.value, count: Number(row.count) })
+  return grouped
+}
 
 function buildWhere(query: ClientTelemetryStatsQuery, omittedColumn?: FilterColumn): Prisma.Sql {
   const conditions: Prisma.Sql[] = [
@@ -490,6 +625,10 @@ function buildWhere(query: ClientTelemetryStatsQuery, omittedColumn?: FilterColu
   if (query.eventKey && omittedColumn !== "eventKey") conditions.push(Prisma.sql`"eventKey" = ${query.eventKey}`)
   if (query.appVersion && omittedColumn !== "appVersion") conditions.push(Prisma.sql`"appVersion" = ${query.appVersion}`)
   if (query.platform && omittedColumn !== "platform") conditions.push(Prisma.sql`"platform" = ${query.platform}`)
+  if (query.browserName && omittedColumn !== "browserName") conditions.push(Prisma.sql`"browserName" = ${query.browserName}`)
+  if (query.browserVersion && omittedColumn !== "browserVersion") conditions.push(Prisma.sql`"browserVersion" = ${query.browserVersion}`)
+  if (query.osName && omittedColumn !== "osName") conditions.push(Prisma.sql`"osName" = ${query.osName}`)
+  if (query.osVersion && omittedColumn !== "osVersion") conditions.push(Prisma.sql`"osVersion" = ${query.osVersion}`)
   if (query.windowType && omittedColumn !== "windowType") conditions.push(Prisma.sql`"windowType" = ${query.windowType}`)
   return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`
 }
@@ -503,6 +642,10 @@ function buildWhereWithoutRange(query: ClientTelemetryStatsQuery): Prisma.Sql {
   if (query.eventKey) conditions.push(Prisma.sql`"eventKey" = ${query.eventKey}`)
   if (query.appVersion) conditions.push(Prisma.sql`"appVersion" = ${query.appVersion}`)
   if (query.platform) conditions.push(Prisma.sql`"platform" = ${query.platform}`)
+  if (query.browserName) conditions.push(Prisma.sql`"browserName" = ${query.browserName}`)
+  if (query.browserVersion) conditions.push(Prisma.sql`"browserVersion" = ${query.browserVersion}`)
+  if (query.osName) conditions.push(Prisma.sql`"osName" = ${query.osName}`)
+  if (query.osVersion) conditions.push(Prisma.sql`"osVersion" = ${query.osVersion}`)
   if (query.windowType) conditions.push(Prisma.sql`"windowType" = ${query.windowType}`)
   return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`
 }

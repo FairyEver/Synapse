@@ -104,6 +104,7 @@ export type DataMaintenanceStatus =
 export interface DataMaintenanceCounts {
   readonly localOutbox: number
   readonly retainedOutbox: number
+  readonly telemetryEnvironmentOrphans: number
   readonly rawAgentDiagnostics: number
   readonly orphanAgentEvents: number
 }
@@ -121,7 +122,7 @@ export interface DataMaintenanceResult {
 }
 
 export interface DataMaintenanceProgress {
-  readonly phase: "outbox-local" | "outbox-retention" | "agent-diagnostics" | "agent-orphans"
+  readonly phase: "outbox-local" | "outbox-retention" | "telemetry-environment-orphans" | "agent-diagnostics" | "agent-orphans"
   readonly deleted: DataMaintenanceCounts
 }
 
@@ -129,6 +130,7 @@ export interface DataMaintenancePolicy {
   readonly maxDeletions: number
   readonly batchSize: number
   readonly rawAgentDiagnosticCutoff: string
+  readonly telemetryEnvironmentOrphanCutoff: string
   readonly outboxSentRetentionLimit: number
 }
 

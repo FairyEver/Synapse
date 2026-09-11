@@ -425,6 +425,7 @@ describe("ConfigBackupService quick inputs", () => {
         "agent.usage",
         "conversations",
         "outbox",
+        "telemetry.event-environments",
         "telemetry.outbox",
         "audit",
       ],

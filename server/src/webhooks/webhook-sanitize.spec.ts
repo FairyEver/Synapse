@@ -13,12 +13,18 @@ describe("webhook sanitize", () => {
       "X-GitHub-Event": "push",
       Authorization: "Bearer secret",
       Cookie: "sid=secret",
+      "User-Agent": "Browser/1.0",
+      "Sec-CH-UA-Platform-Version": '"15.0.0"',
+      "X-Synapse-Telemetry-OS-Version": "10.0.26100",
       "X-Api-Key": "api-key-secret",
       "X-Multi": ["a", "b"],
     })).toEqual({
       "x-github-event": "push",
       authorization: "[redacted]",
       cookie: "[redacted]",
+      "user-agent": "Browser/1.0",
+      "sec-ch-ua-platform-version": '"15.0.0"',
+      "x-synapse-telemetry-os-version": "10.0.26100",
       "x-api-key": "[redacted]",
       "x-multi": "a, b",
     })
@@ -111,6 +117,9 @@ describe("webhook sanitize", () => {
       params: { path: ["webhooks", "wh_public_id", "whsec_secret_value"] },
       headers: {
         "x-test": "ok",
+        "user-agent": "Browser/1.0",
+        "sec-ch-ua-platform-version": '"15.0.0"',
+        "x-synapse-telemetry-os-version": "10.0.26100",
         "x-api-key": "api-key-secret",
         "x-gitlab-token": "gitlab-token-secret",
         "x-hub-signature-256": "sha256=signature-secret",
@@ -132,6 +141,9 @@ describe("webhook sanitize", () => {
       params: { path: ["webhooks", "wh_public_id", "[redacted]"] },
       headers: {
         "x-test": "ok",
+        "user-agent": "[redacted]",
+        "sec-ch-ua-platform-version": "[redacted]",
+        "x-synapse-telemetry-os-version": "[redacted]",
         "x-api-key": "[redacted]",
         "x-gitlab-token": "[redacted]",
         "x-hub-signature-256": "[redacted]",

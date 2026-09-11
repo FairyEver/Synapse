@@ -17,6 +17,8 @@ export interface RunDataMaintenanceOptions {
 }
 
 const OUTBOX_TABLE = "ns_outbox"
+const TELEMETRY_OUTBOX_TABLE = "ns_telemetry_outbox"
+const TELEMETRY_ENVIRONMENT_TABLE = "ns_telemetry_event_environments"
 const AGENT_EVENTS_TABLE = "ns_agent_events"
 const CONVERSATIONS_TABLE = "ns_conversations"
 
@@ -54,6 +56,35 @@ export async function runDataMaintenance(
         onBatch: (count) => {
           deleted.localOutbox += count
           options.onProgress?.({ phase: "outbox-local", deleted: { ...deleted } })
+        },
+        yieldBetweenBatches,
+      })
+    }
+
+    if (remaining > 0 && tableExists(database, TELEMETRY_ENVIRONMENT_TABLE)) {
+      const telemetryOutboxExists = tableExists(database, TELEMETRY_OUTBOX_TABLE)
+      remaining = await deleteInBatches({
+        database,
+        tableName: TELEMETRY_ENVIRONMENT_TABLE,
+        selectSql: `
+          SELECT environments.id
+          FROM ${TELEMETRY_ENVIRONMENT_TABLE} AS environments
+          WHERE json_extract(environments.value, '$.occurredAt') < ?
+            ${telemetryOutboxExists
+              ? `AND NOT EXISTS (
+                  SELECT 1
+                  FROM ${TELEMETRY_OUTBOX_TABLE} AS outbox
+                  WHERE outbox.id = environments.id
+                )`
+              : ""}
+          LIMIT ?
+        `,
+        selectParams: [options.policy.telemetryEnvironmentOrphanCutoff],
+        limit: remaining,
+        batchSize: options.policy.batchSize,
+        onBatch: (count) => {
+          deleted.telemetryEnvironmentOrphans += count
+          options.onProgress?.({ phase: "telemetry-environment-orphans", deleted: { ...deleted } })
         },
         yieldBetweenBatches,
       })
@@ -164,7 +195,7 @@ export async function runDataMaintenance(
 
 interface DeleteInBatchesOptions {
   readonly database: DatabaseSync
-  readonly tableName: typeof OUTBOX_TABLE | typeof AGENT_EVENTS_TABLE
+  readonly tableName: typeof OUTBOX_TABLE | typeof TELEMETRY_ENVIRONMENT_TABLE | typeof AGENT_EVENTS_TABLE
   readonly selectSql: string
   readonly selectParams: readonly (string | number)[]
   readonly limit: number
@@ -232,12 +263,16 @@ function validatePolicy(policy: DataMaintenancePolicy): void {
   if (Number.isNaN(Date.parse(policy.rawAgentDiagnosticCutoff))) {
     throw new Error("Data maintenance raw diagnostic cutoff must be an ISO date")
   }
+  if (Number.isNaN(Date.parse(policy.telemetryEnvironmentOrphanCutoff))) {
+    throw new Error("Data maintenance telemetry environment orphan cutoff must be an ISO date")
+  }
 }
 
 function emptyCounts(): MutableDataMaintenanceCounts {
   return {
     localOutbox: 0,
     retainedOutbox: 0,
+    telemetryEnvironmentOrphans: 0,
     rawAgentDiagnostics: 0,
     orphanAgentEvents: 0,
   }

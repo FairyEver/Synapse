@@ -7,8 +7,10 @@
  */
 
 export {
+  clientTelemetryEnvironmentSchema,
   clientTelemetryOutboxSchema,
   type ClientTelemetryCategory,
+  type ClientTelemetryEnvironmentEntryV1,
   type ClientTelemetryOutcome,
   type ClientTelemetryOutboxEntryV1,
 } from "./client-telemetry"
@@ -218,7 +220,7 @@ export {
 } from "./placeholders"
 
 import { coreConfigSchema } from "./core-config"
-import { clientTelemetryOutboxSchema } from "./client-telemetry"
+import { clientTelemetryEnvironmentSchema, clientTelemetryOutboxSchema } from "./client-telemetry"
 import { workflowMigrationStateSchema } from "./workflow-migration-state"
 import { workflowShareStateSchema } from "./workflow-share-state"
 import { cheatCodeStatesSchema } from "./cheat-code-states"
@@ -285,6 +287,7 @@ import type { NamespaceSchema } from "../types"
 export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   coreConfigSchema,
   clientTelemetryOutboxSchema,
+  clientTelemetryEnvironmentSchema,
   coreIdentitySchema,
   driveSyncBindingsSchema,
   driveSyncBaselineSchema,

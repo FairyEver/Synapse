@@ -35,7 +35,13 @@ describe("DataMaintenanceService", () => {
     await vi.waitFor(() => expect(executor.run).toHaveBeenCalledOnce())
     progressListener?.({
       phase: "outbox-local",
-      deleted: { localOutbox: 500, retainedOutbox: 0, rawAgentDiagnostics: 0, orphanAgentEvents: 0 },
+      deleted: {
+        localOutbox: 500,
+        retainedOutbox: 0,
+        telemetryEnvironmentOrphans: 0,
+        rawAgentDiagnostics: 0,
+        orphanAgentEvents: 0,
+      },
     })
     expect(service.inspect()).toMatchObject({
       status: "running",
@@ -114,6 +120,7 @@ function maintenanceResult(): DataMaintenanceResult {
     deleted: {
       localOutbox: 1_500,
       retainedOutbox: 0,
+      telemetryEnvironmentOrphans: 3,
       rawAgentDiagnostics: 20,
       orphanAgentEvents: 2,
     },

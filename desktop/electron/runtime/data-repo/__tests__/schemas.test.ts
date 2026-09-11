@@ -127,6 +127,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "run_as.config",
         "run_as.preflight",
         "secrets",
+        "telemetry.event-environments",
         "telemetry.outbox",
         "webhook.config",
         "webhook.runs",

@@ -88,6 +88,10 @@ model ClientTelemetryEvent {
   sessionId        String   @db.VarChar(64)
   appVersion       String   @db.VarChar(32)
   platform         String   @db.VarChar(32)
+  browserName      String?  @db.VarChar(64)
+  browserVersion   String?  @db.VarChar(32)
+  osName           String?  @db.VarChar(64)
+  osVersion        String?  @db.VarChar(32)
   occurredAt       DateTime
   receivedAt       DateTime @default(now())
 
@@ -100,6 +104,8 @@ model ClientTelemetryEvent {
   @@index([sessionId, occurredAt])
   @@index([appVersion, occurredAt])
   @@index([platform, occurredAt])
+  @@index([browserName, browserVersion, occurredAt])
+  @@index([osName, osVersion, occurredAt])
 }
 
 model UserApiKey {

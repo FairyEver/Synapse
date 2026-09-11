@@ -19,6 +19,10 @@ import {
   parseClientTelemetryStatsQuery,
 } from "./client-telemetry.schemas"
 import { ClientTelemetryService } from "./client-telemetry.service"
+import {
+  parseDesktopClientEnvironment,
+  parseWebClientEnvironment,
+} from "./client-telemetry-environment"
 
 @Controller("api/client-telemetry")
 export class ClientTelemetryController {
@@ -30,6 +34,7 @@ export class ClientTelemetryController {
   @Post("events")
   @Throttle({ default: { ttl: 60_000, limit: 120 } })
   @Header("Cache-Control", "no-store")
+  @Header("Accept-CH", "Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform-Version")
   async ingest(@Req() request: Request) {
     const events = parseClientTelemetryBatch(request.body)
     const authorization = request.headers.authorization
@@ -44,7 +49,14 @@ export class ClientTelemetryController {
     if (typeof cookieToken === "string" && !userId) {
       throw new UnauthorizedException("未登录或登录已过期。")
     }
-    return this.service.ingest(userId, events)
+    const hasWebEvents = events.some((event) => event.platform === "web")
+    const hasDesktopEvents = events.some((event) => event.platform !== "web")
+    return this.service.ingest(
+      userId,
+      events,
+      hasWebEvents ? parseWebClientEnvironment(request.headers) : {},
+      hasDesktopEvents ? parseDesktopClientEnvironment(request.headers) : {},
+    )
   }
 }
 

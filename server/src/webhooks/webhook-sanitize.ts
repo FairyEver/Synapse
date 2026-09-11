@@ -1,6 +1,7 @@
 import { BadRequestException, UnsupportedMediaTypeException } from "@nestjs/common"
 
 const sensitiveKeyPattern = /authorization|cookie|token|secret|password|credential|signature|api[-_]?key/i
+const requestLogEnvironmentKeyPattern = /^(?:user-agent|sec-ch-ua(?:-.+)?|x-synapse-telemetry-os-(?:name|version))$/iu
 const sensitiveTextLinePattern = /^([A-Za-z0-9_.-]+)\s*[:=]\s*(.+)$/u
 const bearerPattern = /\bbearer\s+[^,\s;]+/giu
 const cookieFragmentPattern = /\bcookie\s*[:=]\s*.+?(?=(?:\s+(?:and|plus|with)\s+\b(?:authorization|bearer|token|secret|password|credential|api[-_]?key)\b)|[,\n]|$)/giu
@@ -174,7 +175,15 @@ function sanitizeWebhookLogParams(params: unknown): unknown {
 
 function sanitizeWebhookLogHeaders(headers: unknown): Record<string, string> | undefined {
   const value = recordValue(headers)
-  return value ? sanitizeWebhookHeaders(value) : undefined
+  if (!value) return undefined
+  const result: Record<string, string> = {}
+  for (const [rawKey, rawValue] of Object.entries(value)) {
+    const key = rawKey.toLowerCase()
+    result[key] = isSensitiveKey(key) || requestLogEnvironmentKeyPattern.test(key)
+      ? "[redacted]"
+      : stringifyHeader(rawValue)
+  }
+  return result
 }
 
 function isWebhookPathParams(value: unknown): value is readonly string[] {
