@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { join } from "node:path"
-import { chromium, type Browser, type BrowserContext } from "playwright"
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright"
 
 const requireFromHere = createRequire(__filename)
 const mermaidScriptPath = requireFromHere.resolve("mermaid/dist/mermaid.min.js")
@@ -39,7 +39,10 @@ export class PdfRenderer {
   private browserInstance: Browser | null = null
   private assetsPromise: Promise<{ readonly css: string; readonly mermaid: string }> | null = null
 
-  constructor(private readonly renderTimeoutMs = 55_000) {}
+  constructor(
+    private readonly renderTimeoutMs = 55_000,
+    private readonly inspectPreparedPage?: (page: Page) => Promise<void>,
+  ) {}
 
   async warmup(timeoutMs = 4_000): Promise<void> {
     let timeout: NodeJS.Timeout | undefined
@@ -147,6 +150,7 @@ export class PdfRenderer {
     await page.addScriptTag({ content: assets.mermaid })
     await page.evaluate(waitForDocumentResources)
     const warnings = await page.evaluate(renderDocumentEnhancements)
+    await this.inspectPreparedPage?.(page)
     const bytes = await page.pdf({
       format: "A4",
       landscape: false,

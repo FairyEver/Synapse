@@ -49,11 +49,22 @@ export function detectPublicAssetImageType(bytes: Buffer): string | null {
 function hasAvifBrand(bytes: Buffer): boolean {
   if (bytes.length < 16 || bytes.subarray(4, 8).toString("ascii") !== "ftyp") return false
   const declaredSize = bytes.readUInt32BE(0)
-  const boxSize = declaredSize === 0 ? bytes.length : declaredSize
-  if (boxSize < 16 || boxSize > bytes.length) return false
+  let boxSize: number
+  let majorBrandOffset: number
+  if (declaredSize === 1) {
+    if (bytes.length < 24) return false
+    const extendedSize = bytes.readBigUInt64BE(8)
+    if (extendedSize < 24n || extendedSize > BigInt(bytes.length)) return false
+    boxSize = Number(extendedSize)
+    majorBrandOffset = 16
+  } else {
+    boxSize = declaredSize === 0 ? bytes.length : declaredSize
+    majorBrandOffset = 8
+  }
+  if (boxSize < majorBrandOffset + 8 || boxSize > bytes.length) return false
   const avifBrands = new Set(["avif", "avis"])
-  if (avifBrands.has(bytes.subarray(8, 12).toString("ascii"))) return true
-  for (let offset = 16; offset + 4 <= boxSize; offset += 4) {
+  if (avifBrands.has(bytes.subarray(majorBrandOffset, majorBrandOffset + 4).toString("ascii"))) return true
+  for (let offset = majorBrandOffset + 8; offset + 4 <= boxSize; offset += 4) {
     if (avifBrands.has(bytes.subarray(offset, offset + 4).toString("ascii"))) return true
   }
   return false

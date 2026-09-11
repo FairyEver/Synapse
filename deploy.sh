@@ -680,6 +680,7 @@ if (!rendererUrl || !secret) {
 
 const response = await fetch(`${rendererUrl.replace(/\/+$/, "")}/render`, {
   method: "POST",
+  signal: AbortSignal.timeout(15_000),
   headers: {
     "Content-Type": "application/json",
     Authorization: `Bearer ${secret}`,

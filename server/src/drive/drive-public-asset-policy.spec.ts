@@ -60,6 +60,10 @@ describe("public asset policy", () => {
     expect(detectPublicAssetImageType(avifFtyp("mif1", ["mif1", "heic"]))).toBeNull()
   })
 
+  it("detects AVIF brands in an extended-size ISO-BMFF ftyp box", () => {
+    expect(detectPublicAssetImageType(avifFtyp("mif1", ["avif"], true))).toBe("image/avif")
+  })
+
   it("validates PDF, Office Open XML, and UTF-8 text signatures", () => {
     expect(matchesPublicAssetContentSignature(Buffer.from("%PDF-1.7\n"), DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION.pdf)).toBe(true)
     expect(matchesPublicAssetContentSignature(Buffer.from([0x50, 0x4b, 0x03, 0x04]), DRIVE_PUBLIC_ASSET_DOCUMENT_MIME_BY_EXTENSION.docx)).toBe(true)
@@ -74,12 +78,17 @@ describe("public asset policy", () => {
   })
 })
 
-function avifFtyp(majorBrand: string, compatibleBrands: readonly string[]): Buffer {
-  const size = 16 + compatibleBrands.length * 4
+function avifFtyp(majorBrand: string, compatibleBrands: readonly string[], extendedSize = false): Buffer {
+  const headerSize = extendedSize ? 24 : 16
+  const size = headerSize + compatibleBrands.length * 4
   const bytes = Buffer.alloc(size)
-  bytes.writeUInt32BE(size, 0)
+  bytes.writeUInt32BE(extendedSize ? 1 : size, 0)
   bytes.write("ftyp", 4, "ascii")
-  bytes.write(majorBrand, 8, "ascii")
-  for (const [index, brand] of compatibleBrands.entries()) bytes.write(brand, 16 + index * 4, "ascii")
+  if (extendedSize) bytes.writeBigUInt64BE(BigInt(size), 8)
+  const majorBrandOffset = extendedSize ? 16 : 8
+  bytes.write(majorBrand, majorBrandOffset, "ascii")
+  for (const [index, brand] of compatibleBrands.entries()) {
+    bytes.write(brand, majorBrandOffset + 8 + index * 4, "ascii")
+  }
   return bytes
 }

@@ -96,6 +96,33 @@ describe('useDriveMarkdownPdfExport', () => {
     expect(mocks.finish).toHaveBeenCalledWith('failure')
     expect(mocks.error).toHaveBeenCalledWith('PDF 导出服务暂不可用，请稍后重试。', { id: 'toast-id' })
   })
+
+  it('uses the share-root endpoint when the shared Markdown file is the share root', async () => {
+    mocks.exportSharePdf.mockResolvedValueOnce({ imageWarnings: 0, diagramWarnings: 0 })
+    const hook = renderExportHook({
+      snapshot: markdownSnapshot({ context: 'share' }),
+      context: { context: 'share', shareId: 'share-root', itemId: null },
+    })
+
+    await act(async () => hook().exportPdf())
+
+    expect(mocks.exportSharePdf).toHaveBeenCalledWith('share-root', null, '说明.pdf')
+    expect(mocks.success).toHaveBeenCalledWith('PDF 已导出', { id: 'toast-id' })
+  })
+
+  it.each([
+    [401, '分享尚未解锁，请重新输入密码。'],
+    [413, '文件或图片过大，无法导出。'],
+    [429, '导出请求较多，请稍后重试。'],
+    [504, 'PDF 导出超时，请稍后重试。'],
+  ])('presents the actionable PDF export message for HTTP %i', async (status, message) => {
+    mocks.exportOwnerPdf.mockRejectedValueOnce(new ApiError('request failed', status))
+    const hook = renderExportHook()
+
+    await act(async () => hook().exportPdf())
+
+    expect(mocks.error).toHaveBeenCalledWith(message, { id: 'toast-id' })
+  })
 })
 
 function renderExportHook(input: {

@@ -50,6 +50,26 @@ test("resolveDevCommandEnv keeps an explicit local document host for server dev"
   assert.equal(env.DOCUMENT_PUBLIC_URL, "http://127.0.0.1:19774/document")
 })
 
+test("resolveDevCommandEnv derives the local PDF renderer URL from its mapped port", () => {
+  const env = resolveDevCommandEnv(
+    ["--filter", "@synapse/server", "run", "dev"],
+    {},
+    { PDF_RENDERER_HOST_PORT: "3999" },
+  )
+
+  assert.equal(env.PDF_RENDERER_URL, "http://127.0.0.1:3999")
+})
+
+test("resolveDevCommandEnv keeps an explicit shell PDF renderer URL", () => {
+  const env = resolveDevCommandEnv(
+    ["--filter", "@synapse/server", "run", "dev"],
+    { PDF_RENDERER_HOST_PORT: "3999", PDF_RENDERER_URL: "http://renderer.test:4010" },
+    { PDF_RENDERER_HOST_PORT: "3010" },
+  )
+
+  assert.equal(env.PDF_RENDERER_URL, "http://renderer.test:4010")
+})
+
 test("resolveDevCommandEnv does not rewrite non-server commands", () => {
   const env = resolveDevCommandEnv(
     ["--filter", "@synapse/dashboard", "run", "dev"],

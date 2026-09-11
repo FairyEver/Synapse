@@ -31,27 +31,85 @@ describe.sequential("PdfRenderer", () => {
   it("prints task lists, quotes, code, wide tables, long links, large images, and multiple pages", async () => {
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     const rows = Array.from({ length: 180 }, (_, index) => `<p>分页内容 ${index + 1}：中英文 mixed content</p>`).join("")
-    const result = await renderer.render({
-      schemaVersion: 1,
-      title: "打印版式",
-      html: `<main class="markdown-body"><h1>验收</h1><ul class="contains-task-list"><li class="task-list-item"><input type="checkbox" checked disabled>任务</li></ul><blockquote><p>引用</p></blockquote><pre><code>const longValue = "abcdefghijklmnopqrstuvwxyz";</code></pre><table><thead><tr><th>很宽的列一</th><th>很宽的列二</th><th>很宽的列三</th></tr></thead><tbody><tr><td>内容一</td><td>内容二</td><td>内容三</td></tr></tbody></table><p><a href="https://example.com/${"long-segment/".repeat(30)}">${"long-link-text-".repeat(30)}</a></p><img src="data:image/png;base64,${png}" alt="超大图片" width="100000" height="100000">${rows}</main>`,
+    const layoutRenderer = new PdfRenderer(55_000, async (page) => {
+      const layout = await page.evaluate(() => {
+        const root = document.querySelector<HTMLElement>(".markdown-body")
+        const task = document.querySelector<HTMLInputElement>('.task-list-item input[type="checkbox"]')
+        const quote = document.querySelector<HTMLElement>("blockquote")
+        const code = document.querySelector<HTMLElement>("pre")
+        const table = document.querySelector<HTMLTableElement>("table")
+        const link = document.querySelector<HTMLAnchorElement>("a")
+        const image = document.querySelector<HTMLImageElement>("img")
+        const heading = document.querySelector<HTMLElement>("h1")
+        if (!root || !task || !quote || !code || !table || !link || !image || !heading) {
+          throw new Error("Expected print fixtures were not rendered")
+        }
+        const rootRect = root.getBoundingClientRect()
+        const imageRect = image.getBoundingClientRect()
+        const linkRect = link.getBoundingClientRect()
+        return {
+          bodyFont: getComputedStyle(document.body).fontFamily,
+          interReady: document.fonts.check("12px Inter"),
+          headingVisible: heading.getBoundingClientRect().width > 0 && heading.getBoundingClientRect().height > 0,
+          taskChecked: task.checked,
+          quoteRuleVisible: Number.parseFloat(getComputedStyle(quote).borderLeftWidth) > 0,
+          codeWraps: getComputedStyle(code).whiteSpace === "pre-wrap",
+          tableFits: table.scrollWidth <= root.clientWidth,
+          linkFits: linkRect.left >= rootRect.left - 1 && linkRect.right <= rootRect.right + 1,
+          imageFits: imageRect.width <= rootRect.width + 1 && imageRect.height <= 926,
+        }
+      })
+      expect(layout).toMatchObject({
+        interReady: true,
+        headingVisible: true,
+        taskChecked: true,
+        quoteRuleVisible: true,
+        codeWraps: true,
+        tableFits: true,
+        linkFits: true,
+        imageFits: true,
+      })
+      expect(layout.bodyFont).toContain("Inter")
     })
+    try {
+      const result = await layoutRenderer.render({
+        schemaVersion: 1,
+        title: "打印版式",
+        html: `<main class="markdown-body"><h1>验收</h1><ul class="contains-task-list"><li class="task-list-item"><input type="checkbox" checked disabled>任务</li></ul><blockquote><p>引用</p></blockquote><pre><code>const longValue = "abcdefghijklmnopqrstuvwxyz";</code></pre><table><thead><tr><th>很宽的列一</th><th>很宽的列二</th><th>很宽的列三</th></tr></thead><tbody><tr><td>内容一</td><td>内容二</td><td>内容三</td></tr></tbody></table><p><a href="https://example.com/${"long-segment/".repeat(30)}">${"long-link-text-".repeat(30)}</a></p><img src="data:image/png;base64,${png}" alt="超大图片" width="100000" height="100000">${rows}</main>`,
+      })
 
-    expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
-    expect(result.imageWarnings).toBe(0)
-    expect(countPdfPages(result.bytes)).toBeGreaterThan(1)
+      expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
+      expect(result.bytes.toString("latin1")).toContain("/FontFamily (Inter)")
+      expect(result.imageWarnings).toBe(0)
+      expect(countPdfPages(result.bytes)).toBeGreaterThan(1)
+    } finally {
+      await layoutRenderer.close()
+    }
   }, 30_000)
 
   it("freezes a GIF to a printable static frame", async () => {
     const gif = "R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
-    const result = await renderer.render({
-      schemaVersion: 1,
-      title: "GIF",
-      html: `<main class="markdown-body"><img src="data:image/gif;base64,${gif}" alt="动图"></main>`,
+    const gifRenderer = new PdfRenderer(55_000, async (page) => {
+      const image = page.locator("img")
+      expect(await image.getAttribute("src")).toMatch(/^data:image\/png;base64,/u)
+      expect(await image.evaluate((element) => {
+        const renderedImage = element as HTMLImageElement
+        return { width: renderedImage.naturalWidth, height: renderedImage.naturalHeight }
+      }))
+        .toEqual({ width: 1, height: 1 })
     })
+    try {
+      const result = await gifRenderer.render({
+        schemaVersion: 1,
+        title: "GIF",
+        html: `<main class="markdown-body"><img src="data:image/gif;base64,${gif}" alt="动图"></main>`,
+      })
 
-    expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
-    expect(result.imageWarnings).toBe(0)
+      expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
+      expect(result.imageWarnings).toBe(0)
+    } finally {
+      await gifRenderer.close()
+    }
   }, 30_000)
 
   it("replaces an undecodable image with a visible warning", async () => {

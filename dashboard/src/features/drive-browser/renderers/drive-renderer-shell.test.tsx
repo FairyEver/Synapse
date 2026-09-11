@@ -6,7 +6,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { toast } from 'sonner'
-import { DrivePreviewToolbarItemView } from './drive-preview-header'
+import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
+import { DrivePreviewHeader, DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererMount } from './drive-renderer-shell'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -115,6 +116,7 @@ vi.mock('sonner', () => ({
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
+const originalMatchMedia = window.matchMedia
 
 afterEach(() => {
   if (root) act(() => root?.unmount())
@@ -123,6 +125,7 @@ afterEach(() => {
   host = null
   document.body.innerHTML = ''
   Reflect.deleteProperty(navigator, 'clipboard')
+  Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: originalMatchMedia })
   vi.clearAllMocks()
 })
 
@@ -340,6 +343,64 @@ describe('DriveRendererShell', () => {
     expect(menuItemTexts()).toEqual(['下载', '导出为 PDF', '在云盘中查看', '历史版本'])
   })
 
+  it('closes the overflow menu after PDF export starts and exposes the busy state', async () => {
+    const onExport = vi.fn(async () => undefined)
+    const snapshot = markdownSnapshot()
+    renderPreviewHeader(snapshot, { exporting: false, disabledReason: null, onExport })
+
+    await click(buttonWithLabel('更多操作'))
+    await click(getMenuItem('导出为 PDF'))
+
+    expect(onExport).toHaveBeenCalledOnce()
+    expect(menuItemTexts()).toEqual([])
+
+    rerenderPreviewHeader(snapshot, { exporting: true, disabledReason: null, onExport })
+    await click(buttonWithLabel('更多操作'))
+    const busyItem = getMenuItem('正在导出')
+    expect(busyItem.getAttribute('aria-disabled')).toBe('true')
+    await click(busyItem)
+    expect(onExport).toHaveBeenCalledOnce()
+  })
+
+  it('keeps PDF export in the compact overflow menu', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    const snapshot = markdownSnapshot()
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    act(() => {
+      root?.render(
+        <FilePreviewLayout>
+          <DrivePreviewHeader
+            snapshot={snapshot}
+            rendererItems={[]}
+            rendererOptions={[]}
+            selectedRendererId='markdown'
+            onRendererChange={vi.fn()}
+            onOpenVersions={vi.fn()}
+            pdfExport={{ exporting: false, disabledReason: null, onExport: vi.fn(async () => undefined) }}
+          />
+        </FilePreviewLayout>
+      )
+    })
+
+    expect(document.querySelector('[data-file-preview-header="compact"]')).not.toBeNull()
+    await click(buttonWithLabel('更多操作'))
+    expect(menuItemTexts()).toContain('导出为 PDF')
+  })
+
   it('copies a shared file title and link from the shared overflow menu', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
@@ -546,6 +607,35 @@ function renderShell(props: ComponentProps<typeof DriveRendererShell>) {
 function rerenderShell(props: ComponentProps<typeof DriveRendererShell>) {
   act(() => {
     root?.render(<DriveRendererShell {...props} />)
+  })
+}
+
+function renderPreviewHeader(
+  snapshot: DriveBrowserSnapshotDto,
+  pdfExport: NonNullable<ComponentProps<typeof DrivePreviewHeader>['pdfExport']>,
+) {
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  rerenderPreviewHeader(snapshot, pdfExport)
+}
+
+function rerenderPreviewHeader(
+  snapshot: DriveBrowserSnapshotDto,
+  pdfExport: NonNullable<ComponentProps<typeof DrivePreviewHeader>['pdfExport']>,
+) {
+  act(() => {
+    root?.render(
+      <DrivePreviewHeader
+        snapshot={snapshot}
+        rendererItems={[]}
+        rendererOptions={[]}
+        selectedRendererId='markdown'
+        onRendererChange={vi.fn()}
+        onOpenVersions={vi.fn()}
+        pdfExport={pdfExport}
+      />
+    )
   })
 }
 

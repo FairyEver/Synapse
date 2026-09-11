@@ -183,6 +183,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("check_pdf_renderer_connection")
     expect(deployScript).toContain('Authorization: `Bearer ${secret}`')
     expect(deployScript).toContain('`${rendererUrl.replace(/\\/+$/, "")}/render`')
+    expect(deployScript).toContain("signal: AbortSignal.timeout(15_000)")
     expect(deployScript).toContain('!== "%PDF-"')
     expect(rendererDockerfile).toContain("mcr.microsoft.com/playwright:v1.59.1-noble")
     expect(rendererDockerfile).toContain("USER 10001:10001")
