@@ -2435,6 +2435,7 @@ describe("DriveService", () => {
 
     expect(snapshot.preview?.kind).toBe("image")
     expect(snapshot.preview?.imageUrl).toBe(`/share/${share.shareId}/download`)
+    expect(snapshot.current.shareUrl).toBe(`/share/${share.shareId}`)
     expect(storageMock.getObjectStream).not.toHaveBeenCalled()
     expect(storageMock.createDownloadUrl).not.toHaveBeenCalled()
   })
@@ -2748,6 +2749,7 @@ describe("DriveService", () => {
       name: "index.html",
       mimeType: "text/html",
     })
+    const share = await service.createShare("user-1", page.id, "https://synapse.test")
 
     const snapshot = await service.getOwnerBrowserSnapshot({
       userId: "user-1",
@@ -2757,6 +2759,7 @@ describe("DriveService", () => {
 
     expect(snapshot.context).toBe("owner")
     expect(snapshot.current.browserUrl).toBe(`/drive/items/${page.id}`)
+    expect(snapshot.current.shareUrl).toBe(`/share/${share.shareId}`)
     expect(snapshot.breadcrumbs.map((item) => item.name)).toEqual(["site", "index.html"])
     expect(snapshot.preview).toMatchObject({
       kind: "html-source",
@@ -4595,7 +4598,7 @@ function createPrismaMemory(options: { readonly staleUsageReads?: boolean } = {}
     user: users.get(item.userId) ? { email: users.get(item.userId)!.email } : null,
     shares: [...shares.values()]
       .filter((share) => share.itemId === item.id && share.enabled)
-      .map((share) => ({ id: share.id, enabled: share.enabled, expiresAt: share.expiresAt })),
+      .map((share) => ({ id: share.id, shareId: share.shareId, enabled: share.enabled, expiresAt: share.expiresAt })),
   })
   const withShareIncludes = (share: any, include: any) => {
     if (!include?.item && !include?.editors) return share

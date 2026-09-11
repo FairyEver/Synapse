@@ -31,7 +31,7 @@ When a user opens a file from Drive, the main content area should become a singl
   - Text and HTML source show the text renderer.
   - Images show the image renderer.
   - Download-only files show the download-only state and button.
-- No share, publish, rename, move, delete, or management actions are added to the reader.
+- The shared preview toolbar may copy an existing share link, but it does not create or modify shares. Publish, rename, move, delete, and other management actions are not added to the reader.
 
 ## UI Rules
 

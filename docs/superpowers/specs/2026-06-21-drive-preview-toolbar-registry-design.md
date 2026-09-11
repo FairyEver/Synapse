@@ -44,9 +44,10 @@ Right side order:
 
 1. Active renderer contributions.
 2. Download.
-3. Open in Drive or open in new window, depending on context.
-4. History versions when available.
-5. Renderer selection when more than one renderer is available.
+3. Copy share link when the current item has a share URL.
+4. Open in Drive or open in new window, depending on context.
+5. History versions when available.
+6. Renderer selection when more than one renderer is available.
 
 Renderer contributions always appear before system actions. Finder must not hard-code Code, Markdown, or MDXeditor-specific buttons.
 
@@ -114,6 +115,7 @@ The exact filenames can be adjusted during implementation, but responsibilities 
 
 - file identity view model,
 - system action view model,
+- copy-share-link text (`文件分享：` plus the filename without its final extension, `网页分享：` plus the HTML filename without its final extension, or `文件夹分享：` plus the folder name, followed by the share URL on the next line),
 - open-in-drive URL,
 - open-in-new-window URL,
 - version item id,
@@ -145,7 +147,7 @@ Renderers must not render a file-level top bar with `border-b` for save, reload,
 
 ## Data Flow
 
-The existing `DriveBrowserSnapshotDto` remains the only server data source. No server DTO or API change is required.
+`DriveBrowserSnapshotDto` remains the only server data source. Its current item exposes the available share URL, or `null` when the owner item has no active share.
 
 Flow:
 
@@ -210,8 +212,10 @@ Use floating menu mode. No persistent header.
 Add focused tests for:
 
 - non-iframe standalone Markdown files render the shared header and do not render the floating file button;
-- iframe HTML files render the floating button and do not render the shared header;
+- shared iframe HTML files render the floating button with `复制分享链接` and do not render the shared header;
 - Finder file previews and standalone file previews share the same system action labels and renderer selector behavior;
+- files and folders with a share URL show `复制分享链接`, while unshared owner items do not;
+- copying a regular file share writes `文件分享：`, copying an HTML share writes `网页分享：`, and copying a folder share writes `文件夹分享：`; file and HTML names omit the final extension, folder names stay unchanged, and all variants write the absolute share URL on the second line;
 - Code renderer registers save/reload/status actions into the shared header;
 - MDXeditor registers save/reload/status actions while preserving the MDXEditor native toolbar plugin;
 - Markdown renderer registers outline/comments/refresh actions and no longer renders its own sticky file header;

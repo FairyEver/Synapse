@@ -685,6 +685,7 @@ export interface DriveBrowserItemDto {
   readonly previewKind: DriveBrowserPreviewKind
   readonly browserUrl: string
   readonly downloadUrl: string | null
+  readonly shareUrl?: string | null
 }
 
 export interface DriveBrowserBreadcrumbDto {

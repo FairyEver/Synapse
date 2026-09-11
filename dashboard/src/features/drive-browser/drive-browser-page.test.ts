@@ -24,6 +24,7 @@ import {
   shouldSuppressDriveFloatingMenuOpen,
 } from './renderers/drive-renderer-shell'
 import {
+  buildDriveShareClipboardText,
   getDrivePreviewFileIdentity,
   getDrivePreviewSystemActions,
   getDrivePreviewSystemMenuSections,
@@ -285,6 +286,27 @@ describe('drive browser view model', () => {
     ])
     expect(floatingHtml).toContain('文件操作')
     expect(floatingHtml).not.toContain('data-drive-preview-header')
+  })
+
+  it('formats shared file clipboard text as a title and absolute link on two lines', () => {
+    expect(buildDriveShareClipboardText(
+      '版本号规则.md',
+      'file',
+      '/share/shr_4M4uLPpYGZ0SCVIq8c824V-M8BLrsIpb',
+      'https://synapse.d2.pub',
+    )).toBe('文件分享：版本号规则\nhttps://synapse.d2.pub/share/shr_4M4uLPpYGZ0SCVIq8c824V-M8BLrsIpb')
+    expect(buildDriveShareClipboardText(
+      '产品资料.v1',
+      'folder',
+      '/share/shr_folder',
+      'https://synapse.d2.pub',
+    )).toBe('文件夹分享：产品资料.v1\nhttps://synapse.d2.pub/share/shr_folder')
+    expect(buildDriveShareClipboardText(
+      '产品介绍.html',
+      'webpage',
+      '/share/shr_webpage',
+      'https://synapse.d2.pub',
+    )).toBe('网页分享：产品介绍\nhttps://synapse.d2.pub/share/shr_webpage')
   })
 
   it('renders compact login status in shared preview headers', () => {
@@ -792,6 +814,7 @@ describe('drive browser view model', () => {
         type: 'folder',
         browserUrl: '/drive/items/folder',
         downloadUrl: '/drive/items/folder/download',
+        shareUrl: '/share/shr_folder',
       },
       children: [
         { ...baseCurrent(), id: 'file', name: 'notes.md', browserUrl: '/drive/items/file' },
@@ -803,6 +826,7 @@ describe('drive browser view model', () => {
 
     expect(html).toContain('data-drive-finder="full"')
     expect(html).toContain('下载整个目录')
+    expect(html).toContain('复制分享链接')
     expect(html).toContain('notes.md')
     expect(html).not.toContain('data-drive-renderer-region="true"')
   })
@@ -928,15 +952,24 @@ describe('drive browser view model', () => {
 
   it('uses floating chrome for iframe html previews', () => {
     const snapshot = createSnapshot({
+      context: 'share',
       surface: 'standalone',
-      current: { ...baseCurrent(), name: 'page.html', previewKind: 'html-source' },
-      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/drive/items/file/render' },
+      current: {
+        ...baseCurrent(),
+        name: 'page.html',
+        previewKind: 'html-source',
+        browserUrl: '/share/shr_webpage',
+        shareUrl: '/share/shr_webpage',
+      },
+      preview: { ...basePreview(), kind: 'html-source', visitUrl: '/share/shr_webpage/render' },
     })
 
     const html = renderToStaticMarkup(createElement(DriveSingleFileReaderView, { snapshot }))
 
     expect(html).toContain('文件操作')
     expect(html).not.toContain('data-drive-preview-header="true"')
+    expect(getDrivePreviewSystemMenuSections(snapshot, 'iframe').flatMap((section) => section.items.map((item) => item.id)))
+      .toContain('copy-share-link')
   })
 
   it('does not offer opening a standalone file reader in another new window', () => {

@@ -17,6 +17,7 @@ import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { trackDriveEvent } from '../shared/drive-telemetry'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemMenuSections } from './drive-preview-actions'
 import { DriveRendererOptionMenuLabel } from './drive-preview-header'
+import { copyDrivePreviewShareLink } from './drive-preview-share-clipboard'
 import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -233,6 +234,14 @@ export function DrivePreviewFloatingMenu({
                         <action.icon data-icon='inline-start' />
                         {action.label}
                       </a>
+                    </DropdownMenuItem>
+                  )
+                }
+                if (action.kind === 'copy-share-link') {
+                  return (
+                    <DropdownMenuItem data-drive-telemetry-event='web.drive.preview.copy-share-link' key={action.id} onSelect={() => { void copyDrivePreviewShareLink(action) }}>
+                      <action.icon data-icon='inline-start' />
+                      {action.label}
                     </DropdownMenuItem>
                   )
                 }

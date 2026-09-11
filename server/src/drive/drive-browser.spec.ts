@@ -107,6 +107,21 @@ describe("drive browser helpers", () => {
 
     expect(item.browserUrl).toBe("/drive/items/child-1")
     expect(item.downloadUrl).toBe("/drive/items/child-1/download")
+    expect(item.shareUrl).toBeNull()
+  })
+
+  it("adds active owner and current share urls to browser items", () => {
+    const ownerItem = buildDriveBrowserItemDto({
+      item: { ...baseItem, id: "child-1", shareId: "shr-owner" },
+      route: { context: "owner", surface: "standalone" },
+    })
+    const sharedItem = buildDriveBrowserItemDto({
+      item: { ...baseItem, id: "child-1" },
+      route: { context: "share", surface: "standalone", shareId: "shr-folder", rootItemId: "root-1" },
+    })
+
+    expect(ownerItem.shareUrl).toBe("/share/shr-owner")
+    expect(sharedItem.shareUrl).toBe("/share/shr-folder/items/child-1")
   })
 
   it("builds console folder browser urls", () => {

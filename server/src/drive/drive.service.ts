@@ -283,6 +283,7 @@ const driveItemWithShares = {
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
+      shareId: true,
       enabled: true,
       passwordEnabled: true,
       expiresAt: true,
@@ -4336,6 +4337,9 @@ function toDrivePublicShareValue(share: {
 
 function toDriveBrowserSourceItem(item: DriveItemRecord): DriveBrowserSourceItem {
   const dto = toDriveItemDto(item)
+  const activeShare = item.shares?.find((share) => (
+    share.enabled && (!share.expiresAt || share.expiresAt > new Date())
+  ))
   return {
     id: dto.id,
     name: dto.name,
@@ -4343,6 +4347,7 @@ function toDriveBrowserSourceItem(item: DriveItemRecord): DriveBrowserSourceItem
     size: dto.size,
     mimeType: dto.mimeType,
     updatedAt: dto.updatedAt,
+    shareId: activeShare?.shareId ?? null,
   }
 }
 

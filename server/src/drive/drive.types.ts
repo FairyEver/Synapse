@@ -150,6 +150,7 @@ export type DriveItemRecord = {
   readonly updatedAt: Date
   readonly shares?: readonly {
     readonly id?: string
+    readonly shareId?: string
     readonly enabled: boolean
     readonly passwordEnabled?: boolean
     readonly expiresAt?: Date | null

@@ -4,13 +4,14 @@ import {
   buildOwnerDriveBrowserUrl,
   type DriveBrowserSnapshotDto,
 } from '@synapse/shared'
-import { Download, ExternalLink, History, ListFilter, type LucideIcon } from 'lucide-react'
+import { Copy, Download, ExternalLink, History, ListFilter, type LucideIcon } from 'lucide-react'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from '../shared/drive-format'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import { getDriveRendererOptions, type DriveRendererId, type DriveRendererOption } from './drive-renderer-registry'
 
 export type DrivePreviewSystemActionId =
   | 'download'
+  | 'copy-share-link'
   | 'open-in-drive'
   | 'open-new-window'
   | 'versions'
@@ -23,9 +24,11 @@ export type DrivePreviewFileIdentity = {
   readonly updatedAt: string
 }
 
+export type DrivePreviewShareKind = 'file' | 'folder' | 'webpage'
+
 export type DrivePreviewLinkAction = {
   readonly kind: 'link'
-  readonly id: Exclude<DrivePreviewSystemActionId, 'versions' | 'renderer-select'>
+  readonly id: Exclude<DrivePreviewSystemActionId, 'copy-share-link' | 'versions' | 'renderer-select'>
   readonly label: string
   readonly href: string
   readonly external?: boolean
@@ -40,6 +43,16 @@ export type DrivePreviewVersionsAction = {
   readonly icon: LucideIcon
 }
 
+export type DrivePreviewCopyShareLinkAction = {
+  readonly kind: 'copy-share-link'
+  readonly id: 'copy-share-link'
+  readonly label: string
+  readonly itemName: string
+  readonly shareKind: DrivePreviewShareKind
+  readonly shareUrl: string
+  readonly icon: LucideIcon
+}
+
 export type DrivePreviewRendererSelectAction = {
   readonly kind: 'renderer-select'
   readonly id: 'renderer-select'
@@ -51,6 +64,7 @@ export type DrivePreviewRendererSelectAction = {
 
 export type DrivePreviewSystemAction =
   | DrivePreviewLinkAction
+  | DrivePreviewCopyShareLinkAction
   | DrivePreviewVersionsAction
   | DrivePreviewRendererSelectAction
 
@@ -83,6 +97,9 @@ export function getDrivePreviewSystemActions(
       icon: Download,
     })
   }
+
+  const copyShareLinkAction = getDriveCopyShareLinkAction(snapshot)
+  if (copyShareLinkAction) actions.push(copyShareLinkAction)
 
   const driveBrowserUrl = getDrivePreviewDriveBrowserUrl(snapshot)
   if (driveBrowserUrl) {
@@ -130,6 +147,33 @@ export function getDrivePreviewSystemActions(
     })
   }
   return actions
+}
+
+export function getDriveCopyShareLinkAction(snapshot: DriveBrowserSnapshotDto): DrivePreviewCopyShareLinkAction | null {
+  if (!snapshot.current.shareUrl) return null
+  return {
+    kind: 'copy-share-link',
+    id: 'copy-share-link',
+    label: '复制分享链接',
+    itemName: snapshot.current.name,
+    shareKind: snapshot.current.type === 'folder'
+      ? 'folder'
+      : snapshot.current.previewKind === 'html-source' ? 'webpage' : 'file',
+    shareUrl: snapshot.current.shareUrl,
+    icon: Copy,
+  }
+}
+
+export function buildDriveShareClipboardText(
+  itemName: string,
+  shareKind: DrivePreviewShareKind,
+  shareUrl: string,
+  origin: string,
+): string {
+  const extensionIndex = itemName.lastIndexOf('.')
+  const displayName = shareKind !== 'folder' && extensionIndex > 0 ? itemName.slice(0, extensionIndex) : itemName
+  const label = shareKind === 'folder' ? '文件夹分享' : shareKind === 'webpage' ? '网页分享' : '文件分享'
+  return `${label}：${displayName}\n${new URL(shareUrl, origin).href}`
 }
 
 export function getDrivePreviewSystemMenuSections(

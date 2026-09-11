@@ -27,6 +27,7 @@ export type DriveBrowserSourceItem = {
   readonly size: string
   readonly mimeType: string | null
   readonly updatedAt: string
+  readonly shareId?: string | null
 }
 
 export type DriveBrowserRouteContext =
@@ -60,6 +61,7 @@ export function buildDriveBrowserItemDto(input: {
   readonly route: DriveBrowserRouteContext
 }): DriveBrowserItemDto {
   const previewKind = resolveDriveBrowserPreviewKind(input.item)
+  const browserUrl = buildBrowserUrl(input.route, input.item)
   return {
     id: input.item.id,
     name: input.item.name,
@@ -68,8 +70,11 @@ export function buildDriveBrowserItemDto(input: {
     mimeType: input.item.mimeType,
     updatedAt: input.item.updatedAt,
     previewKind,
-    browserUrl: buildBrowserUrl(input.route, input.item),
+    browserUrl,
     downloadUrl: buildDownloadUrl(input.route, input.item),
+    shareUrl: input.route.context === "share"
+      ? browserUrl
+      : input.item.shareId ? buildShareDriveBrowserUrl(input.item.shareId) : null,
   }
 }
 
@@ -84,6 +89,7 @@ export function buildConsoleDriveRootItemDto(updatedAt = new Date(0)): DriveBrow
     previewKind: "download-only",
     browserUrl: buildConsoleDriveRootUrl(),
     downloadUrl: null,
+    shareUrl: null,
   }
 }
 

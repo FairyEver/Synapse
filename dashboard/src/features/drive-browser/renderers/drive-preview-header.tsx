@@ -25,6 +25,7 @@ import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemActions } from './drive-preview-actions'
 import type { DrivePreviewSystemAction } from './drive-preview-actions'
+import { copyDrivePreviewShareLink } from './drive-preview-share-clipboard'
 import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
 
@@ -252,6 +253,14 @@ function DrivePreviewHeaderAction({
       </Button>
     )
   }
+  if (action.kind === 'copy-share-link') {
+    return (
+      <Button data-drive-telemetry-event='web.drive.preview.copy-share-link' type='button' variant='outline' size='sm' onClick={() => { void copyDrivePreviewShareLink(action) }}>
+        <action.icon data-icon='inline-start' />
+        {action.label}
+      </Button>
+    )
+  }
   if (action.kind === 'versions') {
     return (
       <Button data-drive-telemetry-event='web.drive.preview.versions' type='button' variant='outline' size='sm' onClick={() => onOpenVersions(action.itemId)}>
@@ -311,6 +320,14 @@ function DrivePreviewHeaderMenuAction({
           <action.icon data-icon='inline-start' />
           {action.label}
         </a>
+      </DropdownMenuItem>
+    )
+  }
+  if (action.kind === 'copy-share-link') {
+    return (
+      <DropdownMenuItem data-drive-telemetry-event='web.drive.preview.copy-share-link' onSelect={() => { void copyDrivePreviewShareLink(action) }}>
+        <action.icon data-icon='inline-start' />
+        {action.label}
       </DropdownMenuItem>
     )
   }

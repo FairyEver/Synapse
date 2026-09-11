@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import { toast } from 'sonner'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
 import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererMount } from './drive-renderer-shell'
 
@@ -108,6 +109,10 @@ vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
 }))
 
+vi.mock('sonner', () => ({
+  toast: vi.fn(),
+}))
+
 let root: Root | null = null
 let host: HTMLDivElement | null = null
 
@@ -117,6 +122,8 @@ afterEach(() => {
   root = null
   host = null
   document.body.innerHTML = ''
+  Reflect.deleteProperty(navigator, 'clipboard')
+  vi.clearAllMocks()
 })
 
 describe('DriveRendererShell', () => {
@@ -331,6 +338,72 @@ describe('DriveRendererShell', () => {
     await click(buttonWithLabel('更多操作'))
 
     expect(menuItemTexts()).toEqual(['下载', '在云盘中查看', '历史版本'])
+  })
+
+  it('copies a shared file title and link from the shared overflow menu', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderShell({
+      snapshot: baseSnapshot({
+        current: {
+          ...baseSnapshot().current,
+          name: '版本号规则.md',
+          shareUrl: 'https://synapse.d2.pub/share/shr_1',
+        },
+      }),
+    })
+
+    await click(buttonWithLabel('更多操作'))
+    expect(menuItemTexts()).toContain('复制分享链接')
+
+    await click(getMenuItem('复制分享链接'))
+
+    expect(writeText).toHaveBeenCalledWith('文件分享：版本号规则\nhttps://synapse.d2.pub/share/shr_1')
+    expect(toast).toHaveBeenCalledWith('已复制分享链接')
+  })
+
+  it('copies a shared HTML page title and link from the floating menu', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderShell({
+      snapshot: baseSnapshot({
+        context: 'share',
+        current: {
+          ...baseSnapshot().current,
+          name: '产品介绍.html',
+          mimeType: 'text/html',
+          previewKind: 'html-source',
+          browserUrl: '/share/shr_webpage',
+          shareUrl: '/share/shr_webpage',
+        },
+        preview: {
+          kind: 'html-source',
+          text: '<html></html>',
+          html: null,
+          outline: null,
+          truncated: false,
+          imageUrl: null,
+          visitUrl: '/share/shr_webpage/render',
+          relativeImages: [],
+        },
+      }),
+      body: true,
+      rendererId: 'iframe',
+    })
+
+    const trigger = buttonWithLabel('文件操作')
+    trigger.setPointerCapture = vi.fn()
+    trigger.releasePointerCapture = vi.fn()
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+      trigger.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, cancelable: true, button: 0 }))
+    })
+    expect(menuItemTexts()).toContain('复制分享链接')
+
+    await click(getMenuItem('复制分享链接'))
+
+    expect(writeText).toHaveBeenCalledWith('网页分享：产品介绍\nhttp://localhost:3000/share/shr_webpage')
+    expect(toast).toHaveBeenCalledWith('已复制分享链接')
   })
 
   it('shows the edit unavailable reason in the shared header', () => {
@@ -618,4 +691,11 @@ function buttonWithText(text: string): HTMLButtonElement {
 function menuItemTexts(): string[] {
   return Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
     .map((item) => item.textContent?.trim() ?? '')
+}
+
+function getMenuItem(text: string): HTMLElement {
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    .find((candidate) => candidate.textContent?.includes(text))
+  if (!item) throw new Error(`menu item not found: ${text}`)
+  return item
 }

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getDriveCopyShareLinkAction } from '../renderers/drive-preview-actions'
+import { copyDrivePreviewShareLink } from '../renderers/drive-preview-share-clipboard'
 import { DriveRendererShell } from '../renderers/drive-renderer-shell'
 import type { DriveRendererEditContext } from '../renderers/drive-renderer-shell'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
@@ -83,6 +85,7 @@ function DriveFinderToolbar({
   readonly onNavigate?: DriveBrowserNavigate
 }) {
   const actions = getDriveFinderActions(snapshot)
+  const copyShareLinkAction = getDriveCopyShareLinkAction(snapshot)
   return (
     <div className='flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between'>
       <DriveFinderBreadcrumbs snapshot={snapshot} onNavigate={onNavigate} />
@@ -94,6 +97,18 @@ function DriveFinderToolbar({
               <Download data-icon='inline-start' />
               下载整个目录
             </a>
+          </Button>
+        ) : null}
+        {copyShareLinkAction ? (
+          <Button
+            data-drive-telemetry-event='web.drive.preview.copy-share-link'
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={() => { void copyDrivePreviewShareLink(copyShareLinkAction) }}
+          >
+            <copyShareLinkAction.icon data-icon='inline-start' />
+            {copyShareLinkAction.label}
           </Button>
         ) : null}
       </div>
