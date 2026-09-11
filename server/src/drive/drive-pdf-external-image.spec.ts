@@ -25,7 +25,10 @@ describe("Drive PDF external image address policy", () => {
     "::1",
     "fe80::1",
     "fc00::1",
+    "fec0::1",
+    "4000::1",
     "64:ff9b:1::1",
+    "64:ff9b::7f00:1",
     "100::1",
     "100:0:0:1::1",
     "2001:5::1",
@@ -37,7 +40,14 @@ describe("Drive PDF external image address policy", () => {
     expect(isPublicAddress(address)).toBe(false)
   })
 
-  it.each(["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"])("accepts public address %s", (address) => {
+  it.each([
+    "1.1.1.1",
+    "8.8.8.8",
+    "192.0.0.9",
+    "192.0.0.10",
+    "2606:4700:4700::1111",
+    "64:ff9b::808:808",
+  ])("accepts public address %s", (address) => {
     expect(isPublicAddress(address)).toBe(true)
   })
 

@@ -61,6 +61,29 @@ describe("Drive Markdown PDF export controllers", () => {
     expect(response.send).toHaveBeenCalledWith(pdf.bytes)
   })
 
+  it("writes a valid download header for a maximum-length Unicode filename", async () => {
+    const drive = { resolveOwnerMarkdownPdfSource: vi.fn(async () => source) }
+    const fileName = `${"a".repeat(179)}😀.pdf`
+    const exporter = { export: vi.fn(async () => ({ ...pdf, fileName })) }
+    const controller = new DriveUserController(
+      drive as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      exporter as never,
+    )
+    const response = createResponse()
+
+    await controller.exportOwnerItemPdf(
+      "item-1",
+      createRequest({ user: { id: "user-1" } }) as never,
+      response as never,
+    )
+
+    expect(response.headers["Content-Disposition"]).toContain("%F0%9F%98%80.pdf")
+  })
+
   it("routes a shared child through share access resolution", async () => {
     const drive = { resolveShareMarkdownPdfSource: vi.fn(async () => source) }
     const exporter = { export: vi.fn(async (input: { signal: AbortSignal; resolveSource: (signal: AbortSignal) => Promise<typeof source> }) => {

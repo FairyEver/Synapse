@@ -288,6 +288,20 @@ describe("DriveMarkdownPdfExportService", () => {
 
     expect(result.fileName).toBe("report.pdf")
   })
+
+  it("does not split a Unicode surrogate pair when truncating the PDF filename", async () => {
+    configureRendererEnv()
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(Buffer.from("%PDF-test"), { status: 200 })))
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+
+    const result = await service.export({
+      rateLimitKey: "user:unicode-name",
+      resolveSource: async () => emptySource(`${"a".repeat(179)}😀.md`),
+    })
+
+    expect(result.fileName).toBe(`${"a".repeat(179)}😀.pdf`)
+    expect(() => encodeURIComponent(result.fileName)).not.toThrow()
+  })
 })
 
 function configureRendererEnv(): void {

@@ -11,6 +11,13 @@ const blockedUnicastIpv4Ranges = [
   ipaddr.IPv4.parseCIDR("168.63.129.16/32"),
   ipaddr.IPv4.parseCIDR("198.18.0.0/15"),
 ]
+const globallyReachableIpv4SpecialRanges = [
+  ipaddr.IPv4.parseCIDR("192.0.0.9/32"),
+  ipaddr.IPv4.parseCIDR("192.0.0.10/32"),
+  ipaddr.IPv4.parseCIDR("192.31.196.0/24"),
+  ipaddr.IPv4.parseCIDR("192.52.193.0/24"),
+  ipaddr.IPv4.parseCIDR("192.175.48.0/24"),
+]
 const blockedUnicastIpv6Ranges = [
   ipaddr.IPv6.parseCIDR("64:ff9b:1::/48"),
   ipaddr.IPv6.parseCIDR("100::/64"),
@@ -28,6 +35,8 @@ const globallyReachableIpv6SpecialRanges = [
   ipaddr.IPv6.parseCIDR("2001:20::/28"),
   ipaddr.IPv6.parseCIDR("2001:30::/28"),
 ]
+const ipv6GlobalUnicastRange = ipaddr.IPv6.parseCIDR("2000::/3")
+const wellKnownNat64Range = ipaddr.IPv6.parseCIDR("64:ff9b::/96")
 
 export type ExternalImageFetchOptions = {
   readonly maxBytes: number
@@ -96,11 +105,16 @@ async function resolvePublicAddress(
 export function isPublicAddress(address: string): boolean {
   try {
     const parsed = ipaddr.process(address)
-    if (parsed.range() !== "unicast") return false
     if (parsed instanceof ipaddr.IPv4) {
+      if (globallyReachableIpv4SpecialRanges.some((range) => parsed.match(range))) return true
+      if (parsed.range() !== "unicast") return false
       return !blockedUnicastIpv4Ranges.some((range) => parsed.match(range))
     }
+    if (parsed.match(wellKnownNat64Range)) {
+      return isPublicAddress(parsed.toByteArray().slice(-4).join("."))
+    }
     if (globallyReachableIpv6SpecialRanges.some((range) => parsed.match(range))) return true
+    if (!parsed.match(ipv6GlobalUnicastRange) || parsed.range() !== "unicast") return false
     return !blockedUnicastIpv6Ranges.some((range) => parsed.match(range))
   } catch {
     return false

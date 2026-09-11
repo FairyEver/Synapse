@@ -361,7 +361,7 @@ function safeFileStem(name: string): string {
     .replace(/[\u0000-\u001f\u007f/\\]/gu, "_")
     .replace(/[. ]+$/gu, "")
     .trim()
-  return (normalized || "文档").slice(0, 180)
+  return Array.from(normalized || "文档").slice(0, 180).join("")
 }
 
 function parseWarningCount(value: string | null): number {
