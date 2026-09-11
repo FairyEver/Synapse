@@ -13,6 +13,8 @@ import { loadEnv } from "../config/env"
 import type { DriveMarkdownRenderOptions } from "./drive-markdown-renderer"
 import {
   DriveMarkdownPdfRenderCancelledError,
+  DriveMarkdownPdfRenderQueueFullError,
+  DriveMarkdownPdfRenderResourceLimitError,
   DriveMarkdownPdfRenderTimeoutError,
   renderDriveMarkdownPdfInWorker,
 } from "./drive-markdown-pdf-render-worker"
@@ -84,6 +86,16 @@ export class DriveMarkdownPdfExportService {
     if (images.length > DRIVE_PDF_MAX_IMAGES) {
       throw new PayloadTooLargeException(`Markdown 图片超过 ${DRIVE_PDF_MAX_IMAGES} 个，无法导出。`)
     }
+    const authorizationImages = source.relativeImageAuthorizationText === undefined
+      ? initial.projection.images ?? []
+      : (await this.renderMarkdown(source.relativeImageAuthorizationText, {
+          allowStandaloneRawImages: source.allowStandaloneRawImages,
+        }, startedAt, signal)).projection.images ?? []
+    const relativeImages = source.resolveRelativeImages
+      ? await source.resolveRelativeImages(initial.projection.images ?? [], authorizationImages, signal)
+      : source.relativeImages
+    this.assertDeadline(startedAt)
+    const sourceWithRelativeImages = { ...source, relativeImages }
 
     const resourceTokens = new Map<string, string | null>()
     const resourceData = new Map<string, string>()
@@ -98,7 +110,7 @@ export class DriveMarkdownPdfExportService {
       assertExportActive(signal)
       this.assertDeadline(startedAt)
       try {
-        const resolved = await this.resolveImage(image, source, remainingTime(startedAt), signal, consumeImageBytes)
+        const resolved = await this.resolveImage(image, sourceWithRelativeImages, remainingTime(startedAt), signal, consumeImageBytes)
         this.assertDeadline(startedAt)
         const token = `image-${index + 1}`
         resourceTokens.set(image.resourceKey, token)
@@ -200,10 +212,17 @@ export class DriveMarkdownPdfExportService {
       if (error instanceof DriveMarkdownPdfRenderTimeoutError) {
         throw new GatewayTimeoutException("PDF 导出超时。")
       }
+      if (error instanceof DriveMarkdownPdfRenderQueueFullError) {
+        throw new HttpException("PDF 导出请求较多，请稍后重试。", HttpStatus.TOO_MANY_REQUESTS)
+      }
+      if (error instanceof DriveMarkdownPdfRenderResourceLimitError) {
+        throw new PayloadTooLargeException("Markdown 结构过于复杂，无法导出。")
+      }
       if (error instanceof DriveMarkdownPdfRenderCancelledError) {
         assertExportActive(signal)
       }
-      throw error
+      if (error instanceof HttpException) throw error
+      throw new BadGatewayException("PDF 导出服务暂不可用。")
     }
   }
 

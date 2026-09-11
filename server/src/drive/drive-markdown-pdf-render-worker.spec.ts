@@ -1,7 +1,9 @@
-import { Worker } from "node:worker_threads"
+import { spawn } from "node:child_process"
 import { describe, expect, it, vi } from "vitest"
 import {
   DriveMarkdownPdfRenderCancelledError,
+  DriveMarkdownPdfRenderQueueFullError,
+  DriveMarkdownPdfRenderResourceLimitError,
   DriveMarkdownPdfRenderTimeoutError,
   renderDriveMarkdownPdfInWorker,
 } from "./drive-markdown-pdf-render-worker"
@@ -16,7 +18,7 @@ describe("Drive Markdown PDF render worker", () => {
         "paragraph\n\n".repeat(50_000),
         {},
         { signal: controller.signal, timeoutMs: 40 },
-        () => new Worker("while (true) {}", { eval: true }),
+        () => createTestWorker("while (true) {}"),
       )).rejects.toBeInstanceOf(DriveMarkdownPdfRenderTimeoutError)
       expect(heartbeat).toHaveBeenCalled()
     } finally {
@@ -30,11 +32,61 @@ describe("Drive Markdown PDF render worker", () => {
       "# heading",
       {},
       { signal: controller.signal, timeoutMs: 5_000 },
-      () => new Worker("setInterval(() => undefined, 1000)", { eval: true }),
+      () => createTestWorker("setInterval(() => undefined, 1000)"),
     )
 
     controller.abort()
 
     await expect(operation).rejects.toBeInstanceOf(DriveMarkdownPdfRenderCancelledError)
   })
+
+  it("bounds active workers and rejects work beyond the shared queue", async () => {
+    const controllers = Array.from({ length: 11 }, () => new AbortController())
+    const createWorker = vi.fn(() => createTestWorker("setInterval(() => undefined, 1000)"))
+    const operations = controllers.slice(0, 10).map((controller) => renderDriveMarkdownPdfInWorker(
+      "# heading",
+      {},
+      { signal: controller.signal, timeoutMs: 5_000 },
+      createWorker,
+    ))
+
+    await expect(renderDriveMarkdownPdfInWorker(
+      "# overflow",
+      {},
+      { signal: controllers[10].signal, timeoutMs: 5_000 },
+      createWorker,
+    )).rejects.toBeInstanceOf(DriveMarkdownPdfRenderQueueFullError)
+    expect(createWorker).toHaveBeenCalledTimes(2)
+
+    for (const controller of controllers) controller.abort()
+    await Promise.allSettled(operations)
+  })
+
+  it("contains worker heap exhaustion without terminating the API process", async () => {
+    const controller = new AbortController()
+    await expect(renderDriveMarkdownPdfInWorker(
+      "[".repeat(10 * 1024 * 1024),
+      {},
+      { signal: controller.signal, timeoutMs: 5_000 },
+      () => createTestWorker(
+        "const values = []; while (true) values.push(new Array(100000).fill('x'))",
+        ["--max-old-space-size=16"],
+      ),
+    )).rejects.toBeInstanceOf(DriveMarkdownPdfRenderResourceLimitError)
+  })
+
+  it("rejects an oversized worker result before cloning it into the API", async () => {
+    await expect(renderDriveMarkdownPdfInWorker(
+      "# heading",
+      {},
+      { signal: new AbortController().signal, timeoutMs: 5_000 },
+      () => createTestWorker("process.once('message', () => process.send({ ok: false, code: 'RESOURCE_LIMIT', error: 'too large' }))"),
+    )).rejects.toBeInstanceOf(DriveMarkdownPdfRenderResourceLimitError)
+  })
 })
+
+function createTestWorker(script: string, execArgv: readonly string[] = []) {
+  return spawn(process.execPath, [...execArgv, "-e", script], {
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
+  })
+}

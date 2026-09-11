@@ -47,6 +47,7 @@ import {
   type DriveTrashListPageDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
+  type DriveMarkdownProjectionImageDto,
   type DriveMarkdownProjectionDto,
   type DriveCollaborationJoinContext,
   type DriveBrowserCollaborationCapabilityDto,
@@ -76,6 +77,7 @@ import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.s
 import {
   extractDriveMarkdownRelativeImages,
   isSafeDriveMarkdownRasterName,
+  parseDriveMarkdownRelativeImageSrc,
   type DriveMarkdownRelativeImageReference,
 } from "./drive-markdown-relative-images"
 import {
@@ -246,6 +248,16 @@ export type DriveMarkdownPdfSource = {
     readonly size: bigint
     readonly mimeType: string | null
   }>
+  readonly resolveRelativeImages?: (
+    images: readonly DriveMarkdownProjectionImageDto[],
+    authorizationImages: readonly DriveMarkdownProjectionImageDto[],
+    signal: AbortSignal,
+  ) => Promise<ReadonlyMap<string, {
+    readonly storageKey: string
+    readonly size: bigint
+    readonly mimeType: string | null
+  }>>
+  readonly relativeImageAuthorizationText?: string
 }
 
 type PreparedUploadRecord = {
@@ -3265,28 +3277,68 @@ export class DriveService implements OnApplicationBootstrap {
       ? { text: liveDocument.sourceText, truncated: Buffer.byteLength(liveDocument.sourceText, "utf8") > maxBytes }
       : await readStreamTextPrefix((await this.storage.getObjectStream({ key: storageKey })).stream, maxBytes, signal)
     if (source.truncated) throw new PayloadTooLargeException("Markdown 文件超过 10 MiB，无法导出。")
+    const storedAuthorizationSource = liveDocument && route.context === "share" && route.rootItemId === current.id
+      ? await readStreamTextPrefix((await this.storage.getObjectStream({ key: storageKey })).stream, maxBytes, signal)
+      : null
+    if (storedAuthorizationSource?.truncated) {
+      throw new PayloadTooLargeException("Markdown 文件超过 10 MiB，无法导出。")
+    }
 
     const allowStandaloneRawImages = isPlainDriveMarkdownItem(item)
-    const resolvedImages = await this.resolveDriveMarkdownRelativeImages(source.text, current, route, {
-      unique: true,
-      maxUnique: maxImages,
-      includeStandaloneRawImages: allowStandaloneRawImages,
-    })
-    const relativeImages = new Map<string, { storageKey: string; size: bigint; mimeType: string | null }>()
-    for (const { reference, item: image } of resolvedImages) {
-      if (!image?.storageKey) continue
-      relativeImages.set(driveMarkdownImageResourceKey(reference.src), {
-        storageKey: image.storageKey,
-        size: image.size,
-        mimeType: image.mimeType,
-      })
-    }
     return {
       itemId: current.id,
       name: current.name,
       sourceText: source.text,
       allowStandaloneRawImages,
-      relativeImages,
+      relativeImages: new Map(),
+      ...(storedAuthorizationSource ? { relativeImageAuthorizationText: storedAuthorizationSource.text } : {}),
+      resolveRelativeImages: async (images, authorizationImages, resolveSignal) => {
+        const references = new Map<string, DriveMarkdownRelativeImageReference>()
+        for (const image of images) {
+          if (!image.resourceKey.startsWith("relative:")) continue
+          const reference = parseDriveMarkdownRelativeImageSrc(image.source)
+          if (reference && !references.has(image.resourceKey)) references.set(image.resourceKey, reference)
+        }
+        if (references.size > maxImages) {
+          throw new PayloadTooLargeException(`Markdown 图片超过 ${maxImages} 个，无法导出。`)
+        }
+        let shareFileImageIds: ReadonlySet<string> | undefined
+        if (route.context === "share" && route.rootItemId === current.id) {
+          const authorizationReferences = new Map<string, DriveMarkdownRelativeImageReference>()
+          for (const image of authorizationImages) {
+            if (!image.resourceKey.startsWith("relative:")) continue
+            if (!references.has(image.resourceKey)) continue
+            const reference = parseDriveMarkdownRelativeImageSrc(image.source)
+            if (reference && !authorizationReferences.has(image.resourceKey)) {
+              authorizationReferences.set(image.resourceKey, reference)
+            }
+          }
+          const authorized = await this.resolveDriveMarkdownRelativeImageReferences(
+            [...authorizationReferences.values()],
+            current,
+            undefined,
+            resolveSignal,
+          )
+          shareFileImageIds = new Set(authorized.flatMap(({ item: image }) => image ? [image.id] : []))
+        }
+        const resolvedImages = await this.resolveDriveMarkdownRelativeImageReferences(
+          [...references.values()],
+          current,
+          route,
+          resolveSignal,
+          shareFileImageIds,
+        )
+        const relativeImages = new Map<string, { storageKey: string; size: bigint; mimeType: string | null }>()
+        for (const { reference, item: image } of resolvedImages) {
+          if (!image?.storageKey) continue
+          relativeImages.set(driveMarkdownImageResourceKey(reference.src), {
+            storageKey: image.storageKey,
+            size: image.size,
+            mimeType: image.mimeType,
+          })
+        }
+        return relativeImages
+      },
     }
   }
 
@@ -3379,16 +3431,29 @@ export class DriveService implements OnApplicationBootstrap {
     if (options?.maxUnique !== undefined && references.length > options.maxUnique) {
       throw new PayloadTooLargeException(`Markdown 图片超过 ${options.maxUnique} 个，无法导出。`)
     }
+    return this.resolveDriveMarkdownRelativeImageReferences(references, markdownItem, route)
+  }
+
+  private async resolveDriveMarkdownRelativeImageReferences(
+    references: readonly DriveMarkdownRelativeImageReference[],
+    markdownItem: DriveItemRecordWithStorage,
+    route?: DriveBrowserRouteContext,
+    signal?: AbortSignal,
+    shareFileImageIdsOverride?: ReadonlySet<string>,
+  ): Promise<ResolvedDriveMarkdownRelativeImage[]> {
+    if (signal?.aborted) throw new Error("DRIVE_PDF_EXPORT_ABORTED")
     const shareRoot = route?.context === "share"
       ? await this.findActiveDriveItem(markdownItem.userId, route.rootItemId)
       : null
     const shareFolderRootId = shareRoot?.type === DRIVE_ITEM_TYPE.folder ? shareRoot.id : null
     const shareFileImageIds = route?.context === "share" && shareRoot?.type === DRIVE_ITEM_TYPE.file
-      ? await this.resolveShareMarkdownImageIds(route.shareId, shareRoot)
+      ? shareFileImageIdsOverride ?? await this.resolveShareMarkdownImageIds(route.shareId, shareRoot)
       : null
 
     return Promise.all(references.map(async (reference) => {
+      if (signal?.aborted) throw new Error("DRIVE_PDF_EXPORT_ABORTED")
       const resolved = await this.resolveDriveMarkdownRelativeImageItem(markdownItem, reference)
+      if (signal?.aborted) throw new Error("DRIVE_PDF_EXPORT_ABORTED")
       const allowed = resolved && (shareFolderRootId
         ? await this.isDescendantOf(resolved.id, shareFolderRootId)
         : shareFileImageIds

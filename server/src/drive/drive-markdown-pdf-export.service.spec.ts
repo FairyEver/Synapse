@@ -4,16 +4,21 @@ import {
   DriveMarkdownPdfExportCancelledError,
   DriveMarkdownPdfExportService,
 } from "./drive-markdown-pdf-export.service"
+import {
+  DriveMarkdownPdfRenderQueueFullError,
+  DriveMarkdownPdfRenderResourceLimitError,
+  renderDriveMarkdownPdfInWorker,
+} from "./drive-markdown-pdf-render-worker"
 
 vi.mock("./drive-markdown-pdf-render-worker", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./drive-markdown-pdf-render-worker")>()
   const { renderDriveMarkdownFragment } = await import("./drive-markdown-renderer.js")
   return {
     ...actual,
-    renderDriveMarkdownPdfInWorker: (
+    renderDriveMarkdownPdfInWorker: vi.fn((
       markdown: string,
       options: Parameters<typeof renderDriveMarkdownFragment>[1],
-    ) => renderDriveMarkdownFragment(markdown, options),
+    ) => renderDriveMarkdownFragment(markdown, options)),
   }
 })
 
@@ -78,6 +83,11 @@ describe("DriveMarkdownPdfExportService", () => {
     }))
     const png = validPng()
     const getObjectStream = vi.fn(async () => ({ stream: Readable.from([png]), size: BigInt(png.length) }))
+    const resolveRelativeImages = vi.fn(async () => new Map([["relative:image.png", {
+      storageKey: "drive/image.png",
+      size: BigInt(png.length),
+      mimeType: "image/png",
+    }]]))
     const service = new DriveMarkdownPdfExportService(
       { getObjectStream } as never,
       {} as never,
@@ -91,14 +101,12 @@ describe("DriveMarkdownPdfExportService", () => {
         name: "重复图片.md",
         sourceText: "![第一处](image.png)\n\n![第二处](image.png)",
         allowStandaloneRawImages: true,
-        relativeImages: new Map([["relative:image.png", {
-          storageKey: "drive/image.png",
-          size: BigInt(png.length),
-          mimeType: "image/png",
-        }]]),
+        relativeImages: new Map(),
+        resolveRelativeImages,
       }),
     })
 
+    expect(resolveRelativeImages).toHaveBeenCalledOnce()
     expect(getObjectStream).toHaveBeenCalledTimes(1)
     expect(result.imageWarnings).toBe(0)
   })
@@ -169,6 +177,28 @@ describe("DriveMarkdownPdfExportService", () => {
       rateLimitKey: "user:queue",
       resolveSource: async () => emptySource("queue.md"),
     })).rejects.toMatchObject({ status: 429 })
+  })
+
+  it("maps a saturated Markdown worker queue to 429", async () => {
+    vi.mocked(renderDriveMarkdownPdfInWorker)
+      .mockRejectedValueOnce(new DriveMarkdownPdfRenderQueueFullError())
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+
+    await expect(service.export({
+      rateLimitKey: "user:worker-queue",
+      resolveSource: async () => emptySource("worker-queue.md"),
+    })).rejects.toMatchObject({ status: 429 })
+  })
+
+  it("maps a Markdown worker memory limit to 413", async () => {
+    vi.mocked(renderDriveMarkdownPdfInWorker)
+      .mockRejectedValueOnce(new DriveMarkdownPdfRenderResourceLimitError())
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+
+    await expect(service.export({
+      rateLimitKey: "user:worker-memory",
+      resolveSource: async () => emptySource("worker-memory.md"),
+    })).rejects.toMatchObject({ status: 413 })
   })
 
   it("maps a renderer timeout to 504", async () => {

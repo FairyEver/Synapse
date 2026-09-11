@@ -1,10 +1,12 @@
 import { BadRequestException, ForbiddenException, Logger, NotFoundException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
+import type { DriveMarkdownProjectionImageDto } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { DriveChangeLogService } from "./drive-change-log"
-import { DriveService } from "./drive.service"
+import { driveMarkdownImageResourceKey } from "./drive-markdown-projection"
+import { DriveService, type DriveMarkdownPdfSource } from "./drive.service"
 import type { DriveStoragePort } from "./drive-storage"
 
 const originalTestEnv = { ...process.env }
@@ -69,6 +71,33 @@ function createDriveChangeLogMock(): Pick<DriveChangeLogService, "append"> & {
     occurredAt: "2026-06-28T00:00:00.000Z",
   }))
   return { append }
+}
+
+function pdfProjectionImages(sources: readonly string[]): DriveMarkdownProjectionImageDto[] {
+  return sources.map((source, index) => ({
+    imageId: `image-${index}`,
+    segmentId: `segment-${index}`,
+    blockId: `block-${index}`,
+    imageIndex: index,
+    documentIndex: index,
+    sourceStart: index,
+    sourceEnd: index + 1,
+    renderedStart: index,
+    renderedEnd: index + 1,
+    source,
+    resourceKey: driveMarkdownImageResourceKey(source),
+    alt: "",
+    title: null,
+  }))
+}
+
+async function resolvePdfRelativeImages(
+  source: DriveMarkdownPdfSource,
+  images: readonly DriveMarkdownProjectionImageDto[],
+  authorizationImages: readonly DriveMarkdownProjectionImageDto[] = images,
+) {
+  if (!source.resolveRelativeImages) throw new Error("PDF relative image resolver missing")
+  return source.resolveRelativeImages(images, authorizationImages, new AbortController().signal)
 }
 
 describe("DriveService", () => {
@@ -2988,10 +3017,11 @@ describe("DriveService", () => {
     })
 
     expect(source.allowStandaloneRawImages).toBe(false)
-    expect([...source.relativeImages.values()]).toEqual([expect.objectContaining({ storageKey: imageRecord.storageKey })])
+    const relativeImages = await resolvePdfRelativeImages(source, pdfProjectionImages(["./diagram.png"]))
+    expect([...relativeImages.values()]).toEqual([expect.objectContaining({ storageKey: imageRecord.storageKey })])
   })
 
-  it("rejects a PDF source with more than 256 unique images before resolving Drive items", async () => {
+  it("rejects a projected PDF source with more than 256 unique images before resolving Drive items", async () => {
     const prisma = createPrismaMemory()
     const objects = new Map<string, DriveTestObject>()
     const storage = createDriveObjectStorage(objects)
@@ -3008,12 +3038,14 @@ describe("DriveService", () => {
       contentType: "text/markdown",
     })
 
-    await expect(service.resolveOwnerMarkdownPdfSource({
+    const source = await service.resolveOwnerMarkdownPdfSource({
       userId: "user-1",
       itemId: markdown.id,
       maxBytes: 10 * 1024 * 1024,
       maxImages: 256,
-    })).rejects.toMatchObject({ status: 413 })
+    })
+    const images = pdfProjectionImages(Array.from({ length: 257 }, (_, index) => `image-${index}.png`))
+    await expect(resolvePdfRelativeImages(source, images)).rejects.toMatchObject({ status: 413 })
   })
 
   it("counts normalized relative image resources before applying the PDF image limit", async () => {
@@ -3052,7 +3084,11 @@ describe("DriveService", () => {
       maxImages: 256,
     })
 
-    expect([...source.relativeImages.values()]).toEqual([
+    const relativeImages = await resolvePdfRelativeImages(source, pdfProjectionImages([
+      ...equivalentSources.map((entry) => entry.slice(entry.indexOf("](") + 2, -1)),
+      "target.png",
+    ]))
+    expect([...relativeImages.values()]).toEqual([
       expect.objectContaining({ storageKey: targetRecord.storageKey }),
     ])
   })
@@ -3118,7 +3154,13 @@ describe("DriveService", () => {
       maxBytes: 10 * 1024 * 1024,
       maxImages: 256,
     })
-    const storageKeys = [...source.relativeImages.values()].map((image) => image.storageKey)
+    expect(source.relativeImageAuthorizationText).toBe("![allowed](./allowed.png)")
+    const relativeImages = await resolvePdfRelativeImages(
+      source,
+      pdfProjectionImages(["./allowed.png", "./private.png"]),
+      pdfProjectionImages(["./allowed.png"]),
+    )
+    const storageKeys = [...relativeImages.values()].map((image) => image.storageKey)
 
     expect(storageKeys).toEqual([allowedRecord.storageKey])
     expect(storageKeys).not.toContain(privateRecord.storageKey)
