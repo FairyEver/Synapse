@@ -73,6 +73,7 @@ describe("dashboard Vite dev proxy", () => {
     const ownerDownloadPattern = "^/drive/items/[^/]+/(download|render)(?:\\?.*)?$"
     const shareDownloadPattern = "^/share/[^/]+/(download|render)(?:\\?.*)?$"
     const shareChildDownloadPattern = "^/share/[^/]+/items/[^/]+/(download|render)(?:\\?.*)?$"
+    const shareReaderPattern = "^/share/[^/]+(?:/items/[^/]+)?/reader(?:\\?.*)?$"
     const ownerDownloadProxy = proxy && !Array.isArray(proxy)
       ? proxy[ownerDownloadPattern]
       : undefined
@@ -81,6 +82,9 @@ describe("dashboard Vite dev proxy", () => {
       : undefined
     const shareChildDownloadProxy = proxy && !Array.isArray(proxy)
       ? proxy[shareChildDownloadPattern]
+      : undefined
+    const shareReaderProxy = proxy && !Array.isArray(proxy)
+      ? proxy[shareReaderPattern]
       : undefined
 
     expect(ownerDownloadProxy).toEqual(expect.objectContaining({
@@ -95,9 +99,15 @@ describe("dashboard Vite dev proxy", () => {
       target: "http://localhost:3001",
       changeOrigin: true,
     }))
+    expect(shareReaderProxy).toEqual(expect.objectContaining({
+      target: "http://localhost:3001",
+      changeOrigin: true,
+    }))
     expect(proxy && !Array.isArray(proxy) ? proxy["/share"] : undefined).toBeUndefined()
     expect(new RegExp(ownerDownloadPattern).test("/drive/items/file-1/download?version=1")).toBe(true)
     expect(new RegExp(shareChildDownloadPattern).test("/share/share-1/items/image-1/download?version=1")).toBe(true)
+    expect(new RegExp(shareReaderPattern).test("/share/share-1/reader")).toBe(true)
+    expect(new RegExp(shareReaderPattern).test("/share/share-1/items/file-1/reader?childrenOffset=100")).toBe(true)
   })
 
   it("serves drive browser page routes through the dashboard app in dev", () => {
@@ -112,7 +122,9 @@ describe("dashboard Vite dev proxy", () => {
     expect(isDriveBrowserSpaPath("/drive/items/file-id/download")).toBe(false)
     expect(isDriveBrowserSpaPath("/drive/items/file-id/render")).toBe(false)
     expect(isDriveBrowserSpaPath("/share/share-id/download")).toBe(false)
+    expect(isDriveBrowserSpaPath("/share/share-id/reader")).toBe(false)
     expect(isDriveBrowserSpaPath("/share/share-id/items/file-id/download")).toBe(false)
+    expect(isDriveBrowserSpaPath("/share/share-id/items/file-id/reader")).toBe(false)
   })
 
   it("redirects legacy dashboard page routes to console paths in dev", () => {

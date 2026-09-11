@@ -33,6 +33,11 @@ import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import {
+  renderDriveShareReaderPage,
+  renderDriveShareReaderPasswordPage,
+  renderDriveShareReaderStatusPage,
+} from "./drive-share-reader-page"
+import {
   parseDriveAnnotationCommentUpdateBody,
   parseDriveAnnotationCreateBody,
   parseDriveAnnotationReplyBody,
@@ -51,6 +56,8 @@ const DRIVE_HTML_RENDER_CSP = "default-src 'self' data: blob: https:; script-src
 const DRIVE_SITE_HTML_RENDER_CSP = DRIVE_HTML_RENDER_CSP
 const PUBLIC_ASSET_CACHE_CONTROL = "no-cache, must-revalidate"
 const PUBLIC_ASSET_CROSS_ORIGIN_RESOURCE_POLICY = "cross-origin"
+const DRIVE_SHARE_READER_CHILDREN_LIMIT = 100
+const DRIVE_SHARE_READER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data: https:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 type DriveAccessCookieKind = "share" | "site"
 
 const prepareUploadSchema = z.object({
@@ -1921,6 +1928,37 @@ export class DrivePublicController {
     await this.unlockShareToPath(shareId, request, response)
   }
 
+  @Get("/share/:shareId/reader")
+  async readShare(
+    @Param("shareId") shareId: string,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    await this.sendShareReader({ shareId, childrenOffset, request, response })
+  }
+
+  @Post("/share/:shareId/reader")
+  async unlockShareReader(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
+    await this.unlockShareReaderToPath(shareId, request, response)
+  }
+
+  @Get("/share/:shareId/items/:itemId/reader")
+  async readShareItem(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Query("childrenOffset") childrenOffset: string | undefined,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    await this.sendShareReader({ shareId, itemId, childrenOffset, request, response })
+  }
+
+  @Post("/share/:shareId/items/:itemId/reader")
+  async unlockShareItemReader(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
+    await this.unlockShareReaderToPath(shareId, request, response)
+  }
+
   @Post("/share/:shareId/download")
   async unlockShareDownload(@Param("shareId") shareId: string, @Req() request: Request, @Res() response: Response) {
     await this.unlockShareToPath(shareId, request, response)
@@ -1953,6 +1991,79 @@ export class DrivePublicController {
     }
     if (access.cookie) setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
     response.redirect(302, request.path)
+  }
+
+  private async unlockShareReaderToPath(shareId: string, request: Request, response: Response): Promise<void> {
+    setShareReaderResponseHeaders(response)
+    try {
+      const access = await this.drive.resolvePublicShareAccess({
+        shareId,
+        password: readBodyPassword(request),
+        cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+      })
+      if (access.status !== "ok") {
+        response.status(200).type("html").send(renderDriveShareReaderPasswordPage({ actionPath: cleanPasswordUrl(request), error: true }))
+        return
+      }
+      if (access.cookie) setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: shareId })
+      response.redirect(302, cleanPasswordUrl(request))
+    } catch (error) {
+      if (isNotFoundException(error)) {
+        sendDriveInvalidShareReaderPage(response)
+        return
+      }
+      throw error
+    }
+  }
+
+  private async sendShareReader(input: {
+    readonly shareId: string
+    readonly itemId?: string
+    readonly childrenOffset?: string
+    readonly request: Request
+    readonly response: Response
+  }): Promise<void> {
+    setShareReaderResponseHeaders(input.response)
+    try {
+      const password = readPasswordQuery(input.request)
+      const requestCookie = readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId })
+      const access = await this.drive.resolvePublicShareAccess({
+        shareId: input.shareId,
+        password,
+        cookie: requestCookie,
+      })
+      if (access.status !== "ok") {
+        input.response.status(200).type("html").send(renderDriveShareReaderPasswordPage({
+          actionPath: cleanPasswordUrl(input.request),
+          error: Boolean(password),
+        }))
+        return
+      }
+      if (access.cookie) setDriveAccessCookie(input.response, access.cookie, { kind: "share", publicId: input.shareId })
+      if (password) {
+        input.response.redirect(302, cleanPasswordUrl(input.request))
+        return
+      }
+      const parsedChildrenPage = parseDriveBrowserChildrenPageQuery(input.childrenOffset, undefined)
+      const snapshot = await this.drive.getShareBrowserSnapshot({
+        shareId: input.shareId,
+        itemId: input.itemId,
+        password: undefined,
+        cookie: access.cookie ?? requestCookie,
+        actorUserId: await this.resolveOptionalUserId(input.request),
+        childrenPage: {
+          ...parsedChildrenPage,
+          limit: DRIVE_SHARE_READER_CHILDREN_LIMIT,
+        },
+      })
+      input.response.status(200).type("html").send(renderDriveShareReaderPage({ shareId: input.shareId, snapshot }))
+    } catch (error) {
+      if (isNotFoundException(error)) {
+        sendDriveInvalidShareReaderPage(input.response)
+        return
+      }
+      throw error
+    }
   }
 
   private async getShareSnapshotResponse(input: {
@@ -2396,6 +2507,15 @@ function setProtectedShareContentCacheHeaders(response: Response): void {
   response.setHeader("Vary", "Cookie")
 }
 
+function setShareReaderResponseHeaders(response: Response): void {
+  setProtectedShareContentCacheHeaders(response)
+  response.setHeader("Content-Security-Policy", DRIVE_SHARE_READER_CSP)
+  response.setHeader("X-Frame-Options", "DENY")
+  response.setHeader("X-Content-Type-Options", "nosniff")
+  response.setHeader("Referrer-Policy", "no-referrer")
+  response.setHeader("Content-Language", "zh-CN")
+}
+
 function setProtectedSiteDenialHeaders(response: Response): void {
   response.setHeader("Cache-Control", "private, no-store")
   response.setHeader("Vary", "Cookie")
@@ -2554,6 +2674,14 @@ ${renderDrivePublicPageCss()}
 
 function sendDriveInvalidSharePage(response: Response): void {
   response.status(404).type("html").send(renderDrivePublicStatusPage({
+    title: "链接已失效",
+    message: "请向文件所有者确认最新链接。",
+  }))
+}
+
+function sendDriveInvalidShareReaderPage(response: Response): void {
+  setShareReaderResponseHeaders(response)
+  response.status(404).type("html").send(renderDriveShareReaderStatusPage({
     title: "链接已失效",
     message: "请向文件所有者确认最新链接。",
   }))

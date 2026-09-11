@@ -1389,6 +1389,10 @@ export function buildShareDriveBrowserUrl(shareId: string, itemId?: string | nul
   return itemId ? `${rootUrl}/items/${encodeURIComponent(itemId)}` : rootUrl
 }
 
+export function buildShareDriveReaderUrl(shareId: string, itemId?: string | null): string {
+  return `${buildShareDriveBrowserUrl(shareId, itemId)}/reader`
+}
+
 export function buildShareDriveDownloadUrl(shareId: string, itemId?: string | null): string {
   return `${buildShareDriveBrowserUrl(shareId, itemId)}/download`
 }

@@ -38,6 +38,7 @@ import {
   buildOwnerDriveRenderUrl,
   buildShareDriveBrowserUrl,
   buildShareDriveDownloadUrl,
+  buildShareDriveReaderUrl,
   buildShareDriveRenderUrl,
   drivePublicAssetContentKind,
   inferDrivePublicAssetMimeType,
@@ -215,6 +216,8 @@ describe("drive URL helpers", () => {
   it("builds share browser URLs with root and child item ids", () => {
     expect(buildShareDriveBrowserUrl("shr/a")).toBe("/share/shr%2Fa")
     expect(buildShareDriveBrowserUrl("shr/a", "child/b")).toBe("/share/shr%2Fa/items/child%2Fb")
+    expect(buildShareDriveReaderUrl("shr/a")).toBe("/share/shr%2Fa/reader")
+    expect(buildShareDriveReaderUrl("shr/a", "child/b")).toBe("/share/shr%2Fa/items/child%2Fb/reader")
     expect(buildShareDriveDownloadUrl("shr/a")).toBe("/share/shr%2Fa/download")
     expect(buildShareDriveDownloadUrl("shr/a", "child/b")).toBe("/share/shr%2Fa/items/child%2Fb/download")
     expect(buildShareDriveRenderUrl("shr/a")).toBe("/share/shr%2Fa/render")

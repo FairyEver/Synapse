@@ -1535,6 +1535,139 @@ describe("DriveController", () => {
     expect(drive.openShareBrowserItemDownload).not.toHaveBeenCalled()
   })
 
+  it("serves the no-script compatibility reader with restrictive headers", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        type: "file",
+        item: createDriveItem({ id: "file-1", name: "brief.txt" }),
+        ownerId: "user-1",
+        storageKey: "drive/file-1",
+      },
+    })
+    drive.getShareBrowserSnapshot.mockResolvedValue(createBrowserSnapshot())
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/reader")
+      .expect(200)
+
+    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.headers.vary).toBe("Cookie")
+    expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
+    expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'")
+    expect(response.headers["x-frame-options"]).toBe("DENY")
+    expect(response.headers["x-content-type-options"]).toBe("nosniff")
+    expect(response.headers["referrer-policy"]).toBe("no-referrer")
+    expect(response.text).toContain("<pre><code>brief</code></pre>")
+    expect(response.text).not.toContain("<script")
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith({
+      shareId: "shr_file",
+      itemId: undefined,
+      password: undefined,
+      cookie: undefined,
+      actorUserId: null,
+      childrenPage: { limit: 100 },
+    })
+  })
+
+  it("serves child reader pages with fixed-size folder pagination", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      value: {
+        type: "folder",
+        item: createDriveItem({ id: "folder-1", name: "资料", type: "folder" }),
+        ownerId: "user-1",
+        storageKey: null,
+      },
+    })
+    drive.getShareBrowserSnapshot.mockResolvedValue(createBrowserSnapshot())
+
+    await request(app!.getHttpServer())
+      .get("/share/shr_folder/items/folder-2/reader?childrenOffset=100")
+      .expect(200)
+
+    expect(drive.getShareBrowserSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      shareId: "shr_folder",
+      itemId: "folder-2",
+      childrenPage: { offset: 100, limit: 100 },
+    }))
+  })
+
+  it("renders the compatibility password form without loading the share snapshot", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({ status: "password_required" })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/reader?childrenOffset=100")
+      .expect(200)
+
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.text).toContain("此分享受密码保护")
+    expect(response.text).toContain('action="/share/shr_file/reader?childrenOffset=100"')
+    expect(response.text).toContain('name="password"')
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
+  })
+
+  it("cleans a valid password query before rendering the compatibility reader", async () => {
+    drive.resolvePublicShareAccess.mockResolvedValue({
+      status: "ok",
+      cookie: "reader-cookie",
+      value: {
+        type: "file",
+        item: createDriveItem({ id: "file-1", name: "brief.txt" }),
+        ownerId: "user-1",
+        storageKey: "drive/file-1",
+      },
+    })
+
+    const response = await request(app!.getHttpServer())
+      .get("/share/shr_file/reader?password=letmein&childrenOffset=100")
+      .expect(302)
+    const setCookie = response.headers["set-cookie"]
+
+    expect(response.headers.location).toBe("/share/shr_file/reader?childrenOffset=100")
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(Array.isArray(setCookie) ? setCookie.join(";") : setCookie).toContain(`${driveAccessCookieName("share", "shr_file")}=reader-cookie`)
+    expect(drive.getShareBrowserSnapshot).not.toHaveBeenCalled()
+  })
+
+  it("posts compatibility reader passwords and keeps errors inside the reader", async () => {
+    drive.resolvePublicShareAccess
+      .mockResolvedValueOnce({ status: "password_required" })
+      .mockResolvedValueOnce({
+        status: "ok",
+        cookie: "reader-cookie",
+        value: {
+          type: "file",
+          item: createDriveItem({ id: "file-1", name: "brief.txt" }),
+          ownerId: "user-1",
+          storageKey: "drive/file-1",
+        },
+      })
+
+    const invalid = await request(app!.getHttpServer())
+      .post("/share/shr_file/reader")
+      .send({ password: "wrong" })
+      .expect(200)
+    const valid = await request(app!.getHttpServer())
+      .post("/share/shr_file/reader")
+      .send({ password: "letmein" })
+      .expect(302)
+
+    expect(invalid.text).toContain("密码不正确")
+    expect(valid.headers.location).toBe("/share/shr_file/reader")
+  })
+
+  it("renders an HTML 404 for invalid compatibility reader links", async () => {
+    const response = await request(app!.getHttpServer())
+      .get("/share/missing/reader")
+      .expect(404)
+
+    expect(response.headers["content-type"]).toContain("text/html")
+    expect(response.headers["cache-control"]).toBe("private, no-store")
+    expect(response.text).toContain("链接已失效")
+  })
+
   it("posts share passwords and redirects after unlock", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
