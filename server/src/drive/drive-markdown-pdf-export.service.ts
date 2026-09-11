@@ -80,9 +80,10 @@ export class DriveMarkdownPdfExportService {
       throw new PayloadTooLargeException(`Markdown 图片超过 ${DRIVE_PDF_MAX_IMAGES} 个，无法导出。`)
     }
 
-    const resourceUrls = new Map<string, string | null>()
+    const resourceTokens = new Map<string, string | null>()
+    const resourceData = new Map<string, string>()
     let imageBytes = 0
-    for (const image of images) {
+    for (const [index, image] of images.entries()) {
       assertExportActive(signal)
       this.assertDeadline(startedAt)
       try {
@@ -92,32 +93,34 @@ export class DriveMarkdownPdfExportService {
         if (imageBytes > DRIVE_PDF_IMAGES_MAX_BYTES) {
           throw new PayloadTooLargeException("Markdown 图片总大小超过 64 MiB，无法导出。")
         }
-        resourceUrls.set(image.resourceKey, `data:${resolved.mimeType};base64,${resolved.bytes.toString("base64")}`)
+        const token = `image-${index + 1}`
+        resourceTokens.set(image.resourceKey, token)
+        resourceData.set(token, `data:${resolved.mimeType};base64,${resolved.bytes.toString("base64")}`)
       } catch (error) {
         assertExportActive(signal)
         if (error instanceof PayloadTooLargeException || error instanceof GatewayTimeoutException) throw error
-        resourceUrls.set(image.resourceKey, null)
+        resourceTokens.set(image.resourceKey, null)
       }
     }
 
     assertExportActive(signal)
     const imageWarnings = (initial.projection.images ?? [])
-      .filter((image) => resourceUrls.get(image.resourceKey) === null)
+      .filter((image) => resourceTokens.get(image.resourceKey) === null)
       .length
 
-    const urlsById = new Map<string, string | null>()
+    const resourceKeysById = new Map<string, string | null>()
     for (const image of initial.projection.images ?? []) {
-      urlsById.set(image.imageId, resourceUrls.get(image.resourceKey) ?? null)
+      resourceKeysById.set(image.imageId, resourceTokens.get(image.resourceKey) ?? null)
     }
     this.assertDeadline(startedAt)
     const rendered = await renderDriveMarkdownFragment(source.sourceText, {
       allowStandaloneRawImages: source.allowStandaloneRawImages,
       projection: initial.projection,
-      pdfImageUrlsById: urlsById,
+      pdfImageResourceKeysById: resourceKeysById,
     })
     const response = await this.renderPdf({
       title: stripMarkdownExtension(source.name),
-      html: `<main class="markdown-body">${rendered.html}</main>`,
+      html: `<main class="markdown-body">${rendered.html}${pdfResourceMapScript(resourceData)}</main>`,
       timeoutMs: remainingTime(startedAt),
       signal,
     })
@@ -210,6 +213,9 @@ export class DriveMarkdownPdfExportService {
       if (response.status === HttpStatus.GATEWAY_TIMEOUT) {
         throw new GatewayTimeoutException("PDF 导出超时。")
       }
+      if (response.status === HttpStatus.PAYLOAD_TOO_LARGE) {
+        throw new PayloadTooLargeException("PDF 导出内容过大。")
+      }
       if (!response.ok) throw new BadGatewayException("PDF 导出服务暂不可用。")
       const declaredLength = Number(response.headers.get("content-length") ?? 0)
       if (declaredLength > DRIVE_PDF_OUTPUT_MAX_BYTES) throw new PayloadTooLargeException("生成的 PDF 超过 64 MiB。")
@@ -286,6 +292,11 @@ async function enforceExportDeadline<T>(
 
 function uniqueProjectionImages(images: readonly DriveMarkdownProjectionImageDto[]): DriveMarkdownProjectionImageDto[] {
   return [...new Map(images.map((image) => [image.resourceKey, image])).values()]
+}
+
+function pdfResourceMapScript(resources: ReadonlyMap<string, string>): string {
+  const json = JSON.stringify(Object.fromEntries(resources)).replace(/</gu, "\\u003c")
+  return `<script id="synapse-pdf-resources" type="application/json">${json}</script>`
 }
 
 function remainingTime(startedAt: number): number {

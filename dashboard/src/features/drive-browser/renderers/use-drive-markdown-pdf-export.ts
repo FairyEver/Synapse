@@ -40,7 +40,7 @@ export function useDriveMarkdownPdfExport(input: {
       else toast.success('PDF 已导出', { id: toastId })
     } catch (error) {
       finish('failure')
-      toast.error(pdfExportErrorMessage(error), { id: toastId })
+      toast.error(pdfExportErrorMessage(error, input.snapshot.context === 'share'), { id: toastId })
     } finally {
       exportingRef.current = false
       setExporting(false)
@@ -61,9 +61,11 @@ export function pdfFilename(name: string): string {
   return `${stem}.pdf`
 }
 
-function pdfExportErrorMessage(error: unknown): string {
+function pdfExportErrorMessage(error: unknown, shared: boolean): string {
   if (error instanceof ApiError) {
-    if (error.status === 401) return '分享尚未解锁，请重新输入密码。'
+    if (error.status === 401) return shared
+      ? '分享尚未解锁，请重新输入密码。'
+      : '登录已失效，请重新登录。'
     if (error.status === 413) return '文件或图片过大，无法导出。'
     if (error.status === 429) return '导出请求较多，请稍后重试。'
     if (error.status === 502) return 'PDF 导出服务暂不可用，请稍后重试。'

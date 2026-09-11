@@ -124,6 +124,33 @@ describe.sequential("PdfRenderer", () => {
     expect(result.imageWarnings).toBe(1)
   }, 30_000)
 
+  it("hydrates repeated images from one self-contained resource entry", async () => {
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    const resourceUrl = `data:image/png;base64,${png}`
+    const resourceRenderer = new PdfRenderer(55_000, async (page) => {
+      expect(await page.locator("#synapse-pdf-resources").count()).toBe(0)
+      expect(await page.locator("img").evaluateAll((images) => images.map((image) => ({
+        src: (image as HTMLImageElement).src,
+        width: (image as HTMLImageElement).naturalWidth,
+      })))).toEqual([
+        { src: resourceUrl, width: 1 },
+        { src: resourceUrl, width: 1 },
+      ])
+    })
+    try {
+      const result = await resourceRenderer.render({
+        schemaVersion: 1,
+        title: "deduplicated resources",
+        html: `<main class="markdown-body"><img data-drive-pdf-resource-key="image-1" alt="one"><img data-drive-pdf-resource-key="image-1" alt="two"><script id="synapse-pdf-resources" type="application/json">${JSON.stringify({ "image-1": resourceUrl })}</script></main>`,
+      })
+
+      expect(result.imageWarnings).toBe(0)
+      expect(result.bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-")
+    } finally {
+      await resourceRenderer.close()
+    }
+  }, 30_000)
+
   it("applies the render deadline before Chromium startup completes", async () => {
     const constrainedRenderer = new PdfRenderer(1)
     try {

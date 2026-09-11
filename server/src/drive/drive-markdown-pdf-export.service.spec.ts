@@ -58,7 +58,12 @@ describe("DriveMarkdownPdfExportService", () => {
 
   it("resolves a repeated relative image only once", async () => {
     configureRendererEnv()
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(Buffer.from("%PDF-test"), { status: 200 })))
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body)) as { html: string }
+      expect(payload.html.match(/data:image\/png;base64,/gu)).toHaveLength(1)
+      expect(payload.html.match(/data-drive-pdf-resource-key="image-1"/gu)).toHaveLength(2)
+      return new Response(Buffer.from("%PDF-test"), { status: 200 })
+    }))
     const png = validPng()
     const getObjectStream = vi.fn(async () => ({ stream: Readable.from([png]), size: BigInt(png.length) }))
     const service = new DriveMarkdownPdfExportService(
@@ -132,6 +137,17 @@ describe("DriveMarkdownPdfExportService", () => {
       rateLimitKey: "user:renderer-timeout",
       resolveSource: async () => emptySource("timeout.md"),
     })).rejects.toMatchObject({ status: 504 })
+  })
+
+  it("maps a renderer request-size rejection to 413", async () => {
+    configureRendererEnv()
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 413 })))
+    const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
+
+    await expect(service.export({
+      rateLimitKey: "user:renderer-request-size",
+      resolveSource: async () => emptySource("oversized-request.md"),
+    })).rejects.toMatchObject({ status: 413 })
   })
 
   it("limits one rate-limit key to five exports per minute", async () => {

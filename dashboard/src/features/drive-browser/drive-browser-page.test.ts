@@ -7,6 +7,7 @@ import { buildDriveShareClipboardText, type DriveBrowserSnapshotDto } from '@syn
 import {
   DriveBrowserView,
   DriveSingleFileReaderView,
+  getDriveBrowserAnnotationContext,
 } from './drive-browser-page'
 import { AdminDriveStorageSummary } from './admin-drive-storage-summary'
 import { AccessLogTable, AdminPublicAssets } from './admin-public-assets'
@@ -193,6 +194,21 @@ describe('drive browser view model', () => {
     expect(formatDriveBrowserSize({ ...baseCurrent(), size: '7372' })).toBe('7.2 KB')
     expect(formatDriveBrowserSize({ ...baseCurrent(), type: 'folder' })).toBe('-')
     expect(driveBrowserKindLabel('markdown')).toBe('Markdown')
+  })
+
+  it('preserves share-root and child routing in the renderer context', () => {
+    const snapshot = createSnapshot({ context: 'share' })
+
+    expect(getDriveBrowserAnnotationContext({ context: 'share', shareId: 'share-1' }, snapshot)).toMatchObject({
+      context: 'share',
+      shareId: 'share-1',
+      itemId: null,
+    })
+    expect(getDriveBrowserAnnotationContext({ context: 'share', shareId: 'share-1', itemId: 'child-1' }, snapshot)).toMatchObject({
+      context: 'share',
+      shareId: 'share-1',
+      itemId: 'child-1',
+    })
   })
 
   it('builds shared preview identity and system actions for owner files', () => {

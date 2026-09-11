@@ -84,10 +84,8 @@ function DriveBrowserPageContent(props: DriveBrowserPageProps) {
     : 'card'
   const layoutMode: DriveBrowserLayoutMode = framed ? 'auto' : 'fixed'
   const shouldCenterState = framed && state.status !== 'ready' && state.status !== 'loading'
-  const annotationContext: DriveAnnotationContext | undefined = state.status === 'ready'
-    ? props.context === 'owner'
-      ? { context: 'owner', itemId: state.snapshot.current.id }
-      : { context: 'share', shareId: props.shareId, itemId: state.snapshot.current.id, canComment: Boolean(state.snapshot.annotation?.canComment) }
+  const annotationContext = state.status === 'ready'
+    ? getDriveBrowserAnnotationContext(props, state.snapshot)
     : undefined
   if (state.status === 'ready' && shouldRenderDriveBodyRenderer(state.snapshot)) {
     return <DriveSingleFileReaderView snapshot={state.snapshot} editContext={state} annotationContext={annotationContext} />
@@ -155,6 +153,20 @@ function DriveBrowserPageContent(props: DriveBrowserPageProps) {
 
   if (!framed) return content
   return <main className='flex min-h-screen supports-[height:100svh]:min-h-svh bg-background p-4 md:p-6'>{content}</main>
+}
+
+export function getDriveBrowserAnnotationContext(
+  props: DriveBrowserPageProps,
+  snapshot: DriveBrowserSnapshotDto,
+): DriveAnnotationContext {
+  return props.context === 'owner'
+    ? { context: 'owner', itemId: snapshot.current.id }
+    : {
+        context: 'share',
+        shareId: props.shareId,
+        itemId: props.itemId ?? null,
+        canComment: Boolean(snapshot.annotation?.canComment),
+      }
 }
 
 export function DriveConsoleBrowserPage(props: Omit<Extract<DriveBrowserPageProps, { context: 'owner' }>, 'context' | 'surface'>) {

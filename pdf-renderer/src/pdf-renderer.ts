@@ -148,6 +148,7 @@ export class PdfRenderer {
     const page = await context.newPage()
     await page.setContent(documentHtml(input.title, input.html, assets.css), { waitUntil: "load" })
     await page.addScriptTag({ content: assets.mermaid })
+    await page.evaluate(hydratePdfResources)
     await page.evaluate(waitForDocumentResources)
     const warnings = await page.evaluate(renderDocumentEnhancements)
     await this.inspectPreparedPage?.(page)
@@ -212,6 +213,27 @@ async function waitForDocumentResources(): Promise<void> {
         image.addEventListener("load", () => resolve(), { once: true })
         image.addEventListener("error", () => resolve(), { once: true })
       })))
+}
+
+function hydratePdfResources(): void {
+  const element = document.querySelector<HTMLScriptElement>("#synapse-pdf-resources")
+  if (!element) return
+  let resources: Record<string, unknown> = {}
+  try {
+    const parsed = JSON.parse(element.textContent ?? "") as unknown
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      resources = parsed as Record<string, unknown>
+    }
+  } catch {
+    resources = {}
+  }
+  for (const image of document.querySelectorAll<HTMLImageElement>("img[data-drive-pdf-resource-key]")) {
+    const key = image.dataset.drivePdfResourceKey ?? ""
+    const value = resources[key]
+    if (typeof value === "string" && value.startsWith("data:image/")) image.src = value
+    image.removeAttribute("data-drive-pdf-resource-key")
+  }
+  element.remove()
 }
 
 async function renderDocumentEnhancements(): Promise<{ readonly imageWarnings: number; readonly diagramWarnings: number }> {

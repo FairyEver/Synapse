@@ -111,13 +111,28 @@ describe('useDriveMarkdownPdfExport', () => {
   })
 
   it.each([
-    [401, '分享尚未解锁，请重新输入密码。'],
     [413, '文件或图片过大，无法导出。'],
     [429, '导出请求较多，请稍后重试。'],
     [504, 'PDF 导出超时，请稍后重试。'],
   ])('presents the actionable PDF export message for HTTP %i', async (status, message) => {
     mocks.exportOwnerPdf.mockRejectedValueOnce(new ApiError('request failed', status))
     const hook = renderExportHook()
+
+    await act(async () => hook().exportPdf())
+
+    expect(mocks.error).toHaveBeenCalledWith(message, { id: 'toast-id' })
+  })
+
+  it.each([
+    ['owner', undefined, '登录已失效，请重新登录。'],
+    ['share', { context: 'share', shareId: 'share-1', itemId: 'file-1' }, '分享尚未解锁，请重新输入密码。'],
+  ] as const)('uses the correct HTTP 401 message for %s exports', async (snapshotContext, context, message) => {
+    const api = snapshotContext === 'owner' ? mocks.exportOwnerPdf : mocks.exportSharePdf
+    api.mockRejectedValueOnce(new ApiError('unauthorized', 401))
+    const hook = renderExportHook({
+      snapshot: markdownSnapshot({ context: snapshotContext }),
+      context,
+    })
 
     await act(async () => hook().exportPdf())
 

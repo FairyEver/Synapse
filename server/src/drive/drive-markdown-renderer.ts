@@ -53,6 +53,7 @@ export type DriveMarkdownRenderResult = {
 export type DriveMarkdownRenderOptions = {
   readonly relativeImageUrls?: ReadonlyMap<string, string | null>
   readonly pdfImageUrlsById?: ReadonlyMap<string, string | null>
+  readonly pdfImageResourceKeysById?: ReadonlyMap<string, string | null>
   readonly allowStandaloneRawImages?: boolean
   readonly previousProjection?: {
     readonly source: string
@@ -112,6 +113,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     .use(remarkRehype)
     .use(() => resolveRelativeResourceUrlsPlugin(options.relativeImageUrls ?? new Map()))
     .use(() => resolvePdfImageUrlsPlugin(options.pdfImageUrlsById))
+    .use(() => resolvePdfImageResourceKeysPlugin(options.pdfImageResourceKeysById))
     .use(rehypeSanitize, {
       ...defaultSchema,
       clobberPrefix: "",
@@ -124,7 +126,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
           "data-drive-markdown-image-id",
         ],
         a: [...(defaultSchema.attributes?.a ?? []), "target", "rel"],
-        img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading", "data-drive-markdown-relative-src"],
+        img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading", "data-drive-markdown-relative-src", "data-drive-pdf-resource-key"],
         span: [...(defaultSchema.attributes?.span ?? []), "data-drive-pdf-image-missing"],
       },
       protocols: {
@@ -318,12 +320,23 @@ function resolvePdfImageUrlsPlugin(pdfImageUrlsById: ReadonlyMap<string, string 
   }
 }
 
-function visitPdfImageAst(node: HtmlAstNode, imageUrlsById: ReadonlyMap<string, string | null>): void {
+function resolvePdfImageResourceKeysPlugin(resourceKeysById: ReadonlyMap<string, string | null> | undefined) {
+  return (tree: HtmlAstNode) => {
+    if (!resourceKeysById) return
+    visitPdfImageAst(tree, resourceKeysById, "data-drive-pdf-resource-key")
+  }
+}
+
+function visitPdfImageAst(
+  node: HtmlAstNode,
+  imageValuesById: ReadonlyMap<string, string | null>,
+  property: "src" | "data-drive-pdf-resource-key" = "src",
+): void {
   const imageId = node.properties?.["data-drive-markdown-image-id"]
-  if (node.tagName === "img" && typeof imageId === "string" && imageUrlsById.has(imageId)) {
-    const resolvedUrl = imageUrlsById.get(imageId) ?? null
-    if (resolvedUrl) {
-      node.properties = { ...node.properties, src: resolvedUrl }
+  if (node.tagName === "img" && typeof imageId === "string" && imageValuesById.has(imageId)) {
+    const resolvedValue = imageValuesById.get(imageId) ?? null
+    if (resolvedValue) {
+      node.properties = { ...node.properties, [property]: resolvedValue }
     } else {
       const alt = typeof node.properties?.alt === "string" ? node.properties.alt.trim() : ""
       node.tagName = "span"
@@ -331,7 +344,7 @@ function visitPdfImageAst(node: HtmlAstNode, imageUrlsById: ReadonlyMap<string, 
       node.children = [{ type: "text", value: alt ? `图片无法加载：${alt}` : "图片无法加载" }]
     }
   }
-  for (const child of node.children ?? []) visitPdfImageAst(child, imageUrlsById)
+  for (const child of node.children ?? []) visitPdfImageAst(child, imageValuesById, property)
 }
 
 function wrapTablesPlugin() {
