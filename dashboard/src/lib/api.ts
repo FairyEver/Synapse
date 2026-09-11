@@ -738,6 +738,42 @@ async function downloadFile(path: string, filename: string) {
   link.remove()
 }
 
+export type DrivePdfExportDownloadResult = {
+  readonly imageWarnings: number
+  readonly diagramWarnings: number
+}
+
+async function downloadPdfExport(path: string, filename: string): Promise<DrivePdfExportDownloadResult> {
+  const response = await fetch(path, { credentials: 'include', method: 'POST' })
+  if (!response.ok) {
+    const message = await readErrorMessage(response)
+    if (shouldNotifyAuthExpired(path, response.status)) notifyAuthExpired(path)
+    throw new ApiError(message, response.status)
+  }
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = filename
+    link.rel = 'noopener'
+    document.body.append(link)
+    link.click()
+    link.remove()
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+  return {
+    imageWarnings: parseNonNegativeHeader(response.headers.get('x-synapse-pdf-image-warnings')),
+    diagramWarnings: parseNonNegativeHeader(response.headers.get('x-synapse-pdf-diagram-warnings')),
+  }
+}
+
+function parseNonNegativeHeader(value: string | null): number {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0
+}
+
 export function getBackupDownloadUrl(filename: string) {
   return `${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`
 }
@@ -1154,6 +1190,11 @@ export const driveBrowserApi = {
       `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/collaboration/checkpoint`,
       { method: 'POST', body: JSON.stringify(input) }
     ),
+  exportOwnerPdf: (itemId: string, filename: string) =>
+    downloadPdfExport(
+      `${driveBrowserApiBasePath}/owner/items/${encodeURIComponent(itemId)}/exports/pdf`,
+      filename
+    ),
   getShareRoot: (shareId: string, options: DriveBrowserShareOptions = {}) =>
     request<DriveBrowserSnapshotDto | DriveBrowserPasswordRequiredDto>(
       `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${driveBrowserQuerySuffix('standalone', normalizeDriveBrowserShareOptions(options))}`
@@ -1188,6 +1229,13 @@ export const driveBrowserApi = {
         ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/collaboration/checkpoint`
         : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/collaboration/checkpoint`,
       { method: 'POST', body: JSON.stringify(input) }
+    ),
+  exportSharePdf: (shareId: string, itemId: string | null | undefined, filename: string) =>
+    downloadPdfExport(
+      itemId
+        ? `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/items/${encodeURIComponent(itemId)}/exports/pdf`
+        : `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}/exports/pdf`,
+      filename
     ),
   uploadPublicAssetFile: async (file: File, input: { readonly name: string; readonly mimeType: string }) => {
     const prepared = await request<DriveUploadPrepareResult>(

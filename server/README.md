@@ -23,7 +23,7 @@ Synapse 后端服务，包含 API 和 Admin 管理后台。
 pnpm dev:server
 ```
 
-自动启动 Postgres 容器、运行迁移、启动 API 和 Admin 开发服务器。
+自动启动 Postgres 与 PDF 渲染器容器、运行迁移、启动 API 和网页端开发服务器。本地命令会叠加 `compose.dev.yml`，仅为宿主机 API 开放渲染器端口；生产部署仍只连接 internal network。
 
 ---
 
@@ -91,7 +91,7 @@ git clone https://YOUR_TOKEN@github.com/你的用户名/Synapse.git synapse
 
 ### 第四步：生成签名密钥
 
-在服务器上分别执行三次以下命令，把输出结果记下来，后面分别用于管理员 JWT、用户 JWT 和桌面更新凭证。三个值不得相同。
+在服务器上分别执行四次以下命令，把输出结果记下来，后面分别用于管理员 JWT、用户 JWT、桌面更新凭证和 PDF 渲染器。四个值不得相同。
 
 ```bash
 cd /www/wwwroot/synapse/server
@@ -134,6 +134,8 @@ ADMIN_ACCESS_SECRET=粘贴独立生成的Base64URL随机值
 USER_ACCESS_JWT_SECRET=粘贴独立生成的随机值
 # 桌面更新凭证密钥（执行 `openssl rand -hex 32` 独立生成，不得复用其它密钥）
 DESKTOP_UPDATE_INTENT_SECRET=粘贴至少32个随机字节生成的Base64URL高熵值
+PDF_RENDERER_URL=http://pdf-renderer:3010
+PDF_RENDERER_INTERNAL_SECRET=粘贴独立生成的Base64URL随机值
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
@@ -171,6 +173,7 @@ BACKUP_COS_REGION=备份桶地域，如 ap-beijing
 - `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
 - `PLATFORM_MEDIA_COS_*` 在生产环境必须四项完整配置，Bucket 必须保持私有读写
 - `DRIVE_COLLABORATION_ENABLED` 只接受 `true` 或 `false`；启用后 `/api/drive/collaboration` 必须允许 WebSocket Upgrade
+- `PDF_RENDERER_URL` 在生产环境使用 compose 内部地址 `http://pdf-renderer:3010`；`PDF_RENDERER_INTERNAL_SECRET` 必须是独立的高熵 Base64URL 密钥
 
 ---
 
@@ -187,6 +190,7 @@ docker compose --env-file .env up -d --build
 
 ```
 ✔ Container server-postgres-1  Healthy
+✔ Container server-pdf-renderer-1 Healthy
 ✔ Container server-server-1    Started
 ```
 
@@ -196,11 +200,12 @@ docker compose --env-file .env up -d --build
 docker compose ps
 ```
 
-应该看到两个容器状态都是 `Up`：
+应该看到三个容器状态都是 `Up`：
 
 ```
 NAME                   STATUS
 server-postgres-1      Up (healthy)
+server-pdf-renderer-1  Up (healthy)
 server-server-1        Up
 ```
 

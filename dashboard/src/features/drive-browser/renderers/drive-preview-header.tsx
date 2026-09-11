@@ -24,7 +24,7 @@ import {
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
 import { getDrivePreviewFileIdentity, getDrivePreviewSystemActions } from './drive-preview-actions'
-import type { DrivePreviewSystemAction } from './drive-preview-actions'
+import type { DrivePreviewPdfExportAction, DrivePreviewSystemAction } from './drive-preview-actions'
 import { copyDrivePreviewShareLink } from './drive-preview-share-clipboard'
 import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
@@ -39,6 +39,7 @@ export function DrivePreviewHeader({
   selectedRendererId,
   onRendererChange,
   onOpenVersions,
+  pdfExport,
 }: {
   readonly snapshot: DriveBrowserSnapshotDto
   readonly rendererItems: readonly DriveRendererToolbarItem[]
@@ -46,9 +47,10 @@ export function DrivePreviewHeader({
   readonly selectedRendererId: DriveRendererId | null
   readonly onRendererChange: (id: DriveRendererId) => void
   readonly onOpenVersions: (itemId: string) => void
+  readonly pdfExport?: Omit<DrivePreviewPdfExportAction, 'kind' | 'id' | 'label' | 'icon'>
 }) {
   const identity = getDrivePreviewFileIdentity(snapshot)
-  const systemActions = getDrivePreviewSystemActions(snapshot, selectedRendererId)
+  const systemActions = getDrivePreviewSystemActions(snapshot, selectedRendererId, pdfExport)
   const layoutMode = useFilePreviewLayoutMode()
   const primaryActions = systemActions.filter((action) => DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id))
   const overflowActions = systemActions.filter((action) => !DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id))
@@ -269,6 +271,22 @@ function DrivePreviewHeaderAction({
       </Button>
     )
   }
+  if (action.kind === 'pdf-export') {
+    return (
+      <Button
+        data-drive-telemetry-event='web.drive.preview.export-pdf'
+        type='button'
+        variant='outline'
+        size='sm'
+        disabled={action.exporting || Boolean(action.disabledReason)}
+        title={action.disabledReason ?? undefined}
+        onClick={() => { void action.onExport() }}
+      >
+        <action.icon data-icon='inline-start' />
+        {action.label}
+      </Button>
+    )
+  }
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -336,6 +354,24 @@ function DrivePreviewHeaderMenuAction({
       <DropdownMenuItem data-drive-telemetry-event='web.drive.preview.versions' onSelect={() => onOpenVersions(action.itemId)}>
         <action.icon data-icon='inline-start' />
         {action.label}
+      </DropdownMenuItem>
+    )
+  }
+  if (action.kind === 'pdf-export') {
+    return (
+      <DropdownMenuItem
+        data-drive-telemetry-event='web.drive.preview.export-pdf'
+        disabled={action.exporting || Boolean(action.disabledReason)}
+        title={action.disabledReason ?? undefined}
+        onSelect={() => { void action.onExport() }}
+      >
+        <action.icon data-icon='inline-start' />
+        {action.disabledReason ? (
+          <span className='flex min-w-0 flex-col gap-0.5'>
+            <span>{action.label}</span>
+            <span className='text-xs text-muted-foreground'>{action.disabledReason}</span>
+          </span>
+        ) : action.label}
       </DropdownMenuItem>
     )
   }

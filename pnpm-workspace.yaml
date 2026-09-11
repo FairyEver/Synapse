@@ -5,6 +5,7 @@ packages:
   - document
   - server
   - dashboard
+  - pdf-renderer
   - auto
   - auto/web
   - templates/shadcn-admin

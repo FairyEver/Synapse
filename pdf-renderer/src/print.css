@@ -1,0 +1,108 @@
+@page {
+  size: A4 portrait;
+  margin: 16mm;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.62;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.markdown-body {
+  box-sizing: border-box;
+  max-width: none;
+  color: inherit;
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body pre,
+.markdown-body blockquote,
+.markdown-body table,
+.markdown-body figure,
+.markdown-body img {
+  break-inside: avoid;
+}
+
+.markdown-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body [data-drive-markdown-table-scroll="true"] {
+  max-width: 100%;
+  overflow: visible;
+}
+
+.markdown-body table {
+  width: 100%;
+  table-layout: fixed;
+  font-size: 9pt;
+}
+
+.markdown-body th,
+.markdown-body td {
+  overflow-wrap: anywhere;
+}
+
+.markdown-body img,
+.markdown-body svg,
+.markdown-body canvas {
+  max-width: 100%;
+  max-height: 245mm;
+  height: auto;
+  object-fit: contain;
+}
+
+.markdown-body a {
+  color: inherit;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body li[data-drive-list-marker]::marker {
+  content: attr(data-drive-list-marker) " ";
+}
+
+.markdown-body [data-drive-pdf-image-missing="true"],
+.markdown-body [data-drive-pdf-mermaid-missing="true"] {
+  display: block;
+  margin: 1em 0;
+  padding: 0.75em 1em;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  font-size: 9pt;
+}
+
+.markdown-body [data-drive-pdf-mermaid="true"] {
+  margin: 1em 0;
+  text-align: center;
+  break-inside: avoid;
+}
+
+.markdown-body [data-drive-pdf-mermaid="true"] svg {
+  width: auto;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  break-after: avoid;
+  text-wrap: balance;
+}

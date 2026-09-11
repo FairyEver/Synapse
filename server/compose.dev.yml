@@ -1,0 +1,11 @@
+services:
+  pdf-renderer:
+    ports:
+      - "127.0.0.1:${PDF_RENDERER_HOST_PORT:-3010}:3010"
+    networks:
+      - pdf-internal
+      - pdf-dev
+
+networks:
+  pdf-dev:
+    driver: bridge

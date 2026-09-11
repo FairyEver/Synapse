@@ -74,7 +74,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("rollback_remote_service")
     expect(deployScript).toContain("print_manual_database_restore_instructions")
     expect(deployScript).toContain("docker compose --env-file .env stop server")
-    expect(deployScript).toContain("docker compose --env-file .env up -d --no-build server")
+    expect(deployScript).toContain("docker compose --env-file .env up -d --no-build pdf-renderer server")
   })
 
   it("keeps deployment migration checks generic for future schema and data migrations", () => {
@@ -158,6 +158,33 @@ describe("server deployment configuration", () => {
     expect(compose).toContain("http://127.0.0.1:3000/healthz")
     expect(compose).not.toContain("http://127.0.0.1:3001/healthz")
     expect(compose).toContain("TRUST_PROXY: loopback")
+  })
+
+  it("builds, isolates, health-checks, and rolls back the PDF renderer with the API", () => {
+    const compose = readRepoFile("server/compose.yml")
+    const devCompose = readRepoFile("server/compose.dev.yml")
+    const deployScript = readRepoFile("deploy.sh")
+    const rendererDockerfile = readRepoFile("pdf-renderer/Dockerfile")
+    const nginx = readRepoFile("server/nginx.conf")
+
+    expect(compose).toContain("image: synapse-pdf-renderer:${SYNAPSE_SERVER_IMAGE_TAG:-latest}")
+    expect(compose).toContain("PDF_RENDERER_URL: http://pdf-renderer:3010")
+    expect(compose).toContain("PDF_RENDERER_INTERNAL_SECRET: ${PDF_RENDERER_INTERNAL_SECRET:?PDF_RENDERER_INTERNAL_SECRET is required}")
+    expect(compose).toContain("read_only: true")
+    expect(compose).toContain("no-new-privileges:true")
+    expect(compose).toContain("pids_limit: 256")
+    expect(compose).toContain("internal: true")
+    expect(compose.match(/\n  pdf-renderer:([\s\S]*?)\nvolumes:/u)?.[1]).not.toContain("ports:")
+    expect(devCompose).toContain('127.0.0.1:${PDF_RENDERER_HOST_PORT:-3010}:3010')
+    expect(deployScript).toContain("docker compose --env-file .env build server pdf-renderer")
+    expect(deployScript).toContain("tag_running_image pdf-renderer synapse-pdf-renderer false")
+    expect(deployScript).toContain("up -d --no-build pdf-renderer server")
+    expect(deployScript).toContain("synapse-pdf-renderer:$ROLLBACK_IMAGE_TAG")
+    expect(rendererDockerfile).toContain("mcr.microsoft.com/playwright:v1.59.1-noble")
+    expect(rendererDockerfile).toContain("USER 10001:10001")
+    expect(nginx).toContain("/exports/pdf$")
+    expect(nginx).toContain("proxy_read_timeout 65s")
+    expect(nginx).toContain("proxy_buffering off")
   })
 
   it("keeps problem feedback behind one coarse in-memory nginx admission", () => {

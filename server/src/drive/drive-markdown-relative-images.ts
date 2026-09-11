@@ -51,6 +51,7 @@ const LOOSE_INLINE_IMAGE_PATTERN = /!\[([^\]\r\n]*)\]\(([^()\r\n]* [^()\r\n]*)\)
 export function extractDriveMarkdownRelativeImages(
   markdown: string,
   limit = DRIVE_MARKDOWN_RELATIVE_IMAGE_LIMIT,
+  options: { readonly includeStandaloneRawImages?: boolean } = {},
 ): DriveMarkdownRelativeImageReference[] {
   const tree = unified().use(remarkParse).parse(markdown) as MarkdownAstNode
   normalizeDriveMarkdownLooseImageNodes(tree)
@@ -59,7 +60,7 @@ export function extractDriveMarkdownRelativeImages(
 
   visitMarkdownAst(tree, (node) => {
     if (references.size >= limit) return
-    const src = imageNodeSource(node, definitions)
+    const src = imageNodeSource(node, definitions, options.includeStandaloneRawImages !== false)
     if (!src || references.has(src)) return
     const parsed = parseDriveMarkdownRelativeImageSrc(src)
     if (parsed) references.set(src, parsed)
@@ -146,12 +147,16 @@ function collectImageDefinitions(tree: MarkdownAstNode): ReadonlyMap<string, str
   return definitions
 }
 
-function imageNodeSource(node: MarkdownAstNode, definitions: ReadonlyMap<string, string>): string | null {
+function imageNodeSource(
+  node: MarkdownAstNode,
+  definitions: ReadonlyMap<string, string>,
+  includeStandaloneRawImages: boolean,
+): string | null {
   if (node.type === "image" && typeof node.url === "string") return node.url.trim()
   if (node.type === "imageReference" && typeof node.identifier === "string") {
     return definitions.get(normalizeReferenceIdentifier(node.identifier))?.trim() ?? null
   }
-  if (node.type === "html" && typeof node.value === "string") {
+  if (includeStandaloneRawImages && node.type === "html" && typeof node.value === "string") {
     return parseStandaloneDriveMarkdownRawImage(node.value)?.src ?? null
   }
   return null

@@ -337,7 +337,7 @@ describe('DriveRendererShell', () => {
 
     await click(buttonWithLabel('更多操作'))
 
-    expect(menuItemTexts()).toEqual(['下载', '在云盘中查看', '历史版本'])
+    expect(menuItemTexts()).toEqual(['下载', '导出为 PDF', '在云盘中查看', '历史版本'])
   })
 
   it('copies a shared file title and link from the shared overflow menu', async () => {

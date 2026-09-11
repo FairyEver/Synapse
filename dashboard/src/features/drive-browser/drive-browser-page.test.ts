@@ -238,6 +238,17 @@ describe('drive browser view model', () => {
       'versions',
       'renderer-select',
     ])
+    expect(getDrivePreviewSystemActions(standaloneFile, 'markdown', {
+      exporting: false,
+      disabledReason: null,
+      onExport: vi.fn(async () => undefined),
+    }).map((action) => action.id)).toEqual([
+      'download',
+      'pdf-export',
+      'open-in-drive',
+      'versions',
+      'renderer-select',
+    ])
     expect(getDrivePreviewSystemMenuSections(standaloneFile).flatMap((section) => section.items.map((item) => item.id))).toContain('open-in-drive')
   })
 
@@ -285,6 +296,32 @@ describe('drive browser view model', () => {
     ])
     expect(floatingHtml).toContain('文件操作')
     expect(floatingHtml).not.toContain('data-drive-preview-header')
+  })
+
+  it('shows the PDF export action as disabled when Markdown has unsaved changes', () => {
+    const snapshot = createSnapshot({
+      surface: 'standalone',
+      current: {
+        ...baseCurrent(),
+        name: 'notes.md',
+        previewKind: 'markdown',
+        downloadUrl: '/drive/items/file/download',
+      },
+    })
+    const actions = getDrivePreviewSystemActions(snapshot, 'markdown', {
+      exporting: false,
+      disabledReason: '请先保存再导出',
+      onExport: vi.fn(async () => undefined),
+    })
+
+    expect(actions[0]?.id).toBe('download')
+    expect(actions[1]).toMatchObject({
+      id: 'pdf-export',
+      kind: 'pdf-export',
+      label: '导出为 PDF',
+      exporting: false,
+      disabledReason: '请先保存再导出',
+    })
   })
 
   it('formats shared file clipboard text as a title and absolute link on two lines', () => {

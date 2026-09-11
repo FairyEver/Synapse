@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Head, Header, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Head, Header, HttpStatus, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import { Buffer } from "node:buffer"
@@ -32,6 +32,7 @@ import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
+import { DRIVE_PDF_MAX_IMAGES, DRIVE_PDF_SOURCE_MAX_BYTES, DriveMarkdownPdfExportService } from "./drive-markdown-pdf-export.service"
 import {
   renderDriveShareReaderPage,
   renderDriveShareReaderPasswordPage,
@@ -223,6 +224,7 @@ export class DriveUserController {
     @Optional() private readonly annotations?: DriveAnnotationService,
     @Optional() private readonly sites?: DriveSiteService,
     @Optional() private readonly changes?: DriveChangeLogService,
+    @Optional() private readonly pdfExports?: DriveMarkdownPdfExportService,
   ) {}
 
   @Get("/public-assets")
@@ -669,6 +671,24 @@ export class DriveUserController {
       surface: parseBrowserSurface(surface),
       childrenPage: parseDriveBrowserChildrenPageQuery(childrenOffset, childrenLimit),
     })
+  }
+
+  @Post("/browser/owner/items/:itemId/exports/pdf")
+  async exportOwnerItemPdf(
+    @Param("itemId") itemId: string,
+    @Req() request: AuthenticatedUserRequest,
+    @Res() response: Response,
+  ): Promise<void> {
+    const exporter = requireDrivePdfExportService(this.pdfExports)
+    sendDrivePdfExport(response, await exporter.export({
+      rateLimitKey: `user:${request.user!.id}`,
+      resolveSource: () => this.drive.resolveOwnerMarkdownPdfSource({
+        userId: request.user!.id,
+        itemId,
+        maxBytes: DRIVE_PDF_SOURCE_MAX_BYTES,
+        maxImages: DRIVE_PDF_MAX_IMAGES,
+      }),
+    }))
   }
 
   @Get("/browser/owner/items/:itemId/annotations")
@@ -1133,6 +1153,25 @@ function downloadTransferErrorMetadata(error: unknown): { readonly errorName: st
   }
 }
 
+function requireDrivePdfExportService(service?: DriveMarkdownPdfExportService): DriveMarkdownPdfExportService {
+  if (!service) throw new Error("Drive Markdown PDF export service is unavailable.")
+  return service
+}
+
+function sendDrivePdfExport(
+  response: Response,
+  result: { readonly bytes: Buffer; readonly fileName: string; readonly imageWarnings: number; readonly diagramWarnings: number },
+): void {
+  response.setHeader("Content-Type", "application/pdf")
+  response.setHeader("Content-Disposition", attachmentContentDisposition(result.fileName))
+  response.setHeader("Cache-Control", "private, no-store")
+  response.setHeader("X-Content-Type-Options", "nosniff")
+  response.setHeader("X-Synapse-Pdf-Image-Warnings", String(result.imageWarnings))
+  response.setHeader("X-Synapse-Pdf-Diagram-Warnings", String(result.diagramWarnings))
+  response.setHeader("Content-Length", String(result.bytes.length))
+  response.status(HttpStatus.OK).send(result.bytes)
+}
+
 @Controller()
 export class DrivePublicController {
   constructor(
@@ -1144,6 +1183,7 @@ export class DrivePublicController {
     @Optional() private readonly sites?: DriveSiteService,
     @Optional() private readonly hostedDocumentImages?: DriveDocumentHostedImageService,
     @Optional() private readonly linkIntake?: DriveLinkIntakeService,
+    @Optional() private readonly pdfExports?: DriveMarkdownPdfExportService,
   ) {}
 
   @Post("/api/drive/link-intake/resolve")
@@ -1481,6 +1521,15 @@ export class DrivePublicController {
     })
   }
 
+  @Post("/api/drive/browser/shares/:shareId/exports/pdf")
+  async exportShareRootPdf(
+    @Param("shareId") shareId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    await this.exportSharePdf({ shareId, request, response })
+  }
+
   @Get("/api/drive/browser/shares/:shareId/items/:itemId")
   async getShareItemSnapshot(
     @Param("shareId") shareId: string,
@@ -1497,6 +1546,16 @@ export class DrivePublicController {
       request,
       response,
     })
+  }
+
+  @Post("/api/drive/browser/shares/:shareId/items/:itemId/exports/pdf")
+  async exportShareItemPdf(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise<void> {
+    await this.exportSharePdf({ shareId, itemId, request, response })
   }
 
   @Get("/api/drive/browser/shares/:shareId/annotations")
@@ -2064,6 +2123,25 @@ export class DrivePublicController {
       }
       throw error
     }
+  }
+
+  private async exportSharePdf(input: {
+    readonly shareId: string
+    readonly itemId?: string
+    readonly request: Request
+    readonly response: Response
+  }): Promise<void> {
+    const exporter = requireDrivePdfExportService(this.pdfExports)
+    sendDrivePdfExport(input.response, await exporter.export({
+      rateLimitKey: `share-ip:${input.request.ip || "unknown"}`,
+      resolveSource: () => this.drive.resolveShareMarkdownPdfSource({
+        shareId: input.shareId,
+        itemId: input.itemId,
+        cookie: readDriveAccessCookie(input.request, { kind: "share", publicId: input.shareId }),
+        maxBytes: DRIVE_PDF_SOURCE_MAX_BYTES,
+        maxImages: DRIVE_PDF_MAX_IMAGES,
+      }),
+    }))
   }
 
   private async getShareSnapshotResponse(input: {

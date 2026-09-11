@@ -2,6 +2,35 @@ import { describe, expect, it } from "vitest"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 
 describe("drive markdown renderer", () => {
+  it("replaces unresolved PDF images with a safe visible placeholder", async () => {
+    const markdown = "before ![示意图](https://example.com/private.png) after"
+    const first = await renderDriveMarkdownFragment(markdown)
+    const image = first.projection.images?.[0]
+    expect(image).toBeDefined()
+
+    const result = await renderDriveMarkdownFragment(markdown, {
+      projection: first.projection,
+      pdfImageUrlsById: new Map([[image!.imageId, null]]),
+    })
+
+    expect(result.html).toContain('data-drive-pdf-image-missing="true"')
+    expect(result.html).toContain("图片无法加载：示意图")
+    expect(result.html).not.toContain("example.com/private.png")
+  })
+
+  it("replaces resolved PDF images with self-contained data URLs", async () => {
+    const markdown = "![图](./image.png)"
+    const first = await renderDriveMarkdownFragment(markdown)
+    const image = first.projection.images?.[0]
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo="
+    const result = await renderDriveMarkdownFragment(markdown, {
+      projection: first.projection,
+      pdfImageUrlsById: new Map([[image!.imageId, dataUrl]]),
+    })
+
+    expect(result.html).toContain(`src="${dataUrl}"`)
+  })
+
   it("renders a sanitized markdown fragment for browser previews", async () => {
     const result = await renderDriveMarkdownFragment([
       "# Notes",

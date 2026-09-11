@@ -6,13 +6,14 @@ import {
   type DriveBrowserSnapshotDto,
   type DriveShareClipboardKind,
 } from '@synapse/shared'
-import { Copy, Download, ExternalLink, History, ListFilter, type LucideIcon } from 'lucide-react'
+import { Copy, Download, ExternalLink, FileDown, History, ListFilter, type LucideIcon } from 'lucide-react'
 import { driveBrowserKindLabel, formatDriveBrowserSize } from '../shared/drive-format'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import { getDriveRendererOptions, type DriveRendererId, type DriveRendererOption } from './drive-renderer-registry'
 
 export type DrivePreviewSystemActionId =
   | 'download'
+  | 'pdf-export'
   | 'copy-share-link'
   | 'open-in-drive'
   | 'open-new-window'
@@ -62,15 +63,28 @@ export type DrivePreviewRendererSelectAction = {
   readonly icon: LucideIcon
 }
 
+export type DrivePreviewPdfExportAction = {
+  readonly kind: 'pdf-export'
+  readonly id: 'pdf-export'
+  readonly label: string
+  readonly icon: LucideIcon
+  readonly exporting: boolean
+  readonly disabledReason: string | null
+  readonly onExport: () => Promise<void>
+}
+
 export type DrivePreviewSystemAction =
   | DrivePreviewLinkAction
   | DrivePreviewCopyShareLinkAction
   | DrivePreviewVersionsAction
   | DrivePreviewRendererSelectAction
+  | DrivePreviewPdfExportAction
+
+export type DrivePreviewSystemMenuAction = Exclude<DrivePreviewSystemAction, DrivePreviewPdfExportAction>
 
 export type DrivePreviewSystemMenuSection = {
   readonly id: 'file' | 'renderer'
-  readonly items: readonly DrivePreviewSystemAction[]
+  readonly items: readonly DrivePreviewSystemMenuAction[]
 }
 
 export function getDrivePreviewFileIdentity(snapshot: DriveBrowserSnapshotDto): DrivePreviewFileIdentity {
@@ -85,6 +99,7 @@ export function getDrivePreviewFileIdentity(snapshot: DriveBrowserSnapshotDto): 
 export function getDrivePreviewSystemActions(
   snapshot: DriveBrowserSnapshotDto,
   selectedRendererId: DriveRendererId | null = null,
+  pdfExport?: Omit<DrivePreviewPdfExportAction, 'kind' | 'id' | 'label' | 'icon'>,
 ): readonly DrivePreviewSystemAction[] {
   if (snapshot.current.type !== 'file') return []
   const actions: DrivePreviewSystemAction[] = []
@@ -95,6 +110,15 @@ export function getDrivePreviewSystemActions(
       label: '下载',
       href: snapshot.current.downloadUrl,
       icon: Download,
+    })
+  }
+  if (snapshot.current.previewKind === 'markdown' && pdfExport) {
+    actions.push({
+      kind: 'pdf-export',
+      id: 'pdf-export',
+      label: pdfExport.exporting ? '正在导出' : '导出为 PDF',
+      icon: FileDown,
+      ...pdfExport,
     })
   }
 
@@ -167,6 +191,7 @@ export function getDrivePreviewSystemMenuSections(
   selectedRendererId: DriveRendererId | null = null,
 ): readonly DrivePreviewSystemMenuSection[] {
   const actions = getDrivePreviewSystemActions(snapshot, selectedRendererId)
+    .filter((action): action is DrivePreviewSystemMenuAction => action.kind !== 'pdf-export')
   const fileItems = actions.filter((action) => action.kind !== 'renderer-select')
   const rendererItems = actions.filter((action) => action.kind === 'renderer-select')
   const sections: DrivePreviewSystemMenuSection[] = []

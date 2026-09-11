@@ -6,7 +6,7 @@
 
 - Electron 41 + Vite 8 + React 19 + TypeScript 6。
 - shadcn/ui（`radix-nova`）+ Tailwind CSS 4。
-- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/auto`、`@synapse/auto-web`。
+- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
 - Git 管理内容，SQLite / DataRepository 管理业务数据。
 
 ```text
@@ -23,6 +23,7 @@ desktop/
     └── types/          # Renderer 全局类型
 document/               # VitePress 文档站
 server/                 # 服务端与管理后台
+pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 ```
 
 新增 renderer 业务模块必须放在 `desktop/src/modules/`。创建目录前先检查现有模块，不得引入 `desktop/src/features/` 等并行架构。`desktop/src/App.tsx` 只负责 app-shell 组合和顶层编排。
@@ -31,7 +32,7 @@ server/                 # 服务端与管理后台
 
 - `pnpm dev`：desktop + server + document。
 - `pnpm dev:desktop`：仅桌面端。
-- `pnpm dev:server`：服务端 API、dashboard 和 compose 服务。
+- `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器。
 - `pnpm dev:document`：文档站。
 - 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`。
 

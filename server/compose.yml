@@ -53,6 +53,8 @@ services:
       BACKUP_COS_REGION: ${BACKUP_COS_REGION:-}
       SYNAPSE_DRIVE_LOCAL_ROOT: /app/data/drive
       DRIVE_COLLABORATION_ENABLED: ${DRIVE_COLLABORATION_ENABLED:-false}
+      PDF_RENDERER_URL: http://pdf-renderer:3010
+      PDF_RENDERER_INTERNAL_SECRET: ${PDF_RENDERER_INTERNAL_SECRET:?PDF_RENDERER_INTERNAL_SECRET is required}
       PORT: "3001"
     ports:
       - "127.0.0.1:3000:3000"
@@ -71,6 +73,44 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      pdf-renderer:
+        condition: service_healthy
+    networks:
+      - default
+      - pdf-internal
+
+  pdf-renderer:
+    restart: unless-stopped
+    image: synapse-pdf-renderer:${SYNAPSE_SERVER_IMAGE_TAG:-latest}
+    build:
+      context: ..
+      dockerfile: pdf-renderer/Dockerfile
+    environment:
+      PDF_RENDERER_INTERNAL_SECRET: ${PDF_RENDERER_INTERNAL_SECRET:?PDF_RENDERER_INTERNAL_SECRET is required}
+      PORT: "3010"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    cpus: "2.0"
+    mem_limit: 2g
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    networks:
+      - pdf-internal
 
 volumes:
   synapse-postgres:
+
+networks:
+  pdf-internal:
+    internal: true

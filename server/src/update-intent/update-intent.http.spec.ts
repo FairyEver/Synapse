@@ -51,6 +51,8 @@ describe("update intent HTTP API", () => {
       USER_ACCESS_JWT_SECRET: "user-secret-user-secret-user-secret",
       APP_PUBLIC_URL: "https://synapse.d2.pub",
       DESKTOP_UPDATE_INTENT_SECRET: updateIntentSecret,
+      PDF_RENDERER_URL: "http://pdf-renderer:3010",
+      PDF_RENDERER_INTERNAL_SECRET: "Py7mR2vK9sF4xD8qW1cN6hJ3uB0eG5iL7oA2tZ9pM4_r",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/tmp/synapse-test-drive",
       SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
       SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",

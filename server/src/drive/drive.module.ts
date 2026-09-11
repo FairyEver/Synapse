@@ -9,6 +9,7 @@ import { DriveChangeLogService } from "./drive-change-log"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import { DriveLinkIntakeService } from "./drive-link-intake.service"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
+import { DriveMarkdownPdfExportService } from "./drive-markdown-pdf-export.service"
 import { DriveCollaborationGateway } from "./drive-collaboration.gateway"
 import { DriveCollaborationService } from "./drive-collaboration.service"
 import { LocalDriveCollaborationBus } from "./drive-collaboration-bus"
@@ -27,6 +28,7 @@ import { PlatformMediaStorage } from "./platform-media-storage"
     DriveChangeLogService,
     DriveAnnotationService,
     DriveMarkdownProjectionService,
+    DriveMarkdownPdfExportService,
     DriveCollaborationService,
     DriveCollaborationGateway,
     LocalDriveCollaborationBus,
@@ -62,6 +64,6 @@ import { PlatformMediaStorage } from "./platform-media-storage"
       inject: [CosDriveStorage, LocalDriveStorage],
     },
   ],
-  exports: ["DriveStoragePort", DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentHostedImageService, DriveLinkIntakeService],
+  exports: ["DriveStoragePort", DriveService, DriveLifecycleService, DriveChangeLogService, DrivePublicAssetService, DriveSiteService, DriveAnnotationService, DriveMarkdownProjectionService, DriveMarkdownPdfExportService, DriveCollaborationService, LocalDriveCollaborationBus, DriveDocumentHostedImageService, DriveLinkIntakeService],
 })
 export class DriveModule {}

@@ -141,6 +141,12 @@ check_not_redirect_to_dashboard() {
 }
 
 check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
+if docker compose --env-file .env exec -T pdf-renderer node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+  echo "pdf renderer ok"
+else
+  echo "pdf renderer FAILED"
+  failed=1
+fi
 check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
 check_body_contains "admin" "http://127.0.0.1:3000/admin/" '<title>Synapse 管理</title>'
 check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
@@ -163,7 +169,7 @@ echo ">>> 检查数据库网络认证..."
 verify_remote_database_auth
 
 echo ">>> 重启服务容器..."
-ssh "$SERVER" "cd $REMOTE_DIR && docker compose --env-file .env restart server"
+ssh "$SERVER" "cd $REMOTE_DIR && docker compose --env-file .env restart server pdf-renderer"
 
 echo ">>> 等待服务启动..."
 sleep 5

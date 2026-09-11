@@ -8,6 +8,8 @@ const repoRoot = path.resolve(scriptDir, "../..")
 const envPath = path.join(repoRoot, "server/.env.local")
 const localServerPublicAppUrl = "http://localhost:3000"
 const localDocumentPublicUrl = "http://localhost:19773/document"
+const localPdfRendererUrl = "http://127.0.0.1:3010"
+const localPdfRendererSecret = "synapse-local-pdf-renderer-secret-not-for-production"
 
 function parseEnvFile(raw) {
   const env = {}
@@ -73,6 +75,9 @@ function resolveDevCommandEnv(args, processEnv, serverEnv) {
     const explicitDocumentPublicUrl = processEnv.DOCUMENT_PUBLIC_URL?.trim()
     env.APP_PUBLIC_URL = explicitPublicAppUrl || localServerPublicAppUrl
     env.DOCUMENT_PUBLIC_URL = explicitDocumentPublicUrl || localDocumentPublicUrl
+    env.PDF_RENDERER_URL = processEnv.PDF_RENDERER_URL?.trim() || localPdfRendererUrl
+    env.PDF_RENDERER_INTERNAL_SECRET = processEnv.PDF_RENDERER_INTERNAL_SECRET?.trim()
+      || localPdfRendererSecret
   }
 
   return env

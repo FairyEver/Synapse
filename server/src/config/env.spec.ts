@@ -8,6 +8,10 @@ import {
 } from "./env"
 
 const productionUpdateIntentSecret = "Rv3kZ8nE1pT6yM4cH9qW2sF7uJ5xB0dG8iL3oA6vN1_r"
+const productionPdfEnv = {
+  PDF_RENDERER_URL: "http://pdf-renderer:3010",
+  PDF_RENDERER_INTERNAL_SECRET: "Py7mR2vK9sF4xD8qW1cN6hJ3uB0eG5iL7oA2tZ9pM4_r",
+}
 const platformMediaCosEnv = {
   PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
   PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
@@ -19,6 +23,7 @@ describe("loadEnv", () => {
   it("parses required production settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
+      ...productionPdfEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -41,6 +46,8 @@ describe("loadEnv", () => {
     expect(env.adminAccessSecret).toHaveLength(43)
     expect(env.appPublicUrl).toBe("https://synapse.test")
     expect(env.desktopUpdateIntentSecret).toBe(productionUpdateIntentSecret)
+    expect(env.pdfRendererUrl).toBe("http://pdf-renderer:3010")
+    expect(env.pdfRendererInternalSecret).toBe(productionPdfEnv.PDF_RENDERER_INTERNAL_SECRET)
     expect(env.driveLocalRoot).toBe("/app/data/drive")
     expect(env.driveCollaborationEnabled).toBe(false)
     expect(isSkillRepositoryCosConfigured(env)).toBe(true)
@@ -62,6 +69,13 @@ describe("loadEnv", () => {
     })
 
     expect(env.appPublicUrl).toBeUndefined()
+  })
+
+  it("rejects a non-HTTP PDF renderer URL", () => {
+    expect(() => loadEnv({
+      ...baseEnv,
+      PDF_RENDERER_URL: "file:///tmp/pdf-renderer",
+    })).toThrow("PDF_RENDERER_URL")
   })
 
   it("parses an optional public document root", () => {
@@ -93,6 +107,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        ...productionPdfEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -104,6 +119,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        ...productionPdfEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -120,6 +136,7 @@ describe("loadEnv", () => {
   it("rejects a desktop update intent secret reused from either JWT domain in production", () => {
     const productionEnv = {
       NODE_ENV: "production",
+      ...productionPdfEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -148,6 +165,7 @@ describe("loadEnv", () => {
   it("rejects a weak desktop update intent secret in production", () => {
     const productionEnv = {
       NODE_ENV: "production",
+      ...productionPdfEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -181,6 +199,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        ...productionPdfEnv,
         ...platformMediaCosEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
@@ -200,6 +219,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        ...productionPdfEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -216,6 +236,7 @@ describe("loadEnv", () => {
   it("allows production Drive storage with complete COS settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
+      ...productionPdfEnv,
       ...platformMediaCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
@@ -240,6 +261,7 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({
         NODE_ENV: "production",
+        ...productionPdfEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -253,6 +275,7 @@ describe("loadEnv", () => {
   it("allows production Skill Repository storage with complete COS settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",
+      ...productionPdfEnv,
       ...platformMediaCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
@@ -370,6 +393,7 @@ describe("loadEnv", () => {
   it("requires Platform Media COS in production", () => {
     expect(() => loadEnv({
       NODE_ENV: "production",
+      ...productionPdfEnv,
       DATABASE_URL: baseEnv.DATABASE_URL,
       ADMIN_ACCESS_SECRET: baseEnv.ADMIN_ACCESS_SECRET,
       USER_ACCESS_JWT_SECRET: baseEnv.USER_ACCESS_JWT_SECRET,

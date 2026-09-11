@@ -5,6 +5,7 @@ import type {
   DriveMarkdownProjectionImageDto,
   DriveMarkdownProjectionSegmentDto,
 } from "@synapse/shared"
+import { PLATFORM_OBJECT_PATH_PREFIX } from "@synapse/shared"
 import { diffArrays } from "diff"
 import type { DriveAnnotationTextPositionSelector } from "@synapse/shared"
 import { parseDriveMarkdownRelativeImageSrc } from "./drive-markdown-relative-images"
@@ -260,6 +261,17 @@ export function driveMarkdownImageResourceKey(source: string): string {
       // Keep the authored identifier when it is not valid percent encoding.
     }
     return `file:${assetId.normalize("NFC")}`
+  }
+
+  const objectMatch = new RegExp(`^${PLATFORM_OBJECT_PATH_PREFIX}/([^/?#]+)`, "u").exec(trimmed)
+  if (objectMatch) {
+    let objectId = objectMatch[1]
+    try {
+      objectId = decodeURIComponent(objectId)
+    } catch {
+      // Keep the authored identifier when it is not valid percent encoding.
+    }
+    return `object:${objectId.normalize("NFC")}`
   }
 
   const relative = parseDriveMarkdownRelativeImageSrc(trimmed)

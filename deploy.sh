@@ -66,7 +66,7 @@ esac
 
 docker compose --env-file .env config >/dev/null
 
-for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE; do
+for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE PDF_RENDERER_URL PDF_RENDERER_INTERNAL_SECRET; do
   value=$(read_env_value "$key")
   if [ -z "$value" ]; then
     echo "$key missing"
@@ -86,6 +86,28 @@ if [ "$desktop_update_intent_unique_chars" -lt 16 ] || printf "%s" "$desktop_upd
   exit 1
 fi
 printf "DESKTOP_UPDATE_INTENT_SECRET ok (high-entropy Base64URL)\n"
+
+pdf_renderer_secret=$(read_env_value PDF_RENDERER_INTERNAL_SECRET)
+if ! printf "%s" "$pdf_renderer_secret" | grep -Eq '^[A-Za-z0-9_-]{43,}$'; then
+  echo "PDF_RENDERER_INTERNAL_SECRET must be an unpadded Base64URL value from at least 32 random bytes"
+  exit 1
+fi
+pdf_renderer_unique_chars=$(printf "%s" "$pdf_renderer_secret" | fold -w 1 | sort -u | wc -l | tr -d ' ')
+if [ "$pdf_renderer_unique_chars" -lt 16 ] || printf "%s" "$pdf_renderer_secret" | grep -Eq '(.)\1{7}'; then
+  echo "PDF_RENDERER_INTERNAL_SECRET must be a high-entropy random value without repeated-character runs"
+  exit 1
+fi
+for existing_secret in ADMIN_ACCESS_SECRET USER_ACCESS_JWT_SECRET DESKTOP_UPDATE_INTENT_SECRET; do
+  if [ "$pdf_renderer_secret" = "$(read_env_value "$existing_secret")" ]; then
+    echo "PDF_RENDERER_INTERNAL_SECRET must not reuse $existing_secret"
+    exit 1
+  fi
+done
+if [ "$(read_env_value PDF_RENDERER_URL)" != "http://pdf-renderer:3010" ]; then
+  echo "PDF_RENDERER_URL must be http://pdf-renderer:3010 in production"
+  exit 1
+fi
+printf "PDF_RENDERER_INTERNAL_SECRET ok (high-entropy Base64URL)\n"
 REMOTE_SCRIPT
 }
 
@@ -286,6 +308,8 @@ sync_remote_code() {
     --exclude='document/node_modules' \
     --exclude='document/.vitepress/cache' \
     --exclude='document/.vitepress/dist' \
+    --exclude='pdf-renderer/node_modules' \
+    --exclude='pdf-renderer/dist' \
     --include='/.dockerignore' \
     --include='/setup.sh' \
     --include='/restart.sh' \
@@ -294,6 +318,7 @@ sync_remote_code() {
     --include='/shared/***' \
     --include='/ui/***' \
     --include='/document/***' \
+    --include='/pdf-renderer/***' \
     --include='/patches/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \
@@ -303,22 +328,33 @@ sync_remote_code() {
 }
 
 build_remote_image() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env build server"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env build server pdf-renderer"
 }
 
 tag_remote_rollback_image() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "cd $REMOTE_DIR/server && NEW_IMAGE_TAG='$NEW_IMAGE_TAG' ROLLBACK_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-container_id=$(docker compose --env-file .env ps -q server || true)
-if [ -z "$container_id" ]; then
-  echo "server container is not running; cannot create rollback image"
-  exit 1
-fi
+tag_running_image() {
+  local service=$1 image_name=$2 required=$3
+  local container_id image_id
+  container_id=$(docker compose --env-file .env ps -q "$service" || true)
+  if [ -z "$container_id" ]; then
+    if [ "$required" = "true" ]; then
+      echo "$service container is not running; cannot create rollback image"
+      exit 1
+    fi
+    docker tag "${image_name}:${NEW_IMAGE_TAG}" "${image_name}:${ROLLBACK_IMAGE_TAG}"
+    echo "$service has no previous container; the newly built image will accompany an API rollback"
+    return
+  fi
+  image_id=$(docker inspect -f '{{.Image}}' "$container_id")
+  docker tag "$image_id" "${image_name}:${ROLLBACK_IMAGE_TAG}"
+  printf "rollback image tagged: %s:%s\n" "$image_name" "$ROLLBACK_IMAGE_TAG"
+}
 
-image_id=$(docker inspect -f '{{.Image}}' "$container_id")
-docker tag "$image_id" "synapse-server:${ROLLBACK_IMAGE_TAG}"
-printf "rollback image tagged: synapse-server:%s\n" "$ROLLBACK_IMAGE_TAG"
+tag_running_image server synapse-server true
+tag_running_image pdf-renderer synapse-pdf-renderer false
 REMOTE_SCRIPT
 }
 
@@ -408,15 +444,15 @@ REMOTE_SCRIPT
 }
 
 stop_remote_server() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env stop server"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && docker compose --env-file .env stop server pdf-renderer"
 }
 
 start_new_remote_server() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env up -d --no-build server"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env up -d --no-build pdf-renderer server"
 }
 
 rollback_remote_service() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' docker compose --env-file .env up -d --no-build server"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$ROLLBACK_IMAGE_TAG' docker compose --env-file .env up -d --no-build pdf-renderer server"
 }
 
 print_manual_database_restore_instructions() {
@@ -428,15 +464,16 @@ print_manual_database_restore_instructions() {
   cd $REMOTE_DIR/server
   postgres_user=\$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
   postgres_db=\$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
-  docker compose --env-file .env stop server
+  docker compose --env-file .env stop server pdf-renderer
   docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
   docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" < $FINAL_BACKUP_FILE
-  SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build server
+  SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build pdf-renderer server
 
 最终切换前备份：$FINAL_BACKUP_FILE
 Postgres globals 备份：$GLOBALS_BACKUP_FILE
 远端 .env 备份：$ENV_BACKUP_FILE
 回滚服务镜像：synapse-server:$ROLLBACK_IMAGE_TAG
+PDF 渲染器回滚镜像：synapse-pdf-renderer:$ROLLBACK_IMAGE_TAG
 EOF
 }
 
@@ -459,6 +496,7 @@ print_deployment_artifacts() {
   echo "最终切换前备份: $FINAL_BACKUP_FILE"
   echo "本地 Drive 备份: $(drive_backup_summary)"
   echo "回滚服务镜像: synapse-server:$ROLLBACK_IMAGE_TAG"
+  echo "PDF 渲染器回滚镜像: synapse-pdf-renderer:$ROLLBACK_IMAGE_TAG"
 }
 
 run_remote_health_check() {
@@ -629,6 +667,12 @@ UPDATE_INTENT_NODE
 
 run_checks_once() {
   failed=0
+  if docker compose --env-file .env exec -T pdf-renderer node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+    echo "pdf renderer ok"
+  else
+    echo "pdf renderer FAILED"
+    record_failure
+  fi
   check_body_contains "healthz" "http://127.0.0.1:3000/healthz" '"status":"ok"'
   check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
   check_body_contains "admin" "http://127.0.0.1:3000/admin/" '<title>Synapse 管理</title>'
@@ -662,7 +706,7 @@ while true; do
     docker compose --env-file .env ps || true
     echo ""
     echo "recent server logs:"
-    docker compose --env-file .env logs --tail=80 server || true
+    docker compose --env-file .env logs --tail=80 server pdf-renderer || true
     exit 1
   fi
 

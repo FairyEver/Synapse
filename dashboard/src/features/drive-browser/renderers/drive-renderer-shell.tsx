@@ -30,6 +30,7 @@ import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
+import { useDriveMarkdownPdfExport } from './use-drive-markdown-pdf-export'
 
 const READING_CONTAINER_CLASSNAME = 'mx-auto h-full w-full max-w-4xl px-4 md:px-6'
 const MEDIA_CONTAINER_CLASSNAME = 'mx-auto w-full max-w-6xl px-4 md:px-6'
@@ -193,6 +194,7 @@ function DriveRendererShellChrome({
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [pendingRendererId, setPendingRendererId] = useState<DriveRendererId | null>(null)
   const versionItemId = getDriveFileVersionItemId(snapshot)
+  const pdfExport = useDriveMarkdownPdfExport({ snapshot, context: annotationContext, hasUnsavedChanges })
   const useFloatingChrome = body && selected.id === 'iframe'
   const requestRendererChange = (id: DriveRendererId) => {
     if (id === selected.id || editContext?.reloading || editContext?.savingText) return
@@ -228,6 +230,11 @@ function DriveRendererShellChrome({
           selectedRendererId={selected.id}
           onRendererChange={requestRendererChange}
           onOpenVersions={() => setVersionsOpen(true)}
+          pdfExport={pdfExport.available ? {
+            exporting: pdfExport.exporting,
+            disabledReason: pdfExport.disabledReason,
+            onExport: pdfExport.exportPdf,
+          } : undefined}
         />
       )}
       {rendererChangeError ? (

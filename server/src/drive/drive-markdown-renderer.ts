@@ -31,6 +31,7 @@ type MarkdownAstNode = {
 
 type HtmlAstNode = {
   type?: string
+  value?: string
   tagName?: string
   properties?: Record<string, unknown>
   children?: HtmlAstNode[]
@@ -51,6 +52,7 @@ export type DriveMarkdownRenderResult = {
 
 export type DriveMarkdownRenderOptions = {
   readonly relativeImageUrls?: ReadonlyMap<string, string | null>
+  readonly pdfImageUrlsById?: ReadonlyMap<string, string | null>
   readonly allowStandaloneRawImages?: boolean
   readonly previousProjection?: {
     readonly source: string
@@ -109,6 +111,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     .use(escapeRawHtmlPlugin)
     .use(remarkRehype)
     .use(() => resolveRelativeResourceUrlsPlugin(options.relativeImageUrls ?? new Map()))
+    .use(() => resolvePdfImageUrlsPlugin(options.pdfImageUrlsById))
     .use(rehypeSanitize, {
       ...defaultSchema,
       clobberPrefix: "",
@@ -122,6 +125,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
         ],
         a: [...(defaultSchema.attributes?.a ?? []), "target", "rel"],
         img: [...(defaultSchema.attributes?.img ?? []), "alt", "title", "width", "height", "loading", "data-drive-markdown-relative-src"],
+        span: [...(defaultSchema.attributes?.span ?? []), "data-drive-pdf-image-missing"],
       },
       protocols: {
         ...defaultSchema.protocols,
@@ -305,6 +309,29 @@ function resolveRelativeResourceUrlsPlugin(relativeImageUrls: ReadonlyMap<string
   return (tree: HtmlAstNode) => {
     visitHtmlAst(tree, indexedImageUrls)
   }
+}
+
+function resolvePdfImageUrlsPlugin(pdfImageUrlsById: ReadonlyMap<string, string | null> | undefined) {
+  return (tree: HtmlAstNode) => {
+    if (!pdfImageUrlsById) return
+    visitPdfImageAst(tree, pdfImageUrlsById)
+  }
+}
+
+function visitPdfImageAst(node: HtmlAstNode, imageUrlsById: ReadonlyMap<string, string | null>): void {
+  const imageId = node.properties?.["data-drive-markdown-image-id"]
+  if (node.tagName === "img" && typeof imageId === "string" && imageUrlsById.has(imageId)) {
+    const resolvedUrl = imageUrlsById.get(imageId) ?? null
+    if (resolvedUrl) {
+      node.properties = { ...node.properties, src: resolvedUrl }
+    } else {
+      const alt = typeof node.properties?.alt === "string" ? node.properties.alt.trim() : ""
+      node.tagName = "span"
+      node.properties = { "data-drive-pdf-image-missing": "true" }
+      node.children = [{ type: "text", value: alt ? `图片无法加载：${alt}` : "图片无法加载" }]
+    }
+  }
+  for (const child of node.children ?? []) visitPdfImageAst(child, imageUrlsById)
 }
 
 function wrapTablesPlugin() {

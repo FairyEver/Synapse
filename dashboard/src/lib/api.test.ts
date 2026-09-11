@@ -423,6 +423,56 @@ describe('adminApi.drive', () => {
   })
 })
 
+describe('driveBrowserApi PDF export', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('posts the export request, downloads the PDF, and returns warning counts', async () => {
+    const link = {
+      click: vi.fn(),
+      download: '',
+      href: '',
+      rel: '',
+      remove: vi.fn(),
+    }
+    const append = vi.fn()
+    const createObjectURL = vi.fn(() => 'blob:pdf-export')
+    const revokeObjectURL = vi.fn()
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      Buffer.from('%PDF-test'),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'X-Synapse-Pdf-Image-Warnings': '2',
+          'X-Synapse-Pdf-Diagram-Warnings': '1',
+        },
+      }
+    ))
+    vi.stubGlobal('document', {
+      body: { append },
+      createElement: vi.fn(() => link),
+    })
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+
+    const result = await driveBrowserApi.exportOwnerPdf('item/1', '文档.pdf')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/drive/browser/owner/items/item%2F1/exports/pdf',
+      { credentials: 'include', method: 'POST' }
+    )
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect(link).toMatchObject({ href: 'blob:pdf-export', download: '文档.pdf', rel: 'noopener' })
+    expect(append).toHaveBeenCalledWith(link)
+    expect(link.click).toHaveBeenCalledOnce()
+    expect(link.remove).toHaveBeenCalledOnce()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:pdf-export')
+    expect(result).toEqual({ imageWarnings: 2, diagramWarnings: 1 })
+  })
+})
+
 describe('adminApi.skillRepositories', () => {
   afterEach(() => {
     vi.restoreAllMocks()

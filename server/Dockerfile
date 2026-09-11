@@ -10,6 +10,7 @@ COPY ui/package.json ui/package.json
 COPY document/package.json document/package.json
 COPY server/package.json server/package.json
 COPY dashboard/package.json dashboard/package.json
+COPY pdf-renderer/package.json pdf-renderer/package.json
 RUN pnpm install --frozen-lockfile --filter @synapse/shared --filter @synapse/server... --filter @synapse/dashboard... --filter @synapse/document...
 
 FROM base AS build
@@ -25,6 +26,7 @@ COPY dashboard/ dashboard/
 COPY document/ document/
 COPY shared/ shared/
 COPY ui/ ui/
+COPY pdf-renderer/package.json pdf-renderer/package.json
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build

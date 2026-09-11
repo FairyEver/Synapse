@@ -2956,6 +2956,121 @@ describe("DriveService", () => {
     expect(snapshot.preview?.html).not.toContain('data-drive-markdown-relative-src="./raw.png"')
   })
 
+  it("resolves CommonMark images for an owned MDX PDF export without enabling raw HTML images", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "组件" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "component.mdx",
+      mimeType: "text/markdown",
+    })
+    const image = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "diagram.png",
+      mimeType: "image/png",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    const imageRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: image.id } })
+    objects.set(markdownRecord.storageKey, {
+      body: "![diagram](./diagram.png)\n\n<img src=\"./raw.png\" alt=\"raw\">",
+      contentType: "text/markdown",
+    })
+
+    const source = await service.resolveOwnerMarkdownPdfSource({
+      userId: "user-1",
+      itemId: markdown.id,
+      maxBytes: 10 * 1024 * 1024,
+      maxImages: 256,
+    })
+
+    expect(source.allowStandaloneRawImages).toBe(false)
+    expect([...source.relativeImages.values()]).toEqual([expect.objectContaining({ storageKey: imageRecord.storageKey })])
+  })
+
+  it("rejects a PDF source with more than 256 unique images before resolving Drive items", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "many-images.md",
+      mimeType: "text/markdown",
+    })
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(markdownRecord.storageKey, {
+      body: Array.from({ length: 257 }, (_, index) => `![${index}](image-${index}.png)`).join("\n"),
+      contentType: "text/markdown",
+    })
+
+    await expect(service.resolveOwnerMarkdownPdfSource({
+      userId: "user-1",
+      itemId: markdown.id,
+      maxBytes: 10 * 1024 * 1024,
+      maxImages: 256,
+    })).rejects.toMatchObject({ status: 413 })
+  })
+
+  it("keeps live single-file share PDF images inside the stored-version authorization set", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    let markdownItemId = ""
+    const collaboration = {
+      getLiveDocument: vi.fn((itemId: string) => itemId === markdownItemId
+        ? { sourceText: "![allowed](./allowed.png)\n\n![private](./private.png)" }
+        : null),
+    }
+    const service = new DriveService(
+      prisma as unknown as PrismaService,
+      storage,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      collaboration as never,
+    )
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const folder = await service.createFolder("user-1", { parentId: null, name: "分享" })
+    const markdown = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "readme.md",
+      mimeType: "text/markdown",
+    })
+    const allowed = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "allowed.png",
+      mimeType: "image/png",
+    })
+    const privateImage = await createCompletedUpload(service, "user-1", {
+      parentId: folder.id,
+      name: "private.png",
+      mimeType: "image/png",
+    })
+    markdownItemId = markdown.id
+    const markdownRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    const allowedRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: allowed.id } })
+    const privateRecord = await prisma.driveItem.findUniqueOrThrow({ where: { id: privateImage.id } })
+    objects.set(markdownRecord.storageKey, { body: "![allowed](./allowed.png)", contentType: "text/markdown" })
+    const share = await service.createShare("user-1", markdown.id, "https://synapse.test")
+
+    const source = await service.resolveShareMarkdownPdfSource({
+      shareId: share.shareId,
+      password: share.password ?? undefined,
+      maxBytes: 10 * 1024 * 1024,
+      maxImages: 256,
+    })
+    const storageKeys = [...source.relativeImages.values()].map((image) => image.storageKey)
+
+    expect(storageKeys).toEqual([allowedRecord.storageKey])
+    expect(storageKeys).not.toContain(privateRecord.storageKey)
+  })
+
   it("resolves explicit Windows Markdown image paths without rewriting the preview source", async () => {
     const prisma = createPrismaMemory()
     const objects = new Map<string, DriveTestObject>()

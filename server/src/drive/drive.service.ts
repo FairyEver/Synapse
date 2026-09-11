@@ -70,7 +70,7 @@ import {
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
-import { mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
+import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
 import {
@@ -235,6 +235,18 @@ type DriveFileVersionDownloadAuditInput = {
 type DriveBrowserTransferResult =
   | ({ readonly kind: "file" } & DriveBrowserDownloadResult)
   | ({ readonly kind: "zip" } & DriveFolderZipBrowserResult)
+
+export type DriveMarkdownPdfSource = {
+  readonly itemId: string
+  readonly name: string
+  readonly sourceText: string
+  readonly allowStandaloneRawImages: boolean
+  readonly relativeImages: ReadonlyMap<string, {
+    readonly storageKey: string
+    readonly size: bigint
+    readonly mimeType: string | null
+  }>
+}
 
 type PreparedUploadRecord = {
   readonly item: DriveItemRecord
@@ -2030,6 +2042,16 @@ export class DriveService implements OnApplicationBootstrap {
     }
   }
 
+  async resolveOwnerMarkdownPdfSource(input: {
+    readonly userId: string
+    readonly itemId: string
+    readonly maxBytes: number
+    readonly maxImages: number
+  }): Promise<DriveMarkdownPdfSource> {
+    const { current } = await this.resolveOwnedBrowserCurrent(input)
+    return this.buildMarkdownPdfSource(current, { context: "owner", surface: "standalone" }, input.maxBytes, input.maxImages)
+  }
+
   async resolveOwnerRenderAccess(input: {
     readonly userId: string
     readonly itemId: string
@@ -2319,6 +2341,28 @@ export class DriveService implements OnApplicationBootstrap {
       size: object.size ?? current.size,
       contentType: resolveDriveDownloadContentType(current.name, object.contentType, current.mimeType),
     }
+  }
+
+  async resolveShareMarkdownPdfSource(input: {
+    readonly shareId: string
+    readonly itemId?: string | null
+    readonly password?: string
+    readonly cookie?: string
+    readonly maxBytes: number
+    readonly maxImages: number
+  }): Promise<DriveMarkdownPdfSource> {
+    const share = await this.resolvePublicShare({
+      shareId: input.shareId,
+      password: input.password,
+      cookie: input.cookie,
+    })
+    const { root, current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    return this.buildMarkdownPdfSource(current, {
+      context: "share",
+      surface: "standalone",
+      shareId: input.shareId,
+      rootItemId: root.id,
+    }, input.maxBytes, input.maxImages)
   }
 
   async prepareOpenApiShareDownload(input: {
@@ -3194,6 +3238,47 @@ export class DriveService implements OnApplicationBootstrap {
     return items.reverse()
   }
 
+  private async buildMarkdownPdfSource(
+    current: DriveItemRecordWithStorage,
+    route: DriveBrowserRouteContext,
+    maxBytes: number,
+    maxImages: number,
+  ): Promise<DriveMarkdownPdfSource> {
+    const item = toDriveBrowserSourceItem(current)
+    if (current.type !== DRIVE_ITEM_TYPE.file || resolveDriveBrowserPreviewKind(item) !== "markdown") {
+      throw new BadRequestException("仅支持导出 Markdown 文件。")
+    }
+    const storageKey = this.requireActiveFileStorage(current)
+    const liveDocument = this.collaboration?.getLiveDocument(current.id) ?? null
+    const source = liveDocument
+      ? { text: liveDocument.sourceText, truncated: Buffer.byteLength(liveDocument.sourceText, "utf8") > maxBytes }
+      : await readStreamTextPrefix((await this.storage.getObjectStream({ key: storageKey })).stream, maxBytes)
+    if (source.truncated) throw new PayloadTooLargeException("Markdown 文件超过 10 MiB，无法导出。")
+
+    const allowStandaloneRawImages = isPlainDriveMarkdownItem(item)
+    const resolvedImages = await this.resolveDriveMarkdownRelativeImages(source.text, current, route, {
+      unique: true,
+      maxUnique: maxImages,
+      includeStandaloneRawImages: allowStandaloneRawImages,
+    })
+    const relativeImages = new Map<string, { storageKey: string; size: bigint; mimeType: string | null }>()
+    for (const { reference, item: image } of resolvedImages) {
+      if (!image?.storageKey) continue
+      relativeImages.set(driveMarkdownImageResourceKey(reference.src), {
+        storageKey: image.storageKey,
+        size: image.size,
+        mimeType: image.mimeType,
+      })
+    }
+    return {
+      itemId: current.id,
+      name: current.name,
+      sourceText: source.text,
+      allowStandaloneRawImages,
+      relativeImages,
+    }
+  }
+
   private async buildBrowserPreview(
     current: DriveItemRecordWithStorage,
     route: DriveBrowserRouteContext,
@@ -3263,18 +3348,39 @@ export class DriveService implements OnApplicationBootstrap {
     markdown: string,
     markdownItem: DriveItemRecordWithStorage,
     route?: DriveBrowserRouteContext,
+    options?: {
+      readonly unique?: boolean
+      readonly maxUnique?: number
+      readonly includeStandaloneRawImages?: boolean
+    },
   ): Promise<ResolvedDriveMarkdownRelativeImage[]> {
-    const references = extractDriveMarkdownRelativeImages(markdown)
+    const extracted = extractDriveMarkdownRelativeImages(
+      markdown,
+      options?.maxUnique === undefined ? undefined : options.maxUnique + 1,
+      { includeStandaloneRawImages: options?.includeStandaloneRawImages },
+    )
+    const references = options?.unique
+      ? [...new Map(extracted.map((reference) => [driveMarkdownImageResourceKey(reference.src), reference])).values()]
+      : extracted
+    if (options?.maxUnique !== undefined && references.length > options.maxUnique) {
+      throw new PayloadTooLargeException(`Markdown 图片超过 ${options.maxUnique} 个，无法导出。`)
+    }
     const shareRoot = route?.context === "share"
       ? await this.findActiveDriveItem(markdownItem.userId, route.rootItemId)
       : null
     const shareFolderRootId = shareRoot?.type === DRIVE_ITEM_TYPE.folder ? shareRoot.id : null
+    const shareFileImageIds = route?.context === "share" && shareRoot?.type === DRIVE_ITEM_TYPE.file
+      ? await this.resolveShareMarkdownImageIds(route.shareId, shareRoot)
+      : null
 
     return Promise.all(references.map(async (reference) => {
       const resolved = await this.resolveDriveMarkdownRelativeImageItem(markdownItem, reference)
-      const item = resolved && (!shareFolderRootId || await this.isDescendantOf(resolved.id, shareFolderRootId))
-        ? resolved
-        : null
+      const allowed = resolved && (shareFolderRootId
+        ? await this.isDescendantOf(resolved.id, shareFolderRootId)
+        : shareFileImageIds
+          ? shareFileImageIds.has(resolved.id)
+          : true)
+      const item = allowed ? resolved : null
       return { reference, item }
     }))
   }
@@ -3363,24 +3469,34 @@ export class DriveService implements OnApplicationBootstrap {
       throw new NotFoundException("文件未找到")
     }
 
+    const allowedIds = await this.resolveShareMarkdownImageIds(share.shareId, markdownItem)
+    if (!allowedIds.has(imageItem.id)) throw new NotFoundException("文件未找到")
+    return imageItem
+  }
+
+  private async resolveShareMarkdownImageIds(
+    shareId: string,
+    markdownItem: DriveItemRecordWithStorage,
+  ): Promise<ReadonlySet<string>> {
     const versionId = await this.findCurrentDriveFileVersionId(markdownItem)
-    if (!versionId) throw new NotFoundException("文件未找到")
+    if (!versionId) return new Set()
     const latestChange = await this.prisma.driveChange.findFirst({
-      where: { userId: share.ownerId },
+      where: { userId: markdownItem.userId },
       orderBy: { sequence: "desc" },
       select: { sequence: true },
     })
-    const cacheKey = `${share.shareId}:${versionId}:${latestChange?.sequence.toString() ?? "0"}`
+    const cacheKey = `${shareId}:${versionId}:${latestChange?.sequence.toString() ?? "0"}`
     let allowedIds = this.markdownShareImageIds.get(cacheKey)
     if (!allowedIds) {
       const storageKey = this.requireActiveFileStorage(markdownItem)
       const preview = await this.readTextPreview(storageKey)
-      const resolved = await this.resolveDriveMarkdownRelativeImages(preview.text, markdownItem)
+      const resolved = await this.resolveDriveMarkdownRelativeImages(preview.text, markdownItem, undefined, {
+        includeStandaloneRawImages: isPlainDriveMarkdownItem(markdownItem),
+      })
       allowedIds = new Set(resolved.flatMap(({ item }) => item ? [item.id] : []))
       this.rememberMarkdownShareImageIds(cacheKey, allowedIds)
     }
-    if (!allowedIds.has(imageItem.id)) throw new NotFoundException("文件未找到")
-    return imageItem
+    return allowedIds
   }
 
   private rememberMarkdownShareImageIds(cacheKey: string, itemIds: ReadonlySet<string>): void {

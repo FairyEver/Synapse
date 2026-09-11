@@ -40,6 +40,17 @@ const optionalEnvUrl = z.preprocess((value) => {
   return value
 }, z.string().url().optional())
 
+const optionalHttpUrl = z.preprocess((value) => {
+  if (typeof value === "string" && value.trim().length === 0) {
+    return undefined
+  }
+
+  return value
+}, z.string().url().refine((value) => {
+  const protocol = new URL(value).protocol
+  return protocol === "http:" || protocol === "https:"
+}, "must use http or https").optional())
+
 const highEntropyBase64UrlSecretSchema = z.string()
   .regex(/^[A-Za-z0-9_-]{43,}$/u, "must contain at least 43 Base64URL characters")
   .refine((value) => new Set(value).size >= 16, "must be a high-entropy random value")
@@ -94,6 +105,8 @@ const envSchema = z
     DRIVE_COS_REGION: optionalEnvString,
     SYNAPSE_DRIVE_LOCAL_ROOT: optionalEnvString,
     DRIVE_COLLABORATION_ENABLED: z.enum(["true", "false"]).default("false"),
+    PDF_RENDERER_URL: optionalHttpUrl,
+    PDF_RENDERER_INTERNAL_SECRET: optionalEnvString,
     SKILL_REPOSITORY_COS_SECRET_ID: optionalEnvString,
     SKILL_REPOSITORY_COS_SECRET_KEY: optionalEnvString,
     SKILL_REPOSITORY_COS_BUCKET: optionalEnvString,
@@ -133,6 +146,22 @@ const envSchema = z
   .refine((env) => env.NODE_ENV !== "production" || !!env.DESKTOP_UPDATE_INTENT_SECRET, {
     path: ["DESKTOP_UPDATE_INTENT_SECRET"],
     message: "DESKTOP_UPDATE_INTENT_SECRET is required in production",
+  })
+  .refine((env) => env.NODE_ENV !== "production" || !!env.PDF_RENDERER_URL, {
+    path: ["PDF_RENDERER_URL"],
+    message: "PDF_RENDERER_URL is required in production",
+  })
+  .refine((env) => env.NODE_ENV !== "production"
+    || highEntropyBase64UrlSecretSchema.safeParse(env.PDF_RENDERER_INTERNAL_SECRET).success, {
+    path: ["PDF_RENDERER_INTERNAL_SECRET"],
+    message: "PDF_RENDERER_INTERNAL_SECRET must be a high-entropy Base64URL value from at least 32 random bytes in production",
+  })
+  .refine((env) => env.NODE_ENV !== "production"
+    || (env.PDF_RENDERER_INTERNAL_SECRET !== env.ADMIN_ACCESS_SECRET
+      && env.PDF_RENDERER_INTERNAL_SECRET !== env.USER_ACCESS_JWT_SECRET
+      && env.PDF_RENDERER_INTERNAL_SECRET !== env.DESKTOP_UPDATE_INTENT_SECRET), {
+    path: ["PDF_RENDERER_INTERNAL_SECRET"],
+    message: "PDF_RENDERER_INTERNAL_SECRET must be different from other service secrets",
   })
   .refine((env) => {
     if (env.NODE_ENV !== "production" || !env.DESKTOP_UPDATE_INTENT_SECRET) return true
@@ -191,6 +220,8 @@ export interface ServerEnv {
   readonly driveCosRegion?: string
   readonly driveLocalRoot?: string
   readonly driveCollaborationEnabled: boolean
+  readonly pdfRendererUrl?: string
+  readonly pdfRendererInternalSecret?: string
   readonly skillRepositoryCosSecretId?: string
   readonly skillRepositoryCosSecretKey?: string
   readonly skillRepositoryCosBucket?: string
@@ -230,6 +261,8 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     driveCosRegion: result.data.DRIVE_COS_REGION,
     driveLocalRoot: result.data.SYNAPSE_DRIVE_LOCAL_ROOT,
     driveCollaborationEnabled: result.data.DRIVE_COLLABORATION_ENABLED === "true",
+    pdfRendererUrl: result.data.PDF_RENDERER_URL,
+    pdfRendererInternalSecret: result.data.PDF_RENDERER_INTERNAL_SECRET,
     skillRepositoryCosSecretId: result.data.SKILL_REPOSITORY_COS_SECRET_ID,
     skillRepositoryCosSecretKey: result.data.SKILL_REPOSITORY_COS_SECRET_KEY,
     skillRepositoryCosBucket: result.data.SKILL_REPOSITORY_COS_BUCKET,
