@@ -96,8 +96,10 @@ describe("Drive PDF external image address policy", () => {
       [{ address: "93.184.216.34", family: 4 }],
       [{ address: "142.250.72.14", family: 4 }],
     ])
+    const redirect = response(302, Buffer.alloc(0), { location: "http://cdn.example/image.png" })
+    const destroyRedirect = vi.spyOn(redirect, "destroy")
     const get = mockHttpResponses([
-      response(302, Buffer.alloc(0), { location: "http://cdn.example/image.png" }),
+      redirect,
       response(200, png, { "content-type": "image/png" }),
     ])
 
@@ -108,6 +110,7 @@ describe("Drive PDF external image address policy", () => {
     })).resolves.toEqual({ bytes: png, mimeType: "image/png" })
     expect(lookup).toHaveBeenCalledTimes(2)
     expect(get).toHaveBeenCalledTimes(2)
+    expect(destroyRedirect).toHaveBeenCalledOnce()
     expectPinnedLookup(get, 0, "93.184.216.34")
     expectPinnedLookup(get, 1, "142.250.72.14")
   })
@@ -149,11 +152,27 @@ describe("Drive PDF external image address policy", () => {
   it("rejects a response whose declared MIME type contradicts its signature", async () => {
     mockLookup([[{ address: "93.184.216.34", family: 4 }]])
     mockHttpResponses([response(200, png, { "content-type": "text/html" })])
+    const onBytes = vi.fn()
 
     await expect(fetchSafeExternalImage("http://example.com/image.png", {
       maxBytes: 1024,
       timeoutMs: 1_000,
+      onBytes,
     })).rejects.toThrow("EXTERNAL_IMAGE_MIME_INVALID")
+    expect(onBytes).toHaveBeenCalledWith(png.length)
+  })
+
+  it("destroys an HTTP error response without draining its body", async () => {
+    mockLookup([[{ address: "93.184.216.34", family: 4 }]])
+    const body = response(404, Buffer.alloc(1024), { "content-type": "text/plain" })
+    const destroy = vi.spyOn(body, "destroy")
+    mockHttpResponses([body])
+
+    await expect(fetchSafeExternalImage("http://example.com/image.png", {
+      maxBytes: 2048,
+      timeoutMs: 1_000,
+    })).rejects.toThrow("EXTERNAL_IMAGE_HTTP_ERROR")
+    expect(destroy).toHaveBeenCalledOnce()
   })
 
   it("rejects an oversized declared response before reading its body", async () => {

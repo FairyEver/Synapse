@@ -43,6 +43,7 @@ export type ExternalImageFetchOptions = {
   readonly timeoutMs: number
   readonly maxRedirects?: number
   readonly signal?: AbortSignal
+  readonly onBytes?: (byteLength: number) => void
 }
 
 export async function fetchSafeExternalImage(
@@ -58,17 +59,17 @@ export async function fetchSafeExternalImage(
     const address = await resolvePublicAddress(normalizeUrlHostname(url.hostname), remainingMs, options.signal)
     const response = await requestPinned(url, address, { ...options, timeoutMs: remainingMs })
     if (redirectStatuses.has(response.statusCode)) {
-      response.stream.resume()
+      response.stream.destroy()
       const location = response.location
       if (!location || redirects === maxRedirects) throw new Error("EXTERNAL_IMAGE_REDIRECT_INVALID")
       url = parseExternalImageUrl(new URL(location, url).toString())
       continue
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      response.stream.resume()
+      response.stream.destroy()
       throw new Error("EXTERNAL_IMAGE_HTTP_ERROR")
     }
-    const bytes = await readLimitedResponse(response.stream, options.maxBytes)
+    const bytes = await readLimitedResponse(response.stream, options.maxBytes, options.onBytes)
     const detectedMime = detectPublicAssetImageType(bytes)
     if (!detectedMime || detectedMime === "image/svg+xml") throw new Error("EXTERNAL_IMAGE_FORMAT_INVALID")
     if (response.contentType && normalizeImageMimeType(response.contentType) !== detectedMime) {
@@ -212,7 +213,11 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, signal?: A
   }
 }
 
-async function readLimitedResponse(stream: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+async function readLimitedResponse(
+  stream: http.IncomingMessage,
+  maxBytes: number,
+  onBytes?: (byteLength: number) => void,
+): Promise<Buffer> {
   const declaredLength = Number(stream.headers["content-length"] ?? 0)
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     stream.destroy()
@@ -226,6 +231,12 @@ async function readLimitedResponse(stream: http.IncomingMessage, maxBytes: numbe
     if (total > maxBytes) {
       stream.destroy()
       throw new Error("EXTERNAL_IMAGE_TOO_LARGE")
+    }
+    try {
+      onBytes?.(bytes.length)
+    } catch (error) {
+      stream.destroy()
+      throw error
     }
     chunks.push(bytes)
   }

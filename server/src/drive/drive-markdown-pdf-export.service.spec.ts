@@ -117,6 +117,37 @@ describe("DriveMarkdownPdfExportService", () => {
     expect(getObjectStream).not.toHaveBeenCalled()
   })
 
+  it("counts invalid image bytes toward the aggregate image budget", async () => {
+    configureRendererEnv()
+    const invalidBytes = Buffer.alloc(10 * 1024 * 1024)
+    const getObjectStream = vi.fn(async () => ({
+      stream: Readable.from([invalidBytes]),
+      size: BigInt(invalidBytes.length),
+    }))
+    const service = new DriveMarkdownPdfExportService(
+      { getObjectStream } as never,
+      {} as never,
+      {} as never,
+    )
+    const imageNames = Array.from({ length: 7 }, (_, index) => `invalid-${index}.png`)
+
+    await expect(service.export({
+      rateLimitKey: "user:invalid-image-budget",
+      resolveSource: async () => ({
+        itemId: "item",
+        name: "失败图片.md",
+        sourceText: imageNames.map((name, index) => `![失败 ${index}](${name})`).join("\n"),
+        allowStandaloneRawImages: true,
+        relativeImages: new Map(imageNames.map((name) => [`relative:${name}`, {
+          storageKey: `drive/${name}`,
+          size: BigInt(invalidBytes.length),
+          mimeType: "image/png",
+        }])),
+      }),
+    })).rejects.toMatchObject({ status: 413 })
+    expect(getObjectStream).toHaveBeenCalledTimes(7)
+  })
+
   it("maps a saturated renderer queue to 429", async () => {
     configureRendererEnv()
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 429 })))

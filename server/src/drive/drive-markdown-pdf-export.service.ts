@@ -83,16 +83,18 @@ export class DriveMarkdownPdfExportService {
     const resourceTokens = new Map<string, string | null>()
     const resourceData = new Map<string, string>()
     let imageBytes = 0
+    const consumeImageBytes = (byteLength: number) => {
+      imageBytes += byteLength
+      if (imageBytes > DRIVE_PDF_IMAGES_MAX_BYTES) {
+        throw new PayloadTooLargeException("Markdown 图片总大小超过 64 MiB，无法导出。")
+      }
+    }
     for (const [index, image] of images.entries()) {
       assertExportActive(signal)
       this.assertDeadline(startedAt)
       try {
-        const resolved = await this.resolveImage(image, source, remainingTime(startedAt), signal)
+        const resolved = await this.resolveImage(image, source, remainingTime(startedAt), signal, consumeImageBytes)
         this.assertDeadline(startedAt)
-        imageBytes += resolved.bytes.length
-        if (imageBytes > DRIVE_PDF_IMAGES_MAX_BYTES) {
-          throw new PayloadTooLargeException("Markdown 图片总大小超过 64 MiB，无法导出。")
-        }
         const token = `image-${index + 1}`
         resourceTokens.set(image.resourceKey, token)
         resourceData.set(token, `data:${resolved.mimeType};base64,${resolved.bytes.toString("base64")}`)
@@ -140,25 +142,26 @@ export class DriveMarkdownPdfExportService {
     source: DriveMarkdownPdfSource,
     remainingMs: number,
     signal: AbortSignal,
+    consumeBytes: (byteLength: number) => void,
   ): Promise<{ readonly bytes: Buffer; readonly mimeType: string }> {
     if (image.resourceKey.startsWith("relative:")) {
       const relative = source.relativeImages.get(image.resourceKey)
       if (!relative) throw new Error("PDF_IMAGE_NOT_FOUND")
-      return this.readStorageImage(relative.storageKey, relative.size, signal)
+      return this.readStorageImage(relative.storageKey, relative.size, signal, consumeBytes)
     }
     if (image.resourceKey.startsWith("object:")) {
       const hosted = await this.hostedImages.resolveImage(image.resourceKey.slice("object:".length))
       if (!hosted) throw new Error("PDF_IMAGE_NOT_FOUND")
       if (hosted.size > BigInt(DRIVE_PDF_IMAGE_MAX_BYTES)) throw imageTooLarge()
       const object = await this.hostedImages.openImage(hosted.storageKey)
-      return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES, signal))
+      return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES, signal, consumeBytes))
     }
     if (image.resourceKey.startsWith("file:")) {
       const asset = await this.publicAssets.resolvePublicAsset(image.resourceKey.slice("file:".length), {})
       if (asset.status !== "ok") throw new Error("PDF_IMAGE_NOT_FOUND")
-      return this.readStorageImage(asset.storageKey, asset.size, signal)
+      return this.readStorageImage(asset.storageKey, asset.size, signal, consumeBytes)
     }
-    if (image.resourceKey.startsWith("data:")) return parseDataImage(image.source)
+    if (image.resourceKey.startsWith("data:")) return parseDataImage(image.source, consumeBytes)
     if (/^https?:\/\//iu.test(image.source.trim())) {
       try {
         return await fetchSafeExternalImage(image.source, {
@@ -166,6 +169,7 @@ export class DriveMarkdownPdfExportService {
           timeoutMs: Math.max(1, Math.min(10_000, remainingMs)),
           maxRedirects: 3,
           signal,
+          onBytes: consumeBytes,
         })
       } catch (error) {
         if (error instanceof Error && error.message === "EXTERNAL_IMAGE_TOO_LARGE") throw imageTooLarge()
@@ -176,10 +180,15 @@ export class DriveMarkdownPdfExportService {
     throw new Error("PDF_IMAGE_UNSUPPORTED")
   }
 
-  private async readStorageImage(storageKey: string, declaredSize: bigint, signal: AbortSignal) {
+  private async readStorageImage(
+    storageKey: string,
+    declaredSize: bigint,
+    signal: AbortSignal,
+    consumeBytes: (byteLength: number) => void,
+  ) {
     if (declaredSize > BigInt(DRIVE_PDF_IMAGE_MAX_BYTES)) throw imageTooLarge()
     const object = await this.storage.getObjectStream({ key: storageKey })
-    return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES, signal))
+    return validateImageBytes(await readLimitedStream(object.stream, DRIVE_PDF_IMAGE_MAX_BYTES, signal, consumeBytes))
   }
 
   private async renderPdf(input: {
@@ -315,6 +324,7 @@ async function readLimitedStream(
   stream: NodeJS.ReadableStream,
   maxBytes: number,
   signal: AbortSignal,
+  consumeBytes: (byteLength: number) => void,
 ): Promise<Buffer> {
   const chunks: Buffer[] = []
   let total = 0
@@ -328,6 +338,12 @@ async function readLimitedStream(
       if (total > maxBytes) {
         ;(stream as { destroy?: () => void }).destroy?.()
         throw imageTooLarge()
+      }
+      try {
+        consumeBytes(bytes.length)
+      } catch (error) {
+        ;(stream as { destroy?: () => void }).destroy?.()
+        throw error
       }
       chunks.push(bytes)
     }
@@ -343,11 +359,15 @@ function validateImageBytes(bytes: Buffer): { readonly bytes: Buffer; readonly m
   return { bytes, mimeType }
 }
 
-function parseDataImage(source: string): { readonly bytes: Buffer; readonly mimeType: string } {
+function parseDataImage(
+  source: string,
+  consumeBytes: (byteLength: number) => void,
+): { readonly bytes: Buffer; readonly mimeType: string } {
   const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=\s]+)$/iu.exec(source.trim())
   if (!match) throw new Error("PDF_IMAGE_DATA_INVALID")
   const bytes = Buffer.from(match[2].replace(/\s+/gu, ""), "base64")
   if (bytes.length > DRIVE_PDF_IMAGE_MAX_BYTES) throw imageTooLarge()
+  consumeBytes(bytes.length)
   return validateImageBytes(bytes)
 }
 
