@@ -2164,9 +2164,12 @@ export class DrivePublicController {
     readonly response: Response
   }): Promise<void> {
     const exporter = requireDrivePdfExportService(this.pdfExports)
+    const actorUserId = await this.resolveOptionalUserId(input.request)
     await runDrivePdfExport(input.request, input.response, (signal) => exporter.export({
       signal,
-      rateLimitKey: `share-ip:${input.request.ip || "unknown"}`,
+      rateLimitKey: actorUserId
+        ? `user:${actorUserId}`
+        : `share-ip:${input.request.ip || "unknown"}`,
       resolveSource: (deadlineSignal) => this.drive.resolveShareMarkdownPdfSource({
         shareId: input.shareId,
         itemId: input.itemId,

@@ -102,6 +102,40 @@ describe("Drive Markdown PDF export controllers", () => {
     })
   })
 
+  it("rate limits a shared export by user when the visitor is signed in", async () => {
+    const drive = { resolveShareMarkdownPdfSource: vi.fn(async () => source) }
+    const exporter = { export: vi.fn(async () => pdf) }
+    const userAuth = { verifyAccessToken: vi.fn(async () => ({ userId: "reader-1" })) }
+    const controller = new DrivePublicController(
+      drive as never,
+      {} as never,
+      undefined,
+      userAuth as never,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      exporter as never,
+    )
+    const response = createResponse()
+
+    await controller.exportShareRootPdf(
+      "share-1",
+      createRequest({
+        ip: "203.0.113.10",
+        headers: { authorization: "Bearer access-token" },
+      }) as never,
+      response as never,
+    )
+
+    expect(userAuth.verifyAccessToken).toHaveBeenCalledWith("access-token")
+    expect(exporter.export).toHaveBeenCalledWith({
+      signal: expect.anything(),
+      rateLimitKey: "user:reader-1",
+      resolveSource: expect.any(Function),
+    })
+  })
+
   it("cancels an export without writing a response when the client disconnects", async () => {
     let exportSignal: AbortSignal | undefined
     const exporter = { export: vi.fn((input: { signal: AbortSignal }) => {

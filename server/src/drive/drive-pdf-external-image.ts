@@ -1,7 +1,7 @@
 import dns from "node:dns/promises"
 import http from "node:http"
 import https from "node:https"
-import { isIP } from "node:net"
+import { isIP, type LookupFunction } from "node:net"
 import ipaddr from "ipaddr.js"
 import { detectPublicAssetImageType } from "./drive-public-asset-policy"
 
@@ -129,7 +129,7 @@ function requestPinned(
         Accept: "image/avif,image/webp,image/png,image/jpeg,image/gif,image/x-icon",
         "User-Agent": "Synapse-PDF-Exporter/1",
       },
-      lookup: (_hostname, _options, callback) => callback(null, resolved.address, resolved.family),
+      lookup: createPinnedLookup(resolved),
     }, (response) => {
       response.once("close", () => {
         if (deadline) clearTimeout(deadline)
@@ -152,6 +152,18 @@ function requestPinned(
     })
     request.once("close", () => options.signal?.removeEventListener("abort", abort))
   })
+}
+
+export function createPinnedLookup(
+  resolved: { readonly address: string; readonly family: 4 | 6 },
+): LookupFunction {
+  return (_hostname, lookupOptions, callback) => {
+    if (lookupOptions.all) {
+      callback(null, [{ address: resolved.address, family: resolved.family }])
+      return
+    }
+    callback(null, resolved.address, resolved.family)
+  }
 }
 
 function normalizeUrlHostname(hostname: string): string {

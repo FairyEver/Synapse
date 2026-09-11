@@ -3,7 +3,7 @@ import dns from "node:dns/promises"
 import http from "node:http"
 import { Readable } from "node:stream"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { fetchSafeExternalImage, isPublicAddress } from "./drive-pdf-external-image"
+import { createPinnedLookup, fetchSafeExternalImage, isPublicAddress } from "./drive-pdf-external-image"
 
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -63,6 +63,22 @@ describe("Drive PDF external image address policy", () => {
     })).resolves.toEqual({ bytes: png, mimeType: "image/png" })
     expect(lookup).not.toHaveBeenCalled()
     expectPinnedLookup(get, 0, "2606:4700:4700::1111", 6)
+  })
+
+  it("satisfies the real Node HTTP client's all-address lookup contract", async () => {
+    const error = await new Promise<NodeJS.ErrnoException>((resolve, reject) => {
+      const request = http.get({
+        hostname: "pinned.invalid",
+        port: 65_535,
+        path: "/image.png",
+        lookup: createPinnedLookup({ address: "127.0.0.1", family: 4 }),
+      }, () => reject(new Error("unexpected HTTP response")))
+      request.setTimeout(1_000, () => request.destroy(new Error("TEST_TIMEOUT")))
+      request.once("error", resolve)
+    })
+
+    expect(error.code).not.toBe("ERR_INVALID_IP_ADDRESS")
+    expect(error.message).not.toBe("TEST_TIMEOUT")
   })
 
   it("re-resolves and pins every redirect hop", async () => {
@@ -204,7 +220,11 @@ function fakeRequest(): http.ClientRequest {
 
 function expectPinnedLookup(get: ReturnType<typeof vi.spyOn>, call: number, address: string, family: 4 | 6 = 4): void {
   const options = get.mock.calls[call]?.[1] as http.RequestOptions
-  const callback = vi.fn()
-  options.lookup?.("ignored.example", {}, callback)
-  expect(callback).toHaveBeenCalledWith(null, address, family)
+  const singleAddressCallback = vi.fn()
+  options.lookup?.("ignored.example", {}, singleAddressCallback)
+  expect(singleAddressCallback).toHaveBeenCalledWith(null, address, family)
+
+  const allAddressesCallback = vi.fn()
+  options.lookup?.("ignored.example", { all: true }, allAddressesCallback)
+  expect(allAddressesCallback).toHaveBeenCalledWith(null, [{ address, family }])
 }
