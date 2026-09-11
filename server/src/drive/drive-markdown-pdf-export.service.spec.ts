@@ -5,20 +5,43 @@ import {
   DriveMarkdownPdfExportService,
 } from "./drive-markdown-pdf-export.service"
 import {
+  discoverDriveMarkdownPdfImagesInWorker,
   DriveMarkdownPdfRenderQueueFullError,
   DriveMarkdownPdfRenderResourceLimitError,
-  renderDriveMarkdownPdfInWorker,
 } from "./drive-markdown-pdf-render-worker"
 
 vi.mock("./drive-markdown-pdf-render-worker", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./drive-markdown-pdf-render-worker")>()
-  const { renderDriveMarkdownFragment } = await import("./drive-markdown-renderer.js")
+  const { executeDriveMarkdownPdfWorkerRequest } = await import("./drive-markdown-pdf-render-task.js")
   return {
     ...actual,
-    renderDriveMarkdownPdfInWorker: vi.fn((
+    discoverDriveMarkdownPdfImagesInWorker: vi.fn(async (
       markdown: string,
-      options: Parameters<typeof renderDriveMarkdownFragment>[1],
-    ) => renderDriveMarkdownFragment(markdown, options)),
+      options: { readonly allowStandaloneRawImages: boolean; readonly maxImages: number },
+    ) => {
+      const result = await executeDriveMarkdownPdfWorkerRequest({
+        kind: "discover-images",
+        markdown,
+        ...options,
+      })
+      if (result.kind !== "image-discovery") throw new Error("Unexpected worker result")
+      return result
+    }),
+    renderDriveMarkdownPdfHtmlInWorker: vi.fn(async (
+      markdown: string,
+      options: {
+        readonly allowStandaloneRawImages: boolean
+        readonly imageResourceKeys: ReadonlyMap<string, string | null>
+      },
+    ) => {
+      const result = await executeDriveMarkdownPdfWorkerRequest({
+        kind: "render-html",
+        markdown,
+        ...options,
+      })
+      if (result.kind !== "html") throw new Error("Unexpected worker result")
+      return result.html
+    }),
   }
 })
 
@@ -180,7 +203,7 @@ describe("DriveMarkdownPdfExportService", () => {
   })
 
   it("maps a saturated Markdown worker queue to 429", async () => {
-    vi.mocked(renderDriveMarkdownPdfInWorker)
+    vi.mocked(discoverDriveMarkdownPdfImagesInWorker)
       .mockRejectedValueOnce(new DriveMarkdownPdfRenderQueueFullError())
     const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
 
@@ -191,7 +214,7 @@ describe("DriveMarkdownPdfExportService", () => {
   })
 
   it("maps a Markdown worker memory limit to 413", async () => {
-    vi.mocked(renderDriveMarkdownPdfInWorker)
+    vi.mocked(discoverDriveMarkdownPdfImagesInWorker)
       .mockRejectedValueOnce(new DriveMarkdownPdfRenderResourceLimitError())
     const service = new DriveMarkdownPdfExportService({} as never, {} as never, {} as never)
 

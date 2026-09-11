@@ -97,7 +97,12 @@ async function resolvePdfRelativeImages(
   authorizationImages: readonly DriveMarkdownProjectionImageDto[] = images,
 ) {
   if (!source.resolveRelativeImages) throw new Error("PDF relative image resolver missing")
-  return source.resolveRelativeImages(images, authorizationImages, new AbortController().signal)
+  const compact = (entries: readonly DriveMarkdownProjectionImageDto[]) => entries.map((image) => ({
+    source: image.source,
+    resourceKey: image.resourceKey,
+    occurrences: 1,
+  }))
+  return source.resolveRelativeImages(compact(images), compact(authorizationImages), new AbortController().signal)
 }
 
 describe("DriveService", () => {

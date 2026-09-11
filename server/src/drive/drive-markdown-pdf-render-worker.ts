@@ -1,6 +1,10 @@
 import { fork, type ChildProcess } from "node:child_process"
 import { join } from "node:path"
-import type { DriveMarkdownRenderOptions, DriveMarkdownRenderResult } from "./drive-markdown-renderer"
+import type {
+  DriveMarkdownPdfImageReference,
+  DriveMarkdownPdfWorkerRequest,
+  DriveMarkdownPdfWorkerResult,
+} from "./drive-markdown-pdf-render-task"
 
 const DRIVE_MARKDOWN_WORKER_CONCURRENCY = 2
 const DRIVE_MARKDOWN_WORKER_MAX_QUEUE = 8
@@ -8,8 +12,12 @@ const DRIVE_MARKDOWN_WORKER_MAX_OLD_SPACE_MB = 512
 const DRIVE_MARKDOWN_WORKER_MAX_YOUNG_SPACE_MB = 64
 
 type RenderWorkerResponse =
-  | { readonly ok: true; readonly result: DriveMarkdownRenderResult }
+  | { readonly ok: true; readonly result: DriveMarkdownPdfWorkerResult }
   | { readonly ok: false; readonly error: string; readonly code?: "RESOURCE_LIMIT" }
+
+type RenderWorkerOutcome =
+  | { readonly ok: true; readonly result: DriveMarkdownPdfWorkerResult }
+  | { readonly ok: false; readonly error: Error }
 
 type QueuedRender = {
   readonly deadline: number
@@ -51,15 +59,63 @@ export class DriveMarkdownPdfRenderResourceLimitError extends Error {
   }
 }
 
-export function renderDriveMarkdownPdfInWorker(
+export async function discoverDriveMarkdownPdfImagesInWorker(
   markdown: string,
-  options: DriveMarkdownRenderOptions,
+  options: {
+    readonly allowStandaloneRawImages: boolean
+    readonly maxImages: number
+    readonly resourceKeys?: ReadonlySet<string>
+  },
   control: {
     readonly signal: AbortSignal
     readonly timeoutMs: number
   },
   createWorker: () => ChildProcess = createRenderWorker,
-): Promise<DriveMarkdownRenderResult> {
+): Promise<{
+  readonly images: readonly DriveMarkdownPdfImageReference[]
+  readonly tooManyImages: boolean
+}> {
+  const result = await scheduleRenderWorker({
+    kind: "discover-images",
+    markdown,
+    allowStandaloneRawImages: options.allowStandaloneRawImages,
+    maxImages: options.maxImages,
+    ...(options.resourceKeys ? { resourceKeys: options.resourceKeys } : {}),
+  }, control, createWorker)
+  if (result.kind !== "image-discovery") throw new Error("Drive Markdown PDF worker returned an invalid result")
+  return result
+}
+
+export async function renderDriveMarkdownPdfHtmlInWorker(
+  markdown: string,
+  options: {
+    readonly allowStandaloneRawImages: boolean
+    readonly imageResourceKeys: ReadonlyMap<string, string | null>
+  },
+  control: {
+    readonly signal: AbortSignal
+    readonly timeoutMs: number
+  },
+  createWorker: () => ChildProcess = createRenderWorker,
+): Promise<string> {
+  const result = await scheduleRenderWorker({
+    kind: "render-html",
+    markdown,
+    allowStandaloneRawImages: options.allowStandaloneRawImages,
+    imageResourceKeys: options.imageResourceKeys,
+  }, control, createWorker)
+  if (result.kind !== "html") throw new Error("Drive Markdown PDF worker returned an invalid result")
+  return result.html
+}
+
+function scheduleRenderWorker(
+  request: DriveMarkdownPdfWorkerRequest,
+  control: {
+    readonly signal: AbortSignal
+    readonly timeoutMs: number
+  },
+  createWorker: () => ChildProcess,
+): Promise<DriveMarkdownPdfWorkerResult> {
   if (control.signal.aborted) return Promise.reject(new DriveMarkdownPdfRenderCancelledError())
   if (control.timeoutMs <= 0) return Promise.reject(new DriveMarkdownPdfRenderTimeoutError())
 
@@ -70,7 +126,7 @@ export function renderDriveMarkdownPdfInWorker(
       signal: control.signal,
       reject,
       start: (remainingMs) => {
-        runRenderWorker(markdown, options, control.signal, remainingMs, createWorker)
+        runRenderWorker(request, control.signal, remainingMs, createWorker)
           .then((result) => {
             releaseWorkerSlot()
             resolve(result)
@@ -155,12 +211,11 @@ function createRenderWorker(): ChildProcess {
 }
 
 function runRenderWorker(
-  markdown: string,
-  options: DriveMarkdownRenderOptions,
+  request: DriveMarkdownPdfWorkerRequest,
   signal: AbortSignal,
   timeoutMs: number,
   createWorker: () => ChildProcess,
-): Promise<DriveMarkdownRenderResult> {
+): Promise<DriveMarkdownPdfWorkerResult> {
   if (signal.aborted) return Promise.reject(new DriveMarkdownPdfRenderCancelledError())
 
   let worker: ChildProcess
@@ -171,49 +226,65 @@ function runRenderWorker(
   }
 
   return new Promise((resolve, reject) => {
-    let settled = false
+    let outcome: RenderWorkerOutcome | undefined
+    let reaped = false
     const timeout = setTimeout(() => {
-      finish(new DriveMarkdownPdfRenderTimeoutError())
+      terminateWith({ ok: false, error: new DriveMarkdownPdfRenderTimeoutError() })
     }, Math.max(1, timeoutMs))
 
-    const finish = (error?: Error, result?: DriveMarkdownRenderResult) => {
-      if (settled) return
-      settled = true
+    const terminateWith = (nextOutcome: RenderWorkerOutcome) => {
+      if (outcome) return
+      outcome = nextOutcome
       clearTimeout(timeout)
       signal.removeEventListener("abort", abort)
-      worker.removeAllListeners()
       if (worker.connected) worker.disconnect()
       if (!worker.killed) worker.kill("SIGKILL")
-      if (error) reject(error)
-      else if (result) resolve(result)
-      else reject(new Error("Drive Markdown PDF worker returned no result"))
     }
-    const abort = () => finish(new DriveMarkdownPdfRenderCancelledError())
+    const abort = () => terminateWith({ ok: false, error: new DriveMarkdownPdfRenderCancelledError() })
+    const settleAfterExit = (code: number | null, exitSignal: NodeJS.Signals | null) => {
+      if (reaped) return
+      reaped = true
+      clearTimeout(timeout)
+      signal.removeEventListener("abort", abort)
+
+      const finalOutcome = outcome ?? outcomeFromWorkerExit(code, exitSignal)
+      if (finalOutcome.ok) resolve(finalOutcome.result)
+      else reject(finalOutcome.error)
+    }
 
     signal.addEventListener("abort", abort, { once: true })
     worker.once("message", (message: RenderWorkerResponse) => {
-      if (message.ok) finish(undefined, message.result)
-      else if (message.code === "RESOURCE_LIMIT") finish(new DriveMarkdownPdfRenderResourceLimitError())
-      else finish(new Error(message.error))
-    })
-    worker.once("error", (error) => finish(normalizeWorkerError(error)))
-    worker.once("exit", (code, exitSignal) => {
-      if (exitSignal === "SIGABRT" || exitSignal === "SIGKILL" || code === 134) {
-        finish(new DriveMarkdownPdfRenderResourceLimitError())
-      } else if (code !== 0) {
-        finish(new Error(`Drive Markdown PDF worker exited with code ${code}`))
+      if (message.ok) terminateWith({ ok: true, result: message.result })
+      else if (message.code === "RESOURCE_LIMIT") {
+        terminateWith({ ok: false, error: new DriveMarkdownPdfRenderResourceLimitError() })
       } else {
-        finish(new Error("Drive Markdown PDF worker exited before returning a result"))
+        terminateWith({ ok: false, error: new Error(message.error) })
       }
     })
+    worker.once("error", (error) => terminateWith({ ok: false, error: normalizeWorkerError(error) }))
+    worker.once("exit", settleAfterExit)
+    worker.once("close", settleAfterExit)
     try {
-      worker.send({ markdown, options }, (error) => {
-        if (error) finish(normalizeWorkerError(error))
+      worker.send(request, (error) => {
+        if (error) terminateWith({ ok: false, error: normalizeWorkerError(error) })
       })
     } catch (error) {
-      finish(normalizeWorkerError(error))
+      terminateWith({ ok: false, error: normalizeWorkerError(error) })
     }
   })
+}
+
+function outcomeFromWorkerExit(
+  code: number | null,
+  exitSignal: NodeJS.Signals | null,
+): RenderWorkerOutcome {
+  if (exitSignal === "SIGABRT" || exitSignal === "SIGKILL" || code === 134) {
+    return { ok: false, error: new DriveMarkdownPdfRenderResourceLimitError() }
+  }
+  if (code !== 0) {
+    return { ok: false, error: new Error(`Drive Markdown PDF worker exited with code ${code}`) }
+  }
+  return { ok: false, error: new Error("Drive Markdown PDF worker exited before returning a result") }
 }
 
 function normalizeWorkerError(error: unknown): Error {

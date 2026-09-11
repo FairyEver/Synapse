@@ -1,17 +1,15 @@
-import { renderDriveMarkdownFragment, type DriveMarkdownRenderOptions } from "./drive-markdown-renderer"
-
-type RenderRequest = {
-  readonly markdown: string
-  readonly options: DriveMarkdownRenderOptions
-}
+import {
+  executeDriveMarkdownPdfWorkerRequest,
+  type DriveMarkdownPdfWorkerRequest,
+} from "./drive-markdown-pdf-render-task"
 
 const DRIVE_MARKDOWN_WORKER_RESULT_MAX_BYTES = 64 * 1024 * 1024
 
 if (!process.send) throw new Error("Drive Markdown PDF render worker requires an IPC channel")
 
-process.once("message", async (request: RenderRequest) => {
+process.once("message", async (request: DriveMarkdownPdfWorkerRequest) => {
   try {
-    const result = await renderDriveMarkdownFragment(request.markdown, request.options)
+    const result = await executeDriveMarkdownPdfWorkerRequest(request)
     if (Buffer.byteLength(JSON.stringify(result), "utf8") > DRIVE_MARKDOWN_WORKER_RESULT_MAX_BYTES) {
       process.send?.({
         ok: false,

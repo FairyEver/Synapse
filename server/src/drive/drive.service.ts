@@ -47,7 +47,6 @@ import {
   type DriveTrashListPageDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
-  type DriveMarkdownProjectionImageDto,
   type DriveMarkdownProjectionDto,
   type DriveCollaborationJoinContext,
   type DriveBrowserCollaborationCapabilityDto,
@@ -71,6 +70,7 @@ import {
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
 import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import type { DriveMarkdownPdfImageReference } from "./drive-markdown-pdf-render-task"
 import { driveMarkdownImageResourceKey, mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
@@ -249,8 +249,8 @@ export type DriveMarkdownPdfSource = {
     readonly mimeType: string | null
   }>
   readonly resolveRelativeImages?: (
-    images: readonly DriveMarkdownProjectionImageDto[],
-    authorizationImages: readonly DriveMarkdownProjectionImageDto[],
+    images: readonly DriveMarkdownPdfImageReference[],
+    authorizationImages: readonly DriveMarkdownPdfImageReference[],
     signal: AbortSignal,
   ) => Promise<ReadonlyMap<string, {
     readonly storageKey: string

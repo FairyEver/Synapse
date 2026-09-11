@@ -54,6 +54,7 @@ export type DriveMarkdownRenderOptions = {
   readonly relativeImageUrls?: ReadonlyMap<string, string | null>
   readonly pdfImageUrlsById?: ReadonlyMap<string, string | null>
   readonly pdfImageResourceKeysById?: ReadonlyMap<string, string | null>
+  readonly pdfImageResourceKeys?: ReadonlyMap<string, string | null>
   readonly allowStandaloneRawImages?: boolean
   readonly previousProjection?: {
     readonly source: string
@@ -79,6 +80,9 @@ export async function renderDriveMarkdownFragment(
 }
 
 async function renderMarkdownBody(markdown: string, options: DriveMarkdownRenderOptions): Promise<DriveMarkdownRenderResult> {
+  const pdfImageResourceKeysById = {
+    current: options.pdfImageResourceKeysById,
+  }
   const outlineState: {
     readonly counts: Map<string, number>
     readonly items: MutableDriveMarkdownOutlineItem[]
@@ -113,7 +117,7 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
     .use(remarkRehype)
     .use(() => resolveRelativeResourceUrlsPlugin(options.relativeImageUrls ?? new Map()))
     .use(() => resolvePdfImageUrlsPlugin(options.pdfImageUrlsById))
-    .use(() => resolvePdfImageResourceKeysPlugin(options.pdfImageResourceKeysById))
+    .use(() => resolvePdfImageResourceKeysPlugin(() => pdfImageResourceKeysById.current))
     .use(rehypeSanitize, {
       ...defaultSchema,
       clobberPrefix: "",
@@ -144,6 +148,14 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
   normalizeEscapedRawHtmlNodes(tree)
   const renderedText = extractDriveMarkdownRenderedText(tree)
   const projection = options.projection ?? buildDriveMarkdownProjection(markdown, tree, { previous: options.previousProjection })
+  if (options.pdfImageResourceKeys) {
+    pdfImageResourceKeysById.current = new Map(
+      (projection.images ?? []).map((image) => [
+        image.imageId,
+        options.pdfImageResourceKeys?.get(image.resourceKey) ?? null,
+      ]),
+    )
+  }
   annotateMarkdownProjectionTree(tree, projection, markdown)
   const transformed = await processor.run(tree as never)
   return {
@@ -320,8 +332,11 @@ function resolvePdfImageUrlsPlugin(pdfImageUrlsById: ReadonlyMap<string, string 
   }
 }
 
-function resolvePdfImageResourceKeysPlugin(resourceKeysById: ReadonlyMap<string, string | null> | undefined) {
+function resolvePdfImageResourceKeysPlugin(
+  getResourceKeysById: () => ReadonlyMap<string, string | null> | undefined,
+) {
   return (tree: HtmlAstNode) => {
+    const resourceKeysById = getResourceKeysById()
     if (!resourceKeysById) return
     visitPdfImageAst(tree, resourceKeysById, "data-drive-pdf-resource-key")
   }

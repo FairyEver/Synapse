@@ -25,7 +25,7 @@
 ## 渲染服务
 
 - `@synapse/pdf-renderer` 是独立 Chromium 服务，只接受共享密钥保护的 `{ schemaVersion: 1, title, html }`。
-- API 的 PDF Markdown 解析在受堆内存限制的独立 worker 进程中执行，全局并发 2、排队 8；相对图片发现复用 worker 返回的 Projection，不在 API 主线程重复解析正文。队列满返回 429，worker 内存超限返回 413。
+- API 的 PDF Markdown 解析在受堆内存限制的独立 worker 进程中执行，全局并发 2、排队 8；发现阶段只返回至多 256 个去重后的图片资源描述和出现次数，最终阶段只返回 HTML，不把完整 Projection 跨进程传回 API。队列满返回 429，worker 内存超限返回 413；终止后的 worker 必须实际退出后才释放并发槽位。
 - 浏览器进程复用，每次请求创建独立 context/page；并发 2、排队 8，队列满返回 429。
 - 页面网络请求全部阻断。容器仅连接 internal network，以非 root、只读文件系统、临时目录、`no-new-privileges` 和 CPU/内存/PID 限制运行。
 - 输出最大 64 MiB，总导出超时 60 秒。API 将渲染器不可用映射为 502，超时映射为 504。

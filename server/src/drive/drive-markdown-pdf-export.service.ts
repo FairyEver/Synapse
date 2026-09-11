@@ -8,16 +8,16 @@ import {
   PayloadTooLargeException,
 } from "@nestjs/common"
 import { Buffer } from "node:buffer"
-import type { DriveMarkdownProjectionImageDto } from "@synapse/shared"
 import { loadEnv } from "../config/env"
-import type { DriveMarkdownRenderOptions } from "./drive-markdown-renderer"
 import {
+  discoverDriveMarkdownPdfImagesInWorker,
   DriveMarkdownPdfRenderCancelledError,
   DriveMarkdownPdfRenderQueueFullError,
   DriveMarkdownPdfRenderResourceLimitError,
   DriveMarkdownPdfRenderTimeoutError,
-  renderDriveMarkdownPdfInWorker,
+  renderDriveMarkdownPdfHtmlInWorker,
 } from "./drive-markdown-pdf-render-worker"
+import type { DriveMarkdownPdfImageReference } from "./drive-markdown-pdf-render-task"
 import type { DriveMarkdownPdfSource } from "./drive.service"
 import type { DriveStoragePort } from "./drive-storage"
 import { DriveDocumentHostedImageService } from "./drive-document-hosted-image.service"
@@ -79,20 +79,28 @@ export class DriveMarkdownPdfExportService {
     signal: AbortSignal,
   ): Promise<DriveMarkdownPdfExportResult> {
     assertExportActive(signal)
-    const initial = await this.renderMarkdown(source.sourceText, {
+    const initial = await this.runMarkdownWorker(() => discoverDriveMarkdownPdfImagesInWorker(source.sourceText, {
       allowStandaloneRawImages: source.allowStandaloneRawImages,
-    }, startedAt, signal)
-    const images = uniqueProjectionImages(initial.projection.images ?? [])
-    if (images.length > DRIVE_PDF_MAX_IMAGES) {
+      maxImages: DRIVE_PDF_MAX_IMAGES,
+    }, {
+      signal,
+      timeoutMs: remainingTime(startedAt),
+    }), signal)
+    if (initial.tooManyImages) {
       throw new PayloadTooLargeException(`Markdown 图片超过 ${DRIVE_PDF_MAX_IMAGES} 个，无法导出。`)
     }
     const authorizationImages = source.relativeImageAuthorizationText === undefined
-      ? initial.projection.images ?? []
-      : (await this.renderMarkdown(source.relativeImageAuthorizationText, {
+      ? initial.images
+      : (await this.runMarkdownWorker(() => discoverDriveMarkdownPdfImagesInWorker(source.relativeImageAuthorizationText!, {
           allowStandaloneRawImages: source.allowStandaloneRawImages,
-        }, startedAt, signal)).projection.images ?? []
+          maxImages: DRIVE_PDF_MAX_IMAGES,
+          resourceKeys: new Set(initial.images.map((image) => image.resourceKey)),
+        }, {
+          signal,
+          timeoutMs: remainingTime(startedAt),
+        }), signal)).images
     const relativeImages = source.resolveRelativeImages
-      ? await source.resolveRelativeImages(initial.projection.images ?? [], authorizationImages, signal)
+      ? await source.resolveRelativeImages(initial.images, authorizationImages, signal)
       : source.relativeImages
     this.assertDeadline(startedAt)
     const sourceWithRelativeImages = { ...source, relativeImages }
@@ -106,7 +114,7 @@ export class DriveMarkdownPdfExportService {
         throw new PayloadTooLargeException("Markdown 图片总大小超过 64 MiB，无法导出。")
       }
     }
-    for (const [index, image] of images.entries()) {
+    for (const [index, image] of initial.images.entries()) {
       assertExportActive(signal)
       this.assertDeadline(startedAt)
       try {
@@ -123,23 +131,21 @@ export class DriveMarkdownPdfExportService {
     }
 
     assertExportActive(signal)
-    const imageWarnings = (initial.projection.images ?? [])
-      .filter((image) => resourceTokens.get(image.resourceKey) === null)
-      .length
-
-    const resourceKeysById = new Map<string, string | null>()
-    for (const image of initial.projection.images ?? []) {
-      resourceKeysById.set(image.imageId, resourceTokens.get(image.resourceKey) ?? null)
-    }
+    const imageWarnings = initial.images.reduce(
+      (count, image) => count + (resourceTokens.get(image.resourceKey) === null ? image.occurrences : 0),
+      0,
+    )
     this.assertDeadline(startedAt)
-    const rendered = await this.renderMarkdown(source.sourceText, {
+    const renderedHtml = await this.runMarkdownWorker(() => renderDriveMarkdownPdfHtmlInWorker(source.sourceText, {
       allowStandaloneRawImages: source.allowStandaloneRawImages,
-      projection: initial.projection,
-      pdfImageResourceKeysById: resourceKeysById,
-    }, startedAt, signal)
+      imageResourceKeys: resourceTokens,
+    }, {
+      signal,
+      timeoutMs: remainingTime(startedAt),
+    }), signal)
     const response = await this.renderPdf({
       title: stripMarkdownExtension(source.name),
-      html: `<main class="markdown-body">${rendered.html}${pdfResourceMapScript(resourceData)}</main>`,
+      html: `<main class="markdown-body">${renderedHtml}${pdfResourceMapScript(resourceData)}</main>`,
       timeoutMs: remainingTime(startedAt),
       signal,
     })
@@ -155,7 +161,7 @@ export class DriveMarkdownPdfExportService {
   }
 
   private async resolveImage(
-    image: DriveMarkdownProjectionImageDto,
+    image: DriveMarkdownPdfImageReference,
     source: DriveMarkdownPdfSource,
     remainingMs: number,
     signal: AbortSignal,
@@ -197,17 +203,12 @@ export class DriveMarkdownPdfExportService {
     throw new Error("PDF_IMAGE_UNSUPPORTED")
   }
 
-  private async renderMarkdown(
-    markdown: string,
-    options: DriveMarkdownRenderOptions,
-    startedAt: number,
+  private async runMarkdownWorker<T>(
+    operation: () => Promise<T>,
     signal: AbortSignal,
-  ) {
+  ): Promise<T> {
     try {
-      return await renderDriveMarkdownPdfInWorker(markdown, options, {
-        signal,
-        timeoutMs: remainingTime(startedAt),
-      })
+      return await operation()
     } catch (error) {
       if (error instanceof DriveMarkdownPdfRenderTimeoutError) {
         throw new GatewayTimeoutException("PDF 导出超时。")
@@ -346,10 +347,6 @@ async function enforceExportDeadline<T>(
     externalSignal?.removeEventListener("abort", cancel)
     controller.abort()
   }
-}
-
-function uniqueProjectionImages(images: readonly DriveMarkdownProjectionImageDto[]): DriveMarkdownProjectionImageDto[] {
-  return [...new Map(images.map((image) => [image.resourceKey, image])).values()]
 }
 
 function pdfResourceMapScript(resources: ReadonlyMap<string, string>): string {
