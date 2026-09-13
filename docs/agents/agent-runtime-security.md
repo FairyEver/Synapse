@@ -2,6 +2,8 @@
 
 本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出、Usage Analysis 和 provider 预览。
 
+处理百炼容量、非文本结果超预算或持续对话问题前，先读[真实 API 边界实测](../reference/2026-09-13-bailian-qwen-context-probe.md)与[持续对话方案](../superpowers/plans/2026-09-13-bailian-context-and-continuous-conversation-plan.md)。前者已验证 token/body 两种上限；后者记录当前预算将非文本序列化字节作为 token 成本的可复现误判及待实施修复。直接 API 成功不能当作 SDK 图片交付、自动重呈现或长任务验收通过；方案不改变下文既有保护与权限边界。
+
 ## 历史写入与容量
 
 长运行性能相关的持久化与显示容量实施状态见 `docs/superpowers/specs/2026-09-13-agent-long-running-capacity-design.md`。历史追加、记录元数据和问题响应须与标题共享会话级读改写串行队列；摘要保存不得将读到的旧 history 回写覆盖新记录。当前整历史 JSON 存储仍未完成分块改造，不能把局部缓存、诊断或计时优化描述为长期稳定性保证。

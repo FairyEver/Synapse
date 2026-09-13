@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "testedOn": "2026-09-13",
+  "endpoint": "https://dashscope.aliyuncs.com/apps/anthropic/v1/messages",
+  "model": "qwen3.8-max",
+  "source": "Authorized direct API requests using the configured Synapse provider; synthetic payloads only.",
+  "redaction": "Provider identity, credentials, local paths, request IDs and raw response bodies omitted. Numeric observations preserved.",
+  "trials": [
+    {
+      "trialId": "T01",
+      "mode": "tokens",
+      "thinking": "disabled",
+      "stream": false,
+      "fillerUnits": 1024,
+      "requestBytes": 2270,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 1062,
+      "actualInputTokens": 1062,
+      "httpStatus": 200,
+      "responseModel": "qwen3.8-max",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 1062,
+        "output_tokens": 1,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "stopReason": "end_turn",
+      "reply": "OK",
+      "durationMs": 674
+    },
+    {
+      "trialId": "T02",
+      "mode": "tokens",
+      "thinking": "disabled",
+      "stream": false,
+      "fillerUnits": 200000,
+      "requestBytes": 400222,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 200038,
+      "actualInputTokens": 200038,
+      "httpStatus": 200,
+      "responseModel": "qwen3.8-max",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 1024,
+        "input_tokens": 199014,
+        "output_tokens": 1,
+        "prompt_tokens_details": {
+          "cached_tokens": 1024
+        }
+      },
+      "stopReason": "end_turn",
+      "reply": "OK",
+      "durationMs": 6934
+    },
+    {
+      "trialId": "T03",
+      "mode": "bytes",
+      "thinking": "disabled",
+      "stream": false,
+      "fillerUnits": 0,
+      "requestBytes": 6291457,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 38,
+      "actualInputTokens": null,
+      "httpStatus": 400,
+      "error": {
+        "code": "BadRequest.TooLarge",
+        "message": "Exceeded limit on max bytes to request body : 6291456"
+      },
+      "durationMs": 468
+    },
+    {
+      "trialId": "T04",
+      "mode": "tokens",
+      "thinking": "disabled",
+      "stream": false,
+      "fillerUnits": 980000,
+      "requestBytes": 1960222,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 980038,
+      "actualInputTokens": null,
+      "httpStatus": null,
+      "transportError": "TypeError",
+      "transportCauseRecorded": false,
+      "durationMs": 20084
+    },
+    {
+      "trialId": "T05",
+      "mode": "bytes",
+      "thinking": "disabled",
+      "stream": false,
+      "fillerUnits": 0,
+      "requestBytes": 6291456,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 38,
+      "actualInputTokens": 38,
+      "httpStatus": 200,
+      "responseModel": "qwen3.8-max",
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 38,
+        "output_tokens": 2,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "stopReason": "end_turn",
+      "reply": "OK.",
+      "durationMs": 966
+    },
+    {
+      "trialId": "T06",
+      "mode": "tokens",
+      "thinking": "disabled",
+      "stream": false,
+      "fillerUnits": 1000000,
+      "requestBytes": 2000222,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 1000038,
+      "actualInputTokens": null,
+      "httpStatus": 400,
+      "error": {
+        "code": "InvalidParameter",
+        "message": "<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 991808]"
+      },
+      "durationMs": 2349
+    },
+    {
+      "trialId": "T07",
+      "mode": "tokens",
+      "thinking": "disabled",
+      "stream": true,
+      "fillerUnits": 991770,
+      "requestBytes": 1983761,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 991808,
+      "actualInputTokens": 991808,
+      "httpStatus": 200,
+      "responseModel": "qwen3.8-max",
+      "usage": {
+        "input_tokens": 792128,
+        "output_tokens": 1,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 199680,
+        "prompt_tokens_details": {
+          "cached_tokens": 199680
+        }
+      },
+      "stopReason": "end_turn",
+      "messageStop": true,
+      "reply": "OK",
+      "durationMs": 58658
+    },
+    {
+      "trialId": "T08",
+      "mode": "tokens",
+      "thinking": "disabled",
+      "stream": true,
+      "fillerUnits": 991771,
+      "requestBytes": 1983763,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 991809,
+      "actualInputTokens": null,
+      "httpStatus": 400,
+      "error": {
+        "code": "InvalidParameter",
+        "message": "<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 991808]"
+      },
+      "durationMs": 4866
+    },
+    {
+      "trialId": "T09",
+      "mode": "tokens",
+      "thinking": "enabled",
+      "stream": true,
+      "effort": "low",
+      "fillerUnits": 983579,
+      "requestBytes": 1967411,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 983654,
+      "actualInputTokens": null,
+      "httpStatus": 400,
+      "error": {
+        "code": "InvalidParameter",
+        "message": "<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 983616]"
+      },
+      "durationMs": 5113
+    },
+    {
+      "trialId": "T10",
+      "mode": "tokens",
+      "thinking": "enabled",
+      "stream": true,
+      "effort": "low",
+      "fillerUnits": 983578,
+      "requestBytes": 1967409,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 983653,
+      "actualInputTokens": null,
+      "httpStatus": 400,
+      "error": {
+        "code": "InvalidParameter",
+        "message": "<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 983616]"
+      },
+      "durationMs": 5151
+    },
+    {
+      "trialId": "T11",
+      "mode": "tokens",
+      "thinking": "enabled",
+      "stream": true,
+      "effort": "low",
+      "fillerUnits": 1024,
+      "requestBytes": 2301,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 1099,
+      "actualInputTokens": 1099,
+      "httpStatus": 200,
+      "responseModel": "qwen3.8-max",
+      "usage": {
+        "input_tokens": 1099,
+        "output_tokens": 16,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "stopReason": "max_tokens",
+      "messageStop": true,
+      "reply": "",
+      "durationMs": 1309
+    },
+    {
+      "trialId": "T12",
+      "mode": "tokens",
+      "thinking": "enabled",
+      "stream": true,
+      "effort": "low",
+      "fillerUnits": 983541,
+      "requestBytes": 1967335,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 983616,
+      "actualInputTokens": 983616,
+      "httpStatus": 200,
+      "responseModel": "qwen3.8-max",
+      "usage": {
+        "input_tokens": 982592,
+        "output_tokens": 16,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 1024,
+        "prompt_tokens_details": {
+          "cached_tokens": 1024
+        }
+      },
+      "stopReason": "max_tokens",
+      "messageStop": true,
+      "reply": "",
+      "durationMs": 81281
+    },
+    {
+      "trialId": "T13",
+      "mode": "tokens",
+      "thinking": "enabled",
+      "stream": true,
+      "effort": "low",
+      "fillerUnits": 983542,
+      "requestBytes": 1967337,
+      "maxOutputTokens": 16,
+      "calibratedInputTokens": 983617,
+      "actualInputTokens": null,
+      "httpStatus": 400,
+      "error": {
+        "code": "InvalidParameter",
+        "message": "<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 983616]"
+      },
+      "durationMs": 5397
+    }
+  ]
+}
