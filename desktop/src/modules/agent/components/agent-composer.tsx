@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { track } from "@/lib/ui-tracking"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import {
@@ -89,6 +90,9 @@ function AgentComposer({
   showConversationRolloverPrompt = false,
   onRemovePendingMessage,
   onRetryPendingMessage,
+  onSteerPendingMessage,
+  activeTurnId,
+  steerBlockedReason,
   onStartNewConversation,
   onJumpToBottom,
   slashCandidates = [],
@@ -142,6 +146,9 @@ function AgentComposer({
   readonly onCreatePermissionModeSession?: (mode: SynapseAgentPermissionMode) => void
   readonly onRemovePendingMessage?: (id: string) => void
   readonly onRetryPendingMessage?: (id: string) => void
+  readonly onSteerPendingMessage?: (id: string) => void
+  readonly activeTurnId?: string
+  readonly steerBlockedReason?: string
   readonly onKnowledgeBaseCommand?: (commandText: string) => void
   readonly onOpenKnowledgeBaseSourceManager?: () => void
   readonly gitRepositoryAvailable?: boolean
@@ -197,6 +204,7 @@ function AgentComposer({
   )
   const slashMenuOpen = Boolean(activeSlashFragment && !slashMenuDismissed && slashCandidates.length > 0)
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
+  const steeringPendingMessage = visiblePendingMessages.some((message) => message.status === "steering")
   const isNewSessionMode = pendingModeAction === "new-session"
   const attachmentAwareCanSend = canSend || attachments.length > 0
 
@@ -662,50 +670,84 @@ function AgentComposer({
               className="max-h-40 min-w-0 max-w-full"
               viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
             >
-              <div className="flex min-w-0 max-w-full flex-col">
-                {visiblePendingMessages.map((message) => (
-                  <div
-                    key={message.id}
-                    className="flex min-w-0 max-w-full items-center gap-2 border-b border-border py-1 last:border-b-0"
-                  >
-                    <div className="flex shrink-0 items-center text-sm text-muted-foreground">
-                      <CornerDownRight className="size-3.5 shrink-0" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate whitespace-nowrap text-sm text-muted-foreground">
-                        {formatDraftAttachmentsForMessage(message.content, message.attachments ?? [])}
-                      </p>
-                      {message.status === "failed" ? (
-                        <p className="truncate whitespace-nowrap text-xs text-destructive">{message.error ?? "发送失败"}</p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {message.status === "failed" ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label="重试发送"
-                          data-track="agent-pending-message-retry"
-                          onClick={() => onRetryPendingMessage?.(message.id)}
-                        >
-                          <RotateCcw />
-                        </Button>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label="删除待发送消息"
-                        data-track="agent-pending-message-remove"
-                        onClick={() => onRemovePendingMessage?.(message.id)}
+              <TooltipProvider>
+                <div className="flex min-w-0 max-w-full flex-col">
+                  {visiblePendingMessages.map((message) => {
+                    const steerDisabledReason = pendingMessageSteerDisabledReason({
+                      message,
+                      activeTurnId,
+                      steeringPendingMessage,
+                      steerBlockedReason,
+                    })
+                    return (
+                      <div
+                        key={message.id}
+                        className="flex min-w-0 max-w-full items-center gap-2 border-b border-border py-1 last:border-b-0"
                       >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                        <div className="flex shrink-0 items-center text-sm text-muted-foreground">
+                          <CornerDownRight className="size-3.5 shrink-0" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate whitespace-nowrap text-sm text-muted-foreground">
+                            {formatDraftAttachmentsForMessage(message.content, message.attachments ?? [])}
+                          </p>
+                          {message.error ? (
+                            <p className="truncate whitespace-nowrap text-xs text-destructive">{message.error}</p>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {sending ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  tabIndex={steerDisabledReason ? 0 : undefined}
+                                  aria-label={steerDisabledReason}
+                                >
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    disabled={Boolean(steerDisabledReason)}
+                                    aria-label={message.status === "steering" ? "引导中" : "引导当前任务"}
+                                    data-track="agent-pending-message-steer"
+                                    onClick={() => onSteerPendingMessage?.(message.id)}
+                                  >
+                                    {message.status === "steering" ? "引导中" : "引导"}
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              {steerDisabledReason ? <TooltipContent>{steerDisabledReason}</TooltipContent> : null}
+                            </Tooltip>
+                          ) : null}
+                          {message.status === "failed" ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-xs"
+                              aria-label="重试发送"
+                              data-track="agent-pending-message-retry"
+                              onClick={() => onRetryPendingMessage?.(message.id)}
+                            >
+                              <RotateCcw />
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            disabled={message.status === "steering"}
+                            aria-label="删除待发送消息"
+                            data-track="agent-pending-message-remove"
+                            onClick={() => onRemovePendingMessage?.(message.id)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </TooltipProvider>
             </ScrollArea>
           ) : null}
           attachments={attachments.length > 0 ? (
@@ -808,6 +850,7 @@ function AgentComposer({
               />
               {sending || cancelPhase === "cancel_pending" ? (
                 <Button
+                  key="stop"
                   type="button"
                   className="agent-composer__stop rounded-full"
                   size="icon-sm"
@@ -819,6 +862,7 @@ function AgentComposer({
                 </Button>
               ) : (
                 <Button
+                  key="send"
                   type="submit"
                   className="agent-composer__send rounded-full"
                   size="icon-sm"
@@ -893,6 +937,20 @@ function showAttachmentRejections(
 function attachmentDuplicateKey(attachment: AgentDraftAttachment): string | null {
   if (attachment.kind === "directory") return `${attachment.kind}:${attachment.attachmentId}`
   return [attachment.kind, attachment.name, attachment.byteSize, attachment.sha256].join(":")
+}
+
+function pendingMessageSteerDisabledReason(input: {
+  readonly message: PendingMessage
+  readonly activeTurnId?: string
+  readonly steeringPendingMessage: boolean
+  readonly steerBlockedReason?: string
+}): string | undefined {
+  if (input.message.status === "steering") return "正在引导"
+  if (input.steeringPendingMessage) return "请等待当前引导完成"
+  if (!input.activeTurnId) return "当前任务尚未准备好"
+  if ((input.message.attachments?.length ?? 0) > 0) return "带附件的消息只能排队发送"
+  if (input.message.content.trim().startsWith("/")) return "命令只能排队发送"
+  return input.steerBlockedReason
 }
 
 function hasFileTransfer(dataTransfer: DataTransfer | null): boolean {

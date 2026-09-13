@@ -30,6 +30,10 @@ describe("runtime data maintenance engine", () => {
       }
       seedEvent(fixture.database, event("old-sdk", "conversation-live", "sdkEvent", OLD))
       seedEvent(fixture.database, event("recent-sdk", "conversation-live", "sdkEvent", RECENT))
+      seedEvent(fixture.database, {
+        ...event("thinking-token-sdk", "conversation-live", "sdkEvent", RECENT),
+        payload: { sdkType: "system", sdkSubtype: "thinking_tokens" },
+      })
       seedEvent(fixture.database, event("semantic", "conversation-live", "result", OLD))
       seedEvent(fixture.database, event("orphan", "conversation-deleted", "result", RECENT))
       fixture.database.close()
@@ -45,7 +49,7 @@ describe("runtime data maintenance engine", () => {
         localOutbox: 1,
         retainedOutbox: 20,
         telemetryEnvironmentOrphans: 1,
-        rawAgentDiagnostics: 1,
+        rawAgentDiagnostics: 2,
         orphanAgentEvents: 1,
       })
       const database = new DatabaseSync(fixture.databasePath)

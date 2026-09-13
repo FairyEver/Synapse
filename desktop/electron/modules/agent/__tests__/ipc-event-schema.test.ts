@@ -3,6 +3,30 @@ import { describe, expect, it } from "vitest"
 import { agentIpcModule } from "../ipc"
 
 describe("agent IPC event schema", () => {
+  it("accepts bounded Renderer event batches", () => {
+    const parsed = agentIpcModule.events.event.payload.parse({
+      domain: "agent",
+      type: "eventBatch",
+      payload: {
+        batchId: "batch-1",
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "local-renderer",
+        conversationId: "conversation-1",
+        deliveryEpoch: "epoch-1",
+        events: [{
+          event: { type: "stream", event: {}, text: "hello" },
+          sequence: 1,
+          timestamp: "2026-09-12T00:00:00.000Z",
+        }],
+        resyncRequired: false,
+      },
+      timestamp: "2026-09-12T00:00:00.000Z",
+      scope: { projectId: "project-1", sessionId: "conversation-1" },
+    }) as { type: string }
+    expect(parsed.type).toBe("eventBatch")
+  })
+
   it("preserves session directory permission capability on live events", () => {
     const parsed = agentIpcModule.events.event.payload.parse({
       domain: "agent",

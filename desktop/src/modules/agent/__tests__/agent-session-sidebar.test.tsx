@@ -18,6 +18,7 @@ const rendererLogger = vi.hoisted(() => ({
   info: vi.fn(),
   warn: vi.fn(),
 }))
+const toast = vi.hoisted(() => vi.fn())
 
 const appConfig = vi.hoisted(() => ({
   agent: {
@@ -28,6 +29,8 @@ const appConfig = vi.hoisted(() => ({
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
 }))
+
+vi.mock("sonner", () => ({ toast }))
 
 vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
@@ -53,6 +56,138 @@ afterEach(() => {
 })
 
 describe("AgentSessionSidebar", () => {
+  it("copies a deep link from an active conversation context menu", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionSidebar
+          sessions={[{
+            projectId: "project / one",
+            id: "conversation?two",
+            conversationRef: "agc_abcdefghijklmnopqrstuv.abc",
+            sessionKey: "local:renderer",
+            platform: "local-renderer",
+            name: "Active Session",
+            active: true,
+            historyCount: 1,
+            createdAt: "2026-09-12T00:00:00.000Z",
+            updatedAt: "2026-09-12T00:00:00.000Z",
+          }]}
+          archivedSessions={[]}
+          projects={[{ id: "project / one", name: "Project One", path: "/tmp/project-one" }]}
+          selectedProjectId="project / one"
+          selectedConversationId="conversation?two"
+          sourceFilter="user"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onCreateSession={vi.fn()}
+          onSourceFilterChange={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    const row = [...document.querySelectorAll<HTMLElement>('[data-track="agent-session-select"]')]
+      .find((candidate) => candidate.textContent?.includes("Active Session"))
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+    const copyItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "复制深度链接")
+    expect(copyItem).toBeDefined()
+
+    await act(async () => {
+      copyItem?.click()
+      await Promise.resolve()
+    })
+
+    expect(writeText).toHaveBeenCalledWith(
+      "synapse://threads/abcdefghijklmnopqrstuv%2Eabc",
+    )
+    expect(toast).toHaveBeenCalledWith("深度链接已复制")
+  })
+
+  it("reports clipboard failure from an archived conversation context menu", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"))
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionSidebar
+          sessions={[]}
+          archivedSessions={[{
+            projectId: "archived-project",
+            id: "archived-conversation",
+            sessionKey: "local:archived",
+            platform: "local",
+            name: "Archived Session",
+            active: false,
+            historyCount: 1,
+            createdAt: "2026-09-12T00:00:00.000Z",
+            updatedAt: "2026-09-12T00:00:00.000Z",
+          }]}
+          projects={[]}
+          selectedProjectId="archived-project"
+          selectedConversationId="archived-conversation"
+          sourceFilter="user"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onCreateSession={vi.fn()}
+          onSourceFilterChange={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    const row = [...document.querySelectorAll<HTMLElement>('[data-track="agent-session-select"]')]
+      .find((candidate) => candidate.textContent?.includes("Archived Session"))
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }))
+      await Promise.resolve()
+    })
+    const copyItem = [...document.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "复制深度链接")
+
+    await act(async () => {
+      copyItem?.click()
+      await Promise.resolve()
+    })
+
+    expect(toast).toHaveBeenCalledWith("复制失败")
+    expect(rendererLogger.warn).toHaveBeenCalledWith(
+      "Agent conversation deep link copy failed.",
+      expect.objectContaining({
+        boundary: "renderer.agent.copy-deep-link",
+        projectId: "archived-project",
+        conversationId: "archived-conversation",
+        errorName: "Error",
+      }),
+    )
+  })
+
   it("renders the local conversation project instead of blocking on missing configured projects", () => {
     const html = renderToStaticMarkup(
       <AgentSessionSidebar

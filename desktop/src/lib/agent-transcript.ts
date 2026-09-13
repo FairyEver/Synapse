@@ -119,6 +119,7 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
 
 function messageLabel(entry: SynapseAgentMessageTimelineItem): string {
   const roleLabel = labelForRole(entry.role)
+  if (entry.role === "user" && entry.messageKind === "steer") return `${roleLabel}（引导）`
   const personaName = entry.role === "assistant" ? entry.metadata?.mainThreadPersona?.name : undefined
   return personaName ? `${roleLabel} [${personaName}]` : roleLabel
 }

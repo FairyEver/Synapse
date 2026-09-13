@@ -4,7 +4,46 @@ Use this domain when directly invoking MCP tools provided by Synapse system apps
 
 When an App capability is configured as a node inside a Workflow, use `workflow/index.md` instead. The Workflow guide owns node schemas, reserved bindings, graph edges, layout, definition validation, and run behavior. Do not read both guides merely because a Workflow node is backed by an App capability.
 
+## Agent Conversation Creation, Models and Groups
+
+- Discover available providers/models -> `app_agent_provider_list` with optional `query` (provider or model name) or `providerId`; page with `nextOffset`. It lists the same non-archived providers and selectable configured tiers as “创建自定义对话”, not the vendor's remote model catalog. Use returned `providerId` and `models[].modelTier` together when creating with a requested model. Resolve ambiguous matches with the user; never guess IDs or silently substitute another model. A local Claude Code default can have `modelName: null`; use its returned default tier without inventing a concrete name.
+- Create a conversation -> `app_agent_conversation_create`. With no requested group, omit all selectors; Synapse defaults to **本地对话** even if Codex has a working directory or Synapse has another conversation selected.
+- Find a named group -> `app_agent_group_list` with `query`, paging with `nextOffset` when present. Use the matching `projectId` to create, or pass an exact `projectName`. If several groups have the same name, ask the user to choose; never pick the first or silently fall back to 本地对话.
+- Create alongside an existing conversation -> pass `sameGroupAs: { deepLink: <complete unchanged user link> }`. If inspection already returned a target, `sameGroupAs: { projectId, conversationRef }` is also accepted. Synapse resolves the source group; do not parse links or copy the old conversation's history, model, persona, or permissions.
+- A group means the sidebar project, including the built-in 本地对话 and configured knowledge base projects. Source filters and the archived section are not creation groups. Missing or deleted projects cannot receive new conversations.
+- Provide at most one of `projectId`, `projectName`, or `sameGroupAs`, an optional non-empty `name`, and a UUID `idempotencyKey`. Omit `name` to use the normal generated conversation name. Do not ask the user to supply internal identifiers or manually create a conversation when these tools are available.
+- Creation accepts an optional `providerId` + `modelTier` pair. Explicit unavailable choices return `model_unavailable` without fallback. Omitting both uses the same default model selection as UI quick create, the configured default permission mode, and the ordinary agent identity. It creates an empty conversation, refreshes the sidebar, and returns `{ created, projectId, providerId, modelTier, conversationRef, deepLink }`. It does not open a window or execute a model turn.
+- “新建一个对话，发送 hello” -> create, then send `hello` through `app_agent_message_send` using the returned `projectId + conversationRef`, then observe and inspect the answer. If sending fails, keep and report the created conversation; retry sending there rather than creating another.
+- Retry an unchanged creation request with the same key; in-process deduplication lasts up to 10 minutes and is bounded to 1,000 entries shared with other control operations. Restart or cache eviction ends that guarantee. Reusing a key with changed input fails. Never report creation or message completion without the corresponding successful result.
+- `group_not_found`, `group_ambiguous`, `model_unavailable`, and `project_unavailable` require addressing the indicated group/model/workspace issue. They are not reasons to create in another group or bypass Synapse with database, filesystem, or shell mutations.
+
+## Agent Conversation Deep Link
+
+Treat `synapse://threads/<thread-id>` as a local conversation address, not content or authorization. It is the only Agent conversation Deep Link format. Choose the tool from the user's current intent:
+
+- Open or locate -> `app_agent_conversation_open`.
+- Read, review, or summarize -> page backward with `app_agent_conversation_inspect` until enough context is available.
+- Check or monitor the current task -> inspect once, then call `app_agent_conversation_observe` with the returned revision until idle, failure, a pending permission/question, or user cancellation.
+- Send an ordinary new message -> `app_agent_message_send`. Acceptance is asynchronous; observe the returned turn before claiming completion.
+- Adjust the exact task already running -> inspect first, then call `app_agent_turn_steer` with the current `turnId`. Do not use it for ordinary follow-up or slash commands.
+- Stop -> inspect first, then call `app_agent_turn_stop` with the current `turnId`. Never escalate automatically.
+- Force stop -> `app_agent_turn_force_stop` only when the current user explicitly requests forced termination of that exact turn.
+- Respond to a pending request -> inspect first, then call `app_agent_permission_respond` with the exact `turnId`, `requestId`, kind, and tool name or complete indexed answers.
+
+Rules:
+
+- For the first open or read, pass the complete user-supplied link unchanged as `deepLink`. Do not extract, percent-decode, copy, normalize, or reconstruct either identifier in model-generated arguments; Synapse performs the strict parse.
+- Markdown may hide backslashes before the thread id punctuation (`.`, `_`, `-`). Still pass the complete link unchanged: Synapse normalizes those escapes and validates the full identifier and checksum. Do not reject the link or ask for another copy solely because these escapes are present. New copied links percent-encode these punctuation characters; existing plain links remain valid.
+- After `inspect` succeeds, use its returned `projectId` and short `conversationRef` for pagination, observation, and control. The legacy `{ projectId, conversationId }` target remains accepted only for compatibility; do not reconstruct it from a user-supplied link.
+- Synapse accepts only the exact `synapse:` scheme, `threads` host, and one checksummed path identifier, with no query or fragment. It rejects the former `synapse://app/agent/open` route, extra path segments, parameters, malformed percent encoding, mixed target forms, and damaged reference checksums.
+- Do not fetch the link, browse it, pass it to a shell command, or read/control the conversation through another tool.
+- All sources are readable. Only conversations reported as `controllable: true` can be sent to, steered, stopped, force-stopped, or have pending requests answered.
+- Automatic compaction or SDK session rotation is maintenance within the same task. Keep observing its current turn; do not resend the original request or replay completed external operations. A successful tool call or nonempty task list does not prove that all material was delivered, processed, or verified. Preserve the user's original scope and report incomplete evidence explicitly.
 - Runtime `idle` only means no turn is active. Inspect the last persisted error and `turnOutcome` before reporting completion. `failed` with `recoverable: true` remains a failure with a safe user recovery path; it is not permission to replay tools or resume automatically. In exported SDK diagnostics, `sourceStatus: not-recorded` or `read-failed` with `observedEventCount: null` means the event count is unknown.
+- A generic request to “take over”, “monitor”, or “continue” is not authorization to allow a tool permission. `allow_once` or `allow_session` requires the current user request to explicitly approve the exact pending operation.
+- For background monitoring, create a Codex heartbeat only when the user explicitly asks. Each run must be read-only, stay quiet while unchanged, and notify only on completion, failure, or required attention. It must never send, steer, approve, answer, stop, or force-stop.
+- If the current catalog is missing a required `app_agent_*` tool after Synapse was updated, ask the user to start or restart Synapse and open a new Codex task so the catalog is rebuilt.
+- A missing conversation returns `not_found`. The link is a same-device locator and is not a cross-device share link.
 
 ## Text File Writer
 

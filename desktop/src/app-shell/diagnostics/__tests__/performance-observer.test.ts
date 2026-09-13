@@ -6,6 +6,7 @@ describe("installPerformanceObserver", () => {
   let capturedCallback: ((list: { getEntries: () => unknown[] }) => void) | null = null
 
   beforeEach(() => {
+    vi.useFakeTimers()
     mockObserverInstance = { observe: vi.fn(), disconnect: vi.fn() }
     capturedCallback = null
     vi.stubGlobal("PerformanceObserver", class {
@@ -18,6 +19,7 @@ describe("installPerformanceObserver", () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
@@ -30,12 +32,13 @@ describe("installPerformanceObserver", () => {
         { entryType: "longtask", duration: 230, startTime: 14523, attribution: [] },
       ],
     })
+    vi.advanceTimersByTime(10_000)
 
     expect(logger.warn).toHaveBeenCalledTimes(1)
     const [msg, meta] = logger.warn.mock.calls[0]
-    expect(msg).toContain("230")
-    expect(meta).toHaveProperty("duration", 230)
-    expect(meta).toHaveProperty("attributionCount", 0)
+    expect(msg).toContain("1 次")
+    expect(meta).toHaveProperty("totalDurationMs", 230)
+    expect(meta).toHaveProperty("maxDurationMs", 230)
     cleanup()
   })
 

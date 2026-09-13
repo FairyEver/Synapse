@@ -109,7 +109,12 @@
 
 ## Agent 与 Knowledge Base
 
-- Agent 会话只能基于已配置项目，新会话绑定 `agentType`；运行状态按 conversation 隔离，同项目多会话不得共享队列、busy 或 live session。
+- Agent Conversation MCP 新建默认进入“本地对话”，也可指定项目 ID、唯一精确分组名称或已有对话所属分组；分组查询只返回可创建的项目标识和名称，不返回路径或归档分组。创建通过现有 Agent Runtime，未指定模型时复用快捷创建默认模型，也支持成对指定 providerId/modelTier；显式模型不可用时失败且不回退。供应商模型查询复用 ProviderService 与自定义创建选择规则，只返回未归档供应商名称、标识与可选档位模型，不返回密钥或连接配置。创建复用默认权限模式，固定普通智能体和本地来源；不复制旧对话内容/身份、不自动发送、不打开窗口，成功后通过 EventBus 刷新会话列表。
+
+- Agent 会话基于内置“本地对话”工作区或已配置项目，新会话绑定 `agentType`；运行状态按 conversation 隔离，同项目多会话不得共享队列、busy 或 live session。
+- Agent 大型文本工具结果属于会话私有 artifact：正文只写入主进程受控目录和 `agent.artifacts` 元数据，SDK 仅可读，Renderer、普通对话导出、MCP、Workflow 与公开 capability 均不得获得正文读取入口；删除会话时同步清理。
+- Agent 对话深度链接只通过既有 Agent System App 的导航能力定位本机 DataRepository 中的对话，唯一格式为 `synapse://threads/<thread-id>`。路径只包含从项目与内部对话 ID 确定性派生的短校验定位符主体；主进程通过有界摘要扫描跨项目解析唯一目标。不得注册或解析旧 `synapse://app/agent/open?projectId=...&conversationId=...` 入口。链接不得包含标题、session key、消息正文、密钥或授权。MCP 首次调用必须允许把完整 `deepLink` 交给 Synapse 解析，后续使用返回的 `projectId + conversationRef`，不得要求 Agent 拆解或重写内部 ID。
+- Agent Conversation MCP 的读取与协作控制集中在独立主进程服务，不得通过数据库旁路驱动 Agent Runtime。所有来源可读，只有 `local` / `local-renderer` 用户对话可控制；发送异步接纳，steer/停止/强停/权限响应使用精确回合与请求校验，且继续经过 `PermissionGuard` 与无正文审计。该能力不得新增第二个 System App、Dock、Workflow/Automation 节点或 Deep Link action。
 - persona 是 conversation 级固定身份，只能在新建对话时选择，创建后不得在 composer、IPC 或 live session 切换。
 - 普通/未绑定模型 persona 使用新建对话选择的模型；绑定模型 persona 固定使用其当前绑定并保存为基础模型。
 - conversation 保存 persona ID 和创建时 snapshot，每轮使用当前可访问的最新配置；配置变化关闭并重建 live session。persona 不存在、无权访问或缓存缺失时不得降级普通对话：保留历史查看/复制/导出，禁用发送并引导新建。

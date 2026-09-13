@@ -68,6 +68,59 @@ export interface AgentMessage {
   readonly providerId?: string
   readonly modelTier?: string
   readonly userMeta?: Record<string, unknown>
+  /** Main-process only ownership used to stop a turn if its Renderer disappears. */
+  readonly originRendererId?: number
+  /** Internal-only marker used to inject a bounded recovery handoff after history persistence. */
+  readonly contextRecoveryTurnId?: string
+  /** Main-process only turn identity for per-turn context budgeting. */
+  readonly runtimeTurnId?: string
+}
+
+export interface AgentSteerMessage {
+  readonly clientMessageId: string
+  readonly content: string
+  readonly submittedAt: string
+}
+
+export type AgentSteerStatus =
+  | "accepted"
+  | "no-active-turn"
+  | "turn-changed"
+  | "permission-pending"
+  | "cancel-pending"
+  | "session-ended"
+  | "unsupported"
+
+export interface AgentSteerResult {
+  readonly status: AgentSteerStatus
+  readonly conversationId: string
+  readonly turnId?: string
+  readonly clientMessageId: string
+}
+
+export type AgentTurnAdmissionResult =
+  | {
+    readonly accepted: true
+    readonly conversationId: string
+    readonly turnId: string
+    readonly disposition: "started" | "queued"
+    readonly queuePosition: number
+  }
+  | {
+    readonly accepted: false
+    readonly conversationId: string
+    readonly reason: "rejected" | "queue_full"
+    readonly error: string
+  }
+
+export interface AgentConversationRuntimeSnapshot {
+  readonly lifecycle: "idle" | "queued" | "starting" | "running" | "awaiting_permission" | "stopping"
+  readonly activeTurnId: string | null
+  readonly queuedTurns: readonly {
+    readonly turnId: string
+    readonly position: number
+  }[]
+  readonly pendingPermissionRequestId: string | null
 }
 
 interface AgentEventBase {
@@ -191,6 +244,8 @@ export interface AgentContextUsage {
   readonly model?: string
   readonly modelContext?: AgentModelContextReference
   readonly contextWindowConfigurationSource?: AgentContextWindowConfigurationSource
+  readonly autoCompactWindowTokens?: number
+  readonly autoCompactThresholdTokens?: number
 }
 
 export interface AgentResultMetadata {
@@ -213,12 +268,17 @@ export interface AgentResultMetadata {
   readonly totalCostBreakdownCny?: Record<string, number>
   readonly costCurrency?: "CNY"
   readonly estimatedCost?: boolean
+  readonly queuedTurnCount?: number
+  readonly userMessageUuid?: string
 }
 
 export type AgentErrorKind =
   | "execution_failed"
   | "connection_interrupted"
   | "tool_use_interrupted"
+  | "request_body_too_large"
+  | "context_refill_thrashing"
+  | "renderer_unavailable"
   | "webfetch_preflight_failed"
 
 export interface AgentResultEvent extends AgentEventBase {
@@ -232,6 +292,8 @@ export interface AgentResultEvent extends AgentEventBase {
   readonly usage?: Record<string, unknown>
   readonly modelUsage?: Record<string, unknown>
   readonly sdkResultUuid?: string
+  readonly queuedTurnCount?: number
+  readonly userMessageUuid?: string
   readonly payload?: Record<string, unknown>
 }
 
@@ -365,6 +427,7 @@ export interface AgentPendingPermission {
   readonly workspaceKey?: string
   readonly workspacePath?: string
   readonly conversationId: string
+  readonly turnId?: string
   readonly toolName: string
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
@@ -428,10 +491,12 @@ export interface AgentLiveSession {
   readonly mainThreadAgentName?: string
   readonly agentDefinitionsHash?: string
   send(message: AgentMessage): Promise<boolean>
+  steer?(message: AgentSteerMessage): Promise<boolean>
   respondPermission(
     requestId: string,
     decision: AgentPermissionDecision,
   ): Promise<void>
+  contextRotation?(): import("./context-continuation").AgentContextRotation | undefined
   nextEvent(): Promise<AgentEvent | null>
   nextEventWithTimeout?(timeoutMs: number): Promise<AgentEvent | null>
   currentSessionId(): string | undefined
@@ -495,6 +560,11 @@ export type ScheduledAgentSendInput = {
 export type CancelTurnResult = {
   readonly status: "no-active-turn" | "graceful-pending" | "hard-killed"
 }
+
+export type ExpectedTurnStopResult =
+  | CancelTurnResult
+  | { readonly status: "graceful-unavailable" }
+  | { readonly status: "turn-changed"; readonly turnId: string }
 
 export type ScheduledAgentSendResult = {
   readonly conversationId: string

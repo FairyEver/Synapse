@@ -113,6 +113,32 @@ function renderInteractiveTimeline(overrides: Partial<ComponentProps<typeof Agen
 }
 
 describe("AgentTimeline", () => {
+  it("updates elapsed time without scanning timeline items again", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-09-13T00:00:00.000Z"))
+    try {
+      let reads = 0
+      const items = new Proxy<SynapseAgentTimelineItem[]>([{
+        id: "phase-clock", kind: "phase", runId: "run", phase: "received", status: "in-progress",
+        timestamp: "2026-09-13T00:00:00.000Z", startedAt: "2026-09-13T00:00:00.000Z",
+      }], {
+        get(target, property, receiver) {
+          if (typeof property === "string" && /^\d+$/.test(property)) reads += 1
+          return Reflect.get(target, property, receiver)
+        },
+      })
+      const { container } = renderInteractiveTimeline({ items, sending: true })
+      expect(reads).toBeGreaterThan(0)
+      reads = 0
+      act(() => vi.advanceTimersByTime(2_000))
+      expect(container.textContent).toContain("2.0s")
+      expect(reads).toBe(0)
+    } finally {
+      for (const root of roots.splice(0)) act(() => root.unmount())
+      vi.useRealTimers()
+    }
+  })
+
   it("lets users continue a recoverable interruption", () => {
     const onContinue = vi.fn()
     const { container } = renderInteractiveTimeline({

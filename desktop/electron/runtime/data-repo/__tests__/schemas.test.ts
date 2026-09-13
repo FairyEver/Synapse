@@ -330,6 +330,17 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     }
   })
 
+  it("accepts legacy conversations and restricts persisted task namespaces to UUIDs", () => {
+    const schema = allSchemas.find((item) => item.name === "conversations")!
+    const legacy = { id: "c", schemaVersion: 1, projectId: "p", sessionKey: "s", history: [], active: true,
+      createdAt: "2026-09-13T00:00:00Z", updatedAt: "2026-09-13T00:00:00Z" }
+    expect(schema.validate(legacy)).toBe(true)
+    expect(schema.validate({ ...legacy, taskListId: "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" })).toBe(true)
+    for (const taskListId of ["../../other", "/tmp/tasks", "shared", 42, null]) {
+      expect(schema.validate({ ...legacy, taskListId })).toBe(false)
+    }
+  })
+
   it("workflows schema accepts option params", () => {
     const workflows = allSchemas.find((schema) => schema.name === "workflows")
     expect(workflows).toBeDefined()
@@ -763,7 +774,26 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         createdAt: "2026-07-03T00:00:00.000Z",
       }),
     ).toBe(false)
-    expect(agentArtifactsSchema.currentVersion).toBe(2)
+    expect(agentArtifactsSchema.currentVersion).toBe(3)
+    expect(
+      agentArtifactsSchema.validate({
+        id: "tool-output-1",
+        schemaVersion: 3,
+        projectId: "project-1",
+        conversationId: "conv-1",
+        turnId: "turn-1",
+        toolUseId: "toolu-1",
+        toolName: "Read",
+        kind: "tool-output-text",
+        mimeType: "text/plain",
+        originalByteSize: 4096,
+        storedByteSize: 4096,
+        contentTruncated: false,
+        sha256: "c".repeat(64),
+        storagePath: "/tmp/synapse/agent-artifacts/project-1/conv-1/tool-output/tool-output-1.txt",
+        createdAt: "2026-09-12T00:00:00.000Z",
+      }),
+    ).toBe(true)
     expect(
       agentArtifactsSchema.validate({
         id: "attachment-1",

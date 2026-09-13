@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  agentDiagnosticPresentation,
   sdkQueryErrorMessage,
   sdkResultErrorMessage,
 } from "../agent-error-messages"
@@ -45,5 +46,27 @@ describe("agent error messages", () => {
     expect(message).toBe("Agent 在工具调用后中断，发送“继续”可接着执行。")
     expect(message).not.toContain("ede_diagnostic")
     expect(message).not.toContain("stop_reason")
+  })
+
+  it("classifies the exact Bailian request-body limit without exposing provider text", () => {
+    const raw = "API Error: Exceeded limit on max bytes to request body : 6291456"
+
+    expect(agentDiagnosticPresentation(raw)).toEqual({
+      message: "当前对话内容较多，暂时无法继续。",
+      errorKind: "request_body_too_large",
+      recoverable: true,
+    })
+    expect(agentDiagnosticPresentation("Exceeded limit on max bytes to request body : 6291457").errorKind)
+      .toBe("execution_failed")
+  })
+
+  it("classifies SDK rapid context refill without exposing the English diagnostic", () => {
+    const raw = "Autocompact is thrashing: context refilled. terminal_reason=rapid_refill_breaker"
+
+    expect(agentDiagnosticPresentation(raw)).toEqual({
+      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
+      errorKind: "context_refill_thrashing",
+      recoverable: true,
+    })
   })
 })

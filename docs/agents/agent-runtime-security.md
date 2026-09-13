@@ -2,14 +2,31 @@
 
 本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出、Usage Analysis 和 provider 预览。
 
+## 历史写入与容量
+
+长运行性能相关的持久化与显示容量实施状态见 `docs/superpowers/specs/2026-09-13-agent-long-running-capacity-design.md`。历史追加、记录元数据和问题响应须与标题共享会话级读改写串行队列；摘要保存不得将读到的旧 history 回写覆盖新记录。当前整历史 JSON 存储仍未完成分块改造，不能把局部缓存、诊断或计时优化描述为长期稳定性保证。
+
 ## Claude SDK 配置
 
 - 修改 SDK 参数前核对官方文档和当前安装包类型。`Options.env` 是子进程环境；`Options.settings` 是更高优先级 inline/flag settings，两者不能混用。
 - Provider 隔离必须同时写两层：顶层 `Options.env`，以及 `Options.settings.env` 中当前 provider 的 `ANTHROPIC_*` 覆盖（至少 base URL、model、auth token/API key 和默认模型变量）。
-- `Options.settings.env` 只能放 provider 的 `ANTHROPIC_*`，不得放 `SYNAPSE_SIDE_CHANNEL_TOKEN`、data-server token、普通 shell env 或其它 runtime secret。
+- `Options.settings.env` 只能放 provider 的 `ANTHROPIC_*` 及宿主持久化的 `CLAUDE_CODE_TASK_LIST_ID`，不得放 `SYNAPSE_SIDE_CHANNEL_TOKEN`、data-server token、普通 shell env 或其它 runtime secret。
 - 回归测试必须证明 provider 配置进入 `settings.env`，side-channel 等非 provider secret 不进入。
 - 历史回归：提交 `6778d598e` 曾删除 `settings.env: options.env`，导致用户本机配置其它 Claude provider 时混用旧 base URL 与当前模型。遇到 `model not found or not supported`，先检查 `desktop/electron/services/agent-runtime/claude-sdk-session.ts` 的覆盖层。
 - SDK 终态只要标记 `is_error` 或 `terminal_reason=api_error`，即使 `subtype=success`、`errors` 为空，也必须按失败结束；SDK 合成的 `is_api_error_message` 不得作为普通 Assistant 回复写入 history。网络中断应投影为可恢复状态并允许用户显式继续，不得自动重放整轮请求，因为已执行工具可能产生不可重复的副作用。
+- 百炼官方 Anthropic 端点使用独立传输策略：6 MiB 请求体上限、200,000 token 自动整理阈值，不得降低模型目录中的 1,000,000 token 上限，也不得把策略扩展到代理或其它 Provider。命中精确 6 MiB 错误后，必须等本轮终态落库再关闭旧 SDK Session、清除持久化 Session ID；Automation、Workflow 与 Relay 只清理 Session，不自动续跑。
+- 所有 Claude Agent SDK 会话必须在 `PostToolUse` 阶段按“单结果/单批”预算治理模型可见工具结果：默认 50/150 KiB，百炼官方 Anthropic 端点 8/24 KiB；累计工具输出只计量，不能触发轮换，文本单结果另受 2,000 行限制。`Read`、搜索和抓取保留前部，`Bash` 保留尾部；截断提示必须说明窄化读取方式，且不得诱导重放已有副作用的调用。大型文本结果必须先原子写入会话私有 artifact 目录（单文件最多 16 MiB，超出按有序文件分片保存并返回索引，文件权限 0600），SDK 仅获得该目录的读取能力，直接文件写工具不得因此扩大可写根；删除会话时同步清理，普通对话导出不得携带该正文。
+- 完整模型请求同时执行 token 与字节预算。百炼 6 MiB 硬限制使用 5 MiB 内部安全预算；预算基于 SDK `getContextUsage()` 的可信完整 token 快照，加上快照后新增消息与工具 payload 的实际 UTF-8/序列化字节。图片/PDF 不做文本截断，但其 payload 必须计入字节预算；将越过安全预算但无法保证完整呈现时显式停止，不能省略结果后引导模型猜测完成；附件原件不得修改。日志不得把估算字节描述为实际 HTTP body。
+- SDK 原生自动整理和预计算整理保持启用；工具结果 token 下降只表示观察到淘汰，不得宣称宿主已经修改 SDK 历史。每轮结束与 compact 后必须读取 SDK 上下文分类；只用 `messageBreakdown.toolResultTokens` 的下降判断已发生的原生淘汰，并按淘汰 token 比例释放本地已跟踪的工具结果字节预算。compact 监测只记录前后 token、耗时、类别与摘要字节数，不记录摘要、工具正文、路径或凭据。请求字节账本必须跨普通 SDK token 快照保留，累计静态上下文、用户消息、主线程 Assistant/工具调用块和工具结果封装；compact 成功后按静态上下文、整理摘要及实际保留的工具结果尾部重建基线，并恢复已释放的工具额度，不能假设工具尾部全部被删除。
+- 正常执行在 `UserPromptSubmit`、主线程 `PostToolBatch`、`PostCompact` 边界读取完整 SDK 快照（5 秒超时），区分 SDK `autoCompactThreshold` 整理触发值和 `maxTokens` 实际工作窗口；宿主按当前工作窗口预留下一次调用空间，不从整理触发值再次扣减 buffer；阈值未知时使用已有保守预算，界面不得把配置窗口冒充真实触发阈值。并行 PostToolUse 必须串行预留额度，不能重复消费剩余预算。
+- 当前 token/字节工作集无法容纳下一次请求时，必须暂停下一次请求，完整保存脱敏任务历史、最近批次、原始任务和 SDK 整理摘要的私有检查点，再关闭旧 Session、清除 resume ID，通过原 SessionManager/权限/审计创建干净 Session，同一 turn 自动续跑。该主动维护适用于前台及后台，不重放请求或工具调用；只有检查点引用与最多 32 KiB 的摘要进入新上下文。历史按短行 JSONL 分片保存，原文不作长度截断；凭据和图片 Base64 除外，附件原件与授权范围保持不变。私有检查点复用 tool-output artifact 的只读授权、删除及导出隔离，不注册公开能力。
+- 轮换必须等待已接纳的 steer 落库，暂停新的 steer 接纳，并保留队列与当前 turn。关闭前保存文件检查点，再将旧 SDK 的检查点标为 superseded；新 Session 不得承诺撤销旧 Session 文件。取消、Renderer 丢失或中止优先于续跑；交接失败停止并保留已有记录，不得发送缺失资料的新请求；连续无工具进展的轮换必须停止，不能形成无限重启。
+- 执行器捕获精确 `rapid_refill_breaker` 或已限定百炼端点的请求体容量失败时，优先采用同一私有检查点交接自动续跑，不重放失败的 HTTP 请求或工具调用。只有无法建立自动交接条件、连续无进展或维护失败时才使用现有可恢复错误兜底；普通网络/API 错误不自动续跑。
+- 自动维护无法接管且已投影为失败终态后的兜底恢复仍是 Agent UI 私有两阶段操作：先验证最新失败轮并整理，再由用户显式“继续上一个任务”。恢复交接最多 32 KiB，只能在用户可见消息落库后注入新 SDK Session；不得包含 Base64、绝对路径、完整工具结果、敏感字段，不得直接重放工具调用。用户发送其它消息时清除恢复状态并使用干净 Session。
+- 请求体恢复期间必须结束旧 Session 的权限等待并暂停既有待发送队列；取消、切换对话和关闭窗口不得向旧 Session 发送内容。恢复日志只记录 Provider scope、阈值、最后可信 token、附件数量/字节、失败轮和恢复结果，不记录 prompt、工具正文、路径、Base64 或凭据。
+- Agent SDK 高频事件必须先分类再构造 payload。`system/thinking_tokens` 与未知 SDK 类型不得进入 AgentEvent、EventBus、持久化或轮次结果；只允许不含正文、路径、凭据和原始 payload 的每轮聚合诊断。真实 thinking 文本继续使用 `thinking_delta`。
+- Renderer 只接收有界显示投影：流式批次最多 128 条/64 KiB、等待确认最多 512 KiB；send 终态最多 32 KiB；timeline 每页最多 100 条/1 MiB、单项与全文分块最多 64 KiB。Renderer 私有全文接口只能接受 project、conversation、history index 和 offset，禁止接受文件路径。
+- Renderer 崩溃或持续无响应时，必须按 webContents 所属关系停止其发起的本地交互轮次、结束权限等待并清除未确认批次；不得停止 Automation、Workflow、Relay 或其它 Renderer 的运行。已执行工具保留真实结果，不回滚、不自动重放。详细不变量见 `docs/superpowers/specs/2026-09-12-agent-renderer-capacity-and-recovery-design.md`。
 - Agent 用户附件只在主进程受控目录暂存；Renderer 与发送 IPC 只携带版本化 attachment id/metadata，history 只保存用户正文与结构化附件元数据，不得携带原始字节、Base64、data URL 或受控绝对路径。
 - 图片只通过“受控原图路径 + Read”进入既有主 query。不得创建图片 content block、附件子 query、隐藏批次会话、摘要回灌、附件 MCP 或读取完整性循环。
 - 附件处理不得读取 Provider 类别、模型名称、base URL 或自定义能力覆盖，不按白名单启停。百炼 Kimi、Qwen 和自定义兼容模型使用同一路径清单；模型或 Provider 拒绝时保留原生错误。
@@ -23,9 +40,19 @@
 - 附件诊断只允许记录类型和计数；不得记录 attachmentId、名称、路径、哈希、运行时清单、工具输入或模型输出。路径链路不登记为公开 capability/MCP。
 - 附件回滚不得恢复 Renderer 原图字节、raw image IPC、Blob URL 或重写用户附件。
 
+## 长任务可靠性实施边界（2026-09-13）
+
 - 工具结果保存或呈现失败的 `execution_failed` 必须保留 SDK 明确给出的 `recoverable`，经轮次归一化、持久化 `turnOutcome`、IPC、历史回放和 MCP 读取不得降为 false；未明确给出时不推断为可恢复。取消和超时仍优先。idle 只代表没有活动轮次，可恢复失败不授权自动重放。
 - 诊断导出的 SDK 流采集状态区分 `captured`、`not-recorded`、`read-failed`；后两者的 `observedEventCount` 为 null，不能把未采集或读取失败解释为零事件。保留采集量、导出量与超限省略量的不同语义。
 - SDK 0.3.245 图片协议夹具证实，挂起 `PostToolUse` 时单独 `close()` 可能将原图发送到后续请求；`interrupt()` 确认后关闭及 hook 正常返回停止在合成夹具中可阻断请求。强制关闭、其它 hook 干预和持久交接尚未通过图片恢复门禁，不得据此启用自动图片重呈现。详见监视整改实施记录。
+
+- 稳定 taskListId 保存在 conversation 可选字段，SDK 普通轮次、resume 和轮换复用；其它 conversation 使用独立随机 UUID。两层 SDK env 均覆盖宿主或 Provider 的全局 task-list ID。旧记录仅可沿用其合法 SDK UUID 对应的默认 namespace，不扫描 SDK 私有任务目录，不声称恢复历史已丢失的任务。
+- 自动交接使用专用执行投影，保留原有真实工作路径、早期用户要求和最新执行批次；凭据仍脱敏。手动恢复和普通导出继续采用各自脱敏边界。路径引用不授予新权限；执行批次不等于模型已消费或处理。
+- SDK 0.3.245 的 Read/Bash 等原生工具会校验 updatedToolOutput 结构；字符串替换可被静默拒绝。治理必须保留原生结构，按实际替换结构及 JSON 转义计入预算；MCP 替换必须移除旧 structuredContent。未知结构不得假称治理成功。
+- 文本结果落盘失败、返回缺失/截断记录、无法交付完整 artifact 引用时，显式结束为可恢复错误；不得继续截断或自动启动缺资料的新代。图片超预算暂时显式停止，完整引用重呈现协议仍待实施。
+- 导出的 timeline、transcript 和消息/工具计数以同一 conversation 持久化历史投影为准；runtime 空页、尾页、sentinel 不作为历史权威。工具计数按 toolUseId 去重。
+- 新代创建前后和轮换异步边界核对取消/Renderer 状态。SDK 在循环开始前已结束或无终态退出时必须记为未完成。
+- 当前仍缺增量权威历史、版本化契约/覆盖账本、持久轮换事务、基于业务证据的停滞判断及完成门禁；现有轮换仍不能作为完整可靠性保证。详细状态见实施计划及其验证记录。
 
 ## Agent 文件检查点
 
@@ -42,15 +69,21 @@
 
 ## MCP 命名、传输与 Schema
 
-- “Synapse MCP 工具按需加载”是默认关闭的 Agent 实验功能，只对创建时已固化开启且使用非 Anthropic 官方端点的对话生效。Anthropic 官方端点继续使用 SDK 原生工具模式；对话切换 Provider/端点时按快照与端点重新计算，不读取当前全局开关改写旧对话。
+- Agent 分组查询与新建对话分别使用 `agent.conversation.read` / `agent.conversation.control` 权限、既有客户端限流与无正文审计。新建只接受默认分组、已配置项目或已有对话所属的可用分组，不接受任意工作目录、来源、permission mode 或继承旧对话身份；普通身份与模型/权限默认值由主进程确定。幂等键作用域为客户端和创建操作，并复用进程内有界 10 分钟缓存；已创建成功后的界面刷新失败不能触发重复创建。
+
+- “Synapse MCP 工具按需加载”默认开启，仅用于非 Anthropic 官方端点；保留用户/会话显式关闭的选择，缺少快照的旧对话使用默认按需模式。Anthropic 官方端点继续使用 SDK 原生工具模式；对话切换 Provider/端点时按快照与端点重新计算，不读取当前全局开关改写旧对话。
 - 实验会话必须先用正常 `settingSources` 做一次不消费用户 prompt、不发送模型请求的 MCP discovery，再以 `strictMcpConfig: true` 重建其它可序列化 MCP，移除 `synapse-mcp` 并注入进程内 `synapse-tool-router`。不得用 `disallowedTools`、运行时 toggle 或同名 server 覆盖模拟隔离。
-- 只要 discovery 失败、MCP 配置无法无损重建、存在显式 `mcp__synapse-mcp__*` 权限规则、policy helper 或 Synapse server 工具策略，整次会话必须回退完整 MCP。新会话继续把显式注入的 MCP Server 名称固化到 `expectedMcpServerNames` 快照，用于 discovery、诊断和兼容；连接器 MCP 缺失、失败、待授权或超时必须记录安全 reason 与状态，但不得阻断用户 Prompt 或终止普通对话。诊断可记录 Server 名称与状态，不得记录 header、环境变量、凭据或 MCP 配置正文。
+- 路由模式中任何异常都不得回退完整 MCP：可选连接器缺失、失败、待授权或 pending 超时，只排除该连接器并保留路由器及其它可重建 MCP；不可重建的可选配置也只排除该项。discovery 整体失败、重名、显式原始 Synapse 权限规则、policy helper、Synapse server 工具策略或路由器创建失败时，使用 `strictMcpConfig: true` 和空 MCP 集合，保留受现有权限限制的内置工具，不能绕过原权限策略。诊断仅记录名称、安全 reason 与状态，禁止配置、header、env 或凭据正文。
 - 内部 router 只暴露 `search` 与 `invoke`。`search` 只读且可自动允许；`invoke` 必须把原始 Synapse 工具名和参数投影回 Persona、子 Agent allowlist、permission mode、权限卡片、toolUse/toolResult、history 与导出，并以 `toolUseId` 关联。底层执行仍走同一 action router、`PermissionGuard`、`AuditSink` 和公共 MCP 结果归一化。
 - 自动注册/清理 Synapse MCP 时移除旧 server：`synapse-data`、`synapse-database`、`synapse-services`，以及旧权限 allowlist 工具名；不得自动新增 `mcp__synapse-mcp__*` allowlist。
 - MCP 工具顶层 `inputSchema` 必须是普通对象，禁止顶层 `oneOf`、`anyOf`、`allOf`。跨字段条件由 dispatcher/service 校验，并在描述中说明。新增/修改工具时运行 `buildAllMcpTools()` 顶层兼容性测试。
 - 公开工具名只使用由 `app.*` capability 派生的规范 `app_*`。旧 `database_*`、`model_price_*`、`repository_*`、`automation_*`、`workflow_*`、`content_*`、`drive_*` 前缀不是兼容别名，调用必须返回 `Unknown tool`。
 - API、MCP、IPC、preload 使用同一 `app.<namespace>.<resource>.<action>` 语义源：HTTP action 保留点，MCP 将点替换为下划线，IPC 使用 `synapse:app:<namespace>:<resource>:<action>`，bridge 去掉 `app`、snake_case 转 camelCase 并按资源嵌套。
 - UI 专用 IPC operation 也遵守 `app.*`，但不得因此注册为 MCP。旧 action/channel/bridge 不保留别名、转发或 fallback。
+- `app.agent.conversation.open` 仍是只定位本机界面的公开导航能力。Agent Conversation Deep Link 唯一格式为 `synapse://threads/<thread-id>`，不携带项目查询参数；主进程严格校验路径短引用，再通过有界摘要扫描跨本机持久化项目解析唯一对话。不得注册或解析旧 `synapse://app/agent/open?projectId=...&conversationId=...` 入口。MCP 可直接接收完整 `deepLink`，后续调用优先使用 `projectId + conversationRef`。混合目标、歧义匹配、损坏校验和与其它畸形链接必须在读取前拒绝。链接本身不得包含标题、session key、timeline、消息正文、密钥或授权。冷启动待处理请求只驻留内存并在 Renderer 确认消费后清除。
+- Agent Conversation MCP 可分页读取所有来源的界面可见时间线和运行状态，但只允许控制 `local` / `local-renderer` 用户对话。读取必须递归遮盖敏感字段并移除 provider/SDK 会话标识、原始 SDK payload、Base64 和内部 artifact URL；单项 64 KiB、整页 1 MiB。审计只记录项目、对话、回合、请求、动作、结果和正文/答案长度，不记录正文、thinking、工具输入输出或答案。
+- Agent Conversation 控制采用协作语义而非独占租约。异步发送以 MCP 客户端内的幂等键接纳；steer、优雅停止、强停和权限响应必须匹配当前精确 `turnId`，权限响应还必须匹配仍 pending 的 `requestId`、kind 与 tool name。优雅停止不得超时自动强停，强停只通过独立高风险 capability 执行。
+- Agent Conversation `observe` 只返回 revision、变化类型、历史数量和运行快照，不重复返回正文；最长等待 30 秒，并限制每对话 4、每客户端 8、全局 32 个并发观察。普通“接管”或“监视”不构成底层工具授权；allow 仍须当前用户明确批准具体操作并继续经过 Shell、文件、网络等既有 `PermissionGuard`。
 - Synapse MCP 只通过 loopback HTTP `/mcp` 提供，不要求静态 token、Authorization/Bearer；不再支持 stdio bridge，旧配置必须自动迁移。内部 data-server `/api` 仍使用 `data-server.json` token，不得作为 MCP 传输入口。
 - 未来远程 MCP 认证必须采用标准 OAuth 或客户端支持方案，不得要求手写静态 Bearer。
 - 诊断必须区分 HTTP server 是否运行，以及 `~/.claude.json` 是否注册 `synapse-mcp`；不得用 `~/.claude/settings.json` 或旧 allowlist 推断 server 存在。
@@ -83,5 +116,5 @@
 - 生产日志使用结构化 logger，不记录正文、token、Authorization、Cookie、secret、未脱敏输入或原始异常堆栈中可能包含的敏感数据。
 - 日志和审计需要保留排障所需普通路径与资源身份，但不能把脱敏摘要误当作运行输入。
 - Agent 回复 Outbox 只保存已有外部 dispatcher 接管的投递事件；本地 Renderer 通过 EventBus 接收事件，不得为其复制 Outbox 记录。已发送记录按回复目标保留最近 500 条，清理必须覆盖先前进程留下的数据，待发送和失败记录不得随已发送记录一起删除。
-- `agent.events` 中 `sdkEvent` / `streamDiagnostics` 是原始诊断层，保留 30 天后可由后台维护删除；Conversation history、语义事件、usage、artifact 与 file checkpoint 不得混入该清理。已删除 conversation 的孤儿 `agent.events` 可分批清理。
+- `agent.events` 中 `sdkEvent` / `streamDiagnostics` 是原始诊断层，保留 30 天后可由后台维护删除；历史 `sdkEvent + system/thinking_tokens` 可立即分批删除。Conversation history、语义事件、usage、artifact 与 file checkpoint 不得混入该清理。已删除 conversation 的孤儿 `agent.events` 可分批清理。
 - 运行数据维护只能在主窗口创建后调度，通过独立 Worker 对 `DataRepository` 内部 SQLite 表执行最多十万行一轮、五百行一批的短事务；中断、超时或锁冲突保留已提交批次并自动重试，不执行启动期 `VACUUM`，不得阻塞 Renderer。权限仅允许 `system:data-maintenance` 对 `runtime-data` 执行 `database.mutate`，结果写入结构化日志、AuditSink 和诊断页。

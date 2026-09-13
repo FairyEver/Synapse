@@ -34,6 +34,10 @@ export class WindowBroadcaster implements EventBroadcaster {
 
   broadcast(event: DomainEvent, channel: string): number {
     const filter = this.filter
-    return this.windowManager.broadcast(channel, event, filter ? (window) => filter(event, window) : undefined)
+    return this.windowManager.broadcast(channel, event, (window) => {
+      const rendererIds = event.scope?.rendererIds
+      if (rendererIds && !rendererIds.includes(window.id)) return false
+      return filter ? filter(event, window) : true
+    })
   }
 }

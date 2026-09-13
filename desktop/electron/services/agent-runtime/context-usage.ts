@@ -26,6 +26,8 @@ const USAGE_FIELDS = {
 export class AgentContextUsageTracker {
   private readonly modelContext: AgentModelContextReference | undefined
   private readonly contextWindowConfigurationSource: AgentContextWindowConfigurationSource | undefined
+  private readonly autoCompactWindowTokens: number | undefined
+  private autoCompactThresholdTokens: number | undefined
   private currentModel: string | undefined
   private contextWindowTokens: number | undefined
   private breakdown: UsageBreakdown | undefined
@@ -34,9 +36,11 @@ export class AgentContextUsageTracker {
   constructor(input: {
     readonly modelContext?: AgentModelContextReference
     readonly contextWindowConfigurationSource?: AgentContextWindowConfigurationSource
+    readonly autoCompactWindowTokens?: number
   } = {}) {
     this.modelContext = input.modelContext
     this.contextWindowConfigurationSource = input.contextWindowConfigurationSource
+    this.autoCompactWindowTokens = input.autoCompactWindowTokens
   }
 
   update(message: unknown): AgentContextUsage | undefined {
@@ -95,6 +99,7 @@ export class AgentContextUsageTracker {
     }
     const model = stringValue(contextUsage?.model)
     if (model) this.currentModel = model
+    this.autoCompactThresholdTokens = tokenNumber(contextUsage?.autoCompactThreshold) || undefined
     this.breakdown = undefined
     this.contextWindowTokens = contextWindowTokens
     return this.setUsedTokens(usedTokens)
@@ -129,6 +134,9 @@ export class AgentContextUsageTracker {
   }
 
   private setUsedTokens(usedTokens: number): AgentContextUsage {
+    if (usedTokens === 0 && this.snapshot && this.snapshot.usedTokens > 0) {
+      return this.snapshot
+    }
     this.snapshot = {
       usedTokens,
       ...(this.contextWindowTokens === undefined
@@ -169,13 +177,17 @@ export class AgentContextUsageTracker {
 
   private referenceMetadata(): Pick<
     AgentContextUsage,
-    "modelContext" | "contextWindowConfigurationSource"
+    "modelContext" | "contextWindowConfigurationSource" | "autoCompactWindowTokens" | "autoCompactThresholdTokens"
   > {
     return {
+      ...(this.autoCompactThresholdTokens ? { autoCompactThresholdTokens: this.autoCompactThresholdTokens } : {}),
       ...(this.modelContext ? { modelContext: this.modelContext } : {}),
       ...(this.contextWindowConfigurationSource
         ? { contextWindowConfigurationSource: this.contextWindowConfigurationSource }
         : {}),
+      ...(this.autoCompactWindowTokens === undefined
+        ? {}
+        : { autoCompactWindowTokens: this.autoCompactWindowTokens }),
     }
   }
 }

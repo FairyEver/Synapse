@@ -45,10 +45,31 @@ const agentConversationUpdatedDomainEventSchema = z.object({
   domain: z.literal("agent"),
   type: z.literal("conversationUpdated"),
   payload: z.object({
+    batchId: z.string(),
     projectId: z.string(),
     sessionKey: z.string(),
     platform: z.string(),
     conversationId: z.string(),
+  }),
+  timestamp: z.string(),
+  scope: agentEventScopeSchema,
+})
+
+const agentEventBatchDomainEventSchema = z.object({
+  domain: z.literal("agent"),
+  type: z.literal("eventBatch"),
+  payload: z.object({
+    projectId: z.string(),
+    sessionKey: z.string(),
+    platform: z.string(),
+    conversationId: z.string(),
+    deliveryEpoch: z.string(),
+    events: z.array(z.object({
+      event: agentEventWithEnvelopeSchema,
+      sequence: z.number().int().positive(),
+      timestamp: z.string(),
+    })).max(128),
+    resyncRequired: z.boolean(),
   }),
   timestamp: z.string(),
   scope: agentEventScopeSchema,
@@ -87,6 +108,7 @@ export const agentIpcModule: IpcModule = {
       operationId: "app.agent.state.changed",
       payload: z.discriminatedUnion("type", [
         agentStreamDomainEventSchema,
+        agentEventBatchDomainEventSchema,
         agentConversationUpdatedDomainEventSchema,
         agentPhaseUpdateDomainEventSchema,
       ]),

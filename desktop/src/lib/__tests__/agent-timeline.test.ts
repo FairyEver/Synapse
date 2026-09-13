@@ -155,6 +155,25 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("restores steer metadata on user timeline messages", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "user",
+      content: "调整当前方向",
+      timestamp: "2026-05-13T00:00:01.000Z",
+      metadata: {
+        messageKind: "steer",
+        clientMessageId: "client-steer-1",
+        turnId: "turn-1",
+      },
+    }, 3, "claude-code")).toMatchObject({
+      kind: "message",
+      role: "user",
+      content: "调整当前方向",
+      messageKind: "steer",
+      clientMessageId: "client-steer-1",
+    })
+  })
+
   it("uses versioned user presentation metadata for structured attachments", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "user",
@@ -494,7 +513,7 @@ describe("agent timeline conversion", () => {
     })
     const restored = historyRecordToTimelineItem("session-1", {
       role: "system",
-      content: "Synapse MCP 工具按需加载不可用，本次对话已回退完整工具。",
+      content: "部分工具暂不可用，已使用可用工具继续。",
       timestamp: "2026-08-25T00:00:00.000Z",
       metadata: {
         agentEventType: "sdkEvent",
@@ -507,8 +526,8 @@ describe("agent timeline conversion", () => {
       expect(item).toMatchObject({
         kind: "sdkEvent",
         sdkType: "synapseToolRouterFallback",
-        label: "工具按需加载已回退",
-        summary: "本次对话继续使用完整 Synapse MCP 工具。",
+        label: "部分工具暂不可用",
+        summary: "已使用可用工具继续。",
       })
     }
   })
@@ -642,6 +661,8 @@ describe("agent timeline conversion", () => {
         contextUsage: {
           usedTokens: 58_000,
           contextWindowTokens: 200_000,
+          autoCompactWindowTokens: 200_000,
+          autoCompactThresholdTokens: 167_000,
           model: "claude-sonnet-4-5",
           contextWindowConfigurationSource: "catalog",
           modelContext: {
@@ -661,6 +682,8 @@ describe("agent timeline conversion", () => {
         contextUsage: {
           usedTokens: 58_000,
           contextWindowTokens: 200_000,
+          autoCompactWindowTokens: 200_000,
+          autoCompactThresholdTokens: 167_000,
           model: "claude-sonnet-4-5",
           contextWindowConfigurationSource: "catalog",
           modelContext: {

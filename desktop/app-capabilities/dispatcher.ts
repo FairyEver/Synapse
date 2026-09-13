@@ -12,6 +12,7 @@ import { TEXT_FILE_WRITER_CAPABILITY_ID } from "./text-file-writer/shared/capabi
 import { HTML_GENERATOR_CAPABILITY_IDS } from "./html-generator/shared/capability"
 import { PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID } from "./problem-feedback/shared/capability"
 import { JSON_REPAIR_CAPABILITY_ID } from "./json-repair/shared/capability"
+import { AGENT_CONVERSATION_CAPABILITY_IDS } from "./agent/shared/capability"
 
 type AppCapabilitySubDispatcher = {
   dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult>
@@ -19,10 +20,12 @@ type AppCapabilitySubDispatcher = {
 
 const secretsCapabilityIds = new Set<string>(SECRETS_CAPABILITY_IDS)
 const htmlGeneratorCapabilityIds = new Set<string>(HTML_GENERATOR_CAPABILITY_IDS)
+const agentConversationCapabilityIds = new Set<string>(AGENT_CONVERSATION_CAPABILITY_IDS)
 
 export type AppCapabilityDispatcher = AppCapabilitySubDispatcher
 
 export function createAppCapabilityDispatcher(deps: {
+  readonly agentConversation: AppCapabilitySubDispatcher
   readonly textExtractor: AppCapabilitySubDispatcher
   readonly documentTemplate: AppCapabilitySubDispatcher
   readonly secrets?: AppCapabilitySubDispatcher
@@ -36,6 +39,9 @@ export function createAppCapabilityDispatcher(deps: {
 }): AppCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
+      if (agentConversationCapabilityIds.has(action)) {
+        return deps.agentConversation.dispatch(action, params, context)
+      }
       if (
         action === TEXT_EXTRACTOR_CAPABILITY_ID
         || action === TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID

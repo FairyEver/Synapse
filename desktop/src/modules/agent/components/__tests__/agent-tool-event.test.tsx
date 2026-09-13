@@ -512,7 +512,7 @@ describe("AgentToolEvent", () => {
     expect(copyButton?.getAttribute("aria-label")).toBe("复制工具输出")
   })
 
-  it("wraps long tool output without enabling horizontal scrollbars", () => {
+  it("keeps long tool output in a vertically scrollable viewport without horizontal scrollbars", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
         id: "tool-long-json",
@@ -535,7 +535,10 @@ describe("AgentToolEvent", () => {
     const outputViewport = container.querySelector('[data-slot="scroll-area-viewport"]')
 
     expect(html).not.toContain("data-orientation=\"horizontal\"")
+    expect(outputFrame?.getAttribute("data-scrollbars")).toBe("vertical")
+    expect(outputFrame?.className).toContain("max-h-60")
     expect(outputFrame?.className).toContain("max-w-full")
+    expect(outputViewport?.className).toContain("max-h-60")
     expect(outputViewport?.className).toContain("overflow-x-hidden")
     expect(output?.className).toContain("break-all")
     expect(output?.textContent).toContain("读取新来源文件和当前清单")

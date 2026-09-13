@@ -1,4 +1,7 @@
-import { resolveDeclaredAppDeepLink } from "../../app-capabilities/manifest-registry"
+import {
+  resolveDeclaredAppDeepLink,
+  resolveDeclaredProtocolRoute,
+} from "../../app-capabilities/manifest-registry"
 
 export type ParsedAppDeepLink = {
   readonly appId: string
@@ -17,7 +20,9 @@ export class AppDeepLinkError extends Error {
 export function isAppDeepLinkCandidate(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl)
-    return parsed.protocol === "synapse:" && parsed.hostname === "app"
+    return parsed.protocol === "synapse:" && (
+      parsed.hostname === "app" || resolveDeclaredProtocolRoute(parsed.hostname) !== null
+    )
   } catch {
     return rawUrl.toLowerCase().startsWith("synapse://app/")
   }
@@ -32,12 +37,24 @@ export function parseDeclaredAppDeepLink(rawUrl: string): ParsedAppDeepLink {
   }
   if (
     parsed.protocol !== "synapse:"
-    || parsed.hostname !== "app"
     || parsed.username !== ""
     || parsed.password !== ""
     || parsed.port !== ""
     || parsed.hash !== ""
   ) throw new AppDeepLinkError("invalid_url")
+
+  if (parsed.hostname !== "app") {
+    const route = resolveDeclaredProtocolRoute(parsed.hostname)
+    if (!route) throw new AppDeepLinkError("unknown_app_action")
+    const result = route.declaration.paramsSchema.safeParse({ deepLink: rawUrl })
+    if (!result.success) throw new AppDeepLinkError("invalid_params")
+    return {
+      appId: route.appId,
+      action: route.declaration.action,
+      capabilityId: route.declaration.capabilityId,
+      params: result.data,
+    }
+  }
 
   const pathParts = parsed.pathname.split("/")
   if (pathParts.length !== 3 || pathParts[0] !== "" || !pathParts[1] || !pathParts[2]) {

@@ -6,7 +6,7 @@ type PendingMessageTarget = {
   readonly sessionKey: string
 }
 
-type PendingMessageStatus = "queued" | "sending" | "failed"
+type PendingMessageStatus = "queued" | "sending" | "steering" | "failed"
 
 type PendingMessageInput = {
   readonly id: string
@@ -51,7 +51,11 @@ function firstQueuedMessageForIdleTarget(
   queue: readonly PendingMessage[],
   sendingConversationIds: ReadonlySet<string>,
 ): PendingMessage | undefined {
-  const blockedTargets = new Set<string>()
+  const blockedTargets = new Set(
+    queue
+      .filter((message) => message.status === "steering")
+      .map((message) => targetKey(message.target)),
+  )
   for (const message of queue) {
     const key = targetKey(message.target)
     if (blockedTargets.has(key)) continue
@@ -70,6 +74,22 @@ function markPendingMessageSending(message: PendingMessage): PendingMessage {
     ...message,
     status: "sending",
     error: undefined,
+  }
+}
+
+function markPendingMessageSteering(message: PendingMessage): PendingMessage {
+  return {
+    ...message,
+    status: "steering",
+    error: undefined,
+  }
+}
+
+function markPendingMessageQueued(message: PendingMessage, error?: string): PendingMessage {
+  return {
+    ...message,
+    status: "queued",
+    error,
   }
 }
 
@@ -99,7 +119,9 @@ export {
   enqueuePendingMessage,
   firstQueuedMessageForIdleTarget,
   markPendingMessageFailed,
+  markPendingMessageQueued,
   markPendingMessageSending,
+  markPendingMessageSteering,
   MAX_PENDING_QUEUE_SIZE,
   pendingMessagesForTarget,
   removePendingMessage,

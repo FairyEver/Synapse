@@ -13,6 +13,31 @@ describe("parseDeclaredAppDeepLink", () => {
     })
   })
 
+  it("resolves the canonical Agent thread route to the existing open capability", () => {
+    const deepLink = "synapse://threads/m0D4NOW0yDeagclYK2CiUQ.xrs"
+    expect(parseDeclaredAppDeepLink(deepLink)).toEqual({
+      appId: "agent",
+      action: "open",
+      capabilityId: "app.agent.conversation.open",
+      params: { deepLink },
+    })
+  })
+
+  it.each([
+    "synapse://app/agent/open",
+    "synapse://app/agent/open?projectId=project-1",
+    "synapse://app/agent/open?conversationId=conversation-1",
+    "synapse://app/agent/open?projectId=project-1&conversationId=conversation-1&extra=1",
+    "synapse://app/agent/open?projectId=project-1&projectId=project-2&conversationId=conversation-1",
+    "synapse://app/agent/open?projectId=project-1&conversationId=conversation-1#fragment",
+    "synapse://app/agent/open?projectId=project-1&conversationId=conversation-1",
+    "synapse://threads",
+    "synapse://threads/m0D4NOW0yDeagclYK2CiUQ.xrs?extra=1",
+    "synapse://threads/m0D4NOW0yDeagclYK2CiUQ.xrs/extra",
+  ])("rejects an invalid Agent conversation link: %s", (url) => {
+    expect(() => parseDeclaredAppDeepLink(url)).toThrow()
+  })
+
   it.each([
     "synapse://app/file-opener/open",
     "synapse://app/file-opener/open?path=relative.txt",

@@ -47,6 +47,11 @@ import {
   TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
 } from "../../app-capabilities/text-extractor/shared/capability"
 import {
+  AGENT_CONVERSATION_CAPABILITY_CATALOG,
+  AGENT_CONVERSATION_OPEN_CAPABILITY_ID,
+  AGENT_CONVERSATION_OPEN_MCP_TOOL_NAME,
+} from "../../app-capabilities/agent/shared/capability"
+import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
   getActionDomainId,
@@ -88,6 +93,10 @@ describe("App capability domain", () => {
   it("registers document template docx generation", () => {
     expect(APP_DOMAIN.id).toBe("app")
     expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
+      id: AGENT_CONVERSATION_OPEN_CAPABILITY_ID,
+      mutates: false,
+    }))
+    expect(APP_DOMAIN.capabilities).toContainEqual(expect.objectContaining({
       id: TEXT_EXTRACTOR_CAPABILITY_ID,
       mutates: false,
     }))
@@ -100,6 +109,7 @@ describe("App capability domain", () => {
       .toBe(TEXT_EXTRACTOR_CAPABILITY_ID)
     expect(APP_MCP_TOOL_ACTIONS.app_document_template_docx_generate).toBe("app.document_template.docx.generate")
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
+      ...AGENT_CONVERSATION_CAPABILITY_CATALOG.map((capability) => capability.toolName),
       TEXT_EXTRACTOR_MCP_TOOL_NAME,
       TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,
       "app_document_template_docx_generate",
@@ -115,6 +125,8 @@ describe("App capability domain", () => {
       ...Object.values(SECRETS_MCP_TOOL_NAMES),
     ])
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_session_resize).toBe("app.terminal.session.resize")
+    expect(APP_MCP_TOOL_ACTIONS[AGENT_CONVERSATION_OPEN_MCP_TOOL_NAME])
+      .toBe(AGENT_CONVERSATION_OPEN_CAPABILITY_ID)
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_rename).toBe("app.terminal.group.rename")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_launch_update).toBe("app.terminal.group_launch.update")
     expect(APP_MCP_TOOL_ACTIONS.app_terminal_group_delete).toBe("app.terminal.group.delete")

@@ -33,6 +33,13 @@ import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
+import { createAgentConversationCapabilityDispatcher } from "../../app-capabilities/agent/main/dispatcher"
+import { AgentConversationControlService } from "../../app-capabilities/agent/main/control-service"
+import { AgentConversationNavigationService } from "../../app-capabilities/agent/main/service"
+import {
+  AGENT_CONVERSATION_CONTROL_SERVICE_ID,
+  AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
+} from "../../app-capabilities/agent/shared/capability"
 import { ipcOperationIdToChannel } from "../../synapse-capabilities/shared/naming"
 import { APP_DOMAIN } from "../../synapse-capabilities/shared/app-domain"
 import { createDocumentTemplateCapabilityDispatcher } from "../../app-capabilities/document-template/main/dispatcher"
@@ -132,11 +139,13 @@ import { createRepositoryCapabilityDispatcher } from "../capabilities/repository
 import { createSkillRepositoryCapabilityDispatcher } from "../capabilities/skill-repository-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
+import { createLocalAgentConversation } from "../modules/agent/conversation-creation"
 import { listTrustedSkillRoots } from "../services/editor-scan-roots"
 import { logStore, createMainLogger } from "../services/log-store"
 import {
   assertKnowledgeBaseStorageMigrationInactive,
   KNOWLEDGE_BASE_MIGRATION_ACTIVE_ERROR,
+  resolveProjectAgent,
 } from "../modules/agent/ipc-shared"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
@@ -1334,6 +1343,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     PROBLEM_FEEDBACK_SERVICE_ID,
     JSON_REPAIR_SERVICE_ID,
     "core.text-extractor",
+    AGENT_CONVERSATION_CONTROL_SERVICE_ID,
+    AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
     FILE_OPENER_SERVICE_ID,
     TEXT_FILE_WRITER_SERVICE_ID,
     HTML_GENERATOR_SERVICE_ID,
@@ -1357,6 +1368,12 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     const terminalService = ctx.registry.get<TerminalService>("core.terminal")
     const textExtractorService = ctx.registry.get<TextExtractorService>(
       "core.text-extractor",
+    )
+    const agentConversationNavigationService = ctx.registry.get<AgentConversationNavigationService>(
+      AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
+    )
+    const agentConversationControlService = ctx.registry.get<AgentConversationControlService>(
+      AGENT_CONVERSATION_CONTROL_SERVICE_ID,
     )
     const fileOpenerService = ctx.registry.get<FileOpenerService>(FILE_OPENER_SERVICE_ID)
     const textFileWriterService = ctx.registry.get<TextFileWriterService>(TEXT_FILE_WRITER_SERVICE_ID)
@@ -1491,6 +1508,12 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       }),
     })
     const fileOpenerDispatcher = createFileOpenerCapabilityDispatcher({ service: fileOpenerService })
+    const agentConversationDispatcher = createAgentConversationCapabilityDispatcher({
+      service: agentConversationNavigationService,
+      controlService: agentConversationControlService,
+      permissionGuard,
+      auditSink,
+    })
     const textFileWriterDispatcher = createTextFileWriterCapabilityDispatcher({ service: textFileWriterService })
     const htmlGeneratorDispatcher = createHtmlGeneratorCapabilityDispatcher({
       generator: htmlGenerationService,
@@ -1520,6 +1543,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
     const appDispatcher = createAppCapabilityDispatcher({
+      agentConversation: agentConversationDispatcher,
       textExtractor: textExtractorDispatcher,
       documentTemplate: documentTemplateDispatcher,
       secrets: secretsDispatcher,
@@ -1830,12 +1854,82 @@ export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<Termina
 export const coreAgentConversationWindowDescriptor: ServiceDescriptor<AgentConversationWindowService> = {
   id: AGENT_CONVERSATION_WINDOW_SERVICE_ID,
   criticality: "degraded",
-  dependsOn: ["core.window-manager"],
+  dependsOn: ["core.window-manager", "core.project-containers"],
   create(ctx) {
     return createDefaultAgentConversationWindowService(
       ctx.registry.get<WindowManager>("core.window-manager"),
+      {
+        onRendererUnavailable: (rendererId) => forEachProjectAgentRuntime(
+          ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+          async (runtime) => {
+            await runtime.interruptRendererTurns(rendererId)
+          },
+        ),
+        onRendererUnresponsive: (rendererId) => forEachProjectAgentRuntime(
+          ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+          (runtime) => runtime.pauseRendererDelivery(rendererId),
+        ),
+        onRendererResponsive: (rendererId) => forEachProjectAgentRuntime(
+          ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
+          (runtime) => runtime.resumeRendererDelivery(rendererId),
+        ),
+      },
     )
   },
+}
+
+export const coreAgentConversationNavigationDescriptor: ServiceDescriptor<AgentConversationNavigationService> = {
+  id: AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.window-manager"],
+  create(ctx) {
+    return new AgentConversationNavigationService({
+      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      windowManager: ctx.registry.get<WindowManager>("core.window-manager"),
+      logger: createMainLogger("agent.conversation-navigation"),
+    })
+  },
+}
+
+export const coreAgentConversationControlDescriptor: ServiceDescriptor<AgentConversationControlService> = {
+  id: AGENT_CONVERSATION_CONTROL_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.config", "core.data-repository", "core.event-bus", "core.project-containers", PROVIDER_SERVICE_ID],
+  create(ctx) {
+    const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
+    return new AgentConversationControlService({
+      listProjects: async () => (await configStore.load()).global.projects.map(({ id, name }) => ({ id, name })),
+      listProviders: () => ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID).listAllProviders(),
+      createConversation: (input) => createLocalAgentConversation(
+        <T>(serviceId: string) => ctx.registry.get<T>(serviceId), input,
+      ),
+      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
+      resolveRuntime: async (projectId) => (await resolveProjectAgent(
+        <T>(serviceId: string) => ctx.registry.get<T>(serviceId),
+        projectId,
+      )).agent,
+      peekRuntime: (projectId) => {
+        const container = containers.peek(projectId)
+        return container?.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+      },
+      logger: createMainLogger("agent.conversation-control"),
+    })
+  },
+  stop(service) {
+    service.dispose()
+  },
+}
+
+async function forEachProjectAgentRuntime(
+  containers: ProjectContainerRegistry,
+  action: (runtime: AgentRuntimeService) => void | Promise<void>,
+): Promise<void> {
+  await Promise.all(containers.list().map(async ({ projectId }) => {
+    const container = containers.peek(projectId)
+    if (!container) return
+    await action(container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID))
+  }))
 }
 
 /**

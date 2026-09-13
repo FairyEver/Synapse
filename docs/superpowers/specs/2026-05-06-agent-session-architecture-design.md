@@ -10,6 +10,7 @@
 2. 每个会话拥有独立的运行时状态（进程、队列、忙碌标志）
 3. 同一项目下多个会话可并行执行，互不阻塞
 4. 为未来新增 Agent 类型提供清晰的扩展路径
+5. 正在运行的会话可接收纯文本软引导，不改变普通消息队列语义
 
 ## 非目标
 
@@ -58,6 +59,8 @@ private readonly states = Map<string, RuntimeSessionState>
 - `busy: boolean` — 该会话是否正在执行
 - `pending: PendingPermissionState` — 该会话的权限请求
 - `lastActivity: number` — 最后活动时间（用于空闲回收）
+- `activeLifecycle` — 当前产品 turn 及其稳定 `turnId`
+- `steerAdmissionsOpen` / `activeSteers` — 当前 turn 的引导准入与去重状态
 
 #### 并行执行
 
@@ -68,6 +71,14 @@ private readonly states = Map<string, RuntimeSessionState>
 LiveSession 空闲超过 10 分钟自动 close。下次发消息时通过 `--resume` 重新启动，AI 上下文不丢失（Claude Code 会话历史持久化在磁盘）。
 
 唯一代价：冷启动延迟 1-3 秒。
+
+#### 普通队列、软引导与停止
+
+- 普通发送：消息进入该 conversation 的 `queue`，等当前产品 turn 完整结束后创建下一 turn。
+- 软引导：仅在 Renderer 提供的 `expectedTurnId` 与当前活动 turn 完全匹配时，将纯文本写入同一个 `AgentLiveSession` 的 SDK 输入流；不创建新的 Synapse 产品 turn，也不强制中断当前工具。
+- 停止：记录当前 turn 的取消意图并中断或关闭执行，不把已经接受的引导重新放回普通队列。
+
+软引导在权限请求等待、停止中、会话已关闭或 turn 已切换时必须拒绝。引导由 Runtime 接受后才写入 history，使用 `clientMessageId` 去重，并以 `messageKind: "steer"` 保留在时间线和导出中。SDK 可能把引导并入当前 SDK turn，也可能产生后续 SDK turn；Runtime 仅在 SDK result 明确报告 `queued_turn_count > 0` 时继续消费后续 SDK turn，未收到用户消息 replay 不得单独阻止产品 turn 结束。中间 result 不累计费用，最终 result 的累计 usage/cost 是该产品 turn 的权威值。
 
 ### 3. Adapter 选择逻辑
 

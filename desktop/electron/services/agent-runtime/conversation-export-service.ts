@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 
 import type {
+  AgentArtifactEntry,
   AgentArtifactEntryV1,
   AgentEventEntryV1,
   AgentUsageEntryV1,
@@ -54,7 +55,7 @@ interface AgentConversationExportServiceDeps {
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly agentEvents: DataNamespace<AgentEventEntryV1>
   readonly agentUsage: DataNamespace<AgentUsageEntryV1>
-  readonly agentArtifacts?: DataNamespace<AgentArtifactEntryV1>
+  readonly agentArtifacts?: DataNamespace<AgentArtifactEntry>
   readonly chooseSavePath: (defaultFileName: string) => Promise<string | null>
   readonly createZipArchive: (sourceDirectoryPath: string, outputFilePath: string) => Promise<void>
   readonly makeTempDir?: (prefix: string) => Promise<string>
@@ -210,7 +211,7 @@ class AgentConversationExportService {
     try {
       await mkdir(packageRoot, { recursive: true })
 
-      const timeline = await this.collectTimeline(request, conversation, skipped)
+      const timeline = this.collectTimeline(conversation)
       const persistedAgentEvents = await this.collectRows(
         "agent-events.json",
         () => this.deps.agentEvents.list({
@@ -257,12 +258,12 @@ class AgentConversationExportService {
           () => this.deps.agentArtifacts!.list({
             projectId: request.projectId,
             conversationId: request.conversationId,
-          } as Partial<AgentArtifactEntryV1>),
+          } as Partial<AgentArtifactEntry>),
           skipped,
         )
         await this.writeAgentArtifacts(
           packageRoot,
-          agentArtifacts.filter((artifact) => artifact.origin !== "user-message"),
+          agentArtifacts.filter(isExportableToolResultImage),
           included,
           skipped,
         )
@@ -327,24 +328,9 @@ class AgentConversationExportService {
     }
   }
 
-  private async collectTimeline(
-    request: AgentConversationExportRequest,
-    conversation: ConversationEntryV1,
-    skipped: Array<{ path: string; reason: string }>,
-  ): Promise<SynapseAgentTimelineItem[]> {
-    if (this.deps.getTimeline) {
-      try {
-        const result = await this.deps.getTimeline(request)
-        return sanitizeExportValue(result.entries) as SynapseAgentTimelineItem[]
-      } catch (error) {
-        skipped.push({ path: "timeline.runtime", reason: "runtime lookup failed; conversation history fallback was used" })
-        this.deps.logger?.warn("Agent conversation export timeline runtime lookup failed.", {
-          boundary: "agent.conversation-export.timeline",
-          ...auditRequestMetadata(request),
-          ...errorAuditMetadata(error),
-        })
-      }
-    }
+  private collectTimeline(conversation: ConversationEntryV1): SynapseAgentTimelineItem[] {
+    // A renderer page can be empty, contain only a tail, or replace a giant turn
+    // with a sentinel. Export the same persisted snapshot as conversation.json.
     return sanitizeExportValue(conversation.history.map((entry, index) =>
       historyRecordToTimelineItem(conversation.id, entry, index, conversation.agentType))) as SynapseAgentTimelineItem[]
   }
@@ -537,6 +523,10 @@ class AgentConversationExportService {
   }
 }
 
+function isExportableToolResultImage(artifact: AgentArtifactEntry): artifact is AgentArtifactEntryV1 {
+  return artifact.schemaVersion === 1 && artifact.origin !== "user-message"
+}
+
 function buildSdkStreamExport(
   rows: readonly AgentEventEntryV1[],
   conversation: ConversationEntryV1,
@@ -704,10 +694,13 @@ function buildSummary(input: {
     projectId: input.conversation.projectId,
     sessionKey: input.conversation.sessionKey,
     agentType: input.conversation.agentType,
-    messageCount: input.timeline.filter((entry) => entry.kind === "message").length,
-    toolCallCount: input.timeline.filter((entry) => entry.kind === "toolCall").length,
-    toolResultCount: input.timeline.filter((entry) => entry.kind === "toolResult").length,
-    failedToolCount: input.timeline.filter(isFailedToolResult).length,
+    historyRecordCount: input.conversation.history.length,
+    messageCount: input.conversation.history.filter((entry) => entry.role === "user" || entry.role === "assistant").length,
+    countSource: "persisted-conversation-history",
+    countSemantics: "user and assistant messages; tools deduplicated by toolUseId; thinking excluded",
+    toolCallCount: countTools(input.timeline, "toolCall"),
+    toolResultCount: countTools(input.timeline, "toolResult"),
+    failedToolCount: countTools(input.timeline.filter(isFailedToolResult), "toolResult"),
     failedTurnCount: failedTurnIds.size,
     recoverableFailureCount: recoverableTurnIds.size,
     apiErrorCount: apiErrorTurnIds.size,
@@ -726,6 +719,14 @@ function buildSummary(input: {
     createdAt: input.conversation.createdAt,
     updatedAt: input.conversation.updatedAt,
   })
+}
+
+function countTools(timeline: readonly SynapseAgentTimelineItem[], kind: "toolCall" | "toolResult"): number {
+  const ids = new Set<string>()
+  for (const entry of timeline) {
+    if (entry.kind === kind) ids.add(entry.toolUseId ?? entry.id)
+  }
+  return ids.size
 }
 
 function uniqueEventTurnIds(events: readonly AgentEventEntryV1[]): Set<string> {

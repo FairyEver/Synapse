@@ -168,7 +168,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
   })
 
   it.each(["failed", "needs-auth"] as const)(
-    "falls back to the complete MCP config when an expected server is %s during discovery",
+    "retains only the router when an optional server is %s during discovery",
     async (unavailableStatus) => {
       const discovery = {
         initializationResult: vi.fn(async () => ({})),
@@ -192,6 +192,8 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       const sdk = {
         resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })),
         query,
+        tool: vi.fn((name) => ({ name })),
+        createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })),
       }
       const options = {
         settingSources: ["user", "project", "local"],
@@ -217,10 +219,13 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       })
 
       expect(result).toBe(fallback)
-      expect(onFallback).toHaveBeenCalledWith("expected-server-unavailable")
-      expect(query).toHaveBeenLastCalledWith({ prompt: expect.anything(), options })
+      expect(onFallback).not.toHaveBeenCalled()
+      expect(query).toHaveBeenLastCalledWith({ prompt: expect.anything(), options: {
+        ...options, strictMcpConfig: true,
+        mcpServers: { "synapse-tool-router": { type: "sdk", name: "synapse-tool-router" } },
+      } })
       expect(logger.warn).toHaveBeenCalledWith(expect.any(String), {
-        boundary: "claude-sdk.synapse-tool-router.fallback",
+        boundary: "claude-sdk.synapse-tool-router.discovery",
         reason: "expected-server-unavailable",
         serverStatuses: [{ name: "figma", status: unavailableStatus }],
       })
@@ -228,7 +233,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     },
   )
 
-  it("falls back immediately when an expected server is missing from discovery", async () => {
+  it("retains the router when an optional server is missing from discovery", async () => {
     const discovery = {
       initializationResult: vi.fn(async () => ({})),
       mcpServerStatus: vi.fn(async () => []),
@@ -242,6 +247,8 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     const sdk = {
       resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })),
       query,
+      tool: vi.fn((name) => ({ name })),
+      createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })),
     }
 
     await expect(createRoutedQuery(sdk as never, {
@@ -257,10 +264,10 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       },
     })).resolves.toBe(fallback)
     expect(discovery.mcpServerStatus).toHaveBeenCalledOnce()
-    expect(onFallback).toHaveBeenCalledWith("expected-server-unavailable")
+    expect(onFallback).not.toHaveBeenCalled()
   })
 
-  it("falls back when an expected server remains pending until discovery times out", async () => {
+  it("retains the router when an optional server stays pending past the deadline", async () => {
     vi.useFakeTimers()
     try {
       const discovery = {
@@ -280,6 +287,8 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       const sdk = {
         resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })),
         query,
+        tool: vi.fn((name) => ({ name })),
+        createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })),
       }
       const resultPromise = createRoutedQuery(sdk as never, {
         prompt: promptThatMustNotBeRead(),
@@ -297,7 +306,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
       await vi.advanceTimersByTimeAsync(5_100)
 
       await expect(resultPromise).resolves.toBe(fallback)
-      expect(onFallback).toHaveBeenCalledWith("expected-server-unavailable")
+      expect(onFallback).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
     }
@@ -370,6 +379,8 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     const sdk = {
       resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })),
       query,
+      tool: vi.fn((name) => ({ name })),
+      createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })),
     }
 
     await expect(createRoutedQuery(sdk as never, {
@@ -416,7 +427,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     },
   )
 
-  it("starts the unmodified final query when discovery cannot preserve permissions", async () => {
+  it("starts a minimal strict query when discovery cannot preserve permissions", async () => {
     const query = vi.fn(() => ({ close: vi.fn() }))
     const onFallback = vi.fn()
     const logger = { warn: vi.fn() }
@@ -430,6 +441,8 @@ describe("Synapse tool router strict MCP reconstruction", () => {
         sources: [],
       })),
       query,
+      tool: vi.fn((name) => ({ name })),
+      createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })),
     }
     const prompt = promptThatMustNotBeRead()
 
@@ -449,7 +462,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     expect(query).toHaveBeenCalledOnce()
     expect(query).toHaveBeenCalledWith({
       prompt,
-      options: { settingSources: ["user", "project", "local"] },
+      options: { settingSources: ["user", "project", "local"], strictMcpConfig: true, mcpServers: {} },
     })
     expect(logger.warn).toHaveBeenCalledWith(
       expect.any(String),

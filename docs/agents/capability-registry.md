@@ -11,7 +11,7 @@
 | Workflow Node | 节点类型、Renderer manifest、Main executor | `desktop/workflow-nodes/register.renderer.ts`、`register.main.ts` |
 | Automation Action | 动作类型、Renderer 配置、Main executor | `desktop/src/action-runtime/builtin-actions.ts`、`desktop/electron/action-runtime/builtin-actions.ts` |
 | MCP Capability / Tool | capability catalog、`tools/list`、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
-| Deep Link | `synapse://app/<app-id>/<action>` | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
+| Deep Link | 默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
 
 ## `desktop/app-capabilities` 产品表面
 
@@ -19,6 +19,7 @@
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
+| Agent Conversation | 是（既有） | 是（既有） | — | — | 11 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Connectors | 是 | 否 | — | — | — | — |
 | Clipboard | 否 | 否 | 2 | — | — | — |
@@ -45,6 +46,9 @@
 
 固定例外：
 
+- Agent 自动上下文维护及私有检查点是既有执行器内部行为，不新增 capability、MCP、Workflow、Automation 或 Deep Link；运行观察继续使用同一 conversation/turn，注册数量不变。
+
+- Agent Conversation 能力包扩展既有 Agent System App，注册 11 个 capability/MCP tool（含供应商模型查询、分组查询与可指定模型的新建对话）；唯一 Deep Link action `open` 只注册 `synapse://threads/<thread-id>`，不注册旧 `synapse://app/agent/open` 入口，也不重复注册应用页、Dock 项或 Workflow/Automation 节点。路径 id 是本机短校验 `conversationRef` 的主体，由主进程跨项目解析唯一目标；复制链接对点号、下划线和连字符做百分号编码，解析只兼容这三个字符的 Markdown 转义，仍校验完整格式与校验和；MCP 首次读取可把完整链接交给主进程解析，后续读取和控制使用返回的 `projectId + conversationRef`，并继续经过权限、来源、回合与请求校验。
 - JavaScript Run、Node.js Run 是能力包，不是隐藏的 System App；它们只注册 Workflow Node 和 Automation Action。它们的 capability ID 进入 catalog，但不映射为 MCP tool。
 - Script Runtime 是两者共用的内部执行基础设施，不注册用户产品表面。
 - Screenshot 当前是空目录占位。
@@ -64,7 +68,7 @@
 
 | System App | 应用页 | 默认 Dock | 关联 MCP domain |
 |---|---:|---:|---|
-| Agent | 是 | 是 | — |
+| Agent | 是 | 是 | `app` |
 | Workflow | 条件显示 | 条件显示 | `workflow` |
 | Drive | 是 | 是 | `drive` |
 | Automation | 是 | 是 | `automation` |
@@ -88,7 +92,7 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 
 | Domain | Capability 数 | MCP Tool 数 |
 |---|---:|---:|
-| `app` | 62 | 58 |
+| `app` | 75 | 71 |
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
@@ -97,9 +101,9 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 63 | 63 |
-| 合计 | 225 | 223 |
+| 合计 | 238 | 234 |
 
-Agent 实验功能可在第三方 Anthropic-compatible 新对话中向 SDK 临时注入进程内 `synapse-tool-router`，其 `search`、`invoke` 仅用于按需发现和调用上表已有的 223 个工具。它们不通过 `/mcp`、Claude Code 注册、capability catalog 或 `tools/list` 公开，因此不计入 capability 或 MCP Tool 数量；公开工具名、schema、URL 和数量均不变。
+Agent 实验功能可在第三方 Anthropic-compatible 新对话中向 SDK 临时注入进程内 `synapse-tool-router`，其 `search`、`invoke` 仅用于按需发现和调用上表已有的 234 个工具。它们不通过 `/mcp`、Claude Code 注册、capability catalog 或 `tools/list` 公开，因此不计入 capability 或 MCP Tool 数量。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

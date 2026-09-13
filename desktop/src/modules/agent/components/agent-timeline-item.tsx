@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type {
   SynapseAgentDisplayProfile,
+  SynapseAgentContextRecovery,
   SynapseAgentFileCheckpointTimelineItem,
   SynapseAgentPendingPermission,
   SynapseAgentPermissionScope,
@@ -22,6 +23,7 @@ import { AgentAnnotation } from "./agent-annotation"
 import { AgentPermissionCard } from "./agent-permission-card"
 import { AgentThinkingEvent } from "./agent-thinking-event"
 import { AgentToolEvent } from "./agent-tool-event"
+import { AgentLongContentDialog } from "./agent-long-content-dialog"
 import { AgentUserQuestionCard } from "./agent-user-question-card"
 import { useAgentWorkspacePanel } from "./agent-workspace-shell"
 
@@ -35,12 +37,20 @@ function AgentTimelineItem({
   referenceActions,
   onRespondPermission,
   onContinue,
+  contextRecovery,
+  onPrepareContextRecovery,
+  onContinueContextRecovery,
+  onCreateConversation,
   toolResult,
   toolCancelled,
+  projectId,
+  conversationId,
 }: {
   readonly item: SynapseAgentTimelineItem
   readonly toolResult?: SynapseAgentToolResultTimelineItem
   readonly toolCancelled?: boolean
+  readonly projectId?: string
+  readonly conversationId?: string
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
@@ -55,6 +65,10 @@ function AgentTimelineItem({
     scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
   readonly onContinue?: () => void
+  readonly contextRecovery?: SynapseAgentContextRecovery
+  readonly onPrepareContextRecovery?: () => void | Promise<void>
+  readonly onContinueContextRecovery?: () => void | Promise<void>
+  readonly onCreateConversation?: () => void
 }) {
   switch (item.kind) {
     case "message":
@@ -65,13 +79,28 @@ function AgentTimelineItem({
           agentIcon={agentIcon}
           onOpenReference={onOpenReference}
           referenceActions={referenceActions}
+          projectId={projectId}
+          conversationId={conversationId}
         />
       )
     case "thinking":
       return <AgentThinkingEvent item={item} profile={profile} />
     case "toolCall":
-    case "toolResult":
-      return <AgentToolEvent item={item} result={toolResult} cancelled={toolCancelled} profile={profile} />
+    case "toolResult": {
+      const longItem = toolResult?.contentTruncated ? toolResult : item.contentTruncated ? item : undefined
+      return (
+        <>
+          <AgentToolEvent item={item} result={toolResult} cancelled={toolCancelled} profile={profile} />
+          {longItem?.historyIndex !== undefined && projectId && conversationId ? (
+            <AgentLongContentDialog
+              projectId={projectId}
+              conversationId={conversationId}
+              historyIndex={longItem.historyIndex}
+            />
+          ) : null}
+        </>
+      )
+    }
     case "toolProgress":
       return <AgentToolProgressEvent item={item} />
     case "permissionRequest": {
@@ -100,6 +129,24 @@ function AgentTimelineItem({
     }
     case "error":
       if (!item.message || item.message.trim().length === 0) return null
+      if (isContextRecoveryErrorKind(item.errorKind)) {
+        return contextRecovery ? (
+          <ContextRecoveryAlert
+            recovery={contextRecovery}
+            onPrepare={onPrepareContextRecovery}
+            onContinue={onContinueContextRecovery}
+            onCreateConversation={onCreateConversation}
+          />
+        ) : (
+          <Alert>
+            <Info data-icon="inline-start" />
+            <AlertDescription className="grid gap-1">
+              <span>{contextRecoveryMessage(item.errorKind)}</span>
+              <span className="text-xs text-muted-foreground">{contextRecoveryDetail(item.errorKind)}</span>
+            </AlertDescription>
+          </Alert>
+        )
+      }
       if (item.recoverable) {
         return (
           <Alert>
@@ -162,6 +209,75 @@ function AgentTimelineItem({
       return exhaustive
     }
   }
+}
+
+function ContextRecoveryAlert({
+  recovery,
+  onPrepare,
+  onContinue,
+  onCreateConversation,
+}: {
+  readonly recovery: SynapseAgentContextRecovery
+  readonly onPrepare?: () => void | Promise<void>
+  readonly onContinue?: () => void | Promise<void>
+  readonly onCreateConversation?: () => void
+}) {
+  const [pending, setPending] = useState(false)
+  const run = (action: (() => void | Promise<void>) | undefined) => {
+    if (!action || pending) return
+    setPending(true)
+    void Promise.resolve().then(action).finally(() => setPending(false))
+  }
+  const prepared = recovery.status === "prepared"
+  const failed = recovery.status === "failed"
+  const message = recovery.reason === "context_refill_thrashing"
+    ? "大型工具结果在整理后迅速填满上下文，本次运行已停止。"
+    : "当前对话内容较多，暂时无法继续。"
+  const detail = recovery.reason === "context_refill_thrashing"
+    ? "错误类型 context_refill_thrashing"
+    : "错误类型 request_body_too_large · 请求体限制 6 MiB"
+  return (
+    <Alert variant={failed ? "destructive" : "default"}>
+      {failed ? <AlertCircle data-icon="inline-start" /> : <Info data-icon="inline-start" />}
+      <AlertDescription className="grid gap-1">
+        <span>{failed ? "整理失败，请新建对话。" : prepared ? "已整理上下文" : message}</span>
+        {!prepared && !failed ? (
+          <span className="text-xs text-muted-foreground">{detail}</span>
+        ) : null}
+      </AlertDescription>
+      <AlertAction>
+        {failed ? (
+          <Button type="button" variant="outline" size="sm" onClick={onCreateConversation}>
+            新建对话
+          </Button>
+        ) : prepared ? (
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => run(onContinue)}>
+            继续上一个任务
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" size="sm" disabled={pending} onClick={() => run(onPrepare)}>
+            {pending ? "正在整理" : "整理上下文"}
+          </Button>
+        )}
+      </AlertAction>
+    </Alert>
+  )
+}
+
+function isContextRecoveryErrorKind(errorKind: string | undefined): boolean {
+  return errorKind === "request_body_too_large" || errorKind === "context_refill_thrashing"
+}
+
+function contextRecoveryMessage(errorKind: string | undefined): string {
+  return errorKind === "context_refill_thrashing"
+    ? "大型工具结果在整理后迅速填满上下文，本次运行已停止。"
+    : "当前对话内容较多，暂时无法继续。"
+}
+
+function contextRecoveryDetail(errorKind: string | undefined): string {
+  return errorKind === "context_refill_thrashing"
+    ? "错误类型 context_refill_thrashing"
+    : "错误类型 request_body_too_large · 请求体限制 6 MiB"
 }
 
 function AgentFileCheckpointCard({ item }: { readonly item: SynapseAgentFileCheckpointTimelineItem }) {

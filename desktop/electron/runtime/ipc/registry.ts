@@ -143,7 +143,18 @@ export class IpcRegistryImpl implements IpcRegistry {
         ...ctx,
         ...invocation,
       }, validated.value))
-      return tryValidateResponse(channel, descriptor.response, result)
+      const response = tryValidateResponse(channel, descriptor.response, result)
+      if (descriptor.maxResponseBytes !== undefined) {
+        const bytes = Buffer.byteLength(JSON.stringify(response), "utf8")
+        if (bytes > descriptor.maxResponseBytes) {
+          throw new IpcRuntimeError(
+            "ipc/response-too-large",
+            `IPC response exceeded the configured byte limit for "${channel}"`,
+            { details: { channel, bytes, maxBytes: descriptor.maxResponseBytes } },
+          )
+        }
+      }
+      return response
     }
     return this.install(channel, invoker)
   }

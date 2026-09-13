@@ -11,6 +11,8 @@ import type { EventBus } from "../runtime/event-bus"
 import type { IpcHandlerContext } from "../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { WindowManager } from "../runtime/window"
+import type { ProjectContainerRegistry } from "../runtime/project-container"
+import { AGENT_RUNTIME_SERVICE_ID, type AgentRuntimeService } from "../services/agent-runtime"
 import type { KnowledgeBaseStorageMigrationService } from "../services/knowledge-base/storage-migration-service"
 import { createAccountExternalUrlOpener } from "./account-external-opener"
 import { registerAgentArtifactProtocol } from "./agent-artifact-protocol"
@@ -131,11 +133,28 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
 
   const windowManager = registry.get<WindowManager>("core.window-manager")
   deps.setWindowManager(windowManager)
+  const forEachAgentRuntime = async (
+    action: (runtime: AgentRuntimeService) => void | Promise<void>,
+  ): Promise<void> => {
+    const projectContainers = registry.get<ProjectContainerRegistry>("core.project-containers")
+    await Promise.all(projectContainers.list().map(async ({ projectId }) => {
+      const container = projectContainers.peek(projectId)
+      if (!container) return
+      await action(container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID))
+    }))
+  }
   if (deps.shouldCreateMainWindowBeforeProtocolHandling?.() !== false) {
     createMainWindow({
       state: deps.mainWindowState,
       windowManager,
       isAppQuitting: deps.isAppQuitting,
+      onRendererUnavailable: (rendererId) => forEachAgentRuntime(async (runtime) => {
+        await runtime.interruptRendererTurns(rendererId)
+      }),
+      onRendererUnresponsive: (rendererId) => forEachAgentRuntime((runtime) =>
+        runtime.pauseRendererDelivery(rendererId)),
+      onRendererResponsive: (rendererId) => forEachAgentRuntime((runtime) =>
+        runtime.resumeRendererDelivery(rendererId)),
     })
   }
   attachActivateHandler(() => {

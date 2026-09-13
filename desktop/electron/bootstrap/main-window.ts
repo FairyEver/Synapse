@@ -5,7 +5,7 @@
  * Phase 0.3 (T3.12) replaces this with WindowManager.
  */
 
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
 import { managedBrowserWindow, type WindowManager } from "../runtime/window"
@@ -15,9 +15,8 @@ import { RendererHealthService } from "../services/renderer-health"
 
 const logger = createMainLogger("bootstrap.main-window")
 const healthLogger = createMainLogger("renderer-health")
-const rendererHealthService = new RendererHealthService({
-  logger: healthLogger,
-})
+const RENDERER_CRASH_LOOP_WINDOW_MS = 60_000
+let lastRendererCrashAt = 0
 
 export interface MainWindowState {
   current: BrowserWindow | null
@@ -32,6 +31,9 @@ export interface MainWindowDeps {
   readonly windowManager?: WindowManager
   /** True when the app has reached `before-quit` and should not block window close. */
   readonly isAppQuitting: () => boolean
+  readonly onRendererUnavailable?: (rendererId: number) => void | Promise<void>
+  readonly onRendererUnresponsive?: (rendererId: number) => void | Promise<void>
+  readonly onRendererResponsive?: (rendererId: number) => void | Promise<void>
 }
 
 export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
@@ -54,6 +56,38 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
   })
 
   deps.state.current = window
+  const rendererHealthService = new RendererHealthService({
+    logger: healthLogger,
+    onUnresponsive: async (target) => {
+      deps.windowManager?.detach("main")
+      await deps.onRendererUnresponsive?.(target.id)
+    },
+    onResponsive: async (target) => {
+      deps.windowManager?.attach({ id: "main", role: "main" }, managedBrowserWindow(window, "main"))
+      await deps.onRendererResponsive?.(target.id)
+    },
+    onUnavailable: async (target) => {
+      const failedAt = Date.now()
+      const repeated = failedAt - lastRendererCrashAt <= RENDERER_CRASH_LOOP_WINDOW_MS
+      lastRendererCrashAt = failedAt
+      deps.windowManager?.detach("main")
+      const stopAgent = Promise.resolve().then(() => deps.onRendererUnavailable?.(target.id))
+      if (repeated) {
+        await loadMainRenderer(window, "failed").catch(() => undefined)
+        await stopAgent
+        await showNativeRendererRecoveryDialog(window)
+        return
+      }
+      const recoveryLoaded = await loadMainRenderer(window, "loading").then(() => true, () => false)
+      await stopAgent
+      if (!recoveryLoaded) {
+        await showNativeRendererRecoveryDialog(window)
+        return
+      }
+      await loadMainRenderer(window)
+      deps.windowManager?.attach({ id: "main", role: "main" }, managedBrowserWindow(window, "main"))
+    },
+  })
   rendererHealthService.attach(window.webContents)
   deps.windowManager?.attach({ id: "main", role: "main" }, managedBrowserWindow(window, "main"))
 
@@ -101,23 +135,45 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
     deps.state.current = null
   })
 
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL
-  if (devServerUrl) {
-    logger.info("Loading renderer from Vite dev server.", { devServerUrl })
-    window.loadURL(devServerUrl).catch((error) => {
-      logger.error("Failed to load renderer from dev server.", { error })
-      window.loadURL(`data:text/html;charset=utf-8,<h2>加载失败</h2><p>${encodeURIComponent(String(error))}</p>`).catch(() => {})
-    })
-  } else {
-    const indexPath = path.join(__dirname, "../../../dist/index.html")
-    logger.info("Loading renderer from built files.", { indexPath })
-    window.loadFile(indexPath).catch((error) => {
-      logger.error("Failed to load renderer from built files.", { error })
-      window.loadURL(`data:text/html;charset=utf-8,<h2>加载失败</h2><p>${encodeURIComponent(String(error))}</p>`).catch(() => {})
-    })
-  }
+  loadMainRenderer(window).catch((error) => {
+    logger.error("Failed to load renderer.", { error })
+    void showNativeRendererRecoveryDialog(window)
+  })
 
   return window
+}
+
+function loadMainRenderer(
+  window: BrowserWindow,
+  recoveryMode?: "loading" | "failed",
+): Promise<void> {
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL
+  if (devServerUrl) {
+    const url = new URL(devServerUrl)
+    if (recoveryMode) url.searchParams.set("rendererRecovery", recoveryMode)
+    logger.info("Loading renderer from Vite dev server.", { recoveryMode })
+    return window.loadURL(url.toString())
+  }
+  const indexPath = path.join(__dirname, "../../../dist/index.html")
+  logger.info("Loading renderer from built files.", { indexPath, recoveryMode })
+  return window.loadFile(indexPath, recoveryMode ? { query: { rendererRecovery: recoveryMode } } : undefined)
+}
+
+async function showNativeRendererRecoveryDialog(window: BrowserWindow): Promise<void> {
+  const result = await dialog.showMessageBox(window, {
+    type: "error",
+    title: "界面恢复失败",
+    message: "界面恢复失败",
+    buttons: ["重新打开", "退出应用"],
+    defaultId: 0,
+    cancelId: 1,
+  })
+  if (result.response === 0) {
+    lastRendererCrashAt = 0
+    await loadMainRenderer(window).catch(() => undefined)
+    return
+  }
+  app.quit()
 }
 
 export function isDevToolsToggleShortcut(input: Electron.Input): boolean {

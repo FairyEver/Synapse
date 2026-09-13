@@ -11,6 +11,7 @@ import { TEXT_FILE_WRITER_CAPABILITY_ID } from "../text-file-writer/shared/capab
 import { createAppCapabilityDispatcher } from "../dispatcher"
 import { PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID } from "../problem-feedback/shared/capability"
 import { JSON_REPAIR_CAPABILITY_ID } from "../json-repair/shared/capability"
+import { AGENT_CONVERSATION_OPEN_CAPABILITY_ID } from "../agent/shared/capability"
 
 describe("createAppCapabilityDispatcher", () => {
   it("routes app capability actions to their dispatchers", async () => {
@@ -36,7 +37,9 @@ describe("createAppCapabilityDispatcher", () => {
     const htmlGenerator = { dispatch: vi.fn(async () => ({ ok: true as const })) }
     const problemFeedback = { dispatch: vi.fn(async () => ({ ok: true as const })) }
     const jsonRepair = { dispatch: vi.fn(async () => ({ ok: true as const })) }
+    const agentConversation = { dispatch: vi.fn(async () => ({ ok: true as const })) }
     const dispatcher = createAppCapabilityDispatcher({
+      agentConversation,
       documentTemplate,
       textExtractor,
       secrets,
@@ -49,6 +52,7 @@ describe("createAppCapabilityDispatcher", () => {
       jsonRepair,
     })
 
+    await dispatcher.dispatch(AGENT_CONVERSATION_OPEN_CAPABILITY_ID, {}, { source: "mcp-http" })
     await dispatcher.dispatch(DOCUMENT_TEMPLATE_CAPABILITY_ID, {}, { source: "mcp-http" })
     await dispatcher.dispatch(TEXT_EXTRACTOR_CAPABILITY_ID, {}, { source: "mcp-http" })
     await dispatcher.dispatch(TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID, {}, { source: "mcp-http" })
@@ -59,6 +63,7 @@ describe("createAppCapabilityDispatcher", () => {
     await dispatcher.dispatch(PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID, {}, { source: "mcp-http" })
     await dispatcher.dispatch(JSON_REPAIR_CAPABILITY_ID, {}, { source: "mcp-http" })
 
+    expect(agentConversation.dispatch).toHaveBeenCalledWith(AGENT_CONVERSATION_OPEN_CAPABILITY_ID, {}, { source: "mcp-http" })
     expect(documentTemplate.dispatch).toHaveBeenCalledWith(DOCUMENT_TEMPLATE_CAPABILITY_ID, {}, { source: "mcp-http" })
     expect(textExtractor.dispatch).toHaveBeenCalledWith(TEXT_EXTRACTOR_CAPABILITY_ID, {}, { source: "mcp-http" })
     expect(textExtractor.dispatch).toHaveBeenCalledWith(TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID, {}, { source: "mcp-http" })
@@ -72,6 +77,7 @@ describe("createAppCapabilityDispatcher", () => {
 
   it("rejects unknown app actions", async () => {
     const dispatcher = createAppCapabilityDispatcher({
+      agentConversation: { dispatch: vi.fn() },
       documentTemplate: { dispatch: vi.fn() },
       textExtractor: { dispatch: vi.fn() },
       secrets: { dispatch: vi.fn() },

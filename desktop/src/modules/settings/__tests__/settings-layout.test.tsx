@@ -192,7 +192,7 @@ describe("SettingsModule layout", () => {
 
     expect(container.textContent).toContain("Synapse MCP 工具按需加载")
     expect(container.textContent).toContain("只在需要时加载 Synapse MCP 工具，减少上下文占用；新会话启动会稍慢。")
-    expect(toggle?.getAttribute("aria-checked")).toBe("false")
+    expect(toggle?.getAttribute("aria-checked")).toBe("true")
 
     await act(async () => {
       toggle?.click()
@@ -200,7 +200,7 @@ describe("SettingsModule layout", () => {
     })
 
     expect(updateConfig).toHaveBeenCalledWith({
-      agent: { experimentalSynapseToolRouterEnabled: true },
+      agent: { experimentalSynapseToolRouterEnabled: false },
     }, false)
   })
 })

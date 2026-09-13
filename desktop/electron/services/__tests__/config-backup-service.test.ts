@@ -231,7 +231,7 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "bypassPermissions",
           defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
-          experimentalSynapseToolRouterEnabled: false,
+          experimentalSynapseToolRouterEnabled: true,
           recentSlashSkills: ["review-code", "openai-docs", "third"],
           allowedWriteDirectories: [],
         },
@@ -292,7 +292,7 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
-          experimentalSynapseToolRouterEnabled: false,
+          experimentalSynapseToolRouterEnabled: true,
           recentSlashSkills: [],
           allowedWriteDirectories: [],
         },
@@ -321,7 +321,7 @@ describe("ConfigBackupService quick inputs", () => {
         agent: {
           defaultPermissionMode: "default",
           defaultProviderModel: null,
-          experimentalSynapseToolRouterEnabled: false,
+          experimentalSynapseToolRouterEnabled: true,
           recentSlashSkills: [],
           allowedWriteDirectories: [],
         },

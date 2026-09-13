@@ -645,7 +645,9 @@ function validateAgentConfig(
     return null
   }
   const normalizedPermissionMode = defaultPermissionMode as SynapseAgentGlobalConfig["defaultPermissionMode"]
-  const experimentalSynapseToolRouterEnabled = rawValue.experimentalSynapseToolRouterEnabled === true
+  const experimentalSynapseToolRouterEnabled = rawValue.experimentalSynapseToolRouterEnabled === undefined
+    ? DEFAULT_AGENT_GLOBAL_CONFIG.experimentalSynapseToolRouterEnabled
+    : rawValue.experimentalSynapseToolRouterEnabled === true
   const recentSlashSkills = validateRecentSlashSkills(rawValue.recentSlashSkills, errors)
   if (!recentSlashSkills) return null
   const allowedWriteDirectories = validateAllowedWriteDirectories(rawValue.allowedWriteDirectories, errors)

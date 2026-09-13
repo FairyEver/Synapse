@@ -13,7 +13,9 @@ import type {
 } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
 import type { AgentDetachedConversation } from "../src/types/agent-conversation-window"
-import type { OpenAgentSessionPayload } from "../src/types/agent-navigation"
+import type {
+  AgentConversationOpenRequest,
+} from "../src/types/agent-navigation"
 import type { SynapseAccountStateChangedEvent } from "../src/types/account"
 import type { SynapseLiveStateChangedEvent } from "../src/types/live"
 import type { SynapseContentChangedEvent } from "../src/types/content"
@@ -1184,6 +1186,9 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.agent.replaceConversationWindowTarget)(request),
     listDetachedConversationWindows: () => invoke(IPC_CHANNELS.agent.listDetachedConversationWindows)({}),
     getTimeline: (args) => invoke(IPC_CHANNELS.agent.getTimeline)(args),
+    getTimelineContentChunk: (args) => invoke(IPC_CHANNELS.agent.getTimelineContentChunk)(args),
+    setAgentEventSubscription: (args) => invoke(IPC_CHANNELS.agent.setAgentEventSubscription)(args),
+    ackAgentEventBatch: (args) => invoke(IPC_CHANNELS.agent.ackAgentEventBatch)(args),
     getFileCheckpoint: (args) => invoke(IPC_CHANNELS.agent.getFileCheckpoint)(args),
     getFileCheckpointDiff: (args) => invoke(IPC_CHANNELS.agent.getFileCheckpointDiff)(args),
     prepareFileCheckpointRewind: (args) => invoke(IPC_CHANNELS.agent.prepareFileCheckpointRewind)(args),
@@ -1194,6 +1199,9 @@ const synapseBridge: SynapseBridge = {
     deleteSession: (args) => invoke(IPC_CHANNELS.agent.deleteSession)(args),
     renameSession: (args) => invoke(IPC_CHANNELS.agent.renameSession)(args),
     send: (args) => invoke(IPC_CHANNELS.agent.send)(args),
+    steer: (args) => invoke(IPC_CHANNELS.agent.steer)(args),
+    prepareContextRecovery: (args) => invoke(IPC_CHANNELS.agent.prepareContextRecovery)(args),
+    continueContextRecovery: (args) => invoke(IPC_CHANNELS.agent.continueContextRecovery)(args),
     chooseAttachments: (args) => invoke(IPC_CHANNELS.agent.chooseAttachments)(args),
     resolveAttachmentPaths: (args) => invoke(IPC_CHANNELS.agent.resolveAttachmentPaths)(args),
     stageClipboardImage: (args) => invoke(IPC_CHANNELS.agent.stageClipboardImage)(args),
@@ -1238,8 +1246,14 @@ const synapseBridge: SynapseBridge = {
     openReferenceDefault: (args) => invoke(IPC_CHANNELS.agent.openReferenceDefault)(args),
     showReferenceInFolder: (args) => invoke(IPC_CHANNELS.agent.showReferenceInFolder)(args),
     openConversation: (target) => invoke(IPC_CHANNELS.agent.openConversation)(target),
+    getPendingConversationOpenRequest: () =>
+      invoke(IPC_CHANNELS.agent.getPendingConversationOpenRequest)() as Promise<
+        AgentConversationOpenRequest | null
+      >,
+    acknowledgeConversationOpenRequest: (requestId) =>
+      invoke(IPC_CHANNELS.agent.acknowledgeConversationOpenRequest)({ requestId }),
     getAvailableAgents: () => invoke(IPC_CHANNELS.agent.getAvailableAgents)({}),
-    onOpenConversation: createRawPayloadSubscription<OpenAgentSessionPayload>(
+    onOpenConversation: createRawPayloadSubscription<AgentConversationOpenRequest>(
       subscribe,
       OPEN_AGENT_SESSION_EVENT,
     ),

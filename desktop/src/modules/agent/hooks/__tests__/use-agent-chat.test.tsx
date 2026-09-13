@@ -74,6 +74,21 @@ const projectScope: AgentProjectScope = {
   defaultProjectId: "project-1",
 }
 
+function sendResult(
+  outcome: {
+    status: "completed" | "failed" | "cancelled" | "interrupted"
+    errorKind?: "execution_failed" | "connection_interrupted"
+    recoverable?: boolean
+  } = { status: "completed" },
+) {
+  return {
+    projectId: session.projectId,
+    sessionKey: session.sessionKey,
+    conversationId: session.id,
+    outcome,
+  }
+}
+
 let roots: Root[] = []
 
 beforeEach(() => {
@@ -263,7 +278,7 @@ describe("useAgentChat", () => {
     await waitFor(() => chat?.timeline.length === 3)
 
     await act(async () => {
-      bridge.send.mockResolvedValueOnce({ queued: true })
+      bridge.send.mockResolvedValueOnce(sendResult())
       await chat?.sendMessage("persist me")
       emitAgentEvent?.({
         domain: "agent",
@@ -747,12 +762,11 @@ describe("useAgentChat", () => {
     const bridge = (window as unknown as {
       synapse: { agent: { send: ReturnType<typeof vi.fn> } }
     }).synapse.agent
-    bridge.send.mockResolvedValue({
-      conversationId: session.id,
-      resultText: "",
-      events: [],
-      error: "SDK 发送失败",
-    })
+    bridge.send.mockResolvedValue(sendResult({
+      status: "failed",
+      errorKind: "execution_failed",
+      recoverable: false,
+    }))
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -779,17 +793,7 @@ describe("useAgentChat", () => {
     const bridge = (window as unknown as {
       synapse: { agent: { send: ReturnType<typeof vi.fn> } }
     }).synapse.agent
-    bridge.send.mockResolvedValue({
-      conversationId: session.id,
-      resultText: "",
-      error: "已停止本次执行。",
-      events: [{
-        type: "result",
-        content: "",
-        done: true,
-        metadata: { cancelled: true },
-      }],
-    })
+    bridge.send.mockResolvedValue(sendResult({ status: "cancelled" }))
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -817,17 +821,11 @@ describe("useAgentChat", () => {
     const bridge = (window as unknown as {
       synapse: { agent: { send: ReturnType<typeof vi.fn> } }
     }).synapse.agent
-    bridge.send.mockResolvedValue({
-      conversationId: session.id,
-      resultText: "",
-      error: "模型连接中断，任务尚未完成。",
-      events: [{
-        type: "error",
-        message: "模型连接中断，任务尚未完成。",
-        errorKind: "connection_interrupted",
-        recoverable: true,
-      }],
-    })
+    bridge.send.mockResolvedValue(sendResult({
+      status: "interrupted",
+      errorKind: "connection_interrupted",
+      recoverable: true,
+    }))
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -907,7 +905,7 @@ describe("useAgentChat", () => {
         }
       }
     }).synapse.agent
-    bridge.send.mockResolvedValue(undefined)
+    bridge.send.mockResolvedValue(sendResult())
     let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
     bridge.onEvent.mockImplementation((callback) => {
       emitAgentEvent = callback
@@ -968,7 +966,7 @@ describe("useAgentChat", () => {
         }
       }
     }).synapse.agent
-    bridge.send.mockResolvedValue(undefined)
+    bridge.send.mockResolvedValue(sendResult())
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -1038,7 +1036,7 @@ describe("useAgentChat", () => {
         }
       }
     }).synapse.agent
-    bridge.send.mockResolvedValue(undefined)
+    bridge.send.mockResolvedValue(sendResult())
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")
     document.body.appendChild(container)

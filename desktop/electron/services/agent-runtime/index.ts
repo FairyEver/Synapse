@@ -149,12 +149,18 @@ export {
   type AgentEvent,
   type AgentLiveSession,
   type AgentMessage,
+  type AgentSteerMessage,
+  type AgentSteerResult,
+  type AgentTurnAdmissionResult,
+  type AgentConversationRuntimeSnapshot,
+  type AgentSteerStatus,
   type AgentPendingPermission,
   type AgentPermissionDecision,
   type AgentPermissionRequestEvent,
   type AgentPermissionResponseRequest,
   type AgentRuntimeTurnResult,
   type AgentRuntimeRelayResult,
+  type ExpectedTurnStopResult,
   type ScheduledAgentSourcePlatform,
   type AgentUserQuestion,
   type AgentUserQuestionOption,
@@ -284,7 +290,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         attachmentStagingService,
         getUsagePriceRules: () => listModelPriceRules(getUsageAnalysisDb()),
         loadExperimentalSynapseToolRouterEnabled: async () => (
-          configService ? (await configService.load()).agent.experimentalSynapseToolRouterEnabled : false
+          configService ? (await configService.load()).agent.experimentalSynapseToolRouterEnabled : true
         ),
         executeSynapseTool: async (toolName, args, context) => {
           const action = MCP_TOOL_ACTIONS[toolName]

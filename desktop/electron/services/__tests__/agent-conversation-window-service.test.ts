@@ -354,7 +354,13 @@ function createFakeWindow() {
     webContents: {
       id: Math.floor(Math.random() * 100_000),
       on: vi.fn(),
+      removeListener: vi.fn(),
       send: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+      ipc: {
+        on: vi.fn(),
+        removeListener: vi.fn(),
+      },
     },
     close: vi.fn(),
     focus: vi.fn(),

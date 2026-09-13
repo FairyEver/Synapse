@@ -80,6 +80,44 @@ afterEach(() => {
 })
 
 describe("AgentComposer", () => {
+  it("does not transfer send-button focus to the stop action while a turn starts", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const renderComposer = (sending: boolean) => (
+      <AgentComposer
+        draft={sending ? "" : "run"}
+        disabled={false}
+        canSend={!sending}
+        sending={sending}
+        cancelPhase="idle"
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={(event) => event.preventDefault()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />
+    )
+
+    await act(async () => {
+      root.render(renderComposer(false))
+    })
+    const sendButton = container.querySelector<HTMLButtonElement>('button[aria-label="发送"]')
+    expect(sendButton).toBeTruthy()
+    if (!sendButton) throw new Error("Expected send button")
+    sendButton.focus()
+    expect(document.activeElement).toBe(sendButton)
+
+    await act(async () => {
+      root.render(renderComposer(true))
+    })
+
+    expect(document.activeElement).not.toBe(
+      container.querySelector<HTMLButtonElement>('button[aria-label="停止"]'),
+    )
+  })
+
   it("focuses the textarea when the conversation focus key changes", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -2167,6 +2205,115 @@ describe("AgentComposer", () => {
     expect(html).not.toContain("sending message")
     expect(html).toContain('aria-label="删除待发送消息"')
     expect(html).toContain('aria-label="重试发送"')
+  })
+
+  it("allows an eligible text message to steer the active turn", async () => {
+    const onSteerPendingMessage = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={true}
+          cancelPhase="idle"
+          activeTurnId="turn-1"
+          pendingMessages={[{
+            id: "pending-steer",
+            target: {
+              projectId: "project-1",
+              conversationId: "conversation-1",
+              sessionKey: "local:renderer",
+            },
+            content: "先修复测试",
+            createdAt: "2026-05-13T10:00:00.000Z",
+            status: "queued",
+          }]}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+          onSteerPendingMessage={onSteerPendingMessage}
+        />,
+      )
+    })
+
+    const steer = container.querySelector<HTMLButtonElement>('button[aria-label="引导当前任务"]')
+    expect(steer?.disabled).toBe(false)
+    await act(async () => steer?.click())
+    expect(onSteerPendingMessage).toHaveBeenCalledWith("pending-steer")
+  })
+
+  it("disables steering for attachments, commands, and a second in-flight steer", async () => {
+    const target = {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "local:renderer",
+    }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(<AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={true}
+        cancelPhase="idle"
+        activeTurnId="turn-1"
+        pendingMessages={[
+          {
+            id: "pending-steering",
+            target,
+            content: "正在引导",
+            createdAt: "2026-05-13T10:00:00.000Z",
+            status: "steering",
+          },
+          {
+            id: "pending-command",
+            target,
+            content: "/save",
+            createdAt: "2026-05-13T10:00:01.000Z",
+            status: "queued",
+          },
+          {
+            id: "pending-attachment",
+            target,
+            content: "检查附件",
+            attachments: [{
+              version: 2,
+              attachmentId: "file-1",
+              kind: "file",
+              name: "brief.md",
+              byteSize: 10,
+              sha256: "0".repeat(64),
+            }],
+            createdAt: "2026-05-13T10:00:02.000Z",
+            status: "queued",
+          },
+        ]}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+        onSteerPendingMessage={vi.fn()}
+      />)
+    })
+
+    const steerButtons = Array.from(container.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label="引导中"], button[aria-label="引导当前任务"]',
+    ))
+    expect(steerButtons).toHaveLength(3)
+    expect(steerButtons.every((button) => button.disabled)).toBe(true)
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="删除待发送消息"]')?.disabled).toBe(true)
   })
 
   it("renders queued messages without per-message persona labels", () => {

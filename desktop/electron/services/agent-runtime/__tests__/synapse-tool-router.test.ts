@@ -14,8 +14,8 @@ describe("Synapse tool router catalog", () => {
   it("indexes every public Synapse MCP tool with action, domain, description, and schema", () => {
     const catalog = buildSynapseToolCatalog()
 
-    expect(catalog).toHaveLength(223)
-    expect(new Set(catalog.map((entry) => entry.name)).size).toBe(223)
+    expect(catalog.map((entry) => entry.name).sort()).toEqual(buildAllMcpTools().map((tool) => tool.name).sort())
+    expect(new Set(catalog.map((entry) => entry.name)).size).toBe(catalog.length)
     expect(catalog.every((entry) => (
       entry.actionId.length > 0
       && entry.domain.length > 0

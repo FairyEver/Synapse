@@ -32,8 +32,16 @@ export function bridgeSdkMessage(
   envelope: AgentEventEnvelope = {},
 ): AgentEvent | readonly AgentEvent[] {
   const raw = message as unknown as Record<string, unknown>
-  const payload = toPlainJson(message)
   const sdkSessionId = stringValue(raw.session_id)
+
+  // The SDK contract explicitly allows new message variants. High-frequency
+  // telemetry such as system/thinking_tokens is not conversation state and
+  // must be rejected before cloning the raw SDK object. This boundary keeps
+  // unknown/provider-specific payloads out of persistence and Renderer IPC.
+  if (raw.type === "system" && raw.subtype === "thinking_tokens") return []
+  if (!isSupportedSdkMessage(raw)) return []
+
+  const payload = toPlainJson(message)
 
   if (raw.type === "result") {
     const costUsd = numberValue(raw.total_cost_usd)
@@ -42,6 +50,8 @@ export function bridgeSdkMessage(
     const usage = recordValue(raw.usage)
     const modelUsage = recordValue(raw.modelUsage)
     const sdkResultUuid = stringValue(raw.uuid)
+    const queuedTurnCount = numberValue(raw.queued_turn_count)
+    const userMessageUuid = stringValue(raw.user_message_uuid)
     const resultDiagnostic = stringValue(raw.result)
     const terminalReason = stringValue(raw.terminal_reason)
     const resultPresentation = resultDiagnostic
@@ -52,6 +62,7 @@ export function bridgeSdkMessage(
       raw.subtype !== "success"
       || raw.is_error === true
       || terminalReason === "api_error"
+      || terminalReason === "rapid_refill_breaker"
       || hasConnectionInterruption
     ) {
       const errors = Array.isArray(raw.errors)
@@ -83,7 +94,7 @@ export function bridgeSdkMessage(
           costUsd,
           costCny,
           costCurrency,
-          payload: sanitizeResultErrorPayload(payload),
+          payload: sanitizeResultErrorPayload(payload, resolvedPresentation.errorKind),
           ...envelope,
         }
       }
@@ -103,6 +114,8 @@ export function bridgeSdkMessage(
       usage,
       modelUsage,
       sdkResultUuid,
+      queuedTurnCount,
+      userMessageUuid,
       payload: sanitizeResultSuccessPayload(payload),
       ...envelope,
     }
@@ -144,6 +157,19 @@ export function bridgeSdkMessage(
       envelope,
     )
     if (toolResultEvents.length > 0) return toolResultEvents
+    if (raw.isReplay === true && raw.parent_tool_use_id === null) {
+      return {
+        type: "sdkEvent",
+        sdkSessionId,
+        sdkType: "userMessageReplay",
+        payload: {
+          content: userMessageText(message.content),
+          timestamp: stringValue(raw.timestamp),
+          uuid: stringValue(raw.uuid),
+        },
+        ...envelope,
+      }
+    }
   }
 
   if (raw.type === "stream_event") {
@@ -177,14 +203,26 @@ export function bridgeSdkMessage(
     }
   }
 
-  return {
-    type: "sdkEvent",
-    sdkSessionId,
-    sdkType: stringValue(raw.type) ?? "unknown",
-    sdkSubtype: stringValue(raw.subtype),
-    payload,
-    ...envelope,
-  }
+  return []
+}
+
+export function isSupportedSdkMessage(raw: Record<string, unknown>): boolean {
+  if (raw.type === "result" || raw.type === "assistant" || raw.type === "stream_event") return true
+  if (raw.type === "user") return true
+  if (raw.type !== "system") return false
+  return raw.subtype === "init"
+    || raw.subtype === "status"
+    || raw.subtype === "compact_boundary"
+}
+
+function userMessageText(value: unknown): string {
+  if (typeof value === "string") return value
+  if (!Array.isArray(value)) return ""
+  return value.map((item) => {
+    if (typeof item === "string") return item
+    const record = isRecord(item) ? item : undefined
+    return record?.type === "text" ? stringValue(record.text) ?? "" : ""
+  }).join("")
 }
 
 function sanitizeResultSuccessPayload(payload: Record<string, unknown>): Record<string, unknown> {
@@ -193,8 +231,16 @@ function sanitizeResultSuccessPayload(payload: Record<string, unknown>): Record<
   return sanitized
 }
 
-function sanitizeResultErrorPayload(payload: Record<string, unknown>): Record<string, unknown> {
+function sanitizeResultErrorPayload(
+  payload: Record<string, unknown>,
+  errorKind?: string,
+): Record<string, unknown> {
   const sanitized = { ...payload }
+  if (errorKind === "request_body_too_large" || errorKind === "context_refill_thrashing") {
+    delete sanitized.result
+    delete sanitized.errors
+    return sanitized
+  }
   if (typeof sanitized.result === "string") {
     sanitized.result = sanitizeDiagnosticText(sanitized.result)
   }

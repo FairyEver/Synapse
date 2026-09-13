@@ -3,7 +3,6 @@ import { z } from "zod"
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
-import type { WindowManager } from "../../runtime/window"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import {
@@ -11,10 +10,14 @@ import {
   type AgentConversationWindowService,
 } from "../../services/agent-conversation-window-service"
 import {
-  OPEN_AGENT_SESSION_EVENT,
-  type SynapseAgentConversationReference,
+  type AgentConversationOpenRequest,
   type SynapseOpenAgentConversationResult,
 } from "../../../src/types/agent-navigation"
+import {
+  AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
+} from "../../../app-capabilities/agent/shared/capability"
+import { AgentConversationNavigationError } from "../../../app-capabilities/agent/shared/errors"
+import type { AgentConversationNavigationService } from "../../../app-capabilities/agent/main/service"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
@@ -109,6 +112,24 @@ const openConversationResultSchema = z.discriminatedUnion("opened", [
   z.object({ opened: z.literal(true) }),
   z.object({ opened: z.literal(false), reason: z.literal("not-found") }),
 ])
+
+const conversationOpenRequestSchema = z.object({
+  requestId: z.number().int().positive(),
+  projectId: z.string().min(1),
+  conversationId: z.string().min(1),
+  sessionKey: z.string().min(1).optional(),
+  sourceFilter: z.enum([
+    "user",
+    "scheduled",
+    "automation",
+    "workflow",
+    "webhook",
+    "relay",
+    "bridge",
+    "all",
+  ]).optional(),
+  prompt: z.string().optional(),
+}).strict()
 
 const openConversationWindowResultSchema = z.object({
   opened: z.literal(true),
@@ -208,39 +229,48 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
     request: openConversationRequestSchema,
     response: openConversationResultSchema,
     handler: async (ctx, request: OpenConversationRequest): Promise<SynapseOpenAgentConversationResult> => {
-      const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
-      const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
-      const conversation = await conversations.get(request.conversationId)
-      if (!isRequestedConversation(conversation, request)) {
-        logger.warn("Agent conversation open skipped.", {
-          projectId: request.projectId,
-          conversationId: request.conversationId,
-          sessionKey: request.sessionKey,
-          platform: request.platform,
-          reason: "not-found",
-        })
-        return { opened: false, reason: "not-found" }
-      }
-
-      const windowManager = ctx.resolve<WindowManager>("core.window-manager")
-      windowManager.open("main")
-      windowManager.broadcast(
-        OPEN_AGENT_SESSION_EVENT,
-        {
-          projectId: conversation.projectId,
-          conversationId: conversation.id,
-          sessionKey: conversation.sessionKey,
-          sourceFilter: request.platform,
-        },
-        (window) => window.role === "main",
+      const service = ctx.resolve<AgentConversationNavigationService>(
+        AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
       )
-      logger.info("Agent conversation opened.", {
-        projectId: request.projectId,
-        conversationId: request.conversationId,
-        sessionKey: conversation.sessionKey,
-        platform: request.platform,
-      })
-      return { opened: true }
+      try {
+        return await service.open(
+          {
+            projectId: request.projectId,
+            conversationId: request.conversationId,
+          },
+          {
+            sessionKey: request.sessionKey,
+            platform: request.platform,
+          },
+        )
+      } catch (error) {
+        if (error instanceof AgentConversationNavigationError && error.code === "not_found") {
+          return { opened: false, reason: "not-found" }
+        }
+        throw error
+      }
+    },
+  },
+  getPendingConversationOpenRequest: {
+    kind: "invoke",
+    operationId: "app.agent.operation.get_pending_conversation_open_request",
+    request: z.void(),
+    response: conversationOpenRequestSchema.nullable(),
+    handler: async (ctx): Promise<AgentConversationOpenRequest | null> => {
+      return ctx.resolve<AgentConversationNavigationService>(
+        AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
+      ).getPendingOpenRequest()
+    },
+  },
+  acknowledgeConversationOpenRequest: {
+    kind: "invoke",
+    operationId: "app.agent.operation.acknowledge_conversation_open_request",
+    request: z.object({ requestId: z.number().int().positive() }).strict(),
+    response: z.void(),
+    handler: async (ctx, request: { requestId: number }): Promise<void> => {
+      ctx.resolve<AgentConversationNavigationService>(
+        AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
+      ).acknowledgeOpenRequest(request.requestId)
     },
   },
   openConversationWindow: {
@@ -427,17 +457,6 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       }
     },
   },
-}
-
-function isRequestedConversation(
-  conversation: ConversationEntryV1 | null,
-  request: SynapseAgentConversationReference,
-): conversation is ConversationEntryV1 {
-  return Boolean(conversation)
-    && conversation?.projectId === request.projectId
-    && conversation.id === request.conversationId
-    && (request.sessionKey === undefined || conversation.sessionKey === request.sessionKey)
-    && conversation.platform === request.platform
 }
 
 async function deleteOrphanSession(

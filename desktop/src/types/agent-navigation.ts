@@ -28,9 +28,14 @@ export type SynapseOpenAgentConversationResult =
   | { readonly opened: false; readonly reason: "not-found" }
 
 export interface OpenAgentSessionPayload {
+  readonly requestId?: number
   readonly projectId: string
   readonly conversationId: string
   readonly sessionKey?: string
   readonly sourceFilter?: SynapseAgentConversationSourceFilter
   readonly prompt?: string
+}
+
+export interface AgentConversationOpenRequest extends OpenAgentSessionPayload {
+  readonly requestId: number
 }

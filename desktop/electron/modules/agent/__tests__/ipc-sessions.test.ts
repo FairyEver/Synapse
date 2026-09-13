@@ -31,6 +31,8 @@ import { configStore } from "../../../services/config-store"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { sessionMethods } from "../ipc-sessions"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT_ID } from "../../../../src/lib/default-agent-workspace"
+import { AgentConversationNavigationService } from "../../../../app-capabilities/agent/main/service"
+import { AGENT_CONVERSATION_NAVIGATION_SERVICE_ID } from "../../../../app-capabilities/agent/shared/capability"
 
 vi.mock("electron", () => electronMock)
 
@@ -402,6 +404,7 @@ describe("agent session IPC methods", () => {
     expect(windowManager.broadcast).toHaveBeenCalledWith(
       "synapse:app:open_agent_session:operation",
       {
+        requestId: 1,
         projectId: "project-1",
         conversationId: "conv-workflow",
         sessionKey: "workflow:project-1:123",
@@ -417,6 +420,7 @@ describe("agent session IPC methods", () => {
       conversationId: "conv-workflow",
       sessionKey: "workflow:project-1:123",
       platform: "workflow",
+      requestId: 1,
     })
   })
 
@@ -446,6 +450,7 @@ describe("agent session IPC methods", () => {
     expect(windowManager.broadcast).toHaveBeenCalledWith(
       "synapse:app:open_agent_session:operation",
       {
+        requestId: 1,
         projectId: "project-1",
         conversationId: "conv-workflow",
         sessionKey: "workflow:project-1:123",
@@ -453,6 +458,35 @@ describe("agent session IPC methods", () => {
       },
       expect.any(Function),
     )
+  })
+
+  it("reads and acknowledges a pending conversation open request", async () => {
+    const conversations = createConversationNamespace([
+      storedConversation({
+        id: "conv-workflow",
+        platform: "workflow",
+        sessionKey: "workflow:project-1:123",
+      }),
+    ])
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => conversations),
+      } as unknown as DataRepository,
+      windowManager: createWindowManager(),
+    })
+
+    await sessionMethods.openConversation.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-workflow",
+      platform: "workflow",
+    })
+    await expect(sessionMethods.getPendingConversationOpenRequest.handler(ctx, undefined))
+      .resolves.toMatchObject({ requestId: 1, conversationId: "conv-workflow" })
+
+    await sessionMethods.acknowledgeConversationOpenRequest.handler(ctx, { requestId: 1 })
+    await expect(sessionMethods.getPendingConversationOpenRequest.handler(ctx, undefined))
+      .resolves.toBeNull()
   })
 
   it("rejects an explicit session key that does not match the stored conversation", async () => {
@@ -723,6 +757,11 @@ function createContext(overrides: {
   const projectContainers: Pick<ProjectContainerRegistry, "open"> = {
     open: vi.fn().mockResolvedValue(container),
   }
+  const agentConversationNavigation = new AgentConversationNavigationService({
+    dataRepository: overrides.dataRepo,
+    windowManager: overrides.windowManager ?? createWindowManager(),
+    logger: logStoreMock.logger,
+  })
   return {
     moduleId: "agent",
     projectContainers,
@@ -730,6 +769,9 @@ function createContext(overrides: {
       if (serviceId === "core.project-containers") return projectContainers as T
       if (serviceId === "core.data-repository") return overrides.dataRepo as T
       if (serviceId === "core.window-manager" && overrides.windowManager) return overrides.windowManager as T
+      if (serviceId === AGENT_CONVERSATION_NAVIGATION_SERVICE_ID) {
+        return agentConversationNavigation as T
+      }
       if (serviceId === AGENT_CONVERSATION_WINDOW_SERVICE_ID) {
         return (overrides.conversationWindowService ?? createConversationWindowServiceMock()) as T
       }

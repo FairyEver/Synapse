@@ -1,5 +1,6 @@
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAgentClock } from "../hooks/use-agent-clock"
 import type {
   SynapseAgentPhaseTimelineItem,
   SynapseAgentPhaseValue,
@@ -71,13 +72,14 @@ function AgentPhaseRow({
   now,
 }: {
   readonly item: SynapseAgentPhaseTimelineItem
-  readonly now: number
+  readonly now?: number
 }) {
   const failed = item.status === "failed"
   const recoverable = item.recoverable === true
   const inProgress = item.status === "in-progress"
   const label = pickLabel(item)
-  const elapsed = elapsedSeconds(item, now)
+  const clock = useAgentClock(inProgress && now === undefined)
+  const elapsed = elapsedSeconds(item, now ?? clock)
 
   return (
     <div

@@ -3,6 +3,7 @@ import { z } from "zod"
 import {
   IpcChannelNotFoundError,
   IpcModuleAlreadyRegisteredError,
+  IpcRuntimeError,
   IpcValidationError,
   IpcRegistryImpl,
   createInMemoryHarness,
@@ -170,6 +171,31 @@ describe("IpcRegistryImpl (T3.2)", () => {
     await expect(harness.invoke("synapse:app:buggy:operation:two_strings", {})).rejects.toBeInstanceOf(
       IpcValidationError,
     )
+  })
+
+  it("rejects validated responses that exceed a method byte limit", async () => {
+    const harness = createInMemoryHarness()
+    harness.registry.register(
+      {
+        id: "bounded",
+        methods: {
+          payload: {
+            kind: "invoke",
+            operationId: "app.bounded.operation.payload",
+            request: z.object({}),
+            response: z.string(),
+            maxResponseBytes: 16,
+            handler: () => "x".repeat(32),
+          },
+        },
+        events: {},
+      },
+      { ...ctx, moduleId: "bounded" },
+    )
+
+    await expect(harness.invoke("synapse:app:bounded:operation:payload", {})).rejects.toMatchObject({
+      code: "ipc/response-too-large",
+    } satisfies Partial<IpcRuntimeError>)
   })
 
   it("async handlers are awaited", async () => {

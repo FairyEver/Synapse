@@ -32,6 +32,7 @@ type ChatState = {
   selectedSessionKey: string
   loading: boolean
   sendingConversationIds: Set<string>
+  activeTurnIdsByConversationId: Record<string, string>
   cancelPhase: "idle" | "cancel_pending" | "cancelled"
   error: string | null
   currentConversationModel: string | undefined
@@ -74,6 +75,8 @@ type ChatAction =
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "ADD_SENDING_CONVERSATION"; conversationId: string }
   | { type: "REMOVE_SENDING_CONVERSATION"; conversationId: string }
+  | { type: "SET_ACTIVE_TURN"; conversationId: string; turnId: string }
+  | { type: "CLEAR_ACTIVE_TURN"; conversationId: string }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_CANCEL_PHASE"; cancelPhase: ChatState["cancelPhase"] }
   | { type: "SET_CURRENT_CONVERSATION_MODEL"; model: string | undefined }
@@ -103,6 +106,7 @@ const initialChatState: ChatState = {
   selectedSessionKey: DEFAULT_LOCAL_SESSION_KEY,
   loading: false,
   sendingConversationIds: new Set(),
+  activeTurnIdsByConversationId: {},
   cancelPhase: "idle",
   error: null,
   currentConversationModel: undefined,
@@ -154,6 +158,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
     case "UPDATE_TIMELINE": {
       const timeline = action.updater(state.timeline)
+      if (timeline === state.timeline) return state
       return {
         ...state,
         timeline,
@@ -189,14 +194,31 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_TIMELINE_HISTORY_ERROR":
       return { ...state, timelineHistoryError: action.error }
     case "ADD_SENDING_CONVERSATION": {
+      if (state.sendingConversationIds.has(action.conversationId)) return state
       const next = new Set(state.sendingConversationIds)
       next.add(action.conversationId)
       return { ...state, sendingConversationIds: next }
     }
     case "REMOVE_SENDING_CONVERSATION": {
+      if (!state.sendingConversationIds.has(action.conversationId)) return state
       const next = new Set(state.sendingConversationIds)
       next.delete(action.conversationId)
       return { ...state, sendingConversationIds: next }
+    }
+    case "SET_ACTIVE_TURN":
+      if (state.activeTurnIdsByConversationId[action.conversationId] === action.turnId) return state
+      return {
+        ...state,
+        activeTurnIdsByConversationId: {
+          ...state.activeTurnIdsByConversationId,
+          [action.conversationId]: action.turnId,
+        },
+      }
+    case "CLEAR_ACTIVE_TURN": {
+      if (!(action.conversationId in state.activeTurnIdsByConversationId)) return state
+      const next = { ...state.activeTurnIdsByConversationId }
+      delete next[action.conversationId]
+      return { ...state, activeTurnIdsByConversationId: next }
     }
     case "SET_CURRENT_CONVERSATION_MODEL":
       return { ...state, currentConversationModel: action.model }
@@ -209,6 +231,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "CANCEL_REQUESTED":
       return { ...state, cancelPhase: "cancel_pending" }
     case "CANCEL_RESET":
+      if (state.cancelPhase === "idle") return state
       return { ...state, cancelPhase: "idle" }
     case "RESET":
       return { ...initialChatState }

@@ -26,6 +26,8 @@ export interface EventScope {
   readonly projectId?: string
   readonly sessionId?: string
   readonly repositoryId?: string
+  /** Private main-process routing hint; never supplied by Renderer callers. */
+  readonly rendererIds?: readonly number[]
 }
 
 export interface DomainEvent<

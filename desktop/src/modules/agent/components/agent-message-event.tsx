@@ -12,6 +12,7 @@ import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import { MARKDOWN_BODY_CLASSNAME } from "@/components/markdown-viewer"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { redactSensitiveText } from "@/lib/agent-redaction"
 import { sanitizeUrl } from "@/lib/url-sanitize"
@@ -32,6 +33,7 @@ import {
   isLocalReferenceHref,
 } from "./agent-local-reference-link"
 import { errorLogMeta } from "../utils"
+import { AgentLongContentDialog } from "./agent-long-content-dialog"
 
 import "streamdown/styles.css"
 
@@ -74,6 +76,8 @@ interface AgentMessageEventProps {
   readonly agentIcon?: string
   readonly onOpenReference: (reference: string) => void
   readonly referenceActions?: AgentReferenceActions
+  readonly projectId?: string
+  readonly conversationId?: string
 }
 
 function AgentMessageEvent({
@@ -81,6 +85,8 @@ function AgentMessageEvent({
   agentIcon,
   onOpenReference,
   referenceActions = unavailableReferenceActions,
+  projectId,
+  conversationId,
 }: AgentMessageEventProps) {
   const outgoing = item.role === "user"
 
@@ -92,6 +98,11 @@ function AgentMessageEvent({
     return (
       <article className="group/message flex min-w-0 flex-col items-end">
         <AgentMessageBubble role="user">
+          {item.messageKind === "steer" ? (
+            <div className="mb-2">
+              <Badge variant="secondary">引导</Badge>
+            </div>
+          ) : null}
           {item.attachments && item.attachments.length > 0 ? (
             <AgentMessageAttachments
               attachments={item.attachments}
@@ -115,6 +126,13 @@ function AgentMessageEvent({
           showCopy={item.content.trim().length > 0}
           className="mt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
         />
+        {item.contentTruncated && item.historyIndex !== undefined && projectId && conversationId ? (
+          <AgentLongContentDialog
+            projectId={projectId}
+            conversationId={conversationId}
+            historyIndex={item.historyIndex}
+          />
+        ) : null}
       </article>
     )
   }
@@ -131,6 +149,13 @@ function AgentMessageEvent({
         onOpenReference={onOpenReference}
         referenceActions={referenceActions}
       />
+      {item.contentTruncated && item.historyIndex !== undefined && projectId && conversationId ? (
+        <AgentLongContentDialog
+          projectId={projectId}
+          conversationId={conversationId}
+          historyIndex={item.historyIndex}
+        />
+      ) : null}
     </article>
   )
 }
@@ -152,8 +177,13 @@ function AssistantMessageBody({
   const streaming = item.streaming === true
   const referenceMenuEnabled = item.role === "assistant" && !streaming
   const suppressNativeReferenceMenu = item.role === "assistant" && streaming
-  const safeContent = redactSensitiveText(item.content)
-  const preprocessed = wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(safeContent)))
+  const { safeContent, preprocessed } = useMemo(() => {
+    const safeContent = redactSensitiveText(item.content)
+    return {
+      safeContent,
+      preprocessed: wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(safeContent))),
+    }
+  }, [item.content])
   const hasUsage = Boolean(item.metadata?.usage)
   const referenceLink = useMemo(() => createAgentLocalReferenceLink({
     enabled: referenceMenuEnabled,

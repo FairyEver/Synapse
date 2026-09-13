@@ -28,12 +28,53 @@ describe("SDK event bridge", () => {
       done: true,
       sdkSessionId: "sdk-1",
       sdkResultUuid: "result-1",
+      queuedTurnCount: undefined,
+      userMessageUuid: undefined,
       costUsd: 0.01,
       costCny: expect.closeTo(0.072, 6),
       costCurrency: "CNY",
       usage: { input_tokens: 1, output_tokens: 2 },
       modelUsage: { "claude-sonnet": { inputTokens: 1, outputTokens: 2 } },
       ...baseEnvelope,
+    })
+  })
+
+  it("projects queued turn and user message correlation fields from SDK results", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-1",
+      uuid: "result-2",
+      result: "stage done",
+      queued_turn_count: 1,
+      user_message_uuid: "user-1",
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "result",
+      queuedTurnCount: 1,
+      userMessageUuid: "user-1",
+    })
+  })
+
+  it("projects replayed main-thread user messages as internal correlation events", () => {
+    expect(bridgeSdkMessage({
+      type: "user",
+      session_id: "sdk-1",
+      uuid: "user-steer-1",
+      parent_tool_use_id: null,
+      isReplay: true,
+      timestamp: "2026-05-13T00:00:01.000Z",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "调整当前方向" }],
+      },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "sdkEvent",
+      sdkType: "userMessageReplay",
+      payload: {
+        content: "调整当前方向",
+        timestamp: "2026-05-13T00:00:01.000Z",
+        uuid: "user-steer-1",
+      },
     })
   })
 
@@ -86,6 +127,28 @@ describe("SDK event bridge", () => {
       }),
       ...baseEnvelope,
     })
+  })
+
+  it("treats the SDK rapid-refill breaker as a recoverable context error", () => {
+    const event = bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-refill",
+      uuid: "result-refill",
+      is_error: true,
+      result: "Autocompact is thrashing: context refilled to the limit.",
+      terminal_reason: "rapid_refill_breaker",
+      usage: { input_tokens: 186_600, output_tokens: 20 },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    expect(event).toMatchObject({
+      type: "error",
+      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
+      errorKind: "context_refill_thrashing",
+      recoverable: true,
+      sdkSessionId: "sdk-refill",
+    })
+    expect(JSON.stringify(event)).not.toContain("Autocompact is thrashing")
   })
 
   it("prioritizes terminal API disconnects when the SDK also reports generic errors", () => {
@@ -992,159 +1055,34 @@ describe("SDK event bridge", () => {
     expect(serialized).toContain("C:\\\\Users\\\\liyang")
   })
 
-  it("bridges unknown SDK messages to generic SDK events with plain JSON payloads", () => {
-    const event = bridgeSdkMessage({
+  it("ignores unknown SDK messages instead of forwarding their payloads", () => {
+    expect(bridgeSdkMessage({
       type: "future_message",
       subtype: "future_subtype",
       session_id: "sdk-1",
-      created_at: 1n,
-      callback: () => "drop me",
-      nested: { value: "kept" },
-    } as unknown as SDKMessage, baseEnvelope)
-
-    expect(event).toMatchObject({
-      type: "sdkEvent",
-      sdkSessionId: "sdk-1",
-      sdkType: "future_message",
-      sdkSubtype: "future_subtype",
-      payload: {
-        type: "future_message",
-        subtype: "future_subtype",
-        session_id: "sdk-1",
-        created_at: "1",
-        nested: { value: "kept" },
-      },
-      ...baseEnvelope,
-    })
-    expect((event as { payload: Record<string, unknown> }).payload.callback).toBeUndefined()
+      secret: "must-not-cross-boundary",
+    } as unknown as SDKMessage, baseEnvelope)).toEqual([])
   })
 
-  it("redacts sensitive fields from SDK bridge payloads", () => {
-    const event = bridgeSdkMessage({
-      type: "future_message",
-      subtype: "future_subtype",
-      session_id: "sdk-redacted",
-      apiKey: "sk-live",
-      nested: {
-        authorization: "Bearer sk-auth",
-        headers: {
-          cookie: "sid=secret-cookie",
-        },
-      },
-      tools: [
-        {
-          name: "Read",
-          credential: "private-credential",
-        },
-      ],
-    } as unknown as SDKMessage, baseEnvelope)
-
-    const payload = (event as { payload: Record<string, unknown> }).payload
-    expect(payload.apiKey).toBe("[redacted]")
-    expect(payload.nested).toMatchObject({
-      authorization: "[redacted]",
-      headers: { cookie: "[redacted]" },
-    })
-    expect(payload.tools).toMatchObject([{ name: "Read", credential: "[redacted]" }])
-    expect(JSON.stringify(payload)).not.toContain("sk-live")
-    expect(JSON.stringify(payload)).not.toContain("sk-auth")
-    expect(JSON.stringify(payload)).not.toContain("secret-cookie")
-    expect(JSON.stringify(payload)).not.toContain("private-credential")
+  it("drops thinking token telemetry before creating an Agent event", () => {
+    expect(bridgeSdkMessage({
+      type: "system",
+      subtype: "thinking_tokens",
+      session_id: "sdk-1",
+      token_count: 12_345,
+    } as unknown as SDKMessage, baseEnvelope)).toEqual([])
   })
 
-  it("drops query and fragment from SDK bridge payload URLs", () => {
-    const event = bridgeSdkMessage({
-      type: "future_message",
-      subtype: "future_subtype",
-      session_id: "sdk-url",
-      url: "https://api.example.test/v1/messages?token=sk-url#secret-fragment",
-      nested: {
-        request_url: "http://localhost:8787/callback?code=secret-code&state=secret-state",
-        note: "https://example.test/docs?keep=query",
-      },
-    } as unknown as SDKMessage, baseEnvelope)
-
-    const payload = (event as { payload: Record<string, unknown> }).payload
-    expect(payload.url).toBe("https://api.example.test/v1/messages")
-    expect(payload.nested).toMatchObject({
-      request_url: "http://localhost:8787/callback",
-      note: "https://example.test/docs?keep=query",
-    })
-    expect(JSON.stringify(payload)).not.toContain("sk-url")
-    expect(JSON.stringify(payload)).not.toContain("secret-fragment")
-    expect(JSON.stringify(payload)).not.toContain("secret-code")
-    expect(JSON.stringify(payload)).not.toContain("secret-state")
-  })
-
-  it("sanitizes diagnostic strings in unknown SDK event payloads", () => {
-    const event = bridgeSdkMessage({
-      type: "future_error",
-      subtype: "stderr",
-      session_id: "sdk-diagnostic",
-      message: "Authorization: Bearer sk-message failed at /Users/liyang/private/project/file.ts",
-      stderr: "token=sk-stderr C:\\Users\\liyang\\secret\\file.ts",
-      nested: {
-        details: "cookie=sid-secret",
-      },
-      content: "literal assistant content remains available",
-    } as unknown as SDKMessage, baseEnvelope)
-
-    const payload = (event as { payload: Record<string, unknown> }).payload
-    const serialized = JSON.stringify(payload)
-    expect(payload).toMatchObject({
-      message: expect.stringContaining("Bearer [redacted]"),
-      stderr: expect.stringContaining("token=[redacted]"),
-      nested: {
-        details: expect.stringContaining("cookie=[redacted]"),
-      },
-      content: "literal assistant content remains available",
-    })
-    expect(serialized).not.toContain("sk-message")
-    expect(serialized).not.toContain("sk-stderr")
-    expect(serialized).not.toContain("sid-secret")
-    expect(serialized).toContain("/Users/liyang/private")
-    expect(serialized).toContain("C:\\\\Users\\\\liyang")
-  })
-
-  it("sanitizes circular SDK payloads without dropping enumerable data", () => {
-    class Fixture {
-      readonly classField = "kept"
+  it("does not create Renderer events for a 50,000-message thinking telemetry burst", () => {
+    let emitted = 0
+    for (let index = 0; index < 50_000; index += 1) {
+      const bridged = bridgeSdkMessage({
+        type: "system",
+        subtype: "thinking_tokens",
+        token_count: index,
+      } as unknown as SDKMessage, baseEnvelope)
+      emitted += Array.isArray(bridged) ? bridged.length : 1
     }
-
-    const fixture = new Fixture()
-    const message = {
-      type: "future_message",
-      subtype: "future_subtype",
-      session_id: "sdk-cycle",
-      keep: "yes",
-      omit: undefined,
-      callback: () => "drop me",
-      symbolValue: Symbol("drop me"),
-      array: [undefined, 1n, fixture],
-      fixture,
-    } as Record<string, unknown>
-    message.self = message
-
-    const event = bridgeSdkMessage(message as unknown as SDKMessage, baseEnvelope)
-
-    expect(event).toMatchObject({
-      type: "sdkEvent",
-      sdkType: "future_message",
-      sdkSubtype: "future_subtype",
-      payload: {
-        type: "future_message",
-        subtype: "future_subtype",
-        session_id: "sdk-cycle",
-        keep: "yes",
-        self: "[Circular]",
-        array: [null, "1", { classField: "kept" }],
-        fixture: { classField: "kept" },
-      },
-      ...baseEnvelope,
-    })
-    const payload = (event as { payload: Record<string, unknown> }).payload
-    expect(payload.omit).toBeUndefined()
-    expect(payload.callback).toBeUndefined()
-    expect(payload.symbolValue).toBeUndefined()
+    expect(emitted).toBe(0)
   })
 })

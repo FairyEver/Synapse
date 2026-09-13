@@ -52,6 +52,13 @@ describe("model capability catalog", () => {
     })
   })
 
+  it("keeps qwen3.8-max at its one-million-token model limit", () => {
+    expect(matchModelCapability({
+      baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic",
+      modelId: "qwen3.8-max",
+    })?.contextWindowTokens).toBe(1_000_000)
+  })
+
   it.each([
     ["https://api.anthropic.com", "claude-sonnet-5", 1_000_000],
     ["https://generativelanguage.googleapis.com", "gemini-3.1-pro-preview", 1_048_576],

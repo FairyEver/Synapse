@@ -148,6 +148,9 @@ describe("initializeReadyApp", () => {
       state: { current: null },
       windowManager: mocks.windowManager,
       isAppQuitting: expect.any(Function),
+      onRendererUnavailable: expect.any(Function),
+      onRendererUnresponsive: expect.any(Function),
+      onRendererResponsive: expect.any(Function),
     })
     expect(mocks.editorInstallService.addPreparedSourceProvider).toHaveBeenCalledOnce()
     expect(mocks.registry.get).toHaveBeenCalledWith("core.synapse-skill")

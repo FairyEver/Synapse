@@ -7,6 +7,67 @@ import type { AgentArtifactEntry, DataNamespace } from "../../../runtime/data-re
 import { AgentArtifactStore } from "../artifact-store"
 
 describe("AgentArtifactStore", () => {
+  it("persists oversized text tool output as a private conversation artifact", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-tool-output-"))
+    try {
+      const namespace = new MemoryNamespace<AgentArtifactEntry>("agent.artifacts")
+      const store = new AgentArtifactStore({
+        rootDirectory: root,
+        artifacts: namespace,
+        now: () => new Date("2026-09-12T00:00:00.000Z"),
+        randomId: () => "tool_output_1",
+      })
+
+      const artifact = await store.persistToolOutputText({
+        projectId: "project_1",
+        conversationId: "conversation_1",
+        turnId: "turn_1",
+        toolUseId: "toolu_1",
+        toolName: "Read",
+        content: "完整工具结果",
+      })
+
+      expect(artifact).toEqual(expect.objectContaining({
+        id: "tool_output_1",
+        originalByteSize: Buffer.byteLength("完整工具结果"),
+        storedByteSize: Buffer.byteLength("完整工具结果"),
+        contentTruncated: false,
+      }))
+      expect(artifact?.storagePath).toContain(path.join("project_1", "conversation_1", "tool-output"))
+      expect(await readFile(artifact?.storagePath ?? "", "utf8")).toBe("完整工具结果")
+      expect(await namespace.list()).toEqual([expect.objectContaining({
+        schemaVersion: 3,
+        kind: "tool-output-text",
+        mimeType: "text/plain",
+        conversationId: "conversation_1",
+        turnId: "turn_1",
+      })])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("preserves oversized text in ordered files instead of discarding everything beyond 16 MiB", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-tool-output-parts-"))
+    try {
+      const namespace = new MemoryNamespace<AgentArtifactEntry>("agent.artifacts")
+      const store = new AgentArtifactStore({ rootDirectory: root, artifacts: namespace })
+      const content = "a".repeat(16 * 1024 * 1024 - 1) + "😀最后一段"
+      const index = await store.persistToolOutputText({
+        projectId: "p1", conversationId: "c1", turnId: "t1", content,
+      })
+      expect(index?.contentTruncated).toBe(false)
+      const listing = await readFile(index!.storagePath, "utf8")
+      const paths = listing.split("\n").slice(1).map((line) => JSON.parse(line) as string)
+      expect(paths).toHaveLength(2)
+      const parts = await Promise.all(paths.map((location) => readFile(location, "utf8")))
+      expect(parts.every((part) => Buffer.byteLength(part) <= 16 * 1024 * 1024)).toBe(true)
+      expect(parts.join("")).toBe(content)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("writes image bytes and stores metadata without base64", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-artifacts-"))
     try {

@@ -18,6 +18,7 @@ import { chatReducer, initialChatState } from "./use-chat-reducer"
 import type { ChatState } from "./use-chat-reducer"
 import { useChatConnection } from "./use-chat-connection"
 import type {
+  ChatConnectionResult,
   PermissionResponseTarget,
   SendMessageOptions,
   SendMessageTarget,
@@ -45,6 +46,7 @@ type UseAgentChatState = {
   loading: boolean
   sending: boolean
   sendingConversationIds: ReadonlySet<string>
+  activeTurnId?: string
   cancelPhase: ChatState["cancelPhase"]
   error: string | null
   currentConversationModel: string | undefined
@@ -64,6 +66,7 @@ type UseAgentChatState = {
   loadOlderTimeline: () => Promise<void>
   refreshPersonas: () => Promise<void>
   sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
+  steerMessage: ChatConnectionResult["steerMessage"]
   setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
   respondPermission: (
     target: PermissionResponseTarget,
@@ -100,6 +103,7 @@ function useAgentChat(
     selectedSessionKey,
     loading,
     sendingConversationIds,
+    activeTurnIdsByConversationId,
     cancelPhase,
     error,
     currentConversationModel,
@@ -176,6 +180,9 @@ function useAgentChat(
     loading,
     sending: selectedConversationId ? sendingConversationIds.has(selectedConversationId) : false,
     sendingConversationIds,
+    activeTurnId: selectedConversationId
+      ? activeTurnIdsByConversationId[selectedConversationId]
+      : undefined,
     cancelPhase,
     error,
     currentConversationModel,
@@ -188,6 +195,7 @@ function useAgentChat(
     loadOlderTimeline: connection.loadOlderTimeline,
     refreshPersonas: connection.refreshPersonas,
     sendMessage: connection.sendMessage,
+    steerMessage: connection.steerMessage,
     setPermissionMode: connection.setPermissionMode,
     respondPermission: connection.respondPermission,
     cancelTurn: connection.cancelTurn,

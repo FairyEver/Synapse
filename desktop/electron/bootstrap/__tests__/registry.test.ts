@@ -88,6 +88,8 @@ describe("buildServiceRegistry (T1.8)", () => {
       [
         "core.action-runtime",
         "agent.conversation-window-service",
+        "core.agent-conversation-control",
+        "core.agent-conversation-navigation",
         "core.agent-reference-actions",
         "core.audit-sink",
         "core.app-icon",
@@ -192,6 +194,17 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
     ])
+    expect(byId.get("core.agent-conversation-navigation")?.dependsOn).toEqual([
+      "core.data-repository",
+      "core.window-manager",
+    ])
+    expect(byId.get("core.agent-conversation-control")?.dependsOn).toEqual([
+      "core.config",
+      "core.data-repository",
+      "core.event-bus",
+      "core.project-containers",
+      "provider",
+    ])
     expect(byId.get("core.secrets")?.dependsOn).toEqual(["core.data-repository", "core.config"])
     expect(byId.get("provider")?.dependsOn).toEqual([
       "core.data-repository",
@@ -290,7 +303,10 @@ describe("buildServiceRegistry (T1.8)", () => {
       "knowledge-base.storage-migration-service",
     ])
     expect(byId.get("core.window-manager")?.dependsOn).toEqual([])
-    expect(byId.get("agent.conversation-window-service")?.dependsOn).toEqual(["core.window-manager"])
+    expect(byId.get("agent.conversation-window-service")?.dependsOn).toEqual([
+      "core.window-manager",
+      "core.project-containers",
+    ])
     expect(byId.get("core.event-bus")?.dependsOn).toEqual(["core.window-manager"])
     expect(byId.get("core.action-runtime")?.dependsOn).toEqual([
       "core.process-environment",
@@ -372,6 +388,8 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.problem-feedback",
       "core.json-repair",
       "core.text-extractor",
+      "core.agent-conversation-control",
+      "core.agent-conversation-navigation",
       "core.file-opener",
       "core.text-file-writer",
       "core.html-generator",

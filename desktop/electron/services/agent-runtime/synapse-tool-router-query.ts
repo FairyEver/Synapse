@@ -70,16 +70,6 @@ class ToolRouterFallbackError extends Error {
   }
 }
 
-class ExpectedMcpServerUnavailableError extends ToolRouterFallbackError {
-  constructor(
-    readonly expectedServerNames: readonly string[],
-    readonly serverStatuses: readonly McpServerStatus[],
-  ) {
-    super("expected-server-unavailable")
-    this.name = "ExpectedMcpServerUnavailableError"
-  }
-}
-
 export class SynapseToolRouterQuery implements QueryLike {
   private readonly query: Promise<Query>
   private failed = false
@@ -151,10 +141,10 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
     expectedServerNames,
   })
   try {
-    const resolved = await sdk.resolveSettings({
+    const resolved = await withDiscoveryDeadline(sdk.resolveSettings({
       cwd: input.router.cwd,
       settingSources: [...input.router.settingSources],
-    })
+    }))
     assertCompatibleSettings(resolved.effective as Record<string, unknown>)
     const discovery = sdk.query({
       prompt: pendingPrompt(),
@@ -162,18 +152,28 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
     })
     let statuses: McpServerStatus[]
     try {
-      await discovery.initializationResult()
-      statuses = await waitForMcpServerStatuses(discovery, expectedServerNames)
+      await withDiscoveryDeadline(discovery.initializationResult())
+      statuses = await waitForMcpServerStatuses(discovery)
     } finally {
-      await Promise.resolve(discovery.close())
+      await withDiscoveryDeadline(Promise.resolve(discovery.close()))
     }
-    assertExpectedMcpServersConnected(statuses, expectedServerNames)
+    if (hasUnavailableExpectedServers(statuses, expectedServerNames)) {
+      input.logger?.warn("Optional MCP servers unavailable; retaining the tool router.", {
+        boundary: "claude-sdk.synapse-tool-router.discovery",
+        reason: "expected-server-unavailable",
+        serverStatuses: summarizeMcpServerStatuses(statuses),
+      })
+    }
     input.logger?.info?.("MCP discovery completed for Synapse tool router.", {
       boundary: "claude-sdk.synapse-tool-router.discovery",
       expectedServerNames,
       serverStatuses: summarizeMcpServerStatuses(statuses),
     })
-    const mcpServers = rebuildMcpServers(statuses)
+    const mcpServers = rebuildMcpServers(statuses, (name, reason) => {
+      input.logger?.warn("Optional MCP configuration omitted from routed session.", {
+        boundary: "claude-sdk.synapse-tool-router.discovery", serverName: name, reason,
+      })
+    })
     mcpServers["synapse-tool-router"] = createSynapseToolRouterServer(sdk, input.router.executeTool)
     input.logger?.info?.("Rebuilt MCP configuration for Synapse tool router.", {
       boundary: "claude-sdk.synapse-tool-router.rebuild",
@@ -191,14 +191,16 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
   } catch (error) {
     const reason = fallbackReason(error)
     input.router.onFallback?.(reason)
-    input.logger?.warn("Synapse tool router unavailable; using the complete MCP configuration.", {
+    input.logger?.warn("Synapse tool router unavailable; using a minimal strict MCP configuration.", {
       boundary: "claude-sdk.synapse-tool-router.fallback",
       reason,
-      ...(error instanceof ExpectedMcpServerUnavailableError
-        ? { serverStatuses: summarizeMcpServerStatuses(error.serverStatuses) }
-        : {}),
     })
-    return sdk.query({ prompt: input.prompt, options: input.options as Options })
+    // Never restore ambient MCPs here: a permission/configuration failure must
+    // neither inflate context nor bypass rules referring to the original server.
+    return sdk.query({
+      prompt: input.prompt,
+      options: { ...input.options, strictMcpConfig: true, mcpServers: {} } as Options,
+    })
   }
 }
 
@@ -211,21 +213,31 @@ export async function createDirectValidatedQuery(
 
 async function waitForMcpServerStatuses(
   query: Pick<Query, "mcpServerStatus">,
-  expectedServerNames: readonly string[],
 ): Promise<McpServerStatus[]> {
   const deadline = Date.now() + MCP_DISCOVERY_PENDING_TIMEOUT_MS
-  let statuses = await query.mcpServerStatus()
+  let statuses = await withDiscoveryDeadline(query.mcpServerStatus())
   while (statuses.some((status) => status.status === "pending")) {
     if (Date.now() >= deadline) {
-      if (hasUnavailableExpectedServers(statuses, expectedServerNames)) {
-        throw new ExpectedMcpServerUnavailableError(expectedServerNames, statuses)
-      }
-      throw new ToolRouterFallbackError("discovery-failed")
+      return statuses
     }
     await new Promise((resolve) => setTimeout(resolve, MCP_DISCOVERY_POLL_INTERVAL_MS))
-    statuses = await query.mcpServerStatus()
+    statuses = await withDiscoveryDeadline(query.mcpServerStatus(), Math.max(1, deadline - Date.now()))
   }
   return statuses
+}
+
+async function withDiscoveryDeadline<T>(operation: Promise<T>, timeoutMs = MCP_DISCOVERY_PENDING_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new ToolRouterFallbackError("discovery-failed")), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 function configuredMcpServerNames(options: Record<string, unknown>): readonly string[] {
@@ -244,22 +256,16 @@ function hasUnavailableExpectedServers(
   })
 }
 
-function assertExpectedMcpServersConnected(
-  statuses: readonly McpServerStatus[],
-  expectedServerNames: readonly string[],
-): void {
-  if (hasUnavailableExpectedServers(statuses, expectedServerNames)) {
-    throw new ExpectedMcpServerUnavailableError(expectedServerNames, statuses)
-  }
-}
-
 function summarizeMcpServerStatuses(
   statuses: readonly McpServerStatus[],
 ): readonly { readonly name: string, readonly status: McpServerStatus["status"] }[] {
   return statuses.map((status) => ({ name: status.name, status: status.status }))
 }
 
-export function rebuildMcpServers(statuses: readonly McpServerStatus[]): Record<string, McpServerConfig> {
+export function rebuildMcpServers(
+  statuses: readonly McpServerStatus[],
+  onUnavailable?: (name: string, reason: SynapseToolRouterFallbackReason) => void,
+): Record<string, McpServerConfig> {
   const servers: Record<string, McpServerConfig> = {}
   const names = new Set<string>()
   for (const status of statuses) {
@@ -275,9 +281,15 @@ export function rebuildMcpServers(statuses: readonly McpServerStatus[]): Record<
       continue
     }
     if (status.status !== "connected") continue
-    if (!status.config) throw new ToolRouterFallbackError("missing-server-config")
+    if (!status.config) {
+      if (!onUnavailable) throw new ToolRouterFallbackError("missing-server-config")
+      onUnavailable(status.name, "missing-server-config")
+      continue
+    }
     if (status.config.type === "claudeai-proxy" || status.config.type === "sdk") {
-      throw new ToolRouterFallbackError("unsupported-server-config")
+      if (!onUnavailable) throw new ToolRouterFallbackError("unsupported-server-config")
+      onUnavailable(status.name, "unsupported-server-config")
+      continue
     }
     servers[status.name] = status.config
   }

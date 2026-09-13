@@ -1,5 +1,83 @@
 # Synapse App MCP API Reference
 
+## `app_agent_provider_list`
+
+- Input: `{ providerId?, query?, offset?, limit? }`. Exact provider ID filter; query searches provider/model names case-insensitively. Offset defaults to 0; limit defaults to 50, maximum 100.
+- Output: `{ providers: [{ providerId, name, models: [{ modelTier, modelName, displayName }] }], nextOffset }`. Only non-archived providers and selectable configured tiers are returned; a matching provider includes all selectable tiers. An unknown/archived provider returns an empty list. Local Claude Code default may have `modelName: null`. No credentials, environment, paths or connection settings are exposed.
+- Use the returned providerId/modelTier pair for custom creation. Follow nextOffset until null. Clarify ambiguous names rather than choosing arbitrarily.
+
+## `app_agent_group_list`
+
+- Input: `{ query?, offset?, limit? }`. `query` is a non-empty name substring (up to 256 characters), `offset` defaults to 0, and `limit` defaults to 50 and is at most 100.
+- Output: `{ groups: [{ projectId, name, isDefault }], nextOffset }`. `nextOffset: null` means the last page. Results include 本地对话 and configured projects; no paths, model credentials, history, or archived section are returned.
+
+## `app_agent_conversation_create`
+
+- Input: `{ projectId?, projectName?, sameGroupAs?, name?, providerId?, modelTier?, idempotencyKey }`. The key is a UUID. Name and exact project name are non-empty trimmed strings up to 256 characters. Unknown fields and multiple group selectors are rejected.
+- No selector defaults to 本地对话. `projectName` must match exactly one group. `sameGroupAs` accepts the same target forms as `open` below, including the complete unchanged `deepLink`; it only selects the source conversation's project.
+- Output: `{ created: true, projectId, providerId, modelTier, conversationRef, deepLink }`. Use these identifiers with `app_agent_message_send`, `app_agent_conversation_inspect`, or `app_agent_conversation_open`. Creation does not send a message or open the UI.
+- `providerId` and `modelTier` must be supplied together. Tier is `default | opus | sonnet | haiku`; discover valid pairs through `app_agent_provider_list`. Explicit missing, archived or unselectable choices fail with `model_unavailable` without fallback. When both are omitted, uses the current UI quick-create default model selection, configured default permission mode, ordinary agent identity, and local conversation source. Missing groups never fall back to 本地对话. The original conversation's content/configuration is not copied.
+- Duplicate unchanged requests from one client reuse the created result within the process-local bounded 10-minute cache. Changed input with the same key returns `idempotency_conflict`; restart or eviction ends deduplication.
+- Additional stable errors: `group_not_found`, `group_ambiguous`, `model_unavailable`, `project_unavailable`. Existing validation, permission, rate-limit, and operation errors also apply.
+
+## `app_agent_conversation_open`
+
+Open and focus an existing conversation in the local Synapse Agent interface.
+
+Target input uses exactly one form:
+
+- `{ deepLink }` for a complete user-supplied Agent link. Pass it unchanged; Synapse parses it.
+- `{ projectId, conversationRef }` for follow-up calls after a successful inspection.
+- Legacy `{ projectId, conversationId }` remains compatible.
+
+Mixing forms and unknown fields are rejected. Markdown escapes before `.`, `_`, and `-` inside the thread identifier are normalized by Synapse before strict format and checksum validation. Pass the original complete link unchanged. Generated links percent-encode these punctuation characters; plain links remain accepted.
+
+Output is exactly `{ opened: true }`. No title, session key, message, transcript, or other conversation content is returned. Agent conversation links use only `synapse://threads/<thread-id>`, with one short checksummed path identifier and no project query. Synapse resolves that identifier across local persisted projects; the former `synapse://app/agent/open` route is rejected.
+
+Stable failures are `invalid_input`, `invalid_link`, `invalid_locator`, `not_found`, and `open_failed`. `not_found` means the conversation was deleted or cannot be uniquely resolved in the receiving local Synapse data. This capability only navigates that Synapse installation and does not share or synchronize a conversation across devices.
+
+## `app_agent_conversation_inspect`
+
+- Input: one target form above plus `{ beforeIndex?, limit? }`; `limit` defaults to 50 and is at most 100. Use `{ deepLink, limit }` for the first read.
+- Returns source, `controllable`, a short stable `conversationRef`, revision, runtime state, pending requests, and one bounded visible timeline page. Use `{ projectId, conversationRef, beforeIndex }` to page backward.
+- Each item is at most 64 KiB and each page at most 1 MiB. Secrets, provider/SDK session identifiers, raw SDK payloads, Base64, and internal artifact URLs are removed or redacted.
+
+## `app_agent_conversation_observe`
+
+- Input: one target form above plus `{ afterRevision, maxWaitMs }`; prefer `projectId` and `conversationRef` returned by inspect. The wait is at most 30 seconds.
+- Returns `changed`, `revision`, `changeTypes`, `historyCount`, and runtime state without timeline bodies.
+- Lifecycle is `idle | queued | starting | running | awaiting_permission | stopping`; state includes the active `turnId` and bounded queued turns.
+
+## `app_agent_message_send`
+
+- Input: one target form above plus `{ content, idempotencyKey }`; content is non-empty and at most 64 KiB, and the key is a UUID.
+- Returns `{ accepted, turnId, disposition, queuePosition, revision }` immediately after admission, without waiting for completion.
+- Only `controllable: true` local user conversations accept control.
+
+## `app_agent_turn_steer`
+
+- Input: one target form above plus `{ expectedTurnId, clientMessageId, content }`; `clientMessageId` is a UUID.
+- Applies only to the exact active turn. Slash commands, changed turns, permission waits, cancellation, ended sessions, and unsupported sessions are rejected.
+
+## `app_agent_turn_stop`
+
+- Input: one target form above plus `{ expectedTurnId, idempotencyKey }`.
+- Requests graceful stop for the exact active turn and never automatically force-stops it.
+
+## `app_agent_turn_force_stop`
+
+- Input is the same as stop.
+- Force-terminates only the exact active turn and requires an explicit current user request to force stop.
+
+## `app_agent_permission_respond`
+
+- Common input: one target form above plus `{ expectedTurnId, requestId, idempotencyKey, kind, decision }`.
+- Tool permission: `kind: "tool_permission"`, exact `expectedToolName`, and `decision: "allow_once" | "allow_session" | "deny"`.
+- User question: `kind: "user_question"`, and either `decision: "skip"` or `decision: "answer"` with every answer as `{ questionIndex, values }`.
+- Project, conversation, active turn, pending request, kind, tool name, answer completeness, and option cardinality are checked.
+
+Control tools use stable errors including `invalid_input`, `invalid_link`, `invalid_locator`, `not_found`, `project_unavailable`, `control_not_supported`, `no_active_turn`, `turn_changed`, `permission_not_pending`, `permission_kind_mismatch`, `idempotency_conflict`, `watermark_ahead`, `quota_exceeded`, and `operation_failed`.
+
 ## `app_text_file_writer_file_write`
 
 Write one complete text value to a local text file.
@@ -202,3 +280,7 @@ Failure is marked `isError: true` and normalized to `{ ok: false, code, error, d
 - `SUBMISSION_OUTCOME_UNKNOWN`: no `data`; the report may have been submitted. Explain duplicate risk and do not retry without a new displayed draft and confirmation.
 
 Failures never expose the content, a snippet, length, HTTP status, service address, request identifier, retryability flag, wait time, or internal exception.
+
+### Automatic context maintenance
+
+Long-running Agent turns may compact or rotate their internal SDK session automatically. Continue observing the same conversation and turn; do not resend the task or replay tools to compensate for maintenance. Private checkpoints are not exposed through this API. Permission requests and actual terminal errors retain their existing handling.

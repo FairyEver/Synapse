@@ -276,3 +276,15 @@ export const DATA_REPO_ATOMIC_MAX_BYTES = 256 * 1024
 
 // DataRepository 索引范围查询最多返回 100 条正文描述符和 1 条下一页探测记录。
 export const DATA_REPO_RANGE_MAX_ROWS = 101
+
+// Agent V2 历史正文每块的 UTF-8 字节上限，控制持久化和回读时的活动正文工作集。
+export const AGENT_HISTORY_CHUNK_BYTES = 32 * 1024
+
+// Agent V2 历史描述符和索引单条记录最大序列化字节数，正文与大型元数据使用引用。
+export const AGENT_HISTORY_RECORD_BYTES = 8 * 1024
+
+// Agent V2 历史预览最多保留的 UTF-16 单元数，末尾不得拆开代理对。
+export const AGENT_HISTORY_PREVIEW_UNITS = 512
+
+// Agent V2 同会话追加遇到 CAS 竞争后的最大尝试次数，超限显式返回可重试错误。
+export const AGENT_HISTORY_APPEND_ATTEMPTS = 64

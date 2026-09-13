@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Check, ChevronDown, Clipboard, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -26,7 +26,7 @@ function AgentThinkingEvent({
   readonly item: SynapseAgentThinkingTimelineItem
   readonly profile: SynapseAgentDisplayProfile
 }) {
-  const redactedContent = redactSensitiveText(item.content)
+  const redactedContent = useMemo(() => redactSensitiveText(item.content), [item.content])
   const handleCopy = () => {
     track({
       component: "agent",

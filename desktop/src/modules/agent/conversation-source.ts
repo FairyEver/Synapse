@@ -1,5 +1,6 @@
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import type { SynapseAgentConversationSourceFilter } from "@/types/agent-navigation"
+import { agentConversationSourceForPlatform } from "../../../app-capabilities/agent/shared/source"
 
 type ConversationSourceFilter = SynapseAgentConversationSourceFilter
 
@@ -14,23 +15,10 @@ const CONVERSATION_SOURCE_OPTIONS: Array<{ value: ConversationSourceFilter; labe
   { value: "all", label: "全部" },
 ]
 
-function conversationSourceForPlatform(
-  platform: string | undefined,
-): Exclude<ConversationSourceFilter, "all"> {
-  const normalized = platform?.trim()
-  if (!normalized || normalized === "local" || normalized === "local-renderer") return "user"
-  if (normalized === "automation") return "automation"
-  if (normalized === "scheduled") return "scheduled"
-  if (normalized === "workflow") return "workflow"
-  if (normalized === "webhook") return "webhook"
-  if (normalized === "relay") return "relay"
-  return "bridge"
-}
-
 function conversationSourceForSession(
   session: Pick<SynapseAgentSessionSummary, "platform">,
 ): Exclude<ConversationSourceFilter, "all"> {
-  return conversationSourceForPlatform(session.platform)
+  return agentConversationSourceForPlatform(session.platform)
 }
 
 function filterSessionsBySource<T extends Pick<SynapseAgentSessionSummary, "platform">>(
@@ -43,7 +31,7 @@ function filterSessionsBySource<T extends Pick<SynapseAgentSessionSummary, "plat
 
 export {
   CONVERSATION_SOURCE_OPTIONS,
-  conversationSourceForPlatform,
+  agentConversationSourceForPlatform as conversationSourceForPlatform,
   conversationSourceForSession,
   filterSessionsBySource,
   type ConversationSourceFilter,

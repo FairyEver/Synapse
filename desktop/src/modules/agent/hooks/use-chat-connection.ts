@@ -12,6 +12,7 @@ import type {
   SynapseAgentPermissionScope,
   SynapseAgentSessionSummary,
   SynapseAgentSendResult,
+  SynapseAgentSteerResult,
   SynapseAgentTimelineItem,
   SynapseAgentTimelineResult,
 } from "@/types/agent"
@@ -40,6 +41,8 @@ type SendMessageTarget = TimelineTarget
 type SendMessageOptions = {
   readonly attachments?: readonly AgentDraftAttachment[]
 }
+
+type SteerMessageResult = SynapseAgentSteerResult["status"] | "failed"
 
 type PermissionResponseTarget = Pick<SynapseAgentPendingPermission, "projectId" | "requestId">
 
@@ -80,6 +83,13 @@ type ChatConnectionResult = {
   ) => Promise<SynapseAgentSessionSummary | undefined>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly sendMessage: (content: string, target?: SendMessageTarget, options?: SendMessageOptions) => Promise<boolean>
+  readonly steerMessage: (input: {
+    readonly content: string
+    readonly target: SendMessageTarget
+    readonly expectedTurnId: string
+    readonly clientMessageId: string
+    readonly clientSubmittedAt: string
+  }) => Promise<SteerMessageResult>
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly setPermissionMode: (mode: SynapseAgentPermissionMode, target?: AgentConversationTarget) => Promise<void>
@@ -710,7 +720,9 @@ function useChatConnection(
         attachments: serializeDraftAttachments(attachments),
         clientSubmittedAt: now,
       })
-      if (result?.error && !isAcceptedTerminalSendResult(result)) throw new Error(result.error)
+      if (result.outcome.status === "failed" && !isAcceptedTerminalSendResult(result)) {
+        throw new Error("发送失败")
+      }
       // NOTE: send() resolves when the message is enqueued, NOT when the turn
       // completes.  REMOVE_SENDING_CONVERSATION is handled by the terminal
       // phase event handler in use-chat-events (cancelled / completed / failed)
@@ -740,6 +752,39 @@ function useChatConnection(
     }
     return true
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef, selectedSessionKeyRef, state.sessions, state.timeline.length, updateTimeline])
+
+  const steerMessage = useCallback(async (input: {
+    readonly content: string
+    readonly target: SendMessageTarget
+    readonly expectedTurnId: string
+    readonly clientMessageId: string
+    readonly clientSubmittedAt: string
+  }): Promise<SteerMessageResult> => {
+    if (!input.target.conversationId) return "no-active-turn"
+    const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.message.steer" })
+    try {
+      const result = await requireSynapseBridge().agent.steer({
+        projectId: input.target.projectId,
+        conversationId: input.target.conversationId,
+        expectedTurnId: input.expectedTurnId,
+        clientMessageId: input.clientMessageId,
+        content: input.content,
+        clientSubmittedAt: input.clientSubmittedAt,
+      })
+      finishTracking(result.status === "accepted" ? "success" : "failure")
+      return result.status
+    } catch (rawError) {
+      finishTracking("failure")
+      logger.error("Agent steer failed.", {
+        projectId: input.target.projectId,
+        conversationId: input.target.conversationId,
+        boundary: "renderer.agent.steer",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      return "failed"
+    }
+  }, [])
 
   const deleteSession = useCallback(async (target: SynapseAgentSessionSummary) => {
     const finishTracking = startTrackedOperation({ component: "agent", eventKey: "agent.session.delete" })
@@ -1064,6 +1109,7 @@ function useChatConnection(
     createSession,
     selectSession,
     sendMessage,
+    steerMessage,
     deleteSession,
     renameSession,
     setPermissionMode,
@@ -1080,6 +1126,7 @@ export type {
   PermissionResponseTarget,
   SendMessageOptions,
   SendMessageTarget,
+  SteerMessageResult,
   TimelineTarget,
   TimelineLoadMode,
 }
@@ -1320,15 +1367,12 @@ function sendFailureDisplayMessage(error: unknown): string {
 }
 
 function isCancelledSendResult(result: SynapseAgentSendResult): boolean {
-  return result.events.some((event) => event.type === "result" && (
-    event.metadata?.cancelled === true
-    || event.metadata?.turnOutcome?.status === "cancelled"
-  ))
+  return result.outcome.status === "cancelled"
 }
 
 function isAcceptedTerminalSendResult(result: SynapseAgentSendResult): boolean {
   return isCancelledSendResult(result)
-    || result.events.some((event) => event.type === "error" && event.recoverable === true)
+    || (result.outcome.status === "interrupted" && result.outcome.recoverable === true)
 }
 
 function isAttachmentFailureMessage(message: string): boolean {

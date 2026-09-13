@@ -110,6 +110,8 @@ export function guardedLog(logger, level, msg, meta?) {
 - 日志 tag：`diagnostics.performance`
 - 记录：duration、startTime、attribution
 - 内存采样：每 60 秒读 `performance.memory`，仅 `usedJSHeapSize / jsHeapSizeLimit > 0.85` 时记录 `WARN`
+- Renderer 启动时包装 `performance.measure`，在调用浏览器原生实现前移除可选 `detail`。React 开发诊断可能把大型组件 props 放入该字段；必须主动阻止 Chromium 结构化克隆，不能等原生序列化失败后再捕获 JS 异常。
+- 已识别的 React Components/Scheduler measure 使用独立 `synapse.react:` 名称，最多保留 256 条，卸载时释放；不清空业务 measure、mark 或 longtask 记录。标签识别须在 React 升级时复查；这个局部上限不代表整个应用内存有界，详见 `2026-09-13-agent-long-running-capacity-design.md`。
 
 ### heartbeat-responder
 
@@ -155,3 +157,9 @@ rendererHealthService.attach(win.webContents)
 ## 配置
 
 不做运行时配置开关，所有模块默认启用。未来需要按环境关闭再加 feature flag。
+# 2026-09-12 补充：Agent 事件洪峰
+
+- Agent SDK 高频消息必须在主进程分类和聚合，不得依赖 Renderer 收到后再忽略。
+- Renderer long task 诊断按 10 秒窗口汇总数量、累计时长和最大时长，禁止逐条回传形成诊断反馈洪峰。
+- `render-process-gone` 与持续 5 秒的 `unresponsive` 会触发窗口级 Agent 止损和轻量恢复入口；详细边界见 `2026-09-12-agent-renderer-capacity-and-recovery-design.md`。
+- `render-process-gone` 只记录并调度恢复；任何 `loadURL`、`reload` 或恢复回调必须等事件处理栈退出后执行，避免 Chromium 在 RenderProcessHost 清理过程中再次进入导航路径。

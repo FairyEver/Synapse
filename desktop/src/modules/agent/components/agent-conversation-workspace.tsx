@@ -36,7 +36,9 @@ import {
   enqueuePendingMessage,
   firstQueuedMessageForIdleTarget,
   markPendingMessageFailed,
+  markPendingMessageQueued,
   markPendingMessageSending,
+  markPendingMessageSteering,
   MAX_PENDING_QUEUE_SIZE,
   pendingMessagesForTarget,
   removePendingMessage,
@@ -89,6 +91,7 @@ export type AgentConversationWorkspaceController = {
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly sending: boolean
   readonly sendingConversationIds: ReadonlySet<string>
+  readonly activeTurnId?: string
   readonly cancelPhase: "idle" | "cancel_pending" | "cancelled"
   readonly error: string | null
   readonly sendMessage: (
@@ -96,6 +99,13 @@ export type AgentConversationWorkspaceController = {
     target?: AgentConversationTarget,
     options?: SendMessageOptions,
   ) => Promise<boolean>
+  readonly steerMessage: (input: {
+    readonly content: string
+    readonly target: AgentConversationTarget
+    readonly expectedTurnId: string
+    readonly clientMessageId: string
+    readonly clientSubmittedAt: string
+  }) => Promise<"accepted" | "no-active-turn" | "turn-changed" | "permission-pending" | "cancel-pending" | "session-ended" | "unsupported" | "failed">
   readonly createSession: (
     projectId: string,
     providerId?: string,
@@ -290,6 +300,7 @@ function AgentConversationWorkspace({
   }, [target.conversationId, target.projectId])
 
   useEffect(() => {
+    if (session.contextRecovery) return
     const next = firstQueuedMessageForIdleTarget(pendingMessages, chat.sendingConversationIds)
     if (!next) return
     const sendingMessage = markPendingMessageSending(next)
@@ -302,7 +313,7 @@ function AgentConversationWorkspace({
         ? removePendingMessage(current, sendingMessage.id)
         : replacePendingMessage(current, markPendingMessageFailed(sendingMessage, "发送失败")))
     })
-  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages, recordRecentSlashSkill])
+  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages, recordRecentSlashSkill, session.contextRecovery])
 
   const queueMessage = (
     content: string,
@@ -391,6 +402,42 @@ function AgentConversationWorkspace({
   const handleRetryPendingMessage = (id: string) => {
     setPendingMessages((current) => current.map((message) =>
       message.id === id ? enqueuePendingMessage(message) : message))
+  }
+
+  const handleSteerPendingMessage = (id: string) => {
+    const message = pendingMessages.find((item) => item.id === id)
+    const expectedTurnId = chat.activeTurnId
+    if (!message || !expectedTurnId || message.status === "steering") return
+    setPendingMessages((current) => replacePendingMessage(current, markPendingMessageSteering(message)))
+    void chat.steerMessage({
+      content: message.content,
+      target: message.target,
+      expectedTurnId,
+      clientMessageId: message.id,
+      clientSubmittedAt: message.createdAt,
+    }).then((status) => {
+      if (status === "accepted") {
+        setPendingMessages((current) => removePendingMessage(current, message.id))
+        toast("已引导当前任务")
+        return
+      }
+      const error = status === "failed" ? "引导失败，请重试" : undefined
+      setPendingMessages((current) => replacePendingMessage(
+        current,
+        markPendingMessageQueued(message, error),
+      ))
+      if (status === "no-active-turn" || status === "turn-changed" || status === "session-ended") {
+        toast("当前任务已结束，消息将按队列发送")
+      } else if (status === "permission-pending") {
+        toast("请先处理权限请求")
+      } else if (status === "cancel-pending") {
+        toast("当前任务正在停止")
+      } else if (status === "unsupported") {
+        toast("当前任务不支持引导")
+      } else {
+        toast("引导失败，请重试")
+      }
+    })
   }
 
   const handleCopyTranscript = async () => {
@@ -569,6 +616,37 @@ function AgentConversationWorkspace({
     setCreateMode(nextMode)
     setCreateInitialName(formatCreateSessionName(new Date()))
     setCreateDialogOpen(true)
+  }
+
+  const prepareContextRecovery = async (): Promise<void> => {
+    const recovery = session.contextRecovery
+    const bridge = getSynapseBridge()?.agent
+    if (!bridge || recovery?.status !== "required") return
+    try {
+      await bridge.prepareContextRecovery({
+        projectId: target.projectId,
+        conversationId: target.conversationId,
+        failedTurnId: recovery.failedTurnId,
+      })
+    } finally {
+      await chat.refresh()
+    }
+  }
+
+  const continueContextRecovery = async (): Promise<void> => {
+    const recovery = session.contextRecovery
+    const bridge = getSynapseBridge()?.agent
+    if (!bridge || recovery?.status !== "prepared") return
+    stick.forcePin()
+    try {
+      await bridge.continueContextRecovery({
+        projectId: target.projectId,
+        conversationId: target.conversationId,
+        failedTurnId: recovery.failedTurnId,
+      })
+    } finally {
+      await chat.refresh()
+    }
   }
 
   const workspacePanels = useMemo(() => [{
@@ -756,10 +834,16 @@ function AgentConversationWorkspace({
         onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
           chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
         onContinue={() => void submitContent("继续", { preserveDraft: true })}
+        contextRecovery={session.contextRecovery}
+        onPrepareContextRecovery={prepareContextRecovery}
+        onContinueContextRecovery={continueContextRecovery}
+        onCreateConversation={() => openCreateDialog()}
         viewportRef={stick.viewportRef}
         loadingOlder={chat.loadingOlder}
         historyError={chat.timelineHistoryError}
         onRetryHistory={() => void chat.loadOlderTimeline()}
+        projectId={target.projectId}
+        conversationId={target.conversationId}
       />
 
       <AgentComposer
@@ -804,6 +888,11 @@ function AgentConversationWorkspace({
         onStartNewConversation={() => openCreateDialog()}
         onJumpToBottom={() => stick.scrollToBottom({ behavior: "smooth" })}
         pendingMessages={selectedPendingMessages}
+        activeTurnId={chat.activeTurnId}
+        steerBlockedReason={currentPendingPermissions.length > 0
+          ? "请先处理权限请求"
+          : chat.cancelPhase !== "idle" ? "当前任务正在停止" : undefined}
+        onSteerPendingMessage={handleSteerPendingMessage}
         onRemovePendingMessage={handleRemovePendingMessage}
         onRetryPendingMessage={handleRetryPendingMessage}
       />

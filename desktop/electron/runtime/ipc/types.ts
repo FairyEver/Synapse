@@ -53,6 +53,8 @@ export interface IpcMethodDescriptor<Req = unknown, Res = unknown> {
   readonly operationId: IpcOperationId
   readonly request: ZodSchema<Req>
   readonly response?: ZodSchema<Res>
+  /** Hard serialized response cap for Renderer-facing payloads. */
+  readonly maxResponseBytes?: number
   /** Server-side handler. The runtime validates request before dispatch. */
   handler(ctx: IpcHandlerContext, request: Req): Promise<Res> | Res
 }

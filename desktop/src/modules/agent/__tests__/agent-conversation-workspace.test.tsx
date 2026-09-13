@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   }>,
   composerProps: [] as Array<{
     readonly draft: string
+    readonly pendingMessages?: readonly { readonly id: string; readonly content: string; readonly status: string }[]
+    readonly onSteerPendingMessage?: (id: string) => void
     readonly onDraftChange: (value: string) => void
     readonly onSubmit: (
       event: { preventDefault: () => void },
@@ -58,6 +60,8 @@ vi.mock("../components/agent-composer", () => ({
     readonly onStartNewConversation?: () => void
     readonly disabled?: boolean
     readonly quickInputs?: readonly { readonly content: string }[]
+    readonly pendingMessages?: readonly { readonly id: string; readonly content: string; readonly status: string }[]
+    readonly onSteerPendingMessage?: (id: string) => void
     readonly onDraftChange: (value: string) => void
     readonly onSubmit: (
       event: { preventDefault: () => void },
@@ -197,6 +201,46 @@ describe("AgentConversationWorkspace", () => {
     })
 
     expect(mocks.composerProps.at(-1)?.draft).toBe("尚未发送的草稿")
+  })
+
+  it("removes an accepted steer from the pending queue", async () => {
+    const steerMessage = vi.fn(async () => "accepted" as const)
+    renderWorkspace({
+      mode: "embedded",
+      chat: createController({
+        sending: true,
+        sendingConversationIds: new Set(["conversation-1"]),
+        activeTurnId: "turn-1",
+        steerMessage,
+      }),
+    })
+
+    await act(async () => {
+      mocks.composerProps.at(-1)?.onDraftChange("调整当前方向")
+    })
+    await act(async () => {
+      mocks.composerProps.at(-1)?.onSubmit(
+        { preventDefault: vi.fn() },
+        [],
+        () => () => undefined,
+      )
+      await Promise.resolve()
+    })
+
+    const pending = mocks.composerProps.at(-1)?.pendingMessages?.[0]
+    expect(pending?.content).toBe("调整当前方向")
+
+    await act(async () => {
+      mocks.composerProps.at(-1)?.onSteerPendingMessage?.(pending!.id)
+      await Promise.resolve()
+    })
+
+    expect(steerMessage).toHaveBeenCalledWith(expect.objectContaining({
+      content: "调整当前方向",
+      expectedTurnId: "turn-1",
+      clientMessageId: pending?.id,
+    }))
+    expect(mocks.composerProps.at(-1)?.pendingMessages).toEqual([])
   })
 
   it("injects the same reference actions into the shared main and detached timeline path", () => {
@@ -676,6 +720,7 @@ function createController(
     cancelPhase: "idle",
     error: null,
     sendMessage: vi.fn(async () => true),
+    steerMessage: vi.fn(async () => "accepted" as const),
     createSession: vi.fn(async () => undefined),
     setPermissionMode: vi.fn(async () => undefined),
     respondPermission: vi.fn(async () => undefined),

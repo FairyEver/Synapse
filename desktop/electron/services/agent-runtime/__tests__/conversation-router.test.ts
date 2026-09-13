@@ -55,6 +55,521 @@ describe("ConversationRouter", () => {
     expect(source).not.toContain(".catch(() => {})")
   })
 
+  it("checkpoints and rotates repeatedly in one turn without replaying the user request or exposing private handoffs", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-context-rotation-"))
+    try {
+      const artifacts = new MemoryNamespace<AgentArtifactEntry>("agent.artifacts")
+      const store = new AgentArtifactStore({ rootDirectory: root, artifacts })
+      const makeRotating = (id: string) => Object.assign(new ScriptedSession([
+        { type: "assistant", content: "已完成阶段工作", message: { role: "assistant", content: [{ type: "text", text: "已完成阶段工作" }] } },
+        { type: "toolResult", toolName: "Bash", toolUseId: id, content: "operation completed", success: true },
+        { type: "sdkEvent", sdkType: "contextRotationRequested", payload: {} },
+      ], id), {
+        contextRotation: () => ({
+          reason: "request-budget" as const, summary: "部署已完成，检查测试结果，不得重新部署。",
+          completedBatches: 5, lastToolBatch: [],
+        }),
+      })
+      const first = makeRotating("sdk-first")
+      const second = makeRotating("sdk-second")
+      const last = new ScriptedSession([{ type: "result", content: "all checks passed", done: true }], "sdk-last")
+      const { router, conversations, factoryCalls } = createRouter({ sessions: [first, second, last], agentArtifactStore: store })
+      const result = await router.send(baseMessage("执行部署并完整验证"))
+      expect(result.error).toBeUndefined()
+      expect(result.resultText).toBe("all checks passed")
+      expect(first.isClosed).toBe(true)
+      expect(second.isClosed).toBe(true)
+      expect(factoryCalls).toHaveLength(3)
+      expect(factoryCalls.every((call) => call.sdkSessionId === undefined)).toBe(true)
+      expect(first.sent).toEqual(["执行部署并完整验证"])
+      expect(last.sent[0]).toContain("不得重新部署")
+      expect(Buffer.byteLength(last.sent[0]!, "utf8")).toBeLessThanOrEqual(32 * 1024)
+      const saved = await conversations.get(result.conversationId)
+      expect(saved?.history.filter((entry) => entry.role === "user")).toHaveLength(1)
+      expect(saved?.contextRecovery).toBeUndefined()
+      expect(saved?.history.some((entry) => entry.role === "assistant" && entry.content === "all checks passed")).toBe(true)
+      expect(JSON.stringify(result.events)).not.toContain("contextRotationRequested")
+      expect(JSON.stringify(saved?.history)).not.toContain(root)
+      const rows = await artifacts.list()
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.every((row) => row.kind === "tool-output-text")).toBe(true)
+      const texts = await Promise.all(rows.map((row) => readFile(row.storagePath!, "utf8")))
+      expect(texts.join("\n")).toContain("operation completed")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it("stops repeated rotation with no tool progress instead of entering an infinite restart loop", async () => {
+    const create = () => Object.assign(new ScriptedSession([
+      { type: "sdkEvent", sdkType: "contextRotationRequested", payload: {} },
+    ]), {
+      contextRotation: () => ({ reason: "request-budget" as const, summary: "", completedBatches: 0, lastToolBatch: [] }),
+    })
+    const first = create()
+    const second = create()
+    const store = { persistToolOutputText: vi.fn(async ({ content }: { content: string }) => ({
+      id: "part", storagePath: "/private/part", originalByteSize: content.length, storedByteSize: content.length, contentTruncated: false,
+    })) } as unknown as AgentArtifactStore
+    const { router, factoryCalls } = createRouter({ sessions: [first, second], agentArtifactStore: store })
+    const result = await router.send(baseMessage("continue"))
+    expect(result.error).toContain("固定上下文")
+    expect(factoryCalls).toHaveLength(2)
+    expect(first.isClosed).toBe(true)
+    expect(second.isClosed).toBe(true)
+  })
+
+  it("cancels during checkpoint persistence without spawning a replacement session", async () => {
+    const session = Object.assign(new ScriptedSession([
+      { type: "sdkEvent", sdkType: "contextRotationRequested", payload: {} },
+    ]), {
+      contextRotation: () => ({ reason: "request-budget" as const, summary: "progress", completedBatches: 1, lastToolBatch: [] }),
+    })
+    const controller = new AbortController()
+    const store = { persistToolOutputText: vi.fn(async ({ content }: { content: string }) => {
+      controller.abort()
+      return { id: "part", storagePath: "/private/part", originalByteSize: content.length, storedByteSize: content.length, contentTruncated: false }
+    }) } as unknown as AgentArtifactStore
+    const { router, factoryCalls } = createRouter({ session, agentArtifactStore: store })
+    const result = await router.send(baseMessage("continue"), { abortSignal: controller.signal })
+    expect(result.error).toBeDefined()
+    expect(factoryCalls).toHaveLength(1)
+    expect(session.isClosed).toBe(true)
+  })
+
+  it("does not start a clean session when checkpoint persistence fails", async () => {
+    const session = Object.assign(new ScriptedSession([
+      { type: "sdkEvent", sdkType: "contextRotationRequested", payload: {} },
+    ]), {
+      contextRotation: () => ({ reason: "request-budget" as const, summary: "progress", completedBatches: 1, lastToolBatch: [] }),
+    })
+    const store = { persistToolOutputText: vi.fn(async () => { throw new Error("disk failure") }) } as unknown as AgentArtifactStore
+    const { router, factoryCalls } = createRouter({ session, agentArtifactStore: store })
+    const result = await router.send(baseMessage("continue"))
+    expect(result.error).toContain("无法保存或恢复上下文")
+    expect(factoryCalls).toHaveLength(1)
+    expect(session.isClosed).toBe(true)
+  })
+
+  it("retires the Bailian SDK session and records local recovery after the 6 MiB terminal error", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({
+      platform: "local-renderer",
+      providerId: "bailian",
+      sdkSessionId: "sdk-old",
+      agentSessionId: "sdk-old",
+    })
+    await conversations.upsert(existing)
+    const session = new ScriptedSession([{
+      type: "error",
+      message: "当前对话内容较多，暂时无法继续。",
+      errorKind: "request_body_too_large",
+      recoverable: true,
+      sdkSessionId: "sdk-old",
+    }], "sdk-old")
+    const { router } = createRouter({
+      conversations,
+      activeProviderId: "bailian",
+      env: {
+        ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
+        ANTHROPIC_MODEL: "qwen3.8-max",
+      },
+      session,
+    })
+
+    await router.sendToConversation({ ...baseMessage("继续分析"), platform: "local-renderer" }, existing.id, {
+      turnId: "turn-overflow",
+    })
+
+    const saved = await conversations.get(existing.id)
+    expect(session.isClosed).toBe(true)
+    expect(saved).toMatchObject({
+      sdkSessionId: undefined,
+      agentSessionId: undefined,
+      pastAgentSessionIds: ["sdk-old"],
+      contextRecovery: {
+        status: "required",
+        reason: "request_body_too_large",
+        failedTurnId: "turn-overflow",
+      },
+    })
+  })
+
+  it("retires the SDK session and records recovery after rapid context refill", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({
+      platform: "local-renderer",
+      providerId: "anthropic",
+      sdkSessionId: "sdk-refill",
+      agentSessionId: "sdk-refill",
+    })
+    await conversations.upsert(existing)
+    const session = new ScriptedSession([{
+      type: "error",
+      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
+      errorKind: "context_refill_thrashing",
+      recoverable: true,
+      sdkSessionId: "sdk-refill",
+    }], "sdk-refill")
+    const { router } = createRouter({ conversations, session })
+
+    await router.sendToConversation({ ...baseMessage("继续分析"), platform: "local-renderer" }, existing.id, {
+      turnId: "turn-refill",
+    })
+
+    const saved = await conversations.get(existing.id)
+    expect(session.isClosed).toBe(true)
+    expect(saved).toMatchObject({
+      sdkSessionId: undefined,
+      agentSessionId: undefined,
+      contextRecovery: {
+        status: "required",
+        reason: "context_refill_thrashing",
+        failedTurnId: "turn-refill",
+      },
+    })
+  })
+
+  it("injects recovery handoff only into the new SDK request after persisting the visible message", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({
+      platform: "local-renderer",
+      providerId: "bailian",
+      history: [
+        { role: "assistant", content: "已完成前置检查", timestamp: "2026-04-26T00:00:00.000Z" },
+        { role: "user", content: "修复剩余问题", timestamp: "2026-04-26T00:00:00.000Z" },
+        {
+          role: "tool",
+          content: "Bash\nsecret tool body",
+          timestamp: "2026-04-26T00:00:00.000Z",
+          metadata: { toolName: "Bash", status: "completed" },
+        },
+      ],
+      contextRecovery: {
+        status: "prepared",
+        reason: "request_body_too_large",
+        failedTurnId: "turn-overflow",
+        createdAt: "2026-04-26T00:00:00.000Z",
+        preparedAt: "2026-04-26T00:00:00.000Z",
+      },
+    })
+    await conversations.upsert(existing)
+    const session = new ScriptedSession([
+      { type: "result", content: "done", done: true, sdkSessionId: "sdk-new" },
+    ], "sdk-new")
+    const { router } = createRouter({
+      conversations,
+      activeProviderId: "bailian",
+      env: {
+        ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
+        ANTHROPIC_MODEL: "qwen3.8-max",
+      },
+      session,
+    })
+
+    await router.sendToConversation({
+      ...baseMessage("继续上一个任务"),
+      displayContent: "继续上一个任务",
+      platform: "local-renderer",
+      contextRecoveryTurnId: "turn-overflow",
+    }, existing.id)
+
+    const saved = await conversations.get(existing.id)
+    expect(session.sent[0]).toContain("<synapse_context_recovery>")
+    expect(session.sent[0]).toContain("修复剩余问题")
+    expect(session.sent[0]).toContain("Bash: completed")
+    expect(session.sent[0]).not.toContain("secret tool body")
+    expect(saved?.history.at(-2)).toMatchObject({ role: "user", content: "继续上一个任务" })
+    expect(JSON.stringify(saved?.history)).not.toContain("synapse_context_recovery")
+    expect(saved?.contextRecovery).toBeUndefined()
+  })
+
+  it("pauses queued turns after overflow and resumes them on a fresh-session user message", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({ platform: "local-renderer", providerId: "bailian" })
+    await conversations.upsert(existing)
+    const overflowing = new ControllableSteerSession("sdk-old")
+    const fresh = new ScriptedSession([
+      { type: "result", content: "new task done", done: true, sdkSessionId: "sdk-new" },
+      { type: "result", content: "queued task done", done: true, sdkSessionId: "sdk-new" },
+    ], "sdk-new")
+    const { router, factoryCalls } = createRouter({
+      conversations,
+      activeProviderId: "bailian",
+      env: {
+        ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
+        ANTHROPIC_MODEL: "qwen3.8-max",
+      },
+      sessions: [overflowing, fresh],
+    })
+
+    const first = router.sendToConversation(
+      { ...baseMessage("first"), platform: "local-renderer" },
+      existing.id,
+      { turnId: "turn-overflow" },
+    )
+    await waitFor(() => overflowing.sent.length === 1)
+    let queuedResolved = false
+    const queued = router.sendToConversation(
+      { ...baseMessage("queued"), platform: "local-renderer" },
+      existing.id,
+    ).then((result) => {
+      queuedResolved = true
+      return result
+    })
+    overflowing.push({
+      type: "error",
+      message: "当前对话内容较多，暂时无法继续。",
+      errorKind: "request_body_too_large",
+      recoverable: true,
+      sdkSessionId: "sdk-old",
+    })
+    await first
+    await flushAsync()
+
+    expect(queuedResolved).toBe(false)
+    expect(factoryCalls).toHaveLength(1)
+
+    const freshTask = router.sendToConversation(
+      { ...baseMessage("fresh task"), platform: "local-renderer" },
+      existing.id,
+    )
+    await Promise.all([freshTask, queued])
+
+    expect(fresh.sent).toEqual(["fresh task", "queued"])
+    expect(factoryCalls).toHaveLength(2)
+    expect((await conversations.get(existing.id))?.contextRecovery).toBeUndefined()
+  })
+
+  it("admits turns without waiting for completion and reports queue position", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation()
+    await conversations.upsert(existing)
+    const session = new ControllableSteerSession("sdk-submit")
+    const { router } = createRouter({ conversations, session })
+
+    await expect(router.submitToConversation(
+      baseMessage("first"),
+      existing.id,
+      { turnId: "turn-first" },
+    )).resolves.toMatchObject({
+      accepted: true,
+      turnId: "turn-first",
+      disposition: "started",
+      queuePosition: 0,
+    })
+    await waitFor(() => session.sent.length === 1)
+    await expect(router.submitToConversation(
+      baseMessage("second"),
+      existing.id,
+      { turnId: "turn-second" },
+    )).resolves.toMatchObject({
+      accepted: true,
+      turnId: "turn-second",
+      disposition: "queued",
+      queuePosition: 1,
+    })
+
+    session.push({ type: "result", content: "first done", done: true, sdkSessionId: "sdk-submit" })
+    await waitFor(() => session.sent.length === 2)
+    const completed = new Promise<void>((resolve) => {
+      const unsubscribe = conversations.onChange((change) => {
+        if (!change.value?.history.some((entry) => entry.content === "second done")) return
+        unsubscribe()
+        resolve()
+      })
+    })
+    session.push({ type: "result", content: "second done", done: true, sdkSessionId: "sdk-submit" })
+    await completed
+    expect((await conversations.get(existing.id))?.history.some((entry) => entry.content === "second done")).toBe(true)
+  })
+
+  it("steers the active turn once and keeps consuming a queued SDK turn", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const existing = conversation()
+    await conversations.upsert(existing)
+    const session = new ControllableSteerSession("sdk-steer")
+    const { router } = createRouter({ conversations, agentUsage, session })
+
+    const turn = router.sendToConversation(baseMessage("开始处理"), existing.id, { turnId: "turn-steer" })
+    await waitFor(() => session.sent.length === 1)
+
+    const steerInput = {
+      conversationId: existing.id,
+      expectedTurnId: "turn-steer",
+      clientMessageId: "client-steer-1",
+      content: "先修复测试，再继续实现",
+      submittedAt: "2026-04-26T00:00:01.000Z",
+    }
+    const [firstSteer, duplicateSteer] = await Promise.all([
+      router.steer(steerInput),
+      router.steer(steerInput),
+    ])
+
+    expect(firstSteer.status).toBe("accepted")
+    expect(duplicateSteer.status).toBe("accepted")
+    expect(session.steered).toEqual([steerInput.content])
+
+    session.push({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "第一阶段" }] },
+      content: "第一阶段",
+      sdkSessionId: "sdk-steer",
+    })
+    session.push({
+      type: "result",
+      content: "第一阶段",
+      done: true,
+      queuedTurnCount: 1,
+      userMessageUuid: "user-initial",
+      sdkSessionId: "sdk-steer",
+    })
+    session.push({
+      type: "sdkEvent",
+      sdkType: "userMessageReplay",
+      payload: {
+        content: steerInput.content,
+        timestamp: steerInput.submittedAt,
+        uuid: "user-steer",
+      },
+      sdkSessionId: "sdk-steer",
+    })
+    session.push({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "已按引导完成" }] },
+      content: "已按引导完成",
+      sdkSessionId: "sdk-steer",
+    })
+    session.push({
+      type: "result",
+      content: "已按引导完成",
+      done: true,
+      queuedTurnCount: 0,
+      userMessageUuid: "user-steer",
+      usage: { input_tokens: 8, output_tokens: 5 },
+      sdkResultUuid: "result-final",
+      sdkSessionId: "sdk-steer",
+    })
+
+    await expect(turn).resolves.toMatchObject({
+      resultText: "已按引导完成",
+      events: [
+        expect.objectContaining({ type: "assistant", content: "已按引导完成" }),
+        expect.objectContaining({ type: "result", sdkResultUuid: "result-final" }),
+      ],
+    })
+    const saved = await conversations.get(existing.id)
+    expect(saved?.history.filter((entry) => entry.metadata?.messageKind === "steer")).toEqual([
+      expect.objectContaining({
+        role: "user",
+        content: steerInput.content,
+        metadata: expect.objectContaining({
+          clientMessageId: steerInput.clientMessageId,
+          turnId: steerInput.expectedTurnId,
+        }),
+      }),
+    ])
+    expect(await agentUsage.list()).toHaveLength(1)
+  })
+
+  it("completes an absorbed steer without waiting for a replay event", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation()
+    await conversations.upsert(existing)
+    const session = new ControllableSteerSession("sdk-steer")
+    const { router } = createRouter({ conversations, session })
+
+    const turn = router.sendToConversation(baseMessage("开始处理"), existing.id, { turnId: "turn-steer" })
+    await waitFor(() => session.sent.length === 1)
+
+    await expect(router.steer({
+      conversationId: existing.id,
+      expectedTurnId: "turn-steer",
+      clientMessageId: "client-steer-absorbed",
+      content: "立即结束，不再调用工具",
+      submittedAt: "2026-09-12T09:54:51.057Z",
+    })).resolves.toMatchObject({ status: "accepted" })
+
+    session.push({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "STEER_ACCEPTED" }] },
+      content: "STEER_ACCEPTED",
+      sdkSessionId: "sdk-steer",
+    })
+    session.push({
+      type: "result",
+      content: "STEER_ACCEPTED",
+      done: true,
+      queuedTurnCount: 0,
+      sdkResultUuid: "result-absorbed-steer",
+      sdkSessionId: "sdk-steer",
+    })
+
+    await expect(turn).resolves.toMatchObject({
+      resultText: "STEER_ACCEPTED",
+      events: expect.arrayContaining([
+        expect.objectContaining({ type: "result", sdkResultUuid: "result-absorbed-steer" }),
+      ]),
+    })
+  })
+
+  it("rejects steering when the active turn id does not match", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation()
+    await conversations.upsert(existing)
+    const session = new ControllableSteerSession("sdk-steer")
+    const { router } = createRouter({ conversations, session })
+    const turn = router.sendToConversation(baseMessage("开始处理"), existing.id, { turnId: "turn-current" })
+    await waitFor(() => session.sent.length === 1)
+
+    await expect(router.steer({
+      conversationId: existing.id,
+      expectedTurnId: "turn-old",
+      clientMessageId: "client-steer-old",
+      content: "错误轮次",
+      submittedAt: "2026-04-26T00:00:01.000Z",
+    })).resolves.toMatchObject({ status: "turn-changed", turnId: "turn-current" })
+    expect(session.steered).toEqual([])
+
+    session.push({ type: "result", content: "done", done: true, sdkSessionId: "sdk-steer" })
+    await turn
+  })
+
+  it("rejects steering while a permission request is pending", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation()
+    await conversations.upsert(existing)
+    const session = new ControllableSteerSession("sdk-steer")
+    const { router, pendingPermissions, sessionManager } = createRouter({ conversations, session })
+    const turn = router.sendToConversation(baseMessage("开始处理"), existing.id, { turnId: "turn-current" })
+    await waitFor(() => session.sent.length === 1)
+    session.push({
+      type: "permissionRequest",
+      requestId: "permission-1",
+      toolName: "Bash",
+      toolInput: "pnpm test",
+      sdkSessionId: "sdk-steer",
+    })
+    await waitFor(() => pendingPermissions.size === 1)
+
+    await expect(router.steer({
+      conversationId: existing.id,
+      expectedTurnId: "turn-current",
+      clientMessageId: "client-steer-permission",
+      content: "调整当前方向",
+      submittedAt: "2026-04-26T00:00:01.000Z",
+    })).resolves.toMatchObject({ status: "permission-pending" })
+    expect(session.steered).toEqual([])
+
+    const pending = pendingPermissions.get("permission-1")
+    if (!pending) throw new Error("missing pending permission")
+    sessionManager.settlePendingPermission(pending)
+    pending.resolve()
+    session.push({ type: "result", content: "done", done: true, sdkSessionId: "sdk-steer" })
+    await turn
+  })
+
   it("binds new conversations to the active provider and passes ProviderService env to the SDK session", async () => {
     const { conversations, router, providerService, factoryCalls } = createRouter({
       activeProviderId: "anthropic",
@@ -616,6 +1131,100 @@ describe("ConversationRouter", () => {
       (event.payload as { sequence?: number }).sequence)).toEqual([1, 2, 3])
   })
 
+  it("batches local Renderer stream deltas into a bounded projected event", async () => {
+    const { eventBus, emits } = createEventBusRecorder()
+    const streamEvents = Array.from({ length: 1_000 }, (): AgentEvent => ({
+      type: "stream",
+      text: "x",
+      deltaType: "text_delta",
+      event: { type: "content_block_delta", raw: "not-forwarded" },
+      payload: { raw: "not-forwarded" },
+    }))
+    const { router } = createRouter({
+      eventBus,
+      session: new ScriptedSession([
+        ...streamEvents,
+        { type: "result", content: "done", done: true },
+      ]),
+    })
+
+    const result = await router.send({
+      ...baseMessage("hello"),
+      platform: "local-renderer",
+      originRendererId: 42,
+    })
+
+    const batches = emits.filter(({ event }) => event.type === "eventBatch")
+    expect(batches).toHaveLength(1)
+    expect(Buffer.byteLength(JSON.stringify(batches[0]?.event.payload), "utf8")).toBeLessThanOrEqual(64 * 1024)
+    expect(batches[0]?.event).toMatchObject({
+      scope: { rendererIds: [42] },
+      payload: {
+        events: [{ event: { type: "stream", text: "x".repeat(1_000), event: { type: "text_delta" } } }],
+      },
+    })
+    expect(result.events.some((event) => event.type === "stream")).toBe(false)
+  })
+
+  it("does not deliver stream batches when the initiating Renderer displays another conversation", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({ id: "conversation-visible", platform: "local-renderer" })
+    await conversations.upsert(existing)
+    const { eventBus, emits } = createEventBusRecorder()
+    const { router } = createRouter({
+      conversations,
+      eventBus,
+      session: new ScriptedSession([
+        { type: "stream", text: "hidden", deltaType: "text_delta", event: {} },
+        { type: "result", content: "done", done: true },
+      ]),
+    })
+    router.setRendererSubscription(42, true, "conversation-other")
+
+    await router.sendToConversation({
+      ...baseMessage("hello"),
+      platform: "local-renderer",
+      originRendererId: 42,
+    }, existing.id)
+
+    expect(emits.some(({ event }) => event.type === "eventBatch")).toBe(false)
+  })
+
+  it("pauses delivery for an unresponsive Renderer and requests a timeline resync after recovery", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const existing = conversation({ id: "conversation-recovery", platform: "local-renderer" })
+    await conversations.upsert(existing)
+    const session = new ControlledSession("sdk-recovery")
+    const { eventBus, emits } = createEventBusRecorder()
+    const { router } = createRouter({ conversations, eventBus, session })
+    router.setRendererSubscription(42, true, existing.id)
+
+    const pending = router.sendToConversation({
+      ...baseMessage("hello"),
+      platform: "local-renderer",
+      originRendererId: 42,
+    }, existing.id)
+    await waitFor(() => session.sent.includes("hello"))
+    router.pauseRendererDelivery(42)
+    session.emitStreamText("partial")
+    session.emitResult("done")
+    await pending
+
+    expect(emits.some(({ event }) => event.type === "eventBatch")).toBe(false)
+    expect(emits.some(({ event }) => event.type === "result")).toBe(false)
+
+    await router.resumeRendererDelivery(42)
+    expect(emits.at(-1)?.event).toMatchObject({
+      type: "eventBatch",
+      scope: { rendererIds: [42] },
+      payload: {
+        conversationId: existing.id,
+        events: [],
+        resyncRequired: true,
+      },
+    })
+  })
+
   it("persists bounded stream diagnostics after the turn completes", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const { router } = createRouter({
@@ -751,13 +1360,15 @@ describe("ConversationRouter", () => {
     ])
   })
 
-  it("persists a terminal error when the SDK session ends without result or error", async () => {
+  it.each([false, true])("persists a terminal error when SDK ends without result (closed before iteration: %s)", async (closedBeforeIteration) => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const { eventBus, events } = createEventBusRecorder()
     const { conversations, router } = createRouter({
       agentEvents,
       eventBus,
-      session: new EndedWithoutTerminalSession("sdk-ended"),
+      session: closedBeforeIteration
+        ? Object.assign(new EndedWithoutTerminalSession("sdk-ended"), { alive: () => false })
+        : new EndedWithoutTerminalSession("sdk-ended"),
     })
 
     const result = await router.send(baseMessage("hello"))
@@ -3192,7 +3803,7 @@ describe("ConversationRouter", () => {
     expect(fallbackEntries).toEqual([
       expect.objectContaining({
         role: "system",
-        content: "Synapse MCP 工具按需加载不可用，本次对话已回退完整工具。",
+        content: "部分工具暂不可用，已使用可用工具继续。",
         metadata: expect.objectContaining({
           agentEventType: "sdkEvent",
           sdkSessionId: "sdk-router",
@@ -3294,7 +3905,15 @@ function createRouter(input: {
     pendingPermissions,
   })
 
-  return { conversations, router, repository, providerService, factoryCalls }
+  return {
+    conversations,
+    router,
+    repository,
+    providerService,
+    factoryCalls,
+    pendingPermissions,
+    sessionManager,
+  }
 }
 
 function createEventBusRecorder(): {
@@ -3444,6 +4063,53 @@ class ScriptedSession implements AgentLiveSession {
 
   get isClosed(): boolean {
     return this.closed
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+  }
+}
+
+class ControllableSteerSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  readonly sent: string[] = []
+  readonly steered: string[] = []
+  private readonly events: AgentEvent[] = []
+  private readonly waiters: Array<(event: AgentEvent) => void> = []
+  private closed = false
+
+  constructor(private readonly sessionId: string) {}
+
+  async send(message: AgentMessage): Promise<boolean> {
+    this.sent.push(message.content)
+    return true
+  }
+
+  async steer(message: { readonly content: string }): Promise<boolean> {
+    this.steered.push(message.content)
+    return true
+  }
+
+  async respondPermission(): Promise<void> {}
+
+  async nextEvent(): Promise<AgentEvent> {
+    const event = this.events.shift()
+    if (event) return event
+    return new Promise((resolve) => this.waiters.push(resolve))
+  }
+
+  push(event: AgentEvent): void {
+    const waiter = this.waiters.shift()
+    if (waiter) waiter(event)
+    else this.events.push(event)
+  }
+
+  currentSessionId(): string {
+    return this.sessionId
+  }
+
+  alive(): boolean {
+    return !this.closed
   }
 
   async close(): Promise<void> {

@@ -34,6 +34,18 @@ export interface RuntimeSessionState {
   agentDefinitionsHash?: string
   closing?: boolean
   activeLifecycle?: TurnLifecycle
+  steerAdmissionsOpen?: boolean
+  permissionAdmissionPending?: boolean
+  activeSteers?: Map<string, {
+    readonly content: string
+    readonly submittedAt: string
+    replayed: boolean
+    readonly acceptance: Promise<boolean>
+    historyPersistence?: Promise<void>
+  }>
+  contextRecoveryPaused?: boolean
+  activeRendererId?: number
+  rendererUnavailable?: boolean
   cancelState?: {
     requestedAt: number
     escalationTimer?: ReturnType<typeof setTimeout>

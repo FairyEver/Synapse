@@ -36,7 +36,7 @@ Because these states are not reconciled through a single lifecycle authority, a 
 - Do not redesign the Agent composer or introduce new visual styling.
 - Do not change model provider configuration, SDK settings, permission mode, tool policy, or MCP behavior.
 - Do not swallow non-cancel network/provider aborts. If there is no cancel intent, abort-like diagnostics can still be failures.
-- Do not change queue semantics. This design remains scoped to the active turn.
+- The cancellation outcome design does not change ordinary queue semantics. The active-turn steering extension below adds a separate path without turning queued messages into new cancellation states.
 - Do not implement retry or resume behavior for cancelled turns.
 
 ## Design Principles
@@ -174,6 +174,20 @@ any terminal -> terminal           locked; late events are diagnostics only
 ```
 
 Illegal transitions such as `cancelled -> failed`, `completed -> failed`, or `failed -> cancelled` must not mutate the main outcome.
+
+## Active-Turn Steering Extension
+
+Steering is a non-terminal input to the current product turn. It does not add a lifecycle terminal state and does not interrupt an in-flight tool call.
+
+```text
+Enter while running -> ordinary conversation queue -> next product turn
+Steer              -> current AgentLiveSession input -> current product turn
+Stop               -> cancellation intent -> current product turn terminates
+```
+
+The Renderer must send the active `runId` as `expectedTurnId`. Runtime accepts steering only while that exact lifecycle is running, steer admission is open, no permission request is pending, no cancellation is pending, and the live session supports `steer()`. Admission closes before terminal result processing so a late click cannot create orphaned SDK events.
+
+Accepted steer messages carry `messageKind: "steer"`, `clientMessageId`, and `turnId` in user history. SDK `user_message_uuid` and replayed user messages provide best-effort correlation, while only an SDK result with `queued_turn_count > 0` keeps the product turn open for another SDK turn; a missing replay event never blocks terminal completion by itself. Intermediate SDK results do not terminate the Synapse lifecycle; the last result owns cumulative usage and cost and produces the only completed phase.
 
 ## Architecture
 

@@ -25,6 +25,10 @@ import {
 } from "@/app-shell/navigation"
 import { useWatchNextAgentSession } from "@/app-shell/use-watch-next-agent-session"
 import { useUpdateOpenRequest } from "@/hooks/use-update-open-request"
+import {
+  useAgentConversationOpenRequest,
+  type AgentConversationOpenRequestControls,
+} from "@/hooks/use-agent-conversation-open-request"
 import { isWorkflowEntryVisible } from "@/app-shell/workflow-entry-visibility"
 import type { SynapseAppUpdateOpenRequest } from "@/types/update"
 import {
@@ -75,6 +79,10 @@ function MainApp() {
   const [activeAppId, setActiveAppIdRaw] = useState<ActiveAppId>(() => hasRepositories ? initialDockAppId : "agent")
   const [pendingAgentSession, setPendingAgentSession] =
     useState<OpenAgentSessionPayload | null>(null)
+  const pendingAgentOpenControlsRef = useRef<{
+    readonly requestId: number
+    readonly controls: AgentConversationOpenRequestControls
+  } | null>(null)
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
   const [launcherResetKey, setLauncherResetKey] = useState(0)
@@ -232,10 +240,28 @@ function MainApp() {
     return subscribeOpenAgentSession(handleOpenAgentSession)
   }, [handleOpenAgentSession])
 
-  useEffect(() => {
-    const bridge = getSynapseBridge()
-    return bridge?.agent.onOpenConversation(handleOpenAgentSession)
-  }, [handleOpenAgentSession])
+  useAgentConversationOpenRequest((request, controls) => {
+    pendingAgentOpenControlsRef.current = {
+      requestId: request.requestId,
+      controls,
+    }
+    handleOpenAgentSession(request)
+  })
+
+  const handlePendingAgentSessionConsumed = useCallback(() => {
+    const consumedRequestId = pendingAgentSession?.requestId
+    const pendingControls = pendingAgentOpenControlsRef.current
+    if (pendingControls && pendingControls.requestId === consumedRequestId) {
+      pendingAgentOpenControlsRef.current = null
+      void pendingControls.controls.acknowledge().catch((error) => {
+        logger.error("Failed to acknowledge Agent conversation open request.", {
+          requestId: pendingControls.requestId,
+          errorName: error instanceof Error ? error.name : typeof error,
+        })
+      })
+    }
+    setPendingAgentSession((current) => current?.requestId === consumedRequestId ? null : current)
+  }, [pendingAgentSession?.requestId])
 
   useWatchNextAgentSession()
 
@@ -317,7 +343,7 @@ function MainApp() {
                     setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
                   }}
                   pendingAgentSession={pendingAgentSession}
-                  onPendingAgentSessionConsumed={() => setPendingAgentSession(null)}
+                  onPendingAgentSessionConsumed={handlePendingAgentSessionConsumed}
                 />
               </EmbeddedSystemAppShell>
             </AppSwitchTransition>

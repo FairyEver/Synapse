@@ -91,7 +91,9 @@ node desktop/scripts/model-capability/update-catalog.mjs --bailian-response /abs
 6. 未配置模型、未知模型或未登记聚合平台不注入任何值。
 7. 派生窗口和目录引用进入 SDK 会话复用键；配置变化时重建会话。
 
-顶栏分母始终以 SDK `getContextUsage()` 或 SDK 结果返回的实际窗口为准。目录值不能伪造运行窗口；两者不一致时同时显示。
+顶栏优先显示 SDK `getContextUsage().autoCompactThreshold` 真实整理触发值；没有传输策略时可显示 SDK 实际窗口。配置了整理窗口但真实阈值未确认时，只显示占用与待确认状态。目录值不能伪造运行窗口；两者不一致时同时显示。
+
+Provider 传输限制不得改写模型能力目录。百炼官方 Anthropic 端点的请求体上限由独立传输策略维护：模型目录中的 `qwen3.8-max` 仍为 1,000,000 token，运行时自动整理配置窗口为 200,000 token（实际触发值由 SDK 扣除 buffer 后返回），请求体安全预算为 5 MiB（Provider 硬限制 6 MiB），工具输出单结果/单批预算为 8/24 KiB；整轮累计输出仅计量，不限制任务总处理量，文本单结果另受 2,000 行限制。顶栏进度按 SDK 真实自动整理触发值计算，Tooltip 分别显示“自动整理触发”和“模型上限”；代理端点、聚合平台和其它 Provider 不继承百炼策略。
 
 ## 禁止保存
 

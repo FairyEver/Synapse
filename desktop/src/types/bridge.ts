@@ -320,6 +320,7 @@ import type {
   SynapseAgentProviderState,
   SynapseAgentRuntimeStatus,
   SynapseAgentSendResult,
+  SynapseAgentSteerResult,
   SynapseAgentSessionSummary,
   SynapseAgentStatus,
   SynapseAgentTimelineResult,
@@ -336,7 +337,7 @@ import type {
   AgentDetachedConversation,
 } from "./agent-conversation-window"
 import type {
-  OpenAgentSessionPayload,
+  AgentConversationOpenRequest,
   SynapseAgentConversationReference,
   SynapseOpenAgentConversationResult,
 } from "./agent-navigation"
@@ -1759,6 +1760,15 @@ export type SynapseBridge = {
     getTimeline: (
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number; beforeIndex?: number },
     ) => Promise<SynapseAgentTimelineResult>
+    getTimelineContentChunk: (
+      args: { projectId: string; conversationId: string; historyIndex: number; offset: number; maxBytes?: number },
+    ) => Promise<{ conversationId: string; historyIndex: number; content: string; nextOffset: number; done: boolean }>
+    setAgentEventSubscription: (
+      args: { projectIds: readonly string[]; projectId?: string; conversationId?: string },
+    ) => Promise<{ ok: true }>
+    ackAgentEventBatch: (
+      args: { projectId: string; conversationId: string; batchId: string },
+    ) => Promise<{ acknowledged: boolean }>
     getFileCheckpoint: (
       args: { projectId: string; conversationId: string; checkpointId: string },
     ) => Promise<SynapseAgentFileCheckpointDetail>
@@ -1807,6 +1817,22 @@ export type SynapseBridge = {
         clientSubmittedAt?: string
         providerId?: string
       },
+    ) => Promise<SynapseAgentSendResult>
+    steer: (
+      args: {
+        projectId: string
+        conversationId: string
+        expectedTurnId: string
+        clientMessageId: string
+        content: string
+        clientSubmittedAt?: string
+      },
+    ) => Promise<SynapseAgentSteerResult>
+    prepareContextRecovery: (
+      args: { projectId: string; conversationId: string; failedTurnId: string },
+    ) => Promise<SynapseAgentSessionSummary>
+    continueContextRecovery: (
+      args: { projectId: string; conversationId: string; failedTurnId: string },
     ) => Promise<SynapseAgentSendResult>
     chooseAttachments: (
       args: { projectId: string; draftScopeId: string; kind: "file" | "directory" },
@@ -1931,7 +1957,9 @@ export type SynapseBridge = {
     openConversation: (
       target: SynapseAgentConversationReference,
     ) => Promise<SynapseOpenAgentConversationResult>
-    onOpenConversation: (listener: (payload: OpenAgentSessionPayload) => void) => () => void
+    getPendingConversationOpenRequest: () => Promise<AgentConversationOpenRequest | null>
+    acknowledgeConversationOpenRequest: (requestId: number) => Promise<void>
+    onOpenConversation: (listener: (payload: AgentConversationOpenRequest) => void) => () => void
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void
     onDetachedConversationWindowsChanged: (
       listener: (items: AgentDetachedConversation[]) => void,

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
-
-type ProviderModelMap = {
-  readonly id?: string
-  readonly source?: "local" | "user" | string
-  readonly model?: string
-  readonly haikuModel?: string
-  readonly sonnetModel?: string
-  readonly opusModel?: string
-  readonly archived?: boolean
-}
+import {
+  LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL,
+  MODEL_TIER_DISPLAY_ORDER,
+  MODEL_TIER_DISPLAY_LABELS,
+  MODEL_TIER_ORIGINAL_LABELS,
+  isLocalClaudeCodeProvider,
+  isProviderModelTierSelectable,
+  resolveModelDisplayName,
+  resolveModelName,
+  type ProviderModelMap,
+} from "./provider-model-selection"
 
 type ProviderModelDisplayStatus = "available" | "archived" | "unavailable" | "unknown"
 
@@ -27,52 +28,6 @@ type ProviderModelDisplayProvider = ProviderModelMap & {
 type ProviderModelCatalog = {
   readonly providers: readonly ProviderModelDisplayProvider[] | null
   readonly refresh: () => Promise<void>
-}
-
-const LOCAL_CLAUDE_CODE_PROVIDER_ID = "local-claude-code"
-const LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL = "Claude Code 默认"
-const MODEL_TIER_DISPLAY_LABELS: Record<ModelTier, string> = {
-  default: "#1",
-  haiku: "#4",
-  sonnet: "#3",
-  opus: "#2",
-}
-const MODEL_TIER_ORIGINAL_LABELS: Record<ModelTier, string> = {
-  default: "主模型",
-  haiku: "Haiku",
-  sonnet: "Sonnet",
-  opus: "Opus",
-}
-const MODEL_TIER_DISPLAY_ORDER: readonly ModelTier[] = ["default", "opus", "sonnet", "haiku"]
-
-/**
- * Extract the model name string from a provider by tier.
- */
-function resolveModelName(provider: ProviderModelMap, tier: ModelTier): string | undefined {
-  const raw = tier === "default" ? provider.model
-    : tier === "haiku" ? provider.haikuModel
-    : tier === "sonnet" ? provider.sonnetModel
-    : provider.opusModel
-  const trimmed = raw?.trim()
-  return trimmed || undefined
-}
-
-function isLocalClaudeCodeProvider(provider: ProviderModelMap): boolean {
-  return provider.id === LOCAL_CLAUDE_CODE_PROVIDER_ID || provider.source === "local"
-}
-
-function isProviderModelTierSelectable(provider: ProviderModelMap, tier: ModelTier): boolean {
-  if (resolveModelName(provider, tier)) return true
-  return tier === "default" && isLocalClaudeCodeProvider(provider)
-}
-
-function resolveModelDisplayName(provider: ProviderModelMap, tier: ModelTier): string | undefined {
-  const modelName = resolveModelName(provider, tier)
-  if (modelName) return modelName
-  if (tier === "default" && isLocalClaudeCodeProvider(provider)) {
-    return LOCAL_CLAUDE_CODE_DEFAULT_MODEL_LABEL
-  }
-  return undefined
 }
 
 /**

@@ -137,7 +137,7 @@ function AgentToolEvent({
               <>
                 <ScrollArea
                   className="max-h-60 min-w-0 max-w-full rounded bg-muted/50"
-                  viewportClassName="overflow-x-hidden px-2 py-1.5"
+                  viewportClassName="max-h-60 overflow-x-hidden px-2 py-1.5"
                 >
                   <pre data-allow-select="true" className="min-w-0 max-w-full whitespace-pre-wrap break-all font-mono text-xs leading-5 text-muted-foreground">
                     {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}

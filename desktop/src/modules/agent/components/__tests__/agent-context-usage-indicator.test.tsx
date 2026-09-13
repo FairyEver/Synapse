@@ -151,4 +151,27 @@ describe("AgentContextUsageIndicator", () => {
     await openTooltip(container)
     expect(document.body.textContent).toContain("模型上限 1,000,000 token")
   })
+
+  it("uses the auto-compact threshold for progress while keeping the one-million-token model limit", async () => {
+    const container = await renderIndicator({
+      usedTokens: 178_000,
+      contextWindowTokens: 1_000_000,
+      autoCompactWindowTokens: 200_000,
+      autoCompactThresholdTokens: 167_000,
+      modelContext: {
+        providerScopeId: "bailian-cn",
+        modelId: "qwen3.8-max",
+        contextWindowTokens: 1_000_000,
+        sourceLabel: "Alibaba Cloud Model Studio",
+        sourceUrl: "https://help.aliyun.com/zh/model-studio/",
+        verifiedAt: "2026-08-25T00:00:00.000Z",
+      },
+    })
+
+    expect(container.textContent).toContain("占用 178K · 整理 167K")
+    await openTooltip(container)
+    expect(document.body.textContent).toContain("自动整理触发 167,000 token")
+    expect(document.body.textContent).toContain("剩余 0 token")
+    expect(document.body.textContent).toContain("模型上限 1,000,000 token")
+  })
 })

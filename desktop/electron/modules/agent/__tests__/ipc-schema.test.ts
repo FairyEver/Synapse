@@ -397,10 +397,12 @@ describe("agent IPC schemas", () => {
       updatedAt: "2026-05-14T00:00:00.000Z",
     }
 
-    expect(sessionSummary(session)).toMatchObject({
+    const summary = sessionSummary(session)
+    expect(summary).toMatchObject({
       id: "conversation-1",
       modelTier: "sonnet",
     })
+    expect(summary.conversationRef).toMatch(/^agc_[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{3}$/)
   })
 
   it("rejects unknown permission modes on session summaries", () => {
@@ -489,6 +491,34 @@ describe("agent IPC schemas", () => {
       projectId: "project-1",
       content: "   ",
       attachments: [],
+    })).toThrow()
+  })
+
+  it("accepts pure-text steer requests and rejects commands or blank content", () => {
+    expect(messageMethods.steer.request.parse({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      expectedTurnId: "turn-1",
+      clientMessageId: "client-1",
+      content: "调整当前方向",
+      clientSubmittedAt: "2026-05-13T00:00:01.000Z",
+    })).toMatchObject({
+      content: "调整当前方向",
+      expectedTurnId: "turn-1",
+    })
+    expect(() => messageMethods.steer.request.parse({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      expectedTurnId: "turn-1",
+      clientMessageId: "client-1",
+      content: "   ",
+    })).toThrow()
+    expect(() => messageMethods.steer.request.parse({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      expectedTurnId: "turn-1",
+      clientMessageId: "client-1",
+      content: "/save",
     })).toThrow()
   })
 

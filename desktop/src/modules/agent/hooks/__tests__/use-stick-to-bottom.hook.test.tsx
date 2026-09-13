@@ -60,7 +60,7 @@ afterEach(() => {
 })
 
 describe("useStickToBottom", () => {
-  it("smoothly follows streamed content while pinned", async () => {
+  it("instantly follows streamed content while pinned", async () => {
     const { rerender, scrollTo } = await renderStickHarness({
       signal: "message:assistant:4",
       latestEntryId: "assistant-1",
@@ -75,7 +75,32 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:12", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
+  })
+
+  it("never starts smooth scrolling across consecutive streamed content updates", async () => {
+    const { rerender, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:4",
+      latestEntryId: "assistant-1",
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    scrollTo.mockClear()
+
+    for (const [length, scrollHeight] of [[12, 2024], [20, 2048], [28, 2072]] as const) {
+      setScrollMetrics(viewport, {
+        scrollTop: scrollHeight - 600,
+        scrollHeight,
+        clientHeight: 600,
+      })
+      await act(async () => {
+        rerender({ signal: `message:assistant:${length}`, latestEntryId: "assistant-1" })
+      })
+    }
+
+    expect(scrollTo.mock.calls.length).toBeGreaterThanOrEqual(3)
+    expect(scrollTo.mock.calls.every(([options]) => options?.behavior === "auto")).toBe(true)
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 2072, behavior: "auto" })
   })
 
   it("does not scroll again when presentation state changes without a timeline content change", async () => {
@@ -111,7 +136,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2200, behavior: "auto" })
   })
 
   it("scrolls to the bottom when historical conversation content loads", async () => {
@@ -128,7 +153,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:200", latestEntryId: "assistant-history" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2600, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2600, behavior: "auto" })
   })
 
   it("uses an instant scroll after forcePin so session switches do not animate from top", async () => {
@@ -204,7 +229,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
     expect(controls.current?.hasUnread).toBe(false)
   })
 
@@ -274,7 +299,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:12", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
     scrollTo.mockClear()
 
     await act(async () => {
@@ -386,7 +411,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:24", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
   })
 
   it("pauses following when wheel input is captured on window inside the timeline area", async () => {
@@ -446,7 +471,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
     expect(controls.current?.hasUnread).toBe(false)
   })
 
@@ -470,7 +495,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
     expect(controls.current?.hasUnread).toBe(false)
   })
 
@@ -500,7 +525,7 @@ describe("useStickToBottom", () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
     expect(controls.current?.hasUnread).toBe(false)
   })
 

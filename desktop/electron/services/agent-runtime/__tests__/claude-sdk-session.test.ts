@@ -37,6 +37,60 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("steer writes a user message into the current SDK input stream", async () => {
+    const { factory, getPrompt } = createQueryFactory()
+    const session = createSession(factory)
+
+    const input = getPrompt()[Symbol.asyncIterator]().next()
+    await expect(session.steer?.({
+      clientMessageId: "client-1",
+      content: "先检查测试失败原因",
+      submittedAt: "2026-05-13T00:00:01.000Z",
+    })).resolves.toBe(true)
+
+    await expect(input).resolves.toEqual({
+      done: false,
+      value: {
+        type: "user",
+        message: {
+          role: "user",
+          content: "先检查测试失败原因",
+        },
+        parent_tool_use_id: null,
+        origin: { kind: "human" },
+        timestamp: "2026-05-13T00:00:01.000Z",
+      },
+    })
+  })
+
+  it("forwards replayed steer messages for active-turn correlation", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+
+    query.push({
+      type: "user",
+      session_id: "sdk-1",
+      uuid: "user-steer-1",
+      parent_tool_use_id: null,
+      isReplay: true,
+      timestamp: "2026-05-13T00:00:01.000Z",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: "先检查测试失败原因" }],
+      },
+    } as unknown as SDKMessage)
+
+    await expect(session.nextEvent()).resolves.toMatchObject({
+      type: "sdkEvent",
+      sdkType: "userMessageReplay",
+      payload: {
+        content: "先检查测试失败原因",
+        timestamp: "2026-05-13T00:00:01.000Z",
+        uuid: "user-steer-1",
+      },
+    })
+  })
+
   it("send exposes image attachments as ordered Read paths", async () => {
     const { factory, getPrompt } = createQueryFactory()
     const session = createSession(factory)
@@ -249,6 +303,138 @@ describe("ClaudeSDKSession", () => {
         disableAllHooks: true,
       },
     })
+  })
+
+  it("bounds large text tool results before the next model request", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { maxToolOutputBytes: 24 * 1024,
+      persistToolOutputText: async () => ({ id: "a", storagePath: "/private/output.txt",
+        originalByteSize: 180000, storedByteSize: 180000, contentTruncated: false }) })
+    await session.send({ ...message("read"), runtimeTurnId: "turn-1" })
+    const hook = postToolUseHook(getOptions())
+
+    const result = await hook({
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: "large.jsonl", offset: 1, limit: 500 },
+      tool_response: {
+        type: "text",
+        file: { content: "数据".repeat(30_000), numLines: 1, startLine: 1, totalLines: 1 },
+      },
+      tool_use_id: "toolu-read",
+    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
+
+    const output = (result.hookSpecificOutput?.updatedToolOutput as { file: { content: string } }).file.content
+    expect(typeof output).toBe("string")
+    expect(Buffer.byteLength(String(output), "utf8")).toBeLessThanOrEqual(24 * 1024)
+    expect(output).toContain("Synapse context guard")
+  })
+
+  it("persists oversized text tool results and exposes only the bounded copy to the model", async () => {
+    const persistToolOutputText = vi.fn(async () => ({
+      id: "artifact-1",
+      storagePath: "/managed/conversation/tool-output/artifact-1.txt",
+      originalByteSize: 60_000,
+      storedByteSize: 60_000,
+      contentTruncated: false,
+    }))
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, {
+      maxToolOutputBytes: 8 * 1024,
+      readOnlyAdditionalDirectories: ["/managed/conversation/tool-output"],
+      persistToolOutputText,
+    })
+    await session.send({ ...message("读取日志"), runtimeTurnId: "turn-1" })
+
+    const result = await postToolUseHook(getOptions())({
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: "large.jsonl" },
+      tool_response: { type: "text", file: { content: "x".repeat(60_000) } },
+      tool_use_id: "toolu-read",
+    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
+
+    expect(persistToolOutputText).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      turnId: "turn-1",
+      toolUseId: "toolu-read",
+      toolName: "Read",
+    }))
+    expect((result.hookSpecificOutput?.updatedToolOutput as { file: { content: string } }).file.content).toContain(
+      "Output saved at /managed/conversation/tool-output/artifact-1.txt",
+    )
+    expect(getOptions().additionalDirectories).toContain("/managed/conversation/tool-output")
+  })
+
+  it.each(["throw", "missing", "truncated"])("stops without a replacement when output persistence is %s", async (failure) => {
+    const { factory, getOptions, query } = createQueryFactory()
+    const session = createSession(factory, { maxToolOutputBytes: 8192,
+      persistToolOutputText: async () => {
+        if (failure === "throw") throw new Error("disk full")
+        if (failure === "missing") return undefined
+        return { id: "a", storagePath: "/private/a", originalByteSize: 60000, storedByteSize: 10, contentTruncated: true }
+      } })
+    await session.send({ ...message("read"), runtimeTurnId: "turn-1" })
+    const output = await postToolUseHook(getOptions())({ hook_event_name: "PostToolUse", tool_name: "Bash",
+      tool_use_id: "already-executed", tool_response: { stdout: "x".repeat(60000), stderr: "" } })
+    expect(output).toMatchObject({ continue: false })
+    expect(output).not.toHaveProperty("hookSpecificOutput.updatedToolOutput")
+    await expect(session.nextEvent()).resolves.toMatchObject({ type: "error", recoverable: true })
+    expect(session.contextRotation()).toBeUndefined()
+    expect(query.close).toHaveBeenCalledOnce()
+    await expect(session.send(message("must not reuse failed query"))).resolves.toBe(false)
+  })
+
+  it("overrides inherited task-list namespaces using the persisted host identity", () => {
+    const { factory, getOptions } = createQueryFactory()
+    const taskListId = "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0"
+    createSession(factory, { taskListId, hostEnv: { CLAUDE_CODE_TASK_LIST_ID: "global-shared" },
+      env: { CLAUDE_CODE_TASK_LIST_ID: "provider-shared" } })
+    expect(getOptions()).toMatchObject({ env: { CLAUDE_CODE_TASK_LIST_ID: taskListId },
+      settings: { env: { CLAUDE_CODE_TASK_LIST_ID: taskListId } } })
+    expect(() => createSession(factory, { taskListId: "../../other-tasks" })).toThrow("Invalid SDK task-list identity")
+  })
+
+  it("leaves image tool results intact", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { maxToolOutputBytes: 24 * 1024,
+      persistToolOutputText: async () => ({ id: "a", storagePath: "/private/output.txt",
+        originalByteSize: 180000, storedByteSize: 180000, contentTruncated: false }) })
+    await session.send({ ...message("read"), runtimeTurnId: "turn-1" })
+    const hook = postToolUseHook(getOptions())
+
+    await expect(hook({
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: "image.png" },
+      tool_response: {
+        type: "image",
+        file: { base64: "a".repeat(30_000), type: "image/png" },
+      },
+      tool_use_id: "toolu-image",
+    })).resolves.toEqual({})
+  })
+
+  it("stops with an explicit incomplete outcome when a non-text result cannot be delivered", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { requestBodyBudgetBytes: 10 * 1024 })
+
+    const result = await postToolUseHook(getOptions())({
+      hook_event_name: "PostToolUse",
+      tool_name: "Read",
+      tool_input: { file_path: "image.png" },
+      tool_response: {
+        type: "image",
+        file: { base64: "a".repeat(30_000), type: "image/png" },
+      },
+      tool_use_id: "toolu-image",
+    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
+
+    expect(result).toMatchObject({ continue: false })
+    expect(result.hookSpecificOutput?.updatedToolOutput).toBeUndefined()
+    await expect(session.nextEvent()).resolves.toMatchObject({ type: "error", recoverable: true })
+    expect(session.contextRotation()).toBeUndefined()
   })
 
   it("merges runtime SDK settings without leaking non-provider env into settings.env", () => {
@@ -992,6 +1178,7 @@ describe("ClaudeSDKSession", () => {
         },
       },
     })
+    expect(getContextUsage).toHaveBeenCalledTimes(2)
   })
 
   it("projects catalog reference metadata without replacing the SDK runtime window", async () => {
@@ -1084,6 +1271,205 @@ describe("ClaudeSDKSession", () => {
       "Claude SDK context usage refresh failed after compaction.",
       expect.objectContaining({ boundary: "claude-sdk-context-usage" }),
     )
+  })
+
+  it("monitors SDK-native tool-result eviction between completed turns", async () => {
+    const logger = { warn: vi.fn(), info: vi.fn() }
+    const getContextUsage = vi.fn()
+      .mockResolvedValueOnce({
+        totalTokens: 80_000,
+        maxTokens: 200_000,
+        model: "qwen3.8-max",
+        messageBreakdown: { toolResultTokens: 40_000 },
+      })
+      .mockResolvedValueOnce({
+        totalTokens: 55_000,
+        maxTokens: 200_000,
+        model: "qwen3.8-max",
+        messageBreakdown: { toolResultTokens: 12_000 },
+      })
+    const { factory, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
+    const session = createSession(factory, { logger })
+
+    for (const sessionId of ["sdk-turn-1", "sdk-turn-2"]) {
+      const event = session.nextEvent()
+      query.push({
+        type: "result",
+        subtype: "success",
+        session_id: sessionId,
+        result: "done",
+        modelUsage: { "qwen3.8-max": { contextWindow: 1_000_000 } },
+      } as unknown as SDKMessage)
+      await expect(event).resolves.toMatchObject({ type: "result" })
+    }
+
+    expect(logger.info).toHaveBeenCalledWith(
+      "Claude SDK native tool-result eviction observed.",
+      expect.objectContaining({
+        boundary: "claude-sdk.tool-result-eviction-monitor",
+        previousToolResultTokens: 40_000,
+        toolResultTokens: 12_000,
+        evictedToolResultTokens: 28_000,
+      }),
+    )
+  })
+
+  it("records SDK-native compaction boundaries without logging the summary body", async () => {
+    const logger = { warn: vi.fn(), info: vi.fn() }
+    const getContextUsage = vi.fn(async () => ({
+      totalTokens: 48_000,
+      maxTokens: 200_000,
+      rawMaxTokens: 1_000_000,
+      model: "qwen3.8-max",
+      categories: [{ name: "Messages", tokens: 42_000, color: "default" }],
+      messageBreakdown: { toolResultTokens: 9_000 },
+    }))
+    const { factory, getOptions, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
+    const session = createSession(factory, { logger })
+
+    const assistantEvent = session.nextEvent()
+    query.push({
+      type: "assistant",
+      session_id: "sdk-compact",
+      parent_tool_use_id: null,
+      message: {
+        role: "assistant",
+        model: "qwen3.8-max",
+        content: [],
+        usage: { input_tokens: 150_000, output_tokens: 500 },
+      },
+    } as unknown as SDKMessage)
+    await assistantEvent
+
+    await lifecycleHook(getOptions(), "PreCompact")({
+      hook_event_name: "PreCompact",
+      trigger: "auto",
+    })
+    await lifecycleHook(getOptions(), "PostCompact")({
+      hook_event_name: "PostCompact",
+      trigger: "auto",
+      compact_summary: "private summary",
+    })
+
+    const compactEvent = session.nextEvent()
+    query.push({
+      type: "system",
+      subtype: "compact_boundary",
+      session_id: "sdk-compact",
+      compact_metadata: { trigger: "auto", pre_tokens: 150_500, post_tokens: 48_000 },
+    } as unknown as SDKMessage)
+    await expect(compactEvent).resolves.toMatchObject({ type: "compactBoundary" })
+
+    expect(logger.info).toHaveBeenCalledWith(
+      "Claude SDK native compaction completed.",
+      expect.objectContaining({
+        boundary: "claude-sdk.compaction-monitor",
+        trigger: "auto",
+        beforeContextTokens: 150_500,
+        afterContextTokens: 48_000,
+        compactSummaryBytes: Buffer.byteLength("private summary"),
+        afterNativeToolResultTokens: 9_000,
+      }),
+    )
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("private summary")
+  })
+
+  it.each(["PostToolBatch", "UserPromptSubmit", "PostCompact"] as const)(
+    "holds %s before another over-budget request and releases it on cancel",
+    async (hookName) => {
+      const getContextUsage = vi.fn(async () => ({
+        totalTokens: 198_000, maxTokens: 200_000, autoCompactThreshold: 167_000,
+        model: "qwen3.8-max", messageBreakdown: { toolResultTokens: 43_000 },
+      }))
+      const { factory, getOptions, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
+      const session = createSession(factory, { persistToolOutputText: vi.fn(), autoCompactWindowTokens: 200_000 })
+      await session.send({ ...message("complete the original task"), runtimeTurnId: "turn-1" })
+      let resumed = false
+      const paused = lifecycleHook(getOptions(), hookName)({
+        hook_event_name: hookName, trigger: "auto", compact_summary: "keep task requirements",
+        tool_calls: [{ tool_name: "Bash", tool_use_id: "done-1", tool_response: "already deployed" }],
+      }).then((result) => { resumed = true; return result })
+      if (hookName === "PostToolBatch") {
+        await expect(session.nextEvent()).resolves.toMatchObject({ type: "toolResult", toolUseId: "done-1" })
+      }
+      await expect(session.nextEvent()).resolves.toMatchObject({
+        type: "sdkEvent", sdkType: "contextRotationRequested", payload: {},
+      })
+      expect(resumed).toBe(false)
+      expect(session.contextRotation()).toMatchObject({
+        reason: hookName === "PostCompact" ? "ineffective-compaction" : "request-budget",
+      })
+      await session.cancelCurrentTurn()
+      await expect(paused).resolves.toMatchObject({ continue: false })
+      expect(query.close).toHaveBeenCalledOnce()
+      expect(query.interrupt).not.toHaveBeenCalled()
+    },
+  )
+
+  it("continues after cumulative tool output exceeds the old turn allowance", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024 })
+    await session.send({ ...message("continue"), runtimeTurnId: "turn-1" })
+    for (let batch = 0; batch < 20; batch += 1) {
+      await expect(postToolUseHook(getOptions())({
+        hook_event_name: "PostToolUse", tool_name: "Bash", tool_response: "x".repeat(6000),
+      })).resolves.toEqual({})
+      await expect(lifecycleHook(getOptions(), "PostToolBatch")({
+        hook_event_name: "PostToolBatch", tool_calls: [],
+      })).resolves.toEqual({})
+    }
+    expect(session.contextRotation()).toBeUndefined()
+    await session.close()
+  })
+
+  it("allows effective compaction and excludes subagent hooks from main-session rotation", async () => {
+    const getContextUsage = vi.fn(async () => ({
+      totalTokens: 45_000, maxTokens: 200_000, autoCompactThreshold: 167_000, model: "qwen3.8-max",
+    }))
+    const { factory, getOptions } = createQueryFactory({ getContextUsage: getContextUsage as never })
+    const session = createSession(factory, { persistToolOutputText: vi.fn() })
+    await session.send({ ...message("continue"), runtimeTurnId: "turn-1" })
+    await expect(lifecycleHook(getOptions(), "PostCompact")({
+      hook_event_name: "PostCompact", trigger: "auto", compact_summary: "progress",
+    })).resolves.toEqual({})
+    expect(session.contextRotation()).toBeUndefined()
+    getContextUsage.mockClear()
+    await lifecycleHook(getOptions(), "PostToolBatch")({
+      hook_event_name: "PostToolBatch", agent_id: "child", tool_calls: [],
+    })
+    expect(getContextUsage).not.toHaveBeenCalled()
+    await session.close()
+  })
+
+  it("records SDK-native compaction failures without logging the SDK error body", async () => {
+    const logger = { warn: vi.fn(), info: vi.fn() }
+    const { factory, getOptions, query } = createQueryFactory()
+    const session = createSession(factory, { logger })
+    await lifecycleHook(getOptions(), "PreCompact")({
+      hook_event_name: "PreCompact",
+      trigger: "auto",
+    })
+
+    const statusEvent = session.nextEvent()
+    query.push({
+      type: "system",
+      subtype: "status",
+      session_id: "sdk-compact-failed",
+      status: null,
+      compact_result: "failed",
+      compact_error: "secret provider response",
+    } as unknown as SDKMessage)
+    await expect(statusEvent).resolves.toMatchObject({ type: "status" })
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Claude SDK native compaction failed.",
+      expect.objectContaining({
+        boundary: "claude-sdk.compaction-monitor",
+        sdkSessionId: "sdk-compact-failed",
+        hasSdkError: true,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret provider response")
   })
 
   it("maps SDK tool result ids back to the tool name for timeline display", async () => {
@@ -1861,6 +2247,60 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("scopes request-body recovery classification to the configured Bailian transport policy", async () => {
+    const raw = "Exceeded limit on max bytes to request body : 6291456"
+    const officialFactory = createQueryFactory()
+    const official = createSession(officialFactory.factory, { maxRequestBodyBytes: 6 * 1024 * 1024 })
+    const officialEvent = official.nextEvent()
+    officialFactory.query.rejectNext(new Error(raw))
+
+    await expect(officialEvent).resolves.toMatchObject({
+      type: "error",
+      message: "当前对话内容较多，暂时无法继续。",
+      errorKind: "request_body_too_large",
+      recoverable: true,
+    })
+
+    const proxyFactory = createQueryFactory()
+    const proxy = createSession(proxyFactory.factory)
+    const proxyEvent = proxy.nextEvent()
+    proxyFactory.query.rejectNext(new Error(raw))
+
+    await expect(proxyEvent).resolves.toMatchObject({
+      type: "error",
+      message: "Agent 执行失败。",
+      errorKind: "execution_failed",
+      recoverable: false,
+    })
+  })
+
+  it("maps rapid context refill query failures to provider-independent recovery", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+    const event = session.nextEvent()
+    query.rejectNext(new Error(
+      "Autocompact is thrashing: context refilled. terminal_reason=rapid_refill_breaker",
+    ))
+
+    await expect(event).resolves.toMatchObject({
+      type: "error",
+      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
+      errorKind: "context_refill_thrashing",
+      recoverable: true,
+    })
+    expect(JSON.stringify(await event)).not.toContain("Autocompact is thrashing")
+  })
+
+  it("automatically hands off a settled context breaker without forwarding its error to the user", async () => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory, { persistToolOutputText: vi.fn() })
+    await session.send({ ...message("finish everything"), runtimeTurnId: "turn-1" })
+    query.rejectNext(new Error("Autocompact is thrashing: terminal_reason=rapid_refill_breaker"))
+    await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextRotationRequested" })
+    expect(session.contextRotation()?.reason).toBe("request-budget")
+    await session.close()
+  })
+
   it("sanitizes SDK query rejection messages before publishing error events", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory, { sdkSessionId: "sdk-1" })
@@ -2217,6 +2657,43 @@ function preToolUseHook(options: Record<string, unknown>, matcher = "TodoWrite")
   return (input) => hook.hooks[0](
     input,
     "toolu-todo",
+    { signal: new AbortController().signal },
+  )
+}
+
+function postToolUseHook(options: Record<string, unknown>): (
+  input: Record<string, unknown>,
+) => Promise<unknown> {
+  const hooks = options.hooks as {
+    PostToolUse: Array<{ matcher?: string, hooks: [(
+      input: Record<string, unknown>,
+      toolUseID: string | undefined,
+      context: { signal: AbortSignal },
+    ) => Promise<unknown>] }>
+  }
+  const hook = hooks.PostToolUse.find((entry) => (entry.matcher ?? "*") === "*")
+  if (!hook) throw new Error("missing PostToolUse hook")
+  return (input) => hook.hooks[0](
+    input,
+    typeof input.tool_use_id === "string" ? input.tool_use_id : undefined,
+    { signal: new AbortController().signal },
+  )
+}
+
+function lifecycleHook(
+  options: Record<string, unknown>,
+  eventName: "PreCompact" | "PostCompact" | "PostToolBatch" | "UserPromptSubmit",
+): (input: Record<string, unknown>) => Promise<unknown> {
+  const hooks = options.hooks as Record<string, Array<{ hooks: [(
+    input: Record<string, unknown>,
+    toolUseID: string | undefined,
+    context: { signal: AbortSignal },
+  ) => Promise<unknown>] }>>
+  const hook = hooks[eventName]?.[0]
+  if (!hook) throw new Error(`missing ${eventName} hook`)
+  return (input) => hook.hooks[0](
+    input,
+    undefined,
     { signal: new AbortController().signal },
   )
 }

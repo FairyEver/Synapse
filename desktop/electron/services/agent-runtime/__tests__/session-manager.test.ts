@@ -46,7 +46,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -91,7 +91,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/missing-workspace",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -130,7 +130,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -169,7 +169,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -206,7 +206,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -261,7 +261,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -306,7 +306,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -344,7 +344,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -378,7 +378,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -409,7 +409,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -453,7 +453,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -517,7 +517,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -560,7 +560,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -620,7 +620,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -675,7 +675,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -727,7 +727,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -775,7 +775,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -805,7 +805,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic/",
@@ -828,6 +828,16 @@ describe("SessionManager", () => {
 
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       model: "qwen3.7-plus",
+      autoCompactWindowTokens: 200_000,
+      maxRequestBodyBytes: 6 * 1024 * 1024,
+      requestBodyBudgetBytes: 5 * 1024 * 1024,
+      maxToolOutputBytes: 8 * 1024,
+      maxToolBatchOutputBytes: 24 * 1024,
+      sdkSettings: expect.objectContaining({
+        autoCompactEnabled: true,
+        autoCompactWindow: 200_000,
+        precomputeCompactionEnabled: true,
+      }),
       env: expect.objectContaining({
         CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1000000",
       }),
@@ -845,7 +855,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
@@ -878,7 +888,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://proxy.example.com/anthropic",
@@ -915,7 +925,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
@@ -950,7 +960,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
@@ -987,7 +997,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
@@ -1024,7 +1034,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2" })),
         getProvider: vi.fn(async () => ({ id: "bailian", category: "cloud_provider", settingsConfig: {} })),
@@ -1090,13 +1100,13 @@ describe("SessionManager", () => {
     }))
   })
 
-  it("keeps the router off for old conversations, official endpoints, and official providers", async () => {
+  it("defaults legacy third-party conversations to the router while preserving official endpoints", async () => {
     const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
     const executeSynapseTool = vi.fn()
     const baseDeps = {
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       states: new Map<string, RuntimeSessionState>(),
       pendingPermissions: new Map<string, PendingPermissionState>(),
       createSession,
@@ -1155,7 +1165,7 @@ describe("SessionManager", () => {
     })
 
     expect(createSession.mock.calls.map(([input]) => input.synapseToolRouter)).toEqual([
-      undefined,
+      expect.any(Function),
       undefined,
       undefined,
     ])
@@ -1168,7 +1178,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_BASE_URL: baseUrl })),
         getProvider: vi.fn(),
@@ -1199,7 +1209,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
@@ -1244,7 +1254,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2",
@@ -1291,7 +1301,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1341,7 +1351,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1407,7 +1417,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1444,7 +1454,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_MODEL: "provider-default",
@@ -1484,7 +1494,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_MODEL: "provider-default",
@@ -1534,7 +1544,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv,
         getActiveProvider: vi.fn(),
@@ -1578,7 +1588,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_MODEL: "deepseek-chat" })),
         getActiveProvider: vi.fn(),
@@ -1617,7 +1627,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({})),
         getActiveProvider: vi.fn(),
@@ -1655,7 +1665,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({})),
         getActiveProvider: vi.fn(),
@@ -1689,7 +1699,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1733,7 +1743,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1780,7 +1790,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1909,7 +1919,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1941,7 +1951,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),
@@ -1982,7 +1992,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({
           ANTHROPIC_MODEL: "provider-default",
@@ -2037,7 +2047,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv,
         getActiveProvider: vi.fn(),
@@ -2091,7 +2101,7 @@ describe("SessionManager", () => {
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
-      repository: {} as AgentSessionRepository,
+      repository: { ensureTaskListId: async () => "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0" } as unknown as AgentSessionRepository,
       providerService: {
         buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
         getActiveProvider: vi.fn(),

@@ -92,6 +92,32 @@ describe("AgentConversationExportService", () => {
     await service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })
   })
 
+  it.each(["empty", "tail"])("exports persisted history when the runtime projection is %s", async (projection) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-export-snapshot-"))
+    tempRoots.push(root)
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const conversation = createConversation()
+    await conversations.upsert(conversation)
+    const service = new AgentConversationExportService({
+      conversations, agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
+      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: async () => path.join(root, "export.zip"),
+      getTimeline: async () => ({ projectId: "project-1", conversationId: "conv-1", sessionKey: TEST_SESSION_KEY,
+        total: conversation.history.length, startIndex: 2, hasMore: true,
+        entries: projection === "empty" ? [] : [{ id: "sentinel", kind: "message", role: "assistant", content: "Only a tail", timestamp: "2026-09-13T00:00:00Z" }] }),
+      createZipArchive: async (directory) => {
+        const timeline = JSON.parse(await readFile(path.join(directory, "timeline.json"), "utf8"))
+        const summary = JSON.parse(await readFile(path.join(directory, "summary.json"), "utf8"))
+        expect(timeline.entries).toHaveLength(conversation.history.length)
+        expect(summary).toMatchObject({ messageCount: 2, toolCallCount: 1, countSource: "persisted-conversation-history" })
+        const transcript = await readFile(path.join(directory, "transcript.md"), "utf8")
+        expect(transcript).toContain("请看图")
+        expect(transcript).toContain("已完成")
+        expect(transcript).not.toContain("Only a tail")
+      },
+    })
+    await service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })
+  })
   it("writes a redacted conversation debug bundle before zipping it", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-test-"))
     tempRoots.push(tempRoot)
@@ -101,6 +127,10 @@ describe("AgentConversationExportService", () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
     const auditEvents: Parameters<AuditSink["record"]>[0][] = []
     const conversation = createConversation()
+    conversation.history.push({ role: "tool", content: "Authorization: Bearer sk-bearer failed",
+      timestamp: "2026-06-08T08:00:02.000Z", metadata: {
+        agentEventType: "toolResult", toolUseId: "toolu-read-1", toolName: "Read", status: "error", success: false,
+      } })
     await conversations.upsert(conversation)
     await agentEvents.upsert({
       id: "event-1",
@@ -413,7 +443,7 @@ describe("AgentConversationExportService", () => {
       })
       expect(sdkStreamText).not.toContain("sk-stream-secret")
       expect(timelineText).toContain("toolu-read-1")
-      expect(timeline.entries).toHaveLength(2)
+      expect(timeline.entries).toHaveLength(conversation.history.length)
       expect(transcript).toContain("Read")
       expect(transcript).toContain("输出")
       expect(transcript).not.toContain("/tmp")
@@ -866,7 +896,7 @@ describe("AgentConversationExportService", () => {
     expect(createZipArchive).toHaveBeenCalledTimes(1)
   })
 
-  it("serializes cyclic runtime timeline values without blocking export", async () => {
+  it("serializes cyclic persisted history metadata without blocking export", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-cycle-test-"))
     tempRoots.push(tempRoot)
     const outputPath = path.join(tempRoot, "conversation.zip")
@@ -879,6 +909,7 @@ describe("AgentConversationExportService", () => {
       token: "sk-secret",
     }
     cyclicInput.self = cyclicInput
+    conversation.history[1]!.metadata!.toolInputRaw = cyclicInput
 
     const createZipArchive = vi.fn(async (sourceDirectoryPath: string) => {
       const timelineText = await readFile(path.join(sourceDirectoryPath, "timeline.json"), "utf8")

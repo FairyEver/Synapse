@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { stat } from "node:fs/promises"
 import { AGENT_ATTACHMENT_IMAGE_MIME_TYPES } from "../../../src/types/agent-attachment"
+import type { SynapseAgentTimelineItem } from "../../../src/types/agent"
 
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
@@ -23,6 +24,7 @@ import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 import { isDefaultAgentWorkspaceProjectId } from "../../../src/lib/default-agent-workspace"
 import { resolveDefaultAgentWorkspaceProject } from "./default-agent-workspace"
+import { agentConversationReference } from "../../../app-capabilities/agent/main/conversation-reference"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -59,7 +61,7 @@ export function assertKnowledgeBaseStorageMigrationInactive(
 export const timelineRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   conversationId: z.string().optional(),
-  limit: z.number().int().positive().max(200).optional(),
+  limit: z.number().int().positive().max(100).optional(),
   beforeIndex: z.number().int().nonnegative().optional(),
 })
 
@@ -81,6 +83,8 @@ const timelineBaseSchema = {
   sdkSessionId: z.string().optional(),
   agentSessionId: z.string().optional(),
   threadId: z.string().optional(),
+  historyIndex: z.number().int().nonnegative().optional(),
+  contentTruncated: z.boolean().optional(),
 }
 
 const jsonRecordSchema = z.record(z.string(), z.unknown())
@@ -89,10 +93,13 @@ const agentErrorKindSchema = z.enum([
   "connection_interrupted",
   "tool_use_interrupted",
   "webfetch_preflight_failed",
+  "request_body_too_large",
+  "context_refill_thrashing",
+  "renderer_unavailable",
 ])
 const agentTurnDiagnosticSchema = z.object({
   source: z.enum(["claude-sdk", "agent-runtime", "process-runner"]),
-  kind: z.enum(["aborted", "closed", "connection_interrupted", "error", "tool_use_interrupted"]),
+  kind: z.enum(["aborted", "closed", "connection_interrupted", "error", "tool_use_interrupted", "request_body_too_large", "context_refill_thrashing", "renderer_unavailable"]),
   message: z.string().optional(),
   recoverable: z.boolean().optional(),
 })
@@ -123,7 +130,7 @@ const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     status: z.literal("interrupted"),
-    reason: z.enum(["network_interrupted", "tool_use_interrupted"]),
+    reason: z.enum(["network_interrupted", "tool_use_interrupted", "request_body_too_large", "context_refill_thrashing", "renderer_unavailable"]),
     recoverable: z.literal(true),
     message: z.string(),
     diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
@@ -180,6 +187,8 @@ const agentModelContextReferenceSchema = z.object({
 export const agentContextUsageSchema = z.object({
   usedTokens: z.number().int().nonnegative(),
   contextWindowTokens: z.number().int().positive().optional(),
+  autoCompactWindowTokens: z.number().int().positive().optional(),
+  autoCompactThresholdTokens: z.number().int().positive().optional(),
   model: z.string().min(1).optional(),
   modelContext: agentModelContextReferenceSchema.optional(),
   contextWindowConfigurationSource: z.enum(["catalog", "provider-env"]).optional(),
@@ -230,6 +239,8 @@ const resultMetadataSchema = z.object({
   totalCostBreakdownCny: jsonRecordSchema.optional(),
   costCurrency: z.literal("CNY").optional(),
   estimatedCost: z.boolean().optional(),
+  queuedTurnCount: z.number().int().nonnegative().optional(),
+  userMessageUuid: z.string().optional(),
 })
 
 const fileCheckpointStatusSchema = z.enum([
@@ -258,6 +269,8 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     attachments: z.array(agentMessageAttachmentSchema).optional(),
     legacy: z.boolean().optional(),
     metadata: resultMetadataSchema.optional(),
+    messageKind: z.literal("steer").optional(),
+    clientMessageId: z.string().optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -369,6 +382,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
 export const sessionSummarySchema = z.object({
   projectId: z.string(),
   id: z.string(),
+  conversationRef: z.string().optional(),
   sessionKey: z.string(),
   mode: permissionModeSchema.optional(),
   name: z.string().optional(),
@@ -386,6 +400,14 @@ export const sessionSummarySchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   lastMessage: timelineItemSchema.optional(),
+  contextRecovery: z.object({
+    status: z.enum(["required", "prepared", "failed"]),
+    reason: z.enum(["request_body_too_large", "context_refill_thrashing"]),
+    failedTurnId: z.string(),
+    createdAt: z.string(),
+    preparedAt: z.string().optional(),
+    failedAt: z.string().optional(),
+  }).optional(),
 })
 
 // ─── Shared helper functions ──────────────────────────────────────────────────
@@ -489,6 +511,7 @@ export function sessionSummary(session: ConversationEntryV1, historyCount = sess
   return {
     projectId: session.projectId,
     id: session.id,
+    conversationRef: agentConversationReference(session.projectId, session.id),
     sessionKey: session.sessionKey,
     mode: permissionModeFromConversation(session),
     name: session.name,
@@ -506,6 +529,7 @@ export function sessionSummary(session: ConversationEntryV1, historyCount = sess
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     lastMessage: last ? historyEntry(session.id, last, historyCount - 1, session.agentType) : undefined,
+    contextRecovery: session.contextRecovery,
   }
 }
 
@@ -574,38 +598,72 @@ export function historyPage(
     return { entries: [], total: 0, startIndex: 0, hasMore: false }
   }
 
-  const paged = request.limit !== undefined || request.beforeIndex !== undefined
   const endIndex = request.beforeIndex ?? total
   assertHistoryPageBoundary(session, endIndex)
-
-  if (!paged) {
-    return {
-      entries: session.history.map((entry, index) =>
-        historyEntry(session.id, entry, index, session.agentType)),
-      total,
-      startIndex: 0,
-      hasMore: false,
-    }
-  }
 
   if (endIndex === 0) {
     return { entries: [], total, startIndex: 0, hasMore: false }
   }
 
-  const nominalStart = Math.max(0, endIndex - (request.limit ?? 100))
+  const nominalStart = Math.max(0, endIndex - Math.min(request.limit ?? 100, 100))
   let startIndex = nominalStart
   while (startIndex > 0 && session.history[startIndex]?.role !== "user") {
     startIndex -= 1
   }
   if (session.history[startIndex]?.role !== "user") startIndex = 0
 
+  const bounded = boundTimelineEntries(session.history.slice(startIndex, endIndex).map((entry, index) =>
+    boundTimelineEntry(historyEntry(session.id, entry, startIndex + index, session.agentType), startIndex + index)))
+  startIndex += bounded.dropped
   return {
-    entries: session.history.slice(startIndex, endIndex).map((entry, index) =>
-      historyEntry(session.id, entry, startIndex + index, session.agentType)),
+    entries: bounded.entries,
     total,
     startIndex,
     hasMore: startIndex > 0,
   }
+}
+
+const MAX_TIMELINE_ITEM_BYTES = 64 * 1024
+const MAX_TIMELINE_PAGE_BYTES = 1000 * 1024
+
+function boundTimelineEntry(entry: SynapseAgentTimelineItem, historyIndex: number): SynapseAgentTimelineItem {
+  const next = { ...entry, historyIndex } as unknown as Record<string, unknown>
+  for (const key of ["content", "message", "toolInput", "summary"] as const) {
+    const value = next[key]
+    if (typeof value !== "string" || Buffer.byteLength(value, "utf8") <= MAX_TIMELINE_ITEM_BYTES) continue
+    next[key] = truncateTimelineText(value, MAX_TIMELINE_ITEM_BYTES)
+    next.contentTruncated = true
+  }
+  return next as unknown as SynapseAgentTimelineItem
+}
+
+function boundTimelineEntries(
+  entries: readonly SynapseAgentTimelineItem[],
+): { readonly entries: SynapseAgentTimelineItem[]; readonly dropped: number } {
+  const result = [...entries]
+  let dropped = 0
+  while (result.length > 0 && Buffer.byteLength(JSON.stringify(result), "utf8") > MAX_TIMELINE_PAGE_BYTES) {
+    do {
+      result.shift()
+      dropped += 1
+    } while (result.length > 0 && !isTimelineUserBoundary(result[0]))
+  }
+  return { entries: result, dropped }
+}
+
+function isTimelineUserBoundary(entry: SynapseAgentTimelineItem | undefined): boolean {
+  return entry?.kind === "message" && entry.role === "user"
+}
+
+function truncateTimelineText(value: string, maxBytes: number): string {
+  let low = 0
+  let high = value.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (Buffer.byteLength(value.slice(0, middle), "utf8") <= maxBytes) low = middle
+    else high = middle - 1
+  }
+  return value.slice(0, low)
 }
 
 function assertHistoryPageBoundary(session: ConversationEntryV1, beforeIndex: number): void {
@@ -695,6 +753,8 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     usage: jsonRecordSchema.optional(),
     modelUsage: jsonRecordSchema.optional(),
     sdkResultUuid: z.string().optional(),
+    queuedTurnCount: z.number().int().nonnegative().optional(),
+    userMessageUuid: z.string().optional(),
     costUsd: z.number().optional(),
     costCny: z.number().optional(),
     costCurrency: z.literal("CNY").optional(),

@@ -9,6 +9,7 @@ import {
   getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
 import { capabilityIdToMcpTool, type CapabilityId } from "../../synapse-capabilities/shared/naming"
+import { APP_DOMAIN, buildAppTools } from "../../synapse-capabilities/shared/app-domain"
 import {
   JAVASCRIPT_RUN_CAPABILITY_ID,
   NODEJS_RUN_CAPABILITY_ID,
@@ -109,7 +110,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(toolNames).toHaveLength(223)
+    expect(allCapabilityIds()).toHaveLength(238)
+    expect(APP_DOMAIN.capabilities).toHaveLength(75)
+    expect(buildAppTools()).toHaveLength(71)
+    expect(toolNames).toHaveLength(234)
     expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -202,6 +206,26 @@ describe("API and MCP capability surface", () => {
       .filter((toolName) => docsText.includes(`\`${toolName}\``))
 
     expect(documentedRetiredToolNames).toEqual([])
+  })
+
+  it("documents the Agent conversation deep link without a shell or content-reading fallback", () => {
+    const skill = readRepoFile("app-capabilities/synapse-skill/skill-package/SKILL.md")
+    const appGuide = readRepoFile("app-capabilities/synapse-skill/skill-package/app/index.md")
+    const appApi = readRepoFile("app-capabilities/synapse-skill/skill-package/app/api-reference.md")
+
+    expect(skill).toContain("Synapse Agent conversation deep links")
+    expect(appGuide).toContain("`app_agent_group_list`")
+    expect(appGuide).toContain("`app_agent_conversation_create`")
+    expect(appGuide).toContain("sameGroupAs")
+    expect(appGuide).toContain("本地对话")
+    expect(appApi).toContain("## `app_agent_conversation_create`")
+    expect(appGuide).toContain("`app_agent_conversation_open`")
+    expect(appGuide).toContain("synapse://threads/<thread-id>")
+    expect(appGuide).toContain("former `synapse://app/agent/open` route")
+    expect(appGuide).toContain("Do not fetch the link")
+    expect(appGuide).toContain("Do not fetch the link, browse it, pass it to a shell command")
+    expect(appApi).toContain("Output is exactly `{ opened: true }`")
+    expect(appApi).toContain("No title, session key, message, transcript")
   })
 
   it("documents JSON Repair direct-call and Workflow boundaries with the implementation", () => {

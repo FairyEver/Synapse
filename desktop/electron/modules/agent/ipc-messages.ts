@@ -5,7 +5,7 @@ import { z } from "zod"
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type {
-  AgentArtifactEntryV1,
+  AgentArtifactEntry,
   AgentEventEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
@@ -20,6 +20,8 @@ import { AgentAttachmentQuotaError } from "../../services/agent-runtime/attachme
 import { REDACTED } from "../../services/agent-runtime/redaction"
 import { agentConversationDeliveryOptions } from "../../services/agent-runtime/event-delivery"
 import type { EventBus } from "../../runtime/event-bus"
+import type { ProjectContainerRegistry } from "../../runtime/project-container"
+import { AGENT_RUNTIME_SERVICE_ID } from "../../services/agent-runtime"
 import { AGENT_ATTACHMENT_IMAGE_MIME_TYPES } from "../../../src/types/agent-attachment"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
@@ -44,6 +46,7 @@ import { AgentClipboardAttachmentService } from "./clipboard-attachment-service"
 const MAX_CLIENT_SKEW_MS = 60_000
 const MAX_AGENT_ATTACHMENT_RESOLUTION_PATHS = 256
 const logger = createMainLogger("agent.ipc")
+const rendererDestroyCleanupRegistered = new Set<number>()
 const clipboardAttachmentService = new AgentClipboardAttachmentService(() => clipboard.readImage())
 const agentImageMimeTypeSchema = z.enum(AGENT_ATTACHMENT_IMAGE_MIME_TYPES)
 const attachmentPathSchema = z.string()
@@ -176,6 +179,21 @@ const sendRequestSchema = projectRequestSchema.extend({
   })
 })
 
+const steerRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  expectedTurnId: z.string().min(1),
+  clientMessageId: z.string().min(1),
+  content: z.string(),
+  clientSubmittedAt: z.string().optional(),
+}).superRefine((request, ctx) => {
+  const content = request.content.trim()
+  if (!content) {
+    ctx.addIssue({ code: "custom", path: ["content"], message: "content is required" })
+  } else if (content.startsWith("/")) {
+    ctx.addIssue({ code: "custom", path: ["content"], message: "commands cannot steer an active turn" })
+  }
+})
+
 const respondPermissionRequestSchema = projectRequestSchema.extend({
   requestId: z.string().min(1),
   behavior: z.enum(["allow", "deny"]),
@@ -193,6 +211,11 @@ const cancelTurnRequestSchema = projectRequestSchema.extend({
   conversationId: z.string().min(1),
 })
 
+const contextRecoveryRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  failedTurnId: z.string().min(1),
+})
+
 const cancelTurnResultSchema = z.object({
   status: z.enum(["no-active-turn", "graceful-pending", "hard-killed"]),
 })
@@ -200,6 +223,21 @@ const cancelTurnResultSchema = z.object({
 const exportConversationBundleRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
   conversationId: z.string().min(1),
+})
+const timelineContentChunkRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  historyIndex: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  maxBytes: z.number().int().positive().max(64 * 1024).optional(),
+})
+const agentEventSubscriptionRequestSchema = z.object({
+  projectIds: z.array(z.string().min(1)).max(256),
+  projectId: z.string().min(1).optional(),
+  conversationId: z.string().min(1).optional(),
+})
+const ackAgentEventBatchRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  batchId: z.string().min(1),
 })
 
 const fileCheckpointRequestSchema = projectRequestSchema.extend({
@@ -220,11 +258,36 @@ const sendResultSchema = z.object({
   projectId: z.string(),
   sessionKey: z.string(),
   conversationId: z.string(),
-  resultText: z.string(),
-  events: z.array(agentEventSchema),
+  outcome: z.object({
+    status: z.enum(["completed", "failed", "cancelled", "interrupted"]),
+    errorKind: z.enum([
+      "execution_failed",
+      "connection_interrupted",
+      "tool_use_interrupted",
+      "webfetch_preflight_failed",
+      "request_body_too_large",
+      "context_refill_thrashing",
+      "renderer_unavailable",
+    ]).optional(),
+    recoverable: z.boolean().optional(),
+  }),
   agentSessionId: z.string().optional(),
   threadId: z.string().optional(),
-  error: z.string().optional(),
+})
+
+const steerResultSchema = z.object({
+  status: z.enum([
+    "accepted",
+    "no-active-turn",
+    "turn-changed",
+    "permission-pending",
+    "cancel-pending",
+    "session-ended",
+    "unsupported",
+  ]),
+  conversationId: z.string(),
+  turnId: z.string().optional(),
+  clientMessageId: z.string(),
 })
 
 const timelineResultSchema = z.object({
@@ -235,6 +298,13 @@ const timelineResultSchema = z.object({
   total: z.number().int().nonnegative(),
   startIndex: z.number().int().nonnegative(),
   hasMore: z.boolean(),
+})
+const timelineContentChunkResultSchema = z.object({
+  conversationId: z.string(),
+  historyIndex: z.number().int().nonnegative(),
+  content: z.string(),
+  nextOffset: z.number().int().nonnegative(),
+  done: z.boolean(),
 })
 
 const pendingPermissionSchema = z.object({
@@ -308,6 +378,7 @@ const fileCheckpointRewindSchema = z.object({
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SendRequest = z.infer<typeof sendRequestSchema>
+type SteerRequest = z.infer<typeof steerRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
 type SetPermissionModeRequest = z.infer<typeof setPermissionModeRequestSchema>
 type ExportConversationBundleRequest = z.infer<typeof exportConversationBundleRequestSchema>
@@ -315,6 +386,56 @@ type ExportConversationBundleRequest = z.infer<typeof exportConversationBundleRe
 // ─── Message method descriptors ───────────────────────────────────────────────
 
 export const messageMethods: Record<string, IpcMethodDescriptor> = {
+  setAgentEventSubscription: {
+    kind: "invoke",
+    operationId: "app.agent.operation.set_event_subscription",
+    request: agentEventSubscriptionRequestSchema,
+    response: z.object({ ok: z.literal(true) }),
+    handler: (ctx, request: z.infer<typeof agentEventSubscriptionRequestSchema>) => {
+      const rendererId = ctx.sender?.id
+      if (rendererId === undefined) throw new Error("Renderer 订阅来源无效。")
+      const containers = ctx.resolve<ProjectContainerRegistry>("core.project-containers")
+      const subscribed = new Set(request.projectIds)
+      for (const { projectId } of containers.list()) {
+        containers.peek(projectId)?.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+          .setRendererSubscription(
+            rendererId,
+            subscribed.has(projectId),
+            request.projectId === projectId ? request.conversationId : null,
+          )
+      }
+      if (!rendererDestroyCleanupRegistered.has(rendererId)) {
+        rendererDestroyCleanupRegistered.add(rendererId)
+        ctx.sender?.onDestroyed(() => {
+          rendererDestroyCleanupRegistered.delete(rendererId)
+          for (const { projectId } of containers.list()) {
+            containers.peek(projectId)?.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+              .setRendererSubscription(rendererId, false)
+          }
+        })
+      }
+      return { ok: true }
+    },
+  },
+  ackAgentEventBatch: {
+    kind: "invoke",
+    operationId: "app.agent.operation.ack_event_batch",
+    request: ackAgentEventBatchRequestSchema,
+    response: z.object({ acknowledged: z.boolean() }),
+    handler: (ctx, request: z.infer<typeof ackAgentEventBatchRequestSchema>) => {
+      const rendererId = ctx.sender?.id
+      if (rendererId === undefined) return { acknowledged: false }
+      const containers = ctx.resolve<ProjectContainerRegistry>("core.project-containers")
+      const runtime = containers.peek(request.projectId)?.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+      return {
+        acknowledged: runtime?.ackRendererEventBatch(
+          rendererId,
+          request.conversationId,
+          request.batchId,
+        ) ?? false,
+      }
+    },
+  },
   getFileCheckpoint: {
     kind: "invoke",
     operationId: "app.agent.operation.get_file_checkpoint",
@@ -372,9 +493,11 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
     operationId: "app.agent.operation.get_timeline",
     request: timelineRequestSchema,
     response: timelineResultSchema,
+    maxResponseBytes: 1024 * 1024,
     handler: async (ctx, request: z.infer<typeof timelineRequestSchema>) => {
       try {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        if (ctx.sender) agent.setRendererSubscription(ctx.sender.id, true, request.conversationId)
         const session = await resolveTimelineSession(agent, request)
         const page = session
           ? historyPage(session, request)
@@ -421,6 +544,33 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       }
     },
   },
+  getTimelineContentChunk: {
+    kind: "invoke",
+    operationId: "app.agent.operation.get_timeline_content_chunk",
+    request: timelineContentChunkRequestSchema,
+    response: timelineContentChunkResultSchema,
+    maxResponseBytes: 68 * 1024,
+    handler: async (ctx, request: z.infer<typeof timelineContentChunkRequestSchema>) => {
+      const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
+      const conversation = await dataRepo.namespace<ConversationEntryV1>("conversations")
+        .get(request.conversationId)
+      if (!conversation || conversation.projectId !== request.projectId) {
+        throw new Error("找不到当前对话。")
+      }
+      const history = conversation.history[request.historyIndex]
+      if (!history) throw new Error("对话内容索引无效。")
+      if (request.offset > history.content.length) throw new Error("对话内容偏移无效。")
+      const content = truncateUtf8Chunk(history.content.slice(request.offset), request.maxBytes ?? 64 * 1024)
+      const nextOffset = request.offset + content.length
+      return {
+        conversationId: conversation.id,
+        historyIndex: request.historyIndex,
+        content,
+        nextOffset,
+        done: nextOffset >= history.content.length,
+      }
+    },
+  },
   exportConversationBundle: {
     kind: "invoke",
     operationId: "app.agent.operation.export_conversation_bundle",
@@ -435,7 +585,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         conversations: dataRepo.namespace<ConversationEntryV1>("conversations"),
         agentEvents: dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
-        agentArtifacts: dataRepo.namespace<AgentArtifactEntryV1>("agent.artifacts"),
+        agentArtifacts: dataRepo.namespace<AgentArtifactEntry>("agent.artifacts"),
         permissionGuard,
         auditSink,
         logger,
@@ -545,6 +695,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
     operationId: "app.agent.operation.send",
     request: sendRequestSchema,
     response: sendResultSchema,
+    maxResponseBytes: 32 * 1024,
     handler: async (ctx, request: SendRequest) => {
       const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
       const eventBus = ctx.resolve<EventBus>("core.event-bus")
@@ -557,6 +708,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         const project = config.global.projects.find((item) => item.id === request.projectId)
         assertKnowledgeBaseStorageMigrationInactive(ctx.resolve, project)
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        if (ctx.sender) agent.setRendererSubscription(ctx.sender.id, true, request.conversationId)
         eventBus.emit({
           domain: "agent",
           type: "phase.update",
@@ -570,7 +722,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             startedAt: submittedAt,
             completedAt: t_recv,
           },
-          scope: { projectId: request.projectId },
+          scope: rendererEventScope(request.projectId, ctx.sender?.id),
           timestamp: t_recv,
         }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
 
@@ -586,7 +738,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             status: "in-progress",
             startedAt: t_recv,
           },
-          scope: { projectId: request.projectId },
+          scope: rendererEventScope(request.projectId, ctx.sender?.id),
           timestamp: t_recv,
         }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
 
@@ -605,6 +757,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           content: request.content,
           displayContent: request.displayContent,
           providerId: request.providerId,
+          originRendererId: ctx.sender?.id,
           attachmentRefs: stagedAttachments?.refs,
           attachmentDraftScopeId: stagedAttachments?.draftScopeId,
           replyCtx: {
@@ -614,8 +767,8 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
         }
         const result = request.conversationId
-          ? await agent.sendToConversation(message, request.conversationId)
-          : await agent.send(message)
+          ? await agent.sendToConversation(message, request.conversationId, { turnId: runId })
+          : await agent.send(message, { turnId: runId })
         const t_done = new Date().toISOString()
         const errorEvent = latestAgentErrorEvent(result.events as AgentEvent[])
         const cancelled = isCancelledAgentResult(result.events as AgentEvent[])
@@ -632,7 +785,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             startedAt: t_recv,
             completedAt: t_done,
           },
-          scope: { projectId: request.projectId },
+          scope: rendererEventScope(request.projectId, ctx.sender?.id),
           timestamp: t_done,
         }, agentConversationDeliveryOptions(request.projectId, result.conversationId))
         eventBus.emit({
@@ -651,18 +804,16 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             errorKind: errorEvent?.errorKind,
             recoverable: errorEvent?.recoverable,
           },
-          scope: { projectId: request.projectId },
+          scope: rendererEventScope(request.projectId, ctx.sender?.id),
           timestamp: t_done,
         }, agentConversationDeliveryOptions(request.projectId, result.conversationId))
         return {
           projectId: request.projectId,
           sessionKey,
           conversationId: result.conversationId,
-          resultText: result.resultText,
-          events: result.events as AgentEvent[],
+          outcome: rendererTurnOutcome(result.events as AgentEvent[], result.error),
           agentSessionId: result.agentSessionId,
           threadId: result.threadId,
-          error: result.error,
         }
       } catch (rawError) {
         const t_fail = new Date().toISOString()
@@ -688,10 +839,123 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             completedAt: t_fail,
             errorMessage: "发送失败",
           },
-          scope: { projectId: request.projectId },
+          scope: rendererEventScope(request.projectId, ctx.sender?.id),
           timestamp: t_fail,
         }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
         throw rawError
+      }
+    },
+  },
+  steer: {
+    kind: "invoke",
+    operationId: "app.agent.operation.steer",
+    request: steerRequestSchema,
+    response: steerResultSchema,
+    handler: async (ctx, request: SteerRequest) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const receivedAt = new Date().toISOString()
+      return agent.steer({
+        conversationId: request.conversationId,
+        expectedTurnId: request.expectedTurnId,
+        clientMessageId: request.clientMessageId,
+        content: request.content.trim(),
+        submittedAt: clampClientSubmittedAt(request.clientSubmittedAt, receivedAt),
+      })
+    },
+  },
+  prepareContextRecovery: {
+    kind: "invoke",
+    operationId: "app.agent.operation.prepare_context_recovery",
+    request: contextRecoveryRequestSchema,
+    response: sessionSummarySchema,
+    handler: async (ctx, request: z.infer<typeof contextRecoveryRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const updated = await agent.prepareContextRecovery(request)
+      return sessionSummary(updated)
+    },
+  },
+  continueContextRecovery: {
+    kind: "invoke",
+    operationId: "app.agent.operation.continue_context_recovery",
+    request: contextRecoveryRequestSchema,
+    response: sendResultSchema,
+    maxResponseBytes: 32 * 1024,
+    handler: async (ctx, request: z.infer<typeof contextRecoveryRequestSchema>) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      if (ctx.sender) agent.setRendererSubscription(ctx.sender.id, true, request.conversationId)
+      const conversation = await agent.getSession(request.conversationId)
+      if (!conversation) throw new Error("找不到当前对话。")
+      const eventBus = ctx.resolve<EventBus>("core.event-bus")
+      const runId = randomUUID()
+      const startedAt = new Date().toISOString()
+      eventBus.emit({
+        domain: "agent",
+        type: "phase.update",
+        payload: {
+          runId,
+          projectId: request.projectId,
+          conversationId: request.conversationId,
+          phase: "received",
+          status: "in-progress",
+          startedAt,
+        },
+        scope: rendererEventScope(request.projectId, ctx.sender?.id),
+        timestamp: startedAt,
+      }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
+      let result
+      try {
+        result = await agent.continueContextRecovery({
+          ...request,
+          turnId: runId,
+          originRendererId: ctx.sender?.id,
+        })
+      } catch (error) {
+        const failedAt = new Date().toISOString()
+        eventBus.emit({
+          domain: "agent",
+          type: "phase.update",
+          payload: {
+            runId,
+            projectId: request.projectId,
+            conversationId: request.conversationId,
+            phase: "failed",
+            status: "failed",
+            startedAt,
+            completedAt: failedAt,
+            errorMessage: "整理失败，请新建对话。",
+          },
+          scope: rendererEventScope(request.projectId, ctx.sender?.id),
+          timestamp: failedAt,
+        }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
+        throw error
+      }
+      const completedAt = new Date().toISOString()
+      const errorEvent = latestAgentErrorEvent(result.events as AgentEvent[])
+      eventBus.emit({
+        domain: "agent",
+        type: "phase.update",
+        payload: {
+          runId,
+          projectId: request.projectId,
+          conversationId: request.conversationId,
+          phase: result.error ? "failed" : "completed",
+          status: result.error ? "failed" : "done",
+          startedAt,
+          completedAt,
+          errorMessage: result.error,
+          errorKind: errorEvent?.errorKind,
+          recoverable: errorEvent?.recoverable,
+        },
+        scope: rendererEventScope(request.projectId, ctx.sender?.id),
+        timestamp: completedAt,
+      }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
+      return {
+        projectId: request.projectId,
+        sessionKey: conversation.sessionKey,
+        conversationId: result.conversationId,
+        outcome: rendererTurnOutcome(result.events as AgentEvent[], result.error),
+        agentSessionId: result.agentSessionId,
+        threadId: result.threadId,
       }
     },
   },
@@ -775,6 +1039,33 @@ function isCancelledAgentResult(events: readonly AgentEvent[]): boolean {
   ))
 }
 
+function rendererTurnOutcome(
+  events: readonly AgentEvent[],
+  error: string | undefined,
+): {
+  readonly status: "completed" | "failed" | "cancelled" | "interrupted"
+  readonly errorKind?: Extract<AgentEvent, { type: "error" }>["errorKind"]
+  readonly recoverable?: boolean
+} {
+  if (isCancelledAgentResult(events)) return { status: "cancelled" }
+  const errorEvent = latestAgentErrorEvent(events)
+  if (errorEvent?.turnOutcome?.status === "interrupted" || errorEvent?.recoverable === true) {
+    return {
+      status: "interrupted",
+      errorKind: errorEvent.errorKind,
+      recoverable: true,
+    }
+  }
+  if (error || errorEvent) {
+    return {
+      status: "failed",
+      errorKind: errorEvent?.errorKind,
+      recoverable: errorEvent?.recoverable,
+    }
+  }
+  return { status: "completed" }
+}
+
 function timelineLookupErrorMeta(rawError: unknown): {
   readonly errorName: string
   readonly errorLength: number
@@ -813,5 +1104,27 @@ function sendFailureDiagnostic(rawError: unknown): {
     errorName: rawError instanceof Error ? rawError.name : typeof rawError,
     errorLength: message.length,
     errorCode: typeof code === "string" || typeof code === "number" ? String(code) : undefined,
+  }
+}
+
+function truncateUtf8Chunk(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value
+  let low = 0
+  let high = value.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (Buffer.byteLength(value.slice(0, middle), "utf8") <= maxBytes) low = middle
+    else high = middle - 1
+  }
+  return value.slice(0, low)
+}
+
+function rendererEventScope(projectId: string, rendererId: number | undefined): {
+  readonly projectId: string
+  readonly rendererIds?: readonly number[]
+} {
+  return {
+    projectId,
+    ...(rendererId !== undefined ? { rendererIds: [rendererId] } : {}),
   }
 }

@@ -6,9 +6,17 @@ export type AppDeepLinkDeclaration = {
   readonly paramsSchema: z.ZodType<Record<string, unknown>>
 }
 
+export type AppProtocolRouteDeclaration = {
+  readonly hostname: string
+  readonly action: string
+  readonly capabilityId: string
+  readonly paramsSchema: z.ZodType<Record<string, unknown>>
+}
+
 export type MainAppCapabilityManifest = {
   readonly id: string
   readonly deepLinks?: readonly AppDeepLinkDeclaration[]
+  readonly protocolRoutes?: readonly AppProtocolRouteDeclaration[]
 }
 
 export type BuiltinCapabilitySurfaceDiscovery = "visible" | "hidden"

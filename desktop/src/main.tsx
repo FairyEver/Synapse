@@ -1,34 +1,41 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import App from "@/App"
-import { AppErrorBoundary } from "@/components/app-error-boundary"
-import { ActiveRepositorySwitchProvider } from "@/app-shell/active-repository-switch"
-import { AccountProvider } from "@/app-shell/account"
-import { AppConfigProvider } from "@/app-shell/config"
-import { IdentityProvider } from "@/app-shell/identity-context"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
 import { installDiagnostics } from "@/app-shell/diagnostics"
 import { updateDiagnosticContext } from "@/lib/diagnostic-context"
 import { installNativeDataTrackCapture, track, updateTrackingContext } from "@/lib/ui-tracking"
-import { AppNotificationsProvider } from "@/app-shell/notifications"
-import { RepositoryManagerProvider } from "@/app-shell/repository"
+import { Spinner } from "@/components/ui/spinner"
 import "@/styles/globals.css"
 
-const bootstrapLogger = createRendererLogger("renderer.bootstrap")
+const recoveryMode = new URLSearchParams(window.location.search).get("rendererRecovery")
 
-bootstrapLogger.info("Renderer bootstrap started.")
-installRendererLogForwarding()
-const cleanupDiagnostics = installDiagnostics()
-const cleanupNativeDataTrackCapture = installNativeDataTrackCapture()
-
-if (import.meta.hot) {
-  import.meta.hot.dispose(() => {
-    cleanupDiagnostics()
-    cleanupNativeDataTrackCapture()
-  })
+if (recoveryMode) {
+  createRoot(document.getElementById("root")!).render(
+    <main className="flex min-h-screen items-center justify-center text-foreground">
+      <div className="flex items-center gap-2" role="status">
+        {recoveryMode === "loading" ? <Spinner /> : null}
+        <span>{recoveryMode === "failed" ? "界面恢复失败" : "正在恢复界面…"}</span>
+      </div>
+    </main>,
+  )
+} else {
+  void bootstrapRenderer()
 }
 
-void (async () => {
+async function bootstrapRenderer(): Promise<void> {
+  const bootstrapLogger = createRendererLogger("renderer.bootstrap")
+  bootstrapLogger.info("Renderer bootstrap started.")
+  installRendererLogForwarding()
+  const cleanupDiagnostics = installDiagnostics()
+  const cleanupNativeDataTrackCapture = installNativeDataTrackCapture()
+
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      cleanupDiagnostics()
+      cleanupNativeDataTrackCapture()
+    })
+  }
+
   const windowType = new URLSearchParams(window.location.search).get("window")
   updateDiagnosticContext({ windowType: windowType ?? "main" })
   updateTrackingContext({ windowType: windowType ?? "main" })
@@ -50,6 +57,9 @@ void (async () => {
   }, { once: true })
 
   if (windowType === "workflow-editor") {
+    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
+    const { AppConfigProvider } = await import("@/app-shell/config")
+    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
     updateTrackingContext({ moduleId: "workflow", windowType })
     const { WorkflowEditorApp } = await import("@/modules/workflow/editor/editor-app")
     createRoot(document.getElementById("root")!).render(
@@ -64,6 +74,8 @@ void (async () => {
       </StrictMode>,
     )
   } else if (windowType === "workflow-runner") {
+    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
+    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
     updateTrackingContext({ moduleId: "workflow", windowType })
     const { WorkflowRunnerApp } = await import("@/modules/workflow/runner/runner-app")
     createRoot(document.getElementById("root")!).render(
@@ -76,6 +88,8 @@ void (async () => {
       </StrictMode>,
     )
   } else if (windowType === "knowledge-source-manager") {
+    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
+    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
     updateTrackingContext({ moduleId: "knowledge-base", windowType })
     const { KnowledgeBaseSourceManagerWindow } = await import("@/modules/knowledge-base/source-manager-window")
     createRoot(document.getElementById("root")!).render(
@@ -88,6 +102,9 @@ void (async () => {
       </StrictMode>,
     )
   } else if (windowType === "automation-editor") {
+    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
+    const { AppConfigProvider } = await import("@/app-shell/config")
+    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
     updateTrackingContext({ moduleId: "automation", windowType })
     const { AutomationEditorApp } = await import("@/modules/automation/editor/editor-app")
     createRoot(document.getElementById("root")!).render(
@@ -102,6 +119,13 @@ void (async () => {
       </StrictMode>,
     )
   } else if (windowType === "system-app") {
+    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
+    const { AppConfigProvider } = await import("@/app-shell/config")
+    const { RepositoryManagerProvider } = await import("@/app-shell/repository")
+    const { IdentityProvider } = await import("@/app-shell/identity-context")
+    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
+    const { AccountProvider } = await import("@/app-shell/account")
+    const { ActiveRepositorySwitchProvider } = await import("@/app-shell/active-repository-switch")
     const { SystemAppWindowApp } = await import("@/modules/apps/system-app-window-app")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
@@ -123,6 +147,14 @@ void (async () => {
       </StrictMode>,
     )
   } else {
+    const { default: App } = await import("@/App")
+    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
+    const { AppConfigProvider } = await import("@/app-shell/config")
+    const { RepositoryManagerProvider } = await import("@/app-shell/repository")
+    const { IdentityProvider } = await import("@/app-shell/identity-context")
+    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
+    const { AccountProvider } = await import("@/app-shell/account")
+    const { ActiveRepositorySwitchProvider } = await import("@/app-shell/active-repository-switch")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
         <AppErrorBoundary>
@@ -143,4 +175,4 @@ void (async () => {
       </StrictMode>,
     )
   }
-})()
+}

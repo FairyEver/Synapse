@@ -54,9 +54,33 @@ function useChatEvents(
   const latestDeliverySequencesRef = useRef(new Map<string, DeliverySequenceState>())
 
   useEffect(() => {
+    const bridge = getSynapseBridge()
+    if (!bridge) return undefined
+    const setSubscription = bridge.agent.setAgentEventSubscription
+    if (typeof setSubscription !== "function") return undefined
+    void setSubscription({
+      projectIds: projectIdsRef.current,
+      projectId: state.selectedProjectId,
+      conversationId: state.selectedConversationId,
+    })
+    return () => {
+      void setSubscription({ projectIds: [] })
+    }
+  }, [projectIdsKey, projectIdsRef, state.selectedConversationId, state.selectedProjectId])
+
+  useEffect(() => {
     if (projectIdsRef.current.length === 0) return undefined
     const bridge = getSynapseBridge()
     if (!bridge) return undefined
+    const acknowledgeBatch = (request: {
+      readonly projectId: string
+      readonly conversationId: string
+      readonly batchId: string
+    }) => {
+      if (typeof bridge.agent.ackAgentEventBatch === "function") {
+        void bridge.agent.ackAgentEventBatch(request)
+      }
+    }
     const clearStreamFlushTimer = () => {
       if (!streamFlushTimerRef.current) return
       clearTimeout(streamFlushTimerRef.current)
@@ -103,6 +127,54 @@ function useChatEvents(
         })
         return
       }
+      if (domainEvent.type === "eventBatch") {
+        if (domainEvent.payload.resyncRequired) {
+          streamEventsRef.current = []
+          void loadTimeline({
+            projectId: domainEvent.payload.projectId,
+            sessionKey: domainEvent.payload.sessionKey,
+            conversationId: domainEvent.payload.conversationId,
+          }, "refresh-tail").finally(() => acknowledgeBatch({
+            projectId: domainEvent.payload.projectId,
+            conversationId: domainEvent.payload.conversationId,
+            batchId: domainEvent.payload.batchId,
+          }))
+          return
+        }
+        for (const item of domainEvent.payload.events) {
+          const streamEvent: SynapseAgentStreamDomainEvent = {
+            domain: "agent",
+            type: item.event.type,
+            payload: {
+              event: item.event,
+              projectId: domainEvent.payload.projectId,
+              sessionKey: domainEvent.payload.sessionKey,
+              platform: domainEvent.payload.platform,
+              deliveryEpoch: domainEvent.payload.deliveryEpoch,
+              sequence: item.sequence,
+            },
+            timestamp: item.timestamp,
+            scope: domainEvent.scope,
+          }
+          if (!acceptSequencedAgentEvent(streamEvent, latestDeliverySequencesRef.current)) continue
+          if (matchesSelectedEvent(streamEvent, {
+            projectId: selectedProjectIdRef.current,
+            conversationId: selectedConversationIdRef.current,
+            sessionKey: selectedSessionKeyRef.current,
+          })) {
+            const contextUsage = contextUsageFromEvent(item.event)
+            if (contextUsage) dispatch({ type: "SET_CONTEXT_USAGE", contextUsage })
+            streamEventsRef.current.push(streamEvent)
+          }
+        }
+        flushStreamEvents()
+        acknowledgeBatch({
+          projectId: domainEvent.payload.projectId,
+          conversationId: domainEvent.payload.conversationId,
+          batchId: domainEvent.payload.batchId,
+        })
+        return
+      }
       if (isThinkingTokenTelemetryEvent(domainEvent)) {
         acceptSequencedAgentEvent(domainEvent, latestDeliverySequencesRef.current)
         return
@@ -116,6 +188,7 @@ function useChatEvents(
           markConversationTerminal(terminalConversationTimestampsRef.current, payload.conversationId, domainEvent.timestamp)
           pendingConversationIdsRef.current.delete(payload.conversationId)
           dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
+          dispatch({ type: "CLEAR_ACTIVE_TURN", conversationId: payload.conversationId })
         } else if (
           payload.status === "in-progress"
           && payload.conversationId
@@ -126,6 +199,9 @@ function useChatEvents(
           )
         ) {
           dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: payload.conversationId })
+          if (payload.phase === "received") {
+            dispatch({ type: "SET_ACTIVE_TURN", conversationId: payload.conversationId, turnId: payload.runId })
+          }
         }
         const selectedProject = selectedProjectIdRef.current
         const selectedConv = selectedConversationIdRef.current
@@ -257,6 +333,7 @@ function useChatEvents(
           markConversationTerminal(terminalConversationTimestampsRef.current, activeConversationId, domainEvent.timestamp)
           pendingConversationIdsRef.current.delete(activeConversationId)
           dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: activeConversationId })
+          dispatch({ type: "CLEAR_ACTIVE_TURN", conversationId: activeConversationId })
           dispatch({ type: "CANCEL_RESET" })
         } else if (
           domainEvent.payload.event.type !== "fileCheckpoint"

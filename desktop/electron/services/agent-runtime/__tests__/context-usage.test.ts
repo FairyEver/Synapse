@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest"
 import { AgentContextUsageTracker } from "../context-usage"
 
 describe("AgentContextUsageTracker", () => {
+  it("uses the SDK trigger separately from the configured compact window", () => {
+    const tracker = new AgentContextUsageTracker({ autoCompactWindowTokens: 200_000 })
+    expect(tracker.replaceFromContextUsage({ totalTokens: 178_000, maxTokens: 200_000, autoCompactThreshold: 167_000 }))
+      .toMatchObject({ usedTokens: 178_000, autoCompactWindowTokens: 200_000, autoCompactThresholdTokens: 167_000 })
+  })
+
   it("updates main-thread input and streaming output usage", () => {
     const tracker = new AgentContextUsageTracker()
 
@@ -232,5 +238,20 @@ describe("AgentContextUsageTracker", () => {
         only: { contextWindow: 128_000 },
       },
     })).toEqual({ usedTokens: 35, contextWindowTokens: 128_000, model: "only" })
+  })
+
+  it("keeps the last trustworthy snapshot when a failed result reports synthetic zero usage", () => {
+    const tracker = new AgentContextUsageTracker({ autoCompactWindowTokens: 200_000 })
+    tracker.update({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: { usage: { input_tokens: 128_000, output_tokens: 321 } },
+    })
+
+    expect(tracker.update({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: { usage: { input_tokens: 0, output_tokens: 0 } },
+    })).toEqual({ usedTokens: 128_321, autoCompactWindowTokens: 200_000 })
   })
 })

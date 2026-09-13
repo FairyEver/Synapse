@@ -175,6 +175,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.problem-feedback",
       "core.json-repair",
       "core.text-extractor",
+      "core.agent-conversation-control",
+      "core.agent-conversation-navigation",
       "core.file-opener",
       "core.text-file-writer",
       "core.html-generator",

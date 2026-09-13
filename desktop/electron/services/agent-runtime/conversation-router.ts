@@ -31,6 +31,7 @@ import {
   AGENT_RELAY_QUESTION_DENY_MESSAGE,
   AGENT_RELAY_QUESTION_ERROR_MESSAGE,
   AGENT_RELAY_TIMED_OUT_MESSAGE,
+  AGENT_RENDERER_UNAVAILABLE_MESSAGE,
   AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE,
   AGENT_SESSION_ENDED_MESSAGE,
   AGENT_SPAWN_DENIED_MESSAGE,
@@ -64,8 +65,10 @@ import type {
   AgentLiveSession,
   AgentMessage,
   AgentPermissionRequestEvent,
+  AgentTurnAdmissionResult,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
+  AgentSteerResult,
   AgentToolResultEvent,
   AgentUserQuestionResolution,
 } from "./types"
@@ -88,6 +91,8 @@ import {
 import { agentConversationDeliveryOptions } from "./event-delivery"
 import type { AttachmentStagingService } from "./attachment-staging-service"
 import type { AgentFileCheckpointService } from "./agent-file-checkpoint-service"
+import { persistContextContinuation, withContextContinuationUsage, type AgentContextRotation } from "./context-continuation"
+import { buildContextRecoveryHandoff } from "./context-recovery"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -132,6 +137,14 @@ const DEFAULT_LIVE_EVENT_TIMEOUT_MS = 60 * 60 * 1000
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
 const MAX_HISTORY_CONTENT_LENGTH = 10_000
+const MAX_TURN_RESULT_EVENTS = 512
+const FILE_CHECKPOINT_EVENT_SEQUENCE_BASE = 1_000_000
+const AFTER_TURN_EVENT_SEQUENCE_BASE = 1_100_000
+const RENDERER_STREAM_FLUSH_MS = 50
+const MAX_RENDERER_STREAM_BATCH_EVENTS = 128
+const MAX_RENDERER_STREAM_BATCH_BYTES = 64 * 1024
+const MAX_RENDERER_EVENT_TEXT_BYTES = 60 * 1024
+const MAX_RENDERER_PENDING_STREAM_BYTES = 512 * 1024
 const COST_EPSILON = 0.000001
 
 interface ModelUsageBreakdown {
@@ -147,11 +160,43 @@ interface NormalizedTurnUsage {
   readonly summary?: ClaudeSdkUsageSummary
 }
 
-interface ConversationTurnOptions {
+interface PendingRendererStreamBatch {
+  readonly message: AgentMessage
+  readonly conversationId: string
+  readonly events: Array<{
+    readonly event: AgentEvent
+    readonly sequence: number
+    readonly timestamp: string
+    readonly bytes: number
+  }>
+  bytes: number
+  resyncRequired: boolean
+  timer?: ReturnType<typeof setTimeout>
+}
+
+export interface ConversationTurnOptions {
   readonly abortSignal?: AbortSignal
   readonly liveEventTimeoutMs?: number
   readonly onResponseStarted?: () => void
+  readonly turnId?: string
+  readonly contextRecoveryPriority?: boolean
 }
+
+type AgentTurnSubmissionHandle =
+  | {
+    readonly accepted: true
+    readonly conversationId: string
+    readonly turnId: string
+    readonly disposition: "started" | "queued"
+    readonly queuePosition: number
+    readonly completion: Promise<AgentRuntimeTurnResult>
+  }
+  | {
+    readonly accepted: false
+    readonly conversationId: string
+    readonly reason: "rejected" | "queue_full"
+    readonly result: AgentRuntimeTurnResult
+  }
 
 interface NewConversationTurnOptions extends ConversationTurnOptions {
   readonly onConversationCreated?: (conversation: ConversationEntryV1) => void
@@ -171,6 +216,11 @@ export class ConversationRouter {
   >()
   private readonly savedSdkSessions = new Map<string, string>()
   private readonly streamDiagnostics = new Map<string, StreamDiagnosticCapture>()
+  private readonly rendererStreamBatches = new Map<string, PendingRendererStreamBatch>()
+  private readonly rendererInFlightBatches = new Map<string, string>()
+  private readonly rendererSubscriptions = new Map<number, string | null | undefined>()
+  private readonly pausedRendererIds = new Set<number>()
+  private readonly pausedRendererConversations = new Map<number, Set<string>>()
   private deliverySequence = 0
   private readonly deliveryEpoch = randomUUID()
 
@@ -187,6 +237,58 @@ export class ConversationRouter {
     this.commandRouter = input.commandRouter
     this.pendingPermissions = input.pendingPermissions
     this.permissionTimeoutMs = input.deps.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS
+  }
+
+  setRendererSubscription(
+    rendererId: number,
+    subscribed: boolean,
+    conversationId?: string | null,
+  ): void {
+    const previous = this.rendererSubscriptions.get(rendererId)
+    if (subscribed) this.rendererSubscriptions.set(rendererId, conversationId)
+    else this.rendererSubscriptions.delete(rendererId)
+    if (!subscribed || previous !== conversationId) this.clearRendererDeliveryState(rendererId)
+  }
+
+  ackRendererEventBatch(rendererId: number, conversationId: string, batchId: string): boolean {
+    const key = `${this.deps.projectId}:${conversationId}`
+    if (this.rendererInFlightBatches.get(key) !== `${rendererId}:${batchId}`) return false
+    this.rendererInFlightBatches.delete(key)
+    this.flushRendererStreamBatch(key)
+    return true
+  }
+
+  detachRenderer(rendererId: number): void {
+    this.rendererSubscriptions.delete(rendererId)
+    this.pausedRendererIds.delete(rendererId)
+    this.pausedRendererConversations.delete(rendererId)
+    this.clearRendererDeliveryState(rendererId)
+  }
+
+  pauseRendererDelivery(rendererId: number): void {
+    this.pausedRendererIds.add(rendererId)
+    this.clearRendererDeliveryState(rendererId)
+  }
+
+  async resumeRendererDelivery(rendererId: number): Promise<void> {
+    this.pausedRendererIds.delete(rendererId)
+    const conversationIds = this.pausedRendererConversations.get(rendererId)
+    this.pausedRendererConversations.delete(rendererId)
+    if (!conversationIds || conversationIds.size === 0) return
+    for (const conversationId of conversationIds) {
+      const conversation = await this.repository.get(conversationId)
+      if (!conversation) continue
+      this.emitRendererResync(rendererId, conversation)
+    }
+  }
+
+  private clearRendererDeliveryState(rendererId: number): void {
+    for (const [key, pending] of this.rendererStreamBatches) {
+      if (pending.message.originRendererId !== rendererId) continue
+      if (pending.timer) clearTimeout(pending.timer)
+      this.rendererStreamBatches.delete(key)
+      this.rendererInFlightBatches.delete(key)
+    }
   }
 
   async send(
@@ -215,6 +317,159 @@ export class ConversationRouter {
       ? { ...message, platform: conversation.platform }
       : message
     return this.enqueueTurn(effectiveMessage, effectiveConversation, options)
+  }
+
+  async submitToConversation(
+    message: AgentMessage,
+    conversationId: string,
+    options: ConversationTurnOptions = {},
+  ): Promise<AgentTurnAdmissionResult> {
+    this.assertProject(message)
+    const conversation = await this.repository.get(conversationId)
+    if (!conversation) {
+      throw new Error(conversationNotFoundMessage(conversationId))
+    }
+    const effectiveConversation = message.modeOverride
+      ? await this.repository.savePermissionMode(conversation.id, message.modeOverride)
+      : conversation
+    const effectiveMessage = conversation.platform
+      ? { ...message, platform: conversation.platform }
+      : message
+    const submission = await this.admitTurn(effectiveMessage, effectiveConversation, options)
+    if (!submission.accepted) {
+      return {
+        accepted: false,
+        conversationId: submission.conversationId,
+        reason: submission.reason,
+        error: submission.result.error ?? AGENT_TURN_FAILED_MESSAGE,
+      }
+    }
+    void submission.completion.catch((error) => {
+      this.deps.logger?.warn("Detached Agent turn completion failed.", {
+        boundary: "agent-runtime.detached-turn",
+        projectId: this.deps.projectId,
+        conversationId: submission.conversationId,
+        turnId: submission.turnId,
+        ...queuedTurnFailureMetadata(error),
+      })
+    })
+    return {
+      accepted: true,
+      conversationId: submission.conversationId,
+      turnId: submission.turnId,
+      disposition: submission.disposition,
+      queuePosition: submission.queuePosition,
+    }
+  }
+
+  async steer(input: {
+    readonly conversationId: string
+    readonly expectedTurnId: string
+    readonly clientMessageId: string
+    readonly content: string
+    readonly submittedAt: string
+  }): Promise<AgentSteerResult> {
+    const state = this.sessionManager.stateForConversation(input.conversationId)
+    const base = {
+      conversationId: input.conversationId,
+      clientMessageId: input.clientMessageId,
+    }
+    if (!state.busy || !state.activeLifecycle) return { ...base, status: "no-active-turn" }
+    if (state.activeLifecycle.turnId !== input.expectedTurnId) {
+      return { ...base, status: "turn-changed", turnId: state.activeLifecycle.turnId }
+    }
+    if (state.cancelState || state.activeLifecycle.state === "cancelling" || state.activeLifecycle.state === "force_cancelling") {
+      return { ...base, status: "cancel-pending", turnId: state.activeLifecycle.turnId }
+    }
+    if (state.permissionAdmissionPending || state.pending) {
+      return { ...base, status: "permission-pending", turnId: state.activeLifecycle.turnId }
+    }
+    if (!state.steerAdmissionsOpen) {
+      return { ...base, status: "turn-changed", turnId: state.activeLifecycle.turnId }
+    }
+    const liveSession = state.liveSession
+    if (!liveSession?.alive()) {
+      return { ...base, status: "session-ended", turnId: state.activeLifecycle.turnId }
+    }
+    if (!liveSession.steer) {
+      return { ...base, status: "unsupported", turnId: state.activeLifecycle.turnId }
+    }
+
+    state.activeSteers ??= new Map()
+    const existing = state.activeSteers.get(input.clientMessageId)
+    if (existing) {
+      if (existing.content !== input.content) {
+        return { ...base, status: "unsupported", turnId: state.activeLifecycle.turnId }
+      }
+      const accepted = await existing.acceptance
+      if (accepted) await existing.historyPersistence
+      return { ...base, status: accepted ? "accepted" : "session-ended", turnId: input.expectedTurnId }
+    }
+    const acceptance = liveSession.steer({
+      clientMessageId: input.clientMessageId,
+      content: input.content,
+      submittedAt: input.submittedAt,
+    }).catch((error) => {
+      this.deps.logger?.warn("Agent live session rejected steer input.", {
+        boundary: "agent-runtime.steer-input",
+        projectId: this.deps.projectId,
+        conversationId: input.conversationId,
+        turnId: input.expectedTurnId,
+        clientMessageId: input.clientMessageId,
+        ...queuedTurnFailureMetadata(error),
+      })
+      return false
+    })
+    const activeSteer = {
+      content: input.content,
+      submittedAt: input.submittedAt,
+      replayed: false,
+      acceptance,
+      historyPersistence: undefined as Promise<void> | undefined,
+    }
+    state.activeSteers.set(input.clientMessageId, activeSteer)
+    activeSteer.historyPersistence = acceptance.then(async (accepted) => {
+      if (accepted) await this.persistAcceptedSteer(input)
+    })
+    const accepted = await activeSteer.acceptance
+    if (!accepted) {
+      if (state.activeSteers.get(input.clientMessageId) === activeSteer) {
+        state.activeSteers.delete(input.clientMessageId)
+      }
+      return { ...base, status: "session-ended", turnId: input.expectedTurnId }
+    }
+    await activeSteer.historyPersistence
+    return { ...base, status: "accepted", turnId: input.expectedTurnId }
+  }
+
+  private async persistAcceptedSteer(input: {
+    readonly conversationId: string
+    readonly expectedTurnId: string
+    readonly clientMessageId: string
+    readonly content: string
+  }): Promise<void> {
+    try {
+      const conversation = await this.repository.appendHistory(
+        input.conversationId,
+        "user",
+        input.content,
+        {
+          messageKind: "steer",
+          clientMessageId: input.clientMessageId,
+          turnId: input.expectedTurnId,
+        },
+      )
+      this.emitConversationUpdated(conversation)
+    } catch (error) {
+      this.deps.logger?.warn("Agent steer history persistence failed after SDK acceptance.", {
+        boundary: "agent-runtime.steer-history",
+        projectId: this.deps.projectId,
+        conversationId: input.conversationId,
+        turnId: input.expectedTurnId,
+        clientMessageId: input.clientMessageId,
+        ...queuedTurnFailureMetadata(error),
+      })
+    }
   }
 
   async sendNewSession(
@@ -338,13 +593,27 @@ export class ConversationRouter {
     conversation: ConversationEntryV1,
     options: ConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
+    const submission = await this.admitTurn(message, conversation, options)
+    return submission.accepted ? submission.completion : submission.result
+  }
+
+  private async admitTurn(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    options: ConversationTurnOptions = {},
+  ): Promise<AgentTurnSubmissionHandle> {
     this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
     const governance = this.deps.governance?.evaluateMessage(message)
     if (governance && !governance.allowed) {
-      return this.finishWithError(message, conversation.id, governance.reason ?? AGENT_MESSAGE_BLOCKED_MESSAGE)
+      return {
+        accepted: false,
+        conversationId: conversation.id,
+        reason: "rejected",
+        result: this.finishWithError(message, conversation.id, governance.reason ?? AGENT_MESSAGE_BLOCKED_MESSAGE),
+      }
     }
 
-    const turnId = randomUUID()
+    const turnId = options.turnId ?? randomUUID()
     const lifecycle = createTurnLifecycle({
       turnId,
       conversationId: conversation.id,
@@ -364,12 +633,24 @@ export class ConversationRouter {
         await this.persistAgentEvent(commandResult.conversationId, turnId, index + 1, event)
         await this.saveEventHistory(commandResult.conversationId, event)
       }
-      return commandResult
+      return {
+        accepted: true,
+        conversationId: commandResult.conversationId,
+        turnId,
+        disposition: "started",
+        queuePosition: 0,
+        completion: Promise.resolve(commandResult),
+      }
     }
 
     const state = this.sessionManager.stateForConversation(conversation.id, message)
     if (state.busy && state.queue.length >= this.queueLimit()) {
-      return this.finishWithError(message, conversation.id, AGENT_QUEUE_FULL_MESSAGE)
+      return {
+        accepted: false,
+        conversationId: conversation.id,
+        reason: "queue_full",
+        result: this.finishWithError(message, conversation.id, AGENT_QUEUE_FULL_MESSAGE),
+      }
     }
     message = await this.prepareStagedAttachmentMessage(message, conversation, turnId)
     liveMessage = liveContentOverride === undefined
@@ -377,7 +658,10 @@ export class ConversationRouter {
       : { ...message, content: liveContentOverride }
     const userHistoryMetadata = await this.prepareUserMessageHistory(message)
 
-    return new Promise<AgentRuntimeTurnResult>((resolve) => {
+    const disposition = state.busy ? "queued" as const : "started" as const
+    const recoveryPriority = options.contextRecoveryPriority || Boolean(conversation.contextRecovery)
+    const queuePosition = state.busy ? recoveryPriority ? 1 : state.queue.length + 1 : 0
+    const completion = new Promise<AgentRuntimeTurnResult>((resolve) => {
       const turn = {
         message,
         conversationId: conversation.id,
@@ -393,7 +677,12 @@ export class ConversationRouter {
       if (nativeSlashPassthrough) {
         this.nativeSlashPassthroughs.set(turn, nativeSlashPassthrough)
       }
-      state.queue.push(turn)
+      if (recoveryPriority) {
+        state.contextRecoveryPaused = false
+        state.queue.unshift(turn)
+      } else {
+        state.queue.push(turn)
+      }
       if (!state.busy) {
         state.busy = true
         void this.processQueue(state)
@@ -419,11 +708,20 @@ export class ConversationRouter {
         }
       }
     })
+    return {
+      accepted: true,
+      conversationId: conversation.id,
+      turnId,
+      disposition,
+      queuePosition,
+      completion,
+    }
   }
 
   private async processQueue(state: RuntimeSessionState): Promise<void> {
     try {
       while (state.queue.length > 0) {
+        if (state.contextRecoveryPaused) break
         const turn = state.queue.shift()
         if (!turn) continue
         const ac = new AbortController()
@@ -458,7 +756,7 @@ export class ConversationRouter {
             turn.liveEventTimeoutMs,
             turn.onResponseStarted,
           )
-          if (ac.signal.aborted) {
+          if (ac.signal.aborted && !isRendererUnavailableResult(result)) {
             await this.rollbackStagedAttachmentMessage(turn.message, turn.conversationId, turn.turnId)
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
           } else {
@@ -490,7 +788,10 @@ export class ConversationRouter {
             turn.resolve(result)
           }
         } finally {
-          if ((turn.message.attachmentRefs?.length ?? 0) > 0) {
+          if (
+            (turn.message.attachmentRefs?.length ?? 0) > 0
+            || (turn.message.contextRecoveryTurnId && (turn.message.attachments?.length ?? 0) > 0)
+          ) {
             await this.sessionManager.closeCurrentTurn(turn.conversationId)
           }
           externalSignal?.removeEventListener("abort", abort)
@@ -499,6 +800,9 @@ export class ConversationRouter {
           if (state.activeLifecycle?.turnId === turn.turnId) {
             state.activeLifecycle = undefined
           }
+          state.steerAdmissionsOpen = false
+          state.permissionAdmissionPending = false
+          state.activeSteers = undefined
           this.clearCancelState(state)
         }
       }
@@ -520,12 +824,27 @@ export class ConversationRouter {
     onResponseStarted?: () => void,
   ): Promise<AgentRuntimeTurnResult> {
     state.activeTurns += 1
+    state.activeRendererId = message.platform === "local-renderer" ? message.originRendererId : undefined
+    state.rendererUnavailable = false
     state.lastActivity = Date.now()
     try {
       let conversation = await this.repository.get(conversationId)
       if (!conversation) {
         await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(conversationId, turnId)
         throw new Error(`Conversation "${conversationId}" was deleted while queued`)
+      }
+      const recovery = conversation.contextRecovery
+      const isRecoveryContinuation = recovery?.status === "prepared"
+        && recovery.failedTurnId === message.contextRecoveryTurnId
+      const recoveryHandoff = isRecoveryContinuation
+        ? buildContextRecoveryHandoff({
+            conversation,
+            workspacePath: message.workspacePath ?? conversation.workspacePath ?? this.deps.workDir,
+          })
+        : undefined
+      if (recovery) {
+        conversation = await this.repository.clearContextRecovery(conversation.id)
+        this.emitConversationUpdated(conversation)
       }
       conversation = await this.appendUserMessageHistory(
         conversation,
@@ -551,11 +870,14 @@ export class ConversationRouter {
           message,
           abortSignal,
         })
-        const preparedMessage = await Promise.resolve(this.deps.prepareMessage?.(liveMessage, {
+        const preparedMessageBase = recoveryHandoff
+          ? { ...liveMessage, content: recoveryHandoff }
+          : liveMessage
+        const preparedMessage = await Promise.resolve(this.deps.prepareMessage?.(preparedMessageBase, {
           isNewLiveSession: sessionHandle.created,
           conversationId: conversation.id,
           turnId,
-        }) ?? liveMessage)
+        }) ?? preparedMessageBase)
         const result = await this.processLiveTurn(
           state,
           preparedMessage,
@@ -567,8 +889,10 @@ export class ConversationRouter {
           liveEventTimeoutMs,
           onResponseStarted,
         )
-        await this.appendFileCheckpointEvent(message, result, conversation.id, turnId, sessionHandle.liveSession)
+        await this.appendFileCheckpointEvent(message, result, conversation.id, turnId, (state.liveSession ?? sessionHandle.liveSession))
         await this.appendAfterTurnEvents(message, result, conversation.id, turnId, sessionHandle.created)
+
+        await this.handleContextCapacityFailure({ state, message, conversation, turnId, result })
 
         if (isBackgroundPlatform) {
           const tDone = this.isoNow()
@@ -610,8 +934,66 @@ export class ConversationRouter {
       }
     } finally {
       state.activeTurns = Math.max(0, state.activeTurns - 1)
+      state.activeRendererId = undefined
+      state.rendererUnavailable = false
       state.lastActivity = Date.now()
     }
+  }
+
+  private async handleContextCapacityFailure(input: {
+    readonly state: RuntimeSessionState
+    readonly message: AgentMessage
+    readonly conversation: ConversationEntryV1
+    readonly turnId: string
+    readonly result: AgentRuntimeTurnResult
+  }): Promise<void> {
+    const errorEvent = latestAgentErrorEvent(input.result.events)
+    const errorKind = errorEvent?.errorKind
+    const requestBodyTooLarge = errorKind === "request_body_too_large"
+    const contextRefillThrashing = errorKind === "context_refill_thrashing"
+    if (!requestBodyTooLarge && !contextRefillThrashing) return
+    if (requestBodyTooLarge && (
+      input.state.sdkSettings?.autoCompactEnabled !== true
+      || input.state.sdkSettings.autoCompactWindow !== 200_000
+    )) return
+
+    await this.sessionManager.closeCurrentTurn(input.conversation.id)
+    this.forgetSavedSdkSession(input.conversation.id)
+    input.state.contextRecoveryPaused = input.message.platform === "local-renderer"
+    const updated = input.message.platform === "local-renderer"
+      ? await this.repository.markContextRecoveryRequired(
+          input.conversation.id,
+          input.turnId,
+          input.conversation.agentType,
+          errorKind,
+        )
+      : await this.repository.clearCurrentAgentSessionId(
+          input.conversation.id,
+          input.conversation.agentType,
+        )
+    this.emitConversationUpdated(updated)
+    this.deps.logger?.warn("Agent context capacity recovery is required.", {
+      boundary: "agent-runtime.context-recovery.required",
+      projectId: this.deps.projectId,
+      conversationId: input.conversation.id,
+      providerId: input.message.providerId ?? input.conversation.providerId,
+      errorKind,
+      providerScope: requestBodyTooLarge ? "bailian-cn" : undefined,
+      autoCompactWindowTokens: input.state.sdkSettings?.autoCompactWindow,
+      maxRequestBodyBytes: requestBodyTooLarge ? 6 * 1024 * 1024 : undefined,
+      failedTurnId: input.turnId,
+      lastTrustedContextTokens: latestContextUsedTokens(input.result.events),
+      recoveryStatus: input.message.platform === "local-renderer" ? "required" : "not-applicable",
+      attachmentCount: (input.message.attachments?.length ?? 0) + (input.message.attachmentRefs?.length ?? 0),
+      attachmentBytes: [
+        ...(input.message.attachments ?? []),
+        ...(input.message.attachmentRefs ?? []),
+      ].reduce((total, attachment) => total + (
+        "byteSize" in attachment
+          ? attachment.byteSize
+          : attachment.size ?? 0
+      ), 0),
+    })
   }
 
   private async checkRendererAgentSpawn(
@@ -692,6 +1074,69 @@ export class ConversationRouter {
     }
   }
 
+  private async rotateContextSession(
+    state: RuntimeSessionState,
+    message: AgentMessage,
+    conversationId: string,
+    turnId: string,
+    liveSession: AgentLiveSession,
+    abortSignal?: AbortSignal,
+    nextSequence?: () => number,
+  ): Promise<AgentLiveSession> {
+    const checkAdmission = (): void => {
+      if (state.cancelState || state.rendererUnavailable || abortSignal?.aborted) throw new Error(AGENT_CANCELLED_MESSAGE)
+    }
+    checkAdmission()
+    await Promise.all([...state.activeSteers?.values() ?? []].map((steer) => steer.historyPersistence))
+    checkAdmission()
+    const rotation = liveSession.contextRotation?.()
+    const store = this.deps.agentArtifactStore
+    const conversation = await this.repository.get(conversationId)
+    checkAdmission()
+    if (!rotation || !store || !conversation) throw new Error("上下文交接资料不可用。")
+    try {
+      const content = await persistContextContinuation({
+        store, projectId: this.deps.projectId, conversation, turnId,
+        workspacePath: message.workspacePath ?? this.deps.workDir,
+        runtimeMessage: message.content, rotation, abortSignal,
+      })
+      checkAdmission()
+      // Persist before closing; the old SDK is paused at a request boundary.
+      // A new SDK cannot rewind files changed in its predecessor.
+      await this.appendFileCheckpointEvent(message, {
+        conversationId, events: [], resultText: "",
+      }, conversationId, turnId, liveSession, nextSequence)
+      checkAdmission()
+      await this.sessionManager.closeCurrentTurn(conversationId)
+      checkAdmission()
+      this.forgetSavedSdkSession(conversationId)
+      const clean = await this.repository.clearCurrentAgentSessionId(conversationId, conversation.agentType)
+      if (state.cancelState || state.rendererUnavailable || abortSignal?.aborted) throw new Error(AGENT_CANCELLED_MESSAGE)
+      await this.appendSupersededCheckpointEvents(message, clean, turnId, nextSequence)
+      checkAdmission()
+      await this.checkRendererAgentSpawn(message, clean)
+      checkAdmission()
+      const handle = await this.sessionManager.getOrCreateSession({ state, conversation: clean, message, abortSignal })
+      if (state.cancelState || state.rendererUnavailable || abortSignal?.aborted) {
+        await this.sessionManager.closeCurrentTurn(conversationId)
+        throw new Error(AGENT_CANCELLED_MESSAGE)
+      }
+      if (message.platform === "local-renderer") handle.liveSession.beginFileCheckpoint?.(turnId)
+      if (!await handle.liveSession.send({ ...message, content, runtimeTurnId: turnId, attachments: undefined })) {
+        throw new Error(AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE)
+      }
+      this.deps.logger?.info("Agent continued after automatic context rotation.", {
+        boundary: "agent-runtime.context-rotation", projectId: this.deps.projectId,
+        conversationId, turnId, reason: rotation.reason, completedBatches: rotation.completedBatches,
+      })
+      return handle.liveSession
+    } catch (error) {
+      await this.sessionManager.closeCurrentTurn(conversationId)
+      if (state.cancelState || abortSignal?.aborted) throw new Error(AGENT_CANCELLED_MESSAGE, { cause: error })
+      throw new Error("无法保存或恢复上下文，请重试。", { cause: error })
+    }
+  }
+
   private async processLiveTurn(
     state: RuntimeSessionState,
     message: AgentMessage,
@@ -704,6 +1149,7 @@ export class ConversationRouter {
     onResponseStarted?: () => void,
   ): Promise<AgentRuntimeTurnResult> {
     const events: AgentEvent[] = []
+    let persistedSequence = 0
     let resultText = ""
     let latestAssistantText = ""
     let streamedText = ""
@@ -715,10 +1161,13 @@ export class ConversationRouter {
     let resultCostBreakdownCny: AgentUsageCostBreakdownCny | undefined
     let resultCostCurrency: "CNY" | undefined
     let assistantHistoryPersisted = false
+    let stageAssistantPersisted = false
     let streamedThinking = ""
     let streamedThinkingStartedAt: string | undefined
     let error: string | undefined
     let responseStarted = false
+    let rotationsWithoutProgress = 0
+    const contextRotations: Pick<AgentContextRotation, "usage">[] = []
 
     const flushStreamedThinkingHistory = async (): Promise<void> => {
       const content = streamedThinking.trim()
@@ -733,29 +1182,82 @@ export class ConversationRouter {
         timestamp: startedAt ?? this.isoNow(),
       })
     }
+    const persistRendererLossPartial = async (): Promise<void> => {
+      if (!state.rendererUnavailable || assistantHistoryPersisted) return
+      const content = latestAssistantText || streamedText
+      if (!content.trim()) return
+      const partialEvent: AgentEvent = {
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: content }] },
+        content,
+        conversationId: conversation.id,
+        providerId: message.providerId ?? conversation.providerId,
+        sdkSessionId: liveSession.currentSessionId(),
+        timestamp: this.isoNow(),
+      }
+      appendBoundedTurnEvent(events, partialEvent)
+      await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, partialEvent)
+      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, partialEvent, {
+        assistantHistoryPersisted,
+      }) || assistantHistoryPersisted
+      resultText = content
+    }
 
     if (message.platform === "local-renderer") liveSession.beginFileCheckpoint?.(turnId)
-    const accepted = await liveSession.send(message)
+    state.activeSteers = new Map()
+    state.steerAdmissionsOpen = true
+    const accepted = await liveSession.send({ ...message, runtimeTurnId: turnId })
     if (!accepted) {
+      state.steerAdmissionsOpen = false
       await this.sessionManager.closeCurrentTurn(conversation.id)
       error = AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE
     } else if (nativeSlashPassthrough) {
       const event = nativeSlashPassthroughEvent(nativeSlashPassthrough, liveSession.currentSessionId(), this.isoNow())
-      events.push(event)
+      appendBoundedTurnEvent(events, event)
       this.emitEvent(message, conversation.id, event)
-      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+      await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, event)
       await this.saveEventSdkSession(conversation.id, event, liveSession)
       await this.saveEventHistory(conversation.id, event)
     }
-
     while (!error && liveSession.alive()) {
       const event = await nextLiveEventWithTimeout(liveSession, liveEventTimeoutMs)
       if (!event) {
+        state.steerAdmissionsOpen = false
         error = liveSession.alive() ? AGENT_SESSION_TIMED_OUT_MESSAGE : AGENT_SESSION_ENDED_MESSAGE
         if (liveSession.alive()) {
           await this.sessionManager.closeCurrentTurn(conversation.id)
         }
         break
+      }
+      if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
+        state.steerAdmissionsOpen = false
+        const rotation = liveSession.contextRotation()!
+        contextRotations.push({ usage: rotation.usage })
+        rotationsWithoutProgress = rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
+        if (rotationsWithoutProgress > 1 || state.cancelState || state.rendererUnavailable || abortSignal?.aborted) {
+          await this.sessionManager.closeCurrentTurn(conversation.id)
+          error = state.cancelState || abortSignal?.aborted ? AGENT_CANCELLED_MESSAGE
+            : state.rendererUnavailable ? AGENT_RENDERER_UNAVAILABLE_MESSAGE
+            : "当前模型的固定上下文已占满可用空间，请减少已加载的工具或指令。"
+          break
+        }
+        await flushStreamedThinkingHistory()
+        liveSession = await this.rotateContextSession(state, message, conversation.id, turnId, liveSession, abortSignal, () => ++persistedSequence)
+        const compactEvent: AgentEvent = {
+          type: "compactBoundary", payload: { automaticSessionRotation: true },
+          conversationId: conversation.id, providerId: message.providerId ?? conversation.providerId,
+          sdkSessionId: liveSession.currentSessionId(), timestamp: this.isoNow(),
+        }
+        appendBoundedTurnEvent(events, compactEvent)
+        this.emitEvent(message, conversation.id, compactEvent)
+        await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, compactEvent)
+        await this.saveEventHistory(conversation.id, compactEvent)
+        latestAssistantText = ""
+        streamedText = ""
+        assistantHistoryPersisted = false
+        stageAssistantPersisted = false
+        state.steerAdmissionsOpen = !state.cancelState
+        continue
       }
       if (!responseStarted && isAgentResponseActivityEvent(event)) {
         responseStarted = true
@@ -772,13 +1274,59 @@ export class ConversationRouter {
         await flushStreamedThinkingHistory()
       }
 
+      if (isUserMessageReplayEvent(event)) {
+        await markMatchingSteerReplayed(state, event)
+        continue
+      }
+
+      if (state.rendererUnavailable) {
+        state.steerAdmissionsOpen = false
+        await persistRendererLossPartial()
+        const projected = rendererUnavailableEvent({
+          conversationId: conversation.id,
+          providerId: message.providerId ?? conversation.providerId,
+          sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+          timestamp: this.isoNow(),
+        })
+        appendBoundedTurnEvent(events, projected)
+        this.emitEvent(message, conversation.id, projected)
+        await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
+        await this.saveEventHistory(conversation.id, projected)
+        error = projected.message
+        break
+      }
+
       if (event.type === "result") {
         resultText = latestAssistantText || event.content || streamedText
+        if ((event.queuedTurnCount ?? 0) > 0) {
+          if (resultText && !stageAssistantPersisted) {
+            const stageEvent: AgentEvent = {
+              type: "assistant",
+              message: { role: "assistant", content: [{ type: "text", text: resultText }] },
+              content: resultText,
+              conversationId: conversation.id,
+              providerId: message.providerId ?? conversation.providerId,
+              sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+              timestamp: event.timestamp ?? this.isoNow(),
+            }
+            appendBoundedTurnEvent(events, stageEvent)
+            this.emitEvent(message, conversation.id, stageEvent)
+            await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, stageEvent)
+            assistantHistoryPersisted = await this.saveEventHistory(conversation.id, stageEvent, {
+              assistantHistoryPersisted,
+            }) || assistantHistoryPersisted
+          }
+          stageAssistantPersisted = false
+          latestAssistantText = ""
+          streamedText = ""
+          continue
+        }
+        state.steerAdmissionsOpen = false
         const finalized = await this.finalizeResultUsageMetadata({
           state,
           conversation,
           message,
-          event,
+          event: withContextContinuationUsage(event, contextRotations),
           turnId,
           sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
           userMeta: message.userMeta ?? conversation.userMeta,
@@ -790,9 +1338,9 @@ export class ConversationRouter {
         resultCostCny = finalized.costCny
         resultCostBreakdownCny = metadataUsageCostBreakdown(resultMetadata, "costBreakdownCny")
         resultCostCurrency = finalized.costCurrency
-        events.push(finalized.event)
+        appendBoundedTurnEvent(events, finalized.event)
         this.emitEvent(message, conversation.id, finalized.event)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, finalized.event)
+        await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, finalized.event)
         await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
         assistantHistoryPersisted = await this.saveEventHistory(conversation.id, finalized.event, {
           assistantHistoryPersisted,
@@ -808,10 +1356,11 @@ export class ConversationRouter {
       }
 
       if (event.type === "error") {
+        state.steerAdmissionsOpen = false
         const finalized = await this.finalizeErrorUsage({
           state,
           conversation,
-          event,
+          event: withContextContinuationUsage(event, contextRotations),
           turnId,
           sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
           userMeta: message.userMeta ?? conversation.userMeta,
@@ -846,9 +1395,9 @@ export class ConversationRouter {
                 payload: enrichedError.payload,
               }
             : projectedOutcome
-          events.push(projected)
+          appendBoundedTurnEvent(events, projected)
           this.emitEvent(message, conversation.id, projected)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+          await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
           await this.saveEventSdkSession(conversation.id, projected, liveSession)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
             assistantHistoryPersisted,
@@ -856,9 +1405,9 @@ export class ConversationRouter {
           error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
           break
         }
-        events.push(enrichedError)
+        appendBoundedTurnEvent(events, enrichedError)
         this.emitEvent(message, conversation.id, enrichedError)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, enrichedError)
+        await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
         await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
         await this.saveEventHistory(conversation.id, enrichedError)
         error = enrichedError.message
@@ -866,11 +1415,18 @@ export class ConversationRouter {
       }
 
       const preparedEvent = await this.prepareEventForStorageAndDisplay(conversation.id, turnId, event)
-      events.push(preparedEvent)
+      if (preparedEvent.type === "permissionRequest") {
+        state.permissionAdmissionPending = true
+      }
+      appendBoundedTurnEvent(events, preparedEvent)
       this.emitEvent(message, conversation.id, preparedEvent)
-      await this.persistAgentEvent(conversation.id, turnId, events.length, preparedEvent)
+      await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, preparedEvent)
       await this.saveEventSdkSession(conversation.id, preparedEvent, liveSession)
-      assistantHistoryPersisted = await this.saveEventHistory(conversation.id, preparedEvent) || assistantHistoryPersisted
+      const preparedEventHistoryPersisted = await this.saveEventHistory(conversation.id, preparedEvent)
+      assistantHistoryPersisted = preparedEventHistoryPersisted || assistantHistoryPersisted
+      if (preparedEvent.type === "assistant" && preparedEventHistoryPersisted) {
+        stageAssistantPersisted = true
+      }
 
       if (preparedEvent.type === "permissionRequest") {
         const questionTimeoutFailed = await this.awaitPendingPermission(
@@ -881,7 +1437,9 @@ export class ConversationRouter {
           liveSession,
           abortSignal,
         )
+        state.permissionAdmissionPending = false
         if (questionTimeoutFailed) {
+          state.steerAdmissionsOpen = false
           const lifecycle = state.activeLifecycle
           if (lifecycle) {
             markTimeoutRequested(lifecycle, { source: "runtime", now: () => this.isoNow() })
@@ -900,9 +1458,9 @@ export class ConversationRouter {
               sdkSessionId: liveSession.currentSessionId(),
               timestamp: this.isoNow(),
             })
-            events.push(projected)
+            appendBoundedTurnEvent(events, projected)
             this.emitEvent(message, conversation.id, projected)
-            await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+            await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
             await this.saveEventSdkSession(conversation.id, projected, liveSession)
             assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
               assistantHistoryPersisted,
@@ -913,24 +1471,39 @@ export class ConversationRouter {
           }
           break
         }
+        if (!state.cancelState && liveSession.alive()) state.steerAdmissionsOpen = true
         continue
       }
     }
 
+    if (state.rendererUnavailable && !error && !hasTerminalTurnOutcome(events[events.length - 1])) {
+      error = AGENT_RENDERER_UNAVAILABLE_MESSAGE
+    }
+    if (!error && !events.some((event) => event.type === "result" || event.type === "error")) {
+      error = AGENT_SESSION_ENDED_MESSAGE
+    }
     await flushStreamedThinkingHistory()
+    await persistRendererLossPartial()
 
     if (error && events[events.length - 1]?.type !== "error" && !hasTerminalTurnOutcome(events[events.length - 1])) {
-      const errorEvent: AgentEvent = {
-        type: "error",
-        message: sanitizeErrorText(error),
-        conversationId: conversation.id,
-        providerId: message.providerId ?? conversation.providerId,
-        sdkSessionId: liveSession.currentSessionId(),
-        timestamp: this.isoNow(),
-      }
-      events.push(errorEvent)
+      const errorEvent: AgentEvent = state.rendererUnavailable
+        ? rendererUnavailableEvent({
+            conversationId: conversation.id,
+            providerId: message.providerId ?? conversation.providerId,
+            sdkSessionId: liveSession.currentSessionId(),
+            timestamp: this.isoNow(),
+          })
+        : {
+            type: "error",
+            message: sanitizeErrorText(error),
+            conversationId: conversation.id,
+            providerId: message.providerId ?? conversation.providerId,
+            sdkSessionId: liveSession.currentSessionId(),
+            timestamp: this.isoNow(),
+          }
+      appendBoundedTurnEvent(events, errorEvent)
       this.emitEvent(message, conversation.id, errorEvent)
-      await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+      await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, errorEvent)
       await this.saveEventHistory(conversation.id, errorEvent)
       error = errorEvent.message
     }
@@ -988,10 +1561,10 @@ export class ConversationRouter {
   ): Promise<void> {
     const events = await this.runAfterTurn(message, result, conversationId, turnId, isNewLiveSession)
     const mutableEvents = result.events as AgentEvent[]
-    for (const event of events) {
-      mutableEvents.push(event)
+    for (const [index, event] of events.entries()) {
+      appendBoundedTurnEvent(mutableEvents, event)
       this.emitEvent(message, conversationId, event)
-      await this.persistAgentEvent(conversationId, turnId, result.events.length, event)
+      await this.persistAgentEvent(conversationId, turnId, AFTER_TURN_EVENT_SEQUENCE_BASE + index, event)
       await this.saveEventHistory(conversationId, event)
     }
   }
@@ -1002,6 +1575,7 @@ export class ConversationRouter {
     conversationId: string,
     turnId: string,
     liveSession: AgentLiveSession,
+    nextSequence?: () => number,
   ): Promise<void> {
     if (message.platform !== "local-renderer" || !this.deps.fileCheckpoints || !liveSession.finalizeFileCheckpoint) return
     try {
@@ -1009,10 +1583,10 @@ export class ConversationRouter {
       if (!capture) return
       const checkpointEvents = await this.deps.fileCheckpoints.persistCapture(conversationId, capture)
       const mutableEvents = result.events as AgentEvent[]
-      for (const event of checkpointEvents) {
-        mutableEvents.push(event)
+      for (const [index, event] of checkpointEvents.entries()) {
+        appendBoundedTurnEvent(mutableEvents, event)
         this.emitEvent(message, conversationId, event)
-        await this.persistAgentEvent(conversationId, turnId, mutableEvents.length, event)
+        await this.persistAgentEvent(conversationId, turnId, nextSequence?.() ?? FILE_CHECKPOINT_EVENT_SEQUENCE_BASE + index, event)
         await this.saveEventHistory(conversationId, event)
       }
     } catch (error) {
@@ -1030,13 +1604,14 @@ export class ConversationRouter {
     message: AgentMessage,
     conversation: ConversationEntryV1,
     turnId: string,
+    nextSequence?: () => number,
   ): Promise<void> {
     if (message.platform !== "local-renderer" || !this.deps.fileCheckpoints) return
     try {
       const events = await this.deps.fileCheckpoints.supersedeAvailable(conversation.id)
       for (const [index, event] of events.entries()) {
         this.emitEvent(message, conversation.id, event)
-        await this.persistAgentEvent(conversation.id, turnId, index, event)
+        await this.persistAgentEvent(conversation.id, turnId, nextSequence?.() ?? index, event)
         await this.saveEventHistory(conversation.id, event)
       }
     } catch (error) {
@@ -1079,6 +1654,7 @@ export class ConversationRouter {
     state.lastActivity = Date.now()
     const turnId = randomUUID()
     const events: AgentEvent[] = []
+    let persistedSequence = 0
     let partialText = ""
     let resultText = ""
     let latestAssistantText = ""
@@ -1106,13 +1682,15 @@ export class ConversationRouter {
         message,
         abortSignal,
       })
-      const liveSession = sessionHandle.liveSession
+      let liveSession = sessionHandle.liveSession
+      let rotationsWithoutProgress = 0
+      const contextRotations: Pick<AgentContextRotation, "usage">[] = []
       const liveMessage = await Promise.resolve(this.deps.prepareMessage?.(message, {
         isNewLiveSession: sessionHandle.created,
         conversationId: savedConversation.id,
         turnId,
       }) ?? message)
-      const accepted = await liveSession.send(liveMessage)
+      const accepted = await liveSession.send({ ...liveMessage, runtimeTurnId: turnId })
       if (!accepted) {
         await this.sessionManager.closeCurrentTurn(conversation.id)
         error = AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE
@@ -1128,9 +1706,9 @@ export class ConversationRouter {
             sdkSessionId: liveSession.currentSessionId(),
             timestamp: this.isoNow(),
           }
-          events.push(errorEvent)
+          appendBoundedTurnEvent(events, errorEvent)
           this.emitEvent(message, conversation.id, errorEvent)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+          await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, errorEvent)
           await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
           await this.sessionManager.closeCurrentTurn(conversation.id)
@@ -1145,6 +1723,20 @@ export class ConversationRouter {
             timedOut: true,
           }
         }
+        if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
+          const rotation = liveSession.contextRotation()!
+          contextRotations.push({ usage: rotation.usage })
+          rotationsWithoutProgress = rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
+          if (rotationsWithoutProgress > 1 || abortSignal.aborted) {
+            await this.sessionManager.closeCurrentTurn(conversation.id)
+            error = abortSignal.aborted ? AGENT_CANCELLED_MESSAGE : "当前模型的固定上下文已占满可用空间。"
+            break
+          }
+          liveSession = await this.rotateContextSession(state, liveMessage, conversation.id, turnId, liveSession, abortSignal, () => ++persistedSequence)
+          latestAssistantText = ""
+          assistantHistoryPersisted = false
+          continue
+        }
         const assistantText = assistantEventText(event)
         if (assistantText) latestAssistantText = assistantText
         if (event.type === "result") {
@@ -1154,7 +1746,7 @@ export class ConversationRouter {
             state,
             conversation,
             message,
-            event,
+            event: withContextContinuationUsage(event, contextRotations),
             turnId,
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
             userMeta: message.userMeta ?? conversation.userMeta,
@@ -1166,9 +1758,9 @@ export class ConversationRouter {
           resultCostCny = finalized.costCny
           resultCostBreakdownCny = metadataUsageCostBreakdown(resultMetadata, "costBreakdownCny")
           resultCostCurrency = finalized.costCurrency
-          events.push(finalized.event)
+          appendBoundedTurnEvent(events, finalized.event)
           this.emitEvent(message, conversation.id, finalized.event)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, finalized.event)
+          await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, finalized.event)
           await this.saveEventSdkSession(conversation.id, finalized.event, liveSession)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, finalized.event, {
             assistantHistoryPersisted,
@@ -1186,7 +1778,7 @@ export class ConversationRouter {
           const finalized = await this.finalizeErrorUsage({
             state,
             conversation,
-            event,
+            event: withContextContinuationUsage(event, contextRotations),
             turnId,
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
             userMeta: message.userMeta ?? conversation.userMeta,
@@ -1221,10 +1813,10 @@ export class ConversationRouter {
                   payload: enrichedError.payload,
                 }
               : projectedOutcome
-            events.push(projected)
+            appendBoundedTurnEvent(events, projected)
             partialText = appendRelayText(partialText, projected)
             this.emitEvent(message, conversation.id, projected)
-            await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+            await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
             await this.saveEventSdkSession(conversation.id, projected, liveSession)
             assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
               assistantHistoryPersisted,
@@ -1232,19 +1824,19 @@ export class ConversationRouter {
             error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
             break
           }
-          events.push(enrichedError)
+          appendBoundedTurnEvent(events, enrichedError)
           partialText = appendRelayText(partialText, enrichedError)
           this.emitEvent(message, conversation.id, enrichedError)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, enrichedError)
+          await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
           await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, enrichedError) || assistantHistoryPersisted
           error = enrichedError.message
           break
         }
-        events.push(event)
+        appendBoundedTurnEvent(events, event)
         partialText = appendRelayText(partialText, event)
         this.emitEvent(message, conversation.id, event)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+        await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, event)
         await this.saveEventSdkSession(conversation.id, event, liveSession)
         assistantHistoryPersisted = await this.saveEventHistory(conversation.id, event) || assistantHistoryPersisted
         if (event.type === "permissionRequest") {
@@ -1288,9 +1880,9 @@ export class ConversationRouter {
             sdkSessionId: liveSession.currentSessionId(),
             timestamp: this.isoNow(),
           })
-          events.push(projected)
+          appendBoundedTurnEvent(events, projected)
           this.emitEvent(message, conversation.id, projected)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, projected)
+          await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
           await this.saveEventSdkSession(conversation.id, projected, liveSession)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
             assistantHistoryPersisted,
@@ -1315,9 +1907,9 @@ export class ConversationRouter {
           sdkSessionId: liveSession.currentSessionId(),
           timestamp: this.isoNow(),
         }
-        events.push(errorEvent)
+        appendBoundedTurnEvent(events, errorEvent)
         this.emitEvent(message, conversation.id, errorEvent)
-        await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+        await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, errorEvent)
         await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
         assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
         await this.sessionManager.closeCurrentTurn(conversation.id)
@@ -1332,12 +1924,15 @@ export class ConversationRouter {
           timedOut: true,
         }
       }
+      if (!error && !events.some((event) => event.type === "result" || event.type === "error")) {
+        error = AGENT_SESSION_ENDED_MESSAGE
+      }
       if (error && events[events.length - 1]?.type !== "error" && !hasTerminalTurnOutcome(events[events.length - 1])) {
         const errorResult = this.finishWithError(message, conversation.id, error)
         const errorEvent = errorResult.events[0]
         if (errorEvent) {
-          events.push(errorEvent)
-          await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+          appendBoundedTurnEvent(events, errorEvent)
+          await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, errorEvent)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, errorEvent) || assistantHistoryPersisted
         }
         error = errorResult.error
@@ -1392,6 +1987,9 @@ export class ConversationRouter {
   private async prepareUserMessageHistory(
     message: AgentMessage,
   ): Promise<Record<string, unknown> | undefined> {
+    if (message.contextRecoveryTurnId) {
+      return userMessagePresentationHistoryMetadata({ ...message, attachments: undefined })
+    }
     if (message.attachmentRefs && message.attachmentRefs.length > 0) {
       return userMessagePresentationHistoryMetadataFromRefs(message, message.attachmentRefs)
     }
@@ -1516,7 +2114,7 @@ export class ConversationRouter {
   }
 
   private async loadExperimentalSynapseToolRouterEnabled(): Promise<boolean> {
-    return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) === true
+    return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) !== false
   }
 
   private async loadEnabledConnectorIds(): Promise<readonly string[]> {
@@ -1571,6 +2169,7 @@ export class ConversationRouter {
         workspaceKey: message.workspaceKey,
         workspacePath: message.workspacePath,
         conversationId,
+        turnId: state.activeLifecycle?.turnId,
         toolName: event.toolName,
         toolInput: event.toolInput,
         toolInputRaw: event.toolInputRaw,
@@ -2252,21 +2851,44 @@ export class ConversationRouter {
     conversationId: string,
     event: AgentEvent,
   ): void {
+    const rendererId = message.originRendererId
+    if (message.platform === "local-renderer" && rendererId !== undefined) {
+      if (this.pausedRendererIds.has(rendererId)) {
+        const conversations = this.pausedRendererConversations.get(rendererId) ?? new Set<string>()
+        conversations.add(conversationId)
+        this.pausedRendererConversations.set(rendererId, conversations)
+        return
+      }
+      if (isAgentStreamDeltaEvent(event) && !this.isRendererDisplaying(rendererId, conversationId)) {
+        return
+      }
+    }
     const target = replyTargetFromMessage(message, conversationId, event)
     const sequence = this.nextDeliverySequence()
+    if (message.platform === "local-renderer" && isAgentStreamDeltaEvent(event)) {
+      this.enqueueRendererStreamEvent(message, conversationId, event, sequence)
+      return
+    }
+    if (message.platform === "local-renderer") {
+      this.flushRendererStreamBatch(`${this.deps.projectId}:${conversationId}`)
+    }
     const options = this.deliveryOptions(conversationId)
+    const rendererEvent = projectAgentEventForRenderer(event)
     this.deps.eventBus?.emit({
       domain: "agent",
       type: event.type,
       payload: {
-        event,
+        event: rendererEvent,
         projectId: this.deps.projectId,
         sessionKey: message.sessionKey,
         platform: message.platform,
         deliveryEpoch: this.deliveryEpoch,
         sequence,
       },
-      scope: { sessionId: conversationId },
+      scope: {
+        sessionId: conversationId,
+        ...(rendererId !== undefined ? { rendererIds: [rendererId] } : {}),
+      },
       timestamp: this.isoNow(),
     }, options)
     if (shouldSuppressReply(message)) return
@@ -2291,7 +2913,98 @@ export class ConversationRouter {
       .catch(() => undefined)
   }
 
+  private enqueueRendererStreamEvent(
+    message: AgentMessage,
+    conversationId: string,
+    event: AgentEvent,
+    sequence: number,
+  ): void {
+    const key = `${this.deps.projectId}:${conversationId}`
+    const batch = this.rendererStreamBatches.get(key) ?? {
+      message,
+      conversationId,
+      events: [],
+      bytes: 0,
+      resyncRequired: false,
+    }
+    const projected = projectAgentEventForRenderer(event)
+    const timestamp = this.isoNow()
+    const bytes = Buffer.byteLength(JSON.stringify(projected), "utf8")
+    if (batch.bytes + bytes > MAX_RENDERER_PENDING_STREAM_BYTES) {
+      batch.events.splice(0)
+      batch.bytes = 0
+      batch.resyncRequired = true
+    } else if (!batch.resyncRequired) {
+      const previous = batch.events[batch.events.length - 1]
+      const merged = previous ? mergeAdjacentStreamEvents(previous.event, projected) : undefined
+      if (previous && merged) {
+        const mergedBytes = Buffer.byteLength(JSON.stringify(merged), "utf8")
+        batch.bytes += mergedBytes - previous.bytes
+        batch.events[batch.events.length - 1] = { event: merged, sequence, timestamp, bytes: mergedBytes }
+      } else {
+        batch.events.push({ event: projected, sequence, timestamp, bytes })
+        batch.bytes += bytes
+      }
+    }
+    if (!batch.timer) {
+      batch.timer = setTimeout(() => this.flushRendererStreamBatch(key), RENDERER_STREAM_FLUSH_MS)
+    }
+    this.rendererStreamBatches.set(key, batch)
+  }
+
+  private flushRendererStreamBatch(key: string): void {
+    if (this.rendererInFlightBatches.has(key)) return
+    const pending = this.rendererStreamBatches.get(key)
+    if (!pending) return
+    if (pending.timer) clearTimeout(pending.timer)
+    pending.timer = undefined
+    const options = this.deliveryOptions(pending.conversationId)
+    const events: typeof pending.events = []
+    let bytes = 0
+    while (pending.events.length > 0 && events.length < MAX_RENDERER_STREAM_BATCH_EVENTS) {
+      const candidate = pending.events[0]
+      if (!candidate) break
+      if (events.length > 0 && bytes + candidate.bytes > MAX_RENDERER_STREAM_BATCH_BYTES) break
+      pending.events.shift()
+      pending.bytes -= candidate.bytes
+      events.push(candidate)
+      bytes += candidate.bytes
+    }
+    if (pending.events.length === 0) this.rendererStreamBatches.delete(key)
+    else this.rendererStreamBatches.set(key, pending)
+    const batchId = randomUUID()
+    const rendererId = pending.message.originRendererId
+    if (
+      rendererId !== undefined
+      && (this.pausedRendererIds.has(rendererId) || !this.isRendererDisplaying(rendererId, pending.conversationId))
+    ) {
+      return
+    }
+    if (!this.deps.eventBus) return
+    if (rendererId !== undefined) this.rendererInFlightBatches.set(key, `${rendererId}:${batchId}`)
+    this.deps.eventBus.emit({
+      domain: "agent",
+      type: "eventBatch",
+      payload: {
+        batchId,
+        projectId: this.deps.projectId,
+        sessionKey: pending.message.sessionKey,
+        platform: pending.message.platform,
+        conversationId: pending.conversationId,
+        deliveryEpoch: this.deliveryEpoch,
+        events: events.map(({ event, sequence, timestamp }) => ({ event, sequence, timestamp })),
+        resyncRequired: pending.resyncRequired,
+      },
+      scope: {
+        sessionId: pending.conversationId,
+        ...(rendererId !== undefined ? { rendererIds: [rendererId] } : {}),
+      },
+      timestamp: this.isoNow(),
+    }, options)
+  }
+
   private emitConversationUpdated(conversation: ConversationEntryV1): void {
+    const rendererIds = [...this.rendererSubscriptions.keys()]
     this.deps.eventBus?.emit({
       domain: "agent",
       type: "conversationUpdated",
@@ -2301,7 +3014,40 @@ export class ConversationRouter {
         platform: conversation.platform ?? "local",
         conversationId: conversation.id,
       },
-      scope: { sessionId: conversation.id },
+      scope: {
+        sessionId: conversation.id,
+        ...(rendererIds.length > 0 ? { rendererIds } : {}),
+      },
+      timestamp: this.isoNow(),
+    }, this.deliveryOptions(conversation.id))
+  }
+
+  private isRendererDisplaying(rendererId: number, conversationId: string): boolean {
+    if (!this.rendererSubscriptions.has(rendererId)) return true
+    const selectedConversationId = this.rendererSubscriptions.get(rendererId)
+    return selectedConversationId === undefined || selectedConversationId === conversationId
+  }
+
+  private emitRendererResync(rendererId: number, conversation: ConversationEntryV1): void {
+    if (!this.deps.eventBus) return
+    const key = `${this.deps.projectId}:${conversation.id}`
+    if (this.rendererInFlightBatches.has(key)) return
+    const batchId = randomUUID()
+    this.rendererInFlightBatches.set(key, `${rendererId}:${batchId}`)
+    this.deps.eventBus.emit({
+      domain: "agent",
+      type: "eventBatch",
+      payload: {
+        batchId,
+        projectId: this.deps.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: conversation.platform ?? "local-renderer",
+        conversationId: conversation.id,
+        deliveryEpoch: this.deliveryEpoch,
+        events: [],
+        resyncRequired: true,
+      },
+      scope: { sessionId: conversation.id, rendererIds: [rendererId] },
       timestamp: this.isoNow(),
     }, this.deliveryOptions(conversation.id))
   }
@@ -2442,6 +3188,28 @@ function isNativeSlashRoute(
   result: AgentCommandRouterResult,
 ): result is Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> {
   return "kind" in result && result.kind === "nativeSlash"
+}
+
+function isUserMessageReplayEvent(
+  event: AgentEvent,
+): event is Extract<AgentEvent, { type: "sdkEvent" }> {
+  return event.type === "sdkEvent" && event.sdkType === "userMessageReplay"
+}
+
+function markMatchingSteerReplayed(
+  state: RuntimeSessionState,
+  event: Extract<AgentEvent, { type: "sdkEvent" }>,
+): Promise<void> | undefined {
+  const content = typeof event.payload.content === "string" ? event.payload.content : undefined
+  const timestamp = typeof event.payload.timestamp === "string" ? event.payload.timestamp : undefined
+  if (!content || !timestamp) return undefined
+  for (const steer of state.activeSteers?.values() ?? []) {
+    if (!steer.replayed && steer.content === content && steer.submittedAt === timestamp) {
+      steer.replayed = true
+      return steer.historyPersistence
+    }
+  }
+  return undefined
 }
 
 function nativeSlashPassthroughEvent(
@@ -2600,7 +3368,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
       if (event.sdkType === "synapseToolRouterFallback") {
         return {
           role: "system",
-          content: "Synapse MCP 工具按需加载不可用，本次对话已回退完整工具。",
+          content: "部分工具暂不可用，已使用可用工具继续。",
           metadata: compactMetadata({
             agentEventType: event.type,
             sdkSessionId: event.sdkSessionId,
@@ -2662,6 +3430,8 @@ function resultHistoryMetadata(
     turnUsage,
     modelUsage: resultModelUsageFromEvent(event),
     sdkResultUuid: resultSdkResultUuidFromEvent(event),
+    queuedTurnCount: event.queuedTurnCount,
+    userMessageUuid: event.userMessageUuid,
     costUsd: resultCostFromEvent(event),
     costCny: resultCostCnyFromEvent(event),
     costCurrency: resultCostCurrencyFromEvent(event),
@@ -2681,6 +3451,20 @@ function latestAgentErrorEvent(events: readonly AgentEvent[]): Extract<AgentEven
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (event?.type === "error") return event
+  }
+  return undefined
+}
+
+function latestContextUsedTokens(events: readonly AgentEvent[]): number | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (!event) continue
+    const contextUsage = event.type === "result"
+      ? event.metadata?.contextUsage
+      : "contextUsage" in event
+        ? event.contextUsage
+        : undefined
+    if (contextUsage && contextUsage.usedTokens > 0) return contextUsage.usedTokens
   }
   return undefined
 }
@@ -3132,8 +3916,133 @@ function hasTerminalTurnOutcome(event: AgentEvent | undefined): boolean {
   return false
 }
 
+function isRendererUnavailableResult(result: AgentRuntimeTurnResult): boolean {
+  return result.events.some((event) => event.type === "error" && event.errorKind === "renderer_unavailable")
+}
+
 function appendStreamedText(current: string, event: AgentEvent): string {
   if (event.type === "text") return `${current}${event.content}`
   if (event.type === "stream" && event.text) return `${current}${event.text}`
   return current
+}
+
+function appendBoundedTurnEvent(events: AgentEvent[], event: AgentEvent): void {
+  // Stream deltas are transport/display details. The accumulated text and
+  // persisted timeline are authoritative, so retaining every delta in the
+  // terminal result only creates a second unbounded copy of the turn.
+  if (event.type === "stream") return
+  if (
+    event.type === "sdkEvent"
+    && event.sdkType !== "userMessageReplay"
+    && event.sdkType !== "nativeSlashPassthrough"
+  ) return
+
+  if (event.type === "assistant") {
+    let previousAssistant = -1
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      if (events[index]?.type === "assistant") {
+        previousAssistant = index
+        break
+      }
+    }
+    if (previousAssistant >= 0) events.splice(previousAssistant, 1)
+  }
+  if (events.length >= MAX_TURN_RESULT_EVENTS) {
+    const replaceable = events.findIndex((candidate) => (
+      candidate.type !== "result"
+      && candidate.type !== "error"
+      && candidate.type !== "permissionRequest"
+      && candidate.type !== "toolResult"
+    ))
+    if (replaceable >= 0) events.splice(replaceable, 1)
+    else if (event.type !== "result" && event.type !== "error") return
+    else events.shift()
+  }
+  events.push(event)
+}
+
+function projectAgentEventForRenderer(event: AgentEvent): AgentEvent {
+  const projected = { ...event } as Record<string, unknown>
+  delete projected.payload
+  delete projected.contentBlocks
+  delete projected.imageBlocks
+  delete projected.usage
+  delete projected.modelUsage
+
+  for (const key of ["content", "text", "thinking", "partialJson", "toolInput", "message"] as const) {
+    const value = projected[key]
+    if (typeof value === "string") projected[key] = truncateUtf8(value, MAX_RENDERER_EVENT_TEXT_BYTES)
+  }
+  if (event.type === "assistant") {
+    const content = assistantEventText(event) ?? ""
+    projected.content = truncateUtf8(content, MAX_RENDERER_EVENT_TEXT_BYTES)
+    projected.message = { role: "assistant", content: [] }
+  }
+  if (event.type === "stream") {
+    projected.event = { type: event.deltaType ?? "delta" }
+  }
+  if (event.type === "compactBoundary") projected.payload = {}
+  if (event.type === "sessionInit") {
+    projected.tools = event.tools?.slice(0, 128)
+    projected.mcpServers = event.mcpServers?.slice(0, 64).map((server) => ({
+      ...(typeof server.name === "string" ? { name: server.name } : {}),
+      ...(typeof server.status === "string" ? { status: server.status } : {}),
+    }))
+  }
+  if ("toolInputRaw" in projected) {
+    const rawBytes = Buffer.byteLength(JSON.stringify(projected.toolInputRaw), "utf8")
+    if (rawBytes > MAX_RENDERER_EVENT_TEXT_BYTES) delete projected.toolInputRaw
+  }
+  return projected as unknown as AgentEvent
+}
+
+function mergeAdjacentStreamEvents(previous: AgentEvent, next: AgentEvent): AgentEvent | undefined {
+  if (previous.type !== "stream" || next.type !== "stream") return undefined
+  if (previous.deltaType !== next.deltaType || previous.blockIndex !== next.blockIndex) return undefined
+  const merged = {
+    ...next,
+    text: mergeBoundedDelta(previous.text, next.text),
+    thinking: mergeBoundedDelta(previous.thinking, next.thinking),
+    partialJson: mergeBoundedDelta(previous.partialJson, next.partialJson),
+  }
+  return merged
+}
+
+function mergeBoundedDelta(previous: string | undefined, next: string | undefined): string | undefined {
+  if (previous === undefined && next === undefined) return undefined
+  return truncateUtf8(`${previous ?? ""}${next ?? ""}`, MAX_RENDERER_EVENT_TEXT_BYTES)
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value
+  let low = 0
+  let high = value.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (Buffer.byteLength(value.slice(0, middle), "utf8") <= maxBytes) low = middle
+    else high = middle - 1
+  }
+  return value.slice(0, low)
+}
+
+function rendererUnavailableEvent(input: {
+  readonly conversationId: string
+  readonly providerId?: string
+  readonly sdkSessionId?: string
+  readonly timestamp: string
+}): Extract<AgentEvent, { type: "error" }> {
+  return {
+    ...input,
+    type: "error",
+    message: AGENT_RENDERER_UNAVAILABLE_MESSAGE,
+    errorKind: "renderer_unavailable",
+    recoverable: true,
+    turnOutcome: {
+      status: "interrupted",
+      reason: "renderer_unavailable",
+      recoverable: true,
+      message: AGENT_RENDERER_UNAVAILABLE_MESSAGE,
+      diagnostics: [{ source: "agent-runtime", kind: "renderer_unavailable" }],
+    },
+  }
 }

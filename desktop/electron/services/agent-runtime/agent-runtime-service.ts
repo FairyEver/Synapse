@@ -41,6 +41,7 @@ import {
   AGENT_PERSONA_MODEL_UNAVAILABLE_MESSAGE,
   AGENT_PERSONA_UNAVAILABLE_MESSAGE,
   AGENT_PROJECT_WORKSPACE_REQUIRED_MESSAGE,
+  AGENT_RENDERER_UNAVAILABLE_MESSAGE,
   AGENT_SCHEDULED_SPAWN_DENIED_MESSAGE,
   AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE,
   commandExecutionStatusMessage,
@@ -83,7 +84,7 @@ import type {
   RuntimeSessionState,
   PendingPermissionState,
 } from "./session-lifecycle"
-import { ConversationRouter } from "./conversation-router"
+import { ConversationRouter, type ConversationTurnOptions } from "./conversation-router"
 import type { AgentArtifactStore } from "./artifact-store"
 import type {
   AttachmentStagingService,
@@ -93,6 +94,7 @@ import type {
   StagePathsInput as AttachmentStagePathsInput,
 } from "./attachment-staging-service"
 import type {
+  AgentAttachment,
   AgentEvent,
   AgentMessage,
   AgentPendingPermission,
@@ -101,7 +103,11 @@ import type {
   AgentUserQuestionResolution,
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
+  AgentSteerResult,
+  AgentTurnAdmissionResult,
+  AgentConversationRuntimeSnapshot,
   CancelTurnResult,
+  ExpectedTurnStopResult,
   ScheduledAgentSendInput,
   ScheduledAgentSendResult,
 } from "./types"
@@ -282,6 +288,7 @@ export class AgentRuntimeService {
       onElicitation: deps.onElicitation,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
       executeSynapseTool: deps.executeSynapseTool,
+      agentArtifactStore: deps.agentArtifactStore,
       onConversationTitle: (conversationId, title) =>
         this.applyGeneratedConversationTitle(conversationId, title),
       onConversationUpdated: (conversation) => this.emitConversationUpdated(conversation),
@@ -353,15 +360,209 @@ export class AgentRuntimeService {
     })
   }
 
-  async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
-    return this.conversationRouter.send(message)
+  async send(
+    message: AgentMessage,
+    options: ConversationTurnOptions = {},
+  ): Promise<AgentRuntimeTurnResult> {
+    return this.conversationRouter.send(message, options)
   }
 
   async sendToConversation(
     message: AgentMessage,
     conversationId: string,
+    options: ConversationTurnOptions = {},
   ): Promise<AgentRuntimeTurnResult> {
-    return this.conversationRouter.sendToConversation(message, conversationId)
+    return this.conversationRouter.sendToConversation(message, conversationId, options)
+  }
+
+  async submitToConversation(
+    message: AgentMessage,
+    conversationId: string,
+    options: ConversationTurnOptions = {},
+  ): Promise<AgentTurnAdmissionResult> {
+    return this.conversationRouter.submitToConversation(message, conversationId, options)
+  }
+
+  getConversationRuntimeSnapshot(conversationId: string): AgentConversationRuntimeSnapshot {
+    const state = this.states.get(conversationId)
+    const activeLifecycle = state?.activeLifecycle
+    const pending = state?.pending
+      ?? [...this.pendingPermissions.values()].find((item) => item.conversationId === conversationId)
+    let lifecycle: AgentConversationRuntimeSnapshot["lifecycle"] = "idle"
+    if (state?.cancelState || activeLifecycle?.state === "cancelling" || activeLifecycle?.state === "force_cancelling") {
+      lifecycle = "stopping"
+    } else if (pending || state?.permissionAdmissionPending) {
+      lifecycle = "awaiting_permission"
+    } else if (activeLifecycle?.state === "starting") {
+      lifecycle = "starting"
+    } else if (activeLifecycle && activeLifecycle.state !== "terminal") {
+      lifecycle = "running"
+    } else if ((state?.queue.length ?? 0) > 0) {
+      lifecycle = "queued"
+    }
+    return {
+      lifecycle,
+      activeTurnId: activeLifecycle?.turnId ?? null,
+      queuedTurns: (state?.queue ?? []).map((turn, index) => ({
+        turnId: turn.turnId,
+        position: index + 1,
+      })),
+      pendingPermissionRequestId: pending?.requestId ?? null,
+    }
+  }
+
+  async prepareContextRecovery(input: {
+    readonly conversationId: string
+    readonly failedTurnId: string
+  }): Promise<ConversationEntryV1> {
+    const conversation = await this.repository.get(input.conversationId)
+    if (!conversation || conversation.platform !== "local-renderer") {
+      throw new Error(conversationNotFoundMessage(input.conversationId))
+    }
+    const recovery = conversation.contextRecovery
+    if (!recovery || recovery.failedTurnId !== input.failedTurnId) {
+      throw new Error("该失败轮次已失效，请刷新后重试。")
+    }
+    await this.sessionManager.closeCurrentTurn(conversation.id)
+    this.conversationRouter.forgetSavedSdkSession(conversation.id)
+    const updated = await this.repository.prepareContextRecovery(
+      conversation.id,
+      input.failedTurnId,
+    )
+    this.emitConversationUpdated(updated)
+    this.deps.logger?.info("Agent context recovery prepared.", {
+      boundary: "agent-runtime.context-recovery.prepared",
+      projectId: this.deps.projectId,
+      conversationId: conversation.id,
+      failedTurnId: input.failedTurnId,
+      recoveryReason: recovery.reason,
+      recoveryStatus: updated.contextRecovery?.status,
+    })
+    return updated
+  }
+
+  async continueContextRecovery(input: {
+    readonly conversationId: string
+    readonly failedTurnId: string
+    readonly turnId?: string
+    readonly originRendererId?: number
+  }): Promise<AgentRuntimeTurnResult> {
+    const conversation = await this.repository.get(input.conversationId)
+    const recovery = conversation?.contextRecovery
+    if (
+      !conversation
+      || conversation.platform !== "local-renderer"
+      || recovery?.status !== "prepared"
+      || recovery.failedTurnId !== input.failedTurnId
+    ) {
+      throw new Error("当前对话尚未完成上下文整理。")
+    }
+
+    try {
+      const recoveryAttachments = await this.resolveContextRecoveryAttachments(
+        conversation.id,
+        input.failedTurnId,
+      )
+      const result = await this.sendToConversation({
+        projectId: this.deps.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: "local-renderer",
+        userId: "renderer",
+        userName: "Renderer",
+        workspaceKey: conversation.workspaceKey,
+        workspacePath: conversation.workspacePath,
+        content: "继续上一个任务",
+        displayContent: "继续上一个任务",
+        modeOverride: conversation.agentConfig?.mode,
+        agentType: conversation.agentType,
+        providerId: conversation.providerId,
+        modelTier: conversation.agentConfig?.modelTier,
+        contextRecoveryTurnId: input.failedTurnId,
+        originRendererId: input.originRendererId,
+        attachments: recoveryAttachments?.attachments,
+        runtimeAttachmentDirectories: recoveryAttachments?.controlledDirectories,
+        replyCtx: {
+          kind: "local-renderer",
+          projectId: this.deps.projectId,
+          sessionKey: conversation.sessionKey,
+        },
+      }, conversation.id, { turnId: input.turnId, contextRecoveryPriority: true })
+      if (result.error) {
+        const updated = await this.repository.markContextRecoveryFailed(
+          conversation.id,
+          input.failedTurnId,
+        )
+        this.emitConversationUpdated(updated)
+      }
+      this.deps.logger?.info("Agent context recovery continuation completed.", {
+        boundary: "agent-runtime.context-recovery.continued",
+        projectId: this.deps.projectId,
+        conversationId: conversation.id,
+        providerScope: recovery.reason === "request_body_too_large" ? "bailian-cn" : undefined,
+        failedTurnId: input.failedTurnId,
+        recoveryReason: recovery.reason,
+        recoveryResult: result.error ? "failed" : "completed",
+      })
+      return result
+    } catch (error) {
+      const updated = await this.repository.markContextRecoveryFailed(
+        conversation.id,
+        input.failedTurnId,
+      )
+      this.emitConversationUpdated(updated)
+      this.deps.logger?.warn("Agent context recovery continuation failed.", {
+        boundary: "agent-runtime.context-recovery.failed",
+        projectId: this.deps.projectId,
+        conversationId: conversation.id,
+        failedTurnId: input.failedTurnId,
+        ...errorLogMeta(error),
+      })
+      throw error
+    }
+  }
+
+  private async resolveContextRecoveryAttachments(
+    conversationId: string,
+    failedTurnId: string,
+  ): Promise<{
+    readonly attachments: readonly AgentAttachment[]
+    readonly controlledDirectories: readonly string[]
+  } | undefined> {
+    const staging = this.deps.attachmentStagingService
+    if (!staging) return undefined
+    try {
+      const entries = await staging.listForTurn({
+        projectId: this.deps.projectId,
+        conversationId,
+        turnId: failedTurnId,
+      })
+      if (entries.length === 0) return undefined
+      return staging.resolveCommittedForRuntime({
+        projectId: this.deps.projectId,
+        conversationId,
+        turnId: failedTurnId,
+        attachmentIds: entries.map((entry) => entry.id),
+      })
+    } catch (error) {
+      this.deps.logger?.warn("Agent context recovery attachments unavailable.", {
+        boundary: "agent-runtime.context-recovery.attachments",
+        projectId: this.deps.projectId,
+        conversationId,
+        failedTurnId,
+        ...errorLogMeta(error),
+      })
+      return undefined
+    }
+  }
+
+  async steer(input: {
+    readonly conversationId: string
+    readonly expectedTurnId: string
+    readonly clientMessageId: string
+    readonly content: string
+    readonly submittedAt: string
+  }): Promise<AgentSteerResult> {
+    return this.conversationRouter.steer(input)
   }
 
   async getFileCheckpointDetail(
@@ -810,6 +1011,56 @@ export class AgentRuntimeService {
     return result
   }
 
+  async cancelExpectedTurn(
+    conversationId: string,
+    expectedTurnId: string,
+  ): Promise<ExpectedTurnStopResult> {
+    const state = this.states.get(conversationId)
+    if (!state?.busy || !state.activeLifecycle) return { status: "no-active-turn" }
+    if (state.activeLifecycle.turnId !== expectedTurnId) {
+      return { status: "turn-changed", turnId: state.activeLifecycle.turnId }
+    }
+    if (state.cancelState) {
+      return {
+        status: state.cancelState.escalationTimer ? "graceful-pending" : "graceful-unavailable",
+      }
+    }
+    if (!state.liveSession?.cancelCurrentTurn) return { status: "graceful-unavailable" }
+    const gracefulSent = await this.sessionManager.interrupt(conversationId)
+    if (!gracefulSent) return { status: "graceful-unavailable" }
+
+    state.cancelState = { requestedAt: Date.now() }
+    markCancelRequested(state.activeLifecycle, {
+      mode: "graceful",
+      source: "user",
+      now: () => this.isoNow(),
+    })
+    const pendingQuestion = state.pending && isAskUserQuestionTool(state.pending.toolName)
+      ? state.pending
+      : undefined
+    if (pendingQuestion) {
+      await this.persistUserQuestionResolution(pendingQuestion, {
+        status: "cancelled",
+        resolvedAt: this.isoNow(),
+      })
+    }
+    this.sessionManager.settlePending(state)
+    const conversation = await this.repository.get(conversationId)
+    const sessionKey = conversation?.sessionKey ?? ""
+    const escalationTimer = setTimeout(() => {
+      if (state.cancelState?.escalationTimer !== escalationTimer || !state.busy) return
+      this.emitCancelEscalation(conversationId, sessionKey)
+    }, 5000)
+    state.cancelState.escalationTimer = escalationTimer
+    const result: CancelTurnResult = { status: "graceful-pending" }
+    this.logTurnCancellation("cancel", conversationId, state, result, {
+      gracefulSent: true,
+      expectedTurnId,
+      automaticForceEscalation: false,
+    })
+    return result
+  }
+
   async forceKillTurn(conversationId: string): Promise<CancelTurnResult> {
     const state = this.states.get(conversationId)
     if (!state || !state.busy) {
@@ -830,6 +1081,83 @@ export class AgentRuntimeService {
     this.logTurnCancellation("force-kill", conversationId, state, result)
     await this.sessionManager.closeCurrentTurn(conversationId)
     return result
+  }
+
+  async forceKillExpectedTurn(
+    conversationId: string,
+    expectedTurnId: string,
+  ): Promise<ExpectedTurnStopResult> {
+    const state = this.states.get(conversationId)
+    if (!state?.busy || !state.activeLifecycle) return { status: "no-active-turn" }
+    if (state.activeLifecycle.turnId !== expectedTurnId) {
+      return { status: "turn-changed", turnId: state.activeLifecycle.turnId }
+    }
+    return this.forceKillTurn(conversationId)
+  }
+
+  async interruptRendererTurns(rendererId: number): Promise<number> {
+    this.conversationRouter.detachRenderer(rendererId)
+    let affected = 0
+    for (const [conversationId, state] of this.states) {
+      for (let index = state.queue.length - 1; index >= 0; index -= 1) {
+        const queued = state.queue[index]
+        if (queued?.message.originRendererId !== rendererId) continue
+        state.queue.splice(index, 1)
+        queued.resolve(rendererUnavailableTurnResult(queued.conversationId))
+        affected += 1
+      }
+      if (!state.busy || state.activeRendererId !== rendererId) continue
+      affected += 1
+      state.rendererUnavailable = true
+      state.steerAdmissionsOpen = false
+      state.permissionAdmissionPending = false
+      this.sessionManager.settlePending(state)
+      const interrupted = await this.sessionManager.interrupt(conversationId).catch(() => false)
+      if (!interrupted) {
+        state.turnAbortController?.abort("renderer-unavailable")
+        await this.sessionManager.closeCurrentTurn(conversationId)
+        await waitForRendererTurnRelease(state, rendererId, 5_000)
+        continue
+      }
+      const escalationTimer = setTimeout(() => {
+        if (!state.busy || state.activeRendererId !== rendererId) return
+        state.turnAbortController?.abort("renderer-unavailable")
+        void this.sessionManager.closeCurrentTurn(conversationId)
+      }, 2_000)
+      await waitForRendererTurnRelease(state, rendererId, 5_000)
+      clearTimeout(escalationTimer)
+      if (state.activeRendererId === rendererId) {
+        state.turnAbortController?.abort("renderer-unavailable")
+        await this.sessionManager.closeCurrentTurn(conversationId)
+      }
+    }
+    this.deps.logger?.warn("Renderer-owned Agent turns stopped.", {
+      boundary: "agent-runtime.renderer-unavailable",
+      projectId: this.deps.projectId,
+      rendererId,
+      affectedTurns: affected,
+    })
+    return affected
+  }
+
+  setRendererSubscription(
+    rendererId: number,
+    subscribed: boolean,
+    conversationId?: string | null,
+  ): void {
+    this.conversationRouter.setRendererSubscription(rendererId, subscribed, conversationId)
+  }
+
+  ackRendererEventBatch(rendererId: number, conversationId: string, batchId: string): boolean {
+    return this.conversationRouter.ackRendererEventBatch(rendererId, conversationId, batchId)
+  }
+
+  pauseRendererDelivery(rendererId: number): void {
+    this.conversationRouter.pauseRendererDelivery(rendererId)
+  }
+
+  async resumeRendererDelivery(rendererId: number): Promise<void> {
+    await this.conversationRouter.resumeRendererDelivery(rendererId)
   }
 
   private logTurnCancellation(
@@ -887,6 +1215,7 @@ export class AgentRuntimeService {
       workspaceKey: pending.workspaceKey,
       workspacePath: pending.workspacePath,
       conversationId: pending.conversationId,
+      turnId: pending.turnId,
       toolName: pending.toolName,
       toolInput: sanitizePermissionText(pending.toolInput),
       toolInputRaw: sanitizePermissionRawInput(pending.toolInputRaw),
@@ -1270,7 +1599,7 @@ export class AgentRuntimeService {
 
   private async loadExperimentalSynapseToolRouterEnabled(): Promise<boolean> {
     try {
-      return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) === true
+      return (await this.deps.loadExperimentalSynapseToolRouterEnabled?.()) !== false
     } catch (error) {
       this.deps.logger?.warn("Failed to load the experimental Synapse tool router setting; using the safe default.", {
         projectId: this.deps.projectId,
@@ -1764,6 +2093,44 @@ export class AgentRuntimeService {
       promptLength: input.prompt.length,
     })
   }
+}
+
+function rendererUnavailableTurnResult(conversationId: string): AgentRuntimeTurnResult {
+  const event: AgentEvent = {
+    type: "error",
+    message: AGENT_RENDERER_UNAVAILABLE_MESSAGE,
+    errorKind: "renderer_unavailable",
+    recoverable: true,
+    turnOutcome: {
+      status: "interrupted",
+      reason: "renderer_unavailable",
+      recoverable: true,
+      message: AGENT_RENDERER_UNAVAILABLE_MESSAGE,
+    },
+  }
+  return {
+    conversationId,
+    events: [event],
+    resultText: "",
+    error: event.message,
+  }
+}
+
+function waitForRendererTurnRelease(
+  state: RuntimeSessionState,
+  rendererId: number,
+  timeoutMs: number,
+): Promise<void> {
+  if (state.activeRendererId !== rendererId) return Promise.resolve()
+  return new Promise((resolve) => {
+    const startedAt = Date.now()
+    const timer = setInterval(() => {
+      if (state.activeRendererId === rendererId && Date.now() - startedAt < timeoutMs) return
+      clearInterval(timer)
+      resolve()
+    }, 25)
+    timer.unref?.()
+  })
 }
 
 async function assertProviderModelAvailable(

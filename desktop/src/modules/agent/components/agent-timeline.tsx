@@ -3,11 +3,11 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
   SynapseAgentDisplayProfile,
+  SynapseAgentContextRecovery,
   SynapseAgentPendingPermission,
   SynapseAgentPermissionScope,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
-import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
 import type { AgentReferenceActions } from "../hooks/use-agent-reference-actions"
 import { AgentPhaseRow } from "./agent-phase-row"
 import { AgentProcessGroup } from "./agent-process-group"
@@ -29,10 +29,16 @@ function AgentTimeline({
   referenceActions,
   onRespondPermission,
   onContinue,
+  contextRecovery,
+  onPrepareContextRecovery,
+  onContinueContextRecovery,
+  onCreateConversation,
   viewportRef,
   loadingOlder,
   historyError,
   onRetryHistory,
+  projectId,
+  conversationId,
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
   readonly profile: SynapseAgentDisplayProfile
@@ -49,18 +55,24 @@ function AgentTimeline({
     scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
   readonly onContinue?: () => void
+  readonly contextRecovery?: SynapseAgentContextRecovery
+  readonly onPrepareContextRecovery?: () => void | Promise<void>
+  readonly onContinueContextRecovery?: () => void | Promise<void>
+  readonly onCreateConversation?: () => void
   readonly viewportRef: Ref<HTMLDivElement>
   readonly loadingOlder: boolean
   readonly historyError: string | null
   readonly onRetryHistory: () => void
+  readonly projectId?: string
+  readonly conversationId?: string
 }) {
-  // Drives 1s re-renders for any in-progress phase row's elapsed timer.
-  useActivePhaseTicker(items)
   const now = Date.now()
-  const latestPendingItemIds = latestPendingTimelineItemIds(items, pendingPermissions)
-  const continuableInterruptionId = latestContinuableInterruptionId(items)
+  const visibleItems = visibleTimelineItems(items, now)
+  const latestPendingItemIds = latestPendingTimelineItemIds(visibleItems, pendingPermissions)
+  const continuableInterruptionId = latestContinuableInterruptionId(visibleItems)
+  const contextRecoveryErrorId = latestContextRecoveryErrorId(visibleItems)
   const pendingPermissionRequestIds = new Set(pendingPermissions.map((permission) => permission.requestId))
-  const displayEntries = timelineDisplayEntries(items)
+  const displayEntries = timelineDisplayEntries(visibleItems)
   const displayNodes = groupTimelineDisplayEntries(displayEntries, {
     pendingPermissionRequestIds,
     nowMs: now,
@@ -102,6 +114,7 @@ function AgentTimeline({
                     key={node.id}
                     label={node.label}
                     durationLabel={node.durationLabel}
+                    activeStartedAtMs={node.activeStartedAtMs}
                     open={open}
                     onOpenChange={(nextOpen) =>
                       setProcessGroupOpenOverrides((current) => ({
@@ -111,7 +124,7 @@ function AgentTimeline({
                   >
                     {node.entries.map((entry) => (
                       entry.item.kind === "phase" ? (
-                        <AgentPhaseRow key={entry.item.id} item={entry.item} now={now} />
+                        <AgentPhaseRow key={entry.item.id} item={entry.item} />
                       ) : (
                         <AgentTimelineItem
                           key={entry.item.id}
@@ -126,6 +139,12 @@ function AgentTimeline({
                           referenceActions={referenceActions}
                           onRespondPermission={onRespondPermission}
                           onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
+                          contextRecovery={entry.item.id === contextRecoveryErrorId ? contextRecovery : undefined}
+                          onPrepareContextRecovery={onPrepareContextRecovery}
+                          onContinueContextRecovery={onContinueContextRecovery}
+                          onCreateConversation={onCreateConversation}
+                          projectId={projectId}
+                          conversationId={conversationId}
                         />
                       )
                     ))}
@@ -134,7 +153,7 @@ function AgentTimeline({
               }
               const entry = node.entry
               return entry.item.kind === "phase" ? (
-                <AgentPhaseRow key={entry.item.id} item={entry.item} now={now} />
+                <AgentPhaseRow key={entry.item.id} item={entry.item} />
               ) : (
                 <AgentTimelineItem
                   key={entry.item.id}
@@ -149,6 +168,12 @@ function AgentTimeline({
                   referenceActions={referenceActions}
                   onRespondPermission={onRespondPermission}
                   onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
+                  contextRecovery={entry.item.id === contextRecoveryErrorId ? contextRecovery : undefined}
+                  onPrepareContextRecovery={onPrepareContextRecovery}
+                  onContinueContextRecovery={onContinueContextRecovery}
+                  onCreateConversation={onCreateConversation}
+                  projectId={projectId}
+                  conversationId={conversationId}
                 />
               )
             })}
@@ -157,6 +182,36 @@ function AgentTimeline({
       </ScrollArea>
     </div>
   )
+}
+
+function visibleTimelineItems(
+  items: readonly SynapseAgentTimelineItem[],
+  nowMs: number,
+): readonly SynapseAgentTimelineItem[] {
+  return items.filter((item, index) => {
+    if (item.kind === "sdkEvent" && item.sdkType === "compactBoundary") return false
+    if (item.kind !== "sdkEvent" || item.sdkType !== "status" || item.label !== "正在整理上下文…") {
+      return true
+    }
+    const completed = items.slice(index + 1).some((later) =>
+      later.kind === "sdkEvent"
+      && (later.sdkType === "compactBoundary" || later.sdkType === "status"))
+    if (completed) return false
+    const startedAt = Date.parse(item.timestamp)
+    return Number.isFinite(startedAt) && nowMs - startedAt >= 800
+  })
+}
+
+function latestContextRecoveryErrorId(items: readonly SynapseAgentTimelineItem[]): string | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind === "error" && isContextRecoveryErrorKind(item.errorKind)) return item.id
+  }
+  return undefined
+}
+
+function isContextRecoveryErrorKind(errorKind: string | undefined): boolean {
+  return errorKind === "request_body_too_large" || errorKind === "context_refill_thrashing"
 }
 
 function latestPendingTimelineItemIds(

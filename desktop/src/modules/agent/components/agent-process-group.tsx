@@ -6,10 +6,13 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { AgentAnnotation } from "./agent-annotation"
+import { useAgentClock } from "../hooks/use-agent-clock"
+import { formatProcessGroupDuration } from "./agent-timeline-display"
 
 type AgentProcessGroupProps = {
   readonly label: string
   readonly durationLabel?: string
+  readonly activeStartedAtMs?: number
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly children: React.ReactNode
@@ -18,6 +21,7 @@ type AgentProcessGroupProps = {
 function AgentProcessGroup({
   label,
   durationLabel,
+  activeStartedAtMs,
   open,
   onOpenChange,
   children,
@@ -34,7 +38,7 @@ function AgentProcessGroup({
           >
             <span className="shrink-0">{label}</span>
             {durationLabel ? (
-              <span className="shrink-0 tabular-nums">{durationLabel}</span>
+              <AgentProcessDuration label={durationLabel} startedAtMs={activeStartedAtMs} />
             ) : null}
             <ChevronDown
               data-icon="inline-end"
@@ -50,6 +54,11 @@ function AgentProcessGroup({
       </Collapsible>
     </AgentAnnotation>
   )
+}
+
+function AgentProcessDuration({ label, startedAtMs }: { readonly label: string; readonly startedAtMs?: number }) {
+  const now = useAgentClock(startedAtMs !== undefined)
+  return <span className="shrink-0 tabular-nums">{startedAtMs === undefined ? label : formatProcessGroupDuration(now - startedAtMs)}</span>
 }
 
 export { AgentProcessGroup }

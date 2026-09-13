@@ -86,8 +86,14 @@ import {
   CLIPBOARD_TEXT_READ_CAPABILITY_ID,
   CLIPBOARD_TEXT_WRITE_CAPABILITY_ID,
 } from "../../app-capabilities/clipboard/shared/capability"
+import {
+  AGENT_CONVERSATION_CAPABILITY_CATALOG,
+  AGENT_CONVERSATION_MCP_TOOL_ACTIONS,
+} from "../../app-capabilities/agent/shared/capability"
+import { buildAgentConversationMcpTools } from "../../app-capabilities/agent/shared/mcp-tools"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
+  ...AGENT_CONVERSATION_CAPABILITY_CATALOG,
   {
     id: TEXT_EXTRACTOR_CAPABILITY_ID,
     title: "Extract document text",
@@ -210,6 +216,7 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 }
 
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
+  ...AGENT_CONVERSATION_MCP_TOOL_ACTIONS,
   [TEXT_EXTRACTOR_MCP_TOOL_NAME]: TEXT_EXTRACTOR_CAPABILITY_ID,
   [TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME]: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
   [DOCUMENT_TEMPLATE_MCP_TOOL_NAME]: DOCUMENT_TEMPLATE_CAPABILITY_ID,
@@ -250,6 +257,7 @@ const strictEmptyInputSchema = {
 }
 export function buildAppTools(): McpToolDefinition[] {
   return [
+    ...buildAgentConversationMcpTools(),
     {
       name: TEXT_EXTRACTOR_MCP_TOOL_NAME,
       description: "Extract complete normalized plain text and metadata from one local PDF or DOCX. The file must be an absolute path to a regular, non-symbolic-link document whose extension matches its content. PDF extraction reads the existing text layer; DOCX extraction reads main-document paragraphs, list text, table cells, and recognizable text boxes. It does not perform OCR or layout reconstruction. An empty text result is successful. Limits: 50 MiB source file, 5 MiB UTF-8 text, 2,000 PDF pages, 60 seconds, and two concurrent tasks.",

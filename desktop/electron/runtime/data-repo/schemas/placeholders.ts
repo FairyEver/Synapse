@@ -205,6 +205,15 @@ export interface ConversationMainThreadPersonaSnapshotV1 extends Record<string, 
   definitionHash: string
 }
 
+export interface ConversationContextRecoveryV1 extends Record<string, unknown> {
+  status: "required" | "prepared" | "failed"
+  reason: "request_body_too_large" | "context_refill_thrashing"
+  failedTurnId: string
+  createdAt: string
+  preparedAt?: string
+  failedAt?: string
+}
+
 export interface ConversationEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
@@ -212,6 +221,8 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   sessionKey: string
   providerId?: string
   sdkSessionId?: string
+  /** Host-owned SDK task namespace; survives execution session rotation. */
+  taskListId?: string
   usage?: ConversationUsageV1
   costUsd?: number
   costCny?: number
@@ -236,6 +247,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
     activeMainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }
   resumePolicy?: ConversationResumePolicyV1
+  contextRecovery?: ConversationContextRecoveryV1
   history: ConversationHistoryEntryV1[]
   userMeta?: ConversationUserMetaV1
   active: boolean
@@ -258,6 +270,9 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).sessionKey === "string"
     && isOptionalString((v as ConversationEntryV1).providerId)
     && isOptionalString((v as ConversationEntryV1).sdkSessionId)
+    && ((v as ConversationEntryV1).taskListId === undefined
+      || (typeof (v as ConversationEntryV1).taskListId === "string"
+        && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test((v as ConversationEntryV1).taskListId!)))
     && ((v as ConversationEntryV1).usage === undefined || isConversationUsage((v as ConversationEntryV1).usage))
     && isOptionalNonNegativeFiniteNumber((v as ConversationEntryV1).costUsd)
     && isOptionalNonNegativeFiniteNumber((v as ConversationEntryV1).costCny)
@@ -272,6 +287,7 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && ((v as ConversationEntryV1).pastAgentSessionIds === undefined || isStringArray((v as ConversationEntryV1).pastAgentSessionIds))
     && ((v as ConversationEntryV1).agentConfig === undefined || isConversationAgentConfig((v as ConversationEntryV1).agentConfig))
     && ((v as ConversationEntryV1).resumePolicy === undefined || isConversationResumePolicy((v as ConversationEntryV1).resumePolicy))
+    && ((v as ConversationEntryV1).contextRecovery === undefined || isConversationContextRecovery((v as ConversationEntryV1).contextRecovery))
     && isOptionalRecord((v as ConversationEntryV1).userMeta)
     && ((v as ConversationEntryV1).titleSource === undefined || isConversationTitleSource((v as ConversationEntryV1).titleSource))
     && typeof (v as ConversationEntryV1).createdAt === "string"
@@ -363,18 +379,38 @@ export interface AgentArtifactEntryV2 extends Record<string, unknown> {
   lastError?: string
 }
 
-export type AgentArtifactEntry = AgentArtifactEntryV1 | AgentArtifactEntryV2
+export interface AgentArtifactEntryV3 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 3
+  projectId: string
+  conversationId: string
+  turnId: string
+  toolUseId?: string
+  toolName?: string
+  kind: "tool-output-text"
+  mimeType: "text/plain"
+  originalByteSize: number
+  storedByteSize: number
+  contentTruncated: boolean
+  sha256: string
+  storagePath: string
+  createdAt: string
+}
+
+export type AgentArtifactEntry = AgentArtifactEntryV1 | AgentArtifactEntryV2 | AgentArtifactEntryV3
 
 const agentArtifactMigrations: readonly Migration[] = [
   migration<unknown, unknown>(1, 2, (data) => data),
+  migration<unknown, unknown>(2, 3, (data) => data),
 ]
 
 export const agentArtifactsSchema: NamespaceSchema<AgentArtifactEntry> = {
   name: "agent.artifacts",
   backend: "sqlite",
-  currentVersion: 2,
+  currentVersion: 3,
   migrations: agentArtifactMigrations,
-  validate: (v): v is AgentArtifactEntry => isAgentArtifactEntryV1(v) || isAgentArtifactEntryV2(v),
+  validate: (v): v is AgentArtifactEntry =>
+    isAgentArtifactEntryV1(v) || isAgentArtifactEntryV2(v) || isAgentArtifactEntryV3(v),
 }
 
 function isAgentArtifactEntryV1(v: unknown): v is AgentArtifactEntryV1 {
@@ -450,6 +486,29 @@ function isAgentArtifactEntryV2(v: unknown): v is AgentArtifactEntryV2 {
       && isOptionalPositiveInteger(v.previewHeight)
   }
   return true
+}
+
+function isAgentArtifactEntryV3(v: unknown): v is AgentArtifactEntryV3 {
+  return isAnyRecord<AgentArtifactEntryV3>(v)
+    && v.schemaVersion === 3
+    && typeof v.id === "string"
+    && typeof v.projectId === "string"
+    && typeof v.conversationId === "string"
+    && typeof v.turnId === "string"
+    && isOptionalString(v.toolUseId)
+    && isOptionalString(v.toolName)
+    && v.kind === "tool-output-text"
+    && v.mimeType === "text/plain"
+    && Number.isSafeInteger(v.originalByteSize)
+    && v.originalByteSize > 0
+    && Number.isSafeInteger(v.storedByteSize)
+    && v.storedByteSize > 0
+    && v.storedByteSize <= v.originalByteSize
+    && typeof v.contentTruncated === "boolean"
+    && isSha256Hex(v.sha256)
+    && typeof v.storagePath === "string"
+    && typeof v.createdAt === "string"
+    && hasNoArtifactBytes(v)
 }
 
 function isOptionalPositiveInteger(value: unknown): boolean {
@@ -1409,6 +1468,17 @@ function isRequiredNonNegativeInteger(value: unknown): boolean {
 
 function isConversationResumePolicy(value: unknown): value is ConversationResumePolicyV1 {
   return ["resume", "fresh", "continue"].includes(String(value))
+}
+
+function isConversationContextRecovery(value: unknown): value is ConversationContextRecoveryV1 {
+  if (!isAnyRecord<ConversationContextRecoveryV1>(value)) return false
+  return ["required", "prepared", "failed"].includes(String(value.status))
+    && ["request_body_too_large", "context_refill_thrashing"].includes(String(value.reason))
+    && typeof value.failedTurnId === "string"
+    && value.failedTurnId.length > 0
+    && typeof value.createdAt === "string"
+    && isOptionalString(value.preparedAt)
+    && isOptionalString(value.failedAt)
 }
 
 function isRunAsCheckStatus(value: unknown): value is RunAsCheckStatusV1 {

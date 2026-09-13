@@ -21,6 +21,8 @@ import {
   coreActionRuntimeDescriptor,
   coreAgentReferenceActionsDescriptor,
   coreAgentConversationWindowDescriptor,
+  coreAgentConversationControlDescriptor,
+  coreAgentConversationNavigationDescriptor,
   coreAppIconDescriptor,
   coreAuditSinkDescriptor,
   coreAutomationDescriptor,
@@ -130,9 +132,11 @@ export function buildServiceRegistry(
   registry.register(coreWindowManagerDescriptor)
   registry.register(coreSystemAppWindowDescriptor)
   registry.register(coreAgentConversationWindowDescriptor)
+  registry.register(coreAgentConversationNavigationDescriptor)
   registry.register(coreEventBusDescriptor)
   registry.register(coreCheatCodeStateDescriptor)
   registry.register(coreProjectContainerRegistryDescriptor)
+  registry.register(coreAgentConversationControlDescriptor)
   registry.register(coreExecutionIsolationDescriptor)
   registry.register(coreSideChannelDescriptor)
   registry.register(coreTerminalAgentNotificationsDescriptor)

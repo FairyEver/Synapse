@@ -52,6 +52,7 @@ const CAPABILITY_ACTIONS = [
   "renew",
   "release",
   "send",
+  "steer",
   "command",
   "paste",
   "raw",
@@ -59,6 +60,7 @@ const CAPABILITY_ACTIONS = [
   "commit",
   "trigger",
   "submit",
+  "respond",
   "repair",
 ] as const
 

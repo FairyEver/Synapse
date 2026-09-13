@@ -255,6 +255,27 @@ describe("createProtocolUrlRouter", () => {
     expect(showAppDeepLinkError).not.toHaveBeenCalled()
   })
 
+  it("dispatches the canonical Agent thread route through the existing open capability", async () => {
+    const deepLink = "synapse://threads/m0D4NOW0yDeagclYK2CiUQ.xrs"
+    const dispatchAppAction = vi.fn(async () => ({ ok: true as const, data: { opened: true } }))
+    const router = createProtocolUrlRouter({
+      ...createUnusedUpdateRouterDeps(),
+      focusMainWindow: vi.fn(),
+      handleAuthCallback: vi.fn(async () => undefined),
+      logger: createLogger(),
+      openSkillRepositoryInstallWindow: vi.fn(async () => undefined),
+      dispatchAppAction,
+    }, [deepLink])
+
+    expect(router.shouldCreateMainWindowBeforeStart()).toBe(false)
+    await router.start()
+
+    expect(dispatchAppAction).toHaveBeenCalledWith(
+      "app.agent.conversation.open",
+      { deepLink },
+    )
+  })
+
   it("reports one sanitized native error for an invalid app deep link without focusing", async () => {
     const focusMainWindow = vi.fn()
     const showAppDeepLinkError = vi.fn()

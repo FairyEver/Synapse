@@ -2,12 +2,12 @@
 
 ## 目标
 
-在不改变公开 Synapse MCP、权限语义或已有对话的前提下，为第三方 Anthropic-compatible Provider 提供默认关闭的工具按需加载实验，降低 223 个 Synapse 工具 schema 的初始上下文占用。
+在不改变公开 Synapse MCP、权限语义或已有对话的前提下，为第三方 Anthropic-compatible Provider 提供默认开启的工具按需加载实验，降低 223 个 Synapse 工具 schema 的初始上下文占用。
 
 ## 产品边界
 
-- 系统设置“实验功能”下提供“Synapse MCP 工具按需加载”，默认关闭，异常配置归一化为关闭。
-- 开关只在新建对话时写入 `agentConfig.experimentalSynapseToolRouterEnabled`；缺少字段的旧对话按关闭处理。
+- 系统设置“实验功能”下提供“Synapse MCP 工具按需加载”，默认开启，异常配置归一化为关闭，缺省配置使用默认开启。
+- 开关只在新建对话时写入 `agentConfig.experimentalSynapseToolRouterEnabled`；缺少字段的旧对话按默认开启处理，显式 false 继续关闭。
 - 实际模式由对话快照与 Provider 端点共同决定。Anthropic 官方端点不启用；第三方端点启用。对话内切换 Provider 时重新创建 live session 并重新计算。
 - `/mcp`、Claude Code 注册、公开工具名、schema 与 225/223 能力数量不变。两个 router 工具只存在于 Agent SDK 进程内会话。
 
@@ -15,11 +15,11 @@
 
 1. 以 `user`、`project`、`local` 正常 setting sources 解析 SDK 设置。
 2. 创建不读取真实用户 prompt 的 discovery query，只等待初始化与 `mcpServerStatus()`，随后关闭。
-3. 把会话显式注入的非 Synapse Server 记录为预期集合，等待 discovery 中的 `pending` 完成，并校验预期集合全部为 `connected`；缺失或不可用时不得静默删除。
-4. 从有效配置移除 `synapse-mcp`，保留其它启用且可安全序列化的 stdio、HTTP 或 SSE server。
-5. 以 `strictMcpConfig: true` 创建正式 query，并注入进程内 `synapse-tool-router`；正式 query 初始化后再次校验预期集合。校验失败时回退完整 MCP 配置并重新连接，回退后仍不可用则终止会话并显示可操作错误。
+3. 把会话显式注入的非 Synapse Server 记录为预期集合；等待 pending 最多 5 秒。缺失、离线、待授权或超时只记录安全诊断并排除该项。
+4. 从有效配置移除 `synapse-mcp`，保留其它可重建且已连接的 stdio、HTTP 或 SSE server；可选配置不支持时只排除该项。
+5. 以 `strictMcpConfig: true` 创建正式 query，注入进程内 `synapse-tool-router`。可选连接器失败不能恢复全量 Synapse schema。
 
-以下任一情况整会话回退当前完整 MCP：discovery 失败、预期 Server 缺失或不可用、server 重名、缺失或不支持的 server 配置、policy helper、Synapse server 级工具策略，或有效权限配置显式引用 `mcp__synapse-mcp__*`。回退 reason 使用固定枚举；结构化日志只记录预期 Server 名称、发现状态与最终 Server 名称，配置、header、环境变量与凭据只留在内存，不进入日志、事件、历史或导出。
+整体 discovery 失败、重名、policy helper、Synapse server 级工具策略、原始 Synapse 权限规则或路由器创建失败时，使用 strict 空 MCP 集合，仅保留受现有权限约束的内置工具。任何情况下不得全量回退，也不得通过路由器绕过原工具权限。日志只记录名称和安全 reason/status，不记录配置、header、环境变量或凭据。
 
 ## 内部协议
 

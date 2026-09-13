@@ -334,16 +334,14 @@ describe("agentIpcModule", () => {
         projectId: "project-1",
         sessionKey: "local:renderer",
       },
-    }))
+    }), expect.objectContaining({ turnId: expect.any(String) }))
     expect(result).toEqual({
       projectId: "project-1",
       sessionKey: "local:renderer",
       conversationId: "conv-1",
-      resultText: "done",
-      events: [{ type: "result", content: "done", done: true }],
+      outcome: { status: "completed" },
       agentSessionId: "thread-1",
       threadId: "thread-1",
-      error: undefined,
     })
   })
 
@@ -529,7 +527,7 @@ describe("agentIpcModule", () => {
       content: "hello",
     })).resolves.toEqual(expect.objectContaining({
       conversationId: "conv-1",
-      resultText: "done",
+      outcome: { status: "completed" },
     }))
 
     expect(storageMigration.isActive).not.toHaveBeenCalled()
@@ -556,7 +554,7 @@ describe("agentIpcModule", () => {
 
     expect(send).toHaveBeenCalledWith(expect.objectContaining({
       providerId: "deepseek",
-    }))
+    }), expect.objectContaining({ turnId: expect.any(String) }))
   })
 
   it("resolves ordered attachment ids before forwarding trusted refs", async () => {
@@ -598,7 +596,7 @@ describe("agentIpcModule", () => {
       attachmentRefs: [imageRef, fileRef],
       attachmentDraftScopeId: "draft-1",
       displayContent: "hello",
-    }))
+    }), expect.objectContaining({ turnId: expect.any(String) }))
     expect(JSON.stringify(send.mock.calls)).not.toMatch(/"(?:data|bytes|base64)":/)
   })
 
@@ -958,10 +956,10 @@ describe("agentIpcModule", () => {
       attachmentRefs: expect.arrayContaining([
         expect.objectContaining({ kind: "image", attachmentId: "image-49" }),
       ]),
-    }))
+    }), expect.objectContaining({ turnId: expect.any(String) }))
   })
 
-  it("validates SDK events in local renderer send responses", async () => {
+  it("returns only a bounded terminal outcome for local renderer sends", async () => {
     const sdkEvents = [
       {
         type: "sessionInit",
@@ -1046,9 +1044,9 @@ describe("agentIpcModule", () => {
       content: "hello",
     })
 
-    expect(result).toEqual(expect.objectContaining({
-      events: sdkEvents,
-    }))
+    expect(result).toEqual(expect.objectContaining({ outcome: { status: "completed" } }))
+    expect(result).not.toHaveProperty("events")
+    expect(result).not.toHaveProperty("resultText")
   })
 
   it("preserves tool use ids and image artifacts in conversation timelines", async () => {
@@ -1687,7 +1685,7 @@ describe("agentIpcModule", () => {
     })
   })
 
-  it("returns the full conversation timeline when no limit is requested", async () => {
+  it("caps the conversation timeline at 100 entries when no limit is requested", async () => {
     const history = Array.from({ length: 101 }, (_, index) => ({
       role: "user" as const,
       content: `message ${String(index + 1)}`,
@@ -1718,15 +1716,45 @@ describe("agentIpcModule", () => {
       readonly hasMore: boolean
     }
 
-    expect(result.entries).toHaveLength(101)
+    expect(result.entries).toHaveLength(100)
     expect(result).toEqual(expect.objectContaining({
       total: 101,
-      startIndex: 0,
-      hasMore: false,
+      startIndex: 1,
+      hasMore: true,
     }))
     expect(result.entries[0]).toEqual(expect.objectContaining({
-      content: "message 1",
+      content: "message 2",
     }))
+  })
+
+  it("reads long timeline content through validated 64 KiB chunks", async () => {
+    const fullContent = "中".repeat(70_000)
+    const conversation = {
+      schemaVersion: 1 as const,
+      id: "conv-long",
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      active: true,
+      history: [{ role: "assistant", content: fullContent, timestamp: "2026-09-12T00:00:00.000Z" }],
+      createdAt: "2026-09-12T00:00:00.000Z",
+      updatedAt: "2026-09-12T00:00:00.000Z",
+    }
+    const harness = createHarness({
+      dataRepository: {
+        namespace: vi.fn(() => ({ get: vi.fn().mockResolvedValue(conversation) })),
+      } as never,
+    })
+
+    const first = await harness.invoke("synapse:app:agent:operation:get_timeline_content_chunk", {
+      projectId: "project-1",
+      conversationId: "conv-long",
+      historyIndex: 0,
+      offset: 0,
+    }) as { content: string; nextOffset: number; done: boolean }
+
+    expect(Buffer.byteLength(first.content, "utf8")).toBeLessThanOrEqual(64 * 1024)
+    expect(first.done).toBe(false)
+    expect(first.nextOffset).toBe(first.content.length)
   })
 
   it("pages 183 history records at complete user turn boundaries", async () => {
@@ -2321,12 +2349,46 @@ describe("agentIpcModule", () => {
         content: "queued",
       })
 
+      const receivedPhase = harness.eventBusEmits.find((event) =>
+        event.type === "phase.update"
+        && (event.payload as { phase?: string; status?: string }).phase === "received"
+        && (event.payload as { phase?: string; status?: string }).status === "in-progress")
+      const receivedRunId = (receivedPhase?.payload as { runId?: string } | undefined)?.runId
+
       expect(send).not.toHaveBeenCalled()
+      expect(receivedRunId).toEqual(expect.any(String))
       expect(sendToConversation).toHaveBeenCalledWith(expect.objectContaining({
         projectId: "project-1",
         sessionKey: "local:renderer",
         content: "queued",
-      }), "conv-queued")
+      }), "conv-queued", { turnId: receivedRunId })
+    })
+
+    it("forwards steer correlation fields to the active Agent runtime", async () => {
+      const steer = vi.fn().mockResolvedValue({
+        status: "accepted",
+        conversationId: "conv-steer",
+        turnId: "turn-steer",
+        clientMessageId: "client-steer",
+      })
+      const harness = createHarness({ agent: { steer } })
+
+      await expect(harness.invoke("synapse:app:agent:operation:steer", {
+        projectId: "project-1",
+        conversationId: "conv-steer",
+        expectedTurnId: "turn-steer",
+        clientMessageId: "client-steer",
+        content: "  调整当前方向  ",
+        clientSubmittedAt: "2026-05-13T00:00:01.000Z",
+      })).resolves.toMatchObject({ status: "accepted" })
+
+      expect(steer).toHaveBeenCalledWith({
+        conversationId: "conv-steer",
+        expectedTurnId: "turn-steer",
+        clientMessageId: "client-steer",
+        content: "调整当前方向",
+        submittedAt: expect.any(String),
+      })
     })
 
     it("clamps a client clock that is ahead of the server", async () => {
@@ -2494,6 +2556,7 @@ function createHarness(overrides: {
     deleteSession: vi.fn(),
     send: vi.fn(),
     sendToConversation: vi.fn(),
+    steer: vi.fn(),
     stageAttachmentPaths: vi.fn(async ({ paths }: { readonly paths: readonly string[] }) => Promise.all(paths.map(async (sourcePath) => {
       const stat = await fs.lstat(sourcePath)
       if (stat.isSymbolicLink()) throw new Error("symbolic link")

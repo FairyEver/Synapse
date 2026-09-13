@@ -3,6 +3,18 @@ import { describe, expect, it } from "vitest"
 import { formatAgentTranscript } from "../agent-transcript"
 
 describe("agent transcript helpers", () => {
+  it("labels steered user messages in text exports", () => {
+    expect(formatAgentTranscript([{
+      id: "steer-1",
+      kind: "message",
+      role: "user",
+      content: "先修复测试",
+      messageKind: "steer",
+      clientMessageId: "client-1",
+      timestamp: "2026-05-13T00:00:01.000Z",
+    }])).toMatch(/用户（引导）[^\n]*\n先修复测试/)
+  })
+
   it("exports cancelled turn outcome copy instead of raw SDK abort diagnostics", () => {
     const transcript = formatAgentTranscript([{
       id: "result-1",

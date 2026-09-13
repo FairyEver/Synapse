@@ -82,6 +82,7 @@ export type AgentTimelineDisplayNode =
       readonly summary: string
       readonly label: string
       readonly durationLabel?: string
+      readonly activeStartedAtMs?: number
       readonly state: ProcessGroupState
     }
 
@@ -265,7 +266,11 @@ function createProcessGroup(
 ): AgentTimelineDisplayNode {
   const state = processGroupState(entries, context)
   const label = processGroupLabel(state)
-  const durationLabel = processGroupDurationLabel(entries, state, context.nowMs, completedTurnStartedAtMs)
+  const timeRange = processGroupTimeRange(entries, state, context.nowMs, completedTurnStartedAtMs)
+  const durationLabel = timeRange ? formatProcessGroupDuration(timeRange.endMs - timeRange.startMs) : undefined
+  const activeStartedAtMs = state.active || state.pendingPermission
+    ? timeRange?.startMs
+    : undefined
   return {
     kind: "processGroup",
     id: `process:${anchorId}`,
@@ -275,6 +280,7 @@ function createProcessGroup(
     summary: processGroupSummary(label, durationLabel),
     label,
     ...(durationLabel ? { durationLabel } : {}),
+    ...(activeStartedAtMs !== undefined ? { activeStartedAtMs } : {}),
     state,
   }
 }
@@ -287,17 +293,6 @@ function processGroupLabel(state: ProcessGroupState): string {
 
 function processGroupSummary(label: string, durationLabel: string | undefined): string {
   return durationLabel ? `${label} ${durationLabel}` : label
-}
-
-function processGroupDurationLabel(
-  entries: readonly TimelineDisplayEntry[],
-  state: ProcessGroupState,
-  nowMs: number | undefined,
-  completedTurnStartedAtMs?: number,
-): string | undefined {
-  const range = processGroupTimeRange(entries, state, nowMs, completedTurnStartedAtMs)
-  if (!range) return undefined
-  return formatProcessGroupDuration(range.endMs - range.startMs)
 }
 
 function processGroupTimeRange(
@@ -375,7 +370,7 @@ function parseProcessTimestamp(value: string | undefined): number | undefined {
   return Number.isFinite(timestamp) ? timestamp : undefined
 }
 
-function formatProcessGroupDuration(durationMs: number): string | undefined {
+export function formatProcessGroupDuration(durationMs: number): string | undefined {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000))
   if (!Number.isFinite(totalSeconds)) return undefined
   const minutes = Math.floor(totalSeconds / 60)

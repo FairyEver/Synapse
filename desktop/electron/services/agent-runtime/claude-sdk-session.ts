@@ -14,6 +14,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { lstat, realpath } from "node:fs/promises"
 import path from "node:path"
+import { randomUUID } from "node:crypto"
 
 import {
   buildHostEnvironment,
@@ -57,6 +58,7 @@ import type {
   AgentLiveSession,
   AgentMessage,
   AgentPermissionDecision,
+  AgentSteerMessage,
   AgentUserQuestion,
   AgentUserQuestionOption,
 } from "./types"
@@ -83,6 +85,20 @@ import {
   AgentFileCheckpointTracker,
   isReplayedUserMessage,
 } from "./agent-file-checkpoint-tracker"
+import {
+  DEFAULT_TOOL_OUTPUT_MAX_BYTES,
+  governToolOutput,
+  replaceToolOutput,
+  measureToolOutput,
+} from "./tool-output-governor"
+import {
+  AgentContextBudget,
+  DEFAULT_TOOL_OUTPUT_BATCH_MAX_BYTES,
+  type AgentContextBudgetSnapshot,
+} from "./context-budget"
+import { sumClaudeSdkUsage } from "../../../src/lib/token-usage"
+import type { AgentContextRotation } from "./context-continuation"
+import type { PersistedToolOutputText } from "./artifact-store"
 
 export interface QueryLike {
   next(): Promise<IteratorResult<SDKMessage, void>>
@@ -110,6 +126,7 @@ export interface ClaudeSDKSessionOptions {
   readonly providerId: string
   readonly cwd: string
   readonly sdkSessionId?: string
+  readonly taskListId?: string
   readonly env: Record<string, string>
   readonly hostEnv?: NodeJS.ProcessEnv
   readonly resolveShellPath?: () => string | null
@@ -118,6 +135,11 @@ export interface ClaudeSDKSessionOptions {
   readonly model?: string
   readonly modelContext?: AgentModelContextReference
   readonly contextWindowConfigurationSource?: AgentContextWindowConfigurationSource
+  readonly autoCompactWindowTokens?: number
+  readonly maxRequestBodyBytes?: number
+  readonly requestBodyBudgetBytes?: number
+  readonly maxToolOutputBytes?: number
+  readonly maxToolBatchOutputBytes?: number
   readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
   readonly allowPluginHooks?: boolean
@@ -132,6 +154,15 @@ export interface ClaudeSDKSessionOptions {
   readonly toolPolicy?: ClaudeSDKToolPolicy
   readonly abortSignal?: AbortSignal
   readonly additionalDirectories?: readonly string[]
+  readonly readOnlyAdditionalDirectories?: readonly string[]
+  readonly persistToolOutputText?: (input: {
+    readonly projectId: string
+    readonly conversationId: string
+    readonly turnId: string
+    readonly toolUseId?: string
+    readonly toolName?: string
+    readonly content: string
+  }) => Promise<PersistedToolOutputText | undefined>
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly mcpServers?: Options["mcpServers"]
   readonly expectedMcpServerNames?: readonly string[]
@@ -149,6 +180,9 @@ export interface ClaudeSDKSessionOptions {
 
 export interface ClaudeSDKRuntimeSettings {
   readonly skipWebFetchPreflight?: boolean
+  readonly autoCompactEnabled?: boolean
+  readonly autoCompactWindow?: number
+  readonly precomputeCompactionEnabled?: boolean
 }
 
 interface PendingPermission {
@@ -164,6 +198,20 @@ type SessionDirectoryPermissionUpdate = Extract<PermissionUpdate, { type: "addDi
 interface ForwardedAbortController {
   readonly controller: AbortController
   cleanup(): void
+}
+
+function createSdkDiagnosticSummary(): {
+  observedCount: number
+  thinkingTokenCount: number
+  firstObservedAt?: string
+  lastObservedAt?: string
+  types: Map<string, number>
+} {
+  return {
+    observedCount: 0,
+    thinkingTokenCount: 0,
+    types: new Map(),
+  }
 }
 
 type CanUseToolContext = Parameters<NonNullable<Options["canUseTool"]>>[2]
@@ -227,10 +275,39 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly subagentTypesById = new Map<string, string>()
   private readonly attachmentPathLabels = new Map<string, string>()
   private readonly contextUsageTracker: AgentContextUsageTracker
+  private readonly maxRequestBodyBytes: number | undefined
+  private readonly readOnlyAdditionalDirectories: readonly string[]
+  private readonly persistToolOutputText: ClaudeSDKSessionOptions["persistToolOutputText"]
+  private readonly contextBudget: AgentContextBudget
   private readonly fileCheckpointTracker: AgentFileCheckpointTracker
+  private sdkDiagnosticSummary: {
+    observedCount: number
+    thinkingTokenCount: number
+    firstObservedAt?: string
+    lastObservedAt?: string
+    types: Map<string, number>
+  } = createSdkDiagnosticSummary()
   private lastTodoWriteSignature: string | undefined
   private repeatedTodoWriteCount = 0
+  private activeTurnId: string | undefined
+  private pendingCompaction: {
+    readonly startedAt: number
+    readonly trigger: "manual" | "auto"
+    readonly before: AgentContextBudgetSnapshot
+    summaryBytes?: number
+    summaryRequestBytes?: number
+  } | undefined
+  private outputGovernance: Promise<unknown> = Promise.resolve()
+  private rotation: AgentContextRotation | undefined
+  private releaseRotation: (() => void) | undefined
+  private lastCompactSummary = ""
+  private completedBatches = 0
+  private lastToolBatch: import("@anthropic-ai/claude-agent-sdk", { with: { "resolution-mode": "import" } }).PostToolBatchToolCall[] = []
+  private readonly observedMessageUsage = new Map<string, Record<string, unknown>>()
+  private readonly deliveredToolResults = new Set<string>()
+  private lastNativeToolResultTokens: number | undefined
   private closed = false
+  private outputIntegrityFailed = false
   private queryFinished = false
   private permissionMode: PermissionMode | undefined
   private synapseToolRouterFallbackEmitted = false
@@ -253,6 +330,18 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.contextUsageTracker = new AgentContextUsageTracker({
       modelContext: options.modelContext,
       contextWindowConfigurationSource: options.contextWindowConfigurationSource,
+      autoCompactWindowTokens: options.autoCompactWindowTokens,
+    })
+    this.maxRequestBodyBytes = options.maxRequestBodyBytes
+    this.readOnlyAdditionalDirectories = mergeAdditionalDirectories(options.readOnlyAdditionalDirectories ?? [])
+    this.persistToolOutputText = options.persistToolOutputText
+    this.contextBudget = new AgentContextBudget({
+      maxToolResultBytes: options.maxToolOutputBytes ?? DEFAULT_TOOL_OUTPUT_MAX_BYTES,
+      maxToolBatchBytes: options.maxToolBatchOutputBytes ?? DEFAULT_TOOL_OUTPUT_BATCH_MAX_BYTES,
+      maxContextTokens: options.autoCompactWindowTokens ?? options.modelContext?.contextWindowTokens,
+      maxRequestBodyBytes: options.maxRequestBodyBytes,
+      requestBodyBudgetBytes: options.requestBodyBudgetBytes,
+      initialRequestBytes: estimatedStaticRequestBytes(options),
     })
     this.fileCheckpointTracker = new AgentFileCheckpointTracker({
       cwd: this.cwd,
@@ -321,14 +410,38 @@ export class ClaudeSDKSession implements AgentLiveSession {
     for (const directory of message.runtimeAttachmentDirectories ?? []) {
       this.attachmentPathLabels.set(directory, "[Synapse attachment root]")
     }
-    this.inputQueue.push({
-      type: "user",
+    const content = buildAgentRuntimeUserContent(message.content, attachments)
+    const sdkMessage = {
+      type: "user" as const,
       message: {
-        role: "user",
-        content: buildAgentRuntimeUserContent(message.content, attachments),
+        role: "user" as const,
+        content,
       },
       parent_tool_use_id: null,
-    })
+    }
+    this.observedMessageUsage.clear()
+    this.completedBatches = 0
+    this.lastToolBatch = []
+    this.activeTurnId = message.runtimeTurnId
+    this.contextBudget.beginTurn(serializedByteLength(sdkMessage))
+    this.inputQueue.push(sdkMessage)
+    return true
+  }
+
+  async steer(message: AgentSteerMessage): Promise<boolean> {
+    if (this.closed || this.queryFinished || this.rotation) return false
+    const sdkMessage = {
+      type: "user",
+      message: {
+        role: "user" as const,
+        content: message.content,
+      },
+      parent_tool_use_id: null,
+      origin: { kind: "human" },
+      timestamp: message.submittedAt,
+    } as const
+    this.contextBudget.recordModelVisibleBytes(serializedByteLength(sdkMessage))
+    this.inputQueue.push(sdkMessage)
     return true
   }
 
@@ -396,6 +509,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
     return this.query.rewindFiles(sdkUserMessageId, options)
   }
 
+  contextRotation(): AgentContextRotation | undefined {
+    return this.rotation
+  }
+
   nextEvent(): Promise<AgentEvent | null> {
     return this.eventQueue.next()
   }
@@ -415,7 +532,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
   async cancelCurrentTurn(): Promise<boolean> {
     if (!this.alive()) return false
     this.denyPendingPermissions(AGENT_TURN_PERMISSION_CANCELLED_MESSAGE)
-    await this.query.interrupt()
+    if (this.rotation) {
+      await this.close()
+    } else {
+      await this.query.interrupt()
+    }
     return true
   }
 
@@ -437,13 +558,17 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (!this.query.grantAdditionalDirectories) {
       throw new Error("当前会话不支持动态授权附件目录。")
     }
-    await this.query.grantAdditionalDirectories(nextDirectories)
+    await this.query.grantAdditionalDirectories(mergeAdditionalDirectories(
+      nextDirectories,
+      this.readOnlyAdditionalDirectories,
+    ))
     this.additionalDirectories = nextDirectories
   }
 
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
+    this.releaseRotation?.()
     this.queryFinished = true
     this.inputQueue.close()
     this.denyPendingPermissions("Session closed before permission was resolved.")
@@ -483,6 +608,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
       BASH_DEFAULT_TIMEOUT_MS: CLAUDE_CODE_LONG_TASK_TIMEOUT_MS,
       BASH_MAX_TIMEOUT_MS: CLAUDE_CODE_LONG_TASK_TIMEOUT_MS,
     })
+    const taskListId = options.taskListId ?? randomUUID()
+    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(taskListId)) {
+      throw new Error("Invalid SDK task-list identity")
+    }
+    sdkEnv.CLAUDE_CODE_TASK_LIST_ID = taskListId
     const queryOptions: Partial<Options> = {
       cwd: this.cwd,
       enableFileCheckpointing: true,
@@ -493,7 +623,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         enableAllProjectMcpServers: true,
         disableAllHooks: options.allowPluginHooks === true ? false : true,
         ...options.sdkSettings,
-        env: providerSettingsEnv(options.env),
+        env: { ...providerSettingsEnv(options.env), CLAUDE_CODE_TASK_LIST_ID: taskListId },
       },
       env: sdkEnv,
       includePartialMessages: true,
@@ -515,8 +645,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
     queryOptions.systemPrompt = withConfiguredWorkspaceRoot(options.systemPrompt, this.cwd)
     if (options.tools !== undefined) queryOptions.tools = options.tools
     if (options.disallowedTools?.length) queryOptions.disallowedTools = [...options.disallowedTools]
-    if (this.additionalDirectories.length > 0) {
-      queryOptions.additionalDirectories = [...this.additionalDirectories]
+    const queryDirectories = mergeAdditionalDirectories(
+      this.additionalDirectories,
+      this.readOnlyAdditionalDirectories,
+    )
+    if (queryDirectories.length > 0) {
+      queryOptions.additionalDirectories = [...queryDirectories]
     }
     queryOptions.hooks = this.buildHooks()
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
@@ -549,6 +683,65 @@ export class ClaudeSDKSession implements AgentLiveSession {
         return {}
       }],
     })
+    hooks.PostToolUse = [{
+      matcher: "*",
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
+        const governed = this.outputGovernance.then(() => this.limitToolOutput(input))
+        this.outputGovernance = governed.catch(() => undefined)
+        return governed
+      }],
+    }]
+    hooks.PostToolBatch = [{
+      matcher: "*",
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
+        if (input.hook_event_name === "PostToolBatch" && !input.agent_id) {
+          if (input.tool_calls.length > 0) this.completedBatches += 1
+          this.lastToolBatch = input.tool_calls
+        }
+        const snapshot = this.contextBudget.finishToolBatch()
+        if (snapshot.batchToolOutputBytes > 0) {
+          this.logger?.info?.("Agent tool-output batch budget completed.", {
+            boundary: "claude-sdk.tool-output-budget.batch",
+            projectId: this.projectId,
+            conversationId: this.conversationId,
+            providerId: this.providerId,
+            batchToolOutputBytes: snapshot.batchToolOutputBytes,
+            turnToolOutputBytes: snapshot.turnToolOutputBytes,
+            estimatedRequestTokens: snapshot.estimatedRequestTokens,
+            estimatedRequestBytes: snapshot.estimatedRequestBytes,
+            requestBodyBudgetBytes: snapshot.requestBodyBudgetBytes,
+          })
+        }
+        return this.guardNextRequest(input)
+      }],
+    }]
+    hooks.PreCompact = [{
+      matcher: "*",
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
+        if (input.hook_event_name === "PreCompact") {
+          this.pendingCompaction = {
+            startedAt: Date.now(),
+            trigger: input.trigger,
+            before: this.contextBudget.snapshot(),
+          }
+        }
+        return {}
+      }],
+    }]
+    hooks.PostCompact = [{
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
+        if (input.hook_event_name !== "PostCompact" || input.agent_id) return {}
+        this.lastCompactSummary = input.compact_summary
+        if (this.pendingCompaction) {
+          this.pendingCompaction.summaryBytes = Buffer.byteLength(input.compact_summary, "utf8")
+          this.pendingCompaction.summaryRequestBytes = compactSummaryRequestBytes(input.compact_summary)
+        }
+        return this.guardNextRequest(input, true)
+      }],
+    }]
+    hooks.UserPromptSubmit = [{
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => this.guardNextRequest(input)],
+    }]
 
     if (this.personaToolPolicy && this.personaToolPolicy.mode !== "all") {
       hooks.PreToolUse?.unshift({
@@ -563,6 +756,227 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
 
     return hooks
+  }
+
+  private async readContextUsage(): Promise<SDKControlGetContextUsageResponse | undefined> {
+    if (!this.query.getContextUsage) return undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        this.query.getContextUsage(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("Context snapshot timed out")), 5_000)
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  private async guardNextRequest(input: HookInput, afterCompact = false): Promise<HookJSONOutput> {
+    if (this.outputIntegrityFailed) return { continue: false }
+    if (input.agent_id || this.closed || this.rotation) return {}
+    // The SDK exposes request boundaries, not a mutable transcript API.
+    // Holding this hook prevents the next request while the host checkpoints
+    // and closes the old session. close()/cancel releases the pending hook.
+    const before = this.contextBudget.snapshot()
+    let response: SDKControlGetContextUsageResponse | undefined
+    try {
+      response = await this.readContextUsage()
+    } catch (error) {
+      this.logger?.warn("Context preflight snapshot unavailable; retaining conservative budget.", {
+        boundary: "claude-sdk.request-budget", ...errorLogMeta(error),
+      })
+    }
+    if (this.closed || this.abortController?.signal.aborted) return { continue: false }
+    if (response) {
+      const usage = this.contextUsageTracker.replaceFromContextUsage(response)
+      if (usage) {
+        // A hook snapshot can precede insertion of the current batch/prompt;
+        // never erase bytes accrued since the last completed model response.
+        if (afterCompact) {
+          this.contextBudget.completeCompaction(usage.usedTokens, compactSummaryRequestBytes(this.lastCompactSummary), retainedPayloadTokens(response))
+        } else {
+          this.contextBudget.observeContextTokens(usage.usedTokens + before.pendingModelVisibleBytes)
+        }
+        this.contextBudget.updateRequestTokenLimit(response.maxTokens)
+      }
+    }
+    const pressure = this.contextBudget.availableModelVisibleBytes() < 4_096
+    const ineffective = afterCompact && response !== undefined && pressure
+    if (!ineffective && !pressure) return {}
+    if (!this.persistToolOutputText || !this.activeTurnId) {
+      return { continue: false, stopReason: "上下文空间不足，无法保存自动交接资料。" }
+    }
+    return this.pauseForContextRotation(ineffective ? "ineffective-compaction" : "request-budget")
+  }
+
+  private async pauseForContextRotation(reason: AgentContextRotation["reason"]): Promise<HookJSONOutput> {
+    if (this.closed || this.abortController?.signal.aborted) return { continue: false }
+    this.rotation = {
+      reason,
+      summary: this.lastCompactSummary,
+      completedBatches: this.completedBatches,
+      lastToolBatch: this.lastToolBatch,
+      usage: { ...sumClaudeSdkUsage([...this.observedMessageUsage.values()]) },
+    }
+    const paused = new Promise<void>((resolve) => { this.releaseRotation = resolve })
+    // The SDK may not have yielded this batch's user/tool_result frames yet.
+    // Project them before the maintenance marker so history/UI retain their outcomes.
+    for (const tool of this.lastToolBatch) {
+      if (this.deliveredToolResults.has(tool.tool_use_id)) continue
+      const content = measureToolOutput(tool.tool_name, tool.tool_response)?.text
+      this.eventQueue.push(this.projectAttachmentEvent(this.projectSynapseToolRouterEvent({
+        type: "toolResult", toolName: tool.tool_name, toolUseId: tool.tool_use_id,
+        content, status: "observed", conversationId: this.conversationId,
+        providerId: this.providerId, sdkSessionId: this.sdkSessionId,
+        timestamp: this.now().toISOString(),
+      })))
+      this.deliveredToolResults.add(tool.tool_use_id)
+    }
+    this.eventQueue.push({
+      type: "sdkEvent", sdkType: "contextRotationRequested", payload: {},
+      conversationId: this.conversationId, providerId: this.providerId,
+      sdkSessionId: this.sdkSessionId, timestamp: this.now().toISOString(),
+    })
+    await paused
+    return { continue: false, suppressOutput: true }
+  }
+
+  private async limitToolOutput(input: HookInput): Promise<HookJSONOutput> {
+    if (this.outputIntegrityFailed || this.closed || this.abortController?.signal.aborted) return { continue: false }
+    const record = input as unknown as Record<string, unknown>
+    if (record.hook_event_name !== "PostToolUse" || typeof record.tool_name !== "string") return {}
+    const measurement = measureToolOutput(record.tool_name, record.tool_response)
+    if (!measurement) {
+      const responseBytes = serializedByteLength(record.tool_response)
+      const availableBytes = Math.max(
+        0,
+        this.contextBudget.availableModelVisibleBytes() - toolResultRequestBytes(""),
+      )
+      if (responseBytes <= availableBytes) {
+        this.contextBudget.recordToolOutput(toolResultRequestBytes(record.tool_response))
+        return {}
+      }
+      return this.stopForOutputIntegrity("图片或非文本结果超过当前上下文预算，尚未完成处理。已停止执行，请保留原件并核实后继续。")
+    }
+    const availableBytes = Math.max(
+      0,
+      this.contextBudget.availableToolOutputBytes() - toolResultRequestBytes(""),
+    )
+    const needsRewrite = measurement.bytes > availableBytes
+      || measurement.lines > 2_000
+    let persisted: PersistedToolOutputText | undefined
+    if (needsRewrite && this.persistToolOutputText && this.activeTurnId) {
+      try {
+        persisted = await this.persistToolOutputText({
+          projectId: this.projectId,
+          conversationId: this.conversationId,
+          turnId: this.activeTurnId,
+          ...(typeof record.tool_use_id === "string" ? { toolUseId: record.tool_use_id } : {}),
+          toolName: record.tool_name,
+          content: measurement.text,
+        })
+      } catch (error) {
+        this.logger?.warn("Agent tool output persistence failed; stopping before discarding evidence.", {
+          boundary: "claude-sdk.tool-output-artifact",
+          projectId: this.projectId,
+          conversationId: this.conversationId,
+          providerId: this.providerId,
+          toolName: record.tool_name,
+          ...errorLogMeta(error),
+        })
+      }
+    }
+    if (this.closed || this.abortController?.signal.aborted) return { continue: false }
+    if (needsRewrite && (!persisted || persisted.contentTruncated)) {
+      return this.stopForOutputIntegrity("工具结果未能完整保存，已停止执行。该操作可能已生效，请核实已有结果后继续。")
+    }
+    let governed = governToolOutput({
+      toolName: record.tool_name,
+      toolResponse: record.tool_response,
+      maxBytes: availableBytes,
+      ...(persisted ? { persistedOutputPath: persisted.storagePath } : {}),
+    })
+    let updatedToolOutput = governed
+      ? replaceToolOutput(record.tool_name, record.tool_response, governed.updatedToolOutput)
+      : record.tool_response
+    if (governed && updatedToolOutput === undefined) {
+      return this.stopForOutputIntegrity("工具结果已保存，但当前 SDK 输出结构无法安全替换，已停止执行。")
+    }
+    // Account for native result wrappers and JSON escaping, not just preview text.
+    let previewBytes = availableBytes
+    for (let attempt = 0; governed && attempt < 8; attempt += 1) {
+      const excess = toolResultRequestBytes(updatedToolOutput) - this.contextBudget.availableToolOutputBytes()
+      if (excess <= 0) break
+      previewBytes = Math.max(0, previewBytes - excess)
+      governed = governToolOutput({ toolName: record.tool_name, toolResponse: record.tool_response,
+        maxBytes: previewBytes, persistedOutputPath: persisted?.storagePath })
+      updatedToolOutput = governed ? replaceToolOutput(record.tool_name, record.tool_response, governed.updatedToolOutput) : record.tool_response
+    }
+    if (governed && persisted && !governed.updatedToolOutput.includes(persisted.storagePath)) {
+      return this.stopForOutputIntegrity("工具结果已保存，但当前上下文无法容纳完整引用，已停止执行。")
+    }
+    const deliveredRequestBytes = toolResultRequestBytes(updatedToolOutput)
+    if (governed && deliveredRequestBytes > this.contextBudget.availableToolOutputBytes()) {
+      return this.stopForOutputIntegrity("工具结果已保存，但当前上下文无法容纳完整引用，已停止执行。")
+    }
+    this.contextBudget.recordToolOutput(deliveredRequestBytes)
+    if (!governed) return {}
+    const budget = this.contextBudget.snapshot()
+    this.logger?.info?.("Agent tool output was bounded before the next model request.", {
+      boundary: "claude-sdk.tool-output-governor",
+      projectId: this.projectId,
+      conversationId: this.conversationId,
+      providerId: this.providerId,
+      toolName: record.tool_name,
+      originalBytes: governed.originalBytes,
+      deliveredBytes: governed.deliveredBytes,
+      originalLines: governed.originalLines,
+      deliveredLines: governed.deliveredLines,
+      kept: governed.kept,
+      persisted: Boolean(persisted),
+      persistedBytes: persisted?.storedByteSize,
+      persistedTruncated: persisted?.contentTruncated,
+      batchToolOutputBytes: budget.batchToolOutputBytes,
+      turnToolOutputBytes: budget.turnToolOutputBytes,
+      estimatedRequestTokens: budget.estimatedRequestTokens,
+      estimatedRequestBytes: budget.estimatedRequestBytes,
+      requestBodyBudgetBytes: budget.requestBodyBudgetBytes,
+    })
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        updatedToolOutput,
+      },
+    }
+  }
+
+  private stopForOutputIntegrity(message: string): HookJSONOutput {
+    if (!this.outputIntegrityFailed && !this.closed && !this.abortController?.signal.aborted) {
+      this.outputIntegrityFailed = true
+      this.queryFinished = true
+      this.inputQueue.close()
+      this.eventQueue.push({ type: "error", message, errorKind: "execution_failed", recoverable: true,
+        conversationId: this.conversationId, providerId: this.providerId, sdkSessionId: this.sdkSessionId,
+        timestamp: this.now().toISOString() })
+      // Do not await close from inside the hook it may itself be waiting for.
+      void this.closeAfterOutputIntegrityFailure()
+    }
+    return { continue: false, stopReason: message }
+  }
+
+  private async closeAfterOutputIntegrityFailure(): Promise<void> {
+    try {
+      await this.query.close()
+    } catch (error) {
+      this.logger?.warn("Claude SDK close after output integrity failure failed.", {
+        boundary: "claude-sdk.tool-output-integrity", ...errorLogMeta(error),
+      })
+    } finally {
+      this.denyPendingPermissions("Tool output integrity failed.")
+      this.eventQueue.close()
+    }
   }
 
   private async guardConfiguredWorkspaceWrite(input: HookInput): Promise<HookJSONOutput | undefined> {
@@ -894,13 +1308,13 @@ export class ClaudeSDKSession implements AgentLiveSession {
     try {
       while (!this.closed) {
         const result = await this.query.next()
-        if (result.done) break
+        if (result.done || this.outputIntegrityFailed) break
         for (const event of await this.bridgeMessage(result.value)) {
           this.eventQueue.push(event)
         }
       }
     } catch (error) {
-      if (!this.closed) {
+      if (!this.closed && !this.outputIntegrityFailed) {
         this.logger?.warn("Claude SDK query failed.", {
           boundary: "claude-sdk-query",
           projectId: this.projectId,
@@ -909,9 +1323,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
           sdkSessionId: this.sdkSessionId,
           ...errorLogMeta(error),
         })
-        this.eventQueue.push(this.errorEvent(error))
+        const event = this.errorEvent(error)
+        if (this.canAutomaticallyRecoverCapacity(event)) {
+          await this.pauseForContextRotation("request-budget")
+        } else {
+          this.eventQueue.push(event)
+        }
       }
     } finally {
+      this.flushSdkDiagnosticSummary()
       this.queryFinished = true
       this.inputQueue.close()
       this.denyPendingPermissions(AGENT_QUERY_FINISHED_PERMISSION_MESSAGE)
@@ -921,7 +1341,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   }
 
   private errorEvent(error: unknown): AgentEvent {
-    const presentation = sdkQueryErrorPresentation(errorDiagnosticMessage(error))
+    const presentation = this.scopedErrorPresentation(errorDiagnosticMessage(error))
     return {
       type: "error",
       message: presentation.message,
@@ -934,16 +1354,38 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
   }
 
+  private canAutomaticallyRecoverCapacity(event: AgentEvent): boolean {
+    return !this.closed && Boolean(this.persistToolOutputText && this.activeTurnId)
+      && event.type === "error" && (
+        event.errorKind === "context_refill_thrashing"
+        || (event.errorKind === "request_body_too_large" && this.maxRequestBodyBytes === 6 * 1024 * 1024)
+      )
+  }
+
+  private scopedErrorPresentation(diagnostic: string | undefined) {
+    const presentation = sdkQueryErrorPresentation(diagnostic)
+    if (presentation.errorKind !== "request_body_too_large" || this.maxRequestBodyBytes === 6 * 1024 * 1024) {
+      return presentation
+    }
+    return {
+      message: "Agent 执行失败。",
+      errorKind: "execution_failed" as const,
+      recoverable: false,
+    }
+  }
+
   private async bridgeMessage(message: SDKMessage): Promise<readonly AgentEvent[]> {
     const raw = message as unknown as Record<string, unknown>
+    this.observeSdkDiagnostic(raw)
     if (raw.type === "system" && raw.subtype === "init") {
       await this.reconnectConfiguredMcpServers()
     }
     const messageSessionId = typeof raw.session_id === "string" ? raw.session_id : undefined
     if (messageSessionId) this.sdkSessionId = messageSessionId
+    this.observeCompactionStatus(raw)
     if (isReplayedUserMessage(raw)) {
       this.fileCheckpointTracker.recordSdkUserMessageId(raw.uuid as string)
-      return []
+      if (raw.isReplay !== true) return []
     }
 
     const envelope: AgentEventEnvelope & { readonly sdkSessionId?: string } = {
@@ -952,13 +1394,32 @@ export class ClaudeSDKSession implements AgentLiveSession {
       sdkSessionId: this.sdkSessionId,
       timestamp: this.now().toISOString(),
     }
+    if (raw.type === "assistant" && raw.message && typeof raw.message === "object") {
+      const assistant = raw.message as Record<string, unknown>
+      if (typeof assistant.id === "string" && assistant.usage && typeof assistant.usage === "object") {
+        this.observedMessageUsage.set(assistant.id, assistant.usage as Record<string, unknown>)
+      }
+    }
+    if (raw.type === "assistant" && raw.parent_tool_use_id === null) {
+      this.contextBudget.recordModelVisibleBytes(serializedByteLength(raw.message))
+    }
     this.rememberToolUseNames(raw)
     let contextUsage = this.contextUsageTracker.update(raw)
     if (raw.type === "system" && raw.subtype === "compact_boundary") {
       contextUsage = await this.refreshContextUsageAfterCompaction()
+    } else if (raw.type === "result") {
+      contextUsage = await this.refreshContextUsageAfterTurn() ?? contextUsage
     }
+    if (contextUsage) this.contextBudget.observeContextTokens(contextUsage.usedTokens)
     const bridged = bridgeSdkMessage(message, envelope)
     const events = Array.isArray(bridged) ? bridged : [bridged as AgentEvent]
+    const capacityFailure = raw.type === "result" && events.some((event) => this.canAutomaticallyRecoverCapacity(event))
+    if (capacityFailure) {
+      // The failed SDK turn has settled. Hand off its observed state, never
+      // retry its HTTP request or replay a tool invocation.
+      await this.pauseForContextRotation("request-budget")
+      return []
+    }
     for (const event of events) {
       if (event.type !== "error" || event.errorKind !== "connection_interrupted") continue
       this.logger?.warn("Claude SDK connection interrupted.", {
@@ -976,20 +1437,71 @@ export class ClaudeSDKSession implements AgentLiveSession {
           : undefined,
       })
     }
-    return events.map((event) => {
-      const enriched = contextUsage && event.type === "result"
-        ? { ...event, metadata: { ...(event.metadata ?? {}), contextUsage } }
+    const projectedEvents = events.map((event) => {
+      const scopedEvent = event.type === "error"
+        && event.errorKind === "request_body_too_large"
+        && this.maxRequestBodyBytes !== 6 * 1024 * 1024
+        ? { ...event, message: "Agent 执行失败。", errorKind: "execution_failed" as const, recoverable: false }
+        : event
+      const enriched = contextUsage && scopedEvent.type === "result"
+        ? { ...scopedEvent, metadata: { ...(scopedEvent.metadata ?? {}), contextUsage } }
         : contextUsage && (
-          event.type === "assistant"
-          || event.type === "stream"
-          || event.type === "compactBoundary"
+          scopedEvent.type === "assistant"
+          || scopedEvent.type === "stream"
+          || scopedEvent.type === "compactBoundary"
         )
-          ? { ...event, contextUsage }
-          : event
+          ? { ...scopedEvent, contextUsage }
+          : scopedEvent
       return this.projectAttachmentEvent(
         this.projectSynapseToolRouterEvent(this.resolveToolResultName(enriched)),
       )
     })
+    for (const event of projectedEvents) {
+      if (event.type === "toolResult" && event.toolUseId) this.deliveredToolResults.add(event.toolUseId)
+    }
+    if (raw.type === "result") this.flushSdkDiagnosticSummary()
+    return projectedEvents
+  }
+
+  private observeSdkDiagnostic(raw: Record<string, unknown>): void {
+    const type = typeof raw.type === "string" ? raw.type : "unknown"
+    const subtype = typeof raw.subtype === "string" ? raw.subtype : undefined
+    const isThinkingTelemetry = type === "system" && subtype === "thinking_tokens"
+    const isKnown = type === "result"
+      || type === "assistant"
+      || type === "user"
+      || type === "stream_event"
+      || (type === "system" && (subtype === "init" || subtype === "status" || subtype === "compact_boundary"))
+    if (isKnown && !isThinkingTelemetry) return
+
+    const observedAt = this.now().toISOString()
+    const summary = this.sdkDiagnosticSummary
+    summary.observedCount += 1
+    if (isThinkingTelemetry) summary.thinkingTokenCount += 1
+    summary.firstObservedAt ??= observedAt
+    summary.lastObservedAt = observedAt
+    const key = `${type}/${subtype ?? "unknown"}`
+    if (summary.types.has(key) || summary.types.size < 64) {
+      summary.types.set(key, (summary.types.get(key) ?? 0) + 1)
+    }
+  }
+
+  private flushSdkDiagnosticSummary(): void {
+    const summary = this.sdkDiagnosticSummary
+    if (summary.observedCount === 0) return
+    this.logger?.info?.("Claude SDK diagnostic events aggregated.", {
+      boundary: "claude-sdk.diagnostic-summary",
+      projectId: this.projectId,
+      conversationId: this.conversationId,
+      providerId: this.providerId,
+      observedCount: summary.observedCount,
+      thinkingTokenCount: summary.thinkingTokenCount,
+      distinctTypes: summary.types.size,
+      types: [...summary.types.entries()].map(([type, count]) => ({ type, count })),
+      firstObservedAt: summary.firstObservedAt,
+      lastObservedAt: summary.lastObservedAt,
+    })
+    this.sdkDiagnosticSummary = createSdkDiagnosticSummary()
   }
 
   private async reconnectConfiguredMcpServers(): Promise<void> {
@@ -1014,7 +1526,48 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private async refreshContextUsageAfterCompaction(): Promise<AgentContextUsage | undefined> {
     if (!this.query.getContextUsage) return undefined
     try {
-      return this.contextUsageTracker.replaceFromContextUsage(await this.query.getContextUsage())
+      const response = await this.readContextUsage()
+      if (!response) return undefined
+      const usage = this.contextUsageTracker.replaceFromContextUsage(response)
+      if (usage) {
+        const categories = Array.isArray(response.categories) ? response.categories : []
+        const previousToolResultTokens = this.lastNativeToolResultTokens
+        const toolResultTokens = this.observeNativeToolResultTokens(response)
+        const pending = this.pendingCompaction
+        const after = this.contextBudget.completeCompaction(
+          usage.usedTokens,
+          pending?.summaryRequestBytes,
+          retainedPayloadTokens(response),
+        )
+        this.logger?.info?.("Claude SDK native compaction completed.", {
+          boundary: "claude-sdk.compaction-monitor",
+          projectId: this.projectId,
+          conversationId: this.conversationId,
+          providerId: this.providerId,
+          sdkSessionId: this.sdkSessionId,
+          trigger: pending?.trigger,
+          durationMs: pending ? Math.max(0, Date.now() - pending.startedAt) : undefined,
+          beforeContextTokens: pending?.before.observedContextTokens,
+          afterContextTokens: usage.usedTokens,
+          estimatedDroppedTokens: pending?.before.observedContextTokens === undefined
+            ? undefined
+            : Math.max(0, pending.before.observedContextTokens - usage.usedTokens),
+          compactSummaryBytes: pending?.summaryBytes,
+          beforeToolOutputBytes: pending?.before.turnToolOutputBytes,
+          beforeNativeToolResultTokens: previousToolResultTokens,
+          afterNativeToolResultTokens: toolResultTokens,
+          afterEstimatedRequestBytes: after.estimatedRequestBytes,
+          sdkAutoCompactEnabled: response.isAutoCompactEnabled,
+          sdkAutoCompactThreshold: response.autoCompactThreshold,
+          contextCategoryCount: categories.length,
+          contextCategories: categories.slice(0, 32).map((category) => ({
+            name: category.name,
+            tokens: category.tokens,
+          })),
+        })
+        this.pendingCompaction = undefined
+      }
+      return usage
     } catch (error) {
       this.logger?.warn("Claude SDK context usage refresh failed after compaction.", {
         boundary: "claude-sdk-context-usage",
@@ -1026,6 +1579,74 @@ export class ClaudeSDKSession implements AgentLiveSession {
       })
       return undefined
     }
+  }
+
+  private async refreshContextUsageAfterTurn(): Promise<AgentContextUsage | undefined> {
+    if (!this.query.getContextUsage) return undefined
+    try {
+      const response = await this.readContextUsage()
+      if (!response) return undefined
+      const usage = this.contextUsageTracker.replaceFromContextUsage(response)
+      if (!usage) return undefined
+      this.contextBudget.observeContextTokens(usage.usedTokens)
+      const previousToolResultTokens = this.lastNativeToolResultTokens
+      const toolResultTokens = this.observeNativeToolResultTokens(response)
+      const evictedTrackedRequestBytes = previousToolResultTokens !== undefined
+        && toolResultTokens !== undefined
+        ? this.contextBudget.applyNativeToolResultEviction(previousToolResultTokens, toolResultTokens)
+        : 0
+      if (previousToolResultTokens !== undefined
+        && toolResultTokens !== undefined
+        && toolResultTokens < previousToolResultTokens) {
+        this.logger?.info?.("Claude SDK native tool-result eviction observed.", {
+          boundary: "claude-sdk.tool-result-eviction-monitor",
+          projectId: this.projectId,
+          conversationId: this.conversationId,
+          providerId: this.providerId,
+          sdkSessionId: this.sdkSessionId,
+          previousToolResultTokens,
+          toolResultTokens,
+          evictedToolResultTokens: previousToolResultTokens - toolResultTokens,
+          evictedTrackedRequestBytes,
+          contextTokens: usage.usedTokens,
+        })
+      }
+      return usage
+    } catch (error) {
+      this.logger?.warn("Claude SDK context usage refresh failed after turn.", {
+        boundary: "claude-sdk-context-usage",
+        projectId: this.projectId,
+        conversationId: this.conversationId,
+        providerId: this.providerId,
+        sdkSessionId: this.sdkSessionId,
+        ...errorLogMeta(error),
+      })
+      return undefined
+    }
+  }
+
+  private observeNativeToolResultTokens(response: SDKControlGetContextUsageResponse): number | undefined {
+    const tokens = response.messageBreakdown?.toolResultTokens
+    if (!Number.isSafeInteger(tokens) || (tokens ?? -1) < 0) return undefined
+    this.lastNativeToolResultTokens = tokens
+    return tokens
+  }
+
+  private observeCompactionStatus(raw: Record<string, unknown>): void {
+    if (raw.type !== "system" || raw.subtype !== "status" || raw.compact_result !== "failed") return
+    const pending = this.pendingCompaction
+    this.logger?.warn("Claude SDK native compaction failed.", {
+      boundary: "claude-sdk.compaction-monitor",
+      projectId: this.projectId,
+      conversationId: this.conversationId,
+      providerId: this.providerId,
+      sdkSessionId: this.sdkSessionId,
+      trigger: pending?.trigger,
+      durationMs: pending ? Math.max(0, Date.now() - pending.startedAt) : undefined,
+      beforeContextTokens: pending?.before.observedContextTokens,
+      hasSdkError: typeof raw.compact_error === "string" && raw.compact_error.length > 0,
+    })
+    this.pendingCompaction = undefined
   }
 
   private projectAttachmentEvent(event: AgentEvent): AgentEvent {
@@ -1562,6 +2183,40 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
+function estimatedStaticRequestBytes(options: ClaudeSDKSessionOptions): number {
+  return serializedByteLength({
+    systemPrompt: options.systemPrompt,
+    tools: options.tools,
+    disallowedTools: options.disallowedTools,
+    mcpServers: options.mcpServers,
+    plugins: options.plugins,
+    agents: options.agents,
+  })
+}
+
+function serializedByteLength(value: unknown): number {
+  try {
+    const serialized = JSON.stringify(value)
+    return typeof serialized === "string" ? Buffer.byteLength(serialized, "utf8") : 0
+  } catch {
+    return 0
+  }
+}
+
+function toolResultRequestBytes(value: unknown): number {
+  return serializedByteLength({
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "tool", content: value }],
+  })
+}
+
+function compactSummaryRequestBytes(value: string): number {
+  return serializedByteLength({
+    role: "user",
+    content: [{ type: "text", text: value }],
+  })
+}
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined
 }
@@ -1693,4 +2348,10 @@ class AsyncQueue<T> implements AsyncIterable<T> {
       },
     }
   }
+}
+
+function retainedPayloadTokens(response: SDKControlGetContextUsageResponse): number | undefined {
+  const breakdown = response.messageBreakdown
+  if (breakdown?.toolResultTokens === undefined) return undefined
+  return breakdown.toolResultTokens + (breakdown.attachmentTokens ?? 0)
 }

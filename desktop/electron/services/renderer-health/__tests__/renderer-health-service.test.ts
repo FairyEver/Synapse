@@ -4,11 +4,18 @@ import { DIAGNOSTICS_PING_CHANNEL, DIAGNOSTICS_PONG_CHANNEL } from "../constants
 
 function createMockWebContents() {
   const ipcHandlers = new Map<string, ((...args: unknown[]) => void)[]>()
+  const eventHandlers = new Map<string, ((...args: unknown[]) => void)[]>()
   return {
     send: vi.fn(),
     isDestroyed: vi.fn().mockReturnValue(false),
-    on: vi.fn(),
-    removeListener: vi.fn(),
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      const handlers = eventHandlers.get(event) ?? []
+      handlers.push(handler)
+      eventHandlers.set(event, handlers)
+    }),
+    removeListener: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      eventHandlers.set(event, (eventHandlers.get(event) ?? []).filter((candidate) => candidate !== handler))
+    }),
     ipc: {
       on: vi.fn((channel: string, handler: (...args: unknown[]) => void) => {
         const arr = ipcHandlers.get(channel) ?? []
@@ -21,6 +28,9 @@ function createMockWebContents() {
     simulatePong() {
       const pongHandlers = ipcHandlers.get(DIAGNOSTICS_PONG_CHANNEL) ?? []
       for (const h of pongHandlers) h({})
+    },
+    simulate(event: string, ...args: unknown[]) {
+      for (const handler of eventHandlers.get(event) ?? []) handler(...args)
     },
   }
 }
@@ -135,5 +145,78 @@ describe("RendererHealthService", () => {
 
     vi.advanceTimersByTime(60_000)
     expect(wc.send).not.toHaveBeenCalled()
+  })
+
+  it("defers recovery until the render-process-gone handler has unwound", async () => {
+    const wc = createMockWebContents()
+    const onUnavailable = vi.fn()
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const service = new RendererHealthService({ logger, onUnavailable })
+    service.attach(wc as never)
+
+    wc.simulate("render-process-gone", {}, { reason: "crashed", exitCode: 5 })
+    expect(onUnavailable).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1)
+    await Promise.resolve()
+
+    expect(onUnavailable).toHaveBeenCalledWith(wc, "crashed", { reason: "crashed", exitCode: 5 })
+  })
+
+  it("cancels deferred recovery when detached", () => {
+    const wc = createMockWebContents()
+    const onUnavailable = vi.fn()
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const service = new RendererHealthService({ logger, onUnavailable })
+    service.attach(wc as never)
+
+    wc.simulate("render-process-gone", {}, { reason: "crashed", exitCode: 5 })
+    service.detach()
+    vi.advanceTimersByTime(0)
+
+    expect(onUnavailable).not.toHaveBeenCalled()
+  })
+
+  it("waits five seconds before stopping an unresponsive Renderer", async () => {
+    const wc = createMockWebContents()
+    const onUnavailable = vi.fn()
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const service = new RendererHealthService({ logger, onUnavailable })
+    service.attach(wc as never)
+
+    wc.simulate("unresponsive")
+    vi.advanceTimersByTime(4_999)
+    expect(onUnavailable).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    vi.advanceTimersByTime(1)
+    await Promise.resolve()
+    expect(onUnavailable).toHaveBeenCalledWith(wc, "unresponsive", undefined)
+  })
+
+  it("pauses delivery immediately and resumes it when the Renderer responds within five seconds", async () => {
+    const wc = createMockWebContents()
+    const onUnavailable = vi.fn()
+    const onUnresponsive = vi.fn()
+    const onResponsive = vi.fn()
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const service = new RendererHealthService({
+      logger,
+      onUnavailable,
+      onUnresponsive,
+      onResponsive,
+    })
+    service.attach(wc as never)
+
+    wc.simulate("unresponsive")
+    await Promise.resolve()
+    expect(onUnresponsive).toHaveBeenCalledWith(wc)
+
+    vi.advanceTimersByTime(4_000)
+    wc.simulate("responsive")
+    await Promise.resolve()
+
+    expect(onResponsive).toHaveBeenCalledWith(wc)
+    vi.advanceTimersByTime(1_000)
+    expect(onUnavailable).not.toHaveBeenCalled()
   })
 })

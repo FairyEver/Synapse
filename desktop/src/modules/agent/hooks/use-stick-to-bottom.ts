@@ -117,7 +117,6 @@ export function useStickToBottom(input: {
   const programmaticScrollUntilRef = useRef(0)
   const lastTouchYRef = useRef<number | null>(null)
   const lastScrollTopRef = useRef(0)
-  const instantNextScrollRef = useRef(false)
   const olderLoadInFlightRef = useRef(false)
   const suppressNextContentChangeRef = useRef(false)
   const loadOlderAtCurrentAnchorRef = useRef<() => void>(() => {})
@@ -182,7 +181,6 @@ export function useStickToBottom(input: {
 
   const forcePin = useCallback(() => {
     autoFollowRef.current = true
-    instantNextScrollRef.current = true
     isPinnedRef.current = true
     setIsPinned(true)
     setHasUnread(false)
@@ -404,12 +402,7 @@ export function useStickToBottom(input: {
     if (suppressNextContentChangeRef.current) return undefined
 
     if (autoFollowRef.current) {
-      const handle = window.requestAnimationFrame(() => {
-        const behavior = instantNextScrollRef.current ? "auto" : "smooth"
-        instantNextScrollRef.current = false
-        performScrollToBottom({ behavior })
-      })
-      return () => window.cancelAnimationFrame(handle)
+      return scheduleFollowScroll()
     }
 
     if (newEntryArrived || latestEntryId) {

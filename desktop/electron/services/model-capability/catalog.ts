@@ -119,6 +119,17 @@ export function matchModelCapability(input: {
   return modelsByScope.get(scope.id)?.get(input.modelId)
 }
 
+export function matchModelCapabilityProviderScope(
+  baseUrl: string | undefined,
+): ModelCapabilityProviderScope | undefined {
+  if (!baseUrl) return undefined
+  try {
+    return scopeByBaseUrl.get(normalizeProviderBaseUrl(baseUrl))
+  } catch {
+    return undefined
+  }
+}
+
 export function resolveModelContextConfiguration(input: {
   readonly baseUrl?: string
   readonly modelId?: string

@@ -63,6 +63,28 @@ describe("AgentRuntimeService cancelTurn", () => {
     expect(result.resultText).toBe("stopped")
   })
 
+  it("targets the exact turn and never force-kills when graceful interrupt is unavailable", async () => {
+    const session = new CancellableLiveSession({ graceful: false })
+    const service = createService(new CancellableSessionFactory(session))
+    const convId = conversationId("local", "s1", "active")
+    const sendPromise = service.send(baseMessage("hello"), { turnId: "turn-current" })
+    await waitForBusy(service, "hello")
+
+    await expect(service.cancelExpectedTurn(convId, "turn-stale")).resolves.toEqual({
+      status: "turn-changed",
+      turnId: "turn-current",
+    })
+    await expect(service.cancelExpectedTurn(convId, "turn-current")).resolves.toEqual({
+      status: "graceful-unavailable",
+    })
+    expect(session.closed).toBe(false)
+
+    await expect(service.forceKillExpectedTurn(convId, "turn-current")).resolves.toEqual({
+      status: "hard-killed",
+    })
+    await sendPromise
+  })
+
   it("records graceful cancel intent on the active lifecycle before interrupting", async () => {
     const session = new CancellableLiveSession({ graceful: true })
     const factory = new CancellableSessionFactory(session)
@@ -288,6 +310,31 @@ describe("AgentRuntimeService cancelTurn", () => {
 
     const r2 = await send2
     expect(r2.resultText).toBe("done-2")
+  })
+
+  it("stops only the interactive turn owned by a crashed Renderer", async () => {
+    const session = new CancellableLiveSession({ graceful: false })
+    const service = createService(new CancellableSessionFactory(session))
+    const turn = service.send({
+      ...baseMessage("renderer turn"),
+      platform: "local-renderer",
+      originRendererId: 42,
+    })
+    await waitForBusy(service, "renderer turn")
+
+    await expect(service.interruptRendererTurns(7)).resolves.toBe(0)
+    expect(session.closed).toBe(false)
+    await expect(service.interruptRendererTurns(42)).resolves.toBe(1)
+    expect(session.closed).toBe(true)
+
+    await expect(turn).resolves.toMatchObject({
+      error: "界面异常，本次运行已停止。",
+      events: [expect.objectContaining({
+        type: "error",
+        errorKind: "renderer_unavailable",
+        recoverable: true,
+      })],
+    })
   })
 })
 

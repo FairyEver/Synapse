@@ -12,7 +12,7 @@ import {
 describe("Synapse config Agent defaults", () => {
   it("defaults new Agent conversations to default permission mode", () => {
     expect(createDefaultConfig().agent.defaultPermissionMode).toBe("default")
-    expect(createDefaultConfig().agent.experimentalSynapseToolRouterEnabled).toBe(false)
+    expect(createDefaultConfig().agent.experimentalSynapseToolRouterEnabled).toBe(true)
     expect(createDefaultConfig().agent.recentSlashSkills).toEqual([])
     expect(createDefaultConfig().agent.allowedWriteDirectories).toEqual([])
   })
@@ -25,7 +25,7 @@ describe("Synapse config Agent defaults", () => {
     })
 
     expect(config.agent.defaultPermissionMode).toBe("default")
-    expect(config.agent.experimentalSynapseToolRouterEnabled).toBe(false)
+    expect(config.agent.experimentalSynapseToolRouterEnabled).toBe(true)
     expect(config.agent.allowedWriteDirectories).toEqual([])
   })
 

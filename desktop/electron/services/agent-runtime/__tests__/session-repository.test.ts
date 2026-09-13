@@ -9,6 +9,36 @@ import type {
 import { AgentSessionRepository, conversationId } from "../session-repository"
 
 describe("AgentSessionRepository", () => {
+  it("persists an isolated task-list identity across concurrent opens, SDK rotations and repository restarts", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({ projectId: "project-1", conversations })
+    const first = await repository.createSession({ sessionKey: "one" })
+    const second = await repository.createSession({ sessionKey: "two" })
+    const ids = await Promise.all(Array.from({ length: 20 }, () => repository.ensureTaskListId(first.id)))
+    expect(new Set(ids).size).toBe(1)
+    expect(ids[0]).toMatch(/^[0-9a-f-]{36}$/)
+    expect(await repository.ensureTaskListId(second.id)).not.toBe(ids[0])
+    await repository.clearCurrentAgentSessionId(first.id)
+    const reopened = new AgentSessionRepository({ projectId: "project-1", conversations })
+    expect(await reopened.ensureTaskListId(first.id)).toBe(ids[0])
+  })
+  it("preserves concurrent appends and metadata/title updates", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({ projectId: "project-1", conversations, now: fixedNow })
+    const session = await repository.createSession({ sessionKey: "concurrent" })
+    await Promise.all([
+      ...Array.from({ length: 32 }, (_, index) => repository.appendHistory(session.id, "assistant", `entry-${index}`)),
+      repository.saveSdkSession({ conversationId: session.id, sdkSessionId: "sdk-new" }),
+      repository.renameSession(session.id, "manual title"),
+      repository.saveUsage({ conversationId: session.id, costUsd: 3 }),
+    ])
+    const result = await repository.get(session.id)
+    expect(result?.history.map((entry) => entry.content)).toEqual(Array.from({ length: 32 }, (_, index) => `entry-${index}`))
+    expect(result?.sdkSessionId).toBe("sdk-new")
+    expect(result?.costUsd).toBe(3)
+    expect(result?.name).toBe("manual title")
+  })
+
   it("creates and restores the active session with user metadata", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
@@ -200,6 +230,46 @@ describe("AgentSessionRepository", () => {
     expect((await repository.get(first.id))?.active).toBe(false)
     expect((await repository.get(second.id))?.active).toBe(true)
     expect((await repository.getActive("s1", "local"))?.id).toBe(second.id)
+  })
+
+  it("persists an optional idempotent context recovery state and rejects stale turns", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+    const session = await repository.createSession({
+      sessionKey: "local:renderer",
+      platform: "local-renderer",
+      agentType: "claude-code",
+      sdkSessionId: "sdk-1",
+    })
+    await repository.saveAgentSession({
+      conversationId: session.id,
+      agentType: "claude-code",
+      agentSessionId: "sdk-1",
+      sdkSessionId: "sdk-1",
+    })
+
+    const required = await repository.markContextRecoveryRequired(session.id, "turn-1", "claude-code")
+    expect(required).toMatchObject({
+      sdkSessionId: undefined,
+      agentSessionId: undefined,
+      pastAgentSessionIds: ["sdk-1"],
+      contextRecovery: {
+        status: "required",
+        reason: "request_body_too_large",
+        failedTurnId: "turn-1",
+      },
+    })
+
+    await expect(repository.prepareContextRecovery(session.id, "stale-turn"))
+      .rejects.toThrow("该失败轮次已失效")
+    const prepared = await repository.prepareContextRecovery(session.id, "turn-1")
+    expect(prepared.contextRecovery?.status).toBe("prepared")
+    await expect(repository.prepareContextRecovery(session.id, "turn-1")).resolves.toEqual(prepared)
+    expect((await repository.clearContextRecovery(session.id)).contextRecovery).toBeUndefined()
   })
 
   it("resolves only the matching user question history entry once", async () => {
@@ -517,7 +587,7 @@ describe("AgentSessionRepository", () => {
     })
   })
 
-  it("does not let a stale non-title write roll back a manual rename", async () => {
+  it("serializes a manual rename behind an in-progress history read/write", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({
       projectId: "project-1",
@@ -547,9 +617,9 @@ describe("AgentSessionRepository", () => {
 
     const append = repository.appendHistory(conversation.id, "user", "hello")
     await staleRead
-    await repository.renameSession(conversation.id, "手动标题")
+    const rename = repository.renameSession(conversation.id, "手动标题")
     releaseStaleRead()
-    await append
+    await Promise.all([append, rename])
 
     await expect(conversations.get(conversation.id)).resolves.toMatchObject({
       name: "手动标题",

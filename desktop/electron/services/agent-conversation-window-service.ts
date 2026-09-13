@@ -1,4 +1,4 @@
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 import path from "node:path"
 
 import { buildAgentConversationWindowSearchParams } from "../../src/lib/agent-conversation-window"
@@ -22,6 +22,7 @@ import {
   focusDetachedViewWindow,
 } from "./detached-view-window-service"
 import { createMainLogger } from "./log-store"
+import { RendererHealthService } from "./renderer-health"
 
 export const AGENT_DETACHED_CONVERSATIONS_CHANGED_CHANNEL = "synapse:app:agent:operation:detached_conversations_changed"
 export const AGENT_CONVERSATION_WINDOW_SERVICE_ID = "agent.conversation-window-service"
@@ -42,6 +43,9 @@ type Deps = {
   readonly attachWindow?: (managerId: string, window: BrowserWindow) => void
   readonly detachWindow?: (managerId: string) => void
   readonly logger: Logger
+  readonly onRendererUnavailable?: (rendererId: number) => void | Promise<void>
+  readonly onRendererUnresponsive?: (rendererId: number) => void | Promise<void>
+  readonly onRendererResponsive?: (rendererId: number) => void | Promise<void>
 }
 
 const AGENT_CONVERSATION_WINDOW_BOUNDS = {
@@ -50,6 +54,7 @@ const AGENT_CONVERSATION_WINDOW_BOUNDS = {
   minWidth: 400,
   minHeight: 300,
 }
+const RENDERER_CRASH_LOOP_WINDOW_MS = 60_000
 
 function keyForTarget(target: Pick<AgentConversationTarget, "projectId" | "conversationId">): string {
   return `${target.projectId}:${target.conversationId}`
@@ -78,6 +83,8 @@ export function createAgentConversationWindowService(deps: Deps) {
     logger: deps.logger,
   })
   const detachedByKey = new Map<string, AgentDetachedConversation>()
+  const healthByKey = new Map<string, RendererHealthService>()
+  const lastRendererCrashAtByKey = new Map<string, number>()
 
   function listDetachedConversations(): AgentDetachedConversation[] {
     return [...detachedByKey.values()].sort((left, right) => left.openedAt.localeCompare(right.openedAt))
@@ -88,6 +95,9 @@ export function createAgentConversationWindowService(deps: Deps) {
   }
 
   function removeDetachedState(key: string): boolean {
+    healthByKey.get(key)?.detach()
+    healthByKey.delete(key)
+    lastRendererCrashAtByKey.delete(key)
     const hadDetached = detachedByKey.delete(key)
     if (hadDetached) {
       deps.detachWindow?.(windowManagerIdForKey(key))
@@ -151,6 +161,53 @@ export function createAgentConversationWindowService(deps: Deps) {
             windowId: window.id,
             openedAt: deps.now(),
           })
+          const health = new RendererHealthService({
+            logger: {
+              info: (message, metadata) => deps.logger.info(message, recordMetadata(metadata)),
+              warn: (message, metadata) => deps.logger.warn(message, recordMetadata(metadata)),
+              error: (message, metadata) => deps.logger.error(message, recordMetadata(metadata)),
+            },
+            onUnresponsive: async (target) => {
+              deps.detachWindow?.(managerId)
+              await deps.onRendererUnresponsive?.(target.id)
+            },
+            onResponsive: async (target) => {
+              deps.attachWindow?.(managerId, window)
+              await deps.onRendererResponsive?.(target.id)
+            },
+            onUnavailable: async (target) => {
+              deps.detachWindow?.(managerId)
+              const failedAt = Date.now()
+              const repeated = failedAt - (lastRendererCrashAtByKey.get(key) ?? 0) <= RENDERER_CRASH_LOOP_WINDOW_MS
+              lastRendererCrashAtByKey.set(key, failedAt)
+              const stopAgent = Promise.resolve().then(() => deps.onRendererUnavailable?.(target.id))
+              if (repeated) {
+                await loadDetachedRendererRecovery(window, deps.baseUrl(), "failed").catch(() => undefined)
+                await stopAgent
+                await showDetachedRendererRecoveryDialog(window, () => {
+                  lastRendererCrashAtByKey.set(key, 0)
+                  return window.loadURL(buildWindowUrl(deps.baseUrl(), request))
+                })
+                deps.attachWindow?.(managerId, window)
+                return
+              }
+              const recoveryLoaded = await loadDetachedRendererRecovery(window, deps.baseUrl(), "loading")
+                .then(() => true, () => false)
+              await stopAgent
+              if (!recoveryLoaded) {
+                await showDetachedRendererRecoveryDialog(
+                  window,
+                  () => window.loadURL(buildWindowUrl(deps.baseUrl(), request)),
+                )
+                deps.attachWindow?.(managerId, window)
+                return
+              }
+              await window.loadURL(buildWindowUrl(deps.baseUrl(), request))
+              deps.attachWindow?.(managerId, window)
+            },
+          })
+          health.attach(window.webContents)
+          healthByKey.set(key, health)
           broadcastDetachedConversations()
         },
         onRemoved: ({ key: removedKey }) => {
@@ -282,10 +339,20 @@ export function createAgentConversationWindowService(deps: Deps) {
   }
 }
 
+function recordMetadata(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
 export type AgentConversationWindowService = ReturnType<typeof createAgentConversationWindowService>
 
 export function createDefaultAgentConversationWindowService(
   windowManager: WindowManager,
+  rendererCallbacks: Pick<
+    Deps,
+    "onRendererUnavailable" | "onRendererUnresponsive" | "onRendererResponsive"
+  > = {},
 ): AgentConversationWindowService {
   return createAgentConversationWindowService({
     createWindow: (options) => new BrowserWindow(options),
@@ -304,5 +371,35 @@ export function createDefaultAgentConversationWindowService(
       windowManager.detach(managerId)
     },
     logger: createMainLogger("agent-conversation-window"),
+    ...rendererCallbacks,
   })
+}
+
+function loadDetachedRendererRecovery(
+  window: BrowserWindow,
+  baseUrl: string,
+  mode: "loading" | "failed",
+): Promise<void> {
+  const url = new URL(baseUrl)
+  url.searchParams.set("rendererRecovery", mode)
+  return window.loadURL(url.toString())
+}
+
+async function showDetachedRendererRecoveryDialog(
+  window: BrowserWindow,
+  reopen: () => Promise<void>,
+): Promise<void> {
+  const result = await dialog.showMessageBox(window, {
+    type: "error",
+    title: "界面恢复失败",
+    message: "界面恢复失败",
+    buttons: ["重新打开", "退出应用"],
+    defaultId: 0,
+    cancelId: 1,
+  })
+  if (result.response === 0) {
+    await reopen().catch(() => undefined)
+    return
+  }
+  app.quit()
 }

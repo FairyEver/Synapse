@@ -49,6 +49,7 @@ type ProjectGroupProps = {
   onShowProjectInFolder?: () => void
   onOpenProjectInTerminal?: () => void
   onSelect: (session: SynapseAgentSessionSummary) => void
+  onCopyDeepLink?: (session: SynapseAgentSessionSummary) => void | Promise<void>
   onDelete: (session: SynapseAgentSessionSummary) => void | Promise<void>
   onDeleteOthers: (
     session: SynapseAgentSessionSummary,
@@ -72,6 +73,7 @@ function ProjectGroup({
   onShowProjectInFolder,
   onOpenProjectInTerminal,
   onSelect,
+  onCopyDeepLink,
   onDelete,
   onDeleteOthers,
   onRename,
@@ -248,6 +250,11 @@ function ProjectGroup({
                 <ContextMenuItem onClick={() => handleRenameOpen(session)}>
                   重命名
                 </ContextMenuItem>
+                {onCopyDeepLink ? (
+                  <ContextMenuItem onClick={() => void onCopyDeepLink(session)}>
+                    复制深度链接
+                  </ContextMenuItem>
+                ) : null}
                 <ContextMenuItem
                   variant="destructive"
                   onClick={() => handleDeleteOpen(session, "session")}

@@ -1,5 +1,7 @@
 import { useRef, useState } from "react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
+import { buildAgentConversationDeepLink } from "../../../../app-capabilities/agent/shared/schema"
 import {
   ModuleSidebar,
 } from "@/components/module-sidebar"
@@ -134,6 +136,25 @@ function AgentSessionSidebar({
     }
   }
 
+  const handleCopyDeepLink = async (session: SynapseAgentSessionSummary) => {
+    try {
+      if (!session.conversationRef) throw new Error("Agent conversation reference is unavailable")
+      await navigator.clipboard.writeText(buildAgentConversationDeepLink({
+        projectId: session.projectId,
+        conversationRef: session.conversationRef,
+      }))
+      toast("深度链接已复制")
+    } catch (rawError) {
+      logger.warn("Agent conversation deep link copy failed.", {
+        boundary: "renderer.agent.copy-deep-link",
+        projectId: session.projectId,
+        conversationId: session.id,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+      })
+      toast("复制失败")
+    }
+  }
+
   return (
     <ModuleSidebar variant="bare">
       <ScrollArea
@@ -186,6 +207,7 @@ function AgentSessionSidebar({
               ? undefined
               : () => void openProjectInTerminal(project)}
             onSelect={onSelect}
+            onCopyDeepLink={handleCopyDeepLink}
             onDelete={onDelete}
             onDeleteOthers={onDeleteOthers}
             onRename={onRename}
@@ -199,6 +221,7 @@ function AgentSessionSidebar({
             unreadByConversationId={unreadByConversationId}
             sendingConversationIds={sendingConversationIds}
             onSelect={onSelect}
+            onCopyDeepLink={handleCopyDeepLink}
             onDelete={(session) => void onDelete(session)}
             onDeleteOthers={onDeleteOthers}
             onRename={onRename}

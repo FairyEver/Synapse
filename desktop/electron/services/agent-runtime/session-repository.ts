@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto"
 import type {
   AgentUsageEntryV1,
+  ConversationContextRecoveryV1,
   ConversationEntryV1,
   ConversationMainThreadPersonaSnapshotV1,
   ConversationResumePolicyV1,
@@ -67,7 +69,7 @@ export class AgentSessionRepository {
   private readonly now: () => Date
   private readonly idFactory: () => string
   private readonly logger: { warn: (message: string, meta?: unknown) => void } | undefined
-  private readonly titleMutationTails = new Map<string, Promise<void>>()
+  private readonly conversationMutationTails = new Map<string, Promise<void>>()
 
   constructor(options: AgentSessionRepositoryOptions) {
     this.projectId = options.projectId
@@ -76,6 +78,20 @@ export class AgentSessionRepository {
     this.now = options.now ?? (() => new Date())
     this.idFactory = options.idFactory ?? (() => randomId())
     this.logger = options.logger
+  }
+
+  async ensureTaskListId(conversationIdValue: string): Promise<string> {
+    return this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      if (conversation.taskListId) return conversation.taskListId
+      // Older SDK sessions used their session UUID as the default namespace.
+      // Never enumerate another conversation's SDK task directories to recover it.
+      const previous = conversation.sdkSessionId
+      const taskListId = previous && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(previous)
+        ? previous : randomUUID()
+      await this.conversations.upsert({ ...conversation, taskListId, updatedAt: this.isoNow() })
+      return taskListId
+    })
   }
 
   async getOrCreateActive(
@@ -104,7 +120,7 @@ export class AgentSessionRepository {
         userMeta: mergeUserMeta(existing.userMeta, message),
         updatedAt: this.isoNow(),
       }
-      return this.persistNonTitleUpdate(updated)
+      return this.persistNonTitleUpdate(updated, existing)
     }
 
     return this.createSession({
@@ -353,19 +369,22 @@ export class AgentSessionRepository {
     content: string,
     metadata?: Record<string, unknown>,
   ): Promise<ConversationEntryV1> {
-    const conversation = await this.requireConversation(conversationIdValue)
-    const entry: ConversationEntryV1["history"][number] = {
-      role,
-      content,
-      timestamp: this.isoNow(),
-      ...(metadata ? { metadata } : {}),
-    }
-    const updated = {
-      ...conversation,
-      history: [...conversation.history, entry],
-      updatedAt: this.isoNow(),
-    }
-    return this.persistNonTitleUpdate(updated)
+    return this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const entry: ConversationEntryV1["history"][number] = {
+        role,
+        content,
+        timestamp: this.isoNow(),
+        ...(metadata ? { metadata } : {}),
+      }
+      const updated = {
+        ...conversation,
+        history: [...conversation.history, entry],
+        updatedAt: this.isoNow(),
+      }
+      await this.conversations.upsert(updated)
+      return updated
+    })
   }
 
   async mergeLastHistoryMetadata(
@@ -374,19 +393,22 @@ export class AgentSessionRepository {
     metadata: Record<string, unknown> | undefined,
   ): Promise<ConversationEntryV1 | null> {
     if (!metadata || Object.keys(metadata).length === 0) return null
-    const conversation = await this.requireConversation(conversationIdValue)
-    const historyIndex = findLastHistoryIndex(conversation.history, role)
-    if (historyIndex === -1) return null
-    const history = conversation.history.map((entry, index) =>
-      index === historyIndex
-        ? { ...entry, metadata: { ...(entry.metadata ?? {}), ...metadata } }
-        : entry)
-    const updated = {
-      ...conversation,
-      history,
-      updatedAt: this.isoNow(),
-    }
-    return this.persistNonTitleUpdate(updated)
+    return this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const historyIndex = findLastHistoryIndex(conversation.history, role)
+      if (historyIndex === -1) return null
+      const history = conversation.history.map((entry, index) =>
+        index === historyIndex
+          ? { ...entry, metadata: { ...(entry.metadata ?? {}), ...metadata } }
+          : entry)
+      const updated = {
+        ...conversation,
+        history,
+        updatedAt: this.isoNow(),
+      }
+      await this.conversations.upsert(updated)
+      return updated
+    })
   }
 
   async resolveUserQuestion(
@@ -394,19 +416,22 @@ export class AgentSessionRepository {
     requestId: string,
     resolution: AgentUserQuestionResolution,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.requireConversation(conversationIdValue)
-    const historyIndex = findPermissionRequestHistoryIndex(conversation.history, requestId)
-    if (historyIndex === -1) return null
-    const current = conversation.history[historyIndex]
-    if (current?.metadata?.userQuestionResolution) return null
-    const history = conversation.history.map((entry, index) =>
-      index === historyIndex ? resolvedUserQuestionHistoryEntry(entry, resolution) : entry)
-    const updated = {
-      ...conversation,
-      history,
-      updatedAt: this.isoNow(),
-    }
-    return this.persistNonTitleUpdate(updated)
+    return this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const historyIndex = findPermissionRequestHistoryIndex(conversation.history, requestId)
+      if (historyIndex === -1) return null
+      const current = conversation.history[historyIndex]
+      if (current?.metadata?.userQuestionResolution) return null
+      const history = conversation.history.map((entry, index) =>
+        index === historyIndex ? resolvedUserQuestionHistoryEntry(entry, resolution) : entry)
+      const updated = {
+        ...conversation,
+        history,
+        updatedAt: this.isoNow(),
+      }
+      await this.conversations.upsert(updated)
+      return updated
+    })
   }
 
   async prepareUserQuestionResolution(
@@ -414,27 +439,30 @@ export class AgentSessionRepository {
     requestId: string,
     resolution: AgentUserQuestionResolution,
   ): Promise<ConversationEntryV1 | null> {
-    const conversation = await this.requireConversation(conversationIdValue)
-    const historyIndex = findPermissionRequestHistoryIndex(conversation.history, requestId)
-    if (historyIndex === -1) return null
-    const current = conversation.history[historyIndex]
-    if (current?.metadata?.userQuestionResolution) return null
-    const history = conversation.history.map((entry, index) =>
-      index === historyIndex
-        ? {
-            ...entry,
-            metadata: {
-              ...(entry.metadata ?? {}),
-              userQuestionResolutionAttempt: resolution,
-            },
-          }
-        : entry)
-    const updated = {
-      ...conversation,
-      history,
-      updatedAt: this.isoNow(),
-    }
-    return this.persistNonTitleUpdate(updated)
+    return this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const historyIndex = findPermissionRequestHistoryIndex(conversation.history, requestId)
+      if (historyIndex === -1) return null
+      const current = conversation.history[historyIndex]
+      if (current?.metadata?.userQuestionResolution) return null
+      const history = conversation.history.map((entry, index) =>
+        index === historyIndex
+          ? {
+              ...entry,
+              metadata: {
+                ...(entry.metadata ?? {}),
+                userQuestionResolutionAttempt: resolution,
+              },
+            }
+          : entry)
+      const updated = {
+        ...conversation,
+        history,
+        updatedAt: this.isoNow(),
+      }
+      await this.conversations.upsert(updated)
+      return updated
+    })
   }
 
   async saveAgentSession(input: SaveAgentSessionInput): Promise<ConversationEntryV1> {
@@ -451,7 +479,7 @@ export class AgentSessionRepository {
       costCurrency: input.costCurrency,
       updatedAt: this.isoNow(),
     })
-    return this.persistNonTitleUpdate(updated)
+    return this.persistNonTitleUpdate(updated, conversation)
   }
 
   async saveSdkSession(input: {
@@ -465,7 +493,7 @@ export class AgentSessionRepository {
       agentSessionId: input.sdkSessionId,
       updatedAt: this.isoNow(),
     }
-    return this.persistNonTitleUpdate(updated)
+    return this.persistNonTitleUpdate(updated, conversation)
   }
 
   async saveUsage(input: {
@@ -484,7 +512,7 @@ export class AgentSessionRepository {
       costCurrency: input.costCurrency ?? conversation.costCurrency,
       updatedAt: this.isoNow(),
     }
-    return this.persistNonTitleUpdate(updated)
+    return this.persistNonTitleUpdate(updated, conversation)
   }
 
   async recordSdkResultUsage(input: {
@@ -569,7 +597,7 @@ export class AgentSessionRepository {
       },
       updatedAt: this.isoNow(),
     }
-    return this.persistNonTitleUpdate(updated)
+    return this.persistNonTitleUpdate(updated, conversation)
   }
 
   async clearCurrentAgentSessionId(
@@ -585,7 +613,96 @@ export class AgentSessionRepository {
       }),
       sdkSessionId: undefined,
     }
-    return this.persistNonTitleUpdate(updated)
+    return this.persistNonTitleUpdate(updated, conversation)
+  }
+
+  async markContextRecoveryRequired(
+    conversationIdValue: string,
+    failedTurnId: string,
+    agentType?: string,
+    reason: ConversationContextRecoveryV1["reason"] = "request_body_too_large",
+  ): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const createdAt = this.isoNow()
+    const contextRecovery: ConversationContextRecoveryV1 = {
+      status: "required",
+      reason,
+      failedTurnId,
+      createdAt,
+    }
+    const updated: ConversationEntryV1 = {
+      ...applyAgentSession(conversation, {
+        agentType: agentType ?? conversation.agentType,
+        agentSessionId: undefined,
+        updatedAt: createdAt,
+      }),
+      sdkSessionId: undefined,
+      contextRecovery,
+    }
+    return this.persistNonTitleUpdate(updated, conversation)
+  }
+
+  async prepareContextRecovery(
+    conversationIdValue: string,
+    failedTurnId: string,
+  ): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const recovery = conversation.contextRecovery
+    if (
+      !recovery
+      || recovery.failedTurnId !== failedTurnId
+    ) {
+      throw new Error("该失败轮次已失效，请刷新后重试。")
+    }
+    if (recovery.status === "prepared") return conversation
+    if (recovery.status !== "required") {
+      throw new Error("当前对话无法再次整理上下文。")
+    }
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      contextRecovery: {
+        ...recovery,
+        status: "prepared",
+        preparedAt: this.isoNow(),
+      },
+      updatedAt: this.isoNow(),
+    }
+    return this.persistNonTitleUpdate(updated, conversation)
+  }
+
+  async markContextRecoveryFailed(
+    conversationIdValue: string,
+    failedTurnId: string,
+  ): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const recovery = conversation.contextRecovery
+    if (recovery && recovery.failedTurnId !== failedTurnId) return conversation
+    const failedAt = this.isoNow()
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      contextRecovery: {
+        ...(recovery ?? {
+          reason: "request_body_too_large" as const,
+          failedTurnId,
+          createdAt: failedAt,
+        }),
+        status: "failed",
+        failedAt,
+      },
+      updatedAt: failedAt,
+    }
+    return this.persistNonTitleUpdate(updated, conversation)
+  }
+
+  async clearContextRecovery(conversationIdValue: string): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    if (!conversation.contextRecovery) return conversation
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      contextRecovery: undefined,
+      updatedAt: this.isoNow(),
+    }
+    return this.persistNonTitleUpdate(updated, conversation)
   }
 
   async updateUserMeta(
@@ -601,7 +718,7 @@ export class AgentSessionRepository {
       },
       updatedAt: this.isoNow(),
     }
-    return this.persistNonTitleUpdate(updated)
+    return this.persistNonTitleUpdate(updated, conversation)
   }
 
   async get(conversationIdValue: string): Promise<ConversationEntryV1 | null> {
@@ -616,7 +733,7 @@ export class AgentSessionRepository {
   }
 
   async renameSession(conversationIdValue: string, name: string): Promise<ConversationEntryV1> {
-    return this.runTitleMutation(conversationIdValue, async () => {
+    return this.runConversationMutation(conversationIdValue, async () => {
       const conversation = await this.requireConversation(conversationIdValue)
       const updated: ConversationEntryV1 = {
         ...conversation,
@@ -633,7 +750,7 @@ export class AgentSessionRepository {
     conversationIdValue: string,
     name: string,
   ): Promise<ConversationEntryV1 | null> {
-    return this.runTitleMutation(conversationIdValue, async () => {
+    return this.runConversationMutation(conversationIdValue, async () => {
       const conversation = await this.requireConversation(conversationIdValue)
       const normalizedName = name.trim()
       if (
@@ -655,7 +772,7 @@ export class AgentSessionRepository {
   async renameSessionFromFirstUserMessage(
     conversationIdValue: string,
   ): Promise<ConversationEntryV1 | null> {
-    return this.runTitleMutation(conversationIdValue, async () => {
+    return this.runConversationMutation(conversationIdValue, async () => {
       const conversation = await this.requireConversation(conversationIdValue)
       if (!canReplaceWithFallbackTitle(conversation)) return null
       const name = firstUserMessageTitle(conversation)
@@ -671,31 +788,34 @@ export class AgentSessionRepository {
     })
   }
 
-  private async runTitleMutation<T>(
+  private async runConversationMutation<T>(
     conversationIdValue: string,
     mutation: () => Promise<T>,
   ): Promise<T> {
-    const previous = this.titleMutationTails.get(conversationIdValue) ?? Promise.resolve()
+    const previous = this.conversationMutationTails.get(conversationIdValue) ?? Promise.resolve()
     const current = previous.then(mutation)
     const tail = current.then(() => undefined, () => undefined)
-    this.titleMutationTails.set(conversationIdValue, tail)
+    this.conversationMutationTails.set(conversationIdValue, tail)
     try {
       return await current
     } finally {
-      if (this.titleMutationTails.get(conversationIdValue) === tail) {
-        this.titleMutationTails.delete(conversationIdValue)
+      if (this.conversationMutationTails.get(conversationIdValue) === tail) {
+        this.conversationMutationTails.delete(conversationIdValue)
       }
     }
   }
 
-  private async persistNonTitleUpdate(updated: ConversationEntryV1): Promise<ConversationEntryV1> {
-    return this.runTitleMutation(updated.id, async () => {
+  private async persistNonTitleUpdate(
+    updated: ConversationEntryV1,
+    previous: ConversationEntryV1,
+  ): Promise<ConversationEntryV1> {
+    return this.runConversationMutation(updated.id, async () => {
       const latest = await this.requireConversation(updated.id)
-      const merged: ConversationEntryV1 = {
-        ...updated,
-        name: latest.name,
-        titleSource: latest.titleSource,
-      }
+      // Only apply changed fields. A snapshot read before another append must
+      // never overwrite the newer history (or unrelated SDK/usage metadata).
+      const patch = Object.fromEntries(Object.entries(updated).filter(([key, value]) =>
+        key !== "name" && key !== "titleSource" && value !== previous[key as keyof ConversationEntryV1]))
+      const merged: ConversationEntryV1 = { ...latest, ...patch }
       await this.conversations.upsert(merged)
       return merged
     })

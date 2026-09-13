@@ -157,6 +157,8 @@ vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({
     agent: {
       onOpenConversation: () => () => undefined,
+      getPendingConversationOpenRequest: vi.fn(async () => null),
+      acknowledgeConversationOpenRequest: vi.fn(async () => undefined),
     },
     apps: {
       openSystemApp: mocks.openSystemApp,

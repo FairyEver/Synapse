@@ -5,6 +5,7 @@ import {
   firstQueuedMessageForIdleTarget,
   markPendingMessageFailed,
   markPendingMessageSending,
+  markPendingMessageSteering,
   pendingMessagesForTarget,
   removePendingMessage,
   targetKey,
@@ -95,6 +96,31 @@ describe("pending message queue", () => {
     ]
 
     expect(firstQueuedMessageForIdleTarget(failedQueue, new Set())?.id).toBe("pending-3")
+  })
+
+  it("pauses every queued message for a target while one message is steering", () => {
+    const queue = [
+      enqueuePendingMessage({
+        id: "pending-1",
+        content: "A",
+        target: targetA,
+        createdAt: "2026-05-13T10:00:00.000Z",
+      }),
+      markPendingMessageSteering(enqueuePendingMessage({
+        id: "pending-2",
+        content: "B",
+        target: targetA,
+        createdAt: "2026-05-13T10:00:01.000Z",
+      })),
+      enqueuePendingMessage({
+        id: "pending-3",
+        content: "C",
+        target: targetB,
+        createdAt: "2026-05-13T10:00:02.000Z",
+      }),
+    ]
+
+    expect(firstQueuedMessageForIdleTarget(queue, new Set())?.id).toBe("pending-3")
   })
 
   it("removes queued messages by id", () => {

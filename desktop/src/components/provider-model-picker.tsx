@@ -16,11 +16,15 @@ import {
   MODEL_TIER_DISPLAY_ORDER,
   MODEL_TIER_ORIGINAL_LABELS,
   resolveModelDisplayName,
-  resolveModelName,
 } from "@/lib/provider-model"
+import {
+  pickDefaultProviderModelTier,
+  pickInitialProviderModelSelection,
+  selectionForProvider,
+} from "@/lib/provider-model-selection"
 import { cn } from "@/lib/utils"
 import type { SynapseAgentProvider } from "@/types/bridge"
-import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
+import type { ProviderModelSelection } from "@/types/provider-model"
 
 const EMPTY_EXCLUDED_PROVIDERS: readonly string[] = []
 
@@ -208,47 +212,6 @@ function availableTiers(provider: SynapseAgentProvider) {
           originalLabel: MODEL_TIER_ORIGINAL_LABELS[tier],
         }]
       : [])
-}
-
-function pickDefaultProviderModelTier(provider: SynapseAgentProvider): ModelTier | undefined {
-  if (isProviderModelTierSelectable(provider, "sonnet")) return "sonnet"
-  return availableTiers(provider)[0]?.tier
-}
-
-function pickInitialProviderModelSelection(
-  providers: readonly SynapseAgentProvider[],
-  preferred?: ProviderModelSelection | null,
-  autoSelectFallback = true,
-): ProviderModelSelection | undefined {
-  const available = providers.filter((provider) => !provider.archived)
-  const preferredProvider = preferred
-    ? available.find((provider) => provider.id === preferred.providerId)
-    : undefined
-
-  if (preferredProvider && preferred
-    && isProviderModelTierSelectable(preferredProvider, preferred.modelTier)) {
-    return selectionForProvider(preferredProvider, preferred.modelTier)
-  }
-  if (!autoSelectFallback) return undefined
-
-  const provider = preferredProvider
-    ?? available.find((item) => item.active)
-    ?? available[0]
-  if (!provider) return undefined
-  const tier = pickDefaultProviderModelTier(provider)
-  return tier ? selectionForProvider(provider, tier) : undefined
-}
-
-function selectionForProvider(
-  provider: SynapseAgentProvider,
-  modelTier: ModelTier,
-): ProviderModelSelection {
-  return {
-    providerId: provider.id,
-    providerName: provider.name,
-    modelTier,
-    modelName: resolveModelName(provider, modelTier),
-  }
 }
 
 export {

@@ -132,16 +132,15 @@ export function agentEventToTimelineItem(
         ...base,
         kind: "sdkEvent",
         sdkType: "status",
-        label: "SDK event",
-        summary: event.message ?? event.status ?? undefined,
+        label: event.status === "compacting" ? "正在整理上下文…" : "SDK event",
+        summary: event.status === "compacting" ? undefined : event.message ?? event.status ?? undefined,
       }
     case "compactBoundary":
       return {
         ...base,
         kind: "sdkEvent",
         sdkType: "compactBoundary",
-        label: "SDK event",
-        summary: "compact boundary",
+        label: "已整理上下文",
       }
     case "sdkEvent":
       if (event.sdkType === "nativeSlashPassthrough") {
@@ -159,8 +158,8 @@ export function agentEventToTimelineItem(
           ...base,
           kind: "sdkEvent",
           sdkType: event.sdkType,
-          label: "工具按需加载已回退",
-          summary: "本次对话继续使用完整 Synapse MCP 工具。",
+          label: "部分工具暂不可用",
+          summary: "已使用可用工具继续。",
         }
       }
       return {
@@ -267,8 +266,8 @@ export function historyRecordToTimelineItem(
           ...base,
           kind: "sdkEvent",
           sdkType: "synapseToolRouterFallback",
-          label: "工具按需加载已回退",
-          summary: "本次对话继续使用完整 Synapse MCP 工具。",
+          label: "部分工具暂不可用",
+          summary: "已使用可用工具继续。",
         }
       }
       return {
@@ -301,6 +300,10 @@ export function historyRecordToTimelineItem(
         content: presentation?.content ?? entry.content,
         ...(attachments ? { attachments } : {}),
         legacy: entry.role === "tool" || entry.role === "system",
+        ...(stringMetadata(metadata, "messageKind") === "steer" ? { messageKind: "steer" as const } : {}),
+        ...(stringMetadata(metadata, "clientMessageId")
+          ? { clientMessageId: stringMetadata(metadata, "clientMessageId") }
+          : {}),
         ...(storedMetadata ? { metadata: storedMetadata } : {}),
       }
     }
@@ -894,6 +897,8 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     totalCostBreakdownCny: recordMetadata(metadata, "totalCostBreakdownCny") as Record<string, number> | undefined,
     costCurrency: stringMetadata(metadata, "costCurrency") === "CNY" ? "CNY" : undefined,
     estimatedCost: booleanMetadata(metadata, "estimatedCost"),
+    queuedTurnCount: numberMetadata(metadata, "queuedTurnCount"),
+    userMessageUuid: stringMetadata(metadata, "userMessageUuid"),
   }
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
@@ -910,6 +915,11 @@ function contextUsageMetadata(
     && (!Number.isSafeInteger(contextWindowTokens) || (contextWindowTokens as number) <= 0)) {
     return undefined
   }
+  const autoCompactWindowTokens = record.autoCompactWindowTokens
+  const autoCompactThresholdTokens = record.autoCompactThresholdTokens
+  for (const tokens of [autoCompactWindowTokens, autoCompactThresholdTokens]) {
+    if (tokens !== undefined && (!Number.isSafeInteger(tokens) || (tokens as number) <= 0)) return undefined
+  }
   const model = record.model
   if (model !== undefined && (typeof model !== "string" || model.length === 0)) return undefined
   const modelContext = modelContextMetadata(record.modelContext)
@@ -920,6 +930,8 @@ function contextUsageMetadata(
     && contextWindowConfigurationSource !== "provider-env") return undefined
   return {
     usedTokens: record.usedTokens as number,
+    ...(autoCompactWindowTokens === undefined ? {} : { autoCompactWindowTokens: autoCompactWindowTokens as number }),
+    ...(autoCompactThresholdTokens === undefined ? {} : { autoCompactThresholdTokens: autoCompactThresholdTokens as number }),
     ...(contextWindowTokens === undefined ? {} : { contextWindowTokens: contextWindowTokens as number }),
     ...(model === undefined ? {} : { model }),
     ...(modelContext ? { modelContext } : {}),

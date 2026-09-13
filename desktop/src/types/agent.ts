@@ -69,6 +69,8 @@ export interface SynapseAgentContextUsage {
   readonly model?: string
   readonly modelContext?: SynapseAgentModelContextReference
   readonly contextWindowConfigurationSource?: "catalog" | "provider-env"
+  readonly autoCompactWindowTokens?: number
+  readonly autoCompactThresholdTokens?: number
 }
 
 export type SynapseAgentEvent = SynapseAgentEventBase & (
@@ -241,11 +243,14 @@ export type SynapseAgentErrorKind =
   | "execution_failed"
   | "connection_interrupted"
   | "tool_use_interrupted"
+  | "request_body_too_large"
+  | "context_refill_thrashing"
+  | "renderer_unavailable"
   | "webfetch_preflight_failed"
 
 export interface SynapseAgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
-  readonly kind: "aborted" | "closed" | "connection_interrupted" | "error" | "tool_use_interrupted"
+  readonly kind: "aborted" | "closed" | "connection_interrupted" | "request_body_too_large" | "context_refill_thrashing" | "renderer_unavailable" | "error" | "tool_use_interrupted"
   readonly message?: string
   readonly recoverable?: boolean
 }
@@ -274,7 +279,7 @@ export type SynapseAgentTurnOutcome =
   }
   | {
     readonly status: "interrupted"
-    readonly reason: "network_interrupted" | "tool_use_interrupted"
+    readonly reason: "network_interrupted" | "tool_use_interrupted" | "request_body_too_large" | "context_refill_thrashing" | "renderer_unavailable"
     readonly recoverable: true
     readonly message: string
     readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
@@ -301,6 +306,8 @@ interface SynapseAgentTimelineBase {
   readonly sdkSessionId?: string
   readonly agentSessionId?: string
   readonly threadId?: string
+  readonly historyIndex?: number
+  readonly contentTruncated?: boolean
 }
 
 export interface SynapseAgentResultMetadata {
@@ -324,6 +331,8 @@ export interface SynapseAgentResultMetadata {
   readonly totalCostBreakdownCny?: Record<string, number>
   readonly costCurrency?: "CNY"
   readonly estimatedCost?: boolean
+  readonly queuedTurnCount?: number
+  readonly userMessageUuid?: string
 }
 
 export interface SynapseAgentMainThreadPersonaMetadata {
@@ -359,6 +368,8 @@ export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBas
   readonly streaming?: boolean
   readonly legacy?: boolean
   readonly metadata?: SynapseAgentResultMetadata
+  readonly messageKind?: "steer"
+  readonly clientMessageId?: string
 }
 
 export interface SynapseAgentThinkingTimelineItem extends SynapseAgentTimelineBase {
@@ -574,6 +585,7 @@ export type SynapseAgentTimelineEntry = SynapseAgentTimelineItem
 export interface SynapseAgentSessionSummary {
   readonly projectId: string
   readonly id: string
+  readonly conversationRef?: string
   readonly sessionKey: string
   readonly mode?: SynapseAgentPermissionMode
   readonly name?: string
@@ -591,6 +603,16 @@ export interface SynapseAgentSessionSummary {
   readonly createdAt: string
   readonly updatedAt: string
   readonly lastMessage?: SynapseAgentTimelineItem
+  readonly contextRecovery?: SynapseAgentContextRecovery
+}
+
+export interface SynapseAgentContextRecovery {
+  readonly status: "required" | "prepared" | "failed"
+  readonly reason: "request_body_too_large" | "context_refill_thrashing"
+  readonly failedTurnId: string
+  readonly createdAt: string
+  readonly preparedAt?: string
+  readonly failedAt?: string
 }
 
 export interface SynapseAgentStatus {
@@ -689,11 +711,27 @@ export interface SynapseAgentSendResult {
   readonly projectId: string
   readonly sessionKey: string
   readonly conversationId: string
-  readonly resultText: string
-  readonly events: SynapseAgentEvent[]
+  readonly outcome: {
+    readonly status: "completed" | "failed" | "cancelled" | "interrupted"
+    readonly errorKind?: SynapseAgentErrorKind
+    readonly recoverable?: boolean
+  }
   readonly agentSessionId?: string
   readonly threadId?: string
-  readonly error?: string
+}
+
+export interface SynapseAgentSteerResult {
+  readonly status:
+    | "accepted"
+    | "no-active-turn"
+    | "turn-changed"
+    | "permission-pending"
+    | "cancel-pending"
+    | "session-ended"
+    | "unsupported"
+  readonly conversationId: string
+  readonly turnId?: string
+  readonly clientMessageId: string
 }
 
 export interface SynapseAgentTimelineResult {
@@ -743,6 +781,24 @@ export interface SynapseAgentStreamDomainEvent extends SynapseAgentDomainEventBa
   readonly payload: SynapseAgentEventEnvelope
 }
 
+export interface SynapseAgentEventBatchDomainEvent extends SynapseAgentDomainEventBase {
+  readonly type: "eventBatch"
+  readonly payload: {
+    readonly batchId: string
+    readonly projectId: string
+    readonly sessionKey: string
+    readonly platform: string
+    readonly conversationId: string
+    readonly deliveryEpoch: string
+    readonly events: readonly {
+      readonly event: SynapseAgentEvent
+      readonly sequence: number
+      readonly timestamp: string
+    }[]
+    readonly resyncRequired: boolean
+  }
+}
+
 export interface SynapseAgentConversationUpdatedDomainEvent extends SynapseAgentDomainEventBase {
   readonly type: "conversationUpdated"
   readonly payload: SynapseAgentConversationUpdatedPayload
@@ -769,5 +825,6 @@ export interface SynapseAgentPhaseUpdateDomainEvent extends SynapseAgentDomainEv
 
 export type SynapseAgentDomainEvent =
   | SynapseAgentStreamDomainEvent
+  | SynapseAgentEventBatchDomainEvent
   | SynapseAgentConversationUpdatedDomainEvent
   | SynapseAgentPhaseUpdateDomainEvent

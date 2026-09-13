@@ -1,6 +1,6 @@
 ---
 name: synapse-skill
-description: Use when operating Synapse through MCP tools, submitting 问题反馈 to Synapse, or creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory. Trigger for requests such as 开发 Skill、新建 Skill、创建 Skill、修改现有 Skill、迁移 Skill, even when the user does not explicitly name Synapse Skill. Synapse domains include Database; Drive one-time upload versus persistent local file or folder sync, including 备份、镜像、挂载、绑定到云盘、持续同步 and keep synchronized requests; local Markdown document upload or sharing with linked images and HTML; Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
+description: Use when operating Synapse through MCP tools, creating Synapse Agent conversations in default or specified groups, listing conversation groups and available providers/models, creating with a requested model, opening, reading, observing, or controlling a Synapse Agent conversation from its deep link, submitting 问题反馈 to Synapse, or creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory. Trigger for requests such as 开发 Skill、新建 Skill、创建 Skill、修改现有 Skill、迁移 Skill, even when the user does not explicitly name Synapse Skill. Synapse domains include Database; Drive one-time upload versus persistent local file or folder sync, including 备份、镜像、挂载、绑定到云盘、持续同步 and keep synchronized requests; local Markdown document upload or sharing with linked images and HTML; Workflow, Automation, Content, Skill Repository, model price rules, secrets, repositories, Terminal sessions, and app capabilities.
 ---
 
 # Synapse Skill
@@ -26,7 +26,7 @@ First classify the user's intent, then read the matching domain file before usin
 - Local secrets and placeholder secret values -> `secrets/index.md`
 - Settings repositories -> `repository/index.md`
 - Synapse-managed Terminal launch settings, groups, saved commands, sessions, retained output, observation, leases, semantic input, resize, stop, and deletion -> `terminal/index.md`
-- Other App-provided capabilities such as text file writing, text extraction, document generation, JSON repair, Sound Notifier playback, System Notifier notifications, and problem feedback -> `app/index.md`
+- Synapse Agent conversation deep links, conversation creation, provider/model discovery and group discovery, plus other App-provided capabilities such as text file writing, text extraction, document generation, JSON repair, Sound Notifier playback, System Notifier notifications, and problem feedback -> `app/index.md`
 
 When there is specific evidence that Synapse itself or a built-in Synapse Skill violates a documented or otherwise verified product contract, read `app/index.md` before suggesting problem feedback. Do not suggest feedback for ordinary validation, permission, rate-limit, transient network, user-project, third-party, editor, speculative, or purely aesthetic issues.
 

@@ -12,7 +12,7 @@ const eventOf = <D extends string, T extends string>(
   domain: D,
   type: T,
   payload: unknown = {},
-  scope?: { projectId?: string; sessionId?: string; repositoryId?: string },
+  scope?: { projectId?: string; sessionId?: string; repositoryId?: string; rendererIds?: readonly number[] },
 ): DomainEvent => ({
   domain: domain as DomainEvent["domain"],
   type,
@@ -203,5 +203,25 @@ describe("WindowBroadcaster (T4.2)", () => {
     expect(managerLog[0]?.channel).toBe("synapse:app:events:operation:repository")
     expect((managerLog[0]?.payload as DomainEvent).domain).toBe("repository")
     bus.flushAllForTests()
+  })
+
+  it("only broadcasts renderer-scoped events to the selected webContents ids", () => {
+    const delivered: number[] = []
+    const windows = [{ id: 11 }, { id: 22 }, { id: 33 }]
+    const fakeManager = {
+      broadcast: (_channel: string, _payload: unknown, filter?: (window: { id: number }) => boolean) => {
+        for (const window of windows) {
+          if (!filter || filter(window)) delivered.push(window.id)
+        }
+        return delivered.length
+      },
+    }
+    const broadcaster = new WindowBroadcaster(fakeManager as never)
+
+    expect(broadcaster.broadcast(
+      eventOf("agent", "eventBatch", {}, { rendererIds: [22] }),
+      "synapse:app:events:operation:agent",
+    )).toBe(1)
+    expect(delivered).toEqual([22])
   })
 })

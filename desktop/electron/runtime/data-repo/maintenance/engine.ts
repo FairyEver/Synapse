@@ -132,6 +132,37 @@ export async function runDataMaintenance(
         selectSql: `
           SELECT id
           FROM ${AGENT_EVENTS_TABLE}
+          WHERE json_extract(value, '$.eventType') = 'sdkEvent'
+            AND (
+              (
+                json_extract(value, '$.payload.sdkType') = 'system'
+                AND json_extract(value, '$.payload.sdkSubtype') = 'thinking_tokens'
+              )
+              OR (
+                json_extract(value, '$.payload.payload.type') = 'system'
+                AND json_extract(value, '$.payload.payload.subtype') = 'thinking_tokens'
+              )
+            )
+          LIMIT ?
+        `,
+        selectParams: [],
+        limit: remaining,
+        batchSize: options.policy.batchSize,
+        onBatch: (count) => {
+          deleted.rawAgentDiagnostics += count
+          options.onProgress?.({ phase: "agent-diagnostics", deleted: { ...deleted } })
+        },
+        yieldBetweenBatches,
+      })
+    }
+
+    if (remaining > 0 && tableExists(database, AGENT_EVENTS_TABLE)) {
+      remaining = await deleteInBatches({
+        database,
+        tableName: AGENT_EVENTS_TABLE,
+        selectSql: `
+          SELECT id
+          FROM ${AGENT_EVENTS_TABLE}
           WHERE json_extract(value, '$.eventType') IN ('sdkEvent', 'streamDiagnostics')
             AND json_extract(value, '$.createdAt') < ?
           LIMIT ?
