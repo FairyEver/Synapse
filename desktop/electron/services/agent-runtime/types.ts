@@ -74,6 +74,8 @@ export interface AgentMessage {
   readonly contextRecoveryTurnId?: string
   /** Main-process only turn identity for per-turn context budgeting. */
   readonly runtimeTurnId?: string
+  /** Host-owned verified originals for one read-only presentation attempt. */
+  readonly pendingImagePresentations?: readonly import("./image-presentation").PendingImagePresentation[]
 }
 
 export interface AgentSteerMessage {

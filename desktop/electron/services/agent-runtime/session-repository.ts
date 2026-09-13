@@ -788,6 +788,38 @@ export class AgentSessionRepository {
     })
   }
 
+  async saveContextHandoff(
+    conversationIdValue: string,
+    handoff: NonNullable<ConversationEntryV1["contextHandoff"]>,
+    expectedGeneration: number,
+  ): Promise<void> {
+    await this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      if ((conversation.contextHandoff?.generation ?? 0) !== expectedGeneration) {
+        throw new Error("上下文交接代次已变化，拒绝迟到的状态写入。")
+      }
+      const hasPendingImages = handoff.pendingImages.some((image) => !image.presented)
+      const contextRecovery = hasPendingImages ? {
+        status: "required" as const, reason: "request_body_too_large" as const,
+        failedTurnId: handoff.turnId, createdAt: conversation.contextRecovery?.createdAt ?? this.isoNow(),
+      } : conversation.contextRecovery
+      await this.conversations.upsert({ ...conversation, contextHandoff: handoff, contextRecovery, updatedAt: this.isoNow() })
+    })
+  }
+
+  async acknowledgeImagePresentation(conversationIdValue: string, turnId: string, sdkSessionId: string | undefined, toolUseId: string): Promise<void> {
+    await this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const handoff = conversation.contextHandoff
+      if (!handoff || handoff.turnId !== turnId || handoff.phase !== "submitted"
+        || conversation.sdkSessionId !== sdkSessionId) return
+      const pendingImages = handoff.pendingImages.map((image) => image.toolUseId === toolUseId ? { ...image, presented: true } : image)
+      await this.conversations.upsert({ ...conversation, contextHandoff: { ...handoff, pendingImages },
+        contextRecovery: pendingImages.every((image) => image.presented) ? undefined : conversation.contextRecovery,
+        updatedAt: this.isoNow() })
+    })
+  }
+
   private async runConversationMutation<T>(
     conversationIdValue: string,
     mutation: () => Promise<T>,

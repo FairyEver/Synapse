@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { expect, it } from "vitest"
+import { stopQueryAtBoundary } from "../query-stop-barrier"
 import { collectNativeResult, createNativeSdkFixture, toolResult } from "./fixtures/native-sdk-fixture"
 
 // Synthetic 1x1 PNG. Byte delivery only; this fixture makes no visual-understanding claim.
@@ -74,9 +75,8 @@ it.each(["interrupt", "interrupt-then-close", "hook-stop"] as const)("pauses a n
   }
 }, 20_000)
 
-// This is a reproduction of an SDK protocol defect, NOT an I06 acceptance pass.
-// Keep automatic image handoff disabled until forced termination has a proven barrier.
-it("reproduces native close releasing a pending image into an extra request without interrupt acknowledgement", async () => {
+// Regression: bare close released the pending hook and leaked another request.
+it("the production stop barrier prevents a pending image from leaking into an extra request", async () => {
   const entered = deferred()
   const release = deferred()
   const fixture = await createNativeSdkFixture((_request, index) => index === 0
@@ -91,11 +91,7 @@ it("reproduces native close releasing a pending image into an extra request with
   const terminal = collectNativeResult(run).then((result) => ({ result }), (error: unknown) => ({ error }))
   try {
     await bounded(entered.promise, "unsafe close entry")
-    run.close()
-    release.resolve()
-    await bounded(terminal, "unsafe close termination")
-    expect(fixture.requests).toHaveLength(2)
-    const leaked = toolResult(fixture.requests[1], "unsafe_close_image")
-    expect(leaked).toMatchObject({ content: expect.arrayContaining([expect.objectContaining({ type: "image" })]) })
+    await stopQueryAtBoundary({ query: run, release: release.resolve, settled: terminal })
+    expect(fixture.requests).toHaveLength(1)
   } finally { release.resolve(); await fixture.close() }
 }, 15_000)

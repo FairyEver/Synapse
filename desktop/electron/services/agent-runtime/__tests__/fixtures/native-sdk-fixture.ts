@@ -73,7 +73,7 @@ export async function createNativeSdkFixture(reply: (request: FixtureRequest, in
     CLAUDE_CODE_TASK_LIST_ID: randomUUID(), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
   }
   return {
-    root, requests, requestBytes,
+    root, requests, requestBytes, env,
     start(options: Partial<Options> = {}, prompt = "Execute scripted protocol") {
       const run = query({ prompt, options: {
         cwd: root, settingSources: [], strictMcpConfig: true, mcpServers: {}, model: "fixture-model", maxTurns: 16,

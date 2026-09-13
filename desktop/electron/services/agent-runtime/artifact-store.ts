@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs"
 import { AGENT_HISTORY_CHUNK_BYTES } from "../../../config"
 import { createHash, randomUUID } from "node:crypto"
 import { lstat, mkdir, open, realpath, rename, rm, unlink, writeFile } from "node:fs/promises"
@@ -173,6 +174,31 @@ export class AgentArtifactStore {
       originalByteSize,
       storedByteSize,
       contentTruncated: storedByteSize < originalByteSize,
+    }
+  }
+
+  async verifyContextCheckpoint(projectId: string, conversationId: string, artifactIds: readonly string[]): Promise<void> {
+    if (!artifactIds.length) throw new Error("上下文检查点不完整。")
+    const directory = await realpath(this.toolOutputDirectory(projectId, conversationId))
+    for (const id of artifactIds) {
+      const entry = await this.deps.artifacts.get(id)
+      if (!entry || entry.kind !== "tool-output-text" || entry.projectId !== projectId
+        || entry.conversationId !== conversationId || entry.contentTruncated) throw new Error("上下文检查点不完整。")
+      const filePath = await realpath(entry.storagePath)
+      if (path.dirname(filePath) !== directory || (await lstat(entry.storagePath)).isSymbolicLink()) throw new Error("上下文检查点路径无效。")
+      const handle = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW)
+      try {
+        const stat = await handle.stat()
+        if (!stat.isFile() || stat.size !== entry.storedByteSize) throw new Error("上下文检查点已变化。")
+        const hash = createHash("sha256")
+        let bytes = 0
+        for await (const chunk of createReadStream(filePath, { fd: handle.fd, autoClose: false })) {
+          bytes += chunk.length
+          if (bytes > entry.storedByteSize) throw new Error("上下文检查点已变化。")
+          hash.update(chunk)
+        }
+        if (bytes !== entry.storedByteSize || hash.digest("hex") !== entry.sha256) throw new Error("上下文检查点校验失败。")
+      } finally { await handle.close() }
     }
   }
 

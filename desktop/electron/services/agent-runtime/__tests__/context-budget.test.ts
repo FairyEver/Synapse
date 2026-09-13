@@ -3,6 +3,58 @@ import { describe, expect, it } from "vitest"
 import { AgentContextBudget } from "../context-budget"
 
 describe("AgentContextBudget", () => {
+  it("charges image base64 to bytes without inventing visual tokens", () => {
+    const budget = new AgentContextBudget({ maxToolResultBytes: 8192, maxContextTokens: 200000,
+      requestBodyBudgetBytes: 5 * 1024 * 1024 })
+    budget.recordToolOutputCost({ bytes: 453096, tokens: null, source: "native-non-text", batch: 1 })
+    expect(budget.snapshot()).toMatchObject({ pendingModelVisibleBytes: 453096,
+      estimatedRequestTokens: 0, unknownTokenCosts: 1, retainedRequestBytes: 453096 })
+    expect(budget.availableNonTextBytes()).toBe(5 * 1024 * 1024 - 453096)
+    const watermark = budget.costWatermark()
+    budget.recordToolOutputCost({ bytes: 100, tokens: 30, source: "sdk", batch: 2 })
+    budget.observeContextTokens(1200, watermark)
+    expect(budget.snapshot()).toMatchObject({ estimatedRequestTokens: 1230, unknownTokenCosts: 0 })
+    budget.observeContextTokens(1200, watermark)
+    expect(budget.snapshot().estimatedRequestTokens).toBe(1230)
+  })
+
+  it("does not drop image bytes based on compact or eviction token ratios", () => {
+    const budget = new AgentContextBudget({ maxToolResultBytes: 8192, maxContextTokens: 200000 })
+    budget.recordToolOutputCost({ bytes: 453096, tokens: null, source: "native-non-text", batch: 1 })
+    budget.completeCompaction(1000, 50, 10)
+    expect(budget.snapshot().retainedToolOutputBytes).toBe(453096)
+    budget.applyNativeToolResultEviction(100, 0)
+    expect(budget.snapshot().retainedToolOutputBytes).toBe(453096)
+  })
+
+  it("keeps text and unknown image costs arriving after the compact snapshot watermark", () => {
+    const budget = new AgentContextBudget({ maxToolResultBytes: 8192 })
+    budget.recordToolOutput(1000)
+    const covered = budget.costWatermark()
+    budget.recordModelVisibleBytes(40)
+    budget.recordToolOutputCost({ bytes: 453096, tokens: null, source: "native-non-text", batch: 2 })
+    const snapshot = budget.completeCompaction(100, 20, 0, covered)
+    expect(snapshot).toMatchObject({ estimatedRequestTokens: 140, pendingModelVisibleBytes: 453136,
+      unknownTokenCosts: 1, retainedRequestBytes: 453156 })
+    budget.observeContextTokens(100, covered)
+    expect(budget.snapshot()).toEqual(snapshot)
+  })
+
+  it("reserves parallel text separately from visual transport bytes", () => {
+    const budget = new AgentContextBudget({ maxToolResultBytes: 8192, maxToolBatchBytes: 24576, requestBodyBudgetBytes: 5 * 1024 * 1024 })
+    budget.recordToolOutputCost({ bytes: 453096, tokens: null, source: "native-non-text", batch: 1 })
+    for (let i = 0; i < 3; i++) { expect(budget.availableToolOutputBytes()).toBe(8192); budget.recordToolOutput(8192) }
+    expect(budget.availableToolOutputBytes()).toBe(0)
+    expect(budget.snapshot().batchToolOutputBytes).toBe(453096 + 24576)
+  })
+
+  it("still limits non-text payloads by the complete request body", () => {
+    const budget = new AgentContextBudget({ maxToolResultBytes: 8192, maxContextTokens: 200000,
+      requestBodyBudgetBytes: 1000, initialRequestBytes: 200 })
+    expect(budget.availableNonTextBytes()).toBe(800)
+    budget.recordToolOutputCost({ bytes: 801, tokens: null, source: "native-non-text", batch: 1 })
+    expect(budget.availableNonTextBytes()).toBe(0)
+  })
   it("does not rotate merely because a long task exceeds 96 KiB of cumulative output", () => {
     const budget = new AgentContextBudget({ maxToolResultBytes: 8192, maxToolBatchBytes: 24576 })
     for (let batch = 0; batch < 20; batch += 1) {

@@ -397,14 +397,16 @@ describe("ClaudeSDKSession", () => {
   })
 
   it("leaves image tool results intact", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "synapse-image-budget-"))
+    writeFileSync(path.join(root, "image.png"), "a".repeat(22500))
     const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { maxToolOutputBytes: 24 * 1024,
+    const session = createSession(factory, { cwd: root, maxToolOutputBytes: 24 * 1024,
       persistToolOutputText: async () => ({ id: "a", storagePath: "/private/output.txt",
         originalByteSize: 180000, storedByteSize: 180000, contentTruncated: false }) })
     await session.send({ ...message("read"), runtimeTurnId: "turn-1" })
     const hook = postToolUseHook(getOptions())
 
-    await expect(hook({
+    try { await expect(hook({
       hook_event_name: "PostToolUse",
       tool_name: "Read",
       tool_input: { file_path: "image.png" },
@@ -414,6 +416,7 @@ describe("ClaudeSDKSession", () => {
       },
       tool_use_id: "toolu-image",
     })).resolves.toEqual({})
+    } finally { await session.close(); rmSync(root, { recursive: true, force: true }) }
   })
 
   it("stops with an explicit incomplete outcome when a non-text result cannot be delivered", async () => {
@@ -433,8 +436,11 @@ describe("ClaudeSDKSession", () => {
 
     expect(result).toMatchObject({ continue: false })
     expect(result.hookSpecificOutput?.updatedToolOutput).toBeUndefined()
+    expect(session.alive()).toBe(true)
     await expect(session.nextEvent()).resolves.toMatchObject({ type: "error", recoverable: true })
     expect(session.contextRotation()).toBeUndefined()
+    await session.close()
+    expect(session.alive()).toBe(false)
   })
 
   it("merges runtime SDK settings without leaking non-provider env into settings.env", () => {
@@ -1402,7 +1408,7 @@ describe("ClaudeSDKSession", () => {
       await session.cancelCurrentTurn()
       await expect(paused).resolves.toMatchObject({ continue: false })
       expect(query.close).toHaveBeenCalledOnce()
-      expect(query.interrupt).not.toHaveBeenCalled()
+      expect(query.interrupt).toHaveBeenCalledOnce()
     },
   )
 
@@ -2291,6 +2297,23 @@ describe("ClaudeSDKSession", () => {
     expect(JSON.stringify(await event)).not.toContain("Autocompact is thrashing")
   })
 
+  it.each([
+    ["<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 983616]", true],
+    ["HTTP 401 invalid API key", false],
+    ["HTTP 500 internal server error", false],
+    ["fetch failed: ECONNRESET", false],
+  ] as const)("only automatically recovers precisely identified capacity errors: %s", async (diagnostic, recover) => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory, { maxRequestBodyBytes: 6 * 1024 * 1024,
+      persistToolOutputText: async () => ({ id: "part", storagePath: "/checkpoint", originalByteSize: 10, storedByteSize: 10, contentTruncated: false }) })
+    await session.send({ ...message("continue original task"), runtimeTurnId: "turn-1" })
+    const event = session.nextEvent()
+    query.rejectNext(new Error(diagnostic))
+    await expect(event).resolves.toMatchObject(recover ? { type: "sdkEvent", sdkType: "contextRotationRequested" } : { type: "error" })
+    expect(Boolean(session.contextRotation())).toBe(recover)
+    await session.close()
+  })
+
   it("automatically hands off a settled context breaker without forwarding its error to the user", async () => {
     const { factory, query } = createQueryFactory()
     const session = createSession(factory, { persistToolOutputText: vi.fn() })
@@ -2437,7 +2460,7 @@ describe("ClaudeSDKSession", () => {
     })
 
     const event = session.nextEvent()
-    await expect(session.close()).resolves.toBeUndefined()
+    await expect(session.close()).rejects.toThrow("停止未确认")
 
     await expect(event).resolves.toBeNull()
     expect(query.close).toHaveBeenCalledOnce()
@@ -2455,7 +2478,7 @@ describe("ClaudeSDKSession", () => {
       throw new Error("close failed")
     })
 
-    await session.close()
+    await expect(session.close()).rejects.toThrow("停止未确认")
     await waitFor(() => logger.warn.mock.calls.length > 0)
 
     expect(logger.warn).toHaveBeenCalledWith("Claude SDK query close failed.", {
@@ -2826,9 +2849,14 @@ function toolRouterOptions(): NonNullable<ConstructorParameters<typeof ClaudeSDK
 
 class FakeQuery implements QueryLike {
   readonly interrupt = vi.fn(async () => {})
-  readonly close = vi.fn()
+  readonly close = vi.fn(() => {
+    this.terminated = true
+    for (const waiter of this.waiters.splice(0)) waiter({ done: true, value: undefined })
+    this.rejecters.splice(0)
+  })
   readonly setPermissionMode = vi.fn(async (_mode: string) => {})
 
+  private terminated = false
   private readonly messages: SDKMessage[] = []
   private readonly waiters: Array<(value: IteratorResult<SDKMessage, void>) => void> = []
   private readonly rejecters: Array<(error: unknown) => void> = []
@@ -2843,6 +2871,7 @@ class FakeQuery implements QueryLike {
   }
 
   next(): Promise<IteratorResult<SDKMessage, void>> {
+    if (this.terminated) return Promise.resolve({ done: true, value: undefined })
     const message = this.messages.shift()
     if (message) return Promise.resolve({ done: false, value: message })
     return new Promise((resolve, reject) => {

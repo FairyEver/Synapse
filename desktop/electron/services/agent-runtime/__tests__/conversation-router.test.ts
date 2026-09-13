@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -19,6 +19,7 @@ import { ScopedEventBusImpl } from "../../../runtime/project-container"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { ProviderService } from "../../provider"
 import type { ModelPriceRule } from "../../model-price"
+import { captureImagePresentation } from "../image-presentation"
 import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
 import type { ConversationRouterDeps } from "../conversation-router"
@@ -146,9 +147,54 @@ describe("ConversationRouter", () => {
     const store = { persistToolOutputText: vi.fn(async () => { throw new Error("disk failure") }) } as unknown as AgentArtifactStore
     const { router, factoryCalls } = createRouter({ session, agentArtifactStore: store })
     const result = await router.send(baseMessage("continue"))
-    expect(result.error).toContain("无法保存或恢复上下文")
+    expect(result.error).toContain("上下文交接失败")
     expect(factoryCalls).toHaveLength(1)
     expect(session.isClosed).toBe(true)
+  })
+
+  it.each(["stop", "create", "changed", "checkpoint"] as const)("retains image recovery evidence when handoff fails at %s", async (failure) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-image-failure-"))
+    try {
+      const imagePath = path.join(root, "image.png")
+      await writeFile(imagePath, "synthetic original")
+      const image = await captureImagePresentation(imagePath, root, "original-read")
+      const artifacts = new MemoryNamespace<AgentArtifactEntry>("agent.artifacts")
+      const store = new AgentArtifactStore({ rootDirectory: root, artifacts })
+      const first = Object.assign(new ScriptedSession([
+        { type: "sdkEvent", sdkType: "contextRotationRequested", payload: {} },
+      ], "sdk-old"), { contextRotation: () => ({ reason: "image-presentation" as const, summary: "Counter already executed once.",
+        completedBatches: 1, lastToolBatch: [], pendingImages: [image] }) })
+      const close = first.close.bind(first)
+      if (failure === "stop") first.close = vi.fn(async () => { throw new Error("SDK 停止未确认") })
+      if (failure === "changed") first.close = async () => { await close(); await writeFile(imagePath, "changed original") }
+      if (failure === "checkpoint") vi.spyOn(store, "verifyContextCheckpoint").mockRejectedValue(new Error("检查点不完整"))
+      const { router, conversations, factoryCalls } = createRouter({ sessions: [first], agentArtifactStore: store,
+        failFactoryAfterFirst: failure === "create" })
+      const result = await router.send(baseMessage("Read the image after the completed action"))
+      expect(result.error).toContain("上下文交接失败")
+      const saved = await conversations.get(result.conversationId)
+      expect(saved?.contextHandoff).toMatchObject({ phase: "failed", generation: 1,
+        pendingImages: [{ path: image.path, sha256: image.sha256, toolUseId: "original-read", attempts: 0 }] })
+      expect(saved?.contextRecovery).toMatchObject({ status: "required" })
+      expect(saved?.history.some((entry) => entry.metadata?.agentEventType === "error")).toBe(true)
+      expect(factoryCalls).toHaveLength(failure === "create" || failure === "changed" ? 2 : 1)
+      if (failure === "stop") {
+        const retry = await router.send(baseMessage("继续"))
+        expect(retry.error).toContain("旧代停止尚未确认")
+        expect(factoryCalls).toHaveLength(1)
+      }
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
+  it("rejects a late generation write without losing the newer checkpoint", async () => {
+    const { repository } = createRouter()
+    const saved = await repository.getOrCreateActive(baseMessage("start"))
+    const handoff = { version: 1 as const, turnId: "turn", generation: 1, phase: "prepared" as const,
+      checkpointPath: "/checkpoint", pendingImages: [] }
+    await repository.saveContextHandoff(saved.id, handoff, 0)
+    await repository.saveContextHandoff(saved.id, { ...handoff, generation: 2 }, 1)
+    await expect(repository.saveContextHandoff(saved.id, { ...handoff, phase: "failed" }, 1)).rejects.toThrow("代次")
+    expect((await repository.get(saved.id))?.contextHandoff?.generation).toBe(2)
   })
 
   it("retires the Bailian SDK session and records local recovery after the 6 MiB terminal error", async () => {
@@ -3816,6 +3862,7 @@ describe("ConversationRouter", () => {
 })
 
 function createRouter(input: {
+  readonly failFactoryAfterFirst?: boolean
   readonly conversations?: MemoryNamespace<ConversationEntryV1>
   readonly agentEvents?: MemoryNamespace<AgentEventEntryV1>
   readonly agentUsage?: MemoryNamespace<AgentUsageEntryV1>
@@ -3872,6 +3919,7 @@ function createRouter(input: {
         sdkSessionId: options.sdkSessionId,
         env: options.env,
       })
+      if (input.failFactoryAfterFirst && factoryCalls.length > 1) throw new Error("创建新代失败")
       return sessions.shift() ?? input.session ?? input.message ?? new ScriptedSession([
         { type: "result", content: "done", done: true },
       ])

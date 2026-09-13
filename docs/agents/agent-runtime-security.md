@@ -2,7 +2,7 @@
 
 本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出、Usage Analysis 和 provider 预览。
 
-处理百炼容量、非文本结果超预算或持续对话问题前，先读[真实 API 边界实测](../reference/2026-09-13-bailian-qwen-context-probe.md)与[持续对话方案](../superpowers/plans/2026-09-13-bailian-context-and-continuous-conversation-plan.md)。前者已验证 token/body 两种上限；后者记录当前预算将非文本序列化字节作为 token 成本的可复现误判及待实施修复。直接 API 成功不能当作 SDK 图片交付、自动重呈现或长任务验收通过；方案不改变下文既有保护与权限边界。
+处理百炼容量、非文本结果超预算或持续对话问题前，先读[真实 API 边界实测](../reference/2026-09-13-bailian-qwen-context-probe.md)与[持续对话方案](../superpowers/plans/2026-09-13-bailian-context-and-continuous-conversation-plan.md)。前者已验证 token/body 两种上限；后者记录原预算将非文本序列化字节作为 token 成本的可复现误判；修复与验收见[图片交接实施记录](../superpowers/plans/2026-09-13-agent-image-handoff-execution.md)。直接 API 成功不能当作 SDK 图片交付、自动重呈现或长任务验收通过；方案不改变下文既有保护与权限边界。
 
 ## 历史写入与容量
 
@@ -46,15 +46,20 @@
 
 - 工具结果保存或呈现失败的 `execution_failed` 必须保留 SDK 明确给出的 `recoverable`，经轮次归一化、持久化 `turnOutcome`、IPC、历史回放和 MCP 读取不得降为 false；未明确给出时不推断为可恢复。取消和超时仍优先。idle 只代表没有活动轮次，可恢复失败不授权自动重放。
 - 诊断导出的 SDK 流采集状态区分 `captured`、`not-recorded`、`read-failed`；后两者的 `observedEventCount` 为 null，不能把未采集或读取失败解释为零事件。保留采集量、导出量与超限省略量的不同语义。
-- SDK 0.3.245 图片协议夹具证实，挂起 `PostToolUse` 时单独 `close()` 可能将原图发送到后续请求；`interrupt()` 确认后关闭及 hook 正常返回停止在合成夹具中可阻断请求。强制关闭、其它 hook 干预和持久交接尚未通过图片恢复门禁，不得据此启用自动图片重呈现。详见监视整改实施记录。
+- SDK 0.3.245 单独 `close()` 会释放挂起 hook，不能当作停止屏障。自动交接必须先保存检查点，等待 `interrupt()` 确认，再关闭 query 并等待原生迭代器真正结束；不能以收到迟到帧或 `close()` 返回代替终止。控制操作有界超时，失败不创建新代、不自动强杀；当前进程内停止未获确认时，用户再点继续也不能放行图片交接。
+- token 与请求体字节分别计量。图片 Base64 完整计入 body；视觉 token 未被完整 SDK 快照覆盖时为未知，不能按 Base64 字节判 token 超限，不能声称未知等于零。文本估算保留来源；快照/compact 只清算覆盖水位以内的成本。native token 降低不能按比例抹掉已知图片字节。图片不消耗文本单批预览额度。
+- 图片原生 Read 的已取得未呈现状态保存在 conversation 可选 `contextHandoff` 中：generation、phase、checkpoint 引用、原 toolUseId、原件路径/大小/摘要、尝试次数与接收确认。这是现有串行 DataRepository 写入链路的最小扩展，不是 History V2 或另一套恢复存储；旧数据缺字段按无恢复状态读取。
+- 在 `PostToolBatch` 暂停下一请求，使并行工具已经产生的结果都进入同一检查点。新主 query 只通过原生 Read 重呈现原件，保留 conversation、turn、taskListId、权限配置及累计用量；不得重跑生成图片的 Bash、截图、上传或消息发送。路径引用不授予权限，Read 前后校验原件版本；这不是 OS 文件锁，不承诺消除恶意并发改写的全部 TOCTOU 竞态。
+- 同一原件最多一次因容量不足触发的干净会话重呈现。普通网络/认证/服务端错误不自动回放；精确输入范围容量拒绝与已有容量故障可走同一交接链路。待呈现图片未获后续主模型响应确认时，result 不得记为成功；接收确认只表示呈现，不等于理解质量或业务覆盖。
+- 保存失败、旧代停止未确认、检查点缺损、原件变化或权限撤销必须保留可验证状态并停止。重启不自动执行旧任务；用户明确继续时验证原件与检查点后恢复尚未尝试的图片，已提交而接收不明的尝试不得静默重放。
 
 - 稳定 taskListId 保存在 conversation 可选字段，SDK 普通轮次、resume 和轮换复用；其它 conversation 使用独立随机 UUID。两层 SDK env 均覆盖宿主或 Provider 的全局 task-list ID。旧记录仅可沿用其合法 SDK UUID 对应的默认 namespace，不扫描 SDK 私有任务目录，不声称恢复历史已丢失的任务。
 - 自动交接使用专用执行投影，保留原有真实工作路径、早期用户要求和最新执行批次；凭据仍脱敏。手动恢复和普通导出继续采用各自脱敏边界。路径引用不授予新权限；执行批次不等于模型已消费或处理。
 - SDK 0.3.245 的 Read/Bash 等原生工具会校验 updatedToolOutput 结构；字符串替换可被静默拒绝。治理必须保留原生结构，按实际替换结构及 JSON 转义计入预算；MCP 替换必须移除旧 structuredContent。未知结构不得假称治理成功。
-- 文本结果落盘失败、返回缺失/截断记录、无法交付完整 artifact 引用时，显式结束为可恢复错误；不得继续截断或自动启动缺资料的新代。图片超预算暂时显式停止，完整引用重呈现协议仍待实施。
+- 文本结果落盘失败、返回缺失/截断记录、无法交付完整 artifact 引用时，显式结束为可恢复错误；不得继续截断或自动启动缺资料的新代。可验证的原生 Read 图片超出当前工作集时走上述持久交接；未知非文本结构或无法保存引用时保留停止保护。
 - 导出的 timeline、transcript 和消息/工具计数以同一 conversation 持久化历史投影为准；runtime 空页、尾页、sentinel 不作为历史权威。工具计数按 toolUseId 去重。
 - 新代创建前后和轮换异步边界核对取消/Renderer 状态。SDK 在循环开始前已结束或无终态退出时必须记为未完成。
-- 当前仍缺增量权威历史、版本化契约/覆盖账本、持久轮换事务、基于业务证据的停滞判断及完成门禁；现有轮换仍不能作为完整可靠性保证。详细状态见实施计划及其验证记录。
+- 当前仍缺增量权威历史、完整版本化契约/覆盖账本、覆盖所有副作用的轮换事务、基于业务证据的停滞判断及完整业务完成门禁；本轮图片交接和接收门禁不能作为整套长期可靠性保证。详细状态见实施计划及其验证记录。
 
 ## Agent 文件检查点
 

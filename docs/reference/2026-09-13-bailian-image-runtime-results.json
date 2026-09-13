@@ -1,0 +1,1487 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-13",
+  "baselineCommit": "f4d703602",
+  "implementationCommit": null,
+  "sourceNote": "A was exploratory before later guards. B/C/D record exact sources at start. The final SDK-session-only delta after D preserves queued terminal integrity errors after close; its real failure branch is validated by F and native Runtime regression tests. All other D production source fingerprints must match final files.",
+  "finalSourceSha256": {
+    "context-budget.ts": "f67fd2b54776f345b03b229e5b0615169d8c5880f8a5f9730101018508e9c614",
+    "claude-sdk-session.ts": "ac9d03dd0d43a86161c6818ea10812c6f19d1a2ed02b07850baf26e93a136536",
+    "query-stop-barrier.ts": "19af7ec90e1707a6600ef919b301a8cf26fe11b27c12b65089ff1799aabfbfe7",
+    "image-presentation.ts": "8d270488c690ad59465448c2de52af69ecf136d297d105355a57016461152de7",
+    "context-continuation.ts": "dc8224e0b163f795386160297c7d57499c23b7cc8cef64d8b54772c3fdb83edc",
+    "conversation-router.ts": "672ad6f2d9c68d6ada8f2d7fa31dec819175cafd27f6d11840f3138021080ebe",
+    "session-repository.ts": "df814e54b3ace793c9d801046788c72c06f203bf0b71a76efc922f63cc0fb757",
+    "artifact-store.ts": "922d1dbf53903445961c8c3a6def545cef270338609f2f212d154a4ec90afdfe",
+    "types.ts": "60d9466fb20eaec48a589f52b45d537b7a7ce4d8484f41c6ffb9446f31dbe826"
+  },
+  "providerEndpoint": "https://dashscope.aliyuncs.com/apps/anthropic",
+  "parameters": {
+    "autoCompactWindowTokens": 200000,
+    "bodySafetyBytes": 5242880,
+    "bodyHardBytes": 6291456,
+    "maxTurnsPerQuery": 128,
+    "maxOutputTokensEnv": 4096,
+    "tools": [
+      "Read",
+      "Bash"
+    ],
+    "permissionMode": "bypassPermissions",
+    "isolatedRuntime": true
+  },
+  "originalFailureMetadata": {
+    "format": "PNG",
+    "width": 970,
+    "height": 1866,
+    "bytes": 339821,
+    "base64Bytes": 453096,
+    "source": "Read-only file header and stat; original not sent to provider."
+  },
+  "redaction": "Synthetic fixtures/answers, numerical usage and code hashes only. No credentials, original content, original file names, local paths, provider identity, or raw image data.",
+  "fixtures": {
+    "standard": [
+      {
+        "name": "image-01.png",
+        "marker": "8919",
+        "bytes": 344854,
+        "sha256": "7e3d4cd9846108dbbf0f411c95be3df6e9ed802c23093ac16354143bc746f3c0",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-02.png",
+        "marker": "7838",
+        "bytes": 344700,
+        "sha256": "87b0e5e530febf7f4f7d06d645dedbb697fb7176cfc3411c45b77a642d262e73",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-03.png",
+        "marker": "6757",
+        "bytes": 344567,
+        "sha256": "e37888a6f6f84a214abc7920b847b140a9dd1a8baa10f9b2452d7c0f74128391",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-04.png",
+        "marker": "5676",
+        "bytes": 344732,
+        "sha256": "535e21656b65c43a12c50ce91e6627a697e85a8f09892300bfce040b4f053e0f",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-05.png",
+        "marker": "4595",
+        "bytes": 344418,
+        "sha256": "e21f9f1b2cbb8e97495aed22e51236350ee3513194580915911dfe68786fd71c",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-06.png",
+        "marker": "3514",
+        "bytes": 344523,
+        "sha256": "0e9af5e14ac174018ba38d41f1640c263697669c080ce306fed6e42a2b85e0cb",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-07.png",
+        "marker": "2433",
+        "bytes": 344497,
+        "sha256": "7aab5e6259c92213f8efa6b8f6cc2df3361a89286541a0d6d132f92ea5b6231f",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-08.png",
+        "marker": "1352",
+        "bytes": 344451,
+        "sha256": "a63aadb17ada5e644fcdb346e80e7b3a61e1b59538914e2bae4ec80260690af4",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-09.png",
+        "marker": "9271",
+        "bytes": 344547,
+        "sha256": "3d394c3816b2659dd7fb102ceb21bb76d49b5b2957daf49e62072c2c91f6ca5d",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-10.png",
+        "marker": "8190",
+        "bytes": 345242,
+        "sha256": "36d720c56fff12f0cff92d680ccef0146bb48fa2351f26c02fec33a6cdf4c135",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-11.png",
+        "marker": "7109",
+        "bytes": 344964,
+        "sha256": "5f6472e46963d09512990c309f679714bf2a3a734b15602835ee4ea0d9a7c2e5",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-12.png",
+        "marker": "6028",
+        "bytes": 344950,
+        "sha256": "8efc2f347c47e2f1476dc9a53a134f201bf53d6883987728438f84c63b2f7fbf",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-13.png",
+        "marker": "4947",
+        "bytes": 344868,
+        "sha256": "ff9be99845300fcc3bd99dda3642a5571bce1df02d4dffaa1eb6c9ff4b8dbacf",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-14.png",
+        "marker": "3866",
+        "bytes": 344691,
+        "sha256": "e1cb807ca0861fcc6342f2e24caae997d9637d1dc15ab8b25f76b486c056ff67",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-15.png",
+        "marker": "2785",
+        "bytes": 344740,
+        "sha256": "9addda1dbcdd5e2da4796a9ff2dd51292bce8f502379dd0f5df1590cad6a045e",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-16.png",
+        "marker": "1704",
+        "bytes": 344904,
+        "sha256": "b29dcfc96313d5454a115efee5c8c1d6e22ed04b9fdf4abda337a416309ab611",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-17.png",
+        "marker": "9623",
+        "bytes": 344422,
+        "sha256": "4fb599f1bc4d507cf1c9a7bb921e59be7b1aac653624bd082de0f5164be467ca",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-18.png",
+        "marker": "8542",
+        "bytes": 344716,
+        "sha256": "6db152f164604403a27bb19e7cc3b0786c015b82cc2d2a85e2ce8fd8d00aa478",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-19.png",
+        "marker": "7461",
+        "bytes": 344868,
+        "sha256": "7a05ddc6c1c7c166eed871fb9d2c2b795763101d90a0f27b0b43e5a8922a5bb5",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-20.png",
+        "marker": "6380",
+        "bytes": 345019,
+        "sha256": "eb24702eb8d947ab6c86cba1ef2b01eaf03ea4ebae78602f2299780eb0320448",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-21.png",
+        "marker": "5299",
+        "bytes": 344407,
+        "sha256": "252979be4cfaeb262677af282f4be5ba3de961a6f10914624ed24198446a3b07",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-22.png",
+        "marker": "4218",
+        "bytes": 344792,
+        "sha256": "b3c36d10e722ca5a98ea5155d2bf48b4cd08c1bb7625aa4faf2eece3cb69ba22",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-23.png",
+        "marker": "3137",
+        "bytes": 344555,
+        "sha256": "87c752572bdd21d224c4b1fe05bc28933a104add9dd354f826afb318ea4499ea",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-24.png",
+        "marker": "2056",
+        "bytes": 344776,
+        "sha256": "478f0536af62b1ff747cb1f10e049317d8d4c6e3fb790471dc5b6724250fa07f",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-25.png",
+        "marker": "9975",
+        "bytes": 344722,
+        "sha256": "a697beb8c2f12f0fa5aa99172212ab461a7760ec8b4be12d1ff86dbf9ec63a8e",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-26.png",
+        "marker": "8894",
+        "bytes": 344848,
+        "sha256": "990df045c90d0531b72896eaec402b4e20c8a401d498ca9260feff6edf3d3835",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-27.png",
+        "marker": "7813",
+        "bytes": 344662,
+        "sha256": "3faff77ffd29f8ba7b8cbc1438c80b1bea6d909f0cc1c97a948e6e99875cc484",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-28.png",
+        "marker": "6732",
+        "bytes": 344634,
+        "sha256": "357f32a84f66adf2e8e56eea3f859686b632f91031f1ca0b0be49d2cadf22610",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-29.png",
+        "marker": "5651",
+        "bytes": 344386,
+        "sha256": "8ff5696d3f6ddedc732bbef5b33bfb412d12c2cf11723e67b3ae36f84da32e90",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-30.png",
+        "marker": "4570",
+        "bytes": 344922,
+        "sha256": "2d23aebe0e71d2de252ff66bcd735098efd773c5de886463cb76dd058c67ca07",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-31.png",
+        "marker": "3489",
+        "bytes": 344920,
+        "sha256": "fa55b79681912acb052dbe2141aa99f2182d2d89dbe6da161470bdbee62aac16",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-32.png",
+        "marker": "2408",
+        "bytes": 345317,
+        "sha256": "c52e60056a78b87509aa14987404604ace0375e56e6cde56add34f6ee5a39cea",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-33.png",
+        "marker": "1327",
+        "bytes": 344434,
+        "sha256": "b1554b8687a66d515212992911b58aebb799ec22087cff86ee9a966f2e7f8a22",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-34.png",
+        "marker": "9246",
+        "bytes": 344850,
+        "sha256": "a8a149ab2a1e148122a7bd018240a409ae4b31474631623db4def8534e83b743",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-35.png",
+        "marker": "8165",
+        "bytes": 344706,
+        "sha256": "ecd20bf49e11ab6fcab537be4927fc49295873d809c2447e2076df061f2a6694",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-36.png",
+        "marker": "7084",
+        "bytes": 344973,
+        "sha256": "9d9ced0ebe4b00ea53fa5559b717067a3a2e34e614350e7803c3b2aa4a9ce5d0",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-37.png",
+        "marker": "6003",
+        "bytes": 345154,
+        "sha256": "9758ef45bee77d4171daa700db5a3354bd84a001140b866aa795cbfe1c1b31d2",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-38.png",
+        "marker": "4922",
+        "bytes": 344413,
+        "sha256": "67b71db0bf9236b65409ae5e808c688e122150a3cc2f3241e9ee9193672a2390",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-39.png",
+        "marker": "3841",
+        "bytes": 344785,
+        "sha256": "0cc6d00b18b70cd9cb43dfe94a5e74d788de96b52fd8728ce7fe44a7c1672983",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-40.png",
+        "marker": "2760",
+        "bytes": 344989,
+        "sha256": "f4b5e5a7e532fcbe5c300657f825dbddbf4c1c93e8c42260bad12466eb977c8c",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-41.png",
+        "marker": "1679",
+        "bytes": 344704,
+        "sha256": "cc7c22d694be01b955cca3b7a5ba8fd5da1b28cf4f3861ee914c8d6cde40a08b",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-42.png",
+        "marker": "9598",
+        "bytes": 344568,
+        "sha256": "eb5dbabeb699dd58f435c5cd7045ac779a6ac32859ec4c8addc4f421c196e528",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-43.png",
+        "marker": "8517",
+        "bytes": 344667,
+        "sha256": "9e3c85bdad3497ebc73a3e327904d2d6ddc2e78474ea678d1e998afe687a2fe0",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-44.png",
+        "marker": "7436",
+        "bytes": 344736,
+        "sha256": "6a9bcc819810bdcb48a9e4f5c02ce2b5473ef057494005eb9ddf9136c5154bab",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-45.png",
+        "marker": "6355",
+        "bytes": 344193,
+        "sha256": "26f8a97a8e5b51986d6df0460498aae9aba1d45207289b902296400b22a415d6",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-46.png",
+        "marker": "5274",
+        "bytes": 344519,
+        "sha256": "5d38149fcac5ab2cf5fc11f0f4a2333ffaf624d62a4b7fbba0f5823755e1fa8f",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-47.png",
+        "marker": "4193",
+        "bytes": 344558,
+        "sha256": "dc326a456cc4692c37212262805e5b7b6cc755b4d272dc1d18e10899e11cf96e",
+        "width": 720,
+        "height": 480
+      },
+      {
+        "name": "image-48.png",
+        "marker": "3112",
+        "bytes": 344495,
+        "sha256": "6ec7ef6edf8711ae90045e290d1fdf80f06249f0b26d832dacb5c48921b2d3f2",
+        "width": 720,
+        "height": 480
+      }
+    ],
+    "tall-first-four": [
+      {
+        "name": "image-01.png",
+        "marker": "8919",
+        "width": 970,
+        "height": 1866,
+        "bytes": 350667,
+        "sha256": "8c27f5b82448acad475fc04b0a8dd91437d29c0dc9d6ed52f5056379a0f5f520"
+      },
+      {
+        "name": "image-02.png",
+        "marker": "7838",
+        "width": 970,
+        "height": 1866,
+        "bytes": 350561,
+        "sha256": "d5eeefe92e377038ee6bd49b6bd50a1f527deaa7aad04498501f27c817f77431"
+      },
+      {
+        "name": "image-03.png",
+        "marker": "6757",
+        "width": 970,
+        "height": 1866,
+        "bytes": 350374,
+        "sha256": "1147c0c4d7e7292d6c495d02287d3258d3b0d65ec30d1243c0e858b9c2b13bea"
+      },
+      {
+        "name": "image-04.png",
+        "marker": "5676",
+        "width": 970,
+        "height": 1866,
+        "bytes": 350590,
+        "sha256": "e5314b031d72bfe3f46be138e14631f0c1dc3a1903215562e91e3a4e5752b72a"
+      },
+      {
+        "name": "image-05.png",
+        "marker": "4595",
+        "width": 720,
+        "height": 480,
+        "bytes": 344418,
+        "sha256": "e21f9f1b2cbb8e97495aed22e51236350ee3513194580915911dfe68786fd71c"
+      },
+      {
+        "name": "image-06.png",
+        "marker": "3514",
+        "width": 720,
+        "height": 480,
+        "bytes": 344523,
+        "sha256": "0e9af5e14ac174018ba38d41f1640c263697669c080ce306fed6e42a2b85e0cb"
+      },
+      {
+        "name": "image-07.png",
+        "marker": "2433",
+        "width": 720,
+        "height": 480,
+        "bytes": 344497,
+        "sha256": "7aab5e6259c92213f8efa6b8f6cc2df3361a89286541a0d6d132f92ea5b6231f"
+      },
+      {
+        "name": "image-08.png",
+        "marker": "1352",
+        "width": 720,
+        "height": 480,
+        "bytes": 344451,
+        "sha256": "a63aadb17ada5e644fcdb346e80e7b3a61e1b59538914e2bae4ec80260690af4"
+      },
+      {
+        "name": "image-09.png",
+        "marker": "9271",
+        "width": 720,
+        "height": 480,
+        "bytes": 344547,
+        "sha256": "3d394c3816b2659dd7fb102ceb21bb76d49b5b2957daf49e62072c2c91f6ca5d"
+      },
+      {
+        "name": "image-10.png",
+        "marker": "8190",
+        "width": 720,
+        "height": 480,
+        "bytes": 345242,
+        "sha256": "36d720c56fff12f0cff92d680ccef0146bb48fa2351f26c02fec33a6cdf4c135"
+      },
+      {
+        "name": "image-11.png",
+        "marker": "7109",
+        "width": 720,
+        "height": 480,
+        "bytes": 344964,
+        "sha256": "5f6472e46963d09512990c309f679714bf2a3a734b15602835ee4ea0d9a7c2e5"
+      },
+      {
+        "name": "image-12.png",
+        "marker": "6028",
+        "width": 720,
+        "height": 480,
+        "bytes": 344950,
+        "sha256": "8efc2f347c47e2f1476dc9a53a134f201bf53d6883987728438f84c63b2f7fbf"
+      },
+      {
+        "name": "image-13.png",
+        "marker": "4947",
+        "width": 720,
+        "height": 480,
+        "bytes": 344868,
+        "sha256": "ff9be99845300fcc3bd99dda3642a5571bce1df02d4dffaa1eb6c9ff4b8dbacf"
+      },
+      {
+        "name": "image-14.png",
+        "marker": "3866",
+        "width": 720,
+        "height": 480,
+        "bytes": 344691,
+        "sha256": "e1cb807ca0861fcc6342f2e24caae997d9637d1dc15ab8b25f76b486c056ff67"
+      },
+      {
+        "name": "image-15.png",
+        "marker": "2785",
+        "width": 720,
+        "height": 480,
+        "bytes": 344740,
+        "sha256": "9addda1dbcdd5e2da4796a9ff2dd51292bce8f502379dd0f5df1590cad6a045e"
+      },
+      {
+        "name": "image-16.png",
+        "marker": "1704",
+        "width": 720,
+        "height": 480,
+        "bytes": 344904,
+        "sha256": "b29dcfc96313d5454a115efee5c8c1d6e22ed04b9fdf4abda337a416309ab611"
+      },
+      {
+        "name": "image-17.png",
+        "marker": "9623",
+        "width": 720,
+        "height": 480,
+        "bytes": 344422,
+        "sha256": "4fb599f1bc4d507cf1c9a7bb921e59be7b1aac653624bd082de0f5164be467ca"
+      },
+      {
+        "name": "image-18.png",
+        "marker": "8542",
+        "width": 720,
+        "height": 480,
+        "bytes": 344716,
+        "sha256": "6db152f164604403a27bb19e7cc3b0786c015b82cc2d2a85e2ce8fd8d00aa478"
+      },
+      {
+        "name": "image-19.png",
+        "marker": "7461",
+        "width": 720,
+        "height": 480,
+        "bytes": 344868,
+        "sha256": "7a05ddc6c1c7c166eed871fb9d2c2b795763101d90a0f27b0b43e5a8922a5bb5"
+      },
+      {
+        "name": "image-20.png",
+        "marker": "6380",
+        "width": 720,
+        "height": 480,
+        "bytes": 345019,
+        "sha256": "eb24702eb8d947ab6c86cba1ef2b01eaf03ea4ebae78602f2299780eb0320448"
+      },
+      {
+        "name": "image-21.png",
+        "marker": "5299",
+        "width": 720,
+        "height": 480,
+        "bytes": 344407,
+        "sha256": "252979be4cfaeb262677af282f4be5ba3de961a6f10914624ed24198446a3b07"
+      },
+      {
+        "name": "image-22.png",
+        "marker": "4218",
+        "width": 720,
+        "height": 480,
+        "bytes": 344792,
+        "sha256": "b3c36d10e722ca5a98ea5155d2bf48b4cd08c1bb7625aa4faf2eece3cb69ba22"
+      },
+      {
+        "name": "image-23.png",
+        "marker": "3137",
+        "width": 720,
+        "height": 480,
+        "bytes": 344555,
+        "sha256": "87c752572bdd21d224c4b1fe05bc28933a104add9dd354f826afb318ea4499ea"
+      },
+      {
+        "name": "image-24.png",
+        "marker": "2056",
+        "width": 720,
+        "height": 480,
+        "bytes": 344776,
+        "sha256": "478f0536af62b1ff747cb1f10e049317d8d4c6e3fb790471dc5b6724250fa07f"
+      },
+      {
+        "name": "image-25.png",
+        "marker": "9975",
+        "width": 720,
+        "height": 480,
+        "bytes": 344722,
+        "sha256": "a697beb8c2f12f0fa5aa99172212ab461a7760ec8b4be12d1ff86dbf9ec63a8e"
+      },
+      {
+        "name": "image-26.png",
+        "marker": "8894",
+        "width": 720,
+        "height": 480,
+        "bytes": 344848,
+        "sha256": "990df045c90d0531b72896eaec402b4e20c8a401d498ca9260feff6edf3d3835"
+      },
+      {
+        "name": "image-27.png",
+        "marker": "7813",
+        "width": 720,
+        "height": 480,
+        "bytes": 344662,
+        "sha256": "3faff77ffd29f8ba7b8cbc1438c80b1bea6d909f0cc1c97a948e6e99875cc484"
+      },
+      {
+        "name": "image-28.png",
+        "marker": "6732",
+        "width": 720,
+        "height": 480,
+        "bytes": 344634,
+        "sha256": "357f32a84f66adf2e8e56eea3f859686b632f91031f1ca0b0be49d2cadf22610"
+      },
+      {
+        "name": "image-29.png",
+        "marker": "5651",
+        "width": 720,
+        "height": 480,
+        "bytes": 344386,
+        "sha256": "8ff5696d3f6ddedc732bbef5b33bfb412d12c2cf11723e67b3ae36f84da32e90"
+      },
+      {
+        "name": "image-30.png",
+        "marker": "4570",
+        "width": 720,
+        "height": 480,
+        "bytes": 344922,
+        "sha256": "2d23aebe0e71d2de252ff66bcd735098efd773c5de886463cb76dd058c67ca07"
+      },
+      {
+        "name": "image-31.png",
+        "marker": "3489",
+        "width": 720,
+        "height": 480,
+        "bytes": 344920,
+        "sha256": "fa55b79681912acb052dbe2141aa99f2182d2d89dbe6da161470bdbee62aac16"
+      },
+      {
+        "name": "image-32.png",
+        "marker": "2408",
+        "width": 720,
+        "height": 480,
+        "bytes": 345317,
+        "sha256": "c52e60056a78b87509aa14987404604ace0375e56e6cde56add34f6ee5a39cea"
+      },
+      {
+        "name": "image-33.png",
+        "marker": "1327",
+        "width": 720,
+        "height": 480,
+        "bytes": 344434,
+        "sha256": "b1554b8687a66d515212992911b58aebb799ec22087cff86ee9a966f2e7f8a22"
+      },
+      {
+        "name": "image-34.png",
+        "marker": "9246",
+        "width": 720,
+        "height": 480,
+        "bytes": 344850,
+        "sha256": "a8a149ab2a1e148122a7bd018240a409ae4b31474631623db4def8534e83b743"
+      },
+      {
+        "name": "image-35.png",
+        "marker": "8165",
+        "width": 720,
+        "height": 480,
+        "bytes": 344706,
+        "sha256": "ecd20bf49e11ab6fcab537be4927fc49295873d809c2447e2076df061f2a6694"
+      },
+      {
+        "name": "image-36.png",
+        "marker": "7084",
+        "width": 720,
+        "height": 480,
+        "bytes": 344973,
+        "sha256": "9d9ced0ebe4b00ea53fa5559b717067a3a2e34e614350e7803c3b2aa4a9ce5d0"
+      },
+      {
+        "name": "image-37.png",
+        "marker": "6003",
+        "width": 720,
+        "height": 480,
+        "bytes": 345154,
+        "sha256": "9758ef45bee77d4171daa700db5a3354bd84a001140b866aa795cbfe1c1b31d2"
+      },
+      {
+        "name": "image-38.png",
+        "marker": "4922",
+        "width": 720,
+        "height": 480,
+        "bytes": 344413,
+        "sha256": "67b71db0bf9236b65409ae5e808c688e122150a3cc2f3241e9ee9193672a2390"
+      },
+      {
+        "name": "image-39.png",
+        "marker": "3841",
+        "width": 720,
+        "height": 480,
+        "bytes": 344785,
+        "sha256": "0cc6d00b18b70cd9cb43dfe94a5e74d788de96b52fd8728ce7fe44a7c1672983"
+      },
+      {
+        "name": "image-40.png",
+        "marker": "2760",
+        "width": 720,
+        "height": 480,
+        "bytes": 344989,
+        "sha256": "f4b5e5a7e532fcbe5c300657f825dbddbf4c1c93e8c42260bad12466eb977c8c"
+      },
+      {
+        "name": "image-41.png",
+        "marker": "1679",
+        "width": 720,
+        "height": 480,
+        "bytes": 344704,
+        "sha256": "cc7c22d694be01b955cca3b7a5ba8fd5da1b28cf4f3861ee914c8d6cde40a08b"
+      },
+      {
+        "name": "image-42.png",
+        "marker": "9598",
+        "width": 720,
+        "height": 480,
+        "bytes": 344568,
+        "sha256": "eb5dbabeb699dd58f435c5cd7045ac779a6ac32859ec4c8addc4f421c196e528"
+      },
+      {
+        "name": "image-43.png",
+        "marker": "8517",
+        "width": 720,
+        "height": 480,
+        "bytes": 344667,
+        "sha256": "9e3c85bdad3497ebc73a3e327904d2d6ddc2e78474ea678d1e998afe687a2fe0"
+      },
+      {
+        "name": "image-44.png",
+        "marker": "7436",
+        "width": 720,
+        "height": 480,
+        "bytes": 344736,
+        "sha256": "6a9bcc819810bdcb48a9e4f5c02ce2b5473ef057494005eb9ddf9136c5154bab"
+      },
+      {
+        "name": "image-45.png",
+        "marker": "6355",
+        "width": 720,
+        "height": 480,
+        "bytes": 344193,
+        "sha256": "26f8a97a8e5b51986d6df0460498aae9aba1d45207289b902296400b22a415d6"
+      },
+      {
+        "name": "image-46.png",
+        "marker": "5274",
+        "width": 720,
+        "height": 480,
+        "bytes": 344519,
+        "sha256": "5d38149fcac5ab2cf5fc11f0f4a2333ffaf624d62a4b7fbba0f5823755e1fa8f"
+      },
+      {
+        "name": "image-47.png",
+        "marker": "4193",
+        "width": 720,
+        "height": 480,
+        "bytes": 344558,
+        "sha256": "dc326a456cc4692c37212262805e5b7b6cc755b4d272dc1d18e10899e11cf96e"
+      },
+      {
+        "name": "image-48.png",
+        "marker": "3112",
+        "width": 720,
+        "height": 480,
+        "bytes": 344495,
+        "sha256": "6ec7ef6edf8711ae90045e290d1fdf80f06249f0b26d832dacb5c48921b2d3f2"
+      }
+    ]
+  },
+  "successfulWorkloads": [
+    {
+      "run": "A",
+      "status": "PASS",
+      "started": "2026-09-13T09:55:36.465Z",
+      "ended": "2026-09-13T10:04:01.506Z",
+      "durationSeconds": 505.041,
+      "model": "qwen3.8-max",
+      "sdk": "0.3.245",
+      "fixture": "standard",
+      "firstImageControlledPressure": false,
+      "matchedMarkers": 48,
+      "mismatches": [],
+      "counterExecutions": 1,
+      "originalsUnchanged": true,
+      "nativeSessions": 5,
+      "handoffs": 4,
+      "pendingPresentations": [
+        {
+          "image": "image-12.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-23.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-34.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-45.png",
+          "attempts": 1,
+          "presented": true
+        }
+      ],
+      "nativeReadCallsByImage": {
+        "image-01.png": 1,
+        "image-02.png": 1,
+        "image-03.png": 1,
+        "image-04.png": 1,
+        "image-05.png": 1,
+        "image-06.png": 1,
+        "image-07.png": 1,
+        "image-08.png": 1,
+        "image-09.png": 1,
+        "image-10.png": 1,
+        "image-11.png": 1,
+        "image-12.png": 2,
+        "image-13.png": 1,
+        "image-14.png": 1,
+        "image-15.png": 1,
+        "image-16.png": 1,
+        "image-17.png": 1,
+        "image-18.png": 1,
+        "image-19.png": 1,
+        "image-20.png": 1,
+        "image-21.png": 1,
+        "image-22.png": 1,
+        "image-23.png": 2,
+        "image-24.png": 1,
+        "image-25.png": 1,
+        "image-26.png": 1,
+        "image-27.png": 1,
+        "image-28.png": 1,
+        "image-29.png": 1,
+        "image-30.png": 1,
+        "image-31.png": 1,
+        "image-32.png": 1,
+        "image-33.png": 1,
+        "image-34.png": 2,
+        "image-35.png": 1,
+        "image-36.png": 1,
+        "image-37.png": 1,
+        "image-38.png": 1,
+        "image-39.png": 1,
+        "image-40.png": 1,
+        "image-41.png": 1,
+        "image-42.png": 1,
+        "image-43.png": 1,
+        "image-44.png": 1,
+        "image-45.png": 2,
+        "image-46.png": 1,
+        "image-47.png": 1,
+        "image-48.png": 1
+      },
+      "usage": {
+        "inputTokens": 208371,
+        "outputTokens": 4266,
+        "cacheReadInputTokens": 134459,
+        "cacheCreationInputTokens": 28275,
+        "totalTokens": 375371
+      },
+      "pressureSnapshots": [],
+      "testedSourceSha256": null,
+      "filesChangedAfterRunStarted": null
+    },
+    {
+      "run": "B",
+      "status": "PASS",
+      "started": "2026-09-13T10:10:33.219Z",
+      "ended": "2026-09-13T10:20:46.576Z",
+      "durationSeconds": 613.357,
+      "model": "qwen3.8-max",
+      "sdk": "0.3.245",
+      "fixture": "standard",
+      "firstImageControlledPressure": true,
+      "matchedMarkers": 48,
+      "mismatches": [],
+      "counterExecutions": 1,
+      "originalsUnchanged": true,
+      "nativeSessions": 6,
+      "handoffs": 5,
+      "pendingPresentations": [
+        {
+          "image": "image-01.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-12.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-23.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-34.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-45.png",
+          "attempts": 1,
+          "presented": true
+        }
+      ],
+      "nativeReadCallsByImage": {
+        "image-01.png": 2,
+        "image-02.png": 1,
+        "image-03.png": 1,
+        "image-04.png": 1,
+        "image-05.png": 1,
+        "image-06.png": 1,
+        "image-07.png": 1,
+        "image-08.png": 1,
+        "image-09.png": 1,
+        "image-10.png": 1,
+        "image-11.png": 1,
+        "image-12.png": 2,
+        "image-13.png": 1,
+        "image-14.png": 1,
+        "image-15.png": 1,
+        "image-16.png": 1,
+        "image-17.png": 1,
+        "image-18.png": 1,
+        "image-19.png": 1,
+        "image-20.png": 1,
+        "image-21.png": 1,
+        "image-22.png": 1,
+        "image-23.png": 2,
+        "image-24.png": 1,
+        "image-25.png": 1,
+        "image-26.png": 1,
+        "image-27.png": 1,
+        "image-28.png": 1,
+        "image-29.png": 1,
+        "image-30.png": 1,
+        "image-31.png": 1,
+        "image-32.png": 1,
+        "image-33.png": 1,
+        "image-34.png": 2,
+        "image-35.png": 1,
+        "image-36.png": 1,
+        "image-37.png": 1,
+        "image-38.png": 1,
+        "image-39.png": 1,
+        "image-40.png": 1,
+        "image-41.png": 1,
+        "image-42.png": 1,
+        "image-43.png": 1,
+        "image-44.png": 1,
+        "image-45.png": 2,
+        "image-46.png": 1,
+        "image-47.png": 1,
+        "image-48.png": 1
+      },
+      "usage": {
+        "inputTokens": 268211,
+        "outputTokens": 2776,
+        "cacheReadInputTokens": 65087,
+        "cacheCreationInputTokens": 9758,
+        "totalTokens": 345832
+      },
+      "pressureSnapshots": [
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 2059,
+          "tokenLimit": 200000,
+          "serializedBytes": 5246013,
+          "bodyEstimate": 5251116,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 1,
+          "costWatermark": 9,
+          "completedBatches": 2
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 14898,
+          "tokenLimit": 200000,
+          "serializedBytes": 5097792,
+          "bodyEstimate": 5097792,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 91,
+          "completedBatches": 25
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 10325,
+          "tokenLimit": 200000,
+          "serializedBytes": 5086916,
+          "bodyEstimate": 5086916,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 78,
+          "completedBatches": 24
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 25165,
+          "tokenLimit": 200000,
+          "serializedBytes": 5139809,
+          "bodyEstimate": 5139809,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 108,
+          "completedBatches": 26
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 10634,
+          "tokenLimit": 200000,
+          "serializedBytes": 5087605,
+          "bodyEstimate": 5087605,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 79,
+          "completedBatches": 24
+        }
+      ],
+      "testedSourceSha256": {
+        "context-budget.ts": "f67fd2b54776f345b03b229e5b0615169d8c5880f8a5f9730101018508e9c614",
+        "claude-sdk-session.ts": "e2436bc25aed461fc490b55b4fb24059c6af0d50142ad4c16ca89004f7a3d662",
+        "query-stop-barrier.ts": "19af7ec90e1707a6600ef919b301a8cf26fe11b27c12b65089ff1799aabfbfe7",
+        "image-presentation.ts": "8d270488c690ad59465448c2de52af69ecf136d297d105355a57016461152de7",
+        "context-continuation.ts": "dc8224e0b163f795386160297c7d57499c23b7cc8cef64d8b54772c3fdb83edc",
+        "conversation-router.ts": "364e3aef1661c9925943ad7462bb0130b604f88102c9742a559d15eb7b8aee33",
+        "session-repository.ts": "df814e54b3ace793c9d801046788c72c06f203bf0b71a76efc922f63cc0fb757",
+        "artifact-store.ts": "922d1dbf53903445961c8c3a6def545cef270338609f2f212d154a4ec90afdfe",
+        "types.ts": "60d9466fb20eaec48a589f52b45d537b7a7ce4d8484f41c6ffb9446f31dbe826"
+      },
+      "filesChangedAfterRunStarted": [
+        "claude-sdk-session.ts",
+        "conversation-router.ts"
+      ]
+    },
+    {
+      "run": "C",
+      "status": "PASS",
+      "started": "2026-09-13T10:13:46.520Z",
+      "ended": "2026-09-13T10:23:17.441Z",
+      "durationSeconds": 570.921,
+      "model": "qwen3.8-max",
+      "sdk": "0.3.245",
+      "fixture": "tall-first-four",
+      "firstImageControlledPressure": true,
+      "matchedMarkers": 48,
+      "mismatches": [],
+      "counterExecutions": 1,
+      "originalsUnchanged": true,
+      "nativeSessions": 6,
+      "handoffs": 5,
+      "pendingPresentations": [
+        {
+          "image": "image-01.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-12.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-23.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-34.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-45.png",
+          "attempts": 1,
+          "presented": true
+        }
+      ],
+      "nativeReadCallsByImage": {
+        "image-01.png": 2,
+        "image-02.png": 1,
+        "image-03.png": 1,
+        "image-04.png": 1,
+        "image-05.png": 1,
+        "image-06.png": 1,
+        "image-07.png": 1,
+        "image-08.png": 1,
+        "image-09.png": 1,
+        "image-10.png": 1,
+        "image-11.png": 1,
+        "image-12.png": 2,
+        "image-13.png": 1,
+        "image-14.png": 1,
+        "image-15.png": 1,
+        "image-16.png": 1,
+        "image-17.png": 1,
+        "image-18.png": 1,
+        "image-19.png": 1,
+        "image-20.png": 1,
+        "image-21.png": 1,
+        "image-22.png": 1,
+        "image-23.png": 2,
+        "image-24.png": 1,
+        "image-25.png": 1,
+        "image-26.png": 1,
+        "image-27.png": 1,
+        "image-28.png": 1,
+        "image-29.png": 1,
+        "image-30.png": 1,
+        "image-31.png": 1,
+        "image-32.png": 1,
+        "image-33.png": 1,
+        "image-34.png": 2,
+        "image-35.png": 1,
+        "image-36.png": 1,
+        "image-37.png": 1,
+        "image-38.png": 1,
+        "image-39.png": 1,
+        "image-40.png": 1,
+        "image-41.png": 1,
+        "image-42.png": 1,
+        "image-43.png": 1,
+        "image-44.png": 1,
+        "image-45.png": 2,
+        "image-46.png": 1,
+        "image-47.png": 1,
+        "image-48.png": 1
+      },
+      "usage": {
+        "inputTokens": 235516,
+        "outputTokens": 3098,
+        "cacheReadInputTokens": 76206,
+        "cacheCreationInputTokens": 15990,
+        "totalTokens": 330810
+      },
+      "pressureSnapshots": [
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 2362,
+          "tokenLimit": 200000,
+          "serializedBytes": 5246561,
+          "bodyEstimate": 5252328,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 1,
+          "costWatermark": 8,
+          "completedBatches": 2
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 18701,
+          "tokenLimit": 200000,
+          "serializedBytes": 5127372,
+          "bodyEstimate": 5127372,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 78,
+          "completedBatches": 14
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 15469,
+          "tokenLimit": 200000,
+          "serializedBytes": 5104435,
+          "bodyEstimate": 5104435,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 92,
+          "completedBatches": 26
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 13261,
+          "tokenLimit": 200000,
+          "serializedBytes": 5094839,
+          "bodyEstimate": 5094839,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 86,
+          "completedBatches": 24
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 13238,
+          "tokenLimit": 200000,
+          "serializedBytes": 5094570,
+          "bodyEstimate": 5094570,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 89,
+          "completedBatches": 24
+        }
+      ],
+      "testedSourceSha256": {
+        "context-budget.ts": "f67fd2b54776f345b03b229e5b0615169d8c5880f8a5f9730101018508e9c614",
+        "claude-sdk-session.ts": "e2436bc25aed461fc490b55b4fb24059c6af0d50142ad4c16ca89004f7a3d662",
+        "query-stop-barrier.ts": "19af7ec90e1707a6600ef919b301a8cf26fe11b27c12b65089ff1799aabfbfe7",
+        "image-presentation.ts": "8d270488c690ad59465448c2de52af69ecf136d297d105355a57016461152de7",
+        "context-continuation.ts": "dc8224e0b163f795386160297c7d57499c23b7cc8cef64d8b54772c3fdb83edc",
+        "conversation-router.ts": "364e3aef1661c9925943ad7462bb0130b604f88102c9742a559d15eb7b8aee33",
+        "session-repository.ts": "df814e54b3ace793c9d801046788c72c06f203bf0b71a76efc922f63cc0fb757",
+        "artifact-store.ts": "922d1dbf53903445961c8c3a6def545cef270338609f2f212d154a4ec90afdfe",
+        "types.ts": "60d9466fb20eaec48a589f52b45d537b7a7ce4d8484f41c6ffb9446f31dbe826"
+      },
+      "filesChangedAfterRunStarted": [
+        "claude-sdk-session.ts",
+        "conversation-router.ts"
+      ]
+    },
+    {
+      "run": "D",
+      "status": "PASS",
+      "started": "2026-09-13T10:21:25.857Z",
+      "ended": "2026-09-13T10:30:46.728Z",
+      "durationSeconds": 560.871,
+      "model": "qwen3.8-max",
+      "sdk": "0.3.245",
+      "fixture": "tall-first-four",
+      "firstImageControlledPressure": true,
+      "matchedMarkers": 48,
+      "mismatches": [],
+      "counterExecutions": 1,
+      "originalsUnchanged": true,
+      "nativeSessions": 6,
+      "handoffs": 5,
+      "pendingPresentations": [
+        {
+          "image": "image-01.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-12.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-23.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-34.png",
+          "attempts": 1,
+          "presented": true
+        },
+        {
+          "image": "image-45.png",
+          "attempts": 1,
+          "presented": true
+        }
+      ],
+      "nativeReadCallsByImage": {
+        "image-01.png": 2,
+        "image-02.png": 1,
+        "image-03.png": 1,
+        "image-04.png": 1,
+        "image-05.png": 1,
+        "image-06.png": 1,
+        "image-07.png": 1,
+        "image-08.png": 1,
+        "image-09.png": 1,
+        "image-10.png": 1,
+        "image-11.png": 1,
+        "image-12.png": 2,
+        "image-13.png": 1,
+        "image-14.png": 1,
+        "image-15.png": 1,
+        "image-16.png": 1,
+        "image-17.png": 1,
+        "image-18.png": 1,
+        "image-19.png": 1,
+        "image-20.png": 1,
+        "image-21.png": 1,
+        "image-22.png": 1,
+        "image-23.png": 2,
+        "image-24.png": 1,
+        "image-25.png": 1,
+        "image-26.png": 1,
+        "image-27.png": 1,
+        "image-28.png": 1,
+        "image-29.png": 1,
+        "image-30.png": 1,
+        "image-31.png": 1,
+        "image-32.png": 1,
+        "image-33.png": 1,
+        "image-34.png": 2,
+        "image-35.png": 1,
+        "image-36.png": 1,
+        "image-37.png": 1,
+        "image-38.png": 1,
+        "image-39.png": 1,
+        "image-40.png": 1,
+        "image-41.png": 1,
+        "image-42.png": 1,
+        "image-43.png": 1,
+        "image-44.png": 1,
+        "image-45.png": 2,
+        "image-46.png": 1,
+        "image-47.png": 1,
+        "image-48.png": 1
+      },
+      "usage": {
+        "inputTokens": 219417,
+        "outputTokens": 3753,
+        "cacheReadInputTokens": 56109,
+        "cacheCreationInputTokens": 12470,
+        "totalTokens": 291749
+      },
+      "pressureSnapshots": [
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 2485,
+          "tokenLimit": 200000,
+          "serializedBytes": 5247645,
+          "bodyEstimate": 5252820,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 1,
+          "costWatermark": 12,
+          "completedBatches": 3
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 17089,
+          "tokenLimit": 200000,
+          "serializedBytes": 5121000,
+          "bodyEstimate": 5121000,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 74,
+          "completedBatches": 12
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 13406,
+          "tokenLimit": 200000,
+          "serializedBytes": 5098917,
+          "bodyEstimate": 5098917,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 84,
+          "completedBatches": 26
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 12404,
+          "tokenLimit": 200000,
+          "serializedBytes": 5092849,
+          "bodyEstimate": 5092849,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 77,
+          "completedBatches": 13
+        },
+        {
+          "reason": "image-presentation",
+          "tokenEstimate": 15764,
+          "tokenLimit": 200000,
+          "serializedBytes": 5108822,
+          "bodyEstimate": 5108822,
+          "bodyBudget": 5242880,
+          "unknownTokenCosts": 0,
+          "costWatermark": 101,
+          "completedBatches": 27
+        }
+      ],
+      "testedSourceSha256": {
+        "context-budget.ts": "f67fd2b54776f345b03b229e5b0615169d8c5880f8a5f9730101018508e9c614",
+        "claude-sdk-session.ts": "e2436bc25aed461fc490b55b4fb24059c6af0d50142ad4c16ca89004f7a3d662",
+        "query-stop-barrier.ts": "19af7ec90e1707a6600ef919b301a8cf26fe11b27c12b65089ff1799aabfbfe7",
+        "image-presentation.ts": "8d270488c690ad59465448c2de52af69ecf136d297d105355a57016461152de7",
+        "context-continuation.ts": "dc8224e0b163f795386160297c7d57499c23b7cc8cef64d8b54772c3fdb83edc",
+        "conversation-router.ts": "672ad6f2d9c68d6ada8f2d7fa31dec819175cafd27f6d11840f3138021080ebe",
+        "session-repository.ts": "df814e54b3ace793c9d801046788c72c06f203bf0b71a76efc922f63cc0fb757",
+        "artifact-store.ts": "922d1dbf53903445961c8c3a6def545cef270338609f2f212d154a4ec90afdfe",
+        "types.ts": "60d9466fb20eaec48a589f52b45d537b7a7ce4d8484f41c6ffb9446f31dbe826"
+      },
+      "filesChangedAfterRunStarted": [
+        "claude-sdk-session.ts"
+      ]
+    }
+  ],
+  "failureBoundaryTrials": [
+    {
+      "run": "E",
+      "status": "FAIL",
+      "scenario": "single-image-still-full",
+      "cause": "Test pressure mistakenly applied to a checkpoint text Read before the image. Fixed fixture to inject only on native image results; assertions were not relaxed.",
+      "actualError": "工具结果已保存，但当前上下文无法容纳完整引用，已停止执行。",
+      "rerun": "F"
+    },
+    {
+      "run": "F",
+      "status": "PASS",
+      "scenario": "single-image-still-full",
+      "started": "2026-09-13T10:29:12.938Z",
+      "ended": "2026-09-13T10:29:48.078Z",
+      "nativeSessions": 2,
+      "counterExecutions": 1,
+      "originalBytes": 350285,
+      "width": 970,
+      "height": 1866,
+      "actualError": "图片在干净会话中仍无法容纳：body=467223，可用=0 字节；视觉 token 未知。已保留原件引用。",
+      "outcome": {
+        "status": "failed",
+        "reason": "runtime_error",
+        "message": "图片在干净会话中仍无法容纳：body=467223，可用=0 字节；视觉 token 未知。已保留原件引用。",
+        "recoverable": true,
+        "diagnostics": [
+          {
+            "source": "claude-sdk",
+            "kind": "error",
+            "message": "图片在干净会话中仍无法容纳：body=467223，可用=0 字节；视觉 token 未知。已保留原件引用。",
+            "recoverable": true
+          }
+        ]
+      },
+      "testedSdkSessionSourceSha256": "ac9d03dd0d43a86161c6818ea10812c6f19d1a2ed02b07850baf26e93a136536"
+    }
+  ],
+  "limitations": [
+    "Loopback fixed token values prove protocol only.",
+    "Runtime harness is not a launched Electron UI or a full-history/performance acceptance.",
+    "Image reception is not general visual-understanding or complete business-task verification."
+  ],
+  "postDDeltaVerification": {
+    "exactReconstructedSourceMatchesD": true,
+    "change": "Keep queued output-integrity terminal errors observable after close; successful paths unchanged.",
+    "validatedBy": [
+      "111 ClaudeSDKSession tests",
+      "native Runtime still-full test",
+      "real Bailian failure scenario F"
+    ],
+    "finalFailureScenarioSourceMatches": true
+  }
+}

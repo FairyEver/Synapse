@@ -223,6 +223,24 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   sdkSessionId?: string
   /** Host-owned SDK task namespace; survives execution session rotation. */
   taskListId?: string
+  /** Private execution checkpoint. Never grants access to a referenced original. */
+  contextHandoff?: {
+    version: 1
+    turnId: string
+    generation: number
+    phase: "prepared" | "old-stopped" | "submitted" | "failed"
+    checkpointPath: string
+    checkpointArtifacts?: string[]
+    previousSdkSessionId?: string
+    pendingImages: {
+      toolUseId: string
+      path: string
+      sha256: string
+      size: number
+      attempts: number
+      presented?: boolean
+    }[]
+  }
   usage?: ConversationUsageV1
   costUsd?: number
   costCny?: number
@@ -270,6 +288,7 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).sessionKey === "string"
     && isOptionalString((v as ConversationEntryV1).providerId)
     && isOptionalString((v as ConversationEntryV1).sdkSessionId)
+    && isConversationContextHandoff((v as ConversationEntryV1).contextHandoff)
     && ((v as ConversationEntryV1).taskListId === undefined
       || (typeof (v as ConversationEntryV1).taskListId === "string"
         && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test((v as ConversationEntryV1).taskListId!)))
@@ -292,6 +311,23 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && ((v as ConversationEntryV1).titleSource === undefined || isConversationTitleSource((v as ConversationEntryV1).titleSource))
     && typeof (v as ConversationEntryV1).createdAt === "string"
     && typeof (v as ConversationEntryV1).updatedAt === "string",
+}
+
+function isConversationContextHandoff(value: ConversationEntryV1["contextHandoff"]): boolean {
+  return value === undefined || (isAnyRecord(value) && value.version === 1
+    && typeof value.turnId === "string" && value.turnId.length > 0
+    && Number.isSafeInteger(value.generation) && value.generation >= 1
+    && ["prepared", "old-stopped", "submitted", "failed"].includes(value.phase)
+    && typeof value.checkpointPath === "string" && value.checkpointPath.length > 0
+    && (value.checkpointArtifacts === undefined || (Array.isArray(value.checkpointArtifacts) && value.checkpointArtifacts.every((id) => typeof id === "string" && id.length > 0)))
+    && isOptionalString(value.previousSdkSessionId)
+    && Array.isArray(value.pendingImages)
+    && value.pendingImages.every((item) => isAnyRecord(item)
+      && typeof item.toolUseId === "string" && typeof item.path === "string"
+      && typeof item.sha256 === "string" && /^[a-f0-9]{64}$/.test(item.sha256)
+      && Number.isSafeInteger(item.size) && item.size >= 0
+      && (item.presented === undefined || typeof item.presented === "boolean")
+      && Number.isSafeInteger(item.attempts) && item.attempts >= 0 && item.attempts <= 1))
 }
 
 export interface AgentEventEntryV1 extends Record<string, unknown> {

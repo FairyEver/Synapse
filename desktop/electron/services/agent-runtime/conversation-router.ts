@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { verifyImagePresentation } from "./image-presentation"
 
 import type {
   AgentEventEntryV1,
@@ -215,6 +216,7 @@ export class ConversationRouter {
     Extract<AgentCommandRouterResult, { kind: "nativeSlash" }>
   >()
   private readonly savedSdkSessions = new Map<string, string>()
+  private readonly unconfirmedStops = new Set<string>()
   private readonly streamDiagnostics = new Map<string, StreamDiagnosticCapture>()
   private readonly rendererStreamBatches = new Map<string, PendingRendererStreamBatch>()
   private readonly rendererInFlightBatches = new Map<string, string>()
@@ -833,6 +835,34 @@ export class ConversationRouter {
         await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(conversationId, turnId)
         throw new Error(`Conversation "${conversationId}" was deleted while queued`)
       }
+      const savedHandoff = conversation.contextHandoff
+      const restoreImages = savedHandoff?.pendingImages.filter((image) => !image.presented) ?? []
+      const isExplicitImageContinue = restoreImages.length > 0
+        && (message.contextRecoveryTurnId === savedHandoff?.turnId || /^(继续|继续上一个任务|continue)$/i.test(message.content.trim()))
+      let imageRecoveryContent: string | undefined
+      if (isExplicitImageContinue && savedHandoff) {
+        if (this.unconfirmedStops.has(conversation.id)) throw new Error("旧代停止尚未确认，请重启后再继续；交接记录已保留。")
+        const store = this.deps.agentArtifactStore
+        if (!store || !savedHandoff.checkpointArtifacts?.length) throw new Error("图片交接检查点不完整，已保留待恢复状态。")
+        if (state.liveSession) await state.liveSession.close()
+        await store.verifyContextCheckpoint(this.deps.projectId, conversation.id, savedHandoff.checkpointArtifacts)
+        for (const image of restoreImages) await verifyImagePresentation(image)
+        if (restoreImages.some((image) => image.attempts >= 1)) throw new Error("图片已尝试一次干净会话重呈现，请先核实已保存结果；不会自动重复。")
+        await this.sessionManager.closeCurrentTurn(conversation.id)
+        this.forgetSavedSdkSession(conversation.id)
+        conversation = await this.repository.clearCurrentAgentSessionId(conversation.id, conversation.agentType)
+        imageRecoveryContent = [
+          "Continue the same authorized task from its saved checkpoint. Read this index and recover all user requirements and executed results. Never repeat completed commands, screenshots, uploads or messages.",
+          `Checkpoint index: ${JSON.stringify(savedHandoff.checkpointPath)}`,
+          "Then use native Read to present these unchanged originals before proceeding:",
+          JSON.stringify(restoreImages.map((image) => ({ file_path: image.path, originalToolUseId: image.toolUseId }))),
+        ].join("\n")
+        const restored = restoreImages.map((image) => ({ ...image, attempts: 1 }))
+        await this.repository.saveContextHandoff(conversation.id, { ...savedHandoff, generation: savedHandoff.generation + 1,
+          turnId, phase: "submitted", pendingImages: [...savedHandoff.pendingImages.filter((image) => image.presented), ...restored],
+        }, savedHandoff.generation)
+        liveMessage = { ...liveMessage, pendingImagePresentations: restored }
+      }
       const recovery = conversation.contextRecovery
       const isRecoveryContinuation = recovery?.status === "prepared"
         && recovery.failedTurnId === message.contextRecoveryTurnId
@@ -870,8 +900,8 @@ export class ConversationRouter {
           message,
           abortSignal,
         })
-        const preparedMessageBase = recoveryHandoff
-          ? { ...liveMessage, content: recoveryHandoff }
+        const preparedMessageBase = imageRecoveryContent || recoveryHandoff
+          ? { ...liveMessage, content: imageRecoveryContent ?? recoveryHandoff! }
           : liveMessage
         const preparedMessage = await Promise.resolve(this.deps.prepareMessage?.(preparedMessageBase, {
           isNewLiveSession: sessionHandle.created,
@@ -1074,6 +1104,18 @@ export class ConversationRouter {
     }
   }
 
+  private async requireImagePresentationBeforeSuccess(conversationId: string, turnId: string, event: AgentEvent): Promise<AgentEvent> {
+    if (event.type !== "result") return event
+    const handoff = (await this.repository.get(conversationId))?.contextHandoff
+    if (!handoff || handoff.turnId !== turnId || handoff.pendingImages.every((image) => image.presented)) return event
+    await this.repository.saveContextHandoff(conversationId, { ...handoff, phase: "failed" }, handoff.generation)
+    return { type: "error", errorKind: "execution_failed", recoverable: true,
+      message: "待呈现图片尚未获得模型接收确认，任务未完成。已保留原件引用与检查点。",
+      conversationId, sdkSessionId: event.sdkSessionId, providerId: event.providerId, timestamp: this.isoNow(),
+      usage: event.usage,
+    }
+  }
+
   private async rotateContextSession(
     state: RuntimeSessionState,
     message: AgentMessage,
@@ -1094,11 +1136,30 @@ export class ConversationRouter {
     const conversation = await this.repository.get(conversationId)
     checkAdmission()
     if (!rotation || !store || !conversation) throw new Error("上下文交接资料不可用。")
+    const previous = conversation.contextHandoff
+    const generation = (previous?.generation ?? 0) + 1
+    const pendingImages = [...rotation.pendingImages ?? []]
+    const previousImages = previous?.turnId === turnId ? previous.pendingImages : []
+    let handoff: NonNullable<ConversationEntryV1["contextHandoff"]> | undefined
     try {
+      for (const image of pendingImages) {
+        if (previousImages.some((old) => old.path === image.path && old.sha256 === image.sha256 && old.attempts >= 1)) {
+          throw new Error("同一图片已进行一次干净会话重呈现，仍无法容纳。")
+        }
+        await verifyImagePresentation(image)
+      }
       const content = await persistContextContinuation({
         store, projectId: this.deps.projectId, conversation, turnId,
         workspacePath: message.workspacePath ?? this.deps.workDir,
         runtimeMessage: message.content, rotation, abortSignal,
+        onCheckpoint: async (checkpointPath, checkpointArtifacts) => {
+          checkAdmission()
+          handoff = { version: 1, turnId, generation, phase: "prepared", checkpointPath, checkpointArtifacts,
+            previousSdkSessionId: liveSession.currentSessionId(),
+            pendingImages: [...previousImages, ...pendingImages],
+          }
+          await this.repository.saveContextHandoff(conversationId, handoff, previous?.generation ?? 0)
+        },
       })
       checkAdmission()
       // Persist before closing; the old SDK is paused at a request boundary.
@@ -1107,6 +1168,15 @@ export class ConversationRouter {
         conversationId, events: [], resultText: "",
       }, conversationId, turnId, liveSession, nextSequence)
       checkAdmission()
+      // SessionManager cleanup deliberately absorbs close errors; the handoff
+      // must obtain an explicit stop acknowledgement before it can use that path.
+      if (pendingImages.length && handoff) await store.verifyContextCheckpoint(this.deps.projectId, conversationId, handoff.checkpointArtifacts ?? [])
+      try { await liveSession.close() }
+      catch (error) { this.unconfirmedStops.add(conversationId); throw error }
+      checkAdmission()
+      if (!handoff) throw new Error("上下文检查点不完整。")
+      handoff = { ...handoff, phase: "old-stopped" }
+      await this.repository.saveContextHandoff(conversationId, handoff, generation)
       await this.sessionManager.closeCurrentTurn(conversationId)
       checkAdmission()
       this.forgetSavedSdkSession(conversationId)
@@ -1122,7 +1192,14 @@ export class ConversationRouter {
         throw new Error(AGENT_CANCELLED_MESSAGE)
       }
       if (message.platform === "local-renderer") handle.liveSession.beginFileCheckpoint?.(turnId)
-      if (!await handle.liveSession.send({ ...message, content, runtimeTurnId: turnId, attachments: undefined })) {
+      for (const image of pendingImages) await verifyImagePresentation(image)
+      checkAdmission()
+      const attemptedImages = pendingImages.map((image) => ({ ...image, attempts: 1 }))
+      handoff = { ...handoff, phase: "submitted", pendingImages: [...previousImages, ...attemptedImages] }
+      await this.repository.saveContextHandoff(conversationId, handoff, generation)
+      checkAdmission()
+      if (!await handle.liveSession.send({ ...message, content, runtimeTurnId: turnId, attachments: undefined,
+        pendingImagePresentations: attemptedImages })) {
         throw new Error(AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE)
       }
       this.deps.logger?.info("Agent continued after automatic context rotation.", {
@@ -1131,9 +1208,16 @@ export class ConversationRouter {
       })
       return handle.liveSession
     } catch (error) {
+      if (handoff) {
+        try { await this.repository.saveContextHandoff(conversationId, { ...handoff, phase: "failed" }, generation) }
+        catch (saveError) { this.deps.logger?.warn("Failed to persist context handoff failure; previous checkpoint retained.", {
+          boundary: "agent-runtime.context-rotation.persist-failure", conversationId, generation,
+          error: saveError instanceof Error ? saveError.name : "unknown",
+        }) }
+      }
       await this.sessionManager.closeCurrentTurn(conversationId)
       if (state.cancelState || abortSignal?.aborted) throw new Error(AGENT_CANCELLED_MESSAGE, { cause: error })
-      throw new Error("无法保存或恢复上下文，请重试。", { cause: error })
+      throw new Error(`上下文交接失败：${error instanceof Error ? error.message : "状态不可用"}`, { cause: error })
     }
   }
 
@@ -1220,7 +1304,7 @@ export class ConversationRouter {
       await this.saveEventHistory(conversation.id, event)
     }
     while (!error && liveSession.alive()) {
-      const event = await nextLiveEventWithTimeout(liveSession, liveEventTimeoutMs)
+      let event = await nextLiveEventWithTimeout(liveSession, liveEventTimeoutMs)
       if (!event) {
         state.steerAdmissionsOpen = false
         error = liveSession.alive() ? AGENT_SESSION_TIMED_OUT_MESSAGE : AGENT_SESSION_ENDED_MESSAGE
@@ -1229,7 +1313,13 @@ export class ConversationRouter {
         }
         break
       }
-      if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
+      event = await this.requireImagePresentationBeforeSuccess(conversation.id, turnId, event)
+      if (event.type === "sdkEvent" && event.sdkType === "imagePresentationCompleted") {
+          const toolUseId = event.payload?.originalToolUseId
+          if (typeof toolUseId === "string") await this.repository.acknowledgeImagePresentation(conversation.id, turnId, liveSession.currentSessionId(), toolUseId)
+          continue
+        }
+        if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
         state.steerAdmissionsOpen = false
         const rotation = liveSession.contextRotation()!
         contextRotations.push({ usage: rotation.usage })
@@ -1696,7 +1786,7 @@ export class ConversationRouter {
         error = AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE
       }
       while (!error && liveSession.alive() && !abortSignal.aborted) {
-        const event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
+        let event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
         if (!event) {
           const errorEvent: AgentEvent = {
             type: "error",
@@ -1722,6 +1812,12 @@ export class ConversationRouter {
             error: errorEvent.message,
             timedOut: true,
           }
+        }
+        event = await this.requireImagePresentationBeforeSuccess(conversation.id, turnId, event)
+        if (event.type === "sdkEvent" && event.sdkType === "imagePresentationCompleted") {
+          const toolUseId = event.payload?.originalToolUseId
+          if (typeof toolUseId === "string") await this.repository.acknowledgeImagePresentation(conversation.id, turnId, liveSession.currentSessionId(), toolUseId)
+          continue
         }
         if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
           const rotation = liveSession.contextRotation()!
