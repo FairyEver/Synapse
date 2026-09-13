@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, useEffect } from "react"
+import { act, useEffect, useLayoutEffect } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -60,6 +60,100 @@ afterEach(() => {
 })
 
 describe("useStickToBottom", () => {
+  it("settles streamed content at the bottom before the updated layout can paint", async () => {
+    const { rerender } = await renderStickHarness({
+      signal: "thinking:4",
+      latestEntryId: "thinking-1",
+      viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const positionsBeforePaint: number[] = []
+
+    await act(async () => {
+      rerender({
+        signal: "thinking:20",
+        latestEntryId: "thinking-1",
+        viewportMetrics: { scrollTop: 1400, scrollHeight: 2200, clientHeight: 600 },
+        onLayout: () => {
+          const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")
+          positionsBeforePaint.push(viewport!.scrollTop)
+        },
+      })
+    })
+
+    expect(positionsBeforePaint).toEqual([1600])
+  })
+
+  it("follows content resizing without a new timeline event before the observer returns", async () => {
+    const { scrollTo } = await renderStickHarness({
+      signal: "message:assistant:4",
+      latestEntryId: "assistant-1",
+      viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")!
+    const content = viewport.firstElementChild!
+    scrollTo.mockClear()
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2360, clientHeight: 600 })
+
+    act(() => {
+      for (const observer of resizeObservers) {
+        if (observer.observed.has(content)) {
+          observer.callback([], observer as unknown as ResizeObserver)
+        }
+      }
+      expect(viewport.scrollTop).toBe(1760)
+    })
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 2360, behavior: "auto" })
+  })
+
+  it("keeps following when a process group collapses and the browser clamps the scroll position", async () => {
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "toolProgress:Bash:preparing:748",
+      latestEntryId: "tool-1",
+      viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")!
+
+    setScrollMetrics(viewport, { scrollTop: 1200, scrollHeight: 1800, clientHeight: 600 })
+    await triggerResize(viewport.firstElementChild)
+    expect(viewport.scrollTop).toBe(1200)
+    await act(async () => {
+      viewport.dispatchEvent(new Event("scroll"))
+    })
+    expect(controls.current?.isPinned).toBe(true)
+    scrollTo.mockClear()
+
+    await act(async () => {
+      rerender({
+        signal: "thinking:40",
+        latestEntryId: "thinking-2",
+        viewportMetrics: { scrollTop: 1200, scrollHeight: 2040, clientHeight: 600 },
+      })
+    })
+    expect(viewport.scrollTop).toBe(1440)
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 2040, behavior: "auto" })
+  })
+
+  it("leaves the reading position unchanged when content resizes after user scrolling", async () => {
+    const { controls, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:4",
+      latestEntryId: "assistant-1",
+      viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")!
+    await act(async () => {
+      viewport.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }))
+    })
+    setScrollMetrics(viewport, { scrollTop: 1000, scrollHeight: 2360, clientHeight: 600 })
+    scrollTo.mockClear()
+
+    await triggerResize(viewport.firstElementChild)
+
+    expect(viewport.scrollTop).toBe(1000)
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(controls.current?.isPinned).toBe(false)
+  })
+
   it("instantly follows streamed content while pinned", async () => {
     const { rerender, scrollTo } = await renderStickHarness({
       signal: "message:assistant:4",
@@ -736,6 +830,7 @@ type TestResizeObserver = {
 function StickHarness({
   latestEntryId,
   onStick,
+  onLayout,
   renderViewport = true,
   signal,
   viewportMetrics,
@@ -746,6 +841,7 @@ function StickHarness({
 }: {
   readonly latestEntryId: string | undefined
   readonly onStick: (stick: UseStickToBottomReturn) => void
+  readonly onLayout?: () => void
   readonly renderViewport?: boolean
   readonly signal: string
   readonly viewportMetrics?: ScrollMetrics
@@ -765,6 +861,9 @@ function StickHarness({
   useEffect(() => {
     onStick(stick)
   }, [onStick, stick])
+  useLayoutEffect(() => {
+    onLayout?.()
+  }, [onLayout, signal])
   return renderViewport ? (
     <div
       ref={(node) => {
@@ -776,12 +875,15 @@ function StickHarness({
         }
       }}
       data-testid="viewport"
-    />
+    >
+      <div data-testid="content" />
+    </div>
   ) : null
 }
 
 async function renderStickHarness(initialProps: {
   readonly latestEntryId: string | undefined
+  readonly onLayout?: () => void
   readonly renderViewport?: boolean
   readonly signal: string
   readonly viewportMetrics?: ScrollMetrics
@@ -798,7 +900,7 @@ async function renderStickHarness(initialProps: {
   const controls: { current: UseStickToBottomReturn | null } = { current: null }
   const scrollTo = vi.fn(function scrollTo(this: HTMLElement, options?: ScrollToOptions) {
     if (typeof options?.top === "number") {
-      this.scrollTop = options.top
+      this.scrollTop = Math.max(0, Math.min(options.top, this.scrollHeight - this.clientHeight))
     }
   })
   Object.defineProperty(HTMLElement.prototype, "scrollTo", {
@@ -811,6 +913,7 @@ async function renderStickHarness(initialProps: {
       <StickHarness
         signal={props.signal}
         latestEntryId={props.latestEntryId}
+        onLayout={props.onLayout}
         renderViewport={props.renderViewport}
         viewportMetrics={props.viewportMetrics}
         hasOlderEntries={props.hasOlderEntries}

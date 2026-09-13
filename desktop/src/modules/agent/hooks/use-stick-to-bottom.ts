@@ -1,5 +1,5 @@
 import type { Ref } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { SynapseAgentTimelineItem } from "@/types/agent"
 
 export const PINNED_THRESHOLD_PX = 80
@@ -156,19 +156,18 @@ export function useStickToBottom(input: {
     // Mark the next smooth-scroll window as programmatic so the listener
     // does not flip isPinned off mid-animation.
     programmaticScrollUntilRef.current = Date.now() + PROGRAMMATIC_SCROLL_GUARD_MS
-    lastScrollTopRef.current = viewport.scrollTop
     viewport.scrollTo({
       top: viewport.scrollHeight,
       behavior: options?.behavior ?? "auto",
     })
+    // Content can shrink when tool/status rows are replaced. Record the applied
+    // position so that our own upward correction is not mistaken for user input.
+    lastScrollTopRef.current = viewport.scrollTop
   }, [])
 
-  const scheduleFollowScroll = useCallback(() => {
-    const handle = window.requestAnimationFrame(() => {
-      if (!autoFollowRef.current) return
-      performScrollToBottom({ behavior: "auto" })
-    })
-    return () => window.cancelAnimationFrame(handle)
+  const followContent = useCallback(() => {
+    if (!autoFollowRef.current || suppressNextContentChangeRef.current) return
+    performScrollToBottom({ behavior: "auto" })
   }, [performScrollToBottom])
 
   const scrollToBottom = useCallback((options?: ScrollOptions) => {
@@ -366,35 +365,33 @@ export function useStickToBottom(input: {
     ...contentSignal,
   ])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const viewport = viewportNode
     if (!viewport) return undefined
 
-    const cancelFollowScroll = autoFollowRef.current
-      ? scheduleFollowScroll()
-      : undefined
+    followContent()
 
     if (typeof ResizeObserver === "undefined") {
-      return cancelFollowScroll
+      return undefined
     }
 
-    let cancelResizeScroll: (() => void) | undefined
+    // Both callbacks run before paint. Deferring to another animation frame
+    // would expose the new content height with the old scroll position.
     const observer = new ResizeObserver(() => {
-      if (!autoFollowRef.current || viewport.clientHeight <= 0) return
-      cancelResizeScroll?.()
-      cancelResizeScroll = scheduleFollowScroll()
+      if (viewport.clientHeight > 0) followContent()
     })
     observer.observe(viewport)
+    // Radix ScrollArea keeps an intrinsic content wrapper inside its viewport.
+    // Images, wrapping and collapsed groups can resize it without a new event.
+    if (viewport.firstElementChild) observer.observe(viewport.firstElementChild)
 
     return () => {
-      cancelFollowScroll?.()
-      cancelResizeScroll?.()
       observer.disconnect()
     }
-  }, [scheduleFollowScroll, viewportNode])
+  }, [followContent, viewportNode])
 
   // React to content changes: auto-scroll if pinned, mark unread if latest content changed off-screen.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousId = previousLatestIdRef.current
     previousLatestIdRef.current = latestEntryId
     const newEntryArrived = isLatestEntryNew({ previousId, latestId: latestEntryId })
@@ -402,7 +399,8 @@ export function useStickToBottom(input: {
     if (suppressNextContentChangeRef.current) return undefined
 
     if (autoFollowRef.current) {
-      return scheduleFollowScroll()
+      followContent()
+      return undefined
     }
 
     if (newEntryArrived || latestEntryId) {
