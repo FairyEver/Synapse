@@ -154,7 +154,8 @@ interface SdkStreamExport {
     }
   }
   readonly capture: {
-    readonly observedEventCount: number
+    readonly sourceStatus: "captured" | "not-recorded" | "read-failed"
+    readonly observedEventCount: number | null
     readonly capturedEventCount: number
     readonly exportedEventCount: number
     /** @deprecated Export-budget drops only. Use exportDroppedEventCount. */
@@ -218,7 +219,8 @@ class AgentConversationExportService {
         } as Partial<AgentEventEntryV1>),
         skipped,
       )
-      const sdkStreamEvents = buildSdkStreamExport(persistedAgentEvents, conversation)
+      const sdkStreamEvents = buildSdkStreamExport(persistedAgentEvents, conversation,
+        skipped.some((entry) => entry.path === "agent-events.json"))
       const agentEvents = persistedAgentEvents
         .filter((entry) => !isStreamDiagnosticEntry(entry))
         .map(sanitizeAgentEventForExport)
@@ -538,6 +540,7 @@ class AgentConversationExportService {
 function buildSdkStreamExport(
   rows: readonly AgentEventEntryV1[],
   conversation: ConversationEntryV1,
+  readFailed: boolean,
 ): SdkStreamExport {
   const candidates: SdkStreamExportEvent[] = []
   let observedEventCount = 0
@@ -608,7 +611,10 @@ function buildSdkStreamExport(
       },
     },
     capture: {
-      observedEventCount,
+      sourceStatus: readFailed ? "read-failed"
+        : diagnosticTurnIds.size + streamTurnIds.size > 0 ? "captured" : "not-recorded",
+      observedEventCount: readFailed || diagnosticTurnIds.size + streamTurnIds.size === 0
+        ? null : observedEventCount,
       capturedEventCount: candidates.length,
       exportedEventCount: selected.length,
       droppedEventCount,

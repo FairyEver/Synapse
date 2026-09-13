@@ -1024,6 +1024,30 @@ describe("ConversationRouter", () => {
     }))
   })
 
+  it("keeps incomplete output recoverable in events and persistent history after the turn becomes idle", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { eventBus, events } = createEventBusRecorder()
+    const message = "图片或非文本结果超过当前上下文预算，尚未完成处理。"
+    const { conversations, router } = createRouter({ agentEvents, eventBus,
+      session: new ScriptedSession([{ type: "error", message, errorKind: "execution_failed",
+        recoverable: true, sdkSessionId: "sdk-1" }], "sdk-1"),
+    })
+    const result = await router.send(baseMessage("完整检查所有图片"))
+    expect(result.resultText).toBe("")
+    expect(result.error).toBe(message)
+    expect(result.events).toContainEqual(expect.objectContaining({ type: "error", recoverable: true,
+      turnOutcome: expect.objectContaining({ status: "failed", recoverable: true }) }))
+    const saved = await conversations.get(result.conversationId)
+    expect(saved?.history).toContainEqual(expect.objectContaining({ role: "system", content: message,
+      metadata: expect.objectContaining({ recoverable: true,
+        turnOutcome: expect.objectContaining({ status: "failed", recoverable: true }) }) }))
+    expect((await agentEvents.list()).filter((entry) => entry.eventType === "error")).toEqual([
+      expect.objectContaining({ payload: expect.objectContaining({ message, recoverable: true }) }),
+    ])
+    expect(events).toContainEqual(expect.objectContaining({ type: "phase.update",
+      payload: expect.objectContaining({ status: "failed", recoverable: true }) }))
+  })
+
   it("persists result usage on the assistant history entry", async () => {
     const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
     const { conversations, router, repository } = createRouter({

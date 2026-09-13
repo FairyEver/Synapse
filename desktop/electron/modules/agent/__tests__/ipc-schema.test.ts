@@ -340,6 +340,17 @@ describe("agent IPC schemas", () => {
     })).toMatchObject({ turnOutcome })
   })
 
+  it("preserves recoverability on failed outcomes and their diagnostics", () => {
+    const turnOutcome = {
+      status: "failed", reason: "runtime_error", message: "图片尚未完成交付", recoverable: true,
+      diagnostics: [{ source: "claude-sdk", kind: "error", message: "图片尚未完成交付", recoverable: true }],
+    }
+    expect(agentEventSchema.parse({ type: "error", message: turnOutcome.message,
+      errorKind: "execution_failed", recoverable: true, turnOutcome })).toMatchObject({ turnOutcome, recoverable: true })
+    expect(timelineItemSchema.parse({ id: "conv-1:history:4", timestamp: "2026-09-13T00:00:00Z",
+      kind: "error", message: turnOutcome.message, turnOutcome })).toMatchObject({ turnOutcome })
+  })
+
   it("preserves unconfirmed user question resolution attempts on timeline items", () => {
     const resolutionAttempt = {
       status: "answered" as const,

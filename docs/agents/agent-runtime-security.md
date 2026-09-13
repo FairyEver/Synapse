@@ -23,6 +23,10 @@
 - 附件诊断只允许记录类型和计数；不得记录 attachmentId、名称、路径、哈希、运行时清单、工具输入或模型输出。路径链路不登记为公开 capability/MCP。
 - 附件回滚不得恢复 Renderer 原图字节、raw image IPC、Blob URL 或重写用户附件。
 
+- 工具结果保存或呈现失败的 `execution_failed` 必须保留 SDK 明确给出的 `recoverable`，经轮次归一化、持久化 `turnOutcome`、IPC、历史回放和 MCP 读取不得降为 false；未明确给出时不推断为可恢复。取消和超时仍优先。idle 只代表没有活动轮次，可恢复失败不授权自动重放。
+- 诊断导出的 SDK 流采集状态区分 `captured`、`not-recorded`、`read-failed`；后两者的 `observedEventCount` 为 null，不能把未采集或读取失败解释为零事件。保留采集量、导出量与超限省略量的不同语义。
+- SDK 0.3.245 图片协议夹具证实，挂起 `PostToolUse` 时单独 `close()` 可能将原图发送到后续请求；`interrupt()` 确认后关闭及 hook 正常返回停止在合成夹具中可阻断请求。强制关闭、其它 hook 干预和持久交接尚未通过图片恢复门禁，不得据此启用自动图片重呈现。详见监视整改实施记录。
+
 ## Agent 文件检查点
 
 - Agent 文件检查点只属于本地交互式 Agent 会话。它依赖本地 Claude Agent SDK/CLI 的文件跟踪与 `rewindFiles`，不以 Anthropic 自家模型为能力门槛；DeepSeek 官方与百炼 Anthropic 兼容 Provider 使用同一运行路径。

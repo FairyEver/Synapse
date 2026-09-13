@@ -94,6 +94,7 @@ const agentTurnDiagnosticSchema = z.object({
   source: z.enum(["claude-sdk", "agent-runtime", "process-runner"]),
   kind: z.enum(["aborted", "closed", "connection_interrupted", "error", "tool_use_interrupted"]),
   message: z.string().optional(),
+  recoverable: z.boolean().optional(),
 })
 const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
   z.object({
@@ -111,6 +112,7 @@ const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
     status: z.literal("failed"),
     reason: z.string(),
     message: z.string(),
+    recoverable: z.boolean().optional(),
     diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
   }),
   z.object({

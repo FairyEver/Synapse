@@ -4,6 +4,8 @@ Use this domain when directly invoking MCP tools provided by Synapse system apps
 
 When an App capability is configured as a node inside a Workflow, use `workflow/index.md` instead. The Workflow guide owns node schemas, reserved bindings, graph edges, layout, definition validation, and run behavior. Do not read both guides merely because a Workflow node is backed by an App capability.
 
+- Runtime `idle` only means no turn is active. Inspect the last persisted error and `turnOutcome` before reporting completion. `failed` with `recoverable: true` remains a failure with a safe user recovery path; it is not permission to replay tools or resume automatically. In exported SDK diagnostics, `sourceStatus: not-recorded` or `read-failed` with `observedEventCount: null` means the event count is unknown.
+
 ## Text File Writer
 
 Use `app_text_file_writer_file_write` when the user asks to save a complete text value to any local file path.

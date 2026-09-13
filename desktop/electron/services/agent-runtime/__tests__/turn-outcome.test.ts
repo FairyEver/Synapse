@@ -2,13 +2,44 @@ import { describe, expect, it } from "vitest"
 
 import {
   createTurnLifecycle,
+  diagnosticFromAgentError,
   markCancelRequested,
   markTimeoutRequested,
   normalizeExecutorEvent,
   outcomeMessage,
+  outcomeToAgentEvent,
 } from "../turn-outcome"
 
 describe("turn outcome normalization", () => {
+  it.each([true, false, undefined])("preserves execution failure recoverability %s through terminal projection", (recoverable) => {
+    const lifecycle = createTurnLifecycle({ turnId: "turn-1", conversationId: "conversation-1" })
+    const message = "图片结果超过当前上下文预算，尚未完成处理。"
+    const outcome = normalizeExecutorEvent(lifecycle, {
+      type: "executor.error",
+      diagnostic: diagnosticFromAgentError({
+        type: "error", errorKind: "execution_failed", message, recoverable,
+      }),
+    })
+    expect(outcome).toMatchObject({ status: "failed", message })
+    const projected = outcomeToAgentEvent({ outcome, conversationId: "conversation-1", timestamp: "2026-09-13T00:00:00Z" })
+    expect(projected).toMatchObject({ type: "error", errorKind: "execution_failed", message, recoverable: recoverable === true })
+    // A late successful result must not erase the saved incomplete outcome.
+    expect(normalizeExecutorEvent(lifecycle, { type: "executor.result" })).toBe(outcome)
+  })
+
+  it("does not restore recovery after cancellation of a recoverable failure", () => {
+    const lifecycle = createTurnLifecycle({ turnId: "turn-1", conversationId: "conversation-1" })
+    markCancelRequested(lifecycle, { mode: "graceful", source: "user", now: () => "2026-09-13T00:00:00Z" })
+    const outcome = normalizeExecutorEvent(lifecycle, {
+      type: "executor.error",
+      diagnostic: diagnosticFromAgentError({ type: "error", errorKind: "execution_failed", message: "未完整交付", recoverable: true }),
+    })
+    expect(outcome.status).toBe("cancelled")
+    expect(outcomeToAgentEvent({ outcome, conversationId: "conversation-1", timestamp: "2026-09-13T00:00:00Z" })).toMatchObject({
+      type: "result", metadata: { cancelled: true },
+    })
+  })
+
   it("maps SDK abort during graceful cancellation to cancelled", () => {
     const lifecycle = createTurnLifecycle({
       turnId: "turn-1",

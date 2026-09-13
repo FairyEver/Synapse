@@ -247,6 +247,7 @@ export interface SynapseAgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
   readonly kind: "aborted" | "closed" | "connection_interrupted" | "error" | "tool_use_interrupted"
   readonly message?: string
+  readonly recoverable?: boolean
 }
 
 export type SynapseAgentTurnOutcome =
@@ -262,6 +263,7 @@ export type SynapseAgentTurnOutcome =
     readonly status: "failed"
     readonly reason: string
     readonly message: string
+    readonly recoverable?: boolean
     readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
   }
   | {

@@ -218,6 +218,8 @@ Raw diagnostic text such as `Request was aborted` should be available through lo
 
 ## Persistence and Export
 
+Generic failed outcomes preserve an explicitly supplied `recoverable` flag through normalization, the persisted `turnOutcome`, IPC and replay. An absent flag does not imply recovery is safe. Cancellation and timeout intents retain precedence. Runtime `idle` describes activity only and must not replace the last persisted failure; recoverability requires user action and does not authorize replaying tools.
+
 Persist the product outcome separately from diagnostic text. A cancelled turn should not be stored only as:
 
 ```ts

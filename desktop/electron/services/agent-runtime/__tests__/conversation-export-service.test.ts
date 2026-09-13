@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -23,6 +23,75 @@ afterEach(async () => {
 })
 
 describe("AgentConversationExportService", () => {
+  it("keeps every JSON file parseable with nested quotes, paths, large fields and redacted secrets", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-export-escaping-"))
+    tempRoots.push(root)
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const conversation = createConversation()
+    const nested = JSON.stringify({
+      quote: 'escaped "quote" and \\ backslash',
+      windowsPath: "C:\\Users\\Fixture\\folder with spaces\\log.json",
+      unixPath: "/Users/Fixture/folder with spaces/log.json",
+      remoteUrl: "https://example.test/events?kind=tool",
+      chinese: "中文与 emoji 😀\r\n下一行",
+      layers: [[[{ text: "尾部标记" }]]],
+    })
+    const content = `${nested}\n${"大字段😀\\\"\n".repeat(12_000)}`
+    conversation.history.push({ role: "assistant", content, timestamp: "2026-09-13T00:00:00Z", metadata: {
+      apiKey: "sk-monitoring-canary-DO-NOT-EXPORT",
+      nested,
+      image: "data:image/png;base64,c3ludGhldGljLWltYWdl",
+    } })
+    const original = structuredClone(conversation)
+    await conversations.upsert(conversation)
+    await agentEvents.upsert({ id: "escape-event", schemaVersion: 1, projectId: "project-1", conversationId: "conv-1",
+      turnId: "turn-1", eventType: "stream", createdAt: "2026-09-13T00:00:00Z", payload: {
+        content, nested: { value: nested }, apiKey: "sk-monitoring-canary-DO-NOT-EXPORT",
+      } })
+    const service = new AgentConversationExportService({
+      conversations, agentEvents, agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: async () => path.join(root, "export.zip"),
+      createZipArchive: async (directory) => {
+        const jsonFiles = (await readdir(directory)).filter((file) => file.endsWith(".json"))
+        expect(jsonFiles.sort()).toEqual(["agent-events.json", "agent-usage.json", "attachments.json", "conversation.json",
+          "live-state.json", "manifest.json", "sdk-stream-events.json", "summary.json", "timeline.json"])
+        for (const file of jsonFiles) {
+          const text = await readFile(path.join(directory, file), "utf8")
+          expect(() => JSON.parse(text), file).not.toThrow()
+          expect(text, file).not.toContain("sk-monitoring-canary-DO-NOT-EXPORT")
+          expect(text, file).not.toContain("c3ludGhldGljLWltYWdl")
+          expect(text, file).not.toContain("/Users/Fixture/")
+        }
+        const exported = JSON.parse(await readFile(path.join(directory, "conversation.json"), "utf8"))
+        expect(exported.history.at(-1).content).toContain("尾部标记")
+        expect(exported.history.at(-1).content).toContain("https://example.test/events?kind=tool")
+      },
+    })
+    await expect(service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })).resolves.toMatchObject({ success: true })
+    expect(conversation).toEqual(original)
+  })
+
+  it.each(["not-recorded", "read-failed"])("exports unknown observed stream count when diagnostics are %s", async (sourceStatus) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-export-missing-stream-"))
+    tempRoots.push(root)
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    await conversations.upsert(createConversation())
+    if (sourceStatus === "read-failed") vi.spyOn(agentEvents, "list").mockRejectedValue(new Error("fixture storage failure"))
+    const service = new AgentConversationExportService({
+      conversations, agentEvents, agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: async () => path.join(root, "export.zip"),
+      createZipArchive: async (directory) => {
+        const stream = JSON.parse(await readFile(path.join(directory, "sdk-stream-events.json"), "utf8"))
+        expect(stream.capture).toMatchObject({ sourceStatus, observedEventCount: null, exportedEventCount: 0 })
+        const manifest = JSON.parse(await readFile(path.join(directory, "manifest.json"), "utf8"))
+        if (sourceStatus === "read-failed") expect(manifest.skipped).toContainEqual({ path: "agent-events.json", reason: "read failed" })
+      },
+    })
+    await service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })
+  })
+
   it("writes a redacted conversation debug bundle before zipping it", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-test-"))
     tempRoots.push(tempRoot)

@@ -18,6 +18,7 @@ export interface AgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
   readonly kind: AgentTurnDiagnosticKind
   readonly message?: string
+  readonly recoverable?: boolean
 }
 
 export type AgentTurnFailureReason =
@@ -42,6 +43,7 @@ export type AgentTurnOutcome =
     readonly status: "failed"
     readonly reason: AgentTurnFailureReason
     readonly message: string
+    readonly recoverable?: boolean
     readonly diagnostics?: readonly AgentTurnDiagnostic[]
   }
   | {
@@ -205,6 +207,7 @@ function outcomeForEvent(
     status: "failed",
     reason: failureReason(diagnostic),
     message: failedMessage(diagnostic),
+    ...(diagnostic?.recoverable !== undefined ? { recoverable: diagnostic.recoverable } : {}),
   }
 }
 
@@ -248,6 +251,7 @@ export function diagnosticFromAgentError(event: AgentErrorEvent): AgentTurnDiagn
         ? "tool_use_interrupted"
         : /Request was aborted/i.test(message) ? "aborted" : "error",
     message,
+    ...(event.recoverable !== undefined ? { recoverable: event.recoverable } : {}),
   }
 }
 
@@ -299,7 +303,7 @@ export function outcomeToAgentEvent(input: {
     type: "error",
     message: outcomeMessage(input.outcome),
     errorKind: "execution_failed",
-    recoverable: false,
+    recoverable: input.outcome.status === "failed" && input.outcome.recoverable === true,
     turnOutcome: input.outcome,
   } satisfies AgentErrorEvent
 }

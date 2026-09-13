@@ -1,6 +1,6 @@
 # Agent 监视发现专项修复计划：完整交付、恢复与完成验收
 
-日期：2026-09-13。状态：**方案已编写，尚未实施或验收**。
+日期：2026-09-13。状态：**部分实施；图片强停门禁未通过，尚未完成全计划验收**。实测证据、已交付范围与剩余工单见[实施记录](2026-09-13-agent-monitoring-findings-remediation-execution.md)。
 
 本计划针对一次只读监视中发现的五类缺陷及失败恢复状态差异。目标不是让模型更愿意说“完成”，而是让系统保留真实执行事实、交付缺口与任务要求，在可恢复时从确定断点继续，不能恢复时准确结束。
 
@@ -295,9 +295,9 @@ Stop hook 与持久化终态共用一个检查器，核对最新契约、资源�
 实现后按影响范围运行；以下是现有命令和测试文件，新增测试应加入对应专项：
 
 ```bash
-pnpm --filter @synapse/desktop run test -- electron/services/agent-runtime/__tests__/tool-output-governor.test.ts electron/services/agent-runtime/__tests__/artifact-store.test.ts electron/services/agent-runtime/__tests__/context-budget.test.ts
-pnpm --filter @synapse/desktop run test -- electron/services/agent-runtime/__tests__/sdk-native-long-task-contract.test.ts electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts electron/services/agent-runtime/__tests__/context-continuation.test.ts
-pnpm --filter @synapse/desktop run test -- electron/services/agent-runtime/__tests__/conversation-router.test.ts electron/services/agent-runtime/__tests__/turn-outcome.test.ts electron/services/agent-runtime/__tests__/context-recovery.test.ts electron/services/agent-runtime/__tests__/conversation-export-service.test.ts
+pnpm --filter @synapse/desktop run test electron/services/agent-runtime/__tests__/tool-output-governor.test.ts electron/services/agent-runtime/__tests__/artifact-store.test.ts electron/services/agent-runtime/__tests__/context-budget.test.ts
+pnpm --filter @synapse/desktop run test electron/services/agent-runtime/__tests__/sdk-native-long-task-contract.test.ts electron/services/agent-runtime/__tests__/sdk-native-image-contract.test.ts electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts electron/services/agent-runtime/__tests__/context-continuation.test.ts
+pnpm --filter @synapse/desktop run test electron/services/agent-runtime/__tests__/conversation-router.test.ts electron/services/agent-runtime/__tests__/turn-outcome.test.ts electron/services/agent-runtime/__tests__/context-recovery.test.ts electron/services/agent-runtime/__tests__/conversation-export-service.test.ts
 pnpm --filter @synapse/desktop run typecheck
 pnpm --filter @synapse/desktop run check:hard-constraints
 git diff --check

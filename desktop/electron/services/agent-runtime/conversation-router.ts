@@ -2539,6 +2539,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           sdkSessionId: event.sdkSessionId,
           errorKind: event.errorKind,
           recoverable: event.recoverable,
+          turnOutcome: event.turnOutcome,
           usage: event.usage,
           modelUsage: event.modelUsage,
           sdkResultUuid: event.sdkResultUuid,
