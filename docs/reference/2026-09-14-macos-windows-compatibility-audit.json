@@ -1,0 +1,1319 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-13T16:38:40.319491+00:00",
+  "status": "local-validation-passed-windows-native-pending",
+  "scope": {
+    "base": "15678574e12f7afaf741ac8c61f1956a59ec8d2a",
+    "head": "856288724",
+    "files": [
+      {
+        "path": "AGENTS.md",
+        "category": "documentation",
+        "bytes": 10287
+      },
+      {
+        "path": "RELEASE_NOTES_PENDING.md",
+        "category": "documentation",
+        "bytes": 7331
+      },
+      {
+        "path": "desktop/app-capabilities/__tests__/dispatcher.test.ts",
+        "category": "test",
+        "bytes": 5324
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/__tests__/control-service.test.ts",
+        "category": "test",
+        "bytes": 26308
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/__tests__/conversation-reference.test.ts",
+        "category": "test",
+        "bytes": 3532
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/__tests__/dispatcher.test.ts",
+        "category": "test",
+        "bytes": 8256
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/__tests__/service.test.ts",
+        "category": "test",
+        "bytes": 7647
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/control-service.ts",
+        "category": "implementation",
+        "bytes": 32570
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/conversation-reference.ts",
+        "category": "implementation",
+        "bytes": 3539
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/conversation-target.ts",
+        "category": "implementation",
+        "bytes": 2377
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/dispatcher.ts",
+        "category": "implementation",
+        "bytes": 10187
+      },
+      {
+        "path": "desktop/app-capabilities/agent/main/service.ts",
+        "category": "implementation",
+        "bytes": 4184
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/__tests__/manifest.test.ts",
+        "category": "test",
+        "bytes": 1807
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/__tests__/schema.test.ts",
+        "category": "test",
+        "bytes": 9152
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/capability.ts",
+        "category": "implementation",
+        "bytes": 4484
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/errors.ts",
+        "category": "implementation",
+        "bytes": 3508
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/manifest.ts",
+        "category": "implementation",
+        "bytes": 1046
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/mcp-tools.ts",
+        "category": "implementation",
+        "bytes": 5507
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/schema.ts",
+        "category": "implementation",
+        "bytes": 12242
+      },
+      {
+        "path": "desktop/app-capabilities/agent/shared/source.ts",
+        "category": "implementation",
+        "bytes": 645
+      },
+      {
+        "path": "desktop/app-capabilities/dispatcher.ts",
+        "category": "implementation",
+        "bytes": 3822
+      },
+      {
+        "path": "desktop/app-capabilities/manifest-registry.ts",
+        "category": "implementation",
+        "bytes": 1978
+      },
+      {
+        "path": "desktop/app-capabilities/manifest.ts",
+        "category": "implementation",
+        "bytes": 1695
+      },
+      {
+        "path": "desktop/app-capabilities/synapse-skill/skill-package/SKILL.md",
+        "category": "documentation",
+        "bytes": 5868
+      },
+      {
+        "path": "desktop/app-capabilities/synapse-skill/skill-package/app/api-reference.md",
+        "category": "documentation",
+        "bytes": 21517
+      },
+      {
+        "path": "desktop/app-capabilities/synapse-skill/skill-package/app/index.md",
+        "category": "documentation",
+        "bytes": 23964
+      },
+      {
+        "path": "desktop/config.ts",
+        "category": "implementation",
+        "bytes": 17792
+      },
+      {
+        "path": "desktop/electron/bootstrap/__tests__/app-deep-link.test.ts",
+        "category": "test",
+        "bytes": 2383
+      },
+      {
+        "path": "desktop/electron/bootstrap/__tests__/app-ready.test.ts",
+        "category": "test",
+        "bytes": 5281
+      },
+      {
+        "path": "desktop/electron/bootstrap/__tests__/descriptors.test.ts",
+        "category": "test",
+        "bytes": 89116
+      },
+      {
+        "path": "desktop/electron/bootstrap/__tests__/protocol-router.test.ts",
+        "category": "test",
+        "bytes": 15097
+      },
+      {
+        "path": "desktop/electron/bootstrap/__tests__/registry.test.ts",
+        "category": "test",
+        "bytes": 20858
+      },
+      {
+        "path": "desktop/electron/bootstrap/app-deep-link.ts",
+        "category": "implementation",
+        "bytes": 2948
+      },
+      {
+        "path": "desktop/electron/bootstrap/app-ready.ts",
+        "category": "implementation",
+        "bytes": 8355
+      },
+      {
+        "path": "desktop/electron/bootstrap/descriptors.ts",
+        "category": "implementation",
+        "bytes": 131821
+      },
+      {
+        "path": "desktop/electron/bootstrap/main-window.ts",
+        "category": "implementation",
+        "bytes": 6708
+      },
+      {
+        "path": "desktop/electron/bootstrap/registry.ts",
+        "category": "implementation",
+        "bytes": 9372
+      },
+      {
+        "path": "desktop/electron/generated/ipc-channels.generated.ts",
+        "category": "implementation",
+        "bytes": 38106
+      },
+      {
+        "path": "desktop/electron/modules/agent/__tests__/conversation-creation.test.ts",
+        "category": "test",
+        "bytes": 6095
+      },
+      {
+        "path": "desktop/electron/modules/agent/__tests__/ipc-event-schema.test.ts",
+        "category": "test",
+        "bytes": 4164
+      },
+      {
+        "path": "desktop/electron/modules/agent/__tests__/ipc-schema.test.ts",
+        "category": "test",
+        "bytes": 19760
+      },
+      {
+        "path": "desktop/electron/modules/agent/__tests__/ipc-sessions.test.ts",
+        "category": "test",
+        "bytes": 28602
+      },
+      {
+        "path": "desktop/electron/modules/agent/__tests__/ipc.test.ts",
+        "category": "test",
+        "bytes": 94268
+      },
+      {
+        "path": "desktop/electron/modules/agent/conversation-creation.ts",
+        "category": "implementation",
+        "bytes": 2589
+      },
+      {
+        "path": "desktop/electron/modules/agent/ipc-messages.ts",
+        "category": "implementation",
+        "bytes": 44281
+      },
+      {
+        "path": "desktop/electron/modules/agent/ipc-sessions.ts",
+        "category": "implementation",
+        "bytes": 18804
+      },
+      {
+        "path": "desktop/electron/modules/agent/ipc-shared.ts",
+        "category": "implementation",
+        "bytes": 30381
+      },
+      {
+        "path": "desktop/electron/modules/agent/ipc.ts",
+        "category": "implementation",
+        "bytes": 3645
+      },
+      {
+        "path": "desktop/electron/preload.ts",
+        "category": "implementation",
+        "bytes": 68424
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/__tests__/data-maintenance-engine.test.ts",
+        "category": "test",
+        "bytes": 9027
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/__tests__/schemas.test.ts",
+        "category": "test",
+        "bytes": 33743
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/__tests__/sqlite-atomic.test.ts",
+        "category": "test",
+        "bytes": 9231
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/backends/sqlite-query.ts",
+        "category": "implementation",
+        "bytes": 4393
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/backends/sqlite.ts",
+        "category": "implementation",
+        "bytes": 21282
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/factory.ts",
+        "category": "implementation",
+        "bytes": 7733
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/index.ts",
+        "category": "implementation",
+        "bytes": 6607
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/maintenance/engine.ts",
+        "category": "implementation",
+        "bytes": 11139
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/repository.ts",
+        "category": "implementation",
+        "bytes": 8049
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/schemas/agent-history.ts",
+        "category": "implementation",
+        "bytes": 5840
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/schemas/agent-task-progress.ts",
+        "category": "implementation",
+        "bytes": 1569
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/schemas/index.ts",
+        "category": "implementation",
+        "bytes": 10922
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/schemas/placeholders.ts",
+        "category": "implementation",
+        "bytes": 61910
+      },
+      {
+        "path": "desktop/electron/runtime/data-repo/types.ts",
+        "category": "implementation",
+        "bytes": 9244
+      },
+      {
+        "path": "desktop/electron/runtime/event-bus/__tests__/bus.test.ts",
+        "category": "test",
+        "bytes": 9718
+      },
+      {
+        "path": "desktop/electron/runtime/event-bus/broadcaster.ts",
+        "category": "implementation",
+        "bytes": 1684
+      },
+      {
+        "path": "desktop/electron/runtime/event-bus/types.ts",
+        "category": "implementation",
+        "bytes": 3378
+      },
+      {
+        "path": "desktop/electron/runtime/ipc/__tests__/registry.test.ts",
+        "category": "test",
+        "bytes": 10847
+      },
+      {
+        "path": "desktop/electron/runtime/ipc/registry.ts",
+        "category": "implementation",
+        "bytes": 6300
+      },
+      {
+        "path": "desktop/electron/runtime/ipc/types.ts",
+        "category": "implementation",
+        "bytes": 2871
+      },
+      {
+        "path": "desktop/electron/runtime/security/permission-guard.ts",
+        "category": "implementation",
+        "bytes": 8273
+      },
+      {
+        "path": "desktop/electron/runtime/window/__tests__/electron-window.test.ts",
+        "category": "test",
+        "bytes": 2451
+      },
+      {
+        "path": "desktop/electron/runtime/window/electron-window.ts",
+        "category": "implementation",
+        "bytes": 892
+      },
+      {
+        "path": "desktop/electron/services/__tests__/agent-conversation-window-service.test.ts",
+        "category": "test",
+        "bytes": 13013
+      },
+      {
+        "path": "desktop/electron/services/__tests__/config-backup-service.test.ts",
+        "category": "test",
+        "bytes": 25257
+      },
+      {
+        "path": "desktop/electron/services/agent-conversation-window-service.ts",
+        "category": "implementation",
+        "bytes": 14901
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/agent-error-messages.test.ts",
+        "category": "test",
+        "bytes": 3170
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/agent-runtime-cancel.test.ts",
+        "category": "test",
+        "bytes": 18748
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/artifact-store.test.ts",
+        "category": "test",
+        "bytes": 13028
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/assistant-output-integrity.test.ts",
+        "category": "test",
+        "bytes": 1615
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/bailian-image-acceptance.test.ts",
+        "category": "test",
+        "bytes": 13271
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts",
+        "category": "test",
+        "bytes": 103908
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/context-budget.test.ts",
+        "category": "test",
+        "bytes": 8566
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/context-continuation.test.ts",
+        "category": "test",
+        "bytes": 7019
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/context-recovery.test.ts",
+        "category": "test",
+        "bytes": 2134
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/context-usage.test.ts",
+        "category": "test",
+        "bytes": 8053
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/conversation-export-service.test.ts",
+        "category": "test",
+        "bytes": 44293
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts",
+        "category": "test",
+        "bytes": 157607
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/export-evidence.test.ts",
+        "category": "test",
+        "bytes": 2640
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/fixtures/image-runtime-harness.ts",
+        "category": "test",
+        "bytes": 6455
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/fixtures/marked-image.ts",
+        "category": "test",
+        "bytes": 2629
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/fixtures/native-sdk-fixture.ts",
+        "category": "test",
+        "bytes": 5548
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/history-repository.test.ts",
+        "category": "test",
+        "bytes": 7233
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/image-handoff-recovery.test.ts",
+        "category": "test",
+        "bytes": 3613
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/monitoring-failure-projection.test.ts",
+        "category": "test",
+        "bytes": 3081
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/provider-transport-policy.test.ts",
+        "category": "test",
+        "bytes": 1055
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/query-stop-barrier.test.ts",
+        "category": "test",
+        "bytes": 1550
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts",
+        "category": "test",
+        "bytes": 34592
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/sdk-image-runtime.test.ts",
+        "category": "test",
+        "bytes": 3309
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/sdk-native-image-contract.test.ts",
+        "category": "test",
+        "bytes": 5060
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/sdk-native-long-task-contract.test.ts",
+        "category": "test",
+        "bytes": 8284
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/sdk-native-recovery-contract.test.ts",
+        "category": "test",
+        "bytes": 9477
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/sdk-native-task-contract.test.ts",
+        "category": "test",
+        "bytes": 4704
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/sdk-task-progress-runtime.test.ts",
+        "category": "test",
+        "bytes": 32833
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/session-manager.test.ts",
+        "category": "test",
+        "bytes": 84935
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/session-repository.test.ts",
+        "category": "test",
+        "bytes": 30034
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/synapse-tool-router-query.test.ts",
+        "category": "test",
+        "bytes": 17891
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/synapse-tool-router.test.ts",
+        "category": "test",
+        "bytes": 5497
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/task-progress.test.ts",
+        "category": "test",
+        "bytes": 15185
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/timeline-page.test.ts",
+        "category": "test",
+        "bytes": 1796
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/tool-output-governor.test.ts",
+        "category": "test",
+        "bytes": 4013
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/__tests__/turn-outcome.test.ts",
+        "category": "test",
+        "bytes": 7921
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/agent-error-messages.ts",
+        "category": "implementation",
+        "bytes": 10901
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/agent-runtime-service.ts",
+        "category": "implementation",
+        "bytes": 92792
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/artifact-store.ts",
+        "category": "implementation",
+        "bytes": 18303
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/assistant-output-integrity.ts",
+        "category": "implementation",
+        "bytes": 2225
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/claude-sdk-session.ts",
+        "category": "implementation",
+        "bytes": 112294
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/context-budget.ts",
+        "category": "implementation",
+        "bytes": 10483
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/context-continuation.ts",
+        "category": "implementation",
+        "bytes": 9879
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/context-recovery.ts",
+        "category": "implementation",
+        "bytes": 6018
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/context-usage.ts",
+        "category": "implementation",
+        "bytes": 8737
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/conversation-export-service.ts",
+        "category": "implementation",
+        "bytes": 38154
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/conversation-router.ts",
+        "category": "implementation",
+        "bytes": 165107
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/export-evidence.ts",
+        "category": "implementation",
+        "bytes": 4104
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/history-content-store.ts",
+        "category": "implementation",
+        "bytes": 6969
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/history-repository.ts",
+        "category": "implementation",
+        "bytes": 9638
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/image-presentation.ts",
+        "category": "implementation",
+        "bytes": 3939
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/index.ts",
+        "category": "implementation",
+        "bytes": 19115
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/provider-transport-policy.ts",
+        "category": "implementation",
+        "bytes": 1050
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/query-stop-barrier.ts",
+        "category": "implementation",
+        "bytes": 918
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/redaction.ts",
+        "category": "implementation",
+        "bytes": 201
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/sdk-event-bridge.ts",
+        "category": "implementation",
+        "bytes": 22477
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/session-lifecycle.ts",
+        "category": "implementation",
+        "bytes": 9087
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/session-manager.ts",
+        "category": "implementation",
+        "bytes": 38289
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/session-repository.ts",
+        "category": "implementation",
+        "bytes": 42394
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/synapse-tool-router-query.ts",
+        "category": "implementation",
+        "bytes": 11668
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/task-progress-hooks.ts",
+        "category": "implementation",
+        "bytes": 7021
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/task-progress.ts",
+        "category": "implementation",
+        "bytes": 26790
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/timeline-page.ts",
+        "category": "implementation",
+        "bytes": 1049
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/tool-output-governor.ts",
+        "category": "implementation",
+        "bytes": 10598
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/turn-outcome.ts",
+        "category": "implementation",
+        "bytes": 10481
+      },
+      {
+        "path": "desktop/electron/services/agent-runtime/types.ts",
+        "category": "implementation",
+        "bytes": 18101
+      },
+      {
+        "path": "desktop/electron/services/config-backup-service.ts",
+        "category": "implementation",
+        "bytes": 42643
+      },
+      {
+        "path": "desktop/electron/services/model-capability/__tests__/catalog.test.ts",
+        "category": "test",
+        "bytes": 5332
+      },
+      {
+        "path": "desktop/electron/services/model-capability/catalog.ts",
+        "category": "implementation",
+        "bytes": 15096
+      },
+      {
+        "path": "desktop/electron/services/renderer-health/__tests__/renderer-health-service.test.ts",
+        "category": "test",
+        "bytes": 7359
+      },
+      {
+        "path": "desktop/electron/services/renderer-health/renderer-health-service.ts",
+        "category": "implementation",
+        "bytes": 8440
+      },
+      {
+        "path": "desktop/src/App.tsx",
+        "category": "implementation",
+        "bytes": 16153
+      },
+      {
+        "path": "desktop/src/__tests__/App.no-repository.test.tsx",
+        "category": "test",
+        "bytes": 8396
+      },
+      {
+        "path": "desktop/src/__tests__/App.workflow-entry.test.tsx",
+        "category": "test",
+        "bytes": 14230
+      },
+      {
+        "path": "desktop/src/app-shell/diagnostics/__tests__/performance-observer.test.ts",
+        "category": "test",
+        "bytes": 2183
+      },
+      {
+        "path": "desktop/src/app-shell/diagnostics/__tests__/react-performance-measure-guard.test.ts",
+        "category": "test",
+        "bytes": 3739
+      },
+      {
+        "path": "desktop/src/app-shell/diagnostics/performance-observer.ts",
+        "category": "implementation",
+        "bytes": 2506
+      },
+      {
+        "path": "desktop/src/app-shell/diagnostics/react-performance-measure-guard.ts",
+        "category": "implementation",
+        "bytes": 2994
+      },
+      {
+        "path": "desktop/src/components/provider-model-picker.tsx",
+        "category": "implementation",
+        "bytes": 8795
+      },
+      {
+        "path": "desktop/src/constants/defaults.ts",
+        "category": "implementation",
+        "bytes": 3361
+      },
+      {
+        "path": "desktop/src/hooks/__tests__/use-agent-conversation-open-request.test.tsx",
+        "category": "test",
+        "bytes": 2612
+      },
+      {
+        "path": "desktop/src/hooks/use-agent-conversation-open-request.ts",
+        "category": "implementation",
+        "bytes": 2070
+      },
+      {
+        "path": "desktop/src/lib/__tests__/agent-timeline.test.ts",
+        "category": "test",
+        "bytes": 37393
+      },
+      {
+        "path": "desktop/src/lib/__tests__/agent-transcript.test.ts",
+        "category": "test",
+        "bytes": 3847
+      },
+      {
+        "path": "desktop/src/lib/__tests__/config.test.ts",
+        "category": "test",
+        "bytes": 23695
+      },
+      {
+        "path": "desktop/src/lib/agent-redaction.ts",
+        "category": "implementation",
+        "bytes": 4403
+      },
+      {
+        "path": "desktop/src/lib/agent-timeline.ts",
+        "category": "implementation",
+        "bytes": 45226
+      },
+      {
+        "path": "desktop/src/lib/agent-transcript.ts",
+        "category": "implementation",
+        "bytes": 9994
+      },
+      {
+        "path": "desktop/src/lib/config.ts",
+        "category": "implementation",
+        "bytes": 22021
+      },
+      {
+        "path": "desktop/src/lib/provider-model-selection.ts",
+        "category": "implementation",
+        "bytes": 3551
+      },
+      {
+        "path": "desktop/src/lib/provider-model.ts",
+        "category": "implementation",
+        "bytes": 5058
+      },
+      {
+        "path": "desktop/src/main.tsx",
+        "category": "implementation",
+        "bytes": 7586
+      },
+      {
+        "path": "desktop/src/modules/agent/__tests__/agent-composer.test.tsx",
+        "category": "test",
+        "bytes": 122995
+      },
+      {
+        "path": "desktop/src/modules/agent/__tests__/agent-conversation-workspace.test.tsx",
+        "category": "test",
+        "bytes": 23640
+      },
+      {
+        "path": "desktop/src/modules/agent/__tests__/agent-session-sidebar.test.tsx",
+        "category": "test",
+        "bytes": 46517
+      },
+      {
+        "path": "desktop/src/modules/agent/__tests__/pending-message-queue.test.ts",
+        "category": "test",
+        "bytes": 5455
+      },
+      {
+        "path": "desktop/src/modules/agent/components/__tests__/agent-context-usage-indicator.test.tsx",
+        "category": "test",
+        "bytes": 7163
+      },
+      {
+        "path": "desktop/src/modules/agent/components/__tests__/agent-timeline-item.test.tsx",
+        "category": "test",
+        "bytes": 6721
+      },
+      {
+        "path": "desktop/src/modules/agent/components/__tests__/agent-timeline.test.tsx",
+        "category": "test",
+        "bytes": 80855
+      },
+      {
+        "path": "desktop/src/modules/agent/components/__tests__/agent-tool-event.test.tsx",
+        "category": "test",
+        "bytes": 22455
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-composer.tsx",
+        "category": "implementation",
+        "bytes": 38274
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-context-usage-indicator.tsx",
+        "category": "implementation",
+        "bytes": 4900
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-conversation-workspace.tsx",
+        "category": "implementation",
+        "bytes": 39623
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-long-content-dialog.tsx",
+        "category": "implementation",
+        "bytes": 2085
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-message-event.tsx",
+        "category": "implementation",
+        "bytes": 22779
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-phase-row.tsx",
+        "category": "implementation",
+        "bytes": 4027
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-process-group.tsx",
+        "category": "implementation",
+        "bytes": 2241
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-session-sidebar.tsx",
+        "category": "implementation",
+        "bytes": 10060
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-thinking-event.tsx",
+        "category": "implementation",
+        "bytes": 4284
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-timeline-display.ts",
+        "category": "implementation",
+        "bytes": 16019
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-timeline-item.tsx",
+        "category": "implementation",
+        "bytes": 15220
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-timeline.tsx",
+        "category": "implementation",
+        "bytes": 10695
+      },
+      {
+        "path": "desktop/src/modules/agent/components/agent-tool-event.tsx",
+        "category": "implementation",
+        "bytes": 8897
+      },
+      {
+        "path": "desktop/src/modules/agent/components/archived-group.tsx",
+        "category": "implementation",
+        "bytes": 7395
+      },
+      {
+        "path": "desktop/src/modules/agent/components/project-group.tsx",
+        "category": "implementation",
+        "bytes": 11918
+      },
+      {
+        "path": "desktop/src/modules/agent/conversation-source.ts",
+        "category": "implementation",
+        "bytes": 1474
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx",
+        "category": "test",
+        "bytes": 79360
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/__tests__/use-agent-clock.test.tsx",
+        "category": "test",
+        "bytes": 978
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/__tests__/use-agent-long-content.test.tsx",
+        "category": "test",
+        "bytes": 3782
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/__tests__/use-chat-reducer.performance.test.ts",
+        "category": "test",
+        "bytes": 1545
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/__tests__/use-stick-to-bottom.hook.test.tsx",
+        "category": "test",
+        "bytes": 38642
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/use-agent-chat.ts",
+        "category": "implementation",
+        "bytes": 6917
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/use-agent-clock.ts",
+        "category": "implementation",
+        "bytes": 399
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/use-agent-long-content.ts",
+        "category": "implementation",
+        "bytes": 3343
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/use-chat-connection.ts",
+        "category": "implementation",
+        "bytes": 53844
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/use-chat-events.ts",
+        "category": "implementation",
+        "bytes": 23153
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/use-chat-reducer.ts",
+        "category": "implementation",
+        "bytes": 10682
+      },
+      {
+        "path": "desktop/src/modules/agent/hooks/use-stick-to-bottom.ts",
+        "category": "implementation",
+        "bytes": 16631
+      },
+      {
+        "path": "desktop/src/modules/agent/pending-message-queue.ts",
+        "category": "implementation",
+        "bytes": 3324
+      },
+      {
+        "path": "desktop/src/modules/settings/__tests__/settings-layout.test.tsx",
+        "category": "test",
+        "bytes": 6987
+      },
+      {
+        "path": "desktop/src/types/agent-navigation.ts",
+        "category": "implementation",
+        "bytes": 1173
+      },
+      {
+        "path": "desktop/src/types/agent.ts",
+        "category": "implementation",
+        "bytes": 24824
+      },
+      {
+        "path": "desktop/src/types/bridge.ts",
+        "category": "implementation",
+        "bytes": 85783
+      },
+      {
+        "path": "desktop/synapse-capabilities/shared/app-domain.ts",
+        "category": "implementation",
+        "bytes": 24795
+      },
+      {
+        "path": "desktop/synapse-capabilities/shared/naming.ts",
+        "category": "implementation",
+        "bytes": 3921
+      },
+      {
+        "path": "desktop/tests/perf/agent-long-running-storage.test.ts",
+        "category": "test",
+        "bytes": 2515
+      },
+      {
+        "path": "desktop/tests/unit/api-mcp-capability-surface.test.ts",
+        "category": "test",
+        "bytes": 12505
+      },
+      {
+        "path": "desktop/tests/unit/synapse-capabilities.test.ts",
+        "category": "test",
+        "bytes": 19240
+      },
+      {
+        "path": "docs/agents/agent-runtime-security.md",
+        "category": "documentation",
+        "bytes": 36961
+      },
+      {
+        "path": "docs/agents/capability-registry.md",
+        "category": "documentation",
+        "bytes": 13740
+      },
+      {
+        "path": "docs/agents/knowledge-base.md",
+        "category": "documentation",
+        "bytes": 8487
+      },
+      {
+        "path": "docs/agents/model-capability-catalog.md",
+        "category": "documentation",
+        "bytes": 7824
+      },
+      {
+        "path": "docs/agents/module-boundaries.md",
+        "category": "documentation",
+        "bytes": 26142
+      },
+      {
+        "path": "docs/agents/repository-guide.md",
+        "category": "documentation",
+        "bytes": 7863
+      },
+      {
+        "path": "docs/agents/ui-and-product.md",
+        "category": "documentation",
+        "bytes": 7726
+      },
+      {
+        "path": "docs/reference/2026-09-13-agent-task-evidence-runtime-validation.json",
+        "category": "documentation",
+        "bytes": 66184
+      },
+      {
+        "path": "docs/reference/2026-09-13-agent-task-evidence-runtime-validation.md",
+        "category": "documentation",
+        "bytes": 12471
+      },
+      {
+        "path": "docs/reference/2026-09-13-bailian-image-runtime-results.json",
+        "category": "documentation",
+        "bytes": 45151
+      },
+      {
+        "path": "docs/reference/2026-09-13-bailian-qwen-context-probe-results.json",
+        "category": "documentation",
+        "bytes": 7872
+      },
+      {
+        "path": "docs/reference/2026-09-13-bailian-qwen-context-probe.md",
+        "category": "documentation",
+        "bytes": 8764
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-four-gaps-baseline.json",
+        "category": "documentation",
+        "bytes": 15710
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-four-gaps-remediation-execution.md",
+        "category": "documentation",
+        "bytes": 10939
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-four-gaps-remediation-plan.md",
+        "category": "documentation",
+        "bytes": 87878
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-image-handoff-execution.md",
+        "category": "documentation",
+        "bytes": 10712
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-long-running-performance-execution.md",
+        "category": "documentation",
+        "bytes": 12310
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-long-running-performance-plan.md",
+        "category": "documentation",
+        "bytes": 21182
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-long-task-state-and-context-reliability-execution.md",
+        "category": "documentation",
+        "bytes": 6021
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-long-task-state-and-context-reliability-plan.md",
+        "category": "documentation",
+        "bytes": 62563
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-monitoring-findings-remediation-execution.md",
+        "category": "documentation",
+        "bytes": 9551
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-agent-monitoring-findings-remediation-plan.md",
+        "category": "documentation",
+        "bytes": 37956
+      },
+      {
+        "path": "docs/superpowers/plans/2026-09-13-bailian-context-and-continuous-conversation-plan.md",
+        "category": "documentation",
+        "bytes": 14824
+      },
+      {
+        "path": "docs/superpowers/specs/2026-05-06-agent-session-architecture-design.md",
+        "category": "documentation",
+        "bytes": 7763
+      },
+      {
+        "path": "docs/superpowers/specs/2026-05-09-agent-timeline-smart-autoscroll-design.md",
+        "category": "documentation",
+        "bytes": 13512
+      },
+      {
+        "path": "docs/superpowers/specs/2026-05-13-renderer-diagnostics-design.md",
+        "category": "documentation",
+        "bytes": 6924
+      },
+      {
+        "path": "docs/superpowers/specs/2026-06-11-agent-turn-lifecycle-outcome-design.md",
+        "category": "documentation",
+        "bytes": 14665
+      },
+      {
+        "path": "docs/superpowers/specs/2026-08-25-agent-synapse-mcp-tool-router-design.md",
+        "category": "documentation",
+        "bytes": 4690
+      },
+      {
+        "path": "docs/superpowers/specs/2026-09-12-agent-context-budget-governor-design.md",
+        "category": "documentation",
+        "bytes": 6339
+      },
+      {
+        "path": "docs/superpowers/specs/2026-09-12-agent-conversation-mcp-control-design.md",
+        "category": "documentation",
+        "bytes": 11608
+      },
+      {
+        "path": "docs/superpowers/specs/2026-09-12-agent-renderer-capacity-and-recovery-design.md",
+        "category": "documentation",
+        "bytes": 4118
+      },
+      {
+        "path": "docs/superpowers/specs/2026-09-13-agent-long-running-capacity-design.md",
+        "category": "documentation",
+        "bytes": 5560
+      },
+      {
+        "path": "package.json",
+        "category": "implementation",
+        "bytes": 1921
+      }
+    ]
+  },
+  "commits": [
+    "856288724aceabce99aa848edf1753f5f8add8c0 fix: 持久保存长任务进度与证据并校验续接完成状态",
+    "ebaae6f8c6c36ad8ceeb69d88fa7dabfdd754871 fix: 修复 Agent 贴底与滚动条拖动及尺寸变化的时序冲突",
+    "b7bce5a1843ccb25bd1c75c144fd95d722655f4f fix: 修复长单轮对话结束后历史为空及监督分页遗漏",
+    "ad95d76520d0904c0c97bb6e9bb88b8c947ed4cc fix: 修复 Agent 内容变化后贴底延迟和滚动回跳",
+    "3700adda464aa5f8ae18228b7f8e6205d948a110 docs: 固定图片续接验收对应的源码提交",
+    "37d94ef0da4cad2fe81df858b623b712dc4b681b fix: 修复图片容量误判并支持安全交接后继续读取原图",
+    "f4d7036022e9e8f409d129f52e8ff9252e683b81 docs: 记录百炼千问上下文实测边界与持续对话修复方案",
+    "2ec0bece857b62e96c69777af340b70e2ef78bc6 fix: 修复失效渲染帧持续报错和本地服务停止失败",
+    "45fb9fc9d398f73d387aded5bb49b2edcca46c72 feat: 支持 Agent 对话 MCP 控制并增强长任务可靠性",
+    "8ad2033d12727873fbc3b75b13903474d5ef2bf9 fix: 保留 Agent 可恢复失败状态并标记诊断采集缺口",
+    "dd9322adfe46f001e81a428a33acb1953de0fa50 docs: 记录原子存储与 SDK 验证结果及历史分块前置依赖",
+    "5619766a5a1413fc4bbcec80b8d353c522839616 test: 核验原生 SDK 任务元数据与取消和完成协议边界",
+    "48a7754077d4a16c066ecb15c030e116388bf31d feat: 为 DataRepository 增加有界原子批次与索引范围查询",
+    "b129cd198016f3ef790c9fa5bbc052d8db87ee93 docs: 固定 Agent 四项缺口的实施基线与历史消费者迁移清单",
+    "e809ecc11ab2895eb3b477716e0b2b4ef6694c50 docs: 制定监视发现的图片恢复、完整交付与任务验收修复计划"
+  ],
+  "validation": {
+    "host": "darwin-arm64",
+    "nativeSdk": "0.3.245",
+    "recentRegression": {
+      "passed": 1479,
+      "skipped": 3,
+      "filesPassed": 85,
+      "filesSkipped": 1
+    },
+    "crossPlatformContractSubset": {
+      "passed": 160,
+      "files": 14,
+      "includedInRecentRegression": true
+    },
+    "shutdownScripts": {
+      "passed": 20
+    },
+    "lastNativePathRegression": "passed",
+    "typecheck": "passed",
+    "eslint": "passed",
+    "hardConstraints": "passed",
+    "ciYaml": "parsed",
+    "windowsNative": "not-run",
+    "windowsInstallerAndUi": "not-run",
+    "realBailian": "not-run-this-audit",
+    "packagedAsar": {
+      "platform": "macOS",
+      "result": "passed",
+      "artifact": "pre-existing-local-build",
+      "packedFiles": 27687,
+      "unpackedFiles": 1599,
+      "validatesCurrentSourceBuild": false
+    },
+    "lastExportAliasRegression": "passed"
+  },
+  "changedSourceSha256": {
+    ".github/workflows/ci.yml": "a344d84f3d7f3478be7cad43b1109c1498a5cd3face8e44108574b8bb3b2daa8",
+    "desktop/electron/services/__tests__/error-sanitize.test.ts": "cebb97feffa9b41147e1d6617b7ba22e447a12c4148fed21847af2c1e3a53cb1",
+    "desktop/electron/services/agent-runtime/__tests__/context-recovery.test.ts": "c6d401ac265ceffae8581e50fe2bdfcce15ccef970689bbd1d49ebfa419fe197",
+    "desktop/electron/services/agent-runtime/__tests__/export-evidence.test.ts": "49eae2340e0b3b46f1f34aa3557f877937a1d3250484087ef256ae205b50f702",
+    "desktop/electron/services/agent-runtime/__tests__/fixtures/image-runtime-harness.ts": "15461e4ef8cfedec7b180a1d1b676f7b7fa7c88de37f8fafbf4244c4273e1e2e",
+    "desktop/electron/services/agent-runtime/__tests__/fixtures/native-sdk-fixture.ts": "4d8ec3fead635dad6406dd89749b60ef3a9c691bd543b0a43378def0c5c4352d",
+    "desktop/electron/services/agent-runtime/__tests__/sdk-task-progress-runtime.test.ts": "7fa681530ba86657e1fa6294d184e18def0040f98cbe755fb76b0bf99d4337df",
+    "desktop/electron/services/agent-runtime/__tests__/task-progress.test.ts": "c653be83d6ad7bb19c4605a764d2d153d9fee725543e13f64d2c49fbfd90b726",
+    "desktop/electron/services/agent-runtime/context-recovery.ts": "644eefea64dd14378e73e7da9e3dd2e9a947e5ef213d6013d42b8a46a43e29aa",
+    "desktop/electron/services/agent-runtime/export-evidence.ts": "8644400b452f509105f9334b7f101d540d2f2216a152f16f3aeda86f2158f33b",
+    "desktop/electron/services/agent-runtime/task-progress.ts": "96a8e29268661695bf31350beb20b8f56bc6d6daf4038532cc55bc9f90d41d73",
+    "desktop/package.json": "cddbbc279b7069b01b5d3afe238e5889b8afb57cee4a00725b20bff2a5309195",
+    "desktop/src/lib/error-sanitize.ts": "c4490a69a5996a72ce329f9b152b81cd0c0a6b646193638e81b8846e4f95181d",
+    "package.json": "ed8222a8a4b5e4e1a6b33cde5d1f93d7c8d7fcee2fa93e08fb69655485bd0dbb",
+    "scripts/dev/process-utils.mjs": "7c184f7fb27f58190523233b4423af800b036513a1f81b0a5ac2535411435485",
+    "scripts/dev/run-server-with-env.mjs": "a5b69c136cbdd329bd56b93d78835b7465f92184f7438a157306acd9919ba56a",
+    "scripts/__tests__/quit-server.test.mjs": "81f7518d8fee2690aca9965321918dc2b9a097964fbb1bff89c9399f3e2ad2b4",
+    "scripts/dev/quit-server.mjs": "9bfea43c5ecd8d5e5b1788ba04c4de9fdc13402d0282059d050a4feb4d0d14a1"
+  },
+  "limitations": [
+    "Windows runner has not executed this local commit.",
+    "Case aliases require realpath confirmation; no blanket case folding.",
+    "No guarantee for Windows installer integration, SMB/antivirus locks or long paths without native testing.",
+    "Existing POSIX full-stack dev startup scripts were not rewritten."
+  ]
+}

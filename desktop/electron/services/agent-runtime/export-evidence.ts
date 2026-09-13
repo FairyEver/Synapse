@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto"
+import { isAbsoluteLocalPath } from "../error-sanitize"
 
 /** Export-local aliases preserve equality without exposing paths or a reusable path hash. */
 export function createExportEvidenceProjection(): (value: unknown) => unknown {
@@ -18,7 +19,7 @@ export function createExportEvidenceProjection(): (value: unknown) => unknown {
     const output: Record<string, unknown> = {}
     for (const [key, item] of Object.entries(row)) {
       output[key] = project(item)
-      if (typeof item === "string" && /(?:path|directory|root)$/i.test(key) && /^(?:\/|[A-Za-z]:[\\/])/.test(item)) {
+      if (typeof item === "string" && /(?:path|directory|root)$/i.test(key) && (item.startsWith("/") || isAbsoluteLocalPath(item))) {
         output[`${key}ResourceId`] = alias(item)
       }
     }

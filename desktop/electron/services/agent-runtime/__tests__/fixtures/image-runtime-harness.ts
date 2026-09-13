@@ -1,4 +1,5 @@
 import path from "node:path"
+import { nativeFixtureEnvironment } from "./native-sdk-fixture"
 import { query, type HookCallback, type Options } from "@anthropic-ai/claude-agent-sdk"
 import { JsonNamespace, conversationsSchema, type ConversationEntryV1, type AgentArtifactEntry, type AgentEventEntryV1 } from "../../../../runtime/data-repo"
 import type { ProviderService } from "../../../provider"
@@ -40,7 +41,7 @@ export function imageRuntimeHarness(input: {
       let pressureApplied = false
       let readImages = 0
       const session = new ClaudeSDKSession({ ...options, conversationId: options.conversation.id,
-        env: input.env, hostEnv: { PATH: process.env.PATH, HOME: input.root, CLAUDE_CONFIG_DIR: path.join(input.root, "sdk-config") },
+        env: input.env, hostEnv: { ...nativeFixtureEnvironment(input.root), CLAUDE_CONFIG_DIR: path.join(input.root, "sdk-config") },
         model: input.model, mode: "bypassPermissions", maxTurns: 128, autoCompactWindowTokens: 200_000,
         maxRequestBodyBytes: 6 * 1024 * 1024, requestBodyBudgetBytes: input.bodyBudget ?? 5 * 1024 * 1024,
         disallowedTools: input.denyResumedReads && generation > 0 ? ["Read"] : undefined,

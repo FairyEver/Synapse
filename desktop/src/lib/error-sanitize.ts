@@ -7,7 +7,8 @@ const URL_USERINFO_PATTERN = /([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^@/\s?#]+@/g
 // intentionally stop at whitespace instead of guessing where prose ends.
 const DELIMITED_LOCAL_PATH_PATTERN = /(["'`])([^\r\n]*?)\1/g
 const ESCAPED_DELIMITED_LOCAL_PATH_PATTERN = /(\\)(["'`])([^\r\n]*?)\1\2/g
-const FILE_URL_PATH_PATTERN = /\bfile:\/\/\/[^\s<>()[\]{}"'`,;]+/gi
+const FILE_URL_PATH_PATTERN = /\bfile:\/\/[^\s<>()[\]{}"'`,;]+/gi
+const UNC_PATH_PATTERN = /(^|[\s(=]|\[)\\{2,}[^\s<>()[\]{}"'`,;]+/g
 const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:[\\/][^\s<>()[\]{}"'`,;]+/g
 const POSIX_PATH_PATTERN = /(^|[\s(=]|\[)\/(?!\/)[^\s<>()[\]{}"'`,;]+/g
 
@@ -29,7 +30,8 @@ export function isAbsoluteLocalPath(value: string): boolean {
   const normalized = value.trim()
   return /^\/(?!\/).+/.test(normalized)
     || /^[A-Za-z]:[\\/].+/.test(normalized)
-    || /^file:\/\/\/.+/i.test(normalized)
+    || /^\\{2,}[^\\]+\\.+/.test(normalized)
+    || /^file:\/\/.+/i.test(normalized)
 }
 
 export function redactAbsolutePathsInText(value: string): string {
@@ -39,6 +41,7 @@ export function redactAbsolutePathsInText(value: string): string {
     .replace(DELIMITED_LOCAL_PATH_PATTERN, (match, delimiter: string, content: string) =>
       isAbsoluteLocalPath(content) ? `${delimiter}[path]${delimiter}` : match)
     .replace(FILE_URL_PATH_PATTERN, "[path]")
+    .replace(UNC_PATH_PATTERN, "$1[path]")
     .replace(WINDOWS_PATH_PATTERN, "[path]")
     .replace(POSIX_PATH_PATTERN, "$1[path]")
 }

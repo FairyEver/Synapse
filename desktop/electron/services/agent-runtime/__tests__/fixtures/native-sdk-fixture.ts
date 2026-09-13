@@ -5,6 +5,15 @@ import os from "node:os"
 import path from "node:path"
 import { query, type Options, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk"
 
+/** Minimal OS launch environment; test homes never fall back to the user's SDK profile. */
+export function nativeFixtureEnvironment(root: string): NodeJS.ProcessEnv {
+  const allowed = new Set(["path", "systemroot", "windir", "comspec", "pathext", "claude_code_git_bash_path"])
+  return { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase()))),
+    HOME: root, USERPROFILE: root, TMP: root, TEMP: root, TMPDIR: root,
+    CLAUDE_CONFIG_DIR: path.join(root, "config"),
+  }
+}
+
 export interface FixtureCall { name: string; input: Record<string, unknown>; id: string }
 export interface FixtureRequest { stream?: boolean; messages: Array<{ content?: unknown }>; tools?: Array<{ name: string }> }
 export type FixtureReply = string | readonly FixtureCall[]
@@ -68,7 +77,7 @@ export async function createNativeSdkFixture(reply: (request: FixtureRequest, in
   const address = server.address()
   if (!address || typeof address === "string") throw new Error("Missing loopback address")
   const env = {
-    PATH: process.env.PATH, HOME: root, CLAUDE_CONFIG_DIR: path.join(root, "config"),
+    ...nativeFixtureEnvironment(root),
     ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`, ANTHROPIC_API_KEY: "fixture-key",
     CLAUDE_CODE_TASK_LIST_ID: randomUUID(), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
   }
@@ -90,7 +99,7 @@ export async function createNativeSdkFixture(reply: (request: FixtureRequest, in
       for (const run of runs) run.close()
       server.closeAllConnections()
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
-      await rm(root, { recursive: true, force: true })
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     },
   }
 }

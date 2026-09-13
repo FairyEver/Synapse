@@ -18,7 +18,22 @@ function runCommand(command, args, options = {}) {
 }
 
 async function runPnpm(args, options = {}) {
-  return runCommand(pnpmCommand, args, options)
+  const invocation = resolvePnpmInvocation(args, options.env ?? process.env)
+  return runCommand(invocation.command, invocation.args, options)
 }
 
-export { pnpmCommand, runCommand, runPnpm }
+// pnpm.cmd cannot be spawned as an executable on Windows. Root pnpm scripts
+// supply their JS launcher; invoke it with Node and keep arguments out of cmd.exe.
+function resolvePnpmInvocation(args, env = process.env, platform = process.platform, node = process.execPath) {
+  const launcher = env.npm_execpath
+  if (typeof launcher === "string" && /(?:^|[/\\])pnpm\.(?:c?js|mjs)$/i.test(launcher)) {
+    return { command: node, args: [launcher, ...args] }
+  }
+  if (platform === "win32" && typeof launcher === "string" && /(?:^|[/\\])pnpm\.exe$/i.test(launcher)) {
+    return { command: launcher, args }
+  }
+  if (platform === "win32") throw new Error("Windows cleanup must be started through the root pnpm run command.")
+  return { command: "pnpm", args }
+}
+
+export { pnpmCommand, runCommand, runPnpm, resolvePnpmInvocation }

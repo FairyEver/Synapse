@@ -236,10 +236,19 @@ export class TaskProgressSession {
         const id = identifier(u.id), original = state.units.get(id)
         if (unitIds.has(id)) throw new TaskProgressValidationError("同一提交不能重复任务单元 ID。")
         unitIds.add(id)
-        const filePath = path.resolve(this.cwd, identifier(u.path, 4096))
+        let filePath = path.resolve(this.cwd, identifier(u.path, 4096))
         if (u.kind !== "text" && u.kind !== "image") throw new TaskProgressValidationError("任务单元类型无效。")
         if (state.sealed && !original && input.reopen !== true) throw new TaskProgressValidationError("清单已封存；若遗漏材料，以 reopen:true 追加缺项，再重新封存；已有范围不能删除或替换。")
-        if (original && (original.path !== filePath || original.kind !== u.kind)) throw new TaskProgressValidationError("不能替换已登记的任务单元。")
+        if (original && original.kind !== u.kind) throw new TaskProgressValidationError("不能替换已登记的任务单元。")
+        if (original && original.path !== filePath) {
+          // Windows casing / separator aliases and macOS directory aliases must
+          // resolve to the registered identity; lexical lowercasing is not proof.
+          let resolved: string | undefined
+          try { resolved = await progressRealpath(filePath) }
+          catch { resolved = undefined }
+          if (!original.canonicalPath || resolved !== original.canonicalPath) throw new TaskProgressValidationError("不能替换已登记的任务单元。")
+          filePath = original.path
+        }
         let canonicalPath = original?.canonicalPath
         if (!canonicalPath) {
           try { canonicalPath = await progressRealpath(filePath) }

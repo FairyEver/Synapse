@@ -60,6 +60,13 @@ async function loadServerEnv() {
   }
 }
 
+function resolveLocalComposeEnvironment(env) {
+  return { ...env,
+    APP_PUBLIC_URL: env.APP_PUBLIC_URL?.trim() || localServerPublicAppUrl,
+    PDF_RENDERER_INTERNAL_SECRET: env.PDF_RENDERER_INTERNAL_SECRET?.trim() || localPdfRendererSecret,
+  }
+}
+
 function isServerDevCommand(args) {
   return args.includes("@synapse/server") && args.includes("run") && args.includes("dev")
 }
@@ -111,4 +118,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   await main()
 }
 
-export { isServerDevCommand, parseEnvFile, resolveDevCommandEnv }
+export { isServerDevCommand, parseEnvFile, resolveDevCommandEnv, resolveLocalComposeEnvironment }

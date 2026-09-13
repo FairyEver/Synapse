@@ -38,6 +38,8 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 只启动任务需要的最小范围。只改 `desktop/` 不要启动全栈；服务已经运行且热更新覆盖改动时不要重启。除非用户明确要求，不要为了验证主动启动 dev server、浏览器、应用窗口、DevTools、Playwright 或 MCP 页面检查。
 
+本地服务停止统一使用根命令 `pnpm quit:server` / `pnpm quit`。Docker Compose 的本地默认变量经 Node 子进程 env 传递，不依赖 shell 变量赋值；Windows 的嵌套 pnpm 调用通过当前 pnpm 提供的 JavaScript 启动器或独立 pnpm.exe 执行，避免直接 spawn `.cmd` 或插入 shell 命令。独立执行内部脚本不属于受支持入口。
+
 ## 配置规则
 
 - `desktop/config.ts` 集中放置桌面端全局配置常量；每个常量必须有中文注释说明用途和影响范围。

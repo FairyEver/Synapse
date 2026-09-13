@@ -96,13 +96,15 @@ jobs:
         run: pnpm --filter @synapse/desktop run build
       - name: Run tests
         run: pnpm --filter @synapse/desktop run test
+      - name: Run local service shutdown contracts
+        run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs
       - name: Verify IPC codegen drift
         run: pnpm --filter @synapse/desktop run check:ipc-codegen
       - name: Verify Phase 0 hard constraints
         run: pnpm --filter @synapse/desktop run check:hard-constraints
 
   desktop-windows:
-    name: Desktop Windows typecheck + Git tests + package
+    name: Desktop Windows typecheck + Agent/Git tests + package
     runs-on: windows-2022
     steps:
       - name: Checkout repository
@@ -128,6 +130,16 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm --filter @synapse/desktop run typecheck
+      - name: Configure native SDK Git Bash
+        shell: pwsh
+        run: |
+          $gitBash = "C:\Program Files\Git\bin\bash.exe"
+          if (!(Test-Path $gitBash)) { throw "Native SDK Git Bash is missing" }
+          "CLAUDE_CODE_GIT_BASH_PATH=$gitBash" >> $env:GITHUB_ENV
+      - name: Run native Agent continuation and cross-platform contracts
+        run: pnpm --filter @synapse/desktop run test:agent:cross-platform
+      - name: Run local service shutdown contracts
+        run: node --test scripts/__tests__/quit-server.test.mjs scripts/__tests__/run-server-with-env.test.mjs scripts/__tests__/quit-processes.test.mjs
       - name: Run Git unit and integration tests
         run: pnpm --filter @synapse/desktop exec vitest run electron/services/git-client electron/modules/git src/modules/git
       - name: Build desktop

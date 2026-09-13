@@ -162,3 +162,15 @@ describe("redactAbsolutePathsInText", () => {
     expect(isAbsoluteLocalPath("and/or")).toBe(false)
   })
 })
+
+
+it.each([
+  String.raw`\\server\share\private\report.txt`,
+  String.raw`\\?\C:\private\report.txt`,
+  String.raw`\\?\UNC\server\share\report.txt`,
+  "file://server/share/report.txt",
+])("redacts Windows network and extended paths on every host: %s", (file) => {
+  expect(isAbsoluteLocalPath(file)).toBe(true)
+  expect(redactAbsolutePathsInText(`Read ${file}`)).toBe("Read [path]")
+  expect(redactAbsolutePathsInText(JSON.stringify({ file_path: file }))).toBe('{"file_path":"[path]"}')
+})

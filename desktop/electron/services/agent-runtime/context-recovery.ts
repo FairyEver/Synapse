@@ -2,6 +2,7 @@ import path from "node:path"
 
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import { redactSensitiveText } from "./redaction"
+import { redactAbsolutePathsInText } from "../error-sanitize"
 
 export const CONTEXT_RECOVERY_HANDOFF_MAX_BYTES = 32 * 1024
 const MAX_HANDOFF_TEXT_CHARS = 8_000
@@ -79,23 +80,26 @@ function collectRelativeFiles(
 }
 
 function safeRelativePath(value: string, workspacePath: string | undefined): string | undefined {
-  if (!path.isAbsolute(value)) {
-    const normalized = path.normalize(value)
-    return normalized === ".." || normalized.startsWith(`..${path.sep}`) ? undefined : normalized
+  const windowsAbsolute = (file: string) => /^[A-Za-z]:[\\/]/.test(file) || /^\\\\/.test(file)
+  // Drive-relative paths depend on hidden per-drive working directories. Never
+  // present them (or another OS's absolute path) as a workspace-relative file.
+  if (/^[A-Za-z]:(?![\\/])/.test(value)) return undefined
+  const windowsWorkspace = workspacePath !== undefined && windowsAbsolute(workspacePath)
+  if (windowsAbsolute(value) && !windowsWorkspace) return undefined
+  const paths = windowsWorkspace ? path.win32 : path
+  if (!paths.isAbsolute(value)) {
+    const normalized = paths.normalize(value)
+    return normalized === ".." || normalized.startsWith(`..${paths.sep}`) ? undefined : normalized
   }
   if (!workspacePath) return undefined
-  const relative = path.relative(workspacePath, value)
-  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-    return undefined
-  }
+  const relative = paths.relative(workspacePath, paths.resolve(workspacePath, value))
+  if (!relative || relative === ".." || relative.startsWith(`..${paths.sep}`) || paths.isAbsolute(relative)) return undefined
   return relative
 }
 
 export function safeContextHandoffText(value: string, maxChars = MAX_HANDOFF_TEXT_CHARS): string {
-  return redactSensitiveText(value)
+  return redactSensitiveText(redactAbsolutePathsInText(value))
     .replace(/data:[^;,\s]+;base64,[A-Za-z0-9+/=\s]+/gi, "[base64 omitted]")
-    .replace(/(^|[\s"'=(:])\/(?:[^\s"'<>]+\/?)+/gm, "$1[absolute-path]")
-    .replace(/\b[A-Za-z]:\\(?:[^\s"'<>]+\\?)+/g, "[absolute-path]")
     .slice(0, maxChars)
 }
 

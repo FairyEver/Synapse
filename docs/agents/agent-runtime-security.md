@@ -22,6 +22,13 @@
 - 原生 Assistant 边界记录回复字节/摘要、重复长段落与独立思考标签计数；同 UUID 且同内容才抑制重复投递，不按文字相同删除正常消息。排除代码和引用示例后，异常回复只允许一次有持久记录的重新组织；再次异常保留失败，不重跑副作用。未采集原生事件的旧导出不能追溯断言是模型、SDK、IPC 或 Renderer 的重复。
 - 导出保留严格允许的数值 token/body 计量，路径使用每次导出独立随机盐生成的稳定匿名资源 ID；相同导出可比对，不跨导出关联。新增任务 journal 导出脱敏的清单、回执与已提交发现，不附私有 artifact 原文。累计用量不代表当前上下文，宿主 body 账本不代表实际 HTTP 字节。
 
+## 跨平台验证
+
+- 已登记资源的路径写法变化必须再次通过有界 `realpath` 与原规范路径匹配，保留最初登记路径；不得统一转小写来证明文件相同或放宽权限。不匹配、无法验证或原件变化仍拒绝。
+- 手动恢复按工作区的路径格式计算相对路径，拒绝盘符相对路径及跨盘符/共享根逃逸；自由正文脱敏复用共享工具，覆盖 UNC、扩展路径、带空格路径及本地文件 URL。导出资源关联在脱敏前生成，不能遗漏 UNC。
+- `test:agent:cross-platform` 使用已安装原生 SDK 和隔离 loopback，覆盖读取、停止、图片续接、进度及 SQLite；不使用真实服务凭据。Windows runner 显式提供 Git Bash，测试 HOME/USERPROFILE/临时目录与用户配置隔离。
+- macOS 的模拟 Windows 路径测试和原生 SDK 通过，不等于 Windows 原生执行通过；必须保留 CI/实机的实际平台结果。当前审计状态见 `docs/reference/2026-09-14-macos-windows-compatibility-audit.md`。
+
 ## Claude SDK 配置
 
 - 修改 SDK 参数前核对官方文档和当前安装包类型。`Options.env` 是子进程环境；`Options.settings` 是更高优先级 inline/flag settings，两者不能混用。

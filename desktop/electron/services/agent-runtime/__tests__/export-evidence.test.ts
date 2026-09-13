@@ -29,3 +29,16 @@ it("does not count a missing ID placeholder as a session, or cancellation and ze
   expect(stats).toMatchObject({ distinctKnownSdkSessionIds: 20, missingOrUnknownSessionIdRecords: 2,
     knownAttachmentBytes: 203, unknownAttachmentSizes: 1, cancelledOutcomeRecords: 1, failedOutcomeRecords: 0, apiErrorTextMentions: 1 })
 })
+
+
+it("assigns export-local aliases to Windows UNC and extended paths without merging distinct resources", () => {
+  const project = createExportEvidenceProjection()
+  const file = String.raw`\\server\share\项目 资料\one.png`
+  const a = project({ file_path: file }) as Record<string, unknown>
+  const b = JSON.parse(project(JSON.stringify({ file_path: file })) as string)
+  const c = project({ file_path: String.raw`\\server\share\项目 资料\two.png` }) as Record<string, unknown>
+  expect((project({ file_path: "//server/share/file.png" }) as Record<string, unknown>).file_pathResourceId).toMatch(/^resource-/)
+  expect(a.file_pathResourceId).toMatch(/^resource-/)
+  expect(a.file_pathResourceId).toBe(b.file_pathResourceId)
+  expect(c.file_pathResourceId).not.toBe(a.file_pathResourceId)
+})

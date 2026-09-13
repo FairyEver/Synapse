@@ -462,3 +462,30 @@ it("does not force generated output verification into an already sealed input in
       .toMatchObject({ status: "coverage-complete", declaredUnits: 1, processedUnits: 1 })
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
+
+
+it("native Read verifies Unicode/space paths and CRLF text across platform path spellings", async () => {
+  let stage = 0
+  const fixture = await createNativeSdkFixture(() => {
+    const file = path.join(fixture.root, "资料 空格 #.txt")
+    const unit = { id: "text", kind: "text", path: file, receipts: [], processed: false }
+    if (stage++ === 0) return [{ name: "TaskCreate", id: "scope", input: { subject: "Verify text", description: "Unicode original",
+      metadata: { synapseProgress: { version: 1, baseRevision: 0, units: [unit], seal: true } } } }]
+    if (stage === 2) return [{ name: "Read", id: "read", input: { file_path: file.replaceAll("\\", "/") } }]
+    if (stage === 3) return [{ name: "TaskUpdate", id: "finish", input: { taskId: "1", metadata: {
+      synapseProgress: { version: 1, baseRevision: 1, units: [{ ...unit, path: existsSync(file.replace(/\.txt$/, ".TXT")) ? file.replace(/\.txt$/, ".TXT") : file, receipts: ["read"], processed: true }] },
+    } } }]
+    return "Done"
+  })
+  await writeFile(path.join(fixture.root, "资料 空格 #.txt"), "\uFEFF第一行\r\nsecond line\r\n")
+  const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
+  try {
+    const result = await harness.router.send(harness.message("Read the original and keep its evidence."))
+    expect(result.error).toBeUndefined()
+    expect(fixture.requests).toHaveLength(4)
+    expect(JSON.stringify(toolResult(fixture.requests[2], "read"))).toContain("第一行")
+    const saved = await harness.conversations.get(result.conversationId)
+    expect(await harness.repository.taskProgress!.assessment(result.conversationId, saved!.taskProgressScope!.turnId))
+      .toMatchObject({ status: "coverage-complete", declaredUnits: 1, coveredUnits: 1, processedUnits: 1 })
+  } finally { await harness.close(); await fixture.close() }
+}, 30_000)

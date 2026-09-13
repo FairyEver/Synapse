@@ -26,7 +26,7 @@ async function setup() {
   await session.begin("t")
   return { dir, rows, store, session }
 }
-const image = (id: string, file = "/originals/image.png"): WorkReceipt => ({ toolUseId: id, toolName: "Read", path: file,
+const image = (id: string, file = "/originals/image.png"): WorkReceipt => ({ toolUseId: id, toolName: "Read", path: path.resolve(file),
   version: "original-v1", kind: "image", complete: true, presented: false, outputHash: "response" })
 const unit = { id: "image", path: "/originals/image.png", kind: "image", receipts: [] as string[], processed: false }
 
@@ -209,4 +209,25 @@ describe("durable task evidence and coverage", () => {
     replacement.close()
     await expect(replacement.receipt(image("after-cancel"))).rejects.toThrow("旧执行代")
   })
+})
+
+
+it("accepts a proven canonical alias without replacing a unit and rejects an unproven replacement", async () => {
+  const { dir, session, store } = await setup()
+  const original = path.join(dir, "original.txt"), alias = path.join(dir, "ORIGINAL.txt")
+  await writeFile(original, "evidence")
+  const canonical = await realpath(original)
+  const entry = { id: "original", path: original, kind: "text", receipts: [], processed: false }
+  await session.commit({ version: 1, baseRevision: 0, units: [entry], seal: true })
+  await session.receipt({ ...image("read", original), canonicalPath: canonical, kind: "text", range: [1, 1], totalLines: 1 })
+  await session.presented(["read"])
+  // Simulate a filesystem-confirmed casing alias; never lowercase paths to grant identity.
+  const lookup = vi.spyOn(fsPromises, "realpath").mockResolvedValueOnce(canonical)
+  try {
+    await session.commit({ version: 1, baseRevision: 1, units: [{ ...entry, path: alias, receipts: ["read"], processed: true }] })
+    expect(await session.assessment()).toMatchObject({ status: "coverage-complete", declaredUnits: 1 })
+    expect((await store.state("c", "t")).units.get("original")?.path).toBe(original)
+  } finally { lookup.mockRestore() }
+  await writeFile(path.join(dir, "other.txt"), "different")
+  await expect(session.commit({ version: 1, baseRevision: 2, units: [{ ...entry, path: path.join(dir, "other.txt") }] })).rejects.toThrow("替换")
 })
