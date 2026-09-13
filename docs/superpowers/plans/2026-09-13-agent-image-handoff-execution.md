@@ -19,7 +19,7 @@
 
 ## 可重复验收方法
 
-基础源码提交为 `f4d703602`；最终实现属于本记录所在提交。真实运行的生产源码 SHA-256 保存在相邻测试数据中，避免把测试开始后修改过的代码当作已验收。SDK 从已安装 package.json 读取版本，模型固定为用户现有百炼配置的 `qwen3.8-max`。
+基础源码提交为 `f4d703602`；修复与测试源码提交为 `37d94ef0da4cad2fe81df858b623b712dc4b681b`。其后仅补充本文与 JSON 的提交引用，不改变运行时代码。真实运行的生产源码 SHA-256 保存在相邻测试数据中，避免把测试开始后修改过的代码当作已验收。SDK 从已安装 package.json 读取版本，模型固定为用户现有百炼配置的 `qwen3.8-max`。
 
 测试入口：`desktop/electron/services/agent-runtime/__tests__/bailian-image-acceptance.test.ts`。默认跳过真实网络调用；明确设置 `SYNAPSE_BAILIAN_IMAGE_ACCEPTANCE=1`、独立 `SYNAPSE_IMAGE_ACCEPTANCE_ROOT` 和内存注入的 `SYNAPSE_IMAGE_ACCEPTANCE_TOKEN` 才执行。凭据不写入仓库、命令参数或测试证据。
 

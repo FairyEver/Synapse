@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "date": "2026-09-13",
   "baselineCommit": "f4d703602",
-  "implementationCommit": null,
+  "implementationCommit": "37d94ef0da4cad2fe81df858b623b712dc4b681b",
   "sourceNote": "A was exploratory before later guards. B/C/D record exact sources at start. The final SDK-session-only delta after D preserves queued terminal integrity errors after close; its real failure branch is validated by F and native Runtime regression tests. All other D production source fingerprints must match final files.",
   "finalSourceSha256": {
     "context-budget.ts": "f67fd2b54776f345b03b229e5b0615169d8c5880f8a5f9730101018508e9c614",
