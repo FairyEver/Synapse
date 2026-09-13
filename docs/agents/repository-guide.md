@@ -60,6 +60,8 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 桌面 `DataRepository` 的历史数据维护必须在主窗口创建后由独立 Worker 分批执行，主进程启动链不得等待扫描、清理或空间回收。SQLite 清理只处理已声明的冗余/孤儿记录并保留待处理数据；审计 JSONL 保持 append-only，活动文件达到 64 MiB 后无损轮转，历史分段继续参与读取和诊断导出，不得以轮转为由删除审计历史。
 
+DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明字段、索引和记录字节预算的 SQLite 集合。批次最多 128 项（含 CAS 前置条件）及 256 KiB，只允许同一连接同步提交；artifact IO、SDK 和权限等待不得放进事务。冲突必须显式返回，提交成功后才发布 ID 通知。范围读取使用声明索引的等值前缀与下一字段边界，最多 101 行，不允许业务 SQL 或深 OFFSET。原有 namespace 不自动切换通知或存储语义；Agent V2 切换仍须完成消费者、迁移及备份验收。
+
 当前轻量 Backup 包含数据库和 Drive COS 对象清单，不包含 Drive、Skill Repository 或 Platform Media 的对象字节。需要可恢复的新域必须同步设计 manifest、复制和恢复流程。
 
 ## 桌面更新与发布

@@ -30,13 +30,15 @@
  * unchanged and is implemented in T2.5 alongside this generic backend.
  */
 
+import { DATA_REPO_ATOMIC_MAX_BYTES, DATA_REPO_ATOMIC_MAX_ITEMS } from "../../../../config"
 import { DatabaseSync } from "node:sqlite"
 import path from "node:path"
 import { mkdirSync } from "node:fs"
 
 import { AbstractDataNamespace, type NamespaceBaseDeps } from "../namespace-base"
 import { InvalidNamespaceDataError } from "../errors"
-import type { DataListWindowItem, DataListWindowOptions } from "../types"
+import type { AtomicBatchRequest, AtomicBatchResult, DataListWindowItem, DataListWindowOptions, DataRangeQuery, DataSqliteSchema } from "../types"
+import { buildRangeQuery, fieldSql, indexSqlName, scalarParam, validateSqliteSchema } from "./sqlite-query"
 
 const SINGLETON_ID = "__singleton"
 const META_TABLE = "__synapse_meta"
@@ -47,6 +49,7 @@ export interface SqliteBackendDeps<T> extends NamespaceBaseDeps<T> {
   readonly database: DatabaseSync | (() => DatabaseSync)
   readonly indexes?: readonly string[]
   readonly validate?: (data: unknown) => data is T
+  readonly sqlite?: DataSqliteSchema<T>
 }
 
 export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
@@ -58,6 +61,7 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   private readonly tableName: string
   private readonly indexes: readonly string[]
   private readonly validate?: (data: unknown) => data is T
+  private readonly sqlite?: DataSqliteSchema<T>
   private prepared: {
     upsert: ReturnType<DatabaseSync["prepare"]>
     get: ReturnType<DatabaseSync["prepare"]>
@@ -74,6 +78,8 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     this.tableName = sanitizeTableName(deps.name)
     this.indexes = deps.indexes ?? []
     this.validate = deps.validate
+    this.sqlite = deps.sqlite
+    if (this.sqlite) validateSqliteSchema(this.name, this.sqlite)
   }
 
   private ensureSchema(): void {
@@ -97,6 +103,11 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
       database.exec(
         `CREATE INDEX IF NOT EXISTS ${indexName} ON ${this.tableName}(${expr});`,
       )
+    }
+    for (const index of this.sqlite?.indexes ?? []) {
+      database.exec(`CREATE ${index.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS
+        ${indexSqlName(this.name, this.tableName, index.name)} ON ${this.tableName}
+        (${index.fields.map((field) => fieldSql(this.name, field)).join(", ")});`)
     }
 
     const upsertMeta = database.prepare(
@@ -142,6 +153,9 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     if (typeof rawValue !== "string") {
       throw new InvalidNamespaceDataError(this.name, "value column is not a string")
     }
+    if (this.sqlite && Buffer.byteLength(rawValue, "utf8") > this.sqlite.maxRecordBytes) {
+      throw new InvalidNamespaceDataError(this.name, "stored row exceeds registered byte budget")
+    }
     let parsed: unknown
     try {
       parsed = JSON.parse(rawValue)
@@ -166,6 +180,7 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   }
 
   async setSingleton(value: T): Promise<void> {
+    if (this.sqlite?.atomic) throw new InvalidNamespaceDataError(this.name, "atomic collections do not support singleton writes")
     const previous = await this.getSingleton()
     const now = new Date().toISOString()
     this.prep().upsert.run(SINGLETON_ID, JSON.stringify(value), now, now)
@@ -188,6 +203,100 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     const rows = this.listRows(filter)
     const items = rows.map((r) => this.parseRow(r.value))
     return this.applyFilter(items, filter)
+  }
+
+  async queryRange(query: DataRangeQuery<T>): Promise<T[]> {
+    if (!this.sqlite) throw new InvalidNamespaceDataError(this.name, "indexed ranges are not registered")
+    const { sql, params } = buildRangeQuery(this.name, this.tableName, this.sqlite, query)
+    this.ensureSchema()
+    return this.getDatabase().prepare(sql).all(...params).map((row) => this.parseRow(row.value))
+  }
+
+  private validateAtomicObject(value: unknown, partial = false): asserts value is Record<string, unknown> {
+    if (!this.sqlite?.atomic || !this.validate || !value || typeof value !== "object" || Array.isArray(value)
+      || Object.keys(value).some((key) => !this.sqlite?.fields.some((field) => field === key))) {
+      throw new InvalidNamespaceDataError(this.name, "unregistered atomic record fields")
+    }
+    if (!partial && (!this.validate(value) || Buffer.byteLength(JSON.stringify(value), "utf8") > this.sqlite.maxRecordBytes)) {
+      throw new InvalidNamespaceDataError(this.name, "invalid or oversized atomic record")
+    }
+  }
+
+  /** Backend-only synchronous transaction; the public repository resolves registered handles. */
+  static commitBatch(
+    request: AtomicBatchRequest,
+    resolve: (name: string) => SqliteNamespace<Record<string, unknown> & { id: string }>,
+  ): AtomicBatchResult {
+    if (request.operations.length === 0 || request.operations.length + request.guards.length > DATA_REPO_ATOMIC_MAX_ITEMS
+      || Buffer.byteLength(JSON.stringify(request), "utf8") > DATA_REPO_ATOMIC_MAX_BYTES) {
+      throw new Error("Atomic batch exceeds 128 items or 256 KiB")
+    }
+    const namespaces = new Map<string, SqliteNamespace<Record<string, unknown> & { id: string }>>()
+    for (const item of [...request.guards, ...request.operations]) {
+      if (!item.id || item.id === SINGLETON_ID) throw new Error("Invalid atomic record ID")
+      if (!namespaces.has(item.namespace)) namespaces.set(item.namespace, resolve(item.namespace))
+    }
+    const handles = [...namespaces.values()]
+    const db = handles[0].getDatabase()
+    if (handles.some((ns) => ns.getDatabase() !== db)) throw new Error("Atomic batch requires one SQLite connection")
+    for (const ns of handles) {
+      if (!ns.sqlite?.atomic || !ns.validate) throw new InvalidNamespaceDataError(ns.name, "atomic schema is not registered")
+      ns.ensureSchema()
+    }
+    for (const guard of request.guards) {
+      const ns: SqliteNamespace<Record<string, unknown> & { id: string }> = namespaces.get(guard.namespace)!
+      ns.validateAtomicObject(guard.expected, true)
+      for (const value of Object.values(guard.expected)) scalarParam(ns.name, value)
+    }
+    for (const operation of request.operations) {
+      const ns: SqliteNamespace<Record<string, unknown> & { id: string }> = namespaces.get(operation.namespace)!
+      if (operation.kind === "insert") {
+        ns.validateAtomicObject(operation.value)
+        if (operation.value.id !== operation.id) throw new InvalidNamespaceDataError(ns.name, "atomic record ID mismatch")
+      } else if (operation.kind === "patch") {
+        ns.validateAtomicObject(operation.patch, true)
+        if ("id" in operation.patch) throw new InvalidNamespaceDataError(ns.name, "atomic patch cannot change ID")
+      } else if (operation.kind !== "remove") throw new Error("Unknown atomic operation")
+    }
+    const conflict = () => { db.exec("ROLLBACK"); return { committed: false, reason: "conflict" } as const }
+    db.exec("BEGIN IMMEDIATE")
+    try {
+      for (const guard of request.guards) {
+        const ns: SqliteNamespace<Record<string, unknown> & { id: string }> = namespaces.get(guard.namespace)!
+        const entries = Object.entries(guard.expected)
+        const where = entries.map(([field]) => `${fieldSql(ns.name, field)} IS ?`)
+        const found = db.prepare(`SELECT 1 FROM ${ns.tableName} WHERE id = ?${where.length ? ` AND ${where.join(" AND ")}` : ""}`)
+          .get(guard.id, ...entries.map(([, value]) => scalarParam(ns.name, value)))
+        if (!found) return conflict()
+      }
+      const now = new Date().toISOString()
+      for (const operation of request.operations) {
+        const ns: SqliteNamespace<Record<string, unknown> & { id: string }> = namespaces.get(operation.namespace)!
+        if (operation.kind === "insert") {
+          db.prepare(`INSERT INTO ${ns.tableName}(id, value, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+            .run(operation.id, JSON.stringify(operation.value), now, now)
+        } else if (operation.kind === "patch") {
+          const row = db.prepare(`SELECT value FROM ${ns.tableName} WHERE id = ?`).get(operation.id)
+          if (!row) return conflict()
+          const value = { ...ns.parseRow(row.value), ...(operation.patch as Record<string, unknown>) }
+          ns.validateAtomicObject(value)
+          db.prepare(`UPDATE ${ns.tableName} SET value = ?, updated_at = ? WHERE id = ?`)
+            .run(JSON.stringify(value), now, operation.id)
+        } else {
+          if (db.prepare(`DELETE FROM ${ns.tableName} WHERE id = ?`).run(operation.id).changes === 0) return conflict()
+        }
+      }
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      const code = (error as { errcode?: number }).errcode
+      if (code === 1555 || code === 2067) return { committed: false, reason: "conflict" }
+      throw error
+    }
+    for (const operation of request.operations) {
+      namespaces.get(operation.namespace)!.emit({ kind: operation.kind === "remove" ? "remove" : "upsert", id: operation.id })
+    }
+    return { committed: true }
   }
 
   async listWindow(options: DataListWindowOptions<T>): Promise<DataListWindowItem<T>[]> {
@@ -306,6 +415,7 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
   }
 
   async upsert(item: T & { id: string }): Promise<void> {
+    if (this.sqlite?.atomic) this.validateAtomicObject(item)
     if (item.id === SINGLETON_ID) {
       throw new InvalidNamespaceDataError(this.name, `id "${SINGLETON_ID}" is reserved`)
     }

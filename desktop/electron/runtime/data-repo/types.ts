@@ -22,6 +22,49 @@ export type DataChangeListener<T> = (change: DataChangeEvent<T>) => void
 
 export type DataQueryScalar = string | number
 
+export type DataAtomicScalar = string | number | boolean | null
+
+/** Explicit opt-in: bounded rows, registered fields/indexes, ID-only batch notifications. */
+export interface DataSqliteSchema<T> {
+  readonly fields: readonly Extract<keyof T, string>[]
+  readonly maxRecordBytes: number
+  readonly atomic: boolean
+  readonly indexes: readonly {
+    readonly name: string
+    readonly fields: readonly Extract<keyof T, string>[]
+    readonly unique?: boolean
+  }[]
+}
+
+export interface DataRangeQuery<T> {
+  readonly index: string
+  readonly equal: Partial<Record<Extract<keyof T, string>, DataAtomicScalar>>
+  readonly range?: {
+    readonly field: Extract<keyof T, string>
+    readonly gt?: DataQueryScalar
+    readonly gte?: DataQueryScalar
+    readonly lt?: DataQueryScalar
+    readonly lte?: DataQueryScalar
+  }
+  readonly direction: "asc" | "desc"
+  readonly limit: number
+}
+
+export interface AtomicBatchRequest {
+  readonly guards: readonly {
+    readonly namespace: string
+    readonly id: string
+    readonly expected: Readonly<Record<string, DataAtomicScalar>>
+  }[]
+  readonly operations: readonly (
+    | { readonly kind: "insert"; readonly namespace: string; readonly id: string; readonly value: unknown }
+    | { readonly kind: "patch"; readonly namespace: string; readonly id: string; readonly patch: unknown }
+    | { readonly kind: "remove"; readonly namespace: string; readonly id: string }
+  )[]
+}
+
+export type AtomicBatchResult = { readonly committed: true } | { readonly committed: false; readonly reason: "conflict" }
+
 export interface DataListWindowOptions<T> {
   readonly filter?: Partial<Record<keyof T, DataQueryScalar>>
   readonly exclude?: Partial<Record<keyof T, readonly DataQueryScalar[]>>
@@ -55,6 +98,7 @@ export interface DataNamespace<T> {
   /** Optional bounded SQLite query with scalar filters, ordering, offset, and array-tail projection. */
   listWindow?(options: DataListWindowOptions<T>): Promise<DataListWindowItem<T>[]>
   count?(filter?: Partial<T>): Promise<number>
+  queryRange?(query: DataRangeQuery<T>): Promise<T[]>
   get(id: string): Promise<T | null>
   upsert(item: T & { id: string }): Promise<void>
   remove(id: string): Promise<void>
@@ -152,6 +196,8 @@ export interface DataRepository {
    * name returns the same handle.
    */
   namespace<T>(name: string): DataNamespace<T>
+  /** Only explicitly registered bounded SQLite schemas support atomic batches. */
+  commitBatch?(request: AtomicBatchRequest): Promise<AtomicBatchResult>
   exportAll(options?: ExportOptions): Promise<BackupPayload>
   importAll(payload: BackupPayload, options?: ImportOptions): Promise<void>
   inspect(): readonly DataRepositoryInspectEntry[]
@@ -178,6 +224,7 @@ export interface NamespaceSchema<T> {
   readonly encrypted?: boolean
   /** Initial value to write when the namespace is first read. */
   readonly defaults?: () => T
+  readonly sqlite?: DataSqliteSchema<T>
 }
 
 // ------- Layered config (T2.12, §15.8) -------------------------------

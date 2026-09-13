@@ -17,7 +17,10 @@
 import {
   NamespaceNotFoundError,
 } from "./errors"
+import { SqliteNamespace } from "./backends/sqlite"
 import type {
+  AtomicBatchRequest,
+  AtomicBatchResult,
   BackupPayload,
   BackupPayloadEntry,
   DataNamespace,
@@ -58,6 +61,17 @@ export class DataRepositoryImpl implements DataRepository {
       throw new NamespaceNotFoundError(name)
     }
     return entry.handle as DataNamespace<T>
+  }
+
+  async commitBatch(request: AtomicBatchRequest): Promise<AtomicBatchResult> {
+    return SqliteNamespace.commitBatch(request, (name) => {
+      const entry = this.entries.get(name)
+      if (!entry) throw new NamespaceNotFoundError(name)
+      if (!entry.schema.sqlite?.atomic || !(entry.handle instanceof SqliteNamespace)) {
+        throw new Error(`Namespace "${name}" does not support atomic batches`)
+      }
+      return entry.handle
+    })
   }
 
   async exportAll(options: ExportOptions = {}): Promise<BackupPayload> {

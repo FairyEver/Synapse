@@ -67,7 +67,7 @@ export function createFileBackedDataRepository(
         }))
         break
       case "jsonl":
-        repo.register(schema as NamespaceSchema<IdentifiedRecordValue>, new JsonLinesNamespace({
+        repo.register<IdentifiedRecordValue>(schema as NamespaceSchema<IdentifiedRecordValue>, new JsonLinesNamespace({
           name: schema.name,
           schemaVersion: schema.currentVersion,
           backend: "jsonl",
@@ -79,12 +79,13 @@ export function createFileBackedDataRepository(
         break
       case "sqlite": {
         const identifiedSchema = schema as NamespaceSchema<IdentifiedRecordValue>
-        repo.register(identifiedSchema, new SqliteNamespace({
+        repo.register<IdentifiedRecordValue>(identifiedSchema, new SqliteNamespace({
           name: schema.name,
           schemaVersion: schema.currentVersion,
           backend: "sqlite",
           database: getSqliteDb,
           indexes: sqliteIndexesFor(schema.name),
+          sqlite: identifiedSchema.sqlite,
           defaults: identifiedSchema.defaults,
           validate: identifiedSchema.validate,
         }))

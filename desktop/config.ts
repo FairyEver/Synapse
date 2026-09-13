@@ -267,3 +267,12 @@ export const SKILL_ENV_BINDING_SCAN_MAX_ROOT_ENTRIES = 1_000
 
 // Skill 环境变量关联扫描单个受信任根最多检查的 Skill 目录数：与编辑器 Skill 预览的单根规模边界保持一致。
 export const SKILL_ENV_BINDING_SCAN_MAX_SKILLS_PER_ROOT = 200
+
+// DataRepository 原子事务最多包含的操作和前置条件总数，限制主线程同步事务工作量。
+export const DATA_REPO_ATOMIC_MAX_ITEMS = 128
+
+// DataRepository 原子批次与单条记录声明允许的最大序列化字节数，超大正文必须分块。
+export const DATA_REPO_ATOMIC_MAX_BYTES = 256 * 1024
+
+// DataRepository 索引范围查询最多返回 100 条正文描述符和 1 条下一页探测记录。
+export const DATA_REPO_RANGE_MAX_ROWS = 101
