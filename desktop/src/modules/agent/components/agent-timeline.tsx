@@ -35,6 +35,7 @@ function AgentTimeline({
   onCreateConversation,
   viewportRef,
   loadingOlder,
+  hasMore = false,
   historyError,
   onRetryHistory,
   projectId,
@@ -61,6 +62,7 @@ function AgentTimeline({
   readonly onCreateConversation?: () => void
   readonly viewportRef: Ref<HTMLDivElement>
   readonly loadingOlder: boolean
+  readonly hasMore?: boolean
   readonly historyError: string | null
   readonly onRetryHistory: () => void
   readonly projectId?: string
@@ -88,7 +90,13 @@ function AgentTimeline({
       >
         {displayNodes.length === 0 ? (
           <div data-allow-select="true" className="mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center px-4 pb-34 pt-4 text-center">
-            {sending ? (
+            {loadingOlder ? (
+              <p className="text-sm text-muted-foreground">加载中</p>
+            ) : historyError || hasMore ? (
+              <Button type="button" variant="ghost" size="sm" onClick={onRetryHistory}>
+                {historyError ? "重试加载" : "加载历史消息"}
+              </Button>
+            ) : sending ? (
               <AgentRunStatus label="Agent 正在启动" />
             ) : (
               <p className="text-sm text-muted-foreground">暂无消息</p>
@@ -98,10 +106,10 @@ function AgentTimeline({
           <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pb-34 pt-4">
             {loadingOlder ? (
               <p className="py-2 text-center text-sm text-muted-foreground">加载中</p>
-            ) : historyError ? (
+            ) : historyError || hasMore ? (
               <div className="flex justify-center py-1">
                 <Button type="button" variant="ghost" size="sm" onClick={onRetryHistory}>
-                  重试加载
+                  {historyError ? "重试加载" : "加载历史消息"}
                 </Button>
               </div>
             ) : null}

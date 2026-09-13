@@ -300,6 +300,100 @@ describe("AgentConversationControlService", () => {
     service.dispose()
   })
 
+  it("pages every record of a completed oversized turn without a truncatedTurn placeholder", async () => {
+    const entry = conversation()
+    entry.history = Array.from({ length: 611 }, (_, index) => ({
+      role: index === 0 ? "user" : "assistant",
+      content: index === 610 ? "Completed all work" : `${index}:` + "记录\n".repeat(3_000),
+      timestamp: "2026-09-13T00:00:00.000Z",
+    }))
+    const original = JSON.stringify(entry.history)
+    const { service } = createHarness(entry, {
+      getConversationRuntimeSnapshot: vi.fn(() => ({
+        lifecycle: "idle", activeTurnId: null, queuedTurns: [], pendingPermissionRequestId: null,
+      })),
+    })
+    let beforeIndex = entry.history.length
+    let ids: string[] = []
+    while (beforeIndex > 0) {
+      const result = await service.inspect({
+        projectId: entry.projectId, conversationId: entry.id, limit: 100, beforeIndex,
+      })
+      const page = result.timeline as {
+        entries: { id: string; kind: string; content?: string }[];
+        startIndex: number; endIndex: number; total: number; hasMore: boolean; nextBeforeIndex: number | null;
+      }
+      expect(result.state).toMatchObject({ lifecycle: "idle", activeTurnId: null })
+      expect(Buffer.byteLength(JSON.stringify(result), "utf8")).toBeLessThanOrEqual(1024 * 1024)
+      expect(page.entries.length).toBeGreaterThan(0)
+      expect(page.entries.length).toBeLessThan(100)
+      expect(page.startIndex).toBe(beforeIndex - page.entries.length)
+      expect(page.endIndex).toBe(beforeIndex)
+      expect(page.total).toBe(611)
+      expect(page.hasMore).toBe(page.startIndex > 0)
+      expect(page.nextBeforeIndex).toBe(page.startIndex > 0 ? page.startIndex : null)
+      expect(page.entries.every((item) => item.kind !== "truncatedTurn")).toBe(true)
+      if (beforeIndex === 611) expect(page.entries.at(-1)?.content).toBe("Completed all work")
+      ids = [...page.entries.map((item) => item.id), ...ids]
+      beforeIndex = page.startIndex
+    }
+    expect(ids).toEqual(Array.from({ length: 611 }, (_, index) => `${entry.id}:history:${index}`))
+    expect(JSON.stringify(entry.history)).toBe(original)
+    await expect(service.inspect({ projectId: entry.projectId, conversationId: entry.id, limit: 100, beforeIndex: 0 }))
+      .resolves.toMatchObject({ timeline: { entries: [], hasMore: false, nextBeforeIndex: null } })
+    await expect(service.inspect({ projectId: entry.projectId, conversationId: entry.id, limit: 100, beforeIndex: 612 }))
+      .rejects.toMatchObject({ code: "invalid_input" })
+    service.dispose()
+  })
+
+  it("retains toolUseId on oversized tool result summaries and accepts an existing cursor after append", async () => {
+    const entry = conversation()
+    entry.history[2]!.metadata = { agentEventType: "toolUse", toolName: "Read", toolUseId: "read-1" }
+    entry.history.push({
+      role: "tool", content: "正文".repeat(50_000), timestamp: "2026-09-13T00:00:00.000Z",
+      metadata: { agentEventType: "toolResult", toolName: "Read", toolUseId: "read-1", success: true },
+    })
+    const { service } = createHarness(entry)
+    const target = { projectId: entry.projectId, conversationId: entry.id, limit: 1 }
+    const latest = await service.inspect(target)
+    expect(latest.timeline).toMatchObject({
+      startIndex: 3, nextBeforeIndex: 3,
+      entries: [{ kind: "toolResult", toolUseId: "read-1", truncated: true }],
+    })
+    entry.history.push({ role: "assistant", content: "done", timestamp: "2026-09-13T00:00:01.000Z" })
+    const older = await service.inspect({ ...target, beforeIndex: 3 })
+    expect(older.timeline).toMatchObject({
+      total: 5, startIndex: 2, endIndex: 3,
+      entries: [{ kind: "toolCall", toolUseId: "read-1" }],
+    })
+    service.dispose()
+  })
+
+  it("shrinks pending previews without dropping history and explicitly rejects an oversized envelope", async () => {
+    const pending = Array.from({ length: 40 }, (_, index) => ({
+      requestId: `request-${index}`, projectId: "project-1", conversationId: "conversation-1",
+      sessionKey: "local:renderer", turnId: "turn-1", toolName: "Read",
+      toolInput: "记录\n".repeat(5_000), createdAt: "2026-09-13T00:00:00.000Z",
+    }))
+    const { service, runtime } = createHarness(conversation(), {
+      listPendingPermissions: vi.fn(() => pending),
+    })
+    const target = { projectId: "project-1", conversationId: "conversation-1", limit: 50 }
+    const result = await service.inspect(target)
+    expect((result.timeline as { entries: unknown[] }).entries).toHaveLength(3)
+    expect(result.pending).toEqual(pending.map((item) => ({
+      kind: "tool_permission", requestId: item.requestId, turnId: item.turnId, toolName: item.toolName, truncated: true,
+    })))
+    expect(Buffer.byteLength(JSON.stringify(result), "utf8")).toBeLessThanOrEqual(1024 * 1024)
+    runtime.getConversationRuntimeSnapshot.mockReturnValue({
+      lifecycle: "running", activeTurnId: "t".repeat(1024 * 1024), queuedTurns: [], pendingPermissionRequestId: null,
+    })
+    await expect(service.inspect(target)).rejects.toMatchObject({
+      code: "operation_failed", data: { reason: "inspection_page_too_large" },
+    })
+    service.dispose()
+  })
+
   it("allows reading background conversations but refuses control", async () => {
     const { service } = createHarness(conversation("automation"))
     await expect(service.inspect({

@@ -22,7 +22,7 @@
 | React 开发 measure | 已限制可识别记录的保留 | 本地 React 19.2.5 源码的 Components/Scheduler track；真实 Node Performance API 合成 1k/10k/100k 条，React 记录不超过 256，业务同名 measure 与 mark 保留 |
 | 全文查看器 | 局部内容与回退游标有界，关闭释放 | 400 次前进、128 次回退后仍可回到开头；300 次开关清空正文；失败重试、旧响应、双击均覆盖 |
 | prepend / refresh merge / backfill | 仍无限保留和追补，待改 | `use-chat-connection` 静态检查；没有声称缓存已可淘汰 |
-| historyPage / MCP inspect / 全文读取 | 仍存在先读全量再裁剪及整轮回退 | `ipc-shared`、`ipc-messages`、Agent control service 静态检查；UI 单轮超大页面问题仍未解决 |
+| historyPage / MCP inspect / 全文读取 | 后续修复已移除整轮回退，按记录和字节分页；底层仍全量读取会话 | 611 条超大单轮分别遍历 UI IPC 与 MCP，覆盖尾部回复、游标连续性与原文不变；尚未完成分块存储 |
 | DOM、活动字符串、SDK 内存、布局 | 尚无运行时归因 | 未采 CPU/布局调用栈、堆快照或正式包数据；不能把 90 分钟旧进程观察当成当前测量 |
 
 ## 合成存储测量
@@ -85,3 +85,15 @@ pnpm --filter @synapse/desktop exec vitest run tests/perf/agent-long-running-sto
 7. 虚拟化后的原生查找范围、产品搜索定位、全文复制、权限表单、焦点及滚动恢复。
 
 应用运行时验收需要额外授权及隔离测试数据；但 P1～P4 尚未完成的代码工作不应归因于缺少运行时授权。当前交付是部分实施，不能以“只差 8 小时测试”概括。
+
+## 后续修复：长单轮结束后历史为空（2026-09-13）
+
+根因：UI historyPage 为满足用户轮次边界先向前扩到整轮，超过页面字节预算后又按整轮移除，611 条单轮可能返回空 entries；MCP inspect 同条件返回 truncatedTurn 占位。这是读取投影的错误，不能据此判定持久化历史丢失。
+
+本次共用连续记录分页器，只投影当前页候选记录，保留 100 条与原有字节预算。beforeIndex 明确为排他记录索引，兼容旧用户消息边界；UI 可向前加载，MCP nextBeforeIndex 可遍历全轮。跨页工具按 toolUseId 关联；MCP 超大单项摘要也保留该键。MCP 总响应仍无法容纳时显式报错，不返回空历史假成功。无显示记录但仍有旧页、正在加载或历史错误时，UI 显示对应加载入口或状态。
+
+验证采用独立合成数据，不读取正文或凭据，不调用模型，不改用户会话。覆盖 611 条同轮且超过 1 MiB 的 UI/MCP 逐页读取（尾部答案可见，所有 ID 恰好一次，原历史不变）、183 条在工具调用/结果间切页、同名并行工具跨页配对、100k 历史只投影 100 条、UTF-8/JSON 转义字节预算、零游标、追加后的旧游标、越界拒绝、Renderer 向前加载与重新选择、既有尾部刷新/缺口追补/迟到事件回归。
+
+这次修复不迁移存储，不实现页缓存淘汰或 DOM 虚拟化，也不代表长上下文任务无遗漏、无限上下文或长期性能验收通过。未重启用户应用；运行中的旧进程不会因为源码修复自动具备新版主进程分页行为。此前验证记录与未完成阶段仍按各自范围保留。
+
+验证结果（基于 `ad95d7652` 的本次修改）：Electron IPC/分页器/MCP 控制/公开 schema/manifest/tool names 共 6 文件 124 项通过，Renderer timeline 与 chat hook 2 文件 126 项通过，合计 250 项。desktop 完整 typecheck、hard constraints、IPC codegen 一致性与 diff whitespace 检查通过。专项 ESLint 仅报告 control-service 原有 timer 的 prefer-const；对 HEAD 原文运行同一 ESLint 也得到相同告警，本次未改该观察计时逻辑。未运行真实应用或全量测试，不将专项结果当成原失败会话在运行中的旧版本已恢复的证据。

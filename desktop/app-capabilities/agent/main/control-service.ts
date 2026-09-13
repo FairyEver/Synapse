@@ -15,6 +15,7 @@ import type {
 } from "../../../electron/services/agent-runtime"
 import { redactSensitiveValue } from "../../../electron/services/agent-runtime/redaction"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
+import { boundedTimelinePage } from "../../../electron/services/agent-runtime/timeline-page"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "../../../src/lib/default-agent-workspace"
 import type { DispatchActorIdentity } from "../../../synapse-capabilities/shared/types"
 import { AgentConversationCapabilityError } from "../shared/errors"
@@ -236,7 +237,7 @@ export class AgentConversationControlService {
       timeline: page,
     }
     if (jsonBytes(result) <= PAGE_BYTE_LIMIT) return result
-    return {
+    const boundedResult = {
       ...result,
       pending: pending.map((item) => ({
         kind: item.kind,
@@ -245,8 +246,11 @@ export class AgentConversationControlService {
         toolName: item.toolName,
         truncated: true,
       })),
-      timeline: { ...page, entries: [], truncated: true },
     }
+    if (jsonBytes(boundedResult) > PAGE_BYTE_LIMIT) {
+      throw new AgentConversationCapabilityError("operation_failed", { reason: "inspection_page_too_large" })
+    }
+    return boundedResult
   }
 
   async observe(
@@ -608,28 +612,17 @@ function buildTimelinePage(
 ): Record<string, unknown> {
   const total = conversation.history.length
   const end = requestedEnd ?? total
-  if (end > total || (end !== total && conversation.history[end]?.role !== "user")) {
+  if (!Number.isInteger(end) || end < 0 || end > total) {
     throw new AgentConversationCapabilityError("invalid_input")
   }
-  let start = Math.max(0, end - requestedLimit)
-  while (start > 0 && conversation.history[start]?.role !== "user") start -= 1
-  let entries = conversation.history.slice(start, end).map((entry, offset) =>
-    sanitizeTimelineItem(historyRecordToTimelineItem(conversation.id, entry, start + offset, conversation.agentType)))
-  while (entries.length > 0 && jsonBytes(entries) > TIMELINE_PAGE_BYTE_LIMIT) {
-    const nextUserIndex = entries.findIndex((entry, index) => index > 0 && recordValue(entry)?.kind === "message"
-      && recordValue(entry)?.role === "user")
-    if (nextUserIndex === -1) {
-      entries = [{
-        kind: "truncatedTurn",
-        startIndex: start,
-        endIndex: end,
-        truncated: true,
-      }]
-      break
-    }
-    entries = entries.slice(nextUserIndex)
-    start += nextUserIndex
-  }
+  const { entries, startIndex: start } = boundedTimelinePage({
+    endIndex: end,
+    limit: requestedLimit,
+    maxBytes: TIMELINE_PAGE_BYTE_LIMIT,
+    project: (index) => sanitizeTimelineItem(historyRecordToTimelineItem(
+      conversation.id, conversation.history[index]!, index, conversation.agentType,
+    )),
+  })
   return {
     entries,
     total,
@@ -651,6 +644,7 @@ function sanitizeTimelineItem(value: unknown): unknown {
     kind: record.kind,
     role: record.role,
     toolName: record.toolName,
+    toolUseId: record.toolUseId,
     truncated: true,
     content: OMITTED,
   }

@@ -511,6 +511,35 @@ describe("useAgentChat", () => {
     expect(chat?.timelineHasMore).toBe(false)
   })
 
+  it("loads all 611 records of one completed turn and reloads its latest answer on selection", async () => {
+    const bridge = (window as unknown as { synapse: { agent: { getTimeline: ReturnType<typeof vi.fn> } } }).synapse.agent
+    const history = Array.from({ length: 611 }, (_, index) => ({
+      ...timelineHistoryMessage(index), role: index === 0 ? "user" as const : "assistant" as const,
+    }))
+    bridge.getTimeline.mockImplementation(async (request: { beforeIndex?: number }) => {
+      const end = request.beforeIndex ?? history.length
+      const startIndex = Math.max(0, end - 37) // byte-limited pages within the same user turn
+      return { projectId: session.projectId, conversationId: session.id, sessionKey: session.sessionKey,
+        entries: history.slice(startIndex, end), total: history.length, startIndex, hasMore: startIndex > 0 }
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => { root.render(<HookProbe onChange={(next) => { chat = next }} />) })
+    await waitFor(() => chat?.timeline.length === 37)
+    expect(chat?.timeline.at(-1)?.id).toBe(`${session.id}:history:610`)
+    for (let page = 0; page < 17 && chat?.timelineHasMore; page += 1) {
+      await act(async () => { await chat?.loadOlderTimeline() })
+    }
+    expect(chat?.timelineHasMore).toBe(false)
+    expect(chat?.timeline.map((item) => item.id)).toEqual(history.map((item) => item.id))
+    await act(async () => { await chat?.selectSession(session) })
+    expect(chat?.timeline.at(-1)?.id).toBe(`${session.id}:history:610`)
+    expect(chat?.timelineHasMore).toBe(true)
+  })
+
   it("backfills missing pages before merging a live tail refresh", async () => {
     const bridge = (window as unknown as {
       synapse: {

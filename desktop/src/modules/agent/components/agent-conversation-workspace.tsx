@@ -840,6 +840,7 @@ function AgentConversationWorkspace({
         onCreateConversation={() => openCreateDialog()}
         viewportRef={stick.viewportRef}
         loadingOlder={chat.loadingOlder}
+        hasMore={chat.timelineHasMore}
         historyError={chat.timelineHistoryError}
         onRetryHistory={() => void chat.loadOlderTimeline()}
         projectId={target.projectId}

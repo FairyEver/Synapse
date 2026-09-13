@@ -94,7 +94,8 @@ export type AgentConversationCreateInput = z.infer<typeof agentConversationCreat
 
 export const agentConversationInspectInputSchema = z.object({
   ...agentConversationTargetShape,
-  beforeIndex: z.number().int().nonnegative().optional(),
+  beforeIndex: z.number().int().nonnegative().optional()
+    .describe("Exclusive history record index; use timeline.nextBeforeIndex from the previous page. Pages may split a user turn or tool call/result pair."),
   limit: z.number().int().positive().max(100).default(50),
 }).strict().superRefine(validateConversationTarget)
 

@@ -27,6 +27,7 @@
 - 自动维护无法接管且已投影为失败终态后的兜底恢复仍是 Agent UI 私有两阶段操作：先验证最新失败轮并整理，再由用户显式“继续上一个任务”。恢复交接最多 32 KiB，只能在用户可见消息落库后注入新 SDK Session；不得包含 Base64、绝对路径、完整工具结果、敏感字段，不得直接重放工具调用。用户发送其它消息时清除恢复状态并使用干净 Session。
 - 请求体恢复期间必须结束旧 Session 的权限等待并暂停既有待发送队列；取消、切换对话和关闭窗口不得向旧 Session 发送内容。恢复日志只记录 Provider scope、阈值、最后可信 token、附件数量/字节、失败轮和恢复结果，不记录 prompt、工具正文、路径、Base64 或凭据。
 - Agent SDK 高频事件必须先分类再构造 payload。`system/thinking_tokens` 与未知 SDK 类型不得进入 AgentEvent、EventBus、持久化或轮次结果；只允许不含正文、路径、凭据和原始 payload 的每轮聚合诊断。真实 thinking 文本继续使用 `thinking_delta`。
+- Timeline 和 MCP inspect 按持久化记录的连续区间分页，允许在同一用户回合内以及工具调用/结果之间切页；`beforeIndex` 是排他的记录索引，旧用户消息边界游标仍兼容。返回页必须保留稳定记录 ID 与 `toolUseId`，字节超限只缩小当前页，不得整轮删除、用空页或整轮占位符掩盖非空历史。超大单项只裁剪显示投影，不修改持久化原文。
 - Renderer 只接收有界显示投影：流式批次最多 128 条/64 KiB、等待确认最多 512 KiB；send 终态最多 32 KiB；timeline 每页最多 100 条/1 MiB、单项与全文分块最多 64 KiB。Renderer 私有全文接口只能接受 project、conversation、history index 和 offset，禁止接受文件路径。
 - Renderer 崩溃或持续无响应时，必须按 webContents 所属关系停止其发起的本地交互轮次、结束权限等待并清除未确认批次；不得停止 Automation、Workflow、Relay 或其它 Renderer 的运行。已执行工具保留真实结果，不回滚、不自动重放。详细不变量见 `docs/superpowers/specs/2026-09-12-agent-renderer-capacity-and-recovery-design.md`。
 - Agent 用户附件只在主进程受控目录暂存；Renderer 与发送 IPC 只携带版本化 attachment id/metadata，history 只保存用户正文与结构化附件元数据，不得携带原始字节、Base64、data URL 或受控绝对路径。

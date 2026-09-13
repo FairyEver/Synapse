@@ -46,6 +46,7 @@
 
 固定例外：
 
+- Agent Conversation inspect 的既有 `beforeIndex` 现在支持任意有效记录边界，默认 50 条、最多 100 条及既有字节限制不变；超大单轮分多页返回，`toolUseId` 跨页保留，不新增工具，Agent Conversation 仍为 11 项。调用方按返回的 `nextBeforeIndex` 翻页，不再假定用户轮次边界。
 - Agent 自动上下文维护及私有检查点是既有执行器内部行为，不新增 capability、MCP、Workflow、Automation 或 Deep Link；运行观察继续使用同一 conversation/turn，注册数量不变。
 
 - Agent Conversation 能力包扩展既有 Agent System App，注册 11 个 capability/MCP tool（含供应商模型查询、分组查询与可指定模型的新建对话）；唯一 Deep Link action `open` 只注册 `synapse://threads/<thread-id>`，不注册旧 `synapse://app/agent/open` 入口，也不重复注册应用页、Dock 项或 Workflow/Automation 节点。路径 id 是本机短校验 `conversationRef` 的主体，由主进程跨项目解析唯一目标；复制链接对点号、下划线和连字符做百分号编码，解析只兼容这三个字符的 Markdown 转义，仍校验完整格式与校验和；MCP 首次读取可把完整链接交给主进程解析，后续读取和控制使用返回的 `projectId + conversationRef`，并继续经过权限、来源、回合与请求校验。

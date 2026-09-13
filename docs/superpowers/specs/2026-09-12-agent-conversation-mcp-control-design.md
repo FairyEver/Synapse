@@ -53,7 +53,8 @@ Only `open` is a Deep Link action. The package adds no System App, Dock item, Wo
 Inspection presents the same persisted timeline model used by the Agent UI, including visible messages, thinking, tool calls/results, permission requests, results, errors, file checkpoints, and safe SDK event summaries.
 
 - Default page size is 50 and maximum page size is 100.
-- Pagination preserves user-turn boundaries.
+- Pagination uses contiguous persisted record ranges `[startIndex, endIndex)`, including boundaries within a user turn or between a tool call and its result. `beforeIndex` is exclusive; reuse `nextBeforeIndex` until `hasMore` is false. Existing numeric user-boundary cursors remain valid, including zero. New records appended after a cursor do not shift earlier indices.
+- Pages retain stable item IDs and `toolUseId` across boundaries, including truncated item summaries. Byte limits shrink the page; they must not replace an oversized turn with a placeholder or an empty successful page. If even the bounded inspection envelope cannot fit, return an explicit operation failure.
 - One returned timeline item is at most 64 KiB and one page is at most 1 MiB.
 - Redaction recursively covers secret-like keys and text.
 - Provider/SDK session identifiers, raw SDK payloads, Base64 content, and internal artifact URLs are omitted.

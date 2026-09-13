@@ -22,6 +22,7 @@ import type { KnowledgeBaseStorageMigrationService } from "../../services/knowle
 import { createMainLogger } from "../../services/log-store"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
+import { boundedTimelinePage } from "../../services/agent-runtime/timeline-page"
 import { isDefaultAgentWorkspaceProjectId } from "../../../src/lib/default-agent-workspace"
 import { resolveDefaultAgentWorkspaceProject } from "./default-agent-workspace"
 import { agentConversationReference } from "../../../app-capabilities/agent/main/conversation-reference"
@@ -594,10 +595,6 @@ export function historyPage(
   request: Pick<z.infer<typeof timelineRequestSchema>, "limit" | "beforeIndex"> = {},
 ): ConversationHistoryPage {
   const total = session.history.length
-  if (total === 0) {
-    return { entries: [], total: 0, startIndex: 0, hasMore: false }
-  }
-
   const endIndex = request.beforeIndex ?? total
   assertHistoryPageBoundary(session, endIndex)
 
@@ -605,18 +602,14 @@ export function historyPage(
     return { entries: [], total, startIndex: 0, hasMore: false }
   }
 
-  const nominalStart = Math.max(0, endIndex - Math.min(request.limit ?? 100, 100))
-  let startIndex = nominalStart
-  while (startIndex > 0 && session.history[startIndex]?.role !== "user") {
-    startIndex -= 1
-  }
-  if (session.history[startIndex]?.role !== "user") startIndex = 0
-
-  const bounded = boundTimelineEntries(session.history.slice(startIndex, endIndex).map((entry, index) =>
-    boundTimelineEntry(historyEntry(session.id, entry, startIndex + index, session.agentType), startIndex + index)))
-  startIndex += bounded.dropped
+  const { entries, startIndex } = boundedTimelinePage({
+    endIndex,
+    limit: request.limit ?? 100,
+    maxBytes: MAX_TIMELINE_PAGE_BYTES,
+    project: (index) => boundTimelineEntry(historyEntry(session.id, session.history[index]!, index, session.agentType), index),
+  })
   return {
-    entries: bounded.entries,
+    entries,
     total,
     startIndex,
     hasMore: startIndex > 0,
@@ -637,24 +630,6 @@ function boundTimelineEntry(entry: SynapseAgentTimelineItem, historyIndex: numbe
   return next as unknown as SynapseAgentTimelineItem
 }
 
-function boundTimelineEntries(
-  entries: readonly SynapseAgentTimelineItem[],
-): { readonly entries: SynapseAgentTimelineItem[]; readonly dropped: number } {
-  const result = [...entries]
-  let dropped = 0
-  while (result.length > 0 && Buffer.byteLength(JSON.stringify(result), "utf8") > MAX_TIMELINE_PAGE_BYTES) {
-    do {
-      result.shift()
-      dropped += 1
-    } while (result.length > 0 && !isTimelineUserBoundary(result[0]))
-  }
-  return { entries: result, dropped }
-}
-
-function isTimelineUserBoundary(entry: SynapseAgentTimelineItem | undefined): boolean {
-  return entry?.kind === "message" && entry.role === "user"
-}
-
 function truncateTimelineText(value: string, maxBytes: number): string {
   let low = 0
   let high = value.length
@@ -668,8 +643,7 @@ function truncateTimelineText(value: string, maxBytes: number): string {
 
 function assertHistoryPageBoundary(session: ConversationEntryV1, beforeIndex: number): void {
   const total = session.history.length
-  if (beforeIndex === 0 || beforeIndex === total) return
-  if (beforeIndex > total || session.history[beforeIndex]?.role !== "user") {
+  if (!Number.isInteger(beforeIndex) || beforeIndex < 0 || beforeIndex > total) {
     throw new InvalidConversationHistoryBoundaryError(beforeIndex)
   }
 }

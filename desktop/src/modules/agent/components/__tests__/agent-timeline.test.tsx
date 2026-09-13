@@ -113,6 +113,41 @@ function renderInteractiveTimeline(overrides: Partial<ComponentProps<typeof Agen
 }
 
 describe("AgentTimeline", () => {
+  it("keeps loading and recovery controls visible when no displayable rows are loaded", () => {
+    expect(textFromMarkup(renderTimeline({ loadingOlder: true }))).toContain("加载中")
+    expect(textFromMarkup(renderTimeline({ loadingOlder: true }))).not.toContain("暂无消息")
+    const onRetryHistory = vi.fn()
+    const { container, rerender } = renderInteractiveTimeline({ historyError: "历史加载失败", onRetryHistory })
+    expect(container.textContent).not.toContain("暂无消息")
+    expect(container.textContent).toContain("重试加载")
+    act(() => container.querySelector("button")!.click())
+    expect(onRetryHistory).toHaveBeenCalledTimes(1)
+    rerender({ hasMore: true, onRetryHistory })
+    expect(container.textContent).toContain("加载历史消息")
+    expect(container.textContent).not.toContain("暂无消息")
+    act(() => container.querySelector("button")!.click())
+    expect(onRetryHistory).toHaveBeenCalledTimes(2)
+    rerender({})
+    expect(container.textContent).toContain("暂无消息")
+  })
+
+  it("rejoins tool results across pages by toolUseId with parallel calls to the same tool", () => {
+    const timestamp = "2026-09-13T00:00:00.000Z"
+    const calls: SynapseAgentTimelineItem[] = ["read-a", "read-b"].map((toolUseId) => ({
+      id: `call-${toolUseId}`, kind: "toolCall", toolUseId, toolName: "Read", timestamp,
+    }))
+    const results: SynapseAgentTimelineItem[] = ["read-b", "read-a"].map((toolUseId) => ({
+      id: `result-${toolUseId}`, kind: "toolResult", toolUseId, toolName: "Read", timestamp,
+      content: toolUseId, success: true,
+    }))
+    expect(timelineDisplayEntries(results).map((entry) => entry.item.id)).toEqual(results.map((item) => item.id))
+    const joined = timelineDisplayEntries([...calls, ...results])
+    expect(joined).toHaveLength(2)
+    expect(joined.map((entry) => [entry.item.id, entry.result?.id])).toEqual([
+      ["call-read-a", "result-read-a"], ["call-read-b", "result-read-b"],
+    ])
+  })
+
   it("updates elapsed time without scanning timeline items again", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-09-13T00:00:00.000Z"))

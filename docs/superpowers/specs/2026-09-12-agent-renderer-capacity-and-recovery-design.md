@@ -20,6 +20,7 @@ SDK 消息 → 入口分类 → 语义事件 / 流式增量 / 聚合诊断
 - Renderer 事件不得携带 Provider 原始 payload、Assistant 原始 message/contentBlocks、图片 Base64 或完整工具正文。
 - 本地流式事件 50 ms 内最多投递一次；每批最多 128 条、64 KiB；每个 Renderer/对话最多一个未确认批次；等待确认的数据最多 512 KiB，超限改为 timeline resync。
 - 普通 Agent send/恢复响应只返回不超过 32 KiB 的终态摘要，不返回正文或整轮事件数组。
+- Timeline 以连续记录区间分页，允许切开同一用户回合；`beforeIndex` 为排他记录索引，保留稳定 ID 和 `toolUseId` 以便跨页关联。不得为凑齐一轮突破页上限或整轮裁成空页。无可展示记录但仍有旧页时显示加载历史入口；加载中或可重试的历史错误不得显示“暂无消息”。
 - Timeline 每页最多 100 条、1 MiB，单项预览最多 64 KiB。全文接口只能按已校验的 project、conversation 和 history index 读取，每次最多 64 KiB，不接受路径。
 - AgentRuntimeTurnResult 不保留流式增量和未知诊断；语义事件集合有硬上限，并始终优先保留终态、权限、工具结果摘要与最后 Assistant。
 - Renderer 启动时必须在进入 Chromium 原生序列化前移除 `performance.measure` 的可选 `detail`；不得依赖序列化失败后的 JS 异常恢复，避免 React 开发诊断克隆大型 props 时触发原生 OOM。

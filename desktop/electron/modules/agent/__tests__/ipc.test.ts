@@ -1757,7 +1757,7 @@ describe("agentIpcModule", () => {
     expect(first.nextOffset).toBe(first.content.length)
   })
 
-  it("pages 183 history records at complete user turn boundaries", async () => {
+  it("pages 183 history records across a tool call and its result", async () => {
     const history = createConversationHistory183()
     const getSession = vi.fn().mockResolvedValue({
       projectId: "project-1",
@@ -1783,11 +1783,11 @@ describe("agentIpcModule", () => {
 
     expect(latest).toEqual(expect.objectContaining({
       total: 183,
-      startIndex: 3,
+      startIndex: 83,
       hasMore: true,
     }))
-    expect(latest.entries).toHaveLength(180)
-    expect(latest.entries.find((entry) => entry.id.endsWith(":history:82"))?.kind).toBe("toolCall")
+    expect(latest.entries).toHaveLength(100)
+    expect(latest.entries.some((entry) => entry.id.endsWith(":history:82"))).toBe(false)
     expect(latest.entries.find((entry) => entry.id.endsWith(":history:83"))?.kind).toBe("toolResult")
 
     const older = await harness.invoke("synapse:app:agent:operation:get_timeline", {
@@ -1807,14 +1807,13 @@ describe("agentIpcModule", () => {
       startIndex: 0,
       hasMore: false,
     }))
-    expect(older.entries.map((entry) => entry.id)).toEqual([
-      "conv-183:history:0",
-      "conv-183:history:1",
-      "conv-183:history:2",
-    ])
+    expect(older.entries).toHaveLength(83)
+    expect([...older.entries, ...latest.entries].map((entry) => entry.id)).toEqual(
+      Array.from({ length: 183 }, (_, index) => `conv-183:history:${index}`),
+    )
   })
 
-  it("allows a single user turn to exceed the requested page size", async () => {
+  it("splits a single user turn at the requested page size", async () => {
     const history = Array.from({ length: 125 }, (_, index) => ({
       role: index === 0 ? "user" as const : "assistant" as const,
       content: `entry ${String(index)}`,
@@ -1841,9 +1840,40 @@ describe("agentIpcModule", () => {
       limit: 100,
     }) as { readonly entries: readonly unknown[]; readonly startIndex: number; readonly hasMore: boolean }
 
-    expect(result.entries).toHaveLength(125)
-    expect(result.startIndex).toBe(0)
-    expect(result.hasMore).toBe(false)
+    expect(result.entries).toHaveLength(100)
+    expect(result.startIndex).toBe(25)
+    expect(result.hasMore).toBe(true)
+  })
+
+  it("retains every record of a completed 611-record turn above the page byte budget", async () => {
+    const history = Array.from({ length: 611 }, (_, index) => ({
+      role: index === 0 ? "user" as const : "assistant" as const,
+      content: index === 610 ? "Completed all work" : `${index}:` + "记录\n".repeat(3_000),
+      timestamp: "2026-09-13T00:00:00.000Z",
+    }))
+    const original = JSON.stringify(history)
+    const harness = createHarness({ agent: { getSession: vi.fn().mockResolvedValue({
+      id: "conv-611", projectId: "project-1", sessionKey: "local:renderer", active: true,
+      history, createdAt: "2026-09-13T00:00:00.000Z", updatedAt: "2026-09-13T00:00:01.000Z",
+    }) } })
+    let beforeIndex = history.length
+    let ids: string[] = []
+    while (beforeIndex > 0) {
+      const page = await harness.invoke("synapse:app:agent:operation:get_timeline", {
+        projectId: "project-1", conversationId: "conv-611", limit: 100, beforeIndex,
+      }) as { entries: { id: string; content?: string }[]; startIndex: number; total: number; hasMore: boolean }
+      expect(page.entries.length).toBeGreaterThan(0)
+      expect(page.entries.length).toBeLessThan(100) // byte budget, not just entry count
+      expect(Buffer.byteLength(JSON.stringify(page), "utf8")).toBeLessThanOrEqual(1024 * 1024)
+      expect(page.startIndex).toBe(beforeIndex - page.entries.length)
+      expect(page.total).toBe(611)
+      expect(page.hasMore).toBe(page.startIndex > 0)
+      if (beforeIndex === 611) expect(page.entries.at(-1)?.content).toBe("Completed all work")
+      ids = [...page.entries.map((entry) => entry.id), ...ids]
+      beforeIndex = page.startIndex
+    }
+    expect(ids).toEqual(Array.from({ length: 611 }, (_, index) => `conv-611:history:${index}`))
+    expect(JSON.stringify(history)).toBe(original)
   })
 
   it("returns empty pagination metadata for an empty conversation", async () => {
@@ -1873,7 +1903,7 @@ describe("agentIpcModule", () => {
     }))
   })
 
-  it("rejects a beforeIndex that splits a persisted turn", async () => {
+  it("rejects a beforeIndex beyond the persisted history", async () => {
     const harness = createHarness({
       agent: {
         getSession: vi.fn().mockResolvedValue({
@@ -1892,8 +1922,8 @@ describe("agentIpcModule", () => {
       projectId: "project-1",
       conversationId: "conv-183",
       limit: 100,
-      beforeIndex: 83,
-    })).rejects.toThrow("Invalid conversation history boundary: 83")
+      beforeIndex: 184,
+    })).rejects.toThrow("Invalid conversation history boundary: 184")
   })
 
   it("logs timeline runtime fallback with sanitized correlation context", async () => {
