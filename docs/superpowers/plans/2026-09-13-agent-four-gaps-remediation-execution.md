@@ -42,7 +42,7 @@ HEAD `15678574e12f7afaf741ac8c61f1956a59ec8d2a`，desktop 0.2.457，Claude Agent
 
 真实发现：单独 `close()` 后释放 PostToolBatch，即使 hook 返回 continue:false，仍观测到第二次模型请求（连续两次复现）。后续关闭适配必须先取得 interrupt 确认；不能将 close 返回当作已撤销旧执行的证明。当前产品 close 实现尚未接入该适配，此项仍待修复，不把协议夹具通过视作产品已修复。
 
-当前新增协议专项：2 文件、7 项通过（11.26 秒）。P01 仍需补齐其它 hook 改写、SessionStore 丢批/延迟和结构化/error 终态，不能勾选全部完成。
+当前新增协议专项：2 文件、12 项通过（6.93 秒）；已补齐其它 hook 覆盖宿主 prepared 输出、SessionStore 延迟与三次失败丢批、结构化输出以及原生 maxTurns error 终态。镜像失败出现 mirror_error，但 SDK 仍可成功结束。TaskCompleted 的完整覆盖与自动 compact 后迟到/重复快照的宿主处理仍未通过本工单验收；P01 不勾选全部完成。
 
 ## P02：DataRepository 原子基础
 
@@ -52,9 +52,39 @@ HEAD `15678574e12f7afaf741ac8c61f1956a59ec8d2a`，desktop 0.2.457，Claude Agent
 - `repository.ts` / `factory.ts`：只调度已注册 SQLite schema，不向业务暴露 SQL/DatabaseSync；旧 namespace 默认不启用 atomic。
 - `config.ts`：集中 128 项、256 KiB、101 行预算。
 
-先建立 5 项失败用例，均因缺少 API 失败，再实现。追加跨 namespace SQL 故障、普通写入绕过预算回归后，DataRepository 全目录 17 文件、160 项通过，1.51 秒。hard constraints、修改生产文件 ESLint 通过；最终类型检查和提交结果待补。
+先建立 5 项失败用例，均因缺少 API 失败，再实现。追加跨 namespace SQL 故障、普通写入绕过预算回归后，DataRepository 全目录 17 文件、160 项通过，1.51 秒。hard constraints、修改生产文件 ESLint 通过；完整 desktop typecheck 随后通过。P02 原子基础提交 `48a775407`，未包含其他任务已有改动。
 
 边界：尚未启用 V2 产品写入；Agent 的完整索引声明随 P03 落地。巨大旧 JSON 的 raw-value/native RSS/取消测量仍未执行，P02 的迁移源访问门禁未通过。当前事务默认延续 WAL + NORMAL，仅保证进程崩溃一致性，不声称断电持久性。
+
+## P03：隔离基础草稿（未提交、未接入产品）
+
+文件：`schemas/agent-history.ts`、`history-content-store.ts`、`history-repository.ts`、`history-repository.test.ts`，以及 `artifact-store.ts` 的有界正文回读方法、`config.ts` 的 V2 容量常量。
+
+已在隔离数据库/临时 artifact 目录实现与验证：
+
+- 摘要不含 history；descriptor/content/chunk/revision/turn/operation receipt 使用独立集合及声明索引。
+- append 原子提交描述符、摘要计数、轮次索引与回执；相同操作同载荷幂等、异载荷冲突。32 并发追加不读既有 history/list。
+- 32 KiB UTF-8 块，独立 UTF-16 偏移、块 hash 和完整正文 hash；16 MiB 以上中文/emoji 正文以及 128 KiB metadata 可完整回读。
+- 校验项目/对话 scope、受控路径、文件类型、大小与 hash；拒绝拆分代理对的偏移。
+- staging→committed/orphan；并发相同操作产生的未使用正文标记 orphan；落盘失败不追加或发布历史。
+- 页查询使用 seq keyset，附快照描述；revision 读取具备接口基础，但修订写入与全链路一致快照尚未完成。
+
+专项 6 项通过。**不能把它称为 P03 完成**：尚无流式 MessageWriter 与 250 ms 刷盘、全消费端接入、异常尾块恢复及 S01 的 1k/10k/100k V2 追加验收；append 输入目前仍接收完整字符串。尚未将新 schema 放入产品 allSchemas，未切换现有读写。Orphan 清理须等 P15 的引用生命周期验证，当前不自动删除。
+
+### 需要用户处理的前置依赖归属
+
+当前 HEAD 的 `artifact-store.ts` 没有 `persistToolOutputText`，`AgentArtifactEntryV3` 及其 exports 也来自此前任务未提交的工作区。本草稿复用了这些实际存在的实现，未另建一套 artifact 存储。
+
+根 AGENTS.md 要求“只提交本次任务产生的代码……不得混入用户或其他任务的未提交改动”；本计划第 14 节要求“各中间提交都必须可编译”。仅提交 P03 新文件会缺少已有前置实现，直接提交整文件又会夹带其他任务改动。因此已请求用户选择：由原任务先提交前置代码，或明确允许把本计划必需的已有前置改动纳入提交。必要依赖限 `artifact-store.ts` 的工具正文存储、`schemas/placeholders.ts` 的 V3 artifact 结构及 `schemas/index.ts` / data-repo `index.ts` 对应 exports；不包含无关 UI、MCP、更新等已有修改。收到答复前保留草稿，不提交 P03 或继续执行依赖它通过的后续工单。
+
+## 本轮最终验证与提交
+
+- 联合专项：DataRepository 全目录、V2 history 草稿、三份 native SDK contract、artifact store、旧 storage perf，共 **23 文件 / 189 项通过**，9.20 秒。
+- 完整 desktop `typecheck` 通过。此前共享工作区新出现的 `monitoring-failure-projection.test.ts` 曾有两项异步替身类型错误，后续由其来源改动更新后已通过；本次没有修改该文件。
+- `check:hard-constraints`、`check:ipc-codegen`、修改生产文件 ESLint、`git diff --check` 通过。
+- 没有运行全量 desktop test；尚未进入稳定集成点。不以当前专项代替 P16 验收。
+- 已提交：`b129cd198` 基线与消费者清单；`48a775407` 原子存储基础；`5619766a5` SDK 协议测试。P03 草稿因上述依赖归属待确认而未提交。
+- 本轮没有启用任何产品读写变化，没有注册/更改公共 capability 或 IPC schema，没有改变打包边界。RELEASE_NOTES_PENDING、能力数量和权威 MCP/Skill 不因这些未启用基础模块新增完成声明；它们的原有未提交修改保留。
 
 ## 后续与授权门禁
 
