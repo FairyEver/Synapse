@@ -5,12 +5,29 @@ import type { SynapseAgentTimelineItem } from "@/types/agent"
 export const PINNED_THRESHOLD_PX = 80
 export const HISTORY_LOAD_THRESHOLD_PX = 80
 const PROGRAMMATIC_SCROLL_GUARD_MS = 600
+const SCROLL_POSITION_EPSILON_PX = 1
 
-export function computeIsPinned(metrics: {
+type ScrollMetrics = {
   scrollTop: number
   scrollHeight: number
   clientHeight: number
-}): boolean {
+}
+
+type ScrollPosition = {
+  viewport: HTMLElement
+  scrollTop: number
+  maxScrollTop: number
+}
+
+function readScrollMetrics(viewport: HTMLElement): ScrollMetrics {
+  return {
+    scrollTop: viewport.scrollTop,
+    scrollHeight: viewport.scrollHeight,
+    clientHeight: viewport.clientHeight,
+  }
+}
+
+export function computeIsPinned(metrics: ScrollMetrics): boolean {
   const { scrollTop, scrollHeight, clientHeight } = metrics
   if (scrollHeight <= clientHeight) {
     return true
@@ -31,11 +48,7 @@ function isEventInsideViewport(event: WheelEvent, viewport: HTMLElement): boolea
 }
 
 function isViewportPinned(viewport: HTMLElement): boolean {
-  return computeIsPinned({
-    scrollTop: viewport.scrollTop,
-    scrollHeight: viewport.scrollHeight,
-    clientHeight: viewport.clientHeight,
-  })
+  return computeIsPinned(readScrollMetrics(viewport))
 }
 
 function isViewportScrollable(viewport: HTMLElement): boolean {
@@ -116,7 +129,7 @@ export function useStickToBottom(input: {
   const previousLatestIdRef = useRef<string | undefined>(undefined)
   const programmaticScrollUntilRef = useRef(0)
   const lastTouchYRef = useRef<number | null>(null)
-  const lastScrollTopRef = useRef(0)
+  const lastScrollPositionRef = useRef<ScrollPosition | null>(null)
   const olderLoadInFlightRef = useRef(false)
   const suppressNextContentChangeRef = useRef(false)
   const loadOlderAtCurrentAnchorRef = useRef<() => void>(() => {})
@@ -150,25 +163,61 @@ export function useStickToBottom(input: {
     }
   }, [])
 
-  const performScrollToBottom = useCallback((options?: ScrollOptions) => {
+  const recordScrollPosition = useCallback((viewport: HTMLElement, metrics: ScrollMetrics) => {
+    const previous = lastScrollPositionRef.current
+    const maxScrollTop = Math.max(0, metrics.scrollHeight - metrics.clientHeight)
+    const sameViewport = previous?.viewport === viewport
+    const clampedByResize = sameViewport
+      && maxScrollTop < previous.maxScrollTop
+      && previous.scrollTop > maxScrollTop
+      && Math.abs(metrics.scrollTop - maxScrollTop) <= SCROLL_POSITION_EPSILON_PX
+    lastScrollPositionRef.current = { viewport, scrollTop: metrics.scrollTop, maxScrollTop }
+    return {
+      scrollingUp: sameViewport && metrics.scrollTop < previous.scrollTop - SCROLL_POSITION_EPSILON_PX && !clampedByResize,
+      positionChanged: sameViewport && Math.abs(metrics.scrollTop - previous.scrollTop) > SCROLL_POSITION_EPSILON_PX && !clampedByResize,
+    }
+  }, [])
+
+  const performScrollToBottom = useCallback((options?: ScrollOptions, measured?: ScrollMetrics) => {
     const viewport = viewportRef.current
     if (!viewport) return
+    const metrics = measured ?? readScrollMetrics(viewport)
+    const target = Math.max(0, metrics.scrollHeight - metrics.clientHeight)
     // Mark the next smooth-scroll window as programmatic so the listener
     // does not flip isPinned off mid-animation.
     programmaticScrollUntilRef.current = Date.now() + PROGRAMMATIC_SCROLL_GUARD_MS
     viewport.scrollTo({
-      top: viewport.scrollHeight,
+      top: metrics.scrollHeight,
       behavior: options?.behavior ?? "auto",
     })
-    // Content can shrink when tool/status rows are replaced. Record the applied
-    // position so that our own upward correction is not mistaken for user input.
-    lastScrollTopRef.current = viewport.scrollTop
+    // Instant scrolling clamps to this target; smooth scrolling starts from
+    // the measured position and subsequent scroll events track its progress.
+    lastScrollPositionRef.current = {
+      viewport,
+      scrollTop: options?.behavior === "smooth" ? metrics.scrollTop : target,
+      maxScrollTop: target,
+    }
   }, [])
 
   const followContent = useCallback(() => {
     if (!autoFollowRef.current || suppressNextContentChangeRef.current) return
-    performScrollToBottom({ behavior: "auto" })
-  }, [performScrollToBottom])
+    const viewport = viewportRef.current
+    if (!viewport) return
+    const metrics = readScrollMetrics(viewport)
+    // Radix dragging writes scrollTop before the native scroll event arrives.
+    // Honor that movement even when a streamed commit wins the event race.
+    if (recordScrollPosition(viewport, metrics).scrollingUp) {
+      pauseFollowing()
+      return
+    }
+    const target = Math.max(0, metrics.scrollHeight - metrics.clientHeight)
+    if (Math.abs(metrics.scrollTop - target) <= SCROLL_POSITION_EPSILON_PX) {
+      // Layout and ResizeObserver may report the same change. Keep the resize
+      // baseline current without restarting scrolling or its input guard.
+      return
+    }
+    performScrollToBottom({ behavior: "auto" }, metrics)
+  }, [pauseFollowing, performScrollToBottom, recordScrollPosition])
 
   const scrollToBottom = useCallback((options?: ScrollOptions) => {
     autoFollowRef.current = true
@@ -207,7 +256,7 @@ export function useStickToBottom(input: {
         const restore = () => {
           const nextScrollTop = previousScrollTop + viewport.scrollHeight - previousScrollHeight
           viewport.scrollTop = Math.max(0, nextScrollTop)
-          lastScrollTopRef.current = viewport.scrollTop
+          recordScrollPosition(viewport, readScrollMetrics(viewport))
         }
         restore()
         window.requestAnimationFrame(() => {
@@ -220,7 +269,7 @@ export function useStickToBottom(input: {
         })
       })
     })
-  }, [])
+  }, [recordScrollPosition])
   loadOlderAtCurrentAnchorRef.current = loadOlderAtCurrentAnchor
 
   // Subscribe to viewport scroll.
@@ -229,6 +278,7 @@ export function useStickToBottom(input: {
     if (!viewport) return undefined
 
     let frame: number | null = null
+    let pendingScroll: (ScrollMetrics & { scrollingUp: boolean; positionChanged: boolean }) | null = null
     const onWheel = (event: WheelEvent) => {
       if (
         event.deltaY !== 0
@@ -276,31 +326,28 @@ export function useStickToBottom(input: {
     }
 
     const onScroll = () => {
+      const metrics = readScrollMetrics(viewport)
+      const change = recordScrollPosition(viewport, metrics)
+      pendingScroll = { ...metrics, ...change }
+      // Scrollbar dragging has no wheel/key event. Pause at delivery, before a
+      // layout effect can overwrite the user's position while this frame waits.
+      if (change.scrollingUp) pauseFollowing()
       if (frame !== null) return
       frame = window.requestAnimationFrame(() => {
         frame = null
-        if (viewport.scrollTop <= HISTORY_LOAD_THRESHOLD_PX) {
+        const scroll = pendingScroll
+        if (!scroll) return
+        if (scroll.scrollTop <= HISTORY_LOAD_THRESHOLD_PX) {
           loadOlderAtCurrentAnchor()
         }
         const now = Date.now()
-        const previousScrollTop = lastScrollTopRef.current
-        const scrollingUp = viewport.scrollTop < previousScrollTop
-        const scrollPositionChanged = viewport.scrollTop !== previousScrollTop
-        lastScrollTopRef.current = viewport.scrollTop
-        if (scrollingUp) {
-          pauseFollowing()
-          return
-        }
+        if (scroll.scrollingUp) return
         if (autoFollowRef.current && now < programmaticScrollUntilRef.current) {
           return
         }
-        const next = computeIsPinned({
-          scrollTop: viewport.scrollTop,
-          scrollHeight: viewport.scrollHeight,
-          clientHeight: viewport.clientHeight,
-        })
+        const next = computeIsPinned(scroll)
         if (!autoFollowRef.current) {
-          if (next && scrollPositionChanged) {
+          if (next && scroll.positionChanged) {
             autoFollowRef.current = true
             isPinnedRef.current = true
             setIsPinned(true)
@@ -340,7 +387,7 @@ export function useStickToBottom(input: {
       viewport.removeEventListener("scroll", onScroll)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
-  }, [loadOlderAtCurrentAnchor, pauseFollowing, viewportNode])
+  }, [loadOlderAtCurrentAnchor, pauseFollowing, recordScrollPosition, viewportNode])
 
   useEffect(() => {
     const viewport = viewportNode
@@ -400,7 +447,7 @@ export function useStickToBottom(input: {
 
     if (autoFollowRef.current) {
       followContent()
-      return undefined
+      if (autoFollowRef.current) return undefined
     }
 
     if (newEntryArrived || latestEntryId) {

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, useEffect, useLayoutEffect } from "react"
+import { act, useCallback, useEffect, useLayoutEffect } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -60,6 +60,82 @@ afterEach(() => {
 })
 
 describe("useStickToBottom", () => {
+  it.each([
+    { scrollHeight: 1800, clientHeight: 600 },
+    { scrollHeight: 2000, clientHeight: 800 },
+  ])("keeps following when a resize clamp scrolls before ResizeObserver: %j", async (size) => {
+    const flushFrame = controlAnimationFrames()
+    const { controls, rerender } = await renderStickHarness({
+      signal: "thinking:4",
+      latestEntryId: "thinking-1",
+      viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")!
+    setScrollMetrics(viewport, { scrollTop: 1200, ...size })
+    act(() => {
+      viewport.dispatchEvent(new Event("scroll"))
+      flushFrame()
+    })
+    expect(controls.current?.isPinned).toBe(true)
+    await triggerResize(viewport.firstElementChild)
+
+    await act(async () => {
+      rerender({
+        signal: "thinking:40",
+        latestEntryId: "thinking-1",
+        viewportMetrics: { scrollTop: 1200, scrollHeight: size.scrollHeight + 200, clientHeight: size.clientHeight },
+      })
+    })
+    expect(viewport.scrollTop).toBe(1400)
+  })
+
+  it.each([true, false])("honors a scrollbar drag before a stream update (scroll delivered: %s)", async (deliverScroll) => {
+    const flushFrame = controlAnimationFrames()
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "thinking:4",
+      latestEntryId: "thinking-1",
+      viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")!
+    setScrollMetrics(viewport, { scrollTop: 1000, scrollHeight: 2000, clientHeight: 600 })
+    scrollTo.mockClear()
+    await act(async () => {
+      if (deliverScroll) viewport.dispatchEvent(new Event("scroll"))
+      rerender({ signal: "thinking:20", latestEntryId: "thinking-1" })
+    })
+    act(flushFrame)
+
+    expect(viewport.scrollTop).toBe(1000)
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(controls.current?.isPinned).toBe(false)
+    expect(controls.current?.hasUnread).toBe(true)
+  })
+
+  it("does not scroll twice when layout has already followed the new content height", async () => {
+    const { rerender, scrollTo } = await renderStickHarness({
+      signal: "thinking:4",
+      latestEntryId: "thinking-1",
+      viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 },
+    })
+    const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")!
+    scrollTo.mockClear()
+    await act(async () => {
+      rerender({
+        signal: "thinking:20",
+        latestEntryId: "thinking-1",
+        viewportMetrics: { scrollTop: 1400, scrollHeight: 2200, clientHeight: 600 },
+      })
+    })
+    expect(viewport.scrollTop).toBe(1600)
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+
+    await triggerResize(viewport.firstElementChild)
+    await triggerResize(viewport)
+
+    expect(viewport.scrollTop).toBe(1600)
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+  })
+
   it("settles streamed content at the bottom before the updated layout can paint", async () => {
     const { rerender } = await renderStickHarness({
       signal: "thinking:4",
@@ -165,11 +241,12 @@ describe("useStickToBottom", () => {
     scrollTo.mockClear()
     scrollTo.mockClear()
 
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2024, clientHeight: 600 })
     await act(async () => {
       rerender({ signal: "message:assistant:12", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2024, behavior: "auto" })
   })
 
   it("never starts smooth scrolling across consecutive streamed content updates", async () => {
@@ -181,15 +258,17 @@ describe("useStickToBottom", () => {
     expect(viewport).not.toBeNull()
     scrollTo.mockClear()
 
+    let previousScrollTop = 1400
     for (const [length, scrollHeight] of [[12, 2024], [20, 2048], [28, 2072]] as const) {
       setScrollMetrics(viewport, {
-        scrollTop: scrollHeight - 600,
+        scrollTop: previousScrollTop,
         scrollHeight,
         clientHeight: 600,
       })
       await act(async () => {
         rerender({ signal: `message:assistant:${length}`, latestEntryId: "assistant-1" })
       })
+      previousScrollTop = viewport!.scrollTop
     }
 
     expect(scrollTo.mock.calls.length).toBeGreaterThanOrEqual(3)
@@ -389,11 +468,12 @@ describe("useStickToBottom", () => {
     expect(viewport).not.toBeNull()
     setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
 
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2024, clientHeight: 600 })
     await act(async () => {
       rerender({ signal: "message:assistant:12", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2024, behavior: "auto" })
     scrollTo.mockClear()
 
     await act(async () => {
@@ -501,11 +581,12 @@ describe("useStickToBottom", () => {
     expect(controls.current?.isPinned).toBe(true)
     expect(controls.current?.hasUnread).toBe(false)
 
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2024, clientHeight: 600 })
     await act(async () => {
       rerender({ signal: "message:assistant:24", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2024, behavior: "auto" })
   })
 
   it("pauses following when wheel input is captured on window inside the timeline area", async () => {
@@ -561,11 +642,12 @@ describe("useStickToBottom", () => {
 
     expect(controls.current?.isPinned).toBe(true)
 
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2024, clientHeight: 600 })
     await act(async () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2024, behavior: "auto" })
     expect(controls.current?.hasUnread).toBe(false)
   })
 
@@ -585,11 +667,12 @@ describe("useStickToBottom", () => {
 
     expect(controls.current?.isPinned).toBe(true)
 
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2024, clientHeight: 600 })
     await act(async () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2024, behavior: "auto" })
     expect(controls.current?.hasUnread).toBe(false)
   })
 
@@ -615,11 +698,12 @@ describe("useStickToBottom", () => {
 
     expect(controls.current?.isPinned).toBe(true)
 
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2024, clientHeight: 600 })
     await act(async () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "auto" })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2024, behavior: "auto" })
     expect(controls.current?.hasUnread).toBe(false)
   })
 
@@ -864,16 +948,13 @@ function StickHarness({
   useLayoutEffect(() => {
     onLayout?.()
   }, [onLayout, signal])
+  const setViewport = useCallback((node: HTMLDivElement | null) => {
+    if (node && viewportMetrics) setScrollMetrics(node, viewportMetrics)
+    if (typeof stick.viewportRef === "function") stick.viewportRef(node)
+  }, [stick.viewportRef, viewportMetrics])
   return renderViewport ? (
     <div
-      ref={(node) => {
-        if (node && viewportMetrics) {
-          setScrollMetrics(node, viewportMetrics)
-        }
-        if (typeof stick.viewportRef === "function") {
-          stick.viewportRef(node)
-        }
-      }}
+      ref={setViewport}
       data-testid="viewport"
     >
       <div data-testid="content" />
@@ -988,4 +1069,21 @@ async function triggerResize(target: Element | null) {
     }
     await Promise.resolve()
   })
+}
+
+function controlAnimationFrames() {
+  const callbacks = new Map<number, FrameRequestCallback>()
+  vi.mocked(window.requestAnimationFrame).mockImplementation((callback) => {
+    const id = ++rafId
+    callbacks.set(id, callback)
+    return id
+  })
+  vi.mocked(window.cancelAnimationFrame).mockImplementation((id) => {
+    callbacks.delete(id)
+  })
+  return () => {
+    const frame = [...callbacks.values()]
+    callbacks.clear()
+    for (const callback of frame) callback(0)
+  }
 }
