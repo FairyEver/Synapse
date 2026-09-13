@@ -11,7 +11,7 @@
     "quit": "node scripts/dev/quit.mjs",
     "quit:document": "node scripts/dev/quit-processes.mjs dev:document",
     "quit:desktop": "node scripts/dev/quit-processes.mjs dev:desktop",
-    "quit:server": "node scripts/dev/quit-processes.mjs dev:server && APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000} docker compose --env-file server/.env.local -f server/compose.yml -f server/compose.dev.yml down",
+    "quit:server": "node scripts/dev/quit-processes.mjs dev:server && APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000} PDF_RENDERER_INTERNAL_SECRET=${PDF_RENDERER_INTERNAL_SECRET:-synapse-local-pdf-renderer-secret-not-for-production} docker compose --env-file server/.env.local -f server/compose.yml -f server/compose.dev.yml down",
     "quit:processes": "node scripts/dev/quit-processes.mjs",
     "kb:sync-template": "node scripts/knowledge-base/sync-template.mjs",
     "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
