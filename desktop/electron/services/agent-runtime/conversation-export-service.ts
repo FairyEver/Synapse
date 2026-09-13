@@ -1,3 +1,4 @@
+import { createExportEvidenceProjection, summarizeSourceEvidence } from "./export-evidence"
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -52,6 +53,7 @@ interface AgentConversationLiveState {
 }
 
 interface AgentConversationExportServiceDeps {
+  readonly taskProgress?: DataNamespace<import("../../runtime/data-repo").AgentTaskProgressEntryV1>
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly agentEvents: DataNamespace<AgentEventEntryV1>
   readonly agentUsage: DataNamespace<AgentUsageEntryV1>
@@ -180,6 +182,7 @@ interface SdkStreamExport {
 }
 
 class AgentConversationExportService {
+  private readonly evidenceProjections = new Map<string, (value: unknown) => unknown>()
   private readonly deps: AgentConversationExportServiceDeps
 
   constructor(deps: AgentConversationExportServiceDeps) {
@@ -210,6 +213,7 @@ class AgentConversationExportService {
 
     try {
       await mkdir(packageRoot, { recursive: true })
+      this.evidenceProjections.set(packageRoot, createExportEvidenceProjection())
 
       const timeline = this.collectTimeline(conversation)
       const persistedAgentEvents = await this.collectRows(
@@ -234,6 +238,14 @@ class AgentConversationExportService {
         skipped,
       )
       const liveState = await this.collectLiveState(request, skipped)
+      if (this.deps.taskProgress?.listWindow) {
+        for (let offset = 0; ; offset += 100) {
+          const page = await this.deps.taskProgress.listWindow({ filter: { projectId: request.projectId, conversationId: request.conversationId },
+            orderBy: ["turnId", "revision"], order: "asc", offset, limit: 100 })
+          if (page.length) await this.writeJson(packageRoot, `task-progress/${String(offset / 100 + 1).padStart(6, "0")}.json`, page.map((row) => row.value), included)
+          if (page.length < 100) break
+        }
+      }
       const summary = buildSummary({
         conversation,
         timeline,
@@ -318,6 +330,7 @@ class AgentConversationExportService {
       })
       throw error
     } finally {
+      this.evidenceProjections.delete(packageRoot)
       await this.removePath(stagingRoot).catch((error: unknown) => {
         this.deps.logger?.warn("Agent conversation export staging cleanup failed.", {
           boundary: "agent.conversation-export.cleanup",
@@ -383,7 +396,7 @@ class AgentConversationExportService {
     await this.writePreparedText(
       packageRoot,
       relativePath,
-      `${JSON.stringify(sanitizeExportOutputValue(value), null, 2)}\n`,
+      `${JSON.stringify(sanitizeExportOutputValue(this.evidenceProjections.get(packageRoot)?.(value) ?? value), null, 2)}\n`,
       included,
     )
   }
@@ -397,7 +410,7 @@ class AgentConversationExportService {
     await this.writePreparedText(
       packageRoot,
       relativePath,
-      `${JSON.stringify(sanitizeExportOutputValue(value))}\n`,
+      `${JSON.stringify(sanitizeExportOutputValue(this.evidenceProjections.get(packageRoot)?.(value) ?? value))}\n`,
       included,
     )
   }
@@ -707,6 +720,7 @@ function buildSummary(input: {
     eventCount: input.agentEvents.length,
     usageRowCount: input.agentUsage.length,
     usageSummary,
+    sourceEvidence: summarizeSourceEvidence(input.conversation.history),
     costUsd: maximumDefinedCost(
       latestHistoryMetadataNumber(input.conversation, "totalCostUsd"),
       input.conversation.costUsd,

@@ -423,6 +423,7 @@ describe("ConfigBackupService quick inputs", () => {
         "agent.events",
         "agent.artifacts",
         "agent.usage",
+        "agent.task-progress",
         "conversations",
         "outbox",
         "telemetry.event-environments",

@@ -143,6 +143,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
     }
   | {
       type: "error"
+      taskCompletion?: SynapseTaskCompletionAssessment
       message: string
       errorKind?: SynapseAgentErrorKind
       recoverable?: boolean
@@ -310,7 +311,18 @@ interface SynapseAgentTimelineBase {
   readonly contentTruncated?: boolean
 }
 
+export interface SynapseTaskCompletionAssessment {
+  readonly status: "unverified" | "partial" | "coverage-complete"
+  readonly revision: number
+  readonly declaredUnits: number
+  readonly coveredUnits: number
+  readonly processedUnits: number
+  readonly conflictingFindings: number
+  readonly semanticCorrectness: "unverified"
+}
+
 export interface SynapseAgentResultMetadata {
+  readonly taskCompletion?: SynapseTaskCompletionAssessment
   readonly mainThreadPersona?: SynapseAgentMainThreadPersonaMetadata
   readonly model?: string
   readonly effort?: string
@@ -457,6 +469,7 @@ export interface SynapseAgentToolProgressTimelineItem extends SynapseAgentTimeli
 
 export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "error"
+  readonly taskCompletion?: SynapseTaskCompletionAssessment
   readonly message: string
   readonly errorKind?: SynapseAgentErrorKind
   readonly recoverable?: boolean

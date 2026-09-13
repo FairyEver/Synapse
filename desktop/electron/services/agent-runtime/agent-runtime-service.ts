@@ -2,6 +2,7 @@ import type {
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
   AgentEventEntryV1,
+  AgentTaskProgressEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
   ConversationMainThreadPersonaSnapshotV1,
@@ -156,6 +157,7 @@ export interface AgentRuntimeServiceDeps {
   readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
+  readonly taskProgress?: DataNamespace<AgentTaskProgressEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
   readonly fileCheckpointEntries?: DataNamespace<AgentFileCheckpointEntryV1>
   readonly agentArtifactStore?: AgentArtifactStore
@@ -264,6 +266,7 @@ export class AgentRuntimeService {
       projectId: deps.projectId,
       conversations: deps.conversations,
       agentUsage: deps.agentUsage,
+      taskProgress: deps.taskProgress,
       now: deps.now,
       logger: deps.logger,
     })

@@ -223,6 +223,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   sdkSessionId?: string
   /** Host-owned SDK task namespace; survives execution session rotation. */
   taskListId?: string
+  taskProgressScope?: { version: 1; turnId: string; runtimeTurnId: string }
   /** Private execution checkpoint. Never grants access to a referenced original. */
   contextHandoff?: {
     version: 1
@@ -231,6 +232,8 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
     phase: "prepared" | "old-stopped" | "submitted" | "failed"
     checkpointPath: string
     checkpointArtifacts?: string[]
+    historyWatermark?: number
+    progressIndexPath?: string
     previousSdkSessionId?: string
     pendingImages: {
       toolUseId: string
@@ -289,6 +292,13 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && isOptionalString((v as ConversationEntryV1).providerId)
     && isOptionalString((v as ConversationEntryV1).sdkSessionId)
     && isConversationContextHandoff((v as ConversationEntryV1).contextHandoff)
+    && ((v as ConversationEntryV1).taskProgressScope === undefined
+      || (isAnyRecord((v as ConversationEntryV1).taskProgressScope)
+        && (v as ConversationEntryV1).taskProgressScope!.version === 1
+        && typeof (v as ConversationEntryV1).taskProgressScope!.turnId === "string"
+        && (v as ConversationEntryV1).taskProgressScope!.turnId.length > 0
+        && typeof (v as ConversationEntryV1).taskProgressScope!.runtimeTurnId === "string"
+        && (v as ConversationEntryV1).taskProgressScope!.runtimeTurnId.length > 0))
     && ((v as ConversationEntryV1).taskListId === undefined
       || (typeof (v as ConversationEntryV1).taskListId === "string"
         && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test((v as ConversationEntryV1).taskListId!)))
@@ -320,6 +330,8 @@ function isConversationContextHandoff(value: ConversationEntryV1["contextHandoff
     && ["prepared", "old-stopped", "submitted", "failed"].includes(value.phase)
     && typeof value.checkpointPath === "string" && value.checkpointPath.length > 0
     && (value.checkpointArtifacts === undefined || (Array.isArray(value.checkpointArtifacts) && value.checkpointArtifacts.every((id) => typeof id === "string" && id.length > 0)))
+    && isOptionalString(value.progressIndexPath)
+    && (value.historyWatermark === undefined || (Number.isSafeInteger(value.historyWatermark) && value.historyWatermark >= 0))
     && isOptionalString(value.previousSdkSessionId)
     && Array.isArray(value.pendingImages)
     && value.pendingImages.every((item) => isAnyRecord(item)

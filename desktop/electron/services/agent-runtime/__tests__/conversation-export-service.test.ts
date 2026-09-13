@@ -5,6 +5,7 @@ import path from "node:path"
 
 import type {
   AgentArtifactEntryV1,
+  AgentTaskProgressEntryV1,
   AgentEventEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
@@ -70,6 +71,35 @@ describe("AgentConversationExportService", () => {
     })
     await expect(service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })).resolves.toMatchObject({ success: true })
     expect(conversation).toEqual(original)
+  })
+
+  it("exports every progress page with comparable aliases and numeric measurements, excluding credential and evidence bodies", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-progress-export-"))
+    tempRoots.push(root)
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    await conversations.upsert(createConversation())
+    const rows = Array.from({ length: 105 }, (_, i) => ({ value: { id: `row-${i}`, schemaVersion: 1, projectId: "project-1",
+      conversationId: "conv-1", turnId: "turn", revision: i + 1, kind: "receipt", data: {
+        path: "/private/original.png", outputPath: "/private/evidence.json", usedTokens: 12345, estimatedRequestTokens: 14000,
+        apiKey: "sk-progress-export-canary", requestBodyBudgetBytes: 5242880,
+      } } }))
+    const listWindow = vi.fn(async ({ offset = 0, limit }: { offset?: number; limit: number }) => rows.slice(offset, offset + limit))
+    const service = new AgentConversationExportService({ conversations,
+      taskProgress: { listWindow } as unknown as DataNamespace<AgentTaskProgressEntryV1>,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"), agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: async () => path.join(root, "export.zip"), createZipArchive: async (directory) => {
+        const a = await readFile(path.join(directory, "task-progress/000001.json"), "utf8")
+        const b = await readFile(path.join(directory, "task-progress/000002.json"), "utf8")
+        const first = JSON.parse(a), second = JSON.parse(b)
+        expect(first).toHaveLength(100); expect(second).toHaveLength(5)
+        expect(first[0].data.pathResourceId).toBe(second[4].data.pathResourceId)
+        expect(first[0].data).toMatchObject({ usedTokens: 12345, estimatedRequestTokens: 14000, requestBodyBudgetBytes: 5242880 })
+        expect(a + b).not.toContain("/private/"); expect(a + b).not.toContain("sk-progress-export-canary")
+        expect(await readdir(directory)).not.toContain("evidence.json")
+      } })
+    await expect(service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })).resolves.toMatchObject({ success: true })
+    expect(listWindow).toHaveBeenCalledTimes(2)
+    expect(listWindow).toHaveBeenCalledWith(expect.objectContaining({ filter: { projectId: "project-1", conversationId: "conv-1" }, limit: 100 }))
   })
 
   it.each(["not-recorded", "read-failed"])("exports unknown observed stream count when diagnostics are %s", async (sourceStatus) => {
@@ -377,11 +407,14 @@ describe("AgentConversationExportService", () => {
           mimeType: "image/png",
           name: "chart_watermark.png",
           size: 3,
+          normalizedByteSize: 3,
+          sizeConflict: false,
           sha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
           preparedForSdk: true,
         }, {
           kind: "path",
           path: "private-sources",
+          pathResourceId: expect.stringMatching(/^resource-[a-f0-9]{20}$/),
           entryType: "directory",
           name: "private-sources",
         }],

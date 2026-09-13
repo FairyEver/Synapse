@@ -620,6 +620,21 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it.each([
+    { disallowedTools: ["*"] },
+    { disallowedTools: ["TaskUpdate"] },
+    { personaToolPolicy: { mode: "disabled" as const, allowedTools: [] } },
+    { personaToolPolicy: { mode: "allowlist" as const, allowedTools: ["Read"] } },
+  ])("does not demand progress tools excluded by the active policy: %j", async (policy) => {
+    const { factory, getOptions } = createQueryFactory()
+    const taskProgress = { needsInventory: vi.fn().mockResolvedValue(true), assessment: vi.fn().mockResolvedValue({ status: "unverified" }) }
+    createSession(factory, { ...policy, taskProgress: taskProgress as unknown as NonNullable<ConstructorParameters<typeof ClaudeSDKSession>[0]["taskProgress"]> })
+    expect(JSON.stringify(getOptions().systemPrompt)).toContain("progress tools are unavailable")
+    const hooks = getOptions().hooks as { Stop: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> }
+    expect(await hooks.Stop[0]!.hooks[0]!({ hook_event_name: "Stop", last_assistant_message: "Verification unavailable." })).toEqual({})
+    expect(taskProgress.needsInventory).not.toHaveBeenCalled()
+  })
+
   it("denies tools outside the persona allowlist before SDK permissions", async () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
@@ -1395,6 +1410,7 @@ describe("ClaudeSDKSession", () => {
         hook_event_name: hookName, trigger: "auto", compact_summary: "keep task requirements",
         tool_calls: [{ tool_name: "Bash", tool_use_id: "done-1", tool_response: "already deployed" }],
       }).then((result) => { resumed = true; return result })
+      await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextBudgetSnapshot", payload: { exactHttpBody: false } })
       if (hookName === "PostToolBatch") {
         await expect(session.nextEvent()).resolves.toMatchObject({ type: "toolResult", toolUseId: "done-1" })
       }
@@ -2309,7 +2325,8 @@ describe("ClaudeSDKSession", () => {
     await session.send({ ...message("continue original task"), runtimeTurnId: "turn-1" })
     const event = session.nextEvent()
     query.rejectNext(new Error(diagnostic))
-    await expect(event).resolves.toMatchObject(recover ? { type: "sdkEvent", sdkType: "contextRotationRequested" } : { type: "error" })
+    await expect(event).resolves.toMatchObject(recover ? { type: "sdkEvent", sdkType: "contextBudgetSnapshot" } : { type: "error" })
+    if (recover) await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextRotationRequested" })
     expect(Boolean(session.contextRotation())).toBe(recover)
     await session.close()
   })
@@ -2319,6 +2336,7 @@ describe("ClaudeSDKSession", () => {
     const session = createSession(factory, { persistToolOutputText: vi.fn() })
     await session.send({ ...message("finish everything"), runtimeTurnId: "turn-1" })
     query.rejectNext(new Error("Autocompact is thrashing: terminal_reason=rapid_refill_breaker"))
+    await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextBudgetSnapshot" })
     await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextRotationRequested" })
     expect(session.contextRotation()?.reason).toBe("request-budget")
     await session.close()
@@ -2509,6 +2527,29 @@ describe("ClaudeSDKSession", () => {
       behavior: "deny",
       message: "本轮执行已停止，未继续等待权限确认。",
     })
+  })
+
+  it("keeps the SDK control channel alive until external cancellation is acknowledged", async () => {
+    const controller = new AbortController()
+    const { factory, getOptions, query } = createQueryFactory()
+    const session = createSession(factory, { abortSignal: controller.signal })
+    query.interrupt.mockImplementation(async () => {
+      expect((getOptions().abortController as AbortController).signal.aborted).toBe(false)
+    })
+    controller.abort()
+    expect(await session.send(message("must not run"))).toBe(false)
+    await session.close()
+    expect(query.interrupt).toHaveBeenCalledOnce()
+    expect((getOptions().abortController as AbortController).signal.aborted).toBe(true)
+  })
+
+  it("does not create an SDK execution for an already cancelled request", async () => {
+    const controller = new AbortController(); controller.abort()
+    const factory = vi.fn()
+    const session = createSession(factory, { abortSignal: controller.signal })
+    expect(factory).not.toHaveBeenCalled()
+    expect(await session.send(message("cancelled"))).toBe(false)
+    await session.close()
   })
 
   it("cleans up forwarded abort listeners on close", async () => {

@@ -1,3 +1,5 @@
+export { agentTaskProgressSchema, type AgentTaskProgressEntryV1 } from "./agent-task-progress"
+import { agentTaskProgressSchema } from "./agent-task-progress"
 /**
  * Phase 0.2 — Schema barrel.
  *
@@ -311,6 +313,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaSettingsSchema,
   agentPersonaRemoteCacheSchema,
   agentFileCheckpointsSchema,
+  agentTaskProgressSchema,
   soundNotifierSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,

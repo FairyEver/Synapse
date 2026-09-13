@@ -983,6 +983,7 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
           "agent.events",
           "agent.artifacts",
           "agent.usage",
+          "agent.task-progress",
           "conversations",
           "outbox",
           "telemetry.event-environments",

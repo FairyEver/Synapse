@@ -1,5 +1,7 @@
+import { TaskProgressStore } from "./task-progress"
 import { randomUUID } from "node:crypto"
 import type {
+  AgentTaskProgressEntryV1,
   AgentUsageEntryV1,
   ConversationContextRecoveryV1,
   ConversationEntryV1,
@@ -17,6 +19,7 @@ import type { AgentMessage, AgentUserQuestionResolution } from "./types"
 export interface AgentSessionRepositoryOptions {
   readonly projectId: string
   readonly conversations: DataNamespace<ConversationEntryV1>
+  readonly taskProgress?: DataNamespace<AgentTaskProgressEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
   readonly now?: () => Date
   readonly idFactory?: () => string
@@ -63,6 +66,7 @@ export interface SaveAgentSessionInput {
 }
 
 export class AgentSessionRepository {
+  readonly taskProgress?: TaskProgressStore
   private readonly projectId: string
   private readonly conversations: DataNamespace<ConversationEntryV1>
   private readonly agentUsage: DataNamespace<AgentUsageEntryV1> | undefined
@@ -72,6 +76,7 @@ export class AgentSessionRepository {
   private readonly conversationMutationTails = new Map<string, Promise<void>>()
 
   constructor(options: AgentSessionRepositoryOptions) {
+    this.taskProgress = options.taskProgress ? new TaskProgressStore(options.taskProgress, options.projectId) : undefined
     this.projectId = options.projectId
     this.conversations = options.conversations
     this.agentUsage = options.agentUsage
@@ -92,6 +97,22 @@ export class AgentSessionRepository {
       await this.conversations.upsert({ ...conversation, taskListId, updatedAt: this.isoNow() })
       return taskListId
     })
+  }
+
+  createTaskProgressSession(conversationId: string, cwd: string) {
+    return this.taskProgress?.session(conversationId, cwd, (runtimeTurnId, resume) => this.runConversationMutation(conversationId, async () => {
+      const conversation = await this.requireConversation(conversationId)
+      const previous = conversation.taskProgressScope
+      const turnId = previous && (resume || previous.runtimeTurnId === runtimeTurnId) ? previous.turnId : runtimeTurnId
+      await this.conversations.upsert({ ...conversation, taskProgressScope: { version: 1, turnId, runtimeTurnId }, updatedAt: this.isoNow() })
+      return turnId
+    }))
+  }
+
+  async taskProgressMarker(conversationId: string, runtimeTurnId: string): Promise<string | undefined> {
+    if (!this.taskProgress) return undefined
+    const conversation = await this.requireConversation(conversationId)
+    return this.taskProgress.progressMarker(conversationId, conversation.taskProgressScope?.turnId ?? runtimeTurnId)
   }
 
   async getOrCreateActive(
@@ -729,6 +750,7 @@ export class AgentSessionRepository {
 
   async deleteSession(conversationIdValue: string): Promise<void> {
     const conversation = await this.requireConversation(conversationIdValue)
+    await this.taskProgress?.removeConversation(conversation.id)
     await this.conversations.remove(conversation.id)
   }
 

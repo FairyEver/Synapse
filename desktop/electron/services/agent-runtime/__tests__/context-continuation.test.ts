@@ -57,6 +57,32 @@ describe("context continuation checkpoints", () => {
     expect(stored.join("")).not.toContain("mcp-image-bytes")
   })
 
+  it("writes incremental history and plain progress, retaining all ancestor verification references", async () => {
+    const stored: string[] = []
+    const persistToolOutputText = vi.fn(async ({ content }: { content: string }) => {
+      stored.push(content)
+      return { id: `new-${stored.length}`, storagePath: `/private/new-${stored.length}`, originalByteSize: Buffer.byteLength(content),
+        storedByteSize: Buffer.byteLength(content), contentTruncated: false }
+    })
+    const onCheckpoint = vi.fn()
+    const progress = async function* () { yield JSON.stringify({ kind: "assessment", revision: 7 }); yield JSON.stringify({ recordType: "unit", id: "kept", processed: true }) }
+    const prompt = await persistContextContinuation({ store: { persistToolOutputText }, projectId: "p", turnId: "t", runtimeMessage: "continue",
+      conversation: { id: "c", history: [{ role: "assistant", content: "old-private-evidence" }, { role: "assistant", content: "new-evidence" }],
+        contextHandoff: { turnId: "t", historyWatermark: 1, checkpointPath: "/private/parent", checkpointArtifacts: ["ancestor-part", "ancestor-index"] } } as ConversationEntryV1,
+      rotation: { reason: "request-budget", summary: "", completedBatches: 1, lastToolBatch: [] }, progress: progress(), onCheckpoint })
+    expect(stored.join("\n")).not.toContain("old-private-evidence")
+    expect(stored.join("\n")).toContain("new-evidence")
+    expect(stored.join("\n")).toContain("/private/parent")
+    expect(stored.some((page) => page.includes('{"recordType":"unit","id":"kept","processed":true}'))).toBe(true)
+    expect(onCheckpoint).toHaveBeenCalledWith(expect.any(String), expect.arrayContaining(["ancestor-part", "ancestor-index"]),
+      expect.objectContaining({ historyWatermark: 2, progressIndexPath: expect.any(String) }))
+    expect(prompt).toContain('"revision":7')
+    onCheckpoint.mockRejectedValueOnce(new Error("save failed"))
+    await expect(persistContextContinuation({ store: { persistToolOutputText }, projectId: "p", turnId: "t", runtimeMessage: "continue",
+      conversation: { id: "c", history: [] } as unknown as ConversationEntryV1,
+      rotation: { reason: "request-budget", summary: "", completedBatches: 0, lastToolBatch: [] }, onCheckpoint })).rejects.toThrow("save failed")
+  })
+
   it("includes retired session usage without claiming that the last SDK cost covers the whole turn", () => {
     const result = withContextContinuationUsage({ type: "result" as const, done: true as const, content: "done",
       usage: { input_tokens: 200, output_tokens: 20 }, costUsd: 0.1 }, [

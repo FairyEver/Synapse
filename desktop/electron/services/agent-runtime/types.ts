@@ -76,6 +76,7 @@ export interface AgentMessage {
   readonly runtimeTurnId?: string
   /** Host-owned verified originals for one read-only presentation attempt. */
   readonly pendingImagePresentations?: readonly import("./image-presentation").PendingImagePresentation[]
+  readonly deferredImagePresentations?: readonly import("./image-presentation").PendingImagePresentation[]
 }
 
 export interface AgentSteerMessage {
@@ -251,6 +252,7 @@ export interface AgentContextUsage {
 }
 
 export interface AgentResultMetadata {
+  readonly taskCompletion?: import("./task-progress").TaskCompletionAssessment
   readonly model?: string
   readonly effort?: string
   readonly contextRemainingPercent?: number
@@ -300,6 +302,7 @@ export interface AgentResultEvent extends AgentEventBase {
 }
 
 export interface AgentErrorEvent extends AgentEventBase {
+  readonly taskCompletion?: import("./task-progress").TaskCompletionAssessment
   readonly type: "error"
   readonly message: string
   readonly errorKind?: AgentErrorKind
@@ -499,6 +502,7 @@ export interface AgentLiveSession {
     decision: AgentPermissionDecision,
   ): Promise<void>
   contextRotation?(): import("./context-continuation").AgentContextRotation | undefined
+  imagePresentationCapacityBytes?(): number
   nextEvent(): Promise<AgentEvent | null>
   nextEventWithTimeout?(timeoutMs: number): Promise<AgentEvent | null>
   currentSessionId(): string | undefined

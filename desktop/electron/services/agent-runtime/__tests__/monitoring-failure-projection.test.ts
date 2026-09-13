@@ -26,3 +26,16 @@ it("keeps a recoverable output failure through IPC and renderer history replay",
   expect(timelineItemSchema.parse(replay)).toMatchObject({ kind: "error", recoverable: true,
     turnOutcome: { status: "failed", recoverable: true } })
 })
+
+it.each(["partial", "coverage-complete"] as const)("preserves the same %s assessment in live IPC and stored timeline projections", (status) => {
+  const taskCompletion = { status, revision: 3, declaredUnits: 2, coveredUnits: status === "partial" ? 1 : 2,
+    processedUnits: status === "partial" ? 1 : 2, conflictingFindings: 0, semanticCorrectness: "unverified" as const }
+  const failed = status === "partial"
+  const event = failed
+    ? { type: "error", message: "材料未完成", recoverable: true, taskCompletion }
+    : { type: "result", content: "覆盖完成，内容判断尚未独立验证", done: true, metadata: { taskCompletion } }
+  expect(agentEventSchema.parse(event)).toMatchObject(failed ? { taskCompletion } : { metadata: { taskCompletion } })
+  const replay = historyRecordToTimelineItem("c", { role: failed ? "system" : "assistant", content: "任务评估", timestamp: "2026-09-13T00:00:01Z",
+    metadata: { agentEventType: event.type, taskCompletion, recoverable: failed } }, 1)
+  expect(timelineItemSchema.parse(replay)).toMatchObject(failed ? { kind: "error", taskCompletion } : { kind: "result", metadata: { taskCompletion } })
+})

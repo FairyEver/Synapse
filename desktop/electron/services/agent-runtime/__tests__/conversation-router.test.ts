@@ -109,7 +109,7 @@ describe("ConversationRouter", () => {
     })
     const first = create()
     const second = create()
-    const store = { persistToolOutputText: vi.fn(async ({ content }: { content: string }) => ({
+    const store = { verifyContextCheckpoint: vi.fn(async () => undefined), persistToolOutputText: vi.fn(async ({ content }: { content: string }) => ({
       id: "part", storagePath: "/private/part", originalByteSize: content.length, storedByteSize: content.length, contentTruncated: false,
     })) } as unknown as AgentArtifactStore
     const { router, factoryCalls } = createRouter({ sessions: [first, second], agentArtifactStore: store })

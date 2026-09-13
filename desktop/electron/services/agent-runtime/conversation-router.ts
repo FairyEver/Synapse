@@ -1,5 +1,6 @@
+import { isSafeTokenMeasurement } from "./redaction"
 import { randomUUID } from "node:crypto"
-import { verifyImagePresentation } from "./image-presentation"
+import { mergePendingImages, planImagePresentation, verifyImagePresentation } from "./image-presentation"
 
 import type {
   AgentEventEntryV1,
@@ -851,17 +852,6 @@ export class ConversationRouter {
         await this.sessionManager.closeCurrentTurn(conversation.id)
         this.forgetSavedSdkSession(conversation.id)
         conversation = await this.repository.clearCurrentAgentSessionId(conversation.id, conversation.agentType)
-        imageRecoveryContent = [
-          "Continue the same authorized task from its saved checkpoint. Read this index and recover all user requirements and executed results. Never repeat completed commands, screenshots, uploads or messages.",
-          `Checkpoint index: ${JSON.stringify(savedHandoff.checkpointPath)}`,
-          "Then use native Read to present these unchanged originals before proceeding:",
-          JSON.stringify(restoreImages.map((image) => ({ file_path: image.path, originalToolUseId: image.toolUseId }))),
-        ].join("\n")
-        const restored = restoreImages.map((image) => ({ ...image, attempts: 1 }))
-        await this.repository.saveContextHandoff(conversation.id, { ...savedHandoff, generation: savedHandoff.generation + 1,
-          turnId, phase: "submitted", pendingImages: [...savedHandoff.pendingImages.filter((image) => image.presented), ...restored],
-        }, savedHandoff.generation)
-        liveMessage = { ...liveMessage, pendingImagePresentations: restored }
       }
       const recovery = conversation.contextRecovery
       const isRecoveryContinuation = recovery?.status === "prepared"
@@ -900,6 +890,22 @@ export class ConversationRouter {
           message,
           abortSignal,
         })
+        if (isExplicitImageContinue && savedHandoff) {
+          const presentation = planImagePresentation(restoreImages, sessionHandle.liveSession.imagePresentationCapacityBytes?.() ?? 5 * 1024 * 1024)
+          const restored = presentation.selected.map((image) => ({ ...image, attempts: 1 }))
+          imageRecoveryContent = [
+            "Before any other tool, use native Read to present these unchanged originals. Then recover the same authorized task from its saved progress and checkpoint. Never repeat completed commands, screenshots, uploads or messages.",
+            JSON.stringify(restored.map((image) => ({ file_path: image.path, originalToolUseId: image.toolUseId }))),
+            `Images deferred to subsequent clean batches: ${presentation.deferred.length}`,
+            `Checkpoint index: ${JSON.stringify(savedHandoff.checkpointPath)}`,
+            ...(savedHandoff.progressIndexPath ? [`Authoritative progress index: ${JSON.stringify(savedHandoff.progressIndexPath)}`] : []),
+          ].join("\n")
+          if (Buffer.byteLength(imageRecoveryContent) > 32 * 1024) throw new Error("待呈现原图的引用超出安全交接空间。")
+          await this.repository.saveContextHandoff(conversation.id, { ...savedHandoff, generation: savedHandoff.generation + 1,
+            turnId, phase: "submitted", pendingImages: mergePendingImages(savedHandoff.pendingImages, restored),
+          }, savedHandoff.generation)
+          liveMessage = { ...liveMessage, pendingImagePresentations: restored, deferredImagePresentations: presentation.deferred }
+        }
         const preparedMessageBase = imageRecoveryContent || recoveryHandoff
           ? { ...liveMessage, content: imageRecoveryContent ?? recoveryHandoff! }
           : liveMessage
@@ -1138,8 +1144,8 @@ export class ConversationRouter {
     if (!rotation || !store || !conversation) throw new Error("上下文交接资料不可用。")
     const previous = conversation.contextHandoff
     const generation = (previous?.generation ?? 0) + 1
-    const pendingImages = [...rotation.pendingImages ?? []]
     const previousImages = previous?.turnId === turnId ? previous.pendingImages : []
+    const pendingImages = mergePendingImages(previousImages.filter((image) => !image.presented && image.attempts === 0), rotation.pendingImages ?? [])
     let handoff: NonNullable<ConversationEntryV1["contextHandoff"]> | undefined
     try {
       for (const image of pendingImages) {
@@ -1151,12 +1157,13 @@ export class ConversationRouter {
       const content = await persistContextContinuation({
         store, projectId: this.deps.projectId, conversation, turnId,
         workspacePath: message.workspacePath ?? this.deps.workDir,
-        runtimeMessage: message.content, rotation, abortSignal,
-        onCheckpoint: async (checkpointPath, checkpointArtifacts) => {
+        runtimeMessage: message.content, rotation: { ...rotation, pendingImages: [] }, abortSignal,
+        progress: this.repository.taskProgress?.checkpoint(conversationId, conversation.taskProgressScope?.turnId ?? turnId),
+        onCheckpoint: async (checkpointPath, checkpointArtifacts, details) => {
           checkAdmission()
-          handoff = { version: 1, turnId, generation, phase: "prepared", checkpointPath, checkpointArtifacts,
+          handoff = { version: 1, turnId, generation, phase: "prepared", checkpointPath, checkpointArtifacts, ...details,
             previousSdkSessionId: liveSession.currentSessionId(),
-            pendingImages: [...previousImages, ...pendingImages],
+            pendingImages: mergePendingImages(previousImages, pendingImages),
           }
           await this.repository.saveContextHandoff(conversationId, handoff, previous?.generation ?? 0)
         },
@@ -1170,7 +1177,7 @@ export class ConversationRouter {
       checkAdmission()
       // SessionManager cleanup deliberately absorbs close errors; the handoff
       // must obtain an explicit stop acknowledgement before it can use that path.
-      if (pendingImages.length && handoff) await store.verifyContextCheckpoint(this.deps.projectId, conversationId, handoff.checkpointArtifacts ?? [])
+      if (handoff) await store.verifyContextCheckpoint(this.deps.projectId, conversationId, handoff.checkpointArtifacts ?? [])
       try { await liveSession.close() }
       catch (error) { this.unconfirmedStops.add(conversationId); throw error }
       checkAdmission()
@@ -1194,17 +1201,25 @@ export class ConversationRouter {
       if (message.platform === "local-renderer") handle.liveSession.beginFileCheckpoint?.(turnId)
       for (const image of pendingImages) await verifyImagePresentation(image)
       checkAdmission()
-      const attemptedImages = pendingImages.map((image) => ({ ...image, attempts: 1 }))
-      handoff = { ...handoff, phase: "submitted", pendingImages: [...previousImages, ...attemptedImages] }
+      const presentation = planImagePresentation(pendingImages, handle.liveSession.imagePresentationCapacityBytes?.() ?? 5 * 1024 * 1024)
+      const attemptedImages = presentation.selected.map((image) => ({ ...image, attempts: 1 }))
+      handoff = { ...handoff, phase: "submitted", pendingImages: mergePendingImages(previousImages, pendingImages, attemptedImages) }
       await this.repository.saveContextHandoff(conversationId, handoff, generation)
       checkAdmission()
-      if (!await handle.liveSession.send({ ...message, content, runtimeTurnId: turnId, attachments: undefined,
-        pendingImagePresentations: attemptedImages })) {
+      const presentationInstruction = attemptedImages.length ? [
+        "Before any other tool, use native Read on the required unchanged originals below. Do not replay old images or rebuild history first. After these receipts are presented, consume the progress index and save findings. Remaining acquired images will be scheduled automatically; never repeat their producing operations.",
+        JSON.stringify(attemptedImages.map((image) => ({ file_path: image.path, originalToolUseId: image.toolUseId }))),
+        `Images deferred to subsequent clean batches: ${presentation.deferred.length}`,
+      ].join("\n") : ""
+      if (Buffer.byteLength(presentationInstruction) > 16 * 1024) throw new Error("待呈现原图的引用超出安全交接空间。")
+      if (!await handle.liveSession.send({ ...message, content: `${presentationInstruction}\n\n${content}`, runtimeTurnId: turnId, attachments: undefined,
+        pendingImagePresentations: attemptedImages, deferredImagePresentations: presentation.deferred })) {
         throw new Error(AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE)
       }
       this.deps.logger?.info("Agent continued after automatic context rotation.", {
         boundary: "agent-runtime.context-rotation", projectId: this.deps.projectId,
-        conversationId, turnId, reason: rotation.reason, completedBatches: rotation.completedBatches,
+        conversationId, turnId, generation, reason: rotation.reason, stopConfirmed: true,
+        progressIndexAvailable: Boolean(handoff.progressIndexPath), completedBatches: rotation.completedBatches,
       })
       return handle.liveSession
     } catch (error) {
@@ -1251,6 +1266,7 @@ export class ConversationRouter {
     let error: string | undefined
     let responseStarted = false
     let rotationsWithoutProgress = 0
+    let lastProgressMarker: string | undefined
     const contextRotations: Pick<AgentContextRotation, "usage">[] = []
 
     const flushStreamedThinkingHistory = async (): Promise<void> => {
@@ -1323,12 +1339,17 @@ export class ConversationRouter {
         state.steerAdmissionsOpen = false
         const rotation = liveSession.contextRotation()!
         contextRotations.push({ usage: rotation.usage })
-        rotationsWithoutProgress = rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
+        const progressMarker = await this.repository.taskProgressMarker(conversation.id, turnId)
+        rotationsWithoutProgress = progressMarker !== undefined
+          ? progressMarker !== lastProgressMarker ? 0 : rotationsWithoutProgress + 1
+          : rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
+        lastProgressMarker = progressMarker
         if (rotationsWithoutProgress > 1 || state.cancelState || state.rendererUnavailable || abortSignal?.aborted) {
           await this.sessionManager.closeCurrentTurn(conversation.id)
           error = state.cancelState || abortSignal?.aborted ? AGENT_CANCELLED_MESSAGE
             : state.rendererUnavailable ? AGENT_RENDERER_UNAVAILABLE_MESSAGE
-            : "当前模型的固定上下文已占满可用空间，请减少已加载的工具或指令。"
+            : progressMarker !== undefined ? "已保存任务进度，连续两次交接未推进已登记的处理范围，请核对剩余证据后继续。"
+              : "当前模型的固定上下文已占满可用空间，请减少已加载的工具或指令。"
           break
         }
         await flushStreamedThinkingHistory()
@@ -1482,6 +1503,7 @@ export class ConversationRouter {
                 costUsd: enrichedError.costUsd,
                 costCny: enrichedError.costCny,
                 costCurrency: enrichedError.costCurrency,
+                taskCompletion: enrichedError.taskCompletion,
                 payload: enrichedError.payload,
               }
             : projectedOutcome
@@ -1774,6 +1796,7 @@ export class ConversationRouter {
       })
       let liveSession = sessionHandle.liveSession
       let rotationsWithoutProgress = 0
+      let lastProgressMarker: string | undefined
       const contextRotations: Pick<AgentContextRotation, "usage">[] = []
       const liveMessage = await Promise.resolve(this.deps.prepareMessage?.(message, {
         isNewLiveSession: sessionHandle.created,
@@ -1822,10 +1845,16 @@ export class ConversationRouter {
         if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
           const rotation = liveSession.contextRotation()!
           contextRotations.push({ usage: rotation.usage })
-          rotationsWithoutProgress = rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
+          const progressMarker = await this.repository.taskProgressMarker(conversation.id, turnId)
+          rotationsWithoutProgress = progressMarker !== undefined
+            ? progressMarker !== lastProgressMarker ? 0 : rotationsWithoutProgress + 1
+            : rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
+          lastProgressMarker = progressMarker
           if (rotationsWithoutProgress > 1 || abortSignal.aborted) {
             await this.sessionManager.closeCurrentTurn(conversation.id)
-            error = abortSignal.aborted ? AGENT_CANCELLED_MESSAGE : "当前模型的固定上下文已占满可用空间。"
+            error = abortSignal.aborted ? AGENT_CANCELLED_MESSAGE : progressMarker !== undefined
+              ? "已保存任务进度，连续两次交接未推进已登记的处理范围，请核对剩余证据后继续。"
+              : "当前模型的固定上下文已占满可用空间。"
             break
           }
           liveSession = await this.rotateContextSession(state, liveMessage, conversation.id, turnId, liveSession, abortSignal, () => ++persistedSequence)
@@ -1906,6 +1935,7 @@ export class ConversationRouter {
                   costUsd: enrichedError.costUsd,
                   costCny: enrichedError.costCny,
                   costCurrency: enrichedError.costCurrency,
+                  taskCompletion: enrichedError.taskCompletion,
                   payload: enrichedError.payload,
                 }
               : projectedOutcome
@@ -3403,6 +3433,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           sdkSessionId: event.sdkSessionId,
           errorKind: event.errorKind,
           recoverable: event.recoverable,
+          taskCompletion: event.taskCompletion,
           turnOutcome: event.turnOutcome,
           usage: event.usage,
           modelUsage: event.modelUsage,
@@ -3849,6 +3880,7 @@ function sanitizeValue(
     const output: Record<string, unknown> = {}
     for (const [key, entry] of Object.entries(value)) {
       const lower = key.toLowerCase()
+      if (isSafeTokenMeasurement(key, entry)) { output[key] = entry; continue }
       if (key === "imageBlocks") continue
       if (lower.includes("raw")) continue
       if (

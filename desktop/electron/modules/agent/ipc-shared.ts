@@ -214,7 +214,14 @@ export const agentUserQuestionResolutionSchema = z.object({
     values: z.array(z.string()),
   })).optional(),
 })
+const taskCompletionSchema = z.object({
+  status: z.enum(["unverified", "partial", "coverage-complete"]),
+  revision: z.number().int().nonnegative(), declaredUnits: z.number().int().nonnegative(),
+  coveredUnits: z.number().int().nonnegative(), processedUnits: z.number().int().nonnegative(),
+  conflictingFindings: z.number().int().nonnegative(), semanticCorrectness: z.literal("unverified"),
+})
 const resultMetadataSchema = z.object({
+  taskCompletion: taskCompletionSchema.optional(),
   mainThreadPersona: z.object({
     id: z.string(),
     name: z.string(),
@@ -328,6 +335,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     errorKind: agentErrorKindSchema.optional(),
     recoverable: z.boolean().optional(),
     turnOutcome: agentTurnOutcomeSchema.optional(),
+    taskCompletion: taskCompletionSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -740,6 +748,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     errorKind: agentErrorKindSchema.optional(),
     recoverable: z.boolean().optional(),
     turnOutcome: agentTurnOutcomeSchema.optional(),
+    taskCompletion: taskCompletionSchema.optional(),
     usage: jsonRecordSchema.optional(),
     modelUsage: jsonRecordSchema.optional(),
     sdkResultUuid: z.string().optional(),

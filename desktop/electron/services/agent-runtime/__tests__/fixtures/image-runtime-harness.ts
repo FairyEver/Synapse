@@ -1,5 +1,5 @@
 import path from "node:path"
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk"
+import { query, type HookCallback, type Options } from "@anthropic-ai/claude-agent-sdk"
 import { JsonNamespace, conversationsSchema, type ConversationEntryV1, type AgentArtifactEntry, type AgentEventEntryV1 } from "../../../../runtime/data-repo"
 import type { ProviderService } from "../../../provider"
 import { AgentArtifactStore } from "../../artifact-store"
@@ -8,11 +8,13 @@ import { ConversationRouter } from "../../conversation-router"
 import { AgentSessionRepository } from "../../session-repository"
 import { SessionManager } from "../../session-manager"
 import type { AgentMessage } from "../../types"
+import { agentTaskProgressSchema, type AgentTaskProgressEntryV1 } from "../../../../runtime/data-repo"
+import { SqliteNamespace, openSqliteDatabase } from "../../../../runtime/data-repo/backends/sqlite"
 
 /** Real Runtime router, persistence and native SDK. Only Provider selection and
  * sandboxed SDK configuration are supplied by the isolated acceptance harness. */
 export function imageRuntimeHarness(input: {
-  root: string; env: Record<string, string>; model: string; bodyBudget?: number; firstImagePressure?: boolean; denyResumedReads?: boolean; pressureGenerations?: number
+  root: string; env: Record<string, string>; model: string; bodyBudget?: number; firstImagePressure?: boolean; firstTextPressure?: boolean; denyResumedReads?: boolean; pressureGenerations?: number; pressureAfterImages?: number; afterReadHook?: HookCallback
 }) {
   const namespace = <T extends Record<string, unknown>>(name: string) => new JsonNamespace<T>({
     name, schemaVersion: 1, backend: "json", filePath: path.join(input.root, `${name}.json`),
@@ -21,7 +23,10 @@ export function imageRuntimeHarness(input: {
     backend: "json", filePath: path.join(input.root, "conversations.json"), validate: conversationsSchema.validate })
   const agentEvents = namespace<AgentEventEntryV1>("agent.events")
   const store = new AgentArtifactStore({ rootDirectory: path.join(input.root, "artifacts"), artifacts: namespace<AgentArtifactEntry>("agent.artifacts") })
-  const repository = new AgentSessionRepository({ projectId: "image-acceptance", conversations })
+  const progressDb = openSqliteDatabase(path.join(input.root, "progress.sqlite"))
+  const taskProgress = new SqliteNamespace<AgentTaskProgressEntryV1>({ name: agentTaskProgressSchema.name, schemaVersion: 1,
+    backend: "sqlite", database: progressDb, sqlite: agentTaskProgressSchema.sqlite, validate: agentTaskProgressSchema.validate })
+  const repository = new AgentSessionRepository({ projectId: "image-acceptance", conversations, taskProgress })
   const sessions: ClaudeSDKSession[] = []
   const logs: Array<{ message: string; metadata: unknown }> = []
   const logger = { trace: () => undefined, debug: () => undefined, error: () => undefined, fatal: () => undefined, child: () => logger, info: (message: string, metadata?: unknown) => { logs.push({ message, metadata }) },
@@ -33,20 +38,22 @@ export function imageRuntimeHarness(input: {
     createSession: (options) => {
       const generation = sessions.length
       let pressureApplied = false
+      let readImages = 0
       const session = new ClaudeSDKSession({ ...options, conversationId: options.conversation.id,
         env: input.env, hostEnv: { PATH: process.env.PATH, HOME: input.root, CLAUDE_CONFIG_DIR: path.join(input.root, "sdk-config") },
         model: input.model, mode: "bypassPermissions", maxTurns: 128, autoCompactWindowTokens: 200_000,
         maxRequestBodyBytes: 6 * 1024 * 1024, requestBodyBudgetBytes: input.bodyBudget ?? 5 * 1024 * 1024,
         disallowedTools: input.denyResumedReads && generation > 0 ? ["Read"] : undefined,
-        tools: ["Read", "Bash"], systemPrompt: "Complete the user's image verification task using native Read. Preserve progress after maintenance.",
+        tools: ["Read", "Bash", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"], systemPrompt: "Complete the user's image verification task using native Read. Preserve progress after maintenance.",
         logger, synapseToolRouter: undefined,
         queryFactory: ({ prompt, options: sdkOptions }) => {
           const native = sdkOptions as Options
-          if (input.firstImagePressure && generation < (input.pressureGenerations ?? 1)) {
+          if ((input.firstImagePressure || input.firstTextPressure) && generation < (input.pressureGenerations ?? 1)) {
             native.hooks!.PostToolUse = native.hooks!.PostToolUse!.map((matcher) => ({ ...matcher,
               hooks: matcher.hooks.map((hook) => async (...args) => {
                 if (!pressureApplied && args[0].hook_event_name === "PostToolUse" && args[0].tool_name === "Read"
-                  && (args[0].tool_response as { type?: string } | null)?.type === "image") {
+                  && (args[0].tool_response as { type?: string } | null)?.type === (input.firstTextPressure ? "text" : "image")
+                  && ++readImages >= (input.pressureAfterImages ?? 1)) {
                   pressureApplied = true
                   const budget = (session as unknown as { contextBudget: { recordToolOutputCost(cost: { bytes: number; tokens: null; source: "native-non-text"; batch: number }): void } }).contextBudget
                   budget.recordToolOutputCost({ bytes: 5 * 1024 * 1024, tokens: null, source: "native-non-text", batch: 0 })
@@ -55,6 +62,7 @@ export function imageRuntimeHarness(input: {
               }),
             }))
           }
+          if (input.afterReadHook) native.hooks!.PostToolUse!.push({ matcher: "Read", hooks: [input.afterReadHook] })
           return query({ prompt, options: {
           ...sdkOptions, settingSources: [], strictMcpConfig: true, mcpServers: {},
           env: { ...(sdkOptions.env as Record<string, string>), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" },
@@ -71,6 +79,6 @@ export function imageRuntimeHarness(input: {
   return { router, sessions, conversations, agentEvents, logs, store, repository,
     message(content: string): AgentMessage { return { projectId: "image-acceptance", sessionKey: "synthetic-images",
       platform: "local", workspacePath: input.root, content } },
-    async close() { for (const session of sessions) await session.close() },
+    async close() { try { for (const session of sessions) await session.close() } finally { progressDb.close() } },
   }
 }

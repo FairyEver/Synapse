@@ -95,3 +95,9 @@ export {
   REDACTED,
   SENSITIVE_KEY_PATTERN,
 }
+
+/** Exact numeric diagnostic fields only; a string token is still sensitive. */
+export function isSafeTokenMeasurement(key: string, value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    && /^(?:usedtokens|maxtokens|inputtokens|outputtokens|totaltokens|cacheReadInputTokens|cacheCreationInputTokens|reasoningOutputTokens|estimatedRequestTokens|autoCompactThresholdTokens|modelMaxContextTokens|autoCompactWindowTokens|contextWindowTokens|toolResultTokens|cacheReadTokens|cacheCreationTokens|unknownTokenCosts|tokenEstimate|tokenLimit)$/i.test(key.replace(/[-_]/g, ""))
+}

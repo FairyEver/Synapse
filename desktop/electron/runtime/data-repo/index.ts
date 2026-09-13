@@ -1,3 +1,4 @@
+export { agentTaskProgressSchema, type AgentTaskProgressEntryV1 } from "./schemas/agent-task-progress"
 /**
  * Phase 0.2 — DataRepository module entrypoint.
  *

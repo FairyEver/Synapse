@@ -1,5 +1,6 @@
 import type {
   SynapseAgentEvent,
+  SynapseTaskCompletionAssessment,
   SynapseAgentFileCheckpointFile,
   SynapseAgentFileCheckpointStatus,
   SynapseAgentErrorKind,
@@ -118,6 +119,7 @@ export function agentEventToTimelineItem(
         errorKind: event.errorKind,
         recoverable: event.recoverable,
         turnOutcome: event.turnOutcome,
+        taskCompletion: event.taskCompletion,
       }
     case "sessionInit":
       return {
@@ -252,6 +254,7 @@ export function historyRecordToTimelineItem(
         errorKind: errorKindMetadata(metadata, "errorKind"),
         recoverable: booleanMetadata(metadata, "recoverable"),
         turnOutcome: turnOutcomeMetadata(metadata, "turnOutcome"),
+        taskCompletion: taskCompletionMetadata(metadata),
       }
     case "result":
       return {
@@ -875,8 +878,17 @@ function imageArtifactsMetadata(
   return artifacts.length > 0 ? artifacts : undefined
 }
 
+function taskCompletionMetadata(metadata: Record<string, unknown> | undefined): SynapseTaskCompletionAssessment | undefined {
+  const value = recordMetadata(metadata, "taskCompletion")
+  if (!value || !["unverified", "partial", "coverage-complete"].includes(String(value.status)) || value.semanticCorrectness !== "unverified"
+    || ["revision", "declaredUnits", "coveredUnits", "processedUnits", "conflictingFindings"].some((key) =>
+      typeof value[key] !== "number" || !Number.isSafeInteger(value[key]) || (value[key] as number) < 0)) return undefined
+  return value as unknown as SynapseTaskCompletionAssessment
+}
+
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {
   const result: SynapseAgentResultMetadata = {
+    taskCompletion: taskCompletionMetadata(metadata),
     mainThreadPersona: mainThreadPersonaMetadata(metadata),
     model: stringMetadata(metadata, "model"),
     effort: stringMetadata(metadata, "effort"),

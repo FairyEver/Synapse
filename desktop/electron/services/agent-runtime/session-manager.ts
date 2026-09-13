@@ -58,6 +58,7 @@ export interface CreateAgentLiveSessionInput {
   readonly providerId: string
   readonly cwd: string
   readonly sdkSessionId?: string
+  readonly taskProgress?: ClaudeSDKSessionOptions["taskProgress"]
   readonly taskListId?: string
   readonly env: Record<string, string>
   readonly model?: string
@@ -223,6 +224,7 @@ export class SessionManager {
         additionalDirectories: input.additionalDirectories,
         readOnlyAdditionalDirectories: input.readOnlyAdditionalDirectories,
         persistToolOutputText: input.persistToolOutputText,
+        taskProgress: input.taskProgress,
         sdkSettings: input.sdkSettings,
         mcpServers: input.mcpServers,
         expectedMcpServerNames: input.expectedMcpServerNames,
@@ -544,6 +546,8 @@ export class SessionManager {
               agentArtifactStore.persistToolOutputText(artifactInput),
           }
         : {}),
+      taskProgress: this.deps.repository.taskProgress
+        ? this.deps.repository.createTaskProgressSession(input.conversation.id, cwd) : undefined,
       sdkSettings,
       mcpServers: resolvedMcpServers,
       expectedMcpServerNames,

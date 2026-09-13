@@ -1,5 +1,6 @@
 export {
   isSensitiveKey,
+  isSafeTokenMeasurement,
   isSensitiveTextKey,
   redactSensitiveText,
   redactSensitiveValue,
