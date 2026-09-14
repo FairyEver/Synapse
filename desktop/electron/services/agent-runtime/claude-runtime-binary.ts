@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs"
+import { createRequire } from "node:module"
 import path from "node:path"
 
 export const PACKAGED_CLAUDE_RUNTIME_MISSING_MESSAGE = "内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。"
@@ -131,6 +132,37 @@ export function createMissingPackagedClaudeRuntimeError(
 
 export function resourcesPathFromAppPath(appPath: string): string | undefined {
   return path.basename(appPath) === "app.asar" ? path.dirname(appPath) : undefined
+}
+
+/**
+ * Absolute path to the Claude Code executable Synapse ships: the unpacked packaged runtime in a
+ * release build, or the platform package of the installed SDK during development.
+ */
+export function resolveBundledClaudeExecutable(options: {
+  readonly platform?: string
+  readonly arch?: string
+  readonly isPackaged?: boolean
+  readonly fileExists?: (filePath: string) => boolean
+  readonly resolvePackage?: (specifier: string) => string
+} = {}): string | undefined {
+  const runtime = inspectPackagedClaudeRuntime(options)
+  if (runtime.status === "present") return runtime.executablePath
+  // A packaged build must resolve its unpacked runtime; never fall back to an asar path there.
+  if (runtime.status !== "not-packaged") return undefined
+
+  const platform = options.platform ?? process.platform
+  const arch = options.arch ?? process.arch
+  const binaryName = claudeBinaryName(platform)
+  const resolvePackage = options.resolvePackage
+    ?? ((specifier: string) => createRequire(__filename).resolve(specifier))
+  for (const packageName of nativeClaudePackageNames(platform, arch)) {
+    try {
+      return resolvePackage(`${packageName}/${binaryName}`)
+    } catch {
+      continue
+    }
+  }
+  return undefined
 }
 
 function claudeBinaryName(platform: string): string {

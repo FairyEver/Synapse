@@ -806,6 +806,8 @@ export function createTerminalService(deps: {
       readonly shell?: string
       readonly environment?: TerminalLaunchLayer["environment"]
       readonly overriddenFields?: readonly ("cwd" | "shell" | "environment" | "cols" | "rows")[]
+      /** Caller-owned launch environment that must never be written into the session record. */
+      readonly persistEnvironment?: boolean
     },
     createdByClientId?: string,
     commandLaunch?: TerminalLaunchLayer,
@@ -870,7 +872,7 @@ export function createTerminalService(deps: {
       globalLaunchRevisionApplied: globalLaunch.revision,
       discardedOutputBytes: 0,
       discardedOutputChunks: 0,
-      ...(Object.keys(launchEnvironment).length ? { launchEnvironment } : {}),
+      ...(Object.keys(launchEnvironment).length && launchOverrides?.persistEnvironment !== false ? { launchEnvironment } : {}),
       launchFacts: {
         shellKind: resolvedLaunch.shellKind,
         cwdKind: resolvedLaunch.cwdKind,
@@ -1772,6 +1774,27 @@ export function createTerminalService(deps: {
       environment: input.overrides.environment,
       overriddenFields: (Object.keys(input.overrides) as ("cwd" | "shell" | "environment" | "cols" | "rows")[]),
     }, clientId)
+  }
+
+  /**
+   * First-party launch for an embedded agent CLI. The launch environment belongs to the caller
+   * (for example provider credentials) and must stay out of the persisted session record.
+   */
+  async function createSessionWithEphemeralEnvironment(input: {
+    readonly title?: string
+    readonly cwd: string
+    readonly shell: string
+    readonly environment: Record<string, string>
+  }): Promise<TerminalSession> {
+    return createSessionRecord({
+      title: input.title,
+      cwd: input.cwd,
+    }, "ui", {
+      shell: input.shell,
+      environment: input.environment,
+      overriddenFields: ["cwd", "shell", "environment"],
+      persistEnvironment: false,
+    })
   }
 
   function getSession(input: { sessionId: string }): TerminalSession {
@@ -2692,6 +2715,7 @@ export function createTerminalService(deps: {
     createSession,
     createMcpSession,
     createSessionOverride,
+    createSessionWithEphemeralEnvironment,
     getSession,
     getCurrentWorkingDirectory,
     readSession,

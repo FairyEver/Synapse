@@ -3,12 +3,18 @@ import { toast } from "sonner"
 
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import type { ProviderModelSelection } from "@/types/provider-model"
 
 const logger = createRendererLogger("agent.terminal-actions")
 
 type AgentProjectTerminalTarget = {
   readonly id: string
   readonly path: string
+}
+
+type AgentClaudeCodeTerminalTarget = {
+  readonly id: string
+  readonly selection: ProviderModelSelection
 }
 
 function createRequestId(): string {
@@ -52,7 +58,49 @@ function useAgentProjectTerminalActions() {
     }
   }, [])
 
-  return { openProjectInTerminal }
+  const startClaudeCodeTerminal = useCallback(async (target: AgentClaudeCodeTerminalTarget): Promise<boolean> => {
+    const bridge = requireSynapseBridge()
+    let sessionId: string
+    try {
+      const created = await bridge.agent.createClaudeCodeTerminal({
+        projectId: target.id,
+        providerId: target.selection.providerId,
+        modelTier: target.selection.modelTier,
+      })
+      sessionId = created.sessionId
+    } catch (rawError) {
+      logger.warn("Claude Code terminal creation failed.", {
+        boundary: "renderer.agent.claude-code-terminal.create",
+        projectId: target.id,
+        providerId: target.selection.providerId,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessageLength(rawError),
+      })
+      toast.error("无法在终端中启动 Claude Code。")
+      return false
+    }
+
+    try {
+      await bridge.apps.openSystemApp("terminal", {
+        terminalOpenRequest: {
+          requestId: createRequestId(),
+          sessionId,
+        },
+      })
+    } catch (rawError) {
+      logger.warn("Claude Code terminal window open failed.", {
+        boundary: "renderer.agent.claude-code-terminal.window",
+        projectId: target.id,
+        sessionId,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessageLength(rawError),
+      })
+      toast.error("Claude Code 已启动，但无法打开终端应用。")
+    }
+    return true
+  }, [])
+
+  return { openProjectInTerminal, startClaudeCodeTerminal }
 }
 
 function errorMessageLength(error: unknown): number {

@@ -47,6 +47,7 @@ type AgentSessionCreateDialogProps = {
   readonly defaultSelection?: ProviderModelSelection
   readonly onOpenChange: (open: boolean) => void
   readonly onCreate: (input: AgentSessionCreateInput) => Promise<boolean>
+  readonly onCreateTerminal: (input: { readonly selection: ProviderModelSelection }) => Promise<boolean>
 }
 
 function AgentSessionCreateDialog({
@@ -56,11 +57,13 @@ function AgentSessionCreateDialog({
   defaultSelection,
   onOpenChange,
   onCreate,
+  onCreateTerminal,
 }: AgentSessionCreateDialogProps) {
   const [name, setName] = useState(initialName)
   const [personaId, setPersonaId] = useState<string | null>(null)
   const [manualSelection, setManualSelection] = useState<ProviderModelSelection | null>(defaultSelection ?? null)
   const [saving, setSaving] = useState(false)
+  const [creatingTerminal, setCreatingTerminal] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const createdRef = useRef(false)
   const {
@@ -76,6 +79,7 @@ function AgentSessionCreateDialog({
     setPersonaId(null)
     setManualSelection(defaultSelection ?? null)
     setSaving(false)
+    setCreatingTerminal(false)
     createdRef.current = false
   }, [defaultSelection, initialName, open])
 
@@ -108,7 +112,16 @@ function AgentSessionCreateDialog({
     && !providersLoading
     && !providersError
     && !boundModelUnavailable
-    && !saving,
+    && !saving
+    && !creatingTerminal,
+  )
+  const canCreateTerminal = Boolean(
+    effectiveSelection
+    && !providersLoading
+    && !providersError
+    && !boundModelUnavailable
+    && !saving
+    && !creatingTerminal,
   )
   const builtinPersonas = useMemo(
     () => personas.filter((persona) => persona.source === "builtin"),
@@ -140,6 +153,26 @@ function AgentSessionCreateDialog({
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleCreateTerminal = async () => {
+    if (!canCreateTerminal || !effectiveSelection) return
+    setCreatingTerminal(true)
+    try {
+      const created = await onCreateTerminal({ selection: effectiveSelection })
+      if (created) {
+        createdRef.current = true
+        onOpenChange(false)
+      }
+    } catch (rawError) {
+      logger.warn("Agent terminal session creation failed.", {
+        boundary: "renderer.agent.session-create-terminal",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessageLength(rawError),
+      })
+    } finally {
+      setCreatingTerminal(false)
     }
   }
 
@@ -256,6 +289,9 @@ function AgentSessionCreateDialog({
         <DialogFooter>
           <Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>
             取消
+          </Button>
+          <Button type="button" variant="outline" disabled={!canCreateTerminal} onClick={() => void handleCreateTerminal()}>
+            {creatingTerminal ? "正在启动" : "创建终端对话"}
           </Button>
           <Button type="button" disabled={!canCreate} onClick={() => void handleCreate()}>
             {saving ? "正在创建" : "创建对话"}

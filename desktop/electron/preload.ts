@@ -1168,6 +1168,7 @@ const synapseBridge: SynapseBridge = {
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),
     listSessions: (projectId) => invoke(IPC_CHANNELS.agent.listSessions)({ projectId }),
+    createClaudeCodeTerminal: (input) => invoke(IPC_CHANNELS.agent.createClaudeCodeTerminal)(input),
     listAllSessions: (request: { excludeProjectIds?: string[]; limit?: number }) =>
       invoke(IPC_CHANNELS.agent.listAllSessions)(request),
     workspaceTree: {

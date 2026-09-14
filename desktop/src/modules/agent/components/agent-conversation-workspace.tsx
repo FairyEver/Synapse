@@ -67,6 +67,7 @@ import type {
   SendMessageOptions,
 } from "../hooks/use-chat-connection"
 import { useAgentReferenceActions } from "../hooks/use-agent-reference-actions"
+import { useAgentProjectTerminalActions } from "../hooks/use-agent-project-terminal-actions"
 import { useProjectGitActions } from "../hooks/use-project-git-actions"
 import { latestTimelineContentSignal, useStickToBottom } from "../hooks/use-stick-to-bottom"
 import { AgentComposer } from "./agent-composer"
@@ -191,6 +192,7 @@ function AgentConversationWorkspace({
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [createMode, setCreateMode] = useState<SynapseAgentPermissionMode | undefined>()
   const [createInitialName, setCreateInitialName] = useState("")
+  const { startClaudeCodeTerminal } = useAgentProjectTerminalActions()
   const pendingMessageIdRef = useRef(0)
   const recentSlashSkillsRef = useRef(config.agent.recentSlashSkills)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
@@ -933,6 +935,8 @@ function AgentConversationWorkspace({
             setCreatingConversation(false)
           }
         }}
+        onCreateTerminal={async ({ selection }) =>
+          startClaudeCodeTerminal({ id: session.projectId, selection })}
       />
       </div>
     </AgentWorkspaceShell>

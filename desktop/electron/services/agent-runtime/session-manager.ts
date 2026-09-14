@@ -32,6 +32,7 @@ import type {
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
 import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
+import { resolveTierModelFromEnv } from "./provider-model-tier"
 import { resolveAgentProviderTransportPolicy } from "./provider-transport-policy"
 import {
   SYNAPSE_MCP_TOOL_PREFIX,
@@ -332,7 +333,7 @@ export class SessionManager {
       ?? input.message.modelTier
       ?? input.conversation.agentConfig?.modelTier
     if (effectiveTier) {
-      const tierModel = resolveTierFromEnv(env, effectiveTier)
+      const tierModel = resolveTierModelFromEnv(env, effectiveTier)
       if (tierModel) {
         env.ANTHROPIC_MODEL = tierModel
       } else if (personaConfig.providerModel
@@ -834,16 +835,6 @@ export class WorkspacePathUnavailableError extends Error {
   constructor(message: string) {
     super(message)
     this.name = "WorkspacePathUnavailableError"
-  }
-}
-
-function resolveTierFromEnv(env: Record<string, string>, tier: string): string | undefined {
-  switch (tier) {
-    case "default": return env.ANTHROPIC_MODEL
-    case "haiku":   return env.ANTHROPIC_DEFAULT_HAIKU_MODEL
-    case "sonnet":  return env.ANTHROPIC_DEFAULT_SONNET_MODEL
-    case "opus":    return env.ANTHROPIC_DEFAULT_OPUS_MODEL
-    default: return undefined
   }
 }
 

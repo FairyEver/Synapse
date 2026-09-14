@@ -459,6 +459,34 @@ describe("TerminalService core", () => {
     })
   })
 
+  it("launches an embedded agent CLI with a caller-owned environment that is never persisted", async () => {
+    const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-ephemeral-"))
+    const spawnPty = vi.fn(() => fakePty())
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => cwd,
+      resolveEffectivePath: () => "/usr/bin:/bin",
+      appVersion: "9.8.7",
+    })
+    await service.start()
+
+    const session = await service.createSessionWithEphemeralEnvironment({
+      title: "Claude Code",
+      cwd,
+      shell: "/bin/zsh",
+      environment: { ANTHROPIC_AUTH_TOKEN: "secret-token", DISABLE_AUTOUPDATER: "1" },
+    })
+
+    expect(session.launchEnvironment).toBeUndefined()
+    expect(session.launchFacts?.environmentKeys).toEqual(["ANTHROPIC_AUTH_TOKEN", "DISABLE_AUTOUPDATER"])
+    expect(JSON.stringify(session)).not.toContain("secret-token")
+    expect(spawnPty).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({ ANTHROPIC_AUTH_TOKEN: "secret-token", DISABLE_AUTOUPDATER: "1" }),
+    }))
+  })
+
   it("applies global, group, and command launch settings to new PTYs only", async () => {
     const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-layers-"))
     const spawnPty = vi.fn(() => fakePty())

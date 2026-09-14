@@ -117,6 +117,41 @@ describe("AgentSessionCreateDialog", () => {
     expect(details?.className).toContain("sm:grid-cols-2")
   })
 
+  it("starts a Claude Code terminal with the selected provider and model tier", async () => {
+    const onCreate = vi.fn(async () => true)
+    const onCreateTerminal = vi.fn(async () => true)
+    await renderDialog({ onCreate, onCreateTerminal })
+
+    await act(async () => {
+      findButton("创建终端对话")?.click()
+      await Promise.resolve()
+    })
+
+    expect(onCreateTerminal).toHaveBeenCalledWith({ selection: DEFAULT_SELECTION })
+    expect(onCreate).not.toHaveBeenCalled()
+  })
+
+  it("starts a terminal conversation without requiring a conversation name", async () => {
+    const onCreateTerminal = vi.fn(async () => true)
+    await renderDialog({ onCreate: vi.fn(async () => true), onCreateTerminal })
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="会话名称"]')
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+      setter?.call(input, "")
+      input?.dispatchEvent(new Event("input", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const terminalButton = findButton("创建终端对话")
+    expect(terminalButton?.disabled).toBe(false)
+    await act(async () => {
+      terminalButton?.click()
+      await Promise.resolve()
+    })
+    expect(onCreateTerminal).toHaveBeenCalledWith({ selection: DEFAULT_SELECTION })
+  })
+
   it("uses ordinary mode by default and creates an unbound cached persona with the manual model", async () => {
     const onCreate = vi.fn(async () => true)
     await renderDialog({ onCreate })
@@ -217,6 +252,9 @@ async function renderDialog(input: {
     readonly personaId: string | null
     readonly selection: ProviderModelSelection
   }) => Promise<boolean>
+  readonly onCreateTerminal?: (value: {
+    readonly selection: ProviderModelSelection
+  }) => Promise<boolean>
   readonly personas?: readonly SynapseAgentPersona[]
 }): Promise<void> {
   const container = document.createElement("div")
@@ -232,6 +270,7 @@ async function renderDialog(input: {
         defaultSelection={DEFAULT_SELECTION}
         onOpenChange={vi.fn()}
         onCreate={input.onCreate}
+        onCreateTerminal={input.onCreateTerminal ?? (async () => true)}
       />,
     )
     await Promise.resolve()

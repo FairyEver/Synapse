@@ -8,6 +8,7 @@ import {
   agentPhaseUpdatePayloadSchema,
 } from "./ipc-shared"
 import { sessionMethods } from "./ipc-sessions"
+import { claudeCodeTerminalMethods } from "./ipc-claude-code-terminal"
 import { messageMethods } from "./ipc-messages"
 import { toolMethods } from "./ipc-tools"
 import { agentWorkspaceTreeEvents, agentWorkspaceTreeMethods } from "./ipc-workspace-tree"
@@ -98,6 +99,7 @@ export const agentIpcModule: IpcModule = {
   id: "agent",
   methods: {
     ...sessionMethods,
+    ...claudeCodeTerminalMethods,
     ...messageMethods,
     ...toolMethods,
     ...agentWorkspaceTreeMethods,

@@ -22,6 +22,7 @@ import type {
 } from "./account"
 import type { SynapseAppUpdateOpenRequest, SynapseAppUpdateState } from "./update"
 import type { AgentAttachmentRef } from "./agent-attachment"
+import type { ModelTier } from "./provider-model"
 import type {
   GenerateDocxInput,
   GenerateDocxResult,
@@ -1739,6 +1740,11 @@ export type SynapseBridge = {
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
+    createClaudeCodeTerminal: (input: {
+      projectId: string
+      providerId: string
+      modelTier: ModelTier
+    }) => Promise<{ sessionId: string }>
     listAllSessions: (request: { excludeProjectIds?: string[]; limit?: number }) => Promise<SynapseAgentSessionSummary[]>
     workspaceTree: {
       open: (input: { projectId: string }) => Promise<WorkspaceFileTreeScope>

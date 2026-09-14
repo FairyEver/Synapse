@@ -89,7 +89,7 @@ function AgentSessionSidebar({
   const [quickCreatingProjectId, setQuickCreatingProjectId] = useState<string | null>(null)
   const { reload: loadProviders } = useAgentProviderCatalog(false)
   const { showProjectInFolder } = useAgentProjectShellActions()
-  const { openProjectInTerminal } = useAgentProjectTerminalActions()
+  const { openProjectInTerminal, startClaudeCodeTerminal } = useAgentProjectTerminalActions()
   const [createTarget, setCreateTarget] = useState<{
     readonly project: ProjectOption
     readonly initialName: string
@@ -237,6 +237,10 @@ function AgentSessionSidebar({
         onCreate={async ({ name, personaId, selection }) => {
           if (!createTarget) return false
           return (await onCreateSession(createTarget.project.id, selection, name, personaId)) !== false
+        }}
+        onCreateTerminal={async ({ selection }) => {
+          if (!createTarget) return false
+          return startClaudeCodeTerminal({ id: createTarget.project.id, selection })
         }}
       />
     </ModuleSidebar>
