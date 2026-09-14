@@ -86,7 +86,7 @@ function AgentTimeline({
       <ScrollArea
         className="min-h-0 min-w-0 flex-1"
         viewportRef={viewportRef}
-        viewportClassName="min-w-0 overflow-x-hidden"
+        viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
       >
         {displayNodes.length === 0 ? (
           <div data-allow-select="true" className="mx-auto flex min-h-full min-w-0 max-w-4xl items-center justify-center px-4 pb-34 pt-4 text-center">

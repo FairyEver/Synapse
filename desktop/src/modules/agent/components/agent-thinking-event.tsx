@@ -93,7 +93,7 @@ function AgentThinkingEvent({
         <CollapsibleContent>
           <div className="group relative pb-2 pt-1">
             <div className="rounded bg-muted/50 px-2 py-1.5">
-              <pre data-allow-select="true" className="whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">
+              <pre data-allow-select="true" className="whitespace-pre-wrap wrap-anywhere text-xs leading-5 text-muted-foreground">
                 {redactedContent}
               </pre>
             </div>
