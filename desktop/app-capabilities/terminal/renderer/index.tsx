@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2 } from "lucide-react"
+import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
@@ -14,6 +14,12 @@ import {
   AlertDialogTitle,
 } from "../../../src/components/ui/alert-dialog"
 import { Button } from "../../../src/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../../../src/components/ui/context-menu"
 import {
   Dialog,
   DialogContent,
@@ -1281,17 +1287,15 @@ export function TerminalModule({
       {activeHeaderWorkspaces.length > 0 ? (
         <nav aria-label="活动终端会话" className="no-scrollbar flex h-10 min-w-0 items-center gap-0 overflow-x-auto whitespace-nowrap">
           {activeHeaderWorkspaces.map((workspace) => (
-            <SystemAppTopBarActionButton
+            <TerminalHeaderSessionTab
               key={workspace.id}
-              type="button"
-              aria-current={workspace.id === activeWorkspace?.id ? "page" : undefined}
-              aria-label={`切换到会话：${workspace.title}`}
-              className={workspace.id === activeWorkspace?.id ? "bg-muted text-foreground" : undefined}
-              data-track="terminal-header-session-select"
-              onClick={() => selectWorkspace(workspace.id)}
-            >
-              <span className="max-w-32 truncate">{workspace.title}</span>
-            </SystemAppTopBarActionButton>
+              active={workspace.id === activeWorkspace?.id}
+              closeDisabled={workspace.closing || closingWorkspaceId === workspace.id}
+              title={workspace.title}
+              onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
+              onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
+              onSelect={() => selectWorkspace(workspace.id)}
+            />
           ))}
         </nav>
       ) : null}
@@ -1825,6 +1829,53 @@ export function TerminalModule({
         </AlertDialogContent>
       </AlertDialog>
     </SystemAppWindowShell>
+  )
+}
+
+function TerminalHeaderSessionTab({
+  active,
+  closeDisabled,
+  onClose,
+  onRename,
+  onSelect,
+  title,
+}: {
+  readonly active: boolean
+  readonly closeDisabled: boolean
+  readonly onClose: () => void
+  readonly onRename: (returnFocus: HTMLElement) => void
+  readonly onSelect: () => void
+  readonly title: string
+}) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <SystemAppTopBarActionButton
+          ref={buttonRef}
+          type="button"
+          aria-current={active ? "page" : undefined}
+          aria-label={`切换到会话：${title}`}
+          className={active ? "bg-muted text-foreground" : undefined}
+          data-track="terminal-header-session-select"
+          onClick={onSelect}
+        >
+          <span className="max-w-32 truncate">{title}</span>
+        </SystemAppTopBarActionButton>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => {
+          if (buttonRef.current) onRename(buttonRef.current)
+        }}>
+          <Pencil />
+          重命名
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" disabled={closeDisabled} onSelect={onClose}>
+          <X />
+          关闭
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 

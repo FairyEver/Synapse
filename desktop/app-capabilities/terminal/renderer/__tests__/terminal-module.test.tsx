@@ -995,6 +995,75 @@ describe("TerminalModule", () => {
     expect(document.querySelector('[aria-label="活动终端会话"]')).toBeNull()
   })
 
+  it("opens a header session tab context menu without switching the active workspace", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({ id: "session-2", groupId: "group-1", title: "日志终端" })
+
+    await renderEmbeddedModule()
+    await openHeaderSessionMenu("日志终端")
+
+    const menuItems = headerSessionMenuItems()
+    expect(menuItems.map((item) => item.textContent)).toEqual(["重命名", "关闭"])
+    expect(menuItems[1]?.dataset.variant).toBe("destructive")
+
+    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
+    expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
+  })
+
+  it("renames a workspace from its header session tab context menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({ id: "session-2", groupId: "group-1", title: "日志终端" })
+
+    await renderEmbeddedModule()
+    await openHeaderSessionMenu("日志终端")
+    await clickContextMenuItem("重命名")
+
+    expect(document.body.textContent).toContain("重命名终端")
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="终端名称"]')?.value).toBe("日志终端")
+
+    await changeInput("终端名称", "  构建日志  ")
+    await clickButton("保存")
+
+    expect(terminalBridge.renameWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-2",
+      title: "构建日志",
+      expectedLayoutRevision: 1,
+    })
+    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    expect(navigation?.textContent).toContain("构建日志")
+    expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(headerSessionTab("构建日志"))
+  })
+
+  it("closes a workspace from its header session tab context menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({ id: "session-2", groupId: "group-1", title: "日志终端" })
+
+    await renderEmbeddedModule()
+    const xtermFrame = document.querySelector("[data-terminal-xterm-frame]")
+    await openHeaderSessionMenu("日志终端")
+    await clickContextMenuItem("关闭")
+    await act(async () => {
+      await flushPromises()
+    })
+
+    expect(terminalBridge.closeWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-2",
+      expectedLayoutRevision: 1,
+    })
+    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    expect(navigation?.textContent).not.toContain("日志终端")
+    expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
+    expect(document.querySelector("[data-terminal-xterm-frame]")).toBe(xtermFrame)
+  })
+
   it("edits global launch settings from the terminal header without remounting the active terminal", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "zsh" })]
@@ -3245,6 +3314,32 @@ async function clickButtonByAriaLabel(label: string): Promise<void> {
 async function clickMenuItem(text: string): Promise<void> {
   const item = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]'))
     .find((element) => element.textContent === text)
+  await act(async () => {
+    item?.click()
+    await Promise.resolve()
+  })
+}
+
+function headerSessionTab(title: string): HTMLButtonElement | null {
+  return document.body.querySelector<HTMLButtonElement>(
+    `[aria-label="活动终端会话"] button[aria-label="切换到会话：${title}"]`,
+  )
+}
+
+function headerSessionMenuItems(): HTMLElement[] {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+}
+
+async function openHeaderSessionMenu(title: string): Promise<void> {
+  const tab = headerSessionTab(title)
+  await act(async () => {
+    tab?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
+    await Promise.resolve()
+  })
+}
+
+async function clickContextMenuItem(text: string): Promise<void> {
+  const item = headerSessionMenuItems().find((element) => element.textContent === text)
   await act(async () => {
     item?.click()
     await Promise.resolve()
