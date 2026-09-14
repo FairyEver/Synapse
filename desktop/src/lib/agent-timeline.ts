@@ -883,7 +883,10 @@ function taskCompletionMetadata(metadata: Record<string, unknown> | undefined): 
   if (!value || !["unverified", "partial", "coverage-complete"].includes(String(value.status)) || value.semanticCorrectness !== "unverified"
     || ["revision", "declaredUnits", "coveredUnits", "processedUnits", "conflictingFindings"].some((key) =>
       typeof value[key] !== "number" || !Number.isSafeInteger(value[key]) || (value[key] as number) < 0)) return undefined
-  return value as unknown as SynapseTaskCompletionAssessment
+  // Records persisted before mutation evidence existed have no mutatedUnits field.
+  const mutatedUnits = value.mutatedUnits === undefined ? 0 : value.mutatedUnits
+  if (typeof mutatedUnits !== "number" || !Number.isSafeInteger(mutatedUnits) || mutatedUnits < 0) return undefined
+  return { ...value, mutatedUnits } as unknown as SynapseTaskCompletionAssessment
 }
 
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {

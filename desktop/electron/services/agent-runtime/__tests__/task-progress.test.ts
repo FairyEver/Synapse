@@ -5,7 +5,8 @@ import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { SqliteNamespace, openSqliteDatabase } from "../../../runtime/data-repo/backends/sqlite"
 import { agentTaskProgressSchema, JsonNamespace, type ConversationEntryV1, type AgentTaskProgressEntryV1 } from "../../../runtime/data-repo"
-import { TaskProgressStore, type WorkReceipt } from "../task-progress"
+import { TaskProgressStore, detectCoverageClaim, type WorkReceipt } from "../task-progress"
+import { boundedReadDelivery } from "../task-progress-hooks"
 import { AgentSessionRepository } from "../session-repository"
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -230,4 +231,63 @@ it("accepts a proven canonical alias without replacing a unit and rejects an unp
   } finally { lookup.mockRestore() }
   await writeFile(path.join(dir, "other.txt"), "different")
   await expect(session.commit({ version: 1, baseRevision: 2, units: [{ ...entry, path: path.join(dir, "other.txt") }] })).rejects.toThrow("替换")
+})
+
+it("counts a successful edit receipt as processed evidence without granting read coverage", async () => {
+  const { session } = await setup()
+  const file = path.join(path.sep, "originals", "notes.md")
+  await session.receipt({ toolUseId: "edit-1", toolName: "Edit", path: file, kind: "operation", complete: false,
+    presented: false, outputHash: "edit-response",
+    mutation: { toolName: "Edit", path: file, versionAfter: "notes-v2" } })
+  await session.presented(["edit-1"])
+  await session.commit({ version: 1, baseRevision: 0, seal: true,
+    units: [{ id: "notes", path: file, kind: "text", receipts: ["edit-1"], processed: true }] })
+
+  expect(await session.assessment()).toMatchObject({ status: "partial", declaredUnits: 1,
+    coveredUnits: 0, processedUnits: 1, mutatedUnits: 1, semanticCorrectness: "unverified" })
+  await expect(session.evidenceGaps()).resolves.toMatchObject({ missingEvidence: [], overclaim: [] })
+  await expect(session.evidenceGaps("已通读全部文件，未遗漏")).resolves.toMatchObject({
+    missingEvidence: [], overclaim: [{ id: "notes", path: file }],
+  })
+  expect(detectCoverageClaim("4 步全部完成，未中断")).toBe(false)
+  expect(detectCoverageClaim("I read every file in full.")).toBe(true)
+})
+
+it("maps a bounded read to the lines it actually delivered", () => {
+  expect(boundedReadDelivery({ startLine: 1, totalLines: 8, deliveredContentLines: 3, kept: "head" })).toEqual([1, 3])
+  expect(boundedReadDelivery({ startLine: 508, totalLines: 3, deliveredContentLines: 99, kept: "head" })).toEqual([508, 510])
+  expect(boundedReadDelivery({ startLine: 1, totalLines: 8, deliveredContentLines: 3, kept: "tail" })).toEqual([6, 8])
+  expect(boundedReadDelivery({ startLine: 1, totalLines: 8, deliveredContentLines: 0, kept: "head" })).toBeUndefined()
+  expect(boundedReadDelivery({ startLine: 0, totalLines: 8, deliveredContentLines: 3, kept: "head" })).toBeUndefined()
+})
+
+it("tiles coverage from bounded reads and honours a declared processing scope", async () => {
+  const { session, store } = await setup()
+  const file = path.join(path.sep, "originals", "records.txt")
+  const bounded = (id: string, range: [number, number]): WorkReceipt => ({ toolUseId: id, toolName: "Read",
+    path: file, kind: "text", range, deliveredRange: range, bounded: true, totalLines: 8,
+    complete: false, presented: false, outputHash: id, version: "records-v1" })
+  await session.receipt(bounded("page-1", [1, 4]))
+  await session.receipt(bounded("page-2", [5, 8]))
+  await session.presented(["page-1", "page-2"])
+  await session.commit({ version: 1, baseRevision: 0, seal: true,
+    units: [{ id: "records", path: file, kind: "text", receipts: ["page-1", "page-2"], processed: true }] })
+  expect(await session.assessment()).toMatchObject({ status: "coverage-complete", coveredUnits: 1, processedUnits: 1 })
+
+  // A declared scope only needs the declared range, and cannot be rewritten later.
+  const scoped = store.session("c", "/originals")
+  await scoped.begin("t2")
+  await scoped.receipt(bounded("head-1", [1, 4]))
+  await scoped.presented(["head-1"])
+  await scoped.commit({ version: 1, baseRevision: 0, seal: true,
+    units: [{ id: "head", path: file, kind: "text", receipts: ["head-1"], processed: true, scope: [1, 4] }] })
+  expect(await scoped.assessment()).toMatchObject({ status: "coverage-complete", declaredUnits: 1, coveredUnits: 1 })
+  await expect(scoped.commit({ version: 1, baseRevision: 1,
+    units: [{ id: "head", path: file, kind: "text", receipts: [], processed: true, scope: [1, 2] }] })).rejects.toThrow("不能修改处理范围")
+  const otherFile = path.join(path.sep, "originals", "records-2.txt")
+  await scoped.receipt({ ...bounded("head-2", [1, 4]), path: otherFile })
+  await scoped.presented(["head-2"])
+  await expect(scoped.commit({ version: 1, baseRevision: 1, reopen: true,
+    units: [{ id: "wide", path: otherFile, kind: "text", receipts: ["head-2"], processed: true, scope: [1, 99] }] }))
+    .rejects.toThrow("超出材料行数")
 })

@@ -694,7 +694,9 @@ function buildSummary(input: {
   readonly agentUsage: readonly AgentUsageEntryV1[]
 }) {
   const usageSummary = summarizeUsage(input.conversation, input.agentUsage)
-  const errorEvents = input.agentEvents.filter((entry) => entry.eventType === "error")
+  // Evidence notices are advisory and must not inflate failure counts.
+  const errorEvents = input.agentEvents.filter((entry) => entry.eventType === "error"
+    && (entry.payload as { errorKind?: unknown }).errorKind !== "task_evidence_incomplete")
   const failedTurnIds = uniqueEventTurnIds(errorEvents)
   const recoverableTurnIds = uniqueEventTurnIds(
     errorEvents.filter((entry) => entry.payload.recoverable === true),

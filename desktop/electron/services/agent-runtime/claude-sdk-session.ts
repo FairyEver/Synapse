@@ -1,5 +1,11 @@
 import { AssistantOutputIntegrity } from "./assistant-output-integrity"
-import { TASK_PROGRESS_GUIDANCE, TaskProgressValidationError, type TaskProgressSession } from "./task-progress"
+import {
+  TASK_PROGRESS_GUIDANCE,
+  TaskProgressValidationError,
+  type TaskEvidenceGap,
+  type TaskEvidenceGaps,
+  type TaskProgressSession,
+} from "./task-progress"
 import { expectedNativeReadDelivery, nativeReadDeliveredHash, recordTaskToolResult } from "./task-progress-hooks"
 import type {
   HookCallbackMatcher,
@@ -262,6 +268,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly pendingProgressReceipts = new Set<string>()
   private readonly expectedReadDeliveries = new Map<string, { kind: "text" | "image"; hash: string }>()
   private governedToolOutputPath?: string
+  private governedReadDelivery?: { sourceLines: number; kept: "head" | "tail" }
   private eligiblePresentation?: { receipts: string[]; images: string[]; acquired: string[] }
   private presentationAcknowledgement: Promise<void> = Promise.resolve()
   private textBodyPressure = false
@@ -797,7 +804,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
           if ("async" in output || !this.taskProgress || this.closed || output.continue === false) return output
           try {
             const result = await recordTaskToolResult(this.taskProgress, input, output, this.cwd, this.taskProgressToolsAvailable,
-              this.persistToolOutputText && this.activeTurnId ? { outputPath: this.governedToolOutputPath, runtimeEvidenceRoots: this.readOnlyAdditionalDirectories,
+              this.persistToolOutputText && this.activeTurnId ? { outputPath: this.governedToolOutputPath,
+                ...(this.governedReadDelivery ? { boundedDelivery: this.governedReadDelivery } : {}),
+                runtimeEvidenceRoots: this.readOnlyAdditionalDirectories,
                 persist: (content) => this.persistToolOutputText!({ projectId: this.projectId, conversationId: this.conversationId,
                   turnId: this.activeTurnId!, toolName: "task-evidence", content }),
               } : undefined)
@@ -917,10 +926,16 @@ export class ClaudeSDKSession implements AgentLiveSession {
       }
       const assessment = await this.taskProgress?.assessment()
       if (!assessment || assessment.status !== "partial") return {}
-      const marker = `${await this.taskProgress?.progressMarker()}:${assessment.conflictingFindings}`
+      const gaps = await this.taskProgress?.evidenceGaps(typeof input.last_assistant_message === "string" ? input.last_assistant_message : undefined)
+      const hasEvidenceGaps = Boolean(gaps && (gaps.missingEvidence.length > 0 || gaps.overclaim.length > 0))
+      if (!hasEvidenceGaps && assessment.conflictingFindings === 0) return {}
+      const marker = `evidence:${await this.taskProgress?.progressMarker()}:${assessment.conflictingFindings}:${hasEvidenceGaps ? "gap" : "conflict"}`
       if (this.completionRetryMarker === marker) return {}
       this.completionRetryMarker = marker
-      return { decision: "block", reason: `任务覆盖检查未通过：${JSON.stringify(assessment)}。继续处理已登记的缺口并提交证据；不能将 Task 完成或模型结束当作验收通过。无法继续时保留部分完成状态并说明原因。` }
+      const detail = hasEvidenceGaps
+        ? `缺口 ${JSON.stringify([...(gaps?.overclaim ?? []), ...(gaps?.missingEvidence ?? [])].slice(0, 8))}`
+        : "存在证据冲突"
+      return { decision: "block", reason: `任务证据不完整：${JSON.stringify(assessment)}；${detail}。补齐读取覆盖（大文件可分段读取累计）、成功编辑回执，或为只处理部分内容的单元声明 scope；不能把抽样读取当作通读，也不能在证据不足时宣称完成。无法继续时保留未完成状态并说明原因。` }
     }] }]
     hooks.UserPromptSubmit = [{
       hooks: [async (input: HookInput): Promise<HookJSONOutput> => this.guardNextRequest(input)],
@@ -1076,6 +1091,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   private async limitToolOutput(input: HookInput): Promise<HookJSONOutput> {
     this.governedToolOutputPath = undefined
+    this.governedReadDelivery = undefined
     if (this.outputIntegrityFailed || this.closed || this.abortController?.signal.aborted) return { continue: false }
     const record = input as unknown as Record<string, unknown>
     if (record.hook_event_name !== "PostToolUse" || typeof record.tool_name !== "string") return {}
@@ -1197,6 +1213,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
       governed = governToolOutput({ toolName: record.tool_name, toolResponse: record.tool_response,
         maxBytes: previewBytes, persistedOutputPath: persisted?.storagePath })
       updatedToolOutput = governed ? replaceToolOutput(record.tool_name, record.tool_response, governed.updatedToolOutput) : record.tool_response
+    }
+    if (governed && governed.deliveredContentLines > 0 && record.tool_name === "Read") {
+      // The bounded replacement carries only the lines actually delivered; coverage
+      // must never credit the omitted original.
+      this.governedReadDelivery = { sourceLines: governed.deliveredContentLines, kept: governed.kept }
     }
     if (governed && persisted && !governed.updatedToolOutput.includes(persisted.storagePath)) {
       this.textBodyPressure = true
@@ -1713,13 +1734,16 @@ export class ClaudeSDKSession implements AgentLiveSession {
     const events = Array.isArray(bridged) ? bridged : [bridged as AgentEvent]
     if (raw.type === "result" && this.taskProgress) {
       const taskCompletion = await this.taskProgress.assessment()
-      const missingInventory = this.taskProgressToolsAvailable && await this.taskProgress.needsInventory()
+      const finalText = events.find((event) => event.type === "result")?.content
+      const gaps = await this.taskProgress.evidenceGaps(typeof finalText === "string" ? finalText : undefined)
+      const notice = evidenceNoticeMessage(gaps)
       for (let i = 0; i < events.length; i += 1) {
         const event = events[i]!
-        if (event.type === "result") events[i] = (missingInventory || taskCompletion?.status === "partial") && !(event.queuedTurnCount && event.queuedTurnCount > 0)
-          ? { type: "error", message: missingInventory ? "任务尚未登记完整材料清单，无法验证处理范围。已保存读取证据，可继续登记和核对。" : `任务尚未通过覆盖检查：已处理 ${taskCompletion?.processedUnits}/${taskCompletion?.declaredUnits} 项，存在 ${taskCompletion?.conflictingFindings} 项证据冲突。已保存进度，可继续核对。`,
+        if (event.type === "result") events[i] = notice && !(event.queuedTurnCount && event.queuedTurnCount > 0)
+          ? { type: "error", message: notice, errorKind: "task_evidence_incomplete",
             recoverable: true, usage: event.metadata?.usage ?? event.usage, modelUsage: event.modelUsage,
-            costUsd: event.costUsd, sdkResultUuid: event.metadata?.sdkResultUuid, taskCompletion, payload: { taskCompletion }, ...envelope }
+            costUsd: event.costUsd, sdkResultUuid: event.metadata?.sdkResultUuid, taskCompletion,
+            payload: { taskCompletion, evidenceGaps: gaps }, ...envelope }
           : { ...event, metadata: { ...event.metadata, taskCompletion } }
       }
     }
@@ -2355,6 +2379,20 @@ function denyToolUse(message: string): HookJSONOutput {
       permissionDecisionReason: message,
     },
   }
+}
+
+/** Plain-language advisory for substantive evidence gaps; never an execution failure. */
+function evidenceNoticeMessage(gaps: TaskEvidenceGaps): string | undefined {
+  const names = (items: readonly TaskEvidenceGap[]): string =>
+    items.slice(0, 3).map((item) => path.basename(item.path)).join("、")
+  const lines: string[] = []
+  if (gaps.overclaim.length > 0) {
+    lines.push(`答复声称已完整读取这些材料，但没有可核对的记录：${names(gaps.overclaim)}。`)
+  }
+  if (gaps.missingEvidence.length > 0) {
+    lines.push(`这些材料已登记但没有可核对的读取或修改记录：${names(gaps.missingEvidence)}。`)
+  }
+  return lines.length > 0 ? `${lines.join("")}已保存当前进度，可继续核对。` : undefined
 }
 
 function isWriteTool(toolName: string): boolean {

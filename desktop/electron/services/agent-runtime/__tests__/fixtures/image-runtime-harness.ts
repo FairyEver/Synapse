@@ -45,7 +45,7 @@ export function imageRuntimeHarness(input: {
         model: input.model, mode: "bypassPermissions", maxTurns: 128, autoCompactWindowTokens: 200_000,
         maxRequestBodyBytes: 6 * 1024 * 1024, requestBodyBudgetBytes: input.bodyBudget ?? 5 * 1024 * 1024,
         disallowedTools: input.denyResumedReads && generation > 0 ? ["Read"] : undefined,
-        tools: ["Read", "Bash", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"], systemPrompt: "Complete the user's image verification task using native Read. Preserve progress after maintenance.",
+        tools: ["Read", "Edit", "Bash", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"], systemPrompt: "Complete the user's image verification task using native Read. Preserve progress after maintenance.",
         logger, synapseToolRouter: undefined,
         queryFactory: ({ prompt, options: sdkOptions }) => {
           const native = sdkOptions as Options

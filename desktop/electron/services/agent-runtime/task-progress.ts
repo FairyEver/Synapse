@@ -12,6 +12,15 @@ export interface WorkReceipt {
   canonicalPath?: string
   version?: string
   range?: [number, number]
+  /** Range actually delivered to the model when a bounded result omitted lines. */
+  deliveredRange?: [number, number]
+  bounded?: boolean
+  mutation?: {
+    toolName: "Edit" | "Write" | "NotebookEdit"
+    path: string
+    canonicalPath?: string
+    versionAfter?: string
+  }
   totalLines?: number
   kind: "text" | "image" | "operation"
   complete: boolean
@@ -31,6 +40,8 @@ interface WorkUnit {
   kind: "text" | "image"
   receipts: string[]
   processed: boolean
+  /** Optional declared processing range; defaults to the whole file. */
+  scope?: [number, number]
 }
 interface Finding {
   id: string
@@ -51,9 +62,33 @@ interface State {
   findings: Map<string, Finding>
 }
 
+export interface TaskEvidenceGap {
+  readonly id: string
+  readonly path: string
+}
+
+export interface TaskEvidenceGaps {
+  /** Declared units without read coverage or a mutation receipt. */
+  readonly missingEvidence: readonly TaskEvidenceGap[]
+  /** Units an over-claimed final answer says were read in full but that lack read coverage. */
+  readonly overclaim: readonly TaskEvidenceGap[]
+}
+
+// Advisory only: a detected claim produces a notice, never a hard gate.
+const COVERAGE_CLAIM_PATTERNS: readonly RegExp[] = [
+  /通读|读完|完整读取|完整阅读|阅读完整|全部读完|逐行(核对|检查|阅读|审查)|无一遗漏|覆盖了?全部|全部(文件|材料)?都已?(阅读|读取|看完|核对|检查)|每一(行|个文件)都已?(阅读|读取|看完|核对|检查)/,
+  /\b(?:read|reviewed|checked)\b[^.]{0,40}\b(?:in full|fully|every line|all lines|all files|the entire (?:file|document|set))\b/i,
+  /\b(?:full|complete) (?:read|coverage|review)\b/i,
+]
+
+export function detectCoverageClaim(summary: string | undefined): boolean {
+  if (!summary) return false
+  return COVERAGE_CLAIM_PATTERNS.some((pattern) => pattern.test(summary))
+}
+
 /** The SDK task metadata is a submission, not the authoritative completion state. */
 export const TASK_PROGRESS_GUIDANCE = `For multi-file or multi-stage analysis, you MUST register and maintain an explicit inventory and evidence through native TaskCreate/TaskUpdate metadata.synapseProgress. Never replace full reading with sampling. Submit at most 32 units/findings per call:
-{version:1, baseRevision:<latest Synapse receipt revision, initially 0>, units:[{id:<stable id>,path:<absolute original>,kind:"text"|"image",receipts:[<native Read tool_use_id>],processed:<true only after analysis>}], findings:[{id:<stable fact>,value:<concise string or number>,evidence:[<tool_use_id>]}], seal:<true only after the full inventory is registered>}. Empty arrays are allowed. Register inventory before processing; append remaining units before sealing. If an earlier inventory was sealed prematurely, use reopen:true to append missing units without removing prior scope, then seal after the full inventory is registered. You cannot shrink or replace registered scope. Correct a conflicting finding using resolves:true and evidence containing both the old and new sources. SDK tool success and Task completion are not proof of reading, visual understanding, or factual correctness. Use exact receipt paths/ranges and saved findings after maintenance; do not repeat external operations. A receipt of a shortened result does not cover the omitted original. Synapse reports scope coverage separately from semantic correctness. If task tools are unavailable, preserve an explicit progress file and report verification as unavailable; never claim host verification.`
+{version:1, baseRevision:<latest Synapse receipt revision, initially 0>, units:[{id:<stable id>,path:<absolute original>,kind:"text"|"image",receipts:[<native Read tool_use_id or successful Edit/Write tool_use_id>],processed:<true only after analysis>,scope:[<first line>,<last line>]}], findings:[{id:<stable fact>,value:<concise string or number>,evidence:[<tool_use_id>]}], seal:<true only after the full inventory is registered>}. Empty arrays are allowed. Register inventory before processing; append remaining units before sealing. If an earlier inventory was sealed prematurely, use reopen:true to append missing units without removing prior scope, then seal after the full inventory is registered. You cannot shrink or replace registered scope. Correct a conflicting finding using resolves:true and evidence containing both the old and new sources. SDK tool success and Task completion are not proof of reading, visual understanding, or factual correctness. Use exact receipt paths/ranges and saved findings after maintenance; do not repeat external operations. A receipt of a shortened result covers only the lines it delivered: cite chunked Read receipts that tile the file, or declare scope to cover just the range you actually process. Omit scope only when the whole file is in scope. A successful Edit/Write/NotebookEdit receipt proves that unit was processed; it never proves the file was read in full, so do not claim full reading from it. Synapse reports scope coverage separately from semantic correctness. If task tools are unavailable, preserve an explicit progress file and report verification as unavailable; never claim host verification.`
 
 export class TaskProgressValidationError extends Error {}
 
@@ -259,20 +294,35 @@ export class TaskProgressSession {
           throw new TaskProgressValidationError("同一材料须沿用已有任务单元 ID，不能重复计数。")
         }
         const receipts = [...new Set([...(original?.receipts ?? []), ...stringArray(u.receipts)])]
+        const scope = parseUnitScope(u.scope)
+        if (original?.scope && scope && (original.scope[0] !== scope[0] || original.scope[1] !== scope[1])) {
+          throw new TaskProgressValidationError("已登记的任务单元不能修改处理范围。")
+        }
+        const effectiveScope = original?.scope ?? scope
         for (const id of receipts) {
           const receipt = state.receipts.get(id)
           const sameResource = receipt && (receipt.path === filePath || receipt.canonicalPath === filePath || (canonicalPath !== undefined && receipt.canonicalPath === canonicalPath)
             || [...state.receipts.values()].some((previous) => previous.path === filePath && previous.canonicalPath !== undefined
               && previous.canonicalPath === receipt.canonicalPath && previous.version === receipt.version))
-          if (!receipt || !sameResource || receipt.kind !== u.kind || !receipt.presented) {
-            const available = [...state.receipts.values()].filter((r) => r.kind === u.kind && r.presented && r.complete
-              && (r.path === filePath || (canonicalPath !== undefined && r.canonicalPath === canonicalPath)))
-              .slice(-8).map((r) => ({ toolUseId: r.toolUseId, version: r.version, range: r.range }))
+          const readMatches = Boolean(receipt && sameResource && receipt.kind === u.kind)
+          const mutationMatches = Boolean(receipt) && mutationMatchesIdentity(receipt!.mutation, filePath, canonicalPath)
+          if (!receipt || (!readMatches && !mutationMatches) || !receipt.presented) {
+            const available = [...state.receipts.values()].filter((r) => r.presented && (mutationMatchesIdentity(r.mutation, filePath, canonicalPath)
+              || (r.kind === u.kind && (r.complete || r.bounded)
+                && (r.path === filePath || (canonicalPath !== undefined && r.canonicalPath === canonicalPath)))))
+              .slice(-8).map((r) => ({ toolUseId: r.toolUseId, toolName: r.toolName, version: r.version, range: receiptRange(r) }))
             throw new TaskProgressValidationError(`回执 ${id} 尚未呈现或不属于此任务单元。交接前取得的 ID 不能替代新 Read 回执；已呈现证据可依据版本核对后重新提交，无需为换 ID 重读：${JSON.stringify(available)}`)
           }
         }
         if (u.processed === true && !receipts.length) throw new TaskProgressValidationError("没有证据的任务单元不能声明已处理。")
-        units.push({ id, path: filePath, canonicalPath, kind: u.kind, receipts, processed: original?.processed === true || u.processed === true })
+        if (effectiveScope) {
+          const total = receipts.map((id) => state.receipts.get(id)?.totalLines).find((value) => value !== undefined)
+          if (total !== undefined && effectiveScope[1] > total) {
+            throw new TaskProgressValidationError(`处理范围超出材料行数（共 ${total} 行）。`)
+          }
+        }
+        units.push({ id, path: filePath, canonicalPath, kind: u.kind, receipts,
+          processed: original?.processed === true || u.processed === true, ...(effectiveScope ? { scope: effectiveScope } : {}) })
       }
       const findings: Finding[] = []
       const findingIds = new Set<string>()
@@ -332,8 +382,14 @@ export class TaskProgressSession {
       || [...state.receipts.values()].some((r) => matching(r, unit.path) && r.canonicalPath === absolute))
     if (!target) return undefined // Progress/checkpoint reads and ordinary tools remain available.
     const pending = [...state.units.values()].filter((unit) => !unit.processed && unit.id !== target.id).flatMap((unit) => {
-      const receipts = [...state.receipts.values()].filter((r) => r.kind === unit.kind && r.presented && r.complete && (matching(r, unit.path) || (unit.canonicalPath !== undefined && r.canonicalPath === unit.canonicalPath))).map((r) => r.toolUseId)
-      return covered({ ...unit, receipts }, state) ? [{ id: unit.id, path: unit.path, kind: unit.kind, receipts }] : []
+      const receipts = [...state.receipts.values()].filter((r) => {
+        if (!r.presented) return false
+        if (mutationCoversUnit(unit, r)) return true
+        return r.kind === unit.kind && (r.complete || r.bounded)
+          && (matching(r, unit.path) || (unit.canonicalPath !== undefined && r.canonicalPath === unit.canonicalPath))
+      }).map((r) => r.toolUseId)
+      return processedWithEvidence({ ...unit, receipts, processed: true }, state)
+        ? [{ id: unit.id, path: unit.path, kind: unit.kind, receipts }] : []
     })
     if (!pending.length) return undefined
     return `本次新材料读取尚未执行。此前材料已经完整呈现，但处理结果尚未提交；先保存已得出的答案/关键发现，并用 TaskUpdate.metadata.synapseProgress 提交这些单元的 receipts 和 processed 状态，再读取下一份材料。不要重跑已执行动作。当前 baseRevision=${state.revision}；待提交 ${pending.length} 项，前 8 项：${JSON.stringify(pending.slice(0, 8))}`
@@ -347,6 +403,21 @@ export class TaskProgressSession {
   async assessment(): Promise<TaskCompletionAssessment | undefined> {
     return this.turnId ? this.store.assessment(this.conversationId, this.turnId) : undefined
   }
+
+  /** Substantive evidence gaps only: declared-but-unsupported units, plus claims the ledger cannot back. */
+  async evidenceGaps(summary?: string): Promise<TaskEvidenceGaps> {
+    if (!this.turnId) return { missingEvidence: [], overclaim: [] }
+    const state = await this.store.state(this.conversationId, this.turnId)
+    const units = [...state.units.values()]
+    const brief = (matched: readonly WorkUnit[]): TaskEvidenceGap[] => matched.slice(0, 8).map((unit) => ({ id: unit.id, path: unit.path }))
+    return {
+      // Declared scope without read coverage or mutation evidence stays a substantive gap,
+      // whether or not the model marked the unit processed.
+      missingEvidence: brief(units.filter((unit) => !processedWithEvidence(unit, state))),
+      overclaim: detectCoverageClaim(summary) ? brief(units.filter((unit) => !covered(unit, state))) : [],
+    }
+  }
+
   async progressMarker(): Promise<string | undefined> {
     return this.turnId ? this.store.progressMarker(this.conversationId, this.turnId) : undefined
   }
@@ -367,8 +438,8 @@ function resumeCapsule(state: State): Record<string, unknown> {
     if (kept.length < rows.length) omitted[key] = rows.length - kept.length
   }
   const units = [...state.units.values()]
-  add("completedUnitIds", units.filter((u) => u.processed && covered(u, state)).map((u) => u.id), 128)
-  add("pendingUnitIds", units.filter((u) => !u.processed || !covered(u, state)).map((u) => u.id), 128)
+  add("completedUnitIds", units.filter((u) => processedWithEvidence(u, state)).map((u) => u.id), 128)
+  add("pendingUnitIds", units.filter((u) => !processedWithEvidence(u, state)).map((u) => u.id), 128)
   const operations = [...state.receipts.values()].filter((r) => r.kind === "operation")
   add("executedOperations", [...new Map([...operations.slice(0, 2), ...operations.slice(-4), ...operations].map((r) => [r.toolUseId, r])).values()]
     .map((r) => ({ toolUseId: r.toolUseId, inputSummary: r.inputSummary, executionStatus: r.executionStatus, outputPath: r.outputPath })), 6)
@@ -379,27 +450,61 @@ function resumeCapsule(state: State): Record<string, unknown> {
   return capsule
 }
 
+function receiptRange(receipt: WorkReceipt): [number, number] | undefined {
+  return receipt.deliveredRange ?? receipt.range
+}
+
 function covered(unit: WorkUnit, state: State): boolean {
-  const receipts = unit.receipts.map((id) => state.receipts.get(id)).filter((r): r is WorkReceipt => Boolean(r?.presented && r.complete && r.version))
+  const receipts = unit.receipts.map((id) => state.receipts.get(id))
+    .filter((r): r is WorkReceipt => Boolean(r?.presented && r.version && (r.complete || r.bounded)))
   const versions = new Set(receipts.map((r) => r.version))
   if (versions.size !== 1) return false
   if (unit.kind === "image") return receipts.length > 0
   const total = receipts[0]?.totalLines
   if (total === undefined || receipts.some((r) => r.totalLines !== total)) return false
-  let cursor = 1
-  for (const r of receipts.sort((a, b) => (a.range?.[0] ?? 0) - (b.range?.[0] ?? 0))) {
-    if (!r.range || r.range[0] > cursor) return false
-    cursor = Math.max(cursor, r.range[1] + 1)
+  const target = unit.scope ?? [1, total]
+  if (target[0] < 1 || target[1] > total || target[1] < target[0]) return false
+  let cursor = target[0]
+  for (const range of receipts.map(receiptRange).filter((value): value is [number, number] => Boolean(value))
+    .sort((a, b) => a[0] - b[0])) {
+    if (range[1] < cursor) continue
+    if (range[0] > cursor) return false
+    cursor = Math.max(cursor, range[1] + 1)
   }
-  return cursor > total
+  return cursor > target[1]
 }
+
+function mutationMatchesIdentity(mutation: WorkReceipt["mutation"], filePath: string, canonicalPath: string | undefined): boolean {
+  if (!mutation) return false
+  if (mutation.path === filePath) return true
+  if (canonicalPath !== undefined && mutation.canonicalPath === canonicalPath) return true
+  return mutation.canonicalPath !== undefined && mutation.canonicalPath === filePath
+}
+
+function mutationCoversUnit(unit: WorkUnit, receipt: WorkReceipt): boolean {
+  return mutationMatchesIdentity(receipt.mutation, unit.path, unit.canonicalPath)
+}
+
+function mutated(unit: WorkUnit, state: State): boolean {
+  return unit.receipts.some((id) => {
+    const receipt = state.receipts.get(id)
+    return Boolean(receipt?.presented && receipt.mutation && mutationCoversUnit(unit, receipt))
+  })
+}
+
+/** A unit counts as processed when it has read coverage or a successful mutation receipt. */
+function processedWithEvidence(unit: WorkUnit, state: State): boolean {
+  return unit.processed && (covered(unit, state) || mutated(unit, state))
+}
+
 function assess(state: State): TaskCompletionAssessment {
   const units = [...state.units.values()]
   const coveredUnits = units.filter((unit) => covered(unit, state)).length
-  const processedUnits = units.filter((unit) => unit.processed && covered(unit, state)).length
+  const mutatedUnits = units.filter((unit) => mutated(unit, state)).length
+  const processedUnits = units.filter((unit) => processedWithEvidence(unit, state)).length
   const conflictingFindings = [...state.findings.values()].filter((f) => f.conflict).length
-  return { status: !units.length ? "unverified" : state.sealed && processedUnits === units.length && !conflictingFindings ? "coverage-complete" : "partial",
-    revision: state.revision, declaredUnits: units.length, coveredUnits, processedUnits, conflictingFindings, semanticCorrectness: "unverified" }
+  return { status: !units.length ? "unverified" : state.sealed && processedUnits === units.length && coveredUnits === units.length && !conflictingFindings ? "coverage-complete" : "partial",
+    revision: state.revision, declaredUnits: units.length, coveredUnits, processedUnits, mutatedUnits, conflictingFindings, semanticCorrectness: "unverified" }
 }
 export function digest(value: string): string { return createHash("sha256").update(value).digest("hex") }
 function record(value: unknown): Record<string, unknown> {
@@ -416,6 +521,15 @@ function boundedArray(value: unknown): unknown[] {
   return value
 }
 function stringArray(value: unknown): string[] { return boundedArray(value).map((v) => identifier(v)) }
+function parseUnitScope(value: unknown): [number, number] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length !== 2) throw new TaskProgressValidationError("任务单元处理范围格式无效。")
+  const [start, end] = value
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || (start as number) < 1 || (end as number) < (start as number)) {
+    throw new TaskProgressValidationError("任务单元处理范围无效。")
+  }
+  return [start as number, end as number]
+}
 
 /** Filesystem mounts can stall. An unknown canonical identity must not hold a tool hook indefinitely. */
 async function progressRealpath(filePath: string): Promise<string> {

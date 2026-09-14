@@ -248,6 +248,7 @@ export type SynapseAgentErrorKind =
   | "context_refill_thrashing"
   | "renderer_unavailable"
   | "webfetch_preflight_failed"
+  | "task_evidence_incomplete"
 
 export interface SynapseAgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
@@ -317,6 +318,7 @@ export interface SynapseTaskCompletionAssessment {
   readonly declaredUnits: number
   readonly coveredUnits: number
   readonly processedUnits: number
+  readonly mutatedUnits: number
   readonly conflictingFindings: number
   readonly semanticCorrectness: "unverified"
 }

@@ -10,6 +10,8 @@ export interface ToolOutputGovernorResult {
   readonly deliveredBytes: number
   readonly originalLines: number
   readonly deliveredLines: number
+  /** Complete original lines actually kept, excluding the truncation marker. */
+  readonly deliveredContentLines: number
   readonly kept: "head" | "tail"
 }
 
@@ -83,6 +85,7 @@ export function governToolOutput(input: {
   const contentByteBudget = Math.max(0, maxBytes - markerBytes)
   const contentLineBudget = Math.max(0, maxLines - lineCount(boundedMarker))
   const lineBounded = limitLines(text, contentLineBudget, kept)
+  const byteLimited = Buffer.byteLength(lineBounded, "utf8") > contentByteBudget
   const byteBounded = limitUtf8(lineBounded, contentByteBudget, kept)
   const updatedToolOutput = kept === "tail"
     ? `${boundedMarker}${byteBounded}`
@@ -95,8 +98,22 @@ export function governToolOutput(input: {
     deliveredBytes: Buffer.byteLength(updatedToolOutput, "utf8"),
     originalLines,
     deliveredLines: lineCount(updatedToolOutput),
+    deliveredContentLines: deliveredLineCount(byteBounded, byteLimited),
     kept,
   }
+}
+
+/**
+ * Coverage only counts lines the model received in full. A byte-limited cut can
+ * leave a partial trailing line, so it is excluded instead of claimed.
+ */
+function deliveredLineCount(content: string, byteLimited: boolean): number {
+  if (content.length === 0) return 0
+  let complete = 0
+  for (let index = 0; index < content.length; index += 1) {
+    if (content.charCodeAt(index) === 10) complete += 1
+  }
+  return !byteLimited && !content.endsWith("\n") ? complete + 1 : complete
 }
 
 export function measureToolOutput(toolName: string, toolResponse: unknown): ToolOutputMeasurement | undefined {

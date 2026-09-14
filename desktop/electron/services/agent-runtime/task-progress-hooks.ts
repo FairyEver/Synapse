@@ -11,7 +11,12 @@ import { redactSensitiveValue } from "./redaction"
 export async function recordTaskToolResult(
   progress: TaskProgressSession, input: HookInput, governed: HookJSONOutput, cwd: string,
   protocolAvailable = true,
-  evidence?: { outputPath?: string; runtimeEvidenceRoots?: readonly string[]; persist: (content: string) => Promise<{ storagePath: string; contentTruncated: boolean } | undefined> },
+  evidence?: {
+    outputPath?: string
+    boundedDelivery?: { sourceLines: number; kept: "head" | "tail" }
+    runtimeEvidenceRoots?: readonly string[]
+    persist: (content: string) => Promise<{ storagePath: string; contentTruncated: boolean } | undefined>
+  },
 ): Promise<{ context: string; receiptId?: string }> {
   if (input.hook_event_name !== "PostToolUse" || input.agent_id) return { context: "" }
   const toolInput = object(input.tool_input), response = object(input.tool_response)
@@ -42,6 +47,17 @@ export async function recordTaskToolResult(
     if (!saved || saved.contentTruncated) throw new Error("已执行操作的完整证据未能保存。")
     receipt.outputPath = saved.storagePath
     receipt.complete = measurement !== undefined && !rewritten
+    // A successful file mutation is durable evidence that this unit was processed.
+    const mutationTarget = mutationToolTarget(input.tool_name, toolInput)
+    if (mutationTarget && response.success !== false && !response.error) {
+      try {
+        const original = await captureNativeReadVersion(mutationTarget, cwd, input.tool_use_id)
+        receipt.mutation = { toolName: input.tool_name as "Edit" | "Write" | "NotebookEdit",
+          path: path.resolve(cwd, mutationTarget), canonicalPath: original.path, versionAfter: original.sha256 }
+      } catch {
+        // The operation stays recorded; without a stable original it cannot satisfy a unit.
+      }
+    }
   }
   if (input.tool_name === "Read" && typeof toolInput.file_path === "string" && (response.type === "text" || response.type === "image")) {
     receipt.outputPath = evidence?.outputPath
@@ -52,15 +68,28 @@ export async function recordTaskToolResult(
       receipt.outputContentOffsetLines = (text.slice(0, text.length - file.content.length).match(/\n/g) ?? []).length
     }
     receipt.complete = !rewritten && file.truncatedByTokenCap !== true
-    if (response.type === "text" && integer(file.startLine) && integer(file.numLines) && integer(file.totalLines)
+    const bounded = response.type === "text" ? evidence?.boundedDelivery : undefined
+    if (response.type === "text" && integer(file.totalLines)) receipt.totalLines = file.totalLines
+    const metadataLines = typeof file.content === "string" && text.endsWith(file.content)
+      ? completeLineCount(text.slice(0, text.length - file.content.length)) : 0
+    const deliveredContentLines = bounded ? Math.max(0, bounded.sourceLines - metadataLines) : 0
+    const deliveredRange = bounded && integer(file.startLine) && integer(file.totalLines)
+      ? boundedReadDelivery({ startLine: file.startLine, totalLines: file.totalLines,
+        deliveredContentLines, kept: bounded.kept })
+      : undefined
+    if (deliveredRange) {
+      // A bounded read proves only the lines it actually delivered, never the omitted original.
+      receipt.range = deliveredRange
+      receipt.deliveredRange = deliveredRange
+      receipt.bounded = true
+    } else if (response.type === "text" && integer(file.startLine) && integer(file.numLines) && integer(file.totalLines)
       && file.startLine >= 1 && file.startLine + file.numLines - 1 <= file.totalLines) {
       receipt.range = [file.startLine, file.startLine + file.numLines - 1]
-      receipt.totalLines = file.totalLines
     }
     if (response.type === "text" && !receipt.range) receipt.complete = false
     try {
       const original = await captureNativeReadVersion(receipt.path, cwd, input.tool_use_id,
-        response.type === "text" && receipt.range && typeof file.content === "string"
+        !bounded && response.type === "text" && receipt.range && typeof file.content === "string"
           ? { content: file.content, startLine: receipt.range[0], numLines: receipt.range[1] - receipt.range[0] + 1 } : undefined)
       receipt.canonicalPath = original.path
       receipt.version = original.sha256
@@ -74,6 +103,43 @@ export async function recordTaskToolResult(
   }
   return { context: await progress.receipt(receipt, protocolAvailable), receiptId: receipt.toolUseId }
 }
+
+function mutationToolTarget(toolName: string, toolInput: Record<string, unknown>): string | undefined {
+  if (toolName !== "Edit" && toolName !== "Write" && toolName !== "NotebookEdit") return undefined
+  const target = typeof toolInput.file_path === "string" ? toolInput.file_path
+    : typeof toolInput.notebook_path === "string" ? toolInput.notebook_path : undefined
+  return target && target.trim().length > 0 ? target : undefined
+}
+
+/** Lines fully delivered: a trailing fragment without its newline does not count. */
+function completeLineCount(value: string): number {
+  if (value.length === 0) return 0
+  let complete = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.charCodeAt(index) === 10) complete += 1
+  }
+  return value.endsWith("\n") ? complete : complete + 1
+}
+
+/**
+ * Coverage range of a bounded native read. The truncation marker and any partial
+ * trailing line stay outside the delivered range.
+ */
+export function boundedReadDelivery(input: {
+  readonly startLine: number
+  readonly totalLines: number
+  readonly deliveredContentLines: number
+  readonly kept: "head" | "tail"
+}): [number, number] | undefined {
+  const { startLine, totalLines, deliveredContentLines, kept } = input
+  if (!Number.isSafeInteger(startLine) || startLine < 1 || totalLines < 1 || deliveredContentLines <= 0) return undefined
+  const delivered = Math.min(deliveredContentLines, totalLines)
+  const lastLine = startLine + totalLines - 1
+  return kept === "tail"
+    ? [Math.max(startLine, lastLine - delivered + 1), lastLine]
+    : [startLine, startLine + delivered - 1]
+}
+
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }

@@ -146,4 +146,26 @@ describe("tool output governor", () => {
       file: { content: "原始内容".repeat(30_000), numLines: 1, startLine: 1, totalLines: 1 },
     })).toBe(false)
   })
+
+  it("counts only fully delivered lines as delivered content", () => {
+    const lineLimited = governToolOutput({
+      toolName: "Read",
+      toolResponse: "alpha\nbeta\ngamma\ndelta\nepsilon\nzeta",
+      // The truncation marker and its leading newline occupy two line budget slots.
+      maxLines: 4,
+    })
+    expect(lineLimited?.updatedToolOutput.startsWith("alpha\nbeta")).toBe(true)
+    expect(lineLimited?.deliveredContentLines).toBe(2)
+
+    const byteLimited = governToolOutput({
+      toolName: "Read",
+      toolResponse: `${"x".repeat(40)}\n${"y".repeat(4_000)}`,
+      maxBytes: 1024,
+    })
+    expect(byteLimited).toBeDefined()
+    const deliveredBody = byteLimited!.updatedToolOutput.split("\n[Synapse context guard]")[0]!
+    expect(deliveredBody.endsWith("\n")).toBe(false)
+    // The trailing fragment was cut mid-line and must not count as delivered coverage.
+    expect(byteLimited!.deliveredContentLines).toBe((deliveredBody.match(/\n/g) ?? []).length)
+  })
 })

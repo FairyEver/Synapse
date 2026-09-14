@@ -70,7 +70,7 @@ it.each([17, 11])("48 originals keep scope, findings and side effects across rep
   } finally { await harness.close(); await fixture.close() }
 }, 120_000)
 
-it("blocks false completion, gives one correction, then retains a partial outcome", async () => {
+it("gives false completion one correction, then reports an advisory evidence gap without failing the turn", async () => {
   let stage = 0
   const fixture = await createNativeSdkFixture(() => stage++ === 0 ? [{ name: "TaskCreate", id: "declare", input: {
     subject: "Read all", description: "Complete inventory", metadata: { synapseProgress: { version: 1, baseRevision: 0, seal: true,
@@ -79,8 +79,12 @@ it("blocks false completion, gives one correction, then retains a partial outcom
   const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
   try {
     const result = await harness.router.send(harness.message("Inspect the complete inventory."))
-    expect(result.error).toContain("任务尚未通过覆盖检查")
+    expect(result.error).toBeUndefined()
     expect(fixture.requests).toHaveLength(3)
+    const notice = (await harness.agentEvents.list({ conversationId: result.conversationId }))
+      .findLast((entry) => entry.eventType === "error")
+    expect(notice?.payload).toMatchObject({ errorKind: "task_evidence_incomplete", recoverable: true,
+      taskCompletion: { status: "partial", declaredUnits: 1, processedUnits: 0 } })
     expect((await harness.conversations.get(result.conversationId))?.history.some((entry) => entry.metadata?.agentEventType === "error")).toBe(true)
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
@@ -158,8 +162,11 @@ it.each([false, true])("native text range receipts validate source versions (cha
   const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
   try {
     const result = await harness.router.send(harness.message("Read all records and reconcile them."))
-    if (changed) expect(result.error).toContain("任务尚未通过覆盖检查")
-    else expect(result.error).toBeUndefined()
+    expect(result.error).toBeUndefined()
+    const notice = (await harness.agentEvents.list({ conversationId: result.conversationId }))
+      .findLast((entry) => entry.eventType === "error")
+    if (changed) expect(notice?.payload).toMatchObject({ errorKind: "task_evidence_incomplete", recoverable: true })
+    else expect(notice).toBeUndefined()
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
 
@@ -215,7 +222,7 @@ it("continues an unpresented saved text result after its reference cannot fit, w
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
 
-it("does not accept a multi-file final claim with an entirely missing inventory", async () => {
+it("keeps a multi-file turn without any registered inventory advisory and non-failing", async () => {
   let stage = 0
   const fixture = await createNativeSdkFixture(() => stage++ === 0
     ? [1, 2].map((n) => ({ name: "Read", id: `read-${n}`, input: { file_path: path.join(fixture.root, `${n}.txt`) } }))
@@ -224,12 +231,45 @@ it("does not accept a multi-file final claim with an entirely missing inventory"
   const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
   try {
     const result = await harness.router.send(harness.message("Read and check both files."))
-    expect(result.error).toContain("尚未登记完整材料清单")
+    expect(result.error).toBeUndefined()
     expect(fixture.requests).toHaveLength(3)
     const saved = await harness.conversations.get(result.conversationId)
-    expect(saved?.history.findLast((entry) => entry.metadata?.agentEventType === "error")?.metadata).toMatchObject({
-      recoverable: true, taskCompletion: { status: "unverified", declaredUnits: 0, semanticCorrectness: "unverified" },
-    })
+    expect(saved?.history.some((entry) => entry.metadata?.agentEventType === "error")).toBe(false)
+    expect(await harness.repository.taskProgress!.assessment(result.conversationId, saved!.taskProgressScope!.turnId))
+      .toMatchObject({ status: "unverified", declaredUnits: 0 })
+  } finally { await harness.close(); await fixture.close() }
+}, 30_000)
+
+it("treats a native edit receipt as processed evidence without failing the turn", async () => {
+  let stage = 0, revision = 0
+  const unit = () => ({ id: "page", path: path.join(fixture.root, "large.html"), kind: "text", receipts: [] as string[], processed: false })
+  const fixture = await createNativeSdkFixture(() => {
+    switch (stage++) {
+      case 0: return [{ name: "TaskCreate", id: "scope", input: { subject: "Update the prototype page", description: "Large page",
+        metadata: { synapseProgress: { version: 1, baseRevision: revision++, seal: true, units: [unit()] } } } }]
+      case 1: return [{ name: "Read", id: "head", input: { file_path: unit().path, limit: 5 } }]
+      case 2: return [{ name: "Edit", id: "edit-1", input: { file_path: unit().path,
+        old_string: "EDIT-MARKER", new_string: "EDIT-MARKER-DONE" } }]
+      case 3: return [{ name: "TaskUpdate", id: "commit", input: { taskId: "1", metadata: { synapseProgress: { version: 1,
+        baseRevision: revision++, units: [{ ...unit(), receipts: ["head", "edit-1"], processed: true }] } } } }]
+      default: return "第 4 步完成：编辑已执行，磁盘状态已核对。"
+    }
+  })
+  const file = path.join(fixture.root, "large.html")
+  await writeFile(file, `<!doctype html>\n<div>EDIT-MARKER</div>\n${"filler-line\n".repeat(4_000)}`)
+  const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
+  try {
+    const result = await harness.router.send(harness.message("修改这个页面并说明结果。"))
+    expect(result.error).toBeUndefined()
+    expect(await readFile(file, "utf8")).toContain("EDIT-MARKER-DONE")
+    const saved = await harness.conversations.get(result.conversationId)
+    const state = await harness.repository.taskProgress!.state(result.conversationId, saved!.taskProgressScope!.turnId)
+    expect(state.receipts.get("edit-1")?.mutation).toMatchObject({ toolName: "Edit", versionAfter: expect.any(String) })
+    expect(await harness.repository.taskProgress!.assessment(result.conversationId, saved!.taskProgressScope!.turnId))
+      .toMatchObject({ status: "partial", declaredUnits: 1, coveredUnits: 0, processedUnits: 1, mutatedUnits: 1 })
+    const errors = (await harness.agentEvents.list({ conversationId: result.conversationId }))
+      .filter((entry) => entry.eventType === "error")
+    expect(errors).toHaveLength(0)
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
 

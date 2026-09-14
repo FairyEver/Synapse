@@ -1482,11 +1482,13 @@ export class ConversationRouter {
         resultCostCurrency = finalized.costCurrency
         const enrichedError = finalized.event
         const lifecycle = state.activeLifecycle
+        // Evidence notices stay advisory: they end the turn as completed and are
+        // projected unchanged, while real failures keep the interrupted semantics.
+        const advisoryNotice = enrichedError.errorKind === "task_evidence_incomplete"
         if (lifecycle) {
-          const outcome = normalizeExecutorEvent(lifecycle, {
-            type: "executor.error",
-            diagnostic: diagnosticFromAgentError(enrichedError),
-          })
+          const outcome = advisoryNotice
+            ? normalizeExecutorEvent(lifecycle, { type: "executor.result" })
+            : normalizeExecutorEvent(lifecycle, { type: "executor.error", diagnostic: diagnosticFromAgentError(enrichedError) })
           const projectedOutcome = outcomeToAgentEvent({
             outcome,
             conversationId: conversation.id,
@@ -1494,7 +1496,7 @@ export class ConversationRouter {
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
             timestamp: this.isoNow(),
           })
-          const projected = projectedOutcome.type === "error"
+          const projected = advisoryNotice ? enrichedError : projectedOutcome.type === "error"
             ? {
                 ...projectedOutcome,
                 usage: enrichedError.usage,
@@ -1515,6 +1517,7 @@ export class ConversationRouter {
             assistantHistoryPersisted,
           }) || assistantHistoryPersisted
           error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
+          if (advisoryNotice) resultText = resultText || latestAssistantText || enrichedError.message
           break
         }
         appendBoundedTurnEvent(events, enrichedError)
@@ -1522,7 +1525,8 @@ export class ConversationRouter {
         await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
         await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
         await this.saveEventHistory(conversation.id, enrichedError)
-        error = enrichedError.message
+        error = advisoryNotice ? undefined : enrichedError.message
+        if (advisoryNotice) resultText = resultText || latestAssistantText || enrichedError.message
         break
       }
 
@@ -1914,11 +1918,11 @@ export class ConversationRouter {
           resultCostCurrency = finalized.costCurrency
           const enrichedError = finalized.event
           const lifecycle = state.activeLifecycle
+          const advisoryNotice = enrichedError.errorKind === "task_evidence_incomplete"
           if (lifecycle) {
-            const outcome = normalizeExecutorEvent(lifecycle, {
-              type: "executor.error",
-              diagnostic: diagnosticFromAgentError(enrichedError),
-            })
+            const outcome = advisoryNotice
+              ? normalizeExecutorEvent(lifecycle, { type: "executor.result" })
+              : normalizeExecutorEvent(lifecycle, { type: "executor.error", diagnostic: diagnosticFromAgentError(enrichedError) })
             const projectedOutcome = outcomeToAgentEvent({
               outcome,
               conversationId: conversation.id,
@@ -1926,7 +1930,7 @@ export class ConversationRouter {
               sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
               timestamp: this.isoNow(),
             })
-            const projected = projectedOutcome.type === "error"
+            const projected = advisoryNotice ? enrichedError : projectedOutcome.type === "error"
               ? {
                   ...projectedOutcome,
                   usage: enrichedError.usage,
@@ -1944,19 +1948,21 @@ export class ConversationRouter {
             this.emitEvent(message, conversation.id, projected)
             await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, projected)
             await this.saveEventSdkSession(conversation.id, projected, liveSession)
-            assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
-              assistantHistoryPersisted,
-            }) || assistantHistoryPersisted
-            error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
-            break
-          }
+              assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
+                assistantHistoryPersisted,
+              }) || assistantHistoryPersisted
+              error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
+              if (advisoryNotice) partialText = partialText || latestAssistantText
+              break
+            }
           appendBoundedTurnEvent(events, enrichedError)
           partialText = appendRelayText(partialText, enrichedError)
           this.emitEvent(message, conversation.id, enrichedError)
           await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
           await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, enrichedError) || assistantHistoryPersisted
-          error = enrichedError.message
+          error = advisoryNotice ? undefined : enrichedError.message
+          if (advisoryNotice) partialText = partialText || latestAssistantText
           break
         }
         appendBoundedTurnEvent(events, event)

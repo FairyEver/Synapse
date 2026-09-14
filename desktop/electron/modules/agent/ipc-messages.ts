@@ -1049,6 +1049,8 @@ function rendererTurnOutcome(
 } {
   if (isCancelledAgentResult(events)) return { status: "cancelled" }
   const errorEvent = latestAgentErrorEvent(events)
+  // Evidence gaps are advisory: the turn still completed.
+  if (errorEvent?.errorKind === "task_evidence_incomplete") return { status: "completed" }
   if (errorEvent?.turnOutcome?.status === "interrupted" || errorEvent?.recoverable === true) {
     return {
       status: "interrupted",

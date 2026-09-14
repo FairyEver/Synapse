@@ -16,6 +16,7 @@ export type AgentTurnDiagnosticKind =
   | "renderer_unavailable"
   | "error"
   | "tool_use_interrupted"
+  | "task_evidence_incomplete"
 
 export interface AgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"

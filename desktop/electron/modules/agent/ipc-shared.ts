@@ -218,6 +218,8 @@ const taskCompletionSchema = z.object({
   status: z.enum(["unverified", "partial", "coverage-complete"]),
   revision: z.number().int().nonnegative(), declaredUnits: z.number().int().nonnegative(),
   coveredUnits: z.number().int().nonnegative(), processedUnits: z.number().int().nonnegative(),
+  // Records written before mutation evidence existed carry no mutatedUnits field.
+  mutatedUnits: z.number().int().nonnegative().default(0),
   conflictingFindings: z.number().int().nonnegative(), semanticCorrectness: z.literal("unverified"),
 })
 const resultMetadataSchema = z.object({

@@ -284,6 +284,7 @@ export type AgentErrorKind =
   | "context_refill_thrashing"
   | "renderer_unavailable"
   | "webfetch_preflight_failed"
+  | "task_evidence_incomplete"
 
 export interface AgentResultEvent extends AgentEventBase {
   readonly type: "result"
