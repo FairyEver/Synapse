@@ -1753,10 +1753,11 @@ describe("TerminalModule", () => {
     })
     expect(document.body.textContent).not.toContain("一号终端")
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-2" })
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0))
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(
+        document.body.querySelector('[data-track="terminal-session-select"][aria-current="page"]'),
+      )
     })
-    expect(document.activeElement).toBe(document.body.querySelector('[data-track="terminal-session-select"][aria-current="page"]'))
   })
 
   it("deletes the last terminal session and returns to the empty state", async () => {
@@ -1771,10 +1772,9 @@ describe("TerminalModule", () => {
       expectedLayoutRevision: 1,
     })
     expect(document.body.textContent).toContain("新建终端")
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0))
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(document.body.querySelector("[data-system-app-top-bar-actions] button"))
     })
-    expect(document.activeElement).toBe(document.body.querySelector("[data-system-app-top-bar-actions] button"))
   })
 
   it("shows a user-visible error when creating a terminal fails", async () => {
