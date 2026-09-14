@@ -363,6 +363,12 @@ it("does not force an inventory round trip for a two-file edit with limited read
     expect(await readFile(page, "utf8")).toContain("EDIT-MARKER-DONE")
     // Three natural model turns: two reads, one edit, then the final answer. No inventory round trip.
     expect(fixture.requests).toHaveLength(3)
+    const delivered = JSON.stringify(fixture.requests)
+    // The second material earns one optional note; registration is never demanded before proceeding.
+    expect(delivered).not.toContain("before proceeding")
+    expect(delivered).not.toContain("required for task coverage verification")
+    // Delivered once, with the batch that read the second material, and never repeated per material.
+    expect(JSON.stringify(fixture.requests[1]).split("Registering a coverage inventory").length - 1).toBe(1)
     const saved = await harness.conversations.get(result.conversationId)
     expect(saved?.history.some((entry) => entry.metadata?.agentEventType === "error")).toBe(false)
     expect(await harness.repository.taskProgress!.assessment(result.conversationId, saved!.taskProgressScope!.turnId))

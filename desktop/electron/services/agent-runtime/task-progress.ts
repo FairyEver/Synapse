@@ -89,8 +89,8 @@ export function detectCoverageClaim(summary: string | undefined): boolean {
 }
 
 /** The SDK task metadata is a submission, not the authoritative completion state. */
-export const TASK_PROGRESS_GUIDANCE = `For multi-file or multi-stage analysis, you MUST register and maintain an explicit inventory and evidence through native TaskCreate/TaskUpdate metadata.synapseProgress. Never replace full reading with sampling. Submit at most 32 units/findings per call:
-{version:1, baseRevision:<latest Synapse receipt revision, initially 0>, units:[{id:<stable id>,path:<absolute original>,kind:"text"|"image",receipts:[<native Read tool_use_id or successful Edit/Write tool_use_id>],processed:<true only after analysis>,scope:[<first line>,<last line>]}], findings:[{id:<stable fact>,value:<concise string or number>,evidence:[<tool_use_id>]}], seal:<true only after the full inventory is registered>}. Empty arrays are allowed. Register inventory before processing; append remaining units before sealing. If an earlier inventory was sealed prematurely, use reopen:true to append missing units without removing prior scope, then seal after the full inventory is registered. You cannot shrink or replace registered scope. Correct a conflicting finding using resolves:true and evidence containing both the old and new sources. SDK tool success and Task completion are not proof of reading, visual understanding, or factual correctness. Use exact receipt paths/ranges and saved findings after maintenance; do not repeat external operations. A receipt of a shortened result covers only the lines it delivered: cite chunked Read receipts that tile the file, or declare scope to cover just the range you actually process. Omit scope only when the whole file is in scope. A successful Edit/Write/NotebookEdit receipt proves that unit was processed; it never proves the file was read in full, so do not claim full reading from it. Coverage is judged one version at a time: ranges never stitch across versions, and a material that changed is covered again by re-reading one version in full, so never re-read ranges you already presented only to rotate receipt IDs. Synapse reports scope coverage separately from semantic correctness. If task tools are unavailable, preserve an explicit progress file and report verification as unavailable; never claim host verification.`
+export const TASK_PROGRESS_GUIDANCE = `For multi-file or multi-stage analysis that must be verified for coverage, you MUST register and maintain an explicit inventory and evidence through native TaskCreate/TaskUpdate metadata.synapseProgress; tasks that only edit or write named files do not need an inventory, and you must never pause, reorder, or delay the user's requested steps to register one. Never replace full reading with sampling. Submit at most 32 units/findings per call:
+{version:1, baseRevision:<latest Synapse receipt revision, initially 0>, units:[{id:<stable id>,path:<absolute original>,kind:"text"|"image",receipts:[<native Read tool_use_id or successful Edit/Write tool_use_id>],processed:<true only after analysis>,scope:[<first line>,<last line>]}], findings:[{id:<stable fact>,value:<concise string or number>,evidence:[<tool_use_id>]}], seal:<true only after the full inventory is registered>}. Empty arrays are allowed. Register the inventory when a coverage-verified analysis starts; append remaining units before sealing. If an earlier inventory was sealed prematurely, use reopen:true to append missing units without removing prior scope, then seal after the full inventory is registered. You cannot shrink or replace registered scope. Correct a conflicting finding using resolves:true and evidence containing both the old and new sources. SDK tool success and Task completion are not proof of reading, visual understanding, or factual correctness. Use exact receipt paths/ranges and saved findings after maintenance; do not repeat external operations. A receipt of a shortened result covers only the lines it delivered: cite chunked Read receipts that tile the file, or declare scope to cover just the range you actually process. Omit scope only when the whole file is in scope. A successful Edit/Write/NotebookEdit receipt proves that unit was processed; it never proves the file was read in full, so do not claim full reading from it. Coverage is judged one version at a time: ranges never stitch across versions, and a material that changed is covered again by re-reading one version in full, so never re-read ranges you already presented only to rotate receipt IDs. Synapse reports scope coverage separately from semantic correctness. If task tools are unavailable, preserve an explicit progress file and report verification as unavailable; never claim host verification.`
 
 export class TaskProgressValidationError extends Error {}
 
@@ -259,7 +259,13 @@ export class TaskProgressSession {
         throw new Error("相同工具回执标识对应不同结果，已保留原证据。")
       }
       if (!state.receipts.has(receipt.toolUseId)) await append("receipt", { ...receipt })
-      return `Synapse receipt ${receipt.toolUseId}; revision=${state.revision}; acquired, model presentation unconfirmed. ${receipt.path ? JSON.stringify({ originalPath: receipt.path, range: receipt.range, complete: receipt.complete }) : ""}${includeInventoryGuidance && receipt.kind !== "operation" && !state.units.size ? " No inventory registered yet. Submit the complete file inventory with native TaskCreate metadata.synapseProgress before proceeding, then commit processed units and findings using the Read receipt IDs. This is required for task coverage verification." : ""}`
+      // A coverage inventory stays optional: suggest it once, when a second distinct
+      // material is read without any registered scope, and never as a pause condition.
+      const materialsBefore = unregisteredMaterialIdentities(state)
+      const materialsAfter = unregisteredMaterialIdentities(state, receipt)
+      const inventorySuggestion = includeInventoryGuidance && !state.units.size
+        && materialsBefore.size === 1 && materialsAfter.size === 2
+      return `Synapse receipt ${receipt.toolUseId}; revision=${state.revision}; acquired, model presentation unconfirmed. ${receipt.path ? JSON.stringify({ originalPath: receipt.path, range: receipt.range, complete: receipt.complete }) : ""}${inventorySuggestion ? " No inventory registered yet for two or more materials read this turn. Registering a coverage inventory through native TaskCreate/TaskUpdate metadata.synapseProgress is optional and only needed when this turn must be verified for coverage; never pause, reorder, or re-run the user's requested steps to register it." : ""}`
     })
   }
   async presented(ids: string[]): Promise<void> {
@@ -473,11 +479,19 @@ function receiptRange(receipt: WorkReceipt): [number, number] | undefined {
   return receipt.deliveredRange ?? receipt.range
 }
 
+/** Distinct non-private materials read without a registered inventory, including an in-flight receipt. */
+function unregisteredMaterialIdentities(state: State, extra?: WorkReceipt): Set<string> {
+  return new Set([...state.receipts.values(), ...(extra ? [extra] : [])]
+    .filter((receipt) => receipt.kind !== "operation" && !receipt.runtimeEvidence)
+    .flatMap((receipt) => {
+      const identity = receipt.canonicalPath ?? receipt.path
+      return identity ? [identity] : []
+    }))
+}
+
 /** Multi-file evidence read without a registered inventory. */
 function hasUnregisteredMultiFileEvidence(state: State): boolean {
-  return new Set([...state.receipts.values()]
-    .filter((receipt) => receipt.kind !== "operation" && !receipt.runtimeEvidence)
-    .map((receipt) => receipt.canonicalPath ?? receipt.path)).size > 1
+  return unregisteredMaterialIdentities(state).size > 1
 }
 
 /** Coverage is judged one version at a time: ranges never stitch across versions. */

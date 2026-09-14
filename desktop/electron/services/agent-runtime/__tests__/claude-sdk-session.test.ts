@@ -4,7 +4,8 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
@@ -377,6 +378,96 @@ describe("ClaudeSDKSession", () => {
       .find(([entry]) => entry === "Agent tool-output batch budget completed.")?.[1] as { batchToolOutputBytes?: number } | undefined
     expect(batchLog?.batchToolOutputBytes).toBeGreaterThan(0)
     expect(batchLog?.batchToolOutputBytes).toBeLessThan(2 * 1024)
+    await session.close()
+  })
+
+  it("stores compact task evidence for a native file mutation instead of a second copy of the file", async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), "synapse-agent-edit-evidence-"))
+    try {
+      const target = path.join(workspace, "page.html")
+      const originalFile = `<div>旧</div>\n${"filler-line\n".repeat(4_000)}`
+      writeFileSync(target, originalFile, "utf8")
+      const persisted: string[] = []
+      const persistToolOutputText = vi.fn(async ({ content }: { content: string }) => {
+        persisted.push(content)
+        return { id: "artifact-1", storagePath: "/managed/conversation/tool-output/artifact-1.txt",
+          originalByteSize: Buffer.byteLength(content, "utf8"), storedByteSize: Buffer.byteLength(content, "utf8"), contentTruncated: false }
+      })
+      const receipt = vi.fn(async () => "Synapse receipt toolu-edit; revision=0")
+      const begin = vi.fn(async () => undefined)
+      const close = vi.fn()
+      const { factory, getOptions } = createQueryFactory()
+      const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, persistToolOutputText,
+        taskProgress: { receipt, begin, close } as unknown as NonNullable<ConstructorParameters<typeof ClaudeSDKSession>[0]["taskProgress"]> })
+      await session.send({ ...message("修改页面标记"), runtimeTurnId: "turn-1" })
+
+      await expect(postToolUseHook(getOptions())({
+        hook_event_name: "PostToolUse",
+        tool_name: "Edit",
+        tool_input: { file_path: target, old_string: "旧", new_string: "新" },
+        tool_response: {
+          filePath: target,
+          oldString: "旧",
+          newString: "新",
+          originalFile,
+          structuredPatch: [],
+          userModified: false,
+          replaceAll: false,
+        },
+        tool_use_id: "toolu-edit",
+      })).resolves.toBeDefined()
+
+      expect(persisted).toHaveLength(1)
+      const evidence = JSON.parse(persisted[0]!) as {
+        mutation?: { path?: string, versionAfter?: string }
+        outputTextAvailable?: boolean
+        nativePayloadOmitted?: boolean
+      }
+      expect(evidence.nativePayloadOmitted).toBe(true)
+      expect(evidence.outputTextAvailable).toBe(false)
+      expect(evidence.mutation?.path).toBe(target)
+      expect(evidence.mutation?.versionAfter).toBe(createHash("sha256").update(readFileSync(target)).digest("hex"))
+      expect(persisted[0]).not.toContain("filler-line")
+      expect(Buffer.byteLength(persisted[0]!, "utf8")).toBeLessThan(2 * 1024)
+      expect(receipt).toHaveBeenCalledWith(expect.objectContaining({
+        toolUseId: "toolu-edit",
+        outputPath: "/managed/conversation/tool-output/artifact-1.txt",
+        mutation: expect.objectContaining({ versionAfter: evidence.mutation?.versionAfter }),
+      }), expect.any(Boolean))
+      await session.close()
+    } finally {
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it("accounts a failed file mutation once across PostToolUse and PostToolBatch", async () => {
+    const logger = { warn: vi.fn(), info: vi.fn() }
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, logger })
+    await session.send({ ...message("修改页面标记"), runtimeTurnId: "turn-1" })
+    const failure = "String to replace not found in file."
+
+    await expect(postToolUseHook(getOptions())({
+      hook_event_name: "PostToolUse",
+      tool_name: "Edit",
+      tool_input: { file_path: "/tmp/project/page.html", old_string: "旧", new_string: "新" },
+      tool_response: failure,
+      tool_use_id: "toolu-failed-edit",
+    })).resolves.toBeDefined()
+
+    await expect(lifecycleHook(getOptions(), "PostToolBatch")({
+      hook_event_name: "PostToolBatch",
+      tool_calls: [{
+        tool_name: "Edit",
+        tool_use_id: "toolu-failed-edit",
+        tool_input: { file_path: "/tmp/project/page.html" },
+        tool_response: failure,
+      }],
+    })).resolves.toEqual({})
+
+    const batchLog = logger.info.mock.calls
+      .find(([entry]) => entry === "Agent tool-output batch budget completed.")?.[1] as { batchToolOutputBytes?: number } | undefined
+    expect(batchLog?.batchToolOutputBytes).toBe(toolResultRequestBytes(failure))
     await session.close()
   })
 
@@ -2900,6 +2991,14 @@ function todoWriteHookInput(toolInput: Record<string, unknown>): Record<string, 
     tool_name: "TodoWrite",
     tool_input: toolInput,
   }
+}
+
+/** Mirrors the session's tool_result request accounting so a double count fails the assertion. */
+function toolResultRequestBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify({
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "tool", content: value }],
+  }), "utf8")
 }
 
 function message(content: string): AgentMessage {

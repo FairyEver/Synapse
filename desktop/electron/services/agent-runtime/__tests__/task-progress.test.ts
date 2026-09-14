@@ -303,6 +303,25 @@ it("counts a successful edit receipt as processed evidence without granting read
   expect(detectCoverageClaim("I read every file in full.")).toBe(true)
 })
 
+it("suggests a coverage inventory once, without demanding one, when a second material is read", async () => {
+  const { session } = await setup()
+  const read = (id: string, file: string): WorkReceipt => ({ toolUseId: id, toolName: "Read", path: path.resolve(file), kind: "text",
+    range: [1, 1], totalLines: 1, version: "text-v1", complete: true, presented: false, outputHash: id })
+
+  const first = await session.receipt(read("read-1", "/originals/one.txt"))
+  expect(first).not.toContain("inventory")
+
+  const second = await session.receipt(read("read-2", "/originals/two.txt"))
+  expect(second).toContain("Registering a coverage inventory through native TaskCreate/TaskUpdate metadata.synapseProgress is optional")
+  expect(second).not.toMatch(/before proceeding|is required/i)
+
+  const third = await session.receipt(read("read-3", "/originals/three.txt"))
+  expect(third).not.toContain("inventory")
+
+  const reread = await session.receipt(read("read-4", "/originals/one.txt"))
+  expect(reread).not.toContain("inventory")
+})
+
 it("reports an unregistered multi-file claim as advisory without demanding an inventory", async () => {
   const { session } = await setup()
   const first = path.resolve("/originals/one.txt")

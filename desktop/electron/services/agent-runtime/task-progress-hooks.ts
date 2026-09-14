@@ -4,7 +4,7 @@ import { isPathInside } from "../fs-utils"
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { captureNativeReadVersion } from "./image-presentation"
 import { digest, TASK_PROGRESS_GUIDANCE, type TaskProgressSession, type WorkReceipt } from "./task-progress"
-import { measureToolOutput } from "./tool-output-governor"
+import { isStructuredFileMutationOutput, measureToolOutput } from "./tool-output-governor"
 import { redactSensitiveValue } from "./redaction"
 
 /** Observe only successful native tool results, after SDK permission enforcement. */
@@ -39,14 +39,6 @@ export async function recordTaskToolResult(
     const safeInput = redactSensitiveValue(toolInput)
     receipt.inputSummary = JSON.stringify(safeInput).slice(0, 500)
     receipt.executionStatus = response.interrupted === true ? "interrupted" : "returned"
-    const saved = await evidence?.persist(JSON.stringify({ toolUseId: input.tool_use_id, toolName: input.tool_name,
-      toolInput: safeInput, ...(evidence.outputPath ? { fullOutputPath: evidence.outputPath } : { output: redactSensitiveValue(text) }),
-      executionStatus: receipt.executionStatus,
-      outputTextAvailable: measurement !== undefined,
-    }))
-    if (!saved || saved.contentTruncated) throw new Error("已执行操作的完整证据未能保存。")
-    receipt.outputPath = saved.storagePath
-    receipt.complete = measurement !== undefined && !rewritten
     // A successful file mutation is durable evidence that this unit was processed.
     const mutationTarget = mutationToolTarget(input.tool_name, toolInput)
     if (mutationTarget && response.success !== false && !response.error) {
@@ -58,6 +50,21 @@ export async function recordTaskToolResult(
         // The operation stays recorded; without a stable original it cannot satisfy a unit.
       }
     }
+    // Native file-mutation payloads embed the whole file for hooks and the UI while the
+    // model only receives a confirmation line; durable evidence keeps the identity and
+    // the post-write version instead of writing a second copy of the material.
+    const compactMutation = isStructuredFileMutationOutput(input.tool_name, input.tool_response)
+    const saved = await evidence?.persist(JSON.stringify(compactMutation
+      ? { toolUseId: input.tool_use_id, toolName: input.tool_name, toolInput: safeInput,
+        ...(receipt.mutation ? { mutation: receipt.mutation } : {}), executionStatus: receipt.executionStatus,
+        outputTextAvailable: false, nativePayloadOmitted: true }
+      : { toolUseId: input.tool_use_id, toolName: input.tool_name, toolInput: safeInput,
+        ...(evidence.outputPath ? { fullOutputPath: evidence.outputPath } : { output: redactSensitiveValue(text) }),
+        executionStatus: receipt.executionStatus, outputTextAvailable: measurement !== undefined }))
+    if (!saved || saved.contentTruncated) throw new Error("已执行操作的完整证据未能保存。")
+    receipt.outputPath = saved.storagePath
+    receipt.complete = measurement !== undefined && !rewritten
+    if (compactMutation) receipt.outputHash = digest(JSON.stringify([input.tool_name, safeInput, receipt.mutation?.versionAfter ?? null]))
   }
   if (input.tool_name === "Read" && typeof toolInput.file_path === "string" && (response.type === "text" || response.type === "image")) {
     receipt.outputPath = evidence?.outputPath

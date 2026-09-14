@@ -269,6 +269,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly taskProgressToolsAvailable: boolean
   private readonly pendingProgressReceipts = new Set<string>()
   private readonly expectedReadDeliveries = new Map<string, { kind: "text" | "image"; hash: string }>()
+  /** Tool results already accounted from their PostToolUse payload; mutation confirmations are accounted in PostToolBatch instead. */
+  private readonly accountedToolResults = new Set<string>()
   private governedToolOutputPath?: string
   private governedReadDelivery?: { sourceLines: number; kept: "head" | "tail" }
   private eligiblePresentation?: { receipts: string[]; images: string[]; acquired: string[] }
@@ -866,8 +868,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
           // serialization instead of the structured PostToolUse payload.
           for (const call of input.tool_calls) {
             if (!isFileMutationTool(call.tool_name)) continue
+            // PostToolUse already accounted results it bounded or measured itself.
+            if (this.accountedToolResults.delete(call.tool_use_id)) continue
             this.contextBudget.recordToolOutput(toolResultRequestBytes(call.tool_response), this.completedBatches + 1)
           }
+          this.accountedToolResults.clear()
         }
         const snapshot = this.contextBudget.finishToolBatch()
         if (snapshot.batchToolOutputBytes > 0) {
@@ -1146,6 +1151,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         }
         this.contextBudget.recordToolOutputCost({ bytes: toolResultRequestBytes(record.tool_response),
           tokens: null, source: "native-non-text", batch: this.completedBatches + 1 })
+        if (typeof record.tool_use_id === "string") this.accountedToolResults.add(record.tool_use_id)
         return {}
       }
       const filePath = asRecord(record.tool_input)?.file_path
@@ -1251,6 +1257,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       return {}
     }
     this.contextBudget.recordToolOutput(deliveredRequestBytes, this.completedBatches + 1)
+    if (typeof record.tool_use_id === "string") this.accountedToolResults.add(record.tool_use_id)
     if (!governed) return {}
     const budget = this.contextBudget.snapshot()
     this.logger?.info?.("Agent tool output was bounded before the next model request.", {
