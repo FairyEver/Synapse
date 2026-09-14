@@ -2,9 +2,11 @@ import { app, safeStorage } from "electron"
 import pty from "node-pty"
 import headless from "@xterm/headless"
 import serializeAddon from "@xterm/addon-serialize"
+import unicode11Addon from "@xterm/addon-unicode11"
 
 const { Terminal } = headless
 const { SerializeAddon } = serializeAddon
+const { Unicode11Addon } = unicode11Addon
 
 const TIMEOUT_MS = 10_000
 const MARKER = "__SYNAPSE_TERMINAL_RUNTIME_SPIKE__"
@@ -71,10 +73,18 @@ async function verifyHeadlessEmulator() {
   if (!terminal.modes.bracketedPasteMode) throw new Error("Headless emulator did not track bracketed paste mode")
   const serialized = serializer.serialize()
   if (!serialized.includes("hello")) throw new Error("Headless emulator serialization lost screen content")
+  terminal.loadAddon(new Unicode11Addon())
+  terminal.unicode.activeVersion = "11"
+  if (terminal.unicode.activeVersion !== "11") {
+    throw new Error("Headless emulator did not activate the Unicode 11 width table")
+  }
+  await new Promise((resolve) => terminal.write("⚡", resolve))
+  const emojiCells = terminal.buffer.active.cursorX
+  if (emojiCells !== 2) throw new Error(`Headless emulator counted emoji as ${emojiCells} cells instead of 2`)
   terminal.dispose()
   const heapDelta = Math.max(0, process.memoryUsage().heapUsed - before)
   if (heapDelta > 32 * 1024 * 1024) throw new Error("Headless emulator exceeded the spike heap bound")
-  return { implementation: "@xterm/headless", serialization: true, heapDelta }
+  return { implementation: "@xterm/headless", serialization: true, unicodeVersion: "11", emojiCells, heapDelta }
 }
 
 async function verifyQueuedInputAndResize() {

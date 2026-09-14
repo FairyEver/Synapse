@@ -27,6 +27,8 @@ const TERMINAL_FONT_FAMILY = [
 ].join(", ")
 
 const TERMINAL_VISUAL_OPTIONS = {
+  // `terminal.unicode` 属于 proposed API，注册 emoji 宽度表必须先打开这个开关。
+  allowProposedApi: true,
   customGlyphs: true,
   cursorBlink: true,
   cursorStyle: "block",

@@ -127,4 +127,40 @@ describe("TerminalCoreEmulator renderer snapshots", () => {
       emulator.dispose()
     }
   })
+
+  it("counts agent CLI status glyphs as two cells", async () => {
+    const emulator = createTerminalCoreEmulator({
+      cols: 40,
+      rows: 4,
+      sizeRevision: 1,
+    })
+    try {
+      await emulator.accept("⏺ Bash(cd /tmp)\r\n◼ Java 候选逐条复核", 1)
+
+      const view = emulator.getView({ kind: "screen", maxBytes: 4096 })
+
+      expect(view.lines[0]).toBe("⏺ Bash(cd /tmp)")
+      expect(view.lines[1]).toBe("◼ Java 候选逐条复核")
+      expect(view.cursor.x).toBe(20)
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("wraps emoji lines at the width the agent CLIs assume", async () => {
+    const emulator = createTerminalCoreEmulator({
+      cols: 10,
+      rows: 4,
+      sizeRevision: 1,
+    })
+    try {
+      await emulator.accept(`${"⏺".repeat(5)}a`, 1)
+
+      const view = emulator.getView({ kind: "screen", maxBytes: 4096 })
+
+      expect(view.lines.slice(0, 2)).toEqual(["⏺⏺⏺⏺⏺", "a"])
+    } finally {
+      emulator.dispose()
+    }
+  })
 })

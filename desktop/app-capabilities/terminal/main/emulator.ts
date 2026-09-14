@@ -2,6 +2,8 @@ import { SerializeAddon } from "@xterm/addon-serialize"
 import { Terminal } from "@xterm/headless"
 import { fileURLToPath } from "node:url"
 
+import { installTerminalUnicodeWidth } from "../shared/terminal-unicode-width"
+
 export const TERMINAL_EMULATOR_ID = "xterm-headless" as const
 export const TERMINAL_EMULATOR_VERSION = "6.0.0" as const
 
@@ -44,6 +46,7 @@ export function createTerminalCoreEmulator(input: {
   readonly scrollback?: number
   readonly throughOutputSeq?: number
   readonly sizeRevision: number
+  readonly logger?: { warn(message: string, meta?: Record<string, unknown>): void }
   readonly onWorkingDirectoryChanged?: () => void
   readonly onNotification?: (input: { readonly protocol: 9 | 99 | 777; readonly value: string }) => void
 }) {
@@ -53,6 +56,10 @@ export function createTerminalCoreEmulator(input: {
     scrollback: input.scrollback ?? 2_000,
     allowProposedApi: true,
   })
+  const unicodeWidthStatus = installTerminalUnicodeWidth(terminal)
+  if (unicodeWidthStatus !== "patched") {
+    input.logger?.warn("Terminal emulator unicode width table fell back.", { status: unicodeWidthStatus })
+  }
   const serializer = new SerializeAddon()
   terminal.loadAddon(serializer)
   let throughOutputSeq = input.throughOutputSeq ?? 0

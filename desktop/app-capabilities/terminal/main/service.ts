@@ -668,6 +668,7 @@ export function createTerminalService(deps: {
       rows: session.rows,
       sizeRevision: session.sizeRevision,
       throughOutputSeq: session.lastOutputSeq,
+      logger: deps.logger,
       onWorkingDirectoryChanged: () => {
         if (!unpublishedSessions.has(session.id)) {
           events.emit("workingDirectoryChanged", { sessionId: session.id })
@@ -2514,6 +2515,7 @@ export function createTerminalService(deps: {
       cols: session.cols,
       rows: session.rows,
       sizeRevision: session.sizeRevision,
+      logger: deps.logger,
     })
     try {
       await emulator.accept(checkpoint.serialized, checkpoint.throughOutputSeq)

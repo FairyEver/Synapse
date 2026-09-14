@@ -936,6 +936,14 @@ function verifyTerminalRuntime(header, resourcesPath, unpackedPath, failures) {
     )
   }
 
+  for (const relativePath of [
+    "dist-electron/app-capabilities/terminal/shared/terminal-unicode-width.js",
+    "node_modules/@xterm/addon-unicode11/package.json",
+    "node_modules/@xterm/addon-unicode11/lib/addon-unicode11.js",
+  ]) {
+    verifyPackedNode(header, relativePath, failures, "Terminal unicode width runtime is missing from app.asar")
+  }
+
   const nodePtySource = readUnpackedText(
     header,
     unpackedPath,

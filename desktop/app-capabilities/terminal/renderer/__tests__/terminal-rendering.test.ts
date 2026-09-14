@@ -1,7 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
+import { Terminal } from "@xterm/xterm"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { installTerminalUnicodeWidth, TERMINAL_UNICODE_VERSION } from "../../shared/terminal-unicode-width"
 import {
   constrainTerminalCompositionToViewport,
   createTerminalRenderingOptions,
@@ -37,8 +39,30 @@ describe("terminal rendering", () => {
 
     expect(options.theme?.background).toBe("rgba(250, 250, 250, 1)")
     expect(options.macOptionClickForcesSelection).toBe(true)
+    expect(options.allowProposedApi).toBe(true)
     expect(context.fillStyle).toBe("oklch(0.985 0 0)")
     expect(context.fillRect).toHaveBeenCalled()
+  })
+
+  it("activates the emoji aware width table for renderer terminals", async () => {
+    const terminal = new Terminal({
+      ...createTerminalRenderingOptions({
+        appearanceSize: "medium",
+        container: document.createElement("div"),
+        disableStdin: false,
+      }),
+      cols: 20,
+      rows: 4,
+    })
+    try {
+      expect(installTerminalUnicodeWidth(terminal)).toBe("patched")
+      expect(terminal.unicode.activeVersion).toBe(TERMINAL_UNICODE_VERSION)
+      expect(terminal.unicode.versions).toContain(TERMINAL_UNICODE_VERSION)
+      await new Promise<void>((resolve) => terminal.write("⏺a", resolve))
+      expect(terminal.buffer.active.cursorX).toBe(3)
+    } finally {
+      terminal.dispose()
+    }
   })
 
   it("keeps long IME composition text within the remaining terminal width", () => {

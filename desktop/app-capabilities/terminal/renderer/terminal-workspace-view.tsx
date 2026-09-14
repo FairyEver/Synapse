@@ -61,6 +61,7 @@ import {
   findTerminalPaneParentDirection,
   findTerminalPaneSplitPath,
 } from "../shared/schema"
+import { installTerminalUnicodeWidth } from "../shared/terminal-unicode-width"
 import {
   getTerminalClipboardShortcut,
   getTerminalPaneShortcut,
@@ -850,6 +851,10 @@ function TerminalPane({
       cols: sessionRef.current.cols,
       rows: sessionRef.current.rows,
     })
+    const unicodeWidthStatus = installTerminalUnicodeWidth(xterm)
+    if (unicodeWidthStatus !== "patched") {
+      logger.warn("Terminal unicode width table fell back.", { status: unicodeWidthStatus })
+    }
     xtermRef.current = xterm
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon((_event, uri) => {
