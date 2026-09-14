@@ -102,8 +102,12 @@ export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
           env: environment,
           ...(tierModel ? { model: tierModel } : {}),
         }), { mode: 0o600 })
+        // Concurrent Claude Code sessions must stay distinguishable in the terminal list.
+        const title = project.name
+          ? `${CLAUDE_CODE_TERMINAL_TITLE} · ${project.name}`.slice(0, 120)
+          : CLAUDE_CODE_TERMINAL_TITLE
         const session = await ctx.resolve<TerminalService>("core.terminal").createSessionWithEphemeralEnvironment({
-          title: CLAUDE_CODE_TERMINAL_TITLE,
+          title,
           cwd: project.localPath,
           shell: executablePath,
           args: ["--settings", settingsPath, ...(tierModel ? ["--model", tierModel] : [])],

@@ -93,7 +93,7 @@ describe("Claude Code terminal IPC", () => {
       projectId: "project-1",
     })
     expect(launched).toMatchObject({
-      title: "Claude Code",
+      title: "Claude Code · Project One",
       cwd: "/repo",
       shell: "/app/claude",
       environment: {
