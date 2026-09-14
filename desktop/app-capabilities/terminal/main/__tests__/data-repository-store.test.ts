@@ -271,6 +271,37 @@ describe("Terminal DataRepository store", () => {
     expect((await repository.blocks.list()).filter((block) => block.type === "output")).toHaveLength(0)
   })
 
+  it("persists idempotency entries after dropping the runtime session binding", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-idempotency-"))
+    const safeStorage = reversibleSafeStorage()
+    const repository = createTerminalRepository(createFileBackedDataRepository({
+      rootDir: path.join(root, "data-v1"),
+      safeStorage,
+    }))
+    const store = createTerminalDataRepositoryStore({
+      repository,
+      blocks: createTerminalEncryptedBlockStore({ baseDir: path.join(root, "terminal"), safeStorage }),
+    })
+    const idempotency = [{
+      scope: "client-a:app.terminal.session.override.create:idempotency-key-0001",
+      clientId: "client-a",
+      capability: "app.terminal.session.override.create",
+      idempotencyKey: "idempotency-key-0001",
+      digest: "b".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      result: { sessionId: "session-1" },
+      resourceSessionId: "session-1",
+    }]
+
+    await expect(store.saveState({ groups: [], sessions: [], output: [], idempotency }))
+      .resolves.toBeUndefined()
+
+    const loaded = await store.loadState()
+    expect(loaded.idempotency).toHaveLength(1)
+    expect(loaded.idempotency[0]).toMatchObject({ idempotencyKey: "idempotency-key-0001" })
+    expect(loaded.idempotency[0]).not.toHaveProperty("resourceSessionId")
+  })
+
   it("writes only records changed by a structural workspace save", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-delta-save-"))
     const safeStorage = reversibleSafeStorage()

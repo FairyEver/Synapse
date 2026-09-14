@@ -105,7 +105,8 @@ export function createTerminalStore(options: { baseDir: string }): TerminalStore
       }
     },
     async saveState(state) {
-      const parsed = parseTerminalStoreState(state)
+      const parsed = parseTerminalStoreStateForSave(state)
+      validateTerminalStoreState(parsed)
       const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
       await mkdir(options.baseDir, { recursive: true })
       try {
@@ -123,6 +124,30 @@ function parseTerminalStoreState(state: unknown): TerminalStoreState {
   const parsed = terminalStoreStateSchema.parse(state)
   validateTerminalStoreState(parsed)
   return parsed
+}
+
+/**
+ * Runtime-only service fields (such as an idempotency entry's session binding) are not part of the
+ * persisted shape, so strip them before validating a save. Keeping the stored schema strict means
+ * older reader versions never see unknown keys.
+ */
+export function parseTerminalStoreStateForSave(state: unknown): TerminalStoreState {
+  return terminalStoreStateSchema.parse(stripRuntimeStoreFields(state))
+}
+
+function stripRuntimeStoreFields(state: unknown): unknown {
+  if (!state || typeof state !== "object" || Array.isArray(state)) return state
+  const record = state as Record<string, unknown>
+  if (!Array.isArray(record.idempotency)) return state
+  return {
+    ...record,
+    idempotency: record.idempotency.map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry
+      const persisted = { ...(entry as Record<string, unknown>) }
+      delete persisted.resourceSessionId
+      return persisted
+    }),
+  }
 }
 
 function validateTerminalStoreState(state: TerminalStoreState): void {

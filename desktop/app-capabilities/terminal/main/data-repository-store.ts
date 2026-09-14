@@ -20,6 +20,7 @@ import type { TerminalWorkspace } from "../shared/workspace"
 import type { TerminalEncryptedBlockStore } from "./encrypted-block-store"
 import type { TerminalRepository } from "./repository"
 import {
+  parseTerminalStoreStateForSave,
   terminalStoreStateSchema,
   type TerminalRuntimeStoreUpdate,
   type TerminalStore,
@@ -197,7 +198,7 @@ export function createTerminalDataRepositoryStore(options: {
 
   async function saveState(source: Parameters<TerminalStore["saveState"]>[0]): Promise<void> {
     await initialize()
-    const state = terminalStoreStateSchema.parse(source)
+    const state = parseTerminalStoreStateForSave(source)
     const hasSensitiveConfiguration = state.groups.some((group) =>
       Boolean(group.settings?.commands?.length || hasSetEnvironmentValue(group.settings?.environment)))
       || hasSetEnvironmentValue(state.globalLaunch.settings?.environment)

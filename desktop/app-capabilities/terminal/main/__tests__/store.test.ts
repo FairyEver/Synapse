@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -72,6 +72,33 @@ describe("terminal store", () => {
       sessions: [expect.objectContaining(session)],
       output: [output],
     })
+  })
+
+  it("drops the runtime-only idempotency session binding before persisting", async () => {
+    const group = createValidGroup()
+    const session = createValidSession()
+    const idempotency = [{
+      scope: "client-a:app.terminal.session.override.create:key-1",
+      clientId: "client-a",
+      capability: "app.terminal.session.override.create",
+      idempotencyKey: "key-1",
+      digest: "a".repeat(64),
+      expiresAtMs: Date.now() + 60_000,
+      result: { sessionId: session.id },
+      resourceSessionId: session.id,
+    }]
+
+    await createTerminalStore({ baseDir: tempDir }).saveState({
+      groups: [group],
+      sessions: [session],
+      output: [],
+      idempotency,
+    })
+
+    const raw = JSON.parse(await readFile(path.join(tempDir, "terminal-state.json"), "utf8"))
+    expect(raw.idempotency).toHaveLength(1)
+    expect(raw.idempotency[0]).not.toHaveProperty("resourceSessionId")
+    expect(raw.idempotency[0].idempotencyKey).toBe("key-1")
   })
 
   it("returns empty state when the state file does not exist", async () => {
