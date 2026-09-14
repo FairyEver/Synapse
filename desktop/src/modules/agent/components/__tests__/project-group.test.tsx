@@ -74,6 +74,7 @@ describe("ProjectGroup", () => {
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
           onQuickCreateSession={vi.fn()}
+          onQuickCreateTerminalSession={vi.fn()}
           onCustomizeSession={vi.fn()}
           onSelect={vi.fn()}
           onDelete={(session) => setSessions((current) => current.filter((item) => item.id !== session.id))}
@@ -142,6 +143,7 @@ describe("ProjectGroup", () => {
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
           onQuickCreateSession={vi.fn()}
+          onQuickCreateTerminalSession={vi.fn()}
           onCustomizeSession={vi.fn()}
           onSelect={vi.fn()}
           onDelete={onDelete}
@@ -205,6 +207,7 @@ describe("ProjectGroup", () => {
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
           onQuickCreateSession={vi.fn()}
+          onQuickCreateTerminalSession={vi.fn()}
           onCustomizeSession={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
@@ -263,6 +266,7 @@ describe("ProjectGroup", () => {
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
           onQuickCreateSession={vi.fn()}
+          onQuickCreateTerminalSession={vi.fn()}
           onCustomizeSession={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
@@ -299,6 +303,7 @@ describe("ProjectGroup", () => {
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
           onQuickCreateSession={onQuickCreateSession}
+          onQuickCreateTerminalSession={vi.fn()}
           onCustomizeSession={onCustomizeSession}
           onShowProjectInFolder={onShowProjectInFolder}
           onOpenProjectInTerminal={onOpenProjectInTerminal}
@@ -397,6 +402,50 @@ describe("ProjectGroup", () => {
     expect(document.querySelector('[data-slot="dropdown-menu-separator"]')).toBeNull()
   })
 
+  it("starts a terminal session on modifier click and a normal session on plain click", async () => {
+    const onQuickCreateSession = vi.fn()
+    const onQuickCreateTerminalSession = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ProjectGroup
+          project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
+          sessions={[]}
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onQuickCreateSession={onQuickCreateSession}
+          onQuickCreateTerminalSession={onQuickCreateTerminalSession}
+          onCustomizeSession={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    const createButton = container.querySelector<HTMLButtonElement>('[aria-label="新建对话"]')
+    await act(async () => {
+      createButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }))
+      createButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }))
+    })
+
+    expect(onQuickCreateTerminalSession).toHaveBeenCalledTimes(2)
+    expect(onQuickCreateSession).not.toHaveBeenCalled()
+
+    await act(async () => {
+      createButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onQuickCreateSession).toHaveBeenCalledTimes(1)
+    expect(onQuickCreateTerminalSession).toHaveBeenCalledTimes(2)
+  })
+
   it("confirms before clearing every conversation supplied by the visible category", async () => {
     const sessions = [{
       projectId: "project-1",
@@ -432,6 +481,7 @@ describe("ProjectGroup", () => {
           unreadByConversationId={{}}
           sendingConversationIds={new Set()}
           onQuickCreateSession={vi.fn()}
+          onQuickCreateTerminalSession={vi.fn()}
           onCustomizeSession={vi.fn()}
           onSelect={vi.fn()}
           onDelete={onDelete}

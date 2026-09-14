@@ -35,6 +35,19 @@ import { isDefaultAgentWorkspaceProjectId } from "@/lib/default-agent-workspace"
 
 const logger = createRendererLogger("agent")
 
+type QuickCreateTarget = "session" | "terminal"
+
+const QUICK_CREATE_LOG: Record<QuickCreateTarget, { readonly message: string; readonly boundary: string }> = {
+  session: {
+    message: "Agent quick session creation failed.",
+    boundary: "renderer.agent.session-quick-create",
+  },
+  terminal: {
+    message: "Agent terminal quick creation failed.",
+    boundary: "renderer.agent.terminal-quick-create",
+  },
+}
+
 type ProjectOption = {
   id: string
   name: string
@@ -104,7 +117,7 @@ function AgentSessionSidebar({
     setCreateTarget({ project, initialName })
   }
 
-  const handleQuickCreate = async (project: ProjectOption) => {
+  const handleQuickCreate = async (project: ProjectOption, target: QuickCreateTarget) => {
     if (quickCreatePendingRef.current) return
     quickCreatePendingRef.current = true
     setQuickCreatingProjectId(project.id)
@@ -120,11 +133,16 @@ function AgentSessionSidebar({
         return
       }
 
+      if (target === "terminal") {
+        await startClaudeCodeTerminal({ id: project.id, selection })
+        return
+      }
+
       const created = await onCreateSession(project.id, selection, initialName, null)
       if (created === false) openCreateDialog(project, initialName)
     } catch (rawError) {
-      logger.warn("Agent quick session creation failed.", {
-        boundary: "renderer.agent.session-quick-create",
+      logger.warn(QUICK_CREATE_LOG[target].message, {
+        boundary: QUICK_CREATE_LOG[target].boundary,
         projectId: project.id,
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessageLength(rawError),
@@ -198,7 +216,8 @@ function AgentSessionSidebar({
             sendingConversationIds={sendingConversationIds}
             createDisabled={quickCreatingProjectId !== null}
             creating={quickCreatingProjectId === project.id}
-            onQuickCreateSession={() => void handleQuickCreate(project)}
+            onQuickCreateSession={() => void handleQuickCreate(project, "session")}
+            onQuickCreateTerminalSession={() => void handleQuickCreate(project, "terminal")}
             onCustomizeSession={() => openCreateDialog(project)}
             onShowProjectInFolder={isDefaultAgentWorkspaceProjectId(project.id)
               ? undefined

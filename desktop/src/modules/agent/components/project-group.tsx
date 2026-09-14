@@ -45,6 +45,7 @@ type ProjectGroupProps = {
   createDisabled?: boolean
   creating?: boolean
   onQuickCreateSession: () => void
+  onQuickCreateTerminalSession: () => void
   onCustomizeSession: () => void
   onShowProjectInFolder?: () => void
   onOpenProjectInTerminal?: () => void
@@ -69,6 +70,7 @@ function ProjectGroup({
   createDisabled = false,
   creating = false,
   onQuickCreateSession,
+  onQuickCreateTerminalSession,
   onCustomizeSession,
   onShowProjectInFolder,
   onOpenProjectInTerminal,
@@ -157,7 +159,13 @@ function ProjectGroup({
               title="新建对话"
               aria-label="新建对话"
               disabled={createDisabled}
-              onClick={onQuickCreateSession}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey) {
+                  onQuickCreateTerminalSession()
+                  return
+                }
+                onQuickCreateSession()
+              }}
             >
               {creating
                 ? <LoaderCircle className="size-3.5 animate-spin" />

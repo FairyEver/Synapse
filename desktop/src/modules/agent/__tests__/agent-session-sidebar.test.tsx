@@ -907,6 +907,68 @@ describe("AgentSessionSidebar", () => {
     }, expect.any(String), null)
   })
 
+  it("starts a terminal session with the configured default model on modifier click", async () => {
+    appConfig.agent.defaultProviderModel = { providerId: "anthropic", modelTier: "sonnet" }
+    const onCreateSession = vi.fn()
+    const createClaudeCodeTerminal = vi.fn().mockResolvedValue({ sessionId: "terminal-session" })
+    const openSystemApp = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listAllProviders: vi.fn().mockResolvedValue([
+            provider({ id: "anthropic", name: "Anthropic", active: false }),
+            provider({ id: "openrouter", name: "OpenRouter", active: true }),
+          ]),
+          createClaudeCodeTerminal,
+        },
+        apps: { openSystemApp },
+      },
+    })
+    await renderCreationSidebar(onCreateSession)
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }))
+      await Promise.resolve()
+    })
+
+    expect(createClaudeCodeTerminal).toHaveBeenCalledWith({
+      projectId: "project-1",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+    })
+    expect(openSystemApp).toHaveBeenCalledWith("terminal", {
+      terminalOpenRequest: { requestId: expect.any(String), sessionId: "terminal-session" },
+    })
+    expect(onCreateSession).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
+  })
+
+  it("falls back to the custom dialog when terminal quick creation has no selectable model", async () => {
+    const createClaudeCodeTerminal = vi.fn()
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listAllProviders: vi.fn().mockResolvedValue([]),
+          createClaudeCodeTerminal,
+        },
+        apps: { openSystemApp: vi.fn() },
+      },
+    })
+    await renderCreationSidebar(vi.fn())
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }))
+      await Promise.resolve()
+    })
+
+    expect(createClaudeCodeTerminal).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull()
+  })
+
   it("falls back to the custom dialog with the same name when quick creation fails", async () => {
     vi.spyOn(createSessionName, "formatCreateSessionName").mockReturnValue("新对话 14:20")
     const onCreateSession = vi.fn().mockResolvedValue(false)
