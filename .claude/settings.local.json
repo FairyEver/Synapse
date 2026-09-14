@@ -74,7 +74,9 @@
       "mcp__synapse-mcp__database_table_list",
       "mcp__synapse-mcp__database_row_list",
       "mcp__synapse-mcp__database_table_describe",
-      "mcp__synapse-mcp__database_row_delete"
+      "mcp__synapse-mcp__database_row_delete",
+      "Bash(cd *)",
+      "WebFetch(domain:api-docs.deepseek.com)"
     ]
   }
 }
