@@ -46,6 +46,8 @@ Permission checks, revisions, resolution, and predictable validation complete be
 
 Maintain `afterStateRevision` and `afterOutputSeq` independently. A normal timeout returns `changed:false`. A retention gap returns immediately with the current available interval and recovery position.
 
+`attention` is the session's "is a person needed right now" fact and is part of `app_terminal_session_state_get`, `app_terminal_session_state_list`, and every observe result. Synapse writes `waiting` with `kind` `approval` or `agent_question` when the Codex or Claude Code hooks injected by the Terminal agent-notification setting report a permission request, a question tool, or an action notification, and returns to `not_waiting` when the prompt is submitted, the tool continues, the agent is interrupted, the session ends, or the user types in the terminal themselves. `unknown` means no evidence; it is not the same as `not_waiting`. Treat `waiting` as evidence that the agent is blocked on a person: read the rendered view to see the actual question, report it, and get explicit user judgment before answering approvals, passwords, or destructive choices. Do not treat it as a durable state — it clears as soon as work resumes.
+
 ## Control and input
 
 - `app_terminal_session_control_acquire`: immediately acquire one short-lived writer lease for a running session, bound to trusted client and controller instance context. The result includes the current `inputRevision` for the next input request.

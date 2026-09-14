@@ -19,7 +19,7 @@ Read `api-reference.md` before constructing requests. Read `examples.md` when tr
 
 1. Discover groups or sessions with bounded list tools. Preserve the returned immutable ids, revisions, domain revision, and pagination cursor only for the same query.
 2. Create through the path that matches the user's intent: ordinary UI-equivalent session, explicit audited overrides, or a saved group command. Do not turn an ordinary create into an override.
-3. Read lifecycle and attention through `app_terminal_session_state_get` or `app_terminal_session_observe`. These tools never return output bytes.
+3. Read lifecycle and attention through `app_terminal_session_state_get` or `app_terminal_session_observe`. These tools never return output bytes. `attention.state = waiting` means the agent is blocked on a person (hooks report `approval` / `agent_question`); read the rendered view to see the question and get user judgment instead of guessing an answer.
 4. Read retained raw output through `app_terminal_session_output_read`, use `app_terminal_session_view_get` for a bounded human-readable terminal view, or combine state and bounded output with `app_terminal_session_output_observe` when both permissions are available.
 5. Before automated input, acquire a short lease with `app_terminal_session_control_acquire`. Keep its `leaseId`, `leaseRevision`, expiration, and current `inputRevision` private.
 6. Send one single-line text plus Enter with `app_terminal_session_input_command`, or bounded semantic text/key actions with `app_terminal_session_input_send`. Supply the exact expected input revision and a fresh caller-scoped idempotency key for that distinct request.

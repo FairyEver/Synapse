@@ -16,18 +16,21 @@ import {
   TERMINAL_SESSION_OBSERVE_LIMIT,
   TERMINAL_SESSION_OUTPUT_RETENTION_BYTES,
 } from "../../../config"
-import type {
-  TerminalAcquireControlInput,
-  TerminalCommandInput,
-  TerminalCreateSessionOverrideInput,
-  TerminalCreateSessionInput as TerminalMcpCreateSessionInput,
-  TerminalObserveInput,
-  TerminalPasteInput,
-  TerminalRawInput,
-  TerminalResizeInput,
-  TerminalSemanticAction,
-  TerminalSemanticInput,
-  TerminalStopInput,
+import {
+  TERMINAL_AGENT_ATTENTION_DETECTOR_ID,
+  TERMINAL_AGENT_ATTENTION_DETECTOR_VERSION,
+  type TerminalAcquireControlInput,
+  type TerminalAgentAttentionUpdate,
+  type TerminalCommandInput,
+  type TerminalCreateSessionOverrideInput,
+  type TerminalCreateSessionInput as TerminalMcpCreateSessionInput,
+  type TerminalObserveInput,
+  type TerminalPasteInput,
+  type TerminalRawInput,
+  type TerminalResizeInput,
+  type TerminalSemanticAction,
+  type TerminalSemanticInput,
+  type TerminalStopInput,
 } from "../shared/contract-schema"
 import { terminalContractError } from "../shared/errors"
 import type {
@@ -529,6 +532,19 @@ export function createTerminalService(deps: {
     }
   }
 
+  /**
+   * 被动证据（输出、尺寸、输入、回收）只失效非 Hook 的注意证据：
+   * Hook 上报的等待输入只能由后续 Hook 事件、用户输入或会话结束改写，避免终端重绘把标记冲掉。
+   */
+  function passiveAttention(
+    session: Pick<TerminalSession, "attention" | "lastOutputSeq" | "sizeRevision">,
+    reason: string,
+  ) {
+    return session.attention.detectorId === TERMINAL_AGENT_ATTENTION_DETECTOR_ID
+      ? session.attention
+      : unknownAttention(session, reason)
+  }
+
   function ensureDefaultGroup(): TerminalGroup {
     const existing = [...groups.values()].sort((a, b) => a.sortOrder - b.sortOrder)[0]
     if (existing) return existing
@@ -663,6 +679,34 @@ export function createTerminalService(deps: {
     return updated
   }
 
+  /**
+   * Hook 驱动的"等待输入"注意状态：只写状态、kind、原因与水位，重复事件不推进 revision。
+   */
+  function applyAgentAttention(input: TerminalAgentAttentionUpdate): void {
+    const session = sessions.get(input.sessionId)
+    if (!session) return
+    if (
+      session.attention.detectorId === TERMINAL_AGENT_ATTENTION_DETECTOR_ID
+      && session.attention.state === input.state
+      && session.attention.kind === input.kind
+      && session.attention.reason === input.reason
+    ) return
+    updateSessionState(input.sessionId, (current) => ({
+      ...current,
+      attention: {
+        state: input.state,
+        kind: input.kind,
+        reason: input.reason,
+        confidence: 1,
+        detectedAt: now(),
+        throughOutputSeq: current.lastOutputSeq,
+        sizeRevision: current.sizeRevision,
+        detectorId: TERMINAL_AGENT_ATTENTION_DETECTOR_ID,
+        detectorVersion: TERMINAL_AGENT_ATTENTION_DETECTOR_VERSION,
+      },
+    }), input.state === "waiting" ? "attention.waiting" : "attention.cleared")
+  }
+
   function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer): void {
     const emulator = createTerminalCoreEmulator({
       cols: session.cols,
@@ -689,7 +733,7 @@ export function createTerminalService(deps: {
         ...current,
         lastOutputSeq: chunk.seq,
         updatedAt: now(),
-        attention: unknownAttention({ ...current, lastOutputSeq: chunk.seq }, "output_changed"),
+        attention: passiveAttention({ ...current, lastOutputSeq: chunk.seq }, "output_changed"),
         stateRevision: current.stateRevision + 1,
         discardedOutputBytes: runtime.buffer.discardedBytes,
         discardedOutputChunks: runtime.buffer.discardedChunks,
@@ -740,7 +784,7 @@ export function createTerminalService(deps: {
         endedAt: timestamp,
         updatedAt: timestamp,
         stateRevision: current.stateRevision + 1,
-        attention: unknownAttention(current, "not_running"),
+        attention: passiveAttention(current, "not_running"),
       }
       sessions.set(session.id, updated)
       deps.agentNotifications?.unregisterSession(session.id)
@@ -788,7 +832,7 @@ export function createTerminalService(deps: {
           lastEvictedAt: now(),
           stateRevision: session.stateRevision + 1,
           updatedAt: now(),
-          attention: unknownAttention(session, "output_evicted"),
+          attention: passiveAttention(session, "output_evicted"),
         }
         sessions.set(session.id, updated)
         dirtyRuntimeSessionIds.add(session.id)
@@ -926,7 +970,7 @@ export function createTerminalService(deps: {
         endedAt: now(),
         updatedAt: now(),
         stateRevision: session.stateRevision + 1,
-        attention: unknownAttention(session, "not_running"),
+        attention: passiveAttention(session, "not_running"),
       }
       sessions.set(session.id, failed)
       deps.agentNotifications?.unregisterSession(session.id)
@@ -2292,7 +2336,7 @@ export function createTerminalService(deps: {
       rows,
       sizeRevision: current.sizeRevision + 1,
       stateRevision: current.stateRevision + 1,
-      attention: unknownAttention({ ...current, sizeRevision: current.sizeRevision + 1 }, "resize"),
+      attention: passiveAttention({ ...current, sizeRevision: current.sizeRevision + 1 }, "resize"),
       updatedAt: now(),
     }
     sessions.set(current.id, updated)
@@ -2623,7 +2667,7 @@ export function createTerminalService(deps: {
     return updateSessionState(sessionId, (session) => ({
       ...session,
       inputRevision: session.inputRevision + 1,
-      attention: unknownAttention(session, reason),
+      attention: passiveAttention(session, reason),
     }), "input")
   }
 
@@ -2803,6 +2847,7 @@ export function createTerminalService(deps: {
     revokeClientAccess,
     getSessionState,
     getView,
+    applyAgentAttention,
     get terminalDomainRevision() { return terminalDomainRevision },
     get lastPersistError() { return lastPersistError },
     get persistenceProtection() { return deps.store.persistenceProtection ?? "unavailable" },

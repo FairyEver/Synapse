@@ -1847,6 +1847,9 @@ export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<Termina
       openTerminalSession: (sessionId) => systemAppWindows.open("terminal", {
         terminalOpenRequest: { requestId: randomUUID(), sessionId },
       }),
+      setSessionAttention: (update) => ctx.registry
+        .get<TerminalService>("core.terminal")
+        .applyAgentAttention(update),
     })
   },
   start(instance) {

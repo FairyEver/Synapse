@@ -13,6 +13,7 @@ import { createLocalNetworkHostLifecycle } from "../../../electron/runtime/netwo
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { StructuredLogger } from "../../../electron/runtime/service-registry"
 import { terminalContractError } from "../shared/errors"
+import type { TerminalAgentAttentionUpdate } from "../shared/contract-schema"
 import type {
   TerminalAgentNotificationSettings,
   TerminalUpdateAgentNotificationSettingsInput,
@@ -67,6 +68,7 @@ export type TerminalAgentNotificationServiceDeps = {
   readonly focusedWebContentsId: () => number | null
   readonly focusApp: () => void
   readonly openTerminalSession: (sessionId: string) => Promise<void>
+  readonly setSessionAttention?: (update: TerminalAgentAttentionUpdate) => void
   readonly now?: () => number
 }
 
@@ -218,7 +220,14 @@ export class TerminalAgentNotificationService {
 
   handleUserInput(sessionId: string): void {
     const session = this.getSessionBinding(sessionId)
-    if (session) session.waiting = false
+    if (!session) return
+    session.waiting = false
+    this.applyAttention({
+      sessionId,
+      state: "not_waiting",
+      kind: "unknown",
+      reason: "user_input",
+    })
   }
 
   unregisterSession(sessionId: string): void {
@@ -366,31 +375,91 @@ export class TerminalAgentNotificationService {
     if (payload.agentId || payload.parentSessionId || payload.event === "SubagentStop") return
     if (payload.event === "SessionStart" || payload.event === "UserPromptSubmit") {
       session.waiting = false
+      this.applyAttention({
+        sessionId: session.sessionId,
+        state: "not_waiting",
+        kind: "unknown",
+        reason: payload.event === "SessionStart" ? "agent_session_started" : "agent_prompt_submitted",
+      })
       return
     }
     if (payload.event === "PermissionRequest") {
       session.waiting = true
+      this.applyAttention({
+        sessionId: session.sessionId,
+        state: "waiting",
+        kind: "approval",
+        reason: "agent_permission_request",
+      })
       await this.notify(session, "needs_action", payload.source)
       return
     }
     if (payload.event === "PreToolUse" && isQuestionTool(payload.source, payload.toolName)) {
       session.waiting = true
+      this.applyAttention({
+        sessionId: session.sessionId,
+        state: "waiting",
+        kind: "agent_question",
+        reason: "agent_question_tool",
+      })
       await this.notify(session, "needs_action", payload.source)
       return
     }
     if (payload.event === "PreToolUse") {
       session.waiting = false
+      this.applyAttention({
+        sessionId: session.sessionId,
+        state: "not_waiting",
+        kind: "unknown",
+        reason: "agent_tool_started",
+      })
       return
     }
     if (payload.event === "Notification" && isActionNotification(payload.notificationType)) {
       session.waiting = true
+      this.applyAttention({
+        sessionId: session.sessionId,
+        state: "waiting",
+        kind: payload.notificationType === "permission_prompt" ? "approval" : "agent_question",
+        reason: `agent_notification_${payload.notificationType ?? "unspecified"}`,
+      })
       await this.notify(session, "needs_action", payload.source)
       return
     }
     if (payload.event === "Stop") {
       if (session.waiting) return
       session.waiting = false
+      this.applyAttention({
+        sessionId: session.sessionId,
+        state: "not_waiting",
+        kind: "unknown",
+        reason: "agent_stopped",
+      })
       await this.notify(session, "completed", payload.source)
+      return
+    }
+    if (payload.event === "Interrupt" || payload.event === "SessionEnd") {
+      if (!session.waiting) return
+      session.waiting = false
+      this.applyAttention({
+        sessionId: session.sessionId,
+        state: "not_waiting",
+        kind: "unknown",
+        reason: payload.event === "Interrupt" ? "agent_interrupted" : "agent_session_ended",
+      })
+    }
+  }
+
+  private applyAttention(update: TerminalAgentAttentionUpdate): void {
+    try {
+      this.deps.setSessionAttention?.(update)
+    } catch (error) {
+      this.deps.logger.warn("Terminal session attention update failed.", {
+        sessionId: update.sessionId,
+        state: update.state,
+        kind: update.kind,
+        error,
+      })
     }
   }
 

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
 import { createNetworkServiceRegistry } from "../../../../electron/runtime/network"
 import type { AuditSink, PermissionGuard } from "../../../../electron/runtime/security"
+import type { TerminalAgentAttentionUpdate } from "../../shared/contract-schema"
 import type { TerminalAgentNotificationSettings } from "../../shared/schema"
 import {
   TerminalAgentNotificationService,
@@ -76,6 +77,41 @@ describe("TerminalAgentNotificationService", () => {
       { title: "Claude Code", body: "“会话 名称”需要你的操作" },
       { title: "Claude Code", body: "“会话 名称”任务已完成" },
     ])
+    await fixture.service.stop()
+  })
+
+  it("records hook-driven waiting attention and clears it when the agent resumes or the user types", async () => {
+    const fixture = await createFixture()
+    await fixture.service.start()
+    await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    const launch = fixture.service.prepareSession({
+      sessionId,
+      title: "brick-lab",
+      shell: "/bin/zsh",
+      env: { PATH: "/usr/bin" },
+      defaultShellArgs: ["-l"],
+    })!
+
+    await postEvent(launch.env, { source: "claude", event: "PreToolUse", toolName: "AskUserQuestion" })
+    await postEvent(launch.env, { source: "codex", event: "PermissionRequest" })
+    await postEvent(launch.env, { source: "claude", event: "Notification", notificationType: "permission_prompt" })
+    await postEvent(launch.env, { source: "codex", event: "Interrupt" })
+
+    expect(fixture.attention).toEqual([
+      { sessionId, state: "waiting", kind: "agent_question", reason: "agent_question_tool" },
+      { sessionId, state: "waiting", kind: "approval", reason: "agent_permission_request" },
+      { sessionId, state: "waiting", kind: "approval", reason: "agent_notification_permission_prompt" },
+      { sessionId, state: "not_waiting", kind: "unknown", reason: "agent_interrupted" },
+    ])
+
+    fixture.service.handleUserInput(sessionId)
+    expect(fixture.attention.at(-1)).toEqual({
+      sessionId,
+      state: "not_waiting",
+      kind: "unknown",
+      reason: "user_input",
+    })
     await fixture.service.stop()
   })
 
@@ -194,6 +230,7 @@ async function createFixture(options: { platform?: NodeJS.Platform } = {}) {
   const focusedWebContentsId = vi.fn<() => number | null>(() => null)
   const focusApp = vi.fn()
   const openTerminalSession = vi.fn(async () => undefined)
+  const attention: TerminalAgentAttentionUpdate[] = []
   const service = new TerminalAgentNotificationService({
     settings: memorySettingsNamespace(),
     networkRegistry: createNetworkServiceRegistry(),
@@ -206,13 +243,14 @@ async function createFixture(options: { platform?: NodeJS.Platform } = {}) {
     focusedWebContentsId,
     focusApp,
     openTerminalSession,
+    setSessionAttention: (update) => { attention.push(update) },
     createNotification: (input) => {
       const notification = new TestNotification(input)
       notifications.push(notification)
       return notification
     },
   })
-  return { service, notifications, focusedWebContentsId, focusApp, openTerminalSession }
+  return { service, notifications, attention, focusedWebContentsId, focusApp, openTerminalSession }
 }
 
 async function postEvent(env: Record<string, string>, event: Record<string, unknown>): Promise<void> {

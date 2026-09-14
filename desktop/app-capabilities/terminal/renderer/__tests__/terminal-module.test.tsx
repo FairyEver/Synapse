@@ -1130,6 +1130,37 @@ describe("TerminalModule", () => {
     expect(writeText).toHaveBeenCalledWith("synapse://terminals/abcdefghijklmnopqrstuv%2Eabc")
   })
 
+  it("marks a session that waits for user input in the sidebar and header", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({
+      id: "session-2",
+      groupId: "group-1",
+      title: "Claude 会话",
+      attention: {
+        state: "waiting",
+        kind: "agent_question",
+        reason: "agent_question_tool",
+        confidence: 1,
+        detectedAt: "2026-09-14T12:00:00.000Z",
+        throughOutputSeq: 0,
+        sizeRevision: 1,
+        detectorId: "agent-hook-v1",
+        detectorVersion: "1.0.0",
+      },
+    })
+
+    await renderEmbeddedModule()
+
+    const waitingRow = sidebarSessionRow("Claude 会话")
+    expect(waitingRow?.textContent).toContain("等待输入")
+    expect(waitingRow?.querySelector('[title="等待输入"]')).toBeTruthy()
+    expect(sidebarSessionRow("开发终端")?.textContent).not.toContain("等待输入")
+
+    expect(headerSessionTab("Claude 会话")?.textContent).toContain("等待输入")
+    expect(headerSessionTab("开发终端")?.textContent).not.toContain("等待输入")
+  })
+
   it("renames a workspace from its header session tab context menu", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
@@ -3753,6 +3784,17 @@ function createSession(overrides: Partial<SynapseTerminalSession> = {}): Synapse
     rows: 24,
     lastOutputSeq: 0,
     sessionRef: "tsr_abcdefghijklmnopqrstuv.abc",
+    attention: {
+      state: "unknown" as const,
+      kind: "unknown" as const,
+      reason: "insufficient_evidence",
+      confidence: 0,
+      detectedAt: "2026-06-24T00:00:00.000Z",
+      throughOutputSeq: 0,
+      sizeRevision: 1,
+      detectorId: "passive-terminal-v1",
+      detectorVersion: "1.0.0",
+    },
     stateRevision: 1,
     inputRevision: 0,
     sizeRevision: 1,

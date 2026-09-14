@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, CircleDot, Code2, Copy, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
@@ -1294,6 +1294,7 @@ export function TerminalModule({
         lifecycleDisabled={closingWorkspaceId === workspace.id}
         status={workspaceStatus(workspace, sessions)}
         title={workspace.title}
+        waiting={workspaceWaitingForInput(workspace, sessions)}
         workspaceId={workspace.id}
         onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
         onCopyDeepLink={() => { void copySessionDeepLink(workspaceActiveSession(workspace, activePaneIds, sessions)) }}
@@ -1402,6 +1403,7 @@ export function TerminalModule({
                 onCopyDeepLink={() => { void copySessionDeepLink(session) }}
                 onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
                 onSelect={() => selectWorkspace(workspace.id)}
+                waiting={workspaceWaitingForInput(workspace, sessions)}
               />
             )
           })}
@@ -1948,6 +1950,7 @@ function TerminalHeaderSessionTab({
   onRename,
   onSelect,
   title,
+  waiting,
 }: {
   readonly active: boolean
   readonly closeDisabled: boolean
@@ -1956,6 +1959,7 @@ function TerminalHeaderSessionTab({
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
   readonly title: string
+  readonly waiting: boolean
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   return (
@@ -1970,6 +1974,7 @@ function TerminalHeaderSessionTab({
           data-track="terminal-header-session-select"
           onClick={onSelect}
         >
+          {waiting ? <TerminalAttentionIndicator /> : null}
           <span className="max-w-32 truncate">{title}</span>
         </SystemAppTopBarActionButton>
       </ContextMenuTrigger>
@@ -2005,6 +2010,7 @@ function TerminalSidebarWorkspaceRow({
   onSelect,
   status,
   title,
+  waiting,
   workspaceId,
 }: {
   readonly active: boolean
@@ -2018,6 +2024,7 @@ function TerminalSidebarWorkspaceRow({
   readonly onSelect: () => void
   readonly status: SynapseTerminalSession["status"]
   readonly title: string
+  readonly waiting: boolean
   readonly workspaceId: string
 }) {
   const rowRef = useRef<HTMLDivElement | null>(null)
@@ -2043,6 +2050,7 @@ function TerminalSidebarWorkspaceRow({
             onSelect={onSelect}
             onDoubleClick={(event) => onRename(event.currentTarget)}
           >
+            {waiting ? <TerminalAttentionIndicator className="mr-1" /> : null}
             {title}
           </ModuleSidebarRow>
         </div>
@@ -2131,6 +2139,21 @@ function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTermina
   )
 }
 
+function TerminalAttentionIndicator({ className }: { readonly className?: string }) {
+  return (
+    <span
+      title="等待输入"
+      className={cn(
+        "inline-flex size-3.5 shrink-0 items-center justify-center text-amber-600 dark:text-amber-400",
+        className,
+      )}
+    >
+      <CircleHelp className="size-3.5" aria-hidden="true" />
+      <span className="sr-only">等待输入</span>
+    </span>
+  )
+}
+
 function groupWorkspaces(
   groups: readonly SynapseTerminalGroupSummary[],
   workspaces: readonly SynapseTerminalWorkspace[],
@@ -2186,6 +2209,16 @@ function workspaceActiveSession(
   const pane = (activePaneId ? leaves.find((leaf) => leaf.paneId === activePaneId) : undefined) ?? leaves[0]
   if (!pane) return null
   return sessions.find((session) => session.id === pane.sessionId) ?? null
+}
+
+function workspaceWaitingForInput(
+  workspace: SynapseTerminalWorkspace,
+  sessions: readonly SynapseTerminalSession[],
+): boolean {
+  const sessionById = new Map(sessions.map((session) => [session.id, session]))
+  return collectTerminalPaneLeaves(workspace.layout).some(
+    (pane) => sessionById.get(pane.sessionId)?.attention.state === "waiting",
+  )
 }
 
 function mergeSession(

@@ -26,6 +26,19 @@ export const terminalAttentionSchema = z.object({
   detectorVersion: z.string().min(1),
 }).strict()
 
+export const TERMINAL_AGENT_ATTENTION_DETECTOR_ID = "agent-hook-v1" as const
+export const TERMINAL_AGENT_ATTENTION_DETECTOR_VERSION = "1.0.0" as const
+
+/**
+ * Hook 驱动的注意状态更新：只表达"Agent 是否在等待用户输入"，不携带提示词、输出或工具参数。
+ */
+export type TerminalAgentAttentionUpdate = {
+  readonly sessionId: string
+  readonly state: "waiting" | "not_waiting"
+  readonly kind: z.infer<typeof terminalAttentionKindSchema>
+  readonly reason: string
+}
+
 export const terminalEndFactsSchema = z.object({
   cause: z.string().min(1),
   exitCode: z.number().int().nullable(),

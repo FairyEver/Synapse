@@ -85,6 +85,74 @@ describe("TerminalService core", () => {
     expect(harness.service.listSessions().map((item) => item.id)).toContain(session.id)
   })
 
+  it("records hook-driven waiting attention without repeating identical evidence", async () => {
+    const harness = await startedHarness()
+    const session = await harness.service.createSession({ title: "Claude Code" })
+    const changeTypes: string[] = []
+    harness.service.events.on("stateChanged", (payload: { changeTypes: string[] }) => {
+      changeTypes.push(...payload.changeTypes)
+    })
+
+    harness.service.applyAgentAttention({
+      sessionId: session.id,
+      state: "waiting",
+      kind: "approval",
+      reason: "agent_permission_request",
+    })
+
+    const waiting = harness.service.getSessionState(session.id)
+    expect(waiting.attention).toMatchObject({
+      state: "waiting",
+      kind: "approval",
+      reason: "agent_permission_request",
+      confidence: 1,
+      detectorId: "agent-hook-v1",
+      throughOutputSeq: session.lastOutputSeq,
+    })
+    expect(waiting.stateRevision).toBe(session.stateRevision + 1)
+    expect(changeTypes).toEqual(["attention.waiting"])
+
+    harness.service.applyAgentAttention({
+      sessionId: session.id,
+      state: "waiting",
+      kind: "approval",
+      reason: "agent_permission_request",
+    })
+    expect(harness.service.getSessionState(session.id).stateRevision).toBe(waiting.stateRevision)
+
+    harness.pty.emitData("still waiting\r\n")
+    await harness.service.flushPersistQueue()
+    const afterOutput = harness.service.getSessionState(session.id)
+    expect(afterOutput.attention).toMatchObject({
+      state: "waiting",
+      kind: "approval",
+      detectorId: "agent-hook-v1",
+    })
+    expect(afterOutput.stateRevision).toBeGreaterThan(waiting.stateRevision)
+
+    harness.service.applyAgentAttention({
+      sessionId: session.id,
+      state: "not_waiting",
+      kind: "unknown",
+      reason: "user_input",
+    })
+    expect(harness.service.getSessionState(session.id).attention).toMatchObject({
+      state: "not_waiting",
+      detectorId: "agent-hook-v1",
+    })
+    expect(changeTypes.filter((type) => type.startsWith("attention."))).toEqual([
+      "attention.waiting",
+      "attention.cleared",
+    ])
+
+    expect(() => harness.service.applyAgentAttention({
+      sessionId: "00000000-0000-4000-8000-000000000000",
+      state: "waiting",
+      kind: "approval",
+      reason: "agent_permission_request",
+    })).not.toThrow()
+  })
+
   it("uses the OSC 7 working directory and falls back to the launch cwd", async () => {
     const { service, pty } = await startedHarness()
     const session = await service.createSession({})

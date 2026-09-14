@@ -98,10 +98,10 @@ Initial attention detection is passive:
 - Strong evidence is a verifiable structured marker or protocol actually emitted by the program.
 - Medium evidence combines foreground-process identity, versioned adapter, rendered state, and prompt structure.
 - Silence, isolated prompt characters, process name, output activity, or CPU alone never decides attention.
-- Any accepted input invalidates old waiting evidence to unknown.
-- Output, resize, degraded rendering, or mode change invalidates dependent evidence until reconfirmed.
+- Any accepted input invalidates passive waiting evidence. User input delivered through the Terminal UI also clears hook-reported waiting.
+- Output, resize, degraded rendering, or mode change invalidates passive evidence until reconfirmed; hook-reported waiting survives these passive updates because TUI redraws do not answer the prompt.
 - Non-running lifecycle has unknown attention.
-- No Shell integration is injected by default. The optional, default-off Terminal Agent native-notification setting may inject session-local `codex`/`claude` PATH shims and official Hooks for newly created UI terminals; it does not change attention evidence or any MCP contract.
+- No Shell integration is injected by default. The optional, default-off Terminal Agent native-notification setting may inject session-local `codex`/`claude` PATH shims and official Hooks for newly created UI terminals. Those Hooks are the only hook-driven attention source: they write `waiting` with kind `approval` or `agent_question` (detector `agent-hook-v1`, confidence 1) when the agent reports a permission request, question tool, or action notification, and return to `not_waiting` when the prompt is submitted, the tool continues, the agent is interrupted, the session ends, or the user types in the terminal. Sessions without the setting keep passive `unknown` attention, the Terminal sidebar and header session tabs show a waiting marker from this state, and no new capability, tool, MCP contract, or stored field is added.
 
 Asynchronous operation status is `pending_delivery | delivered | delivery_uncertain | completed | failed` and remains separate from lifecycle. Completion includes final lifecycle and cause. `operation.get` requires current state-read authorization over the original resource; an operation id alone cannot probe existence.
 
