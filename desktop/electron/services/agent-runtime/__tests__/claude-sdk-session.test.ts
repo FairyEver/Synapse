@@ -417,6 +417,43 @@ describe("ClaudeSDKSession", () => {
     expect(getOptions().additionalDirectories).toContain("/managed/conversation/tool-output")
   })
 
+  it("re-reads durable evidence in place instead of persisting a second copy", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "synapse-durable-evidence-"))
+    try {
+      const artifact = path.join(dir, "artifact-1.txt")
+      writeFileSync(artifact, "y".repeat(60_000))
+      const persistToolOutputText = vi.fn(async () => ({
+        id: "artifact-2",
+        storagePath: path.join(dir, "artifact-2.txt"),
+        originalByteSize: 60_000,
+        storedByteSize: 60_000,
+        contentTruncated: false,
+      }))
+      const { factory, getOptions } = createQueryFactory()
+      const session = createSession(factory, { cwd: dir, maxToolOutputBytes: 8 * 1024,
+        durableEvidenceRoots: [dir], persistToolOutputText })
+      await session.send({ ...message("读取已保存的结果"), runtimeTurnId: "turn-1" })
+
+      const result = await postToolUseHook(getOptions())({
+        hook_event_name: "PostToolUse",
+        tool_name: "Read",
+        tool_input: { file_path: artifact },
+        tool_response: { type: "text", file: { content: "y".repeat(60_000) } },
+        tool_use_id: "toolu-replay",
+      }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
+
+      expect(persistToolOutputText).not.toHaveBeenCalled()
+      const content = (result.hookSpecificOutput?.updatedToolOutput as { file: { content: string } }).file.content
+      expect(content).toContain("Synapse context guard")
+      expect(content).toContain("No new copy was saved")
+      expect(content).toContain(artifact)
+      expect(session.alive()).toBe(true)
+      await session.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it.each(["throw", "missing", "truncated"])("stops without a replacement when output persistence is %s", async (failure) => {
     const { factory, getOptions, query } = createQueryFactory()
     const session = createSession(factory, { maxToolOutputBytes: 8192,

@@ -46,6 +46,21 @@ describe("tool output governor", () => {
     expect(Buffer.byteLength(result?.updatedToolOutput ?? "", "utf8")).toBeLessThanOrEqual(512)
   })
 
+  it("points a bounded durable re-read at the same file instead of a new copy", () => {
+    const result = governToolOutput({
+      toolName: "Read",
+      toolResponse: "0123456789".repeat(100),
+      maxBytes: 512,
+      existingOutputPath: "/managed/conversation/tool-output/result.txt",
+    })
+
+    expect(result?.updatedToolOutput).toContain("No new copy was saved")
+    expect(result?.updatedToolOutput).toContain("/managed/conversation/tool-output/result.txt")
+    expect(result?.updatedToolOutput).not.toContain("Output saved at")
+    expect(result?.originalText).toBe("0123456789".repeat(100))
+    expect(Buffer.byteLength(result?.updatedToolOutput ?? "", "utf8")).toBeLessThanOrEqual(512)
+  })
+
   it("allows a zero-byte remaining budget without falling back to the default limit", () => {
     const result = governToolOutput({
       toolName: "Read",

@@ -88,7 +88,7 @@ export function detectCoverageClaim(summary: string | undefined): boolean {
 
 /** The SDK task metadata is a submission, not the authoritative completion state. */
 export const TASK_PROGRESS_GUIDANCE = `For multi-file or multi-stage analysis, you MUST register and maintain an explicit inventory and evidence through native TaskCreate/TaskUpdate metadata.synapseProgress. Never replace full reading with sampling. Submit at most 32 units/findings per call:
-{version:1, baseRevision:<latest Synapse receipt revision, initially 0>, units:[{id:<stable id>,path:<absolute original>,kind:"text"|"image",receipts:[<native Read tool_use_id or successful Edit/Write tool_use_id>],processed:<true only after analysis>,scope:[<first line>,<last line>]}], findings:[{id:<stable fact>,value:<concise string or number>,evidence:[<tool_use_id>]}], seal:<true only after the full inventory is registered>}. Empty arrays are allowed. Register inventory before processing; append remaining units before sealing. If an earlier inventory was sealed prematurely, use reopen:true to append missing units without removing prior scope, then seal after the full inventory is registered. You cannot shrink or replace registered scope. Correct a conflicting finding using resolves:true and evidence containing both the old and new sources. SDK tool success and Task completion are not proof of reading, visual understanding, or factual correctness. Use exact receipt paths/ranges and saved findings after maintenance; do not repeat external operations. A receipt of a shortened result covers only the lines it delivered: cite chunked Read receipts that tile the file, or declare scope to cover just the range you actually process. Omit scope only when the whole file is in scope. A successful Edit/Write/NotebookEdit receipt proves that unit was processed; it never proves the file was read in full, so do not claim full reading from it. Synapse reports scope coverage separately from semantic correctness. If task tools are unavailable, preserve an explicit progress file and report verification as unavailable; never claim host verification.`
+{version:1, baseRevision:<latest Synapse receipt revision, initially 0>, units:[{id:<stable id>,path:<absolute original>,kind:"text"|"image",receipts:[<native Read tool_use_id or successful Edit/Write tool_use_id>],processed:<true only after analysis>,scope:[<first line>,<last line>]}], findings:[{id:<stable fact>,value:<concise string or number>,evidence:[<tool_use_id>]}], seal:<true only after the full inventory is registered>}. Empty arrays are allowed. Register inventory before processing; append remaining units before sealing. If an earlier inventory was sealed prematurely, use reopen:true to append missing units without removing prior scope, then seal after the full inventory is registered. You cannot shrink or replace registered scope. Correct a conflicting finding using resolves:true and evidence containing both the old and new sources. SDK tool success and Task completion are not proof of reading, visual understanding, or factual correctness. Use exact receipt paths/ranges and saved findings after maintenance; do not repeat external operations. A receipt of a shortened result covers only the lines it delivered: cite chunked Read receipts that tile the file, or declare scope to cover just the range you actually process. Omit scope only when the whole file is in scope. A successful Edit/Write/NotebookEdit receipt proves that unit was processed; it never proves the file was read in full, so do not claim full reading from it. Coverage is judged one version at a time: ranges never stitch across versions, and a material that changed is covered again by re-reading one version in full, so never re-read ranges you already presented only to rotate receipt IDs. Synapse reports scope coverage separately from semantic correctness. If task tools are unavailable, preserve an explicit progress file and report verification as unavailable; never claim host verification.`
 
 export class TaskProgressValidationError extends Error {}
 
@@ -184,6 +184,19 @@ export class TaskProgressStore {
     })).sort((a, b) => a.id.localeCompare(b.id))))
   }
 
+  /**
+   * Outcome-level fingerprint for completion corrections: acquiring, presenting
+   * or re-reading receipts never re-arms a Stop correction by itself.
+   */
+  async completionMarker(conversationId: string, turnId: string): Promise<string | undefined> {
+    const state = await this.state(conversationId, turnId)
+    if (!state.units.size) return undefined
+    return digest(JSON.stringify([...state.units.values()].map((unit) => ({
+      id: unit.id, processed: unit.processed, covered: covered(unit, state), mutated: mutated(unit, state),
+      scope: unit.scope ?? null,
+    })).sort((a, b) => a.id.localeCompare(b.id))))
+  }
+
   async *checkpoint(conversationId: string, turnId: string): AsyncGenerator<string> {
     const state = await this.state(conversationId, turnId)
     yield JSON.stringify({ kind: "assessment", ...assess(state), inventorySealed: state.sealed, resume: resumeCapsule(state) })
@@ -221,7 +234,8 @@ export class TaskProgressSession {
     return this.mutate(async (state, append) => {
       // A native Read of an exact, host-saved result recovers that original range.
       // Bind by both canonical artifact identity and complete file hash, never by filename.
-      if (receipt.kind === "text" && receipt.version && receipt.range && receipt.complete) {
+      // Bounded replays recover only the lines they delivered, still in source coordinates.
+      if (receipt.kind === "text" && receipt.version && receipt.range && (receipt.complete || receipt.bounded)) {
         for (const source of state.receipts.values()) {
           if (source.kind !== "text" || !source.outputPath || !source.version || !source.range || source.outputHash !== receipt.version) continue
           let artifactPath: string
@@ -233,7 +247,8 @@ export class TaskProgressSession {
             Math.min(source.range[1], source.range[0] + receipt.range[1] - offset - 1)]
           if (range[1] < range[0]) continue
           receipt = { ...receipt, path: source.path, canonicalPath: source.canonicalPath, version: source.version,
-            range, totalLines: source.totalLines, runtimeEvidence: source.runtimeEvidence, sourceReceiptId: source.toolUseId }
+            range, totalLines: source.totalLines, runtimeEvidence: source.runtimeEvidence, sourceReceiptId: source.toolUseId,
+            ...(receipt.bounded ? { deliveredRange: range } : {}) }
           break
         }
       }
@@ -421,6 +436,10 @@ export class TaskProgressSession {
   async progressMarker(): Promise<string | undefined> {
     return this.turnId ? this.store.progressMarker(this.conversationId, this.turnId) : undefined
   }
+
+  async completionMarker(): Promise<string | undefined> {
+    return this.turnId ? this.store.completionMarker(this.conversationId, this.turnId) : undefined
+  }
 }
 
 /** Small complete rows for immediate continuation; omitted rows remain in the full index. */
@@ -454,14 +473,26 @@ function receiptRange(receipt: WorkReceipt): [number, number] | undefined {
   return receipt.deliveredRange ?? receipt.range
 }
 
+/** Coverage is judged one version at a time: ranges never stitch across versions. */
 function covered(unit: WorkUnit, state: State): boolean {
   const receipts = unit.receipts.map((id) => state.receipts.get(id))
     .filter((r): r is WorkReceipt => Boolean(r?.presented && r.version && (r.complete || r.bounded)))
-  const versions = new Set(receipts.map((r) => r.version))
-  if (versions.size !== 1) return false
   if (unit.kind === "image") return receipts.length > 0
+  const byVersion = new Map<string, WorkReceipt[]>()
+  for (const receipt of receipts) {
+    if (!receipt.version) continue
+    const group = byVersion.get(receipt.version)
+    if (group) group.push(receipt)
+    else byVersion.set(receipt.version, [receipt])
+  }
+  // A material that changed is covered again by re-reading one version in full;
+  // receipts from an earlier version never block that coverage.
+  return [...byVersion.values()].some((group) => tilesScope(unit, group))
+}
+
+function tilesScope(unit: WorkUnit, receipts: readonly WorkReceipt[]): boolean {
   const total = receipts[0]?.totalLines
-  if (total === undefined || receipts.some((r) => r.totalLines !== total)) return false
+  if (total === undefined || receipts.some((receipt) => receipt.totalLines !== total)) return false
   const target = unit.scope ?? [1, total]
   if (target[0] < 1 || target[1] > total || target[1] < target[0]) return false
   let cursor = target[0]

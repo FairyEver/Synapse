@@ -85,25 +85,74 @@ describe("durable task evidence and coverage", () => {
     expect(await session.assessment()).toMatchObject({ conflictingFindings: 0, declaredUnits: 1 })
   })
 
-  it("checks the union of text ranges and refuses mixed versions or shortened results", async () => {
+  it("tiles coverage inside one version and never regresses when a later read adds a new version", async () => {
     const { session } = await setup()
     const textUnit = { ...unit, kind: "text", path: "/originals/log.txt" }
     await session.commit({ version: 1, baseRevision: 0, units: [textUnit], seal: true })
-    const receipt = (id: string, range: [number, number], complete = true): WorkReceipt => ({ ...image(id, textUnit.path), kind: "text", range, totalLines: 6, complete })
+    const receipt = (id: string, range: [number, number], complete = true, version = "original-v1"): WorkReceipt =>
+      ({ ...image(id, textUnit.path), kind: "text", range, totalLines: 6, complete, version })
     await session.receipt(receipt("first", [1, 2]))
     await session.receipt(receipt("last", [4, 6]))
     await session.presented(["first", "last"])
     await session.commit({ version: 1, baseRevision: 1, units: [{ ...textUnit, receipts: ["first", "last"], processed: true }] })
     expect(await session.assessment()).toMatchObject({ status: "partial", coveredUnits: 0 })
+    // A shortened result only covers the lines it actually delivered.
     await session.receipt(receipt("truncated", [3, 3], false)); await session.presented(["truncated"])
     await session.commit({ version: 1, baseRevision: 2, units: [{ ...textUnit, receipts: ["truncated"] }] })
     expect(await session.assessment()).toMatchObject({ coveredUnits: 0 })
     await session.receipt(receipt("gap", [3, 4])); await session.presented(["gap"])
     await session.commit({ version: 1, baseRevision: 3, units: [{ ...textUnit, receipts: ["gap"] }] })
     expect(await session.assessment()).toMatchObject({ status: "coverage-complete" })
-    await session.receipt({ ...receipt("changed", [1, 6]), version: "v2" }); await session.presented(["changed"])
+    // The material changed after the read: the new version covers the unit again
+    // and the earlier version's receipts must never drag coverage back down.
+    await session.receipt(receipt("changed", [1, 6], true, "log-v2")); await session.presented(["changed"])
     await session.commit({ version: 1, baseRevision: 4, units: [{ ...textUnit, receipts: ["changed"] }] })
-    expect(await session.assessment()).toMatchObject({ status: "partial" })
+    expect(await session.assessment()).toMatchObject({ status: "coverage-complete", coveredUnits: 1, processedUnits: 1 })
+  })
+
+  it("never stitches ranges across versions and restores coverage by re-reading one version", async () => {
+    const { session } = await setup()
+    const textUnit = { ...unit, kind: "text", path: "/originals/paged.txt" }
+    await session.commit({ version: 1, baseRevision: 0, units: [textUnit], seal: true })
+    const receipt = (id: string, range: [number, number], version: string): WorkReceipt =>
+      ({ ...image(id, textUnit.path), kind: "text", range, totalLines: 6, complete: true, version })
+    await session.receipt(receipt("old-head", [1, 3], "paged-v1"))
+    await session.receipt(receipt("new-tail", [4, 6], "paged-v2"))
+    await session.presented(["old-head", "new-tail"])
+    await session.commit({ version: 1, baseRevision: 1, units: [{ ...textUnit, receipts: ["old-head", "new-tail"], processed: true }] })
+    expect(await session.assessment()).toMatchObject({ status: "partial", coveredUnits: 0 })
+    await session.receipt(receipt("new-head", [1, 3], "paged-v2")); await session.presented(["new-head"])
+    await session.commit({ version: 1, baseRevision: 2, units: [{ ...textUnit, receipts: ["new-head"] }] })
+    expect(await session.assessment()).toMatchObject({ status: "coverage-complete", coveredUnits: 1, processedUnits: 1 })
+  })
+
+  it("keys completion retries to unit outcomes instead of acquired receipts", async () => {
+    const { session } = await setup()
+    const textUnit = { ...unit, kind: "text", path: "/originals/fingerprint.txt" }
+    await session.commit({ version: 1, baseRevision: 0, units: [textUnit], seal: true })
+    const receipt = (id: string, range: [number, number]): WorkReceipt =>
+      ({ ...image(id, textUnit.path), kind: "text", range, totalLines: 4, complete: true, version: "fingerprint-v1" })
+    const declared = await session.completionMarker()
+    // Acquiring and presenting evidence never moves the fingerprint on its own.
+    await session.receipt(receipt("chunk", [1, 2]))
+    expect(await session.completionMarker()).toBe(declared)
+    await session.presented(["chunk"])
+    expect(await session.completionMarker()).toBe(declared)
+    await session.commit({ version: 1, baseRevision: 1, units: [{ ...textUnit, receipts: ["chunk"], processed: true }] })
+    const processed = await session.completionMarker()
+    expect(processed).not.toBe(declared)
+    // Another partial read that changes no outcome keeps the fingerprint stable.
+    await session.receipt(receipt("repeat", [1, 2])); await session.presented(["repeat"])
+    await session.commit({ version: 1, baseRevision: 2, units: [{ ...textUnit, receipts: ["repeat"] }] })
+    expect(await session.completionMarker()).toBe(processed)
+    await session.receipt(receipt("rest", [3, 4])); await session.presented(["rest"])
+    await session.commit({ version: 1, baseRevision: 3, units: [{ ...textUnit, receipts: ["rest"] }] })
+    const covered = await session.completionMarker()
+    expect(covered).not.toBe(processed)
+    // Re-reading an already covered material never re-arms a correction.
+    await session.receipt(receipt("again", [1, 4])); await session.presented(["again"])
+    await session.commit({ version: 1, baseRevision: 4, units: [{ ...textUnit, receipts: ["again"] }] })
+    expect(await session.completionMarker()).toBe(covered)
   })
 
   it("requires processing a delivered original before reading another declared original, without blocking its evidence or repair", async () => {

@@ -170,6 +170,8 @@ export interface ClaudeSDKSessionOptions {
   readonly abortSignal?: AbortSignal
   readonly additionalDirectories?: readonly string[]
   readonly readOnlyAdditionalDirectories?: readonly string[]
+  /** Evidence roots whose content is durable by construction; re-reads must not be persisted again. */
+  readonly durableEvidenceRoots?: readonly string[]
   readonly persistToolOutputText?: (input: {
     readonly projectId: string
     readonly conversationId: string
@@ -307,6 +309,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly contextUsageTracker: AgentContextUsageTracker
   private readonly maxRequestBodyBytes: number | undefined
   private readonly readOnlyAdditionalDirectories: readonly string[]
+  private readonly durableEvidenceRoots: readonly string[]
   private readonly persistToolOutputText: ClaudeSDKSessionOptions["persistToolOutputText"]
   private readonly contextBudget: AgentContextBudget
   private readonly fileCheckpointTracker: AgentFileCheckpointTracker
@@ -371,6 +374,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     })
     this.maxRequestBodyBytes = options.maxRequestBodyBytes
     this.readOnlyAdditionalDirectories = mergeAdditionalDirectories(options.readOnlyAdditionalDirectories ?? [])
+    this.durableEvidenceRoots = mergeAdditionalDirectories(options.durableEvidenceRoots ?? [])
     this.taskProgress = options.taskProgress
     this.taskProgressToolsAvailable = ["TaskCreate", "TaskUpdate"].every((name) =>
       (options.tools === undefined || !Array.isArray(options.tools) || options.tools.includes(name))
@@ -929,7 +933,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
       const gaps = await this.taskProgress?.evidenceGaps(typeof input.last_assistant_message === "string" ? input.last_assistant_message : undefined)
       const hasEvidenceGaps = Boolean(gaps && (gaps.missingEvidence.length > 0 || gaps.overclaim.length > 0))
       if (!hasEvidenceGaps && assessment.conflictingFindings === 0) return {}
-      const marker = `evidence:${await this.taskProgress?.progressMarker()}:${assessment.conflictingFindings}:${hasEvidenceGaps ? "gap" : "conflict"}`
+      // Retries are keyed to unit outcomes: acquiring or presenting more evidence
+      // without changing a unit must not re-arm another correction.
+      const marker = `evidence:${await this.taskProgress?.completionMarker()}:${assessment.conflictingFindings}:${hasEvidenceGaps ? "gap" : "conflict"}`
       if (this.completionRetryMarker === marker) return {}
       this.completionRetryMarker = marker
       const detail = hasEvidenceGaps
@@ -1089,6 +1095,22 @@ export class ClaudeSDKSession implements AgentLiveSession {
     return this.presentationAcknowledgement
   }
 
+  /** Durable evidence roots own their content; a bounded re-read must not be stored twice. */
+  private async durableEvidenceReadPath(record: Record<string, unknown>): Promise<string | undefined> {
+    if (record.tool_name !== "Read" || this.durableEvidenceRoots.length === 0) return undefined
+    const requested = asRecord(record.tool_input)?.file_path
+    if (typeof requested !== "string" || requested.length === 0) return undefined
+    const absolutePath = path.resolve(this.cwd, requested)
+    const roots = await resolveExistingRoots(this.durableEvidenceRoots)
+    if (roots.length === 0) return undefined
+    try {
+      const target = await realpath(absolutePath)
+      return roots.some((root) => isPathInside(root, target)) ? absolutePath : undefined
+    } catch {
+      return undefined // An unresolvable path cannot claim durable evidence.
+    }
+  }
+
   private async limitToolOutput(input: HookInput): Promise<HookJSONOutput> {
     this.governedToolOutputPath = undefined
     this.governedReadDelivery = undefined
@@ -1156,8 +1178,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
     )
     const needsRewrite = measurement.bytes > availableBytes
       || measurement.lines > 2_000
+    // Re-reading durable evidence Synapse already stored must never mint another
+    // copy: the complete content already lives at the path being read.
+    const existingOutputPath = needsRewrite ? await this.durableEvidenceReadPath(record) : undefined
     let persisted: PersistedToolOutputText | undefined
-    if (needsRewrite && this.persistToolOutputText && this.activeTurnId) {
+    if (needsRewrite && !existingOutputPath && this.persistToolOutputText && this.activeTurnId) {
       try {
         persisted = await this.persistToolOutputText({
           projectId: this.projectId,
@@ -1179,7 +1204,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       }
     }
     if (this.closed || this.abortRequested || this.abortController?.signal.aborted) return { continue: false }
-    if (needsRewrite && (!persisted || persisted.contentTruncated)) {
+    if (needsRewrite && !existingOutputPath && (!persisted || persisted.contentTruncated)) {
       return this.stopForOutputIntegrity("工具结果未能完整保存，已停止执行。该操作可能已生效，请核实已有结果后继续。")
     }
     this.governedToolOutputPath = persisted?.storagePath
@@ -1187,7 +1212,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       toolName: record.tool_name,
       toolResponse: record.tool_response,
       maxBytes: availableBytes,
-      ...(persisted ? { persistedOutputPath: persisted.storagePath } : {}),
+      ...(persisted ? { persistedOutputPath: persisted.storagePath } : existingOutputPath ? { existingOutputPath } : {}),
     })
     let updatedToolOutput = governed
       ? replaceToolOutput(record.tool_name, record.tool_response, governed.updatedToolOutput)
@@ -1211,7 +1236,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
       if (excess <= 0) break
       previewBytes = Math.max(0, previewBytes - excess)
       governed = governToolOutput({ toolName: record.tool_name, toolResponse: record.tool_response,
-        maxBytes: previewBytes, persistedOutputPath: persisted?.storagePath })
+        maxBytes: previewBytes,
+        ...(persisted ? { persistedOutputPath: persisted.storagePath } : existingOutputPath ? { existingOutputPath } : {}) })
       updatedToolOutput = governed ? replaceToolOutput(record.tool_name, record.tool_response, governed.updatedToolOutput) : record.tool_response
     }
     if (governed && governed.deliveredContentLines > 0 && record.tool_name === "Read") {
@@ -1243,6 +1269,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       deliveredLines: governed.deliveredLines,
       kept: governed.kept,
       persisted: Boolean(persisted),
+      existingOutput: existingOutputPath !== undefined,
       persistedBytes: persisted?.storedByteSize,
       persistedTruncated: persisted?.contentTruncated,
       batchToolOutputBytes: budget.batchToolOutputBytes,

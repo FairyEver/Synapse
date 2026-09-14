@@ -62,6 +62,8 @@ export function governToolOutput(input: {
   readonly maxBytes?: number
   readonly maxLines?: number
   readonly persistedOutputPath?: string
+  /** Set when the bounded result is already durable at this path and must not be copied again. */
+  readonly existingOutputPath?: string
 }): ToolOutputGovernorResult | undefined {
   const measurement = measureToolOutput(input.toolName, input.toolResponse)
   if (!measurement) return undefined
@@ -79,6 +81,7 @@ export function governToolOutput(input: {
     originalLines,
     kept,
     persistedOutputPath: input.persistedOutputPath,
+    existingOutputPath: input.existingOutputPath,
   })
   const boundedMarker = limitUtf8(marker, maxBytes, "head")
   const markerBytes = Buffer.byteLength(boundedMarker, "utf8")
@@ -195,6 +198,7 @@ function truncationMarker(input: {
   readonly originalLines: number
   readonly kept: "head" | "tail"
   readonly persistedOutputPath?: string
+  readonly existingOutputPath?: string
 }): string {
   const position = input.kept === "tail" ? "last" : "first"
   const continuation = input.toolName === "Read"
@@ -204,7 +208,9 @@ function truncationMarker(input: {
       : "Use a narrower read, search, filter, or pagination request for omitted content."
   const persisted = input.persistedOutputPath
     ? ` Output saved at ${input.persistedOutputPath}. Read that file in bounded ranges; do not rerun the original tool only to recover omitted output.`
-    : ""
+    : input.existingOutputPath
+      ? ` No new copy was saved: the complete content already lives at ${input.existingOutputPath}. Read that same file in smaller ranges; do not rerun or re-save the original tool only to recover omitted output.`
+      : ""
   const marker = `${TRUNCATION_MARKER_PREFIX} Original ${input.toolName} result: ${input.originalBytes} bytes, ${input.originalLines} lines. Keeping the ${position} bounded portion.${persisted} ${continuation}`
   return input.kept === "tail" ? `${marker}\n` : `\n${marker}`
 }

@@ -89,6 +89,39 @@ it("gives false completion one correction, then reports an advisory evidence gap
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
 
+it("stops correcting once a compliance attempt changes no unit outcome", async () => {
+  let stage = 0, revision = 0, attempt = 0
+  const unit = () => ({ id: "page", path: path.join(fixture.root, "large.html"), kind: "text", receipts: [] as string[], processed: false })
+  const fixture = await createNativeSdkFixture(() => {
+    const step = stage++
+    if (step === 0) return [{ name: "TaskCreate", id: "scope", input: { subject: "Verify the page", description: "Large page",
+      metadata: { synapseProgress: { version: 1, baseRevision: revision++, seal: true, units: [unit()] } } } }]
+    if (step === 1) return "第 1 步完成，页面已核对。"
+    const phase = (step - 2) % 3
+    if (phase === 0) {
+      attempt += 1
+      return [{ name: "Read", id: `head-${attempt}`, input: { file_path: unit().path, limit: 5 } }]
+    }
+    if (phase === 1) return [{ name: "TaskUpdate", id: `commit-${attempt}`, input: { taskId: "1", metadata: {
+      synapseProgress: { version: 1, baseRevision: revision++, units: [{ ...unit(), receipts: [`head-${attempt}`] }] } } } }]
+    return "第 1 步完成，页面已核对。"
+  })
+  await writeFile(unit().path, `<!doctype html>\n<div>EDIT-MARKER</div>\n${"filler line\n".repeat(4_000)}`)
+  const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
+  try {
+    const result = await harness.router.send(harness.message("核对这个页面并说明结果。"))
+    expect(result.error).toBeUndefined()
+    // One correction, then an unchanged outcome ends the turn instead of re-reading forever.
+    expect(fixture.requests).toHaveLength(5)
+    const saved = await harness.conversations.get(result.conversationId)
+    const state = await harness.repository.taskProgress!.state(result.conversationId, saved!.taskProgressScope!.turnId)
+    expect([...state.units.values()][0]?.receipts).toEqual(["head-1"])
+    const notice = (await harness.agentEvents.list({ conversationId: result.conversationId }))
+      .findLast((entry) => entry.eventType === "error")
+    expect(notice?.payload).toMatchObject({ errorKind: "task_evidence_incomplete", recoverable: true })
+  } finally { await harness.close(); await fixture.close() }
+}, 30_000)
+
 it("presents a large pending batch in bounded clean groups before unrelated operations", async () => {
   let stage = 0, revision = 0, completed = 0, forbiddenAttempted = false
   const completedFiles = new Set<string>()
@@ -219,6 +252,37 @@ it("continues an unpresented saved text result after its reference cannot fit, w
     expect(await harness.repository.taskProgress!.assessment(result.conversationId, saved!.taskProgressScope!.turnId)).toMatchObject({ status: "coverage-complete", processedUnits: 1 })
     expect(await readFile(path.join(fixture.root, "counter.txt"), "utf8")).toBe("once\n")
     expect(fixture.requestBytes.every((bytes) => bytes < 6 * 1024 * 1024)).toBe(true)
+  } finally { await harness.close(); await fixture.close() }
+}, 30_000)
+
+it("replays a durable saved result in place without minting another artifact", async () => {
+  let stage = 0, savedPath = ""
+  const fixture = await createNativeSdkFixture((request) => {
+    switch (stage++) {
+      case 0: return [{ name: "Read", id: "acquired", input: { file_path: path.join(fixture.root, "records.txt") } }]
+      case 1: {
+        const artifacts = JSON.parse(readFileSync(path.join(fixture.root, "agent.artifacts.json"), "utf8")) as {
+          items: Record<string, { toolUseId?: string; storagePath: string }> }
+        savedPath = Object.values(artifacts.items).find((row) => row.toolUseId === "acquired")!.storagePath
+        return [{ name: "Read", id: "replayed", input: { file_path: savedPath } }]
+      }
+      default: return "已读取保存的结果。"
+    }
+  })
+  await writeFile(path.join(fixture.root, "records.txt"), "alpha beta gamma delta\n".repeat(8_000))
+  const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model", firstTextPressure: true })
+  try {
+    const result = await harness.router.send(harness.message("Read all records."))
+    expect(result.error).toBeUndefined()
+    expect(savedPath).not.toBe("")
+    const artifacts = JSON.parse(readFileSync(path.join(fixture.root, "agent.artifacts.json"), "utf8")) as {
+      items: Record<string, { toolUseId?: string }> }
+    // The bounded re-read must reuse the stored result instead of storing a copy of it.
+    expect(Object.values(artifacts.items).filter((row) => row.toolUseId)).toHaveLength(1)
+    expect(fixture.requests.some((request) => JSON.stringify(request).includes("No new copy was saved"))).toBe(true)
+    const saved = await harness.conversations.get(result.conversationId)
+    const state = await harness.repository.taskProgress!.state(result.conversationId, saved!.taskProgressScope!.turnId)
+    expect(state.receipts.get("replayed")).toMatchObject({ sourceReceiptId: "acquired", bounded: true })
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
 

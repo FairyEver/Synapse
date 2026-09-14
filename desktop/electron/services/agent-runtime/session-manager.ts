@@ -70,6 +70,7 @@ export interface CreateAgentLiveSessionInput {
   readonly maxToolOutputBytes?: number
   readonly maxToolBatchOutputBytes?: number
   readonly readOnlyAdditionalDirectories?: readonly string[]
+  readonly durableEvidenceRoots?: readonly string[]
   readonly persistToolOutputText?: ClaudeSDKSessionOptions["persistToolOutputText"]
   readonly mode?: string
   readonly maxTurns?: number
@@ -223,6 +224,7 @@ export class SessionManager {
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
         readOnlyAdditionalDirectories: input.readOnlyAdditionalDirectories,
+        durableEvidenceRoots: input.durableEvidenceRoots,
         persistToolOutputText: input.persistToolOutputText,
         taskProgress: input.taskProgress,
         sdkSettings: input.sdkSettings,
@@ -501,6 +503,9 @@ export class SessionManager {
     })
 
     const agentArtifactStore = this.deps.agentArtifactStore
+    const agentToolOutputDirectory = agentArtifactStore
+      ? await agentArtifactStore.prepareToolOutputDirectory(this.deps.projectId, input.conversation.id)
+      : undefined
     const taskListId = await this.deps.repository.ensureTaskListId(input.conversation.id)
     const creationInput: CreateAgentLiveSessionInput = {
       projectId: this.deps.projectId,
@@ -534,14 +539,10 @@ export class SessionManager {
         this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},
       ),
       additionalDirectories,
-      ...(agentArtifactStore
+      ...(agentArtifactStore && agentToolOutputDirectory
         ? {
-            readOnlyAdditionalDirectories: [
-              await agentArtifactStore.prepareToolOutputDirectory(
-                this.deps.projectId,
-                input.conversation.id,
-              ),
-            ],
+            readOnlyAdditionalDirectories: [agentToolOutputDirectory],
+            durableEvidenceRoots: [agentToolOutputDirectory],
             persistToolOutputText: (artifactInput: Parameters<AgentArtifactStore["persistToolOutputText"]>[0]) =>
               agentArtifactStore.persistToolOutputText(artifactInput),
           }
