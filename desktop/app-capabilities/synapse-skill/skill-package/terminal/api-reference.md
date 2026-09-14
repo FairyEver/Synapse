@@ -61,6 +61,12 @@ Input and resize require caller-scoped idempotency keys. A fresh descriptive lit
 
 An accepted input result proves only that Synapse delivered bytes to the PTY. Before reporting that an interactive foreground program submitted the instruction or started work, observe fresh output or a rendered view. If the complete instruction remains in the input area, send one Enter key and observe again without resending the text.
 
+## Session navigation
+
+- `app_terminal_session_open`: open or focus one existing local session in the Synapse Terminal window. Pass the complete `synapse://terminals/<payload>.<checksum>` link unchanged when the user supplies one, or an immutable `sessionId` already returned by another Terminal tool. Exactly one of the two is required.
+
+A session deep link carries only a short checksummed reference derived from the session id; Synapse resolves it in the main process against the sessions that currently exist and then reuses the ordinary System App open request. The result contains the resolved `sessionId` and nothing else: no output, no screen content, and no metadata. Sessions live only for the current Synapse run, so a link stops resolving after its session ends or Synapse restarts; opening a stale link fails without creating or restarting a session. Do not fetch, browse, rewrite, or rebuild the link, and never substitute a create call for a link that no longer resolves.
+
 ## Lifecycle and deletion
 
 - `app_terminal_session_stop`: normal termination, running only.

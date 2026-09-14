@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, CircleDot, Code2, Copy, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
@@ -88,6 +88,7 @@ import type {
   SynapseTerminalWorkspace,
 } from "../../../src/types/terminal"
 import { collectTerminalPaneLeaves } from "../shared/schema"
+import { buildTerminalSessionDeepLink } from "../shared/deep-link"
 import {
   buildTerminalCommandWrites,
   TERMINAL_COMMAND_ENTER_DELAY_MS,
@@ -1172,6 +1173,21 @@ export function TerminalModule({
     )))
   }, [])
 
+  const copySessionDeepLink = useCallback(async (session: SynapseTerminalSession | null) => {
+    try {
+      if (!session?.sessionRef) throw new Error("Terminal session reference is unavailable")
+      await navigator.clipboard.writeText(buildTerminalSessionDeepLink({ sessionRef: session.sessionRef }))
+      toast("深度链接已复制")
+    } catch (rawError) {
+      logger.warn("Terminal session deep link copy failed.", {
+        boundary: "renderer.terminal.copy-deep-link",
+        sessionId: session?.id ?? null,
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+      })
+      toast.error("复制失败")
+    }
+  }, [])
+
   const selectWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId)
   }, [])
@@ -1269,26 +1285,21 @@ export function TerminalModule({
 
   const renderGroupWorkspaces = (group: SynapseTerminalGroupSummary & { workspaces: SynapseTerminalWorkspace[] }) => (
     group.workspaces.map((workspace) => (
-      <ModuleSidebarRow
+      <TerminalSidebarWorkspaceRow
         key={workspace.id}
         active={workspace.id === activeWorkspace?.id}
-        data-track="terminal-session-select"
-        icon={<TerminalSessionStatusIcon status={workspaceStatus(workspace, sessions)} />}
-        trailing={
-          <TerminalWorkspaceLifecycleButton
-            canForce={rendererPlatform === "darwin"}
-            closing={workspace.closing}
-            disabled={closingWorkspaceId === workspace.id}
-            title={workspace.title}
-            onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
-          />
-        }
-        trackValue={workspace.id}
+        canForce={rendererPlatform === "darwin"}
+        closeDisabled={Boolean(workspace.closing) || closingWorkspaceId === workspace.id}
+        closing={Boolean(workspace.closing)}
+        lifecycleDisabled={closingWorkspaceId === workspace.id}
+        status={workspaceStatus(workspace, sessions)}
+        title={workspace.title}
+        workspaceId={workspace.id}
+        onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
+        onCopyDeepLink={() => { void copySessionDeepLink(workspaceActiveSession(workspace, activePaneIds, sessions)) }}
+        onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
         onSelect={() => selectWorkspace(workspace.id)}
-        onDoubleClick={(event) => openRenameDialog(workspace, event.currentTarget)}
-      >
-        {workspace.title}
-      </ModuleSidebarRow>
+      />
     ))
   )
 
@@ -1379,17 +1390,21 @@ export function TerminalModule({
       {sidebarToggle}
       {activeHeaderWorkspaces.length > 0 ? (
         <nav aria-label="活动终端会话" className="no-scrollbar flex h-10 min-w-0 items-center gap-0 overflow-x-auto whitespace-nowrap">
-          {activeHeaderWorkspaces.map((workspace) => (
-            <TerminalHeaderSessionTab
-              key={workspace.id}
-              active={workspace.id === activeWorkspace?.id}
-              closeDisabled={workspace.closing || closingWorkspaceId === workspace.id}
-              title={workspace.title}
-              onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
-              onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
-              onSelect={() => selectWorkspace(workspace.id)}
-            />
-          ))}
+          {activeHeaderWorkspaces.map((workspace) => {
+            const session = workspaceActiveSession(workspace, activePaneIds, sessions)
+            return (
+              <TerminalHeaderSessionTab
+                key={workspace.id}
+                active={workspace.id === activeWorkspace?.id}
+                closeDisabled={workspace.closing || closingWorkspaceId === workspace.id}
+                title={workspace.title}
+                onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
+                onCopyDeepLink={() => { void copySessionDeepLink(session) }}
+                onRename={(returnFocus) => openRenameDialog(workspace, returnFocus)}
+                onSelect={() => selectWorkspace(workspace.id)}
+              />
+            )
+          })}
         </nav>
       ) : null}
     </>
@@ -1929,6 +1944,7 @@ function TerminalHeaderSessionTab({
   active,
   closeDisabled,
   onClose,
+  onCopyDeepLink,
   onRename,
   onSelect,
   title,
@@ -1936,6 +1952,7 @@ function TerminalHeaderSessionTab({
   readonly active: boolean
   readonly closeDisabled: boolean
   readonly onClose: () => void
+  readonly onCopyDeepLink: () => void
   readonly onRename: (returnFocus: HTMLElement) => void
   readonly onSelect: () => void
   readonly title: string
@@ -1962,6 +1979,85 @@ function TerminalHeaderSessionTab({
         }}>
           <Pencil />
           重命名
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onCopyDeepLink}>
+          <Copy />
+          复制深度链接
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" disabled={closeDisabled} onSelect={onClose}>
+          <X />
+          关闭
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+function TerminalSidebarWorkspaceRow({
+  active,
+  canForce,
+  closeDisabled,
+  closing,
+  lifecycleDisabled,
+  onClose,
+  onCopyDeepLink,
+  onRename,
+  onSelect,
+  status,
+  title,
+  workspaceId,
+}: {
+  readonly active: boolean
+  readonly canForce: boolean
+  readonly closeDisabled: boolean
+  readonly closing: boolean
+  readonly lifecycleDisabled: boolean
+  readonly onClose: () => void
+  readonly onCopyDeepLink: () => void
+  readonly onRename: (returnFocus: HTMLElement) => void
+  readonly onSelect: () => void
+  readonly status: SynapseTerminalSession["status"]
+  readonly title: string
+  readonly workspaceId: string
+}) {
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className="w-full min-w-0">
+          <ModuleSidebarRow
+            active={active}
+            data-track="terminal-session-select"
+            icon={<TerminalSessionStatusIcon status={status} />}
+            rowRef={rowRef}
+            trailing={
+              <TerminalWorkspaceLifecycleButton
+                canForce={canForce}
+                closing={closing}
+                disabled={lifecycleDisabled}
+                title={title}
+                onClose={onClose}
+              />
+            }
+            trackValue={workspaceId}
+            onSelect={onSelect}
+            onDoubleClick={(event) => onRename(event.currentTarget)}
+          >
+            {title}
+          </ModuleSidebarRow>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => {
+          const row = rowRef.current
+          if (row) onRename(row)
+        }}>
+          <Pencil />
+          重命名
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={onCopyDeepLink}>
+          <Copy />
+          复制深度链接
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" disabled={closeDisabled} onSelect={onClose}>
           <X />
@@ -2051,7 +2147,7 @@ function groupWorkspaces(
   return [
     ...grouped,
     {
-      id: "ungrouped",
+      id: UNGROUPED_TERMINAL_GROUP_ID,
       name: "会话",
       createdAt: "",
       updatedAt: "",
@@ -2078,6 +2174,18 @@ function workspaceStatus(
   if (statuses.includes("failed")) return "failed"
   if (statuses.includes("lost")) return "lost"
   return "ended"
+}
+
+function workspaceActiveSession(
+  workspace: SynapseTerminalWorkspace,
+  activePaneIds: Readonly<Record<string, string>>,
+  sessions: readonly SynapseTerminalSession[],
+): SynapseTerminalSession | null {
+  const leaves = collectTerminalPaneLeaves(workspace.layout)
+  const activePaneId = activePaneIds[workspace.id]
+  const pane = (activePaneId ? leaves.find((leaf) => leaf.paneId === activePaneId) : undefined) ?? leaves[0]
+  if (!pane) return null
+  return sessions.find((session) => session.id === pane.sessionId) ?? null
 }
 
 function mergeSession(

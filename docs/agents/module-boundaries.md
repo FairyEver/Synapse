@@ -60,6 +60,7 @@
 - 可点击 Agent 通知由 Terminal 业务模块拥有，不得改造成 System Notifier 回调或统一通知中心。除精确 session 位于当前焦点时抑制外，统一使用系统原生通知，不得改用 renderer 应用内通知。点击必须复用不可变 `sessionId` 的 System App 打开请求定位具体 workspace/pane；Codex Hook 信任必须由用户确认，不得绕过。
 - 终端字符宽度表以 Claude Code 的宽度库口径（`Bun.stringWidth`，等同 `string-width` / `emoji-regex`：`Emoji` 属性码点算 2 格）为准，渲染端与主进程 headless 仿真器必须共用同一张表；改装宽度表必须同时保证 MCP 读屏与序列化恢复的换行与渲染端一致。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
+- 终端会话深度链接是会话级纯导航：唯一格式为 `synapse://terminals/<payload>.<checksum>`，只携带由 `sessionId` 派生的本机短校验引用，由主进程按当前 session 列表反查唯一目标并复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane。链接只在本机当前运行期间有效，失效时不得新建会话、不得聚焦主窗口，也不得扩展为命令执行、输出读取或 workspace/pane 链接；复制入口只出现在既有 Terminal UI 的会话列表与会话标签菜单。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
 - 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
 - 结构元数据使用已注册 `app.terminal.*` DataRepository；原始输出/检查点只进入专属有界加密块存储，安全存储不可用时不得回退明文。

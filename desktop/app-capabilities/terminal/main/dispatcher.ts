@@ -15,9 +15,11 @@ import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from
 import {
   TERMINAL_CAPABILITY_BY_ID,
   TERMINAL_CAPABILITY_CATALOG,
+  TERMINAL_SESSION_OPEN_CAPABILITY_ID,
   type TerminalCapabilityMetadata,
   type TerminalPermissionFamily,
 } from "../shared/capability"
+import { parseTerminalSessionDeepLink } from "../shared/deep-link"
 import {
   terminalAcquireControlInputSchema,
   terminalCommandInputSchema,
@@ -52,11 +54,13 @@ import {
   terminalResizeInputSchema,
   terminalSemanticInputSchema,
   terminalSessionListInputSchema,
+  terminalSessionOpenInputSchema,
   terminalSessionRenameInputSchema,
   terminalSessionStateListInputSchema,
   terminalSessionTargetSchema,
   terminalStopInputSchema,
   terminalViewInputSchema,
+  type TerminalSessionOpenInput,
 } from "../shared/contract-schema"
 import {
   TerminalContractError,
@@ -67,6 +71,7 @@ import {
 import { terminalInputSchemaForCapability } from "../shared/mcp-tools"
 import type { TerminalLaunchLayer } from "../shared/schema"
 import { TerminalLaunchValidationError } from "./environment"
+import { resolveTerminalSessionReference } from "./session-reference"
 import type { TerminalControllerContext, TerminalService } from "./service"
 
 const TERMINAL_PERMISSION_ACTIONS: Readonly<Record<TerminalPermissionFamily, PermissionAction>> = {
@@ -102,13 +107,18 @@ export type TerminalCapabilityDispatcher = {
   dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult>
 }
 
-export function createTerminalCapabilityDispatcher(deps: {
+export type TerminalCapabilityDispatcherDeps = {
   readonly service: TerminalService
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly actor?: ActorIdentity
   readonly platform?: NodeJS.Platform
-}): TerminalCapabilityDispatcher {
+  readonly openSession?: (sessionId: string) => Promise<void> | void
+}
+
+export function createTerminalCapabilityDispatcher(
+  deps: TerminalCapabilityDispatcherDeps,
+): TerminalCapabilityDispatcher {
   const rateWindows = new Map<string, number[]>()
   const clientsByActor = new Map<string, Set<string>>()
   deps.permissionGuard?.onRevoked?.((event) => {
@@ -127,6 +137,9 @@ export function createTerminalCapabilityDispatcher(deps: {
       try {
         const metadata = TERMINAL_CAPABILITY_BY_ID.get(action as never)
         if (!metadata) throw terminalContractError("unsupported", "capability")
+        if (action === TERMINAL_SESSION_OPEN_CAPABILITY_ID) {
+          return await dispatchSessionOpen(deps, params)
+        }
         requireStableCaller(context)
         const actorClients = clientsByActor.get(context.actor!.id ?? context.clientId!) ?? new Set<string>()
         actorClients.add(context.clientId!)
@@ -157,6 +170,49 @@ export function createTerminalCapabilityDispatcher(deps: {
       }
     },
   }
+}
+
+/**
+ * Terminal 会话深链/打开是纯导航：不要求 clientId、不进限流、不写审计，失败时返回字符串型 DispatchResult，
+ * 这样协议路由的 `dialog.showErrorBox` 能显示可读原因（终端通用错误信封的 error 是对象）。
+ */
+async function dispatchSessionOpen(
+  deps: TerminalCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+): Promise<DispatchResult> {
+  let request: TerminalSessionOpenInput
+  try {
+    request = terminalSessionOpenInputSchema.parse(params)
+  } catch {
+    return { ok: false, code: "validation_error", error: "终端会话链接无效" }
+  }
+  if (!deps.openSession) {
+    return { ok: false, code: "operation_failed", error: "无法打开终端会话" }
+  }
+  const sessions = deps.service.listSessions()
+  let sessionId: string | null = null
+  if (request.deepLink !== undefined) {
+    try {
+      const target = resolveTerminalSessionReference(
+        sessions,
+        parseTerminalSessionDeepLink(request.deepLink).sessionRef,
+      )
+      sessionId = target?.id ?? null
+    } catch {
+      return { ok: false, code: "validation_error", error: "终端会话链接无效" }
+    }
+  } else if (request.sessionId !== undefined) {
+    sessionId = sessions.find((session) => session.id === request.sessionId)?.id ?? null
+  }
+  if (sessionId === null) {
+    return { ok: false, code: "not_found", error: "终端会话不存在" }
+  }
+  try {
+    await deps.openSession(sessionId)
+  } catch {
+    return { ok: false, code: "operation_failed", error: "无法打开终端会话" }
+  }
+  return { ok: true, data: { sessionId }, affected: 1 }
 }
 
 function outcomeFor(result: unknown): "accepted" | "partial" | "delivery_uncertain" | "no_op" | "failed_after_identity_created" {

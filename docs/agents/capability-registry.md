@@ -38,7 +38,7 @@
 | Sound Notifier | 否 | 否 | — | — | 1 | — |
 | Synapse Skill | 是 | 否 | — | — | — | — |
 | System Notifier | 否 | 否 | 1 | — | 1 | — |
-| Terminal | 是 | 是 | — | — | 43 | — |
+| Terminal | 是 | 是 | — | — | 44 | `open` |
 | Text Extractor | 否 | 否 | 1 | — | 2 | — |
 | Text File Writer | 否 | 否 | 1 | — | 1 | — |
 | Script Runtime | 否 | 否 | — | — | — | — |
@@ -56,14 +56,15 @@
 - `figma-skill` 是随桌面端打包的 Agent SDK Skill 插件，不注册独立 System App、MCP domain 或 MCP tool；由 Figma 内置连接器定义声明，并仅在该连接器启用后创建的新对话中按会话快照加载。
 - Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
-- Terminal 的 43 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
-- Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 43。
+- Terminal 的 44 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
+- Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 44。
+- Terminal 会话深度链接是既有 System App 的纯导航入口：唯一 Deep Link action `open` 只注册 `synapse://terminals/<payload>.<checksum>` 短路由与 `app.terminal.session.open` 能力，链接只携带由 `sessionId` 派生的本机短校验引用，由主进程按当前 session 列表反查唯一目标，再复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane。链接仅在本机当前运行期间有效，失效时只报告会话不存在；不注册 workspace/pane 或命令入口，不读取输出，也不新增应用页、Dock、Workflow 或 Automation 表面。
 - Agent 已配置项目可通过现有 Terminal UI IPC 在项目目录新建会话，并以仅含 `sessionId` 的 System App 请求打开或聚焦 Terminal；该入口不新增 MCP capability、tool 或 Deep Link。
-- Terminal 分屏 workspace/pane 仅属于现有 System App 的 UI IPC：创建、调整、平分与拖拽重排 pane 时，每个 pane 仍由一个既有 session 承载，因此 MCP 工具数量保持 43，不注册 workspace/pane MCP capability、tool 或 Deep Link。
-- Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取、监听并解析拖拽选中项；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。文件树路径拖拽只写入 Agent 草稿或当前 Terminal session，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
-- Terminal 图片剪贴板落盘仅属于现有 System App 的 UI 私有 IPC，用于把临时 PNG 路径交给当前 PTY；不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
-- Terminal 用户快捷输入的增删改查仅属于现有 System App 的 UI 私有 IPC；执行仍复用当前 session 输入，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 43。
-- Terminal Agent 原生通知的设置、活动 session 上报与点击后的精确会话定位仅属于现有 System App 的 UI 私有 IPC；通知 Hook 入口是会话级 loopback 内部端口，不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 43。
+- Terminal 分屏 workspace/pane 仅属于现有 System App 的 UI IPC：创建、调整、平分与拖拽重排 pane 时，每个 pane 仍由一个既有 session 承载，因此不新增 MCP 工具，也不注册 workspace/pane MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取、监听并解析拖拽选中项；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。文件树路径拖拽只写入 Agent 草稿或当前 Terminal session，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Terminal 图片剪贴板落盘仅属于现有 System App 的 UI 私有 IPC，用于把临时 PNG 路径交给当前 PTY；不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Terminal 用户快捷输入的增删改查仅属于现有 System App 的 UI 私有 IPC；执行仍复用当前 session 输入，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Terminal Agent 原生通知的设置、活动 session 上报与点击后的精确会话定位仅属于现有 System App 的 UI 私有 IPC；通知 Hook 入口是会话级 loopback 内部端口，不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。
 - Terminal 分组拖拽排序仅属于现有 System App 的 UI 私有 IPC：顺序写入分组既有 `sortOrder` 字段，不注册 MCP capability、tool、Workflow Node 或 Deep Link，不新增 Terminal MCP 工具。
 - Agent 侧栏项目分组顺序存放在全局配置 `global.agentProjectOrder`，只影响侧栏展示顺序，不重排 `config.global.projects`，不注册 MCP capability、tool 或 Deep Link，Agent Conversation 工具数量不变。
 

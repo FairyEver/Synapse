@@ -220,6 +220,10 @@ export const terminalSessionSchema = z.object({
   launchFacts: terminalLaunchFactsSchema.optional(),
 })
 
+export const terminalRendererSessionSchema = terminalSessionSchema.extend({
+  sessionRef: z.string().min(1),
+})
+
 export const terminalOutputChunkSchema = z.object({
   sessionId: z.string().min(1),
   seq: z.number().int().positive(),
@@ -359,30 +363,41 @@ export const terminalReadSessionResultSchema = z.object({
   discardedChunks: z.number().int().nonnegative().default(0),
 })
 
-const terminalRendererSnapshotBaseSchema = z.object({
-  session: terminalSessionSchema,
-  cols: z.number().int().positive(),
-  rows: z.number().int().positive(),
-  throughOutputSeq: z.number().int().nonnegative(),
-  sizeRevision: z.number().int().positive(),
-  emulatorId: z.literal("xterm-headless"),
-  emulatorVersion: z.literal("6.0.0"),
+export const terminalRendererReadSessionResultSchema = terminalReadSessionResultSchema.extend({
+  session: terminalRendererSessionSchema,
 })
 
-export const terminalAttachSessionResultSchema = z.discriminatedUnion("degraded", [
-  terminalRendererSnapshotBaseSchema.extend({
-    degraded: z.literal(false),
-    serialized: z.string(),
-    scrollbackTruncated: z.boolean(),
-    reasons: z.array(z.string()).length(0),
-  }).strict(),
-  terminalRendererSnapshotBaseSchema.extend({
-    degraded: z.literal(true),
-    serialized: z.null(),
-    scrollbackTruncated: z.boolean(),
-    reasons: z.array(z.string().min(1)).min(1),
-  }).strict(),
-])
+function buildTerminalAttachSessionResultSchema<TSession extends z.ZodTypeAny>(sessionSchema: TSession) {
+  const baseSchema = z.object({
+    session: sessionSchema,
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+    throughOutputSeq: z.number().int().nonnegative(),
+    sizeRevision: z.number().int().positive(),
+    emulatorId: z.literal("xterm-headless"),
+    emulatorVersion: z.literal("6.0.0"),
+  })
+  return z.discriminatedUnion("degraded", [
+    baseSchema.extend({
+      degraded: z.literal(false),
+      serialized: z.string(),
+      scrollbackTruncated: z.boolean(),
+      reasons: z.array(z.string()).length(0),
+    }).strict(),
+    baseSchema.extend({
+      degraded: z.literal(true),
+      serialized: z.null(),
+      scrollbackTruncated: z.boolean(),
+      reasons: z.array(z.string().min(1)).min(1),
+    }).strict(),
+  ])
+}
+
+export const terminalAttachSessionResultSchema = buildTerminalAttachSessionResultSchema(terminalSessionSchema)
+
+export const terminalRendererAttachSessionResultSchema = buildTerminalAttachSessionResultSchema(
+  terminalRendererSessionSchema,
+)
 
 export const terminalResizedEventSchema = z.object({
   sessionId: z.string().min(1),

@@ -1015,12 +1015,119 @@ describe("TerminalModule", () => {
     await openHeaderSessionMenu("日志终端")
 
     const menuItems = headerSessionMenuItems()
-    expect(menuItems.map((item) => item.textContent)).toEqual(["重命名", "关闭"])
-    expect(menuItems[1]?.dataset.variant).toBe("destructive")
+    expect(menuItems.map((item) => item.textContent)).toEqual(["重命名", "复制深度链接", "关闭"])
+    expect(menuItems[2]?.dataset.variant).toBe("destructive")
 
     const navigation = document.querySelector('[aria-label="活动终端会话"]')
     expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
+  })
+
+  it("copies the session deep link from its header session tab context menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({
+      id: "session-2",
+      groupId: "group-1",
+      title: "日志终端",
+      sessionRef: "tsr_zyxwvutsrqponmlkjihgfe.zyx",
+    })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderEmbeddedModule()
+    await openHeaderSessionMenu("日志终端")
+    await clickContextMenuItem("复制深度链接")
+
+    expect(writeText).toHaveBeenCalledWith("synapse://terminals/zyxwvutsrqponmlkjihgfe%2Ezyx")
+    const navigation = document.querySelector('[aria-label="活动终端会话"]')
+    expect(navigation?.querySelector('[aria-current="page"]')?.textContent).toBe("开发终端")
+  })
+
+  it("copies the session deep link from its sidebar session row context menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+    createSession({
+      id: "session-2",
+      groupId: "group-1",
+      title: "日志终端",
+      sessionRef: "tsr_zyxwvutsrqponmlkjihgfe.zyx",
+    })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderEmbeddedModule()
+    await openSidebarSessionMenu("日志终端")
+
+    expect(headerSessionMenuItems().map((item) => item.textContent)).toEqual([
+      "重命名",
+      "复制深度链接",
+      "关闭",
+    ])
+
+    await clickContextMenuItem("复制深度链接")
+
+    expect(writeText).toHaveBeenCalledWith("synapse://terminals/zyxwvutsrqponmlkjihgfe%2Ezyx")
+    expect(document.activeElement).not.toBe(headerSessionTab("日志终端"))
+  })
+
+  it("renames a workspace from its sidebar session row context menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+    await openSidebarSessionMenu("开发终端")
+    await clickContextMenuItem("重命名")
+
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="终端名称"]')?.value).toBe("开发终端")
+
+    await changeInput("终端名称", "构建日志")
+    await clickButton("保存")
+
+    expect(terminalBridge.renameWorkspace).toHaveBeenCalledWith({
+      workspaceId: "workspace-session-1",
+      title: "构建日志",
+      expectedLayoutRevision: 1,
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(sidebarSessionRow("构建日志"))
+  })
+
+  it("copies the focused pane session deep link from a split workspace row", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      sessionRef: "tsr_zyxwvutsrqponmlkjihgfe.zyx",
+    })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+
+    await renderModule()
+    await act(async () => {
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "d", metaKey: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(document.querySelectorAll('[data-track="terminal-session-select"]')).toHaveLength(1)
+
+    await openSidebarSessionMenu("开发终端")
+    await clickContextMenuItem("复制深度链接")
+
+    expect(writeText).toHaveBeenCalledWith("synapse://terminals/abcdefghijklmnopqrstuv%2Eabc")
   })
 
   it("renames a workspace from its header session tab context menu", async () => {
@@ -3399,6 +3506,19 @@ function headerSessionMenuItems(): HTMLElement[] {
   return Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
 }
 
+function sidebarSessionRow(title: string): HTMLElement | null {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('[data-track="terminal-session-select"]'))
+    .find((element) => element.textContent?.includes(title)) ?? null
+}
+
+async function openSidebarSessionMenu(title: string): Promise<void> {
+  const row = sidebarSessionRow(title)
+  await act(async () => {
+    row?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
+    await Promise.resolve()
+  })
+}
+
 async function openHeaderSessionMenu(title: string): Promise<void> {
   const tab = headerSessionTab(title)
   await act(async () => {
@@ -3632,6 +3752,7 @@ function createSession(overrides: Partial<SynapseTerminalSession> = {}): Synapse
     cols: 80,
     rows: 24,
     lastOutputSeq: 0,
+    sessionRef: "tsr_abcdefghijklmnopqrstuv.abc",
     stateRevision: 1,
     inputRevision: 0,
     sizeRevision: 1,

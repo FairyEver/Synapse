@@ -7,6 +7,7 @@ import type { WindowManager } from "../../../electron/runtime/window"
 import { createMainLogger } from "../../../electron/services/log-store"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import { materializeTerminalClipboardImage } from "./clipboard-image"
+import { terminalSessionReference } from "./session-reference"
 import type { TerminalService } from "./service"
 import {
   TERMINAL_AGENT_NOTIFICATION_SERVICE_ID,
@@ -19,7 +20,6 @@ import {
 import {
   terminalAttachSessionInputSchema,
   terminalAgentNotificationSettingsSchema,
-  terminalAttachSessionResultSchema,
   terminalClosePaneInputSchema,
   terminalCloseWorkspaceInputSchema,
   terminalCloseWorkspaceResultSchema,
@@ -45,7 +45,9 @@ import {
   terminalMovePaneInputSchema,
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
-  terminalReadSessionResultSchema,
+  terminalRendererAttachSessionResultSchema,
+  terminalRendererReadSessionResultSchema,
+  terminalRendererSessionSchema,
   terminalReorderGroupsInputSchema,
   terminalReportActiveSessionInputSchema,
   terminalRenameGroupInputSchema,
@@ -56,7 +58,6 @@ import {
   terminalRunStartupCommandInputSchema,
   terminalSetSplitRatioInputSchema,
   terminalSessionIdInputSchema,
-  terminalSessionSchema,
   terminalStopSessionInputSchema,
   terminalSplitPaneInputSchema,
   terminalSplitPaneResultSchema,
@@ -309,7 +310,7 @@ export const terminalIpcModule: IpcModule = {
       operationId: "app.terminal.group_command.launch",
       kind: "invoke",
       request: terminalLaunchGroupCommandInputSchema,
-      response: terminalSessionSchema,
+      response: terminalRendererSessionSchema,
       handler: async (ctx, request: z.infer<typeof terminalLaunchGroupCommandInputSchema>) =>
         sanitizeRendererSession(await resolveTerminalService(ctx).launchGroupCommand(request)),
     },
@@ -458,14 +459,14 @@ export const terminalIpcModule: IpcModule = {
       operationId: "app.terminal.session.list",
       kind: "invoke",
       request: z.void(),
-      response: z.array(terminalSessionSchema),
+      response: z.array(terminalRendererSessionSchema),
       handler: (ctx) => resolveTerminalService(ctx).listSessions().map(sanitizeRendererSession),
     },
     createSession: {
       operationId: "app.terminal.session.create",
       kind: "invoke",
       request: terminalCreateSessionInputSchema,
-      response: terminalSessionSchema,
+      response: terminalRendererSessionSchema,
       handler: async (ctx, request: z.infer<typeof terminalCreateSessionInputSchema>) =>
         sanitizeRendererSession(await resolveTerminalService(ctx).createSession(request)),
     },
@@ -473,7 +474,7 @@ export const terminalIpcModule: IpcModule = {
       operationId: "app.terminal.session.get",
       kind: "invoke",
       request: terminalSessionIdInputSchema,
-      response: terminalSessionSchema,
+      response: terminalRendererSessionSchema,
       handler: (ctx, request: z.infer<typeof terminalSessionIdInputSchema>) =>
         sanitizeRendererSession(resolveTerminalService(ctx).getSession(request)),
     },
@@ -481,7 +482,7 @@ export const terminalIpcModule: IpcModule = {
       operationId: "app.terminal.session.attach",
       kind: "invoke",
       request: terminalAttachSessionInputSchema,
-      response: terminalAttachSessionResultSchema,
+      response: terminalRendererAttachSessionResultSchema,
       handler: async (ctx, request: z.infer<typeof terminalAttachSessionInputSchema>) => {
         const result = await resolveTerminalService(ctx).attachSession(request)
         return { ...result, session: sanitizeRendererSession(result.session) }
@@ -491,7 +492,7 @@ export const terminalIpcModule: IpcModule = {
       operationId: "app.terminal.session.read",
       kind: "invoke",
       request: terminalReadSessionInputSchema,
-      response: terminalReadSessionResultSchema,
+      response: terminalRendererReadSessionResultSchema,
       handler: (ctx, request: z.infer<typeof terminalReadSessionInputSchema>) => {
         const result = resolveTerminalService(ctx).readSession(request)
         return { ...result, session: sanitizeRendererSession(result.session) }
@@ -501,7 +502,7 @@ export const terminalIpcModule: IpcModule = {
       operationId: "app.terminal.session.rename",
       kind: "invoke",
       request: terminalRenameSessionInputSchema,
-      response: terminalSessionSchema,
+      response: terminalRendererSessionSchema,
       handler: async (ctx, request: z.infer<typeof terminalRenameSessionInputSchema>) =>
         sanitizeRendererSession(await resolveTerminalService(ctx).renameSession(request)),
     },
@@ -556,7 +557,7 @@ export const terminalIpcModule: IpcModule = {
     sessionChanged: {
       operationId: "app.terminal.operation.session_changed",
       kind: "event",
-      payload: terminalSessionSchema,
+      payload: terminalRendererSessionSchema,
     },
     sessionDeleted: {
       operationId: "app.terminal.operation.session_deleted",
@@ -628,10 +629,12 @@ function launchDetailsGroup(group: ReturnType<TerminalService["getGroup"]>) {
   }
 }
 
-function sanitizeRendererSession(session: ReturnType<TerminalService["getSession"]>) {
+function sanitizeRendererSession(
+  session: ReturnType<TerminalService["getSession"]>,
+): z.infer<typeof terminalRendererSessionSchema> {
   const safeSession = { ...session }
   delete safeSession.launchEnvironment
-  return safeSession
+  return { ...safeSession, sessionRef: terminalSessionReference(session.id) }
 }
 
 function resolveEnvironmentValue(

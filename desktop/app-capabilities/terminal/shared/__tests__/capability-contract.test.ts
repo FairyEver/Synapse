@@ -9,7 +9,7 @@ import { terminalCreateSessionOverrideInputSchema } from "../contract-schema"
 
 describe("Terminal capability contract", () => {
   it("publishes the consolidated capability baseline from one catalog", () => {
-    expect(TERMINAL_CAPABILITY_CATALOG).toHaveLength(43)
+    expect(TERMINAL_CAPABILITY_CATALOG).toHaveLength(44)
 
     const ids = new Set<string>()
     const toolNames = new Set<string>()

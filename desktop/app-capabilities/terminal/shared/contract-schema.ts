@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { terminalSessionDeepLinkSchema } from "./deep-link"
 import { terminalLayoutNodeSchema } from "./workspace"
 
 export const terminalLifecycleSchema = z.enum(["running", "stopping", "ended", "failed", "lost"])
@@ -265,6 +266,20 @@ export const terminalPagedRequestSchema = z.object({
 export const terminalSessionTargetSchema = z.object({
   sessionId: z.string().uuid(),
 }).strict()
+
+export const terminalSessionOpenInputSchema = z.object({
+  deepLink: terminalSessionDeepLinkSchema.optional(),
+  sessionId: z.string().uuid().optional(),
+}).strict().superRefine((value, ctx) => {
+  const provided = Number(value.deepLink !== undefined) + Number(value.sessionId !== undefined)
+  if (provided !== 1) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["deepLink"],
+      message: "provide deepLink or sessionId",
+    })
+  }
+})
 
 export const terminalGroupTargetSchema = z.object({
   groupId: z.string().uuid(),
@@ -539,6 +554,7 @@ export type TerminalIdempotencyRecord = z.infer<typeof terminalIdempotencyRecord
 export type TerminalDomainState = z.infer<typeof terminalDomainStateSchema>
 export type TerminalSemanticAction = z.infer<typeof terminalSemanticActionSchema>
 export type TerminalCreateSessionInput = z.infer<typeof terminalCreateSessionInputSchema>
+export type TerminalSessionOpenInput = z.infer<typeof terminalSessionOpenInputSchema>
 export type TerminalCreateSessionOverrideInput = z.infer<typeof terminalCreateSessionOverrideInputSchema>
 export type TerminalAcquireControlInput = z.infer<typeof terminalAcquireControlInputSchema>
 export type TerminalRenewControlInput = z.infer<typeof terminalRenewControlInputSchema>

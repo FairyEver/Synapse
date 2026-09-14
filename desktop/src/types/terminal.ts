@@ -62,7 +62,9 @@ export type SynapseTerminalLaunchLayer = TerminalLaunchLayer
 export type SynapseTerminalGlobalLaunchSettings = TerminalGlobalLaunchSettings
 export type SynapseTerminalAgentNotificationSettings = TerminalAgentNotificationSettings
 export type SynapseTerminalCustomToolbarAction = TerminalCustomToolbarAction
-export type SynapseTerminalSession = TerminalSession
+export type SynapseTerminalSession = TerminalSession & {
+  readonly sessionRef?: string
+}
 export type SynapseTerminalWorkspace = TerminalWorkspace
 export type SynapseTerminalLayoutNode = TerminalLayoutNode
 export type SynapseTerminalPaneLeaf = TerminalPaneLeaf

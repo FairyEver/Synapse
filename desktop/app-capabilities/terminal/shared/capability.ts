@@ -62,6 +62,8 @@ function defineTerminalCapability(seed: TerminalCapabilitySeed): TerminalCapabil
 
 const C = defineTerminalCapability
 
+export const TERMINAL_SESSION_OPEN_CAPABILITY_ID = "app.terminal.session.open" as const
+
 export const TERMINAL_CAPABILITY_CATALOG = [
   C({ id: "app.terminal.capabilities.get", title: "Get terminal capabilities", description: "Read the Terminal contract, limits, platform support, and degradation without object data.", mutates: false, risk: "normal", permissions: [] }),
   C({ id: "app.terminal.diagnostics.get", title: "Get terminal diagnostics", description: "Read bounded diagnostics for Terminal objects already visible to the caller.", mutates: false, risk: "normal", permissions: ["discover", "state.read"] }),
@@ -82,6 +84,7 @@ export const TERMINAL_CAPABILITY_CATALOG = [
   C({ id: "app.terminal.group_command.update", title: "Update terminal group command", description: "Update a saved terminal input sequence with revision conflict protection.", mutates: true, risk: "high", permissions: ["command.manage"] }),
   C({ id: "app.terminal.group_command.delete", title: "Delete terminal group command", description: "Delete a saved terminal input sequence with revision conflict protection.", mutates: true, risk: "high", permissions: ["command.manage"] }),
   C({ id: "app.terminal.group_command.launch", title: "Launch terminal group command", description: "Create a session and submit an authorized saved input sequence without revealing its body.", mutates: true, risk: "high", permissions: ["command.launch"] }),
+  C({ id: TERMINAL_SESSION_OPEN_CAPABILITY_ID, title: "Open terminal session", description: "Open or focus an existing local Synapse Terminal session in the main application window.", mutates: false, risk: "normal", permissions: [] }),
   C({ id: "app.terminal.session.list", title: "List terminal sessions", description: "List bounded non-state Terminal session summaries.", mutates: false, risk: "normal", permissions: ["discover"] }),
   C({ id: "app.terminal.session_summary.get", title: "Get terminal session summary", description: "Read one non-state Terminal session summary.", mutates: false, risk: "normal", permissions: ["discover"] }),
   C({ id: "app.terminal.session_state.list", title: "List terminal session states", description: "List bounded lifecycle, attention, lease occupancy, and watermarks without output text.", mutates: false, risk: "normal", permissions: ["discover", "state.read"] }),

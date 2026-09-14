@@ -383,6 +383,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.terminal",
+      "core.system-app-window",
       "core.sound-notifier",
       "core.system-notifier.integration",
       "core.problem-feedback",

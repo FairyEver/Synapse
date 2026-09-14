@@ -36,6 +36,7 @@ import {
   terminalResizeInputSchema,
   terminalSemanticInputSchema,
   terminalSessionListInputSchema,
+  terminalSessionOpenInputSchema,
   terminalSessionRenameInputSchema,
   terminalSessionStateListInputSchema,
   terminalSessionTargetSchema,
@@ -44,6 +45,7 @@ import {
 } from "./contract-schema"
 
 const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
+  "app.terminal.session.open": terminalSessionOpenInputSchema,
   "app.terminal.capabilities.get": terminalRequestBaseSchema,
   "app.terminal.diagnostics.get": terminalPagedRequestSchema,
   "app.terminal.global_launch.get": terminalGlobalLaunchGetInputSchema,
@@ -91,15 +93,20 @@ const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
   "app.terminal.session.delete": terminalDeleteSessionInputSchema,
 }
 
+const toolNotes: Readonly<Record<string, string>> = {
+  "app.terminal.session.open": "Pass the complete deepLink unchanged when the user supplies a link; otherwise pass an immutable sessionId already returned by another Terminal tool. This tool returns no terminal output.",
+}
+
 export function buildTerminalMcpTools(): McpToolDefinition[] {
   return TERMINAL_CAPABILITY_CATALOG.map((capability) => {
     const schema = schemaByCapabilityId[capability.id]
     if (!schema) throw new Error(`Missing Terminal MCP schema: ${capability.id}`)
     const jsonSchema = z.toJSONSchema(schema, { target: "draft-7" }) as Record<string, unknown>
     delete jsonSchema.$schema
+    const note = toolNotes[capability.id]
     return {
       name: capability.toolName,
-      description: `${capability.description} Permissions: ${capability.permissions.join(" + ") || "stable authentication"}; risk: ${capability.risk}; support is reported by app_terminal_capabilities_get.`,
+      description: `${capability.description}${note ? ` ${note}` : ""} Permissions: ${capability.permissions.join(" + ") || "stable authentication"}; risk: ${capability.risk}; support is reported by app_terminal_capabilities_get.`,
       inputSchema: jsonSchema as McpToolDefinition["inputSchema"],
     }
   })

@@ -7,6 +7,7 @@ import type { WindowManager } from "../../../../electron/runtime/window"
 import type { TerminalService } from "../service"
 import type { TerminalAgentNotificationService } from "../agent-notification-service"
 import { terminalIpcModule } from "../ipc"
+import { terminalSessionReference } from "../session-reference"
 
 const electronDialogMock = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
@@ -508,6 +509,7 @@ describe("terminalIpcModule", () => {
       cols: 80,
       rows: 24,
       lastOutputSeq: 0,
+      sessionRef: "tsr_abcdefghijklmnopqrstuv.abc",
     }).success).toBe(true)
     expect(terminalIpcModule.events.sessionChanged.payload.safeParse({
       id: "session-1",
@@ -594,7 +596,10 @@ describe("terminalIpcModule", () => {
         source: "pty",
       },
     })
-    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_changed", createSession())
+    expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_changed", {
+      ...createSession(),
+      sessionRef: terminalSessionReference("session-1"),
+    })
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_deleted", {
       sessionId: "session-1",
     })

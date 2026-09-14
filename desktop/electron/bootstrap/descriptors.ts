@@ -1338,6 +1338,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     "core.permission-guard",
     "core.audit-sink",
     "core.terminal",
+    SYSTEM_APP_WINDOW_SERVICE_ID,
     "core.sound-notifier",
     SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
     PROBLEM_FEEDBACK_SERVICE_ID,
@@ -1523,6 +1524,11 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       service: terminalService,
       permissionGuard,
       auditSink,
+      openSession: async (sessionId) => {
+        await ctx.registry
+          .get<ReturnType<typeof createDefaultSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID)
+          .open("terminal", { terminalOpenRequest: { requestId: randomUUID(), sessionId } })
+      },
     })
     const soundNotifierDispatcher = createSoundNotifierCapabilityDispatcher({
       service: ctx.registry.get<SoundNotifierService>("core.sound-notifier"),

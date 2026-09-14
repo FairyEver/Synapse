@@ -10,6 +10,7 @@ import { systemNotifierCapabilityManifest } from "./system-notifier/shared/manif
 import { problemFeedbackCapabilityManifest } from "./problem-feedback/shared/manifest"
 import { jsonRepairCapabilityManifest } from "./json-repair/shared/manifest"
 import { agentConversationCapabilityManifest } from "./agent/shared/manifest"
+import { terminalCapabilityManifest } from "./terminal/shared/manifest"
 
 export {
   filterDiscoverableTypes,
@@ -21,6 +22,7 @@ export {
 
 const appDeepLinkManifests = [
   agentConversationCapabilityManifest,
+  terminalCapabilityManifest,
   fileOpenerCapabilityManifest,
   textFileWriterCapabilityManifest,
   htmlGeneratorCapabilityManifest,

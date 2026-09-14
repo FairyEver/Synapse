@@ -23,6 +23,16 @@ describe("parseDeclaredAppDeepLink", () => {
     })
   })
 
+  it("resolves the canonical Terminal session route to the existing open capability", () => {
+    const deepLink = "synapse://terminals/m0D4NOW0yDeagclYK2CiUQ.xrs"
+    expect(parseDeclaredAppDeepLink(deepLink)).toEqual({
+      appId: "terminal",
+      action: "open",
+      capabilityId: "app.terminal.session.open",
+      params: { deepLink },
+    })
+  })
+
   it.each([
     "synapse://app/agent/open",
     "synapse://app/agent/open?projectId=project-1",
