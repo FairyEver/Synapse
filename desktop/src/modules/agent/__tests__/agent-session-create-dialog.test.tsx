@@ -152,6 +152,23 @@ describe("AgentSessionCreateDialog", () => {
     expect(onCreateTerminal).toHaveBeenCalledWith({ selection: DEFAULT_SELECTION })
   })
 
+  it("keeps the dialog open while a terminal conversation is being created", async () => {
+    let resolveTerminal: ((created: boolean) => void) | undefined
+    const onCreateTerminal = vi.fn(() => new Promise<boolean>((resolve) => { resolveTerminal = resolve }))
+    await renderDialog({ onCreate: vi.fn(async () => true), onCreateTerminal })
+
+    await act(async () => {
+      findButton("创建终端对话")?.click()
+      await Promise.resolve()
+    })
+
+    expect(findButton("取消")?.disabled).toBe(true)
+    await act(async () => {
+      resolveTerminal?.(false)
+      await Promise.resolve()
+    })
+  })
+
   it("uses ordinary mode by default and creates an unbound cached persona with the manual model", async () => {
     const onCreate = vi.fn(async () => true)
     await renderDialog({ onCreate })

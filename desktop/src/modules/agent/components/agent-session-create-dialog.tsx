@@ -177,7 +177,7 @@ function AgentSessionCreateDialog({
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (saving && !nextOpen) return
+    if ((saving || creatingTerminal) && !nextOpen) return
     onOpenChange(nextOpen)
   }
 
@@ -287,7 +287,7 @@ function AgentSessionCreateDialog({
           </Field>
         </FieldGroup>
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" disabled={saving || creatingTerminal} onClick={() => onOpenChange(false)}>
             取消
           </Button>
           <Button type="button" variant="outline" disabled={!canCreateTerminal} onClick={() => void handleCreateTerminal()}>
