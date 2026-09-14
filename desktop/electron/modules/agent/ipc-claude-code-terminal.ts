@@ -1,4 +1,7 @@
 import { z } from "zod"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
@@ -40,17 +43,33 @@ export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
         projectId: request.projectId,
       })
       const tierModel = resolveTierModelFromEnv(providerEnv, request.modelTier)
-      const session = await ctx.resolve<TerminalService>("core.terminal").createSessionWithEphemeralEnvironment({
-        title: CLAUDE_CODE_TERMINAL_TITLE,
-        cwd: project.localPath,
-        shell: executablePath,
-        environment: {
-          ...providerEnv,
-          ...(tierModel ? { ANTHROPIC_MODEL: tierModel } : {}),
-          DISABLE_AUTOUPDATER: "1",
-        },
-      })
-      return { sessionId: session.id }
+      const environment = {
+        ...providerEnv,
+        ...(tierModel ? { ANTHROPIC_MODEL: tierModel } : {}),
+        DISABLE_AUTOUPDATER: "1",
+      }
+      // The user's own ~/.claude/settings.json env outranks the process env, so the selected
+      // Provider and model must be pinned through the higher-priority flag settings layer.
+      const directory = await mkdtemp(path.join(os.tmpdir(), "synapse-claude-code-"))
+      const settingsPath = path.join(directory, "settings.json")
+      try {
+        await writeFile(settingsPath, JSON.stringify({
+          env: environment,
+          ...(tierModel ? { model: tierModel } : {}),
+        }), { mode: 0o600 })
+        const session = await ctx.resolve<TerminalService>("core.terminal").createSessionWithEphemeralEnvironment({
+          title: CLAUDE_CODE_TERMINAL_TITLE,
+          cwd: project.localPath,
+          shell: executablePath,
+          args: ["--settings", settingsPath, ...(tierModel ? ["--model", tierModel] : [])],
+          environment,
+          onEnded: () => { void rm(directory, { recursive: true, force: true }).catch(() => undefined) },
+        })
+        return { sessionId: session.id }
+      } catch (error) {
+        await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+        throw error
+      }
     },
   },
 }

@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { existsSync } from "node:fs"
+import { readFile } from "node:fs/promises"
+import path from "node:path"
 
 const configStoreMock = vi.hoisted(() => ({ load: vi.fn() }))
 const logStoreMock = vi.hoisted(() => ({
@@ -69,7 +72,11 @@ describe("Claude Code terminal IPC", () => {
       ANTHROPIC_AUTH_TOKEN: "token-value",
       ANTHROPIC_DEFAULT_SONNET_MODEL: "sonnet-model",
     })
-    const createSessionWithEphemeralEnvironment = vi.fn().mockResolvedValue({ id: "session-1" })
+    let launched: Record<string, unknown> | undefined
+    const createSessionWithEphemeralEnvironment = vi.fn(async (input: Record<string, unknown>) => {
+      launched = input
+      return { id: "session-1" }
+    })
     const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment })
 
     await expect(method.handler(ctx, {
@@ -82,7 +89,7 @@ describe("Claude Code terminal IPC", () => {
       actor: { kind: "user", id: "renderer" },
       projectId: "project-1",
     })
-    expect(createSessionWithEphemeralEnvironment).toHaveBeenCalledWith({
+    expect(launched).toMatchObject({
       title: "Claude Code",
       cwd: "/repo",
       shell: "/app/claude",
@@ -94,11 +101,33 @@ describe("Claude Code terminal IPC", () => {
         DISABLE_AUTOUPDATER: "1",
       },
     })
+    // The user's own settings outrank the process env, so the provider is pinned as flag settings.
+    const args = launched?.args as string[]
+    const settingsPath = args[1]!
+    expect(args).toEqual(["--settings", settingsPath, "--model", "sonnet-model"])
+    await expect(readFile(settingsPath, "utf8")).resolves.toBe(JSON.stringify({
+      env: {
+        ANTHROPIC_BASE_URL: "https://example.test/anthropic",
+        ANTHROPIC_AUTH_TOKEN: "token-value",
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "sonnet-model",
+        ANTHROPIC_MODEL: "sonnet-model",
+        DISABLE_AUTOUPDATER: "1",
+      },
+      model: "sonnet-model",
+    }))
+
+    // Ending the session releases the caller-owned settings file.
+    ;(launched?.onEnded as () => void)()
+    await vi.waitFor(() => expect(existsSync(path.dirname(settingsPath))).toBe(false))
   })
 
   it("keeps the provider env out of the response and fails when the runtime is missing", async () => {
     const buildEnv = vi.fn().mockResolvedValue({ ANTHROPIC_AUTH_TOKEN: "token-value" })
-    const createSessionWithEphemeralEnvironment = vi.fn().mockResolvedValue({ id: "session-2" })
+    let launched: Record<string, unknown> | undefined
+    const createSessionWithEphemeralEnvironment = vi.fn(async (input: Record<string, unknown>) => {
+      launched = input
+      return { id: "session-2" }
+    })
     const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment })
     const result = await method.handler(ctx, {
       projectId: "project-1",
@@ -106,6 +135,11 @@ describe("Claude Code terminal IPC", () => {
       modelTier: "default",
     })
     expect(JSON.stringify(result)).not.toContain("token-value")
+    // A tier without a resolved model keeps Claude Code's own model choice.
+    const args = launched?.args as string[]
+    expect(args).toHaveLength(2)
+    expect(args[0]).toBe("--settings")
+    ;(launched?.onEnded as () => void)()
 
     runtimeBinaryMock.resolveBundledClaudeExecutable.mockReturnValue(undefined)
     await expect(method.handler(ctx, {

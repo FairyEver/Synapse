@@ -218,6 +218,7 @@ export function createTerminalService(deps: {
   const sessions = new Map<string, TerminalSession>()
   const runtimes = new Map<string, TerminalRuntime>()
   const buffers = new Map<string, TerminalOutputBuffer>()
+  const endCallbacks = new Map<string, () => void>()
   const checkpoints = new Map<string, TerminalStoreState["checkpoints"][number]>()
   const unpublishedSessions = new Map<string, number>()
   const leases = new Map<string, TerminalLeaseState>()
@@ -753,6 +754,7 @@ export function createTerminalService(deps: {
         })
       }
       const removed = removeTerminalSessionInMemory(session.id)
+      runEndCallback(session.id)
       if (published && removed) events.emit("sessionDeleted", { sessionId: session.id })
       void flushPersist()
     })
@@ -804,6 +806,8 @@ export function createTerminalService(deps: {
     source: "ui" | "mcp" = "ui",
     launchOverrides?: {
       readonly shell?: string
+      /** Explicit argv for the launched program; defaults to the shell's own arguments. */
+      readonly args?: readonly string[]
       readonly environment?: TerminalLaunchLayer["environment"]
       readonly overriddenFields?: readonly ("cwd" | "shell" | "environment" | "cols" | "rows")[]
       /** Caller-owned launch environment that must never be written into the session record. */
@@ -892,7 +896,7 @@ export function createTerminalService(deps: {
     bumpDomain("session.created", session.id, session.metadataRevision)
     unpublishedSessions.set(session.id, terminalDomainRevision)
     try {
-      const defaultShellArgs = resolveTerminalShellArgs(environment.shell)
+      const defaultShellArgs = launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
       const integration = deps.agentNotifications?.prepareSession({
         sessionId,
         title: session.title,
@@ -925,6 +929,7 @@ export function createTerminalService(deps: {
       sessions.set(session.id, failed)
       deps.agentNotifications?.unregisterSession(session.id)
       removeTerminalSessionInMemory(session.id)
+      runEndCallback(session.id)
       await flushPersist()
       return failed
     }
@@ -1442,6 +1447,17 @@ export function createTerminalService(deps: {
     return true
   }
 
+  function runEndCallback(sessionId: string): void {
+    const callback = endCallbacks.get(sessionId)
+    if (!callback) return
+    endCallbacks.delete(sessionId)
+    try {
+      callback()
+    } catch (error) {
+      deps.logger?.warn("Terminal session end callback failed.", { sessionId, error })
+    }
+  }
+
   function removeWorkspaceSession(sessionId: string): void {
     const session = sessions.get(sessionId)
     removeSessionResources(sessionId)
@@ -1784,17 +1800,23 @@ export function createTerminalService(deps: {
     readonly title?: string
     readonly cwd: string
     readonly shell: string
+    readonly args?: readonly string[]
     readonly environment: Record<string, string>
+    /** Runs once when the session process ends; used to release caller-owned launch assets. */
+    readonly onEnded?: () => void
   }): Promise<TerminalSession> {
-    return createSessionRecord({
+    const session = await createSessionRecord({
       title: input.title,
       cwd: input.cwd,
     }, "ui", {
       shell: input.shell,
+      args: input.args,
       environment: input.environment,
       overriddenFields: ["cwd", "shell", "environment"],
       persistEnvironment: false,
     })
+    if (input.onEnded) endCallbacks.set(session.id, input.onEnded)
+    return session
   }
 
   function getSession(input: { sessionId: string }): TerminalSession {
