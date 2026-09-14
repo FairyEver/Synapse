@@ -92,6 +92,8 @@ import {
 import {
   DEFAULT_TOOL_OUTPUT_MAX_BYTES,
   governToolOutput,
+  isFileMutationTool,
+  isStructuredFileMutationOutput,
   replaceToolOutput,
   measureToolOutput,
 } from "./tool-output-governor"
@@ -845,6 +847,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
           this.pendingProgressReceipts.clear()
           this.presentedImages.clear()
         }
+        if (input.hook_event_name === "PostToolBatch") {
+          // File-mutation results are passed through untouched, so their
+          // model-visible confirmation is accounted here from the SDK's own
+          // serialization instead of the structured PostToolUse payload.
+          for (const call of input.tool_calls) {
+            if (!isFileMutationTool(call.tool_name)) continue
+            this.contextBudget.recordToolOutput(toolResultRequestBytes(call.tool_response), this.completedBatches + 1)
+          }
+        }
         const snapshot = this.contextBudget.finishToolBatch()
         if (snapshot.batchToolOutputBytes > 0) {
           this.logger?.info?.("Agent tool-output batch budget completed.", {
@@ -1068,6 +1079,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (this.outputIntegrityFailed || this.closed || this.abortController?.signal.aborted) return { continue: false }
     const record = input as unknown as Record<string, unknown>
     if (record.hook_event_name !== "PostToolUse" || typeof record.tool_name !== "string") return {}
+    // Native file-mutation results carry the whole file for hooks and the UI,
+    // while the model only receives a short confirmation line. Nothing enters a
+    // request body here, so there is nothing to bound or replace. The delivered
+    // bytes are accounted for in PostToolBatch.
+    if (isStructuredFileMutationOutput(record.tool_name, record.tool_response)) return {}
     const measurement = measureToolOutput(record.tool_name, record.tool_response)
     if (!measurement) {
       const responseBytes = serializedByteLength(record.tool_response)
@@ -1161,6 +1177,15 @@ export class ClaudeSDKSession implements AgentLiveSession {
       ? replaceToolOutput(record.tool_name, record.tool_response, governed.updatedToolOutput)
       : record.tool_response
     if (governed && updatedToolOutput === undefined) {
+      this.logger?.warn("Agent tool result cannot be replaced safely; stopping before the next request.", {
+        boundary: "claude-sdk.tool-output-integrity",
+        projectId: this.projectId,
+        conversationId: this.conversationId,
+        providerId: this.providerId,
+        toolName: record.tool_name,
+        originalBytes: governed.originalBytes,
+        availableBytes,
+      })
       return this.stopForOutputIntegrity("工具结果已保存，但当前 SDK 输出结构无法安全替换，已停止执行。")
     }
     // Account for native result wrappers and JSON escaping, not just preview text.

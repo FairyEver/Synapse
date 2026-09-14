@@ -330,6 +330,56 @@ describe("ClaudeSDKSession", () => {
     expect(output).toContain("Synapse context guard")
   })
 
+  it("delivers native file-mutation results untouched and accounts their confirmation only", async () => {
+    const persistToolOutputText = vi.fn(async () => ({
+      id: "artifact-1",
+      storagePath: "/managed/conversation/tool-output/artifact-1.txt",
+      originalByteSize: 60_000,
+      storedByteSize: 60_000,
+      contentTruncated: false,
+    }))
+    const logger = { warn: vi.fn(), info: vi.fn() }
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, logger, persistToolOutputText })
+    await session.send({ ...message("新增运营预案页面"), runtimeTurnId: "turn-1" })
+
+    await expect(postToolUseHook(getOptions())({
+      hook_event_name: "PostToolUse",
+      tool_name: "Edit",
+      tool_input: { file_path: "page.html" },
+      tool_response: {
+        filePath: "page.html",
+        oldString: "<div>旧</div>",
+        newString: "<div>新</div>",
+        originalFile: "<div>旧</div>\n".repeat(5_000),
+        structuredPatch: [],
+        userModified: false,
+        replaceAll: false,
+      },
+      tool_use_id: "toolu-edit",
+    })).resolves.toEqual({})
+
+    expect(persistToolOutputText).not.toHaveBeenCalled()
+    expect(logger.warn).not.toHaveBeenCalled()
+    expect(session.alive()).toBe(true)
+
+    await expect(lifecycleHook(getOptions(), "PostToolBatch")({
+      hook_event_name: "PostToolBatch",
+      tool_calls: [{
+        tool_name: "Edit",
+        tool_use_id: "toolu-edit",
+        tool_input: { file_path: "page.html" },
+        tool_response: "The file page.html has been updated successfully. (file state is current in your context — no need to Read it back)",
+      }],
+    })).resolves.toEqual({})
+
+    const batchLog = logger.info.mock.calls
+      .find(([entry]) => entry === "Agent tool-output batch budget completed.")?.[1] as { batchToolOutputBytes?: number } | undefined
+    expect(batchLog?.batchToolOutputBytes).toBeGreaterThan(0)
+    expect(batchLog?.batchToolOutputBytes).toBeLessThan(2 * 1024)
+    await session.close()
+  })
+
   it("persists oversized text tool results and exposes only the bounded copy to the model", async () => {
     const persistToolOutputText = vi.fn(async () => ({
       id: "artifact-1",

@@ -19,6 +19,22 @@ export interface ToolOutputMeasurement {
   readonly lines: number
 }
 
+// File-mutation tools answer with a structured result that embeds the whole
+// file (`originalFile`, `content`, `original_file`, `updated_file`), but the SDK
+// only sends a short confirmation line to the model. Those fields never enter a
+// request body, so they must not be bounded, rewritten or replaced.
+// Verified against the installed SDK with real Edit/Write/NotebookEdit calls.
+const FILE_MUTATION_TOOLS = new Set(["Edit", "Write", "NotebookEdit"])
+
+export function isFileMutationTool(toolName: string): boolean {
+  return FILE_MUTATION_TOOLS.has(toolName)
+}
+
+/** True when a PostToolUse result is a structured file-mutation payload. */
+export function isStructuredFileMutationOutput(toolName: string, toolResponse: unknown): boolean {
+  return isFileMutationTool(toolName) && isRecord(toolResponse)
+}
+
 // Native tools validate hook replacements against their own result schema.
 // A plain string for Read/Bash is silently rejected by SDK 0.3.245.
 export function replaceToolOutput(toolName: string, original: unknown, text: string): unknown {

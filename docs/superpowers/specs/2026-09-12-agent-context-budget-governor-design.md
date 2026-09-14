@@ -11,7 +11,7 @@
 ## Hard Rules
 
 - 可选 MCP 失败只排除对应连接器；路由初始化或权限等价性检查失败使用 strict 最小 MCP 集合，禁止恢复全量 Synapse schema。第三方对话默认按需加载，保留显式关闭选择；官方端点继续 SDK 原生模式。
-- 工具必须先真实执行，再经 `PostToolUse.updatedToolOutput` 治理；不修改原始文件、附件或副作用。大文本先保存到私有只读 artifact，再返回有界预览和引用。单文件最多 16 MiB，超出保存到有序文件并返回索引，不截掉原始正文；模型预览的 2,000 行与默认单结果/单批 50/150 KiB、百炼 8/24 KiB 是上限，实际可见输出还受剩余 token/字节动态限制。并行工具串行记账，避免复用同一余额。
+- 工具必须先真实执行，再经 `PostToolUse.updatedToolOutput` 治理；不修改原始文件、附件或副作用。大文本先保存到私有只读 artifact，再返回有界预览和引用。单文件最多 16 MiB，超出保存到有序文件并返回索引，不截掉原始正文；模型预览的 2,000 行与默认单结果/单批 50/150 KiB、百炼 8/24 KiB 是上限，实际可见输出还受剩余 token/字节动态限制。并行工具串行记账，避免复用同一余额。治理只针对会进入请求体的模型可见内容：原生文件变更工具（Edit / Write / NotebookEdit）的 PostToolUse 结果是给宿主和界面的整份文件副本，模型只收到 SDK 的短确认行，因此这类结果不截断、不改写、不落盘，按 PostToolBatch 的实际交付字节记账。
 - 百炼模型目录保持 1M；整理配置窗口保持 200K。SDK `autoCompactThreshold` 才是真实触发值（该 SDK 的示例为 167K）；不硬编码 33K buffer。字节安全预算保持 5 MiB，对应 Provider 6 MiB 硬上限。
 - 在主线程 UserPromptSubmit、PostToolBatch、PostCompact 处检查下一次请求。SDK 完整快照包含系统提示、工具定义、Skill/Memory、消息和附件；新增内容按真实序列化字节保守估算 token。SDK 自动整理触发值独立观察；按实际工作窗口保留 4,096 余量供下一次调用；不足时暂停请求。SDK 控制快照有 5 秒超时，失败保留保守账本；不声称观察到精确 HTTP body。
 - 完整字节账本跨普通快照保留。compact 成功不能假设旧工具结果消失；保留 `messageBreakdown.toolResultTokens` 对应的尾部估算，并恢复已释放的工具额度。SDK token 下降只是淘汰监测，不是宿主主动历史编辑能力。

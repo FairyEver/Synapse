@@ -4,6 +4,8 @@ import {
   DEFAULT_TOOL_OUTPUT_MAX_BYTES,
   DEFAULT_TOOL_OUTPUT_MAX_LINES,
   governToolOutput,
+  isFileMutationTool,
+  isStructuredFileMutationOutput,
 } from "../tool-output-governor"
 
 describe("tool output governor", () => {
@@ -109,5 +111,39 @@ describe("tool output governor", () => {
 
     expect(result?.deliveredBytes).toBeLessThanOrEqual(16 * 1024)
     expect(result?.updatedToolOutput).toContain("narrower read, search, filter, or pagination")
+  })
+
+  it("identifies native file-mutation payloads as confirmation-only results", () => {
+    expect(isStructuredFileMutationOutput("Edit", {
+      filePath: "/repo/page.html",
+      oldString: "a",
+      newString: "b",
+      originalFile: "filler".repeat(20_000),
+      structuredPatch: [],
+      userModified: false,
+      replaceAll: false,
+    })).toBe(true)
+    expect(isStructuredFileMutationOutput("Write", {
+      type: "create",
+      filePath: "/repo/page.html",
+      content: "filler".repeat(20_000),
+      structuredPatch: [],
+      originalFile: null,
+    })).toBe(true)
+    expect(isStructuredFileMutationOutput("NotebookEdit", {
+      notebook_path: "/repo/notes.ipynb",
+      original_file: "{}",
+      updated_file: "{}",
+    })).toBe(true)
+  })
+
+  it("leaves non mutation tools and string results governed", () => {
+    expect(isFileMutationTool("Read")).toBe(false)
+    expect(isFileMutationTool("Bash")).toBe(false)
+    expect(isStructuredFileMutationOutput("Edit", "<tool_use_error>File has been modified since read</tool_use_error>")).toBe(false)
+    expect(isStructuredFileMutationOutput("Read", {
+      type: "text",
+      file: { content: "原始内容".repeat(30_000), numLines: 1, startLine: 1, totalLines: 1 },
+    })).toBe(false)
   })
 })
