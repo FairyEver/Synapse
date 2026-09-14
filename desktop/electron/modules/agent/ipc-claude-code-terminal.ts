@@ -7,6 +7,11 @@ import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import {
+  SYNAPSE_AGENT_PERMISSION_MODES,
+  type SynapseAgentPermissionMode,
+} from "../../../src/types/agent"
+import { configStore } from "../../services/config-store"
+import {
   PACKAGED_CLAUDE_RUNTIME_MISSING_MESSAGE,
   resolveBundledClaudeExecutable,
 } from "../../services/agent-runtime/claude-runtime-binary"
@@ -58,6 +63,16 @@ const claudeCodeTerminalResponseSchema = z.object({
 }).strict()
 
 /**
+ * The terminal session runs with the same default permission mode as Agent conversations so a
+ * user who disabled permission prompts is not asked again by the Claude Code TUI.
+ */
+export function resolveClaudeCodeTerminalPermissionMode(mode: string | undefined): SynapseAgentPermissionMode {
+  return SYNAPSE_AGENT_PERMISSION_MODES.includes(mode as SynapseAgentPermissionMode)
+    ? mode as SynapseAgentPermissionMode
+    : "default"
+}
+
+/**
  * UI-only launch of the bundled Claude Code CLI as a terminal session. The selected Provider and
  * model tier are resolved here so credentials never reach the renderer or the terminal store.
  */
@@ -71,6 +86,8 @@ export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
       const { providerService, project } = await resolveProjectAgent(ctx.resolve, request.projectId)
       const executablePath = resolveBundledClaudeExecutable()
       if (!executablePath) throw new Error(PACKAGED_CLAUDE_RUNTIME_MISSING_MESSAGE)
+      const config = await configStore.load()
+      const permissionMode = resolveClaudeCodeTerminalPermissionMode(config.agent?.defaultPermissionMode)
       const providerEnv = await providerService.buildEnv(request.providerId, {
         actor: { kind: "user", id: "renderer" },
         projectId: request.projectId,
@@ -110,7 +127,11 @@ export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
           title,
           cwd: project.localPath,
           shell: executablePath,
-          args: ["--settings", settingsPath, ...(tierModel ? ["--model", tierModel] : [])],
+          args: [
+            "--settings", settingsPath,
+            ...(tierModel ? ["--model", tierModel] : []),
+            "--permission-mode", permissionMode,
+          ],
           environment,
           onEnded: () => { void rm(directory, { recursive: true, force: true }).catch(() => undefined) },
         })

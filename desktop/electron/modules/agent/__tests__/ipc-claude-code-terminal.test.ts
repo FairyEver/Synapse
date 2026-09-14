@@ -24,7 +24,11 @@ import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
-import { claudeCodeTerminalMethods, removeStaleClaudeCodeLaunchDirectories } from "../ipc-claude-code-terminal"
+import {
+  claudeCodeTerminalMethods,
+  removeStaleClaudeCodeLaunchDirectories,
+  resolveClaudeCodeTerminalPermissionMode,
+} from "../ipc-claude-code-terminal"
 
 const method = claudeCodeTerminalMethods.createClaudeCodeTerminal!
 
@@ -107,7 +111,11 @@ describe("Claude Code terminal IPC", () => {
     // The user's own settings outrank the process env, so the provider is pinned as flag settings.
     const args = launched?.args as string[]
     const settingsPath = args[1]!
-    expect(args).toEqual(["--settings", settingsPath, "--model", "sonnet-model"])
+    expect(args).toEqual([
+      "--settings", settingsPath,
+      "--model", "sonnet-model",
+      "--permission-mode", "default",
+    ])
     await expect(readFile(settingsPath, "utf8")).resolves.toBe(JSON.stringify({
       env: {
         ANTHROPIC_BASE_URL: "https://example.test/anthropic",
@@ -122,6 +130,44 @@ describe("Claude Code terminal IPC", () => {
     // Ending the session releases the caller-owned settings file.
     ;(launched?.onEnded as () => void)()
     await vi.waitFor(() => expect(existsSync(path.dirname(settingsPath))).toBe(false))
+  })
+
+  it("launches with the default permission mode configured for Agent conversations", async () => {
+    configStoreMock.load.mockResolvedValue({
+      repositories: [{ uuid: "project-1", name: "Project One", localPath: "/repo", contentDirs: {} }],
+      global: { projects: [] },
+      agent: { defaultPermissionMode: "bypassPermissions" },
+    })
+    const buildEnv = vi.fn().mockResolvedValue({ ANTHROPIC_AUTH_TOKEN: "token-value" })
+    let launched: Record<string, unknown> | undefined
+    const createSessionWithEphemeralEnvironment = vi.fn(async (input: Record<string, unknown>) => {
+      launched = input
+      return { id: "session-permission" }
+    })
+    const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment })
+
+    await method.handler(ctx, { projectId: "project-1", providerId: "vendor", modelTier: "default" })
+
+    expect(launched?.args).toEqual(expect.arrayContaining(["--permission-mode", "bypassPermissions"]))
+    ;(launched?.onEnded as () => void)()
+
+    // Configs written before the setting existed still launch with the safe default mode.
+    configStoreMock.load.mockResolvedValue({
+      repositories: [{ uuid: "project-1", name: "Project One", localPath: "/repo", contentDirs: {} }],
+      global: { projects: [] },
+      agent: {},
+    })
+
+    await method.handler(ctx, { projectId: "project-1", providerId: "vendor", modelTier: "default" })
+
+    expect(launched?.args).toEqual(expect.arrayContaining(["--permission-mode", "default"]))
+    ;(launched?.onEnded as () => void)()
+  })
+
+  it("falls back to the default permission mode for unknown values", () => {
+    expect(resolveClaudeCodeTerminalPermissionMode(undefined)).toBe("default")
+    expect(resolveClaudeCodeTerminalPermissionMode("unexpected")).toBe("default")
+    expect(resolveClaudeCodeTerminalPermissionMode("acceptEdits")).toBe("acceptEdits")
   })
 
   it("keeps the provider env out of the response and fails when the runtime is missing", async () => {
@@ -140,8 +186,9 @@ describe("Claude Code terminal IPC", () => {
     expect(JSON.stringify(result)).not.toContain("token-value")
     // A tier without a resolved model keeps Claude Code's own model choice.
     const args = launched?.args as string[]
-    expect(args).toHaveLength(2)
     expect(args[0]).toBe("--settings")
+    expect(args).not.toContain("--model")
+    expect(args).toContain("--permission-mode")
     ;(launched?.onEnded as () => void)()
 
     runtimeBinaryMock.resolveBundledClaudeExecutable.mockReturnValue(undefined)
