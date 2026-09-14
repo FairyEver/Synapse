@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -11,9 +11,42 @@ import {
   resolveBundledClaudeExecutable,
 } from "../../services/agent-runtime/claude-runtime-binary"
 import { resolveTierModelFromEnv } from "../../services/agent-runtime/provider-model-tier"
+import { resolveModelContextConfiguration } from "../../services/model-capability/catalog"
 import { resolveProjectAgent } from "./ipc-shared"
 
 const CLAUDE_CODE_TERMINAL_TITLE = "Claude Code"
+const LAUNCH_DIRECTORY_PATTERN = /^synapse-claude-code-[A-Za-z0-9]{6}$/
+
+/**
+ * Removes launch directories left behind by a previous app process. They hold provider
+ * credentials, so a crash, quit or update that kills the PTY without its exit callback must not
+ * leave them on disk.
+ */
+export async function removeStaleClaudeCodeLaunchDirectories(baseDir: string): Promise<readonly string[]> {
+  const entries = await readdir(baseDir, { withFileTypes: true }).catch(() => [])
+  const removed: string[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !LAUNCH_DIRECTORY_PATTERN.test(entry.name)) continue
+    try {
+      await rm(path.join(baseDir, entry.name), { recursive: true, force: true })
+      removed.push(entry.name)
+    } catch {
+      continue
+    }
+  }
+  return removed
+}
+
+let staleSweep: Promise<readonly string[]> | undefined
+
+function sweepStaleLaunchDirectories(): Promise<readonly string[]> {
+  staleSweep ??= removeStaleClaudeCodeLaunchDirectories(os.tmpdir())
+  return staleSweep
+}
+
+// Only the Electron main process owns these directories; tests and renderer bundles must never
+// delete another process's live launch assets.
+if (process.type === "browser") void sweepStaleLaunchDirectories()
 
 const claudeCodeTerminalRequestSchema = projectRequestSchema.extend({
   providerId: z.string().min(1),
@@ -43,13 +76,25 @@ export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
         projectId: request.projectId,
       })
       const tierModel = resolveTierModelFromEnv(providerEnv, request.modelTier)
+      const provider = await providerService.getProvider(request.providerId).catch(() => undefined)
+      // Claude Code assumes an unknown custom model is 200k, so pin the window Synapse knows.
+      const modelContext = resolveModelContextConfiguration({
+        baseUrl: providerEnv.ANTHROPIC_BASE_URL
+          ?? (provider?.category === "official" ? "https://api.anthropic.com" : undefined),
+        modelId: tierModel ?? providerEnv.ANTHROPIC_MODEL,
+        configuredContextWindow: providerEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
+      })
       const environment = {
         ...providerEnv,
         ...(tierModel ? { ANTHROPIC_MODEL: tierModel } : {}),
+        ...(modelContext.contextWindowTokens !== undefined
+          ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(modelContext.contextWindowTokens) }
+          : {}),
         DISABLE_AUTOUPDATER: "1",
       }
       // The user's own ~/.claude/settings.json env outranks the process env, so the selected
       // Provider and model must be pinned through the higher-priority flag settings layer.
+      await sweepStaleLaunchDirectories()
       const directory = await mkdtemp(path.join(os.tmpdir(), "synapse-claude-code-"))
       const settingsPath = path.join(directory, "settings.json")
       try {

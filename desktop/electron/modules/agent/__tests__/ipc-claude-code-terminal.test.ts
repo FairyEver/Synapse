@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { existsSync } from "node:fs"
-import { readFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 const configStoreMock = vi.hoisted(() => ({ load: vi.fn() }))
@@ -23,18 +24,20 @@ import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
-import { claudeCodeTerminalMethods } from "../ipc-claude-code-terminal"
+import { claudeCodeTerminalMethods, removeStaleClaudeCodeLaunchDirectories } from "../ipc-claude-code-terminal"
 
 const method = claudeCodeTerminalMethods.createClaudeCodeTerminal!
 
 function createContext(input: {
   readonly buildEnv: ReturnType<typeof vi.fn>
   readonly createSessionWithEphemeralEnvironment: ReturnType<typeof vi.fn>
+  readonly getProvider?: ReturnType<typeof vi.fn>
 }): IpcHandlerContext {
+  const getProvider = input.getProvider ?? vi.fn().mockResolvedValue({ category: "third_party" })
   const container: ProjectContainer = {
     projectId: "project-1",
     get: <T>(id: string): T => {
-      if (id === PROVIDER_SERVICE_ID) return { buildEnv: input.buildEnv } as T
+      if (id === PROVIDER_SERVICE_ID) return { buildEnv: input.buildEnv, getProvider } as T
       if (id === AGENT_RUNTIME_SERVICE_ID) return {} as T
       throw new Error(`Unknown service: ${id}`)
     },
@@ -148,5 +151,46 @@ describe("Claude Code terminal IPC", () => {
       modelTier: "default",
     })).rejects.toThrow(runtimeBinaryMock.missingMessage)
     expect(createSessionWithEphemeralEnvironment).toHaveBeenCalledTimes(1)
+  })
+
+  it("pins the catalog context window for a known custom model", async () => {
+    const buildEnv = vi.fn().mockResolvedValue({
+      ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "token-value",
+      ANTHROPIC_MODEL: "qwen3.8-max",
+    })
+    let launched: Record<string, unknown> | undefined
+    const createSessionWithEphemeralEnvironment = vi.fn(async (input: Record<string, unknown>) => {
+      launched = input
+      return { id: "session-3" }
+    })
+    const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment })
+
+    await method.handler(ctx, {
+      projectId: "project-1",
+      providerId: "bailian",
+      modelTier: "default",
+    })
+
+    expect(launched?.environment).toMatchObject({ CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1000000" })
+    ;(launched?.onEnded as () => void)()
+  })
+
+  it("removes launch directories left behind by a previous process and leaves others alone", async () => {
+    const base = await mkdtemp(path.join(os.tmpdir(), "synapse-claude-code-sweep-"))
+    try {
+      await mkdir(path.join(base, "synapse-claude-code-Ab12Cd"))
+      await writeFile(path.join(base, "synapse-claude-code-Ab12Cd", "settings.json"), "{}")
+      await mkdir(path.join(base, "synapse-claude-code-paths-0Fk6yY"))
+      await writeFile(path.join(base, "settings.json"), "{}")
+
+      await expect(removeStaleClaudeCodeLaunchDirectories(base))
+        .resolves.toEqual(["synapse-claude-code-Ab12Cd"])
+      expect(existsSync(path.join(base, "synapse-claude-code-Ab12Cd"))).toBe(false)
+      expect(existsSync(path.join(base, "synapse-claude-code-paths-0Fk6yY"))).toBe(true)
+      expect(existsSync(path.join(base, "settings.json"))).toBe(true)
+    } finally {
+      await rm(base, { recursive: true, force: true })
+    }
   })
 })
