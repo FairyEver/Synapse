@@ -68,4 +68,37 @@ describe("resolveBundledClaudeExecutable", () => {
     })).toBeUndefined()
     expect(resolveModule).not.toHaveBeenCalled()
   })
+
+  it.each([
+    { platform: "win32", arch: "x64", packageName: "@anthropic-ai/claude-agent-sdk-win32-x64", binaryName: "claude.exe" },
+    { platform: "win32", arch: "arm64", packageName: "@anthropic-ai/claude-agent-sdk-win32-arm64", binaryName: "claude.exe" },
+    { platform: "linux", arch: "x64", packageName: "@anthropic-ai/claude-agent-sdk-linux-x64", binaryName: "claude" },
+    { platform: "linux", arch: "arm64", packageName: "@anthropic-ai/claude-agent-sdk-linux-arm64-musl", binaryName: "claude" },
+  ])("resolves $packageName/$binaryName on $platform-$arch during development", ({ platform, arch, packageName, binaryName }) => {
+    const binary = `/${platform}-${arch}/${binaryName}`
+    const resolveModule = vi.fn((specifier: string) => {
+      if (specifier === "@anthropic-ai/claude-agent-sdk") return SDK_MODULE
+      if (specifier === `${packageName}/${binaryName}`) return binary
+      throw new Error(`unexpected specifier: ${specifier}`)
+    })
+
+    expect(resolveBundledClaudeExecutable({
+      isPackaged: false,
+      platform,
+      arch,
+      resolveModule,
+    })).toBe(binary)
+  })
+
+  it("uses the .exe unpacked runtime name on Windows", () => {
+    const binary = path.join(RESOURCES, "app.asar.unpacked", "node_modules",
+      "@anthropic-ai/claude-agent-sdk-win32-x64", "claude.exe")
+    expect(resolveBundledClaudeExecutable({
+      resourcesPath: RESOURCES,
+      isPackaged: true,
+      platform: "win32",
+      arch: "x64",
+      fileExists: (candidate) => candidate === binary,
+    })).toBe(binary)
+  })
 })
