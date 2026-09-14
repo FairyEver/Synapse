@@ -235,7 +235,8 @@ it("accepts a proven canonical alias without replacing a unit and rejects an unp
 
 it("counts a successful edit receipt as processed evidence without granting read coverage", async () => {
   const { session } = await setup()
-  const file = path.join(path.sep, "originals", "notes.md")
+  // Receipt and unit paths must resolve identically on every platform, including Windows.
+  const file = path.resolve("/originals/notes.md")
   await session.receipt({ toolUseId: "edit-1", toolName: "Edit", path: file, kind: "operation", complete: false,
     presented: false, outputHash: "edit-response",
     mutation: { toolName: "Edit", path: file, versionAfter: "notes-v2" } })
@@ -263,7 +264,7 @@ it("maps a bounded read to the lines it actually delivered", () => {
 
 it("tiles coverage from bounded reads and honours a declared processing scope", async () => {
   const { session, store } = await setup()
-  const file = path.join(path.sep, "originals", "records.txt")
+  const file = path.resolve("/originals/records.txt")
   const bounded = (id: string, range: [number, number]): WorkReceipt => ({ toolUseId: id, toolName: "Read",
     path: file, kind: "text", range, deliveredRange: range, bounded: true, totalLines: 8,
     complete: false, presented: false, outputHash: id, version: "records-v1" })
@@ -284,7 +285,7 @@ it("tiles coverage from bounded reads and honours a declared processing scope", 
   expect(await scoped.assessment()).toMatchObject({ status: "coverage-complete", declaredUnits: 1, coveredUnits: 1 })
   await expect(scoped.commit({ version: 1, baseRevision: 1,
     units: [{ id: "head", path: file, kind: "text", receipts: [], processed: true, scope: [1, 2] }] })).rejects.toThrow("不能修改处理范围")
-  const otherFile = path.join(path.sep, "originals", "records-2.txt")
+  const otherFile = path.resolve("/originals/records-2.txt")
   await scoped.receipt({ ...bounded("head-2", [1, 4]), path: otherFile })
   await scoped.presented(["head-2"])
   await expect(scoped.commit({ version: 1, baseRevision: 1, reopen: true,
