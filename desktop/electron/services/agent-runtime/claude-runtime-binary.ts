@@ -139,11 +139,13 @@ export function resourcesPathFromAppPath(appPath: string): string | undefined {
  * release build, or the platform package of the installed SDK during development.
  */
 export function resolveBundledClaudeExecutable(options: {
+  readonly resourcesPath?: string
   readonly platform?: string
   readonly arch?: string
   readonly isPackaged?: boolean
   readonly fileExists?: (filePath: string) => boolean
-  readonly resolvePackage?: (specifier: string) => string
+  /** Resolve a module id, optionally anchored at another module. Injectable for tests. */
+  readonly resolveModule?: (specifier: string, from?: string) => string
 } = {}): string | undefined {
   const runtime = inspectPackagedClaudeRuntime(options)
   if (runtime.status === "present") return runtime.executablePath
@@ -153,11 +155,19 @@ export function resolveBundledClaudeExecutable(options: {
   const platform = options.platform ?? process.platform
   const arch = options.arch ?? process.arch
   const binaryName = claudeBinaryName(platform)
-  const resolvePackage = options.resolvePackage
-    ?? ((specifier: string) => createRequire(__filename).resolve(specifier))
+  const resolveModule = options.resolveModule
+    ?? ((specifier: string, from?: string) => (from ? createRequire(from) : createRequire(__filename)).resolve(specifier))
+  // The platform package is an optional dependency of the SDK, so it must be resolved from the
+  // SDK's own location: pnpm does not hoist it into the application's node_modules.
+  let sdkAnchor: string | undefined
+  try {
+    sdkAnchor = resolveModule("@anthropic-ai/claude-agent-sdk")
+  } catch {
+    sdkAnchor = undefined
+  }
   for (const packageName of nativeClaudePackageNames(platform, arch)) {
     try {
-      return resolvePackage(`${packageName}/${binaryName}`)
+      return resolveModule(`${packageName}/${binaryName}`, sdkAnchor)
     } catch {
       continue
     }

@@ -76,7 +76,10 @@ function useAgentProjectTerminalActions() {
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessageLength(rawError),
       })
-      toast.error("无法在终端中启动 Claude Code。")
+      const reason = rawError instanceof Error ? rawError.message : ""
+      toast.error(reason.includes("内置 Claude Code runtime 缺失")
+        ? "内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。"
+        : "无法在终端中启动 Claude Code。")
       return false
     }
 
