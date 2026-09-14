@@ -291,7 +291,7 @@ function AgentSessionCreateDialog({
             取消
           </Button>
           <Button type="button" variant="outline" disabled={!canCreateTerminal} onClick={() => void handleCreateTerminal()}>
-            {creatingTerminal ? "正在启动" : "创建终端对话"}
+            {creatingTerminal ? "正在启动" : "创建终端cc对话"}
           </Button>
           <Button type="button" disabled={!canCreate} onClick={() => void handleCreate()}>
             {saving ? "正在创建" : "创建对话"}

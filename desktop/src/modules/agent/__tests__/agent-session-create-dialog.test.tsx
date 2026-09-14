@@ -123,7 +123,7 @@ describe("AgentSessionCreateDialog", () => {
     await renderDialog({ onCreate, onCreateTerminal })
 
     await act(async () => {
-      findButton("创建终端对话")?.click()
+      findButton("创建终端cc对话")?.click()
       await Promise.resolve()
     })
 
@@ -143,7 +143,7 @@ describe("AgentSessionCreateDialog", () => {
       await Promise.resolve()
     })
 
-    const terminalButton = findButton("创建终端对话")
+    const terminalButton = findButton("创建终端cc对话")
     expect(terminalButton?.disabled).toBe(false)
     await act(async () => {
       terminalButton?.click()
@@ -158,7 +158,7 @@ describe("AgentSessionCreateDialog", () => {
     await renderDialog({ onCreate: vi.fn(async () => true), onCreateTerminal })
 
     await act(async () => {
-      findButton("创建终端对话")?.click()
+      findButton("创建终端cc对话")?.click()
       await Promise.resolve()
     })
 
