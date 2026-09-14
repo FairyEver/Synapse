@@ -72,6 +72,8 @@ export interface TaskEvidenceGaps {
   readonly missingEvidence: readonly TaskEvidenceGap[]
   /** Units an over-claimed final answer says were read in full but that lack read coverage. */
   readonly overclaim: readonly TaskEvidenceGap[]
+  /** A final answer claimed full coverage of multi-file material while no inventory was registered. */
+  readonly unregisteredClaim?: boolean
 }
 
 // Advisory only: a detected claim produces a notice, never a hard gate.
@@ -409,12 +411,6 @@ export class TaskProgressSession {
     if (!pending.length) return undefined
     return `本次新材料读取尚未执行。此前材料已经完整呈现，但处理结果尚未提交；先保存已得出的答案/关键发现，并用 TaskUpdate.metadata.synapseProgress 提交这些单元的 receipts 和 processed 状态，再读取下一份材料。不要重跑已执行动作。当前 baseRevision=${state.revision}；待提交 ${pending.length} 项，前 8 项：${JSON.stringify(pending.slice(0, 8))}`
   }
-  async needsInventory(): Promise<boolean> {
-    if (!this.turnId) return false
-    const state = await this.store.state(this.conversationId, this.turnId)
-    return state.units.size === 0 && new Set([...state.receipts.values()]
-      .filter((receipt) => receipt.kind !== "operation" && !receipt.runtimeEvidence).map((receipt) => receipt.canonicalPath ?? receipt.path)).size > 1
-  }
   async assessment(): Promise<TaskCompletionAssessment | undefined> {
     return this.turnId ? this.store.assessment(this.conversationId, this.turnId) : undefined
   }
@@ -424,12 +420,16 @@ export class TaskProgressSession {
     if (!this.turnId) return { missingEvidence: [], overclaim: [] }
     const state = await this.store.state(this.conversationId, this.turnId)
     const units = [...state.units.values()]
+    const claimsCoverage = detectCoverageClaim(summary)
     const brief = (matched: readonly WorkUnit[]): TaskEvidenceGap[] => matched.slice(0, 8).map((unit) => ({ id: unit.id, path: unit.path }))
     return {
       // Declared scope without read coverage or mutation evidence stays a substantive gap,
       // whether or not the model marked the unit processed.
       missingEvidence: brief(units.filter((unit) => !processedWithEvidence(unit, state))),
-      overclaim: detectCoverageClaim(summary) ? brief(units.filter((unit) => !covered(unit, state))) : [],
+      overclaim: claimsCoverage ? brief(units.filter((unit) => !covered(unit, state))) : [],
+      // Reading several materials without a registered inventory stays a ledger fact unless the
+      // final answer claims coverage the ledger cannot back; only then is a notice warranted.
+      ...(units.length === 0 && claimsCoverage && hasUnregisteredMultiFileEvidence(state) ? { unregisteredClaim: true } : {}),
     }
   }
 
@@ -471,6 +471,13 @@ function resumeCapsule(state: State): Record<string, unknown> {
 
 function receiptRange(receipt: WorkReceipt): [number, number] | undefined {
   return receipt.deliveredRange ?? receipt.range
+}
+
+/** Multi-file evidence read without a registered inventory. */
+function hasUnregisteredMultiFileEvidence(state: State): boolean {
+  return new Set([...state.receipts.values()]
+    .filter((receipt) => receipt.kind !== "operation" && !receipt.runtimeEvidence)
+    .map((receipt) => receipt.canonicalPath ?? receipt.path)).size > 1
 }
 
 /** Coverage is judged one version at a time: ranges never stitch across versions. */

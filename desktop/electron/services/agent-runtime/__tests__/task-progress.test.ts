@@ -303,6 +303,25 @@ it("counts a successful edit receipt as processed evidence without granting read
   expect(detectCoverageClaim("I read every file in full.")).toBe(true)
 })
 
+it("reports an unregistered multi-file claim as advisory without demanding an inventory", async () => {
+  const { session } = await setup()
+  const first = path.resolve("/originals/one.txt")
+  const second = path.resolve("/originals/two.txt")
+  const read = (id: string, file: string): WorkReceipt => ({ toolUseId: id, toolName: "Read", path: file, kind: "text",
+    range: [1, 1], totalLines: 1, version: "text-v1", complete: true, presented: false, outputHash: id })
+  await session.receipt(read("read-1", first))
+  await session.receipt(read("read-2", second))
+  await session.presented(["read-1", "read-2"])
+
+  expect((await session.evidenceGaps()).unregisteredClaim).toBeUndefined()
+  expect((await session.evidenceGaps("编辑已完成，磁盘状态已核对。")).unregisteredClaim).toBeUndefined()
+  await expect(session.evidenceGaps("已通读全部文件，未遗漏")).resolves.toMatchObject({
+    missingEvidence: [], overclaim: [], unregisteredClaim: true,
+  })
+  // Without an inventory the ledger stays unverified; the turn is never blocked on it.
+  expect(await session.assessment()).toMatchObject({ status: "unverified", declaredUnits: 0 })
+})
+
 it("maps a bounded read to the lines it actually delivered", () => {
   expect(boundedReadDelivery({ startLine: 1, totalLines: 8, deliveredContentLines: 3, kept: "head" })).toEqual([1, 3])
   expect(boundedReadDelivery({ startLine: 508, totalLines: 3, deliveredContentLines: 99, kept: "head" })).toEqual([508, 510])

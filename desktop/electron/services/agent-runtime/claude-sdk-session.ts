@@ -924,10 +924,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
         this.outputRepairAttempted = true
         if (claimed) return { decision: "block", reason: "最终答复包含重复长段落或泄漏的思考标签。依据已保存的结果重新输出一次准确、无重复的最终答复，不重跑已执行的操作；保留未完成及未验证项。" }
       }
-      if (this.taskProgressToolsAvailable && await this.taskProgress?.needsInventory() && this.completionRetryMarker !== "missing-inventory") {
-        this.completionRetryMarker = "missing-inventory"
-        return { decision: "block", reason: `已读取多个资源但尚未登记任务范围，不能验证完成。用已有回执登记完整清单并提交处理结果，不重读或重跑已完成操作。${TASK_PROGRESS_GUIDANCE}` }
-      }
       const assessment = await this.taskProgress?.assessment()
       if (!assessment || assessment.status !== "partial") return {}
       const gaps = await this.taskProgress?.evidenceGaps(typeof input.last_assistant_message === "string" ? input.last_assistant_message : undefined)
@@ -2415,6 +2411,9 @@ function evidenceNoticeMessage(gaps: TaskEvidenceGaps): string | undefined {
   const lines: string[] = []
   if (gaps.overclaim.length > 0) {
     lines.push(`答复声称已完整读取这些材料，但没有可核对的记录：${names(gaps.overclaim)}。`)
+  }
+  if (gaps.unregisteredClaim) {
+    lines.push("答复声称已完整读取多份材料，但没有可核对的登记清单。")
   }
   if (gaps.missingEvidence.length > 0) {
     lines.push(`这些材料已登记但没有可核对的读取或修改记录：${names(gaps.missingEvidence)}。`)

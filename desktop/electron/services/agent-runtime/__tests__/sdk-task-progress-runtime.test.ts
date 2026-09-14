@@ -296,7 +296,8 @@ it("keeps a multi-file turn without any registered inventory advisory and non-fa
   try {
     const result = await harness.router.send(harness.message("Read and check both files."))
     expect(result.error).toBeUndefined()
-    expect(fixture.requests).toHaveLength(3)
+    // Two natural model turns: the reads and the final answer. No inventory round trip.
+    expect(fixture.requests).toHaveLength(2)
     const saved = await harness.conversations.get(result.conversationId)
     expect(saved?.history.some((entry) => entry.metadata?.agentEventType === "error")).toBe(false)
     expect(await harness.repository.taskProgress!.assessment(result.conversationId, saved!.taskProgressScope!.turnId))
@@ -334,6 +335,67 @@ it("treats a native edit receipt as processed evidence without failing the turn"
     const errors = (await harness.agentEvents.list({ conversationId: result.conversationId }))
       .filter((entry) => entry.eventType === "error")
     expect(errors).toHaveLength(0)
+  } finally { await harness.close(); await fixture.close() }
+}, 30_000)
+
+it("does not force an inventory round trip for a two-file edit with limited reads", async () => {
+  let stage = 0
+  const fixture = await createNativeSdkFixture(() => {
+    switch (stage++) {
+      case 0: return [
+        { name: "Read", id: "read-page", input: { file_path: path.join(fixture.root, "page.html"), limit: 5 } },
+        { name: "Read", id: "read-side", input: { file_path: path.join(fixture.root, "side.html"), limit: 5 } },
+      ]
+      case 1: return [{ name: "Edit", id: "edit-page", input: { file_path: path.join(fixture.root, "page.html"),
+        old_string: "EDIT-MARKER", new_string: "EDIT-MARKER-DONE" } }]
+      default: return "已按要求只读开头并完成编辑。"
+    }
+  })
+  const page = path.join(fixture.root, "page.html")
+  const side = path.join(fixture.root, "side.html")
+  for (const file of [page, side]) {
+    await writeFile(file, `<!doctype html>\n<div>EDIT-MARKER</div>\n${"filler-line\n".repeat(2_000)}`)
+  }
+  const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
+  try {
+    const result = await harness.router.send(harness.message("只读开头 5 行，修改 page.html 的标记，不要整份读。"))
+    expect(result.error).toBeUndefined()
+    expect(await readFile(page, "utf8")).toContain("EDIT-MARKER-DONE")
+    // Three natural model turns: two reads, one edit, then the final answer. No inventory round trip.
+    expect(fixture.requests).toHaveLength(3)
+    const saved = await harness.conversations.get(result.conversationId)
+    expect(saved?.history.some((entry) => entry.metadata?.agentEventType === "error")).toBe(false)
+    expect(await harness.repository.taskProgress!.assessment(result.conversationId, saved!.taskProgressScope!.turnId))
+      .toMatchObject({ status: "unverified", declaredUnits: 0 })
+  } finally { await harness.close(); await fixture.close() }
+}, 30_000)
+
+it("keeps an unregistered multi-file coverage claim advisory without another model turn", async () => {
+  let stage = 0
+  const fixture = await createNativeSdkFixture(() => {
+    switch (stage++) {
+      case 0: return [
+        { name: "Read", id: "read-page", input: { file_path: path.join(fixture.root, "page.html"), limit: 5 } },
+        { name: "Read", id: "read-side", input: { file_path: path.join(fixture.root, "side.html"), limit: 5 } },
+      ]
+      case 1: return [{ name: "Edit", id: "edit-page", input: { file_path: path.join(fixture.root, "page.html"),
+        old_string: "EDIT-MARKER", new_string: "EDIT-MARKER-DONE" } }]
+      default: return "已通读全部文件，未遗漏，编辑完成。"
+    }
+  })
+  const page = path.join(fixture.root, "page.html")
+  const side = path.join(fixture.root, "side.html")
+  for (const file of [page, side]) {
+    await writeFile(file, `<!doctype html>\n<div>EDIT-MARKER</div>\n${"filler-line\n".repeat(2_000)}`)
+  }
+  const harness = imageRuntimeHarness({ root: fixture.root, env: fixture.env as Record<string, string>, model: "fixture-model" })
+  try {
+    const result = await harness.router.send(harness.message("只读开头 5 行，修改 page.html 的标记，不要整份读。"))
+    expect(result.error).toBeUndefined()
+    expect(fixture.requests).toHaveLength(3)
+    const notice = (await harness.agentEvents.list({ conversationId: result.conversationId }))
+      .findLast((entry) => entry.eventType === "error")
+    expect(notice?.payload).toMatchObject({ errorKind: "task_evidence_incomplete", recoverable: true })
   } finally { await harness.close(); await fixture.close() }
 }, 30_000)
 

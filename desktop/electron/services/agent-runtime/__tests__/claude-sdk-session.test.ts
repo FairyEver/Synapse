@@ -714,12 +714,11 @@ describe("ClaudeSDKSession", () => {
     { personaToolPolicy: { mode: "allowlist" as const, allowedTools: ["Read"] } },
   ])("does not demand progress tools excluded by the active policy: %j", async (policy) => {
     const { factory, getOptions } = createQueryFactory()
-    const taskProgress = { needsInventory: vi.fn().mockResolvedValue(true), assessment: vi.fn().mockResolvedValue({ status: "unverified" }) }
+    const taskProgress = { assessment: vi.fn().mockResolvedValue({ status: "unverified" }) }
     createSession(factory, { ...policy, taskProgress: taskProgress as unknown as NonNullable<ConstructorParameters<typeof ClaudeSDKSession>[0]["taskProgress"]> })
     expect(JSON.stringify(getOptions().systemPrompt)).toContain("progress tools are unavailable")
     const hooks = getOptions().hooks as { Stop: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> }
     expect(await hooks.Stop[0]!.hooks[0]!({ hook_event_name: "Stop", last_assistant_message: "Verification unavailable." })).toEqual({})
-    expect(taskProgress.needsInventory).not.toHaveBeenCalled()
   })
 
   it("denies tools outside the persona allowlist before SDK permissions", async () => {
