@@ -300,11 +300,14 @@ Dependencies:
 ```text
 @xterm/xterm
 @xterm/addon-fit
+@xterm/addon-unicode11
 @xterm/addon-web-links
 node-pty
 ```
 
 `node-pty` is a native module, so implementation must verify Electron rebuild and packaged app behavior. If packaging boundaries change, the packaged asar check must prove the native runtime files are available in the correct packed or unpacked location.
+
+Terminal character widths follow the Claude Code width library (`Bun.stringWidth`, equivalent to `string-width` / `emoji-regex`: code points with the `Emoji` property are two cells). The Renderer and the Main-process headless emulator must share the same table (`terminal-unicode-width.ts`), so MCP screen reads and serialized checkpoints wrap exactly like the rendered terminal.
 
 ## Validation
 

@@ -2,16 +2,34 @@ import { app, safeStorage } from "electron"
 import pty from "node-pty"
 import headless from "@xterm/headless"
 import serializeAddon from "@xterm/addon-serialize"
-import unicode11Addon from "@xterm/addon-unicode11"
+import { existsSync } from "node:fs"
+import { createRequire } from "node:module"
+import { fileURLToPath } from "node:url"
 
 const { Terminal } = headless
 const { SerializeAddon } = serializeAddon
-const { Unicode11Addon } = unicode11Addon
+const requireFromSpike = createRequire(import.meta.url)
+const APP_UNICODE_WIDTH_MODULE = fileURLToPath(
+  new URL("../../dist-electron/app-capabilities/terminal/shared/terminal-unicode-width.js", import.meta.url),
+)
 
 const TIMEOUT_MS = 10_000
 const MARKER = "__SYNAPSE_TERMINAL_RUNTIME_SPIKE__"
 const COMMAND_MARKER = "__SYNAPSE_TERMINAL_ATOMIC_COMMAND__"
 const activePtys = new Set()
+
+function loadAppUnicodeWidthModule() {
+  if (!existsSync(APP_UNICODE_WIDTH_MODULE)) {
+    throw new Error(
+      `App terminal width module is missing at ${APP_UNICODE_WIDTH_MODULE}; run "pnpm --filter @synapse/desktop run build:electron" first`,
+    )
+  }
+  const module = requireFromSpike(APP_UNICODE_WIDTH_MODULE)
+  if (typeof module.installTerminalUnicodeWidth !== "function" || typeof module.TERMINAL_UNICODE_VERSION !== "string") {
+    throw new Error("App terminal width module does not export installTerminalUnicodeWidth/TERMINAL_UNICODE_VERSION")
+  }
+  return module
+}
 
 function spawnPty(file, args, options) {
   const instance = pty.spawn(file, args, options)
@@ -73,18 +91,35 @@ async function verifyHeadlessEmulator() {
   if (!terminal.modes.bracketedPasteMode) throw new Error("Headless emulator did not track bracketed paste mode")
   const serialized = serializer.serialize()
   if (!serialized.includes("hello")) throw new Error("Headless emulator serialization lost screen content")
-  terminal.loadAddon(new Unicode11Addon())
-  terminal.unicode.activeVersion = "11"
-  if (terminal.unicode.activeVersion !== "11") {
-    throw new Error("Headless emulator did not activate the Unicode 11 width table")
+  const widthModule = loadAppUnicodeWidthModule()
+  const widthStatus = widthModule.installTerminalUnicodeWidth(terminal)
+  if (widthStatus !== "patched") {
+    throw new Error(`App terminal width table did not activate (status: ${widthStatus})`)
   }
-  await new Promise((resolve) => terminal.write("⚡", resolve))
-  const emojiCells = terminal.buffer.active.cursorX
-  if (emojiCells !== 2) throw new Error(`Headless emulator counted emoji as ${emojiCells} cells instead of 2`)
+  if (terminal.unicode.activeVersion !== widthModule.TERMINAL_UNICODE_VERSION) {
+    throw new Error(
+      `App terminal width table activated ${terminal.unicode.activeVersion} instead of ${widthModule.TERMINAL_UNICODE_VERSION}`,
+    )
+  }
+  const glyphWidths = {}
+  for (const glyph of ["⏺", "◼", "🇨🇳"]) {
+    const before = terminal.buffer.active.cursorX
+    await new Promise((resolve) => terminal.write(glyph, resolve))
+    glyphWidths[glyph] = terminal.buffer.active.cursorX - before
+  }
+  for (const [glyph, cells] of Object.entries(glyphWidths)) {
+    if (cells !== 2) throw new Error(`App terminal width table counted ${glyph} as ${cells} cells instead of 2`)
+  }
   terminal.dispose()
   const heapDelta = Math.max(0, process.memoryUsage().heapUsed - before)
   if (heapDelta > 32 * 1024 * 1024) throw new Error("Headless emulator exceeded the spike heap bound")
-  return { implementation: "@xterm/headless", serialization: true, unicodeVersion: "11", emojiCells, heapDelta }
+  return {
+    implementation: "@xterm/headless",
+    serialization: true,
+    unicodeVersion: widthModule.TERMINAL_UNICODE_VERSION,
+    glyphWidths,
+    heapDelta,
+  }
 }
 
 async function verifyQueuedInputAndResize() {

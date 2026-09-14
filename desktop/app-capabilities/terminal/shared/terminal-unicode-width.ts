@@ -9,9 +9,17 @@ import {
  * 终端字符宽度表。
  *
  * 背景：xterm.js 默认使用内置的 Unicode 6 宽度表，`@xterm/addon-unicode11` 只补充 East Asian Width，
- * 两者都会把 emoji 基础字符（`⏺`、`◻`、`◼`、`⚠️`、`✔️`、`⚡` 等）算成 1 格。Claude Code、Codex CLI
- * 等按 emoji 规则算 2 格，两边差 1 格会改变长行的换行位置，让这些 CLI 的增量重绘错位、在终端缓冲区里
- * 留下上一帧的字符。这里用官方 addon 的 Unicode 11 表作为基座，再把 emoji 基础字符补成 2 格。
+ * 两者都会把 emoji 基础字符（`⏺`、`◻`、`◼`、`⚠️`、`✔️`、`⚡` 等）算成 1 格。
+ *
+ * 对齐口径：Claude Code 用 `Bun.stringWidth`（口径与 npm `string-width` / `emoji-regex` 相同）计算宽度，
+ * 即 `emoji-data.txt` 里 `Emoji` 属性的码点算 2 格；两边差 1 格会改变长行的换行位置，让 CLI 的增量重绘
+ * 错位、在终端缓冲区里留下上一帧的字符。这里用官方 addon 的 Unicode 11 表作为基座，再把 emoji 基础字符
+ * 补成 2 格。其他工具链口径不同，例如 Codex CLI（ratatui + Rust `unicode-width`）只把 `Emoji_Presentation`
+ * 码点和 East Asian Width 的 W/F 算 2 格，`⏺`/`◼`/`⚠` 在它眼里仍是 1 格 —— 这是刻意的取舍：以 Agent
+ * 会话面板主用的 Claude Code 口径为准。
+ *
+ * 已知限制：宽度按码点计算，不按 grapheme 聚合。区域指示符（国旗）已从表中剔除，靠基座表 1 + 1 = 2 格
+ * 保持正确；肤色修饰符、ZWJ 组合 emoji 与键帽序列仍与 CLI 的 grapheme 口径不一致（偏宽或偏窄）。
  */
 
 /** 自定义宽度表版本号；渲染端与主进程 headless 仿真器必须使用同一个值。 */

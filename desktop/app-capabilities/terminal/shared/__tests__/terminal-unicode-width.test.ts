@@ -73,8 +73,18 @@ const SINGLE_WIDTH_SAMPLES: readonly (readonly [string, number])[] = [
   ["a\u0301", 1],
 ]
 
+const FLAG_SAMPLES: readonly (readonly [string, number])[] = [
+  ["🇨🇳", 2],
+  ["🇺🇸", 2],
+  ["🇯🇵", 2],
+]
+
 describe("terminal unicode width provider", () => {
   it.each([...EMOJI_SAMPLES, ...WIDE_SAMPLES])("counts %s as two cells", async (text, expected) => {
+    expect(await measureWidth(text)).toBe(expected)
+  })
+
+  it.each(FLAG_SAMPLES)("counts the flag %s as two cells", async (text, expected) => {
     expect(await measureWidth(text)).toBe(expected)
   })
 
@@ -105,12 +115,29 @@ describe("terminal unicode width provider", () => {
     }
   })
 
+  it("keeps regional indicators out of the emoji table", () => {
+    for (const codepoint of [0x1f1e6, 0x1f1ff]) {
+      expect(isTerminalEmojiCodePoint(codepoint)).toBe(false)
+    }
+  })
+
   it("wraps a line only once the emoji cells exceed the terminal width", async () => {
     const terminal = createTerminal(10)
     try {
       expect(installTerminalUnicodeWidth(terminal)).toBe("patched")
       await write(terminal, `${"⏺".repeat(5)}a`)
       expect(screenLines(terminal).slice(0, 2)).toEqual(["⏺⏺⏺⏺⏺", "a"])
+    } finally {
+      terminal.dispose()
+    }
+  })
+
+  it("wraps flag lines at the width the agent CLIs assume", async () => {
+    const terminal = createTerminal(10)
+    try {
+      expect(installTerminalUnicodeWidth(terminal)).toBe("patched")
+      await write(terminal, `${"🇨🇳".repeat(5)}a`)
+      expect(screenLines(terminal).slice(0, 2)).toEqual(["🇨🇳🇨🇳🇨🇳🇨🇳🇨🇳", "a"])
     } finally {
       terminal.dispose()
     }

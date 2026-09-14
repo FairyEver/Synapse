@@ -938,6 +938,7 @@ function verifyTerminalRuntime(header, resourcesPath, unpackedPath, failures) {
 
   for (const relativePath of [
     "dist-electron/app-capabilities/terminal/shared/terminal-unicode-width.js",
+    "dist-electron/app-capabilities/terminal/shared/terminal-unicode-emoji-ranges.js",
     "node_modules/@xterm/addon-unicode11/package.json",
     "node_modules/@xterm/addon-unicode11/lib/addon-unicode11.js",
   ]) {
