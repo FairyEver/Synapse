@@ -243,6 +243,43 @@ describe("ConfigBackupService quick inputs", () => {
     }
   })
 
+  it("keeps the Agent project order when importing a backup", async () => {
+    const filePath = await writeBackupFile({
+      projects: [
+        { id: "project-a", name: "Project A", path: "/project-a" },
+        { id: "project-b", name: "Project B", path: "/project-b" },
+      ],
+      agentProjectOrder: ["project-b", "project-missing", "project-b", "  "],
+    })
+
+    try {
+      await configBackupService.readImport(filePath)
+
+      expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
+        global: expect.objectContaining({
+          agentProjectOrder: ["project-b"],
+        }),
+      }))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
+  it("rejects a malformed Agent project order when importing a backup", async () => {
+    const filePath = await writeBackupFile({
+      agentProjectOrder: "project-a",
+    })
+
+    try {
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow(
+        "config.global.agentProjectOrder 必须是数组。",
+      )
+      expect(configStore.replace).not.toHaveBeenCalled()
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("rejects malformed quick inputs when importing a backup", async () => {
     const filePath = await writeBackupFile({
       quickInputs: [{ id: "quick-1", content: "   " }],

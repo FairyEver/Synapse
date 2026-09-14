@@ -46,6 +46,7 @@ import {
   terminalOutputChunkSchema,
   terminalReadSessionInputSchema,
   terminalReadSessionResultSchema,
+  terminalReorderGroupsInputSchema,
   terminalReportActiveSessionInputSchema,
   terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
@@ -255,6 +256,14 @@ export const terminalIpcModule: IpcModule = {
       response: terminalGroupListItemSchema,
       handler: async (ctx, request: z.infer<typeof terminalRenameGroupInputSchema>) =>
         summarizeGroup(await resolveTerminalService(ctx).renameGroup(request)),
+    },
+    reorderGroups: {
+      operationId: "app.terminal.group.reorder",
+      kind: "invoke",
+      request: terminalReorderGroupsInputSchema,
+      response: z.array(terminalGroupListItemSchema),
+      handler: async (ctx, request: z.infer<typeof terminalReorderGroupsInputSchema>) =>
+        (await resolveTerminalService(ctx).reorderGroups(request)).map(summarizeGroup),
     },
     updateGroupSettings: {
       operationId: "app.terminal.group.update_settings",

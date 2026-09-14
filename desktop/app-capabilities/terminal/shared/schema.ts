@@ -241,6 +241,10 @@ export const terminalRenameGroupInputSchema = z.object({
   name: z.string().min(1).max(80),
 }).strict()
 
+export const terminalReorderGroupsInputSchema = z.object({
+  groupIds: z.array(z.string().min(1)).min(1),
+}).strict()
+
 export const terminalUpdateGroupSettingsInputSchema = z.object({
   groupId: z.string().min(1),
   name: z.string().min(1).max(80),
@@ -406,6 +410,7 @@ export type TerminalSession = z.infer<typeof terminalSessionSchema>
 export type TerminalOutputChunk = z.infer<typeof terminalOutputChunkSchema>
 export type TerminalCreateGroupInput = z.infer<typeof terminalCreateGroupInputSchema>
 export type TerminalRenameGroupInput = z.infer<typeof terminalRenameGroupInputSchema>
+export type TerminalReorderGroupsInput = z.infer<typeof terminalReorderGroupsInputSchema>
 export type TerminalUpdateGroupSettingsInput = z.infer<typeof terminalUpdateGroupSettingsInputSchema>
 export type TerminalUpdateGlobalLaunchSettingsInput = z.infer<typeof terminalUpdateGlobalLaunchSettingsInputSchema>
 export type TerminalUpdateAgentNotificationSettingsInput = z.infer<typeof terminalUpdateAgentNotificationSettingsInputSchema>

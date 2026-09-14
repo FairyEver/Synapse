@@ -96,6 +96,7 @@ function createConfig(): SynapseConfig {
       variables: [],
       knowledgeBaseStorage: { mode: "default" },
       dockAppIds: [...DEFAULT_DOCK_APP_IDS],
+      agentProjectOrder: [],
     },
     agent: structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG),
   }

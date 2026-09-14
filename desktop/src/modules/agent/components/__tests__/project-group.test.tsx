@@ -525,4 +525,111 @@ describe("ProjectGroup", () => {
       action: "select",
     })
   })
+
+  it("moves the sortable group from the actions menu", async () => {
+    const onMove = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ProjectGroup
+          project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
+          sessions={[]}
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          sortableId="project-1"
+          canMoveUp
+          canMoveDown
+          onMove={onMove}
+          onQuickCreateSession={vi.fn()}
+          onQuickCreateTerminalSession={vi.fn()}
+          onCustomizeSession={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    await act(async () => {
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="更多操作"]')
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+
+    const menuItems = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+    expect(menuItems.map((item) => item.textContent)).toEqual([
+      "创建自定义对话",
+      "上移",
+      "下移",
+      "清空对话",
+    ])
+    expect(menuItems[1]?.getAttribute("data-disabled")).toBeNull()
+    expect(menuItems[2]?.getAttribute("data-disabled")).toBeNull()
+
+    await act(async () => {
+      menuItems[2]?.click()
+    })
+
+    expect(onMove).toHaveBeenCalledWith("down")
+    expect(track).toHaveBeenCalledWith({
+      component: "dropdown-menu-item",
+      eventKey: "agent-project-move-down",
+      name: "agent-project-move-down",
+      action: "select",
+    })
+  })
+
+  it("disables the move actions at the list boundaries", async () => {
+    const onMove = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ProjectGroup
+          project={{ id: "project-1", name: "Project One", path: "/secret/project-one" }}
+          sourceLabel="用户对话"
+          sessions={[]}
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          sortableId="project-1"
+          canMoveUp={false}
+          canMoveDown
+          onMove={onMove}
+          onQuickCreateSession={vi.fn()}
+          onQuickCreateTerminalSession={vi.fn()}
+          onCustomizeSession={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    await act(async () => {
+      const trigger = container.querySelector<HTMLButtonElement>('[aria-label="更多操作"]')
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.click()
+      await Promise.resolve()
+    })
+
+    const moveUpItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "上移")
+    expect(moveUpItem?.getAttribute("data-disabled")).not.toBeNull()
+
+    expect(container.querySelector('[data-sortable-id="project-1"]')).not.toBeNull()
+    expect(
+      container.querySelector('[data-sortable-id="project-1"] [aria-roledescription="sortable"]'),
+    ).not.toBeNull()
+  })
 })

@@ -27,6 +27,7 @@ import {
   type ConversationSourceFilter,
 } from "./conversation-source"
 import { useAgentChat } from "./hooks/use-agent-chat"
+import { useAgentProjectOrder } from "./hooks/use-agent-project-order"
 import {
   isDetachedAgentConversation,
   useDetachedAgentConversations,
@@ -81,6 +82,12 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     name: project.name,
     path: project.path,
   })), [config.global.projects])
+  const {
+    moveProject,
+    projects: orderedProjectOptions,
+    reorderProjects,
+    saving: reorderingProjects,
+  } = useAgentProjectOrder(projectOptions)
   const visibleSessions = useMemo(
     () => filterSessionsBySource(chat.sessions, sourceFilter),
     [chat.sessions, sourceFilter],
@@ -293,9 +300,12 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     <AgentSessionSidebar
       sessions={chat.sessions}
       archivedSessions={chat.archivedSessions}
-      projects={projectOptions}
+      projects={orderedProjectOptions}
       selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
+      reordering={reorderingProjects}
+      onReorderProjects={(orderedIds) => void reorderProjects(orderedIds)}
+      onMoveProject={(projectId, direction) => void moveProject(projectId, direction)}
       sourceFilter={sourceFilter}
       unreadByConversationId={chat.unreadByConversationId}
       sendingConversationIds={chat.sendingConversationIds}

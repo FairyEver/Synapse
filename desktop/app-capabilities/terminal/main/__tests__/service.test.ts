@@ -443,6 +443,86 @@ describe("TerminalService core", () => {
     expect(harness.service.getGroup(session.groupId).name).toBe("默认")
   })
 
+  it("reorders terminal groups and persists the new order", async () => {
+    const store = memoryStore()
+    const harness = await startedHarness(store)
+    const firstGroup = harness.service.listGroups()[0]!
+    const secondGroup = await harness.service.createGroup({ name: "Second" })
+    const thirdGroup = await harness.service.createGroup({ name: "Third" })
+    const reorderedEvents: Array<{ eventType: string; objectId: string }> = []
+    harness.service.events.on("domainChanged", (event: { eventType: string; objectId: string }) => {
+      if (event.eventType === "group.reordered") reorderedEvents.push(event)
+    })
+
+    const reordered = await harness.service.reorderGroups({
+      groupIds: [thirdGroup.id, firstGroup.id, secondGroup.id],
+    })
+
+    expect(reordered.map((group) => group.id)).toEqual([thirdGroup.id, firstGroup.id, secondGroup.id])
+    expect(reordered.map((group) => group.sortOrder)).toEqual([0, 1, 2])
+    expect([...store.state.groups]
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((group) => [group.id, group.sortOrder]))
+      .toEqual([[thirdGroup.id, 0], [firstGroup.id, 1], [secondGroup.id, 2]])
+    expect(harness.service.getGroup(thirdGroup.id).groupRevision).toBe(2)
+    expect(harness.service.getGroup(secondGroup.id).groupRevision).toBe(2)
+    expect(reorderedEvents.map((event) => event.objectId))
+      .toEqual([thirdGroup.id, firstGroup.id, secondGroup.id])
+  })
+
+  it("rejects a terminal group order that is not a full permutation", async () => {
+    const store = memoryStore()
+    const harness = await startedHarness(store)
+    const firstGroup = harness.service.listGroups()[0]!
+    const secondGroup = await harness.service.createGroup({ name: "Second" })
+    const storedOrder = store.state.groups.map((group) => [group.id, group.sortOrder])
+
+    await expect(harness.service.reorderGroups({ groupIds: [] })).rejects.toMatchObject({
+      payload: { code: "invalid_argument" },
+    })
+    await expect(harness.service.reorderGroups({ groupIds: [firstGroup.id] })).rejects.toMatchObject({
+      payload: { code: "invalid_argument" },
+    })
+    await expect(harness.service.reorderGroups({
+      groupIds: [secondGroup.id, firstGroup.id, secondGroup.id],
+    })).rejects.toMatchObject({ payload: { code: "invalid_argument" } })
+    await expect(harness.service.reorderGroups({
+      groupIds: [firstGroup.id, "019f8a39-0000-7000-8000-000000000999"],
+    })).rejects.toMatchObject({ payload: { code: "invalid_argument" } })
+
+    expect(harness.service.listGroups().map((group) => group.id))
+      .toEqual([firstGroup.id, secondGroup.id])
+    expect(store.state.groups.map((group) => [group.id, group.sortOrder])).toEqual(storedOrder)
+  })
+
+  it("skips persistence when the terminal group order is unchanged", async () => {
+    const store = memoryStore()
+    let saveCount = 0
+    const countingStore: TerminalStore = {
+      ...store,
+      async saveState(state) {
+        saveCount += 1
+        await store.saveState(state)
+      },
+    }
+    const harness = await startedHarness(countingStore)
+    const firstGroup = harness.service.listGroups()[0]!
+    const secondGroup = await harness.service.createGroup({ name: "Second" })
+    const reorderedEvents: string[] = []
+    harness.service.events.on("domainChanged", (event: { eventType: string }) => {
+      if (event.eventType === "group.reordered") reorderedEvents.push(event.eventType)
+    })
+    const savesBefore = saveCount
+
+    const reordered = await harness.service.reorderGroups({
+      groupIds: [firstGroup.id, secondGroup.id],
+    })
+
+    expect(reordered.map((group) => group.id)).toEqual([firstGroup.id, secondGroup.id])
+    expect(saveCount).toBe(savesBefore)
+    expect(reorderedEvents).toEqual([])
+  })
+
   it("records explicit launch overrides as redacted facts", async () => {
     const harness = await startedHarness()
     const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-override-"))

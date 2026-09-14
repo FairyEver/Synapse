@@ -1,10 +1,13 @@
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { buildAgentConversationDeepLink } from "../../../../app-capabilities/agent/shared/schema"
 import {
   ModuleSidebar,
 } from "@/components/module-sidebar"
+import {
+  ModuleSidebarSortableList,
+} from "@/components/module-sidebar-sortable"
 import { pickInitialProviderModelSelection } from "@/components/provider-model-picker"
 import {
   Select,
@@ -31,6 +34,7 @@ import {
   type ConversationSourceFilter,
 } from "../conversation-source"
 import { formatCreateSessionName } from "../create-session-name"
+import { splitPinnedAgentProjects, type AgentProjectMoveDirection } from "../project-order"
 import { isDefaultAgentWorkspaceProjectId } from "@/lib/default-agent-workspace"
 
 const logger = createRendererLogger("agent")
@@ -77,7 +81,10 @@ type AgentSessionSidebarProps = {
     session: SynapseAgentSessionSummary,
     groupSessions: readonly SynapseAgentSessionSummary[],
   ) => void
+  onMoveProject?: (projectId: string, direction: AgentProjectMoveDirection) => void
   onRename: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
+  onReorderProjects?: (orderedIds: readonly string[]) => void
+  reordering?: boolean
 }
 
 function AgentSessionSidebar({
@@ -95,7 +102,10 @@ function AgentSessionSidebar({
   onSelect,
   onDelete,
   onDeleteOthers,
+  onMoveProject,
   onRename,
+  onReorderProjects,
+  reordering = false,
 }: AgentSessionSidebarProps) {
   const { config } = useAppConfig()
   const quickCreatePendingRef = useRef(false)
@@ -110,6 +120,8 @@ function AgentSessionSidebar({
   const visibleSessions = filterSessionsBySource(sessions, sourceFilter)
   const visibleArchivedSessions = filterSessionsBySource(archivedSessions, sourceFilter)
   const sessionsByProject = groupSessionsByProject(visibleSessions)
+  const { pinned, sortable } = useMemo(() => splitPinnedAgentProjects(projects), [projects])
+  const sortableProjectIds = useMemo(() => sortable.map((project) => project.id), [sortable])
   const sourceLabel = CONVERSATION_SOURCE_OPTIONS.find((option) => option.value === sourceFilter)?.label
     ?? "当前分类"
 
@@ -173,6 +185,45 @@ function AgentSessionSidebar({
     }
   }
 
+  const renderProjectGroup = (
+    project: ProjectOption,
+    sortableOptions?: { readonly canMoveDown: boolean; readonly canMoveUp: boolean },
+  ) => (
+    <ProjectGroup
+      key={project.id}
+      project={project}
+      sortableId={sortableOptions ? project.id : undefined}
+      sortableDisabled={reordering}
+      canMoveUp={sortableOptions?.canMoveUp ?? false}
+      canMoveDown={sortableOptions?.canMoveDown ?? false}
+      onMove={onMoveProject
+        ? (direction) => onMoveProject(project.id, direction)
+        : undefined}
+      sourceLabel={sourceLabel}
+      sessions={sessionsByProject.get(project.id) ?? []}
+      selectedProjectId={selectedProjectId}
+      selectedConversationId={selectedConversationId}
+      unreadByConversationId={unreadByConversationId}
+      sendingConversationIds={sendingConversationIds}
+      createDisabled={quickCreatingProjectId !== null}
+      creating={quickCreatingProjectId === project.id}
+      onQuickCreateSession={() => void handleQuickCreate(project, "session")}
+      onQuickCreateTerminalSession={() => void handleQuickCreate(project, "terminal")}
+      onCustomizeSession={() => openCreateDialog(project)}
+      onShowProjectInFolder={isDefaultAgentWorkspaceProjectId(project.id)
+        ? undefined
+        : () => void showProjectInFolder(project)}
+      onOpenProjectInTerminal={isDefaultAgentWorkspaceProjectId(project.id)
+        ? undefined
+        : () => void openProjectInTerminal(project)}
+      onSelect={onSelect}
+      onCopyDeepLink={handleCopyDeepLink}
+      onDelete={onDelete}
+      onDeleteOthers={onDeleteOthers}
+      onRename={onRename}
+    />
+  )
+
   return (
     <ModuleSidebar variant="bare">
       <ScrollArea
@@ -204,34 +255,17 @@ function AgentSessionSidebar({
             </SelectContent>
           </Select>
         </div>
-        {projects.map((project) => (
-          <ProjectGroup
-            key={project.id}
-            project={project}
-            sourceLabel={sourceLabel}
-            sessions={sessionsByProject.get(project.id) ?? []}
-            selectedProjectId={selectedProjectId}
-            selectedConversationId={selectedConversationId}
-            unreadByConversationId={unreadByConversationId}
-            sendingConversationIds={sendingConversationIds}
-            createDisabled={quickCreatingProjectId !== null}
-            creating={quickCreatingProjectId === project.id}
-            onQuickCreateSession={() => void handleQuickCreate(project, "session")}
-            onQuickCreateTerminalSession={() => void handleQuickCreate(project, "terminal")}
-            onCustomizeSession={() => openCreateDialog(project)}
-            onShowProjectInFolder={isDefaultAgentWorkspaceProjectId(project.id)
-              ? undefined
-              : () => void showProjectInFolder(project)}
-            onOpenProjectInTerminal={isDefaultAgentWorkspaceProjectId(project.id)
-              ? undefined
-              : () => void openProjectInTerminal(project)}
-            onSelect={onSelect}
-            onCopyDeepLink={handleCopyDeepLink}
-            onDelete={onDelete}
-            onDeleteOthers={onDeleteOthers}
-            onRename={onRename}
-          />
-        ))}
+        {pinned.map((project) => renderProjectGroup(project))}
+        <ModuleSidebarSortableList
+          disabled={reordering || !onReorderProjects}
+          items={sortableProjectIds}
+          onReorder={(orderedIds) => onReorderProjects?.(orderedIds)}
+        >
+          {sortable.map((project, index) => renderProjectGroup(project, {
+            canMoveDown: index < sortable.length - 1,
+            canMoveUp: index > 0,
+          }))}
+        </ModuleSidebarSortableList>
         {visibleArchivedSessions.length > 0 ? (
           <ArchivedGroup
             sessions={visibleArchivedSessions}

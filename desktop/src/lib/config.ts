@@ -17,6 +17,7 @@ import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../typ
 import { SYNAPSE_AGENT_PERMISSION_MODES } from "../types/agent"
 import { MODEL_TIERS } from "../types/provider-model"
 import { normalizeDockAppIds } from "../modules/apps/dock"
+import { normalizeAgentProjectOrder } from "../modules/agent/project-order"
 import type { ModelTier } from "../types/provider-model"
 import type { SynapseContentType } from "../types/content"
 import type {
@@ -234,6 +235,10 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
   }
 
   if (hasOwnKey(value, "dockAppIds") && !Array.isArray(value.dockAppIds)) {
+    return true
+  }
+
+  if (hasOwnKey(value, "agentProjectOrder") && !Array.isArray(value.agentProjectOrder)) {
     return true
   }
 
@@ -615,10 +620,11 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     normalizeQuickInputs(value.quickInputs),
     normalizeQuickInputSeededVersion(value.defaultQuickInputsSeededVersion),
   )
+  const projects = normalizeProjects(value.projects)
 
   return {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
-    projects: normalizeProjects(value.projects),
+    projects,
     quickInputs: seeded.quickInputs,
     defaultQuickInputsSeededVersion: seeded.seededVersion,
     favorites: normalizeFavorites(value.favorites),
@@ -629,6 +635,10 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     variables: normalizeVariableList(value.variables),
     knowledgeBaseStorage: normalizeKnowledgeBaseStorage(value.knowledgeBaseStorage),
     dockAppIds: normalizeDockAppIds(Array.isArray(value.dockAppIds) ? value.dockAppIds : undefined),
+    agentProjectOrder: normalizeAgentProjectOrder(
+      projects,
+      Array.isArray(value.agentProjectOrder) ? value.agentProjectOrder : undefined,
+    ),
   }
 }
 

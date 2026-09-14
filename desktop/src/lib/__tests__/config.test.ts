@@ -735,4 +735,46 @@ describe("Synapse user variables config", () => {
 
     expect(config.global.dockAppIds).toEqual(["database", "launcher"])
   })
+
+  it("normalizes the Agent project order in global config", () => {
+    expect(createDefaultConfig().global.agentProjectOrder).toEqual([])
+
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [
+          { id: "project-a", name: "Project A", path: "/project-a" },
+          { id: "project-b", name: "Project B", path: "/project-b" },
+        ],
+        agentProjectOrder: ["project-b", "ghost", "project-b", 42],
+      },
+    })
+
+    expect(config.global.agentProjectOrder).toEqual(["project-b"])
+  })
+
+  it("patches the Agent project order and drops removed projects", () => {
+    const current = applySynapseConfigPatch(createDefaultConfig(), {
+      global: {
+        projects: [
+          { id: "project-a", name: "Project A", path: "/project-a" },
+          { id: "project-b", name: "Project B", path: "/project-b" },
+        ],
+      },
+    })
+    const next = applySynapseConfigPatch(current, {
+      global: { agentProjectOrder: ["project-b", "project-a"] },
+    })
+
+    expect(next.global.agentProjectOrder).toEqual(["project-b", "project-a"])
+    expect(next.global.projects).toEqual(current.global.projects)
+
+    const removed = applySynapseConfigPatch(next, {
+      global: { projects: [{ id: "project-a", name: "Project A", path: "/project-a" }] },
+    })
+
+    expect(removed.global.agentProjectOrder).toEqual(["project-a"])
+  })
 })

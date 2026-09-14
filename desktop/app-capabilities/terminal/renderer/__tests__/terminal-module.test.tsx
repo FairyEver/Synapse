@@ -119,6 +119,15 @@ const terminalBridge = vi.hoisted(() => ({
     bridgeState.groups = bridgeState.groups.map((item) => item.id === groupId ? group : item)
     return group
   }),
+  reorderGroups: vi.fn(async ({ groupIds }: { groupIds: string[] }) => {
+    const reordered = groupIds.map((groupId, index) => {
+      const group = bridgeState.groups.find((item) => item.id === groupId)
+      if (!group) throw new Error("Group not found")
+      return { ...group, sortOrder: index, updatedAt: "2026-06-24T00:04:00.000Z" }
+    })
+    bridgeState.groups = reordered
+    return reordered
+  }),
   updateGroupSettings: vi.fn(async ({ groupId, name, settings }: SynapseTerminalUpdateGroupSettingsInput) => {
     const group = {
       ...bridgeState.groups.find((item) => item.id === groupId),
@@ -516,6 +525,7 @@ vi.mock("@/lib/electron-bridge", () => ({
         get: terminalBridge.getGroup,
         create: terminalBridge.createGroup,
         rename: terminalBridge.renameGroup,
+        reorder: terminalBridge.reorderGroups,
         updateSettings: terminalBridge.updateGroupSettings,
         delete: terminalBridge.deleteGroup,
       },
@@ -779,6 +789,7 @@ beforeEach(() => {
   terminalBridge.updateGlobalLaunchSettings.mockClear()
   terminalBridge.createGroup.mockClear()
   terminalBridge.renameGroup.mockClear()
+  terminalBridge.reorderGroups.mockClear()
   terminalBridge.updateGroupSettings.mockClear()
   terminalBridge.getGroupCommand.mockClear()
   terminalBridge.createGroupCommand.mockClear()
@@ -1563,6 +1574,54 @@ describe("TerminalModule", () => {
     expect(document.querySelector("[data-slot='collapsible'][data-state='closed']")).toBeTruthy()
     expect(document.querySelector("[aria-label^='终端输出与输入']")).toBeTruthy()
     expect(terminalBridge.attachSession).toHaveBeenLastCalledWith({ sessionId: "session-1" })
+  })
+
+  it("moves a terminal group down from the group menu and keeps the new order", async () => {
+    bridgeState.groups = [
+      createGroup({ id: "group-build", name: "构建", sortOrder: 0 }),
+      createGroup({ id: "group-logs", name: "日志", sortOrder: 1 }),
+      createGroup({ id: "group-tests", name: "测试", sortOrder: 2 }),
+    ]
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    await clickMenuItem("下移")
+
+    expect(terminalBridge.reorderGroups).toHaveBeenCalledWith({
+      groupIds: ["group-logs", "group-build", "group-tests"],
+    })
+    expect(sidebarSortableGroupIds()).toEqual(["group-logs", "group-build", "group-tests"])
+  })
+
+  it("keeps the previous terminal group order when reordering fails", async () => {
+    bridgeState.groups = [
+      createGroup({ id: "group-build", name: "构建", sortOrder: 0 }),
+      createGroup({ id: "group-logs", name: "日志", sortOrder: 1 }),
+    ]
+    terminalBridge.reorderGroups.mockRejectedValueOnce(new Error("Terminal group order rejected"))
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    await clickMenuItem("下移")
+
+    expect(toastState.error).toHaveBeenCalledWith("调整分组顺序失败")
+    expect(sidebarSortableGroupIds()).toEqual(["group-build", "group-logs"])
+  })
+
+  it("disables group move actions at the ends of the terminal group list", async () => {
+    bridgeState.groups = [
+      createGroup({ id: "group-build", name: "构建", sortOrder: 0 }),
+      createGroup({ id: "group-logs", name: "日志", sortOrder: 1 }),
+    ]
+
+    await renderModule()
+    await clickGroupMenu("构建")
+    expect(menuItemForText("上移")?.hasAttribute("data-disabled")).toBe(true)
+    await clickMenuItem("上移")
+    expect(terminalBridge.reorderGroups).not.toHaveBeenCalled()
+
+    await clickGroupMenu("日志")
+    expect(menuItemForText("下移")?.hasAttribute("data-disabled")).toBe(true)
   })
 
   it("renames a terminal group from the group menu", async () => {
@@ -3318,6 +3377,16 @@ async function clickMenuItem(text: string): Promise<void> {
     item?.click()
     await Promise.resolve()
   })
+}
+
+function menuItemForText(text: string): HTMLElement | undefined {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]'))
+    .find((element) => element.textContent === text)
+}
+
+function sidebarSortableGroupIds(): string[] {
+  return Array.from(document.body.querySelectorAll<HTMLElement>("[data-sortable-id]"))
+    .map((element) => element.dataset.sortableId ?? "")
 }
 
 function headerSessionTab(title: string): HTMLButtonElement | null {

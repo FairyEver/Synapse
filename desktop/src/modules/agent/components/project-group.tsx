@@ -1,6 +1,15 @@
 import { useRef, useState } from "react"
-import { EllipsisVertical, Folder, FolderOpen, LoaderCircle, Plus } from "lucide-react"
-import { ModuleSidebarGroup } from "@/components/module-sidebar"
+import {
+  ArrowDown,
+  ArrowUp,
+  EllipsisVertical,
+  Folder,
+  FolderOpen,
+  LoaderCircle,
+  Plus,
+} from "lucide-react"
+import { ModuleSidebarGroup, type ModuleSidebarGroupProps } from "@/components/module-sidebar"
+import { ModuleSidebarSortableGroup } from "@/components/module-sidebar-sortable"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -33,6 +42,30 @@ import {
 } from "./agent-session-delete-dialog"
 import { sessionLabel } from "../utils"
 import { conversationUnreadKey } from "../live-sync"
+import type { AgentProjectMoveDirection } from "../project-order"
+
+type ProjectGroupShellProps = ModuleSidebarGroupProps & {
+  readonly sortableDisabled: boolean
+  readonly sortableId?: string
+}
+
+function ProjectGroupShell({
+  sortableDisabled,
+  sortableId,
+  ...groupProps
+}: ProjectGroupShellProps) {
+  if (!sortableId) {
+    return <ModuleSidebarGroup {...groupProps} />
+  }
+
+  return (
+    <ModuleSidebarSortableGroup
+      {...groupProps}
+      sortableDisabled={sortableDisabled}
+      sortableId={sortableId}
+    />
+  )
+}
 
 type ProjectGroupProps = {
   project: { id: string; name: string; path: string }
@@ -56,7 +89,12 @@ type ProjectGroupProps = {
     session: SynapseAgentSessionSummary,
     groupSessions: readonly SynapseAgentSessionSummary[],
   ) => void
+  onMove?: (direction: AgentProjectMoveDirection) => void
   onRename: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
+  canMoveDown?: boolean
+  canMoveUp?: boolean
+  sortableDisabled?: boolean
+  sortableId?: string
 }
 
 function ProjectGroup({
@@ -78,7 +116,12 @@ function ProjectGroup({
   onCopyDeepLink,
   onDelete,
   onDeleteOthers,
+  onMove,
   onRename,
+  canMoveDown = false,
+  canMoveUp = false,
+  sortableDisabled = false,
+  sortableId,
 }: ProjectGroupProps) {
   const isSelected = selectedProjectId === project.id
   const [open, setOpen] = useState(isSelected || sessions.length > 0)
@@ -141,7 +184,9 @@ function ProjectGroup({
 
   return (
     <>
-      <ModuleSidebarGroup
+      <ProjectGroupShell
+        sortableId={sortableId}
+        sortableDisabled={sortableDisabled}
         open={open}
         onOpenChange={setOpen}
         data-track="agent-project-group"
@@ -206,6 +251,26 @@ function ProjectGroup({
                   >
                     在终端中打开
                   </DropdownMenuItem>
+                ) : null}
+                {onMove ? (
+                  <>
+                    <DropdownMenuItem
+                      data-track="agent-project-move-up"
+                      disabled={!canMoveUp}
+                      onSelect={() => onMove("up")}
+                    >
+                      <ArrowUp />
+                      上移
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-track="agent-project-move-down"
+                      disabled={!canMoveDown}
+                      onSelect={() => onMove("down")}
+                    >
+                      <ArrowDown />
+                      下移
+                    </DropdownMenuItem>
+                  </>
                 ) : null}
                 <DropdownMenuItem
                   variant="destructive"
@@ -280,7 +345,7 @@ function ProjectGroup({
             </ContextMenu>
           )
         })}
-      </ModuleSidebarGroup>
+      </ProjectGroupShell>
 
       <AgentSessionRenameDialog
         session={renameTarget}

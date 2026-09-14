@@ -178,6 +178,7 @@ type ModuleSidebarGroupProps = {
   readonly open: boolean
   readonly openIcon?: LucideIcon
   readonly title: ReactNode
+  readonly triggerProps?: HTMLAttributes<HTMLButtonElement>
 }
 
 function ModuleSidebarGroup({
@@ -192,13 +193,17 @@ function ModuleSidebarGroup({
   open,
   openIcon: OpenIcon,
   title,
+  triggerProps,
 }: ModuleSidebarGroupProps) {
   const Icon = open ? OpenIcon : ClosedIcon
 
   return (
     <Collapsible open={open} onOpenChange={onOpenChange} data-track={dataTrack} className={cn("grid w-full min-w-0 max-w-full", className)}>
       <div className={cn("flex h-8 w-full min-w-0 max-w-full items-center justify-between rounded-lg px-2 transition-colors hover:bg-muted/50", headerClassName)}>
-        <CollapsibleTrigger className="flex h-full min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50">
+        <CollapsibleTrigger
+          {...triggerProps}
+          className="flex h-full min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+        >
           {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
           <span className="truncate">{title}</span>
         </CollapsibleTrigger>
@@ -377,4 +382,5 @@ export {
   ModuleSidebarItem,
   ModuleSidebarList,
   ModuleSidebarRow,
+  type ModuleSidebarGroupProps,
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, CircleDot, Code2, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
@@ -57,6 +57,10 @@ import {
   ModuleSidebarList,
   ModuleSidebarRow,
 } from "../../../src/components/module-sidebar"
+import {
+  ModuleSidebarSortableGroup,
+  ModuleSidebarSortableList,
+} from "../../../src/components/module-sidebar-sortable"
 import { SidebarContentLayout } from "../../../src/components/sidebar-content-layout"
 import { Skeleton } from "../../../src/components/ui/skeleton"
 import { requireBridgeDomain } from "../../../src/lib/electron-bridge"
@@ -104,10 +108,16 @@ import {
   type TerminalToolbarAction,
 } from "./terminal-toolbar-actions"
 import { TerminalToolbarManagerDialog } from "./terminal-toolbar-manager-dialog"
+import {
+  applyGroupOrder,
+  moveGroupId,
+  type TerminalGroupMoveDirection,
+} from "./terminal-group-order"
 
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
 const TERMINAL_SIDEBAR_PERSISTENCE_ID = "terminal"
+const UNGROUPED_TERMINAL_GROUP_ID = "ungrouped"
 const logger = createRendererLogger("terminal.app")
 
 export function TerminalModule({
@@ -147,6 +157,7 @@ export function TerminalModule({
   const [groupRenameTarget, setGroupRenameTarget] = useState<SynapseTerminalGroupSummary | null>(null)
   const [groupName, setGroupName] = useState("")
   const [groupSaving, setGroupSaving] = useState(false)
+  const [groupReordering, setGroupReordering] = useState(false)
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<SynapseTerminalGroupSummary | null>(null)
   const [deleteGroupSaving, setDeleteGroupSaving] = useState(false)
   const [groupSettingsTarget, setGroupSettingsTarget] = useState<SynapseTerminalGroup | null>(null)
@@ -223,6 +234,15 @@ export function TerminalModule({
   }, [workspaces])
 
   const workspaceGroups = useMemo(() => groupWorkspaces(groups, workspaces), [groups, workspaces])
+  const sortableGroups = useMemo(
+    () => workspaceGroups.filter((group) => group.id !== UNGROUPED_TERMINAL_GROUP_ID),
+    [workspaceGroups],
+  )
+  const ungroupedGroup = useMemo(
+    () => workspaceGroups.find((group) => group.id === UNGROUPED_TERMINAL_GROUP_ID) ?? null,
+    [workspaceGroups],
+  )
+  const sortableGroupIds = useMemo(() => sortableGroups.map((group) => group.id), [sortableGroups])
   const activeHeaderWorkspaces = useMemo(() => {
     const sessionsById = new Map(sessions.map((session) => [session.id, session]))
     return workspaceGroups
@@ -872,6 +892,35 @@ export function TerminalModule({
     terminalBridge,
   ])
 
+  const persistGroupOrder = useCallback(async (orderedGroupIds: readonly string[]) => {
+    if (groupReordering) return
+    setGroupReordering(true)
+    setGroups((current) => applyGroupOrder(current, orderedGroupIds))
+    try {
+      const nextGroups = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.group.reorder" },
+        () => terminalBridge.group.reorder({ groupIds: [...orderedGroupIds] }),
+      )
+      setGroups(nextGroups)
+    } catch (error) {
+      logger.warn("Failed to persist terminal group order.", error)
+      toast.error("调整分组顺序失败")
+      try {
+        setGroups(await terminalBridge.group.list())
+      } catch (refreshError) {
+        logger.warn("Failed to refresh terminal groups after a group order error.", refreshError)
+      }
+    } finally {
+      setGroupReordering(false)
+    }
+  }, [groupReordering, terminalBridge])
+
+  const moveGroup = useCallback((groupId: string, direction: TerminalGroupMoveDirection) => {
+    const nextOrder = moveGroupId(sortableGroupIds, groupId, direction)
+    if (!nextOrder) return
+    void persistGroupOrder(nextOrder)
+  }, [persistGroupOrder, sortableGroupIds])
+
   const openCommandManager = useCallback(async (group: SynapseTerminalGroupSummary) => {
     try {
       const [details, globalSettings] = await Promise.all([
@@ -1135,6 +1184,114 @@ export function TerminalModule({
     })
   }, [])
 
+  const renderGroupActions = (group: SynapseTerminalGroupSummary, index: number) => (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        title="新建终端"
+        onClick={() => { void createSession({ groupId: group.id }) }}
+      >
+        <Plus className="size-3.5" />
+        <span className="sr-only">新建终端</span>
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={`以命令启动：${group.name}`}
+          >
+            <Code2 className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {group.settings?.commands?.map((command) => (
+            <DropdownMenuItem key={command.id} onClick={() => { void launchCommand(group, command) }}>
+              <TerminalIcon />
+              {command.name}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem onClick={() => { void openCommandManager(group) }}>
+            <Settings />
+            管理命令
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label={`终端分组操作：${group.name}`}
+          >
+            <MoreHorizontal className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => { void openGroupSettingsDialog(group) }}>
+            <Settings />
+            设置
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => { void openCommandManager(group) }}>
+            <Code2 />
+            命令
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
+            <Pencil />
+            重命名
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={groupReordering || index === 0}
+            onClick={() => moveGroup(group.id, "up")}
+          >
+            <ArrowUp />
+            上移
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={groupReordering || index === sortableGroups.length - 1}
+            onClick={() => moveGroup(group.id, "down")}
+          >
+            <ArrowDown />
+            下移
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={(event) => startDeleteGroup(group, event)}>
+            <Trash2 />
+            删除
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
+
+  const renderGroupWorkspaces = (group: SynapseTerminalGroupSummary & { workspaces: SynapseTerminalWorkspace[] }) => (
+    group.workspaces.map((workspace) => (
+      <ModuleSidebarRow
+        key={workspace.id}
+        active={workspace.id === activeWorkspace?.id}
+        data-track="terminal-session-select"
+        icon={<TerminalSessionStatusIcon status={workspaceStatus(workspace, sessions)} />}
+        trailing={
+          <TerminalWorkspaceLifecycleButton
+            canForce={rendererPlatform === "darwin"}
+            closing={workspace.closing}
+            disabled={closingWorkspaceId === workspace.id}
+            title={workspace.title}
+            onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
+          />
+        }
+        trackValue={workspace.id}
+        onSelect={() => selectWorkspace(workspace.id)}
+        onDoubleClick={(event) => openRenameDialog(workspace, event.currentTarget)}
+      >
+        {workspace.title}
+      </ModuleSidebarRow>
+    ))
+  )
+
   const sidebar = (
     <ModuleSidebar
       variant="bare"
@@ -1155,108 +1312,44 @@ export function TerminalModule({
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
             </>
-          ) : workspaceGroups.length > 0 ? workspaceGroups.map((group) => (
-            <ModuleSidebarGroup
-              key={group.id}
-              open={openGroupIds[group.id] ?? true}
-              onOpenChange={(open) => setOpenGroupIds((current) => ({ ...current, [group.id]: open }))}
-              data-track="terminal-session-group"
-              title={group.name}
-              openIcon={FolderOpen}
-              closedIcon={Folder}
-              actions={group.id !== "ungrouped" ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    title="新建终端"
-                    onClick={() => { void createSession({ groupId: group.id }) }}
+          ) : workspaceGroups.length > 0 ? (
+            <>
+              <ModuleSidebarSortableList
+                items={sortableGroupIds}
+                disabled={groupReordering}
+                onReorder={(orderedGroupIds) => { void persistGroupOrder(orderedGroupIds) }}
+              >
+                {sortableGroups.map((group, index) => (
+                  <ModuleSidebarSortableGroup
+                    key={group.id}
+                    sortableId={group.id}
+                    sortableDisabled={groupReordering}
+                    open={openGroupIds[group.id] ?? true}
+                    onOpenChange={(open) => setOpenGroupIds((current) => ({ ...current, [group.id]: open }))}
+                    data-track="terminal-session-group"
+                    title={group.name}
+                    openIcon={FolderOpen}
+                    closedIcon={Folder}
+                    actions={renderGroupActions(group, index)}
                   >
-                    <Plus className="size-3.5" />
-                    <span className="sr-only">新建终端</span>
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={`以命令启动：${group.name}`}
-                      >
-                        <Code2 className="size-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {group.settings?.commands?.map((command) => (
-                        <DropdownMenuItem key={command.id} onClick={() => { void launchCommand(group, command) }}>
-                          <TerminalIcon />
-                          {command.name}
-                        </DropdownMenuItem>
-                      ))}
-                      <DropdownMenuItem onClick={() => { void openCommandManager(group) }}>
-                        <Settings />
-                        管理命令
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon-xs"
-                        variant="ghost"
-                        aria-label={`终端分组操作：${group.name}`}
-                      >
-                        <MoreHorizontal className="size-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => { void openGroupSettingsDialog(group) }}>
-                        <Settings />
-                        设置
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => { void openCommandManager(group) }}>
-                        <Code2 />
-                        命令
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openRenameGroupDialog(group)}>
-                        <Pencil />
-                        重命名
-                      </DropdownMenuItem>
-                      <DropdownMenuItem variant="destructive" onClick={(event) => startDeleteGroup(group, event)}>
-                        <Trash2 />
-                        删除
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : null}
-            >
-              {group.workspaces.map((workspace) => (
-                <ModuleSidebarRow
-                  key={workspace.id}
-                  active={workspace.id === activeWorkspace?.id}
-                  data-track="terminal-session-select"
-                  icon={<TerminalSessionStatusIcon status={workspaceStatus(workspace, sessions)} />}
-                  trailing={
-                    <TerminalWorkspaceLifecycleButton
-                      canForce={rendererPlatform === "darwin"}
-                      closing={workspace.closing}
-                      disabled={closingWorkspaceId === workspace.id}
-                      title={workspace.title}
-                      onClose={() => { void closeWorkspace(workspace, workspace.closing && rendererPlatform === "darwin") }}
-                    />
-                  }
-                  trackValue={workspace.id}
-                  onSelect={() => selectWorkspace(workspace.id)}
-                  onDoubleClick={(event) => openRenameDialog(workspace, event.currentTarget)}
+                    {renderGroupWorkspaces(group)}
+                  </ModuleSidebarSortableGroup>
+                ))}
+              </ModuleSidebarSortableList>
+              {ungroupedGroup ? (
+                <ModuleSidebarGroup
+                  open={openGroupIds[ungroupedGroup.id] ?? true}
+                  onOpenChange={(open) => setOpenGroupIds((current) => ({ ...current, [ungroupedGroup.id]: open }))}
+                  data-track="terminal-session-group"
+                  title={ungroupedGroup.name}
+                  openIcon={FolderOpen}
+                  closedIcon={Folder}
                 >
-                  {workspace.title}
-                </ModuleSidebarRow>
-              ))}
-            </ModuleSidebarGroup>
-          )) : (
+                  {renderGroupWorkspaces(ungroupedGroup)}
+                </ModuleSidebarGroup>
+              ) : null}
+            </>
+          ) : (
             <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
               暂无会话
             </div>

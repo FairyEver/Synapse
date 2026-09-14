@@ -93,6 +93,7 @@ export const DEFAULT_GLOBAL_CONFIG: SynapseGlobalConfig = {
   variables: [],
   knowledgeBaseStorage: DEFAULT_KNOWLEDGE_BASE_STORAGE,
   dockAppIds: [...DEFAULT_DOCK_APP_IDS],
+  agentProjectOrder: [],
 }
 
 export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {

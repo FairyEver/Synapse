@@ -51,6 +51,7 @@ import type {
   TerminalReadSessionInput,
   TerminalReadSessionResult,
   TerminalRenameGroupInput,
+  TerminalReorderGroupsInput,
   TerminalRenameSessionInput,
   TerminalResizeSessionInput,
   TerminalRunStartupCommandInput,
@@ -1499,6 +1500,41 @@ export function createTerminalService(deps: {
     return updated
   }
 
+  async function reorderGroups(input: TerminalReorderGroupsInput): Promise<TerminalGroup[]> {
+    const currentOrder = listGroups()
+    const seenGroupIds = new Set<string>()
+    for (const groupId of input.groupIds) {
+      if (seenGroupIds.has(groupId)) {
+        throw terminalContractError("invalid_argument", "validation", { details: { reason: "duplicate_group_id", groupId } })
+      }
+      if (!groups.has(groupId)) {
+        throw terminalContractError("invalid_argument", "validation", { details: { reason: "unknown_group_id", groupId } })
+      }
+      seenGroupIds.add(groupId)
+    }
+    if (seenGroupIds.size !== currentOrder.length) {
+      throw terminalContractError("invalid_argument", "validation", { details: { reason: "incomplete_group_order" } })
+    }
+
+    const reordered = input.groupIds.map((groupId) => groups.get(groupId)!)
+    if (reordered.every((group, index) => group.sortOrder === index)) return currentOrder
+
+    const timestamp = now()
+    for (const [index, group] of reordered.entries()) {
+      if (group.sortOrder === index) continue
+      const updated: TerminalGroup = {
+        ...group,
+        sortOrder: index,
+        updatedAt: timestamp,
+        groupRevision: group.groupRevision + 1,
+      }
+      groups.set(group.id, updated)
+      bumpDomain("group.reordered", group.id, updated.groupRevision)
+    }
+    await flushPersist()
+    return listGroups()
+  }
+
   async function updateGroupSettings(input: TerminalUpdateGroupSettingsInput): Promise<TerminalGroup> {
     const group = getGroupOrThrow(input.groupId)
     if (input.expectedLaunchRevision !== undefined && input.expectedLaunchRevision !== group.launchRevision) {
@@ -2727,6 +2763,7 @@ export function createTerminalService(deps: {
     getGroupCommand,
     createGroup,
     renameGroup,
+    reorderGroups,
     updateGroupSettings,
     createGroupCommand,
     updateGroupCommand,

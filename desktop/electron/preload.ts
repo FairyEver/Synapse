@@ -571,6 +571,7 @@ const synapseBridge: SynapseBridge = {
       get: (input) => invoke(IPC_CHANNELS.terminal.getGroup)(input),
       create: (input) => invoke(IPC_CHANNELS.terminal.createGroup)(input),
       rename: (input) => invoke(IPC_CHANNELS.terminal.renameGroup)(input),
+      reorder: (input) => invoke(IPC_CHANNELS.terminal.reorderGroups)(input),
       updateSettings: (input) => invoke(IPC_CHANNELS.terminal.updateGroupSettings)(input),
       delete: (input) => invoke(IPC_CHANNELS.terminal.deleteGroup)(input),
     },

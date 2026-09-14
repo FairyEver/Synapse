@@ -5,6 +5,7 @@ import { CONFIG_BACKUP_IMPORT_MAX_BYTES } from "../../config"
 import { CONTENT_TYPE_DEFINITIONS } from "../../src/config/content-types"
 import { DEFAULT_AGENT_GLOBAL_CONFIG, DEFAULT_KNOWLEDGE_BASE_STORAGE } from "../../src/constants/defaults"
 import { DEFAULT_DOCK_APP_IDS, normalizeDockAppIds } from "../../src/modules/apps/dock"
+import { normalizeAgentProjectOrder } from "../../src/modules/agent/project-order"
 import type {
   SynapseDataRepositoryBackupPayload,
   SynapseConfigBackup,
@@ -124,6 +125,23 @@ function validateDockAppIds(rawValue: unknown, errors: string[]): SynapseConfig[
   }
 
   return normalizeDockAppIds(rawValue)
+}
+
+function validateAgentProjectOrder(
+  rawValue: unknown,
+  projects: SynapseConfig["global"]["projects"],
+  errors: string[],
+): SynapseConfig["global"]["agentProjectOrder"] | null {
+  if (rawValue === undefined) {
+    return []
+  }
+
+  if (!Array.isArray(rawValue)) {
+    errors.push("config.global.agentProjectOrder 必须是数组。")
+    return null
+  }
+
+  return normalizeAgentProjectOrder(projects, rawValue)
 }
 
 function formatValidationErrors(errors: string[]): string {
@@ -818,6 +836,12 @@ function validateConfig(
     projectIdSet.add(project.id)
   })
 
+  const agentProjectOrder = validateAgentProjectOrder(
+    global.agentProjectOrder,
+    normalizedProjects,
+    errors,
+  )
+
   if (
     activeRepoUuid !== null
     && activeRepoUuid !== undefined
@@ -843,6 +867,7 @@ function validateConfig(
     || !normalizedAgent
     || !knowledgeBaseStorage
     || !dockAppIds
+    || !agentProjectOrder
   ) {
     return null
   }
@@ -861,6 +886,7 @@ function validateConfig(
       variables,
       knowledgeBaseStorage,
       dockAppIds,
+      agentProjectOrder,
     },
     agent: normalizedAgent,
   }

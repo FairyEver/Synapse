@@ -103,5 +103,5 @@ type AgentPickerPopoverProps = {
 
 ## 排序
 
-- 项目顺序：按 `config.global.projects` 数组顺序
+- 项目顺序：先按 `config.global.agentProjectOrder` 排列，未记录的项目再按 `config.global.projects` 数组顺序追加；「本地对话」固定首位、「已归档」固定末位，二者不参与排序
 - 对话顺序：按 `updatedAt` 降序（最近活跃的在上面），保持现有排序逻辑

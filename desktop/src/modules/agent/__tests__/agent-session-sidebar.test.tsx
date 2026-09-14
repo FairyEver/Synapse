@@ -340,6 +340,101 @@ describe("AgentSessionSidebar", () => {
       .some((item) => item.textContent === "在终端中打开")).toBe(false)
   })
 
+  it("renders sortable project groups in the given order with the local workspace pinned", () => {
+    const html = renderToStaticMarkup(
+      <AgentSessionSidebar
+        sessions={[]}
+        archivedSessions={[{
+          projectId: "project-a",
+          id: "archived-conversation",
+          sessionKey: "local:archived",
+          platform: "local",
+          name: "Archived Session",
+          active: false,
+          historyCount: 1,
+          createdAt: "2026-09-12T00:00:00.000Z",
+          updatedAt: "2026-09-12T00:00:00.000Z",
+        }]}
+        projects={[
+          DEFAULT_AGENT_WORKSPACE_PROJECT,
+          { id: "project-c", name: "Project C", path: "/tmp/project-c" },
+          { id: "project-a", name: "Project A", path: "/tmp/project-a" },
+        ]}
+        selectedProjectId={undefined}
+        selectedConversationId={undefined}
+        sourceFilter="user"
+        unreadByConversationId={{}}
+        sendingConversationIds={new Set()}
+        onCreateSession={vi.fn()}
+        onSourceFilterChange={vi.fn()}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onDeleteOthers={vi.fn()}
+        onRename={vi.fn()}
+        onMoveProject={vi.fn()}
+        onReorderProjects={vi.fn()}
+      />,
+    )
+
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+
+    expect([...wrapper.querySelectorAll('[data-slot="collapsible"]')]
+      .map((group) => group.querySelector("span.truncate")?.textContent))
+      .toEqual(["本地对话", "Project C", "Project A", "已归档"])
+    expect([...wrapper.querySelectorAll("[data-sortable-id]")]
+      .map((element) => element.getAttribute("data-sortable-id")))
+      .toEqual(["project-c", "project-a"])
+    expect(wrapper.querySelector(`[data-sortable-id="${DEFAULT_AGENT_WORKSPACE_PROJECT.id}"]`)).toBeNull()
+  })
+
+  it("moves a project group from the actions menu", async () => {
+    const onMoveProject = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionSidebar
+          sessions={[]}
+          archivedSessions={[]}
+          projects={[
+            DEFAULT_AGENT_WORKSPACE_PROJECT,
+            { id: "project-a", name: "Project A", path: "/tmp/project-a" },
+            { id: "project-b", name: "Project B", path: "/tmp/project-b" },
+          ]}
+          selectedProjectId={undefined}
+          selectedConversationId={undefined}
+          sourceFilter="user"
+          unreadByConversationId={{}}
+          sendingConversationIds={new Set()}
+          onCreateSession={vi.fn()}
+          onSourceFilterChange={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+          onMoveProject={onMoveProject}
+          onReorderProjects={vi.fn()}
+        />,
+      )
+    })
+
+    await openProjectActionMenu(1)
+    const moveDownItem = [...document.body.querySelectorAll<HTMLElement>("[role='menuitem']")]
+      .find((item) => item.textContent === "下移")
+    expect(moveDownItem).toBeDefined()
+
+    await act(async () => {
+      moveDownItem?.click()
+      await Promise.resolve()
+    })
+
+    expect(onMoveProject).toHaveBeenCalledWith("project-a", "down")
+  })
+
   it("allows long session titles to truncate inside the sidebar", () => {
     const longTitle = "能力矩阵回归测试工作流 / 8A. 通道聚合与边界校验 · 05-22 21:19"
     const html = renderToStaticMarkup(

@@ -427,6 +427,7 @@ export const IPC_CHANNELS = {
     "getGroup": "synapse:app:terminal:group:get",
     "createGroup": "synapse:app:terminal:group:create",
     "renameGroup": "synapse:app:terminal:group:rename",
+    "reorderGroups": "synapse:app:terminal:group:reorder",
     "updateGroupSettings": "synapse:app:terminal:group:update_settings",
     "getGroupCommand": "synapse:app:terminal:group_command:get",
     "createGroupCommand": "synapse:app:terminal:group_command:create",

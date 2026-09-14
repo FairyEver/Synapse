@@ -136,6 +136,7 @@ import type {
   SynapseTerminalReadSessionInput,
   SynapseTerminalReadSessionResult,
   SynapseTerminalRenameGroupInput,
+  SynapseTerminalReorderGroupsInput,
   SynapseTerminalRenameSessionInput,
   SynapseTerminalRenameWorkspaceInput,
   SynapseTerminalResizeSessionInput,
@@ -1210,6 +1211,7 @@ export type SynapseBridge = {
       get: (input: { groupId: string }) => Promise<SynapseTerminalGroup>
       create: (input: SynapseTerminalCreateGroupInput) => Promise<SynapseTerminalGroupSummary>
       rename: (input: SynapseTerminalRenameGroupInput) => Promise<SynapseTerminalGroupSummary>
+      reorder: (input: SynapseTerminalReorderGroupsInput) => Promise<SynapseTerminalGroupSummary[]>
       updateSettings: (input: SynapseTerminalUpdateGroupSettingsInput) => Promise<SynapseTerminalGroupSummary>
       delete: (input: SynapseTerminalDeleteGroupInput) => Promise<void>
     }

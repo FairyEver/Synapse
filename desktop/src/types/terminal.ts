@@ -30,6 +30,7 @@ import type {
   TerminalReadSessionInput,
   TerminalReadSessionResult,
   TerminalRenameGroupInput,
+  TerminalReorderGroupsInput,
   TerminalRenameSessionInput,
   TerminalRenameWorkspaceInput,
   TerminalResizeSessionInput,
@@ -68,6 +69,7 @@ export type SynapseTerminalPaneLeaf = TerminalPaneLeaf
 export type SynapseTerminalOutputChunk = TerminalOutputChunk
 export type SynapseTerminalCreateGroupInput = TerminalCreateGroupInput
 export type SynapseTerminalRenameGroupInput = TerminalRenameGroupInput
+export type SynapseTerminalReorderGroupsInput = TerminalReorderGroupsInput
 export type SynapseTerminalUpdateGroupSettingsInput = TerminalUpdateGroupSettingsInput
 export type SynapseTerminalUpdateGlobalLaunchSettingsInput = TerminalUpdateGlobalLaunchSettingsInput
 export type SynapseTerminalUpdateAgentNotificationSettingsInput = TerminalUpdateAgentNotificationSettingsInput

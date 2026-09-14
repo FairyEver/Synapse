@@ -89,6 +89,7 @@ describe("terminalIpcModule", () => {
     expect(terminalIpcModule.methods.getGroup.operationId).toBe("app.terminal.group.get")
     expect(terminalIpcModule.methods.createGroup.operationId).toBe("app.terminal.group.create")
     expect(terminalIpcModule.methods.renameGroup.operationId).toBe("app.terminal.group.rename")
+    expect(terminalIpcModule.methods.reorderGroups.operationId).toBe("app.terminal.group.reorder")
     expect(terminalIpcModule.methods.updateGroupSettings.operationId).toBe("app.terminal.group.update_settings")
     expect(terminalIpcModule.methods.getGroupCommand.operationId).toBe("app.terminal.group_command.get")
     expect(terminalIpcModule.methods.revealEnvironmentValue.operationId).toBe("app.terminal.environment.reveal")
@@ -299,6 +300,30 @@ describe("terminalIpcModule", () => {
     expect(service.runStartupCommand).toHaveBeenCalledWith({
       sessionId: "session-1",
     })
+  })
+
+  it("reorders terminal groups through IPC", async () => {
+    const service = createService()
+    const group = {
+      id: "group-1",
+      name: "构建",
+      createdAt: "2026-06-24T00:00:00.000Z",
+      updatedAt: "2026-06-24T00:01:00.000Z",
+      sortOrder: 0,
+      groupRevision: 2,
+      launchRevision: 1,
+      membershipRevision: 1,
+      commandCollectionRevision: 1,
+    }
+    service.reorderGroups = vi.fn(async () => [group])
+
+    const reordered = await terminalIpcModule.methods.reorderGroups.handler(createContext(service), {
+      groupIds: ["group-1"],
+    })
+
+    expect(service.reorderGroups).toHaveBeenCalledWith({ groupIds: ["group-1"] })
+    expect(() => terminalIpcModule.methods.reorderGroups.response.parse(reordered)).not.toThrow()
+    expect(reordered).toEqual([group])
   })
 
   it("validates group mutation responses with saved command summaries", async () => {
@@ -660,6 +685,7 @@ function createService(): Partial<TerminalService> {
       membershipRevision: 1,
       commandCollectionRevision: 1,
     })),
+    reorderGroups: vi.fn(async () => []),
     updateGroupSettings: vi.fn((input) => ({
       id: input.groupId,
       name: input.name,
