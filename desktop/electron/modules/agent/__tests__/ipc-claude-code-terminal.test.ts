@@ -223,6 +223,76 @@ describe("Claude Code terminal IPC", () => {
     ;(launched?.onEnded as () => void)()
   })
 
+  it("pins the declared 1M window when the model name carries the marker", async () => {
+    const buildEnv = vi.fn().mockResolvedValue({
+      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "token-value",
+      ANTHROPIC_MODEL: "deepseek-flash[1M]",
+    })
+    let launched: Record<string, unknown> | undefined
+    const createSessionWithEphemeralEnvironment = vi.fn(async (input: Record<string, unknown>) => {
+      launched = input
+      return { id: "session-1m" }
+    })
+    const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment })
+
+    await method.handler(ctx, { projectId: "project-1", providerId: "vendor", modelTier: "default" })
+
+    expect(launched?.environment).toMatchObject({
+      ANTHROPIC_MODEL: "deepseek-flash[1M]",
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1000000",
+    })
+    // The marker must survive into the flag layer too: it is what Claude Code reads as the declaration.
+    const args = launched?.args as string[]
+    expect(args).toEqual(expect.arrayContaining(["--model", "deepseek-flash[1M]"]))
+    await expect(readFile(args[1]!, "utf8")).resolves.toContain("deepseek-flash[1M]")
+    ;(launched?.onEnded as () => void)()
+  })
+
+  it("lets the declared 1M window outrank the catalog entry for the same model", async () => {
+    const buildEnv = vi.fn()
+    const launched: Array<Record<string, unknown>> = []
+    const createSessionWithEphemeralEnvironment = vi.fn(async (input: Record<string, unknown>) => {
+      launched.push(input)
+      return { id: `session-window-${launched.length}` }
+    })
+    const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment })
+    const providerEnv = {
+      ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/apps/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "token-value",
+    }
+
+    // The catalog registers this model at 128k, so an unmarked launch keeps the catalog value.
+    buildEnv.mockResolvedValue({ ...providerEnv, ANTHROPIC_MODEL: "deepseek-v3" })
+    await method.handler(ctx, { projectId: "project-1", providerId: "bailian", modelTier: "default" })
+    expect(launched[0]?.environment).toMatchObject({ CLAUDE_CODE_MAX_CONTEXT_TOKENS: "128000" })
+    ;(launched[0]?.onEnded as () => void)()
+
+    buildEnv.mockResolvedValue({ ...providerEnv, ANTHROPIC_MODEL: "deepseek-v3[1M]" })
+    await method.handler(ctx, { projectId: "project-1", providerId: "bailian", modelTier: "default" })
+    expect(launched[1]?.environment).toMatchObject({ CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1000000" })
+    ;(launched[1]?.onEnded as () => void)()
+  })
+
+  it("writes no context window for an unmarked model the catalog does not know", async () => {
+    const buildEnv = vi.fn().mockResolvedValue({
+      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+      ANTHROPIC_AUTH_TOKEN: "token-value",
+      ANTHROPIC_MODEL: "unlisted-model",
+    })
+    let launched: Record<string, unknown> | undefined
+    const createSessionWithEphemeralEnvironment = vi.fn(async (input: Record<string, unknown>) => {
+      launched = input
+      return { id: "session-unlisted" }
+    })
+    const ctx = createContext({ buildEnv, createSessionWithEphemeralEnvironment })
+
+    await method.handler(ctx, { projectId: "project-1", providerId: "vendor", modelTier: "default" })
+
+    expect(launched?.environment).not.toHaveProperty("CLAUDE_CODE_MAX_CONTEXT_TOKENS")
+    ;(launched?.onEnded as () => void)()
+  })
+
   it("removes launch directories left behind by a previous process and leaves others alone", async () => {
     const base = await mkdtemp(path.join(os.tmpdir(), "synapse-claude-code-sweep-"))
     try {

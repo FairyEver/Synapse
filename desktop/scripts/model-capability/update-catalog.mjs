@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url"
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const CATALOG_PATH = path.resolve(SCRIPT_DIR, "../../electron/services/model-capability/catalog.json")
 const GENERATED_AT = "2026-08-25T00:00:00.000Z"
+// Declared before the catalog is built: withDerivedAliases reads them during canonicalization.
+const ONE_M_CONTEXT_TOKENS = 1_000_000
+const ONE_M_CONTEXT_MARKERS = ["[1M]", "[1m]"]
 const MIN_BAILIAN_TEXT_MODELS = 40
 const ALIYUN_TEXT_URL = "https://help.aliyun.com/zh/model-studio/text-generation-model"
 const ALIYUN_LIST_URL = "https://help.aliyun.com/zh/model-studio/model-list-text-generation/"
@@ -14,10 +17,11 @@ const BAILIAN_MARKET_URL = "https://bailian.console.aliyun.com/cn-beijing?tab=mo
 const args = process.argv.slice(2)
 const checkOnly = args.includes("--check")
 const refreshOfficialDocs = args.includes("--official-docs")
+const canonicalOnly = args.includes("--canonical")
 const browserResponsePath = optionValue("--bailian-response")
 
-if (!checkOnly && !refreshOfficialDocs && !browserResponsePath) {
-  fail("Use --check, --official-docs, or --bailian-response <path>.")
+if (!checkOnly && !refreshOfficialDocs && !canonicalOnly && !browserResponsePath) {
+  fail("Use --check, --canonical, --official-docs, or --bailian-response <path>.")
 }
 
 const previous = await readCatalogIfPresent()
@@ -127,6 +131,7 @@ function directModels() {
     direct("anthropic-official", "claude-haiku-4-5-20251001", 200_000, "Anthropic", "anthropic-models", { maxOutputTokens: 64_000 }),
     direct("anthropic-official", "claude-opus-4-8", 1_000_000, "Anthropic", "anthropic-models", { maxOutputTokens: 128_000 }),
     direct("anthropic-official", "claude-sonnet-5", 1_000_000, "Anthropic", "anthropic-models", { maxOutputTokens: 128_000 }),
+    direct("deepseek-official", "deepseek-flash", 1_000_000, "DeepSeek", "deepseek-v4", { capabilities: ["reasoning", "tool-calling"] }),
     direct("deepseek-official", "deepseek-v4-flash", 1_000_000, "DeepSeek", "deepseek-v4", { capabilities: ["reasoning", "tool-calling"] }),
     direct("deepseek-official", "deepseek-v4-pro", 1_000_000, "DeepSeek", "deepseek-v4", { capabilities: ["reasoning", "tool-calling"] }),
     direct("gemini-official", "gemini-3-flash-preview", 1_048_576, "Google", "gemini-models", {
@@ -144,7 +149,7 @@ function directModels() {
       capabilities: ["code-execution", "function-calling", "reasoning", "structured-output"],
     }),
     direct("kimi-code-official", "k3", 1_048_576, "Moonshot AI", "kimi-code-models", {
-      aliases: ["k3[1m]"],
+      aliases: ["k3[1M]", "k3[1m]"],
       inputModalities: ["image", "text", "video"],
       capabilities: ["reasoning", "tool-calling"],
     }),
@@ -337,6 +342,20 @@ function direct(providerScopeId, modelId, contextWindowTokens, author, sourceId,
   }
 }
 
+/**
+ * Claude Code reads a trailing `[1m]` on a model id as a 1M-context declaration, and Synapse stores
+ * that declaration on the model name itself. Registering the marked spelling as an alias keeps the
+ * exact catalog lookup working for a model the user declared as 1M. Only models whose window is
+ * exactly one million tokens qualify: for any other window the marker and the catalog would report
+ * different numbers.
+ */
+function withDerivedAliases(model) {
+  if (model.contextWindowTokens !== ONE_M_CONTEXT_TOKENS) return model
+  const aliases = new Set(model.aliases)
+  for (const marker of ONE_M_CONTEXT_MARKERS) aliases.add(`${model.modelId}${marker}`)
+  return { ...model, aliases: [...aliases] }
+}
+
 function canonicalCatalog(value) {
   return {
     schemaVersion: 1,
@@ -347,15 +366,18 @@ function canonicalCatalog(value) {
       baseUrls: [...item.baseUrls].sort(),
       sourceIds: [...item.sourceIds].sort(),
     })),
-    models: [...value.models].sort(byModelKey).map((item) => ({
-      ...item,
-      aliases: [...item.aliases].sort(),
-      inputModalities: [...item.inputModalities].sort(),
-      outputModalities: [...item.outputModalities].sort(),
-      capabilities: [...item.capabilities].sort(),
-      features: [...item.features].sort(),
-      serviceRegions: [...item.serviceRegions].sort(),
-    })),
+    models: [...value.models].sort(byModelKey).map((item) => {
+      const model = withDerivedAliases(item)
+      return {
+        ...model,
+        aliases: [...model.aliases].sort(byString),
+        inputModalities: [...model.inputModalities].sort(byString),
+        outputModalities: [...model.outputModalities].sort(byString),
+        capabilities: [...model.capabilities].sort(byString),
+        features: [...model.features].sort(byString),
+        serviceRegions: [...model.serviceRegions].sort(byString),
+      }
+    }),
   }
 }
 
@@ -497,6 +519,11 @@ function optionValue(name) {
 
 function byId(left, right) {
   return left.id.localeCompare(right.id, "en")
+}
+
+// Must match the runtime catalog validator, which order-checks these arrays with localeCompare.
+function byString(left, right) {
+  return left.localeCompare(right, "en")
 }
 
 function byModelKey(left, right) {

@@ -62,6 +62,7 @@ describe("model capability catalog", () => {
   it.each([
     ["https://api.anthropic.com", "claude-sonnet-5", 1_000_000],
     ["https://generativelanguage.googleapis.com", "gemini-3.1-pro-preview", 1_048_576],
+    ["https://api.deepseek.com/anthropic", "deepseek-flash", 1_000_000],
     ["https://api.deepseek.com/anthropic", "deepseek-v4-pro", 1_000_000],
     ["https://api.kimi.com/coding/", "kimi-for-coding", 262_144],
     ["https://open.bigmodel.cn/api/anthropic", "glm-5.2", 1_000_000],
@@ -71,6 +72,39 @@ describe("model capability catalog", () => {
   ])("matches representative official model %s %s", (baseUrl, modelId, contextWindowTokens) => {
     expect(matchModelCapability({ baseUrl, modelId })?.contextWindowTokens)
       .toBe(contextWindowTokens)
+  })
+
+  // Synapse stores the 1M declaration on the model name, so the marked spelling must resolve to the
+  // same catalog record instead of falling out of the exact lookup.
+  it.each([
+    ["https://api.deepseek.com/anthropic", "deepseek-flash[1M]"],
+    ["https://api.deepseek.com/anthropic", "deepseek-flash[1m]"],
+    ["https://api.deepseek.com/anthropic", "deepseek-v4-pro[1M]"],
+    ["https://dashscope.aliyuncs.com/apps/anthropic", "qwen3.8-max[1M]"],
+    ["https://api.anthropic.com", "claude-opus-4-8[1m]"],
+  ])("resolves the 1M declaration spelling of %s %s", (baseUrl, modelId) => {
+    const resolved = resolveModelContextConfiguration({ baseUrl, modelId })
+    expect(resolved.contextWindowTokens).toBe(1_000_000)
+    expect(resolved.configurationSource).toBe("catalog")
+    expect(resolved.modelContext?.contextWindowTokens).toBe(1_000_000)
+  })
+
+  it("does not register the 1M spelling for a model with a smaller window", () => {
+    expect(matchModelCapability({
+      baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic",
+      modelId: "deepseek-v3[1M]",
+    })).toBeUndefined()
+  })
+
+  // k3's documented window is 1,048,576 rather than one million, so its marker resolves to the
+  // catalog's own value instead of the marker's nominal one.
+  it("resolves the marker of a model whose window is close to one million", () => {
+    const resolved = resolveModelContextConfiguration({
+      baseUrl: "https://api.kimi.com/coding",
+      modelId: "k3[1M]",
+    })
+    expect(resolved.contextWindowTokens).toBe(1_048_576)
+    expect(resolved.configurationSource).toBe("catalog")
   })
 
   it("normalizes host, duplicate slashes and trailing slashes without weakening exact path matching", () => {

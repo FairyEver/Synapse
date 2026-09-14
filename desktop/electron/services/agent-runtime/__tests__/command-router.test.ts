@@ -58,6 +58,71 @@ describe("AgentCommandRouter", () => {
     expect(resets).toEqual(["s1", "s1"])
   })
 
+  it("keeps a configured 1M declaration when the bare model name is typed", async () => {
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "deepseek",
+      name: "DeepSeek",
+      category: "third_party",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      active: true,
+      model: "deepseek-flash[1M]",
+      env: {},
+    })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => null,
+    })
+    const conversation = baseConversation()
+
+    const list = expectRuntimeResult(await router.handle(baseMessage("/model"), conversation))
+    expect(list.resultText).toContain("deepseek-flash[1M]")
+
+    // The marker is part of the configured value, so the bare name selects that entry instead of
+    // overwriting the declaration.
+    const bare = expectRuntimeResult(
+      await router.handle(baseMessage("/model deepseek-flash"), conversation),
+    )
+    expect(bare.resultText).toBe("模型已切换：deepseek-flash[1M]")
+    await expect(providerService.getActiveProvider()).resolves.toMatchObject({
+      model: "deepseek-flash[1M]",
+    })
+
+    const declared = expectRuntimeResult(
+      await router.handle(baseMessage("/model deepseek-flash[1m]"), conversation),
+    )
+    expect(declared.resultText).toBe("模型已切换：deepseek-flash[1M]")
+  })
+
+  it("still accepts a model name the Provider does not configure", async () => {
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "deepseek",
+      name: "DeepSeek",
+      category: "third_party",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      active: true,
+      model: "deepseek-flash",
+      env: {},
+    })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => null,
+    })
+
+    const switched = expectRuntimeResult(
+      await router.handle(baseMessage("/model brand-new-model"), baseConversation()),
+    )
+    expect(switched.resultText).toBe("模型已切换：brand-new-model")
+    await expect(providerService.getActiveProvider()).resolves.toMatchObject({
+      model: "brand-new-model",
+    })
+  })
+
   it("switches the conversation-bound provider model instead of the active provider", async () => {
     const { providerService } = makeProviderService()
     await providerService.createProvider({

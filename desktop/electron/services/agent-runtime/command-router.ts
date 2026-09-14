@@ -28,6 +28,9 @@ import {
 } from "./agent-error-messages"
 import { agentRuntimeErrorMessage } from "./error-message"
 
+// `@synapse/shared` is ESM-only, so the main process reaches its values through a dynamic import.
+const sharedModelContextPromise = import("@synapse/shared")
+
 export interface AgentCommandRouterDeps {
   readonly projectId: string
   readonly agentType: string
@@ -266,7 +269,8 @@ export class AgentCommandRouter {
       )
     }
 
-    const target = resolveModelTarget(targetInput, models)
+    const { stripOneMMarker } = await sharedModelContextPromise
+    const target = resolveModelTarget(targetInput, models, stripOneMMarker)
     const reset = await this.deps.resetSession(message)
     await this.deps.providerService.updateProvider(provider.id, { model: target })
     return commandResult(
@@ -639,6 +643,7 @@ export function parseModelSwitchArgs(args: readonly string[]): string | null {
 export function resolveModelTarget(
   input: string,
   models: readonly ModelOption[],
+  normalizeModelId: (modelId: string) => string = (modelId) => modelId,
 ): string {
   const trimmed = input.trim()
   const index = Number.parseInt(trimmed, 10)
@@ -649,7 +654,13 @@ export function resolveModelTarget(
     model.aliases.some((value) => value.toLowerCase() === trimmed.toLowerCase()))
   if (alias) return alias.id
   const exact = models.find((model) => model.id.toLowerCase() === trimmed.toLowerCase())
-  return exact?.id ?? trimmed
+  if (exact) return exact.id
+  // A `[1M]` declaration is a property of the configured model, not part of its identity, and the
+  // result is written back to the Provider. Typing the bare name must therefore select the
+  // configured entry rather than overwrite its declaration.
+  const wanted = normalizeModelId(trimmed).toLowerCase()
+  const declared = models.find((model) => normalizeModelId(model.id).toLowerCase() === wanted)
+  return declared?.id ?? trimmed
 }
 
 export function modesForAgent(agentType: string): readonly ModeOption[] {

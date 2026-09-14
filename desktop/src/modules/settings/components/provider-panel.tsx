@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDownIcon, ClipboardCopy, DownloadIcon, Plus } from "lucide-react"
 import { toast } from "sonner"
+import { hasOneMMarker, setOneMMarker } from "@synapse/shared"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   AlertDialog,
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -1190,6 +1192,12 @@ function ProviderApiAndModelFields({
                 disabled={disabled}
                 onChange={(event) => onValueChange("model", event.target.value)}
               />
+              <ProviderOneMContextField
+                id="provider-model-1m"
+                value={values.model}
+                disabled={disabled}
+                onValueChange={(next) => onValueChange("model", next)}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="provider-opus-model">
@@ -1200,6 +1208,12 @@ function ProviderApiAndModelFields({
                 value={values.opusModel}
                 disabled={disabled}
                 onChange={(event) => onValueChange("opusModel", event.target.value)}
+              />
+              <ProviderOneMContextField
+                id="provider-opus-model-1m"
+                value={values.opusModel}
+                disabled={disabled}
+                onValueChange={(next) => onValueChange("opusModel", next)}
               />
             </Field>
             <Field>
@@ -1212,6 +1226,12 @@ function ProviderApiAndModelFields({
                 disabled={disabled}
                 onChange={(event) => onValueChange("sonnetModel", event.target.value)}
               />
+              <ProviderOneMContextField
+                id="provider-sonnet-model-1m"
+                value={values.sonnetModel}
+                disabled={disabled}
+                onValueChange={(next) => onValueChange("sonnetModel", next)}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="provider-haiku-model">
@@ -1223,11 +1243,45 @@ function ProviderApiAndModelFields({
                 disabled={disabled}
                 onChange={(event) => onValueChange("haikuModel", event.target.value)}
               />
+              <ProviderOneMContextField
+                id="provider-haiku-model-1m"
+                value={values.haikuModel}
+                disabled={disabled}
+                onValueChange={(next) => onValueChange("haikuModel", next)}
+              />
             </Field>
           </div>
         </TooltipProvider>
       </div>
     </>
+  )
+}
+
+/**
+ * A 1M-context declaration is stored as a `[1M]` suffix on the model name itself, so the checkbox
+ * and the input are two views of one value: typing the suffix by hand ticks the box too.
+ */
+function ProviderOneMContextField({
+  id,
+  value,
+  disabled,
+  onValueChange,
+}: {
+  readonly id: string
+  readonly value: string
+  readonly disabled: boolean
+  readonly onValueChange: (value: string) => void
+}) {
+  return (
+    <Field orientation="horizontal">
+      <Checkbox
+        id={id}
+        checked={hasOneMMarker(value)}
+        disabled={disabled}
+        onCheckedChange={(checked) => onValueChange(setOneMMarker(value, checked === true))}
+      />
+      <FieldLabel htmlFor={id}>1M 上下文</FieldLabel>
+    </Field>
   )
 }
 

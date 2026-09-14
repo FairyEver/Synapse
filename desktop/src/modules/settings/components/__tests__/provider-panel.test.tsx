@@ -25,6 +25,12 @@ import type { SynapseAgentProvider } from "@/types/bridge"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+} as typeof ResizeObserver
+
 let roots: Root[] = []
 
 beforeEach(() => {
@@ -452,6 +458,71 @@ describe("ProviderPanel dialog editor", () => {
     expect(config.env.ANTHROPIC_BASE_URL).toBe("https://api.example.com")
     expect(config.env.ANTHROPIC_AUTH_TOKEN).toBe("sk-custom")
     expect(config.env.ANTHROPIC_MODEL).toBe("claude-custom")
+  })
+
+  it("stores the 1M declaration as a model name suffix", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "新建").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      setInputValue(inputById("provider-opus-model"), "deepseek-flash")
+      inputById("provider-opus-model").dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    expect(checkboxById("provider-opus-model-1m").getAttribute("data-state")).toBe("unchecked")
+
+    // Ticking the box writes the suffix into the model name, so one value has two views.
+    await act(async () => { checkboxById("provider-opus-model-1m").click() })
+    expect(inputById("provider-opus-model").value).toBe("deepseek-flash[1M]")
+    expect(checkboxById("provider-opus-model-1m").getAttribute("data-state")).toBe("checked")
+    expect(envFromConfigJson().ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("deepseek-flash[1M]")
+
+    await act(async () => { checkboxById("provider-opus-model-1m").click() })
+    expect(inputById("provider-opus-model").value).toBe("deepseek-flash")
+    expect(checkboxById("provider-opus-model-1m").getAttribute("data-state")).toBe("unchecked")
+    expect(envFromConfigJson().ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("deepseek-flash")
+  })
+
+  it("reflects a hand-typed 1M suffix in the checkbox", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "新建").click()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      setInputValue(inputById("provider-sonnet-model"), "deepseek-v4-pro[1m]")
+      inputById("provider-sonnet-model").dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    expect(checkboxById("provider-sonnet-model-1m").getAttribute("data-state")).toBe("checked")
+    expect(checkboxById("provider-haiku-model-1m").getAttribute("data-state")).toBe("unchecked")
   })
 
   it("updates provider form fields from pasted config JSON", async () => {
@@ -1449,11 +1520,24 @@ function inputById(id: string): HTMLInputElement {
   return input
 }
 
+function checkboxById(id: string): HTMLElement {
+  const checkbox = document.body.querySelector<HTMLElement>(`#${id}`)
+  if (!checkbox || checkbox.getAttribute("role") !== "checkbox") {
+    throw new Error(`Checkbox not found: ${id}`)
+  }
+  return checkbox
+}
+
 function textareaByLabel(label: string): HTMLTextAreaElement {
   const textareas = Array.from(document.body.querySelectorAll<HTMLTextAreaElement>("textarea"))
   const match = textareas.find((candidate) => candidate.getAttribute("aria-label") === label)
   if (!match) throw new Error(`Textarea not found: ${label}`)
   return match
+}
+
+function envFromConfigJson(): Record<string, string> {
+  const parsed = JSON.parse(textareaByLabel("配置 JSON").value) as { env?: Record<string, string> }
+  return parsed.env ?? {}
 }
 
 function setInputValue(input: HTMLInputElement, value: string): void {

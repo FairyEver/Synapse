@@ -200,7 +200,10 @@
     {
       "providerScopeId": "anthropic-official",
       "modelId": "claude-fable-5",
-      "aliases": [],
+      "aliases": [
+        "claude-fable-5[1m]",
+        "claude-fable-5[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -246,7 +249,10 @@
     {
       "providerScopeId": "anthropic-official",
       "modelId": "claude-opus-4-8",
-      "aliases": [],
+      "aliases": [
+        "claude-opus-4-8[1m]",
+        "claude-opus-4-8[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -269,7 +275,10 @@
     {
       "providerScopeId": "anthropic-official",
       "modelId": "claude-sonnet-5",
-      "aliases": [],
+      "aliases": [
+        "claude-sonnet-5[1m]",
+        "claude-sonnet-5[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -585,7 +594,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "deepseek-v4-flash",
-      "aliases": [],
+      "aliases": [
+        "deepseek-v4-flash[1m]",
+        "deepseek-v4-flash[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -610,7 +622,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "deepseek-v4-pro",
-      "aliases": [],
+      "aliases": [
+        "deepseek-v4-pro[1m]",
+        "deepseek-v4-pro[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -765,7 +780,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "glm-5.2",
-      "aliases": [],
+      "aliases": [
+        "glm-5.2[1m]",
+        "glm-5.2[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -869,7 +887,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "mimo-v2.5-pro",
-      "aliases": [],
+      "aliases": [
+        "mimo-v2.5-pro[1m]",
+        "mimo-v2.5-pro[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -1045,7 +1066,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen-flash",
-      "aliases": [],
+      "aliases": [
+        "qwen-flash[1m]",
+        "qwen-flash[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -1308,7 +1332,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen-plus",
-      "aliases": [],
+      "aliases": [
+        "qwen-plus[1m]",
+        "qwen-plus[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -1713,7 +1740,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3-coder-flash",
-      "aliases": [],
+      "aliases": [
+        "qwen3-coder-flash[1m]",
+        "qwen3-coder-flash[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -1740,7 +1770,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3-coder-flash-2025-07-28",
-      "aliases": [],
+      "aliases": [
+        "qwen3-coder-flash-2025-07-28[1m]",
+        "qwen3-coder-flash-2025-07-28[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -1792,7 +1825,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3-coder-plus",
-      "aliases": [],
+      "aliases": [
+        "qwen3-coder-plus[1m]",
+        "qwen3-coder-plus[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -1819,7 +1855,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3-coder-plus-2025-07-22",
-      "aliases": [],
+      "aliases": [
+        "qwen3-coder-plus-2025-07-22[1m]",
+        "qwen3-coder-plus-2025-07-22[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -1845,7 +1884,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3-coder-plus-2025-09-23",
-      "aliases": [],
+      "aliases": [
+        "qwen3-coder-plus-2025-09-23[1m]",
+        "qwen3-coder-plus-2025-09-23[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2146,7 +2188,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.5-flash",
-      "aliases": [],
+      "aliases": [
+        "qwen3.5-flash[1m]",
+        "qwen3.5-flash[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2175,7 +2220,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.5-flash-2026-02-23",
-      "aliases": [],
+      "aliases": [
+        "qwen3.5-flash-2026-02-23[1m]",
+        "qwen3.5-flash-2026-02-23[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2203,7 +2251,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.5-plus",
-      "aliases": [],
+      "aliases": [
+        "qwen3.5-plus[1m]",
+        "qwen3.5-plus[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2232,7 +2283,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.5-plus-2026-02-15",
-      "aliases": [],
+      "aliases": [
+        "qwen3.5-plus-2026-02-15[1m]",
+        "qwen3.5-plus-2026-02-15[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2260,7 +2314,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.6-flash",
-      "aliases": [],
+      "aliases": [
+        "qwen3.6-flash[1m]",
+        "qwen3.6-flash[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2289,7 +2346,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.6-flash-2026-04-16",
-      "aliases": [],
+      "aliases": [
+        "qwen3.6-flash-2026-04-16[1m]",
+        "qwen3.6-flash-2026-04-16[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2343,7 +2403,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.6-plus",
-      "aliases": [],
+      "aliases": [
+        "qwen3.6-plus[1m]",
+        "qwen3.6-plus[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2372,7 +2435,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.6-plus-2026-04-02",
-      "aliases": [],
+      "aliases": [
+        "qwen3.6-plus-2026-04-02[1m]",
+        "qwen3.6-plus-2026-04-02[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2400,7 +2466,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-flash",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-flash[1m]",
+        "qwen3.7-flash[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2429,7 +2498,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-flash-2026-07-15",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-flash-2026-07-15[1m]",
+        "qwen3.7-flash-2026-07-15[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2457,7 +2529,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-max",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-max[1m]",
+        "qwen3.7-max[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2486,7 +2561,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-max-2026-05-17",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-max-2026-05-17[1m]",
+        "qwen3.7-max-2026-05-17[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2514,7 +2592,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-max-2026-05-20",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-max-2026-05-20[1m]",
+        "qwen3.7-max-2026-05-20[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2542,7 +2623,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-max-2026-06-08",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-max-2026-06-08[1m]",
+        "qwen3.7-max-2026-06-08[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2570,7 +2654,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-max-preview",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-max-preview[1m]",
+        "qwen3.7-max-preview[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2598,7 +2685,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-plus",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-plus[1m]",
+        "qwen3.7-plus[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "maxInputTokens": 991808,
       "maxOutputTokens": 131072,
@@ -2634,7 +2724,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.7-plus-2026-05-26",
-      "aliases": [],
+      "aliases": [
+        "qwen3.7-plus-2026-05-26[1m]",
+        "qwen3.7-plus-2026-05-26[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "maxInputTokens": 991808,
       "maxOutputTokens": 131072,
@@ -2669,7 +2762,10 @@
     {
       "providerScopeId": "bailian-cn",
       "modelId": "qwen3.8-max",
-      "aliases": [],
+      "aliases": [
+        "qwen3.8-max[1m]",
+        "qwen3.8-max[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2721,8 +2817,39 @@
     },
     {
       "providerScopeId": "deepseek-official",
+      "modelId": "deepseek-flash",
+      "aliases": [
+        "deepseek-flash[1m]",
+        "deepseek-flash[1M]"
+      ],
+      "contextWindowTokens": 1000000,
+      "inputModalities": [
+        "text"
+      ],
+      "outputModalities": [
+        "text"
+      ],
+      "capabilities": [
+        "reasoning",
+        "tool-calling"
+      ],
+      "features": [],
+      "author": "DeepSeek",
+      "inferenceProvider": "DeepSeek",
+      "serviceRegions": [
+        "global"
+      ],
+      "status": "online",
+      "sourceId": "deepseek-v4",
+      "verifiedAt": "2026-08-25T00:00:00.000Z"
+    },
+    {
+      "providerScopeId": "deepseek-official",
       "modelId": "deepseek-v4-flash",
-      "aliases": [],
+      "aliases": [
+        "deepseek-v4-flash[1m]",
+        "deepseek-v4-flash[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2747,7 +2874,10 @@
     {
       "providerScopeId": "deepseek-official",
       "modelId": "deepseek-v4-pro",
-      "aliases": [],
+      "aliases": [
+        "deepseek-v4-pro[1m]",
+        "deepseek-v4-pro[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -2844,7 +2974,8 @@
       "providerScopeId": "kimi-code-official",
       "modelId": "k3",
       "aliases": [
-        "k3[1m]"
+        "k3[1m]",
+        "k3[1M]"
       ],
       "contextWindowTokens": 1048576,
       "inputModalities": [
@@ -3077,7 +3208,10 @@
     {
       "providerScopeId": "minimax-official",
       "modelId": "MiniMax-M3",
-      "aliases": [],
+      "aliases": [
+        "MiniMax-M3[1m]",
+        "MiniMax-M3[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "image",
@@ -3179,7 +3313,10 @@
     {
       "providerScopeId": "xiaomi-mimo-official",
       "modelId": "mimo-v2.5-pro",
-      "aliases": [],
+      "aliases": [
+        "mimo-v2.5-pro[1m]",
+        "mimo-v2.5-pro[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"
@@ -3206,7 +3343,10 @@
     {
       "providerScopeId": "zhipu-official",
       "modelId": "glm-5.2",
-      "aliases": [],
+      "aliases": [
+        "glm-5.2[1m]",
+        "glm-5.2[1M]"
+      ],
       "contextWindowTokens": 1000000,
       "inputModalities": [
         "text"

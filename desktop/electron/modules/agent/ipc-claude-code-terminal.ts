@@ -22,6 +22,9 @@ import { resolveProjectAgent } from "./ipc-shared"
 const CLAUDE_CODE_TERMINAL_TITLE = "Claude Code"
 const LAUNCH_DIRECTORY_PATTERN = /^synapse-claude-code-[A-Za-z0-9]{6}$/
 
+// `@synapse/shared` is ESM-only, so the main process reaches its values through a dynamic import.
+const sharedModelContextPromise = import("@synapse/shared")
+
 /**
  * Removes launch directories left behind by a previous app process. They hold provider
  * credentials, so a crash, quit or update that kills the PTY without its exit callback must not
@@ -94,18 +97,24 @@ export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
       })
       const tierModel = resolveTierModelFromEnv(providerEnv, request.modelTier)
       const provider = await providerService.getProvider(request.providerId).catch(() => undefined)
-      // Claude Code assumes an unknown custom model is 200k, so pin the window Synapse knows.
-      const modelContext = resolveModelContextConfiguration({
-        baseUrl: providerEnv.ANTHROPIC_BASE_URL
-          ?? (provider?.category === "official" ? "https://api.anthropic.com" : undefined),
-        modelId: tierModel ?? providerEnv.ANTHROPIC_MODEL,
-        configuredContextWindow: providerEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
-      })
+      const { ONE_M_CONTEXT_TOKENS, hasOneMMarker } = await sharedModelContextPromise
+      const effectiveModel = tierModel ?? providerEnv.ANTHROPIC_MODEL
+      // Claude Code assumes an unknown custom model is 200k, so pin the window Synapse knows. A
+      // `[1m]` on the model name is the user's explicit per-role declaration, so it outranks both
+      // the Provider-wide window and the model catalog.
+      const contextWindowTokens = effectiveModel !== undefined && hasOneMMarker(effectiveModel)
+        ? ONE_M_CONTEXT_TOKENS
+        : resolveModelContextConfiguration({
+          baseUrl: providerEnv.ANTHROPIC_BASE_URL
+            ?? (provider?.category === "official" ? "https://api.anthropic.com" : undefined),
+          modelId: effectiveModel,
+          configuredContextWindow: providerEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
+        }).contextWindowTokens
       const environment = {
         ...providerEnv,
         ...(tierModel ? { ANTHROPIC_MODEL: tierModel } : {}),
-        ...(modelContext.contextWindowTokens !== undefined
-          ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(modelContext.contextWindowTokens) }
+        ...(contextWindowTokens !== undefined
+          ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(contextWindowTokens) }
           : {}),
         DISABLE_AUTOUPDATER: "1",
       }
