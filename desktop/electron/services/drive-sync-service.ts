@@ -820,7 +820,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }) ?? null
     await recoverInterruptedOperations()
     await reconcileLocalWatcher()
-    if (isCurrentAccountOnline()) await rescanActiveBindingsAfterWatcherStart()
+    if (isCurrentAccountOnline()) {
+      await rescanActiveBindingsAfterWatcherStart()
+      await retryErroredBindings()
+    }
   }
 
   async function stopRemotePolling(): Promise<void> {
@@ -899,6 +902,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       await setHealth({ health: "retrying", lastError: errorMessage(error) })
     })
     await rescanActiveBindingsAfterWatcherStart()
+    await retryErroredBindings()
     armRemotePolling()
   }
 
@@ -3366,6 +3370,25 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function reconcileLocalWatcher(): Promise<void> {
     localWatcher.reconcile(await listOwnerBindings())
+  }
+
+  /**
+   * Gives bindings parked in "error" one recovery attempt per launch.
+   *
+   * Nothing else ever does: the background poll, the retry timer and the startup rescan all filter
+   * on `isAutomaticallySyncableBinding`, which excludes "error" — so a binding stayed dead until
+   * the user manually resumed it. A transient cause (dropped connection, expired session) now
+   * clears itself; a persistent one simply re-records the same error, so the state stays honest
+   * rather than being silently cleared.
+   */
+  async function retryErroredBindings(): Promise<void> {
+    if (!isCurrentAccountOnline()) return
+    const errored = (await listOwnerBindings()).filter((binding) => binding.status === "error")
+    for (const binding of errored) {
+      await resumeBinding(binding.id).catch(async (error) => {
+        await markBindingError(binding.id, errorMessage(error), { emitChanged: true }).catch(() => undefined)
+      })
+    }
   }
 
   async function rescanActiveBindingsAfterWatcherStart(): Promise<void> {

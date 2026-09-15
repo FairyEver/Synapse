@@ -3264,6 +3264,43 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("retries a binding parked in error when the local watcher starts", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await writeFile(path.join(tempDir, "spec.md"), "local", "utf8")
+      const harness = createHarness({
+        watch: () => ({ close: vi.fn(), on: vi.fn() }) as unknown as ReturnType<DriveSyncWatchFactory>,
+        accountService: {
+          listDriveItemTree: vi.fn(async () => ({ items: [] })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "drive-root",
+        driveItemName: "Docs",
+        drivePathHint: "/Docs",
+        kind: "folder",
+        localPath: tempDir,
+        remoteCursor: "100",
+        excludeRules: [],
+        deferWatcher: true,
+      })
+      const stored = await harness.bindings.get(binding.id)
+      if (!stored) throw new Error("binding missing")
+      await harness.bindings.upsert({ ...stored, status: "error", lastError: "fetch failed" })
+
+      await service.startLocalWatcher()
+
+      // "error" is excluded from every automatic path, so without an explicit retry this binding
+      // would stay parked until the user noticed and resumed it by hand.
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        bindings: [expect.objectContaining({ id: binding.id, status: "active", lastError: null })],
+      })
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("reconciles instead of replaying remote changes when the binding hint is stale", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {
