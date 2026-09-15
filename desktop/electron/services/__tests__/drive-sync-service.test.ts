@@ -1853,8 +1853,8 @@ describe("DriveSyncService", () => {
           })),
           listDriveItemTree: vi.fn(async () => ({
             items: [
-              { id: "remote-notes", parentId: "remote-docs", type: "folder", name: "notes", path: "notes", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
-              { id: "remote-spec", parentId: "remote-notes", type: "file", name: "spec.md", path: "notes/spec.md", depth: 2, size: "4", mimeType: "text/markdown", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-notes", parentId: "remote-docs", type: "folder", name: "notes", path: "Docs/notes", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-spec", parentId: "remote-notes", type: "file", name: "spec.md", path: "Docs/notes/spec.md", depth: 2, size: "4", mimeType: "text/markdown", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
             ],
             total: 2,
             fileCount: 1,
@@ -1911,10 +1911,10 @@ describe("DriveSyncService", () => {
           })),
           listDriveItemTree: vi.fn(async () => ({
             items: [
-              { id: "remote-notes", parentId: "remote-docs", type: "folder", name: "notes", path: "notes", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
-              { id: "remote-spec", parentId: "remote-notes", type: "file", name: "spec.md", path: "notes/spec.md", depth: 2, size: "4", mimeType: "text/markdown", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
-              { id: "remote-node-modules", parentId: "remote-docs", type: "folder", name: "node_modules", path: "node_modules", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
-              { id: "remote-package", parentId: "remote-node-modules", type: "file", name: "package.json", path: "node_modules/package.json", depth: 2, size: "2", mimeType: "application/json", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-notes", parentId: "remote-docs", type: "folder", name: "notes", path: "Docs/notes", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-spec", parentId: "remote-notes", type: "file", name: "spec.md", path: "Docs/notes/spec.md", depth: 2, size: "4", mimeType: "text/markdown", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-node-modules", parentId: "remote-docs", type: "folder", name: "node_modules", path: "Docs/node_modules", depth: 1, size: "0", mimeType: null, storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
+              { id: "remote-package", parentId: "remote-node-modules", type: "file", name: "package.json", path: "Docs/node_modules/package.json", depth: 2, size: "2", mimeType: "application/json", storageStatus: "active", shared: false, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z" },
             ],
             total: 4,
             fileCount: 2,
@@ -3011,6 +3011,165 @@ describe("DriveSyncService", () => {
       await expect(harness.operations.list()).resolves.toContainEqual(
         expect.objectContaining({ bindingId: binding.id, kind: "upload", status: "succeeded" }),
       )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("stops a full rescan instead of materializing cloud ancestor paths when the binding hint is a bare name", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    const leaf = "流程-撤销已通过审批"
+    const cloudChain = `公司文档镜像/系统/平台/设计文档/${leaf}`
+    const fileNames = ["测试清单.md", "功能变更清单.md", "产品设计文档.md"]
+    try {
+      const localRoot = path.join(tempDir, leaf)
+      await mkdir(localRoot, { recursive: true })
+      for (const name of fileNames) await writeFile(path.join(localRoot, name), `content of ${name}`, "utf8")
+
+      const remoteItems = fileNames.map((name, index) => ({
+        id: `remote-file-${index}`,
+        parentId: "remote-root",
+        name,
+        type: "file",
+        // The real server returns the absolute path from the drive root, ancestor chain included.
+        path: `${cloudChain}/${name}`,
+        size: String(Buffer.byteLength(`content of ${name}`)),
+        depth: 1,
+      }))
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async () => ({ ...mockDriveItem("remote-root"), type: "folder" as const, name: leaf, size: "0" })),
+          listDriveItemTree: vi.fn(async () => ({ items: remoteItems })),
+          downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+            const index = Number(itemId.replace("remote-file-", ""))
+            await writeFile(outputPath, `content of ${fileNames[index]}`, "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-root",
+        driveItemName: leaf,
+        // Bare leaf name, exactly as the MCP/http dispatcher writes it.
+        drivePathHint: leaf,
+        kind: "folder",
+        localPath: localRoot,
+        remoteCursor: "100",
+        excludeRules: [],
+        deferWatcher: true,
+      })
+      for (const [index, name] of fileNames.entries()) {
+        const stats = await lstat(path.join(localRoot, name))
+        await harness.baseline.upsert({
+          id: `${binding.id}:${name}`,
+          schemaVersion: 1,
+          bindingId: binding.id,
+          relativePath: name,
+          kind: "file",
+          remoteItemId: `remote-file-${index}`,
+          remoteVersionId: null,
+          remoteEtag: null,
+          localSize: stats.size,
+          localMtimeMs: stats.mtimeMs,
+          localHash: await hashDriveSyncFile(path.join(localRoot, name)),
+          lastSyncedAt: "2026-06-28T00:00:00.000Z",
+          deletedAt: null,
+        })
+      }
+
+      await expect(service.rescanBinding(binding.id)).rejects.toThrow("无法确定云盘条目")
+
+      // The user must be told, rather than left with a silently corrupted folder.
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        bindings: [expect.objectContaining({
+          id: binding.id,
+          status: "error",
+          lastError: expect.stringContaining("无法确定云盘条目"),
+        })],
+      })
+
+      // The local folder must be left exactly as it was — no nested cloud chain.
+      await expect(readdir(localRoot)).resolves.toEqual(expect.arrayContaining(fileNames))
+      await expect(readdir(localRoot)).resolves.toHaveLength(fileNames.length)
+      await expect(readFile(path.join(localRoot, fileNames[0]), "utf8")).resolves.toBe(`content of ${fileNames[0]}`)
+      await expect(lstat(path.join(localRoot, "公司文档镜像"))).rejects.toThrow()
+      const operations = await harness.operations.list()
+      expect(operations.map((operation) => operation.kind)).not.toContain("move_local")
+      expect(operations.map((operation) => operation.kind)).not.toContain("upload")
+      // Nothing may be treated as remotely deleted just because it failed to resolve.
+      expect(operations.map((operation) => operation.kind)).not.toContain("delete_local")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps a full rescan unchanged when the binding hint is an absolute cloud path", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    const leaf = "流程-撤销已通过审批"
+    const cloudChain = `公司文档镜像/系统/平台/设计文档/${leaf}`
+    const fileNames = ["测试清单.md", "功能变更清单.md", "产品设计文档.md"]
+    try {
+      const localRoot = path.join(tempDir, leaf)
+      await mkdir(localRoot, { recursive: true })
+      for (const name of fileNames) await writeFile(path.join(localRoot, name), `content of ${name}`, "utf8")
+
+      const remoteItems = fileNames.map((name, index) => ({
+        id: `remote-file-${index}`,
+        parentId: "remote-root",
+        name,
+        type: "file",
+        path: `${cloudChain}/${name}`,
+        size: String(Buffer.byteLength(`content of ${name}`)),
+        depth: 1,
+      }))
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async () => ({ ...mockDriveItem("remote-root"), type: "folder" as const, name: leaf, size: "0" })),
+          listDriveItemTree: vi.fn(async () => ({ items: remoteItems })),
+          downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+            const index = Number(itemId.replace("remote-file-", ""))
+            await writeFile(outputPath, `content of ${fileNames[index]}`, "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-root",
+        driveItemName: leaf,
+        drivePathHint: `/${cloudChain}`,
+        kind: "folder",
+        localPath: localRoot,
+        remoteCursor: "100",
+        excludeRules: [],
+        deferWatcher: true,
+      })
+      for (const [index, name] of fileNames.entries()) {
+        const stats = await lstat(path.join(localRoot, name))
+        await harness.baseline.upsert({
+          id: `${binding.id}:${name}`,
+          schemaVersion: 1,
+          bindingId: binding.id,
+          relativePath: name,
+          kind: "file",
+          remoteItemId: `remote-file-${index}`,
+          remoteVersionId: null,
+          remoteEtag: null,
+          localSize: stats.size,
+          localMtimeMs: stats.mtimeMs,
+          localHash: await hashDriveSyncFile(path.join(localRoot, name)),
+          lastSyncedAt: "2026-06-28T00:00:00.000Z",
+          deletedAt: null,
+        })
+      }
+
+      await expect(service.rescanBinding(binding.id)).resolves.toBeUndefined()
+
+      await expect(readdir(localRoot)).resolves.toEqual(expect.arrayContaining(fileNames))
+      await expect(lstat(path.join(localRoot, "公司文档镜像"))).rejects.toThrow()
+      const operations = (await harness.operations.list()).filter((operation) => operation.kind !== "resync")
+      expect(operations).toEqual([])
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }

@@ -592,10 +592,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const remoteEntries = await listAllRemoteTreeEntries(next.driveItemId)
     const candidates = [
       ...localEntries.map((entry) => ({ relativePath: entry.relativePath, kind: entry.kind })),
-      ...remoteEntries.map((entry) => ({
-        relativePath: normalizeRemoteTreePath(entry.path, next.driveItemName, next.drivePathHint),
-        kind: entry.type,
-      })),
+      ...remoteEntries.flatMap((entry) => {
+        const relativePath = normalizeRemoteTreePath(entry.path, next.driveItemName, next.drivePathHint)
+        return relativePath === null ? [] : [{ relativePath, kind: entry.type }]
+      }),
     ]
     return [...new Set(candidates
       .filter((candidate) => candidate.relativePath
@@ -1410,7 +1410,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
     const remoteByPath = new Map(
       remoteEntries
-        .map((entry) => [normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint), entry] as const)
+        .flatMap((entry) => {
+          const relativePath = normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint)
+          return relativePath === null ? [] : [[relativePath, entry] as const]
+        })
         .filter(([relativePath, entry]) => !isDriveSyncExcluded(relativePath, input.excludeRules, entry.type)),
     )
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry]))
@@ -2138,6 +2141,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const localByPath = new Map(input.localEntries.map((entry) => [entry.relativePath, entry]))
     for (const item of remoteEntries) {
       const relativePath = normalizeRemoteTreePath(item.path, input.binding.driveItemName, input.drivePathHint)
+      if (relativePath === null) continue
       const localEntry = localByPath.get(relativePath)
       if (!localEntry) continue
       await baselineStore.upsert({
@@ -2271,6 +2275,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const remoteByPath = new Map<string, DriveSyncRemoteTreeEntry>()
     for (const remote of remoteEntries) {
       const relativeWithinRoot = normalizeRemoteTreePath(remote.path, remoteRootName, conflict.remotePathHint)
+      if (relativeWithinRoot === null) continue
       const relativePath = rootRelativePath
         ? path.posix.join(rootRelativePath, relativeWithinRoot)
         : relativeWithinRoot
@@ -2804,6 +2809,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       const relativePath = remote.id === input.binding.driveItemId
         ? ""
         : normalizeRemoteTreePath(remote.path, input.binding.driveItemName, input.binding.drivePathHint)
+      // Fail closed rather than skip. Dropping an unresolved entry would leave it out of
+      // remoteById, and the baseline sweep below reads a missing remote id as "deleted on the
+      // cloud" and plans a delete_local for it — turning "could not resolve this path" into
+      // "delete the user's file". Aborting the whole scan is the only safe outcome here.
+      if (relativePath === null) throw new Error(UNRESOLVED_REMOTE_TREE_PATH_MESSAGE)
       if (isDriveSyncExcluded(relativePath, input.binding.excludeRules, remote.type)) continue
       remoteByPath.set(relativePath, remote)
       remoteById.set(remote.id, remote)
@@ -4495,7 +4505,15 @@ function normalizeConflictRelativePath(relativePath: string): string {
   return normalized === "." ? "" : normalized
 }
 
-function normalizeRemoteTreePath(remotePath: string, rootName: string, rootPath?: string | null): string {
+/**
+ * Maps a cloud entry's absolute path onto a path relative to the binding root.
+ *
+ * Returns `null` when no known root matches. Returning the input unchanged (as this used to do)
+ * silently turned an absolute cloud path into something that *looked* like a relative path, so
+ * callers happily created a local directory chain mirroring the cloud ancestors. Callers must
+ * treat `null` as "unresolved": skip the entry, or abort the operation — never guess.
+ */
+function normalizeRemoteTreePath(remotePath: string, rootName: string, rootPath?: string | null): string | null {
   const normalized = normalizeRemoteTreePathSegments(remotePath)
   const roots = [rootPath, rootName]
     .map((candidate) => normalizeRemoteTreePathSegments(candidate ?? ""))
@@ -4505,8 +4523,10 @@ function normalizeRemoteTreePath(remotePath: string, rootName: string, rootPath?
     const rootPrefix = `${root}/`
     if (normalized.startsWith(rootPrefix)) return normalized.slice(rootPrefix.length)
   }
-  return normalized
+  return null
 }
+
+const UNRESOLVED_REMOTE_TREE_PATH_MESSAGE = "无法确定云盘条目在同步目录中的相对路径，已停止本次完整校验。"
 
 function normalizeRemoteTreePathSegments(value: string): string {
   return value.split(/[\\/]+/u).filter(Boolean).join("/")

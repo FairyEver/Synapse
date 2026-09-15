@@ -184,11 +184,16 @@ async function downloadFolderDescendants(
   let completedBytes = 0
   let totalBytes = 0
   let progressWrites = Promise.resolve()
+  const unresolvedItemNames: string[] = []
   let offset: number | null = 0
   while (offset !== null) {
     const page = await deps.accountService.listDriveItemTree({ parentId: input.rootDriveItemId, offset, limit: 200 })
     for (const item of page.items) {
       const relativePath = downloadedFolderChildRelativePath(input.rootRelativePath, rootName, item.path ?? item.name, deps.operation.remotePathHint)
+      if (relativePath === null) {
+        unresolvedItemNames.push(item.name)
+        continue
+      }
       if (!relativePath || isDriveSyncExcluded(relativePath, deps.binding.excludeRules, item.type)) continue
       const localPath = path.join(deps.binding.localPath, relativePath)
       markSelfWrite(deps, relativePath)
@@ -259,6 +264,23 @@ async function downloadFolderDescendants(
       })
     }
     offset = page.nextOffset ?? null
+  }
+  // Skipped silently would leave the user with a partially downloaded folder and no explanation.
+  // Record a diagnostic instead of throwing: the folder root baseline is already committed, and
+  // this error is not classified retryable, so throwing would strand the rest of the subtree.
+  if (unresolvedItemNames.length > 0) {
+    await deps.recordOperation({
+      bindingId: deps.binding.id,
+      kind: deps.operation.kind,
+      status: "error",
+      driveItemId: input.rootDriveItemId,
+      relativePath: deps.operation.relativePath,
+      localPath: input.rootLocalPath,
+      remotePathHint: deps.operation.remotePathHint,
+      remoteItemKind: "folder",
+      source: "initialization",
+      message: `已跳过 ${unresolvedItemNames.length} 个无法确定本地路径的云盘条目：${unresolvedItemNames.slice(0, 3).join("、")}`,
+    })
   }
 }
 
@@ -465,7 +487,13 @@ async function recordProgress(
   })
 }
 
-function downloadedFolderChildRelativePath(rootRelativePath: string, rootName: string, remotePath: string, remotePathHint: string | null): string {
+/**
+ * Resolves a downloaded folder child onto a path relative to the binding root.
+ *
+ * Returns `null` when no known root prefix matches. Falling back to the raw remote path (as this
+ * used to) nested the cloud ancestors inside the binding root and then uploaded them back.
+ */
+function downloadedFolderChildRelativePath(rootRelativePath: string, rootName: string, remotePath: string, remotePathHint: string | null): string | null {
   const normalizedRemotePath = remotePath.split(/[\\/]+/u).filter(Boolean).join("/")
   const remoteRootPath = remotePathHint?.split(/[\\/]+/u).filter(Boolean).join("/") ?? ""
   if (normalizedRemotePath === remoteRootPath || normalizedRemotePath === rootName) return rootRelativePath
@@ -473,8 +501,8 @@ function downloadedFolderChildRelativePath(rootRelativePath: string, rootName: s
     .filter(Boolean)
     .map((value) => `${value}/`)
   const matchedPrefix = rootPrefixes.find((prefix) => normalizedRemotePath.startsWith(prefix))
-  const suffix = matchedPrefix ? normalizedRemotePath.slice(matchedPrefix.length) : normalizedRemotePath
-  return [rootRelativePath, suffix].filter(Boolean).join("/")
+  if (!matchedPrefix) return null
+  return [rootRelativePath, normalizedRemotePath.slice(matchedPrefix.length)].filter(Boolean).join("/")
 }
 
 async function deleteRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {
