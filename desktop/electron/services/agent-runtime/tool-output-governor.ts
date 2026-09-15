@@ -41,6 +41,10 @@ export function isStructuredFileMutationOutput(toolName: string, toolResponse: u
 // A plain string for Read/Bash is silently rejected by SDK 0.3.245.
 export function replaceToolOutput(toolName: string, original: unknown, text: string): unknown {
   if (typeof original === "string") return text
+  // MCP results reach PostToolUse as a bare array of content blocks, not as the
+  // `{ content }` envelope handled below. Anything measured as text must be
+  // replaceable here, or the governor aborts a turn it could have continued.
+  if (toolName.startsWith("mcp__") && Array.isArray(original)) return [{ type: "text", text }]
   if (!isRecord(original)) return undefined
   if (toolName === "Read" && original.type === "text" && isRecord(original.file)) {
     return { ...original, file: { ...original.file, content: text, numLines: lineCount(text) } }
@@ -135,6 +139,8 @@ export function measureToolOutput(toolName: string, toolResponse: unknown): Tool
 
 function toolOutputText(toolName: string, value: unknown): string | undefined {
   if (typeof value === "string") return value
+  // Bound the text the model actually reads, not its JSON-escaped envelope.
+  if (toolName.startsWith("mcp__") && Array.isArray(value)) return mcpTextBlocks(value) ?? safeJson(value)
   if (!isRecord(value)) return safeJson(value)
 
   if (toolName === "Read" && value.type === "text" && isRecord(value.file)) {
@@ -184,6 +190,20 @@ function toolOutputLineCount(toolName: string, value: unknown, fallbackText: str
       .reduce((total, item) => total + lineCount(item), 0)
   }
   return lineCount(fallbackText)
+}
+
+// MCP tool results reach PostToolUse as an array of content blocks
+// (`[{ type: "text", text }]`) — verified against the runtime Synapse ships
+// (Claude Code 2.1.245) with a probe MCP server. All-text arrays are what the
+// model reads; anything else falls back to the serialized envelope, and image
+// or PDF blocks never reach here at all.
+function mcpTextBlocks(value: readonly unknown[]): string | undefined {
+  const parts: string[] = []
+  for (const block of value) {
+    if (!isRecord(block) || block.type !== "text" || typeof block.text !== "string") return undefined
+    parts.push(block.text)
+  }
+  return parts.length > 0 ? parts.join("\n") : undefined
 }
 
 function scalarMetadataLine(key: string, value: unknown): string[] {

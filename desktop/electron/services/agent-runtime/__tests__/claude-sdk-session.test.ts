@@ -508,6 +508,39 @@ describe("ClaudeSDKSession", () => {
     expect(getOptions().additionalDirectories).toContain("/managed/conversation/tool-output")
   })
 
+  it("bounds an oversized MCP tool result instead of stopping the turn", async () => {
+    const persistToolOutputText = vi.fn(async () => ({
+      id: "artifact-mcp",
+      storagePath: "/managed/conversation/tool-output/artifact-mcp.txt",
+      originalByteSize: 80_000,
+      storedByteSize: 80_000,
+      contentTruncated: false,
+    }))
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, persistToolOutputText })
+    await session.send({ ...message("查看云盘同步状态"), runtimeTurnId: "turn-1" })
+
+    const result = await postToolUseHook(getOptions())({
+      hook_event_name: "PostToolUse",
+      tool_name: "mcp__synapse-mcp__app_drive_sync_snapshot_get",
+      tool_input: {},
+      // MCP results reach the hook as content blocks, not as a `{ content }` envelope.
+      tool_response: [{ type: "text", text: "row\n".repeat(20_000) }],
+      tool_use_id: "toolu-mcp",
+    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
+
+    const blocks = result.hookSpecificOutput?.updatedToolOutput as { type: string; text: string }[]
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]?.type).toBe("text")
+    expect(blocks[0]?.text).toContain("Synapse context guard")
+    expect(blocks[0]?.text).toContain("Output saved at /managed/conversation/tool-output/artifact-mcp.txt")
+    expect(persistToolOutputText).toHaveBeenCalledWith(expect.objectContaining({
+      toolName: "mcp__synapse-mcp__app_drive_sync_snapshot_get",
+      toolUseId: "toolu-mcp",
+    }))
+    await session.close()
+  })
+
   it("re-reads durable evidence in place instead of persisting a second copy", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "synapse-durable-evidence-"))
     try {

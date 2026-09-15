@@ -6,6 +6,7 @@ import {
   governToolOutput,
   isFileMutationTool,
   isStructuredFileMutationOutput,
+  replaceToolOutput,
 } from "../tool-output-governor"
 
 describe("tool output governor", () => {
@@ -117,15 +118,29 @@ describe("tool output governor", () => {
     })).toBeUndefined()
   })
 
-  it("bounds unknown structured text outputs without assuming their schema", () => {
-    const result = governToolOutput({
-      toolName: "mcp__example__query",
-      toolResponse: { rows: Array.from({ length: 5_000 }, (_, index) => ({ index, value: "payload" })) },
-      maxBytes: 16 * 1024,
-    })
+  it("bounds an MCP content-block array and can replace it again", () => {
+    const toolName = "mcp__synapse-mcp__app_drive_sync_snapshot_get"
+    const original = [{ type: "text", text: JSON.stringify(
+      Array.from({ length: 5_000 }, (_, index) => ({ index, value: "payload" })), null, 2) }]
+    const result = governToolOutput({ toolName, toolResponse: original, maxBytes: 16 * 1024 })
 
     expect(result?.deliveredBytes).toBeLessThanOrEqual(16 * 1024)
     expect(result?.updatedToolOutput).toContain("narrower read, search, filter, or pagination")
+    // Anything the governor bounds must be rebuildable, or the turn aborts instead.
+    expect(replaceToolOutput(toolName, original, result!.updatedToolOutput))
+      .toEqual([{ type: "text", text: result!.updatedToolOutput }])
+  })
+
+  it("bounds the MCP text the model reads, not its JSON-escaped envelope", () => {
+    const toolName = "mcp__synapse-mcp__app_drive_item_tree_list"
+    const result = governToolOutput({
+      toolName,
+      toolResponse: [{ type: "text", text: Array.from({ length: 3_000 }, (_, index) => `row-${index}`).join("\n") }],
+    })
+
+    expect(result).toMatchObject({ kept: "head", originalLines: 3_000 })
+    expect(result?.updatedToolOutput.startsWith("row-0")).toBe(true)
+    expect(result?.updatedToolOutput).not.toContain('\\"')
   })
 
   it("identifies native file-mutation payloads as confirmation-only results", () => {
