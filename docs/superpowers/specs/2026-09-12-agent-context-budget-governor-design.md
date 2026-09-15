@@ -1,5 +1,7 @@
 # Agent 上下文预算与自动续跑设计
 
+> 已废弃（2026-09-15）：本文仅保留历史调查。当前权威设计为[Claude Agent SDK 原生上下文生命周期](./2026-09-15-agent-sdk-native-context-lifecycle-design.md)，不得据本文恢复预算、工具结果改写或自动交接。
+
 ## 实施状态
 
 2026-09-13 首批修复已删除累计轮次输出硬额度，修正原生工具替换结构、路径交接、任务 namespace 和落盘失败处理。完整契约、覆盖账本、增量检查点和轮换事务仍按 [长任务可靠性计划](../plans/2026-09-13-agent-long-task-state-and-context-reliability-plan.md) 实施，不能将本文件原有自动续跑描述视为已满足最终可靠性保证。

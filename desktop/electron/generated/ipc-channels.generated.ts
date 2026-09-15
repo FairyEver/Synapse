@@ -260,8 +260,6 @@ export const IPC_CHANNELS = {
     "releaseAttachments": "synapse:app:agent:operation:release_attachments",
     "send": "synapse:app:agent:operation:send",
     "steer": "synapse:app:agent:operation:steer",
-    "prepareContextRecovery": "synapse:app:agent:operation:prepare_context_recovery",
-    "continueContextRecovery": "synapse:app:agent:operation:continue_context_recovery",
     "listPendingPermissions": "synapse:app:agent:operation:list_pending_permissions",
     "respondPermission": "synapse:app:agent:operation:respond_permission",
     "setPermissionMode": "synapse:app:agent:operation:set_permission_mode",

@@ -2,7 +2,6 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolut
 import { describe, expect, it } from "vitest"
 
 import { bridgeSdkMessage } from "../sdk-event-bridge"
-import { DEFAULT_CLAUDE_SDK_MAX_TURNS } from "../turn-limits"
 
 const baseEnvelope = {
   conversationId: "conversation-1",
@@ -129,7 +128,7 @@ describe("SDK event bridge", () => {
     })
   })
 
-  it("treats the SDK rapid-refill breaker as a recoverable context error", () => {
+  it("treats the SDK rapid-refill breaker as an ordinary failed turn", () => {
     const event = bridgeSdkMessage({
       type: "result",
       subtype: "success",
@@ -143,12 +142,12 @@ describe("SDK event bridge", () => {
 
     expect(event).toMatchObject({
       type: "error",
-      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
-      errorKind: "context_refill_thrashing",
-      recoverable: true,
+      message: expect.stringContaining("Agent 执行失败。"),
+      errorKind: "execution_failed",
+      recoverable: false,
       sdkSessionId: "sdk-refill",
     })
-    expect(JSON.stringify(event)).not.toContain("Autocompact is thrashing")
+    expect(JSON.stringify(event)).not.toContain("context_refill_thrashing")
   })
 
   it("prioritizes terminal API disconnects when the SDK also reports generic errors", () => {
@@ -244,7 +243,7 @@ describe("SDK event bridge", () => {
       modelUsage: { "claude-sonnet": { inputTokens: 3, outputTokens: 4 } },
     } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
       type: "error",
-      message: "已达到本轮执行上限（200），任务尚未完成；发送“继续”可接着执行。",
+      message: "Agent 已停止，任务尚未完成。诊断信息：error_max_turns",
       sdkSessionId: "sdk-max-turns",
       sdkResultUuid: "result-max-turns",
       usage: { input_tokens: 3, output_tokens: 4 },
@@ -257,7 +256,7 @@ describe("SDK event bridge", () => {
       session_id: "sdk-max-turns",
       uuid: "result-max-turns",
     } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
-      message: expect.stringContaining(String(DEFAULT_CLAUDE_SDK_MAX_TURNS)),
+      message: "Agent 已停止，任务尚未完成。诊断信息：error_max_turns",
     })
   })
 

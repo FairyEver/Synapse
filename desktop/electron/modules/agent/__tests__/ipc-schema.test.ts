@@ -111,16 +111,6 @@ describe("agent IPC schemas", () => {
       usedTokens: 58_000,
       contextWindowTokens: 200_000,
       model: "claude-sonnet-4-5",
-      contextWindowConfigurationSource: "catalog" as const,
-      modelContext: {
-        providerScopeId: "anthropic-official",
-        modelId: "claude-sonnet-5",
-        contextWindowTokens: 1_000_000,
-        maxOutputTokens: 128_000,
-        sourceLabel: "Anthropic",
-        sourceUrl: "https://platform.claude.com/docs/en/about-claude/models/overview",
-        verifiedAt: "2026-08-25T00:00:00.000Z",
-      },
     }
 
     for (const event of [

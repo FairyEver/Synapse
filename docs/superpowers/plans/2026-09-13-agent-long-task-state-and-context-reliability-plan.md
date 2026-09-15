@@ -1,5 +1,7 @@
 # Agent 长任务状态、上下文整理与完整性修复方案
 
+> 已废弃（2026-09-15）：不得据本文恢复本地任务证据、完成阻断、上下文预算或自动交接。参见[当前设计](../specs/2026-09-15-agent-sdk-native-context-lifecycle-design.md)。
+
 状态：部分实施，P0–P8 尚未全部完成。首批修复和剩余门禁见 [实施记录](./2026-09-13-agent-long-task-state-and-context-reliability-execution.md)；尚未通过真实百炼长任务验收，不代表长任务可靠性已解决。
 
 日期：2026-09-13。

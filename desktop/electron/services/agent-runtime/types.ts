@@ -2,10 +2,6 @@ import type { ActorIdentity } from "../../runtime/security"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 import type { AgentTurnOutcome } from "./turn-outcome"
 import type { AgentAttachmentRef } from "../../../src/types/agent-attachment"
-import type {
-  AgentContextWindowConfigurationSource,
-  AgentModelContextReference,
-} from "../model-capability/catalog"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
@@ -70,13 +66,8 @@ export interface AgentMessage {
   readonly userMeta?: Record<string, unknown>
   /** Main-process only ownership used to stop a turn if its Renderer disappears. */
   readonly originRendererId?: number
-  /** Internal-only marker used to inject a bounded recovery handoff after history persistence. */
-  readonly contextRecoveryTurnId?: string
-  /** Main-process only turn identity for per-turn context budgeting. */
+  /** Main-process only turn identity for lifecycle and persistence correlation. */
   readonly runtimeTurnId?: string
-  /** Host-owned verified originals for one read-only presentation attempt. */
-  readonly pendingImagePresentations?: readonly import("./image-presentation").PendingImagePresentation[]
-  readonly deferredImagePresentations?: readonly import("./image-presentation").PendingImagePresentation[]
 }
 
 export interface AgentSteerMessage {
@@ -245,14 +236,10 @@ export interface AgentContextUsage {
   readonly usedTokens: number
   readonly contextWindowTokens?: number
   readonly model?: string
-  readonly modelContext?: AgentModelContextReference
-  readonly contextWindowConfigurationSource?: AgentContextWindowConfigurationSource
-  readonly autoCompactWindowTokens?: number
   readonly autoCompactThresholdTokens?: number
 }
 
 export interface AgentResultMetadata {
-  readonly taskCompletion?: import("./task-progress").TaskCompletionAssessment
   readonly model?: string
   readonly effort?: string
   readonly contextRemainingPercent?: number
@@ -280,11 +267,8 @@ export type AgentErrorKind =
   | "execution_failed"
   | "connection_interrupted"
   | "tool_use_interrupted"
-  | "request_body_too_large"
-  | "context_refill_thrashing"
   | "renderer_unavailable"
   | "webfetch_preflight_failed"
-  | "task_evidence_incomplete"
 
 export interface AgentResultEvent extends AgentEventBase {
   readonly type: "result"
@@ -303,7 +287,6 @@ export interface AgentResultEvent extends AgentEventBase {
 }
 
 export interface AgentErrorEvent extends AgentEventBase {
-  readonly taskCompletion?: import("./task-progress").TaskCompletionAssessment
   readonly type: "error"
   readonly message: string
   readonly errorKind?: AgentErrorKind
@@ -502,8 +485,6 @@ export interface AgentLiveSession {
     requestId: string,
     decision: AgentPermissionDecision,
   ): Promise<void>
-  contextRotation?(): import("./context-continuation").AgentContextRotation | undefined
-  imagePresentationCapacityBytes?(): number
   nextEvent(): Promise<AgentEvent | null>
   nextEventWithTimeout?(timeoutMs: number): Promise<AgentEvent | null>
   currentSessionId(): string | undefined

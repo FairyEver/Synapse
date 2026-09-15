@@ -1,7 +1,3 @@
-import type {
-  AgentContextWindowConfigurationSource,
-  AgentModelContextReference,
-} from "../model-capability/catalog"
 import type { AgentContextUsage } from "./types"
 
 type UsageBreakdown = {
@@ -24,24 +20,11 @@ const USAGE_FIELDS = {
 } as const
 
 export class AgentContextUsageTracker {
-  private readonly modelContext: AgentModelContextReference | undefined
-  private readonly contextWindowConfigurationSource: AgentContextWindowConfigurationSource | undefined
-  private readonly autoCompactWindowTokens: number | undefined
   private autoCompactThresholdTokens: number | undefined
   private currentModel: string | undefined
   private contextWindowTokens: number | undefined
   private breakdown: UsageBreakdown | undefined
   private snapshot: AgentContextUsage | undefined
-
-  constructor(input: {
-    readonly modelContext?: AgentModelContextReference
-    readonly contextWindowConfigurationSource?: AgentContextWindowConfigurationSource
-    readonly autoCompactWindowTokens?: number
-  } = {}) {
-    this.modelContext = input.modelContext
-    this.contextWindowConfigurationSource = input.contextWindowConfigurationSource
-    this.autoCompactWindowTokens = input.autoCompactWindowTokens
-  }
 
   update(message: unknown): AgentContextUsage | undefined {
     const raw = recordValue(message)
@@ -113,7 +96,9 @@ export class AgentContextUsageTracker {
       this.snapshot = {
         usedTokens: this.snapshot.usedTokens,
         model,
-        ...this.referenceMetadata(),
+        ...(this.autoCompactThresholdTokens
+          ? { autoCompactThresholdTokens: this.autoCompactThresholdTokens }
+          : {}),
       }
     }
   }
@@ -143,7 +128,9 @@ export class AgentContextUsageTracker {
         ? {}
         : { contextWindowTokens: this.contextWindowTokens }),
       ...(this.currentModel ? { model: this.currentModel } : {}),
-      ...this.referenceMetadata(),
+      ...(this.autoCompactThresholdTokens
+        ? { autoCompactThresholdTokens: this.autoCompactThresholdTokens }
+        : {}),
     }
     return this.snapshot
   }
@@ -165,7 +152,9 @@ export class AgentContextUsageTracker {
         this.snapshot = {
           usedTokens: this.snapshot.usedTokens,
           ...(this.currentModel ? { model: this.currentModel } : {}),
-          ...this.referenceMetadata(),
+          ...(this.autoCompactThresholdTokens
+            ? { autoCompactThresholdTokens: this.autoCompactThresholdTokens }
+            : {}),
         }
       }
       return
@@ -175,21 +164,6 @@ export class AgentContextUsageTracker {
     if (this.snapshot) this.setUsedTokens(this.snapshot.usedTokens)
   }
 
-  private referenceMetadata(): Pick<
-    AgentContextUsage,
-    "modelContext" | "contextWindowConfigurationSource" | "autoCompactWindowTokens" | "autoCompactThresholdTokens"
-  > {
-    return {
-      ...(this.autoCompactThresholdTokens ? { autoCompactThresholdTokens: this.autoCompactThresholdTokens } : {}),
-      ...(this.modelContext ? { modelContext: this.modelContext } : {}),
-      ...(this.contextWindowConfigurationSource
-        ? { contextWindowConfigurationSource: this.contextWindowConfigurationSource }
-        : {}),
-      ...(this.autoCompactWindowTokens === undefined
-        ? {}
-        : { autoCompactWindowTokens: this.autoCompactWindowTokens }),
-    }
-  }
 }
 
 function lastIterationBreakdown(value: unknown): UsageBreakdown | undefined {

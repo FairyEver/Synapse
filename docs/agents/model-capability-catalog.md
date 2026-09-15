@@ -2,14 +2,14 @@
 
 ## 适用范围
 
-模型能力目录位于 `desktop/electron/services/model-capability/catalog.json`，是随桌面应用打包的构建期快照。它只服务于两件事：
+模型能力目录位于 `desktop/electron/services/model-capability/catalog.json`，是随桌面应用打包的构建期快照。它服务于模型展示、能力说明和目录维护：
 
-1. 在创建 Agent SDK 会话前，为已知 Provider 端点和精确模型 ID 配置官方上下文窗口。
-2. 为上下文 Tooltip 提供可追溯的模型上限、最大输入/输出和核验日期。
+1. 展示 Provider scope 内可追溯的模型、别名、上下文与输入/输出能力。
+2. 为模型选择、说明和离线核验提供构建期元数据。
 
-应用运行时不得联网刷新目录。目录不得用于图片附件、工具调用、视觉能力、模型路由、模型质量判断或其它能力分支。
+应用运行时不得联网刷新目录。目录不得控制 Claude Agent SDK/CLI 的上下文环境、compact、请求预算、图片附件、工具结果、会话轮换或故障恢复。
 
-容量排查与修改百炼传输策略前，先读[2026-09-13 百炼 Qwen 实测](../reference/2026-09-13-bailian-qwen-context-probe.md)：精确端点上 `qwen3.8-max` 关闭/开启思考分别验证 991,808/983,616 输入 token，HTTP body 验证 6 MiB 边界；多一个校准 token 或一个字节均被拒绝。参数、原始数值及证据限制见随文 JSON。该记录不替代官方目录来源、不代表其它模型或图片能力、不授权自动计费复测；200K/5 MiB 仍是本地运行策略。 图片成本分离、原生 SDK 停止屏障与同一原件续接的后续实现/验收见[图片交接实施记录](../superpowers/plans/2026-09-13-agent-image-handoff-execution.md)；这些行为不依赖模型目录的视觉白名单。
+历史容量调查见[2026-09-13 百炼 Qwen 实测](../reference/2026-09-13-bailian-qwen-context-probe.md)。该记录不替代官方目录来源，也不授权从目录向 SDK 注入任何限制或恢复策略。
 
 ## 数据结构
 
@@ -81,21 +81,14 @@ node desktop/scripts/model-capability/update-catalog.mjs --bailian-response /abs
 - 更新前输出新增、变化和删除摘要；校验成功后才使用临时文件原子替换。
 - 代表模型至少覆盖 Qwen、Anthropic、Gemini、DeepSeek、Kimi、GLM、MiniMax、StepFun 和 MiMo。
 
-完成更新后至少运行目录专项、Agent Runtime/Provider/Renderer 上下文专项、Desktop typecheck、hard constraints、renderer build 和 `git diff --check`。正式包存在时还要运行 `check:packaged-asar`。
+完成更新后至少运行目录专项、Desktop typecheck、hard constraints、renderer build 和 `git diff --check`。正式包存在时还要运行 `check:packaged-asar`。
 
-## 运行时匹配规则
+## Agent Runtime 边界
 
-1. 先完成 tier/Persona 模型解析，再读取最终 `ANTHROPIC_MODEL`。
-2. Base URL 只规范化 scheme、host、path、重复斜杠和末尾斜杠。
-3. 只在对应 `providerScope` 中精确匹配 `modelId` 或已记录官方别名。
-4. 禁止模糊匹配、截断版本号、大小写猜测或按模型家族继承。
-5. 用户 Provider 环境中的 `CLAUDE_CODE_MAX_CONTEXT_TOKENS` 优先；目录不得覆盖。
-6. 未配置模型、未知模型或未登记聚合平台不注入任何值。
-7. 派生窗口和目录引用进入 SDK 会话复用键；配置变化时重建会话。
-
-顶栏优先显示 SDK `getContextUsage().autoCompactThreshold` 真实整理触发值；没有传输策略时可显示 SDK 实际窗口。配置了整理窗口但真实阈值未确认时，只显示占用与待确认状态。目录值不能伪造运行窗口；两者不一致时同时显示。
-
-Provider 传输限制不得改写模型能力目录。百炼官方 Anthropic 端点的请求体上限由独立传输策略维护：模型目录中的 `qwen3.8-max` 仍为 1,000,000 token，运行时自动整理配置窗口为 200,000 token（实际触发值由 SDK 扣除 buffer 后返回），请求体安全预算为 5 MiB（Provider 硬限制 6 MiB），工具输出单结果/单批预算为 8/24 KiB；整轮累计输出仅计量，不限制任务总处理量，文本单结果另受 2,000 行限制。顶栏进度按 SDK 真实自动整理触发值计算，Tooltip 分别显示“自动整理触发”和“模型上限”；代理端点、聚合平台和其它 Provider 不继承百炼策略。
+- Agent 与内置 Claude Code 终端只透传 Provider 显式提供的 `CLAUDE_CODE_MAX_CONTEXT_TOKENS`；未提供时保持未设置。
+- 目录中的 `contextWindowTokens`、`maxInputTokens` 与 `maxOutputTokens` 不进入 SDK query options、settings、环境、会话复用键或上下文 UI。
+- 上下文 UI 只显示 SDK `getContextUsage()` 返回的已用 token、实际窗口、模型和可选 compact threshold。
+- 百炼不拥有目录驱动的专属运行分支；Provider 真实错误按普通 SDK 执行失败处理。
 
 ## 禁止保存
 

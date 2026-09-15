@@ -2,52 +2,35 @@
 
 本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出、Usage Analysis 和 provider 预览。
 
-处理百炼容量、非文本结果超预算或持续对话问题前，先读[真实 API 边界实测](../reference/2026-09-13-bailian-qwen-context-probe.md)与[持续对话方案](../superpowers/plans/2026-09-13-bailian-context-and-continuous-conversation-plan.md)。前者已验证 token/body 两种上限；后者记录原预算将非文本序列化字节作为 token 成本的可复现误判；修复与验收见[图片交接实施记录](../superpowers/plans/2026-09-13-agent-image-handoff-execution.md)。直接 API 成功不能当作 SDK 图片交付、自动重呈现或长任务验收通过；方案不改变下文既有保护与权限边界。
+Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpowers/specs/2026-09-15-agent-sdk-native-context-lifecycle-design.md)为权威。历史百炼边界实测与预算/交接调查仅用于追溯，不再定义运行时行为。
 
 ## 历史写入与容量
 
 长运行性能相关的持久化与显示容量实施状态见 `docs/superpowers/specs/2026-09-13-agent-long-running-capacity-design.md`。历史追加、记录元数据和问题响应须与标题共享会话级读改写串行队列；摘要保存不得将读到的旧 history 回写覆盖新记录。当前整历史 JSON 存储仍未完成分块改造，不能把局部缓存、诊断或计时优化描述为长期稳定性保证。
 
-## 长任务证据与完成边界
+## SDK 原生上下文生命周期
 
-- `agent.task-progress` 是 DataRepository 的 SQLite 版本化 journal；按 project/conversation/logical turn 隔离，单条最多 64 KiB、分页读取、串行写入和 generation 所有权屏障。Conversation 只保存逻辑任务指针。自动交接和显式继续复用逻辑任务，新请求开启新范围；旧数据缺字段时为无已登记状态，重启不得自动执行。
-- 复用原生 `TaskCreate/TaskUpdate.metadata.synapseProgress` 提交清单与发现，不新增公开工具、MCP server 或权限。提交包含 version=1、baseRevision、每次最多 32 项 units/findings、可选 seal。工具调用成功不是宿主提交成功；版本过期、路径替换、未知/未呈现回执必须拒绝，保存失败必须停止。
-- Read 回执和清单同时保留原始/规范路径，不能因 macOS 目录别名变更而丢失身份；回执还保留原件版本、实际行区间/总行数、完整性、原生 toolUseId；区分取得、模型已接收和提交已处理。串行 PostToolUse 只记录取得，PostToolBatch 先核对 SDK 转换后文本/图片内容与取得结果的一致性（与原始工具结构分开处理），再固定待确认集合，下一主线程 PreToolUse/后继 PostToolBatch/正常 Stop 才确认上一批呈现。不能使用可能迟到的 SDK iterator Assistant 事件清空当前批次。
-- 图片先呈现当次必须续接的原件，再允许其它工具；大量待呈现原图按干净会话可用 body 分批，余项持久保留且未计尝试。每个版本仍只允许一次容量重呈现，不能提高 200K/5 MiB/6 MiB 阈值。权限、取消、原件与停止屏障保持有效。
-- 完整文本已保存但当前工作集无法容纳其引用时，在批次屏障自动交接；新代读取保存的准确版本/区间。恢复回执必须同时匹配宿主 artifact 规范路径和完整哈希，扣除保存元数据行后关联原始区间。保存失败、原件不可验证或 artifact 损坏不得计作已覆盖。已执行操作保存脱敏参数、完整结果或完整结果引用，不因维护自动重跑。
-- 已登记材料完整呈现后，读取下一份新材料前须提交前一批处理状态；保存答案、Task 提交、检查点读取与同一原件的核对仍可执行。主 query 必须先完成当批待续接图片，不让进度治理消耗其保留空间。
-- 清单不能缩减或替换已登记资源；初次封存或显式重开后封存须包含已取得的材料；已封存清单重复提交 seal 为幂等操作，之后校验生成的输出不强制扩张原输入范围。过早封存可用 `reopen:true` 追加缺项后重新封存，不能重编号或替代旧单元。文本覆盖在**同一版本内**检查区间并集，并按回执的**实际交付区间**计入：被单条预算截断的读取只覆盖它真正交付的完整行，省略部分与半行不计；单元可声明一次不可修改的 `scope`，声明后只按该范围判定。覆盖按版本分组判定，跨版本区间永不拼接，任一单一版本自洽铺满即算覆盖：读取后发生变更的材料按新版本重读即可恢复覆盖，旧版本回执既不作废也不阻断后续覆盖。成功且可核对原件的 `Edit/Write/NotebookEdit` 回执（记录规范路径与写入后版本）证明该单元已处理，但不得当作通读证据。图片检查已确认的原生呈现。来源完整且已呈现才接受发现；相同事实冲突保留双来源，显式包含原来源的校正才清除冲突。缺失 ID、缺失字节数和零用量都不是错误或零大小的证据。
-- 已持久化的工具结果（会话 tool-output artifact）再次读取时不重复落盘：超限时只按剩余预算交付分段的已有内容，并把截断标记指向同一文件；分段重放的回执按其实际交付区间回填到源材料区间，完整重放仍以完整哈希与规范路径核对。Stop 补正按单元结果去重：只有单元覆盖、处理、编辑证据、声明范围或冲突数发生变化才会再次补正，单纯取得或呈现更多回执不重新触发。
-- 只有已封存范围全部覆盖且声明已处理、没有证据冲突时才产生 `coverage-complete`；未登记为 `unverified`；有任务工具且已读取多个非私有证据资源但未登记清单时，不得强制补登记或为它增加模型回合，只在最终答复声称通读/完整覆盖时按下述提示处理。系统提示只对需要覆盖核对的多文件/多阶段分析要求登记清单，纯编辑/写入任务不登记；回执侧最多在第二份材料读取后给出一次明确非阻塞的可选建议，措辞不得含"必须先登记/required"或要求暂停、重排用户步骤。覆盖缺口是**非失败**提示：仅在最终答复声称通读/完整覆盖而缺少读取覆盖、多文件材料未登记清单却被声称完整覆盖，或已登记单元既无读取覆盖也无编辑回执时，产生 `task_evidence_incomplete` 提示（保留一键继续），该提示不算执行失败，且不得据此把成功回合标记为中断；无虚假声称的未登记状态只记账不提示。部分完成仍触发一次基于实际进展的 Stop 补正，冲突发现同样保留一次补正。评估字段在实时 IPC、历史回放和 MCP timeline 中保持一致。所有评估的 `semanticCorrectness` 仍为 `unverified`，不证明清单穷尽用户材料或模型理解正确。不得据 SDK 成功、Task completed 或 Agent 自报 PASS 对外宣称任务通过。
-- 检查点写入新增历史、链接祖先并保留祖先 artifact 校验引用；当前进度为完整记录的独立 JSONL 页，同时注入有界的已完成/待处理 ID、已执行动作与已保存发现；缺省项明确计数并保留完整索引，不能每次强制重读全部检查点。新 query 前验证全部引用，缺资料停止。停滞标记以已登记单元/版本/范围状态变化为依据；未登记任务仍只能使用已有保守轮换保护，不宣称拥有通用业务进展判定。
-- 原生 Assistant 边界记录回复字节/摘要、重复长段落与独立思考标签计数；同 UUID 且同内容才抑制重复投递，不按文字相同删除正常消息。排除代码和引用示例后，异常回复只允许一次有持久记录的重新组织；再次异常保留失败，不重跑副作用。未采集原生事件的旧导出不能追溯断言是模型、SDK、IPC 或 Renderer 的重复。
-- 导出保留严格允许的数值 token/body 计量，路径使用每次导出独立随机盐生成的稳定匿名资源 ID；相同导出可比对，不跨导出关联。新增任务 journal 导出脱敏的清单、回执与已提交发现，不附私有 artifact 原文。累计用量不代表当前上下文，宿主 body 账本不代表实际 HTTP 字节。
+- 所有 Agent、Relay、Workflow 与 Automation 的 Claude Agent SDK 查询使用持久 Streaming Input；已有 `sdkSessionId` 通过 SDK `resume` 延续。不得为上下文容量创建隐藏 query、交接会话或自动重放用户请求与工具调用。
+- 不向 SDK 传 `maxTurns`、宿主自动整理开关/窗口、预计算整理开关、请求体预算或工具输出预算。百炼与其它 Anthropic 兼容 Provider 使用同一路径。
+- Read、Bash、MCP、`structuredContent`、数组及图片工具结果不得由 Synapse 截断、替换或因结构完整性检查阻断；SDK 对工具结果和上下文的处理是唯一运行权威。
+- 不注入任务清单、证据账本、完成度修正或 Stop 阻断。历史 conversation 中的 `taskListId`、`taskProgressScope`、`contextHandoff`、`contextRecovery` 仅为兼容读取字段，运行时忽略，并在下次正常保存时剥离。`agent.task-progress` 只保留兼容清理，清理失败不得影响保存。
+- SDK 的 `status=compacting` 与 `compact_boundary` 继续投影到 timeline。只在 compact 完成或一轮结束后调用 `getContextUsage()`，展示 SDK 返回的 used tokens、窗口、模型及可选 compact threshold；不得混入模型目录上限或本地估算。
+- Provider/SDK 返回的请求体过大、rapid refill 或其它异常只结束当前轮，按普通失败投影；不得重试、换 Session、生成恢复状态或提供“整理上下文”操作。内部日志可记录脱敏分类布尔值，但不得记录 prompt、工具正文、路径、Base64 或凭据。
 
 ## 跨平台验证
 
-- 已登记资源的路径写法变化必须再次通过有界 `realpath` 与原规范路径匹配，保留最初登记路径；不得统一转小写来证明文件相同或放宽权限。不匹配、无法验证或原件变化仍拒绝。
-- 手动恢复按工作区的路径格式计算相对路径，拒绝盘符相对路径及跨盘符/共享根逃逸；自由正文脱敏复用共享工具，覆盖 UNC、扩展路径、带空格路径及本地文件 URL。导出资源关联在脱敏前生成，不能遗漏 UNC。
-- `test:agent:cross-platform` 使用已安装原生 SDK 和隔离 loopback，覆盖读取、停止、图片续接、进度及 SQLite；不使用真实服务凭据。Windows runner 显式提供 Git Bash，测试 HOME/USERPROFILE/临时目录与用户配置隔离。
-- macOS 的模拟 Windows 路径测试和原生 SDK 通过，不等于 Windows 原生执行通过；必须保留 CI/实机的实际平台结果。当前审计状态见 `docs/reference/2026-09-14-macos-windows-compatibility-audit.md`。
+- `test:agent:cross-platform` 覆盖 SDK 参数、会话持久化、SQLite、停止屏障和 timeline，不使用真实服务凭据。Windows runner 显式提供 Git Bash，并隔离 HOME、USERPROFILE、临时目录与用户配置。
+- macOS 的模拟 Windows 路径测试不等于 Windows 原生执行通过；必须保留 CI/实机结果。当前审计状态见 `docs/reference/2026-09-14-macos-windows-compatibility-audit.md`。
 
 ## Claude SDK 配置
 
 - 修改 SDK 参数前核对官方文档和当前安装包类型。`Options.env` 是子进程环境；`Options.settings` 是更高优先级 inline/flag settings，两者不能混用。
 - Provider 隔离必须同时写两层：顶层 `Options.env`，以及 `Options.settings.env` 中当前 provider 的 `ANTHROPIC_*` 覆盖（至少 base URL、model、auth token/API key 和默认模型变量）。
-- `Options.settings.env` 只能放 provider 的 `ANTHROPIC_*` 及宿主持久化的 `CLAUDE_CODE_TASK_LIST_ID`，不得放 `SYNAPSE_SIDE_CHANNEL_TOKEN`、data-server token、普通 shell env 或其它 runtime secret。
+- `Options.settings.env` 只能放 provider 的 `ANTHROPIC_*` 以及 Provider 显式配置的 `CLAUDE_CODE_MAX_CONTEXT_TOKENS`，不得放 task namespace、`SYNAPSE_SIDE_CHANNEL_TOKEN`、data-server token、普通 shell env 或其它 runtime secret。未显式配置上下文环境变量时必须保持未设置。
 - 回归测试必须证明 provider 配置进入 `settings.env`，side-channel 等非 provider secret 不进入。
 - 历史回归：提交 `6778d598e` 曾删除 `settings.env: options.env`，导致用户本机配置其它 Claude provider 时混用旧 base URL 与当前模型。遇到 `model not found or not supported`，先检查 `desktop/electron/services/agent-runtime/claude-sdk-session.ts` 的覆盖层。
 - SDK 终态只要标记 `is_error` 或 `terminal_reason=api_error`，即使 `subtype=success`、`errors` 为空，也必须按失败结束；SDK 合成的 `is_api_error_message` 不得作为普通 Assistant 回复写入 history。网络中断应投影为可恢复状态并允许用户显式继续，不得自动重放整轮请求，因为已执行工具可能产生不可重复的副作用。
-- 百炼官方 Anthropic 端点使用独立传输策略：6 MiB 请求体上限、200,000 token 自动整理阈值，不得降低模型目录中的 1,000,000 token 上限，也不得把策略扩展到代理或其它 Provider。命中精确 6 MiB 错误后，必须等本轮终态落库再关闭旧 SDK Session、清除持久化 Session ID；Automation、Workflow 与 Relay 只清理 Session，不自动续跑。
-- 所有 Claude Agent SDK 会话必须在 `PostToolUse` 阶段按“单结果/单批”预算治理模型可见工具结果：默认 50/150 KiB，百炼官方 Anthropic 端点 8/24 KiB；累计工具输出只计量，不能触发轮换，文本单结果另受 2,000 行限制。`Read`、搜索和抓取保留前部，`Bash` 保留尾部；截断提示必须说明窄化读取方式，且不得诱导重放已有副作用的调用。大型文本结果必须先原子写入会话私有 artifact 目录（单文件最多 16 MiB，超出按有序文件分片保存并返回索引，文件权限 0600），SDK 仅获得该目录的读取能力，直接文件写工具不得因此扩大可写根；删除会话时同步清理，普通对话导出不得携带该正文。
-- 完整模型请求同时执行 token 与字节预算。百炼 6 MiB 硬限制使用 5 MiB 内部安全预算；预算基于 SDK `getContextUsage()` 的可信完整 token 快照，加上快照后新增消息与工具 payload 的实际 UTF-8/序列化字节。图片/PDF 不做文本截断，但其 payload 必须计入字节预算；将越过安全预算但无法保证完整呈现时显式停止，不能省略结果后引导模型猜测完成；附件原件不得修改。日志不得把估算字节描述为实际 HTTP body。
-- SDK 原生自动整理和预计算整理保持启用；工具结果 token 下降只表示观察到淘汰，不得宣称宿主已经修改 SDK 历史。每轮结束与 compact 后必须读取 SDK 上下文分类；只用 `messageBreakdown.toolResultTokens` 的下降判断已发生的原生淘汰，并按淘汰 token 比例释放本地已跟踪的工具结果字节预算。compact 监测只记录前后 token、耗时、类别与摘要字节数，不记录摘要、工具正文、路径或凭据。请求字节账本必须跨普通 SDK token 快照保留，累计静态上下文、用户消息、主线程 Assistant/工具调用块和工具结果封装；compact 成功后按静态上下文、整理摘要及实际保留的工具结果尾部重建基线，并恢复已释放的工具额度，不能假设工具尾部全部被删除。
-- 正常执行在 `UserPromptSubmit`、主线程 `PostToolBatch`、`PostCompact` 边界读取完整 SDK 快照（5 秒超时），区分 SDK `autoCompactThreshold` 整理触发值和 `maxTokens` 实际工作窗口；宿主按当前工作窗口预留下一次调用空间，不从整理触发值再次扣减 buffer；阈值未知时使用已有保守预算，界面不得把配置窗口冒充真实触发阈值。并行 PostToolUse 必须串行预留额度，不能重复消费剩余预算。
-- 当前 token/字节工作集无法容纳下一次请求时，必须暂停下一次请求，完整保存脱敏任务历史、最近批次、原始任务和 SDK 整理摘要的私有检查点，再关闭旧 Session、清除 resume ID，通过原 SessionManager/权限/审计创建干净 Session，同一 turn 自动续跑。该主动维护适用于前台及后台，不重放请求或工具调用；只有检查点引用与最多 32 KiB 的摘要进入新上下文。历史按短行 JSONL 分片保存，原文不作长度截断；凭据和图片 Base64 除外，附件原件与授权范围保持不变。私有检查点复用 tool-output artifact 的只读授权、删除及导出隔离，不注册公开能力。
-- 轮换必须等待已接纳的 steer 落库，暂停新的 steer 接纳，并保留队列与当前 turn。关闭前保存文件检查点，再将旧 SDK 的检查点标为 superseded；新 Session 不得承诺撤销旧 Session 文件。取消、Renderer 丢失或中止优先于续跑；交接失败停止并保留已有记录，不得发送缺失资料的新请求；连续无工具进展的轮换必须停止，不能形成无限重启。
-- 执行器捕获精确 `rapid_refill_breaker` 或已限定百炼端点的请求体容量失败时，优先采用同一私有检查点交接自动续跑，不重放失败的 HTTP 请求或工具调用。只有无法建立自动交接条件、连续无进展或维护失败时才使用现有可恢复错误兜底；普通网络/API 错误不自动续跑。
-- 自动维护无法接管且已投影为失败终态后的兜底恢复仍是 Agent UI 私有两阶段操作：先验证最新失败轮并整理，再由用户显式“继续上一个任务”。恢复交接最多 32 KiB，只能在用户可见消息落库后注入新 SDK Session；不得包含 Base64、绝对路径、完整工具结果、敏感字段，不得直接重放工具调用。用户发送其它消息时清除恢复状态并使用干净 Session。
-- 请求体恢复期间必须结束旧 Session 的权限等待并暂停既有待发送队列；取消、切换对话和关闭窗口不得向旧 Session 发送内容。恢复日志只记录 Provider scope、阈值、最后可信 token、附件数量/字节、失败轮和恢复结果，不记录 prompt、工具正文、路径、Base64 或凭据。
+- Agent 与内置 Claude Code 终端使用同一 Provider 环境透传规则；模型能力目录只服务展示、说明与价格，不得推导 SDK/CLI 的上下文环境或生命周期参数。
 - Agent SDK 高频事件必须先分类再构造 payload。`system/thinking_tokens` 与未知 SDK 类型不得进入 AgentEvent、EventBus、持久化或轮次结果；只允许不含正文、路径、凭据和原始 payload 的每轮聚合诊断。真实 thinking 文本继续使用 `thinking_delta`。
 - Timeline 和 MCP inspect 按持久化记录的连续区间分页，允许在同一用户回合内以及工具调用/结果之间切页；`beforeIndex` 是排他的记录索引，旧用户消息边界游标仍兼容。返回页必须保留稳定记录 ID 与 `toolUseId`，字节超限只缩小当前页，不得整轮删除、用空页或整轮占位符掩盖非空历史。超大单项只裁剪显示投影，不修改持久化原文。
 - Renderer 只接收有界显示投影：流式批次最多 128 条/64 KiB、等待确认最多 512 KiB；send 终态最多 32 KiB；timeline 每页最多 100 条/1 MiB、单项与全文分块最多 64 KiB。Renderer 私有全文接口只能接受 project、conversation、history index 和 offset，禁止接受文件路径。
@@ -59,31 +42,11 @@
 - 同一草稿下的受控附件根目录作为一个精确 `additionalDirectories` 授权。每个已提交附件批次必须轮换草稿范围；附件轮结束后必须关闭对应 live session，下一轮按 SDK session id 恢复，避免旧草稿目录继续留在进程授权中。单独选择的图片和文件不得授权原始父目录；只有用户明确选择的文件夹才可授权该精确真实路径。
 - 同一次选择或拖放遇到图片数量、单轮、项目或全局空间配额时，必须释放该次调用已经暂存的全部附件，不得向 Renderer 返回部分批次。其它无效路径仍可按项拒绝，不能破坏同批次有效项。
 - 附件孤儿回收必须按当前 `projectId` 过滤后再比较会话集合；任何项目服务都不得用本项目会话列表清理其它项目的 committed 附件。
-- Persona 显式禁用 Read 时继续禁用；runtime 不强制启用工具，也不以此判断模型能力。普通工具可用性不等于完成验证；仅对已登记的任务范围执行下述证据覆盖门禁，不能用 Read 次数代替覆盖或语义正确性。
+- Persona 显式禁用 Read 时继续禁用；runtime 不强制启用工具，也不以此判断模型能力。
 - 交互式 Agent 的 `Write`、`Edit`、`MultiEdit`、`NotebookEdit` 必须在 PreToolUse 阶段限制到会话 `cwd` 或已明确授权的 `additionalDirectories`；祖先 Git 仓库不得扩大该边界，且 `bypassPermissions` 不得绕过这条直接文件写入边界。校验必须同时约束词法路径和真实路径：已存在目标取目标 `realpath`，新目标取最近存在父目录的 `realpath`，授权根或目标无法安全解析时拒绝，项目内 symlink 不得把写入导向真实根外。该检查是 SDK 工具执行前的 fail-closed 预检，不提供文件描述符级原子写入，不能消除校验后到 SDK 实际写入之间的 TOCTOU 竞态。Bash、MCP 和外部进程不属于这条结构化路径检查，继续服从 SDK permission mode、显式授权及操作系统权限；项目目录不是通用 OS 沙箱。
 - 运行时附件清单不写入 history。timeline、权限卡片、工具事件、日志和导出必须把受控附件路径投影为稳定附件标签；存在附件上下文时不得持久化可能拆分路径的流式 `input_json_delta` 正文。
 - 附件诊断只允许记录类型和计数；不得记录 attachmentId、名称、路径、哈希、运行时清单、工具输入或模型输出。路径链路不登记为公开 capability/MCP。
 - 附件回滚不得恢复 Renderer 原图字节、raw image IPC、Blob URL 或重写用户附件。
-
-## 长任务可靠性实施边界（2026-09-13）
-
-- 工具结果保存或呈现失败的 `execution_failed` 必须保留 SDK 明确给出的 `recoverable`，经轮次归一化、持久化 `turnOutcome`、IPC、历史回放和 MCP 读取不得降为 false；未明确给出时不推断为可恢复。取消和超时仍优先。idle 只代表没有活动轮次，可恢复失败不授权自动重放。
-- 诊断导出的 SDK 流采集状态区分 `captured`、`not-recorded`、`read-failed`；后两者的 `observedEventCount` 为 null，不能把未采集或读取失败解释为零事件。保留采集量、导出量与超限省略量的不同语义。
-- SDK 0.3.245 单独 `close()` 会释放挂起 hook，不能当作停止屏障。自动交接必须先保存检查点，等待 `interrupt()` 确认，再关闭 query 并等待原生迭代器真正结束；不能以收到迟到帧或 `close()` 返回代替终止。控制操作有界超时，失败不创建新代、不自动强杀；当前进程内停止未获确认时，用户再点继续也不能放行图片交接。
-- 外部 AbortSignal 不得先中止 SDK 控制通道；先停止新工作准入并执行既有停止屏障，确认结束后再 abort transport。预先取消的请求不创建执行；确认失败必须保留失败保护，不能当作已安全停止。
-- token 与请求体字节分别计量。图片 Base64 完整计入 body；视觉 token 未被完整 SDK 快照覆盖时为未知，不能按 Base64 字节判 token 超限，不能声称未知等于零。文本估算保留来源；快照/compact 只清算覆盖水位以内的成本。native token 降低不能按比例抹掉已知图片字节。图片不消耗文本单批预览额度。
-- 图片原生 Read 的已取得未呈现状态保存在 conversation 可选 `contextHandoff` 中：generation、phase、checkpoint 引用、原 toolUseId、原件路径/大小/摘要、尝试次数与接收确认。这是现有串行 DataRepository 写入链路的最小扩展，不是 History V2 或另一套恢复存储；旧数据缺字段按无恢复状态读取。
-- 在 `PostToolBatch` 暂停下一请求，使并行工具已经产生的结果都进入同一检查点。新主 query 只通过原生 Read 重呈现原件，保留 conversation、turn、taskListId、权限配置及累计用量；不得重跑生成图片的 Bash、截图、上传或消息发送。路径引用不授予权限，Read 前后校验原件版本；这不是 OS 文件锁，不承诺消除恶意并发改写的全部 TOCTOU 竞态。
-- 同一原件最多一次因容量不足触发的干净会话重呈现。普通网络/认证/服务端错误不自动回放；精确输入范围容量拒绝与已有容量故障可走同一交接链路。待呈现图片未获后续主模型响应确认时，result 不得记为成功；接收确认只表示呈现，不等于理解质量或业务覆盖。
-- 保存失败、旧代停止未确认、检查点缺损、原件变化或权限撤销必须保留可验证状态并停止。重启不自动执行旧任务；用户明确继续时验证原件与检查点后恢复尚未尝试的图片，已提交而接收不明的尝试不得静默重放。
-
-- 稳定 taskListId 保存在 conversation 可选字段，SDK 普通轮次、resume 和轮换复用；其它 conversation 使用独立随机 UUID。两层 SDK env 均覆盖宿主或 Provider 的全局 task-list ID。旧记录仅可沿用其合法 SDK UUID 对应的默认 namespace，不扫描 SDK 私有任务目录，不声称恢复历史已丢失的任务。
-- 自动交接使用专用执行投影，保留原有真实工作路径、早期用户要求和最新执行批次；凭据仍脱敏。手动恢复和普通导出继续采用各自脱敏边界。路径引用不授予新权限；执行批次不等于模型已消费或处理。
-- SDK 0.3.245 的 Read/Bash 等原生工具会校验 updatedToolOutput 结构；字符串替换可被静默拒绝。治理必须保留原生结构，按实际替换结构及 JSON 转义计入预算；MCP 替换必须移除旧 structuredContent。未知结构不得假称治理成功。
-- 文本结果落盘失败、返回缺失/截断记录或无法保存完整 artifact 引用时，显式结束为可恢复错误；不得继续截断或自动启动缺资料的新代。完整引用仅因当前容量暂时无法交付时，使用上文的持久检查点与停止屏障交接。可验证的原生 Read 图片超出当前工作集时走上述持久交接；未知非文本结构或无法保存引用时保留停止保护。
-- 导出的 timeline、transcript 和消息/工具计数以同一 conversation 持久化历史投影为准；runtime 空页、尾页、sentinel 不作为历史权威。工具计数按 toolUseId 去重。
-- 新代创建前后和轮换异步边界核对取消/Renderer 状态。SDK 在循环开始前已结束或无终态退出时必须记为未完成。
-- 增量检查点、任务证据账本与已登记范围的覆盖门禁见上文“长任务证据与完成边界”；增量权威历史迁移、通用副作用事务和语义正确性自动验收仍未完成，不能作为整套长期可靠性保证。详细状态见实施计划及其验证记录。
 
 ## Agent 文件检查点
 

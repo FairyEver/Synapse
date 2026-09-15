@@ -139,74 +139,24 @@ describe("AgentTimelineItem", () => {
     expect(html).not.toContain("拒绝")
   })
 
-  it.each([
-    ["required" as const, "当前对话内容较多，暂时无法继续。", "整理上下文"],
-    ["prepared" as const, "已整理上下文", "继续上一个任务"],
-    ["failed" as const, "整理失败，请新建对话。", "新建对话"],
-  ])("renders the %s context recovery state", (status, message, action) => {
+  it("renders provider failures as ordinary errors", () => {
     const html = renderToStaticMarkup(
       <AgentTimelineItem
         item={{
-          id: "error-context",
+          id: "provider-error",
           kind: "error",
-          message: "raw provider error must not render",
-          errorKind: "request_body_too_large",
-          recoverable: true,
+          message: "Provider request failed",
+          errorKind: "execution_failed",
           timestamp: "2026-09-12T00:00:00.000Z",
-        }}
-        contextRecovery={{
-          status,
-          reason: "request_body_too_large",
-          failedTurnId: "turn-1",
-          createdAt: "2026-09-12T00:00:00.000Z",
         }}
         profile={profile}
         pendingPermissions={[]}
         onOpenReference={vi.fn()}
         onRespondPermission={vi.fn()}
-        onPrepareContextRecovery={vi.fn()}
-        onContinueContextRecovery={vi.fn()}
-        onCreateConversation={vi.fn()}
       />,
     )
 
-    expect(html).toContain(message)
-    expect(html).toContain(action)
-    expect(html).not.toContain("raw provider error")
-    if (status === "required") {
-      expect(html).toContain("request_body_too_large")
-      expect(html).toContain("6 MiB")
-    }
-  })
-
-  it("renders rapid refill recovery without the SDK English error", () => {
-    const html = renderToStaticMarkup(
-      <AgentTimelineItem
-        item={{
-          id: "error-refill",
-          kind: "error",
-          message: "Autocompact is thrashing",
-          errorKind: "context_refill_thrashing",
-          recoverable: true,
-          timestamp: "2026-09-12T00:00:00.000Z",
-        }}
-        contextRecovery={{
-          status: "required",
-          reason: "context_refill_thrashing",
-          failedTurnId: "turn-refill",
-          createdAt: "2026-09-12T00:00:00.000Z",
-        }}
-        profile={profile}
-        pendingPermissions={[]}
-        onOpenReference={vi.fn()}
-        onRespondPermission={vi.fn()}
-        onPrepareContextRecovery={vi.fn()}
-      />,
-    )
-
-    expect(html).toContain("大型工具结果在整理后迅速填满上下文")
-    expect(html).toContain("context_refill_thrashing")
-    expect(html).toContain("整理上下文")
-    expect(html).not.toContain("Autocompact is thrashing")
+    expect(html).toContain("Provider request failed")
+    expect(html).not.toContain("整理上下文")
   })
 })

@@ -34,7 +34,8 @@ describe("agent error messages", () => {
   })
 
   it("keeps max turns and ordinary SDK error messages unchanged", () => {
-    expect(sdkResultErrorMessage("error_max_turns", [])).toContain("已达到本轮执行上限")
+    expect(sdkResultErrorMessage("error_max_turns", []))
+      .toBe("Agent 已停止，任务尚未完成。诊断信息：error_max_turns")
     expect(sdkQueryErrorMessage("plain failure")).toBe("Agent 执行失败。诊断信息：plain failure")
   })
 
@@ -48,25 +49,25 @@ describe("agent error messages", () => {
     expect(message).not.toContain("stop_reason")
   })
 
-  it("classifies the exact Bailian request-body limit without exposing provider text", () => {
+  it("treats the Bailian request-body limit as an ordinary terminal failure", () => {
     const raw = "API Error: Exceeded limit on max bytes to request body : 6291456"
 
     expect(agentDiagnosticPresentation(raw)).toEqual({
-      message: "当前对话内容较多，暂时无法继续。",
-      errorKind: "request_body_too_large",
-      recoverable: true,
+      message: `Agent 执行失败。诊断信息：${raw}`,
+      errorKind: "execution_failed",
+      recoverable: false,
     })
     expect(agentDiagnosticPresentation("Exceeded limit on max bytes to request body : 6291457").errorKind)
       .toBe("execution_failed")
   })
 
-  it("classifies SDK rapid context refill without exposing the English diagnostic", () => {
+  it("treats SDK rapid context refill as an ordinary terminal failure", () => {
     const raw = "Autocompact is thrashing: context refilled. terminal_reason=rapid_refill_breaker"
 
     expect(agentDiagnosticPresentation(raw)).toEqual({
-      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
-      errorKind: "context_refill_thrashing",
-      recoverable: true,
+      message: `Agent 执行失败。诊断信息：${raw}`,
+      errorKind: "execution_failed",
+      recoverable: false,
     })
   })
 })

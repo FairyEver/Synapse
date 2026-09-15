@@ -1,6 +1,5 @@
 import { isSafeTokenMeasurement } from "./redaction"
 import { randomUUID } from "node:crypto"
-import { mergePendingImages, planImagePresentation, verifyImagePresentation } from "./image-presentation"
 
 import type {
   AgentEventEntryV1,
@@ -93,8 +92,6 @@ import {
 import { agentConversationDeliveryOptions } from "./event-delivery"
 import type { AttachmentStagingService } from "./attachment-staging-service"
 import type { AgentFileCheckpointService } from "./agent-file-checkpoint-service"
-import { persistContextContinuation, withContextContinuationUsage, type AgentContextRotation } from "./context-continuation"
-import { buildContextRecoveryHandoff } from "./context-recovery"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -181,7 +178,6 @@ export interface ConversationTurnOptions {
   readonly liveEventTimeoutMs?: number
   readonly onResponseStarted?: () => void
   readonly turnId?: string
-  readonly contextRecoveryPriority?: boolean
 }
 
 type AgentTurnSubmissionHandle =
@@ -217,7 +213,6 @@ export class ConversationRouter {
     Extract<AgentCommandRouterResult, { kind: "nativeSlash" }>
   >()
   private readonly savedSdkSessions = new Map<string, string>()
-  private readonly unconfirmedStops = new Set<string>()
   private readonly streamDiagnostics = new Map<string, StreamDiagnosticCapture>()
   private readonly rendererStreamBatches = new Map<string, PendingRendererStreamBatch>()
   private readonly rendererInFlightBatches = new Map<string, string>()
@@ -662,8 +657,7 @@ export class ConversationRouter {
     const userHistoryMetadata = await this.prepareUserMessageHistory(message)
 
     const disposition = state.busy ? "queued" as const : "started" as const
-    const recoveryPriority = options.contextRecoveryPriority || Boolean(conversation.contextRecovery)
-    const queuePosition = state.busy ? recoveryPriority ? 1 : state.queue.length + 1 : 0
+    const queuePosition = state.busy ? state.queue.length + 1 : 0
     const completion = new Promise<AgentRuntimeTurnResult>((resolve) => {
       const turn = {
         message,
@@ -680,12 +674,7 @@ export class ConversationRouter {
       if (nativeSlashPassthrough) {
         this.nativeSlashPassthroughs.set(turn, nativeSlashPassthrough)
       }
-      if (recoveryPriority) {
-        state.contextRecoveryPaused = false
-        state.queue.unshift(turn)
-      } else {
-        state.queue.push(turn)
-      }
+      state.queue.push(turn)
       if (!state.busy) {
         state.busy = true
         void this.processQueue(state)
@@ -724,7 +713,6 @@ export class ConversationRouter {
   private async processQueue(state: RuntimeSessionState): Promise<void> {
     try {
       while (state.queue.length > 0) {
-        if (state.contextRecoveryPaused) break
         const turn = state.queue.shift()
         if (!turn) continue
         const ac = new AbortController()
@@ -791,10 +779,7 @@ export class ConversationRouter {
             turn.resolve(result)
           }
         } finally {
-          if (
-            (turn.message.attachmentRefs?.length ?? 0) > 0
-            || (turn.message.contextRecoveryTurnId && (turn.message.attachments?.length ?? 0) > 0)
-          ) {
+          if ((turn.message.attachmentRefs?.length ?? 0) > 0) {
             await this.sessionManager.closeCurrentTurn(turn.conversationId)
           }
           externalSignal?.removeEventListener("abort", abort)
@@ -836,36 +821,6 @@ export class ConversationRouter {
         await this.deps.agentArtifactStore?.removeUserMessageArtifactsForTurn(conversationId, turnId)
         throw new Error(`Conversation "${conversationId}" was deleted while queued`)
       }
-      const savedHandoff = conversation.contextHandoff
-      const restoreImages = savedHandoff?.pendingImages.filter((image) => !image.presented) ?? []
-      const isExplicitImageContinue = restoreImages.length > 0
-        && (message.contextRecoveryTurnId === savedHandoff?.turnId || /^(继续|继续上一个任务|continue)$/i.test(message.content.trim()))
-      let imageRecoveryContent: string | undefined
-      if (isExplicitImageContinue && savedHandoff) {
-        if (this.unconfirmedStops.has(conversation.id)) throw new Error("旧代停止尚未确认，请重启后再继续；交接记录已保留。")
-        const store = this.deps.agentArtifactStore
-        if (!store || !savedHandoff.checkpointArtifacts?.length) throw new Error("图片交接检查点不完整，已保留待恢复状态。")
-        if (state.liveSession) await state.liveSession.close()
-        await store.verifyContextCheckpoint(this.deps.projectId, conversation.id, savedHandoff.checkpointArtifacts)
-        for (const image of restoreImages) await verifyImagePresentation(image)
-        if (restoreImages.some((image) => image.attempts >= 1)) throw new Error("图片已尝试一次干净会话重呈现，请先核实已保存结果；不会自动重复。")
-        await this.sessionManager.closeCurrentTurn(conversation.id)
-        this.forgetSavedSdkSession(conversation.id)
-        conversation = await this.repository.clearCurrentAgentSessionId(conversation.id, conversation.agentType)
-      }
-      const recovery = conversation.contextRecovery
-      const isRecoveryContinuation = recovery?.status === "prepared"
-        && recovery.failedTurnId === message.contextRecoveryTurnId
-      const recoveryHandoff = isRecoveryContinuation
-        ? buildContextRecoveryHandoff({
-            conversation,
-            workspacePath: message.workspacePath ?? conversation.workspacePath ?? this.deps.workDir,
-          })
-        : undefined
-      if (recovery) {
-        conversation = await this.repository.clearContextRecovery(conversation.id)
-        this.emitConversationUpdated(conversation)
-      }
       conversation = await this.appendUserMessageHistory(
         conversation,
         message,
@@ -890,30 +845,11 @@ export class ConversationRouter {
           message,
           abortSignal,
         })
-        if (isExplicitImageContinue && savedHandoff) {
-          const presentation = planImagePresentation(restoreImages, sessionHandle.liveSession.imagePresentationCapacityBytes?.() ?? 5 * 1024 * 1024)
-          const restored = presentation.selected.map((image) => ({ ...image, attempts: 1 }))
-          imageRecoveryContent = [
-            "Before any other tool, use native Read to present these unchanged originals. Then recover the same authorized task from its saved progress and checkpoint. Never repeat completed commands, screenshots, uploads or messages.",
-            JSON.stringify(restored.map((image) => ({ file_path: image.path, originalToolUseId: image.toolUseId }))),
-            `Images deferred to subsequent clean batches: ${presentation.deferred.length}`,
-            `Checkpoint index: ${JSON.stringify(savedHandoff.checkpointPath)}`,
-            ...(savedHandoff.progressIndexPath ? [`Authoritative progress index: ${JSON.stringify(savedHandoff.progressIndexPath)}`] : []),
-          ].join("\n")
-          if (Buffer.byteLength(imageRecoveryContent) > 32 * 1024) throw new Error("待呈现原图的引用超出安全交接空间。")
-          await this.repository.saveContextHandoff(conversation.id, { ...savedHandoff, generation: savedHandoff.generation + 1,
-            turnId, phase: "submitted", pendingImages: mergePendingImages(savedHandoff.pendingImages, restored),
-          }, savedHandoff.generation)
-          liveMessage = { ...liveMessage, pendingImagePresentations: restored, deferredImagePresentations: presentation.deferred }
-        }
-        const preparedMessageBase = imageRecoveryContent || recoveryHandoff
-          ? { ...liveMessage, content: imageRecoveryContent ?? recoveryHandoff! }
-          : liveMessage
-        const preparedMessage = await Promise.resolve(this.deps.prepareMessage?.(preparedMessageBase, {
+        const preparedMessage = await Promise.resolve(this.deps.prepareMessage?.(liveMessage, {
           isNewLiveSession: sessionHandle.created,
           conversationId: conversation.id,
           turnId,
-        }) ?? preparedMessageBase)
+        }) ?? liveMessage)
         const result = await this.processLiveTurn(
           state,
           preparedMessage,
@@ -927,8 +863,6 @@ export class ConversationRouter {
         )
         await this.appendFileCheckpointEvent(message, result, conversation.id, turnId, (state.liveSession ?? sessionHandle.liveSession))
         await this.appendAfterTurnEvents(message, result, conversation.id, turnId, sessionHandle.created)
-
-        await this.handleContextCapacityFailure({ state, message, conversation, turnId, result })
 
         if (isBackgroundPlatform) {
           const tDone = this.isoNow()
@@ -974,62 +908,6 @@ export class ConversationRouter {
       state.rendererUnavailable = false
       state.lastActivity = Date.now()
     }
-  }
-
-  private async handleContextCapacityFailure(input: {
-    readonly state: RuntimeSessionState
-    readonly message: AgentMessage
-    readonly conversation: ConversationEntryV1
-    readonly turnId: string
-    readonly result: AgentRuntimeTurnResult
-  }): Promise<void> {
-    const errorEvent = latestAgentErrorEvent(input.result.events)
-    const errorKind = errorEvent?.errorKind
-    const requestBodyTooLarge = errorKind === "request_body_too_large"
-    const contextRefillThrashing = errorKind === "context_refill_thrashing"
-    if (!requestBodyTooLarge && !contextRefillThrashing) return
-    if (requestBodyTooLarge && (
-      input.state.sdkSettings?.autoCompactEnabled !== true
-      || input.state.sdkSettings.autoCompactWindow !== 200_000
-    )) return
-
-    await this.sessionManager.closeCurrentTurn(input.conversation.id)
-    this.forgetSavedSdkSession(input.conversation.id)
-    input.state.contextRecoveryPaused = input.message.platform === "local-renderer"
-    const updated = input.message.platform === "local-renderer"
-      ? await this.repository.markContextRecoveryRequired(
-          input.conversation.id,
-          input.turnId,
-          input.conversation.agentType,
-          errorKind,
-        )
-      : await this.repository.clearCurrentAgentSessionId(
-          input.conversation.id,
-          input.conversation.agentType,
-        )
-    this.emitConversationUpdated(updated)
-    this.deps.logger?.warn("Agent context capacity recovery is required.", {
-      boundary: "agent-runtime.context-recovery.required",
-      projectId: this.deps.projectId,
-      conversationId: input.conversation.id,
-      providerId: input.message.providerId ?? input.conversation.providerId,
-      errorKind,
-      providerScope: requestBodyTooLarge ? "bailian-cn" : undefined,
-      autoCompactWindowTokens: input.state.sdkSettings?.autoCompactWindow,
-      maxRequestBodyBytes: requestBodyTooLarge ? 6 * 1024 * 1024 : undefined,
-      failedTurnId: input.turnId,
-      lastTrustedContextTokens: latestContextUsedTokens(input.result.events),
-      recoveryStatus: input.message.platform === "local-renderer" ? "required" : "not-applicable",
-      attachmentCount: (input.message.attachments?.length ?? 0) + (input.message.attachmentRefs?.length ?? 0),
-      attachmentBytes: [
-        ...(input.message.attachments ?? []),
-        ...(input.message.attachmentRefs ?? []),
-      ].reduce((total, attachment) => total + (
-        "byteSize" in attachment
-          ? attachment.byteSize
-          : attachment.size ?? 0
-      ), 0),
-    })
   }
 
   private async checkRendererAgentSpawn(
@@ -1110,132 +988,6 @@ export class ConversationRouter {
     }
   }
 
-  private async requireImagePresentationBeforeSuccess(conversationId: string, turnId: string, event: AgentEvent): Promise<AgentEvent> {
-    if (event.type !== "result") return event
-    const handoff = (await this.repository.get(conversationId))?.contextHandoff
-    if (!handoff || handoff.turnId !== turnId || handoff.pendingImages.every((image) => image.presented)) return event
-    await this.repository.saveContextHandoff(conversationId, { ...handoff, phase: "failed" }, handoff.generation)
-    return { type: "error", errorKind: "execution_failed", recoverable: true,
-      message: "待呈现图片尚未获得模型接收确认，任务未完成。已保留原件引用与检查点。",
-      conversationId, sdkSessionId: event.sdkSessionId, providerId: event.providerId, timestamp: this.isoNow(),
-      usage: event.usage,
-    }
-  }
-
-  private async rotateContextSession(
-    state: RuntimeSessionState,
-    message: AgentMessage,
-    conversationId: string,
-    turnId: string,
-    liveSession: AgentLiveSession,
-    abortSignal?: AbortSignal,
-    nextSequence?: () => number,
-  ): Promise<AgentLiveSession> {
-    const checkAdmission = (): void => {
-      if (state.cancelState || state.rendererUnavailable || abortSignal?.aborted) throw new Error(AGENT_CANCELLED_MESSAGE)
-    }
-    checkAdmission()
-    await Promise.all([...state.activeSteers?.values() ?? []].map((steer) => steer.historyPersistence))
-    checkAdmission()
-    const rotation = liveSession.contextRotation?.()
-    const store = this.deps.agentArtifactStore
-    const conversation = await this.repository.get(conversationId)
-    checkAdmission()
-    if (!rotation || !store || !conversation) throw new Error("上下文交接资料不可用。")
-    const previous = conversation.contextHandoff
-    const generation = (previous?.generation ?? 0) + 1
-    const previousImages = previous?.turnId === turnId ? previous.pendingImages : []
-    const pendingImages = mergePendingImages(previousImages.filter((image) => !image.presented && image.attempts === 0), rotation.pendingImages ?? [])
-    let handoff: NonNullable<ConversationEntryV1["contextHandoff"]> | undefined
-    try {
-      for (const image of pendingImages) {
-        if (previousImages.some((old) => old.path === image.path && old.sha256 === image.sha256 && old.attempts >= 1)) {
-          throw new Error("同一图片已进行一次干净会话重呈现，仍无法容纳。")
-        }
-        await verifyImagePresentation(image)
-      }
-      const content = await persistContextContinuation({
-        store, projectId: this.deps.projectId, conversation, turnId,
-        workspacePath: message.workspacePath ?? this.deps.workDir,
-        runtimeMessage: message.content, rotation: { ...rotation, pendingImages: [] }, abortSignal,
-        progress: this.repository.taskProgress?.checkpoint(conversationId, conversation.taskProgressScope?.turnId ?? turnId),
-        onCheckpoint: async (checkpointPath, checkpointArtifacts, details) => {
-          checkAdmission()
-          handoff = { version: 1, turnId, generation, phase: "prepared", checkpointPath, checkpointArtifacts, ...details,
-            previousSdkSessionId: liveSession.currentSessionId(),
-            pendingImages: mergePendingImages(previousImages, pendingImages),
-          }
-          await this.repository.saveContextHandoff(conversationId, handoff, previous?.generation ?? 0)
-        },
-      })
-      checkAdmission()
-      // Persist before closing; the old SDK is paused at a request boundary.
-      // A new SDK cannot rewind files changed in its predecessor.
-      await this.appendFileCheckpointEvent(message, {
-        conversationId, events: [], resultText: "",
-      }, conversationId, turnId, liveSession, nextSequence)
-      checkAdmission()
-      // SessionManager cleanup deliberately absorbs close errors; the handoff
-      // must obtain an explicit stop acknowledgement before it can use that path.
-      if (handoff) await store.verifyContextCheckpoint(this.deps.projectId, conversationId, handoff.checkpointArtifacts ?? [])
-      try { await liveSession.close() }
-      catch (error) { this.unconfirmedStops.add(conversationId); throw error }
-      checkAdmission()
-      if (!handoff) throw new Error("上下文检查点不完整。")
-      handoff = { ...handoff, phase: "old-stopped" }
-      await this.repository.saveContextHandoff(conversationId, handoff, generation)
-      await this.sessionManager.closeCurrentTurn(conversationId)
-      checkAdmission()
-      this.forgetSavedSdkSession(conversationId)
-      const clean = await this.repository.clearCurrentAgentSessionId(conversationId, conversation.agentType)
-      if (state.cancelState || state.rendererUnavailable || abortSignal?.aborted) throw new Error(AGENT_CANCELLED_MESSAGE)
-      await this.appendSupersededCheckpointEvents(message, clean, turnId, nextSequence)
-      checkAdmission()
-      await this.checkRendererAgentSpawn(message, clean)
-      checkAdmission()
-      const handle = await this.sessionManager.getOrCreateSession({ state, conversation: clean, message, abortSignal })
-      if (state.cancelState || state.rendererUnavailable || abortSignal?.aborted) {
-        await this.sessionManager.closeCurrentTurn(conversationId)
-        throw new Error(AGENT_CANCELLED_MESSAGE)
-      }
-      if (message.platform === "local-renderer") handle.liveSession.beginFileCheckpoint?.(turnId)
-      for (const image of pendingImages) await verifyImagePresentation(image)
-      checkAdmission()
-      const presentation = planImagePresentation(pendingImages, handle.liveSession.imagePresentationCapacityBytes?.() ?? 5 * 1024 * 1024)
-      const attemptedImages = presentation.selected.map((image) => ({ ...image, attempts: 1 }))
-      handoff = { ...handoff, phase: "submitted", pendingImages: mergePendingImages(previousImages, pendingImages, attemptedImages) }
-      await this.repository.saveContextHandoff(conversationId, handoff, generation)
-      checkAdmission()
-      const presentationInstruction = attemptedImages.length ? [
-        "Before any other tool, use native Read on the required unchanged originals below. Do not replay old images or rebuild history first. After these receipts are presented, consume the progress index and save findings. Remaining acquired images will be scheduled automatically; never repeat their producing operations.",
-        JSON.stringify(attemptedImages.map((image) => ({ file_path: image.path, originalToolUseId: image.toolUseId }))),
-        `Images deferred to subsequent clean batches: ${presentation.deferred.length}`,
-      ].join("\n") : ""
-      if (Buffer.byteLength(presentationInstruction) > 16 * 1024) throw new Error("待呈现原图的引用超出安全交接空间。")
-      if (!await handle.liveSession.send({ ...message, content: `${presentationInstruction}\n\n${content}`, runtimeTurnId: turnId, attachments: undefined,
-        pendingImagePresentations: attemptedImages, deferredImagePresentations: presentation.deferred })) {
-        throw new Error(AGENT_SESSION_ENDED_BEFORE_SEND_MESSAGE)
-      }
-      this.deps.logger?.info("Agent continued after automatic context rotation.", {
-        boundary: "agent-runtime.context-rotation", projectId: this.deps.projectId,
-        conversationId, turnId, generation, reason: rotation.reason, stopConfirmed: true,
-        progressIndexAvailable: Boolean(handoff.progressIndexPath), completedBatches: rotation.completedBatches,
-      })
-      return handle.liveSession
-    } catch (error) {
-      if (handoff) {
-        try { await this.repository.saveContextHandoff(conversationId, { ...handoff, phase: "failed" }, generation) }
-        catch (saveError) { this.deps.logger?.warn("Failed to persist context handoff failure; previous checkpoint retained.", {
-          boundary: "agent-runtime.context-rotation.persist-failure", conversationId, generation,
-          error: saveError instanceof Error ? saveError.name : "unknown",
-        }) }
-      }
-      await this.sessionManager.closeCurrentTurn(conversationId)
-      if (state.cancelState || abortSignal?.aborted) throw new Error(AGENT_CANCELLED_MESSAGE, { cause: error })
-      throw new Error(`上下文交接失败：${error instanceof Error ? error.message : "状态不可用"}`, { cause: error })
-    }
-  }
-
   private async processLiveTurn(
     state: RuntimeSessionState,
     message: AgentMessage,
@@ -1265,9 +1017,6 @@ export class ConversationRouter {
     let streamedThinkingStartedAt: string | undefined
     let error: string | undefined
     let responseStarted = false
-    let rotationsWithoutProgress = 0
-    let lastProgressMarker: string | undefined
-    const contextRotations: Pick<AgentContextRotation, "usage">[] = []
 
     const flushStreamedThinkingHistory = async (): Promise<void> => {
       const content = streamedThinking.trim()
@@ -1328,47 +1077,6 @@ export class ConversationRouter {
           await this.sessionManager.closeCurrentTurn(conversation.id)
         }
         break
-      }
-      event = await this.requireImagePresentationBeforeSuccess(conversation.id, turnId, event)
-      if (event.type === "sdkEvent" && event.sdkType === "imagePresentationCompleted") {
-          const toolUseId = event.payload?.originalToolUseId
-          if (typeof toolUseId === "string") await this.repository.acknowledgeImagePresentation(conversation.id, turnId, liveSession.currentSessionId(), toolUseId)
-          continue
-        }
-        if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
-        state.steerAdmissionsOpen = false
-        const rotation = liveSession.contextRotation()!
-        contextRotations.push({ usage: rotation.usage })
-        const progressMarker = await this.repository.taskProgressMarker(conversation.id, turnId)
-        rotationsWithoutProgress = progressMarker !== undefined
-          ? progressMarker !== lastProgressMarker ? 0 : rotationsWithoutProgress + 1
-          : rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
-        lastProgressMarker = progressMarker
-        if (rotationsWithoutProgress > 1 || state.cancelState || state.rendererUnavailable || abortSignal?.aborted) {
-          await this.sessionManager.closeCurrentTurn(conversation.id)
-          error = state.cancelState || abortSignal?.aborted ? AGENT_CANCELLED_MESSAGE
-            : state.rendererUnavailable ? AGENT_RENDERER_UNAVAILABLE_MESSAGE
-            : progressMarker !== undefined ? "已保存任务进度，连续两次交接未推进已登记的处理范围，请核对剩余证据后继续。"
-              : "当前模型的固定上下文已占满可用空间，请减少已加载的工具或指令。"
-          break
-        }
-        await flushStreamedThinkingHistory()
-        liveSession = await this.rotateContextSession(state, message, conversation.id, turnId, liveSession, abortSignal, () => ++persistedSequence)
-        const compactEvent: AgentEvent = {
-          type: "compactBoundary", payload: { automaticSessionRotation: true },
-          conversationId: conversation.id, providerId: message.providerId ?? conversation.providerId,
-          sdkSessionId: liveSession.currentSessionId(), timestamp: this.isoNow(),
-        }
-        appendBoundedTurnEvent(events, compactEvent)
-        this.emitEvent(message, conversation.id, compactEvent)
-        await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, compactEvent)
-        await this.saveEventHistory(conversation.id, compactEvent)
-        latestAssistantText = ""
-        streamedText = ""
-        assistantHistoryPersisted = false
-        stageAssistantPersisted = false
-        state.steerAdmissionsOpen = !state.cancelState
-        continue
       }
       if (!responseStarted && isAgentResponseActivityEvent(event)) {
         responseStarted = true
@@ -1437,7 +1145,7 @@ export class ConversationRouter {
           state,
           conversation,
           message,
-          event: withContextContinuationUsage(event, contextRotations),
+          event,
           turnId,
           sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
           userMeta: message.userMeta ?? conversation.userMeta,
@@ -1471,7 +1179,7 @@ export class ConversationRouter {
         const finalized = await this.finalizeErrorUsage({
           state,
           conversation,
-          event: withContextContinuationUsage(event, contextRotations),
+          event,
           turnId,
           sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
           userMeta: message.userMeta ?? conversation.userMeta,
@@ -1482,13 +1190,11 @@ export class ConversationRouter {
         resultCostCurrency = finalized.costCurrency
         const enrichedError = finalized.event
         const lifecycle = state.activeLifecycle
-        // Evidence notices stay advisory: they end the turn as completed and are
-        // projected unchanged, while real failures keep the interrupted semantics.
-        const advisoryNotice = enrichedError.errorKind === "task_evidence_incomplete"
         if (lifecycle) {
-          const outcome = advisoryNotice
-            ? normalizeExecutorEvent(lifecycle, { type: "executor.result" })
-            : normalizeExecutorEvent(lifecycle, { type: "executor.error", diagnostic: diagnosticFromAgentError(enrichedError) })
+          const outcome = normalizeExecutorEvent(lifecycle, {
+            type: "executor.error",
+            diagnostic: diagnosticFromAgentError(enrichedError),
+          })
           const projectedOutcome = outcomeToAgentEvent({
             outcome,
             conversationId: conversation.id,
@@ -1496,7 +1202,7 @@ export class ConversationRouter {
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
             timestamp: this.isoNow(),
           })
-          const projected = advisoryNotice ? enrichedError : projectedOutcome.type === "error"
+          const projected = projectedOutcome.type === "error"
             ? {
                 ...projectedOutcome,
                 usage: enrichedError.usage,
@@ -1505,7 +1211,6 @@ export class ConversationRouter {
                 costUsd: enrichedError.costUsd,
                 costCny: enrichedError.costCny,
                 costCurrency: enrichedError.costCurrency,
-                taskCompletion: enrichedError.taskCompletion,
                 payload: enrichedError.payload,
               }
             : projectedOutcome
@@ -1516,8 +1221,7 @@ export class ConversationRouter {
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
             assistantHistoryPersisted,
           }) || assistantHistoryPersisted
-          error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
-          if (advisoryNotice) resultText = resultText || latestAssistantText || enrichedError.message
+          error = outcomeMessage(outcome)
           break
         }
         appendBoundedTurnEvent(events, enrichedError)
@@ -1525,8 +1229,7 @@ export class ConversationRouter {
         await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
         await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
         await this.saveEventHistory(conversation.id, enrichedError)
-        error = advisoryNotice ? undefined : enrichedError.message
-        if (advisoryNotice) resultText = resultText || latestAssistantText || enrichedError.message
+        error = enrichedError.message
         break
       }
 
@@ -1798,10 +1501,7 @@ export class ConversationRouter {
         message,
         abortSignal,
       })
-      let liveSession = sessionHandle.liveSession
-      let rotationsWithoutProgress = 0
-      let lastProgressMarker: string | undefined
-      const contextRotations: Pick<AgentContextRotation, "usage">[] = []
+      const liveSession = sessionHandle.liveSession
       const liveMessage = await Promise.resolve(this.deps.prepareMessage?.(message, {
         isNewLiveSession: sessionHandle.created,
         conversationId: savedConversation.id,
@@ -1840,32 +1540,6 @@ export class ConversationRouter {
             timedOut: true,
           }
         }
-        event = await this.requireImagePresentationBeforeSuccess(conversation.id, turnId, event)
-        if (event.type === "sdkEvent" && event.sdkType === "imagePresentationCompleted") {
-          const toolUseId = event.payload?.originalToolUseId
-          if (typeof toolUseId === "string") await this.repository.acknowledgeImagePresentation(conversation.id, turnId, liveSession.currentSessionId(), toolUseId)
-          continue
-        }
-        if (event.type === "sdkEvent" && event.sdkType === "contextRotationRequested" && liveSession.contextRotation?.()) {
-          const rotation = liveSession.contextRotation()!
-          contextRotations.push({ usage: rotation.usage })
-          const progressMarker = await this.repository.taskProgressMarker(conversation.id, turnId)
-          rotationsWithoutProgress = progressMarker !== undefined
-            ? progressMarker !== lastProgressMarker ? 0 : rotationsWithoutProgress + 1
-            : rotation.completedBatches > 0 ? 0 : rotationsWithoutProgress + 1
-          lastProgressMarker = progressMarker
-          if (rotationsWithoutProgress > 1 || abortSignal.aborted) {
-            await this.sessionManager.closeCurrentTurn(conversation.id)
-            error = abortSignal.aborted ? AGENT_CANCELLED_MESSAGE : progressMarker !== undefined
-              ? "已保存任务进度，连续两次交接未推进已登记的处理范围，请核对剩余证据后继续。"
-              : "当前模型的固定上下文已占满可用空间。"
-            break
-          }
-          liveSession = await this.rotateContextSession(state, liveMessage, conversation.id, turnId, liveSession, abortSignal, () => ++persistedSequence)
-          latestAssistantText = ""
-          assistantHistoryPersisted = false
-          continue
-        }
         const assistantText = assistantEventText(event)
         if (assistantText) latestAssistantText = assistantText
         if (event.type === "result") {
@@ -1875,7 +1549,7 @@ export class ConversationRouter {
             state,
             conversation,
             message,
-            event: withContextContinuationUsage(event, contextRotations),
+            event,
             turnId,
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
             userMeta: message.userMeta ?? conversation.userMeta,
@@ -1907,7 +1581,7 @@ export class ConversationRouter {
           const finalized = await this.finalizeErrorUsage({
             state,
             conversation,
-            event: withContextContinuationUsage(event, contextRotations),
+            event,
             turnId,
             sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
             userMeta: message.userMeta ?? conversation.userMeta,
@@ -1918,11 +1592,11 @@ export class ConversationRouter {
           resultCostCurrency = finalized.costCurrency
           const enrichedError = finalized.event
           const lifecycle = state.activeLifecycle
-          const advisoryNotice = enrichedError.errorKind === "task_evidence_incomplete"
           if (lifecycle) {
-            const outcome = advisoryNotice
-              ? normalizeExecutorEvent(lifecycle, { type: "executor.result" })
-              : normalizeExecutorEvent(lifecycle, { type: "executor.error", diagnostic: diagnosticFromAgentError(enrichedError) })
+            const outcome = normalizeExecutorEvent(lifecycle, {
+              type: "executor.error",
+              diagnostic: diagnosticFromAgentError(enrichedError),
+            })
             const projectedOutcome = outcomeToAgentEvent({
               outcome,
               conversationId: conversation.id,
@@ -1930,7 +1604,7 @@ export class ConversationRouter {
               sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
               timestamp: this.isoNow(),
             })
-            const projected = advisoryNotice ? enrichedError : projectedOutcome.type === "error"
+            const projected = projectedOutcome.type === "error"
               ? {
                   ...projectedOutcome,
                   usage: enrichedError.usage,
@@ -1939,7 +1613,6 @@ export class ConversationRouter {
                   costUsd: enrichedError.costUsd,
                   costCny: enrichedError.costCny,
                   costCurrency: enrichedError.costCurrency,
-                  taskCompletion: enrichedError.taskCompletion,
                   payload: enrichedError.payload,
                 }
               : projectedOutcome
@@ -1951,8 +1624,7 @@ export class ConversationRouter {
               assistantHistoryPersisted = await this.saveEventHistory(conversation.id, projected, {
                 assistantHistoryPersisted,
               }) || assistantHistoryPersisted
-              error = outcome.status === "completed" ? undefined : outcomeMessage(outcome)
-              if (advisoryNotice) partialText = partialText || latestAssistantText
+              error = outcomeMessage(outcome)
               break
             }
           appendBoundedTurnEvent(events, enrichedError)
@@ -1961,8 +1633,7 @@ export class ConversationRouter {
           await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, enrichedError)
           await this.saveEventSdkSession(conversation.id, enrichedError, liveSession)
           assistantHistoryPersisted = await this.saveEventHistory(conversation.id, enrichedError) || assistantHistoryPersisted
-          error = advisoryNotice ? undefined : enrichedError.message
-          if (advisoryNotice) partialText = partialText || latestAssistantText
+          error = enrichedError.message
           break
         }
         appendBoundedTurnEvent(events, event)
@@ -2119,9 +1790,6 @@ export class ConversationRouter {
   private async prepareUserMessageHistory(
     message: AgentMessage,
   ): Promise<Record<string, unknown> | undefined> {
-    if (message.contextRecoveryTurnId) {
-      return userMessagePresentationHistoryMetadata({ ...message, attachments: undefined })
-    }
     if (message.attachmentRefs && message.attachmentRefs.length > 0) {
       return userMessagePresentationHistoryMetadataFromRefs(message, message.attachmentRefs)
     }
@@ -3439,7 +3107,6 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           sdkSessionId: event.sdkSessionId,
           errorKind: event.errorKind,
           recoverable: event.recoverable,
-          taskCompletion: event.taskCompletion,
           turnOutcome: event.turnOutcome,
           usage: event.usage,
           modelUsage: event.modelUsage,
@@ -3584,20 +3251,6 @@ function latestAgentErrorEvent(events: readonly AgentEvent[]): Extract<AgentEven
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (event?.type === "error") return event
-  }
-  return undefined
-}
-
-function latestContextUsedTokens(events: readonly AgentEvent[]): number | undefined {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (!event) continue
-    const contextUsage = event.type === "result"
-      ? event.metadata?.contextUsage
-      : "contextUsage" in event
-        ? event.contextUsage
-        : undefined
-    if (contextUsage && contextUsage.usedTokens > 0) return contextUsage.usedTokens
   }
   return undefined
 }

@@ -15,8 +15,8 @@ const exactTokenFormatter = new Intl.NumberFormat("en-US")
 function AgentContextUsageIndicator({ contextUsage }: AgentContextUsageIndicatorProps) {
   if (!contextUsage) return null
 
-  const { usedTokens, contextWindowTokens, autoCompactWindowTokens, autoCompactThresholdTokens } = contextUsage
-  const displayWindowTokens = autoCompactThresholdTokens ?? (autoCompactWindowTokens === undefined ? contextWindowTokens : undefined)
+  const { usedTokens, contextWindowTokens, autoCompactThresholdTokens } = contextUsage
+  const displayWindowTokens = autoCompactThresholdTokens ?? contextWindowTokens
   const hasWindow = displayWindowTokens !== undefined
   const percentage = hasWindow
     ? Math.round((usedTokens / displayWindowTokens) * 100)
@@ -25,8 +25,6 @@ function AgentContextUsageIndicator({ contextUsage }: AgentContextUsageIndicator
     ? undefined
     : Math.min(100, Math.max(0, percentage))
   const exactUsed = exactTokenFormatter.format(usedTokens)
-  const modelContext = contextUsage.modelContext
-  const configurationSource = contextUsage.contextWindowConfigurationSource
 
   return (
     <Tooltip>
@@ -65,32 +63,13 @@ function AgentContextUsageIndicator({ contextUsage }: AgentContextUsageIndicator
               <span>剩余 {exactTokenFormatter.format(Math.max(0, displayWindowTokens - usedTokens))} token</span>
               {autoCompactThresholdTokens !== undefined ? (
                 <span>自动整理触发 {exactTokenFormatter.format(autoCompactThresholdTokens)} token</span>
-              ) : modelContext ? (
-                <span>运行窗口 {exactTokenFormatter.format(displayWindowTokens)} / 模型上限 {exactTokenFormatter.format(modelContext.contextWindowTokens)} token</span>
               ) : (
                 <span>运行窗口 {exactTokenFormatter.format(displayWindowTokens)} token</span>
               )}
-              {autoCompactThresholdTokens !== undefined && modelContext ? (
-                <span>模型上限 {exactTokenFormatter.format(modelContext.contextWindowTokens)} token</span>
-              ) : contextWindowTokens !== undefined && contextWindowTokens !== displayWindowTokens ? (
+              {contextWindowTokens !== undefined && contextWindowTokens !== displayWindowTokens ? (
                 <span>模型窗口 {exactTokenFormatter.format(contextWindowTokens)} token</span>
               ) : null}
             </>
-          ) : modelContext ? (
-            <span>模型上限 {exactTokenFormatter.format(modelContext.contextWindowTokens)} token</span>
-          ) : null}
-          {autoCompactWindowTokens !== undefined && autoCompactThresholdTokens === undefined ? <span>自动整理触发待确认</span> : null}
-          {modelContext?.maxInputTokens !== undefined ? (
-            <span>最大输入 {exactTokenFormatter.format(modelContext.maxInputTokens)} token</span>
-          ) : null}
-          {modelContext?.maxOutputTokens !== undefined ? (
-            <span>最大输出 {exactTokenFormatter.format(modelContext.maxOutputTokens)} token</span>
-          ) : null}
-          {configurationSource ? (
-            <span>配置来源 {configurationSource === "catalog" ? "模型目录" : "Provider 环境变量"}</span>
-          ) : null}
-          {modelContext ? (
-            <span>官方资料 {modelContext.sourceLabel} · {modelContext.verifiedAt.slice(0, 10)}</span>
           ) : null}
         </div>
       </TooltipContent>

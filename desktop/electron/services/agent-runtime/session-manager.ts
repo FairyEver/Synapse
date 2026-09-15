@@ -3,7 +3,6 @@ import { realpath, stat } from "node:fs/promises"
 
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
-import { resolveModelContextConfiguration } from "../model-capability/catalog"
 import { LOCAL_CLAUDE_CODE_PROVIDER_ID, type CCProvider, type ProviderService } from "../provider"
 import {
   AGENT_CANCELLED_MESSAGE,
@@ -20,7 +19,6 @@ import {
 } from "./attachments"
 import {
   ClaudeSDKSession,
-  DEFAULT_CLAUDE_SDK_MAX_TURNS,
   type ClaudeSDKPersonaToolPolicy,
   type ClaudeSDKRuntimeSettings,
   type ClaudeSDKSessionOptions,
@@ -33,7 +31,6 @@ import type {
 } from "./project-contributions"
 import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
 import { resolveTierModelFromEnv } from "./provider-model-tier"
-import { resolveAgentProviderTransportPolicy } from "./provider-transport-policy"
 import {
   SYNAPSE_MCP_TOOL_PREFIX,
   SYNAPSE_TOOL_ROUTER_INVOKE_TOOL,
@@ -51,7 +48,6 @@ import type {
   AgentMessage,
   AgentRuntimeTurnResult,
 } from "./types"
-import type { AgentArtifactStore } from "./artifact-store"
 
 export interface CreateAgentLiveSessionInput {
   readonly projectId: string
@@ -59,22 +55,9 @@ export interface CreateAgentLiveSessionInput {
   readonly providerId: string
   readonly cwd: string
   readonly sdkSessionId?: string
-  readonly taskProgress?: ClaudeSDKSessionOptions["taskProgress"]
-  readonly taskListId?: string
   readonly env: Record<string, string>
   readonly model?: string
-  readonly modelContext?: ClaudeSDKSessionOptions["modelContext"]
-  readonly contextWindowConfigurationSource?: ClaudeSDKSessionOptions["contextWindowConfigurationSource"]
-  readonly autoCompactWindowTokens?: number
-  readonly maxRequestBodyBytes?: number
-  readonly requestBodyBudgetBytes?: number
-  readonly maxToolOutputBytes?: number
-  readonly maxToolBatchOutputBytes?: number
-  readonly readOnlyAdditionalDirectories?: readonly string[]
-  readonly durableEvidenceRoots?: readonly string[]
-  readonly persistToolOutputText?: ClaudeSDKSessionOptions["persistToolOutputText"]
   readonly mode?: string
-  readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
   readonly allowPluginHooks?: boolean
   readonly agent?: string
@@ -152,7 +135,6 @@ export interface SessionManagerDeps {
     args: Record<string, unknown>,
     context: { readonly conversationId: string; readonly abortSignal?: AbortSignal },
   ) => unknown | Promise<unknown>
-  readonly agentArtifactStore?: Pick<AgentArtifactStore, "persistToolOutputText" | "prepareToolOutputDirectory">
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
@@ -201,18 +183,9 @@ export class SessionManager {
         providerId: input.providerId,
         cwd: input.cwd,
         sdkSessionId: input.sdkSessionId,
-        taskListId: input.taskListId,
         env: input.env,
         model: input.model,
-        modelContext: input.modelContext,
-        contextWindowConfigurationSource: input.contextWindowConfigurationSource,
-        autoCompactWindowTokens: input.autoCompactWindowTokens,
-        maxRequestBodyBytes: input.maxRequestBodyBytes,
-        requestBodyBudgetBytes: input.requestBodyBudgetBytes,
-        maxToolOutputBytes: input.maxToolOutputBytes,
-        maxToolBatchOutputBytes: input.maxToolBatchOutputBytes,
         mode: input.mode,
-        maxTurns: input.maxTurns ?? DEFAULT_CLAUDE_SDK_MAX_TURNS,
         plugins: input.plugins,
         allowPluginHooks: input.allowPluginHooks,
         agent: input.agent,
@@ -224,10 +197,6 @@ export class SessionManager {
         personaToolPolicy: input.personaToolPolicy,
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
-        readOnlyAdditionalDirectories: input.readOnlyAdditionalDirectories,
-        durableEvidenceRoots: input.durableEvidenceRoots,
-        persistToolOutputText: input.persistToolOutputText,
-        taskProgress: input.taskProgress,
         sdkSettings: input.sdkSettings,
         mcpServers: input.mcpServers,
         expectedMcpServerNames: input.expectedMcpServerNames,
@@ -342,26 +311,14 @@ export class SessionManager {
       }
     }
     const provider = await this.getProviderSafe(providerId)
-    const modelContextConfiguration = resolveModelContextConfiguration({
-      baseUrl: env.ANTHROPIC_BASE_URL
-        ?? (provider?.category === "official" ? "https://api.anthropic.com" : undefined),
-      modelId: env.ANTHROPIC_MODEL,
-      configuredContextWindow: env.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
-    })
-    if (modelContextConfiguration.contextWindowTokens !== undefined) {
-      env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(modelContextConfiguration.contextWindowTokens)
-    }
-    const transportPolicy = resolveAgentProviderTransportPolicy({
-      baseUrl: env.ANTHROPIC_BASE_URL,
-    })
     const modelMatches = input.state.effectiveModel === env.ANTHROPIC_MODEL
-    const modelContextMatches = input.state.modelContextConfigurationKey
-      === modelContextConfiguration.configurationKey
+    const contextWindowMatches = input.state.contextWindowConfigurationValue
+      === env.CLAUDE_CODE_MAX_CONTEXT_TOKENS
     const synapseToolRouterEnabled = input.conversation.agentConfig?.experimentalSynapseToolRouterEnabled !== false
       && isThirdPartyAnthropicCompatibleProvider(provider, env.ANTHROPIC_BASE_URL)
       && Boolean(this.deps.executeSynapseTool)
     const synapseToolRouterMatches = input.state.synapseToolRouterEnabled === synapseToolRouterEnabled
-    const sdkSettings = resolveProviderSdkSettings(provider, env, transportPolicy)
+    const sdkSettings = resolveProviderSdkSettings(provider, env)
     const sdkSettingsMatch = sdkSettingsEqual(input.state.sdkSettings, sdkSettings)
     const contributionAgents = await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {})
     const agents = { ...contributionAgents, ...personaConfig.agents }
@@ -382,7 +339,7 @@ export class SessionManager {
       && modeMatches
       && allowedWriteDirectoriesMatch
       && modelMatches
-      && modelContextMatches
+      && contextWindowMatches
       && synapseToolRouterMatches
       && sdkSettingsMatch
     const reusableLiveSession = input.state.liveSession
@@ -422,7 +379,7 @@ export class SessionManager {
         !activeAgentMatches
         || !providerMatches
         || !modelMatches
-        || !modelContextMatches
+        || !contextWindowMatches
         || !synapseToolRouterMatches
         || !sdkSettingsMatch
         || !personaDefinitionsMatch
@@ -436,7 +393,7 @@ export class SessionManager {
           !providerMatches
           || !modeMatches
           || !modelMatches
-          || !modelContextMatches
+          || !contextWindowMatches
           || !synapseToolRouterMatches
           || !sdkSettingsMatch
           || !allowedWriteDirectoriesMatch
@@ -448,7 +405,7 @@ export class SessionManager {
           providerChanged: !providerMatches,
           modeChanged: !modeMatches,
           modelChanged: !modelMatches,
-          modelContextChanged: !modelContextMatches,
+          contextWindowConfigurationChanged: !contextWindowMatches,
           synapseToolRouterChanged: !synapseToolRouterMatches,
           sdkSettingsChanged: !sdkSettingsMatch,
           allowedWriteDirectoriesChanged: !allowedWriteDirectoriesMatch,
@@ -503,29 +460,15 @@ export class SessionManager {
       resolvedServerNames: Object.keys(resolvedMcpServers),
     })
 
-    const agentArtifactStore = this.deps.agentArtifactStore
-    const agentToolOutputDirectory = agentArtifactStore
-      ? await agentArtifactStore.prepareToolOutputDirectory(this.deps.projectId, input.conversation.id)
-      : undefined
-    const taskListId = await this.deps.repository.ensureTaskListId(input.conversation.id)
     const creationInput: CreateAgentLiveSessionInput = {
       projectId: this.deps.projectId,
       conversation: input.conversation,
       providerId,
       cwd,
       sdkSessionId,
-      taskListId,
       env,
       model: env.ANTHROPIC_MODEL,
-      modelContext: modelContextConfiguration.modelContext,
-      contextWindowConfigurationSource: modelContextConfiguration.configurationSource,
-      autoCompactWindowTokens: transportPolicy?.autoCompactWindowTokens,
-      maxRequestBodyBytes: transportPolicy?.maxRequestBodyBytes,
-      requestBodyBudgetBytes: transportPolicy?.requestBodyBudgetBytes,
-      maxToolOutputBytes: transportPolicy?.maxToolOutputBytes,
-      maxToolBatchOutputBytes: transportPolicy?.maxToolBatchOutputBytes,
       mode: modeOverride,
-      maxTurns: DEFAULT_CLAUDE_SDK_MAX_TURNS,
       plugins,
       allowPluginHooks: await Promise.resolve(
         this.deps.allowPluginHooks?.(input.message, input.conversation) ?? false,
@@ -540,16 +483,6 @@ export class SessionManager {
         this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},
       ),
       additionalDirectories,
-      ...(agentArtifactStore && agentToolOutputDirectory
-        ? {
-            readOnlyAdditionalDirectories: [agentToolOutputDirectory],
-            durableEvidenceRoots: [agentToolOutputDirectory],
-            persistToolOutputText: (artifactInput: Parameters<AgentArtifactStore["persistToolOutputText"]>[0]) =>
-              agentArtifactStore.persistToolOutputText(artifactInput),
-          }
-        : {}),
-      taskProgress: this.deps.repository.taskProgress
-        ? this.deps.repository.createTaskProgressSession(input.conversation.id, cwd) : undefined,
       sdkSettings,
       mcpServers: resolvedMcpServers,
       expectedMcpServerNames,
@@ -580,7 +513,7 @@ export class SessionManager {
     input.state.liveSession = liveSession
     input.state.providerId = providerId
     input.state.effectiveModel = env.ANTHROPIC_MODEL
-    input.state.modelContextConfigurationKey = modelContextConfiguration.configurationKey
+    input.state.contextWindowConfigurationValue = env.CLAUDE_CODE_MAX_CONTEXT_TOKENS
     input.state.sdkSettings = sdkSettings
     input.state.synapseToolRouterEnabled = synapseToolRouterEnabled
     input.state.modeOverride = modeOverride
@@ -685,6 +618,7 @@ export class SessionManager {
     state.liveSession = undefined
     state.providerId = undefined
     state.effectiveModel = undefined
+    state.contextWindowConfigurationValue = undefined
     state.modeOverride = undefined
     state.synapseToolRouterEnabled = undefined
     state.mainThreadAgentName = undefined
@@ -841,21 +775,15 @@ export class WorkspacePathUnavailableError extends Error {
 function resolveProviderSdkSettings(
   provider: CCProvider | undefined,
   env: Record<string, string>,
-  transportPolicy: ReturnType<typeof resolveAgentProviderTransportPolicy>,
 ): ClaudeSDKRuntimeSettings | undefined {
   const configured = provider?.settingsConfig?.skipWebFetchPreflight
-  const compactSettings = transportPolicy ? {
-    autoCompactEnabled: true,
-    autoCompactWindow: transportPolicy.autoCompactWindowTokens,
-    precomputeCompactionEnabled: true,
-  } : {}
   if (typeof configured === "boolean") {
-    return { skipWebFetchPreflight: configured, ...compactSettings }
+    return { skipWebFetchPreflight: configured }
   }
   if (isThirdPartyAnthropicCompatibleBaseUrl(env.ANTHROPIC_BASE_URL)) {
-    return { skipWebFetchPreflight: true, ...compactSettings }
+    return { skipWebFetchPreflight: true }
   }
-  return transportPolicy ? compactSettings : undefined
+  return undefined
 }
 
 export function isThirdPartyAnthropicCompatibleBaseUrl(baseUrl: string | undefined): boolean {
@@ -889,9 +817,6 @@ function sdkSettingsEqual(
   right: ClaudeSDKRuntimeSettings | undefined,
 ): boolean {
   return left?.skipWebFetchPreflight === right?.skipWebFetchPreflight
-    && left?.autoCompactEnabled === right?.autoCompactEnabled
-    && left?.autoCompactWindow === right?.autoCompactWindow
-    && left?.precomputeCompactionEnabled === right?.precomputeCompactionEnabled
 }
 
 function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {

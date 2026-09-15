@@ -107,71 +107,16 @@ describe("AgentContextUsageIndicator", () => {
     expect(document.body.textContent).toContain("剩余 0 token")
   })
 
-  it("keeps the SDK runtime window in the header and shows a different official limit in the tooltip", async () => {
+  it("uses the SDK compact threshold when it is available", async () => {
     const container = await renderIndicator({
-      usedTokens: 35_333,
+      usedTokens: 150_000,
       contextWindowTokens: 200_000,
-      contextWindowConfigurationSource: "catalog",
-      modelContext: {
-        providerScopeId: "bailian-cn",
-        modelId: "qwen3.7-plus",
-        contextWindowTokens: 1_000_000,
-        maxInputTokens: 991_808,
-        maxOutputTokens: 65_536,
-        sourceLabel: "Alibaba Cloud Model Studio",
-        sourceUrl: "https://help.aliyun.com/zh/model-studio/qwen3-7-plus",
-        verifiedAt: "2026-08-25T00:00:00.000Z",
-      },
-    })
-
-    expect(container.textContent).toContain("上下文 35.3K / 200K · 18%")
-    await openTooltip(container)
-    expect(document.body.textContent).toContain("运行窗口 200,000 / 模型上限 1,000,000 token")
-    expect(document.body.textContent).toContain("最大输入 991,808 token")
-    expect(document.body.textContent).toContain("最大输出 65,536 token")
-    expect(document.body.textContent).toContain("配置来源 模型目录")
-    expect(document.body.textContent).toContain("官方资料 Alibaba Cloud Model Studio · 2026-08-25")
-  })
-
-  it("does not calculate a percentage from the catalog when the SDK window is unavailable", async () => {
-    const container = await renderIndicator({
-      usedTokens: 12_400,
-      modelContext: {
-        providerScopeId: "bailian-cn",
-        modelId: "qwen3.7-plus",
-        contextWindowTokens: 1_000_000,
-        sourceLabel: "Alibaba Cloud Model Studio",
-        sourceUrl: "https://help.aliyun.com/zh/model-studio/qwen3-7-plus",
-        verifiedAt: "2026-08-25T00:00:00.000Z",
-      },
-    })
-
-    expect(container.textContent).toBe("上下文 12.4K")
-    expect(container.querySelector('[role="progressbar"]')).toBeNull()
-    await openTooltip(container)
-    expect(document.body.textContent).toContain("模型上限 1,000,000 token")
-  })
-
-  it("uses the auto-compact threshold for progress while keeping the one-million-token model limit", async () => {
-    const container = await renderIndicator({
-      usedTokens: 178_000,
-      contextWindowTokens: 1_000_000,
-      autoCompactWindowTokens: 200_000,
       autoCompactThresholdTokens: 167_000,
-      modelContext: {
-        providerScopeId: "bailian-cn",
-        modelId: "qwen3.8-max",
-        contextWindowTokens: 1_000_000,
-        sourceLabel: "Alibaba Cloud Model Studio",
-        sourceUrl: "https://help.aliyun.com/zh/model-studio/",
-        verifiedAt: "2026-08-25T00:00:00.000Z",
-      },
     })
 
-    expect(container.textContent).toContain("占用 178K · 整理 167K")
+    expect(container.textContent).toContain("占用 150K · 整理 167K")
     await openTooltip(container)
     expect(document.body.textContent).toContain("自动整理触发 167,000 token")
-    expect(document.body.textContent).toContain("剩余 0 token")
-    expect(document.body.textContent).toContain("模型上限 1,000,000 token")
+    expect(document.body.textContent).toContain("模型窗口 200,000 token")
   })
 })

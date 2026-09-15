@@ -5,7 +5,6 @@ import path from "node:path"
 
 import type {
   AgentArtifactEntryV1,
-  AgentTaskProgressEntryV1,
   AgentEventEntryV1,
   AgentUsageEntryV1,
   ConversationEntryV1,
@@ -73,81 +72,6 @@ describe("AgentConversationExportService", () => {
     expect(conversation).toEqual(original)
   })
 
-  it("exports every progress page with comparable aliases and numeric measurements, excluding credential and evidence bodies", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-progress-export-"))
-    tempRoots.push(root)
-    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    await conversations.upsert(createConversation())
-    const rows = Array.from({ length: 105 }, (_, i) => ({ value: { id: `row-${i}`, schemaVersion: 1, projectId: "project-1",
-      conversationId: "conv-1", turnId: "turn", revision: i + 1, kind: "receipt", data: {
-        path: "/private/original.png", outputPath: "/private/evidence.json", usedTokens: 12345, estimatedRequestTokens: 14000,
-        apiKey: "sk-progress-export-canary", requestBodyBudgetBytes: 5242880,
-      } } }))
-    const listWindow = vi.fn(async ({ offset = 0, limit }: { offset?: number; limit: number }) => rows.slice(offset, offset + limit))
-    const service = new AgentConversationExportService({ conversations,
-      taskProgress: { listWindow } as unknown as DataNamespace<AgentTaskProgressEntryV1>,
-      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"), agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
-      chooseSavePath: async () => path.join(root, "export.zip"), createZipArchive: async (directory) => {
-        const a = await readFile(path.join(directory, "task-progress/000001.json"), "utf8")
-        const b = await readFile(path.join(directory, "task-progress/000002.json"), "utf8")
-        const first = JSON.parse(a), second = JSON.parse(b)
-        expect(first).toHaveLength(100); expect(second).toHaveLength(5)
-        expect(first[0].data.pathResourceId).toBe(second[4].data.pathResourceId)
-        expect(first[0].data).toMatchObject({ usedTokens: 12345, estimatedRequestTokens: 14000, requestBodyBudgetBytes: 5242880 })
-        expect(a + b).not.toContain("/private/"); expect(a + b).not.toContain("sk-progress-export-canary")
-        expect(await readdir(directory)).not.toContain("evidence.json")
-      } })
-    await expect(service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })).resolves.toMatchObject({ success: true })
-    expect(listWindow).toHaveBeenCalledTimes(2)
-    expect(listWindow).toHaveBeenCalledWith(expect.objectContaining({ filter: { projectId: "project-1", conversationId: "conv-1" }, limit: 100 }))
-  })
-
-  it.each(["not-recorded", "read-failed"])("exports unknown observed stream count when diagnostics are %s", async (sourceStatus) => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-export-missing-stream-"))
-    tempRoots.push(root)
-    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
-    await conversations.upsert(createConversation())
-    if (sourceStatus === "read-failed") vi.spyOn(agentEvents, "list").mockRejectedValue(new Error("fixture storage failure"))
-    const service = new AgentConversationExportService({
-      conversations, agentEvents, agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
-      chooseSavePath: async () => path.join(root, "export.zip"),
-      createZipArchive: async (directory) => {
-        const stream = JSON.parse(await readFile(path.join(directory, "sdk-stream-events.json"), "utf8"))
-        expect(stream.capture).toMatchObject({ sourceStatus, observedEventCount: null, exportedEventCount: 0 })
-        const manifest = JSON.parse(await readFile(path.join(directory, "manifest.json"), "utf8"))
-        if (sourceStatus === "read-failed") expect(manifest.skipped).toContainEqual({ path: "agent-events.json", reason: "read failed" })
-      },
-    })
-    await service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })
-  })
-
-  it.each(["empty", "tail"])("exports persisted history when the runtime projection is %s", async (projection) => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-export-snapshot-"))
-    tempRoots.push(root)
-    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const conversation = createConversation()
-    await conversations.upsert(conversation)
-    const service = new AgentConversationExportService({
-      conversations, agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"),
-      agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
-      chooseSavePath: async () => path.join(root, "export.zip"),
-      getTimeline: async () => ({ projectId: "project-1", conversationId: "conv-1", sessionKey: TEST_SESSION_KEY,
-        total: conversation.history.length, startIndex: 2, hasMore: true,
-        entries: projection === "empty" ? [] : [{ id: "sentinel", kind: "message", role: "assistant", content: "Only a tail", timestamp: "2026-09-13T00:00:00Z" }] }),
-      createZipArchive: async (directory) => {
-        const timeline = JSON.parse(await readFile(path.join(directory, "timeline.json"), "utf8"))
-        const summary = JSON.parse(await readFile(path.join(directory, "summary.json"), "utf8"))
-        expect(timeline.entries).toHaveLength(conversation.history.length)
-        expect(summary).toMatchObject({ messageCount: 2, toolCallCount: 1, countSource: "persisted-conversation-history" })
-        const transcript = await readFile(path.join(directory, "transcript.md"), "utf8")
-        expect(transcript).toContain("请看图")
-        expect(transcript).toContain("已完成")
-        expect(transcript).not.toContain("Only a tail")
-      },
-    })
-    await service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })
-  })
   it("writes a redacted conversation debug bundle before zipping it", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-export-test-"))
     tempRoots.push(tempRoot)

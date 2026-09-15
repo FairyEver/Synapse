@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest"
 import { AgentContextUsageTracker } from "../context-usage"
 
 describe("AgentContextUsageTracker", () => {
-  it("uses the SDK trigger separately from the configured compact window", () => {
-    const tracker = new AgentContextUsageTracker({ autoCompactWindowTokens: 200_000 })
+  it("uses the compact threshold returned by the SDK", () => {
+    const tracker = new AgentContextUsageTracker()
     expect(tracker.replaceFromContextUsage({ totalTokens: 178_000, maxTokens: 200_000, autoCompactThreshold: 167_000 }))
-      .toMatchObject({ usedTokens: 178_000, autoCompactWindowTokens: 200_000, autoCompactThresholdTokens: 167_000 })
+      .toMatchObject({ usedTokens: 178_000, contextWindowTokens: 200_000, autoCompactThresholdTokens: 167_000 })
   })
 
   it("updates main-thread input and streaming output usage", () => {
@@ -111,45 +111,6 @@ describe("AgentContextUsageTracker", () => {
     })
   })
 
-  it("preserves catalog reference metadata while keeping the SDK window authoritative", () => {
-    const tracker = new AgentContextUsageTracker({
-      contextWindowConfigurationSource: "catalog",
-      modelContext: {
-        providerScopeId: "bailian-cn",
-        modelId: "qwen3.7-plus",
-        contextWindowTokens: 1_000_000,
-        maxInputTokens: 991_808,
-        sourceLabel: "Alibaba Cloud Model Studio",
-        sourceUrl: "https://help.aliyun.com/zh/model-studio/qwen3-7-plus",
-        verifiedAt: "2026-08-25T00:00:00.000Z",
-      },
-    })
-
-    tracker.update({
-      type: "assistant",
-      parent_tool_use_id: null,
-      message: {
-        model: "qwen3.7-plus",
-        usage: { input_tokens: 35_000, output_tokens: 333 },
-      },
-    })
-    const refreshed = tracker.replaceFromContextUsage({
-      totalTokens: 35_333,
-      maxTokens: 200_000,
-      model: "qwen3.7-plus",
-    })
-
-    expect(refreshed).toMatchObject({
-      usedTokens: 35_333,
-      contextWindowTokens: 200_000,
-      contextWindowConfigurationSource: "catalog",
-      modelContext: {
-        contextWindowTokens: 1_000_000,
-        maxInputTokens: 991_808,
-      },
-    })
-  })
-
   it("ignores subagent usage without changing the main-thread snapshot", () => {
     const tracker = new AgentContextUsageTracker()
     tracker.update({
@@ -241,7 +202,7 @@ describe("AgentContextUsageTracker", () => {
   })
 
   it("keeps the last trustworthy snapshot when a failed result reports synthetic zero usage", () => {
-    const tracker = new AgentContextUsageTracker({ autoCompactWindowTokens: 200_000 })
+    const tracker = new AgentContextUsageTracker()
     tracker.update({
       type: "assistant",
       parent_tool_use_id: null,
@@ -252,6 +213,6 @@ describe("AgentContextUsageTracker", () => {
       type: "assistant",
       parent_tool_use_id: null,
       message: { usage: { input_tokens: 0, output_tokens: 0 } },
-    })).toEqual({ usedTokens: 128_321, autoCompactWindowTokens: 200_000 })
+    })).toEqual({ usedTokens: 128_321 })
   })
 })

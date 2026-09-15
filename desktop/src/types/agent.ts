@@ -49,27 +49,10 @@ export const SYNAPSE_AGENT_PERMISSION_MODES = [
 export type SynapseAgentPermissionMode = typeof SYNAPSE_AGENT_PERMISSION_MODES[number]
 export type SynapseAgentPermissionScope = "once" | "session"
 
-export interface SynapseAgentModelContextReference {
-  readonly providerScopeId: string
-  readonly modelId: string
-  readonly contextWindowTokens: number
-  readonly maxInputTokens?: number
-  readonly maxOutputTokens?: number
-  readonly reasoningMaxInputTokens?: number
-  readonly reasoningMaxOutputTokens?: number
-  readonly maxReasoningTokens?: number
-  readonly sourceLabel: string
-  readonly sourceUrl: string
-  readonly verifiedAt: string
-}
-
 export interface SynapseAgentContextUsage {
   readonly usedTokens: number
   readonly contextWindowTokens?: number
   readonly model?: string
-  readonly modelContext?: SynapseAgentModelContextReference
-  readonly contextWindowConfigurationSource?: "catalog" | "provider-env"
-  readonly autoCompactWindowTokens?: number
   readonly autoCompactThresholdTokens?: number
 }
 
@@ -143,7 +126,6 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
     }
   | {
       type: "error"
-      taskCompletion?: SynapseTaskCompletionAssessment
       message: string
       errorKind?: SynapseAgentErrorKind
       recoverable?: boolean
@@ -244,15 +226,12 @@ export type SynapseAgentErrorKind =
   | "execution_failed"
   | "connection_interrupted"
   | "tool_use_interrupted"
-  | "request_body_too_large"
-  | "context_refill_thrashing"
   | "renderer_unavailable"
   | "webfetch_preflight_failed"
-  | "task_evidence_incomplete"
 
 export interface SynapseAgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
-  readonly kind: "aborted" | "closed" | "connection_interrupted" | "request_body_too_large" | "context_refill_thrashing" | "renderer_unavailable" | "error" | "tool_use_interrupted"
+  readonly kind: "aborted" | "closed" | "connection_interrupted" | "renderer_unavailable" | "error" | "tool_use_interrupted"
   readonly message?: string
   readonly recoverable?: boolean
 }
@@ -281,7 +260,7 @@ export type SynapseAgentTurnOutcome =
   }
   | {
     readonly status: "interrupted"
-    readonly reason: "network_interrupted" | "tool_use_interrupted" | "request_body_too_large" | "context_refill_thrashing" | "renderer_unavailable"
+    readonly reason: "network_interrupted" | "tool_use_interrupted" | "renderer_unavailable"
     readonly recoverable: true
     readonly message: string
     readonly diagnostics?: readonly SynapseAgentTurnDiagnostic[]
@@ -312,19 +291,7 @@ interface SynapseAgentTimelineBase {
   readonly contentTruncated?: boolean
 }
 
-export interface SynapseTaskCompletionAssessment {
-  readonly status: "unverified" | "partial" | "coverage-complete"
-  readonly revision: number
-  readonly declaredUnits: number
-  readonly coveredUnits: number
-  readonly processedUnits: number
-  readonly mutatedUnits: number
-  readonly conflictingFindings: number
-  readonly semanticCorrectness: "unverified"
-}
-
 export interface SynapseAgentResultMetadata {
-  readonly taskCompletion?: SynapseTaskCompletionAssessment
   readonly mainThreadPersona?: SynapseAgentMainThreadPersonaMetadata
   readonly model?: string
   readonly effort?: string
@@ -471,7 +438,6 @@ export interface SynapseAgentToolProgressTimelineItem extends SynapseAgentTimeli
 
 export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "error"
-  readonly taskCompletion?: SynapseTaskCompletionAssessment
   readonly message: string
   readonly errorKind?: SynapseAgentErrorKind
   readonly recoverable?: boolean
@@ -618,16 +584,6 @@ export interface SynapseAgentSessionSummary {
   readonly createdAt: string
   readonly updatedAt: string
   readonly lastMessage?: SynapseAgentTimelineItem
-  readonly contextRecovery?: SynapseAgentContextRecovery
-}
-
-export interface SynapseAgentContextRecovery {
-  readonly status: "required" | "prepared" | "failed"
-  readonly reason: "request_body_too_large" | "context_refill_thrashing"
-  readonly failedTurnId: string
-  readonly createdAt: string
-  readonly preparedAt?: string
-  readonly failedAt?: string
 }
 
 export interface SynapseAgentStatus {

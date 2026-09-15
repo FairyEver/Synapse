@@ -32,7 +32,7 @@
 - Knowledge Base 不做 MCP 隔离；是否允许工具仍走现有权限流程。
 - Agent composer slash menu 只插入 `/<name>`，不自动执行/发送，也不在 renderer 侧扫描目录替代后端解析。
 
-- Agent 的持久 taskListId 独立于 SDK session；自动上下文交接保留已授权的普通项目 cwd、托管 backing directory 和任务临时路径。路径保留不扩大 Knowledge Base plugin、MCP 或文件写权限，也不得自动清理旧临时目录。
+- Agent 使用 SDK 原生 Streaming Input、session resume 与 compact；Knowledge Base 的 backing directory 仅通过既有 `additionalDirectories` 授权，不参与上下文预算、自动交接或 session rotation。
 
 ## 资料与 native slash
 

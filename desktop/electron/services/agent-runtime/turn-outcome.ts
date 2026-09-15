@@ -11,12 +11,9 @@ export type AgentTurnDiagnosticKind =
   | "aborted"
   | "closed"
   | "connection_interrupted"
-  | "request_body_too_large"
-  | "context_refill_thrashing"
   | "renderer_unavailable"
   | "error"
   | "tool_use_interrupted"
-  | "task_evidence_incomplete"
 
 export interface AgentTurnDiagnostic {
   readonly source: "claude-sdk" | "agent-runtime" | "process-runner"
@@ -58,7 +55,7 @@ export type AgentTurnOutcome =
   }
   | {
     readonly status: "interrupted"
-    readonly reason: "network_interrupted" | "tool_use_interrupted" | "request_body_too_large" | "context_refill_thrashing" | "renderer_unavailable"
+    readonly reason: "network_interrupted" | "tool_use_interrupted" | "renderer_unavailable"
     readonly recoverable: true
     readonly message: string
     readonly diagnostics?: readonly AgentTurnDiagnostic[]
@@ -207,24 +204,6 @@ function outcomeForEvent(
     }
   }
 
-  if (diagnostic?.kind === "request_body_too_large") {
-    return {
-      status: "interrupted",
-      reason: "request_body_too_large",
-      recoverable: true,
-      message: "当前对话内容较多，暂时无法继续。",
-    }
-  }
-
-  if (diagnostic?.kind === "context_refill_thrashing") {
-    return {
-      status: "interrupted",
-      reason: "context_refill_thrashing",
-      recoverable: true,
-      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
-    }
-  }
-
   return {
     status: "failed",
     reason: failureReason(diagnostic),
@@ -269,10 +248,6 @@ export function diagnosticFromAgentError(event: AgentErrorEvent): AgentTurnDiagn
     source: "claude-sdk",
     kind: event.errorKind === "connection_interrupted"
       ? "connection_interrupted"
-      : event.errorKind === "request_body_too_large"
-        ? "request_body_too_large"
-        : event.errorKind === "context_refill_thrashing"
-          ? "context_refill_thrashing"
       : isToolUseInterruptedMessage(message)
         ? "tool_use_interrupted"
         : /Request was aborted/i.test(message) ? "aborted" : "error",
@@ -319,10 +294,6 @@ export function outcomeToAgentEvent(input: {
       message: input.outcome.message,
       errorKind: input.outcome.reason === "network_interrupted"
         ? "connection_interrupted"
-        : input.outcome.reason === "request_body_too_large"
-          ? "request_body_too_large"
-        : input.outcome.reason === "context_refill_thrashing"
-          ? "context_refill_thrashing"
         : input.outcome.reason === "renderer_unavailable"
           ? "renderer_unavailable"
         : "tool_use_interrupted",

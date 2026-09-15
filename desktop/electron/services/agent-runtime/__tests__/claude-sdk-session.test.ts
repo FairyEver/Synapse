@@ -223,15 +223,7 @@ describe("ClaudeSDKSession", () => {
       enableFileCheckpointing: true,
       extraArgs: { "replay-user-messages": null },
     })
-  })
-
-  it("sets a default SDK turn cap to stop runaway tool loops", () => {
-    const { factory, getOptions } = createQueryFactory()
-    createSession(factory)
-
-    expect(getOptions()).toMatchObject({
-      maxTurns: 200,
-    })
+    expect(getOptions()).not.toHaveProperty("maxTurns")
   })
 
   it("does not combine file checkpointing with the incompatible SDK session store", () => {
@@ -253,15 +245,6 @@ describe("ClaudeSDKSession", () => {
     })
 
     expect(getOptions().sessionStore).toBeUndefined()
-  })
-
-  it("allows callers to override the default SDK turn cap", () => {
-    const { factory, getOptions } = createQueryFactory()
-    createSession(factory, { maxTurns: 12 })
-
-    expect(getOptions()).toMatchObject({
-      maxTurns: 12,
-    })
   })
 
   it("passes additional directories to Claude Agent SDK", () => {
@@ -304,354 +287,11 @@ describe("ClaudeSDKSession", () => {
         disableAllHooks: true,
       },
     })
-  })
-
-  it("bounds large text tool results before the next model request", async () => {
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { maxToolOutputBytes: 24 * 1024,
-      persistToolOutputText: async () => ({ id: "a", storagePath: "/private/output.txt",
-        originalByteSize: 180000, storedByteSize: 180000, contentTruncated: false }) })
-    await session.send({ ...message("read"), runtimeTurnId: "turn-1" })
-    const hook = postToolUseHook(getOptions())
-
-    const result = await hook({
-      hook_event_name: "PostToolUse",
-      tool_name: "Read",
-      tool_input: { file_path: "large.jsonl", offset: 1, limit: 500 },
-      tool_response: {
-        type: "text",
-        file: { content: "数据".repeat(30_000), numLines: 1, startLine: 1, totalLines: 1 },
-      },
-      tool_use_id: "toolu-read",
-    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
-
-    const output = (result.hookSpecificOutput?.updatedToolOutput as { file: { content: string } }).file.content
-    expect(typeof output).toBe("string")
-    expect(Buffer.byteLength(String(output), "utf8")).toBeLessThanOrEqual(24 * 1024)
-    expect(output).toContain("Synapse context guard")
-  })
-
-  it("delivers native file-mutation results untouched and accounts their confirmation only", async () => {
-    const persistToolOutputText = vi.fn(async () => ({
-      id: "artifact-1",
-      storagePath: "/managed/conversation/tool-output/artifact-1.txt",
-      originalByteSize: 60_000,
-      storedByteSize: 60_000,
-      contentTruncated: false,
-    }))
-    const logger = { warn: vi.fn(), info: vi.fn() }
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, logger, persistToolOutputText })
-    await session.send({ ...message("新增运营预案页面"), runtimeTurnId: "turn-1" })
-
-    await expect(postToolUseHook(getOptions())({
-      hook_event_name: "PostToolUse",
-      tool_name: "Edit",
-      tool_input: { file_path: "page.html" },
-      tool_response: {
-        filePath: "page.html",
-        oldString: "<div>旧</div>",
-        newString: "<div>新</div>",
-        originalFile: "<div>旧</div>\n".repeat(5_000),
-        structuredPatch: [],
-        userModified: false,
-        replaceAll: false,
-      },
-      tool_use_id: "toolu-edit",
-    })).resolves.toEqual({})
-
-    expect(persistToolOutputText).not.toHaveBeenCalled()
-    expect(logger.warn).not.toHaveBeenCalled()
-    expect(session.alive()).toBe(true)
-
-    await expect(lifecycleHook(getOptions(), "PostToolBatch")({
-      hook_event_name: "PostToolBatch",
-      tool_calls: [{
-        tool_name: "Edit",
-        tool_use_id: "toolu-edit",
-        tool_input: { file_path: "page.html" },
-        tool_response: "The file page.html has been updated successfully. (file state is current in your context — no need to Read it back)",
-      }],
-    })).resolves.toEqual({})
-
-    const batchLog = logger.info.mock.calls
-      .find(([entry]) => entry === "Agent tool-output batch budget completed.")?.[1] as { batchToolOutputBytes?: number } | undefined
-    expect(batchLog?.batchToolOutputBytes).toBeGreaterThan(0)
-    expect(batchLog?.batchToolOutputBytes).toBeLessThan(2 * 1024)
-    await session.close()
-  })
-
-  it("stores compact task evidence for a native file mutation instead of a second copy of the file", async () => {
-    const workspace = mkdtempSync(path.join(tmpdir(), "synapse-agent-edit-evidence-"))
-    try {
-      const target = path.join(workspace, "page.html")
-      const originalFile = `<div>旧</div>\n${"filler-line\n".repeat(4_000)}`
-      writeFileSync(target, originalFile, "utf8")
-      const persisted: string[] = []
-      const persistToolOutputText = vi.fn(async ({ content }: { content: string }) => {
-        persisted.push(content)
-        return { id: "artifact-1", storagePath: "/managed/conversation/tool-output/artifact-1.txt",
-          originalByteSize: Buffer.byteLength(content, "utf8"), storedByteSize: Buffer.byteLength(content, "utf8"), contentTruncated: false }
-      })
-      const receipt = vi.fn(async () => "Synapse receipt toolu-edit; revision=0")
-      const begin = vi.fn(async () => undefined)
-      const close = vi.fn()
-      const { factory, getOptions } = createQueryFactory()
-      const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, persistToolOutputText,
-        taskProgress: { receipt, begin, close } as unknown as NonNullable<ConstructorParameters<typeof ClaudeSDKSession>[0]["taskProgress"]> })
-      await session.send({ ...message("修改页面标记"), runtimeTurnId: "turn-1" })
-
-      await expect(postToolUseHook(getOptions())({
-        hook_event_name: "PostToolUse",
-        tool_name: "Edit",
-        tool_input: { file_path: target, old_string: "旧", new_string: "新" },
-        tool_response: {
-          filePath: target,
-          oldString: "旧",
-          newString: "新",
-          originalFile,
-          structuredPatch: [],
-          userModified: false,
-          replaceAll: false,
-        },
-        tool_use_id: "toolu-edit",
-      })).resolves.toBeDefined()
-
-      expect(persisted).toHaveLength(1)
-      const evidence = JSON.parse(persisted[0]!) as {
-        mutation?: { path?: string, versionAfter?: string }
-        outputTextAvailable?: boolean
-        nativePayloadOmitted?: boolean
-      }
-      expect(evidence.nativePayloadOmitted).toBe(true)
-      expect(evidence.outputTextAvailable).toBe(false)
-      expect(evidence.mutation?.path).toBe(target)
-      expect(evidence.mutation?.versionAfter).toBe(createHash("sha256").update(readFileSync(target)).digest("hex"))
-      expect(persisted[0]).not.toContain("filler-line")
-      expect(Buffer.byteLength(persisted[0]!, "utf8")).toBeLessThan(2 * 1024)
-      expect(receipt).toHaveBeenCalledWith(expect.objectContaining({
-        toolUseId: "toolu-edit",
-        outputPath: "/managed/conversation/tool-output/artifact-1.txt",
-        mutation: expect.objectContaining({ versionAfter: evidence.mutation?.versionAfter }),
-      }), expect.any(Boolean))
-      await session.close()
-    } finally {
-      rmSync(workspace, { recursive: true, force: true })
-    }
-  })
-
-  it("accounts a failed file mutation once across PostToolUse and PostToolBatch", async () => {
-    const logger = { warn: vi.fn(), info: vi.fn() }
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, logger })
-    await session.send({ ...message("修改页面标记"), runtimeTurnId: "turn-1" })
-    const failure = "String to replace not found in file."
-
-    await expect(postToolUseHook(getOptions())({
-      hook_event_name: "PostToolUse",
-      tool_name: "Edit",
-      tool_input: { file_path: "/tmp/project/page.html", old_string: "旧", new_string: "新" },
-      tool_response: failure,
-      tool_use_id: "toolu-failed-edit",
-    })).resolves.toBeDefined()
-
-    await expect(lifecycleHook(getOptions(), "PostToolBatch")({
-      hook_event_name: "PostToolBatch",
-      tool_calls: [{
-        tool_name: "Edit",
-        tool_use_id: "toolu-failed-edit",
-        tool_input: { file_path: "/tmp/project/page.html" },
-        tool_response: failure,
-      }],
-    })).resolves.toEqual({})
-
-    const batchLog = logger.info.mock.calls
-      .find(([entry]) => entry === "Agent tool-output batch budget completed.")?.[1] as { batchToolOutputBytes?: number } | undefined
-    expect(batchLog?.batchToolOutputBytes).toBe(toolResultRequestBytes(failure))
-    await session.close()
-  })
-
-  it("persists oversized text tool results and exposes only the bounded copy to the model", async () => {
-    const persistToolOutputText = vi.fn(async () => ({
-      id: "artifact-1",
-      storagePath: "/managed/conversation/tool-output/artifact-1.txt",
-      originalByteSize: 60_000,
-      storedByteSize: 60_000,
-      contentTruncated: false,
-    }))
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, {
-      maxToolOutputBytes: 8 * 1024,
-      readOnlyAdditionalDirectories: ["/managed/conversation/tool-output"],
-      persistToolOutputText,
-    })
-    await session.send({ ...message("读取日志"), runtimeTurnId: "turn-1" })
-
-    const result = await postToolUseHook(getOptions())({
-      hook_event_name: "PostToolUse",
-      tool_name: "Read",
-      tool_input: { file_path: "large.jsonl" },
-      tool_response: { type: "text", file: { content: "x".repeat(60_000) } },
-      tool_use_id: "toolu-read",
-    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
-
-    expect(persistToolOutputText).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: "project-1",
-      conversationId: "conversation-1",
-      turnId: "turn-1",
-      toolUseId: "toolu-read",
-      toolName: "Read",
-    }))
-    expect((result.hookSpecificOutput?.updatedToolOutput as { file: { content: string } }).file.content).toContain(
-      "Output saved at /managed/conversation/tool-output/artifact-1.txt",
-    )
-    expect(getOptions().additionalDirectories).toContain("/managed/conversation/tool-output")
-  })
-
-  it("bounds an oversized MCP tool result instead of stopping the turn", async () => {
-    const persistToolOutputText = vi.fn(async () => ({
-      id: "artifact-mcp",
-      storagePath: "/managed/conversation/tool-output/artifact-mcp.txt",
-      originalByteSize: 80_000,
-      storedByteSize: 80_000,
-      contentTruncated: false,
-    }))
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024, persistToolOutputText })
-    await session.send({ ...message("查看云盘同步状态"), runtimeTurnId: "turn-1" })
-
-    const result = await postToolUseHook(getOptions())({
-      hook_event_name: "PostToolUse",
-      tool_name: "mcp__synapse-mcp__app_drive_sync_snapshot_get",
-      tool_input: {},
-      // MCP results reach the hook as content blocks, not as a `{ content }` envelope.
-      tool_response: [{ type: "text", text: "row\n".repeat(20_000) }],
-      tool_use_id: "toolu-mcp",
-    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
-
-    const blocks = result.hookSpecificOutput?.updatedToolOutput as { type: string; text: string }[]
-    expect(blocks).toHaveLength(1)
-    expect(blocks[0]?.type).toBe("text")
-    expect(blocks[0]?.text).toContain("Synapse context guard")
-    expect(blocks[0]?.text).toContain("Output saved at /managed/conversation/tool-output/artifact-mcp.txt")
-    expect(persistToolOutputText).toHaveBeenCalledWith(expect.objectContaining({
-      toolName: "mcp__synapse-mcp__app_drive_sync_snapshot_get",
-      toolUseId: "toolu-mcp",
-    }))
-    await session.close()
-  })
-
-  it("re-reads durable evidence in place instead of persisting a second copy", async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "synapse-durable-evidence-"))
-    try {
-      const artifact = path.join(dir, "artifact-1.txt")
-      writeFileSync(artifact, "y".repeat(60_000))
-      const persistToolOutputText = vi.fn(async () => ({
-        id: "artifact-2",
-        storagePath: path.join(dir, "artifact-2.txt"),
-        originalByteSize: 60_000,
-        storedByteSize: 60_000,
-        contentTruncated: false,
-      }))
-      const { factory, getOptions } = createQueryFactory()
-      const session = createSession(factory, { cwd: dir, maxToolOutputBytes: 8 * 1024,
-        durableEvidenceRoots: [dir], persistToolOutputText })
-      await session.send({ ...message("读取已保存的结果"), runtimeTurnId: "turn-1" })
-
-      const result = await postToolUseHook(getOptions())({
-        hook_event_name: "PostToolUse",
-        tool_name: "Read",
-        tool_input: { file_path: artifact },
-        tool_response: { type: "text", file: { content: "y".repeat(60_000) } },
-        tool_use_id: "toolu-replay",
-      }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
-
-      expect(persistToolOutputText).not.toHaveBeenCalled()
-      const content = (result.hookSpecificOutput?.updatedToolOutput as { file: { content: string } }).file.content
-      expect(content).toContain("Synapse context guard")
-      expect(content).toContain("No new copy was saved")
-      expect(content).toContain(artifact)
-      expect(session.alive()).toBe(true)
-      await session.close()
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
-
-  it.each(["throw", "missing", "truncated"])("stops without a replacement when output persistence is %s", async (failure) => {
-    const { factory, getOptions, query } = createQueryFactory()
-    const session = createSession(factory, { maxToolOutputBytes: 8192,
-      persistToolOutputText: async () => {
-        if (failure === "throw") throw new Error("disk full")
-        if (failure === "missing") return undefined
-        return { id: "a", storagePath: "/private/a", originalByteSize: 60000, storedByteSize: 10, contentTruncated: true }
-      } })
-    await session.send({ ...message("read"), runtimeTurnId: "turn-1" })
-    const output = await postToolUseHook(getOptions())({ hook_event_name: "PostToolUse", tool_name: "Bash",
-      tool_use_id: "already-executed", tool_response: { stdout: "x".repeat(60000), stderr: "" } })
-    expect(output).toMatchObject({ continue: false })
-    expect(output).not.toHaveProperty("hookSpecificOutput.updatedToolOutput")
-    await expect(session.nextEvent()).resolves.toMatchObject({ type: "error", recoverable: true })
-    expect(session.contextRotation()).toBeUndefined()
-    expect(query.close).toHaveBeenCalledOnce()
-    await expect(session.send(message("must not reuse failed query"))).resolves.toBe(false)
-  })
-
-  it("overrides inherited task-list namespaces using the persisted host identity", () => {
-    const { factory, getOptions } = createQueryFactory()
-    const taskListId = "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0"
-    createSession(factory, { taskListId, hostEnv: { CLAUDE_CODE_TASK_LIST_ID: "global-shared" },
-      env: { CLAUDE_CODE_TASK_LIST_ID: "provider-shared" } })
-    expect(getOptions()).toMatchObject({ env: { CLAUDE_CODE_TASK_LIST_ID: taskListId },
-      settings: { env: { CLAUDE_CODE_TASK_LIST_ID: taskListId } } })
-    expect(() => createSession(factory, { taskListId: "../../other-tasks" })).toThrow("Invalid SDK task-list identity")
-  })
-
-  it("leaves image tool results intact", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "synapse-image-budget-"))
-    writeFileSync(path.join(root, "image.png"), "a".repeat(22500))
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { cwd: root, maxToolOutputBytes: 24 * 1024,
-      persistToolOutputText: async () => ({ id: "a", storagePath: "/private/output.txt",
-        originalByteSize: 180000, storedByteSize: 180000, contentTruncated: false }) })
-    await session.send({ ...message("read"), runtimeTurnId: "turn-1" })
-    const hook = postToolUseHook(getOptions())
-
-    try { await expect(hook({
-      hook_event_name: "PostToolUse",
-      tool_name: "Read",
-      tool_input: { file_path: "image.png" },
-      tool_response: {
-        type: "image",
-        file: { base64: "a".repeat(30_000), type: "image/png" },
-      },
-      tool_use_id: "toolu-image",
-    })).resolves.toEqual({})
-    } finally { await session.close(); rmSync(root, { recursive: true, force: true }) }
-  })
-
-  it("stops with an explicit incomplete outcome when a non-text result cannot be delivered", async () => {
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { requestBodyBudgetBytes: 10 * 1024 })
-
-    const result = await postToolUseHook(getOptions())({
-      hook_event_name: "PostToolUse",
-      tool_name: "Read",
-      tool_input: { file_path: "image.png" },
-      tool_response: {
-        type: "image",
-        file: { base64: "a".repeat(30_000), type: "image/png" },
-      },
-      tool_use_id: "toolu-image",
-    }) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
-
-    expect(result).toMatchObject({ continue: false })
-    expect(result.hookSpecificOutput?.updatedToolOutput).toBeUndefined()
-    expect(session.alive()).toBe(true)
-    await expect(session.nextEvent()).resolves.toMatchObject({ type: "error", recoverable: true })
-    expect(session.contextRotation()).toBeUndefined()
-    await session.close()
-    expect(session.alive()).toBe(false)
+    expect(getOptions().hooks).not.toHaveProperty("PostToolUse")
+    expect(getOptions().hooks).not.toHaveProperty("PostToolBatch")
+    expect(getOptions().hooks).not.toHaveProperty("PreCompact")
+    expect(getOptions().hooks).not.toHaveProperty("PostCompact")
+    expect(getOptions().hooks).not.toHaveProperty("Stop")
   })
 
   it("merges runtime SDK settings without leaking non-provider env into settings.env", () => {
@@ -660,6 +300,7 @@ describe("ClaudeSDKSession", () => {
       env: {
         ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com",
         ANTHROPIC_AUTH_TOKEN: "sk-provider",
+        CLAUDE_CODE_MAX_CONTEXT_TOKENS: "256000",
         SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
       },
       sdkSettings: {
@@ -675,6 +316,7 @@ describe("ClaudeSDKSession", () => {
         env: {
           ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com",
           ANTHROPIC_AUTH_TOKEN: "sk-provider",
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: "256000",
         },
       },
     })
@@ -831,20 +473,6 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
-  it.each([
-    { disallowedTools: ["*"] },
-    { disallowedTools: ["TaskUpdate"] },
-    { personaToolPolicy: { mode: "disabled" as const, allowedTools: [] } },
-    { personaToolPolicy: { mode: "allowlist" as const, allowedTools: ["Read"] } },
-  ])("does not demand progress tools excluded by the active policy: %j", async (policy) => {
-    const { factory, getOptions } = createQueryFactory()
-    const taskProgress = { assessment: vi.fn().mockResolvedValue({ status: "unverified" }) }
-    createSession(factory, { ...policy, taskProgress: taskProgress as unknown as NonNullable<ConstructorParameters<typeof ClaudeSDKSession>[0]["taskProgress"]> })
-    expect(JSON.stringify(getOptions().systemPrompt)).toContain("progress tools are unavailable")
-    const hooks = getOptions().hooks as { Stop: Array<{ hooks: Array<(input: unknown) => Promise<unknown>> }> }
-    expect(await hooks.Stop[0]!.hooks[0]!({ hook_event_name: "Stop", last_assistant_message: "Verification unavailable." })).toEqual({})
-  })
-
   it("denies tools outside the persona allowlist before SDK permissions", async () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
@@ -869,67 +497,6 @@ describe("ClaudeSDKSession", () => {
         permissionDecisionReason: expect.stringContaining("当前智能体未允许使用该工具"),
       },
     })
-  })
-
-  it("denies repeated identical TodoWrite calls twice before stopping the turn", async () => {
-    const { factory, getOptions } = createQueryFactory()
-    createSession(factory)
-    const guard = preToolUseHook(getOptions())
-    const input = {
-      todos: [{
-        content: "展示今日工作计划",
-        status: "completed",
-        activeForm: "展示今日工作计划",
-      }],
-    }
-
-    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({})
-    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({})
-    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: expect.stringContaining("Do not retry TodoWrite"),
-        additionalContext: expect.stringContaining("Answer the user directly"),
-      },
-    })
-    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: expect.stringContaining("Do not retry TodoWrite"),
-        additionalContext: expect.stringContaining("Answer the user directly"),
-      },
-    })
-    await expect(guard(todoWriteHookInput(input))).resolves.toEqual({
-      continue: false,
-      stopReason: expect.stringContaining("Stopped repeated TodoWrite"),
-    })
-  })
-
-  it("resets the TodoWrite repetition guard when the tool input changes", async () => {
-    const { factory, getOptions } = createQueryFactory()
-    createSession(factory)
-    const guard = preToolUseHook(getOptions())
-    const firstInput = {
-      todos: [{
-        content: "展示今日工作计划",
-        status: "completed",
-        activeForm: "展示今日工作计划",
-      }],
-    }
-    const secondInput = {
-      todos: [{
-        content: "展示明日工作计划",
-        status: "completed",
-        activeForm: "展示明日工作计划",
-      }],
-    }
-
-    await expect(guard(todoWriteHookInput(firstInput))).resolves.toEqual({})
-    await expect(guard(todoWriteHookInput(firstInput))).resolves.toEqual({})
-    await expect(guard(todoWriteHookInput(secondInput))).resolves.toEqual({})
-    await expect(guard(todoWriteHookInput(secondInput))).resolves.toEqual({})
   })
 
   it("denies restricted subagent writes outside allowed paths before prompting", async () => {
@@ -959,7 +526,7 @@ describe("ClaudeSDKSession", () => {
         context: { signal: AbortSignal },
       ) => Promise<unknown>] }]
     }
-    expect(hooks.PreToolUse[0].matcher).toBe("TodoWrite")
+    expect(hooks.PreToolUse[0].matcher).toBe("*")
     expect(hooks.SubagentStop).toHaveLength(1)
     await hooks.SubagentStart[0].hooks[0]({
       hook_event_name: "SubagentStart",
@@ -1412,65 +979,12 @@ describe("ClaudeSDKSession", () => {
     expect(getContextUsage).toHaveBeenCalledTimes(2)
   })
 
-  it("projects catalog reference metadata without replacing the SDK runtime window", async () => {
-    const { factory, query } = createQueryFactory()
-    const session = createSession(factory, {
-      contextWindowConfigurationSource: "catalog",
-      modelContext: {
-        providerScopeId: "bailian-cn",
-        modelId: "qwen3.7-plus",
-        contextWindowTokens: 1_000_000,
-        maxInputTokens: 991_808,
-        sourceLabel: "Alibaba Cloud Model Studio",
-        sourceUrl: "https://help.aliyun.com/zh/model-studio/qwen3-7-plus",
-        verifiedAt: "2026-08-25T00:00:00.000Z",
-      },
-    })
-
-    const assistantEvent = session.nextEvent()
-    query.push({
-      type: "assistant",
-      session_id: "sdk-context-reference",
-      parent_tool_use_id: null,
-      message: {
-        role: "assistant",
-        model: "qwen3.7-plus",
-        content: [],
-        usage: { input_tokens: 35_000, output_tokens: 333 },
-      },
-    } as unknown as SDKMessage)
-    await expect(assistantEvent).resolves.toMatchObject({
-      contextUsage: {
-        usedTokens: 35_333,
-        contextWindowConfigurationSource: "catalog",
-        modelContext: { contextWindowTokens: 1_000_000 },
-      },
-    })
-
-    const resultEvent = session.nextEvent()
-    query.push({
-      type: "result",
-      subtype: "success",
-      session_id: "sdk-context-reference",
-      result: "done",
-      modelUsage: { "qwen3.7-plus": { contextWindow: 200_000 } },
-    } as unknown as SDKMessage)
-    await expect(resultEvent).resolves.toMatchObject({
-      metadata: {
-        contextUsage: {
-          contextWindowTokens: 200_000,
-          modelContext: { contextWindowTokens: 1_000_000 },
-        },
-      },
-    })
-  })
-
   it("does not expose compact summary tokens when the SDK context refresh fails", async () => {
     const logger = { warn: vi.fn() }
     const getContextUsage = vi.fn(async () => {
       throw new Error("context usage unavailable")
     })
-    const { factory, query } = createQueryFactory({ getContextUsage })
+    const { factory, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
     const session = createSession(factory, { logger })
 
     const assistantEvent = session.nextEvent()
@@ -1504,204 +1018,40 @@ describe("ClaudeSDKSession", () => {
     )
   })
 
-  it("monitors SDK-native tool-result eviction between completed turns", async () => {
-    const logger = { warn: vi.fn(), info: vi.fn() }
-    const getContextUsage = vi.fn()
-      .mockResolvedValueOnce({
-        totalTokens: 80_000,
-        maxTokens: 200_000,
-        model: "qwen3.8-max",
-        messageBreakdown: { toolResultTokens: 40_000 },
-      })
-      .mockResolvedValueOnce({
-        totalTokens: 55_000,
-        maxTokens: 200_000,
-        model: "qwen3.8-max",
-        messageBreakdown: { toolResultTokens: 12_000 },
-      })
-    const { factory, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
-    const session = createSession(factory, { logger })
-
-    for (const sessionId of ["sdk-turn-1", "sdk-turn-2"]) {
-      const event = session.nextEvent()
-      query.push({
-        type: "result",
-        subtype: "success",
-        session_id: sessionId,
-        result: "done",
-        modelUsage: { "qwen3.8-max": { contextWindow: 1_000_000 } },
-      } as unknown as SDKMessage)
-      await expect(event).resolves.toMatchObject({ type: "result" })
-    }
-
-    expect(logger.info).toHaveBeenCalledWith(
-      "Claude SDK native tool-result eviction observed.",
-      expect.objectContaining({
-        boundary: "claude-sdk.tool-result-eviction-monitor",
-        previousToolResultTokens: 40_000,
-        toolResultTokens: 12_000,
-        evictedToolResultTokens: 28_000,
-      }),
-    )
-  })
-
-  it("records SDK-native compaction boundaries without logging the summary body", async () => {
-    const logger = { warn: vi.fn(), info: vi.fn() }
+  it("continues on the same SDK query and session after a native compact boundary", async () => {
     const getContextUsage = vi.fn(async () => ({
-      totalTokens: 48_000,
+      totalTokens: 42_000,
       maxTokens: 200_000,
-      rawMaxTokens: 1_000_000,
+      autoCompactThreshold: 167_000,
       model: "qwen3.8-max",
-      categories: [{ name: "Messages", tokens: 42_000, color: "default" }],
-      messageBreakdown: { toolResultTokens: 9_000 },
     }))
-    const { factory, getOptions, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
-    const session = createSession(factory, { logger })
-
-    const assistantEvent = session.nextEvent()
-    query.push({
-      type: "assistant",
-      session_id: "sdk-compact",
-      parent_tool_use_id: null,
-      message: {
-        role: "assistant",
-        model: "qwen3.8-max",
-        content: [],
-        usage: { input_tokens: 150_000, output_tokens: 500 },
-      },
-    } as unknown as SDKMessage)
-    await assistantEvent
-
-    await lifecycleHook(getOptions(), "PreCompact")({
-      hook_event_name: "PreCompact",
-      trigger: "auto",
-    })
-    await lifecycleHook(getOptions(), "PostCompact")({
-      hook_event_name: "PostCompact",
-      trigger: "auto",
-      compact_summary: "private summary",
-    })
+    const { factory, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
+    const factorySpy = vi.fn(factory)
+    const session = createSession(factorySpy)
 
     const compactEvent = session.nextEvent()
     query.push({
       type: "system",
       subtype: "compact_boundary",
-      session_id: "sdk-compact",
-      compact_metadata: { trigger: "auto", pre_tokens: 150_500, post_tokens: 48_000 },
+      session_id: "sdk-native-compact",
+      compact_metadata: { trigger: "auto", pre_tokens: 168_000, post_tokens: 42_000 },
     } as unknown as SDKMessage)
-    await expect(compactEvent).resolves.toMatchObject({ type: "compactBoundary" })
-
-    expect(logger.info).toHaveBeenCalledWith(
-      "Claude SDK native compaction completed.",
-      expect.objectContaining({
-        boundary: "claude-sdk.compaction-monitor",
-        trigger: "auto",
-        beforeContextTokens: 150_500,
-        afterContextTokens: 48_000,
-        compactSummaryBytes: Buffer.byteLength("private summary"),
-        afterNativeToolResultTokens: 9_000,
-      }),
-    )
-    expect(JSON.stringify(logger.info.mock.calls)).not.toContain("private summary")
-  })
-
-  it.each(["PostToolBatch", "UserPromptSubmit", "PostCompact"] as const)(
-    "holds %s before another over-budget request and releases it on cancel",
-    async (hookName) => {
-      const getContextUsage = vi.fn(async () => ({
-        totalTokens: 198_000, maxTokens: 200_000, autoCompactThreshold: 167_000,
-        model: "qwen3.8-max", messageBreakdown: { toolResultTokens: 43_000 },
-      }))
-      const { factory, getOptions, query } = createQueryFactory({ getContextUsage: getContextUsage as never })
-      const session = createSession(factory, { persistToolOutputText: vi.fn(), autoCompactWindowTokens: 200_000 })
-      await session.send({ ...message("complete the original task"), runtimeTurnId: "turn-1" })
-      let resumed = false
-      const paused = lifecycleHook(getOptions(), hookName)({
-        hook_event_name: hookName, trigger: "auto", compact_summary: "keep task requirements",
-        tool_calls: [{ tool_name: "Bash", tool_use_id: "done-1", tool_response: "already deployed" }],
-      }).then((result) => { resumed = true; return result })
-      await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextBudgetSnapshot", payload: { exactHttpBody: false } })
-      if (hookName === "PostToolBatch") {
-        await expect(session.nextEvent()).resolves.toMatchObject({ type: "toolResult", toolUseId: "done-1" })
-      }
-      await expect(session.nextEvent()).resolves.toMatchObject({
-        type: "sdkEvent", sdkType: "contextRotationRequested", payload: {},
-      })
-      expect(resumed).toBe(false)
-      expect(session.contextRotation()).toMatchObject({
-        reason: hookName === "PostCompact" ? "ineffective-compaction" : "request-budget",
-      })
-      await session.cancelCurrentTurn()
-      await expect(paused).resolves.toMatchObject({ continue: false })
-      expect(query.close).toHaveBeenCalledOnce()
-      expect(query.interrupt).toHaveBeenCalledOnce()
-    },
-  )
-
-  it("continues after cumulative tool output exceeds the old turn allowance", async () => {
-    const { factory, getOptions } = createQueryFactory()
-    const session = createSession(factory, { maxToolOutputBytes: 8 * 1024 })
-    await session.send({ ...message("continue"), runtimeTurnId: "turn-1" })
-    for (let batch = 0; batch < 20; batch += 1) {
-      await expect(postToolUseHook(getOptions())({
-        hook_event_name: "PostToolUse", tool_name: "Bash", tool_response: "x".repeat(6000),
-      })).resolves.toEqual({})
-      await expect(lifecycleHook(getOptions(), "PostToolBatch")({
-        hook_event_name: "PostToolBatch", tool_calls: [],
-      })).resolves.toEqual({})
-    }
-    expect(session.contextRotation()).toBeUndefined()
-    await session.close()
-  })
-
-  it("allows effective compaction and excludes subagent hooks from main-session rotation", async () => {
-    const getContextUsage = vi.fn(async () => ({
-      totalTokens: 45_000, maxTokens: 200_000, autoCompactThreshold: 167_000, model: "qwen3.8-max",
-    }))
-    const { factory, getOptions } = createQueryFactory({ getContextUsage: getContextUsage as never })
-    const session = createSession(factory, { persistToolOutputText: vi.fn() })
-    await session.send({ ...message("continue"), runtimeTurnId: "turn-1" })
-    await expect(lifecycleHook(getOptions(), "PostCompact")({
-      hook_event_name: "PostCompact", trigger: "auto", compact_summary: "progress",
-    })).resolves.toEqual({})
-    expect(session.contextRotation()).toBeUndefined()
-    getContextUsage.mockClear()
-    await lifecycleHook(getOptions(), "PostToolBatch")({
-      hook_event_name: "PostToolBatch", agent_id: "child", tool_calls: [],
-    })
-    expect(getContextUsage).not.toHaveBeenCalled()
-    await session.close()
-  })
-
-  it("records SDK-native compaction failures without logging the SDK error body", async () => {
-    const logger = { warn: vi.fn(), info: vi.fn() }
-    const { factory, getOptions, query } = createQueryFactory()
-    const session = createSession(factory, { logger })
-    await lifecycleHook(getOptions(), "PreCompact")({
-      hook_event_name: "PreCompact",
-      trigger: "auto",
+    await expect(compactEvent).resolves.toMatchObject({
+      type: "compactBoundary",
+      sdkSessionId: "sdk-native-compact",
+      contextUsage: { usedTokens: 42_000 },
     })
 
-    const statusEvent = session.nextEvent()
+    const resultEvent = session.nextEvent()
     query.push({
-      type: "system",
-      subtype: "status",
-      session_id: "sdk-compact-failed",
-      status: null,
-      compact_result: "failed",
-      compact_error: "secret provider response",
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-native-compact",
+      result: "continued",
     } as unknown as SDKMessage)
-    await expect(statusEvent).resolves.toMatchObject({ type: "status" })
-
-    expect(logger.warn).toHaveBeenCalledWith(
-      "Claude SDK native compaction failed.",
-      expect.objectContaining({
-        boundary: "claude-sdk.compaction-monitor",
-        sdkSessionId: "sdk-compact-failed",
-        hasSdkError: true,
-      }),
-    )
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret provider response")
+    await expect(resultEvent).resolves.toMatchObject({ type: "result", content: "continued" })
+    expect(factorySpy).toHaveBeenCalledOnce()
+    expect(session.currentSessionId()).toBe("sdk-native-compact")
   })
 
   it("maps SDK tool result ids back to the tool name for timeline display", async () => {
@@ -2479,77 +1829,20 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
-  it("scopes request-body recovery classification to the configured Bailian transport policy", async () => {
-    const raw = "Exceeded limit on max bytes to request body : 6291456"
-    const officialFactory = createQueryFactory()
-    const official = createSession(officialFactory.factory, { maxRequestBodyBytes: 6 * 1024 * 1024 })
-    const officialEvent = official.nextEvent()
-    officialFactory.query.rejectNext(new Error(raw))
+  it.each([
+    "Exceeded limit on max bytes to request body : 6291456",
+    "Autocompact is thrashing: context refilled to the limit",
+  ])("surfaces provider capacity failures once without recovery or retry: %s", async (diagnostic) => {
+    const { factory, query } = createQueryFactory()
+    const session = createSession(factory)
+    query.rejectNext(new Error(diagnostic))
 
-    await expect(officialEvent).resolves.toMatchObject({
+    await expect(session.nextEvent()).resolves.toMatchObject({
       type: "error",
-      message: "当前对话内容较多，暂时无法继续。",
-      errorKind: "request_body_too_large",
-      recoverable: true,
-    })
-
-    const proxyFactory = createQueryFactory()
-    const proxy = createSession(proxyFactory.factory)
-    const proxyEvent = proxy.nextEvent()
-    proxyFactory.query.rejectNext(new Error(raw))
-
-    await expect(proxyEvent).resolves.toMatchObject({
-      type: "error",
-      message: "Agent 执行失败。",
       errorKind: "execution_failed",
       recoverable: false,
     })
-  })
-
-  it("maps rapid context refill query failures to provider-independent recovery", async () => {
-    const { factory, query } = createQueryFactory()
-    const session = createSession(factory)
-    const event = session.nextEvent()
-    query.rejectNext(new Error(
-      "Autocompact is thrashing: context refilled. terminal_reason=rapid_refill_breaker",
-    ))
-
-    await expect(event).resolves.toMatchObject({
-      type: "error",
-      message: "大型工具结果在整理后迅速填满上下文，本次运行已停止。",
-      errorKind: "context_refill_thrashing",
-      recoverable: true,
-    })
-    expect(JSON.stringify(await event)).not.toContain("Autocompact is thrashing")
-  })
-
-  it.each([
-    ["<400> InternalError.Algo.InvalidParameter: Range of input length should be [1, 983616]", true],
-    ["HTTP 401 invalid API key", false],
-    ["HTTP 500 internal server error", false],
-    ["fetch failed: ECONNRESET", false],
-  ] as const)("only automatically recovers precisely identified capacity errors: %s", async (diagnostic, recover) => {
-    const { factory, query } = createQueryFactory()
-    const session = createSession(factory, { maxRequestBodyBytes: 6 * 1024 * 1024,
-      persistToolOutputText: async () => ({ id: "part", storagePath: "/checkpoint", originalByteSize: 10, storedByteSize: 10, contentTruncated: false }) })
-    await session.send({ ...message("continue original task"), runtimeTurnId: "turn-1" })
-    const event = session.nextEvent()
-    query.rejectNext(new Error(diagnostic))
-    await expect(event).resolves.toMatchObject(recover ? { type: "sdkEvent", sdkType: "contextBudgetSnapshot" } : { type: "error" })
-    if (recover) await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextRotationRequested" })
-    expect(Boolean(session.contextRotation())).toBe(recover)
-    await session.close()
-  })
-
-  it("automatically hands off a settled context breaker without forwarding its error to the user", async () => {
-    const { factory, query } = createQueryFactory()
-    const session = createSession(factory, { persistToolOutputText: vi.fn() })
-    await session.send({ ...message("finish everything"), runtimeTurnId: "turn-1" })
-    query.rejectNext(new Error("Autocompact is thrashing: terminal_reason=rapid_refill_breaker"))
-    await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextBudgetSnapshot" })
-    await expect(session.nextEvent()).resolves.toMatchObject({ type: "sdkEvent", sdkType: "contextRotationRequested" })
-    expect(session.contextRotation()?.reason).toBe("request-budget")
-    await session.close()
+    await expect(session.nextEvent()).resolves.toBeNull()
   })
 
   it("sanitizes SDK query rejection messages before publishing error events", async () => {
@@ -3016,22 +2309,6 @@ function workspaceWriteDenied(): Record<string, unknown> {
       permissionDecisionReason: "文件写入仅允许当前项目或已明确授权的附加目录。",
     },
   }
-}
-
-function todoWriteHookInput(toolInput: Record<string, unknown>): Record<string, unknown> {
-  return {
-    hook_event_name: "PreToolUse",
-    tool_name: "TodoWrite",
-    tool_input: toolInput,
-  }
-}
-
-/** Mirrors the session's tool_result request accounting so a double count fails the assertion. */
-function toolResultRequestBytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify({
-    role: "user",
-    content: [{ type: "tool_result", tool_use_id: "tool", content: value }],
-  }), "utf8")
 }
 
 function message(content: string): AgentMessage {

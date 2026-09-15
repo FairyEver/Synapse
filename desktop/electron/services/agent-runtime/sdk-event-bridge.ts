@@ -94,7 +94,7 @@ export function bridgeSdkMessage(
           costUsd,
           costCny,
           costCurrency,
-          payload: sanitizeResultErrorPayload(payload, resolvedPresentation.errorKind),
+          payload: sanitizeResultErrorPayload(payload),
           ...envelope,
         }
       }
@@ -231,16 +231,8 @@ function sanitizeResultSuccessPayload(payload: Record<string, unknown>): Record<
   return sanitized
 }
 
-function sanitizeResultErrorPayload(
-  payload: Record<string, unknown>,
-  errorKind?: string,
-): Record<string, unknown> {
+function sanitizeResultErrorPayload(payload: Record<string, unknown>): Record<string, unknown> {
   const sanitized = { ...payload }
-  if (errorKind === "request_body_too_large" || errorKind === "context_refill_thrashing") {
-    delete sanitized.result
-    delete sanitized.errors
-    return sanitized
-  }
   if (typeof sanitized.result === "string") {
     sanitized.result = sanitizeDiagnosticText(sanitized.result)
   }

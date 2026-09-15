@@ -652,7 +652,7 @@ describe("agent timeline conversion", () => {
     }))
   })
 
-  it("restores persisted context usage metadata", () => {
+  it("restores SDK context usage while ignoring legacy host estimates", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "assistant",
       content: "done",
@@ -661,19 +661,8 @@ describe("agent timeline conversion", () => {
         contextUsage: {
           usedTokens: 58_000,
           contextWindowTokens: 200_000,
-          autoCompactWindowTokens: 200_000,
           autoCompactThresholdTokens: 167_000,
           model: "claude-sonnet-4-5",
-          contextWindowConfigurationSource: "catalog",
-          modelContext: {
-            providerScopeId: "anthropic-official",
-            modelId: "claude-sonnet-5",
-            contextWindowTokens: 1_000_000,
-            maxOutputTokens: 128_000,
-            sourceLabel: "Anthropic",
-            sourceUrl: "https://platform.claude.com/docs/en/about-claude/models/overview",
-            verifiedAt: "2026-08-25T00:00:00.000Z",
-          },
         },
       },
     }, 5, "claude")).toMatchObject({
@@ -682,16 +671,8 @@ describe("agent timeline conversion", () => {
         contextUsage: {
           usedTokens: 58_000,
           contextWindowTokens: 200_000,
-          autoCompactWindowTokens: 200_000,
           autoCompactThresholdTokens: 167_000,
           model: "claude-sonnet-4-5",
-          contextWindowConfigurationSource: "catalog",
-          modelContext: {
-            providerScopeId: "anthropic-official",
-            modelId: "claude-sonnet-5",
-            contextWindowTokens: 1_000_000,
-            maxOutputTokens: 128_000,
-          },
         },
       },
     })

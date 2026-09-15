@@ -1,6 +1,5 @@
 import type {
   SynapseAgentEvent,
-  SynapseTaskCompletionAssessment,
   SynapseAgentFileCheckpointFile,
   SynapseAgentFileCheckpointStatus,
   SynapseAgentErrorKind,
@@ -119,7 +118,6 @@ export function agentEventToTimelineItem(
         errorKind: event.errorKind,
         recoverable: event.recoverable,
         turnOutcome: event.turnOutcome,
-        taskCompletion: event.taskCompletion,
       }
     case "sessionInit":
       return {
@@ -254,7 +252,6 @@ export function historyRecordToTimelineItem(
         errorKind: errorKindMetadata(metadata, "errorKind"),
         recoverable: booleanMetadata(metadata, "recoverable"),
         turnOutcome: turnOutcomeMetadata(metadata, "turnOutcome"),
-        taskCompletion: taskCompletionMetadata(metadata),
       }
     case "result":
       return {
@@ -878,20 +875,8 @@ function imageArtifactsMetadata(
   return artifacts.length > 0 ? artifacts : undefined
 }
 
-function taskCompletionMetadata(metadata: Record<string, unknown> | undefined): SynapseTaskCompletionAssessment | undefined {
-  const value = recordMetadata(metadata, "taskCompletion")
-  if (!value || !["unverified", "partial", "coverage-complete"].includes(String(value.status)) || value.semanticCorrectness !== "unverified"
-    || ["revision", "declaredUnits", "coveredUnits", "processedUnits", "conflictingFindings"].some((key) =>
-      typeof value[key] !== "number" || !Number.isSafeInteger(value[key]) || (value[key] as number) < 0)) return undefined
-  // Records persisted before mutation evidence existed have no mutatedUnits field.
-  const mutatedUnits = value.mutatedUnits === undefined ? 0 : value.mutatedUnits
-  if (typeof mutatedUnits !== "number" || !Number.isSafeInteger(mutatedUnits) || mutatedUnits < 0) return undefined
-  return { ...value, mutatedUnits } as unknown as SynapseTaskCompletionAssessment
-}
-
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {
   const result: SynapseAgentResultMetadata = {
-    taskCompletion: taskCompletionMetadata(metadata),
     mainThreadPersona: mainThreadPersonaMetadata(metadata),
     model: stringMetadata(metadata, "model"),
     effort: stringMetadata(metadata, "effort"),
@@ -930,79 +915,16 @@ function contextUsageMetadata(
     && (!Number.isSafeInteger(contextWindowTokens) || (contextWindowTokens as number) <= 0)) {
     return undefined
   }
-  const autoCompactWindowTokens = record.autoCompactWindowTokens
   const autoCompactThresholdTokens = record.autoCompactThresholdTokens
-  for (const tokens of [autoCompactWindowTokens, autoCompactThresholdTokens]) {
-    if (tokens !== undefined && (!Number.isSafeInteger(tokens) || (tokens as number) <= 0)) return undefined
-  }
+  if (autoCompactThresholdTokens !== undefined
+    && (!Number.isSafeInteger(autoCompactThresholdTokens) || (autoCompactThresholdTokens as number) <= 0)) return undefined
   const model = record.model
   if (model !== undefined && (typeof model !== "string" || model.length === 0)) return undefined
-  const modelContext = modelContextMetadata(record.modelContext)
-  if (record.modelContext !== undefined && !modelContext) return undefined
-  const contextWindowConfigurationSource = record.contextWindowConfigurationSource
-  if (contextWindowConfigurationSource !== undefined
-    && contextWindowConfigurationSource !== "catalog"
-    && contextWindowConfigurationSource !== "provider-env") return undefined
   return {
     usedTokens: record.usedTokens as number,
-    ...(autoCompactWindowTokens === undefined ? {} : { autoCompactWindowTokens: autoCompactWindowTokens as number }),
     ...(autoCompactThresholdTokens === undefined ? {} : { autoCompactThresholdTokens: autoCompactThresholdTokens as number }),
     ...(contextWindowTokens === undefined ? {} : { contextWindowTokens: contextWindowTokens as number }),
     ...(model === undefined ? {} : { model }),
-    ...(modelContext ? { modelContext } : {}),
-    ...(contextWindowConfigurationSource === undefined
-      ? {}
-      : { contextWindowConfigurationSource }),
-  }
-}
-
-function modelContextMetadata(
-  value: unknown,
-): SynapseAgentContextUsage["modelContext"] | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
-  const record = value as Record<string, unknown>
-  const positiveFields = [
-    "contextWindowTokens",
-    "maxInputTokens",
-    "maxOutputTokens",
-    "reasoningMaxInputTokens",
-    "reasoningMaxOutputTokens",
-    "maxReasoningTokens",
-  ] as const
-  if (!Number.isSafeInteger(record.contextWindowTokens) || (record.contextWindowTokens as number) <= 0) {
-    return undefined
-  }
-  for (const field of positiveFields.slice(1)) {
-    const tokenLimit = record[field]
-    if (tokenLimit !== undefined && (!Number.isSafeInteger(tokenLimit) || (tokenLimit as number) <= 0)) {
-      return undefined
-    }
-  }
-  if (
-    typeof record.providerScopeId !== "string"
-    || typeof record.modelId !== "string"
-    || typeof record.sourceLabel !== "string"
-    || typeof record.sourceUrl !== "string"
-    || typeof record.verifiedAt !== "string"
-  ) return undefined
-  return {
-    providerScopeId: record.providerScopeId,
-    modelId: record.modelId,
-    contextWindowTokens: record.contextWindowTokens as number,
-    ...(record.maxInputTokens === undefined ? {} : { maxInputTokens: record.maxInputTokens as number }),
-    ...(record.maxOutputTokens === undefined ? {} : { maxOutputTokens: record.maxOutputTokens as number }),
-    ...(record.reasoningMaxInputTokens === undefined
-      ? {}
-      : { reasoningMaxInputTokens: record.reasoningMaxInputTokens as number }),
-    ...(record.reasoningMaxOutputTokens === undefined
-      ? {}
-      : { reasoningMaxOutputTokens: record.reasoningMaxOutputTokens as number }),
-    ...(record.maxReasoningTokens === undefined
-      ? {}
-      : { maxReasoningTokens: record.maxReasoningTokens as number }),
-    sourceLabel: record.sourceLabel,
-    sourceUrl: record.sourceUrl,
-    verifiedAt: record.verifiedAt,
   }
 }
 

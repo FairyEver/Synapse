@@ -205,6 +205,7 @@ export interface ConversationMainThreadPersonaSnapshotV1 extends Record<string, 
   definitionHash: string
 }
 
+/** @deprecated Read-only compatibility for conversations saved before native SDK context management. */
 export interface ConversationContextRecoveryV1 extends Record<string, unknown> {
   status: "required" | "prepared" | "failed"
   reason: "request_body_too_large" | "context_refill_thrashing"
@@ -221,10 +222,11 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   sessionKey: string
   providerId?: string
   sdkSessionId?: string
-  /** Host-owned SDK task namespace; survives execution session rotation. */
+  /** @deprecated Read-only compatibility; stripped on the next normal save. */
   taskListId?: string
+  /** @deprecated Read-only compatibility; stripped on the next normal save. */
   taskProgressScope?: { version: 1; turnId: string; runtimeTurnId: string }
-  /** Private execution checkpoint. Never grants access to a referenced original. */
+  /** @deprecated Read-only compatibility; stripped on the next normal save. */
   contextHandoff?: {
     version: 1
     turnId: string
@@ -268,6 +270,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
     activeMainThreadPersonaSnapshot?: ConversationMainThreadPersonaSnapshotV1
   }
   resumePolicy?: ConversationResumePolicyV1
+  /** @deprecated Read-only compatibility; stripped on the next normal save. */
   contextRecovery?: ConversationContextRecoveryV1
   history: ConversationHistoryEntryV1[]
   userMeta?: ConversationUserMetaV1

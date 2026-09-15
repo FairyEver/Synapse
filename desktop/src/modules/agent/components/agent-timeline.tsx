@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
   SynapseAgentDisplayProfile,
-  SynapseAgentContextRecovery,
   SynapseAgentPendingPermission,
   SynapseAgentPermissionScope,
   SynapseAgentTimelineItem,
@@ -29,10 +28,6 @@ function AgentTimeline({
   referenceActions,
   onRespondPermission,
   onContinue,
-  contextRecovery,
-  onPrepareContextRecovery,
-  onContinueContextRecovery,
-  onCreateConversation,
   viewportRef,
   loadingOlder,
   hasMore = false,
@@ -56,10 +51,6 @@ function AgentTimeline({
     scope?: SynapseAgentPermissionScope,
   ) => void | Promise<void>
   readonly onContinue?: () => void
-  readonly contextRecovery?: SynapseAgentContextRecovery
-  readonly onPrepareContextRecovery?: () => void | Promise<void>
-  readonly onContinueContextRecovery?: () => void | Promise<void>
-  readonly onCreateConversation?: () => void
   readonly viewportRef: Ref<HTMLDivElement>
   readonly loadingOlder: boolean
   readonly hasMore?: boolean
@@ -72,7 +63,6 @@ function AgentTimeline({
   const visibleItems = visibleTimelineItems(items, now)
   const latestPendingItemIds = latestPendingTimelineItemIds(visibleItems, pendingPermissions)
   const continuableInterruptionId = latestContinuableInterruptionId(visibleItems)
-  const contextRecoveryErrorId = latestContextRecoveryErrorId(visibleItems)
   const pendingPermissionRequestIds = new Set(pendingPermissions.map((permission) => permission.requestId))
   const displayEntries = timelineDisplayEntries(visibleItems)
   const displayNodes = groupTimelineDisplayEntries(displayEntries, {
@@ -147,10 +137,6 @@ function AgentTimeline({
                           referenceActions={referenceActions}
                           onRespondPermission={onRespondPermission}
                           onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
-                          contextRecovery={entry.item.id === contextRecoveryErrorId ? contextRecovery : undefined}
-                          onPrepareContextRecovery={onPrepareContextRecovery}
-                          onContinueContextRecovery={onContinueContextRecovery}
-                          onCreateConversation={onCreateConversation}
                           projectId={projectId}
                           conversationId={conversationId}
                         />
@@ -176,10 +162,6 @@ function AgentTimeline({
                   referenceActions={referenceActions}
                   onRespondPermission={onRespondPermission}
                   onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
-                  contextRecovery={entry.item.id === contextRecoveryErrorId ? contextRecovery : undefined}
-                  onPrepareContextRecovery={onPrepareContextRecovery}
-                  onContinueContextRecovery={onContinueContextRecovery}
-                  onCreateConversation={onCreateConversation}
                   projectId={projectId}
                   conversationId={conversationId}
                 />
@@ -208,18 +190,6 @@ function visibleTimelineItems(
     const startedAt = Date.parse(item.timestamp)
     return Number.isFinite(startedAt) && nowMs - startedAt >= 800
   })
-}
-
-function latestContextRecoveryErrorId(items: readonly SynapseAgentTimelineItem[]): string | undefined {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index]
-    if (item?.kind === "error" && isContextRecoveryErrorKind(item.errorKind)) return item.id
-  }
-  return undefined
-}
-
-function isContextRecoveryErrorKind(errorKind: string | undefined): boolean {
-  return errorKind === "request_body_too_large" || errorKind === "context_refill_thrashing"
 }
 
 function latestPendingTimelineItemIds(

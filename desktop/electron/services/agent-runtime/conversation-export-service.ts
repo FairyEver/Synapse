@@ -53,7 +53,6 @@ interface AgentConversationLiveState {
 }
 
 interface AgentConversationExportServiceDeps {
-  readonly taskProgress?: DataNamespace<import("../../runtime/data-repo").AgentTaskProgressEntryV1>
   readonly conversations: DataNamespace<ConversationEntryV1>
   readonly agentEvents: DataNamespace<AgentEventEntryV1>
   readonly agentUsage: DataNamespace<AgentUsageEntryV1>
@@ -238,14 +237,6 @@ class AgentConversationExportService {
         skipped,
       )
       const liveState = await this.collectLiveState(request, skipped)
-      if (this.deps.taskProgress?.listWindow) {
-        for (let offset = 0; ; offset += 100) {
-          const page = await this.deps.taskProgress.listWindow({ filter: { projectId: request.projectId, conversationId: request.conversationId },
-            orderBy: ["turnId", "revision"], order: "asc", offset, limit: 100 })
-          if (page.length) await this.writeJson(packageRoot, `task-progress/${String(offset / 100 + 1).padStart(6, "0")}.json`, page.map((row) => row.value), included)
-          if (page.length < 100) break
-        }
-      }
       const summary = buildSummary({
         conversation,
         timeline,
@@ -694,9 +685,7 @@ function buildSummary(input: {
   readonly agentUsage: readonly AgentUsageEntryV1[]
 }) {
   const usageSummary = summarizeUsage(input.conversation, input.agentUsage)
-  // Evidence notices are advisory and must not inflate failure counts.
-  const errorEvents = input.agentEvents.filter((entry) => entry.eventType === "error"
-    && (entry.payload as { errorKind?: unknown }).errorKind !== "task_evidence_incomplete")
+  const errorEvents = input.agentEvents.filter((entry) => entry.eventType === "error")
   const failedTurnIds = uniqueEventTurnIds(errorEvents)
   const recoverableTurnIds = uniqueEventTurnIds(
     errorEvents.filter((entry) => entry.payload.recoverable === true),

@@ -1836,12 +1836,6 @@ export type SynapseBridge = {
         clientSubmittedAt?: string
       },
     ) => Promise<SynapseAgentSteerResult>
-    prepareContextRecovery: (
-      args: { projectId: string; conversationId: string; failedTurnId: string },
-    ) => Promise<SynapseAgentSessionSummary>
-    continueContextRecovery: (
-      args: { projectId: string; conversationId: string; failedTurnId: string },
-    ) => Promise<SynapseAgentSendResult>
     chooseAttachments: (
       args: { projectId: string; draftScopeId: string; kind: "file" | "directory" },
     ) => Promise<SynapseAgentAttachmentSelectionResult>

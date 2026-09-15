@@ -1,5 +1,3 @@
-import { DEFAULT_CLAUDE_SDK_MAX_TURNS } from "./turn-limits"
-
 export const AGENT_CANCELLED_MESSAGE = "已停止本次执行。"
 export const AGENT_SESSION_CLOSED_MESSAGE = "Agent 会话已关闭，无法继续执行。"
 export const AGENT_SESSION_RESETTING_MESSAGE = "Agent 会话正在重置，请稍后再试。"
@@ -47,16 +45,12 @@ const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
 const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
 export const AGENT_TOOL_USE_INTERRUPTED_MESSAGE = "Agent 在工具调用后中断，发送“继续”可接着执行。"
 export const AGENT_CONNECTION_INTERRUPTED_MESSAGE = "模型连接中断，任务尚未完成。"
-export const AGENT_REQUEST_BODY_TOO_LARGE_MESSAGE = "当前对话内容较多，暂时无法继续。"
-export const AGENT_CONTEXT_REFILL_THRASHING_MESSAGE = "大型工具结果在整理后迅速填满上下文，本次运行已停止。"
 export const AGENT_RENDERER_UNAVAILABLE_MESSAGE = "界面异常，本次运行已停止。"
 
 export type AgentErrorKind =
   | "execution_failed"
   | "connection_interrupted"
   | "tool_use_interrupted"
-  | "request_body_too_large"
-  | "context_refill_thrashing"
   | "webfetch_preflight_failed"
 
 export interface AgentErrorPresentation {
@@ -73,13 +67,6 @@ export function sdkResultErrorPresentation(subtype: string | undefined, errors: 
   if (errors.length > 0) {
     const diagnostic = errors.join("\n")
     return agentDiagnosticPresentation(diagnostic)
-  }
-  if (subtype === "error_max_turns") {
-    return {
-      message: `已达到本轮执行上限（${DEFAULT_CLAUDE_SDK_MAX_TURNS}），任务尚未完成；发送“继续”可接着执行。`,
-      errorKind: "execution_failed",
-      recoverable: false,
-    }
   }
   if (subtype === "error_max_budget_usd") {
     return {
@@ -107,20 +94,6 @@ export function sdkQueryErrorPresentation(diagnostic: string | undefined): Agent
 }
 
 export function agentDiagnosticPresentation(diagnostic: string | undefined): AgentErrorPresentation {
-  if (isRequestBodyTooLargeDiagnostic(diagnostic)) {
-    return {
-      message: AGENT_REQUEST_BODY_TOO_LARGE_MESSAGE,
-      errorKind: "request_body_too_large",
-      recoverable: true,
-    }
-  }
-  if (isContextRefillThrashingDiagnostic(diagnostic)) {
-    return {
-      message: AGENT_CONTEXT_REFILL_THRASHING_MESSAGE,
-      errorKind: "context_refill_thrashing",
-      recoverable: true,
-    }
-  }
   if (isConnectionInterruptedDiagnostic(diagnostic)) {
     return {
       message: AGENT_CONNECTION_INTERRUPTED_MESSAGE,

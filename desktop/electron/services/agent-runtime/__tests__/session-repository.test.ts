@@ -1,27 +1,54 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type {
+  AgentTaskProgressEntryV1,
   ConversationEntryV1,
   DataChangeEvent,
+  DataListWindowOptions,
   DataChangeListener,
   DataNamespace,
 } from "../../../runtime/data-repo"
 import { AgentSessionRepository, conversationId } from "../session-repository"
 
 describe("AgentSessionRepository", () => {
-  it("persists an isolated task-list identity across concurrent opens, SDK rotations and repository restarts", async () => {
+  it("ignores legacy recovery state and removes it with task progress on the next save", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const repository = new AgentSessionRepository({ projectId: "project-1", conversations })
-    const first = await repository.createSession({ sessionKey: "one" })
-    const second = await repository.createSession({ sessionKey: "two" })
-    const ids = await Promise.all(Array.from({ length: 20 }, () => repository.ensureTaskListId(first.id)))
-    expect(new Set(ids).size).toBe(1)
-    expect(ids[0]).toMatch(/^[0-9a-f-]{36}$/)
-    expect(await repository.ensureTaskListId(second.id)).not.toBe(ids[0])
-    await repository.clearCurrentAgentSessionId(first.id)
-    const reopened = new AgentSessionRepository({ projectId: "project-1", conversations })
-    expect(await reopened.ensureTaskListId(first.id)).toBe(ids[0])
+    const taskProgress = new MemoryNamespace<AgentTaskProgressEntryV1>("agent.task-progress")
+    const repository = new AgentSessionRepository({ projectId: "project-1", conversations, taskProgress })
+    const session = await repository.createSession({ sessionKey: "legacy" })
+    await conversations.upsert({
+      ...session,
+      taskListId: "a6ef4f63-9707-4dca-99ab-1fc71a3c88b0",
+      taskProgressScope: { version: 1, turnId: "turn-1", runtimeTurnId: "runtime-1" },
+      contextRecovery: {
+        status: "required",
+        reason: "request_body_too_large",
+        failedTurnId: "turn-1",
+        createdAt: "2026-09-12T00:00:00.000Z",
+      },
+    })
+    await taskProgress.upsert({
+      id: "legacy-progress",
+      schemaVersion: 1,
+      projectId: "project-1",
+      conversationId: session.id,
+      turnId: "turn-1",
+      revision: 1,
+      kind: "assessment",
+      data: {},
+    })
+
+    expect(await repository.get(session.id)).not.toHaveProperty("contextRecovery")
+    await repository.savePermissionMode(session.id, "default")
+
+    expect(await conversations.get(session.id)).not.toMatchObject({
+      taskListId: expect.anything(),
+      taskProgressScope: expect.anything(),
+      contextRecovery: expect.anything(),
+    })
+    expect(await taskProgress.get("legacy-progress")).toBeNull()
   })
+
   it("preserves concurrent appends and metadata/title updates", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({ projectId: "project-1", conversations, now: fixedNow })
@@ -230,46 +257,6 @@ describe("AgentSessionRepository", () => {
     expect((await repository.get(first.id))?.active).toBe(false)
     expect((await repository.get(second.id))?.active).toBe(true)
     expect((await repository.getActive("s1", "local"))?.id).toBe(second.id)
-  })
-
-  it("persists an optional idempotent context recovery state and rejects stale turns", async () => {
-    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
-    const repository = new AgentSessionRepository({
-      projectId: "project-1",
-      conversations,
-      now: fixedNow,
-    })
-    const session = await repository.createSession({
-      sessionKey: "local:renderer",
-      platform: "local-renderer",
-      agentType: "claude-code",
-      sdkSessionId: "sdk-1",
-    })
-    await repository.saveAgentSession({
-      conversationId: session.id,
-      agentType: "claude-code",
-      agentSessionId: "sdk-1",
-      sdkSessionId: "sdk-1",
-    })
-
-    const required = await repository.markContextRecoveryRequired(session.id, "turn-1", "claude-code")
-    expect(required).toMatchObject({
-      sdkSessionId: undefined,
-      agentSessionId: undefined,
-      pastAgentSessionIds: ["sdk-1"],
-      contextRecovery: {
-        status: "required",
-        reason: "request_body_too_large",
-        failedTurnId: "turn-1",
-      },
-    })
-
-    await expect(repository.prepareContextRecovery(session.id, "stale-turn"))
-      .rejects.toThrow("该失败轮次已失效")
-    const prepared = await repository.prepareContextRecovery(session.id, "turn-1")
-    expect(prepared.contextRecovery?.status).toBe("prepared")
-    await expect(repository.prepareContextRecovery(session.id, "turn-1")).resolves.toEqual(prepared)
-    expect((await repository.clearContextRecovery(session.id)).contextRecovery).toBeUndefined()
   })
 
   it("resolves only the matching user question history entry once", async () => {
@@ -776,6 +763,12 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
         (value as Record<string, unknown>)[key] === expected,
       ),
     )
+  }
+
+  async listWindow(options: DataListWindowOptions<T>): Promise<Array<{ value: T }>> {
+    const values = await this.list(options.filter as Partial<T> | undefined)
+    const offset = options.offset ?? 0
+    return values.slice(offset, offset + options.limit).map((value) => ({ value }))
   }
 
   async get(id: string): Promise<T | null> {

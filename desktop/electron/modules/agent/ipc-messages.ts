@@ -210,11 +210,6 @@ const cancelTurnRequestSchema = projectRequestSchema.extend({
   conversationId: z.string().min(1),
 })
 
-const contextRecoveryRequestSchema = projectRequestSchema.extend({
-  conversationId: z.string().min(1),
-  failedTurnId: z.string().min(1),
-})
-
 const cancelTurnResultSchema = z.object({
   status: z.enum(["no-active-turn", "graceful-pending", "hard-killed"]),
 })
@@ -264,8 +259,6 @@ const sendResultSchema = z.object({
       "connection_interrupted",
       "tool_use_interrupted",
       "webfetch_preflight_failed",
-      "request_body_too_large",
-      "context_refill_thrashing",
       "renderer_unavailable",
     ]).optional(),
     recoverable: z.boolean().optional(),
@@ -584,7 +577,6 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         conversations: dataRepo.namespace<ConversationEntryV1>("conversations"),
         agentEvents: dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
-        taskProgress: dataRepo.namespace<import("../../runtime/data-repo").AgentTaskProgressEntryV1>("agent.task-progress"),
         agentArtifacts: dataRepo.namespace<AgentArtifactEntry>("agent.artifacts"),
         permissionGuard,
         auditSink,
@@ -863,102 +855,6 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       })
     },
   },
-  prepareContextRecovery: {
-    kind: "invoke",
-    operationId: "app.agent.operation.prepare_context_recovery",
-    request: contextRecoveryRequestSchema,
-    response: sessionSummarySchema,
-    handler: async (ctx, request: z.infer<typeof contextRecoveryRequestSchema>) => {
-      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      const updated = await agent.prepareContextRecovery(request)
-      return sessionSummary(updated)
-    },
-  },
-  continueContextRecovery: {
-    kind: "invoke",
-    operationId: "app.agent.operation.continue_context_recovery",
-    request: contextRecoveryRequestSchema,
-    response: sendResultSchema,
-    maxResponseBytes: 32 * 1024,
-    handler: async (ctx, request: z.infer<typeof contextRecoveryRequestSchema>) => {
-      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      if (ctx.sender) agent.setRendererSubscription(ctx.sender.id, true, request.conversationId)
-      const conversation = await agent.getSession(request.conversationId)
-      if (!conversation) throw new Error("找不到当前对话。")
-      const eventBus = ctx.resolve<EventBus>("core.event-bus")
-      const runId = randomUUID()
-      const startedAt = new Date().toISOString()
-      eventBus.emit({
-        domain: "agent",
-        type: "phase.update",
-        payload: {
-          runId,
-          projectId: request.projectId,
-          conversationId: request.conversationId,
-          phase: "received",
-          status: "in-progress",
-          startedAt,
-        },
-        scope: rendererEventScope(request.projectId, ctx.sender?.id),
-        timestamp: startedAt,
-      }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
-      let result
-      try {
-        result = await agent.continueContextRecovery({
-          ...request,
-          turnId: runId,
-          originRendererId: ctx.sender?.id,
-        })
-      } catch (error) {
-        const failedAt = new Date().toISOString()
-        eventBus.emit({
-          domain: "agent",
-          type: "phase.update",
-          payload: {
-            runId,
-            projectId: request.projectId,
-            conversationId: request.conversationId,
-            phase: "failed",
-            status: "failed",
-            startedAt,
-            completedAt: failedAt,
-            errorMessage: "整理失败，请新建对话。",
-          },
-          scope: rendererEventScope(request.projectId, ctx.sender?.id),
-          timestamp: failedAt,
-        }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
-        throw error
-      }
-      const completedAt = new Date().toISOString()
-      const errorEvent = latestAgentErrorEvent(result.events as AgentEvent[])
-      eventBus.emit({
-        domain: "agent",
-        type: "phase.update",
-        payload: {
-          runId,
-          projectId: request.projectId,
-          conversationId: request.conversationId,
-          phase: result.error ? "failed" : "completed",
-          status: result.error ? "failed" : "done",
-          startedAt,
-          completedAt,
-          errorMessage: result.error,
-          errorKind: errorEvent?.errorKind,
-          recoverable: errorEvent?.recoverable,
-        },
-        scope: rendererEventScope(request.projectId, ctx.sender?.id),
-        timestamp: completedAt,
-      }, agentConversationDeliveryOptions(request.projectId, request.conversationId))
-      return {
-        projectId: request.projectId,
-        sessionKey: conversation.sessionKey,
-        conversationId: result.conversationId,
-        outcome: rendererTurnOutcome(result.events as AgentEvent[], result.error),
-        agentSessionId: result.agentSessionId,
-        threadId: result.threadId,
-      }
-    },
-  },
   listPendingPermissions: {
     kind: "invoke",
     operationId: "app.agent.operation.list_pending_permissions",
@@ -1049,8 +945,6 @@ function rendererTurnOutcome(
 } {
   if (isCancelledAgentResult(events)) return { status: "cancelled" }
   const errorEvent = latestAgentErrorEvent(events)
-  // Evidence gaps are advisory: the turn still completed.
-  if (errorEvent?.errorKind === "task_evidence_incomplete") return { status: "completed" }
   if (errorEvent?.turnOutcome?.status === "interrupted" || errorEvent?.recoverable === true) {
     return {
       status: "interrupted",

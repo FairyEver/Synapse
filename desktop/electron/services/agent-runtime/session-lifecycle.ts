@@ -24,7 +24,7 @@ export interface RuntimeSessionState {
   turnAbortController?: AbortController
   providerId?: string
   effectiveModel?: string
-  modelContextConfigurationKey?: string
+  contextWindowConfigurationValue?: string
   sdkSettings?: ClaudeSDKRuntimeSettings
   synapseToolRouterEnabled?: boolean
   additionalDirectories?: readonly string[]
@@ -43,7 +43,6 @@ export interface RuntimeSessionState {
     readonly acceptance: Promise<boolean>
     historyPersistence?: Promise<void>
   }>
-  contextRecoveryPaused?: boolean
   activeRendererId?: number
   rendererUnavailable?: boolean
   cancelState?: {

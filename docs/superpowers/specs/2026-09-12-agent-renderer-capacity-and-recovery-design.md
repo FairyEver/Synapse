@@ -1,5 +1,7 @@
 # Agent Renderer 容量与恢复设计
 
+> 部分废弃（2026-09-15）：请求体恢复 UI、两阶段整理和会话交接已删除，当前权威设计为[Claude Agent SDK 原生上下文生命周期](./2026-09-15-agent-sdk-native-context-lifecycle-design.md)；Renderer 事件容量与崩溃隔离部分仍有效。
+
 ## 目标
 
 Agent Provider 可以产生远高于用户可见内容数量的 SDK 遥测和流式增量。本设计把 SDK 消息、运行时语义状态、Renderer 显示投影分开，避免高频事件或超长对象压垮 Electron Renderer，并在 Renderer 故障时停止其发起的本地 Agent。

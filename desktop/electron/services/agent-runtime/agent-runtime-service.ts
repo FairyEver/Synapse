@@ -95,7 +95,6 @@ import type {
   StagePathsInput as AttachmentStagePathsInput,
 } from "./attachment-staging-service"
 import type {
-  AgentAttachment,
   AgentEvent,
   AgentMessage,
   AgentPendingPermission,
@@ -291,7 +290,6 @@ export class AgentRuntimeService {
       onElicitation: deps.onElicitation,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
       executeSynapseTool: deps.executeSynapseTool,
-      agentArtifactStore: deps.agentArtifactStore,
       onConversationTitle: (conversationId, title) =>
         this.applyGeneratedConversationTitle(conversationId, title),
       onConversationUpdated: (conversation) => this.emitConversationUpdated(conversation),
@@ -411,150 +409,6 @@ export class AgentRuntimeService {
         position: index + 1,
       })),
       pendingPermissionRequestId: pending?.requestId ?? null,
-    }
-  }
-
-  async prepareContextRecovery(input: {
-    readonly conversationId: string
-    readonly failedTurnId: string
-  }): Promise<ConversationEntryV1> {
-    const conversation = await this.repository.get(input.conversationId)
-    if (!conversation || conversation.platform !== "local-renderer") {
-      throw new Error(conversationNotFoundMessage(input.conversationId))
-    }
-    const recovery = conversation.contextRecovery
-    if (!recovery || recovery.failedTurnId !== input.failedTurnId) {
-      throw new Error("该失败轮次已失效，请刷新后重试。")
-    }
-    await this.sessionManager.closeCurrentTurn(conversation.id)
-    this.conversationRouter.forgetSavedSdkSession(conversation.id)
-    const updated = await this.repository.prepareContextRecovery(
-      conversation.id,
-      input.failedTurnId,
-    )
-    this.emitConversationUpdated(updated)
-    this.deps.logger?.info("Agent context recovery prepared.", {
-      boundary: "agent-runtime.context-recovery.prepared",
-      projectId: this.deps.projectId,
-      conversationId: conversation.id,
-      failedTurnId: input.failedTurnId,
-      recoveryReason: recovery.reason,
-      recoveryStatus: updated.contextRecovery?.status,
-    })
-    return updated
-  }
-
-  async continueContextRecovery(input: {
-    readonly conversationId: string
-    readonly failedTurnId: string
-    readonly turnId?: string
-    readonly originRendererId?: number
-  }): Promise<AgentRuntimeTurnResult> {
-    const conversation = await this.repository.get(input.conversationId)
-    const recovery = conversation?.contextRecovery
-    if (
-      !conversation
-      || conversation.platform !== "local-renderer"
-      || recovery?.status !== "prepared"
-      || recovery.failedTurnId !== input.failedTurnId
-    ) {
-      throw new Error("当前对话尚未完成上下文整理。")
-    }
-
-    try {
-      const recoveryAttachments = await this.resolveContextRecoveryAttachments(
-        conversation.id,
-        input.failedTurnId,
-      )
-      const result = await this.sendToConversation({
-        projectId: this.deps.projectId,
-        sessionKey: conversation.sessionKey,
-        platform: "local-renderer",
-        userId: "renderer",
-        userName: "Renderer",
-        workspaceKey: conversation.workspaceKey,
-        workspacePath: conversation.workspacePath,
-        content: "继续上一个任务",
-        displayContent: "继续上一个任务",
-        modeOverride: conversation.agentConfig?.mode,
-        agentType: conversation.agentType,
-        providerId: conversation.providerId,
-        modelTier: conversation.agentConfig?.modelTier,
-        contextRecoveryTurnId: input.failedTurnId,
-        originRendererId: input.originRendererId,
-        attachments: recoveryAttachments?.attachments,
-        runtimeAttachmentDirectories: recoveryAttachments?.controlledDirectories,
-        replyCtx: {
-          kind: "local-renderer",
-          projectId: this.deps.projectId,
-          sessionKey: conversation.sessionKey,
-        },
-      }, conversation.id, { turnId: input.turnId, contextRecoveryPriority: true })
-      if (result.error) {
-        const updated = await this.repository.markContextRecoveryFailed(
-          conversation.id,
-          input.failedTurnId,
-        )
-        this.emitConversationUpdated(updated)
-      }
-      this.deps.logger?.info("Agent context recovery continuation completed.", {
-        boundary: "agent-runtime.context-recovery.continued",
-        projectId: this.deps.projectId,
-        conversationId: conversation.id,
-        providerScope: recovery.reason === "request_body_too_large" ? "bailian-cn" : undefined,
-        failedTurnId: input.failedTurnId,
-        recoveryReason: recovery.reason,
-        recoveryResult: result.error ? "failed" : "completed",
-      })
-      return result
-    } catch (error) {
-      const updated = await this.repository.markContextRecoveryFailed(
-        conversation.id,
-        input.failedTurnId,
-      )
-      this.emitConversationUpdated(updated)
-      this.deps.logger?.warn("Agent context recovery continuation failed.", {
-        boundary: "agent-runtime.context-recovery.failed",
-        projectId: this.deps.projectId,
-        conversationId: conversation.id,
-        failedTurnId: input.failedTurnId,
-        ...errorLogMeta(error),
-      })
-      throw error
-    }
-  }
-
-  private async resolveContextRecoveryAttachments(
-    conversationId: string,
-    failedTurnId: string,
-  ): Promise<{
-    readonly attachments: readonly AgentAttachment[]
-    readonly controlledDirectories: readonly string[]
-  } | undefined> {
-    const staging = this.deps.attachmentStagingService
-    if (!staging) return undefined
-    try {
-      const entries = await staging.listForTurn({
-        projectId: this.deps.projectId,
-        conversationId,
-        turnId: failedTurnId,
-      })
-      if (entries.length === 0) return undefined
-      return staging.resolveCommittedForRuntime({
-        projectId: this.deps.projectId,
-        conversationId,
-        turnId: failedTurnId,
-        attachmentIds: entries.map((entry) => entry.id),
-      })
-    } catch (error) {
-      this.deps.logger?.warn("Agent context recovery attachments unavailable.", {
-        boundary: "agent-runtime.context-recovery.attachments",
-        projectId: this.deps.projectId,
-        conversationId,
-        failedTurnId,
-        ...errorLogMeta(error),
-      })
-      return undefined
     }
   }
 

@@ -769,9 +769,9 @@ describe("SessionManager", () => {
     expect(sessions[0]?.close).toHaveBeenCalledOnce()
   })
 
-  it("passes the default SDK turn cap into new live sessions", async () => {
+  it("does not pass a host turn cap into new live sessions", async () => {
     const states = new Map<string, RuntimeSessionState>()
-    const createSession = vi.fn(() => new FakeLiveSession())
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
@@ -792,16 +792,17 @@ describe("SessionManager", () => {
       message: baseMessage("default"),
     })
 
-    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
-      maxTurns: 200,
+    const created = createSession.mock.calls[0]?.[0]
+    expect(created).toMatchObject({
       providerId: "anthropic",
       mode: "default",
       sdkSessionId: "sdk-1",
-    }))
+    })
+    expect(created).not.toHaveProperty("maxTurns")
   })
 
-  it("injects the catalog context window after resolving the requested model tier", async () => {
-    const createSession = vi.fn(() => new FakeLiveSession())
+  it("does not inject catalog context limits for Bailian models", async () => {
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
     const manager = new SessionManager({
       projectId: "project-1",
       workDir: "/tmp/project",
@@ -826,31 +827,15 @@ describe("SessionManager", () => {
       message: baseMessage("default"),
     })
 
-    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
-      model: "qwen3.7-plus",
-      autoCompactWindowTokens: 200_000,
-      maxRequestBodyBytes: 6 * 1024 * 1024,
-      requestBodyBudgetBytes: 5 * 1024 * 1024,
-      maxToolOutputBytes: 8 * 1024,
-      maxToolBatchOutputBytes: 24 * 1024,
-      sdkSettings: expect.objectContaining({
-        autoCompactEnabled: true,
-        autoCompactWindow: 200_000,
-        precomputeCompactionEnabled: true,
-      }),
-      env: expect.objectContaining({
-        CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1000000",
-      }),
-      contextWindowConfigurationSource: "catalog",
-      modelContext: expect.objectContaining({
-        modelId: "qwen3.7-plus",
-        contextWindowTokens: 1_000_000,
-        maxInputTokens: 991_808,
-      }),
-    }))
+    const created = createSession.mock.calls[0]?.[0]
+    expect(created?.model).toBe("qwen3.7-plus")
+    expect(created?.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBeUndefined()
+    expect(created).not.toHaveProperty("maxRequestBodyBytes")
+    expect(created).not.toHaveProperty("requestBodyBudgetBytes")
+    expect(created).not.toHaveProperty("autoCompactWindowTokens")
   })
 
-  it("preserves an explicit Provider context window while still attaching the official reference", async () => {
+  it("passes through an explicit Provider context window unchanged", async () => {
     const createSession = vi.fn(() => new FakeLiveSession())
     const manager = new SessionManager({
       projectId: "project-1",
@@ -878,8 +863,6 @@ describe("SessionManager", () => {
 
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       env: expect.objectContaining({ CLAUDE_CODE_MAX_CONTEXT_TOKENS: "200000" }),
-      contextWindowConfigurationSource: "provider-env",
-      modelContext: expect.objectContaining({ contextWindowTokens: 1_000_000 }),
     }))
   })
 
@@ -910,8 +893,6 @@ describe("SessionManager", () => {
 
     const created = createSession.mock.calls[0]?.[0]
     expect(created?.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBeUndefined()
-    expect(created?.modelContext).toBeUndefined()
-    expect(created?.contextWindowConfigurationSource).toBeUndefined()
   })
 
   it("recreates the SDK session when the effective context configuration changes", async () => {

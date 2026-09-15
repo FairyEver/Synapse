@@ -302,7 +302,6 @@ function AgentConversationWorkspace({
   }, [target.conversationId, target.projectId])
 
   useEffect(() => {
-    if (session.contextRecovery) return
     const next = firstQueuedMessageForIdleTarget(pendingMessages, chat.sendingConversationIds)
     if (!next) return
     const sendingMessage = markPendingMessageSending(next)
@@ -315,7 +314,7 @@ function AgentConversationWorkspace({
         ? removePendingMessage(current, sendingMessage.id)
         : replacePendingMessage(current, markPendingMessageFailed(sendingMessage, "发送失败")))
     })
-  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages, recordRecentSlashSkill, session.contextRecovery])
+  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages, recordRecentSlashSkill])
 
   const queueMessage = (
     content: string,
@@ -620,37 +619,6 @@ function AgentConversationWorkspace({
     setCreateDialogOpen(true)
   }
 
-  const prepareContextRecovery = async (): Promise<void> => {
-    const recovery = session.contextRecovery
-    const bridge = getSynapseBridge()?.agent
-    if (!bridge || recovery?.status !== "required") return
-    try {
-      await bridge.prepareContextRecovery({
-        projectId: target.projectId,
-        conversationId: target.conversationId,
-        failedTurnId: recovery.failedTurnId,
-      })
-    } finally {
-      await chat.refresh()
-    }
-  }
-
-  const continueContextRecovery = async (): Promise<void> => {
-    const recovery = session.contextRecovery
-    const bridge = getSynapseBridge()?.agent
-    if (!bridge || recovery?.status !== "prepared") return
-    stick.forcePin()
-    try {
-      await bridge.continueContextRecovery({
-        projectId: target.projectId,
-        conversationId: target.conversationId,
-        failedTurnId: recovery.failedTurnId,
-      })
-    } finally {
-      await chat.refresh()
-    }
-  }
-
   const workspacePanels = useMemo(() => [{
     id: "agent.file-diff" as const,
     title: () => "审查文件",
@@ -836,10 +804,6 @@ function AgentConversationWorkspace({
         onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
           chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
         onContinue={() => void submitContent("继续", { preserveDraft: true })}
-        contextRecovery={session.contextRecovery}
-        onPrepareContextRecovery={prepareContextRecovery}
-        onContinueContextRecovery={continueContextRecovery}
-        onCreateConversation={() => openCreateDialog()}
         viewportRef={stick.viewportRef}
         loadingOlder={chat.loadingOlder}
         hasMore={chat.timelineHasMore}

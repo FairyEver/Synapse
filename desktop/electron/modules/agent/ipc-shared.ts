@@ -94,13 +94,11 @@ const agentErrorKindSchema = z.enum([
   "connection_interrupted",
   "tool_use_interrupted",
   "webfetch_preflight_failed",
-  "request_body_too_large",
-  "context_refill_thrashing",
   "renderer_unavailable",
 ])
 const agentTurnDiagnosticSchema = z.object({
   source: z.enum(["claude-sdk", "agent-runtime", "process-runner"]),
-  kind: z.enum(["aborted", "closed", "connection_interrupted", "error", "tool_use_interrupted", "request_body_too_large", "context_refill_thrashing", "renderer_unavailable"]),
+  kind: z.enum(["aborted", "closed", "connection_interrupted", "error", "tool_use_interrupted", "renderer_unavailable"]),
   message: z.string().optional(),
   recoverable: z.boolean().optional(),
 })
@@ -131,7 +129,7 @@ const agentTurnOutcomeSchema = z.discriminatedUnion("status", [
   }),
   z.object({
     status: z.literal("interrupted"),
-    reason: z.enum(["network_interrupted", "tool_use_interrupted", "request_body_too_large", "context_refill_thrashing", "renderer_unavailable"]),
+    reason: z.enum(["network_interrupted", "tool_use_interrupted", "renderer_unavailable"]),
     recoverable: z.literal(true),
     message: z.string(),
     diagnostics: z.array(agentTurnDiagnosticSchema).optional(),
@@ -172,27 +170,11 @@ const agentToolResultContentDiagnosticsSchema = z.object({
   imageCount: z.number().int().nonnegative(),
   images: z.array(agentToolResultImageDiagnosticSchema),
 })
-const agentModelContextReferenceSchema = z.object({
-  providerScopeId: z.string().min(1),
-  modelId: z.string().min(1),
-  contextWindowTokens: z.number().int().positive(),
-  maxInputTokens: z.number().int().positive().optional(),
-  maxOutputTokens: z.number().int().positive().optional(),
-  reasoningMaxInputTokens: z.number().int().positive().optional(),
-  reasoningMaxOutputTokens: z.number().int().positive().optional(),
-  maxReasoningTokens: z.number().int().positive().optional(),
-  sourceLabel: z.string().min(1),
-  sourceUrl: z.string().url(),
-  verifiedAt: z.string().datetime(),
-})
 export const agentContextUsageSchema = z.object({
   usedTokens: z.number().int().nonnegative(),
   contextWindowTokens: z.number().int().positive().optional(),
-  autoCompactWindowTokens: z.number().int().positive().optional(),
   autoCompactThresholdTokens: z.number().int().positive().optional(),
   model: z.string().min(1).optional(),
-  modelContext: agentModelContextReferenceSchema.optional(),
-  contextWindowConfigurationSource: z.enum(["catalog", "provider-env"]).optional(),
 })
 export const agentUserQuestionOptionSchema = z.object({
   label: z.string(),
@@ -214,16 +196,7 @@ export const agentUserQuestionResolutionSchema = z.object({
     values: z.array(z.string()),
   })).optional(),
 })
-const taskCompletionSchema = z.object({
-  status: z.enum(["unverified", "partial", "coverage-complete"]),
-  revision: z.number().int().nonnegative(), declaredUnits: z.number().int().nonnegative(),
-  coveredUnits: z.number().int().nonnegative(), processedUnits: z.number().int().nonnegative(),
-  // Records written before mutation evidence existed carry no mutatedUnits field.
-  mutatedUnits: z.number().int().nonnegative().default(0),
-  conflictingFindings: z.number().int().nonnegative(), semanticCorrectness: z.literal("unverified"),
-})
 const resultMetadataSchema = z.object({
-  taskCompletion: taskCompletionSchema.optional(),
   mainThreadPersona: z.object({
     id: z.string(),
     name: z.string(),
@@ -337,7 +310,6 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     errorKind: agentErrorKindSchema.optional(),
     recoverable: z.boolean().optional(),
     turnOutcome: agentTurnOutcomeSchema.optional(),
-    taskCompletion: taskCompletionSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -411,14 +383,6 @@ export const sessionSummarySchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   lastMessage: timelineItemSchema.optional(),
-  contextRecovery: z.object({
-    status: z.enum(["required", "prepared", "failed"]),
-    reason: z.enum(["request_body_too_large", "context_refill_thrashing"]),
-    failedTurnId: z.string(),
-    createdAt: z.string(),
-    preparedAt: z.string().optional(),
-    failedAt: z.string().optional(),
-  }).optional(),
 })
 
 // ─── Shared helper functions ──────────────────────────────────────────────────
@@ -540,7 +504,6 @@ export function sessionSummary(session: ConversationEntryV1, historyCount = sess
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     lastMessage: last ? historyEntry(session.id, last, historyCount - 1, session.agentType) : undefined,
-    contextRecovery: session.contextRecovery,
   }
 }
 
@@ -750,7 +713,6 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     errorKind: agentErrorKindSchema.optional(),
     recoverable: z.boolean().optional(),
     turnOutcome: agentTurnOutcomeSchema.optional(),
-    taskCompletion: taskCompletionSchema.optional(),
     usage: jsonRecordSchema.optional(),
     modelUsage: jsonRecordSchema.optional(),
     sdkResultUuid: z.string().optional(),

@@ -16,14 +16,10 @@ import {
   resolveBundledClaudeExecutable,
 } from "../../services/agent-runtime/claude-runtime-binary"
 import { resolveTierModelFromEnv } from "../../services/agent-runtime/provider-model-tier"
-import { resolveModelContextConfiguration } from "../../services/model-capability/catalog"
 import { resolveProjectAgent } from "./ipc-shared"
 
 const CLAUDE_CODE_TERMINAL_TITLE = "Claude Code"
 const LAUNCH_DIRECTORY_PATTERN = /^synapse-claude-code-[A-Za-z0-9]{6}$/
-
-// `@synapse/shared` is ESM-only, so the main process reaches its values through a dynamic import.
-const sharedModelContextPromise = import("@synapse/shared")
 
 /**
  * Removes launch directories left behind by a previous app process. They hold provider
@@ -96,26 +92,9 @@ export const claudeCodeTerminalMethods: Record<string, IpcMethodDescriptor> = {
         projectId: request.projectId,
       })
       const tierModel = resolveTierModelFromEnv(providerEnv, request.modelTier)
-      const provider = await providerService.getProvider(request.providerId).catch(() => undefined)
-      const { ONE_M_CONTEXT_TOKENS, hasOneMMarker } = await sharedModelContextPromise
-      const effectiveModel = tierModel ?? providerEnv.ANTHROPIC_MODEL
-      // Claude Code assumes an unknown custom model is 200k, so pin the window Synapse knows. A
-      // `[1m]` on the model name is the user's explicit per-role declaration, so it outranks both
-      // the Provider-wide window and the model catalog.
-      const contextWindowTokens = effectiveModel !== undefined && hasOneMMarker(effectiveModel)
-        ? ONE_M_CONTEXT_TOKENS
-        : resolveModelContextConfiguration({
-          baseUrl: providerEnv.ANTHROPIC_BASE_URL
-            ?? (provider?.category === "official" ? "https://api.anthropic.com" : undefined),
-          modelId: effectiveModel,
-          configuredContextWindow: providerEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS,
-        }).contextWindowTokens
       const environment = {
         ...providerEnv,
         ...(tierModel ? { ANTHROPIC_MODEL: tierModel } : {}),
-        ...(contextWindowTokens !== undefined
-          ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(contextWindowTokens) }
-          : {}),
         DISABLE_AUTOUPDATER: "1",
       }
       // The user's own ~/.claude/settings.json env outranks the process env, so the selected
