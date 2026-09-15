@@ -20,6 +20,12 @@ export type DriveChangeAppendInput = {
   readonly userId: string
   readonly itemId: string
   readonly parentId: string | null
+  /**
+   * Parent before the change, for moves. `parentId` is the post-move parent, so an item moved out
+   * of a folder is no longer matched by id-based scoping — this is what still ties it to the folder
+   * it came from.
+   */
+  readonly previousParentId?: string | null
   readonly type: DriveChangeType
   readonly versionId?: string | null
   readonly etag?: string | null
@@ -46,6 +52,7 @@ export class DriveChangeLogService {
         userId: input.userId,
         itemId: input.itemId,
         parentId: input.parentId,
+        previousParentId: input.previousParentId ?? null,
         type: input.type,
         versionId: input.versionId ?? null,
         etag: input.etag ?? null,
@@ -189,7 +196,13 @@ async function driveChangeScopeWhere(
   if (rootItemId) {
     conditions.push({ itemId: rootItemId }, { parentId: rootItemId })
     const scopedFolderIds = await resolveFolderIds(rootItemId)
-    if (scopedFolderIds.length > 0) conditions.push({ parentId: { in: scopedFolderIds } })
+    if (scopedFolderIds.length > 0) {
+      conditions.push({ parentId: { in: scopedFolderIds } })
+      // An item moved out of the scope keeps its post-move `parentId` (outside the subtree), so
+      // without this it would only be reachable through the path-hint clause below — which cannot
+      // match when the client's hint is a bare leaf name.
+      conditions.push({ previousParentId: { in: scopedFolderIds } })
+    }
   }
   if (rootPathHint) {
     conditions.push(

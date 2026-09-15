@@ -1389,6 +1389,7 @@ export class DriveService implements OnApplicationBootstrap {
         userId,
         itemId: next.id,
         parentId: next.parentId,
+        previousParentId: item.parentId,
         type: "moved",
         name: next.name,
         pathHint: previousPathHint,
@@ -1916,6 +1917,7 @@ export class DriveService implements OnApplicationBootstrap {
       const targetParent = move.targetParentId ? await this.requireOwnedFolder(userId, move.targetParentId) : null
       return {
         ...move,
+        previousParentId: item.parentId,
         pathHint: `/${await this.resolveOwnedItemPath(userId, item)}`,
         currentPathHint: targetParent ? `/${await this.resolveOwnedItemPath(userId, targetParent)}/${move.name}` : `/${move.name}`,
       }
@@ -1930,6 +1932,7 @@ export class DriveService implements OnApplicationBootstrap {
           userId,
           itemId: move.itemId,
           parentId: move.targetParentId,
+          previousParentId: move.previousParentId,
           type: "moved",
           name: move.name,
           pathHint: move.pathHint,

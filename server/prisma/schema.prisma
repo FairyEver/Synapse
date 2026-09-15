@@ -450,6 +450,8 @@ model DriveChange {
   itemId     String
   item       DriveItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
   parentId   String?
+  /// Parent before a move; keeps items moved out of a folder reachable by that folder's scope.
+  previousParentId String?
   type       String    @db.VarChar(32)
   versionId  String?
   etag       String?
@@ -461,6 +463,7 @@ model DriveChange {
   @@index([userId, sequence])
   @@index([itemId, sequence])
   @@index([userId, itemId, sequence])
+  @@index([userId, previousParentId, sequence])
   @@index([occurredAt])
 }
 
