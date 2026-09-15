@@ -347,7 +347,7 @@ describe("DriveSyncService", () => {
         accountService: {
           listDriveChanges,
           listDriveItemTree: vi.fn(async () => ({
-            items: [{ id: "remote-cloud", name: "cloud.md", type: "file", path: "/Docs/cloud.md", size: "6" }],
+            items: [{ id: "remote-cloud", parentId: "drive-root", name: "cloud.md", type: "file", path: "/Docs/cloud.md", size: "6" }],
             nextOffset: null,
           })),
         },
@@ -2088,17 +2088,17 @@ describe("DriveSyncService", () => {
               if (offset === 3) {
                 return {
                   items: [
-                    { id: "remote-gitignore", name: ".gitignore", type: "file", path: "Docs/.gitignore", depth: 1, size: "9" },
-                    { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/notes/spec.md", depth: 2, size: "4" },
+                    { id: "remote-gitignore", parentId: "remote-docs", name: ".gitignore", type: "file", path: "Docs/.gitignore", depth: 1, size: "9" },
+                    { id: "remote-spec", parentId: "remote-notes", name: "spec.md", type: "file", path: "Docs/notes/spec.md", depth: 2, size: "4" },
                   ],
                   nextOffset: null,
                 }
               }
               return {
                 items: [
-                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/notes", depth: 1, size: "0" },
-                  { id: "remote-more", name: "more", type: "folder", path: "Docs/more", depth: 1, size: "0" },
-                  { id: "remote-readme", name: "readme.md", type: "file", path: "Docs/more/readme.md", depth: 2, size: "6" },
+                  { id: "remote-notes", parentId: "remote-docs", name: "notes", type: "folder", path: "Docs/notes", depth: 1, size: "0" },
+                  { id: "remote-more", parentId: "remote-docs", name: "more", type: "folder", path: "Docs/more", depth: 1, size: "0" },
+                  { id: "remote-readme", parentId: "remote-more", name: "readme.md", type: "file", path: "Docs/more/readme.md", depth: 2, size: "6" },
                 ],
                 nextOffset: 3,
               }
@@ -2218,9 +2218,9 @@ describe("DriveSyncService", () => {
           getDriveItem: vi.fn(async () => ({ ...mockDriveItem("remote-docs"), name: "Docs", type: "folder", size: "0" })),
           listDriveItemTree: vi.fn(async () => ({
             items: [
-              { id: "remote-assets", name: "assets", type: "folder", path: "Docs/assets", depth: 0, size: "0" },
-              { id: "remote-logo", name: "logo.png", type: "file", path: "Docs/assets/logo.png", depth: 1, size: "3" },
-              { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/spec.md", depth: 0, size: "4" },
+              { id: "remote-assets", parentId: "remote-docs", name: "assets", type: "folder", path: "Docs/assets", depth: 0, size: "0" },
+              { id: "remote-logo", parentId: "remote-assets", name: "logo.png", type: "file", path: "Docs/assets/logo.png", depth: 1, size: "3" },
+              { id: "remote-spec", parentId: "remote-docs", name: "spec.md", type: "file", path: "Docs/spec.md", depth: 0, size: "4" },
             ],
             nextOffset: null,
           })),
@@ -2444,9 +2444,9 @@ describe("DriveSyncService", () => {
             }
             if (parentId === "remote-docs") {
               return { items: [
-                { id: "remote-root-readme", name: "README.md", type: "file", path: "Docs/README.md", depth: 1, size: "4" },
-                { id: "remote-docs-folder", name: "docs", type: "folder", path: "Docs/docs", depth: 1, size: "0" },
-                { id: "remote-nested-readme", name: "README.md", type: "file", path: "Docs/docs/README.md", depth: 2, size: "6" },
+                { id: "remote-root-readme", parentId: "remote-docs", name: "README.md", type: "file", path: "Docs/README.md", depth: 1, size: "4" },
+                { id: "remote-docs-folder", parentId: "remote-docs", name: "docs", type: "folder", path: "Docs/docs", depth: 1, size: "0" },
+                { id: "remote-nested-readme", parentId: "remote-docs-folder", name: "README.md", type: "file", path: "Docs/docs/README.md", depth: 2, size: "6" },
               ] }
             }
             return { items: [] }
@@ -2485,11 +2485,11 @@ describe("DriveSyncService", () => {
           listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
             if (parentId === "remote-docs") {
               return { items: [
-                { id: "remote-git", name: ".git", type: "folder", path: "Docs/.git", size: "0" },
-                { id: "remote-git-config", name: "config", type: "file", path: "Docs/.git/config", size: "17" },
-                { id: "remote-notes", name: "notes", type: "folder", path: "Docs/notes", size: "0" },
-                { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/notes/spec.md", size: "11" },
-                { id: "remote-readme", name: "readme.md", type: "file", path: "Docs/readme.md", size: "13" },
+                { id: "remote-git", parentId: "remote-docs", name: ".git", type: "folder", path: "Docs/.git", size: "0" },
+                { id: "remote-git-config", parentId: "remote-git", name: "config", type: "file", path: "Docs/.git/config", size: "17" },
+                { id: "remote-notes", parentId: "remote-docs", name: "notes", type: "folder", path: "Docs/notes", size: "0" },
+                { id: "remote-spec", parentId: "remote-notes", name: "spec.md", type: "file", path: "Docs/notes/spec.md", size: "11" },
+                { id: "remote-readme", parentId: "remote-docs", name: "readme.md", type: "file", path: "Docs/readme.md", size: "13" },
               ] }
             }
             return { items: [] }
@@ -2534,9 +2534,9 @@ describe("DriveSyncService", () => {
           listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
             if (parentId === "remote-docs") {
               return { items: [
-                { id: "remote-assets", name: "assets", type: "folder", path: "Projects/Docs/assets", size: "0" },
-                { id: "remote-logo", name: "logo.txt", type: "file", path: "Projects/Docs/assets/logo.txt", size: "4" },
-                { id: "remote-spec", name: "spec.md", type: "file", path: "Projects/Docs/spec.md", size: "4" },
+                { id: "remote-assets", parentId: "remote-docs", name: "assets", type: "folder", path: "Projects/Docs/assets", size: "0" },
+                { id: "remote-logo", parentId: "remote-assets", name: "logo.txt", type: "file", path: "Projects/Docs/assets/logo.txt", size: "4" },
+                { id: "remote-spec", parentId: "remote-docs", name: "spec.md", type: "file", path: "Projects/Docs/spec.md", size: "4" },
               ] }
             }
             return { items: [] }
@@ -2585,8 +2585,8 @@ describe("DriveSyncService", () => {
           listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
             if (parentId === "remote-docs") {
               return { items: [
-                { id: "remote-readme-1", name: "Readme.md", type: "file", path: "Docs/Readme.md", size: "11" },
-                { id: "remote-readme-2", name: "README.md", type: "file", path: "Docs/README.md", size: "13" },
+                { id: "remote-readme-1", parentId: "remote-docs", name: "Readme.md", type: "file", path: "Docs/Readme.md", size: "11" },
+                { id: "remote-readme-2", parentId: "remote-docs", name: "README.md", type: "file", path: "Docs/README.md", size: "13" },
               ] }
             }
             return { items: [] }
@@ -2653,7 +2653,7 @@ describe("DriveSyncService", () => {
         accountService: {
           listDriveItemTree: vi.fn(async ({ parentId }: { parentId?: string | null }) => {
             if (parentId === "remote-docs") {
-              return { items: [{ id: "remote-readme", name: "readme.md", type: "file", path: "Docs/readme.md", size: "13" }] }
+              return { items: [{ id: "remote-readme", parentId: "remote-docs", name: "readme.md", type: "file", path: "Docs/readme.md", size: "13" }] }
             }
             return { items: [] }
           }),
@@ -3016,7 +3016,7 @@ describe("DriveSyncService", () => {
     }
   })
 
-  it("stops a full rescan instead of materializing cloud ancestor paths when the binding hint is a bare name", async () => {
+  it("resolves a full rescan for a bare-name binding hint without materializing cloud ancestor paths", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     const leaf = "流程-撤销已通过审批"
     const cloudChain = `公司文档镜像/系统/平台/设计文档/${leaf}`
@@ -3078,9 +3078,61 @@ describe("DriveSyncService", () => {
         })
       }
 
+      // The bare hint must no longer matter: the cloud location comes from the parentId chain.
+      await expect(service.rescanBinding(binding.id)).resolves.toBeUndefined()
+
+      // The cloud ancestors must not be materialized locally, and nothing may be moved or uploaded.
+      await expect(readdir(localRoot)).resolves.toEqual(expect.arrayContaining(fileNames))
+      await expect(readdir(localRoot)).resolves.toHaveLength(fileNames.length)
+      await expect(readFile(path.join(localRoot, fileNames[0]), "utf8")).resolves.toBe(`content of ${fileNames[0]}`)
+      await expect(lstat(path.join(localRoot, "公司文档镜像"))).rejects.toThrow()
+      const operations = (await harness.operations.list()).filter((operation) => operation.kind !== "resync")
+      expect(operations).toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("stops a full rescan when a cloud entry cannot be placed under the binding root", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    const leaf = "流程-撤销已通过审批"
+    try {
+      const localRoot = path.join(tempDir, leaf)
+      await mkdir(localRoot, { recursive: true })
+      await writeFile(path.join(localRoot, "测试清单.md"), "content", "utf8")
+
+      const harness = createHarness({
+        accountService: {
+          getDriveItem: vi.fn(async () => ({ ...mockDriveItem("remote-root"), type: "folder" as const, name: leaf, size: "0" })),
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{
+              id: "remote-orphan",
+              // Ancestor is not part of the subtree, so the chain never reaches the binding root.
+              parentId: "remote-somewhere-else",
+              name: "测试清单.md",
+              type: "file",
+              path: `${leaf}/测试清单.md`,
+              size: "7",
+            }],
+          })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-root",
+        driveItemName: leaf,
+        drivePathHint: leaf,
+        kind: "folder",
+        localPath: localRoot,
+        remoteCursor: "100",
+        excludeRules: [],
+        deferWatcher: true,
+      })
+
       await expect(service.rescanBinding(binding.id)).rejects.toThrow("无法确定云盘条目")
 
-      // The user must be told, rather than left with a silently corrupted folder.
+      // The user must be told, and the local folder must be left untouched — in particular an
+      // unresolvable entry must never be read as "deleted on the cloud".
       await expect(service.getSnapshot()).resolves.toMatchObject({
         bindings: [expect.objectContaining({
           id: binding.id,
@@ -3088,16 +3140,11 @@ describe("DriveSyncService", () => {
           lastError: expect.stringContaining("无法确定云盘条目"),
         })],
       })
-
-      // The local folder must be left exactly as it was — no nested cloud chain.
-      await expect(readdir(localRoot)).resolves.toEqual(expect.arrayContaining(fileNames))
-      await expect(readdir(localRoot)).resolves.toHaveLength(fileNames.length)
-      await expect(readFile(path.join(localRoot, fileNames[0]), "utf8")).resolves.toBe(`content of ${fileNames[0]}`)
-      await expect(lstat(path.join(localRoot, "公司文档镜像"))).rejects.toThrow()
+      await expect(readdir(localRoot)).resolves.toEqual(["测试清单.md"])
+      await expect(readFile(path.join(localRoot, "测试清单.md"), "utf8")).resolves.toBe("content")
       const operations = await harness.operations.list()
       expect(operations.map((operation) => operation.kind)).not.toContain("move_local")
       expect(operations.map((operation) => operation.kind)).not.toContain("upload")
-      // Nothing may be treated as remotely deleted just because it failed to resolve.
       expect(operations.map((operation) => operation.kind)).not.toContain("delete_local")
     } finally {
       await rm(tempDir, { recursive: true, force: true })
@@ -3170,6 +3217,59 @@ describe("DriveSyncService", () => {
       await expect(lstat(path.join(localRoot, "公司文档镜像"))).rejects.toThrow()
       const operations = (await harness.operations.list()).filter((operation) => operation.kind !== "resync")
       expect(operations).toEqual([])
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it("reconciles instead of replaying remote changes when the binding hint is stale", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      await writeFile(path.join(tempDir, "spec.md"), "local", "utf8")
+      const listDriveChanges = vi.fn(async () => ({
+        items: [],
+        nextCursor: "42",
+        hasMore: false,
+        resyncRequired: false,
+      }))
+      const harness = createHarness({
+        accountService: {
+          // The bound folder actually lives under 公司文档镜像, but the binding only recorded the
+          // bare leaf name — exactly the state the MCP dispatcher used to write.
+          getDriveItem: vi.fn(async (itemId: string) => ({
+            ...mockDriveItem(itemId),
+            type: "folder" as const,
+            size: "0",
+            name: itemId === "remote-mirror" ? "公司文档镜像" : "Docs",
+            parentId: itemId === "remote-mirror" ? null : "remote-mirror",
+          })),
+          listDriveChanges,
+          listDriveItemTree: vi.fn(async () => ({ items: [] })),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-docs",
+        driveItemName: "Docs",
+        drivePathHint: "Docs",
+        kind: "folder",
+        localPath: tempDir,
+        remoteCursor: "41",
+        excludeRules: [],
+        deferWatcher: true,
+      })
+
+      await expect(service.pollRemoteChanges(binding.id)).resolves.toBeUndefined()
+
+      // The binding adopts the real location, and the round reconciles rather than replaying the
+      // change feed against a local tree that had been drifting.
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({
+        drivePathHint: "/公司文档镜像/Docs",
+        driveItemId: "remote-docs",
+      })
+      await expect(harness.operations.list()).resolves.toContainEqual(
+        expect.objectContaining({ bindingId: binding.id, kind: "resync", status: "succeeded" }),
+      )
     } finally {
       await rm(tempDir, { recursive: true, force: true })
     }
@@ -3740,8 +3840,8 @@ describe("DriveSyncService", () => {
             if (parentId === "remote-project") {
               return {
                 items: [
-                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/Project/notes" },
-                  { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/notes/spec.md" },
+                  { id: "remote-notes", parentId: "remote-project", name: "notes", type: "folder", path: "Docs/Project/notes" },
+                  { id: "remote-spec", parentId: "remote-notes", name: "spec.md", type: "file", path: "Docs/Project/notes/spec.md" },
                 ],
                 nextOffset: null,
               }
@@ -3824,8 +3924,8 @@ describe("DriveSyncService", () => {
             if (parentId === "remote-project") {
               return {
                 items: [
-                  { id: "remote-notes", name: "notes", type: "folder", path: "Docs/Project/notes" },
-                  { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/notes/spec.md" },
+                  { id: "remote-notes", parentId: "remote-project", name: "notes", type: "folder", path: "Docs/Project/notes" },
+                  { id: "remote-spec", parentId: "remote-notes", name: "spec.md", type: "file", path: "Docs/Project/notes/spec.md" },
                 ],
                 nextOffset: null,
               }
@@ -4087,7 +4187,9 @@ describe("DriveSyncService", () => {
               id: "change-1",
               sequence: "43",
               itemId: "remote-spec",
-              parentId: "drive-root",
+              // The containing folder is intentionally absent from the baseline, so the change is
+              // placed by its path hint rather than by the parent link.
+              parentId: "remote-linked",
               type: "content_updated",
               versionId: null,
               etag: null,

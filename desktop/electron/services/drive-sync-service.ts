@@ -57,6 +57,7 @@ import {
   localPathIdentitiesOverlap,
   normalizeLocalPath,
   pathCollisionKey,
+  relativePathByRemoteItemId,
   writeDriveSyncFileTarget,
 } from "./drive-sync-paths"
 import {
@@ -94,6 +95,9 @@ type DriveSyncRemoteTreeEntry = {
   readonly type: DriveItemDto["type"]
   readonly path: string
   readonly size: string
+  // Real parent link. Relative paths are derived by walking this up to the binding root, so the
+  // result does not depend on how `drivePathHint` happens to be spelled.
+  readonly parentId: string | null
 }
 
 export interface DriveSyncAccountService {
@@ -280,6 +284,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   const pendingRemoteEchoes = new Map<string, PendingRemoteEcho[]>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const fullRescanBindingIds = new Set<string>()
+  // Verifying a binding's location costs one request per ancestor, and polling runs every 30s, so
+  // a verified location is trusted for a while instead of being re-walked on every poll.
+  const verifiedRootHintChecks = new Map<string, { readonly signature: string; readonly checkedAtMs: number }>()
   let storageReadyPromise: Promise<void> | null = null
   let stopAccountListener: (() => void) | null = null
   let stopBeforeIdentityChangeListener: (() => void) | null = null
@@ -489,6 +496,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   }
 
   async function removeBinding(id: string): Promise<void> {
+    verifiedRootHintChecks.delete(id)
     await workCoordinator.cancelAndRun(id, async () => {
       await clearBindingState(id)
       await updateBindingStatus(id, "removed")
@@ -590,11 +598,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       hashFiles: false,
     })
     const remoteEntries = await listAllRemoteTreeEntries(next.driveItemId)
+    const remoteRelativePaths = relativePathByRemoteItemId(remoteEntries, next.driveItemId)
     const candidates = [
       ...localEntries.map((entry) => ({ relativePath: entry.relativePath, kind: entry.kind })),
       ...remoteEntries.flatMap((entry) => {
-        const relativePath = normalizeRemoteTreePath(entry.path, next.driveItemName, next.drivePathHint)
-        return relativePath === null ? [] : [{ relativePath, kind: entry.type }]
+        const relativePath = remoteRelativePaths.get(entry.id)
+        return relativePath === undefined ? [] : [{ relativePath, kind: entry.type }]
       }),
     ]
     return [...new Set(candidates
@@ -651,12 +660,84 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
   }
 
+  /**
+   * Rebuilds an item's absolute path by walking the live parent chain, mirroring the server's own
+   * resolution. Returns null when the path cannot be established.
+   */
+  async function resolveRemoteItemAbsolutePath(itemId: string): Promise<string | null> {
+    if (!deps.accountService.getDriveItem) return null
+    const names: string[] = []
+    const visited = new Set<string>()
+    let currentId: string | null = itemId
+    while (currentId) {
+      if (visited.has(currentId) || visited.size >= MAX_REMOTE_ANCESTOR_DEPTH) return null
+      visited.add(currentId)
+      let item: DriveItemDto
+      try {
+        item = await deps.accountService.getDriveItem(currentId)
+      } catch {
+        return null
+      }
+      names.unshift(item.name)
+      currentId = item.parentId ?? null
+    }
+    return names.join("/")
+  }
+
+  /**
+   * Brings the stored `drivePathHint` back in line with where the bound item actually lives.
+   *
+   * Returns true when it was stale, which callers must treat as "reconcile before syncing". The
+   * hint is the binding's entire notion of location, so once it is wrong every path decision taken
+   * from it — and any backlog the feed would replay — is untrustworthy.
+   */
+  async function refreshBindingRootPathHint(binding: DriveSyncBindingEntryV1): Promise<boolean> {
+    if (binding.kind !== "folder") return false
+    // A binding still initializing has just been reconciled against the live tree, so its hint is
+    // already consistent and forcing another reconciliation would only duplicate that work.
+    if (binding.status === "initializing" || binding.initialPhase !== null) return false
+    const signature = `${binding.driveItemId}|${binding.drivePathHint ?? ""}`
+    const nowMs = (deps.now?.() ?? new Date()).getTime()
+    const previous = verifiedRootHintChecks.get(binding.id)
+    if (previous && previous.signature === signature && nowMs - previous.checkedAtMs < ROOT_HINT_RECHECK_INTERVAL_MS) {
+      return false
+    }
+    const livePath = await resolveRemoteItemAbsolutePath(binding.driveItemId)
+    if (!livePath) return false
+    if (normalizeRemoteTreePathSegments(binding.drivePathHint ?? "") === livePath) {
+      verifiedRootHintChecks.set(binding.id, { signature, checkedAtMs: nowMs })
+      return false
+    }
+    const current = await requireBinding(binding.id)
+    if (current.driveItemId !== binding.driveItemId) return false
+    await deps.bindings.upsert({
+      ...current,
+      drivePathHint: `/${livePath}`,
+      driveItemName: path.posix.basename(livePath),
+      updatedAt: timestamp(),
+    })
+    await emitChanged()
+    return true
+  }
+
   async function pollActiveBindingRemoteChanges(binding: DriveSyncBindingEntryV1, throwOnRootIssue: boolean): Promise<void> {
     const rootReady = await ensureBindingRootReady(binding, {
       checkRemote: true,
       throwOnIssue: throwOnRootIssue,
     })
     if (!rootReady) return
+    if (await refreshBindingRootPathHint(binding)) {
+      // The bound folder is not where the binding thinks it is. Reconcile both sides first: the
+      // change feed would otherwise replay whatever backlog accumulated while the hint was wrong
+      // onto a local tree that has been drifting for exactly that long.
+      if (!fullRescanBindingIds.has(binding.id)) {
+        await fullRescanBinding(await requireBinding(binding.id))
+        return
+      }
+      // Already inside a full rescan for this binding, which has just reconciled both sides —
+      // continue with the refreshed hint rather than starting a second run from inside the first.
+      binding = await requireBinding(binding.id)
+    }
     const baseline = await baselineStore.listByBinding(binding.id)
     let localChanges: readonly DriveSyncLocalChange[]
     try {
@@ -1021,8 +1102,6 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       if (input.kind === "folder") {
         await assertRemoteFolderTreeLocallyRepresentable({
           driveItemId: input.driveItemId,
-          driveItemName: input.driveItemName,
-          drivePathHint: input.drivePathHint ?? null,
           excludeRules: createBindingExcludeRules(input.excludeRules ?? [], importedGitignoreRules, input.useDefaultExcludes),
         })
       }
@@ -1057,7 +1136,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         } else if (input.kind === "file" && input.direction === "local_to_remote") {
           binding = await updateBindingDriveItemId(binding.id, await uploadInitialFile(binding, input.targetParentId ?? null))
         } else if (input.kind === "folder" && input.direction === "remote_to_local") {
-          await downloadInitialFolder(binding, input.drivePathHint ?? null)
+          await downloadInitialFolder(binding)
         } else if (input.kind === "folder" && input.direction === "local_to_remote") {
           binding = await updateBindingDriveItemId(binding.id, await uploadInitialFolder(binding, input.targetParentId ?? null, input.drivePathHint ?? null))
         }
@@ -1408,16 +1487,17 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       hashFiles: input.hashFiles,
     })
     const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
+    const remoteRelativePaths = relativePathByRemoteItemId(remoteEntries, input.driveItemId)
     const remoteByPath = new Map(
       remoteEntries
         .flatMap((entry) => {
-          const relativePath = normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint)
-          return relativePath === null ? [] : [[relativePath, entry] as const]
+          const relativePath = remoteRelativePaths.get(entry.id)
+          return relativePath === undefined ? [] : [[relativePath, entry] as const]
         })
         .filter(([relativePath, entry]) => !isDriveSyncExcluded(relativePath, input.excludeRules, entry.type)),
     )
     const localByPath = new Map(localEntries.map((entry) => [entry.relativePath, entry]))
-    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemName, input.excludeRules, input.drivePathHint)
+    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemId, input.excludeRules)
 
     const differences: string[] = []
     for (const local of localEntries) {
@@ -1500,15 +1580,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
     const rules = createBindingExcludeRules(input.excludeRules ?? [], preview.importedGitignoreRules, input.useDefaultExcludes)
     const remoteEntries = await listAllRemoteTreeEntries(input.driveItemId)
-    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemName, rules, input.drivePathHint)
+    assertNoRemoteFolderPathCollisions(remoteEntries, input.driveItemId, rules)
+    const remoteRelativePaths = relativePathByRemoteItemId(remoteEntries, input.driveItemId)
     const entries: DriveSyncInitialTransferPreviewEntryDto[] = [{
       action: "create_local_folder",
       relativePath: ".",
       size: null,
     }]
     for (const entry of remoteEntries) {
-      const relativePath = normalizeRemoteTreePath(entry.path, input.driveItemName, input.drivePathHint)
-      if (!relativePath || isDriveSyncExcluded(relativePath, rules, entry.type)) continue
+      const relativePath = remoteRelativePaths.get(entry.id)
+      if (relativePath === undefined || !relativePath || isDriveSyncExcluded(relativePath, rules, entry.type)) continue
       entries.push({
         action: entry.type === "file" ? "download_file" : "create_local_folder",
         relativePath,
@@ -1803,7 +1884,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
   }
 
-  async function downloadInitialFolder(binding: DriveSyncBindingDto, drivePathHint?: string | null): Promise<void> {
+  async function downloadInitialFolder(binding: DriveSyncBindingDto): Promise<void> {
     const operation = await recordOperation({
       bindingId: binding.id,
       kind: "download",
@@ -1817,8 +1898,6 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await createDriveSyncDirectoryTarget(binding.localPath, binding.localPath)
     await assertRemoteFolderTreeLocallyRepresentable({
       driveItemId: binding.driveItemId,
-      driveItemName: binding.driveItemName,
-      drivePathHint,
       excludeRules: binding.excludeRules,
     })
     await baselineStore.upsert({
@@ -1833,7 +1912,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       localHash: null,
       deletedAt: null,
     })
-    await downloadRemoteFolderTree(binding, drivePathHint, operation.id)
+    await downloadRemoteFolderTree(binding, operation.id)
     await recordOperation({
       id: operation.id,
       bindingId: binding.id,
@@ -1850,23 +1929,23 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function downloadRemoteFolderTree(
     binding: DriveSyncBindingDto,
-    drivePathHint?: string | null,
     operationRecordId?: string,
   ): Promise<void> {
     const remoteEntries = await listAllRemoteTreeEntries(binding.driveItemId)
     const baselineByPath = new Map((await baselineStore.listByBinding(binding.id)).map((entry) => [entry.relativePath, entry] as const))
-    assertNoRemoteFolderPathCollisions(remoteEntries, binding.driveItemName, binding.excludeRules, drivePathHint)
+    assertNoRemoteFolderPathCollisions(remoteEntries, binding.driveItemId, binding.excludeRules)
+    const remoteRelativePaths = relativePathByRemoteItemId(remoteEntries, binding.driveItemId)
     let completedBytes = 0
     const totalBytes = remoteEntries.reduce((total, item) => {
-      const relativePath = normalizeRemoteTreePath(item.path, binding.driveItemName, drivePathHint)
-      return !relativePath || item.type !== "file" || isDriveSyncExcluded(relativePath, binding.excludeRules, item.type)
+      const relativePath = remoteRelativePaths.get(item.id)
+      return relativePath === undefined || !relativePath || item.type !== "file" || isDriveSyncExcluded(relativePath, binding.excludeRules, item.type)
         ? total
         : total + safeRemoteFileSize(item.size)
     }, 0)
     let progressWrites = Promise.resolve()
     for (const item of remoteEntries) {
-      const relativePath = normalizeRemoteTreePath(item.path, binding.driveItemName, drivePathHint)
-      if (!relativePath || isDriveSyncExcluded(relativePath, binding.excludeRules, item.type)) continue
+      const relativePath = remoteRelativePaths.get(item.id)
+      if (relativePath === undefined || !relativePath || isDriveSyncExcluded(relativePath, binding.excludeRules, item.type)) continue
       const localPath = path.join(binding.localPath, relativePath)
       if (item.type === "folder") {
         const current = await inspectDriveSyncLocalPath(localPath)
@@ -1964,11 +2043,9 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
 
   async function assertRemoteFolderTreeLocallyRepresentable(input: {
     readonly driveItemId: string
-    readonly driveItemName: string
-    readonly drivePathHint?: string | null
     readonly excludeRules: DriveSyncBindingEntryV1["excludeRules"]
   }): Promise<void> {
-    assertNoRemoteFolderPathCollisions(await listAllRemoteTreeEntries(input.driveItemId), input.driveItemName, input.excludeRules, input.drivePathHint)
+    assertNoRemoteFolderPathCollisions(await listAllRemoteTreeEntries(input.driveItemId), input.driveItemId, input.excludeRules)
   }
 
   async function assertLocalFolderTreeFullySyncable(
@@ -2109,7 +2186,6 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     await recordUploadedFolderBaseline({
       binding,
       remoteRootId,
-      drivePathHint,
       localEntries: snapshot,
     })
     await createMissingUploadedFolders({
@@ -2134,14 +2210,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
   async function recordUploadedFolderBaseline(input: {
     readonly binding: DriveSyncBindingDto
     readonly remoteRootId: string
-    readonly drivePathHint: string | null
     readonly localEntries: readonly { readonly relativePath: string; readonly kind: "file" | "folder"; readonly size: number | null; readonly mtimeMs: number | null; readonly hash: string | null }[]
   }): Promise<void> {
     const remoteEntries = await listAllRemoteTreeEntries(input.remoteRootId)
+    const remoteRelativePaths = relativePathByRemoteItemId(remoteEntries, input.remoteRootId)
     const localByPath = new Map(input.localEntries.map((entry) => [entry.relativePath, entry]))
     for (const item of remoteEntries) {
-      const relativePath = normalizeRemoteTreePath(item.path, input.binding.driveItemName, input.drivePathHint)
-      if (relativePath === null) continue
+      const relativePath = remoteRelativePaths.get(item.id)
+      if (relativePath === undefined) continue
       const localEntry = localByPath.get(relativePath)
       if (!localEntry) continue
       await baselineStore.upsert({
@@ -2271,11 +2347,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       .find((entry) => entry.relativePath === rootRelativePath && entry.deletedAt === null)!)
 
     const remoteEntries = remoteRoot ? await listAllRemoteTreeEntries(remoteRootId) : []
-    const remoteRootName = remoteRoot?.name ?? path.basename(localRootPath)
+    const remoteRelativePaths = relativePathByRemoteItemId(remoteEntries, remoteRootId)
     const remoteByPath = new Map<string, DriveSyncRemoteTreeEntry>()
     for (const remote of remoteEntries) {
-      const relativeWithinRoot = normalizeRemoteTreePath(remote.path, remoteRootName, conflict.remotePathHint)
-      if (relativeWithinRoot === null) continue
+      const relativeWithinRoot = remoteRelativePaths.get(remote.id)
+      if (relativeWithinRoot === undefined) continue
       const relativePath = rootRelativePath
         ? path.posix.join(rootRelativePath, relativeWithinRoot)
         : relativeWithinRoot
@@ -2735,6 +2811,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       type: root.type,
       path: binding.drivePathHint ?? root.name,
       size: root.size,
+      // Synthetic root: it is the walk terminator and never resolves through its own parentId.
+      parentId: root.parentId ?? null,
     }
     return binding.kind === "folder"
       ? [rootEntry, ...await listAllRemoteTreeEntries(binding.driveItemId)]
@@ -2805,15 +2883,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     const remoteByPath = new Map<string, DriveSyncRemoteTreeEntry>()
     const remoteById = new Map<string, DriveSyncRemoteTreeEntry>()
     const remotePathById = new Map<string, string>()
+    const remoteRelativePaths = relativePathByRemoteItemId(input.remoteEntries, input.binding.driveItemId)
     for (const remote of input.remoteEntries) {
-      const relativePath = remote.id === input.binding.driveItemId
-        ? ""
-        : normalizeRemoteTreePath(remote.path, input.binding.driveItemName, input.binding.drivePathHint)
+      const relativePath = remoteRelativePaths.get(remote.id)
       // Fail closed rather than skip. Dropping an unresolved entry would leave it out of
       // remoteById, and the baseline sweep below reads a missing remote id as "deleted on the
       // cloud" and plans a delete_local for it — turning "could not resolve this path" into
       // "delete the user's file". Aborting the whole scan is the only safe outcome here.
-      if (relativePath === null) throw new Error(UNRESOLVED_REMOTE_TREE_PATH_MESSAGE)
+      if (relativePath === undefined) throw new Error(UNRESOLVED_REMOTE_TREE_PATH_MESSAGE)
       if (isDriveSyncExcluded(relativePath, input.binding.excludeRules, remote.type)) continue
       remoteByPath.set(relativePath, remote)
       remoteById.set(remote.id, remote)
@@ -3684,7 +3761,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
     if (binding.initialDirection === "remote_to_local") {
       if (binding.kind === "file") await downloadInitialFile(toBindingDto(binding))
-      else await downloadInitialFolder(toBindingDto(binding), binding.drivePathHint)
+      else await downloadInitialFolder(toBindingDto(binding))
       await updateBindingInitialization(binding.id, "replay", binding.initialCursor ?? null)
       await finishRecoveredInitialization(binding.id)
       return
@@ -4389,6 +4466,7 @@ function toRemoteTreeEntry(item: Partial<DriveItemTreeListPageDto["items"][numbe
     type: item.type,
     path: item.path,
     size: item.size,
+    parentId: item.parentId ?? null,
   }
 }
 
@@ -4505,28 +4583,13 @@ function normalizeConflictRelativePath(relativePath: string): string {
   return normalized === "." ? "" : normalized
 }
 
-/**
- * Maps a cloud entry's absolute path onto a path relative to the binding root.
- *
- * Returns `null` when no known root matches. Returning the input unchanged (as this used to do)
- * silently turned an absolute cloud path into something that *looked* like a relative path, so
- * callers happily created a local directory chain mirroring the cloud ancestors. Callers must
- * treat `null` as "unresolved": skip the entry, or abort the operation — never guess.
- */
-function normalizeRemoteTreePath(remotePath: string, rootName: string, rootPath?: string | null): string | null {
-  const normalized = normalizeRemoteTreePathSegments(remotePath)
-  const roots = [rootPath, rootName]
-    .map((candidate) => normalizeRemoteTreePathSegments(candidate ?? ""))
-    .filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index)
-  for (const root of roots) {
-    if (normalized === root) return ""
-    const rootPrefix = `${root}/`
-    if (normalized.startsWith(rootPrefix)) return normalized.slice(rootPrefix.length)
-  }
-  return null
-}
-
 const UNRESOLVED_REMOTE_TREE_PATH_MESSAGE = "无法确定云盘条目在同步目录中的相对路径，已停止本次完整校验。"
+
+/** Guards the live ancestor walk against cycles and absurd nesting. */
+const MAX_REMOTE_ANCESTOR_DEPTH = 256
+
+/** How long a verified binding location is trusted before it is walked again. */
+const ROOT_HINT_RECHECK_INTERVAL_MS = 10 * 60_000
 
 function normalizeRemoteTreePathSegments(value: string): string {
   return value.split(/[\\/]+/u).filter(Boolean).join("/")
@@ -4538,14 +4601,14 @@ function driveItemNameFromPathHint(pathHint: string, fallback: string): string {
 
 function assertNoRemoteFolderPathCollisions(
   remoteEntries: readonly DriveSyncRemoteTreeEntry[],
-  rootName: string,
+  rootItemId: string,
   excludeRules: DriveSyncBindingEntryV1["excludeRules"],
-  rootPath?: string | null,
 ): void {
+  const remoteRelativePaths = relativePathByRemoteItemId(remoteEntries, rootItemId)
   const seen = new Map<string, string>()
   for (const item of remoteEntries) {
-    const relativePath = normalizeRemoteTreePath(item.path, rootName, rootPath)
-    if (!relativePath || isDriveSyncExcluded(relativePath, excludeRules, item.type)) continue
+    const relativePath = remoteRelativePaths.get(item.id)
+    if (relativePath === undefined || !relativePath || isDriveSyncExcluded(relativePath, excludeRules, item.type)) continue
     assertDriveSyncLocalRelativePathPortable(relativePath)
     const key = pathCollisionKey(relativePath)
     const existing = seen.get(key)

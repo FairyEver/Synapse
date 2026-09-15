@@ -480,6 +480,85 @@ describe("drive sync planner", () => {
       }),
     ])
   })
+
+  it("places a remote change under a bare-name binding hint using the parent link", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "流程-撤销已通过审批" }),
+      baseline: [],
+      changes: [remoteChange({
+        itemId: "remote-new",
+        type: "content_updated",
+        parentId: "drive-root",
+        name: "新增.md",
+        pathHint: null,
+      })],
+    })
+
+    // The hint is a bare leaf name, so only the parent link can place this file.
+    expect(result.operations).toEqual([
+      expect.objectContaining({ kind: "download", relativePath: "新增.md" }),
+    ])
+  })
+
+  it("places a change under a folder the baseline already knows", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "流程-撤销已通过审批" }),
+      baseline: [baseline({ relativePath: "a", remoteItemId: "remote-a", kind: "folder" })],
+      changes: [remoteChange({
+        itemId: "remote-new",
+        type: "content_updated",
+        parentId: "remote-a",
+        name: "新增.md",
+        pathHint: null,
+      })],
+    })
+
+    expect(result.operations).toEqual([
+      expect.objectContaining({ kind: "download", relativePath: "a/新增.md" }),
+    ])
+  })
+
+  it("keeps the new path for a rename even though the baseline knows the old one", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "流程-撤销已通过审批" }),
+      baseline: [
+        baseline({ relativePath: "a", remoteItemId: "remote-a", kind: "folder" }),
+        baseline({ relativePath: "a/x.md", remoteItemId: "remote-x" }),
+      ],
+      changes: [remoteChange({
+        itemId: "remote-x",
+        type: "renamed",
+        parentId: "remote-a",
+        name: "y.md",
+        pathHint: "/流程-撤销已通过审批/a/x.md",
+        currentPathHint: "/流程-撤销已通过审批/a/y.md",
+      })],
+    })
+
+    // Preferring the baseline path here would plan a no-op move and silently drop the rename.
+    expect(result.operations).toEqual([
+      expect.objectContaining({ kind: "move_local", relativePath: "a/y.md", driveItemId: "remote-x" }),
+    ])
+  })
+
+  it("deletes locally when a remote item is moved outside the binding root", () => {
+    const result = planDriveSyncRemoteChanges({
+      binding: binding({ drivePathHint: "流程-撤销已通过审批" }),
+      baseline: [baseline({ relativePath: "spec.md", remoteItemId: "remote-spec" })],
+      changes: [remoteChange({
+        itemId: "remote-spec",
+        type: "moved",
+        parentId: "remote-archive",
+        name: "spec.md",
+        pathHint: "/流程-撤销已通过审批/spec.md",
+        currentPathHint: "/Archive/spec.md",
+      })],
+    })
+
+    expect(result.operations).toEqual([
+      expect.objectContaining({ kind: "delete_local", relativePath: "spec.md" }),
+    ])
+  })
 })
 
 function binding(input: Partial<DriveSyncBindingEntryV1> = {}): DriveSyncBindingEntryV1 {
@@ -544,12 +623,13 @@ function remoteChange(input: Pick<DriveChangeDto, "itemId" | "type"> & {
   readonly currentPathHint?: string | null
   readonly name?: string | null
   readonly itemKind?: DriveChangeDto["itemKind"]
+  readonly parentId?: string | null
 }): DriveChangeDto {
   return {
     id: `change:${input.itemId}`,
     sequence: "42",
     itemId: input.itemId,
-    parentId: null,
+    parentId: input.parentId ?? null,
     type: input.type,
     versionId: null,
     etag: null,

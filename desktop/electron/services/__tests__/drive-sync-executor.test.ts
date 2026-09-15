@@ -128,8 +128,8 @@ describe("drive sync executor", () => {
         if (parentId === "remote-project") {
           return {
             items: [
-              { id: "remote-docs", name: "docs", type: "folder", path: "Docs/Project/docs" },
-              { id: "remote-spec", name: "spec.md", type: "file", path: "Docs/Project/docs/spec.md" },
+              { id: "remote-docs", parentId: "remote-project", name: "docs", type: "folder", path: "Docs/Project/docs" },
+              { id: "remote-spec", parentId: "remote-docs", name: "spec.md", type: "file", path: "Docs/Project/docs/spec.md" },
             ],
             nextOffset: null,
           }
@@ -162,6 +162,52 @@ describe("drive sync executor", () => {
     await expect(namespace.list()).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ relativePath: "Project", remoteItemId: "remote-project", kind: "folder" }),
       expect.objectContaining({ relativePath: "Project/docs", remoteItemId: "remote-docs", kind: "folder" }),
+      expect.objectContaining({ relativePath: "Project/docs/spec.md", remoteItemId: "remote-spec", kind: "file" }),
+    ]))
+  })
+
+  it("resolves descendants whose parent is returned on an earlier page", async () => {
+    const namespace = createMemoryNamespace<DriveSyncBaselineEntryV1>()
+    const bindingEntry = binding({ localPath: tempDir })
+    const accountService = createAccountService({
+      listDriveItemTree: vi.fn(async ({ parentId, offset }: { parentId?: string | null; offset?: number | null }) => {
+        if (parentId !== "remote-project") return { items: [], nextOffset: null }
+        // The parent folder lands on the first page; its child only on the second.
+        if (!offset) {
+          return {
+            items: [{ id: "remote-docs", parentId: "remote-project", name: "docs", type: "folder", path: "Docs/Project/docs" }],
+            nextOffset: 5,
+          }
+        }
+        return {
+          items: [{ id: "remote-spec", parentId: "remote-docs", name: "spec.md", type: "file", path: "Docs/Project/docs/spec.md" }],
+          nextOffset: null,
+        }
+      }),
+      downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+        await writeFile(outputPath, itemId, "utf8")
+        return { ok: true as const, path: outputPath }
+      }),
+    })
+
+    await executeDriveSyncOperation({
+      binding: bindingEntry,
+      operation: operation({
+        kind: "download",
+        relativePath: "Project",
+        driveItemId: "remote-project",
+        localPath: path.join(tempDir, "Project"),
+        remoteItemKind: "folder",
+        remotePathHint: "/Docs/Project",
+      }),
+      baselineStore: createDriveSyncBaselineStore({ baseline: namespace, now: fixedNow }),
+      accountService,
+      recordOperation: async () => ({ id: "operation-1" }),
+      trashLocalPath: vi.fn(),
+    })
+
+    await expect(readFile(path.join(tempDir, "Project", "docs", "spec.md"), "utf8")).resolves.toBe("remote-spec")
+    await expect(namespace.list()).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ relativePath: "Project/docs/spec.md", remoteItemId: "remote-spec", kind: "file" }),
     ]))
   })

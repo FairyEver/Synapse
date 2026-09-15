@@ -18,6 +18,7 @@ import {
   assertNoSymlinkPathComponents,
   driveSyncLocalWriteRootPath,
   prepareDriveSyncTargetPath,
+  relativePathByRemoteItemId,
   writeDriveSyncFileTarget,
 } from "./drive-sync-paths"
 
@@ -180,90 +181,104 @@ async function downloadFolderDescendants(
     readonly operationRecordId: string
   },
 ): Promise<void> {
-  const rootName = path.basename(input.rootLocalPath)
-  let completedBytes = 0
-  let totalBytes = 0
-  let progressWrites = Promise.resolve()
-  const unresolvedItemNames: string[] = []
+  // Accumulate the whole subtree before resolving any path: a parent may sit on an earlier page,
+  // so per-page resolution would fail to place its children.
+  const rows: DownloadTreeItem[] = []
   let offset: number | null = 0
   while (offset !== null) {
     const page = await deps.accountService.listDriveItemTree({ parentId: input.rootDriveItemId, offset, limit: 200 })
-    for (const item of page.items) {
-      const relativePath = downloadedFolderChildRelativePath(input.rootRelativePath, rootName, item.path ?? item.name, deps.operation.remotePathHint)
-      if (relativePath === null) {
-        unresolvedItemNames.push(item.name)
-        continue
-      }
-      if (!relativePath || isDriveSyncExcluded(relativePath, deps.binding.excludeRules, item.type)) continue
-      const localPath = path.join(deps.binding.localPath, relativePath)
-      markSelfWrite(deps, relativePath)
-      if (item.type === "folder") {
-        await createDriveSyncDirectoryTarget(driveSyncLocalWriteRootPath(deps.binding), localPath)
-        const stats = await lstat(localPath)
-        await deps.baselineStore.upsert({
-          bindingId: deps.binding.id,
-          relativePath,
-          kind: "folder",
-          remoteItemId: item.id,
-          remoteVersionId: null,
-          remoteEtag: null,
-          localSize: null,
-          localMtimeMs: stats.mtimeMs,
-          localHash: null,
-          deletedAt: null,
-        })
-        continue
-      }
-      const declaredSize = safeByteSize(item.size)
-      totalBytes += declaredSize
-      if (!deps.skipLocalPrecondition) await assertLocalTargetStillAtBaseline(deps, localPath, relativePath)
-      let writtenPath: string
-      try {
-        writtenPath = await writeDriveSyncFileTarget(
-          driveSyncLocalWriteRootPath(deps.binding),
-          localPath,
-          (outputPath) => deps.accountService.downloadDriveFile({
-            itemId: item.id,
-            outputPath,
-            signal: deps.signal,
-            onProgress: (fileCompletedBytes, fileTotalBytes) => {
-              progressWrites = progressWrites.then(() => deps.recordOperation({
-                id: input.operationRecordId,
-                bindingId: deps.binding.id,
-                kind: deps.operation.kind,
-                status: "running",
-                driveItemId: input.rootDriveItemId,
-                relativePath: deps.operation.relativePath,
-                localPath: input.rootLocalPath,
-                remotePathHint: deps.operation.remotePathHint,
-                remoteItemKind: "folder",
-                completedBytes: completedBytes + fileCompletedBytes,
-                totalBytes: Math.max(totalBytes, completedBytes + fileTotalBytes),
-              })).then(() => undefined)
-            },
-          }),
-        )
-      } finally {
-        await progressWrites
-      }
-      const stats = await lstat(writtenPath)
-      completedBytes += Math.max(declaredSize, stats.size)
-      totalBytes = Math.max(totalBytes, completedBytes)
-      await progressWrites
+    for (const item of page.items) rows.push({ ...item, parentId: item.parentId ?? null })
+    offset = page.nextOffset ?? null
+  }
+
+  const relativePaths = relativePathByRemoteItemId(rows, input.rootDriveItemId)
+  const unresolvedItemNames: string[] = []
+  const targets: Array<{ readonly item: DownloadTreeItem; readonly relativePath: string }> = []
+  for (const item of rows) {
+    const relativeToDownloadRoot = relativePaths.get(item.id)
+    if (relativeToDownloadRoot === undefined) {
+      unresolvedItemNames.push(item.name)
+      continue
+    }
+    // The download root can itself sit inside the binding, so rebase onto the binding root.
+    const relativePath = [input.rootRelativePath, relativeToDownloadRoot].filter(Boolean).join("/")
+    if (!relativePath || isDriveSyncExcluded(relativePath, deps.binding.excludeRules, item.type)) continue
+    targets.push({ item, relativePath })
+  }
+
+  let completedBytes = 0
+  let progressWrites = Promise.resolve()
+  let totalBytes = targets.reduce(
+    (total, target) => target.item.type === "file" ? total + safeByteSize(target.item.size) : total,
+    0,
+  )
+  for (const { item, relativePath } of targets) {
+    const localPath = path.join(deps.binding.localPath, relativePath)
+    markSelfWrite(deps, relativePath)
+    if (item.type === "folder") {
+      await createDriveSyncDirectoryTarget(driveSyncLocalWriteRootPath(deps.binding), localPath)
+      const stats = await lstat(localPath)
       await deps.baselineStore.upsert({
         bindingId: deps.binding.id,
         relativePath,
-        kind: "file",
+        kind: "folder",
         remoteItemId: item.id,
         remoteVersionId: null,
         remoteEtag: null,
-        localSize: stats.size,
+        localSize: null,
         localMtimeMs: stats.mtimeMs,
-        localHash: await hashDriveSyncFile(writtenPath),
+        localHash: null,
         deletedAt: null,
       })
+      continue
     }
-    offset = page.nextOffset ?? null
+    const declaredSize = safeByteSize(item.size)
+    if (!deps.skipLocalPrecondition) await assertLocalTargetStillAtBaseline(deps, localPath, relativePath)
+    let writtenPath: string
+    try {
+      writtenPath = await writeDriveSyncFileTarget(
+        driveSyncLocalWriteRootPath(deps.binding),
+        localPath,
+        (outputPath) => deps.accountService.downloadDriveFile({
+          itemId: item.id,
+          outputPath,
+          signal: deps.signal,
+          onProgress: (fileCompletedBytes, fileTotalBytes) => {
+            progressWrites = progressWrites.then(() => deps.recordOperation({
+              id: input.operationRecordId,
+              bindingId: deps.binding.id,
+              kind: deps.operation.kind,
+              status: "running",
+              driveItemId: input.rootDriveItemId,
+              relativePath: deps.operation.relativePath,
+              localPath: input.rootLocalPath,
+              remotePathHint: deps.operation.remotePathHint,
+              remoteItemKind: "folder",
+              completedBytes: completedBytes + fileCompletedBytes,
+              totalBytes: Math.max(totalBytes, completedBytes + fileTotalBytes),
+            })).then(() => undefined)
+          },
+        }),
+      )
+    } finally {
+      await progressWrites
+    }
+    const stats = await lstat(writtenPath)
+    completedBytes += Math.max(declaredSize, stats.size)
+    totalBytes = Math.max(totalBytes, completedBytes)
+    await progressWrites
+    await deps.baselineStore.upsert({
+      bindingId: deps.binding.id,
+      relativePath,
+      kind: "file",
+      remoteItemId: item.id,
+      remoteVersionId: null,
+      remoteEtag: null,
+      localSize: stats.size,
+      localMtimeMs: stats.mtimeMs,
+      localHash: await hashDriveSyncFile(writtenPath),
+      deletedAt: null,
+    })
   }
   // Skipped silently would leave the user with a partially downloaded folder and no explanation.
   // Record a diagnostic instead of throwing: the folder root baseline is already committed, and
@@ -282,6 +297,10 @@ async function downloadFolderDescendants(
       message: `已跳过 ${unresolvedItemNames.length} 个无法确定本地路径的云盘条目：${unresolvedItemNames.slice(0, 3).join("、")}`,
     })
   }
+}
+
+type DownloadTreeItem = Awaited<ReturnType<DriveSyncAccountService["listDriveItemTree"]>>["items"][number] & {
+  readonly parentId: string | null
 }
 
 function safeByteSize(value: string | undefined): number {
@@ -485,24 +504,6 @@ async function recordProgress(
     snapshotSize: snapshot.size,
     snapshotMtimeMs: snapshot.sourceMtimeMs,
   })
-}
-
-/**
- * Resolves a downloaded folder child onto a path relative to the binding root.
- *
- * Returns `null` when no known root prefix matches. Falling back to the raw remote path (as this
- * used to) nested the cloud ancestors inside the binding root and then uploaded them back.
- */
-function downloadedFolderChildRelativePath(rootRelativePath: string, rootName: string, remotePath: string, remotePathHint: string | null): string | null {
-  const normalizedRemotePath = remotePath.split(/[\\/]+/u).filter(Boolean).join("/")
-  const remoteRootPath = remotePathHint?.split(/[\\/]+/u).filter(Boolean).join("/") ?? ""
-  if (normalizedRemotePath === remoteRootPath || normalizedRemotePath === rootName) return rootRelativePath
-  const rootPrefixes = [remoteRootPath, rootName]
-    .filter(Boolean)
-    .map((value) => `${value}/`)
-  const matchedPrefix = rootPrefixes.find((prefix) => normalizedRemotePath.startsWith(prefix))
-  if (!matchedPrefix) return null
-  return [rootRelativePath, normalizedRemotePath.slice(matchedPrefix.length)].filter(Boolean).join("/")
 }
 
 async function deleteRemoteItem(deps: DriveSyncExecutorDeps): Promise<void> {

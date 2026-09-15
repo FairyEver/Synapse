@@ -288,7 +288,7 @@ export function planDriveSyncRemoteChanges(input: {
       .map((entry) => [entry.remoteItemId, entry] as const),
   )
   const localChangedPaths = input.localChangedPaths ?? new Set<string>()
-  const recursiveDownloadFolderRoots = recursiveDownloadFolderRelativePaths(input.binding, input.changes)
+  const recursiveDownloadFolderRoots = recursiveDownloadFolderRelativePaths(input.binding, input.changes, baselineByRemoteId)
   const operations: DriveSyncPlannedOperation[] = []
   const conflicts: DriveSyncPlannedConflict[] = []
 
@@ -297,8 +297,8 @@ export function planDriveSyncRemoteChanges(input: {
     if (input.binding.kind === "file" && !baseline && change.itemId !== input.binding.driveItemId) continue
     const hasCurrentPathHint = change.currentPathHint !== undefined && change.currentPathHint !== null
     const currentChange = currentPathChange(change)
-    const currentRelativePath = remoteRelativePath(input.binding, currentChange)
-    const previousRelativePath = remoteRelativePath(input.binding, change)
+    const currentRelativePath = remoteRelativePath(input.binding, currentChange, baselineByRemoteId)
+    const previousRelativePath = remoteRelativePath(input.binding, change, baselineByRemoteId)
     const isRemoteMoveOutsideRoot = change.type === "moved" && baseline && hasCurrentPathHint && currentRelativePath === null
     const relativePath = change.type === "renamed" || change.type === "moved"
       ? (hasCurrentPathHint ? currentRelativePath : previousRelativePath) ?? (isRemoteMoveOutsideRoot ? baseline.relativePath : null)
@@ -382,11 +382,12 @@ export function planDriveSyncRemoteChanges(input: {
 function recursiveDownloadFolderRelativePaths(
   binding: DriveSyncBindingEntryV1,
   changes: readonly DriveChangeDto[],
+  baselineByRemoteId: ReadonlyMap<string, DriveSyncBaselineEntryV1>,
 ): ReadonlySet<string> {
   const roots = new Set<string>()
   for (const change of changes) {
     if ((change.type !== "created" && change.type !== "restored") || change.itemKind !== "folder") continue
-    const relativePath = remoteRelativePath(binding, currentPathChange(change))
+    const relativePath = remoteRelativePath(binding, currentPathChange(change), baselineByRemoteId)
     if (relativePath === null || isDriveSyncExcluded(relativePath, binding.excludeRules, "folder")) continue
     roots.add(relativePath)
   }
@@ -451,9 +452,47 @@ function plannedConflict(input: {
   }
 }
 
-function remoteRelativePath(binding: DriveSyncBindingEntryV1, change: DriveChangeDto): string | null {
+function remoteRelativePath(
+  binding: DriveSyncBindingEntryV1,
+  change: DriveChangeDto,
+  baselineByRemoteId: ReadonlyMap<string, DriveSyncBaselineEntryV1>,
+): string | null {
   if (change.itemId === binding.driveItemId) return ""
   if (binding.kind === "file") return null
+  const structural = structuralRelativePath(binding, change, baselineByRemoteId)
+  if (structural !== null) return structural
+  return hintRelativePath(binding, change)
+}
+
+/**
+ * Places a change under the binding root using the entry's real parent link, so the result does not
+ * depend on how `drivePathHint` is spelled (the UI stores an absolute path, the MCP dispatcher
+ * stores a bare leaf name).
+ *
+ * One hop is enough: the parent is either the binding root itself, or an item the baseline already
+ * knows. Anything deeper arrives as a recursive folder download for its ancestor instead.
+ */
+function structuralRelativePath(
+  binding: DriveSyncBindingEntryV1,
+  change: DriveChangeDto,
+  baselineByRemoteId: ReadonlyMap<string, DriveSyncBaselineEntryV1>,
+): string | null {
+  if (binding.kind !== "folder") return null
+  const parentId = change.parentId
+  if (!parentId) return null
+  const name = change.name ?? path.posix.basename(normalizeDrivePath(change.currentPathHint ?? change.pathHint ?? ""))
+  if (!name || name === "." || name === "/") return null
+  if (parentId === binding.driveItemId) return name
+  const parent = baselineByRemoteId.get(parentId)
+  if (!parent || parent.kind !== "folder") return null
+  return parent.relativePath ? `${parent.relativePath}/${name}` : name
+}
+
+/**
+ * Strict prefix match, kept as the fallback for entries the parent chain cannot place. Never
+ * returns the raw path: doing so would hand callers a cloud path that merely looks relative.
+ */
+function hintRelativePath(binding: DriveSyncBindingEntryV1, change: DriveChangeDto): string | null {
   if (!change.pathHint || !binding.drivePathHint) return null
   const bindingPath = normalizeDrivePath(binding.drivePathHint)
   const changePath = normalizeDrivePath(change.pathHint)

@@ -83,6 +83,74 @@ export async function writeDriveSyncFileTarget(
   }
 }
 
+export interface DriveSyncRemotePathEntry {
+  readonly id: string
+  readonly name: string
+  readonly parentId: string | null
+}
+
+/**
+ * Derives every entry's path relative to `rootItemId` by walking the real `parentId` chain.
+ *
+ * This deliberately ignores the server's absolute `path` string and the binding's `drivePathHint`:
+ * both are strings that can disagree (the UI stores an absolute path, the MCP dispatcher stores a
+ * bare leaf name), and a mismatch used to produce a path that *looked* relative while actually
+ * containing the whole cloud ancestor chain — which then got materialized locally.
+ *
+ * `entries` must be the complete subtree, not one page: a parent may sit on an earlier page.
+ * Entries whose chain is broken, cycles, or whose names cannot form a portable path are omitted
+ * from the result rather than guessed at.
+ */
+export function relativePathByRemoteItemId(
+  entries: readonly DriveSyncRemotePathEntry[],
+  rootItemId: string,
+): ReadonlyMap<string, string> {
+  const byId = new Map(entries.map((entry) => [entry.id, entry] as const))
+  const resolved = new Map<string, string>([[rootItemId, ""]])
+  for (const entry of entries) {
+    if (entry.id === rootItemId) continue
+    resolve(entry.id)
+  }
+  return resolved
+
+  function resolve(id: string): string | undefined {
+    const cached = resolved.get(id)
+    if (cached !== undefined) return cached
+
+    const names: string[] = []
+    const ids: string[] = []
+    const visited = new Set<string>()
+    let current: string | null = id
+    let base: string | undefined
+    while (current !== null) {
+      if (visited.has(current)) return undefined
+      visited.add(current)
+      const known = resolved.get(current)
+      if (known !== undefined) {
+        base = known
+        break
+      }
+      const entry = byId.get(current)
+      if (!entry || !isSafeRemoteName(entry.name)) return undefined
+      names.push(entry.name)
+      ids.push(current)
+      current = entry.parentId
+    }
+    if (base === undefined) return undefined
+
+    let path = base
+    for (let index = names.length - 1; index >= 0; index -= 1) {
+      path = path ? `${path}/${names[index]}` : names[index]
+      resolved.set(ids[index], path)
+    }
+    return resolved.get(id)
+  }
+}
+
+function isSafeRemoteName(name: string): boolean {
+  return name.length > 0 && name !== "." && name !== ".." && !/[/\\]/u.test(name)
+}
+
 export function pathCollisionKey(relativePath: string): string {
   return toPosixPath(relativePath).normalize("NFC").toLowerCase()
 }
