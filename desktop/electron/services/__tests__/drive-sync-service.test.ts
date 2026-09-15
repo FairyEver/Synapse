@@ -3222,6 +3222,48 @@ describe("DriveSyncService", () => {
     }
   })
 
+  it("clears a stale error status after a successful full rescan", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
+    try {
+      const harness = createHarness({
+        accountService: {
+          listDriveItemTree: vi.fn(async () => ({
+            items: [{ id: "remote-spec", parentId: "remote-root", name: "spec.md", type: "file", path: "Docs/spec.md", size: "5" }],
+          })),
+          downloadDriveFile: vi.fn(async ({ outputPath }: { outputPath: string }) => {
+            await writeFile(outputPath, "local", "utf8")
+            return { ok: true as const, path: outputPath }
+          }),
+        },
+      })
+      const service = createDriveSyncService(harness.deps)
+      const binding = await service.createBinding({
+        driveItemId: "remote-root",
+        driveItemName: "Docs",
+        drivePathHint: "/Docs",
+        kind: "folder",
+        localPath: tempDir,
+        remoteCursor: "100",
+        excludeRules: [],
+        deferWatcher: true,
+      })
+      const stored = await harness.bindings.get(binding.id)
+      if (!stored) throw new Error("binding missing")
+      await harness.bindings.upsert({ ...stored, status: "error", lastError: "fetch failed" })
+
+      await expect(service.rescanBinding(binding.id)).resolves.toBeUndefined()
+
+      // An "error" binding is excluded from automatic sync, so a successful reconciliation has to
+      // release it — otherwise it stays parked until the user happens to press resume.
+      await expect(service.getSnapshot()).resolves.toMatchObject({
+        bindings: [expect.objectContaining({ id: binding.id, status: "active", lastError: null })],
+      })
+      await expect(readFile(path.join(tempDir, "spec.md"), "utf8")).resolves.toBe("local")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("reconciles instead of replaying remote changes when the binding hint is stale", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-sync-service-"))
     try {

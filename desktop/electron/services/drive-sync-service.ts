@@ -2754,6 +2754,12 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
         source: "manual",
         message: null,
       })
+      // A reconciliation that just succeeded proves the binding works again, so a stale error must
+      // not keep it parked: `isAutomaticallySyncableBinding` excludes "error", which is how a
+      // binding could sit dead for hours after an expired session was re-authenticated.
+      if ((await requireBinding(binding.id)).status === "error") {
+        await updateBindingStatus(binding.id, "active")
+      }
       const current = await requireBinding(binding.id)
       if (isAutomaticallySyncableBinding(current) || current.status === "initializing") {
         await pollActiveBindingRemoteChanges(current, true)
