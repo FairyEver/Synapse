@@ -299,14 +299,16 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         let usable = usableWidth
         collectionView.alwaysBounceHorizontal = gridWidth > usable
 
-        let widthRatio = usable > 0 ? usable / gridWidth : 0
-        let heightRatio = pane.height > 0 ? pane.height / gridHeight : 0
-        let widthIsTheLimit = widthRatio <= heightRatio
-
         collectionView.contentInset = UIEdgeInsets(
-            // Top-aligned when the width is what runs out; centred when it is the
-            // height, which is the landscape case.
-            top: widthIsTheLimit ? 0 : max(0, (pane.height - gridHeight) / 2),
+            // Centred on both axes, the way a photo sits in an album.
+            //
+            // It used to be pinned to the top whenever the width was what ran out,
+            // on the reasoning that a terminal's last lines are the ones being read.
+            // That is true of a terminal that fills the screen and false of one
+            // floating in the middle of it: the reader is looking at a picture of
+            // their computer, and a picture that is not where they expect it is
+            // worse than one they have to look slightly lower to find.
+            top: max(0, (pane.height - gridHeight) / 2),
             // A row is one cell of padding wider than its text on each side, so the
             // text sits one padding in from the row's own edge. A fitted row is
             // exactly as wide as the pane and this comes out at zero; it only lifts

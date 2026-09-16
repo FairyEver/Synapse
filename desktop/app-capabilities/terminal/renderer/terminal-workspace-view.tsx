@@ -990,21 +990,31 @@ function TerminalPane({
      * viewport lays over the right edge: without it the last column sits under it.
      */
     let remoteCanvasFrame: number | undefined
+    /**
+     * Whether the mount is currently wearing the phone's dimensions.
+     *
+     * A flag rather than the state alone: the fit has to know this *before* React has
+     * re-rendered, because that is exactly the window in which it would measure the
+     * wrong thing.
+     */
+    let remoteCanvasApplied = false
     const syncRemoteCanvas = () => {
       if (remoteCanvasFrame !== undefined) return
+      if (sessionRef.current.sizeOwner?.kind !== "mobile") {
+        remoteCanvasApplied = false
+        setRemoteCanvas((current) => (current === null ? current : null))
+        return
+      }
       // Measured on the next frame rather than now. A font-size change is applied by
       // xterm's own render pass, so reading the screen element in the same tick
       // would measure the size it is about to stop being.
       remoteCanvasFrame = requestAnimationFrame(() => {
         remoteCanvasFrame = undefined
         if (disposed) return
-
-        if (sessionRef.current.sizeOwner?.kind !== "mobile") {
-          setRemoteCanvas((current) => (current === null ? current : null))
-          return
-        }
+        if (sessionRef.current.sizeOwner?.kind !== "mobile") return
         const screen = container.querySelector<HTMLElement>(".xterm-screen")
         if (!screen || screen.offsetWidth === 0 || screen.offsetHeight === 0) return
+        remoteCanvasApplied = true
         const next = {
           width: screen.offsetWidth + TERMINAL_VIEWPORT_SCROLLBAR_PX,
           height: screen.offsetHeight,
@@ -1048,6 +1058,7 @@ function TerminalPane({
         releaseRequested: ownershipReleaseRequested,
         paneChanged,
       })
+      const canvasWasRemote = remoteCanvasApplied
       syncRemoteCanvas()
       if (decision === "hold") return
       if (decision === "release") {
@@ -1057,6 +1068,17 @@ function TerminalPane({
       }
       // No claim left, so a later one is free to preempt all over again.
       if (!owner) ownershipReleaseRequested = false
+
+      // The mount is still sized to the phone's grid, and React has not re-rendered to
+      // take that off it yet. Measuring it here proposes the phone's grid — which is
+      // the size the terminal already has — so the fit finds nothing to do, skips the
+      // resize, and the terminal keeps the phone's shape until some unrelated event
+      // happens to run the fit again. That is why taking the size back appeared to
+      // work only after clicking the terminal.
+      if (canvasWasRemote) {
+        requestAnimationFrame(() => syncTerminalGeometryRef.current?.(true))
+        return
+      }
 
       const proposed = fitAddon.proposeDimensions()
       const cols = proposed?.cols ?? xterm.cols
