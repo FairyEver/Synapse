@@ -79,7 +79,20 @@ const heartbeatIntervalMs = 20_000
 const heartbeatTimeoutMs = 45_000
 /** Only a cache of the last list sent; users past this simply get the next change. */
 const liveDesktopPresenceCacheLimit = 2_000
-export const liveDesktopMaxPayloadBytes = 16 * 1024
+/**
+ * Ceiling for one message a desktop sends. The summary is the largest of those and
+ * the only one that cannot be split — a phone replaces its whole list with whatever
+ * arrives — so this is derived from the summary's own budget rather than picked:
+ * it must clear `MOBILE_FRAME_LIMITS.maxSummaryBytes` with room for the envelope.
+ * That budget lives in `shared/src/mobile-live.ts` and is pinned by a boundary test
+ * there; the spec below checks this ceiling still clears it.
+ *
+ * Do not lower this without lowering that budget first. The two constants have no
+ * type-level link, and the failure they guard is quiet: an oversized message is
+ * answered by closing the connection, so the desktop simply vanishes from the phone
+ * as though it had gone offline.
+ */
+export const liveDesktopMaxPayloadBytes = 256 * 1024
 
 @Injectable()
 export class LiveDesktopGateway implements OnApplicationShutdown {

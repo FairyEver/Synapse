@@ -27,6 +27,13 @@ export const MOBILE_LIVE_HEARTBEAT_TIMEOUT_MS = 45_000
  * Phones send far less than desktops: a few intents and a keepalive, plus the
  * occasional pasted command. 32 KiB is generous for that while staying far below
  * what an abusive client could use to pin memory.
+ *
+ * This bounds what a phone may *send*. It deliberately does not bound the summary
+ * the cloud relays *to* a phone — `maxPayload` only applies to received messages,
+ * and the summary is the one thing a phone cannot afford to lose, since it replaces
+ * the whole list. That direction is governed by the desktop's own ceiling in
+ * `live/live-desktop.gateway.ts`; raising this one would loosen the inbound guard
+ * without unblocking a single byte of summary.
  */
 export const MOBILE_LIVE_MAX_PAYLOAD_BYTES = 32 * 1024
 

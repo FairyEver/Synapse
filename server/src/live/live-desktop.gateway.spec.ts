@@ -3,7 +3,7 @@ import type { IncomingMessage } from "node:http"
 import { Socket } from "node:net"
 import { Logger } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
-import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
+import { LIVE_MESSAGE_TYPES, MOBILE_FRAME_LIMITS } from "@synapse/shared"
 import {
   createLiveDesktopGatewayForTest,
   liveDesktopMaxPayloadBytes,
@@ -304,6 +304,17 @@ describe("LiveDesktopGateway", () => {
     expect(server.options.maxPayload).toBe(liveDesktopMaxPayloadBytes)
     expect(server.options.maxPayload).toBeLessThan(100 * 1024 * 1024)
     server.close()
+  })
+
+  it("leaves room for the largest summary a desktop can produce", () => {
+    // A summary arrives whole or not at all, so a ceiling below it does not truncate
+    // the list — it closes the socket and the desktop looks offline. The budget is
+    // the binding number; change it in `shared/src/mobile-live.ts` and raise this to
+    // match, never the other way round.
+    const envelopeAllowance = 4 * 1024
+    expect(liveDesktopMaxPayloadBytes).toBeGreaterThanOrEqual(
+      MOBILE_FRAME_LIMITS.maxSummaryBytes + envelopeAllowance,
+    )
   })
 
   it("registers a client after hello, sends welcome, responds to ping, and publishes events", () => {
