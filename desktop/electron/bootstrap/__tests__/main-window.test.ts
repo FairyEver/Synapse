@@ -59,6 +59,7 @@ const mocks = vi.hoisted(() => {
     app: {
       exit: vi.fn(),
       getVersion: () => "0.0.0-test",
+      isPackaged: false,
       relaunch: vi.fn(),
     },
     BrowserWindow,
@@ -71,6 +72,15 @@ import { createMainWindow, isDevToolsToggleShortcut } from "../main-window"
 vi.mock("electron", () => ({
   app: mocks.app,
   BrowserWindow: mocks.BrowserWindow,
+}))
+
+// Pinned so the title under test does not depend on which environment happened to
+// generate the config last — the file is rewritten by every dev/release run.
+vi.mock("../../generated/deployment-config.generated", () => ({
+  SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG: {
+    publicAppUrl: "http://localhost:3000",
+    apiBaseUrl: "http://localhost:3000/api",
+  },
 }))
 
 vi.mock("../../services/app-icon-service", () => ({
@@ -208,5 +218,34 @@ describe("createMainWindow close behavior", () => {
     expect(closeEvent.preventDefault).not.toHaveBeenCalled()
     expect(mocks.windows.at(-1)?.hide).not.toHaveBeenCalled()
     expect(mocks.windows.at(-1)?.setFullScreen).not.toHaveBeenCalled()
+  })
+})
+
+describe("createMainWindow title", () => {
+  it("shows the environment the app is actually configured for", () => {
+    const state = { current: null }
+    createMainWindow({ state, isAppQuitting: () => false })
+
+    expect(mocks.BrowserWindow).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: "Synapse AI Studio 0.0.0-test dev",
+    }))
+  })
+
+  it("keeps the renderer's own title from replacing it", () => {
+    const state = { current: null }
+    createMainWindow({ state, isAppQuitting: () => false })
+    const window = mocks.windows.at(-1)
+    const handler = window?.on.mock.calls
+      .find(([event]) => event === "page-title-updated")?.[1] as
+      | ((event: { preventDefault: () => void }) => void)
+      | undefined
+    expect(handler).toBeTypeOf("function")
+
+    const event = { preventDefault: vi.fn() }
+    handler?.(event)
+
+    // The page ships its own <title>, which would otherwise win on load and take
+    // the environment off the window — late enough to look like a flicker.
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
   })
 })

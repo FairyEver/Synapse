@@ -8,10 +8,12 @@
 import { app, BrowserWindow, dialog } from "electron"
 import path from "node:path"
 import { DEFAULT_WINDOW_BOUNDS } from "../../src/constants/defaults"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
 import { managedBrowserWindow, type WindowManager } from "../runtime/window"
 import { getWindowIconPath } from "../services/app-icon-service"
 import { createMainLogger } from "../services/log-store"
 import { RendererHealthService } from "../services/renderer-health"
+import { resolveWindowTitle } from "./window-title"
 
 const logger = createMainLogger("bootstrap.main-window")
 const healthLogger = createMainLogger("renderer-health")
@@ -45,7 +47,13 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
     minWidth,
     minHeight,
     show: false,
-    title: `Synapse AI Studio ${app.getVersion()}`,
+    // Reads the configuration the app actually connects with, so the suffix
+    // cannot disagree with where the traffic goes.
+    title: resolveWindowTitle({
+      version: app.getVersion(),
+      apiBaseUrl: SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.apiBaseUrl,
+      isPackaged: app.isPackaged,
+    }),
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, "..", "preload.js"),
@@ -93,6 +101,13 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
 
   window.webContents.on("preload-error", (_event, preloadPath, error) => {
     logger.error("Preload script failed.", { error })
+  })
+
+  // The renderer's own document title would replace this one as soon as the page
+  // loads, dropping both the version and the environment. It arrives late, so
+  // the loss would look like a flicker rather than a missing suffix.
+  window.on("page-title-updated", (event) => {
+    event.preventDefault()
   })
 
   attachDevelopmentInputShortcuts(window)
