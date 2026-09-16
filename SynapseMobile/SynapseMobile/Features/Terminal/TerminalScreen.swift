@@ -34,14 +34,12 @@ struct TerminalScreen: View {
             inputBar
         }
         .background(Theme.terminalBackground.ignoresSafeArea(edges: .bottom))
-        // The terminal canvas is a dark surface by nature — its colours come from
-        // the desktop's emulator, not from the app's theme. Leaving the chrome to
-        // follow the system puts a dark screen inside a light frame, which reads as
-        // a picture pasted onto paper. Pinning the colour scheme for this subtree
-        // keeps the whole screen one surface in either system appearance; the list
-        // and settings screens still follow the system.
-        .environment(\.colorScheme, .dark)
-        .modifier(DarkWindowWhileVisible())
+        // The canvas keeps its own dark surface — its colours come from the
+        // desktop's emulator and the fixed terminal palette, not from the app's
+        // theme — while the bars above and below it follow the system. Nothing
+        // here pins the colour scheme: a scene-level pin is inherited by the
+        // screen that comes next, which is what made leaving the terminal flash
+        // from dark to light.
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         // The terminal is the screen; a tab bar over a soft keyboard only
@@ -67,12 +65,6 @@ struct TerminalScreen: View {
     private var navigationBar: some View {
         HStack(spacing: 10) {
             Button {
-                // Hand the window back to the system *before* popping. The list is
-                // laid out as part of the pop, and if the window is still dark when
-                // that happens the list renders dark for its first frames and then
-                // switches — which is the flash. Waiting for `onDisappear` is too
-                // late: by then the incoming screen has already drawn.
-                DarkWindowWhileVisible.restore()
                 dismiss()
             } label: {
                 Image(systemName: "chevron.left")
@@ -201,45 +193,5 @@ struct TerminalScreen: View {
     private var statusColor: Color {
         guard let session else { return .secondary }
         return Theme.statusColor(isWaiting: session.attention.isWaiting, isRunning: session.isRunning)
-    }
-}
-
-/// Holds the window in the dark appearance for as long as this screen is up.
-///
-/// The terminal is a dark surface, and two things about it are decided by the
-/// scene rather than by this subtree: the status bar's text colour, and the
-/// material behind the navigation bar. `.environment(\.colorScheme, .dark)` only
-/// reaches the subtree, so on its own it leaves black status bar text and a light
-/// band across the top.
-///
-/// `preferredColorScheme(.dark)` does reach both, but it is a *scene* preference
-/// and it costs the screen that comes next: the incoming view is laid out while
-/// the terminal is still on screen, so whatever the scene's appearance is at that
-/// moment is what the new screen draws its first frames in. Leaving through
-/// `onDisappear` is too late for the same reason — measured on the simulator, the
-/// list still came up dark for about 150 ms and then switched.
-///
-/// So the window is handed back explicitly before the pop (see the back button),
-/// with `onDisappear` left as a safety net for any other way off this screen.
-private struct DarkWindowWhileVisible: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .onAppear { Self.apply(.dark) }
-            .onDisappear { Self.restore() }
-    }
-
-    static func restore() {
-        apply(.unspecified)
-    }
-
-    private static func apply(_ style: UIUserInterfaceStyle) {
-        let window = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first { $0.isKeyWindow }
-        guard let window, window.overrideUserInterfaceStyle != style else { return }
-        UIView.performWithoutAnimation {
-            window.overrideUserInterfaceStyle = style
-        }
     }
 }

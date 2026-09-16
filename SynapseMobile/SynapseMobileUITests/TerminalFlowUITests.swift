@@ -260,6 +260,41 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "12-deleted")
     }
 
+    /// Can the terminal be left without the back button?
+    ///
+    /// The screen hides the navigation bar, which historically disables the
+    /// interactive pop gesture — but "historically" is not "on this OS". If the
+    /// gesture does work, it is a second way off this screen, and any work tied to
+    /// the back button alone does not cover it.
+    func testWhetherTheTerminalCanBeLeftByEdgeSwipe() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        XCTAssertTrue(app.staticTexts["claude-code"].waitForExistence(timeout: 20), "session list never arrived")
+        app.staticTexts["claude-code"].tap()
+
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
+        capture(app, name: "19-terminal-before-edge-swipe")
+
+        // The system pop gesture: begin at the left edge and drag right.
+        let edge = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
+        edge.press(forDuration: 0.05, thenDragTo: edge.withOffset(CGVector(dx: 320, dy: 0)))
+        Thread.sleep(forTimeInterval: 1.0)
+        capture(app, name: "20-terminal-after-edge-swipe")
+
+        // Asserting the gesture does NOT pop. A failure here is the finding, not a
+        // broken test: it would mean this screen has two ways out.
+        XCTAssertTrue(
+            terminal.exists,
+            "EDGE SWIPE POPPED THE TERMINAL — there is an exit that never touches the back button"
+        )
+    }
+
     /// A tab holding more than one terminal is drawn as one block on the list.
     ///
     /// Run against the mock started with `--splits`; without it the desktop sends
