@@ -26,7 +26,7 @@ struct TerminalScreen: View {
             TerminalTextView(
                 store: store,
                 fontSize: fontSize,
-                revision: store.lastSeq,
+                revision: store.renderRevision,
                 onRequestHistory: { model.requestHistory(sessionId) },
                 onTap: { inputFocused = false }
             )

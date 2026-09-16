@@ -52,6 +52,15 @@ final class TerminalStore {
     private(set) var didTruncate = false
     private(set) var columns: Int = 80
     private(set) var lastSeq = 0
+
+    /// Drives the view re-applying what it holds.
+    ///
+    /// Deliberately more than the frame sequence. Rotating changes the wrap width
+    /// and re-wraps every row, but no new output arrives to announce it — and the
+    /// view is holding rows laid out for the previous width, cursor included, so
+    /// without this it keeps the old wrap until some later frame happens to land.
+    /// That is why a rotated terminal looked wrong only sometimes.
+    private(set) var renderRevision = 0
     /// The oldest line index this store holds; the cursor a history request sends.
     private(set) var oldestIndex = 0
     /// True once the desktop has said there is nothing older.
@@ -98,11 +107,13 @@ final class TerminalStore {
         guard newColumns != columns, newColumns > 0 else { return }
         columns = newColumns
         rebuildAllRows()
+        renderRevision += 1
     }
 
     func apply(_ frame: MobileTerminalFrame) {
         if frame.isHistory {
             applyHistory(frame)
+            renderRevision += 1
             return
         }
         isAlternateScreen = frame.alt
@@ -138,6 +149,7 @@ final class TerminalStore {
         trimToLimit()
         lastCursor = frame.cursor
         refreshCursorPosition()
+        renderRevision += 1
     }
 
     /// Maps the desktop's cursor onto the wrapped rows. Hidden, or pointing at a
