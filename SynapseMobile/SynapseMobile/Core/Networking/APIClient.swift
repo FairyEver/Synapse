@@ -293,7 +293,10 @@ actor APIClient {
             message: response.delivered ? nil : "电脑离线。",
             sessionId: nil,
             createdSessionId: nil,
-            landedPath: nil
+            landedPath: nil,
+            signedAsrUrl: nil,
+            asrVoiceId: nil,
+            asrExpiresAt: nil
         )
     }
 

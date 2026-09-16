@@ -13,4 +13,6 @@ enum AppLog {
     static let realtime = Logger(subsystem: subsystem, category: "realtime")
     /// Credentials and REST traffic.
     static let network = Logger(subsystem: subsystem, category: "network")
+    /// 语音输入：签名、连接、识别失败。
+    static let voice = Logger(subsystem: subsystem, category: "voice")
 }

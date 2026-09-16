@@ -90,5 +90,12 @@
 	-->
 	<key>NSCameraUsageDescription</key>
 	<string>拍一张照片发给电脑上的终端。</string>
+	<!--
+	  Only the microphone. The transcription happens in the cloud rather than on
+	  device, so the app never touches the system's speech recogniser and has no
+	  reason to ask for it.
+	-->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于把说的话转成文字填进终端输入框。</string>
 </dict>
 </plist>

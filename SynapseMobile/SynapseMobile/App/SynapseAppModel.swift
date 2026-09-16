@@ -434,6 +434,41 @@ final class SynapseAppModel {
         }
     }
 
+    /// Asks the computer for a signed realtime-ASR URL.
+    ///
+    /// The phone never sees the cloud key: the desktop signs the whole URL and this
+    /// connects with it as it arrives. Voice input belongs to no terminal, so the
+    /// intent carries no session id.
+    ///
+    /// Every call is a fresh signature and therefore a fresh voice id, which is what
+    /// the engine requires per connection — a retry after an interruption must come
+    /// back through here rather than reusing the last one.
+    func requestAsrSignature() async -> AsrSignOutcome {
+        // No banner here: the caller is the voice bar, which says what went wrong in
+        // place already. Two different sentences for one failure read as two.
+        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+            return .unreachable
+        }
+        let result = await awaitResult(
+            of: MobileIntentRequest(intentId: UUID().uuidString, kind: "asrSign"),
+            sentTo: desktop,
+            timeoutSeconds: 5
+        )
+        // 电脑上没配密钥是唯一一个用户改得动的原因，单独报出去；其余都归「没连上」。
+        if result?.code == "voice_not_configured" { return .notConfigured }
+        guard let result, result.isAccepted,
+              let raw = result.signedAsrUrl, let url = URL(string: raw),
+              let voiceId = result.asrVoiceId, !voiceId.isEmpty else {
+            AppLog.voice.warning("asr signature request refused: \(result?.code ?? "no_result", privacy: .public)")
+            return .unreachable
+        }
+        return .signed(AsrSignature(
+            url: url,
+            voiceId: voiceId,
+            expiresAt: result.asrExpiresAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+        ))
+    }
+
     func sendKey(_ sessionId: String, _ key: MobileKey) {
         Task {
             await write(MobileIntentRequest(

@@ -28,6 +28,7 @@ struct TerminalScreen: View {
     /// terminal that is waiting for input should really receive them.
     @State private var pendingFiles: [PickedFile] = []
     @State private var showingBusyConfirm = false
+    @State private var voice = VoiceInputController()
 
     private var store: TerminalStore { model.store(for: sessionId) }
     private var session: MobileSummarySession? { model.session(sessionId) }
@@ -125,7 +126,21 @@ struct TerminalScreen: View {
                 onRetry: { model.retryRelay($0) }
             )
             accessoryBar
-            inputBar
+            // Recording replaces the whole bar rather than hiding the keyboard: with
+            // no focusable view left on screen there is nothing for the keyboard to
+            // come up for.
+            if voice.isActive {
+                VoiceInputBar(
+                    transcript: voice.transcript,
+                    elapsed: voice.elapsed,
+                    phase: voice.phase,
+                    onRetry: { voice.retry() },
+                    onCancel: { voice.cancel() },
+                    onConfirm: { Task { await finishVoice() } }
+                )
+            } else {
+                inputBar
+            }
         }
         .background(Theme.terminalBackground.ignoresSafeArea(edges: .bottom))
         // The canvas keeps its own dark surface — its colours come from the
@@ -145,7 +160,18 @@ struct TerminalScreen: View {
         // costs vertical space and invites taps by accident.
         .toolbar(.hidden, for: .tabBar)
         .onAppear { model.openTerminal(sessionId) }
-        .onDisappear { model.closeTerminal(sessionId) }
+        .onDisappear {
+            // Leaving the screen ends the recording with it: a microphone left open
+            // behind a pushed-back list is the kind of thing that only gets noticed
+            // from the status bar.
+            voice.cancel()
+            model.closeTerminal(sessionId)
+        }
+        .onChange(of: voice.notice) { _, message in
+            guard let message else { return }
+            model.banner = message
+            voice.notice = nil
+        }
         .alert("重命名终端", isPresented: $showingRename) {
             TextField("名称", text: $renamingTitle)
             Button("取消", role: .cancel) {}
@@ -355,6 +381,18 @@ struct TerminalScreen: View {
                 .focused($inputFocused)
                 .onSubmit(sendDraft)
 
+            Button {
+                // Dropped before the bar swaps: the keyboard would otherwise be
+                // dismissed by a view that no longer exists.
+                inputFocused = false
+                voice.start { await model.requestAsrSignature() }
+            } label: {
+                Image(systemName: "mic")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Theme.ink)
+            }
+            .accessibilityIdentifier("voice-start")
+
             Button(action: sendDraft) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 26))
@@ -374,6 +412,15 @@ struct TerminalScreen: View {
         guard !text.isEmpty else { return }
         draft = ""
         model.sendCommand(sessionId, text: text)
+    }
+
+    /// Voice is only another way of filling `draft` — sending stays the arrow's job.
+    private func finishVoice() async {
+        guard let text = await voice.confirm() else { return }
+        // Appended rather than assigned: whatever was typed before the microphone
+        // was tapped is still the user's, and dictation after it reads as a
+        // continuation.
+        draft = draft.isEmpty ? text : draft + " " + text
     }
 
     // MARK: - Sending files to the computer

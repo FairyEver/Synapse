@@ -315,6 +315,15 @@ struct MobileIntentResult: Decodable {
     /// Set for `fileUpload`: where the file ended up on the computer. The phone
     /// cannot derive it, and needs it to undo the insertion it caused.
     let landedPath: String?
+    /// Set for `asrSign`: a ready-to-connect Tencent realtime-ASR URL that already
+    /// carries its signature, plus the voice id that goes with it. The key itself
+    /// never leaves the desktop, so this is the whole handshake the phone gets.
+    ///
+    /// Every connection needs a fresh `asrVoiceId`; an interrupted one is void.
+    let signedAsrUrl: String?
+    let asrVoiceId: String?
+    /// When the signature expires, epoch seconds. Ask for another one after that.
+    let asrExpiresAt: Int?
 
     var isAccepted: Bool { outcome == "accepted" }
     var isNoOp: Bool { outcome == "no_op" }
@@ -370,6 +379,13 @@ struct MobileIntentRequest: Encodable {
     /// and what it should call the result. See `shared/src/mobile-live.ts`.
     var driveItemId: String?
     var fileName: String?
+    /// Voice input. Not tied to a terminal — the signature needs no session
+    /// context — so this one carries no `sessionId`.
+    ///
+    /// Only the engine model is the phone's to choose; everything else about the
+    /// request is the desktop's to sign, and the URL that comes back is used as
+    /// it arrives rather than rebuilt here. See `shared/src/mobile-live.ts`.
+    var engineModelType: String?
 }
 
 struct MobileIntentPayloadOut: Encodable {

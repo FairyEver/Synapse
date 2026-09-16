@@ -32,10 +32,17 @@ export type VoiceServiceDeps = {
   readonly logger: VoiceLogger
 }
 
-/** 未配置腾讯云密钥。渲染进程据此把麦克风入口藏起来，不弹错误框。 */
+/**
+ * 未配置腾讯云密钥。渲染进程据此把麦克风入口藏起来，不弹错误框。
+ *
+ * 带 code 是因为它会经手机 intent 的结果回去：手机那边学不到"这台电脑配没配"，
+ * 只能从这次失败里知道。没有 code 就会退化成一句"操作没有完成"，用户无从下手。
+ */
 export class VoiceNotConfiguredError extends Error {
+  readonly code = "voice_not_configured"
+
   constructor() {
-    super("腾讯云语音识别未配置。")
+    super("电脑上还没有配置语音识别。")
     this.name = "VoiceNotConfiguredError"
   }
 }
