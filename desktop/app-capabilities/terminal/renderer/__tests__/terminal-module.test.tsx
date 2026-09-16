@@ -1575,6 +1575,31 @@ describe("TerminalModule", () => {
     expect(pending?.textContent).toContain("git status --short")
   })
 
+  /**
+   * 未定稿的文字还会变，必须和已定稿的部分在视觉上分开 —— 用户眼看着字变了会很
+   * 难受，分级显示是让这件事可预期的方式。
+   */
+  it("录音中把已定稿和未定稿分开显示", async () => {
+    voiceState.available = true
+    voiceState.phase = "recording"
+    voiceState.transcript = { stable: "跑一下 ", unstable: "pnpm dev", combined: "跑一下 pnpm dev" }
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const strip = document.body.querySelector("[data-voice-transcript]")
+    expect(strip).toBeTruthy()
+    expect(strip?.textContent).toBe("跑一下 pnpm dev")
+    // 未定稿的那半边单独包着一个次要色的节点。
+    const unstable = strip?.querySelector("span")
+    expect(unstable?.textContent).toBe("pnpm dev")
+    expect(unstable?.className).toContain("text-muted-foreground")
+
+    // 录音态不该顺手把命令填进去 —— 那要等用户点完成。
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
   it("识别结果为空时不写终端", async () => {
     voiceState.available = true
     voiceState.phase = "recording"
