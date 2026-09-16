@@ -157,6 +157,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         if gridChanged {
             zoom = 1
             canvasOffset = .zero
+            // A selection is a run of rows and columns, and both just changed meaning:
+            // the same numbers now name different characters. Left alone, the handles
+            // stayed on screen pointing at nothing.
+            clearSelection()
             // What the computer is showing now is the bottom of the buffer, so that
             // is where a reader arriving at this grid expects to be.
             pendingLandingScroll = true
