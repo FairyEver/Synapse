@@ -194,6 +194,41 @@ describe("mobile live protocol", () => {
     })).toBe(false)
   })
 
+  it("validates the ASR signing intent, which carries no session", () => {
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "asrSign" })).toBe(true)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "asrSign", engineModelType: "Hy-ASR-3.0-preview",
+    })).toBe(true)
+
+    // 校验器只看必需的形状，多带的字段一律忽略 —— 和其他 intent 一致，
+    // asrSign 不要求 sessionId，带了也不影响。
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "asrSign", sessionId: "s1" })).toBe(true)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "asrSign",
+      engineModelType: "x".repeat(MOBILE_FRAME_LIMITS.maxEngineModelTypeLength + 1),
+    })).toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "asrSign", engineModelType: "" })).toBe(false)
+  })
+
+  it("carries the signed URL back in the intent result, bounded", () => {
+    const signed = {
+      intentId: "i1",
+      outcome: "accepted" as const,
+      signedAsrUrl: "wss://asr.cloud.tencent.com/asr/v2/1252371654?secretid=AKID&signature=abc",
+      asrVoiceId: "voice-1",
+      asrExpiresAt: 1_700_000_300,
+    }
+    expect(isMobileIntentResult(signed)).toBe(true)
+
+    expect(isMobileIntentResult({
+      ...signed, signedAsrUrl: "x".repeat(MOBILE_FRAME_LIMITS.maxSignedAsrUrlLength + 1),
+    })).toBe(false)
+    expect(isMobileIntentResult({
+      ...signed, asrVoiceId: "x".repeat(MOBILE_FRAME_LIMITS.maxAsrVoiceIdLength + 1),
+    })).toBe(false)
+    expect(isMobileIntentResult({ ...signed, asrExpiresAt: -1 })).toBe(false)
+  })
+
   it("validates the file upload intent against both name and item bounds", () => {
     expect(isMobileIntent({
       v: 1, intentId: "i1", kind: "fileUpload",

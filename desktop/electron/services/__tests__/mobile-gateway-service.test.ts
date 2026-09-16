@@ -317,9 +317,14 @@ function createHarness(options: { sessionLines?: number } = {}) {
     return true
   })
 
+  const signRequests: { readonly engineModelType?: string }[] = []
   const gateway = new MobileGatewayService({
     terminal: terminal as unknown as TerminalService,
     fileRelay,
+    signAsrSession: async (input) => {
+      signRequests.push(input)
+      return { url: "wss://asr.example/signed", voiceId: "voice-1", expiredAt: 1_700_000_300 }
+    },
     permissionGuard,
     auditSink: { record: (event: unknown) => audits.push(event), list: () => [], clearForTests: () => {} },
     logger: { info: () => {}, warn: () => {} },
@@ -333,7 +338,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
 
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits,
-    permissionGuard, fileRelay, landings, discarded,
+    permissionGuard, fileRelay, landings, discarded, signRequests,
   }
 }
 
@@ -488,6 +493,39 @@ describe("MobileGatewayService", () => {
     // Typed, not submitted: the user still gets to look at it before pressing Enter.
     expect(write?.actions.some((action) => action.type === "key")).toBe(false)
     expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+  })
+
+  it("hands the phone a signed ASR URL instead of the key", async () => {
+    const harness = createHarness()
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-asr",
+      kind: "asrSign",
+    }))
+
+    expect(harness.signRequests).toEqual([{}])
+    expect(harness.results.at(-1)).toMatchObject({
+      result: {
+        outcome: "accepted",
+        signedAsrUrl: "wss://asr.example/signed",
+        asrVoiceId: "voice-1",
+        asrExpiresAt: 1_700_000_300,
+      },
+    })
+  })
+
+  it("passes a caller-chosen engine through to the signer", async () => {
+    const harness = createHarness()
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-asr-engine",
+      kind: "asrSign",
+      engineModelType: "Hy-ASR-3.0-preview",
+    }))
+
+    expect(harness.signRequests).toEqual([{ engineModelType: "Hy-ASR-3.0-preview" }])
   })
 
   it("still lands the file when the terminal can no longer take the path", async () => {

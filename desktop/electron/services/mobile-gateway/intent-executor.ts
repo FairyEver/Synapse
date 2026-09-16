@@ -10,7 +10,7 @@ import type { TerminalService } from "../../../app-capabilities/terminal/main/se
 import type { AuditSink, PermissionAction } from "../../runtime/security/permission-guard"
 import type { MobileAttachment } from "./attachment-registry"
 import { AttachmentRegistry, createAttachment } from "./attachment-registry"
-import { mobileControllerFor, MOBILE_RELAY_RESOURCE } from "./controller"
+import { mobileControllerFor, MOBILE_RELAY_RESOURCE, MOBILE_VOICE_RESOURCE } from "./controller"
 import type { MobileFileRelay } from "./file-relay"
 import { MobileFileRelayError } from "./file-relay"
 
@@ -29,6 +29,14 @@ export type IntentExecutorDeps = {
   readonly terminal: TerminalService
   readonly registry: AttachmentRegistry
   readonly fileRelay: MobileFileRelay
+  /**
+   * 签一条实时语音识别 URL。密钥只留在主进程，手机拿到的是已经签好名的入场券。
+   */
+  readonly signAsrSession: (input: { readonly engineModelType?: string }) => Promise<{
+    readonly url: string
+    readonly voiceId: string
+    readonly expiredAt: number
+  }>
   readonly auditSink: AuditSink
   readonly logger: MobileGatewayLogger
   readonly authorize: (
@@ -369,6 +377,29 @@ export class MobileIntentExecutor {
           // and to undo the insertion, which is one backspace per character.
           landedPath: landed.path,
           ...(note === undefined ? {} : { message: note }),
+        }
+      }
+
+      /**
+       * 手机要一条已签名的实时语音识别 URL。
+       *
+       * 签名原文只覆盖握手参数、不含音频数据，所以桌面可以预先签好整条 URL 下发，
+       * 手机拿它直连腾讯云。密钥从头到尾没有离开主进程，也没有走 STS —— 这个接口
+       * 的鉴权是 URL 上的 signature 参数，没有临时凭证的传参位置。
+       *
+       * 不挂 sessionId：语音输入与具体终端无关。
+       */
+      case "asrSign": {
+        await this.deps.authorize("voice.asr.sign", MOBILE_VOICE_RESOURCE)
+        const signed = await this.deps.signAsrSession(
+          intent.engineModelType === undefined ? {} : { engineModelType: intent.engineModelType },
+        )
+        return {
+          intentId: intent.intentId,
+          outcome: "accepted",
+          signedAsrUrl: signed.url,
+          asrVoiceId: signed.voiceId,
+          asrExpiresAt: signed.expiredAt,
         }
       }
 

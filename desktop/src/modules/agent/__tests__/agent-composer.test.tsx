@@ -3878,6 +3878,10 @@ function installShellBridge(
       shell: {
         filePathForDroppedFile: typeof filePathForDroppedFileMock
       }
+      voice: {
+        settings: { get: () => Promise<unknown> }
+        session: { sign: () => Promise<unknown> }
+      }
       agent: {
         chooseAttachments: typeof chooseAttachments
         resolveAttachmentPaths: typeof resolveAttachmentPaths

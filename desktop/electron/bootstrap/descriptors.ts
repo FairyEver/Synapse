@@ -278,6 +278,7 @@ import {
   MOBILE_RELAY_DIRECTORY_NAME,
   mobileGatewayFileRelayPolicy,
   mobileGatewayTerminalPolicy,
+  mobileGatewayVoicePolicy,
 } from "../services/mobile-gateway/controller"
 import { createMobileFileRelay } from "../services/mobile-gateway/file-relay"
 import type { ProcessRuntime } from "../runtime/process"
@@ -522,10 +523,12 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
 export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService> = {
   id: "core.mobile-gateway",
   criticality: "degraded",
-  dependsOn: ["core.terminal", "core.permission-guard", "core.audit-sink"],
+  dependsOn: ["core.terminal", "core.permission-guard", "core.audit-sink", "core.voice"],
   create(ctx) {
+    const voice = ctx.registry.get<VoiceService>("core.voice")
     return createMobileGatewayService({
       terminal: ctx.registry.get<TerminalService>("core.terminal"),
+      signAsrSession: (input) => voice.signSession(input),
       fileRelay: createMobileFileRelay({
         downloadDriveFile: (input) => accountService.downloadDriveFile(input),
         permanentlyDeleteDriveItem: (itemId) => accountService.permanentlyDeleteDriveItem(itemId),
@@ -2275,6 +2278,8 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     // only thing outside the terminal a phone may cause, and only into its own
     // landing directory.
     guard.registerPolicy(mobileGatewayFileRelayPolicy)
+    // 语音签名同样成对：一个动作配一个资源，手机只能拿签名，碰不到别的。
+    guard.registerPolicy(mobileGatewayVoicePolicy)
     return guard
   },
 }

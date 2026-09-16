@@ -8,9 +8,12 @@ import {
   MOBILE_GATEWAY_ACTOR,
   MOBILE_GATEWAY_ALLOWED_ACTIONS,
   MOBILE_GATEWAY_RELAY_ACTIONS,
+  MOBILE_GATEWAY_VOICE_ACTIONS,
   MOBILE_RELAY_RESOURCE,
+  MOBILE_VOICE_RESOURCE,
   mobileGatewayFileRelayPolicy,
   mobileGatewayTerminalPolicy,
+  mobileGatewayVoicePolicy,
 } from "../mobile-gateway/controller"
 
 /*
@@ -114,13 +117,15 @@ function scan(source: string, file: string): { readonly authorizes: readonly Cal
 const scanned = gatewaySourceFiles().map(({ file, source }) => ({ file, ...scan(source, file) }))
 
 /**
- * Both ways the gateway may be let through: the terminal table, which grants by
- * action, and the file relay, which grants by action *and* resource. An action the
- * gateway asks for has to appear in one of them or it fails on the user's phone.
+ * Every way the gateway may be let through: the terminal table, which grants by
+ * action; the file relay, which grants by action *and* resource; and the voice
+ * signing table, which is likewise paired with a resource. An action the gateway
+ * asks for has to appear in one of them or it fails on the user's phone.
  */
 const GRANTED_ACTIONS = new Set<string>([
   ...MOBILE_GATEWAY_ALLOWED_ACTIONS,
   ...MOBILE_GATEWAY_RELAY_ACTIONS,
+  ...MOBILE_GATEWAY_VOICE_ACTIONS,
 ])
 
 describe("mobile gateway permission table", () => {
@@ -131,8 +136,9 @@ describe("mobile gateway permission table", () => {
         if (call.action === null) continue // reported by the literal assertion below
         if (GRANTED_ACTIONS.has(call.action as PermissionAction)) continue
         unlisted.push(
-          `${call.file}:${call.line} authorizes "${call.action}", which is in neither `
-          + `MOBILE_GATEWAY_ALLOWED_ACTIONS nor MOBILE_GATEWAY_RELAY_ACTIONS (controller.ts). `
+          `${call.file}:${call.line} authorizes "${call.action}", which is in none of `
+          + `MOBILE_GATEWAY_ALLOWED_ACTIONS, MOBILE_GATEWAY_RELAY_ACTIONS or `
+          + `MOBILE_GATEWAY_VOICE_ACTIONS (controller.ts). `
           + `Add it to the one that matches how it is granted, or this action fails on the `
           + `phone as "本地策略拒绝了这个操作。" — ${call.snippet}`,
         )
@@ -217,6 +223,45 @@ describe("mobile gateway permission table", () => {
 
     // The terminal table must not have grown this action in the process.
     expect(MOBILE_GATEWAY_ALLOWED_ACTIONS.has("fs.write.outside-userdata")).toBe(false)
+  })
+
+  it("scopes voice signing to the voice resource, and only to signing", async () => {
+    /*
+     * Signing hands the phone a URL that spends the user's speech quota, so like the
+     * file relay it is granted on an action *and* a resource rather than outright.
+     * The other half matters just as much: the action that lets a phone type into a
+     * terminal must not be reachable through this policy.
+     */
+    const guard = createPermissionGuard()
+    guard.registerPolicy(mobileGatewayVoicePolicy)
+
+    await expect(guard.check({
+      action: "voice.asr.sign",
+      actor: MOBILE_GATEWAY_ACTOR,
+      resource: MOBILE_VOICE_RESOURCE,
+      context: {},
+    })).resolves.toMatchObject({ allowed: true })
+
+    for (const resource of ["terminal:session-1", "voice:asr:other", "", "voice:terminal"]) {
+      await expect(guard.check({
+        action: "voice.asr.sign",
+        actor: MOBILE_GATEWAY_ACTOR,
+        resource,
+        context: {},
+      })).resolves.toMatchObject({ allowed: false })
+    }
+
+    // 反过来也要挡住：语音策略不能变成终端控制的旁路。
+    await expect(guard.check({
+      action: "terminal.session.control",
+      actor: MOBILE_GATEWAY_ACTOR,
+      resource: MOBILE_VOICE_RESOURCE,
+      context: {},
+    })).resolves.toMatchObject({ allowed: false })
+
+    // The terminal table must not have grown this action in the process.
+    expect(MOBILE_GATEWAY_ALLOWED_ACTIONS.has("voice.asr.sign")).toBe(false)
+    expect(MOBILE_GATEWAY_RELAY_ACTIONS.has("voice.asr.sign")).toBe(false)
   })
 
   it("funnels every permission check through the gateway's own authorize method", () => {

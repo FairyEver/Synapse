@@ -60,6 +60,13 @@ export type PermissionAction =
   | "json.repair"
   | "clipboard.read"
   | "clipboard.write"
+  /**
+   * 签一条腾讯云实时语音识别的 URL。
+   *
+   * 单独一项而不是复用 `terminal.session.control`：手机要的是「用一下麦克风」，
+   * 不是「控制终端」，能签发一次会话并不等于能往 PTY 里写东西。
+   */
+  | "voice.asr.sign"
 
 export type ActorIdentity =
   | { kind: "user"; id?: string; display?: string }

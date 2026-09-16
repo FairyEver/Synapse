@@ -87,6 +87,28 @@ export const MOBILE_GATEWAY_RELAY_ACTIONS: ReadonlySet<PermissionAction> = new S
   "fs.write.outside-userdata",
 ])
 
+/**
+ * 语音签名的资源就是「这台电脑的语音服务」，与具体终端无关：签名本身不携带终
+ * 端上下文，也碰不到 PTY。
+ */
+export const MOBILE_VOICE_RESOURCE = "voice:asr"
+
+export const MOBILE_GATEWAY_VOICE_ACTIONS: ReadonlySet<PermissionAction> = new Set([
+  "voice.asr.sign",
+])
+
+export const mobileGatewayVoicePolicy: PermissionPolicy = {
+  id: "mobile-gateway-voice",
+  decide: (request) => {
+    const isMobileGateway = request.actor.kind === MOBILE_GATEWAY_ACTOR.kind
+      && request.actor.id === MOBILE_GATEWAY_ACTOR_ID
+    if (!isMobileGateway) return "defer-to-next"
+    return request.action === "voice.asr.sign" && request.resource === MOBILE_VOICE_RESOURCE
+      ? "allow"
+      : "defer-to-next"
+  },
+}
+
 export const mobileGatewayFileRelayPolicy: PermissionPolicy = {
   id: "mobile-gateway-file-relay",
   decide: (request) => {

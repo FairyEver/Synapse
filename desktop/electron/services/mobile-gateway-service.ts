@@ -79,6 +79,12 @@ const SIZE_OWNERSHIP_IDLE_TIMEOUT_MS = 90_000
 export type MobileGatewayServiceDeps = {
   readonly terminal: TerminalService
   readonly fileRelay: MobileFileRelay
+  /** 语音签名：桌面持密钥，手机拿已签名的 URL。未配置时抛错，手机据此隐藏入口。 */
+  readonly signAsrSession: (input: { readonly engineModelType?: string }) => Promise<{
+    readonly url: string
+    readonly voiceId: string
+    readonly expiredAt: number
+  }>
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly logger: MobileGatewayLogger
@@ -128,6 +134,7 @@ export class MobileGatewayService {
       terminal: deps.terminal,
       registry: this.registry,
       fileRelay: deps.fileRelay,
+      signAsrSession: (input) => deps.signAsrSession(input),
       auditSink: deps.auditSink,
       logger: deps.logger,
       authorize: (action, resource, context) => this.authorize(action, resource, context),
