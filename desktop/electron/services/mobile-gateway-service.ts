@@ -345,9 +345,16 @@ export class MobileGatewayService {
       lines: content.lines,
       total: content.total,
       cursor: {
-        // The emulator reports a row relative to the window it returned, and
-        // `content.from` is that same window's first line in gateway space.
-        row: content.from + window.cursor.row,
+        // The emulator reports a row relative to the window it returned, so the
+        // base has to be that window's first line in gateway space.
+        //
+        // `content.from` is not that line. It is the first line the update
+        // *changed*, which sits later than the window's start whenever the head of
+        // the window is unchanged — the ordinary case. Adding it pushed the cursor
+        // down by however much of the window had not changed, which is why it was
+        // only sometimes in the wrong place. `oldestIndex` is the window's first
+        // line, the same correspondence line 425 already relies on.
+        row: attachment.tracker.oldestIndex + window.cursor.row,
         col: window.cursor.col,
         visible: window.cursor.visible,
       },

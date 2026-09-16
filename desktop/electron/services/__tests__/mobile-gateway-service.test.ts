@@ -742,6 +742,30 @@ describe("MobileGatewayService", () => {
     expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
     expect(harness.frames[0].frame.lines).toHaveLength(10)
   })
+  it("keeps the cursor on the same line when only the tail of the window changes", async () => {
+    // The window's head is unchanged, so the update's `from` is the first *changed*
+    // line — later than the window's start. Deriving the cursor's gateway row from
+    // that instead of from the window's start pushed it down by however much of the
+    // window had not changed, which is what put the cursor on the wrong row on a
+    // phone. The window did not move here, so the cursor must not either.
+    const harness = createHarness({ sessionLines: 40 })
+    await attach(harness)
+
+    const lines = Array.from({ length: 40 }, (_, index) => ({ text: `line-${index}` }))
+    harness.terminal.lines.set("sess-1", lines)
+    harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 2 } })
+    await harness.timers.advance(60)
+    const settled = harness.frames.at(-1)!.frame.cursor.row
+
+    harness.frames.length = 0
+    const changed = lines.map((line, index) => index === 39 ? { text: "line-39 rewritten" } : line)
+    harness.terminal.lines.set("sess-1", changed)
+    harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 3 } })
+    await harness.timers.advance(60)
+
+    expect(harness.frames.at(-1)?.frame.cursor.row).toBe(settled)
+  })
+
   it("never emits a negative line index while the buffer is still filling", async () => {
     // The window slides over a growing buffer without anything being evicted, so
     // the emulator's window start and the tracker's do not move together. Mapping
