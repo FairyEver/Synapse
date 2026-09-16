@@ -186,6 +186,36 @@ describe("TerminalCoreEmulator styled line windows", () => {
     }
   })
 
+  it("reports the cursor hidden exactly while the program asked for that", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      await emulator.accept("prompt$ ", 1)
+      expect(emulator.readLineWindow({ maxLines: 10 }).cursor.visible).toBe(true)
+
+      // DECTCEM off is what a full-screen program sends while it draws a cursor of
+      // its own, Claude Code included.
+      await emulator.accept("\u001b[?25l", 2)
+      expect(emulator.readLineWindow({ maxLines: 10 }).cursor.visible).toBe(false)
+
+      await emulator.accept("\u001b[?25h", 3)
+      expect(emulator.readLineWindow({ maxLines: 10 }).cursor.visible).toBe(true)
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("keeps the cursor mode across a sequence split between chunks", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      await emulator.accept("out\u001b[?2", 1)
+      await emulator.accept("5l", 2)
+
+      expect(emulator.readLineWindow({ maxLines: 10 }).cursor.visible).toBe(false)
+    } finally {
+      emulator.dispose()
+    }
+  })
+
   it("keeps foreground runs and omits run entries for default-styled spans", async () => {
     const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
     try {

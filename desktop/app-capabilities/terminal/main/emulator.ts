@@ -150,7 +150,30 @@ export function createTerminalCoreEmulator(input: {
     })
   }
 
+  /**
+   * DECTCEM — `ESC[?25l` hides the terminal's own cursor, `ESC[?25h` shows it — is
+   * how a full-screen program draws a cursor of its own instead. Every TUI does it,
+   * Claude Code included, which is why a real terminal shows no cursor next to
+   * Claude's input box.
+   *
+   * xterm does not expose the mode, so it is read from the byte stream here.
+   * Reporting it as permanently visible made remote clients draw a block the
+   * program had deliberately hidden.
+   */
+  let cursorHidden = false
+  /** A sequence can straddle two chunks; a short tail catches the split. */
+  let decPrivateModeTail = ""
+
+  function trackCursorVisibility(data: string): void {
+    const scan = decPrivateModeTail + data
+    for (const match of scan.matchAll(/\x1b\[\?25([hl])/gu)) {
+      cursorHidden = match[1] === "l"
+    }
+    decPrivateModeTail = scan.slice(-8)
+  }
+
   function accept(data: string, outputSeq: number): Promise<void> {
+    trackCursorVisibility(data)
     writeChain = writeChain.then(() => new Promise<void>((resolve) => {
       terminal.write(data, () => {
         throughOutputSeq = outputSeq
@@ -233,8 +256,9 @@ export function createTerminalCoreEmulator(input: {
     const startIndex = Math.max(0, totalLines - Math.max(1, input.maxLines))
     const scratch = buffer.getNullCell()
     const lines: TerminalStyledLine[] = []
-    // xterm.modes does not expose DECTCEM, and the cursor only matters when a
-    // session is interactive; the caller decides whether to draw it.
+    // Whether the caller draws the cursor is its decision; whether the program
+    // wants one at all is this one, and it comes from the tracked DECTCEM state
+    // rather than being assumed.
     for (let index = startIndex; index < totalLines; index += 1) {
       lines.push(readStyledLine(buffer.getLine(index), scratch))
     }
@@ -247,7 +271,7 @@ export function createTerminalCoreEmulator(input: {
       cursor: {
         row: Math.max(0, buffer.baseY + buffer.cursorY - startIndex),
         col: buffer.cursorX,
-        visible: true,
+        visible: !cursorHidden,
       },
       alt: buffer.type === "alternate",
       throughOutputSeq,
