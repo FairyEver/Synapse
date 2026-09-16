@@ -5,6 +5,7 @@ import type { MobileIntent, MobileTerminalFrame } from "@synapse/shared"
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
+import type { TerminalLayoutNode } from "../../../app-capabilities/terminal/shared/workspace"
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
 import { clampSummaryText, MobileGatewayService } from "../mobile-gateway-service"
 import type { MobileGatewayTransport, MobileSummaryDraft } from "../mobile-gateway/transport"
@@ -59,9 +60,17 @@ type FakeSession = {
   attention: { state: string; kind: string }
 }
 
+type FakeWorkspace = {
+  id: string
+  groupId: string
+  title: string
+  layout: TerminalLayoutNode
+}
+
 class FakeTerminal {
   readonly events = new EventEmitter()
   readonly sessions = new Map<string, FakeSession>()
+  readonly workspaces = new Map<string, FakeWorkspace>()
   readonly lines = new Map<string, TerminalStyledLine[]>()
   readonly calls: string[] = []
   leaseOwner: string | null = null
@@ -73,6 +82,10 @@ class FakeTerminal {
 
   listSessions(): FakeSession[] {
     return [...this.sessions.values()]
+  }
+
+  listWorkspaces(): FakeWorkspace[] {
+    return [...this.workspaces.values()]
   }
 
   getSession(input: { sessionId: string }): FakeSession {
@@ -232,6 +245,22 @@ function createHarness(options: { sessionLines?: number } = {}) {
   gateway.setTransport(transport)
 
   return { gateway, terminal, timers, transport, frames, summaries, results, audits, permissionGuard }
+}
+
+/** Seeds one tab under a fixed id. The gateway walks this layout, never the tree's storage. */
+function seedWorkspace(harness: ReturnType<typeof createHarness>, layout: TerminalLayoutNode): void {
+  harness.terminal.workspaces.set("ws-1", {
+    id: "ws-1",
+    groupId: "g1",
+    title: "前端开发",
+    layout,
+  })
+}
+
+/** Adds a conversation, as splitting a pane does when a tab gains one. */
+function addSession(harness: ReturnType<typeof createHarness>, id: string, title: string): void {
+  const existing = harness.terminal.sessions.get("sess-1")!
+  harness.terminal.sessions.set(id, { ...existing, id, title })
 }
 
 function intent<T extends MobileIntent>(value: T): T {
@@ -838,5 +867,129 @@ describe("MobileGatewayService", () => {
     expect(clampSummaryText("👍".repeat(10), 5)).toBe("👍".repeat(2))
     expect(clampSummaryText("ab👍", 3)).toBe("ab")
     expect(clampSummaryText("abc", 10)).toBe("abc")
+  })
+
+  it("omits the tab layer while no tab is split", async () => {
+    const harness = createHarness()
+    // A conversation's own tab, which is what every session gets by default.
+    seedWorkspace(harness, { type: "leaf", paneId: "pane-1", sessionId: "sess-1" })
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.sessions).toHaveLength(1)
+    // One pane per tab is what the flat list already says, so restating it would be
+    // overhead on every summary and would change the payload for phones that do not
+    // need it.
+    expect(draft.workspaces).toBeUndefined()
+    // The serialized form is the one that matters: the fingerprint is taken over it,
+    // so an unsplit desktop hashes — and therefore costs — exactly what it did before
+    // the tab layer existed.
+    expect(JSON.stringify(draft)).not.toContain("workspaces")
+  })
+
+  it("reports which conversations share a tab once one is split", async () => {
+    const harness = createHarness()
+    addSession(harness, "sess-2", "前端开发 #2")
+    seedWorkspace(harness, {
+      type: "split",
+      splitId: "split-1",
+      direction: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-1", sessionId: "sess-1" },
+      second: { type: "leaf", paneId: "pane-2", sessionId: "sess-2" },
+    })
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.workspaces).toEqual([{
+      id: "ws-1",
+      groupId: "g1",
+      title: "前端开发",
+      panes: [
+        { paneId: "pane-1", sessionId: "sess-1" },
+        { paneId: "pane-2", sessionId: "sess-2" },
+      ],
+    }])
+  })
+
+  it("treats a split as a change worth pushing", async () => {
+    const harness = createHarness()
+    seedWorkspace(harness, { type: "leaf", paneId: "pane-1", sessionId: "sess-1" })
+    await harness.timers.advance(1_000)
+    const beforeSplit = harness.summaries.length
+    expect((harness.summaries.at(-1) as MobileSummaryDraft).workspaces).toBeUndefined()
+
+    // Splitting creates a session, which is what the terminal service announces; the
+    // summary is only ever produced in response to an event, so without this the new
+    // tab layer would sit unsent.
+    addSession(harness, "sess-2", "前端开发 #2")
+    seedWorkspace(harness, {
+      type: "split",
+      splitId: "split-1",
+      direction: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-1", sessionId: "sess-1" },
+      second: { type: "leaf", paneId: "pane-2", sessionId: "sess-2" },
+    })
+    harness.terminal.events.emit("sessionChanged", { sessionId: "sess-2" })
+
+    await harness.timers.advance(1_000)
+
+    expect(harness.summaries.length).toBeGreaterThan(beforeSplit)
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.workspaces).toHaveLength(1)
+    expect(draft.workspaces?.[0].panes.map((pane) => pane.sessionId)).toEqual(["sess-1", "sess-2"])
+  })
+
+  it("never names a conversation the summary does not carry", async () => {
+    const harness = createHarness()
+    // A persisted layout whose second session did not survive the reload: the tab is
+    // real, the conversation behind one of its panes is not.
+    seedWorkspace(harness, {
+      type: "split",
+      splitId: "split-1",
+      direction: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-1", sessionId: "sess-1" },
+      second: { type: "leaf", paneId: "pane-2", sessionId: "sess-gone" },
+    })
+
+    await harness.timers.advance(1_000)
+
+    // Filtering leaves one pane, which is the unsplit case again — a tab the phone
+    // could not draw any useful distinction from the flat list.
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.sessions).toHaveLength(1)
+    expect(draft.workspaces).toBeUndefined()
+  })
+
+  it("keeps the surviving panes of a tab when another one's session is gone", async () => {
+    const harness = createHarness()
+    addSession(harness, "sess-2", "前端开发 #2")
+    seedWorkspace(harness, {
+      type: "split",
+      splitId: "split-1",
+      direction: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-1", sessionId: "sess-1" },
+      second: {
+        type: "split",
+        splitId: "split-2",
+        direction: "vertical",
+        ratio: 0.5,
+        first: { type: "leaf", paneId: "pane-2", sessionId: "sess-2" },
+        second: { type: "leaf", paneId: "pane-3", sessionId: "sess-gone" },
+      },
+    })
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.workspaces?.[0].panes).toEqual([
+      { paneId: "pane-1", sessionId: "sess-1" },
+      { paneId: "pane-2", sessionId: "sess-2" },
+    ])
   })
 })

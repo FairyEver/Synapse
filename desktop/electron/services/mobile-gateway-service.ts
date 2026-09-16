@@ -4,8 +4,10 @@ import type {
   MobileIntentResult,
   MobileSummaryGroup,
   MobileSummarySession,
+  MobileSummaryWorkspace,
   MobileTerminalFrame,
 } from "@synapse/shared" with { "resolution-mode": "import" }
+import { collectTerminalPaneLeaves } from "../../app-capabilities/terminal/shared/workspace"
 
 import type {
   TerminalService,
@@ -499,32 +501,100 @@ export class MobileGatewayService {
     const transport = this.transport
     if (!transport) return
     try {
-      const groups = this.summaryGroups()
       const sessions = await this.summarySessions()
+      const content = this.fitSummaryToBudget({
+        groups: this.summaryGroups(),
+        workspaces: this.summaryWorkspaces(sessions),
+        sessions,
+      })
+      if (!content) return
       // Compared without the revision so an idle desktop produces no traffic at all.
-      const content = JSON.stringify({ groups, sessions })
-      if (content === this.lastSummaryContent) return
-      this.lastSummaryContent = content
-      const bytes = Buffer.byteLength(content, "utf8")
-      if (bytes > MOBILE_FRAME_LIMITS.maxSummaryBytes) {
-        /*
-         * Unreachable while the field bounds hold — the boundary test in the shared
-         * package proves the largest admissible summary fits. It exists because the
-         * failure it guards against is invisible: the socket would close, and the
-         * user would see their computer drop offline with nothing in the summary to
-         * point at. A future field that outgrows the budget lands here instead.
-         */
-        this.deps.logger.warn("Mobile summary exceeded its byte budget and was not sent.", {
-          bytes,
-          budget: MOBILE_FRAME_LIMITS.maxSummaryBytes,
-        })
-        return
-      }
+      // `workspaces` is absent rather than empty in the common case, and JSON drops
+      // absent keys, so an unsplit desktop fingerprints exactly as it always did.
+      const serialized = JSON.stringify(content)
+      if (serialized === this.lastSummaryContent) return
+      this.lastSummaryContent = serialized
       this.summaryRevision += 1
-      transport.sendSummary({ revision: this.summaryRevision, groups, sessions })
+      transport.sendSummary({ revision: this.summaryRevision, ...content })
     } catch (error) {
       this.logWarn("Mobile summary flush failed.", error)
     }
+  }
+
+  /**
+   * Shrinks a summary to fit `maxSummaryBytes`, never dropping a conversation.
+   *
+   * The field bounds should already keep this unreachable for any desktop the product
+   * can produce, and the boundary test in the shared package shows the largest
+   * admissible session list on its own fits. It exists because the failure it prevents
+   * is invisible: an oversized summary is answered by the socket closing, so the user
+   * sees their computer go offline with nothing in the list to point at.
+   *
+   * The tab layer is sacrificed first because losing it degrades to precisely the flat
+   * list the phone rendered before the layer existed — whereas dropping sessions would
+   * make terminals disappear, and sending an oversized payload would take the whole
+   * connection with it. If even that does not fit, the summary is not sent and the
+   * phone keeps the list it already has.
+   */
+  private fitSummaryToBudget(content: MobileSummaryContent): MobileSummaryContent | null {
+    if (summaryBytes(content) <= MOBILE_FRAME_LIMITS.maxSummaryBytes) return content
+    const withoutTabs: MobileSummaryContent = { groups: content.groups, sessions: content.sessions }
+    const bytes = summaryBytes(withoutTabs)
+    if (bytes <= MOBILE_FRAME_LIMITS.maxSummaryBytes) return withoutTabs
+    this.deps.logger.warn("Mobile summary exceeded its byte budget and was not sent.", {
+      bytes,
+      budget: MOBILE_FRAME_LIMITS.maxSummaryBytes,
+    })
+    return null
+  }
+
+  /**
+   * The tab layer, or `undefined` when it would say nothing.
+   *
+   * A conversation gets its own tab unless the user splits it, so a desktop with no
+   * splits has exactly one pane per tab — the flat session list already says that, and
+   * restating it would cost bytes on every summary. The layer appears when a tab holds
+   * a second pane, which is also when a phone gains something the flat list could not
+   * tell it, and disappears again when the last split closes.
+   *
+   * Panes are filtered against the sessions this summary actually carries, so a phone
+   * is never handed a pane naming a conversation absent from the same payload. A tab
+   * left with fewer than two panes by that filter is dropped with it, since a one-pane
+   * tab is once again the flat case.
+   *
+   * Ordering: panes come in the tab's own layout order, so dragging one to a new
+   * position changes this array and therefore the content fingerprint. The desktop
+   * emits nothing for a layout-only change, though — `movePane` bumps the terminal
+   * domain revision and nothing more — and this gateway deliberately subscribes to no
+   * more events than the four it has (`start()` documents why: the emitter is at
+   * Node's default listener cap). A reorder therefore reaches the phone with the next
+   * summary that anything else happens to trigger, and waits if it was the last thing
+   * to happen. That gap is accepted on purpose: this layer answers *which conversations
+   * share a tab*, and that answer is set by splitting and closing, both of which do
+   * emit. Closing it would cost an eleventh listener plus a standing timer, for the
+   * cosmetic order within a tab alone.
+   */
+  private summaryWorkspaces(
+    sessions: readonly MobileSummarySession[],
+  ): readonly MobileSummaryWorkspace[] | undefined {
+    const present = new Set(sessions.map((session) => session.id))
+    const tabs: MobileSummaryWorkspace[] = []
+    for (const workspace of this.terminal.listWorkspaces()) {
+      const panes = collectTerminalPaneLeaves(workspace.layout)
+        .filter((pane) => present.has(pane.sessionId))
+        .map((pane) => ({
+          paneId: clampSummaryText(pane.paneId, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+          sessionId: clampSummaryText(pane.sessionId, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+        }))
+      if (panes.length < 2) continue
+      tabs.push({
+        id: clampSummaryText(workspace.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+        groupId: clampSummaryText(workspace.groupId, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+        title: clampSummaryText(workspace.title, MOBILE_FRAME_LIMITS.maxTitleLength),
+        panes,
+      })
+    }
+    return tabs.length > 0 ? tabs : undefined
   }
 
   private summaryGroups(): MobileSummaryGroup[] {
@@ -718,6 +788,18 @@ export class MobileGatewayService {
 
 export function createMobileGatewayService(deps: MobileGatewayServiceDeps): MobileGatewayService {
   return new MobileGatewayService(deps)
+}
+
+/** One summary's content, before the revision the transport assigns at send time. */
+type MobileSummaryContent = {
+  readonly groups: readonly MobileSummaryGroup[]
+  readonly workspaces?: readonly MobileSummaryWorkspace[]
+  readonly sessions: readonly MobileSummarySession[]
+}
+
+/** What the socket will have to carry, measured the same way the budget is stated. */
+function summaryBytes(content: MobileSummaryContent): number {
+  return Buffer.byteLength(JSON.stringify(content), "utf8")
 }
 
 /**
