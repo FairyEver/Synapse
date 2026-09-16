@@ -2653,7 +2653,7 @@ export function createTerminalService(deps: {
       }
       return {
         kind: input.kind,
-        lines: [], cols: session.cols, rows: session.rows, cursor: { x: 0, y: 0 },
+        lines: [], cols: session.cols, rows: session.rows, textCursor: { x: 0, y: 0 },
         generatedAt: now(), throughOutputSeq: session.lastOutputSeq, sizeRevision: session.sizeRevision,
         emulatorId: "xterm-headless", emulatorVersion: "6.0.0",
         degraded: true, reasons: ["checkpoint_unavailable"], hasMore: false,

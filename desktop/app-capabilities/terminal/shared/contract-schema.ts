@@ -416,11 +416,14 @@ export const terminalSessionRenameInputSchema = z.object({
   idempotencyKey: terminalIdempotencyKeySchema,
 }).strict()
 
+// No `cursor`: the view is bounded by `tailLines`/`maxBytes` and reports `hasMore` when the
+// byte budget truncates it, but it publishes no anchor to continue from, so accepting a
+// continuation token here would only promise a continuation this tool cannot honour. The
+// `cursor` this tool *returns* is a text cursor position, and is named `textCursor` for it.
 export const terminalViewInputSchema = z.object({
   sessionId: z.string().uuid(),
   kind: z.enum(["screen", "scrollback"]),
   tailLines: z.number().int().positive().max(2_000).optional(),
-  cursor: terminalCursorSchema.optional(),
   maxBytes: z.number().int().positive().max(1024 * 1024).default(256 * 1024),
 }).strict()
 

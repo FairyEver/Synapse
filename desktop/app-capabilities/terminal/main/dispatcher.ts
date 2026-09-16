@@ -45,7 +45,6 @@ import {
   terminalLeaseOperationInputSchema,
   terminalObserveInputSchema,
   terminalOperationGetInputSchema,
-  terminalPagedRequestSchema,
   terminalPasteInputSchema,
   terminalRawInputSchema,
   terminalReadOutputInputSchema,
@@ -318,7 +317,10 @@ async function dispatchAuthorizedCore(
     return buildCapabilities(deps.platform ?? process.platform, service.persistenceProtection)
   }
   if (action === "app.terminal.diagnostics.get") {
-    terminalPagedRequestSchema.parse(params)
+    // No pagination: this returns one fixed snapshot and has no collection to page through.
+    // It used to take the shared paged request shape, which advertised `limit`/`cursor` that
+    // nothing here ever read.
+    terminalRequestBaseSchema.parse(params)
     return {
       terminalDomainRevision: service.terminalDomainRevision,
       scope: "authorized_objects_only",

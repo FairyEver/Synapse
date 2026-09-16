@@ -27,7 +27,6 @@ import {
   terminalLeaseOperationInputSchema,
   terminalObserveInputSchema,
   terminalOperationGetInputSchema,
-  terminalPagedRequestSchema,
   terminalPasteInputSchema,
   terminalRawInputSchema,
   terminalReadOutputInputSchema,
@@ -47,7 +46,7 @@ import {
 const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
   "app.terminal.session.open": terminalSessionOpenInputSchema,
   "app.terminal.capabilities.get": terminalRequestBaseSchema,
-  "app.terminal.diagnostics.get": terminalPagedRequestSchema,
+  "app.terminal.diagnostics.get": terminalRequestBaseSchema,
   "app.terminal.global_launch.get": terminalGlobalLaunchGetInputSchema,
   "app.terminal.global_launch.update": terminalGlobalLaunchUpdateInputSchema,
   "app.terminal.group.list": terminalGroupListInputSchema,

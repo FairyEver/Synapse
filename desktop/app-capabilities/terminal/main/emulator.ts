@@ -63,7 +63,12 @@ export type TerminalRenderedView = {
   readonly lines: string[]
   readonly cols: number
   readonly rows: number
-  readonly cursor: { readonly x: number; readonly y: number }
+  /**
+   * Where the emulator's text cursor sits, not a continuation token. Everywhere else in this
+   * domain `cursor` means an opaque pagination cursor bound to a query, so this field is
+   * named for what it is rather than taking that word.
+   */
+  readonly textCursor: { readonly x: number; readonly y: number }
   readonly generatedAt: string
   readonly throughOutputSeq: number
   readonly sizeRevision: number
@@ -202,7 +207,7 @@ export function createTerminalCoreEmulator(input: {
       lines,
       cols: terminal.cols,
       rows: terminal.rows,
-      cursor: { x: buffer.cursorX, y: buffer.cursorY },
+      textCursor: { x: buffer.cursorX, y: buffer.cursorY },
       generatedAt: new Date().toISOString(),
       throughOutputSeq,
       sizeRevision,

@@ -78,7 +78,7 @@ describe("TerminalCoreEmulator renderer snapshots", () => {
       expect(restored.getView({ kind: "screen", maxBytes: 64 * 1024 }))
         .toMatchObject({
           lines: emulator.getView({ kind: "screen", maxBytes: 64 * 1024 }).lines,
-          cursor: emulator.getView({ kind: "screen", maxBytes: 64 * 1024 }).cursor,
+          textCursor: emulator.getView({ kind: "screen", maxBytes: 64 * 1024 }).textCursor,
           cols: 100,
           rows: 30,
           throughOutputSeq: 2,
@@ -145,7 +145,7 @@ describe("TerminalCoreEmulator renderer snapshots", () => {
 
       expect(view.lines[0]).toBe("⏺ Bash(cd /tmp)")
       expect(view.lines[1]).toBe("◼ Java 候选逐条复核")
-      expect(view.cursor.x).toBe(20)
+      expect(view.textCursor.x).toBe(20)
     } finally {
       emulator.dispose()
     }

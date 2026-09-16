@@ -143,6 +143,44 @@ describe("Terminal capability dispatcher", () => {
     expect(JSON.stringify(result)).not.toContain("groupCount")
   })
 
+  it("rejects the pagination parameters that were previously accepted and ignored", async () => {
+    /*
+     * `diagnostics.get` returns one fixed snapshot, so a `limit`/`cursor` it accepted could
+     * never have been honoured. Dropping them is a breaking change, and this is what makes it
+     * a *visible* one: a caller still sending them gets a structured validation error it can
+     * act on, rather than a result that silently ignored what it asked for.
+     *
+     * The no-argument call is asserted alongside it on purpose. Without that half the test
+     * would also pass on a dispatcher that rejected *every* call, which would make it pin
+     * nothing at all.
+     */
+    const dispatcher = createTerminalCapabilityDispatcher({
+      service: serviceStub(),
+      ...allowingSecurity(),
+    })
+
+    await expect(dispatcher.dispatch("app.terminal.diagnostics.get", {}, localMcpContext))
+      .resolves.toMatchObject({ ok: true, data: { objectCountsUnavailable: true } })
+
+    await expect(dispatcher.dispatch(
+      "app.terminal.diagnostics.get",
+      { limit: 10 },
+      localMcpContext,
+    )).resolves.toMatchObject({ ok: false, error: { code: "validation_error", retryable: false } })
+
+    await expect(dispatcher.dispatch(
+      "app.terminal.diagnostics.get",
+      { cursor: "opaque-token" },
+      localMcpContext,
+    )).resolves.toMatchObject({ ok: false, error: { code: "validation_error", retryable: false } })
+
+    await expect(dispatcher.dispatch(
+      "app.terminal.session_view.get",
+      { sessionId: "11111111-1111-4111-8111-111111111111", kind: "screen", cursor: "opaque-token" },
+      localMcpContext,
+    )).resolves.toMatchObject({ ok: false, error: { code: "validation_error", retryable: false } })
+  })
+
   it("reads and updates global launch settings without exposing environment values", async () => {
     const current = {
       revision: 3,
