@@ -36,7 +36,11 @@ final class DisplayModeUITests: XCTestCase {
 
     func testCaptureDisplayModes() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        // Deliberately not passing `-SynapseAPIBaseURL`. The app defaults to the
+        // hosted server, which is what this run targets, and passing the argument
+        // made its live socket fail with a bad URL while the same app launched by
+        // hand connected — so the argument is the thing to take out of the picture
+        // rather than something to work around.
         app.launch()
 
         signIn(app)
