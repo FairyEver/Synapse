@@ -188,6 +188,7 @@ export function TerminalModule({
   const sessionRenameReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
+  const pendingActiveRowFocusRef = useRef(false)
   const createGroupActionRef = useRef<HTMLButtonElement | null>(null)
   const pendingClosePaneIdsRef = useRef(new Set<string>())
   const refreshRequestIdRef = useRef(0)
@@ -669,12 +670,7 @@ export function TerminalModule({
       if (result.state === "deleted") {
         setWorkspaces((current) => current.filter((workspace) => workspace.id !== target.id))
         setActiveWorkspaceId((current) => current === target.id ? null : current)
-        globalThis.setTimeout(() => {
-          const nextActiveRow = document.querySelector<HTMLElement>(
-            '[data-track="terminal-session-select"][aria-current="page"]',
-          )
-          ;(nextActiveRow ?? createSessionActionRef.current)?.focus()
-        }, 0)
+        pendingActiveRowFocusRef.current = true
       }
       await refreshAfterWorkspaceMutation("Failed to refresh terminal objects after closing a workspace.")
     } catch (error) {
@@ -685,6 +681,23 @@ export function TerminalModule({
       setClosingWorkspaceId((current) => current === target.id ? null : current)
     }
   }, [enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, terminalBridge])
+
+  /**
+   * Returns focus to the surviving active row once a closed workspace is actually gone.
+   *
+   * This used to run from a `setTimeout(0)`, which fired before React committed the removal: the
+   * closing row still carried `aria-current="page"`, so the query found and focused that very row,
+   * and focus fell to `document.body` when the row was then removed. Effects run after the commit,
+   * where the closing row can no longer be matched.
+   */
+  useEffect(() => {
+    if (!pendingActiveRowFocusRef.current) return
+    pendingActiveRowFocusRef.current = false
+    const nextActiveRow = document.querySelector<HTMLElement>(
+      '[data-track="terminal-session-select"][aria-current="page"]',
+    )
+    ;(nextActiveRow ?? createSessionActionRef.current)?.focus()
+  }, [activeWorkspaceId, workspaces])
 
   const splitPane = useCallback(async (paneId: string, direction: "right" | "down") => {
     if (!activeWorkspace) return
