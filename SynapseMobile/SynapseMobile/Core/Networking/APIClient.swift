@@ -129,7 +129,7 @@ actor APIClient {
             throw APIError(
                 status: 0,
                 code: "credential_storage_failed",
-                message: "登录成功但凭证没能保存，重启后需要重新登录。请检查系统存储权限。"
+                message: "登录信息没能保存，重启后需要重新登录。"
             )
         }
         onCredentialsChanged()
@@ -269,7 +269,7 @@ actor APIClient {
             intentId: intent.intentId,
             outcome: "rejected",
             code: response.code ?? (response.delivered ? "no_result" : "delivery_failed"),
-            message: response.delivered ? nil : "电脑当前离线。",
+            message: response.delivered ? nil : "电脑离线。",
             sessionId: nil,
             createdSessionId: nil
         )
@@ -415,7 +415,7 @@ actor APIClient {
         }
 
         guard let http = response as? HTTPURLResponse else {
-            throw APIError(status: 0, code: "network", message: "网络响应无效。")
+            throw APIError(status: 0, code: "network", message: "服务器返回的数据无法读取。")
         }
 
         if http.statusCode == 401 || http.statusCode == 403, authenticated, allowRefresh {
@@ -437,12 +437,12 @@ actor APIClient {
 
         if Response.self == EmptyResponse.self {
             guard let empty = EmptyResponse() as? Response else {
-                throw APIError(status: http.statusCode, code: "decode", message: "响应类型不匹配。")
+                throw APIError(status: http.statusCode, code: "decode", message: "服务器返回的数据格式不正确。")
             }
             return empty
         }
         if data.isEmpty {
-            throw APIError(status: http.statusCode, code: "empty", message: "服务器返回了空响应。")
+            throw APIError(status: http.statusCode, code: "empty", message: "服务器没有返回数据。")
         }
         do {
             return try JSONDecoder().decode(Response.self, from: data)

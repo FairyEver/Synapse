@@ -12,7 +12,7 @@ struct SettingsView: View {
 
             Section("已连接的电脑") {
                 if model.onlineDesktops.isEmpty {
-                    Text("当前没有在线的电脑")
+                    Text("没有在线的电脑")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 } else {
@@ -47,7 +47,7 @@ struct SettingsView: View {
                 Task { await model.signOut() }
             }
         } message: {
-            Text("本机保存的凭证会被清除，终端控制随即失效。")
+            Text("本机保存的登录信息会被清除，终端控制将失效。")
         }
     }
 }

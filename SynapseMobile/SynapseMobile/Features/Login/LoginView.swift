@@ -26,7 +26,7 @@ struct LoginView: View {
                     .foregroundStyle(Theme.ink)
                 Text("Synapse Remote")
                     .font(.system(size: 24, weight: .bold))
-                Text("用你的 Synapse 账号登录")
+                Text("使用 Synapse 账号登录")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
@@ -78,7 +78,7 @@ struct LoginView: View {
             .padding(.horizontal, 24)
             .padding(.top, 16)
 
-            Text("电脑上的终端需要保持 Synapse 打开并登录同一个账号。")
+            Text("电脑端需保持打开并登录同一账号。")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)

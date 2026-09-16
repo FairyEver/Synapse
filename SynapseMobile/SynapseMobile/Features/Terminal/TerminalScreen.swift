@@ -58,7 +58,7 @@ struct TerminalScreen: View {
             Button("取消", role: .cancel) {}
             Button("停止", role: .destructive) { model.stop(sessionId) }
         } message: {
-            Text("终端会收到挂起信号并退出，未保存的进程状态会丢失。")
+            Text("终端将被停止，未保存的进程状态会丢失。")
         }
     }
 

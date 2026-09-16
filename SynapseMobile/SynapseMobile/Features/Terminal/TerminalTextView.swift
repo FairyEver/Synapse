@@ -286,7 +286,7 @@ final class TerminalHeaderView: UICollectionReusableView {
     }
 
     func configure(atFloor: Bool) {
-        label.text = atFloor ? "已到最早" : ""
+        label.text = atFloor ? "没有更多历史" : ""
     }
 }
 

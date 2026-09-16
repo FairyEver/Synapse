@@ -87,7 +87,7 @@ final class SynapseAppModel {
             // reconnects, and the next refresh succeeds once the server is back.
             authState = .signedIn
             await startLiveSession()
-            banner = "暂时连不上服务器，正在重试。"
+            banner = "连不上服务器，正在重试。"
         }
     }
 
@@ -196,7 +196,7 @@ final class SynapseAppModel {
             }
         }
         realtime.onDesktopDetached = { [weak self] _ in
-            self?.banner = "电脑的连接已断开。"
+            self?.banner = "电脑已断开连接。"
         }
         realtime.onPresence = { [weak self] clientInstanceIds in
             self?.applyPresence(clientInstanceIds)
@@ -436,7 +436,7 @@ final class SynapseAppModel {
         }
         await reclaimControl(write.sessionId)
         guard !preemptedSessions.contains(write.sessionId) else {
-            banner = "桌面端正在使用这个终端，命令没有发送。"
+            banner = "电脑正在使用这个终端，命令没有发送。"
             return
         }
         // The gateway answers a repeated intentId from its cache, which would hand
@@ -498,7 +498,7 @@ final class SynapseAppModel {
 
     private func performReturningSession(_ intent: MobileIntentRequest) async -> String? {
         guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
-            banner = "电脑当前离线。"
+            banner = "电脑离线。"
             return nil
         }
         guard let result = await awaitResult(of: intent, sentTo: desktop, timeoutSeconds: 10) else {

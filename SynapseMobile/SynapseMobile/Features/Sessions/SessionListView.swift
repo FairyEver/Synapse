@@ -76,7 +76,7 @@ struct SessionListView: View {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) { model.delete(session.id) }
         } message: { _ in
-            Text("会先停止它，正在跑的任务会中断。")
+            Text("会先停止终端，未完成的任务会中断。")
         }
     }
 
@@ -151,7 +151,7 @@ struct SessionListView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("电脑不在线")
                     .font(.system(size: 15, weight: .semibold))
-                Text("终端运行在电脑上。打开电脑上的 Synapse，并保持账号登录，这里就会显示出正在运行的终端。")
+                Text("请在电脑上打开 Synapse 并登录。")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
@@ -159,16 +159,12 @@ struct SessionListView: View {
         }
     }
 
+    /// Title only: the sentence that used to sit here restated it, and "a session
+    /// may have just ended" is not something the reader can act on.
     private var emptySection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("没有正在运行的终端")
-                    .font(.system(size: 15, weight: .semibold))
-                Text("电脑上没有活着的会话，或者会话刚刚结束。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 4)
+            Text("没有正在运行的终端")
+                .font(.system(size: 15, weight: .semibold))
         }
     }
 }
@@ -252,19 +248,15 @@ struct NewSessionSheet: View {
                             dismiss()
                             onCreated(group.id)
                         } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(group.name)
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(.primary)
-                                Text("在该分组下新建终端")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                            }
+                            // The group name is the whole choice; the subtitle only
+                            // restated the sheet's own title.
+                            Text(group.name)
+                                .font(.system(size: 15))
                         }
                     }
                 }
                 if (model.summary?.groups ?? []).isEmpty {
-                    Text("电脑上还没有分组。先在桌面上创建一个分组。")
+                    Text("电脑上还没有分组，请先在电脑端创建。")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }

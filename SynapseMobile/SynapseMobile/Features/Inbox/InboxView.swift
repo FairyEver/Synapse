@@ -13,9 +13,9 @@ struct InboxView: View {
             if model.waitingSessions.isEmpty {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("没有需要你的事")
+                        Text("暂无待处理事项")
                             .font(.system(size: 15, weight: .semibold))
-                        Text("Claude Code 或 Codex 请求确认、向你提问时，会出现在这里，并推送到锁屏。")
+                        Text("Claude Code 或 Codex 请求确认或提问时，会推送通知。")
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                     }
