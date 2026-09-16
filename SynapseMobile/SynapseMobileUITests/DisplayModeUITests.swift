@@ -57,6 +57,7 @@ final class DisplayModeUITests: XCTestCase {
         settle(seconds: 5)
         shot(app, "01-desktop-grid")
         print("=== DIAG 01-desktop-grid: \(terminal.value ?? "nil") ===")
+        print("=== DIAG 01-desktop-grid: \(terminal.value ?? "nil") ===")
 
         // What this screen offers, so the next run can address it by name instead of
         // guessing at identifiers.
@@ -70,10 +71,20 @@ final class DisplayModeUITests: XCTestCase {
         settle(seconds: 2)
         shot(app, "02-pinched")
         print("=== DIAG 02-pinched: \(terminal.value ?? "nil") ===")
+        print("=== DIAG 02-pinched: \(terminal.value ?? "nil") ===")
+
+        // Magnified, a one-finger drag should move the canvas — the photo-viewer
+        // gesture — rather than the buffer underneath it.
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+            .press(forDuration: 0.05, thenDragTo: terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.65)))
+        settle(seconds: 2)
+        shot(app, "02b-dragged-while-magnified")
+        print("=== DIAG 02b-dragged: \(terminal.value ?? "nil") ===")
 
         terminal.pinch(withScale: 0.4, velocity: -1.0)
         settle(seconds: 2)
         shot(app, "03-pinched-back")
+        print("=== DIAG 03-pinched-back: \(terminal.value ?? "nil") ===")
         print("=== DIAG 03-pinched-back: \(terminal.value ?? "nil") ===")
 
         // Hold still long enough to mean "select" rather than "scroll". Aimed well

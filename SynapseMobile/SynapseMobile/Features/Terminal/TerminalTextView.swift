@@ -173,6 +173,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         reportColumnsIfNeeded()
     }
 
+
     /// Re-measures every row at the current size.
     ///
     /// Rebuilt rather than patched: the row cache is keyed by content, and a size
@@ -239,6 +240,17 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// the finger. While it is magnified the collection view stops scrolling, because
     /// a drag is then about where in the screen the reader is looking rather than
     /// where in the buffer.
+    /// Sizes the canvas without touching its transform.
+    ///
+    /// `frame` is derived from `bounds`, `center` and `transform`, so assigning it on
+    /// a view that is already transformed makes UIKit recompute the other three from
+    /// it — and the zoom is silently undone. That is why a drag moved the offset by a
+    /// hundred and seventy points and the picture did not move at all.
+    private func sizeCanvas(to size: CGSize) {
+        canvas.bounds = CGRect(origin: .zero, size: size)
+        canvas.center = CGPoint(x: size.width / 2, y: size.height / 2)
+    }
+
     private func applyCanvasTransform() {
         let magnified = zoom > 1.001
         collectionView.isScrollEnabled = !magnified
@@ -260,7 +272,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
 
     private func applyInsets() {
         let pane = bounds
-        canvas.frame = pane
+        sizeCanvas(to: pane.size)
         defer { applyCanvasTransform() }
         guard displayMode == .desktopDriven, let grid = desktopGrid, pane.width > 0, pane.height > 0 else {
             collectionView.contentInset = .zero
@@ -311,7 +323,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // itself a layout-affecting change, so doing this on every pass makes the
         // two call each other: a continuous redraw, which the reader sees as the
         // picture flickering while they are trying to read it.
-        canvas.frame = bounds
+        sizeCanvas(to: bounds.size)
         let paneSize = bounds.size
         if displayMode == .desktopDriven, desktopGrid != nil, paneSize != lastLaidOutPaneSize {
             lastLaidOutPaneSize = paneSize
@@ -675,7 +687,21 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         let proposed = zoom * gesture.scale
         let clamped = min(TerminalDisplayConfig.maxZoom, max(TerminalDisplayConfig.minZoom, proposed))
         guard abs(clamped - zoom) > 0.001 else { return }
+
+        // Magnified about the fingers, not about the middle of the pane.
+        //
+        // The transform scales around the canvas's centre, and a terminal puts its
+        // content at the top — so scaling about the centre throws the very line the
+        // reader is looking at off the screen the moment they pinch, which reads as
+        // the zoom having lost their place. This keeps the point under the fingers
+        // under the fingers, which is what a photo viewer does.
+        let focal = gesture.location(in: self)
+        let previous = zoom
         zoom = clamped
+        let ratio = zoom / previous
+        let fromCentre = CGPoint(x: focal.x - bounds.midX, y: focal.y - bounds.midY)
+        canvasOffset.x = fromCentre.x - ratio * (fromCentre.x - canvasOffset.x)
+        canvasOffset.y = fromCentre.y - ratio * (fromCentre.y - canvasOffset.y)
         // Reset each step so the next callback reports an incremental change rather
         // than the whole gesture again.
         gesture.scale = 1

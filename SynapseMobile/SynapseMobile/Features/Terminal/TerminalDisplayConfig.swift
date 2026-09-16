@@ -123,11 +123,16 @@ enum TerminalCellMetrics {
         return measured
     }
 
-    /// One line's height, rounded up so rows tile without seams between them.
+    /// One line's height.
+    ///
+    /// The line box, rounded up — and no more. There used to be an extra point on
+    /// top, which left a hairline gap between every pair of rows: invisible in text,
+    /// and plainly visible in a program that draws with full-block characters, where
+    /// several rows are meant to join into one shape. A logo came out striped.
     static func rowHeight(forFontSize size: CGFloat) -> CGFloat {
         let key = NSNumber(value: Double(size))
         if let cached = rowHeightCache.object(forKey: key) { return CGFloat(cached.doubleValue) }
-        let height = ceil(TerminalFont.regular(ofSize: size).lineHeight) + 1
+        let height = ceil(TerminalFont.regular(ofSize: size).lineHeight)
         rowHeightCache.setObject(NSNumber(value: Double(height)), forKey: key)
         return height
     }
