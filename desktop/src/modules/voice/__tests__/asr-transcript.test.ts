@@ -50,6 +50,33 @@ describe("AsrTranscriptAccumulator", () => {
     expect(accumulator.finalText()).toBe("git status")
   })
 
+  /**
+   * slice_type=0 是「这句话开始」，它带的文字还会变。当成定稿的话，紧接着的
+   * slice_type=1 会让同一句同时出现在两级里，拼出重复文本。
+   */
+  it("句子开始不算定稿，不会和后面的识别中重复", () => {
+    const accumulator = new AsrTranscriptAccumulator()
+    accumulator.apply({ sliceType: 0, index: 0, text: "帮我看看" })
+    expect(accumulator.snapshot().stable).toBe("")
+    expect(accumulator.snapshot().unstable).toBe("帮我看看")
+
+    accumulator.apply({ sliceType: 1, index: 0, text: "帮我看看终端" })
+    const snapshot = accumulator.snapshot()
+    expect(snapshot.stable).toBe("")
+    expect(snapshot.combined).toBe("帮我看看终端")
+
+    accumulator.apply({ sliceType: 2, index: 0, text: "帮我看看终端。" })
+    expect(accumulator.finalText()).toBe("帮我看看终端。")
+  })
+
+  it("迟到的识别中不能把已定稿的句子重新打开", () => {
+    const accumulator = new AsrTranscriptAccumulator()
+    accumulator.apply({ sliceType: 2, index: 0, text: "第一句。" })
+    expect(accumulator.apply({ sliceType: 1, index: 0, text: "第一句" })).toBe(false)
+    expect(accumulator.snapshot().stable).toBe("第一句。")
+    expect(accumulator.snapshot().unstable).toBe("")
+  })
+
   it("什么都不说时 finalText 是空串", () => {
     const accumulator = new AsrTranscriptAccumulator()
     expect(accumulator.finalText()).toBe("")

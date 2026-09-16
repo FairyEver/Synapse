@@ -27,7 +27,11 @@ export class AsrTranscriptAccumulator {
   /** 返回本次是否真的改变了文本，UI 可以据此跳过无谓的重渲染。 */
   apply(result: { sliceType: number; index: number; text: string }): boolean {
     const text = result.text ?? ""
-    if (result.sliceType === 1) {
+    // 只有 2 是定稿。0 是「这句话开始」，它带的文字同样还会变，归当前句 ——
+    // 当成定稿的话，紧接着来的 1 会让同一句同时出现在两级里，拼出重复的文本。
+    if (result.sliceType !== 2) {
+      // 迟到的非稳态不能把已经定稿的句子重新打开。
+      if (this.settled.has(result.index)) return false
       // 同一句的非稳态结果会重复下发，内容是全量而非增量。
       const changed = this.partialIndex !== result.index || this.partialText !== text
       this.partialIndex = result.index

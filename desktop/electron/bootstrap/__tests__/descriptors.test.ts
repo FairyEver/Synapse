@@ -172,6 +172,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.terminal",
       "core.system-app-window",
       "core.sound-notifier",
+      "core.voice",
       "core.system-notifier.integration",
       "core.problem-feedback",
       "core.json-repair",
