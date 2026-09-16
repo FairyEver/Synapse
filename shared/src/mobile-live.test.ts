@@ -184,6 +184,67 @@ describe("mobile live protocol", () => {
     })).toBe(false)
   })
 
+  it("rejects a summary once any one of its fields outgrows the wire bound", () => {
+    const session = summary().sessions[0]
+    const group = summary().groups[0]
+    expect(isMobileSummaryPayload(summary({
+      sessions: [{ ...session, cwd: "c".repeat(MOBILE_FRAME_LIMITS.maxSummaryCwdLength) }],
+    }))).toBe(true)
+    expect(isMobileSummaryPayload(summary({
+      sessions: [{ ...session, cwd: "c".repeat(MOBILE_FRAME_LIMITS.maxSummaryCwdLength + 1) }],
+    }))).toBe(false)
+    expect(isMobileSummaryPayload(summary({
+      groups: [{ ...group, name: "n".repeat(MOBILE_FRAME_LIMITS.maxSummaryGroupNameLength + 1) }],
+    }))).toBe(false)
+    expect(isMobileSummaryPayload(summary({
+      sessions: [{
+        ...session,
+        lastLine: "l".repeat(MOBILE_FRAME_LIMITS.maxSummaryLastLineLength + 1),
+        startedAt: "2".repeat(MOBILE_FRAME_LIMITS.maxSummaryStartedAtLength + 1),
+        id: "s".repeat(MOBILE_FRAME_LIMITS.maxSummaryIdLength + 1),
+      }],
+    }))).toBe(false)
+    // Empty is a legitimate value for a preview, and for a directory we cannot name.
+    expect(isMobileSummaryPayload(summary({
+      sessions: [{ ...session, cwd: "", lastLine: "" }],
+    }))).toBe(true)
+  })
+
+  it("keeps the largest summary the wire admits inside the declared budget", () => {
+    /*
+     * A summary is the one message a phone cannot reassemble: it replaces the whole
+     * list with whatever arrives, so an oversized one is not a truncated view but a
+     * dead socket. The desktop producer clamps to exactly these limits, which makes
+     * this the widest summary that can ever exist — so if it fits, every summary fits.
+     */
+    const limits = MOBILE_FRAME_LIMITS
+    const payload: MobileSummaryPayload = {
+      desktopClientInstanceId: "d".repeat(120),
+      desktopName: "d".repeat(120),
+      revision: 1,
+      groups: Array.from({ length: limits.maxSummaryGroups }, () => ({
+        id: "g".repeat(limits.maxSummaryIdLength),
+        name: "n".repeat(limits.maxSummaryGroupNameLength),
+      })),
+      sessions: Array.from({ length: limits.maxSummarySessions }, () => ({
+        id: "s".repeat(limits.maxSummaryIdLength),
+        groupId: "g".repeat(limits.maxSummaryIdLength),
+        title: "t".repeat(limits.maxTitleLength),
+        status: "stopping" as const,
+        attention: { state: "not_waiting" as const, kind: "other_interaction" as const },
+        cwd: "c".repeat(limits.maxSummaryCwdLength),
+        cols: 500,
+        rows: 200,
+        startedAt: "2".repeat(limits.maxSummaryStartedAtLength),
+        lastLine: "l".repeat(limits.maxSummaryLastLineLength),
+        lastOutputSeq: 999_999_999,
+      })),
+    }
+
+    expect(isMobileSummaryPayload(payload)).toBe(true)
+    expect(Buffer.byteLength(JSON.stringify(payload), "utf8")).toBeLessThanOrEqual(limits.maxSummaryBytes)
+  })
+
   it("keeps the attachment routing fields required", () => {
     expect(isMobileFramePayload({
       desktopClientInstanceId: "desktop-1",

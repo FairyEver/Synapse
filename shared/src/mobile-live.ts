@@ -8,9 +8,12 @@
  * - `mobile.frame`   desktop → cloud → one phone (only for the attached session)
  * - `mobile.intent`  phone → cloud → one desktop, answered by `mobile.intentResult`
  *
- * Frames are self-bounded. The desktop→cloud socket rejects payloads above 16 KiB
- * at the `ws` layer by dropping the connection, so every producer must respect
- * `MOBILE_FRAME_LIMITS.maxPayloadBytes` and split rather than grow.
+ * Producers are self-bounded, and they are bounded separately because they fail
+ * differently. A frame that is too large is split; a *summary* cannot be split —
+ * a phone treats every summary it receives as the whole list, so a summary that
+ * outgrows the socket must never be produced at all. `maxPayloadBytes` bounds one
+ * frame, `maxSummaryBytes` bounds one summary, and the sockets' `maxPayload` sits
+ * above both (see the comment on `maxSummaryBytes`).
  */
 
 /**
@@ -26,7 +29,7 @@
 export const MOBILE_PROTOCOL_VERSION = 1
 
 export const MOBILE_FRAME_LIMITS = {
-  /** Hard ceiling for one serialized frame, half of the socket's 16 KiB limit. */
+  /** Hard ceiling for one serialized frame. A phone renders far less; the split point is here. */
   maxPayloadBytes: 8 * 1024,
   /** Steady-state uplink budget. Excess frames become a fresh snapshot instead. */
   maxBytesPerSecond: 64 * 1024,
@@ -38,6 +41,38 @@ export const MOBILE_FRAME_LIMITS = {
   maxRunsPerLine: 256,
   maxSummarySessions: 256,
   maxSummaryGroups: 128,
+  /**
+   * Summary field bounds. Every one of these is the *producer's* clamp as well as
+   * the relay's guard, so a field can never be long enough to fail validation.
+   *
+   * `cwd` and `lastLine` are display strings — a phone row shows a fraction of
+   * them — which is why they are clamped far below what a terminal can hold.
+   */
+  maxSummaryIdLength: 48,
+  maxSummaryCwdLength: 128,
+  maxSummaryLastLineLength: 120,
+  maxSummaryStartedAtLength: 48,
+  /** Group names are capped at 80 by the terminal schema; this only restates it. */
+  maxSummaryGroupNameLength: 80,
+  /**
+   * Byte budget for one serialized summary payload, measured without the envelope.
+   *
+   * The desktop's producer must never exceed this. It cannot: with every field at
+   * the limits above, the largest summary the wire admits — 256 sessions and 128
+   * groups — serializes to 218 KiB. The boundary test in `mobile-live.test.ts`
+   * pins that arithmetic down, and `live-desktop.gateway.spec.ts` asserts the
+   * socket clears it.
+   *
+   * The constraint that makes this a *correctness* constant rather than a tuning
+   * knob is the sockets' `maxPayload`. Both the desktop→cloud hop and the phone hop
+   * must carry a summary in one message, because a phone treats each one as the
+   * whole list; the `ws` layer answers an oversized message by closing the
+   * connection, which a user sees as their computer going offline. The desktop hop
+   * is the binding one and is set to 256 KiB in
+   * `server/src/live/live-desktop.gateway.ts`; raise that first, and keep this
+   * below it.
+   */
+  maxSummaryBytes: 224 * 1024,
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
@@ -187,6 +222,10 @@ export interface MobileSummarySession {
 /**
  * Content-driven, not tick-driven: the desktop only sends this when the rendered
  * snapshot actually differs from the previous one, so an idle terminal costs nothing.
+ *
+ * It is the one message that cannot be split — a phone replaces its whole list with
+ * whatever arrives — so its size is bounded by `MOBILE_FRAME_LIMITS.maxSummaryBytes`
+ * and the sockets are sized above that.
  */
 export interface MobileSummaryPayload {
   readonly desktopClientInstanceId: string
@@ -482,20 +521,24 @@ function isRunWire(value: unknown): value is MobileRunWire {
 }
 
 function isSummaryGroup(value: unknown): value is MobileSummaryGroup {
-  return isRecord(value) && boundedString(value.id, 120) && boundedString(value.name, 200)
+  return isRecord(value) &&
+    boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength) &&
+    boundedString(value.name, MOBILE_FRAME_LIMITS.maxSummaryGroupNameLength)
 }
 
 function isSummarySession(value: unknown): value is MobileSummarySession {
   if (!isRecord(value)) return false
-  if (!boundedString(value.id, 120)) return false
-  if (!boundedString(value.groupId, 120)) return false
+  if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength)) return false
+  if (!boundedString(value.groupId, MOBILE_FRAME_LIMITS.maxSummaryIdLength)) return false
   if (!boundedString(value.title, MOBILE_FRAME_LIMITS.maxTitleLength)) return false
   if (!isSummaryStatus(value.status)) return false
   if (!isSummaryAttention(value.attention)) return false
-  if (typeof value.cwd !== "string") return false
+  // Unlike the fields above these may legitimately be empty: a session whose
+  // directory is unknown, or that has not printed anything yet.
+  if (!boundedText(value.cwd, MOBILE_FRAME_LIMITS.maxSummaryCwdLength)) return false
   if (!positiveNumber(value.cols) || !positiveNumber(value.rows)) return false
-  if (!nonEmptyString(value.startedAt)) return false
-  if (typeof value.lastLine !== "string") return false
+  if (!boundedString(value.startedAt, MOBILE_FRAME_LIMITS.maxSummaryStartedAtLength)) return false
+  if (!boundedText(value.lastLine, MOBILE_FRAME_LIMITS.maxSummaryLastLineLength)) return false
   if (!nonNegativeInteger(value.lastOutputSeq)) return false
   return true
 }
@@ -522,6 +565,11 @@ function nonEmptyString(value: unknown): value is string {
 
 function boundedString(value: unknown, maxLength: number): value is string {
   return nonEmptyString(value) && value.length <= maxLength
+}
+
+/** Like `boundedString`, but empty is a legitimate value. */
+function boundedText(value: unknown, maxLength: number): value is string {
+  return typeof value === "string" && value.length <= maxLength
 }
 
 function positiveNumber(value: unknown): value is number {

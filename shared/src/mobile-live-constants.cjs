@@ -14,9 +14,9 @@
 exports.MOBILE_PROTOCOL_VERSION = 1
 
 /**
- * Frames are self-bounded. The desktop→cloud socket rejects payloads above 16 KiB
- * at the `ws` layer by dropping the connection rather than returning an error, so
- * `maxPayloadBytes` deliberately leaves a factor of two of headroom.
+ * Producers are self-bounded. `maxPayloadBytes` bounds one frame, which can be
+ * split; `maxSummaryBytes` bounds one summary, which cannot, and the sockets'
+ * `maxPayload` is sized above both — see the comments in `mobile-live.ts`.
  *
  * @type {{
  *   readonly maxPayloadBytes: number,
@@ -27,6 +27,12 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxRunsPerLine: number,
  *   readonly maxSummarySessions: number,
  *   readonly maxSummaryGroups: number,
+ *   readonly maxSummaryIdLength: number,
+ *   readonly maxSummaryCwdLength: number,
+ *   readonly maxSummaryLastLineLength: number,
+ *   readonly maxSummaryStartedAtLength: number,
+ *   readonly maxSummaryGroupNameLength: number,
+ *   readonly maxSummaryBytes: number,
  *   readonly maxIntentTextLength: number,
  *   readonly maxKeyActions: number,
  *   readonly maxTitleLength: number,
@@ -42,6 +48,12 @@ exports.MOBILE_FRAME_LIMITS = {
   maxRunsPerLine: 256,
   maxSummarySessions: 256,
   maxSummaryGroups: 128,
+  maxSummaryIdLength: 48,
+  maxSummaryCwdLength: 128,
+  maxSummaryLastLineLength: 120,
+  maxSummaryStartedAtLength: 48,
+  maxSummaryGroupNameLength: 80,
+  maxSummaryBytes: 224 * 1024,
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
