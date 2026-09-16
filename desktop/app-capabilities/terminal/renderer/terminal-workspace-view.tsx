@@ -20,13 +20,13 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Columns3, Folder, Maximize2, Minimize2, Pencil, RotateCcw, Rows3, Square, X } from "lucide-react"
+import { Columns3, Folder, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "../../../src/app-shell/logging"
-import { Badge } from "../../../src/components/ui/badge"
 import { Button } from "../../../src/components/ui/button"
+import { Card, CardContent } from "../../../src/components/ui/card"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -848,8 +848,15 @@ function TerminalPane({
   const setProjectionVisibilityRef = useRef<((nextVisible: boolean) => void) | null>(null)
   const appearanceSizeRef = useRef(appearanceSize)
   const sessionRef = useRef(session)
+  /**
+   * The phone deciding this terminal's grid, when there is one.
+   *
+   * Kept as the owner itself rather than a boolean so the overlay can name the
+   * device without narrowing the session type again at each use.
+   */
+  const mobileOwner = session.sizeOwner?.kind === "mobile" ? session.sizeOwner : null
   /** True while a phone decides this terminal's grid. */
-  const remoteSized = session.sizeOwner?.kind === "mobile"
+  const remoteSized = mobileOwner !== null
   /**
    * The phone's grid in pixels, so the mount can be laid out at it.
    *
@@ -1587,11 +1594,6 @@ function TerminalPane({
             onRename={() => onRenameSession(session.id, paneRootRef.current)}
             title={session.title}
           />
-          {remoteSized ? (
-            <Badge variant="outline" className="shrink-0 text-muted-foreground">
-              由 {session.sizeOwner?.deviceLabel} 设定 · {session.cols}×{session.rows}
-            </Badge>
-          ) : null}
           {workspaceTreeBridge ? <Button
             ref={fileTreeTriggerRef}
             type="button"
@@ -1613,25 +1615,6 @@ function TerminalPane({
           </Button> : null}
         </div>
         <div className="flex shrink-0 items-center">
-          {remoteSized ? (
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              aria-label={`重置为电脑尺寸：${session.title}`}
-              title="重置为电脑尺寸"
-              data-track="terminal-pane-size-owner-reset"
-              className="shrink-0 text-muted-foreground"
-              onClick={(event) => {
-                event.stopPropagation()
-                onActive()
-                releaseGridOwnershipRef.current?.(true)
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <RotateCcw className="size-3.5" />
-            </Button>
-          ) : null}
           <Button
             type="button"
             size="icon-xs"
@@ -1776,6 +1759,43 @@ function TerminalPane({
           </div>
         ) : null}
       </div>
+      {mobileOwner ? (
+        // Covers the whole pane, header included: while a phone decides this
+        // terminal's grid, every local act on the pane is either meaningless or
+        // preempts the phone, and the only one worth offering is giving the grid
+        // back. Blocking the rest is what makes the claim legible instead of
+        // silently reverting the phone's layout the moment someone drags an edge.
+        <div
+          data-terminal-pane-mobile-overlay
+          role="status"
+          className="absolute inset-0 z-30 flex items-center justify-center bg-black/10"
+        >
+          {/*
+            An inverted surface, not the pane's own. The terminal app is scoped
+            dark, so `bg-card` here is the same near-black as the output behind
+            it and the message reads as more terminal text. On `bg-primary` it
+            cannot be mistaken for anything the shell printed.
+          */}
+          <Card size="sm" className="bg-primary text-primary-foreground shadow-lg">
+            <CardContent className="flex flex-col items-center gap-3">
+              <p className="font-medium">正在被 {mobileOwner.deviceLabel} 使用</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                data-track="terminal-pane-size-owner-reset"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onActive()
+                  releaseGridOwnershipRef.current?.(true)
+                }}
+              >
+                转移到电脑
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
     </div>
   )
 }

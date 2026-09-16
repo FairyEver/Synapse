@@ -361,6 +361,19 @@ const terminalBridge = vi.hoisted(() => ({
   }),
   writeSession: vi.fn(async () => undefined),
   resizeSession: vi.fn(async () => undefined),
+  releaseSizeOwnership: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    const current = getSession(sessionId)
+    const session: SynapseTerminalSession = {
+      ...current,
+      sizeOwner: undefined,
+      stateRevision: current.stateRevision + 1,
+    }
+    bridgeState.sessions = bridgeState.sessions.map((item) => item.id === sessionId ? session : item)
+    // The main process announces the change; the pane reads ownership off the
+    // session it is handed, so nothing here removes the overlay on its own.
+    bridgeState.sessionChangedListener?.(session)
+    return session
+  }),
   deleteSession: vi.fn(async ({ sessionId }: { sessionId: string }) => {
     bridgeState.workspaces = bridgeState.workspaces.filter((workspace) =>
       workspace.layout.type !== "leaf" || workspace.layout.sessionId !== sessionId)
@@ -559,6 +572,7 @@ vi.mock("@/lib/electron-bridge", () => ({
         rename: terminalBridge.renameSession,
         write: terminalBridge.writeSession,
         resize: terminalBridge.resizeSession,
+        releaseSizeOwnership: terminalBridge.releaseSizeOwnership,
         delete: terminalBridge.deleteSession,
         stop: terminalBridge.stopSession,
         runStartupCommand: terminalBridge.runStartupCommand,
@@ -815,6 +829,7 @@ beforeEach(() => {
   terminalBridge.renameSession.mockClear()
   terminalBridge.writeSession.mockClear()
   terminalBridge.resizeSession.mockClear()
+  terminalBridge.releaseSizeOwnership.mockClear()
   terminalBridge.deleteSession.mockClear()
   terminalBridge.stopSession.mockClear()
   terminalBridge.runStartupCommand.mockClear()
@@ -3197,6 +3212,45 @@ describe("TerminalModule", () => {
       cols: 100,
       rows: 30,
     })
+  })
+
+  it("covers the pane a phone owns, and uncovers it once the grid is handed back", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      cols: 45,
+      rows: 33,
+      sizeOwner: {
+        kind: "mobile",
+        deviceLabel: "iPhone",
+        mobileClientInstanceId: "client-1",
+        cols: 45,
+        rows: 33,
+      },
+    })]
+
+    await renderModule()
+
+    expect(document.querySelector("[data-terminal-pane-mobile-overlay]")?.textContent)
+      .toContain("正在被 iPhone 使用")
+
+    await clickButton("转移到电脑")
+
+    expect(terminalBridge.releaseSizeOwnership).toHaveBeenCalledWith({ sessionId: "session-1" })
+    // Nothing here takes the cover off by itself — the claim clearing does.
+    expect(document.querySelector("[data-terminal-pane-mobile-overlay]")).toBeNull()
+  })
+
+  it("leaves an unclaimed pane uncovered", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(document.querySelector("[data-terminal-pane-mobile-overlay]")).toBeNull()
+    expect(buttonForText("转移到电脑")).toBeUndefined()
   })
 
   it("keeps one xterm instance when session lifecycle changes", async () => {
