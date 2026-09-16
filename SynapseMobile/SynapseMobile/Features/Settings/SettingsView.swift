@@ -16,11 +16,10 @@ struct SettingsView: View {
             // A density names a cell size, not a column count, so the same choice
             // reads the same on a phone of any size — the grid recomputes around it.
             //
-            // It is the reading preference for the mode where the phone decides the
-            // wrap, and the footer says so. In the desktop-grid mode the computer's
-            // column count decides the size, so a reader who changes this and opens
-            // such a terminal would otherwise find that nothing happened and conclude
-            // the setting is broken.
+            // It governs the phone-driven mode only, where the pane's width is the
+            // wrap and the density decides how much fits across it. In the
+            // desktop-grid mode the computer's columns decide the size, which is why
+            // that mode's own menu offers no density at all.
             Section {
                 Picker("显示密度", selection: $display.density) {
                     ForEach(TerminalDensity.allCases, id: \.self) { density in
@@ -30,8 +29,6 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             } header: {
                 Text("终端")
-            } footer: {
-                Text("\(display.density.detail)。只在「优先移动端」生效：那里一行放多少字由你定。「优先还原」按电脑的列数排版，字的大小随它算。")
             }
 
             Section("已连接的电脑") {

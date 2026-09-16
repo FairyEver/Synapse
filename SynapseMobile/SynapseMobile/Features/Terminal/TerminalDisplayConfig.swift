@@ -75,14 +75,6 @@ enum TerminalDensity: String, CaseIterable, Codable, Sendable {
         case .spacious: "稀疏"
         }
     }
-
-    var detail: String {
-        switch self {
-        case .compact: "同屏内容最多"
-        case .normal: "默认"
-        case .spacious: "字大，久看不累"
-        }
-    }
 }
 
 /// The desktop's grid, as the phone last heard it.
