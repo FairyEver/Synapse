@@ -1,6 +1,7 @@
 import { dialog } from "electron"
 
 import type { AutomationService } from "../services/automation"
+import type { MobileGatewayService } from "../services/mobile-gateway-service"
 import { accountService } from "../services/account-service"
 import { editorInstallService } from "../services/editor-install-service"
 import { installStatusCacheService } from "../services/install-status-cache-service"
@@ -117,6 +118,29 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     }))
   } catch (error) {
     logger.warn("Live webhook delivery handler not installed.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+  }
+  try {
+    // Two directions, wired here so neither service has to know about the other:
+    // cloud-delivered intents flow into the gateway, and the gateway hands finished
+    // payloads back to the connection that owns the socket and the device identity.
+    const mobileGateway = registry.get<MobileGatewayService>("core.mobile-gateway")
+    liveConnectionService.setMobileIntentHandler({
+      handle: (mobileClientInstanceId, intent) => mobileGateway.handleIntent(mobileClientInstanceId, intent),
+      releaseClient: (mobileClientInstanceId) => mobileGateway.releaseClient(mobileClientInstanceId),
+    })
+    mobileGateway.setTransport({
+      sendSummary: (draft) => void liveConnectionService.sendMobileSummary(draft),
+      sendFrame: (mobileClientInstanceId, frame) => {
+        void liveConnectionService.sendMobileFrame(mobileClientInstanceId, frame)
+      },
+      sendIntentResult: (mobileClientInstanceId, result) => {
+        void liveConnectionService.sendMobileIntentResult(mobileClientInstanceId, result)
+      },
+    })
+  } catch (error) {
+    logger.warn("Mobile terminal gateway transport not installed.", {
       errorName: error instanceof Error ? error.name : typeof error,
     })
   }

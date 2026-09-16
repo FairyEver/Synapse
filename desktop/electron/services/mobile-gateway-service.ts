@@ -1,0 +1,713 @@
+import { MOBILE_FRAME_LIMITS } from "@synapse/shared/mobile-live-constants"
+import type {
+  MobileIntent,
+  MobileIntentResult,
+  MobileSummaryGroup,
+  MobileSummarySession,
+  MobileTerminalFrame,
+} from "@synapse/shared" with { "resolution-mode": "import" }
+
+import type {
+  TerminalService,
+} from "../../app-capabilities/terminal/main/service"
+import type { TerminalStyledLine } from "../../app-capabilities/terminal/main/emulator"
+import type {
+  AuditSink,
+  PermissionAction,
+  PermissionGuard,
+} from "../runtime/security/permission-guard"
+import type { MobileAttachment } from "./mobile-gateway/attachment-registry"
+import { AttachmentRegistry } from "./mobile-gateway/attachment-registry"
+import { MOBILE_GATEWAY_ACTOR } from "./mobile-gateway/controller"
+import { buildTerminalFrames } from "./mobile-gateway/frame-builder"
+import type { MobileGatewayLogger } from "./mobile-gateway/intent-executor"
+import { MobileIntentError, MobileIntentExecutor } from "./mobile-gateway/intent-executor"
+import type { MobileGatewayTransport } from "./mobile-gateway/transport"
+
+export type { MobileGatewayTransport, MobileSummaryDraft } from "./mobile-gateway/transport"
+
+/**
+ * How long output is accumulated before a frame is sent.
+ *
+ * Terminal output arrives in bursts — a build emits dozens of chunks in a few
+ * milliseconds — and one frame per chunk would spend most of its bytes on
+ * per-frame overhead. 60 ms is below the threshold where scrolling stops looking
+ * continuous and collapses a burst into a single frame.
+ */
+const FLUSH_INTERVAL_MS = 60
+
+/** The session list changes far less often than the screen; 1 Hz is plenty. */
+const SUMMARY_INTERVAL_MS = 1_000
+
+/** Tail lines read to answer "what is this terminal doing right now". */
+const SUMMARY_TAIL_LINES = 4
+
+/**
+ * Styled lines read per flush. This is the replayable window a phone can scroll
+ * back through; the desktop keeps the full scrollback.
+ */
+const DEFAULT_LINE_WINDOW = 500
+
+const LEASE_RENEW_INTERVAL_MS = 15_000
+
+/**
+ * Safety net for a phone that vanished without detaching — killed by iOS, lost
+ * its network, or crashed. A client that stops sending anything is dropped and its
+ * leases released, so a dead phone cannot pin a terminal's write lease.
+ *
+ * Well above the client's keepalive interval, so a healthy idle viewer is never
+ * dropped. Step 2 adds an explicit disconnect signal from the cloud that makes
+ * this immediate; this exists so correctness does not depend on it.
+ */
+const CLIENT_IDLE_TIMEOUT_MS = 5 * 60_000
+
+export type MobileGatewayServiceDeps = {
+  readonly terminal: TerminalService
+  readonly permissionGuard: PermissionGuard
+  readonly auditSink: AuditSink
+  readonly logger: MobileGatewayLogger
+  readonly now?: () => Date
+  readonly setTimeout?: (callback: () => void, delayMs: number) => NodeJS.Timeout
+  readonly clearTimeout?: (handle: NodeJS.Timeout) => void
+  readonly lineWindowLines?: number
+}
+
+export type MobileGatewayState = {
+  readonly started: boolean
+  readonly transportAttached: boolean
+  readonly clients: number
+  readonly attachments: number
+  readonly lastSummaryRevision: number
+}
+
+export class MobileGatewayService {
+  private readonly deps: MobileGatewayServiceDeps
+  private readonly terminal: TerminalService
+  private readonly registry = new AttachmentRegistry()
+  private readonly executor: MobileIntentExecutor
+  private readonly setTimer: (callback: () => void, delayMs: number) => NodeJS.Timeout
+  private readonly clearTimer: (handle: NodeJS.Timeout) => void
+  private readonly lineWindowLines: number
+
+  private transport: MobileGatewayTransport | null = null
+  private started = false
+  private flushTimer: NodeJS.Timeout | null = null
+  private summaryTimer: NodeJS.Timeout | null = null
+  private leaseTimer: NodeJS.Timeout | null = null
+
+  private summaryRevision = 0
+  private lastSummaryContent = ""
+  private readonly bytesByClient = new Map<string, { windowStartedMs: number; bytes: number }>()
+  private readonly lastLineCache = new Map<string, string>()
+  private readonly lastLineDirty = new Set<string>()
+  private readonly lastActivityByClient = new Map<string, number>()
+
+  constructor(deps: MobileGatewayServiceDeps) {
+    this.deps = deps
+    this.terminal = deps.terminal
+    this.setTimer = deps.setTimeout ?? ((callback, delayMs) => setTimeout(callback, delayMs))
+    this.clearTimer = deps.clearTimeout ?? ((handle) => clearTimeout(handle))
+    this.lineWindowLines = deps.lineWindowLines ?? DEFAULT_LINE_WINDOW
+    this.executor = new MobileIntentExecutor({
+      terminal: deps.terminal,
+      registry: this.registry,
+      auditSink: deps.auditSink,
+      logger: deps.logger,
+      authorize: (action, resource, context) => this.authorize(action, resource, context),
+      nowMs: () => this.nowMs(),
+      markDirty: (sessionId) => this.markDirty(sessionId),
+      requestSummary: () => this.scheduleSummary(),
+      pushSnapshot: (attachment) => this.pushSnapshot(attachment),
+      sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
+    })
+  }
+
+  setTransport(transport: MobileGatewayTransport | null): void {
+    this.transport = transport
+    if (transport) this.scheduleSummary()
+  }
+
+  /**
+   * Subscribes to the terminal service's own event emitter rather than going
+   * through IPC or the EventBus. The terminal capability deliberately does not
+   * publish to the EventBus, and the renderer path is a broadcast to windows that
+   * has nothing to do with this consumer.
+   *
+   * Four listeners here plus the six the terminal IPC layer registers lands at
+   * Node's default cap of ten; that is the whole budget, so this list should not grow.
+   */
+  start(): void {
+    if (this.started) return
+    this.started = true
+    const events = this.terminal.events
+    events.on("data", this.handleData)
+    events.on("stateChanged", this.handleStateChanged)
+    events.on("sessionChanged", this.handleSessionChanged)
+    events.on("sessionDeleted", this.handleSessionDeleted)
+    this.scheduleLeaseRenewal()
+    this.scheduleSummary()
+  }
+
+  async stop(): Promise<void> {
+    if (!this.started) return
+    this.started = false
+    const events = this.terminal.events
+    events.off("data", this.handleData)
+    events.off("stateChanged", this.handleStateChanged)
+    events.off("sessionChanged", this.handleSessionChanged)
+    events.off("sessionDeleted", this.handleSessionDeleted)
+    this.clearTimerIfSet("flush")
+    this.clearTimerIfSet("summary")
+    this.clearTimerIfSet("lease")
+    for (const attachment of this.registry.all()) {
+      this.registry.detach(attachment.mobileClientInstanceId, attachment.sessionId)
+    }
+    this.bytesByClient.clear()
+    this.lastLineCache.clear()
+    this.lastLineDirty.clear()
+    this.lastSummaryContent = ""
+  }
+
+  /** Called by the live connection when a phone sends an intent. */
+  async handleIntent(mobileClientInstanceId: string, intent: MobileIntent): Promise<void> {
+    if (!this.started) {
+      this.sendIntentResult(mobileClientInstanceId, {
+        intentId: intent.intentId,
+        outcome: "rejected",
+        code: "gateway_unavailable",
+        message: "终端服务当前不可用。",
+      })
+      return
+    }
+    this.lastActivityByClient.set(mobileClientInstanceId, this.nowMs())
+    const result = await this.executor.execute(mobileClientInstanceId, intent)
+    this.sendIntentResult(mobileClientInstanceId, result)
+  }
+
+  /** Called when a phone's connection drops, so its leases are not held by nobody. */
+  async releaseClient(mobileClientInstanceId: string): Promise<void> {
+    for (const attachment of this.registry.detachClient(mobileClientInstanceId)) {
+      await this.releaseAttachmentLease(attachment)
+    }
+    this.executor.forgetClient(mobileClientInstanceId)
+    this.bytesByClient.delete(mobileClientInstanceId)
+    this.scheduleSummary()
+  }
+
+  getState(): MobileGatewayState {
+    return {
+      started: this.started,
+      transportAttached: this.transport !== null,
+      clients: this.registry.clientCount(),
+      attachments: this.registry.all().length,
+      lastSummaryRevision: this.summaryRevision,
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Terminal events
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Every handler is wrapped: these run inside the PTY's data callback, and an
+   * exception here would propagate into the terminal service itself.
+   */
+  private readonly handleData = (payload: { readonly sessionId: string }): void => {
+    try {
+      this.lastLineDirty.add(payload.sessionId)
+      this.markDirty(payload.sessionId)
+    } catch (error) {
+      this.logWarn("Mobile gateway data handler failed.", error)
+    }
+  }
+
+  private readonly handleStateChanged = (payload: {
+    readonly sessionId: string
+    readonly changeTypes: readonly string[]
+  }): void => {
+    try {
+      this.lastLineDirty.add(payload.sessionId)
+      this.markDirty(payload.sessionId)
+      if (payload.changeTypes.some((type) => type.startsWith("lease."))) {
+        this.recheckLeases(payload.sessionId)
+      }
+      this.scheduleSummary()
+    } catch (error) {
+      this.logWarn("Mobile gateway state handler failed.", error)
+    }
+  }
+
+  private readonly handleSessionChanged = (): void => {
+    try {
+      this.scheduleSummary()
+    } catch (error) {
+      this.logWarn("Mobile gateway session handler failed.", error)
+    }
+  }
+
+  private readonly handleSessionDeleted = (payload: { readonly sessionId: string }): void => {
+    try {
+      this.lastLineCache.delete(payload.sessionId)
+      this.lastLineDirty.delete(payload.sessionId)
+      for (const attachment of this.registry.detachSession(payload.sessionId)) {
+        attachment.leaseId = null
+        attachment.leaseExpiresAtMs = 0
+      }
+      this.scheduleSummary()
+    } catch (error) {
+      this.logWarn("Mobile gateway delete handler failed.", error)
+    }
+  }
+
+  /**
+   * The desktop typing preempts the phone's lease by design (`user_takeover` in
+   * the terminal service). Rather than guessing from the change type, ask the
+   * service who owns the lease — that answer is authoritative.
+   */
+  private recheckLeases(sessionId: string): void {
+    for (const attachment of this.registry.forSession(sessionId)) {
+      const controller = this.controllerFor(attachment)
+      try {
+        const state = this.terminal.getSessionState(sessionId, controller)
+        if (state.lease.occupied && !state.lease.own) {
+          attachment.leaseId = null
+          attachment.leaseExpiresAtMs = 0
+          attachment.leasePreempted = true
+        }
+      } catch {
+        // The session is gone; the delete handler cleans up.
+      }
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Frame flushing
+   * ------------------------------------------------------------------ */
+
+  private markDirty(sessionId: string): void {
+    const attachments = this.registry.forSession(sessionId)
+    if (attachments.length === 0) return
+    for (const attachment of attachments) attachment.dirty = true
+    this.scheduleFlush()
+  }
+
+  private scheduleFlush(): void {
+    if (this.flushTimer || !this.started) return
+    this.flushTimer = this.setTimer(() => {
+      this.flushTimer = null
+      void this.flush()
+    }, FLUSH_INTERVAL_MS)
+  }
+
+  private async flush(): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    for (const attachment of this.registry.all()) {
+      if (!attachment.dirty) continue
+      attachment.dirty = false
+      try {
+        await this.flushAttachment(attachment)
+      } catch (error) {
+        this.logWarn("Mobile frame flush failed.", error, { sessionId: attachment.sessionId })
+      }
+    }
+  }
+
+  private async flushAttachment(attachment: MobileAttachment): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    const window = await this.terminal.readLineWindow({
+      sessionId: attachment.sessionId,
+      maxLines: this.lineWindowLines,
+    })
+    // Anchor before the first push so gateway indices and emulator indices share
+    // an origin; history paging needs to be able to name lines older than the window.
+    if (!attachment.anchored) {
+      attachment.tracker.anchorAt(window.startIndex)
+      attachment.anchored = true
+    }
+    attachment.emulatorWindowStart = window.startIndex
+    attachment.lastSeq = window.throughOutputSeq
+    attachment.lastSizeRevision = window.sizeRevision
+    const update = attachment.tracker.push(window.lines)
+    const mustSnapshot = attachment.needsSnapshot
+    if (!update && !mustSnapshot) return
+
+    const content = mustSnapshot ? attachment.tracker.snapshot() : update!
+    attachment.needsSnapshot = false
+
+    const frames = buildTerminalFrames({
+      sessionId: attachment.sessionId,
+      kind: mustSnapshot ? "reset" : "suffix",
+      from: content.from,
+      lines: content.lines,
+      total: content.total,
+      cursor: {
+        // The emulator reports a row relative to the window it returned, and
+        // `content.from` is that same window's first line in gateway space.
+        row: content.from + window.cursor.row,
+        col: window.cursor.col,
+        visible: window.cursor.visible,
+      },
+      alt: window.alt,
+      truncated: content.truncated,
+      seq: window.throughOutputSeq,
+      sizeRevision: window.sizeRevision,
+    })
+
+    // A snapshot is the recovery path, so it always goes out. Ordinary updates are
+    // subject to the uplink budget: past it, the update is dropped and the next
+    // flush sends a fresh window instead of queueing frames the phone will never
+    // catch up on. On a metered link the latest screen always beats a full history.
+    if (!mustSnapshot && !this.consumeBudget(attachment.mobileClientInstanceId, frames)) {
+      attachment.needsSnapshot = true
+      return
+    }
+    for (const frame of frames) {
+      transport.sendFrame(attachment.mobileClientInstanceId, frame)
+    }
+  }
+
+  /** Sends one full window immediately, for attach and for post-reconnect resync. */
+  private async pushSnapshot(attachment: MobileAttachment): Promise<void> {
+    const window = await this.terminal.readLineWindow({
+      sessionId: attachment.sessionId,
+      maxLines: this.lineWindowLines,
+    })
+    if (!attachment.anchored) {
+      attachment.tracker.anchorAt(window.startIndex)
+      attachment.anchored = true
+    }
+    attachment.emulatorWindowStart = window.startIndex
+    attachment.lastSeq = window.throughOutputSeq
+    attachment.lastSizeRevision = window.sizeRevision
+    attachment.tracker.push(window.lines)
+    const snapshot = attachment.tracker.snapshot()
+    attachment.needsSnapshot = false
+    attachment.dirty = false
+    const frames = buildTerminalFrames({
+      sessionId: attachment.sessionId,
+      kind: "reset",
+      from: snapshot.from,
+      lines: snapshot.lines,
+      total: snapshot.total,
+      cursor: {
+        row: snapshot.from + window.cursor.row,
+        col: window.cursor.col,
+        visible: window.cursor.visible,
+      },
+      alt: window.alt,
+      truncated: false,
+      seq: window.throughOutputSeq,
+      sizeRevision: window.sizeRevision,
+    })
+    this.consumeBudget(attachment.mobileClientInstanceId, frames)
+    for (const frame of frames) {
+      this.transport?.sendFrame(attachment.mobileClientInstanceId, frame)
+    }
+  }
+
+  /**
+   * Serves one page of scrollback below what the phone already has.
+   *
+   * `before` is the client's oldest gateway index. The reply is a `history` frame
+   * covering exactly `[from, from + lines.length)`; an empty one means the desktop
+   * has nothing older, which is the honest answer once the emulator's ring has
+   * evicted it — the line is gone here too, not merely unsent.
+   */
+  async sendHistory(attachment: MobileAttachment, before: number, limit: number): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    const requested = Math.max(1, Math.min(limit, MOBILE_FRAME_LIMITS.maxHistoryLines))
+    // The client's oldest line, expressed in the emulator's own index space.
+    const emulatorOfBefore = before - attachment.tracker.oldestIndex + attachment.emulatorWindowStart
+    // Clamped by `before` as well as by what the emulator holds: a page may not
+    // reach below gateway index 0. That index is not expressible on the wire, and
+    // the server answers a malformed frame by closing the desktop's connection.
+    const count = Math.min(requested, emulatorOfBefore, before)
+    if (count <= 0) {
+      this.emitHistoryFrame(attachment, before, [])
+      return
+    }
+    const range = await this.terminal.readLineRange({
+      sessionId: attachment.sessionId,
+      from: emulatorOfBefore - count,
+      maxLines: count,
+    })
+    if (range.lines.length === 0) {
+      this.emitHistoryFrame(attachment, before, [])
+      return
+    }
+    this.emitHistoryFrame(attachment, before - range.lines.length, range.lines)
+  }
+
+  private emitHistoryFrame(
+    attachment: MobileAttachment,
+    from: number,
+    lines: readonly TerminalStyledLine[],
+  ): void {
+    const transport = this.transport
+    if (!transport) return
+    const frames = buildTerminalFrames({
+      sessionId: attachment.sessionId,
+      kind: "history",
+      from,
+      lines,
+      total: attachment.tracker.snapshot().total,
+      // History does not move the cursor, and the client ignores it here.
+      cursor: { row: 0, col: 0, visible: false },
+      alt: false,
+      truncated: false,
+      seq: attachment.lastSeq,
+      sizeRevision: attachment.lastSizeRevision,
+    })
+    for (const frame of frames) {
+      transport.sendFrame(attachment.mobileClientInstanceId, frame)
+    }
+  }
+
+  private consumeBudget(
+    mobileClientInstanceId: string,
+    frames: readonly MobileTerminalFrame[],
+  ): boolean {
+    const nowMs = this.nowMs()
+    let entry = this.bytesByClient.get(mobileClientInstanceId)
+    if (!entry || nowMs - entry.windowStartedMs >= 1_000) {
+      entry = { windowStartedMs: nowMs, bytes: 0 }
+      this.bytesByClient.set(mobileClientInstanceId, entry)
+    }
+    let bytes = 0
+    for (const frame of frames) bytes += Buffer.byteLength(JSON.stringify(frame), "utf8")
+    const withinBudget = entry.bytes + bytes <= MOBILE_FRAME_LIMITS.maxBytesPerSecond
+    entry.bytes += bytes
+    return withinBudget
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Summary
+   * ------------------------------------------------------------------ */
+
+  private scheduleSummary(): void {
+    if (this.summaryTimer || !this.started) return
+    this.summaryTimer = this.setTimer(() => {
+      this.summaryTimer = null
+      void this.flushSummary()
+    }, SUMMARY_INTERVAL_MS)
+  }
+
+  private async flushSummary(): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    try {
+      const groups = this.summaryGroups()
+      const sessions = await this.summarySessions()
+      // Compared without the revision so an idle desktop produces no traffic at all.
+      const content = JSON.stringify({ groups, sessions })
+      if (content === this.lastSummaryContent) return
+      this.lastSummaryContent = content
+      this.summaryRevision += 1
+      transport.sendSummary({ revision: this.summaryRevision, groups, sessions })
+    } catch (error) {
+      this.logWarn("Mobile summary flush failed.", error)
+    }
+  }
+
+  private summaryGroups(): MobileSummaryGroup[] {
+    return this.terminal.listGroups().map((group) => ({ id: group.id, name: group.name }))
+  }
+
+  private async summarySessions(): Promise<MobileSummarySession[]> {
+    const sessions = this.terminal.listSessions()
+    const rows: MobileSummarySession[] = []
+    for (const session of sessions) {
+      rows.push({
+        id: session.id,
+        groupId: session.groupId,
+        title: session.title,
+        status: session.status,
+        attention: { state: session.attention.state, kind: session.attention.kind },
+        cwd: session.cwd,
+        cols: session.cols,
+        rows: session.rows,
+        startedAt: session.startedAt,
+        lastLine: await this.lastLineFor(session.id),
+        lastOutputSeq: session.lastOutputSeq,
+      })
+    }
+    return rows
+  }
+
+  /**
+   * The last line is the most useful thing in a session row, so it is refreshed
+   * only for sessions that actually produced output, and only at summary rate.
+   *
+   * It also becomes the body of a phone notification, which is why decorative
+   * lines are skipped: the bottom of a pending permission prompt is a box-drawing
+   * border, and "╰──────╯" tells the user nothing.
+   */
+  private async lastLineFor(sessionId: string): Promise<string> {
+    const known = this.lastLineCache.get(sessionId)
+    if (known !== undefined && !this.lastLineDirty.has(sessionId)) return known
+    this.lastLineDirty.delete(sessionId)
+    try {
+      const window = await this.terminal.readLineWindow({
+        sessionId,
+        maxLines: SUMMARY_TAIL_LINES,
+      })
+      for (let index = window.lines.length - 1; index >= 0; index -= 1) {
+        const text = window.lines[index].text.trim()
+        if (text && isMeaningfulLine(text)) {
+          this.lastLineCache.set(sessionId, text)
+          return text
+        }
+      }
+      this.lastLineCache.set(sessionId, "")
+      return ""
+    } catch {
+      return known ?? ""
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Leases
+   * ------------------------------------------------------------------ */
+
+  private scheduleLeaseRenewal(): void {
+    if (this.leaseTimer || !this.started) return
+    this.leaseTimer = this.setTimer(() => {
+      this.leaseTimer = null
+      void this.executor.renewLeases()
+        .then(() => this.expireIdleClients())
+        .catch((error) => this.logWarn("Mobile lease renewal failed.", error))
+        .finally(() => this.scheduleLeaseRenewal())
+    }, LEASE_RENEW_INTERVAL_MS)
+  }
+
+  private async expireIdleClients(): Promise<void> {
+    const nowMs = this.nowMs()
+    for (const [mobileClientInstanceId, lastAtMs] of [...this.lastActivityByClient]) {
+      if (nowMs - lastAtMs < CLIENT_IDLE_TIMEOUT_MS) continue
+      for (const attachment of this.registry.detachClient(mobileClientInstanceId)) {
+        await this.releaseAttachmentLease(attachment)
+      }
+      this.lastActivityByClient.delete(mobileClientInstanceId)
+      this.bytesByClient.delete(mobileClientInstanceId)
+      this.deps.logger.info("Mobile client expired while idle.", { mobileClientInstanceId })
+    }
+  }
+
+  private async releaseAttachmentLease(attachment: MobileAttachment): Promise<void> {
+    const leaseId = attachment.leaseId
+    attachment.leaseId = null
+    attachment.leaseExpiresAtMs = 0
+    if (!leaseId) return
+    try {
+      this.terminal.releaseControl(
+        { sessionId: attachment.sessionId, leaseId },
+        this.controllerFor(attachment),
+      )
+    } catch {
+      // Already expired or taken over; nothing to recover.
+    }
+  }
+
+  private controllerFor(attachment: MobileAttachment) {
+    return {
+      clientId: `mobile:${attachment.mobileClientInstanceId}`,
+      controllerInstanceId: `mobile:${attachment.mobileClientInstanceId}:${attachment.sessionId}`,
+      actorKind: "agent" as const,
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Authorization and audit
+   * ------------------------------------------------------------------ */
+
+  private async authorize(
+    action: PermissionAction,
+    resource: string,
+    context: Record<string, unknown> = {},
+  ): Promise<void> {
+    let allowed = false
+    try {
+      const result = await this.deps.permissionGuard.check({
+        action,
+        actor: MOBILE_GATEWAY_ACTOR,
+        resource,
+        context,
+      })
+      allowed = result.allowed
+    } catch (error) {
+      this.recordAudit(action, resource, "failed")
+      throw new MobileIntentError("permission_check_failed", "权限检查没有完成。")
+    }
+    this.recordAudit(action, resource, allowed ? "allowed" : "denied")
+    if (!allowed) {
+      throw new MobileIntentError("permission_denied", "本地策略拒绝了这个操作。")
+    }
+  }
+
+  private recordAudit(
+    action: PermissionAction,
+    resource: string,
+    outcome: "allowed" | "denied" | "failed",
+  ): void {
+    try {
+      this.deps.auditSink.record({
+        action,
+        actor: MOBILE_GATEWAY_ACTOR,
+        resource,
+        outcome,
+        metadata: { source: "core.mobile-gateway" },
+      })
+    } catch (error) {
+      // Auditing must never take down the operation it is recording.
+      this.logWarn("Mobile gateway audit failed.", error)
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Plumbing
+   * ------------------------------------------------------------------ */
+
+  private sendIntentResult(mobileClientInstanceId: string, result: MobileIntentResult): void {
+    const transport = this.transport
+    if (!transport) return
+    transport.sendIntentResult(mobileClientInstanceId, result)
+  }
+
+  private nowMs(): number {
+    return (this.deps.now?.() ?? new Date()).getTime()
+  }
+
+  private clearTimerIfSet(kind: "flush" | "summary" | "lease"): void {
+    const handle = kind === "flush" ? this.flushTimer : kind === "summary" ? this.summaryTimer : this.leaseTimer
+    if (!handle) return
+    this.clearTimer(handle)
+    if (kind === "flush") this.flushTimer = null
+    else if (kind === "summary") this.summaryTimer = null
+    else this.leaseTimer = null
+  }
+
+  private logWarn(message: string, error: unknown, extra: Record<string, unknown> = {}): void {
+    this.deps.logger.warn(message, {
+      ...extra,
+      errorName: error instanceof Error ? error.name : typeof error,
+      code: error instanceof MobileIntentError ? error.code : undefined,
+    })
+  }
+}
+
+export function createMobileGatewayService(deps: MobileGatewayServiceDeps): MobileGatewayService {
+  return new MobileGatewayService(deps)
+}
+
+/**
+ * Rejects box-drawing borders and block/rule glyphs, which are how TUIs frame
+ * themselves and carry no information on their own.
+ */
+const DECORATION_PATTERN = /^[\s─-╿▀-▟■-◿‐-―_=~\-—–]+$/u
+
+export function isMeaningfulLine(text: string): boolean {
+  return !DECORATION_PATTERN.test(text)
+}

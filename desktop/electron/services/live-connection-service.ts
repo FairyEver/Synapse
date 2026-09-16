@@ -1,6 +1,10 @@
 import os from "node:os"
 import { app } from "electron"
 import WebSocket from "ws"
+import type {
+  MobileIntentResult,
+  MobileTerminalFrame,
+} from "@synapse/shared" with { "resolution-mode": "import" }
 import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseLiveState } from "../../src/types/live"
 import type { EventBus } from "../runtime/event-bus"
@@ -9,6 +13,10 @@ import type { LiveWebhookDeliveryHandler } from "./live-webhook-delivery-handler
 import { LiveClientIdStore } from "./live-client-id-store"
 import { createLiveReconnectDelay } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
+import type {
+  MobileIntentHandler,
+  MobileSummaryDraft,
+} from "./mobile-gateway/transport"
 
 const logger = createMainLogger("service.live")
 const defaultHeartbeatIntervalMs = 20_000
@@ -43,6 +51,8 @@ export class LiveConnectionService {
   private readonly platform: () => string
   private readonly deviceName: () => string
   private webhookDeliveryHandler: Pick<LiveWebhookDeliveryHandler, "handle"> | null
+  private mobileIntentHandler: MobileIntentHandler | null = null
+  private sharedProtocol: Awaited<typeof liveProtocolPromise> | null = null
   private eventBus: EventBus | null = null
   private socket: LiveSocket | null = null
   private reconnectTimer: NodeJS.Timeout | null = null
@@ -83,6 +93,10 @@ export class LiveConnectionService {
 
   setWebhookDeliveryHandler(handler: Pick<LiveWebhookDeliveryHandler, "handle">): void {
     this.webhookDeliveryHandler = handler
+  }
+
+  setMobileIntentHandler(handler: MobileIntentHandler): void {
+    this.mobileIntentHandler = handler
   }
 
   getState(): SynapseLiveState {
@@ -289,6 +303,92 @@ export class LiveConnectionService {
           ...this.liveErrorMetadata(error),
         })
       })
+      return
+    }
+
+    if (parsed.type === LIVE_MESSAGE_TYPES.mobileIntent) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
+      const payload = parsed.payload
+      // The cloud routes per device, but a desktop must never act on an intent
+      // addressed to a different one.
+      if (payload.desktopClientInstanceId !== clientInstanceId) {
+        logger.warn("Live mobile intent ignored.", { reason: "desktop_mismatch" })
+        return
+      }
+      if (!this.mobileIntentHandler) {
+        logger.warn("Live mobile intent ignored.", { reason: "missing_handler" })
+        return
+      }
+      void this.mobileIntentHandler.handle(payload.mobileClientInstanceId, payload.intent)
+        .catch((error: unknown) => {
+          logger.warn("Live mobile intent handler failed.", this.liveErrorMetadata(error))
+        })
+      return
+    }
+
+    if (parsed.type === LIVE_MESSAGE_TYPES.mobileDetached) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
+      // A phone that vanished must not keep holding a terminal's write lease.
+      void this.mobileIntentHandler?.releaseClient(parsed.payload.mobileClientInstanceId)
+        .catch((error: unknown) => {
+          logger.warn("Live mobile client release failed.", this.liveErrorMetadata(error))
+        })
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Mobile terminal relay
+   * ------------------------------------------------------------------ */
+
+  async sendMobileSummary(draft: MobileSummaryDraft): Promise<void> {
+    // Without an identity the cloud cannot tell which desktop a summary belongs to.
+    const clientInstanceId = this.state.clientInstanceId
+    if (!clientInstanceId) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileSummary, {
+      desktopClientInstanceId: clientInstanceId,
+      desktopName: this.deviceName(),
+      ...draft,
+    }, this.envelopeMetadata()))
+  }
+
+  async sendMobileFrame(mobileClientInstanceId: string, frame: MobileTerminalFrame): Promise<void> {
+    const clientInstanceId = this.state.clientInstanceId
+    if (!clientInstanceId) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileFrame, {
+      desktopClientInstanceId: clientInstanceId,
+      mobileClientInstanceId,
+      frame,
+    }, this.envelopeMetadata()))
+  }
+
+  async sendMobileIntentResult(
+    mobileClientInstanceId: string,
+    result: MobileIntentResult,
+  ): Promise<void> {
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileIntentResult, {
+      mobileClientInstanceId,
+      result,
+    }, this.envelopeMetadata()))
+  }
+
+  private async getProtocol(): Promise<Awaited<typeof liveProtocolPromise>> {
+    if (!this.sharedProtocol) this.sharedProtocol = await liveProtocolPromise
+    return this.sharedProtocol
+  }
+
+  private envelopeMetadata(): { id: string; sentAt: string } {
+    return { id: this.createMessageId(), sentAt: this.now().toISOString() }
+  }
+
+  private sendLiveEnvelope(envelope: unknown): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return
+    try {
+      this.socket.send(JSON.stringify(envelope))
+    } catch (error) {
+      logger.warn("Live outbound message failed.", this.liveErrorMetadata(error))
     }
   }
 

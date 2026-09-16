@@ -4,8 +4,59 @@ import { fileURLToPath } from "node:url"
 
 import { installTerminalUnicodeWidth } from "../shared/terminal-unicode-width"
 
+// xterm does not export IBuffer/IBufferLine/IBufferCell, so they are recovered
+// from the public Terminal surface.
+type TerminalActiveBuffer = Terminal["buffer"]["active"]
+type TerminalBufferLine = NonNullable<ReturnType<TerminalActiveBuffer["getLine"]>>
+type TerminalBufferCell = ReturnType<TerminalActiveBuffer["getNullCell"]>
+
 export const TERMINAL_EMULATOR_ID = "xterm-headless" as const
 export const TERMINAL_EMULATOR_VERSION = "6.0.0" as const
+
+/** `-1` for the terminal default, `0..255` for a palette index, `0x1000000 | rgb` for truecolor. */
+export const TERMINAL_STYLE_DEFAULT_COLOR = -1
+export const TERMINAL_STYLE_TRUECOLOR_BASE = 0x1000000
+
+/**
+ * A run of adjacent cells sharing one style. Deliberately semantic rather than
+ * wire-shaped: the emulator has no business knowing about the mobile protocol,
+ * so the caller compacts this into whatever representation it ships.
+ */
+export type TerminalStyledRun = {
+  readonly start: number
+  readonly length: number
+  readonly foreground: number
+  readonly background: number
+  readonly bold: boolean
+  readonly italic: boolean
+  readonly underline: boolean
+  readonly dim: boolean
+  readonly inverse: boolean
+}
+
+export type TerminalStyledLine = {
+  readonly text: string
+  /** Absent when the whole line uses default styling, which is the common case. */
+  readonly runs?: readonly TerminalStyledRun[]
+}
+
+export type TerminalLineWindow = {
+  readonly lines: readonly TerminalStyledLine[]
+  /**
+   * Buffer index of `lines[0]`. Only meaningful within one read: xterm recycles
+   * its ring buffer once scrollback is full, so indices slide. Callers that need
+   * a stable line number must keep their own counter.
+   */
+  readonly startIndex: number
+  readonly totalLines: number
+  readonly cols: number
+  readonly rows: number
+  /** `row` is relative to `lines[0]`. */
+  readonly cursor: { readonly row: number; readonly col: number; readonly visible: boolean }
+  readonly alt: boolean
+  readonly throughOutputSeq: number
+  readonly sizeRevision: number
+}
 
 export type TerminalRenderedView = {
   readonly kind: "screen" | "scrollback"
@@ -53,7 +104,11 @@ export function createTerminalCoreEmulator(input: {
   const terminal = new Terminal({
     cols: input.cols,
     rows: input.rows,
-    scrollback: input.scrollback ?? 2_000,
+    // Matches the desktop's own visible terminal. The phone's scrollback bound is
+    // this number: it is the deepest history the desktop can still offer, and
+    // lines evicted here are gone for both. Costs memory per session, which is
+    // why it is a deliberate constant and not just "large".
+    scrollback: input.scrollback ?? 5_000,
     allowProposedApi: true,
   })
   const unicodeWidthStatus = installTerminalUnicodeWidth(terminal)
@@ -159,6 +214,63 @@ export function createTerminalCoreEmulator(input: {
     }
   }
 
+  /**
+   * Reads the tail of the buffer as styled lines.
+   *
+   * Unlike `getView`, this keeps per-cell styling so a remote client can render
+   * colour without shipping raw ANSI over the wire. Trailing whitespace is
+   * trimmed the same way `translateToString(true)` does, so blank padding never
+   * reaches the client.
+   */
+  function readLineWindow(input: { readonly maxLines: number }): TerminalLineWindow {
+    const buffer = terminal.buffer.active
+    const totalLines = buffer.length
+    const startIndex = Math.max(0, totalLines - Math.max(1, input.maxLines))
+    const scratch = buffer.getNullCell()
+    const lines: TerminalStyledLine[] = []
+    // xterm.modes does not expose DECTCEM, and the cursor only matters when a
+    // session is interactive; the caller decides whether to draw it.
+    for (let index = startIndex; index < totalLines; index += 1) {
+      lines.push(readStyledLine(buffer.getLine(index), scratch))
+    }
+    return {
+      lines,
+      startIndex,
+      totalLines,
+      cols: terminal.cols,
+      rows: terminal.rows,
+      cursor: {
+        row: Math.max(0, buffer.baseY + buffer.cursorY - startIndex),
+        col: buffer.cursorX,
+        visible: true,
+      },
+      alt: buffer.type === "alternate",
+      throughOutputSeq,
+      sizeRevision,
+    }
+  }
+
+  /**
+   * Reads an arbitrary slice of the buffer rather than the tail.
+   *
+   * History paging needs this: the phone asks for the lines just below what it
+   * already has, which is nowhere near the end of a long buffer.
+   */
+  function readLineRange(input: {
+    readonly from: number
+    readonly maxLines: number
+  }): { readonly lines: TerminalStyledLine[]; readonly startIndex: number } {
+    const buffer = terminal.buffer.active
+    const startIndex = Math.max(0, Math.min(input.from, buffer.length))
+    const end = Math.min(buffer.length, startIndex + Math.max(0, input.maxLines))
+    const scratch = buffer.getNullCell()
+    const lines: TerminalStyledLine[] = []
+    for (let index = startIndex; index < end; index += 1) {
+      lines.push(readStyledLine(buffer.getLine(index), scratch))
+    }
+    return { lines, startIndex }
+  }
+
   function bracketedPasteEvidence(): {
     readonly enabled: boolean
     readonly fresh: boolean
@@ -215,6 +327,8 @@ export function createTerminalCoreEmulator(input: {
     accept,
     resize,
     getView,
+    readLineWindow,
+    readLineRange,
     bracketedPasteEvidence,
     ready,
     captureSnapshot,
@@ -224,6 +338,120 @@ export function createTerminalCoreEmulator(input: {
     get sizeRevision(): number { return sizeRevision },
     get currentCwd(): string | undefined { return currentCwd },
   }
+}
+
+function readStyledLine(line: TerminalBufferLine | undefined, scratch: TerminalBufferCell): TerminalStyledLine {
+  if (!line) return { text: "" }
+  const end = trimmedCellCount(line, scratch)
+  if (end === 0) return { text: "" }
+
+  let text = ""
+  const runs: TerminalStyledRun[] = []
+  let runStart = 0
+  let runForeground = TERMINAL_STYLE_DEFAULT_COLOR
+  let runBackground = TERMINAL_STYLE_DEFAULT_COLOR
+  let runBold = false
+  let runItalic = false
+  let runUnderline = false
+  let runDim = false
+  let runInverse = false
+  let runOpen = false
+
+  const closeRun = (endOffset: number): void => {
+    if (!runOpen) return
+    // Only emit runs that actually differ from the default, so plain log lines
+    // carry no styling payload at all.
+    const styled = runForeground !== TERMINAL_STYLE_DEFAULT_COLOR
+      || runBackground !== TERMINAL_STYLE_DEFAULT_COLOR
+      || runBold || runItalic || runUnderline || runDim || runInverse
+    if (styled && endOffset > runStart) {
+      runs.push({
+        start: runStart,
+        length: endOffset - runStart,
+        foreground: runForeground,
+        background: runBackground,
+        bold: runBold,
+        italic: runItalic,
+        underline: runUnderline,
+        dim: runDim,
+        inverse: runInverse,
+      })
+    }
+    runOpen = false
+  }
+
+  // Set while the previous cell was a double-width character, whose trailing
+  // cell is empty and must not be drawn again.
+  let wideTrailer = false
+  for (let x = 0; x < end; x += 1) {
+    const cell = line.getCell(x, scratch)
+    if (!cell) break
+    const chars = cell.getChars()
+    if (chars.length === 0) {
+      // Any other empty cell is a blank the output moved the cursor across —
+      // a status line pads between its segments with a cursor jump. Dropping
+      // those cells would run the segments together.
+      if (!wideTrailer) text += " "
+      wideTrailer = false
+      continue
+    }
+    wideTrailer = cell.getWidth() === 2
+    const foreground = readCellColor(cell, true)
+    const background = readCellColor(cell, false)
+    const bold = cell.isBold() !== 0
+    const italic = cell.isItalic() !== 0
+    const underline = cell.isUnderline() !== 0
+    const dim = cell.isDim() !== 0
+    const inverse = cell.isInverse() !== 0
+    if (runOpen && (foreground !== runForeground
+      || background !== runBackground
+      || bold !== runBold
+      || italic !== runItalic
+      || underline !== runUnderline
+      || dim !== runDim
+      || inverse !== runInverse)) {
+      closeRun(text.length)
+    }
+    if (!runOpen) {
+      runStart = text.length
+      runForeground = foreground
+      runBackground = background
+      runBold = bold
+      runItalic = italic
+      runUnderline = underline
+      runDim = dim
+      runInverse = inverse
+      runOpen = true
+    }
+    text += chars
+  }
+  closeRun(text.length)
+  return runs.length > 0 ? { text, runs } : { text }
+}
+
+function trimmedCellCount(line: TerminalBufferLine, scratch: TerminalBufferCell): number {
+  let end = 0
+  for (let x = 0; x < line.length; x += 1) {
+    const cell = line.getCell(x, scratch)
+    if (!cell) break
+    const chars = cell.getChars()
+    if (chars.length > 0 && chars.trim().length > 0) end = x + 1
+  }
+  return end
+}
+
+function readCellColor(cell: TerminalBufferCell, foreground: boolean): number {
+  const isRgb = foreground ? cell.isFgRGB() : cell.isBgRGB()
+  if (isRgb) {
+    const value = foreground ? cell.getFgColor() : cell.getBgColor()
+    return TERMINAL_STYLE_TRUECOLOR_BASE | (value & 0xff_ffff)
+  }
+  const isPalette = foreground ? cell.isFgPalette() : cell.isBgPalette()
+  if (isPalette) {
+    const value = foreground ? cell.getFgColor() : cell.getBgColor()
+    return value & 0xff
+  }
+  return TERMINAL_STYLE_DEFAULT_COLOR
 }
 
 function serializeTerminalState(

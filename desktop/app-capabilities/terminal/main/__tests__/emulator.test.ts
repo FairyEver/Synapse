@@ -1,7 +1,11 @@
 import { Buffer } from "node:buffer"
 import { describe, expect, it, vi } from "vitest"
 
-import { createTerminalCoreEmulator } from "../emulator"
+import {
+  TERMINAL_STYLE_DEFAULT_COLOR,
+  TERMINAL_STYLE_TRUECOLOR_BASE,
+  createTerminalCoreEmulator,
+} from "../emulator"
 
 describe("TerminalCoreEmulator renderer snapshots", () => {
   it("reports standard terminal notification OSC sequences without exposing their content", async () => {
@@ -159,6 +163,134 @@ describe("TerminalCoreEmulator renderer snapshots", () => {
       const view = emulator.getView({ kind: "screen", maxBytes: 4096 })
 
       expect(view.lines.slice(0, 2)).toEqual(["⏺⏺⏺⏺⏺", "a"])
+    } finally {
+      emulator.dispose()
+    }
+  })
+})
+
+describe("TerminalCoreEmulator styled line windows", () => {
+  it("returns trimmed plain lines with no styling payload for unstyled output", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      await emulator.accept("hello\r\nworld", 1)
+
+      const window = emulator.readLineWindow({ maxLines: 10 })
+
+      expect(window.lines[0]).toEqual({ text: "hello" })
+      expect(window.lines[1]).toEqual({ text: "world" })
+      expect(window.alt).toBe(false)
+      expect(window.throughOutputSeq).toBe(1)
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("keeps foreground runs and omits run entries for default-styled spans", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      // "red" in palette colour 1, then " plain" with default styling.
+      await emulator.accept("\u001b[31mred\u001b[0m plain", 1)
+
+      const line = emulator.readLineWindow({ maxLines: 10 }).lines[0]
+
+      expect(line.text).toBe("red plain")
+      expect(line.runs).toEqual([
+        {
+          start: 0,
+          length: 3,
+          foreground: 1,
+          background: TERMINAL_STYLE_DEFAULT_COLOR,
+          bold: false,
+          italic: false,
+          underline: false,
+          dim: false,
+          inverse: false,
+        },
+      ])
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("separates adjacent runs that differ only by attribute", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      await emulator.accept("\u001b[1mbold\u001b[22m plain", 1)
+
+      const line = emulator.readLineWindow({ maxLines: 10 }).lines[0]
+
+      expect(line.text).toBe("bold plain")
+      expect(line.runs).toHaveLength(1)
+      expect(line.runs?.[0]).toMatchObject({ start: 0, length: 4, bold: true })
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("encodes truecolor distinctly from palette indices", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      await emulator.accept("\u001b[38;2;18;52;86mdeep\u001b[0m", 1)
+
+      const line = emulator.readLineWindow({ maxLines: 10 }).lines[0]
+
+      expect(line.runs?.[0]?.foreground).toBe(
+        TERMINAL_STYLE_TRUECOLOR_BASE | (18 << 16) | (52 << 8) | 86,
+      )
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("bounds the window to the tail and reports the buffer offset", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 4, sizeRevision: 1 })
+    try {
+      await emulator.accept(Array.from({ length: 30 }, (_, index) => `line${index}`).join("\r\n"), 1)
+
+      const window = emulator.readLineWindow({ maxLines: 5 })
+
+      expect(window.lines).toHaveLength(5)
+      expect(window.lines.at(-1)?.text).toBe("line29")
+      expect(window.startIndex).toBe(window.totalLines - 5)
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("places the cursor relative to the returned window", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      await emulator.accept("one\r\ntwo\r\nthree", 1)
+
+      const window = emulator.readLineWindow({ maxLines: 10 })
+      const cursorLine = window.lines[window.cursor.row]
+
+      expect(cursorLine?.text).toBe("three")
+      expect(window.cursor.col).toBe(5)
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("keeps the blank cells a cursor jump stepped over", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      // A footer drawn with absolute positioning, the way a status line pads
+      // between segments. The gap is real space on screen.
+      await emulator.accept("left\u001b[9Gright", 1)
+
+      expect(emulator.readLineWindow({ maxLines: 10 }).lines[0].text).toBe("left    right")
+    } finally {
+      emulator.dispose()
+    }
+  })
+
+  it("reports the alternate screen while a TUI owns the terminal", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 40, rows: 6, sizeRevision: 1 })
+    try {
+      await emulator.accept("\u001b[?1049halt screen", 1)
+      expect(emulator.readLineWindow({ maxLines: 10 }).alt).toBe(true)
     } finally {
       emulator.dispose()
     }

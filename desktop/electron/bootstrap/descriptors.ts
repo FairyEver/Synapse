@@ -262,6 +262,8 @@ import type {
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy, systemDataMaintenancePolicy } from "../runtime/security"
+import { createMobileGatewayService, type MobileGatewayService } from "../services/mobile-gateway-service"
+import { mobileGatewayTerminalPolicy } from "../services/mobile-gateway/controller"
 import type { ProcessRuntime } from "../runtime/process"
 import {
   buildHostEnvironment,
@@ -489,6 +491,32 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
   },
   async start(instance) {
     await instance.start()
+  },
+  async stop(instance) {
+    await instance.stop()
+  },
+}
+
+/**
+ * Relays terminal state to phones through the cloud.
+ *
+ * Degraded rather than fatal: without it the desktop terminal works exactly as
+ * before, only the remote view is unavailable.
+ */
+export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService> = {
+  id: "core.mobile-gateway",
+  criticality: "degraded",
+  dependsOn: ["core.terminal", "core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return createMobileGatewayService({
+      terminal: ctx.registry.get<TerminalService>("core.terminal"),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("mobile-gateway"),
+    })
+  },
+  start(instance) {
+    instance.start()
   },
   async stop(instance) {
     await instance.stop()
@@ -2175,6 +2203,9 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     guard.registerPolicy(systemAutomationPolicy)
     guard.registerPolicy(systemMcpAutoRegisterPolicy)
     guard.registerPolicy(systemDataMaintenancePolicy)
+    // Narrow on purpose: cloud-delivered mobile commands run as an agent, never as
+    // the user, so anything outside the listed terminal actions stays denied.
+    guard.registerPolicy(mobileGatewayTerminalPolicy)
     return guard
   },
 }

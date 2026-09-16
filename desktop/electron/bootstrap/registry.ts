@@ -61,6 +61,7 @@ import {
   coreSoundNotifierDescriptor,
   coreSystemNotifierDescriptor,
   coreSystemNotifierIntegrationDescriptor,
+  coreMobileGatewayDescriptor,
   coreSystemAppWindowDescriptor,
   coreSynapseSkillDescriptor,
   coreTerminalDescriptor,
@@ -141,6 +142,7 @@ export function buildServiceRegistry(
   registry.register(coreSideChannelDescriptor)
   registry.register(coreTerminalAgentNotificationsDescriptor)
   registry.register(coreTerminalDescriptor)
+  registry.register(coreMobileGatewayDescriptor)
   registry.register(coreWorkspaceFileTreeDescriptor)
   registry.register(coreSynapseSkillDescriptor)
   registry.register(coreQuickInputDescriptor)

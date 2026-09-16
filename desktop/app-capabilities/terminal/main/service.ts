@@ -91,7 +91,11 @@ import {
   type TerminalSplitPaneResult,
   type TerminalWorkspace,
 } from "../shared/workspace"
-import { createTerminalCoreEmulator, type TerminalCoreEmulator } from "./emulator"
+import {
+  createTerminalCoreEmulator,
+  type TerminalCoreEmulator,
+  type TerminalStyledLine,
+} from "./emulator"
 import type { TerminalAgentNotificationService } from "./agent-notification-service"
 import {
   resolveTerminalEnvironment,
@@ -2632,6 +2636,59 @@ export function createTerminalService(deps: {
     return runtime.emulator.getView(input)
   }
 
+  /**
+   * Styled tail of a session's screen, for consumers that render it themselves
+   * rather than shipping raw ANSI. Mirrors `getView`'s checkpoint fallback so a
+   * session whose runtime is gone still yields its last known screen.
+   */
+  async function readLineWindow(input: { sessionId: string; maxLines: number }) {
+    const runtime = runtimes.get(input.sessionId)
+    if (!runtime) {
+      const session = getSessionOrThrow(input.sessionId)
+      const emulator = await restoreCheckpointEmulator(session)
+      if (emulator) {
+        try {
+          return emulator.readLineWindow({ maxLines: input.maxLines })
+        } finally {
+          emulator.dispose()
+        }
+      }
+      return {
+        lines: [],
+        startIndex: 0,
+        totalLines: 0,
+        cols: session.cols,
+        rows: session.rows,
+        cursor: { row: 0, col: 0, visible: false },
+        alt: false,
+        throughOutputSeq: session.lastOutputSeq,
+        sizeRevision: session.sizeRevision,
+      }
+    }
+    // Reads are synchronous over the buffer, so wait for queued writes to land
+    // first; otherwise a burst of output can be read half-applied.
+    await runtime.emulator.ready()
+    return runtime.emulator.readLineWindow({ maxLines: input.maxLines })
+  }
+
+  /**
+   * An arbitrary slice of a session's scrollback, for history paging.
+   *
+   * Returns nothing for a session whose runtime is gone: the checkpoint holds a
+   * truncated snapshot, and serving history out of it would hand the phone a
+   * window that does not line up with what it already has.
+   */
+  async function readLineRange(input: {
+    sessionId: string
+    from: number
+    maxLines: number
+  }): Promise<{ readonly lines: TerminalStyledLine[]; readonly startIndex: number }> {
+    const runtime = runtimes.get(input.sessionId)
+    if (!runtime) return { lines: [], startIndex: 0 }
+    await runtime.emulator.ready()
+    return runtime.emulator.readLineRange({ from: input.from, maxLines: input.maxLines })
+  }
+
   function clearExpiredLease(sessionId: string): void {
     const lease = leases.get(sessionId)
     if (lease && Date.parse(lease.expiresAt) <= Date.now()) expireLease(sessionId, "expired")
@@ -2847,6 +2904,8 @@ export function createTerminalService(deps: {
     revokeClientAccess,
     getSessionState,
     getView,
+    readLineWindow,
+    readLineRange,
     applyAgentAttention,
     get terminalDomainRevision() { return terminalDomainRevision },
     get lastPersistError() { return lastPersistError },
