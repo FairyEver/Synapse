@@ -45,14 +45,11 @@ struct TerminalScreen: View {
         return DesktopGrid(columns: session.cols, rows: session.rows)
     }
 
-    /// The store owns the wrap, so the mode and the grid reach it here rather than
-    /// being passed straight to the view.
+    /// Tells the desktop which grid to adopt, or that it may decide again.
     ///
-    /// Called from `onAppear`/`onChange` rather than from `updateUIView`: the store
-    /// is observed, and mutating it while SwiftUI is already updating is how a view
-    /// update turns into a cycle.
+    /// The view is what wraps the rows — it is the only thing that can see both the
+    /// pane and the mode — so there is nothing to push into the store here.
     private func syncDisplayMode() {
-        store.adopt(displayMode: displayMode, desktopGrid: desktopGrid)
         if displayMode == .phoneDriven {
             reportGridToDesktop()
         } else {

@@ -210,3 +210,37 @@ func terminalGridFitScale(
     // "part of the screen, legible", which is the other mode's behaviour.
     return min(1, min(usableWidth / gridWidth, usableHeight / gridHeight))
 }
+
+/// The width rows should be wrapped at.
+///
+/// One function, because there used to be two things deciding this — the view's own
+/// measurement and a display mode carried separately by the store — and when they
+/// disagreed the rows were wrapped at one width while the cells were sized for
+/// another. That is not a subtle failure: text hugs the left of a box built for a
+/// wider grid, the right margin is empty, and the whole screen is taller than it
+/// should be because every line was wrapped early.
+///
+/// - Parameters:
+///   - displayMode: which device's grid the terminal is being shown at.
+///   - desktopGrid: the computer's grid, absent until the phone has been told it.
+///   - paneWidth: the space the rows have to fit in, used only when the phone's own
+///     width is what decides.
+///   - fontSize: the size the rows will be drawn at, which is what turns the pane's
+///     width into a column count.
+func terminalWrapColumns(
+    displayMode: TerminalDisplayMode,
+    desktopGrid: DesktopGrid?,
+    paneWidth: CGFloat,
+    fontSize: CGFloat
+) -> Int {
+    // The computer's grid, whenever that is what is being shown. Re-wrapping at the
+    // phone's width here is the one thing this mode exists to avoid.
+    if displayMode == .desktopDriven, let desktopGrid, desktopGrid.columns > 0 {
+        return desktopGrid.columns
+    }
+    guard fontSize > 0 else { return TerminalCellMetrics.minimumColumns }
+    return max(
+        TerminalCellMetrics.minimumColumns,
+        TerminalCellMetrics.columns(fitting: paneWidth, fontSize: fontSize)
+    )
+}

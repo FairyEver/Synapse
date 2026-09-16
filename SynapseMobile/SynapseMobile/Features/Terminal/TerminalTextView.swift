@@ -295,9 +295,14 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private func reportColumnsIfNeeded() {
         guard fontSize > 0 else { return }
 
-        let columns = max(
-            TerminalCellMetrics.minimumColumns,
-            TerminalCellMetrics.columns(fitting: bounds.width, fontSize: fontSize)
+        // Decided here, and only here. The store wraps at whatever it is told, so a
+        // second opinion about it — one the store used to hold — is how the rows and
+        // the boxes around them came apart.
+        let columns = terminalWrapColumns(
+            displayMode: displayMode,
+            desktopGrid: desktopGrid,
+            paneWidth: bounds.width,
+            fontSize: fontSize
         )
         if columns != reportedColumns {
             reportedColumns = columns
