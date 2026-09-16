@@ -78,7 +78,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var canvasOffset: CGPoint = .zero
     /// The view the zoom transform is applied to. Sits between this view and the
     /// collection view so the magnification is one transform over everything the
-    /// terminal draws, insets included.
+    /// terminal draws.
     private let canvas = UIView()
     /// Kept so it can be switched on only while the canvas is magnified — a pan that
     /// is always live would take drags away from the terminal's own scrolling.
@@ -94,8 +94,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var appliedRows: [DisplayRow] = []
     private var isPinnedToBottom = true
     /// Set when the grid changes, so the view lands on the computer's current
-    /// screen once. Not a standing behaviour: after that the reader owns the scroll
-    /// position, and re-pinning on every frame is what made the picture twitch.
+    /// screen at once rather than waiting for the next frame to carry it there.
+    ///
+    /// A one-shot on top of the ordinary following, not instead of it: following
+    /// applies whenever the reader is at the bottom, and a reader who has just been
+    /// switched to another grid has not been anywhere yet.
     private var pendingLandingScroll = false
     private var atHistoryFloor = false
     private var requestsInFlight = false
@@ -114,18 +117,13 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var reportedRows = 0
     private var lastLayoutHeight: CGFloat = 0
     /// The pane size the fit was last computed against, so `layoutSubviews` can tell
-    /// a real resize from its own inset being applied.
+    /// a real resize from the canvas being sized to the pane it already has.
     private var lastLaidOutPaneSize: CGSize = .zero
     private var appliedCursor: TerminalStore.CursorPosition?
     private var blinkTimer: Timer?
     /// Blink phase. The cursor is solid whenever blinking is off, so starting from
     /// `true` means Reduce Motion shows a steady block with no timer at all.
     private var cursorPhaseOn = true
-
-    /// Both edges together. Derived from the cell metrics rather than given its own
-    /// number: the row label's leading is the same measurement seen once, and two
-    /// literals describing one edge is how they drift.
-    private static var horizontalInset: CGFloat { TerminalCellMetrics.contentInset * 2 }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -171,7 +169,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             fontSize = target
             remeasureRows()
         } else {
-            applyInsets()
+            applyCanvasLayout()
             collectionView.collectionViewLayout.invalidateLayout()
         }
         reportColumnsIfNeeded()
@@ -188,7 +186,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         appliedRows = []
         rowsByKey.removeAll()
         cursorPhaseOn = true
-        applyInsets()
+        applyCanvasLayout()
         collectionView.collectionViewLayout.invalidateLayout()
     }
 
@@ -225,23 +223,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         )
     }
 
-    /// The pane's width with a cell of padding taken off each side.
-    private var usableWidth: CGFloat {
-        max(0, bounds.width - Self.horizontalInset)
-    }
-
-    /// Places the grid inside the pane.
-    ///
-    /// The desktop-grid mode aligns rather than fills. A grid wider than it is tall —
-    /// which is what a desktop terminal is — is scaled to the width and sits at the
-    /// top: the lines a reader looks for are the last ones, and empty space below
-    /// them goes unnoticed where empty space above them would not. A grid taller
-    /// than the pane is centred instead.
     /// Magnifies the canvas, or puts it back.
     ///
     /// One transform over the whole container, so everything the terminal draws —
-    /// rows, alignment insets, the cursor — grows together and nothing reflows under
-    /// the finger. While it is magnified the collection view stops scrolling, because
+    /// rows, padding, the cursor — grows together and nothing reflows under the
+    /// finger. While it is magnified the collection view stops scrolling, because
     /// a drag is then about where in the screen the reader is looking rather than
     /// where in the buffer.
     /// Sizes the canvas without touching its transform.
@@ -274,61 +260,36 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             .scaledBy(x: zoom, y: zoom)
     }
 
-    private func applyInsets() {
-        let pane = bounds
-        sizeCanvas(to: pane.size)
-        defer { applyCanvasTransform() }
-        guard displayMode == .desktopDriven, let grid = desktopGrid, pane.width > 0, pane.height > 0 else {
-            collectionView.contentInset = .zero
-            collectionView.alwaysBounceHorizontal = false
-            return
-        }
-
-        let cellWidth = TerminalCellMetrics.advance(forFontSize: fontSize)
-        let cellHeight = TerminalRowCell.rowHeight(for: fontSize)
-        let gridWidth = CGFloat(grid.columns) * cellWidth
-        let gridHeight = CGFloat(grid.rows) * cellHeight
-        guard gridWidth > 0, gridHeight > 0 else {
-            collectionView.contentInset = .zero
-            collectionView.alwaysBounceHorizontal = false
-            return
-        }
-
-        // Only once the reader has pinched past the fit is there more grid than
-        // pane, and only then is there anything to scroll to.
-        let usable = usableWidth
-        collectionView.alwaysBounceHorizontal = gridWidth > usable
-
-        collectionView.contentInset = UIEdgeInsets(
-            // Centred on both axes, the way a photo sits in an album.
-            //
-            // It used to be pinned to the top whenever the width was what ran out,
-            // on the reasoning that a terminal's last lines are the ones being read.
-            // That is true of a terminal that fills the screen and false of one
-            // floating in the middle of it: the reader is looking at a picture of
-            // their computer, and a picture that is not where they expect it is
-            // worse than one they have to look slightly lower to find.
-            top: max(0, (pane.height - gridHeight) / 2),
-            // A row is one cell of padding wider than its text on each side, so the
-            // text sits one padding in from the row's own edge. A fitted row is
-            // exactly as wide as the pane and this comes out at zero; it only lifts
-            // the grid once it is wider than the pane, which is the pinched case.
-            left: max(0, (pane.width - gridWidth) / 2 - TerminalCellMetrics.contentInset),
-            bottom: 0,
-            right: 0
-        )
+    /// Sizes the canvas and re-applies the zoom.
+    ///
+    /// It used to *place the grid* as well, as a picture inside a box exactly one
+    /// desktop screen tall: centred on both axes, with the margins that implies.
+    /// The box was a fiction. The rows this view is handed are the whole buffer, not
+    /// one screen, so the "margin" was padding inserted at the one place a reader
+    /// never sits — the head of the buffer — while the centring only ever applied to
+    /// a session whose output had not yet filled the pane. Past that it padded a
+    /// scroll range that made the picture scrollable before it was full, which is
+    /// what "at the bottom" then meant, and why following the newest line had to be
+    /// switched off here to stop the twitch that came of it.
+    ///
+    /// A terminal is not a photograph. Its text starts at the top left, its newest
+    /// line sits on the bottom edge, and this pane is simply a window of the
+    /// computer's width onto the buffer. There is nothing to place: no inset, on
+    /// either axis. The row carries the one cell of padding its own text sits in.
+    private func applyCanvasLayout() {
+        sizeCanvas(to: bounds.size)
+        applyCanvasTransform()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         // A resize changes how much of the desktop's grid fits, so the fitted size
-        // and the alignment are recomputed before anything lays out with the old
-        // ones.
+        // is recomputed before anything lays out with the old one.
         //
-        // Only when the pane's own size actually changed. Setting a content inset is
+        // Only when the pane's own size actually changed. Re-measuring the rows is
         // itself a layout-affecting change, so doing this on every pass makes the
         // two call each other: a continuous redraw, which the reader sees as the
-        // picture flickering while they are trying to read it.
+        // text flickering while they are trying to read it.
         sizeCanvas(to: bounds.size)
         let paneSize = bounds.size
         if displayMode == .desktopDriven, desktopGrid != nil, paneSize != lastLaidOutPaneSize {
@@ -338,19 +299,21 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
                 fontSize = target
                 remeasureRows()
             } else {
-                applyInsets()
+                applyCanvasLayout()
             }
         }
         reportColumnsIfNeeded()
         // The keyboard appearing shrinks this view. Nothing new was appended, so
         // no snapshot runs — without this the newest output would slide below the
         // fold and the user would have to scroll to find it.
+        //
+        // The desktop-grid mode included. It was excluded while the grid was
+        // centred inside a one-screen box: there, pinning scrolled the top of the
+        // picture off, which is the opposite of showing one whole screen. With the
+        // box gone, staying with the newest line means the same thing in both modes.
         if bounds.height != lastLayoutHeight {
             lastLayoutHeight = bounds.height
-            // Except in the desktop-grid mode, where the grid is placed by the
-            // alignment rules and pinning to the bottom would scroll the top of it
-            // off — the opposite of showing the whole screen.
-            if isPinnedToBottom, displayMode == .phoneDriven { scrollToBottom() }
+            if isPinnedToBottom { scrollToBottom() }
         }
     }
 
@@ -417,12 +380,18 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         } else if pendingLandingScroll {
             pendingLandingScroll = false
             scrollToBottom()
-        } else if wasAtBottom, displayMode == .phoneDriven {
-            // Only where following the tail is the point. In the desktop-grid mode
-            // the grid is placed by the alignment rules, and a screen shorter than
-            // the pane counts as "at the bottom" the whole time — so this would
-            // scroll on every frame that arrives, which is the jitter a reader sees
-            // as the picture twitching while they are reading it.
+        } else if wasAtBottom {
+            // Both modes, because both are a terminal: a reader sitting on the
+            // newest line is watching output arrive, and a pane that stops at the
+            // line it was showing when they last touched it is not showing them
+            // the computer's screen — it is showing them a screenshot of it.
+            //
+            // The desktop-grid mode used to be excluded here. The reason was real
+            // at the time: content shorter than the one-screen box was still
+            // "scrollable" by the box's own padding, so following the tail moved
+            // the picture on every frame and the reader saw it twitch. That padding
+            // is gone, so content that fits cannot be scrolled at all and this is a
+            // no-op until there is genuinely more to follow.
             scrollToBottom()
         }
         if floorChanged {
@@ -577,10 +546,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         collectionView.alwaysBounceVertical = true
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.keyboardDismissMode = .interactive
-        // The alignment insets are computed from the pane's own geometry, so letting
-        // UIKit also apply safe-area insets would shift the grid by an amount that
-        // varies with the notch and the home indicator — exactly what the centring
-        // arithmetic below cannot account for.
+        // The collection view fills the pane exactly, and the pane's own geometry is
+        // what the fit, the canvas and the reported row count are measured against.
+        // Letting UIKit apply safe-area insets as well would move the newest line up
+        // off the bottom edge by an amount that varies with the device, and no part
+        // of that arithmetic would know about it.
         collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.register(TerminalRowCell.self, forCellWithReuseIdentifier: TerminalRowCell.reuseIdentifier)
         collectionView.register(
@@ -951,22 +921,14 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         layout collectionViewLayout: UICollectionViewLayout,
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
-        CGSize(width: itemWidth, height: TerminalRowCell.rowHeight(for: fontSize))
-    }
-
-    /// A row's width.
-    ///
-    /// A row fills the pane in the phone-driven mode. In the desktop-grid mode it is
-    /// the grid's own width instead, because `contentInset.left` only centres content
-    /// that is narrower than the pane — a full-width row would simply be shifted
-    /// across, which is how a centred grid silently comes out right-aligned.
-    private var itemWidth: CGFloat {
-        guard displayMode == .desktopDriven, let grid = desktopGrid else {
-            return collectionView.bounds.width
-        }
-        let gridWidth = CGFloat(grid.columns) * TerminalCellMetrics.advance(forFontSize: fontSize)
-        guard gridWidth > 0 else { return collectionView.bounds.width }
-        return gridWidth + Self.horizontalInset
+        // A row fills the pane in both modes, and its text starts one cell of
+        // padding in from the left edge. In the desktop-grid mode the row used to be
+        // the grid's own width, so that an inset could centre a grid narrower than
+        // the pane — but the pane is not a frame to centre things in. A flow layout
+        // centres a line its items do not fill, so a narrower row would land in the
+        // middle of the pane however it was inset; its width is the only thing
+        // holding the text at the edge the computer's text starts from.
+        CGSize(width: collectionView.bounds.width, height: TerminalRowCell.rowHeight(for: fontSize))
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -979,8 +941,8 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         // never past the point the desktop has already said is the end.
         //
         // Also in the desktop-grid mode, where scrolling up walks back through
-        // earlier screens at the same grid — the scale is fixed by "one screen
-        // fits", so history reads exactly like the screen it scrolled away from.
+        // earlier output at the same grid — one scale for the whole buffer, so
+        // history reads exactly like the lines it scrolled away from.
         if scrollView.contentOffset.y < 240, !requestsInFlight, !atHistoryFloor, !appliedKeys.isEmpty {
             onRequestHistory?()
         }
