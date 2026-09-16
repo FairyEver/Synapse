@@ -89,6 +89,13 @@ struct SessionListView: View {
         SessionRow(session: session) {
             path.append(.terminal(session.id))
         }
+        // Swipe actions are the one place the app's tint is a *fill* rather than
+        // an accent: the button paints its background with it and then draws the
+        // icon and text on top in that same colour. The app-wide tint is
+        // `Color.primary`, which is right for a glyph on a neutral background and
+        // invisible here — it painted white-on-white in dark mode. These two take
+        // the system's own fills instead, so both appearances are correct without
+        // inventing a colour.
         .swipeActions(edge: .trailing) {
             // Declared first, so it is the one a full swipe commits to.
             Button(role: .destructive) {
@@ -96,12 +103,15 @@ struct SessionListView: View {
             } label: {
                 Label("删除", systemImage: "trash")
             }
+            .tint(Color(uiColor: .systemRed))
+
             Button {
                 renameTitle = session.title
                 renameTarget = session
             } label: {
                 Label("重命名", systemImage: "pencil")
             }
+            .tint(Color(uiColor: .systemGray))
         }
     }
 

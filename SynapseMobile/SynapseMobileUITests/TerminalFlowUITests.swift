@@ -219,6 +219,8 @@ final class TerminalFlowUITests: XCTestCase {
         let renameButton = app.buttons["重命名"]
         XCTAssertTrue(renameButton.waitForExistence(timeout: 5), "swipe did not reveal rename")
         XCTAssertTrue(app.buttons["删除"].exists, "swipe did not reveal delete")
+        // The actions themselves, before the alert covers them.
+        capture(app, name: "15-swipe-actions")
         renameButton.tap()
 
         let nameField = app.textFields.firstMatch
@@ -256,6 +258,35 @@ final class TerminalFlowUITests: XCTestCase {
             "the deleted row is still listed"
         )
         capture(app, name: "12-deleted")
+    }
+
+    /// Leaving the terminal must show the list already in the system's appearance.
+    ///
+    /// The terminal is a dark screen, and it used to force the whole scene dark
+    /// while it was up — so coming back made the list fade from dark to light.
+    /// Run this in light system appearance; the recordings taken alongside it are
+    /// what show whether the transition is there.
+    func testLeavingTheTerminalShowsTheListImmediately() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        XCTAssertTrue(app.staticTexts["claude-code"].waitForExistence(timeout: 20), "session list never arrived")
+        app.staticTexts["claude-code"].tap()
+
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
+        capture(app, name: "16-terminal-dark-screen")
+
+        app.buttons["chevron.left"].firstMatch.tap()
+        XCTAssertTrue(
+            app.staticTexts["claude-code"].waitForExistence(timeout: 10),
+            "never returned to the list"
+        )
+        capture(app, name: "17-list-right-after-back")
     }
 
     /// A write the desktop refuses as preempted has to be replayed by the client.
