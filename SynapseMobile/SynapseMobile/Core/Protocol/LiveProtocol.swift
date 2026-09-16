@@ -135,7 +135,26 @@ struct MobileSummaryPayload: Decodable {
     let desktopName: String
     let revision: Int
     let groups: [MobileSummaryGroup]
+    /// Tabs that hold a split, and only those.
+    ///
+    /// Optional on purpose: a desktop that has no splits omits the field entirely,
+    /// and one that predates it never sends it. Both decode to `nil`, which is why
+    /// the list falls back to its flat form without needing a branch of its own.
+    let workspaces: [MobileSummaryWorkspace]?
     let sessions: [MobileSummarySession]
+}
+
+/// One tab of a desktop workspace, once it holds more than one pane.
+struct MobileSummaryWorkspace: Decodable, Hashable {
+    let id: String
+    let groupId: String
+    let title: String
+    let panes: [MobileSummaryWorkspacePane]
+}
+
+struct MobileSummaryWorkspacePane: Decodable, Hashable {
+    let paneId: String
+    let sessionId: String
 }
 
 // MARK: - Terminal frame

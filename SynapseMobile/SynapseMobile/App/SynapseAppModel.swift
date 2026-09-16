@@ -282,6 +282,12 @@ final class SynapseAppModel {
         sessions.filter { $0.groupId == groupId }
     }
 
+    /// The tabs of a group that hold a split. Empty for a desktop that sends no
+    /// `workspaces`, which covers both an older one and one with no splits at all.
+    func splitTabs(inGroup groupId: String) -> [MobileSummaryWorkspace] {
+        (summary?.workspaces ?? []).filter { $0.groupId == groupId }
+    }
+
     var waitingSessions: [MobileSummarySession] {
         sessions.filter { $0.attention.isWaiting }
     }

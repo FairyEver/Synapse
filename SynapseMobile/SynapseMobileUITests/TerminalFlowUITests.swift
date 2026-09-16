@@ -260,6 +260,44 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "12-deleted")
     }
 
+    /// A tab holding more than one terminal is drawn as one block on the list.
+    ///
+    /// Run against the mock started with `--splits`; without it the desktop sends
+    /// no `workspaces` and there is no hierarchy to draw — which the last
+    /// assertion here covers, so this test is meaningful in both runs.
+    func testSplitTabGroupsItsTerminals() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        XCTAssertTrue(
+            app.staticTexts["claude-code"].waitForExistence(timeout: 20),
+            "session list never arrived"
+        )
+
+        guard app.staticTexts["网页调试"].exists else {
+            // The plain run: the flat list must look exactly as it always did.
+            XCTAssertTrue(app.staticTexts["build"].exists, "flat list lost a terminal")
+            XCTAssertTrue(app.staticTexts["api-logs"].exists, "flat list lost a terminal")
+            capture(app, name: "18-list-without-splits")
+            return
+        }
+
+        // The tab names itself, and its terminals are inside it rather than loose
+        // among the others.
+        XCTAssertTrue(app.staticTexts["web-a"].exists, "a pane of the split tab is missing")
+        XCTAssertTrue(app.staticTexts["web-b"].exists, "a pane of the split tab is missing")
+        // A terminal that is a tab of its own must NOT be inside the split block:
+        // its row sits further left than the panes indented under the tab.
+        let pane = app.staticTexts["web-a"].frame.minX
+        let loose = app.staticTexts["claude-code"].frame.minX
+        XCTAssertGreaterThan(pane, loose, "the split tab's panes are not indented under it")
+        capture(app, name: "18-list-with-split-tab")
+    }
+
     /// Leaving the terminal must show the list already in the system's appearance.
     ///
     /// The terminal is a dark screen, and it used to force the whole scene dark

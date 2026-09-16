@@ -13,6 +13,8 @@ struct SessionListView: View {
     @State private var renameTarget: MobileSummarySession?
     @State private var renameTitle = ""
     @State private var deleteTarget: MobileSummarySession?
+    /// Tabs the user has closed. Absent means open, so the default needs no state.
+    @State private var collapsedTabs: Set<String> = []
 
     var body: some View {
         List {
@@ -23,12 +25,13 @@ struct SessionListView: View {
                 emptySection
             } else {
                 ForEach(model.summary?.groups ?? []) { group in
-                    let sessions = model.sessions(inGroup: group.id)
-                    if !sessions.isEmpty {
+                    let blocks = sessionListBlocks(
+                        sessions: model.sessions(inGroup: group.id),
+                        workspaces: model.splitTabs(inGroup: group.id),
+                    )
+                    if !blocks.isEmpty {
                         Section(group.name) {
-                            ForEach(sessions) { session in
-                                sessionRow(session)
-                            }
+                            blockRows(blocks)
                         }
                     }
                 }
@@ -38,9 +41,13 @@ struct SessionListView: View {
                 // strictly better than dropping it silently.
                 if !ungroupedSessions.isEmpty {
                     Section("其它") {
-                        ForEach(ungroupedSessions) { session in
-                            sessionRow(session)
-                        }
+                        blockRows(sessionListBlocks(
+                            sessions: ungroupedSessions,
+                            // Every workspace, not just the ungrouped ones: these
+                            // sessions only belong to groups that are missing from
+                            // the advertised list, so nothing else can match them.
+                            workspaces: model.summary?.workspaces ?? [],
+                        ))
                     }
                 }
             }
@@ -78,6 +85,51 @@ struct SessionListView: View {
         } message: { _ in
             Text("会先停止终端，未完成的任务会中断。")
         }
+    }
+
+    /// Draws one group's terminals, collapsing a split tab into one block.
+    ///
+    /// `DisclosureGroup` rather than a nested `Section`: inside an `insetGrouped`
+    /// list a nested section is simply another card, and what this has to express is
+    /// ownership — not more chrome around it. The group indents its children
+    /// itself, which is the platform's own way of saying "these belong to the row
+    /// above".
+    @ViewBuilder
+    private func blockRows(_ blocks: [SessionListBlock]) -> some View {
+        ForEach(blocks) { block in
+            switch block {
+            case .session(let id):
+                if let session = model.session(id) {
+                    sessionRow(session)
+                }
+            case .tab(let id, let title, let sessionIds):
+                DisclosureGroup(isExpanded: expansion(of: id)) {
+                    ForEach(sessionIds, id: \.self) { sessionId in
+                        if let session = model.session(sessionId) {
+                            sessionRow(session)
+                        }
+                    }
+                } label: {
+                    Text(title)
+                }
+            }
+        }
+    }
+
+    /// Tabs start open. The relationship between the terminals is the thing this
+    /// screen is meant to show, so it must not need a tap to see; collapsing is
+    /// only there for someone who wants a long list out of the way.
+    private func expansion(of tabId: String) -> Binding<Bool> {
+        Binding(
+            get: { !collapsedTabs.contains(tabId) },
+            set: { isExpanded in
+                if isExpanded {
+                    collapsedTabs.remove(tabId)
+                } else {
+                    collapsedTabs.insert(tabId)
+                }
+            }
+        )
     }
 
     /// A row plus the two actions a swipe reveals.

@@ -7,7 +7,7 @@
  * (which holds a single-instance lock and may be signed into another account).
  *
  * Usage: node test/mock-desktop.mjs <email> <password> [baseUrl]
- *          [--contend <title>] [--control-port <port>]
+ *          [--contend <title>] [--control-port <port>] [--splits]
  */
 
 import { randomUUID } from "node:crypto"
@@ -20,6 +20,12 @@ const controlPortFlag = rawArgs.indexOf("--control-port")
 const controlPort = controlPortFlag >= 0 && rawArgs[controlPortFlag + 1]
   ? Number(rawArgs[controlPortFlag + 1])
   : 3011
+/**
+ * Draws the group/tab/pane hierarchy: two of the sessions below share one tab,
+ * which is what makes the desktop publish `workspaces` at all. Off by default so
+ * that a run which is about the flat list sees exactly the flat list.
+ */
+const splitFixturesEnabled = rawArgs.includes("--splits")
 const contendFlag = rawArgs.indexOf("--contend")
 /**
  * Which session stands in for "the desktop user is typing right now" — see the
@@ -40,7 +46,7 @@ const positional = rawArgs.filter((_, index) => !flagIndexes.has(index))
 const [email, password, baseUrl = "http://127.0.0.1:3001"] = positional
 if (!email || !password) {
   console.error(
-    "usage: node test/mock-desktop.mjs <email> <password> [baseUrl] [--contend <title>] [--control-port <port>]",
+    "usage: node test/mock-desktop.mjs <email> <password> [baseUrl] [--contend <title>] [--control-port <port>] [--splits]",
   )
   process.exit(1)
 }
@@ -50,6 +56,9 @@ const groupId = randomUUID()
 const claudeSessionId = randomUUID()
 const buildSessionId = randomUUID()
 const logSessionId = randomUUID()
+const splitLeftId = randomUUID()
+const splitRightId = randomUUID()
+const splitWorkspaceId = randomUUID()
 
 let accessToken = ""
 let desktopWanted = true
@@ -105,6 +114,21 @@ function buildSummary() {
     desktopName: "Mock MacBook Pro",
     revision: summaryRevision,
     groups: [{ id: groupId, name: "前端开发" }],
+    // Absent unless the split fixture is on, which is exactly how a desktop with
+    // no splits behaves — the phone must read both.
+    ...(splitFixturesEnabled
+      ? {
+          workspaces: [{
+            id: splitWorkspaceId,
+            groupId,
+            title: "网页调试",
+            panes: [
+              { paneId: `pane-${splitLeftId}`, sessionId: splitLeftId },
+              { paneId: `pane-${splitRightId}`, sessionId: splitRightId },
+            ],
+          }],
+        }
+      : {}),
     sessions: [...sessions.values()],
   }
 }
@@ -429,6 +453,12 @@ makeSession(buildSessionId, "build", "/Users/liy/code/synapse", [
   `> tsc -b && vite build`,
   "",
 ])
+
+// Only when asked: two terminals sharing one tab.
+if (splitFixturesEnabled) {
+  makeSession(splitLeftId, "web-a", "/Users/liy/code/web", [`$ pnpm dev`, `  ready in 812 ms`, ""])
+  makeSession(splitRightId, "web-b", "/Users/liy/code/web", [`$ pnpm test`, `  24 passed`, ""])
+}
 
 makeSession(claudeSessionId, "claude-code", "/Users/liy/code/synapse", [
   `$ claude`,
