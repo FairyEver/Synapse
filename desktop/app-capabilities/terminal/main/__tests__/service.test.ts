@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { createTerminalService, ensureExecutableIfPresent, type PtyLike } from "../service"
 import type { TerminalStore, TerminalStoreState } from "../store"
+import { collectTerminalPaneLeaves } from "../../shared/workspace"
 
 const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", actorKind: "connector" as const }
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
@@ -1163,6 +1164,114 @@ describe("TerminalService core", () => {
     await service.flushPersistQueue()
     await expect(service.getView({ sessionId: session.id, kind: "screen", maxBytes: 64 * 1024 }))
       .rejects.toThrow("not_found")
+  })
+})
+
+describe("TerminalService conversation naming", () => {
+  it("names a new tab after its group and the conversation inside it with a running number", async () => {
+    const { service } = await startedHarness()
+    const group = await service.createGroup({ name: "Synapse" })
+
+    const session = await service.createSession({ groupId: group.id })
+    const workspace = service.getWorkspaceForSession({ sessionId: session.id })
+
+    expect(session.title).toBe("Synapse #1")
+    expect(workspace.title).toBe("Synapse")
+  })
+
+  it("numbers split panes and further tabs from one running sequence", async () => {
+    const { service } = await startedHarness()
+    const group = await service.createGroup({ name: "Synapse" })
+
+    const first = await service.createSession({ groupId: group.id })
+    const firstWorkspace = service.getWorkspaceForSession({ sessionId: first.id })
+    const split = await service.splitPane({
+      workspaceId: firstWorkspace.id,
+      paneId: collectTerminalPaneLeaves(firstWorkspace.layout)[0]!.paneId,
+      direction: "right",
+      expectedLayoutRevision: firstWorkspace.layoutRevision,
+    })
+    const second = await service.getSession({ sessionId: split.sessionId })
+    const nextTab = await service.createSession({ groupId: group.id })
+
+    expect([first.title, second.title, nextTab.title]).toEqual(["Synapse #1", "Synapse #2", "Synapse #3"])
+    expect(service.getWorkspaceForSession({ sessionId: nextTab.id }).title).toBe("Synapse")
+  })
+
+  it("keeps an independent sequence per group", async () => {
+    const { service } = await startedHarness()
+    const synapse = await service.createGroup({ name: "Synapse" })
+    const mobile = await service.createGroup({ name: "Mobile" })
+
+    const synapseFirst = await service.createSession({ groupId: synapse.id })
+    const mobileFirst = await service.createSession({ groupId: mobile.id })
+    const mobileSecond = await service.createSession({ groupId: mobile.id })
+
+    expect([synapseFirst.title, mobileFirst.title, mobileSecond.title])
+      .toEqual(["Synapse #1", "Mobile #1", "Mobile #2"])
+  })
+
+  it("does not recycle a number after the conversation is gone", async () => {
+    const spawned: ReturnType<typeof fakePty>[] = []
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty: () => {
+        const pty = fakePty()
+        spawned.push(pty)
+        return pty
+      },
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-naming-")),
+      resolveEffectivePath: () => "/usr/bin:/bin",
+    })
+    await service.start()
+    const group = await service.createGroup({ name: "Synapse" })
+
+    const first = await service.createSession({ groupId: group.id })
+    await service.createSession({ groupId: group.id })
+    spawned[0]!.emitExit({ exitCode: 0 })
+    await service.flushPersistQueue()
+    expect(service.listSessions().map((item) => item.id)).not.toContain(first.id)
+
+    const third = await service.createSession({ groupId: group.id })
+    expect(third.title).toBe("Synapse #3")
+  })
+
+  it("numbers a command-launched conversation while naming its tab after the command", async () => {
+    const { service } = await startedHarness()
+    const group = await service.createGroup({ name: "Synapse" })
+    await service.createSession({ groupId: group.id })
+    const command = await service.createGroupCommand({ groupId: group.id, name: "dev", command: "pnpm dev" })
+
+    const launched = await service.launchGroupCommand({ groupId: group.id, commandId: command.id })
+
+    expect(launched.title).toBe("Synapse #2")
+    expect(service.getWorkspaceForSession({ sessionId: launched.id }).title).toBe("Synapse dev")
+  })
+
+  it("keeps an explicit session title and leaves the sequence untouched", async () => {
+    const { service } = await startedHarness()
+    const group = await service.createGroup({ name: "Synapse" })
+
+    const named = await service.createSession({ groupId: group.id, title: "Claude Code · Synapse" })
+    const auto = await service.createSession({ groupId: group.id })
+
+    expect(named.title).toBe("Claude Code · Synapse")
+    expect(service.getWorkspaceForSession({ sessionId: named.id }).title).toBe("Claude Code · Synapse")
+    expect(auto.title).toBe("Synapse #1")
+  })
+
+  it("restarts the sequence from #1 after the service restarts", async () => {
+    const store = memoryStore()
+    const first = await startedHarness(store)
+    const group = await first.service.createGroup({ name: "Synapse" })
+    expect((await first.service.createSession({ groupId: group.id })).title).toBe("Synapse #1")
+
+    await first.service.stop()
+    await first.service.start()
+    const second = await first.service.createSession({ groupId: group.id })
+
+    expect(second.title).toBe("Synapse #1")
   })
 })
 

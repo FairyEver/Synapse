@@ -223,6 +223,12 @@ export function createTerminalService(deps: {
   const groups = new Map<string, TerminalGroup>()
   const toolbarActions = new Map<string, TerminalCustomToolbarAction>()
   const workspaces = new Map<string, TerminalWorkspace>()
+  /**
+   * Per-group conversation numbering for auto-named sessions ("<group name> #<n>").
+   * In-memory only, by design: every terminal is gone after an app restart, so the
+   * sequence restarts at #1, and a deleted conversation never returns its number.
+   */
+  const conversationSequences = new Map<string, number>()
   const sessions = new Map<string, TerminalSession>()
   const runtimes = new Map<string, TerminalRuntime>()
   const buffers = new Map<string, TerminalOutputBuffer>()
@@ -592,12 +598,22 @@ export function createTerminalService(deps: {
       collectTerminalPaneLeaves(workspace.layout).some((pane) => pane.sessionId === sessionId))
   }
 
-  function createWorkspaceForSession(session: TerminalSession): TerminalWorkspace {
+  /**
+   * Next "<group name> #<n>" title for a session that was not given an explicit name.
+   * Numbers are per group and never recycled, so deleting a conversation leaves a gap.
+   */
+  function nextConversationTitle(group: TerminalGroup): string {
+    const next = (conversationSequences.get(group.id) ?? 0) + 1
+    conversationSequences.set(group.id, next)
+    return `${group.name} #${next}`
+  }
+
+  function createWorkspaceForSession(session: TerminalSession, title: string = session.title): TerminalWorkspace {
     const timestamp = now()
     const workspace: TerminalWorkspace = {
       id: randomUUID(),
       groupId: session.groupId,
-      title: session.title,
+      title,
       layout: { type: "leaf", paneId: randomUUID(), sessionId: session.id },
       layoutRevision: 1,
       closingPaneIds: [],
@@ -866,9 +882,18 @@ export function createTerminalService(deps: {
     createdByClientId?: string,
     commandLaunch?: TerminalLaunchLayer,
     createWorkspace = true,
+    createWorkspaceTitle?: string,
   ): Promise<TerminalSession> {
     assertCreateQuota()
     const group = input.groupId ? getGroupOrThrow(input.groupId) : ensureDefaultGroup()
+    const explicitTitle = input.title?.trim()
+    const sessionTitle = explicitTitle || nextConversationTitle(group)
+    /*
+     * A freshly created tab is named after its group, while the conversation inside it carries
+     * the numbered name. An explicitly named session (command launch, embedded agent CLI, MCP)
+     * keeps naming its own tab so concurrent terminals stay distinguishable.
+     */
+    const workspaceTitle = createWorkspaceTitle ?? (explicitTitle ? sessionTitle : group.name)
     const resolvedLaunch = resolveTerminalLaunchConfiguration({
       global: globalLaunch.settings,
       group: launchLayerFromGroup(group.settings),
@@ -893,7 +918,7 @@ export function createTerminalService(deps: {
     const session: TerminalSession = {
       id: sessionId,
       groupId: group.id,
-      title: input.title?.trim() || path.basename(environment.cwd) || "终端",
+      title: sessionTitle,
       cwd: environment.cwd,
       shell: environment.shell,
       status: "running",
@@ -941,7 +966,7 @@ export function createTerminalService(deps: {
     const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
     sessions.set(session.id, session)
     buffers.set(session.id, buffer)
-    if (createWorkspace) createWorkspaceForSession(session)
+    if (createWorkspace) createWorkspaceForSession(session, workspaceTitle)
     updateGroupMembership(group.id)
     bumpDomain("session.created", session.id, session.metadataRevision)
     unpublishedSessions.set(session.id, terminalDomainRevision)
@@ -996,6 +1021,7 @@ export function createTerminalService(deps: {
     terminalDomainRevision = state.terminalDomainRevision
     groups.clear()
     workspaces.clear()
+    conversationSequences.clear()
     sessions.clear()
     buffers.clear()
     checkpoints.clear()
@@ -1039,6 +1065,7 @@ export function createTerminalService(deps: {
     }
     for (const sessionId of sessionIds) removeTerminalSessionInMemory(sessionId)
     workspaces.clear()
+    conversationSequences.clear()
     operations.clear()
     deletePlans.clear()
     for (const [scope, entry] of idempotency) {
@@ -1694,10 +1721,9 @@ export function createTerminalService(deps: {
     const command = getCommand(group, input.commandId)
     const session = await createSessionRecord({
       groupId: group.id,
-      title: command.name,
       cols: input.cols,
       rows: input.rows,
-    }, origin.source, undefined, origin.clientId, command.launch)
+    }, origin.source, undefined, origin.clientId, command.launch, true, `${group.name} ${command.name}`)
     if (session.status !== "running") return session
     const operation = createOperation("command_delivery", session.id, "terminal-command-launch")
     const delivery = deliverSavedCommand(session.id, command.command)
