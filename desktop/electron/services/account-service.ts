@@ -7,10 +7,13 @@ import { pipeline } from "node:stream/promises"
 import { app, safeStorage } from "electron"
 
 import type {
+  SynapseAccountLoginOutcome,
+  SynapseAccountLoginResult,
   SynapseAccountOfflineReason,
   SynapseAccountProfile,
   SynapseAccountState,
 } from "../../src/types/account"
+import { isAccountOnline } from "../../src/types/account"
 import type {
   DriveLocalUploadFileItem,
   DriveLocalUploadFolderItem,
@@ -1826,7 +1829,38 @@ export class AccountService {
     })
   }
 
-  async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
+  /**
+   * Starts the browser login flow, or picks up the one already in flight.
+   *
+   * The contract is deliberately idempotent, because a caller that repeats itself is a
+   * normal caller: an Agent re-invoking a tool has no way to know the first call landed.
+   *
+   * - Signed in **and online**: nothing happens. This is the case a repeated call would
+   *   otherwise turn into an identity switch, and no identity switch can be a side effect
+   *   of asking. Being signed in but *offline* is deliberately excluded — re-login is the
+   *   remedy the account panel itself offers for that state, which is exactly the
+   *   situation where a caller has something to fix.
+   * - A login already in flight, still within its lifetime: the same attempt is kept and
+   *   its URL reopened. Starting a second attempt used to look harmless and was not — the
+   *   callback is matched against the persisted attempt's `state`, so replacing the attempt
+   *   made the page the user already had open fail silently when they finished in it.
+   * - Anything else: a fresh attempt and a fresh page, as before.
+   */
+  async startLogin(): Promise<SynapseAccountLoginResult> {
+    if (isAccountOnline(this.state)) {
+      return { state: this.state, outcome: "already_authenticated" }
+    }
+
+    const live = await this.activeAttemptIfLive()
+    if (live) {
+      // Same attempt, so no `notifyBeforeIdentityChange`: nobody's identity is changing.
+      const loginUrl = await this.loginUrlFor(live)
+      this.setState({ status: "authenticating", loginUrl })
+      // Read the state after the browser attempt: opening can fail and set an error state.
+      const outcome = await this.openLoginPage(loginUrl, "reused_attempt")
+      return { state: this.state, loginUrl, outcome }
+    }
+
     await this.notifyBeforeIdentityChange()
     this.loginFallbackState = this.state
     this.cancelOfflineRetry()
@@ -1854,12 +1888,51 @@ export class AccountService {
     } catch (error) {
       logger.warn("Failed to start desktop account login.", { error })
       this.setState({ status: "error", message: "无法保存登录状态。" })
-      return { state: this.state, loginUrl }
+      return { state: this.state, loginUrl, outcome: "start_failed" }
     }
 
-    if (this.authRevision !== revision) return { state: this.state, loginUrl }
+    // A newer call took over while this one was persisting; its attempt is the live one.
+    if (this.authRevision !== revision) return { state: this.state, loginUrl, outcome: "start_failed" }
     this.setState({ status: "authenticating", loginUrl })
 
+    // Read the state after the browser attempt: opening can fail and set an error state.
+    const outcome = await this.openLoginPage(loginUrl, "opened")
+    return { state: this.state, loginUrl, outcome }
+  }
+
+  /**
+   * The persisted attempt, but only while it is still worth resuming. Past its lifetime
+   * the callback could no longer accept it, so a caller gets a fresh one instead.
+   */
+  private async activeAttemptIfLive(): Promise<PersistedAccount["activeAttempt"] | null> {
+    try {
+      const persisted = await this.namespace.getSingleton()
+      const attempt = persisted?.activeAttempt
+      if (!attempt) return null
+      return new Date(attempt.expiresAt).getTime() > Date.now() ? attempt : null
+    } catch (error) {
+      logger.warn("Failed to read the pending desktop account login attempt.", { error })
+      return null
+    }
+  }
+
+  /**
+   * Rebuilds an attempt's login URL from what was persisted with it. The URL is a pure
+   * function of the attempt's `state` and the challenge derived from its verifier, which
+   * is why resuming an attempt can hand back the identical URL instead of a new one.
+   */
+  private async loginUrlFor(attempt: NonNullable<PersistedAccount["activeAttempt"]>): Promise<string> {
+    return dashboardLoginUrl(
+      attempt.apiBaseUrl,
+      attempt.state,
+      createCodeChallenge(attempt.codeVerifier),
+    )
+  }
+
+  private async openLoginPage(
+    loginUrl: string,
+    opened: SynapseAccountLoginOutcome,
+  ): Promise<SynapseAccountLoginOutcome> {
     try {
       await this.openExternal(loginUrl)
       logger.info("Desktop account login started.", {
@@ -1867,12 +1940,12 @@ export class AccountService {
         status: "success",
         apiMode: apiMode(),
       })
+      return opened
     } catch (error) {
       logger.warn("Failed to open desktop account login URL.", { error })
       this.setState({ status: "error", message: "无法打开浏览器，请检查默认浏览器设置后重试。" })
+      return "open_failed"
     }
-
-    return { state: this.state, loginUrl }
   }
 
   async handleAuthCallback(rawUrl: string): Promise<SynapseAccountState> {

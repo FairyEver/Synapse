@@ -161,7 +161,8 @@ describe("AccountService", () => {
     const result = await service.startLogin()
 
     expect(result.state.status).toBe("authenticating")
-    const loginUrl = new URL(result.loginUrl)
+    expect(result.loginUrl).toBeDefined()
+    const loginUrl = new URL(result.loginUrl!)
     expect(loginUrl.pathname).toBe("/console/auth/desktop")
     expect(loginUrl.searchParams.get("client_id")).toBe("synapse-desktop")
     expect(loginUrl.searchParams.get("redirect_uri")).toBe("synapse://auth/desktop/callback")
@@ -1810,7 +1811,8 @@ describe("AccountService", () => {
     expect(service.getApiBaseUrlForLive()).toBe(expectedApiBaseUrl)
 
     const result = await service.startLogin()
-    expect(new URL(result.loginUrl).origin).toBe(new URL(expectedPublicAppUrl).origin)
+    expect(result.loginUrl).toBeDefined()
+    expect(new URL(result.loginUrl!).origin).toBe(new URL(expectedPublicAppUrl).origin)
     expect(await namespace.getSingleton()).toMatchObject({
       activeAttempt: {
         apiBaseUrl: expectedApiBaseUrl,
@@ -1841,7 +1843,8 @@ describe("AccountService", () => {
     const { service } = await createTestAccountService()
 
     const result = await service.startLogin()
-    const loginUrl = new URL(result.loginUrl)
+    expect(result.loginUrl).toBeDefined()
+    const loginUrl = new URL(result.loginUrl!)
 
     expect(accountLogger.info).toHaveBeenCalledWith("Desktop account login started.", {
       operation: "startLogin",
@@ -2175,6 +2178,88 @@ describe("AccountService", () => {
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
   })
 
+  it("resumes the login already in flight instead of replacing it", async () => {
+    // The reason this matters more than it looks: the callback is matched against the
+    // persisted attempt's `state`. A second call that replaced the attempt would make the
+    // page the user already has open fail silently when they finish in it — and a caller
+    // that repeats itself (an Agent re-invoking a tool) cannot know it already succeeded.
+    const fetch = vi.fn(async (url) => {
+      if (String(url).endsWith("/auth/desktop/token")) {
+        return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, openExternal, service } = await createTestAccountService({
+      fetch: fetch as typeof fetch,
+    })
+
+    const first = await service.startLogin()
+    const firstAttempt = (await namespace.getSingleton())?.activeAttempt
+    const second = await service.startLogin()
+    const secondAttempt = (await namespace.getSingleton())?.activeAttempt
+
+    expect(first.outcome).toBe("opened")
+    expect(second.outcome).toBe("reused_attempt")
+    expect(secondAttempt!.state).toBe(firstAttempt!.state)
+    expect(second.loginUrl).toBe(first.loginUrl)
+    // Reopening the page is the point of a repeat call; minting a second attempt is not.
+    expect(openExternal).toHaveBeenCalledTimes(2)
+
+    // The decisive assertion: the page opened by the *first* call still completes.
+    const state = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=code-1&state=${firstAttempt!.state}`,
+    )
+    expect(state.status).toBe("authenticated")
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it("starts a fresh attempt once the previous one has expired", async () => {
+    const { namespace, service } = await createTestAccountService()
+    await service.startLogin()
+    const expired = (await namespace.getSingleton())?.activeAttempt
+    await namespace.setSingleton({
+      ...(await namespace.getSingleton() ?? {}),
+      activeAttempt: { ...expired!, expiresAt: new Date(Date.now() - 1_000).toISOString() },
+    })
+
+    const result = await service.startLogin()
+
+    // Past its lifetime the callback could no longer accept it, so resuming would only
+    // hand back a URL that cannot work.
+    expect(result.outcome).toBe("opened")
+    expect((await namespace.getSingleton())?.activeAttempt?.state).not.toBe(expired!.state)
+  })
+
+  it("leaves an online account alone", async () => {
+    const fetch = vi.fn(async (url) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, openExternal, service } = await createTestAccountService({
+      fetch: fetch as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-1", lastProfile: storedProfile })
+    await service.refreshFromStorage({ reason: "startup" })
+    expect(service.getState().status).toBe("authenticated")
+    openExternal.mockClear()
+
+    const result = await service.startLogin()
+
+    // Asking to sign in is not a way to change who is signed in.
+    expect(result.outcome).toBe("already_authenticated")
+    expect(result.loginUrl).toBeUndefined()
+    expect(openExternal).not.toHaveBeenCalled()
+    expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+  })
+
   it("preserves newer login attempts when an older callback arrives", async () => {
     const fetch = vi.fn(async (url, init) => {
       if (String(url).endsWith("/auth/desktop/token")) {
@@ -2191,10 +2276,23 @@ describe("AccountService", () => {
     await service.startLogin()
     const firstAttempt = (await namespace.getSingleton())?.activeAttempt
     expect(firstAttempt).toBeTruthy()
-    await service.startLogin()
-    const secondAttempt = (await namespace.getSingleton())?.activeAttempt
-    expect(secondAttempt).toBeTruthy()
-    expect(secondAttempt!.state).not.toBe(firstAttempt!.state)
+    /*
+     * A superseding attempt is written directly rather than produced by a second
+     * `startLogin()`: a repeat call now resumes the attempt in flight instead of
+     * replacing it (see the idempotency tests below), so this test is about what the
+     * callback does with a newer attempt, not about how that attempt came to exist.
+     */
+    const secondAttempt = {
+      state: "state-replaced",
+      codeVerifier: firstAttempt!.codeVerifier,
+      apiBaseUrl: firstAttempt!.apiBaseUrl,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    }
+    await namespace.setSingleton({
+      ...(await namespace.getSingleton() ?? {}),
+      activeAttempt: secondAttempt,
+    })
 
     const firstState = await service.handleAuthCallback(
       `synapse://auth/desktop/callback?code=code-1&state=${firstAttempt!.state}`,
