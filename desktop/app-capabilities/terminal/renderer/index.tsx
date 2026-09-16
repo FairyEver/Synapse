@@ -658,8 +658,9 @@ export function TerminalModule({
       const result = await enqueueWorkspaceMutation(target.id, async () => {
         const current = await getCurrentWorkspace(target.id)
         if (!current) return { workspaceId: target.id, state: "deleted" as const, remainingSessionIds: [] }
+        const eventKey = force ? "terminal.workspace.force_close" : "terminal.workspace.close"
         return runTrackedOperation(
-          { component: "terminal", eventKey: force ? "terminal.workspace.force_close" : "terminal.workspace.close" },
+          { component: "terminal", eventKey },
           () => terminalBridge.workspace.close({
             workspaceId: current.id,
             expectedLayoutRevision: current.layoutRevision,
@@ -708,8 +709,9 @@ export function TerminalModule({
         if (!current || !collectTerminalPaneLeaves(current.layout).some((pane) => pane.paneId === paneId)) {
           throw new Error("Terminal pane not found")
         }
+        const eventKey = `terminal.pane.split_${direction}`
         return runTrackedOperation(
-          { component: "terminal", eventKey: `terminal.pane.split_${direction}` },
+          { component: "terminal", eventKey },
           () => terminalBridge.pane.split({
             workspaceId,
             paneId,
@@ -748,8 +750,9 @@ export function TerminalModule({
         const current = await getCurrentWorkspace(workspaceId)
         if (!current || !collectTerminalPaneLeaves(current.layout).some((pane) => pane.paneId === paneId)) return
         const force = rendererPlatform === "darwin" && current.closingPaneIds.includes(paneId)
+        const eventKey = force ? "terminal.pane.force_close" : "terminal.pane.close"
         await runTrackedOperation(
-          { component: "terminal", eventKey: force ? "terminal.pane.force_close" : "terminal.pane.close" },
+          { component: "terminal", eventKey },
           () => terminalBridge.pane.close({
             workspaceId,
             paneId,
