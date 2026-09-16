@@ -8,6 +8,7 @@ import SwiftUI
 /// visual tidiness.
 struct SessionListView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Environment(TerminalDisplaySettings.self) private var display
     @Binding var path: [Route]
     @State private var showingNewSession = false
     @State private var renameTarget: MobileSummarySession?
@@ -69,6 +70,12 @@ struct SessionListView: View {
             NewSessionSheet { groupId in
                 Task {
                     if let created = await model.createSession(groupId: groupId) {
+                        // The terminal was born at this phone's shape — the desktop's
+                        // own fit is suppressed from the moment it exists — so the
+                        // phone shows it the way it made it. Shrinking the computer's
+                        // grid down to fit would be the other mode's answer to a
+                        // question the reader never asked.
+                        display.setMode(.phoneDriven, for: created)
                         path.append(.terminal(created))
                     }
                 }

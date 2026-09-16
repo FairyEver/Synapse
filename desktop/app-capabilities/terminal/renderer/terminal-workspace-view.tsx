@@ -1368,6 +1368,24 @@ function TerminalPane({
     syncTerminalGeometryRef.current?.(true)
   }, [appearanceSize])
 
+  /**
+   * Takes the grid back when it stops being a phone's.
+   *
+   * Releasing the claim deliberately leaves the PTY where it is — nothing should
+   * reflow a terminal on the strength of a phone that has already stopped looking at
+   * it. The other half of that bargain is this effect: the desktop has to notice the
+   * claim is gone and fit itself again, or the terminal keeps the phone's shape for
+   * ever. Switching back to the fidelity mode then looks like it did nothing, because
+   * as far as the PTY is concerned, it did.
+   */
+  const wasRemoteSizedRef = useRef(false)
+  useEffect(() => {
+    if (wasRemoteSizedRef.current && !remoteSized) {
+      syncTerminalGeometryRef.current?.(true)
+    }
+    wasRemoteSizedRef.current = remoteSized
+  }, [remoteSized])
+
   const writeDroppedPaths = useCallback((paths: readonly (string | null)[], eventKey: string) => {
     if (paths.length === 0 || paths.some((path) => !isValidDroppedTerminalPath(path))) {
       toast.error("拖拽路径不可用")
