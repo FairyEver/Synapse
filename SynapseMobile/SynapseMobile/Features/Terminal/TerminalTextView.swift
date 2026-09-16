@@ -79,6 +79,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// blink without waiting for new rows to arrive.
     private var appliedRows: [DisplayRow] = []
     private var isPinnedToBottom = true
+    /// Set when the grid changes, so the view lands on the computer's current
+    /// screen once. Not a standing behaviour: after that the reader owns the scroll
+    /// position, and re-pinning on every frame is what made the picture twitch.
+    private var pendingLandingScroll = false
     private var atHistoryFloor = false
     private var requestsInFlight = false
     /// Reports how many monospace columns fit, so the wrap matches the phone.
@@ -95,6 +99,9 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var reportedColumns = 0
     private var reportedRows = 0
     private var lastLayoutHeight: CGFloat = 0
+    /// The pane size the fit was last computed against, so `layoutSubviews` can tell
+    /// a real resize from its own inset being applied.
+    private var lastLaidOutPaneSize: CGSize = .zero
     private var appliedCursor: TerminalStore.CursorPosition?
     private var blinkTimer: Timer?
     /// Blink phase. The cursor is solid whenever blinking is off, so starting from
@@ -133,7 +140,12 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         baseFontSize = base
         // A pinned zoom was measured against a size that no longer applies; fitting
         // is the only predictable starting point.
-        if gridChanged { zoom = 1 }
+        if gridChanged {
+            zoom = 1
+            // What the computer is showing now is the bottom of the buffer, so that
+            // is where a reader arriving at this grid expects to be.
+            pendingLandingScroll = true
+        }
 
         let target = renderedFontSize(base: base)
         if target != fontSize {
@@ -168,7 +180,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// grid, only the size changes.
     private func renderedFontSize(base: CGFloat) -> CGFloat {
         guard displayMode == .desktopDriven, let grid = desktopGrid, base > 0 else { return base }
-        return max(1, (base * fitScale(for: grid, base: base) * zoom).rounded())
+        // Floored, not rounded. Rounding up leaves the grid a fraction of a point
+        // wider than the pane, and a fraction of a point across eighty columns is
+        // several points of sideways travel — enough that the whole screen looks
+        // like it is meant to scroll when it is not.
+        return max(1, (base * fitScale(for: grid, base: base) * zoom).rounded(.down))
     }
 
     /// How much the desktop's grid has to shrink to fit the pane.
@@ -176,21 +192,20 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// Measured at `base` rather than at the current size, so asking twice gives
     /// the same answer instead of compounding.
     private func fitScale(for grid: DesktopGrid, base: CGFloat) -> CGFloat {
-        let cellWidth = TerminalCellMetrics.advance(forFontSize: base)
-        let cellHeight = TerminalCellMetrics.rowHeight(forFontSize: base)
-        guard cellWidth > 0, cellHeight > 0, bounds.width > 0, bounds.height > 0 else { return 1 }
+        terminalGridFitScale(
+            grid: grid,
+            paneSize: bounds.size,
+            contentInset: TerminalCellMetrics.contentInset,
+            cellSize: CGSize(
+                width: TerminalCellMetrics.advance(forFontSize: base),
+                height: TerminalCellMetrics.rowHeight(forFontSize: base)
+            )
+        )
+    }
 
-        let gridWidth = CGFloat(grid.columns) * cellWidth
-        let gridHeight = CGFloat(grid.rows) * cellHeight
-        guard gridWidth > 0, gridHeight > 0 else { return 1 }
-
-        let fitted = min(bounds.width / gridWidth, bounds.height / gridHeight)
-        // Never above 1: enlarging past the desktop's own size would be a different
-        // claim than "the whole screen, fitted". And never below the readable floor —
-        // a grid scaled past legibility is not the whole screen, it is an unreadable
-        // one, and scrolling to read it is the better failure.
-        let floor = base > 0 ? TerminalDisplayConfig.minimumReadableFontSize / base : 1
-        return min(1, max(fitted, floor))
+    /// The pane's width with a cell of padding taken off each side.
+    private var usableWidth: CGFloat {
+        max(0, bounds.width - Self.horizontalInset)
     }
 
     /// Places the grid inside the pane.
@@ -218,21 +233,24 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             return
         }
 
-        // Sideways scrolling is how a grid that reached the readable floor stays
-        // readable: it cannot shrink further, so it has to move instead.
-        collectionView.alwaysBounceHorizontal = gridWidth > pane.width
+        // Only once the reader has pinched past the fit is there more grid than
+        // pane, and only then is there anything to scroll to.
+        let usable = usableWidth
+        collectionView.alwaysBounceHorizontal = gridWidth > usable
 
-        let widthRatio = pane.width / gridWidth
-        let heightRatio = pane.height / gridHeight
+        let widthRatio = usable > 0 ? usable / gridWidth : 0
+        let heightRatio = pane.height > 0 ? pane.height / gridHeight : 0
         let widthIsTheLimit = widthRatio <= heightRatio
 
         collectionView.contentInset = UIEdgeInsets(
             // Top-aligned when the width is what runs out; centred when it is the
             // height, which is the landscape case.
             top: widthIsTheLimit ? 0 : max(0, (pane.height - gridHeight) / 2),
-            // Horizontally centred either way. The rows are laid out at the grid's
-            // own width for this to mean anything — see `sizeForItemAt`.
-            left: max(0, (pane.width - gridWidth - Self.horizontalInset) / 2),
+            // A row is one cell of padding wider than its text on each side, so the
+            // text sits one padding in from the row's own edge. A fitted row is
+            // exactly as wide as the pane and this comes out at zero; it only lifts
+            // the grid once it is wider than the pane, which is the pinched case.
+            left: max(0, (pane.width - gridWidth) / 2 - TerminalCellMetrics.contentInset),
             bottom: 0,
             right: 0
         )
@@ -242,8 +260,15 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         super.layoutSubviews()
         // A resize changes how much of the desktop's grid fits, so the fitted size
         // and the alignment are recomputed before anything lays out with the old
-        // ones. Guarded on an actual change, which is what keeps this from looping.
-        if displayMode == .desktopDriven, desktopGrid != nil {
+        // ones.
+        //
+        // Only when the pane's own size actually changed. Setting a content inset is
+        // itself a layout-affecting change, so doing this on every pass makes the
+        // two call each other: a continuous redraw, which the reader sees as the
+        // picture flickering while they are trying to read it.
+        let paneSize = bounds.size
+        if displayMode == .desktopDriven, desktopGrid != nil, paneSize != lastLaidOutPaneSize {
+            lastLaidOutPaneSize = paneSize
             let target = renderedFontSize(base: baseFontSize)
             if target != fontSize {
                 fontSize = target
@@ -320,7 +345,15 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         if insertedAbove > 0 {
             collectionView.contentOffset.y = offsetBefore
                 + CGFloat(insertedAbove) * TerminalRowCell.rowHeight(for: fontSize)
-        } else if wasAtBottom {
+        } else if pendingLandingScroll {
+            pendingLandingScroll = false
+            scrollToBottom()
+        } else if wasAtBottom, displayMode == .phoneDriven {
+            // Only where following the tail is the point. In the desktop-grid mode
+            // the grid is placed by the alignment rules, and a screen shorter than
+            // the pane counts as "at the bottom" the whole time — so this would
+            // scroll on every frame that arrives, which is the jitter a reader sees
+            // as the picture twitching while they are reading it.
             scrollToBottom()
         }
         if floorChanged {
@@ -361,7 +394,8 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             for: rows,
             cursor: cursor,
             cursorVisible: cursorPhaseOn,
-            selection: selection
+            selection: selection,
+            fontSize: fontSize
         )
     }
 
@@ -371,10 +405,18 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         for rows: [DisplayRow],
         cursor: TerminalStore.CursorPosition?,
         cursorVisible: Bool,
-        selection: TerminalSelection? = nil
+        selection: TerminalSelection? = nil,
+        fontSize: CGFloat? = nil
     ) -> [String] {
         rows.enumerated().map { index, row in
             var key = row.id
+            // The size a row is drawn at is part of its identity, for the same
+            // reason the cursor is. A row identifier carries the text, and the text
+            // does not change when the size does — so without this the diff sees no
+            // change, leaves the rows already on screen drawn at the old size, and
+            // the reader gets a band of differently-sized text that only corrects
+            // itself once those rows scroll away and come back.
+            if let fontSize { key += "#size:\(fontSize)" }
             if cursorVisible, let cursor, cursor.rowIndex == index {
                 key += "#cursor:\(cursor.column)"
             }
@@ -526,9 +568,13 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // recycling, and the fitting arithmetic stays the only thing deciding how
         // big a cell is. A transform would put a second, competing scale on top of
         // all three.
-        collectionView.addGestureRecognizer(
-            UIPinchGestureRecognizer(target: self, action: #selector(handlePinch))
-        )
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch))
+        // The collection view's own pan answers the same two fingers, and by default
+        // it wins — which is why magnifying the grid did nothing at all. They are
+        // different questions about the same gesture: one is how big the grid is,
+        // the other is where in it the reader is looking.
+        pinch.delegate = self
+        collectionView.addGestureRecognizer(pinch)
 
         // Half a second of holding still is how iOS says "select". `allowableMovement`
         // is what keeps that from swallowing an ordinary flick: past it this gesture
@@ -722,6 +768,21 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
         // Cells are trivial to build; nothing to precompute, but implementing the
         // protocol keeps UIKit from disabling prefetch scheduling entirely.
+    }
+}
+
+extension TerminalCollectionView: UIGestureRecognizerDelegate {
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+    ) -> Bool {
+        // Only the pinch and the scroll, and only with each other. Letting the long
+        // press run alongside the scroll would turn a press that was meant to keep
+        // scrolling into a selection.
+        let pair: (UIGestureRecognizer, UIGestureRecognizer) = (gestureRecognizer, other)
+        let isPinchAndPan = (pair.0 is UIPinchGestureRecognizer && pair.1 === collectionView.panGestureRecognizer)
+            || (pair.1 is UIPinchGestureRecognizer && pair.0 === collectionView.panGestureRecognizer)
+        return isPinchAndPan
     }
 }
 

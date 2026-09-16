@@ -168,11 +168,45 @@ enum TerminalDisplayConfig {
     static let maxZoom: CGFloat = 6
     static let zoomStep: CGFloat = 1.35
 
-    /// Below this the fit is refused and the pane scrolls sideways instead. A grid
-    /// scaled past legibility is not "the whole screen", it is an unreadable one.
-    static let minimumReadableFontSize: CGFloat = 8
-
     /// Vertical emptiness past which the grid is described as wide rather than
     /// tall, and landscape is worth suggesting.
     static let wideGridEmptyRatio: CGFloat = 0.4
+}
+
+/// The scale that makes one screen of the desktop's grid fit inside a pane.
+///
+/// Pure, and tested on its own, because it is the whole of what the desktop-grid
+/// mode promises. Every part of it has been wrong at least once: the margins were
+/// left out, which made the grid permanently a hair too wide for the pane and gave
+/// the whole screen a few points of sideways travel it was never meant to have.
+///
+/// - Parameters:
+///   - grid: the desktop's grid, in cells.
+///   - paneSize: the space the grid has to fit inside.
+///   - contentInset: padding on each side of a row. The grid fits *inside* this,
+///     not merely equal to it.
+///   - cellSize: one cell at the size the grid would be drawn at unscaled.
+/// - Returns: at most 1, because enlarging past the desktop's own size is a
+///   different claim than fitting it; and exactly 1 rather than 0 for a pane with
+///   no size yet, so a measurement taken mid-layout cannot make the text vanish.
+func terminalGridFitScale(
+    grid: DesktopGrid,
+    paneSize: CGSize,
+    contentInset: CGFloat,
+    cellSize: CGSize
+) -> CGFloat {
+    guard cellSize.width > 0, cellSize.height > 0 else { return 1 }
+    let gridWidth = CGFloat(grid.columns) * cellSize.width
+    let gridHeight = CGFloat(grid.rows) * cellSize.height
+    guard gridWidth > 0, gridHeight > 0 else { return 1 }
+
+    let usableWidth = paneSize.width - contentInset * 2
+    let usableHeight = paneSize.height
+    guard usableWidth > 0, usableHeight > 0 else { return 1 }
+
+    // No lower bound. The mode's promise is the whole screen, and the reader
+    // accepts small text as the price of it — that is the trade they picked this
+    // mode for. A floor here would quietly turn "the whole screen, tiny" into
+    // "part of the screen, legible", which is the other mode's behaviour.
+    return min(1, min(usableWidth / gridWidth, usableHeight / gridHeight))
 }
