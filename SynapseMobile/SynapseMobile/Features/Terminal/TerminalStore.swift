@@ -206,23 +206,77 @@ final class TerminalStore {
         renderRevision += 1
     }
 
+    /// Cells one character occupies on the desktop's grid.
+    ///
+    /// A deliberately small table. It exists only to relate a cell column to a
+    /// character offset, so it needs to be right about the characters where those
+    /// two differ and about nothing else. Anything it does not know counts as one
+    /// cell, which is also what the desktop gives an unknown character.
+    static func cellWidth(of character: Character) -> Int {
+        guard let scalar = character.unicodeScalars.first else { return 1 }
+        // Everything past the basic plane is wide: the emoji, and the CJK blocks
+        // that live up there.
+        if scalar.value > 0xFFFF { return 2 }
+        switch scalar.value {
+        case 0x1100...0x115F,  // Hangul Jamo
+            0x2E80...0x303E,   // CJK radicals and punctuation
+            0x3041...0x33FF,   // Kana, CJK compatibility
+            0x3400...0x4DBF,   // CJK extension A
+            0x4E00...0x9FFF,   // CJK unified ideographs
+            0xA000...0xA4CF,   // Yi
+            0xAC00...0xD7A3,   // Hangul syllables
+            0xF900...0xFAFF,   // CJK compatibility ideographs
+            0xFE30...0xFE6F,   // CJK compatibility forms
+            0xFF00...0xFF60,   // Fullwidth forms
+            0xFFE0...0xFFE6:   // Fullwidth signs
+            return 2
+        default:
+            return 1
+        }
+    }
+
+    /// Character offset of a cell column within one line.
+    ///
+    /// Cells count a wide character twice and characters count it once, so the two
+    /// part company at the first one in a line. The desktop reports its cursor in
+    /// cells because cells are what its grid counts; the wrap here slices by
+    /// characters, so the column has to be translated before it can be used for
+    /// either half of that arithmetic.
+    static func characterIndex(forCell cell: Int, in text: String) -> Int {
+        guard cell > 0 else { return 0 }
+        var cells = 0
+        var characters = 0
+        for character in text {
+            if cells >= cell { break }
+            cells += cellWidth(of: character)
+            characters += 1
+        }
+        return characters
+    }
+
     /// Maps the desktop's cursor onto the wrapped rows. Hidden, or pointing at a
     /// line this store no longer holds, means nothing to draw.
     private func refreshCursorPosition() {
         guard lastCursor.visible,
               let base = rowOffsetByLine[lastCursor.row],
-              lastCursor.col >= 0
+              lastCursor.col >= 0,
+              let line = lines[lastCursor.row]
         else {
             cursorPosition = nil
             return
         }
+
+        // Translated from cells to characters first. Using the cell column directly
+        // put the cursor one character too far right for every wide character before
+        // it — invisible in Latin text, and wrong in every line of Chinese.
+        let character = Self.characterIndex(forCell: lastCursor.col, in: line.text)
         let width = max(1, columns)
-        let rowIndex = base + lastCursor.col / width
+        let rowIndex = base + character / width
         guard rowIndex < rows.count else {
             cursorPosition = nil
             return
         }
-        cursorPosition = CursorPosition(rowIndex: rowIndex, column: lastCursor.col % width)
+        cursorPosition = CursorPosition(rowIndex: rowIndex, column: character % width)
     }
 
     /// Inserts a page of scrollback below what is already held.

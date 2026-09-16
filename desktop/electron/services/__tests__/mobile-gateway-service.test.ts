@@ -659,6 +659,33 @@ describe("MobileGatewayService", () => {
     expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
   })
 
+  /** Leaving the phone-driven mode hands the grid back to the desktop. */
+  it("releases the grid for a phone that stops driving it", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-resize",
+      kind: "resize",
+      sessionId: "sess-1",
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+    }))
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeDefined()
+    harness.terminal.calls.length = 0
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-release",
+      kind: "releaseGrid",
+      sessionId: "sess-1",
+    }))
+
+    expect(harness.terminal.calls).toContain("releaseSizeOwnership")
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
+  })
+
   /**
    * The idle sweep releases ownership on its own shorter clock — a phone that
    * vanished mid-use should stop deciding the grid long before the gateway

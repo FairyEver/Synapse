@@ -357,7 +357,12 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// in, which makes moving it a change the diff reports instead of one this view
     /// has to force — the two rows involved are the only ones that need rebuilding.
     private func identities(for rows: [DisplayRow], cursor: TerminalStore.CursorPosition?) -> [String] {
-        Self.identities(for: rows, cursor: cursor, cursorVisible: cursorPhaseOn)
+        Self.identities(
+            for: rows,
+            cursor: cursor,
+            cursorVisible: cursorPhaseOn,
+            selection: selection
+        )
     }
 
     /// Static and parameterised on the blink phase so both halves of the property
@@ -365,11 +370,21 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     static func identities(
         for rows: [DisplayRow],
         cursor: TerminalStore.CursorPosition?,
-        cursorVisible: Bool
+        cursorVisible: Bool,
+        selection: TerminalSelection? = nil
     ) -> [String] {
         rows.enumerated().map { index, row in
-            guard cursorVisible, let cursor, cursor.rowIndex == index else { return row.id }
-            return "\(row.id)#cursor:\(cursor.column)"
+            var key = row.id
+            if cursorVisible, let cursor, cursor.rowIndex == index {
+                key += "#cursor:\(cursor.column)"
+            }
+            // Woven in the same way the cursor is: a row that is partly selected
+            // looks different, and the diff has to be able to see that without
+            // comparing text.
+            if let columns = selection?.columns(onRow: index) {
+                key += "#sel:\(columns.lowerBound)-\(columns.upperBound)"
+            }
+            return key
         }
     }
 
@@ -484,7 +499,8 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
                 cell.configure(
                     row: row,
                     fontSize: self?.fontSize ?? 14,
-                    cursorColumn: self?.cursorColumn(forRowAt: indexPath.item)
+                    cursorColumn: self?.cursorColumn(forRowAt: indexPath.item),
+                    selection: self?.selection?.columns(onRow: indexPath.item)
                 )
             }
             return cell
@@ -514,11 +530,27 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             UIPinchGestureRecognizer(target: self, action: #selector(handlePinch))
         )
 
+        // Half a second of holding still is how iOS says "select". `allowableMovement`
+        // is what keeps that from swallowing an ordinary flick: past it this gesture
+        // fails and the collection view's own pan takes over, so a press that was
+        // really a scroll never becomes a selection.
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress))
+        longPress.minimumPressDuration = TerminalDisplayConfig.selectionHoldSeconds
+        longPress.allowableMovement = TerminalDisplayConfig.selectionDriftTolerance
+        collectionView.addGestureRecognizer(longPress)
+
+        // Attached to this view rather than to the collection view: the handles are
+        // placed in this coordinate space and must not scroll away with the content.
+        selectionOverlay.attach(to: self)
+
         collectionView.dataSource = dataSource
         collectionView.delegate = self
     }
 
     @objc private func handleTap() {
+        // Tapping anywhere but the selection drops it, which is what dismisses the
+        // edit menu too.
+        clearSelection()
         onTap?()
     }
 
@@ -546,9 +578,195 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         remeasureRows()
     }
 
+    // MARK: - Selection
+
+    /// The reader's current selection, or nil when there is none.
+    ///
+    /// It lives here rather than in the store because it is a fact about what is on
+    /// screen — a row index means nothing to a buffer that keeps re-wrapping.
+    private var selection: TerminalSelection?
+    private let selectionOverlay = TerminalSelectionOverlay()
+    /// The edit menu currently up, kept so it can be torn down when it closes.
+    private var editMenu: UIEditMenuInteraction?
+
+    /// Where a point lands on the grid, in the units the selection is built from:
+    /// display rows, and characters within one.
+    private func gridPosition(at point: CGPoint) -> TerminalSelection.Position? {
+        guard let indexPath = collectionView.indexPathForItem(at: point),
+              let cell = collectionView.cellForItem(at: indexPath)
+        else { return nil }
+        let advance = TerminalCellMetrics.advance(forFontSize: fontSize)
+        guard advance > 0 else { return nil }
+        let offset = point.x - cell.frame.minX - TerminalCellMetrics.contentInset
+        // Clamped rather than rejected: a finger that has run past the end of a row
+        // is still selecting that row's last character, not nothing.
+        let column = max(0, Int(offset / advance))
+        return TerminalSelection.Position(row: indexPath.item, column: column)
+    }
+
+    /// The cell a position points at, in this view's coordinates.
+    ///
+    /// This is what the loupe centres on, so it is what the reader sees magnified —
+    /// the cell the selection has reached, which stops matching the finger as soon
+    /// as the finger leaves the row.
+    private func caretRect(for position: TerminalSelection.Position) -> CGRect {
+        let advance = TerminalCellMetrics.advance(forFontSize: fontSize)
+        let height = TerminalRowCell.rowHeight(for: fontSize)
+        let indexPath = IndexPath(item: position.row, section: 0)
+        guard let attributes = collectionView.collectionViewLayout
+            .layoutAttributesForItem(at: indexPath) else {
+            return .null
+        }
+        return CGRect(
+            x: attributes.frame.minX + TerminalCellMetrics.contentInset
+                + CGFloat(position.column) * advance - collectionView.contentOffset.x,
+            y: attributes.frame.minY - collectionView.contentOffset.y,
+            width: advance,
+            height: height
+        )
+    }
+
+    /// Puts the handles on the selection's two ends and redraws the tinted rows.
+    private func refreshSelection() {
+        guard let selection else {
+            selectionOverlay.hide()
+            return
+        }
+        let height = TerminalRowCell.rowHeight(for: fontSize)
+        let start = caretRect(for: selection.start)
+        let end = caretRect(for: selection.end)
+        selectionOverlay.layout(
+            start: CGRect(x: start.minX, y: start.minY, width: height, height: height),
+            end: CGRect(x: end.maxX, y: end.minY, width: height, height: height)
+        )
+        // Re-keyed rather than reloaded: the selection is part of a row's identity,
+        // so the diff applies the tint the same way it applies the cursor.
+        push(rows: appliedRows, keys: identities(for: appliedRows, cursor: appliedCursor))
+    }
+
+    private func clearSelection() {
+        guard selection != nil else { return }
+        selection = nil
+        refreshSelection()
+    }
+
+    /// Starts a selection at a point, with the loupe already up.
+    private func beginSelection(at point: CGPoint) {
+        guard let position = gridPosition(at: point) else { return }
+        selection = TerminalSelection(at: position)
+        // Nothing is selected yet, so the reader is about to drag: scrolling must
+        // not answer the same finger.
+        collectionView.isScrollEnabled = false
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        selectionOverlay.beginLoupe(
+            at: point,
+            caretRect: caretRect(for: position),
+            in: self
+        )
+        refreshSelection()
+    }
+
+    private func extendSelection(to point: CGPoint) {
+        guard var current = selection, let position = gridPosition(at: point) else { return }
+        let previous = current.end
+        current.extend(to: position)
+        selection = current
+
+        // One tick per row or column crossed, which is the feedback that makes a
+        // selection feel like it is following the finger rather than lagging it.
+        if previous != current.end {
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+        selectionOverlay.moveLoupe(to: point, caretRect: caretRect(for: position))
+        refreshSelection()
+    }
+
+    private func endSelection(at point: CGPoint) {
+        collectionView.isScrollEnabled = true
+        selectionOverlay.endLoupe()
+
+        // A press that never moved is how the reader meant to scroll, or to put the
+        // keyboard away. Offering to copy one character would be a misread.
+        guard let selection, !selection.isEmpty else {
+            clearSelection()
+            return
+        }
+        presentSelectionMenu()
+    }
+
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        let point = gesture.location(in: self)
+        switch gesture.state {
+        case .began:
+            beginSelection(at: point)
+        case .changed:
+            // A long press that has been recognised keeps the gesture: the reader
+            // spent half a second saying what they meant, and reversing that on the
+            // next movement would take the selection away mid-drag.
+            extendSelection(to: point)
+        case .ended, .cancelled, .failed:
+            endSelection(at: point)
+        default:
+            break
+        }
+    }
+
+    private func presentSelectionMenu() {
+        let interaction = UIEditMenuInteraction(delegate: self)
+        editMenu = interaction
+        collectionView.addInteraction(interaction)
+        let anchor = selection.map { caretRect(for: $0.end) } ?? .zero
+        interaction.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: CGPoint(x: anchor.midX, y: anchor.minY)))
+    }
+
     func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
         // Cells are trivial to build; nothing to precompute, but implementing the
         // protocol keeps UIKit from disabling prefetch scheduling entirely.
+    }
+}
+
+extension TerminalCollectionView: UIEditMenuInteractionDelegate {
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        menuFor configuration: UIEditMenuConfiguration,
+        suggestedActions: [UIMenuElement]
+    ) -> UIMenu? {
+        guard let selection, !selection.isEmpty else { return nil }
+        return UIMenu(children: [
+            UIAction(title: "拷贝") { [weak self] _ in self?.copySelection() },
+            UIAction(title: "全选") { [weak self] _ in self?.selectAllRows() },
+        ])
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        willDismissMenuFor configuration: UIEditMenuConfiguration,
+        animator: any UIEditMenuInteractionAnimating
+    ) {
+        collectionView.removeInteraction(interaction)
+        editMenu = nil
+    }
+
+    /// Puts the selected cells on the pasteboard.
+    ///
+    /// Straight from the rows the view is showing, which is what the reader sees and
+    /// therefore what they meant — not from the store's lines, which are wrapped
+    /// differently and would paste text that was never on screen.
+    private func copySelection() {
+        guard let selection else { return }
+        let text = selection.lines(from: appliedRows.map(\.text)).joined(separator: "\n")
+        UIPasteboard.general.string = text
+        clearSelection()
+    }
+
+    private func selectAllRows() {
+        guard let lastIndex = appliedRows.indices.last else { return }
+        let lastColumn = max(0, appliedRows[lastIndex].text.count - 1)
+        selection = TerminalSelection(
+            anchor: TerminalSelection.Position(row: 0, column: 0),
+            head: TerminalSelection.Position(row: lastIndex, column: lastColumn)
+        )
+        refreshSelection()
     }
 }
 
@@ -683,12 +901,18 @@ final class TerminalRowCell: UICollectionViewCell {
         TerminalCellMetrics.rowHeight(forFontSize: size)
     }
 
-    func configure(row: DisplayRow, fontSize: CGFloat, cursorColumn: Int?) {
+    func configure(
+        row: DisplayRow,
+        fontSize: CGFloat,
+        cursorColumn: Int?,
+        selection: ClosedRange<Int>? = nil
+    ) {
         label.font = Self.font(ofSize: fontSize)
         label.attributedText = Self.attributed(
             row: row,
             fontSize: fontSize,
-            cursorColumn: cursorColumn
+            cursorColumn: cursorColumn,
+            selection: selection
         )
         continuationBar.isHidden = !row.isContinuation
     }
@@ -698,7 +922,8 @@ final class TerminalRowCell: UICollectionViewCell {
     static func attributed(
         row: DisplayRow,
         fontSize: CGFloat,
-        cursorColumn: Int?
+        cursorColumn: Int?,
+        selection: ClosedRange<Int>? = nil
     ) -> NSAttributedString {
         let font = Self.font(ofSize: fontSize)
         let attributed = NSMutableAttributedString(string: row.text, attributes: [
@@ -743,8 +968,42 @@ final class TerminalRowCell: UICollectionViewCell {
                 attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
             }
         }
+        applySelection(selection, to: attributed)
         applyCursor(at: cursorColumn, to: attributed, font: font)
         return attributed
+    }
+
+    /// Tints the selected cells, under whatever the cursor does.
+    ///
+    /// Applied after the runs so it covers their own backgrounds — a selection that
+    /// stopped at the first coloured run would look broken exactly where a reader is
+    /// most likely to be selecting. Applied before the cursor so the block still
+    /// inverts on top of it, which is how the two stay legible together.
+    private static func applySelection(
+        _ selection: ClosedRange<Int>?,
+        to attributed: NSMutableAttributedString
+    ) {
+        guard let selection else { return }
+        let text = attributed.string
+        let characters = text.count
+        guard selection.lowerBound < characters else { return }
+
+        // Converted to UTF-16 offsets for the same reason the cursor is: the range
+        // counts characters and the string is indexed by UTF-16, so the two differ
+        // after the first character outside the basic plane.
+        let first = selection.lowerBound
+        let last = min(selection.upperBound, characters - 1)
+        let lower = text.index(text.startIndex, offsetBy: first)
+        let upper = text.index(text.startIndex, offsetBy: last + 1)
+        let start = text[..<lower].utf16.count
+        let end = text[..<upper].utf16.count
+        guard end > start else { return }
+
+        attributed.addAttribute(
+            .backgroundColor,
+            value: UIColor.tintColor.withAlphaComponent(0.3),
+            range: NSRange(location: start, length: end - start)
+        )
     }
 
     /// Draws the terminal cursor as a block.
@@ -758,7 +1017,11 @@ final class TerminalRowCell: UICollectionViewCell {
         font: UIFont
     ) {
         guard let column, column >= 0 else { return }
-        guard column < (attributed.string as NSString).length else {
+        // `column` counts characters, which is what the rows are sliced by. The
+        // attributed string is indexed by UTF-16, and the two part company at the
+        // first character outside the basic plane — an emoji, usually.
+        let offset = attributed.string.prefix(column).utf16.count
+        guard offset < (attributed.string as NSString).length else {
             // Past the end of the text there is no character to invert, so the
             // block is a filled space instead.
             attributed.append(NSAttributedString(string: " ", attributes: [
@@ -767,10 +1030,10 @@ final class TerminalRowCell: UICollectionViewCell {
             ]))
             return
         }
-        let range = NSRange(location: column, length: 1)
-        let foreground = attributed.attribute(.foregroundColor, at: column, effectiveRange: nil) as? UIColor
+        let range = NSRange(location: offset, length: 1)
+        let foreground = attributed.attribute(.foregroundColor, at: offset, effectiveRange: nil) as? UIColor
             ?? UIColor(TerminalPalette.defaultForeground)
-        let background = attributed.attribute(.backgroundColor, at: column, effectiveRange: nil) as? UIColor
+        let background = attributed.attribute(.backgroundColor, at: offset, effectiveRange: nil) as? UIColor
             ?? UIColor(TerminalPalette.defaultBackground)
         attributed.addAttribute(.foregroundColor, value: background, range: range)
         attributed.addAttribute(.backgroundColor, value: foreground, range: range)

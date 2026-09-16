@@ -20,11 +20,12 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Columns3, Folder, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
+import { Columns3, Folder, Maximize2, Minimize2, Pencil, RotateCcw, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { Badge } from "../../../src/components/ui/badge"
 import { Button } from "../../../src/components/ui/button"
 import {
   ContextMenu,
@@ -78,10 +79,19 @@ import {
   getTerminalAppearanceOptions,
   type TerminalAppearanceSize,
 } from "./terminal-appearance"
+import { decideTerminalGrid } from "./terminal-grid-ownership"
 import {
   constrainTerminalCompositionToViewport,
   createTerminalRenderingOptions,
 } from "./terminal-rendering"
+
+/**
+ * Width the viewport's scrollbar takes over the right edge of the screen.
+ *
+ * Matches what the fit addon reserves for it, so a grid-sized mount is not narrower
+ * than the grid xterm is already drawing into it.
+ */
+const TERMINAL_VIEWPORT_SCROLLBAR_PX = 14
 
 const TERMINAL_WRITE_CHUNK_SIZE = 60 * 1024
 const TERMINAL_PANE_DRAG_TYPE = "application/x-synapse-terminal-pane"
@@ -819,15 +829,35 @@ function TerminalPane({
   const workspaceTreeBridge = terminalBridge.workspaceTree
   const shellBridge = requireBridgeDomain("shell")
   const containerRef = useRef<HTMLDivElement | null>(null)
+  /**
+   * The pane's terminal area, one level above the mount.
+   *
+   * Geometry is measured here rather than on the mount because in the remote-sized
+   * mode the mount is set to the phone's grid, and measuring that would make this
+   * component's own layout look like the user resizing the pane.
+   */
+  const frameRef = useRef<HTMLDivElement | null>(null)
   const paneRootRef = useRef<HTMLDivElement | null>(null)
   const paneContentRef = useRef<HTMLDivElement | null>(null)
   const fileTreeOverlayRef = useRef<HTMLDivElement | null>(null)
   const fileTreeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const xtermRef = useRef<Terminal | null>(null)
   const syncTerminalGeometryRef = useRef<((refreshRenderer?: boolean) => void) | null>(null)
+  /** Hands the grid back to this machine. Reached from the pane header button. */
+  const releaseGridOwnershipRef = useRef<((announceFailure?: boolean) => void) | null>(null)
   const setProjectionVisibilityRef = useRef<((nextVisible: boolean) => void) | null>(null)
   const appearanceSizeRef = useRef(appearanceSize)
   const sessionRef = useRef(session)
+  /** True while a phone decides this terminal's grid. */
+  const remoteSized = session.sizeOwner?.kind === "mobile"
+  /**
+   * The phone's grid in pixels, so the mount can be laid out at it.
+   *
+   * Measured from xterm's own screen element rather than computed from a cell size,
+   * because that element is already exactly the grid — and the cell size lives
+   * inside xterm, which does not expose it.
+   */
+  const [remoteCanvas, setRemoteCanvas] = useState<{ width: number; height: number } | null>(null)
   const onSessionChangedRef = useRef(onSessionChanged)
   const onSessionDeletedRef = useRef(onSessionDeleted)
   const onShortcutRef = useRef(onShortcut)
@@ -938,9 +968,96 @@ function TerminalPane({
     const constrainComposition = () => constrainTerminalCompositionToViewport(container)
     compositionTextarea?.addEventListener("compositionupdate", constrainComposition)
 
+    /**
+     * The pane area's size at the last sync, so a genuine layout change can be told
+     * apart from the observer merely firing again.
+     *
+     * Null until the first look, which only establishes the baseline. Starting from
+     * zero instead would make mounting the pane read as a resize — and a pane
+     * remounts whenever its workspace is switched back to, which would take the grid
+     * away from a phone that had done nothing.
+     */
+    let lastPaneSize: { width: number; height: number } | null = null
+    /** Set once this pane has asked to give the grid back, so it asks once. Cleared
+     *  when the claim is gone, which is what lets a later claim preempt again. */
+    let ownershipReleaseRequested = false
+
+    /**
+     * Sizes the mount to the phone's grid, or takes it back to filling the pane.
+     *
+     * The screen element is measured rather than a cell size computed, because xterm
+     * owns the cell size and does not expose it. The extra width is the scrollbar the
+     * viewport lays over the right edge: without it the last column sits under it.
+     */
+    let remoteCanvasFrame: number | undefined
+    const syncRemoteCanvas = () => {
+      if (remoteCanvasFrame !== undefined) return
+      // Measured on the next frame rather than now. A font-size change is applied by
+      // xterm's own render pass, so reading the screen element in the same tick
+      // would measure the size it is about to stop being.
+      remoteCanvasFrame = requestAnimationFrame(() => {
+        remoteCanvasFrame = undefined
+        if (disposed) return
+
+        if (sessionRef.current.sizeOwner?.kind !== "mobile") {
+          setRemoteCanvas((current) => (current === null ? current : null))
+          return
+        }
+        const screen = container.querySelector<HTMLElement>(".xterm-screen")
+        if (!screen || screen.offsetWidth === 0 || screen.offsetHeight === 0) return
+        const next = {
+          width: screen.offsetWidth + TERMINAL_VIEWPORT_SCROLLBAR_PX,
+          height: screen.offsetHeight,
+        }
+        setRemoteCanvas((current) =>
+          current && current.width === next.width && current.height === next.height ? current : next,
+        )
+      })
+    }
+
+    const releaseGridOwnership = (announceFailure = false) => {
+      void terminalBridge.session
+        .releaseSizeOwnership({ sessionId: session.id })
+        .then(() => syncTerminalGeometryRef.current?.(true))
+        .catch((error) => {
+          ownershipReleaseRequested = false
+          logger.warn("Failed to release terminal grid ownership.", error)
+          // Only when the reader asked for it. Preemption happens because they
+          // resized something, and they are already looking at the result.
+          if (announceFailure) toast.error("重置终端尺寸失败")
+        })
+    }
+    releaseGridOwnershipRef.current = releaseGridOwnership
+
     const syncTerminalGeometry = (refreshRenderer = false) => {
       if (disposed || !projectionVisible || !geometrySyncReady || !projectionAvailable) return
       if (refreshRenderer) xterm.refresh(0, xterm.rows - 1)
+
+      // Measured on the pane, not on the mount: in the remote-sized mode the mount
+      // is set to the phone's grid, so measuring that would make this component's
+      // own layout look like someone resizing the pane.
+      const pane = frameRef.current
+      const size = { width: pane?.clientWidth ?? 0, height: pane?.clientHeight ?? 0 }
+      const paneChanged = lastPaneSize !== null
+        && (size.width !== lastPaneSize.width || size.height !== lastPaneSize.height)
+      lastPaneSize = size
+
+      const owner = sessionRef.current.sizeOwner
+      const decision = decideTerminalGrid({
+        hasMobileOwner: owner?.kind === "mobile",
+        releaseRequested: ownershipReleaseRequested,
+        paneChanged,
+      })
+      syncRemoteCanvas()
+      if (decision === "hold") return
+      if (decision === "release") {
+        ownershipReleaseRequested = true
+        releaseGridOwnership()
+        return
+      }
+      // No claim left, so a later one is free to preempt all over again.
+      if (!owner) ownershipReleaseRequested = false
+
       const proposed = fitAddon.proposeDimensions()
       const cols = proposed?.cols ?? xterm.cols
       const rows = proposed?.rows ?? xterm.rows
@@ -970,7 +1087,10 @@ function TerminalPane({
         constrainComposition()
       })
     })
-    resizeObserver.observe(container)
+    // Observes the pane area, not the mount: the mount's size is chosen by this
+    // component in the remote-sized mode, and watching it would make every layout
+    // change here read as a user resize.
+    resizeObserver.observe(frameRef.current ?? container)
 
     const writeTerminalInput = (data: string) => {
       if (disposed || xterm.options.disableStdin) return
@@ -1078,6 +1198,9 @@ function TerminalPane({
             xterm.resize(nextBarrier.cols, nextBarrier.rows)
             appliedSizeRevision = nextBarrier.sizeRevision
             requestedResize = { cols: nextBarrier.cols, rows: nextBarrier.rows }
+            // The grid just changed shape, so the mount's size — which is the grid
+            // in the remote-sized mode — has to follow it.
+            syncRemoteCanvas()
             resizeBarriers.delete(nextBarrier.sizeRevision)
             continue
           }
@@ -1147,6 +1270,7 @@ function TerminalPane({
       if (replaceExistingState) await resetTerminalData()
       if (disposed || generation !== projectionGeneration || !projectionVisible) return
       xterm.resize(snapshot.cols, snapshot.rows)
+      syncRemoteCanvas()
       if (!reset || replaceExistingState) await writeTerminalData(snapshot.serialized)
       if (disposed || generation !== projectionGeneration || !projectionVisible) return
       lastSeq = snapshot.throughOutputSeq
@@ -1423,6 +1547,11 @@ function TerminalPane({
             onRename={() => onRenameSession(session.id, paneRootRef.current)}
             title={session.title}
           />
+          {remoteSized ? (
+            <Badge variant="outline" className="shrink-0 text-muted-foreground">
+              由 {session.sizeOwner?.deviceLabel} 设定 · {session.cols}×{session.rows}
+            </Badge>
+          ) : null}
           {workspaceTreeBridge ? <Button
             ref={fileTreeTriggerRef}
             type="button"
@@ -1444,6 +1573,25 @@ function TerminalPane({
           </Button> : null}
         </div>
         <div className="flex shrink-0 items-center">
+          {remoteSized ? (
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={`重置为电脑尺寸：${session.title}`}
+              title="重置为电脑尺寸"
+              data-track="terminal-pane-size-owner-reset"
+              className="shrink-0 text-muted-foreground"
+              onClick={(event) => {
+                event.stopPropagation()
+                onActive()
+                releaseGridOwnershipRef.current?.(true)
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <RotateCcw className="size-3.5" />
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="icon-xs"
@@ -1535,16 +1683,33 @@ function TerminalPane({
           </div>
         ) : null}
         <div
+          ref={frameRef}
           data-terminal-xterm-frame
           className={cn(
             "h-full min-h-0 min-w-0 overflow-hidden p-1",
+            // A phone-sized grid does not fill the pane, so it is placed rather
+            // than stretched. Centring is the only arrangement that keeps the
+            // dashed canvas outline reading as "this is the whole terminal".
+            //
+            // Keyed off the measured size rather than off the ownership, because
+            // between the claim arriving and the grid being measured there is a
+            // frame with no size to place — where a sized-out mount would collapse
+            // to nothing and blink.
+            remoteCanvas && "flex items-center justify-center",
             !projectionReady && "invisible",
           )}
         >
           <div
             ref={containerRef}
             data-terminal-xterm-mount
-            className="h-full min-h-0 min-w-0 overflow-hidden"
+            data-remote-sized={remoteSized ? "" : undefined}
+            className={cn(
+              "min-h-0 min-w-0 overflow-hidden",
+              remoteCanvas
+                ? "shrink-0 rounded-sm outline-1 outline-dashed outline-border"
+                : "h-full w-full",
+            )}
+            style={remoteCanvas ?? undefined}
           />
         </div>
         {fileTreeOpen && fileTreeDataSource ? (

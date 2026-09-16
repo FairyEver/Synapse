@@ -53,6 +53,30 @@ struct TerminalScreen: View {
     /// update turns into a cycle.
     private func syncDisplayMode() {
         store.adopt(displayMode: displayMode, desktopGrid: desktopGrid)
+        if displayMode == .phoneDriven {
+            reportGridToDesktop()
+        } else {
+            // The desktop's own layout decides again from here. The phone has no way
+            // to name the size the desktop would have chosen — all it ever heard is
+            // the size the PTY currently has, which is the phone's.
+            model.releaseGrid(for: sessionId)
+        }
+    }
+
+    /// Tells the desktop which grid to adopt, when the reader has asked the phone to
+    /// drive the size.
+    ///
+    /// Skipped while the input has focus. The keyboard shrinks the pane, and
+    /// reporting that shrink would resize the PTY every time someone taps the input
+    /// — a redraw for a keyboard the desktop cannot see. The size that stands is the
+    /// one measured before the keyboard came up.
+    private func reportGridToDesktop() {
+        guard displayMode == .phoneDriven, !inputFocused, store.visibleRows > 0 else { return }
+        model.setGridSize(
+            DesktopGrid(columns: store.columns, rows: store.visibleRows),
+            for: sessionId,
+            deviceLabel: UIDevice.current.name
+        )
     }
 
     var body: some View {
@@ -74,6 +98,11 @@ struct TerminalScreen: View {
             .onChange(of: displayMode) { syncDisplayMode() }
             .onChange(of: session?.cols) { syncDisplayMode() }
             .onChange(of: session?.rows) { syncDisplayMode() }
+            // Both are measured by the view, so they are what the desktop is asked
+            // to adopt. Rotation and a dismissed keyboard both land here.
+            .onChange(of: store.columns) { reportGridToDesktop() }
+            .onChange(of: store.visibleRows) { reportGridToDesktop() }
+            .onChange(of: inputFocused) { reportGridToDesktop() }
             accessoryBar
             inputBar
         }

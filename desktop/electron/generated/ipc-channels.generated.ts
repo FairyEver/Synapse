@@ -455,6 +455,7 @@ export const IPC_CHANNELS = {
     "renameSession": "synapse:app:terminal:session:rename",
     "writeSession": "synapse:app:terminal:session:write",
     "resizeSession": "synapse:app:terminal:session:resize",
+    "releaseSizeOwnership": "synapse:app:terminal:session:release_size_ownership",
     "deleteSession": "synapse:app:terminal:session:delete",
     "stopSession": "synapse:app:terminal:session:stop",
     "runStartupCommand": "synapse:app:terminal:session:run_startup_command",

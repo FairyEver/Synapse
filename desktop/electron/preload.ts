@@ -605,6 +605,8 @@ const synapseBridge: SynapseBridge = {
       rename: (input) => invoke(IPC_CHANNELS.terminal.renameSession)(input),
       write: (input) => invoke(IPC_CHANNELS.terminal.writeSession)(input),
       resize: (input) => invoke(IPC_CHANNELS.terminal.resizeSession)(input),
+      releaseSizeOwnership: (input) =>
+        invoke(IPC_CHANNELS.terminal.releaseSizeOwnership)(input),
       delete: (input) => invoke(IPC_CHANNELS.terminal.deleteSession)(input),
       stop: (input) => invoke(IPC_CHANNELS.terminal.stopSession)(input),
       runStartupCommand: (input) => invoke(IPC_CHANNELS.terminal.runStartupCommand)(input),

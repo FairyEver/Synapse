@@ -361,6 +361,15 @@ export type MobileIntent =
     readonly rows: number
     readonly deviceLabel: string
   })
+  /**
+   * Hands the grid back to the desktop.
+   *
+   * Sent when the reader leaves the mode where the phone drives the size. The phone
+   * cannot restore the desktop's own grid itself — it only ever heard the size the
+   * PTY currently has, which is the phone's — so it releases the claim and lets the
+   * desktop's layout decide again.
+   */
+  | (MobileIntentEnvelope<"releaseGrid"> & { readonly sessionId: string })
   | (MobileIntentEnvelope<"create"> & {
     readonly groupId: string
     readonly title?: string
@@ -557,6 +566,8 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
     case "rename":
       return boundedString(value.sessionId, 120) &&
         boundedString(value.title, MOBILE_FRAME_LIMITS.maxTitleLength)
+    case "releaseGrid":
+      return boundedString(value.sessionId, 120)
     case "resize":
       return boundedString(value.sessionId, 120) &&
         boundedCols(value.cols) && boundedRows(value.rows) &&

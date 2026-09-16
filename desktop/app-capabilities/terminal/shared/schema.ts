@@ -365,6 +365,17 @@ export const terminalResizeSessionInputSchema = z.object({
   rows: z.number().int().positive().max(200),
 }).strict()
 
+/**
+ * Hands a phone's claim on a terminal's grid back to the desktop.
+ *
+ * The PTY keeps whatever size it has; the desktop's own layout sets it on the next
+ * pass. UI-only — the pane header has a button for it and there is no capability
+ * behind it, so it registers no MCP tool.
+ */
+export const terminalReleaseSizeOwnershipInputSchema = z.object({
+  sessionId: z.string().min(1),
+}).strict()
+
 export const terminalStopSessionInputSchema = z.object({
   sessionId: z.string().min(1),
   force: z.boolean().optional(),
@@ -462,6 +473,7 @@ export type TerminalRenameSessionInput = z.infer<typeof terminalRenameSessionInp
 export type TerminalDeleteSessionInput = z.infer<typeof terminalDeleteSessionInputSchema>
 export type TerminalReadSessionInput = z.infer<typeof terminalReadSessionInputSchema>
 export type TerminalWriteSessionInput = z.infer<typeof terminalWriteSessionInputSchema>
+export type TerminalReleaseSizeOwnershipInput = z.infer<typeof terminalReleaseSizeOwnershipInputSchema>
 export type TerminalResizeSessionInput = z.infer<typeof terminalResizeSessionInputSchema>
 export type TerminalStopSessionInput = z.infer<typeof terminalStopSessionInputSchema>
 export type TerminalRunStartupCommandInput = z.infer<typeof terminalRunStartupCommandInputSchema>

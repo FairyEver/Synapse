@@ -219,6 +219,10 @@ final class SynapseAppModel {
                     to: desktop
                 )
             }
+            // A claim on a terminal's grid does not survive the break — the desktop
+            // drops it when the phone goes — so any terminal whose size this phone
+            // was deciding has to say so again, or the mode quietly stops applying.
+            self.reassertGridClaims()
         }
     }
 
@@ -500,6 +504,94 @@ final class SynapseAppModel {
                 commandId: commandId
             )
         )
+    }
+
+    // MARK: - Grid size
+
+    /// The grid the phone last asked the desktop to adopt, so a repeat is not sent.
+    private var requestedGrid: [String: DesktopGrid] = [:]
+    private var gridSizeTasks: [String: Task<Void, Never>] = [:]
+
+    /// Tells the desktop to adopt the phone's grid, for the display mode where the
+    /// phone drives the size so its own rendering is exact rather than wrapped.
+    ///
+    /// Debounced: the pane's measured size settles over several layout passes after
+    /// a rotation, and each one is a candidate grid. Sending them all would resize
+    /// the PTY repeatedly while the user is still turning the phone, and a
+    /// full-screen program redraws for every one.
+    ///
+    /// Nothing is awaited. The reply carries no dimensions, so the phone keeps
+    /// rendering what it measured and corrects from the next summary.
+    func setGridSize(_ grid: DesktopGrid, for sessionId: String, deviceLabel: String) {
+        guard grid.columns > 0, grid.rows > 0 else { return }
+        guard requestedGrid[sessionId] != grid else { return }
+
+        gridSizeTasks[sessionId]?.cancel()
+        gridSizeTasks[sessionId] = Task { [weak self] in
+            try? await Task.sleep(
+                nanoseconds: UInt64(AppConfiguration.terminalGridDebounce * 1_000_000_000)
+            )
+            guard !Task.isCancelled, let self,
+                  let desktop = self.selectedDesktopClientInstanceId,
+                  self.realtime.state.isConnected
+            else { return }
+
+            self.requestedGrid[sessionId] = grid
+            self.send(
+                MobileIntentRequest(
+                    intentId: UUID().uuidString,
+                    kind: "resize",
+                    sessionId: sessionId,
+                    cols: grid.columns,
+                    rows: grid.rows,
+                    deviceLabel: deviceLabel
+                ),
+                to: desktop
+            )
+        }
+    }
+
+    /// Stops deciding a session's grid and lets the desktop's own layout take over.
+    ///
+    /// The phone cannot restore the desktop's size by itself: everything it was ever
+    /// told is the size the PTY currently has, which is the phone's. So it gives up
+    /// the claim and the desktop re-fits.
+    func releaseGrid(for sessionId: String) {
+        gridSizeTasks[sessionId]?.cancel()
+        gridSizeTasks[sessionId] = nil
+
+        // Nothing was claimed, so there is nothing to give back. This is also what
+        // keeps a phone that was never in the mode from sending a release at all.
+        guard requestedGrid.removeValue(forKey: sessionId) != nil else { return }
+        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else { return }
+
+        send(
+            MobileIntentRequest(
+                intentId: UUID().uuidString,
+                kind: "releaseGrid",
+                sessionId: sessionId
+            ),
+            to: desktop
+        )
+    }
+
+    /// Says it again after a reconnect.
+    ///
+    /// The desktop releases a phone's claim when it disconnects, so a claim made
+    /// before the break does not survive it and the mode would silently stop being
+    /// in effect. Re-sending is the whole recovery: there is nothing to reconcile,
+    /// because the size the phone wants has not changed.
+    func reassertGridClaims() {
+        let claims = requestedGrid
+        guard !claims.isEmpty else { return }
+        requestedGrid.removeAll()
+        gridSizeTasks.values.forEach { $0.cancel() }
+        gridSizeTasks.removeAll()
+
+        let label = UIDevice.current.name
+        for (sessionId, grid) in claims {
+            setGridSize(grid, for: sessionId, deviceLabel: label)
+        }
     }
 
     private func performReturningSession(_ intent: MobileIntentRequest) async -> String? {

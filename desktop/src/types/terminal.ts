@@ -33,6 +33,7 @@ import type {
   TerminalReorderGroupsInput,
   TerminalRenameSessionInput,
   TerminalRenameWorkspaceInput,
+  TerminalReleaseSizeOwnershipInput,
   TerminalResizeSessionInput,
   TerminalResizedEvent,
   TerminalRunStartupCommandInput,
@@ -92,6 +93,7 @@ export type SynapseTerminalDeleteSessionInput = TerminalDeleteSessionInput
 export type SynapseTerminalReadSessionInput = TerminalReadSessionInput
 export type SynapseTerminalReadSessionResult = TerminalReadSessionResult
 export type SynapseTerminalWriteSessionInput = TerminalWriteSessionInput
+export type SynapseTerminalReleaseSizeOwnershipInput = TerminalReleaseSizeOwnershipInput
 export type SynapseTerminalResizeSessionInput = TerminalResizeSessionInput
 export type SynapseTerminalResizedEvent = TerminalResizedEvent
 export type SynapseTerminalStopSessionInput = TerminalStopSessionInput

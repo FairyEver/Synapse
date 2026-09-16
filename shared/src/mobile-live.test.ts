@@ -194,6 +194,12 @@ describe("mobile live protocol", () => {
     })).toBe(false)
   })
 
+  it("accepts a grid release, and only with a terminal to release", () => {
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "releaseGrid", sessionId: "s1" })).toBe(true)
+    // Handing back a grid nobody named is not expressible.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "releaseGrid" })).toBe(false)
+  })
+
   it("accepts starting dimensions on create only as a pair", () => {
     expect(isMobileIntent({
       v: 1, intentId: "i1", kind: "create", groupId: "g1", cols: 54, rows: 37, deviceLabel: "iPhone",

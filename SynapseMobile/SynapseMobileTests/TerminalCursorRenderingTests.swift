@@ -46,6 +46,21 @@ struct TerminalCursorRenderingTests {
         #expect(attributed.attribute(.backgroundColor, at: 2, effectiveRange: nil) != nil)
     }
 
+    /// The column counts characters; an attributed string is indexed by UTF-16.
+    ///
+    /// The two agree until a character outside the basic plane, and then they do
+    /// not: an emoji is one character and two UTF-16 units. Using the column as an
+    /// index would put the block inside the emoji's surrogate pair — which either
+    /// inverts half a glyph or throws.
+    @Test func placesTheCursorAfterAnEmoji() {
+        // "🙂ab" — the emoji is one character, so the "a" is character 1 and
+        // UTF-16 offset 2.
+        let attributed = TerminalRowCell.attributed(row: row("🙂ab"), fontSize: 14, cursorColumn: 1)
+
+        #expect(attributed.attribute(.backgroundColor, at: 2, effectiveRange: nil) != nil)
+        #expect(attributed.attribute(.backgroundColor, at: 1, effectiveRange: nil) == nil)
+    }
+
     /// An empty row still shows the cursor, which is where it sits on a fresh prompt.
     @Test func drawsOnAnEmptyRow() {
         let attributed = TerminalRowCell.attributed(row: row(""), fontSize: 14, cursorColumn: 0)

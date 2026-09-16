@@ -139,6 +139,7 @@ import type {
   SynapseTerminalReorderGroupsInput,
   SynapseTerminalRenameSessionInput,
   SynapseTerminalRenameWorkspaceInput,
+  SynapseTerminalReleaseSizeOwnershipInput,
   SynapseTerminalResizeSessionInput,
   SynapseTerminalResizedEvent,
   SynapseTerminalRunStartupCommandInput,
@@ -1245,6 +1246,7 @@ export type SynapseBridge = {
       rename: (input: SynapseTerminalRenameSessionInput) => Promise<SynapseTerminalSession>
       write: (input: SynapseTerminalWriteSessionInput) => Promise<void>
       resize: (input: SynapseTerminalResizeSessionInput) => Promise<void>
+      releaseSizeOwnership: (input: SynapseTerminalReleaseSizeOwnershipInput) => Promise<void>
       delete: (input: SynapseTerminalDeleteSessionInput) => Promise<void>
       stop: (input: SynapseTerminalStopSessionInput) => Promise<void>
       runStartupCommand: (input: SynapseTerminalRunStartupCommandInput) => Promise<void>

@@ -287,6 +287,22 @@ export class MobileIntentExecutor {
         return accepted(intent.intentId, { sessionId: intent.sessionId })
       }
 
+      /**
+       * Hands the grid back, for when the reader leaves the mode where the phone
+       * drives the size.
+       *
+       * Authorized as a resize because that is what it is the other half of: the
+       * same permission that lets a phone choose the size lets it stop choosing.
+       * The PTY keeps whatever size it has — the desktop's own fit sets it on its
+       * next layout pass, and shrinking it out from under a terminal in the
+       * meantime would reflow text nobody asked to move.
+       */
+      case "releaseGrid": {
+        await this.deps.authorize("terminal.session.resize", sessionResource(intent.sessionId))
+        terminal.releaseSizeOwnership(intent.sessionId)
+        return accepted(intent.intentId, { sessionId: intent.sessionId })
+      }
+
       case "create": {
         await this.deps.authorize("terminal.session.create", `terminal.group:${intent.groupId}`)
         // Explicit starting dimensions are also a resize. ADR 0063 requires both

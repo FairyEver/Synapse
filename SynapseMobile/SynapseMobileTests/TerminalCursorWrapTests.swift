@@ -51,6 +51,34 @@ struct TerminalCursorWrapTests {
         #expect(store.cursorPosition == TerminalStore.CursorPosition(rowIndex: 1, column: 10))
     }
 
+    /// A cell column is not a character offset once a wide character appears.
+    ///
+    /// The desktop counts cells because cells are what its grid counts; the wrap
+    /// slices by characters. Every Han character is two cells and one character, so
+    /// the two numbers drift apart one cell at a time across a line.
+    @Test func translatesCellColumnsThroughWideCharacters() {
+        // "中文abc" is two cells per Han character and one per Latin.
+        #expect(TerminalStore.characterIndex(forCell: 0, in: "中文abc") == 0)
+        #expect(TerminalStore.characterIndex(forCell: 2, in: "中文abc") == 1)
+        #expect(TerminalStore.characterIndex(forCell: 4, in: "中文abc") == 2)
+        #expect(TerminalStore.characterIndex(forCell: 5, in: "中文abc") == 3)
+        // Past the end clamps to the whole line rather than running off it.
+        #expect(TerminalStore.characterIndex(forCell: 99, in: "中文abc") == 5)
+    }
+
+    /// The cursor lands on the character it is under, not at the column's index.
+    @Test func putsTheCursorOnTheCharacterAfterWideText() throws {
+        let store = TerminalStore()
+        store.update(columns: 40)
+        store.apply(frame(
+            lines: [try line("中文abc")],
+            cursor: TerminalCursor(row: 0, col: 5, visible: true)
+        ))
+
+        // Cell 5 is the "b": two cells into 中, two into 文, one into a.
+        #expect(store.cursorPosition == TerminalStore.CursorPosition(rowIndex: 0, column: 3))
+    }
+
     /// Widening has to move it back, or rotating one way would only ever be right.
     @Test func movesTheCursorBackWhenTheWrapWidens() throws {
         let store = TerminalStore()

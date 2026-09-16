@@ -53,6 +53,7 @@ import {
   terminalRenameGroupInputSchema,
   terminalRenameSessionInputSchema,
   terminalRenameWorkspaceInputSchema,
+  terminalReleaseSizeOwnershipInputSchema,
   terminalResizeSessionInputSchema,
   terminalResizedEventSchema,
   terminalRunStartupCommandInputSchema,
@@ -521,6 +522,17 @@ export const terminalIpcModule: IpcModule = {
       response: z.void(),
       handler: (ctx, request: z.infer<typeof terminalResizeSessionInputSchema>) =>
         resolveTerminalService(ctx).resizeSession(request),
+    },
+    releaseSizeOwnership: {
+      operationId: "app.terminal.session.release_size_ownership",
+      kind: "invoke",
+      request: terminalReleaseSizeOwnershipInputSchema,
+      response: z.void(),
+      // Returns nothing on purpose: the caller re-runs its own fit afterwards, and
+      // what it needs to know is that the claim is gone, not what the grid became.
+      handler: (ctx, request: z.infer<typeof terminalReleaseSizeOwnershipInputSchema>) => {
+        resolveTerminalService(ctx).releaseSizeOwnership(request.sessionId)
+      },
     },
     deleteSession: {
       operationId: "app.terminal.session.delete",
