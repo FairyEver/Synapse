@@ -61,11 +61,32 @@ actor APIClient {
     /// credential the server keeps rejecting until some unrelated REST request
     /// happened to replace it. That state is indistinguishable from a bad network
     /// on the phone, and it does not clear on its own.
-    func liveToken() async -> String? {
+    /// What the live socket should do about its credential.
+    ///
+    /// The first two cases must not be collapsed into one. A refresh that failed
+    /// because the server could not be reached says nothing about the credential —
+    /// the account is still signed in and the token is still on disk. Reporting it
+    /// as an authentication failure is what used to stop the socket for good: the
+    /// account screen kept showing the signed-in email while the terminal list said
+    /// the computer was offline, and nothing retried until the app was relaunched.
+    enum LiveTokenOutcome {
+        case token(String)
+        /// The path to the server is missing; the credential is intact.
+        case unreachable
+        /// The credential is gone and has been discarded.
+        case unauthenticated
+    }
+
+    func liveTokenOutcome() async -> LiveTokenOutcome {
         if accessToken == nil || accessTokenIsStale {
-            _ = await refreshAccessToken()
+            switch await refreshAccessTokenOutcome() {
+            case .success(let token): return .token(token)
+            case .failure(.rejected): return .unauthenticated
+            case .failure(.unreachable): return .unreachable
+            }
         }
-        return accessToken
+        guard let accessToken else { return .unauthenticated }
+        return .token(accessToken)
     }
 
     /// Refreshes slightly early: a token that expires between here and the

@@ -63,7 +63,7 @@ final class SynapseAppModel {
             deviceName: UIDevice.current.name,
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0",
             tokenProvider: { [weak apiClient] in
-                await apiClient?.liveToken()
+                await apiClient?.liveTokenOutcome() ?? .unauthenticated
             }
         )
         wireRealtime()

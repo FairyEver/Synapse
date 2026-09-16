@@ -54,7 +54,7 @@ final class RealtimeClient {
     /// per attempt. On a network that keeps dropping that is a session every few
     /// seconds, for the life of the process.
     private let session = URLSession(configuration: .default)
-    private let tokenProvider: @Sendable () async -> String?
+    private let tokenProvider: @Sendable () async -> APIClient.LiveTokenOutcome
     private let clientInstanceId: String
     private let deviceName: String
     private let appVersion: String
@@ -70,7 +70,7 @@ final class RealtimeClient {
         clientInstanceId: String,
         deviceName: String,
         appVersion: String,
-        tokenProvider: @escaping @Sendable () async -> String?
+        tokenProvider: @escaping @Sendable () async -> APIClient.LiveTokenOutcome
     ) {
         self.clientInstanceId = clientInstanceId
         self.deviceName = deviceName
@@ -129,17 +129,28 @@ final class RealtimeClient {
 
         Task { [weak self] in
             guard let self else { return }
-            guard let token = await self.tokenProvider() else {
+            switch await self.tokenProvider() {
+            case .token(let token):
+                await MainActor.run {
+                    guard self.generation == current else { return }
+                    self.startSocket(token: token, generation: current)
+                }
+            case .unreachable:
+                // Only the path to the server is missing — the account is still
+                // signed in and the token is still on disk. Staying in the reconnect
+                // loop is the whole difference between "retrying" and "signed out";
+                // stopping here is what used to leave the app reporting an offline
+                // computer until it was relaunched by hand.
+                await MainActor.run {
+                    guard self.generation == current else { return }
+                    self.scheduleReconnect()
+                }
+            case .unauthenticated:
                 await MainActor.run {
                     guard self.generation == current else { return }
                     self.shouldStayConnected = false
                     self.state = .unauthenticated
                 }
-                return
-            }
-            await MainActor.run {
-                guard self.generation == current else { return }
-                self.startSocket(token: token, generation: current)
             }
         }
     }
