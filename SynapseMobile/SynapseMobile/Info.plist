@@ -20,6 +20,13 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!--
+	  The app speaks only HTTPS/TLS, which is exempt from the export-control
+	  question. Declaring it here is what keeps App Store Connect from asking it
+	  again on every single upload.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!--
@@ -39,9 +46,14 @@
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<!--
+	  The deployment target is 18.0, so the binary carries an arm64 slice and
+	  nothing else. Naming armv7 here was left over from the Xcode template and
+	  describes a slice the app does not have.
+	-->
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

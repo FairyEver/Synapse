@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Archive → App Store Connect, used by scripts/release-ios.sh.
+
+  `destination = upload` makes xcodebuild hand the ipa to App Store Connect in
+  the same step, so there is no Organizer click between archiving and the build
+  showing up in TestFlight. Leave it on `export` when you only want the ipa.
+
+  Signing is left automatic on purpose: `signingStyle` is absent, which means
+  xcodebuild resolves the distribution certificate and profile through the
+  account signed into Xcode, the same way the Organizer would.
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>U4JT7UKH9W</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>destination</key>
+	<string>upload</string>
+	<!-- The app links no third-party frameworks with bitcode-era requirements,
+	     and none of its own dependencies are managed by a package manager that
+	     needs a manifest uploaded alongside. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>
