@@ -847,9 +847,10 @@ export function TerminalModule({
         if (!current) return current
         return workspaces.some((workspace) => workspace.id === current && workspace.groupId === groupId) ? null : current
       })
+      // A deleted group has no row left to return to, so focus goes to the control that creates
+      // one. Handing it to the close handler keeps it out of the focus trap's way.
+      deleteGroupReturnFocusRef.current = createGroupActionRef.current
       setDeleteGroupTarget(null)
-      deleteGroupReturnFocusRef.current = null
-      globalThis.setTimeout(() => createGroupActionRef.current?.focus(), 0)
     } catch (error) {
       logger.error("Failed to delete terminal group.", error)
       toast.error("删除分组失败")
