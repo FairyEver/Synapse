@@ -1101,6 +1101,39 @@ describe("TerminalModule", () => {
     expect(document.activeElement).toBe(sidebarSessionRow("构建日志"))
   })
 
+  it("keeps focus on the returned row after the rename dialog closes", async () => {
+    // The dialog's own field used to reclaim focus after the row had taken it, which left focus
+    // on the unmounting dialog and then on document.body. Asserting the *last* focus call is what
+    // catches a later steal; asserting only the final activeElement can pass while it is in flight.
+    const focused: HTMLElement[] = []
+    const originalFocus = HTMLElement.prototype.focus
+    HTMLElement.prototype.focus = function (this: HTMLElement, ...args: unknown[]) {
+      focused.push(this)
+      return (originalFocus as (...a: unknown[]) => void).apply(this, args)
+    }
+    try {
+      bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+      createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+      await renderEmbeddedModule()
+      await openSidebarSessionMenu("开发终端")
+      await clickContextMenuItem("重命名")
+      await changeInput("终端名称", "构建日志")
+      await clickButton("保存")
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+
+      const row = sidebarSessionRow("构建日志")
+      expect(row).toBeTruthy()
+      expect(document.activeElement).toBe(row)
+      expect(focused.at(-1)).toBe(row)
+    } finally {
+      HTMLElement.prototype.focus = originalFocus
+    }
+  })
+
   it("copies the focused pane session deep link from a split workspace row", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({

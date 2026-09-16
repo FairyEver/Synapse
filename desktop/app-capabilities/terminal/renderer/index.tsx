@@ -432,10 +432,6 @@ export function TerminalModule({
   const closeRenameDialog = useCallback(() => {
     setRenameTarget(null)
     setRenameTitle("")
-    globalThis.setTimeout(() => {
-      renameReturnFocusRef.current?.focus()
-      renameReturnFocusRef.current = null
-    }, 0)
   }, [])
 
   const openSessionRenameDialog = useCallback((sessionId: string, returnFocus: HTMLElement | null) => {
@@ -449,18 +445,10 @@ export function TerminalModule({
   const closeSessionRenameDialog = useCallback(() => {
     setSessionRenameTarget(null)
     setSessionRenameTitle("")
-    globalThis.setTimeout(() => {
-      sessionRenameReturnFocusRef.current?.focus()
-      sessionRenameReturnFocusRef.current = null
-    }, 0)
   }, [])
 
   const closeDeleteGroupDialog = useCallback(() => {
     setDeleteGroupTarget(null)
-    globalThis.setTimeout(() => {
-      deleteGroupReturnFocusRef.current?.focus()
-      deleteGroupReturnFocusRef.current = null
-    }, 0)
   }, [])
 
   const openCreateGroupDialog = useCallback(() => {
@@ -1898,7 +1886,12 @@ export function TerminalModule({
       <Dialog open={renameTarget !== null} onOpenChange={(open) => {
         if (!open) closeRenameDialog()
       }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={(event) => {
+          // Radix releases its focus trap before this fires; restoring focus from a timer instead
+          // raced that trap and lost focus to document.body when the dialog content unmounted.
+          event.preventDefault()
+          renameReturnFocusRef.current?.focus()
+        }}>
           <DialogHeader>
             <DialogTitle>重命名终端</DialogTitle>
             <DialogDescription className="sr-only">
@@ -1939,7 +1932,10 @@ export function TerminalModule({
       <Dialog open={sessionRenameTarget !== null} onOpenChange={(open) => {
         if (!open) closeSessionRenameDialog()
       }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          sessionRenameReturnFocusRef.current?.focus()
+        }}>
           <DialogHeader>
             <DialogTitle>重命名对话</DialogTitle>
             <DialogDescription className="sr-only">
@@ -1980,7 +1976,10 @@ export function TerminalModule({
       <AlertDialog open={deleteGroupTarget !== null} onOpenChange={(open) => {
         if (!open && !deleteGroupSaving) closeDeleteGroupDialog()
       }}>
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          deleteGroupReturnFocusRef.current?.focus()
+        }}>
           <AlertDialogHeader>
             <AlertDialogTitle>删除分组</AlertDialogTitle>
             <AlertDialogDescription>
