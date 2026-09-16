@@ -20,6 +20,13 @@ struct TerminalScreen: View {
     private var store: TerminalStore { model.store(for: sessionId) }
     private var session: MobileSummarySession? { model.session(sessionId) }
 
+    private var modeBinding: Binding<TerminalDisplayMode> {
+        Binding(
+            get: { display.mode(for: sessionId) },
+            set: { display.setMode($0, for: sessionId) }
+        )
+    }
+
     /// Optional-tagged so "follow the system setting" is a choice the picker can
     /// show rather than an absence it cannot.
     private var sessionDensityBinding: Binding<TerminalDensity?> {
@@ -27,6 +34,25 @@ struct TerminalScreen: View {
             get: { display.isOverridingDensity(sessionId) ? display.density(for: sessionId) : nil },
             set: { display.setDensity($0, for: sessionId) }
         )
+    }
+
+    private var displayMode: TerminalDisplayMode { display.mode(for: sessionId) }
+
+    /// What the desktop last said its grid is. Absent until the first summary
+    /// arrives, and the desktop-grid mode cannot be honoured without it.
+    private var desktopGrid: DesktopGrid? {
+        guard let session, session.cols > 0, session.rows > 0 else { return nil }
+        return DesktopGrid(columns: session.cols, rows: session.rows)
+    }
+
+    /// The store owns the wrap, so the mode and the grid reach it here rather than
+    /// being passed straight to the view.
+    ///
+    /// Called from `onAppear`/`onChange` rather than from `updateUIView`: the store
+    /// is observed, and mutating it while SwiftUI is already updating is how a view
+    /// update turns into a cycle.
+    private func syncDisplayMode() {
+        store.adopt(displayMode: displayMode, desktopGrid: desktopGrid)
     }
 
     var body: some View {
@@ -37,11 +63,17 @@ struct TerminalScreen: View {
             TerminalTextView(
                 store: store,
                 fontSize: fontSize,
+                displayMode: displayMode,
+                desktopGrid: desktopGrid,
                 revision: store.renderRevision,
                 onRequestHistory: { model.requestHistory(sessionId) },
                 onTap: { inputFocused = false }
             )
             .background(Theme.terminalBackground)
+            .onAppear { syncDisplayMode() }
+            .onChange(of: displayMode) { syncDisplayMode() }
+            .onChange(of: session?.cols) { syncDisplayMode() }
+            .onChange(of: session?.rows) { syncDisplayMode() }
             accessoryBar
             inputBar
         }
@@ -104,6 +136,13 @@ struct TerminalScreen: View {
             .frame(maxWidth: .infinity)
 
             Menu {
+                Picker(selection: modeBinding) {
+                    ForEach(TerminalDisplayMode.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                } label: {
+                    Label("显示模式", systemImage: "rectangle.split.2x1")
+                }
                 Picker(selection: sessionDensityBinding) {
                     Text("跟随系统").tag(TerminalDensity?.none)
                     ForEach(TerminalDensity.allCases, id: \.self) { value in

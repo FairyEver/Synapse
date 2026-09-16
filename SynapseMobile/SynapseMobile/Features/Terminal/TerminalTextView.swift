@@ -10,7 +10,14 @@ import UIKit
 /// `TerminalStore` before the data ever reaches the view.
 struct TerminalTextView: UIViewRepresentable {
     let store: TerminalStore
+    /// The size the reader's density asks for. In the desktop-grid mode the view
+    /// scales it down to fit, so this is a starting point rather than the answer.
     let fontSize: CGFloat
+    /// Which device's grid to lay the rows out for. The store owns the wrap; this
+    /// is the same choice, passed down so the cell layout can follow it.
+    let displayMode: TerminalDisplayMode
+    /// The desktop's grid, absent until the first summary arrives.
+    let desktopGrid: DesktopGrid?
     /// Bumped by the store on every applied frame; drives the snapshot.
     let revision: Int
 
@@ -22,14 +29,17 @@ struct TerminalTextView: UIViewRepresentable {
         view.onWidthChanged = { [weak store] columns in
             store?.update(columns: columns)
         }
+        view.onRowsChanged = { [weak store] rows in
+            store?.reportVisibleRows(rows)
+        }
         view.onRequestHistory = onRequestHistory
         view.onTap = onTap
-        view.applyFont(size: fontSize)
+        view.applyLayout(displayMode: displayMode, desktopGrid: desktopGrid, fontSize: fontSize)
         return view
     }
 
     func updateUIView(_ view: TerminalCollectionView, context: Context) {
-        view.applyFont(size: fontSize)
+        view.applyLayout(displayMode: displayMode, desktopGrid: desktopGrid, fontSize: fontSize)
         view.apply(
             rows: store.rows,
             atHistoryFloor: store.reachedHistoryFloor,
@@ -48,6 +58,17 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private var rowsByKey: [String: DisplayRow] = [:]
     private var fontSize: CGFloat = 12
+    /// What the density asks for, kept so the fit can be recomputed when the pane
+    /// resizes — a rotation changes how much of the desktop's grid fits.
+    private var baseFontSize: CGFloat = 12
+    /// Which grid the rows are laid out for. The store owns the wrap; this mirrors
+    /// it so the cell layout and the scroll behaviour can follow.
+    private var displayMode: TerminalDisplayMode = .phoneDriven
+    private var desktopGrid: DesktopGrid?
+    /// Pinch scaling on top of the fitted size, in the desktop-grid mode only.
+    /// Fitted is 1, and it never goes below — shrinking past "the whole screen"
+    /// would be a third mode nobody asked for.
+    private var zoom: CGFloat = 1
     /// The identities last handed to the data source. A row that holds the cursor
     /// has the cursor woven into its identity, so a cursor that moves — or blinks —
     /// is a change the diff can see for itself. That is what keeps this view off
@@ -62,11 +83,17 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var requestsInFlight = false
     /// Reports how many monospace columns fit, so the wrap matches the phone.
     var onWidthChanged: ((Int) -> Void)?
+    /// Reports how many rows the pane shows. Only the phone can measure this, and it
+    /// is what the desktop is asked to adopt in the phone-driven mode. Purely
+    /// outbound: unlike the column count it changes nothing about how rows are laid
+    /// out here.
+    var onRowsChanged: ((Int) -> Void)?
     /// Asks for another page when the user reaches the top.
     var onRequestHistory: (() -> Void)?
     /// Tapping the terminal is how the keyboard is put away.
     var onTap: (() -> Void)?
     private var reportedColumns = 0
+    private var reportedRows = 0
     private var lastLayoutHeight: CGFloat = 0
     private var appliedCursor: TerminalStore.CursorPosition?
     private var blinkTimer: Timer?
@@ -89,29 +116,152 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         fatalError("init(coder:) is not used")
     }
 
-    func applyFont(size: CGFloat) {
-        guard size != fontSize else { return }
-        fontSize = size
-        collectionView.collectionViewLayout.invalidateLayout()
-        // Row height depends on the font, so every visible cell must re-measure.
-        // Every row is re-keyed from scratch below, so the cursor is drawn solid
-        // rather than left at whatever phase the blink was in.
+    /// Adopts the display mode, the desktop's grid and the density's font size as
+    /// one layout.
+    ///
+    /// Together on purpose. They describe a single arrangement, and applying them
+    /// separately would leave rows laid out for one grid measured with another's
+    /// cell size.
+    func applyLayout(
+        displayMode mode: TerminalDisplayMode,
+        desktopGrid grid: DesktopGrid?,
+        fontSize base: CGFloat
+    ) {
+        let gridChanged = desktopGrid != grid || displayMode != mode
+        displayMode = mode
+        desktopGrid = grid
+        baseFontSize = base
+        // A pinned zoom was measured against a size that no longer applies; fitting
+        // is the only predictable starting point.
+        if gridChanged { zoom = 1 }
+
+        let target = renderedFontSize(base: base)
+        if target != fontSize {
+            fontSize = target
+            remeasureRows()
+        } else {
+            applyInsets()
+            collectionView.collectionViewLayout.invalidateLayout()
+        }
+        reportColumnsIfNeeded()
+    }
+
+    /// Re-measures every row at the current size.
+    ///
+    /// Rebuilt rather than patched: the row cache is keyed by content, and a size
+    /// change alters every key whether or not the text moved. The cursor is drawn
+    /// solid afterwards rather than left at whatever phase the blink happened to be.
+    private func remeasureRows() {
         appliedKeys = []
         appliedRows = []
         rowsByKey.removeAll()
         cursorPhaseOn = true
-        reportColumnsIfNeeded()
+        applyInsets()
+        collectionView.collectionViewLayout.invalidateLayout()
+    }
+
+    /// The size cells are actually drawn at.
+    ///
+    /// The density's size in the phone-driven mode. In the desktop-grid mode the
+    /// whole desktop screen has to fit, so it is that size scaled down — which is
+    /// how the mode keeps its promise with no transform anywhere: the grid stays a
+    /// grid, only the size changes.
+    private func renderedFontSize(base: CGFloat) -> CGFloat {
+        guard displayMode == .desktopDriven, let grid = desktopGrid, base > 0 else { return base }
+        return max(1, (base * fitScale(for: grid, base: base) * zoom).rounded())
+    }
+
+    /// How much the desktop's grid has to shrink to fit the pane.
+    ///
+    /// Measured at `base` rather than at the current size, so asking twice gives
+    /// the same answer instead of compounding.
+    private func fitScale(for grid: DesktopGrid, base: CGFloat) -> CGFloat {
+        let cellWidth = TerminalCellMetrics.advance(forFontSize: base)
+        let cellHeight = TerminalCellMetrics.rowHeight(forFontSize: base)
+        guard cellWidth > 0, cellHeight > 0, bounds.width > 0, bounds.height > 0 else { return 1 }
+
+        let gridWidth = CGFloat(grid.columns) * cellWidth
+        let gridHeight = CGFloat(grid.rows) * cellHeight
+        guard gridWidth > 0, gridHeight > 0 else { return 1 }
+
+        let fitted = min(bounds.width / gridWidth, bounds.height / gridHeight)
+        // Never above 1: enlarging past the desktop's own size would be a different
+        // claim than "the whole screen, fitted". And never below the readable floor —
+        // a grid scaled past legibility is not the whole screen, it is an unreadable
+        // one, and scrolling to read it is the better failure.
+        let floor = base > 0 ? TerminalDisplayConfig.minimumReadableFontSize / base : 1
+        return min(1, max(fitted, floor))
+    }
+
+    /// Places the grid inside the pane.
+    ///
+    /// The desktop-grid mode aligns rather than fills. A grid wider than it is tall —
+    /// which is what a desktop terminal is — is scaled to the width and sits at the
+    /// top: the lines a reader looks for are the last ones, and empty space below
+    /// them goes unnoticed where empty space above them would not. A grid taller
+    /// than the pane is centred instead.
+    private func applyInsets() {
+        let pane = bounds
+        guard displayMode == .desktopDriven, let grid = desktopGrid, pane.width > 0, pane.height > 0 else {
+            collectionView.contentInset = .zero
+            collectionView.alwaysBounceHorizontal = false
+            return
+        }
+
+        let cellWidth = TerminalCellMetrics.advance(forFontSize: fontSize)
+        let cellHeight = TerminalRowCell.rowHeight(for: fontSize)
+        let gridWidth = CGFloat(grid.columns) * cellWidth
+        let gridHeight = CGFloat(grid.rows) * cellHeight
+        guard gridWidth > 0, gridHeight > 0 else {
+            collectionView.contentInset = .zero
+            collectionView.alwaysBounceHorizontal = false
+            return
+        }
+
+        // Sideways scrolling is how a grid that reached the readable floor stays
+        // readable: it cannot shrink further, so it has to move instead.
+        collectionView.alwaysBounceHorizontal = gridWidth > pane.width
+
+        let widthRatio = pane.width / gridWidth
+        let heightRatio = pane.height / gridHeight
+        let widthIsTheLimit = widthRatio <= heightRatio
+
+        collectionView.contentInset = UIEdgeInsets(
+            // Top-aligned when the width is what runs out; centred when it is the
+            // height, which is the landscape case.
+            top: widthIsTheLimit ? 0 : max(0, (pane.height - gridHeight) / 2),
+            // Horizontally centred either way. The rows are laid out at the grid's
+            // own width for this to mean anything — see `sizeForItemAt`.
+            left: max(0, (pane.width - gridWidth - Self.horizontalInset) / 2),
+            bottom: 0,
+            right: 0
+        )
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        // A resize changes how much of the desktop's grid fits, so the fitted size
+        // and the alignment are recomputed before anything lays out with the old
+        // ones. Guarded on an actual change, which is what keeps this from looping.
+        if displayMode == .desktopDriven, desktopGrid != nil {
+            let target = renderedFontSize(base: baseFontSize)
+            if target != fontSize {
+                fontSize = target
+                remeasureRows()
+            } else {
+                applyInsets()
+            }
+        }
         reportColumnsIfNeeded()
         // The keyboard appearing shrinks this view. Nothing new was appended, so
         // no snapshot runs — without this the newest output would slide below the
         // fold and the user would have to scroll to find it.
         if bounds.height != lastLayoutHeight {
             lastLayoutHeight = bounds.height
-            if isPinnedToBottom { scrollToBottom() }
+            // Except in the desktop-grid mode, where the grid is placed by the
+            // alignment rules and pinning to the bottom would scroll the top of it
+            // off — the opposite of showing the whole screen.
+            if isPinnedToBottom, displayMode == .phoneDriven { scrollToBottom() }
         }
     }
 
@@ -119,13 +269,24 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// phone is, so the column count is measured here and pushed to the store.
     private func reportColumnsIfNeeded() {
         guard fontSize > 0 else { return }
+
         let columns = max(
             TerminalCellMetrics.minimumColumns,
             TerminalCellMetrics.columns(fitting: bounds.width, fontSize: fontSize)
         )
-        guard columns != reportedColumns else { return }
-        reportedColumns = columns
-        onWidthChanged?(columns)
+        if columns != reportedColumns {
+            reportedColumns = columns
+            onWidthChanged?(columns)
+        }
+
+        let rows = TerminalCellMetrics.rows(
+            fitting: bounds.height,
+            cellHeight: TerminalRowCell.rowHeight(for: fontSize)
+        )
+        if rows != reportedRows {
+            reportedRows = rows
+            onRowsChanged?(rows)
+        }
     }
 
     func apply(rows: [DisplayRow], atHistoryFloor: Bool, cursor: TerminalStore.CursorPosition?) {
@@ -290,6 +451,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         collectionView.alwaysBounceVertical = true
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.keyboardDismissMode = .interactive
+        // The alignment insets are computed from the pane's own geometry, so letting
+        // UIKit also apply safe-area insets would shift the grid by an amount that
+        // varies with the notch and the home indicator — exactly what the centring
+        // arithmetic below cannot account for.
+        collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.register(TerminalRowCell.self, forCellWithReuseIdentifier: TerminalRowCell.reuseIdentifier)
         collectionView.register(
             TerminalHeaderView.self,
@@ -339,12 +505,45 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         tap.cancelsTouchesInView = false
         collectionView.addGestureRecognizer(tap)
 
+        // Pinching changes the font size rather than scaling the view. Text stays
+        // crisp at any size, the collection view keeps its own scrolling and cell
+        // recycling, and the fitting arithmetic stays the only thing deciding how
+        // big a cell is. A transform would put a second, competing scale on top of
+        // all three.
+        collectionView.addGestureRecognizer(
+            UIPinchGestureRecognizer(target: self, action: #selector(handlePinch))
+        )
+
         collectionView.dataSource = dataSource
         collectionView.delegate = self
     }
 
     @objc private func handleTap() {
         onTap?()
+    }
+
+    /// Magnifies the desktop's grid past the fit.
+    ///
+    /// Only where there is something to magnify: the phone-driven mode is already at
+    /// the size the reader chose, and widening it further is a different promise than
+    /// the one that mode makes. The zoom is a multiple of the fitted size, so it
+    /// means the same thing after a rotation as before one.
+    @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+        guard displayMode == .desktopDriven, desktopGrid != nil else { return }
+        guard gesture.state == .changed else { return }
+
+        let proposed = zoom * gesture.scale
+        let clamped = min(TerminalDisplayConfig.maxZoom, max(TerminalDisplayConfig.minZoom, proposed))
+        guard abs(clamped - zoom) > 0.001 else { return }
+        zoom = clamped
+        // Reset each step so the next callback reports an incremental change rather
+        // than the whole gesture again.
+        gesture.scale = 1
+
+        let target = renderedFontSize(base: baseFontSize)
+        guard target != fontSize else { return }
+        fontSize = target
+        remeasureRows()
     }
 
     func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
@@ -359,7 +558,22 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         layout collectionViewLayout: UICollectionViewLayout,
         sizeForItemAt indexPath: IndexPath
     ) -> CGSize {
-        CGSize(width: collectionView.bounds.width, height: TerminalRowCell.rowHeight(for: fontSize))
+        CGSize(width: itemWidth, height: TerminalRowCell.rowHeight(for: fontSize))
+    }
+
+    /// A row's width.
+    ///
+    /// A row fills the pane in the phone-driven mode. In the desktop-grid mode it is
+    /// the grid's own width instead, because `contentInset.left` only centres content
+    /// that is narrower than the pane — a full-width row would simply be shifted
+    /// across, which is how a centred grid silently comes out right-aligned.
+    private var itemWidth: CGFloat {
+        guard displayMode == .desktopDriven, let grid = desktopGrid else {
+            return collectionView.bounds.width
+        }
+        let gridWidth = CGFloat(grid.columns) * TerminalCellMetrics.advance(forFontSize: fontSize)
+        guard gridWidth > 0 else { return collectionView.bounds.width }
+        return gridWidth + Self.horizontalInset
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -370,6 +584,10 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
 
         // Reaching the top asks for the next page. One request at a time, and
         // never past the point the desktop has already said is the end.
+        //
+        // Also in the desktop-grid mode, where scrolling up walks back through
+        // earlier screens at the same grid — the scale is fixed by "one screen
+        // fits", so history reads exactly like the screen it scrolled away from.
         if scrollView.contentOffset.y < 240, !requestsInFlight, !atHistoryFloor, !appliedKeys.isEmpty {
             onRequestHistory?()
         }

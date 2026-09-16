@@ -85,6 +85,16 @@ enum TerminalDensity: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// The desktop's grid, as the phone last heard it.
+///
+/// Absent until the first summary arrives, which is why adopting it is conditional
+/// rather than assumed: a terminal whose size the phone has not been told yet has
+/// no desktop grid to render.
+struct DesktopGrid: Equatable {
+    let columns: Int
+    let rows: Int
+}
+
 /// The grid's indivisible measurements.
 ///
 /// One home for values that used to be separate constants in the view layer. The

@@ -103,7 +103,61 @@ final class TerminalStore {
         isLoadingHistory = false
     }
 
+    /// Which device's grid the rows are laid out for.
+    ///
+    /// In `.phoneDriven` the phone's own width is the wrap. In `.desktopDriven` it is
+    /// the desktop's, because re-wrapping is exactly what that mode exists to avoid:
+    /// the whole point is that a line sits where the computer put it.
+    private(set) var displayMode: TerminalDisplayMode = .phoneDriven
+    /// Rows in one desktop screen. Only meaningful in `.desktopDriven`, where the pane
+    /// scales the grid to fit.
+    private(set) var gridRows = 0
+
+    /// Applies the reader's display mode and the desktop's grid together.
+    ///
+    /// One entry point on purpose — the two always change the layout as a pair, and
+    /// letting them arrive separately is how a wrap survives a mode change. Rows
+    /// already held are rebuilt rather than patched: they were laid out for the
+    /// previous width, and every one of them is now wrong.
+    func adopt(displayMode mode: TerminalDisplayMode, desktopGrid: DesktopGrid?) {
+        switch mode {
+        case .phoneDriven:
+            guard displayMode != .phoneDriven || gridRows != 0 else { return }
+            displayMode = .phoneDriven
+            gridRows = 0
+            // The phone's width arrives from the view's own measurement, which
+            // `update(columns:)` accepts again now that the mode allows it.
+        case .desktopDriven:
+            guard let desktopGrid, desktopGrid.columns > 0, desktopGrid.rows > 0 else { return }
+            guard displayMode != .desktopDriven
+                || columns != desktopGrid.columns
+                || gridRows != desktopGrid.rows
+            else { return }
+            displayMode = .desktopDriven
+            gridRows = desktopGrid.rows
+            columns = desktopGrid.columns
+        }
+        rebuildAllRows()
+        renderRevision += 1
+    }
+
+    /// Rows the pane shows at the reader's density.
+    ///
+    /// Not a layout input the way the column count is — nothing here re-wraps
+    /// because of it. It exists because the phone's rows are half of what the
+    /// desktop is asked to adopt, and only the phone can measure them.
+    private(set) var visibleRows = 0
+
+    func reportVisibleRows(_ rows: Int) {
+        visibleRows = rows
+    }
+
     func update(columns newColumns: Int) {
+        // Only the phone-driven mode wraps at the phone's width. Accepting one
+        // while the desktop's grid is in force would undo that mode from the
+        // inside: a rotation or a dismissed keyboard would re-wrap the very grid
+        // it was chosen to preserve.
+        guard displayMode == .phoneDriven else { return }
         guard newColumns != columns, newColumns > 0 else { return }
         columns = newColumns
         rebuildAllRows()
