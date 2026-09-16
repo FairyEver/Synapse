@@ -83,6 +83,21 @@ export const MOBILE_FRAME_LIMITS = {
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
+  /**
+   * Grid bounds a phone may ask the desktop to adopt.
+   *
+   * Restated from `terminalResizeSessionInputSchema`, which is the terminal
+   * capability's own ceiling — the gateway validates before the service does, so a
+   * request that is rejected here never reaches the layer that would explain why.
+   * Keep the two in step.
+   */
+  maxResizeCols: 500,
+  maxResizeRows: 200,
+  /**
+   * A phone's own name, shown on the desktop badge that says which device set the
+   * size. Display-only, so it is clamped well below what a device name can hold.
+   */
+  maxDeviceLabelLength: 40,
 } as const
 
 /** Style attribute bits packed into the fifth element of a run tuple. */
@@ -328,7 +343,44 @@ export type MobileIntent =
   })
   | MobileIntentEnvelope<"stopAll">
   | (MobileIntentEnvelope<"rename"> & { readonly sessionId: string; readonly title: string })
-  | (MobileIntentEnvelope<"create"> & { readonly groupId: string; readonly title?: string })
+  /**
+   * The phone sets the PTY grid, for the display mode where the phone drives the
+   * size so its own rendering is exact rather than wrapped.
+   *
+   * This is a UI resize, not an automated one: ADR 0063 allows a user or UI resize
+   * without a lease because it neither takes input control nor revokes a lease the
+   * desktop holds. The desktop tracks who set the size so it can say so and offer
+   * to take it back, and any resize from anywhere else clears that ownership.
+   *
+   * `deviceLabel` is what the desktop badge shows. The id is what makes the owner
+   * unambiguous when more than one phone is attached.
+   */
+  | (MobileIntentEnvelope<"resize"> & {
+    readonly sessionId: string
+    readonly cols: number
+    readonly rows: number
+    readonly deviceLabel: string
+  })
+  | (MobileIntentEnvelope<"create"> & {
+    readonly groupId: string
+    readonly title?: string
+    /**
+     * Initial grid, so the session is born the right shape.
+     *
+     * Resizing after creation is too late: a shell prints its banner, prompt and
+     * first `git status` within the opening milliseconds, laid out for whatever
+     * width the PTY had at the time. Those lines stay in scrollback at the old
+     * width forever. ADR 0063 requires explicit initial dimensions to be
+     * authorized as both a creation and a resize.
+     */
+    readonly cols?: number
+    readonly rows?: number
+    /**
+     * Only meaningful together with the dimensions, and only for the badge the
+     * desktop shows while the phone owns the size.
+     */
+    readonly deviceLabel?: string
+  })
   | (MobileIntentEnvelope<"launchCommand"> & { readonly groupId: string; readonly commandId: string })
 
 type MobileIntentEnvelope<TKind extends string> = {
@@ -505,9 +557,17 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
     case "rename":
       return boundedString(value.sessionId, 120) &&
         boundedString(value.title, MOBILE_FRAME_LIMITS.maxTitleLength)
+    case "resize":
+      return boundedString(value.sessionId, 120) &&
+        boundedCols(value.cols) && boundedRows(value.rows) &&
+        boundedString(value.deviceLabel, MOBILE_FRAME_LIMITS.maxDeviceLabelLength)
     case "create":
       return boundedString(value.groupId, 120) &&
-        (value.title === undefined || boundedString(value.title, MOBILE_FRAME_LIMITS.maxTitleLength))
+        (value.title === undefined || boundedString(value.title, MOBILE_FRAME_LIMITS.maxTitleLength)) &&
+        // 尺寸要么两个都给，要么都不给：只给一半的网格没有意义。
+        resizeShape(value.cols, value.rows) &&
+        (value.deviceLabel === undefined ||
+          boundedString(value.deviceLabel, MOBILE_FRAME_LIMITS.maxDeviceLabelLength))
     case "launchCommand":
       return boundedString(value.groupId, 120) && boundedString(value.commandId, 120)
     default:
@@ -646,4 +706,18 @@ function nonNegativeInteger(value: unknown): value is number {
 
 function boundedArray(value: unknown, maxLength: number): value is readonly unknown[] {
   return Array.isArray(value) && value.length <= maxLength
+}
+
+function boundedCols(value: unknown): value is number {
+  return nonNegativeInteger(value) && value > 0 && value <= MOBILE_FRAME_LIMITS.maxResizeCols
+}
+
+function boundedRows(value: unknown): value is number {
+  return nonNegativeInteger(value) && value > 0 && value <= MOBILE_FRAME_LIMITS.maxResizeRows
+}
+
+/** Dimensions travel as a pair; half a grid is not a grid. */
+function resizeShape(cols: unknown, rows: unknown): boolean {
+  if (cols === undefined && rows === undefined) return true
+  return boundedCols(cols) && boundedRows(rows)
 }

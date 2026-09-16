@@ -179,6 +179,32 @@ type TerminalServiceLogger = {
 
 export type TerminalService = ReturnType<typeof createTerminalService>
 
+/**
+ * Who asked for a grid change.
+ *
+ * Only a phone's own request claims size ownership; the desktop's fit, an
+ * automated resize and creation all release it. See `applySessionResize`.
+ */
+type SessionResizeSource =
+  | { readonly kind: "desktop" }
+  | {
+    readonly kind: "mobile"
+    readonly deviceLabel: string
+    readonly mobileClientInstanceId: string
+  }
+
+/** Compared by value, so re-adopting the same shape from the same phone is a no-op. */
+function sameSizeOwner(
+  a: TerminalSession["sizeOwner"],
+  b: TerminalSession["sizeOwner"],
+): boolean {
+  if (!a || !b) return a === b
+  return a.deviceLabel === b.deviceLabel
+    && a.mobileClientInstanceId === b.mobileClientInstanceId
+    && a.cols === b.cols
+    && a.rows === b.rows
+}
+
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
 const LEASE_MIN_MS = 1_000
@@ -2354,19 +2380,52 @@ export function createTerminalService(deps: {
     })
   }
 
-  async function applySessionResize(sessionId: string, cols: number, rows: number): Promise<TerminalSession> {
+  /**
+   * The one place a session's grid changes, and therefore the one place size
+   * ownership changes too.
+   *
+   * `source` names who asked. Anything that is not a phone clears mobile
+   * ownership, which is how ownership returns to the desktop without a separate
+   * release call: the desktop's own fit, an automated resize and creation all
+   * arrive here as non-mobile. Only a phone's own request re-establishes it.
+   */
+  async function applySessionResize(
+    sessionId: string,
+    cols: number,
+    rows: number,
+    source: SessionResizeSource = { kind: "desktop" },
+  ): Promise<TerminalSession> {
     const runtime = getRuntimeForInput(sessionId)
     const current = getSessionOrThrow(sessionId)
-    if (current.cols === cols && current.rows === rows) return current
 
-    runtime.pty.resize(cols, rows)
+    const nextOwner: TerminalSession["sizeOwner"] = source.kind === "mobile"
+      ? {
+        kind: "mobile",
+        deviceLabel: source.deviceLabel,
+        mobileClientInstanceId: source.mobileClientInstanceId,
+        cols,
+        rows,
+      }
+      : undefined
+    const ownerChanged = !sameSizeOwner(current.sizeOwner, nextOwner)
+    const sizeChanged = current.cols !== cols || current.rows !== rows
+    // Ownership can change with the grid unchanged — a phone adopting a session
+    // that already happens to be its shape. The renderer still has to hear about
+    // that, or the badge never appears.
+    if (!sizeChanged && !ownerChanged) return current
+
+    if (sizeChanged) runtime.pty.resize(cols, rows)
+
     const updated: TerminalSession = {
       ...current,
       cols,
       rows,
-      sizeRevision: current.sizeRevision + 1,
+      sizeOwner: nextOwner,
+      sizeRevision: sizeChanged ? current.sizeRevision + 1 : current.sizeRevision,
       stateRevision: current.stateRevision + 1,
-      attention: passiveAttention({ ...current, sizeRevision: current.sizeRevision + 1 }, "resize"),
+      attention: sizeChanged
+        ? passiveAttention({ ...current, sizeRevision: current.sizeRevision + 1 }, "resize")
+        : current.attention,
       updatedAt: now(),
     }
     sessions.set(current.id, updated)
@@ -2375,19 +2434,86 @@ export function createTerminalService(deps: {
       sessionId,
       stateRevision: updated.stateRevision,
       throughOutputSeq: updated.lastOutputSeq,
-      changeTypes: ["size", "attention"],
+      changeTypes: sizeChanged ? ["size", "attention"] : ["size"],
     })
 
-    const barrier = await runtime.emulator.resize(cols, rows, updated.sizeRevision)
-    events.emit("resized", {
+    if (sizeChanged) {
+      const barrier = await runtime.emulator.resize(cols, rows, updated.sizeRevision)
+      events.emit("resized", {
+        sessionId,
+        cols,
+        rows,
+        sizeRevision: barrier.sizeRevision,
+        throughOutputSeq: barrier.throughOutputSeq,
+      })
+    }
+    scheduleRuntimePersist(sessionId)
+    return updated
+  }
+
+  /**
+   * A phone setting the grid for its own display mode.
+   *
+   * Not the automated path: ADR 0063 lets a user or UI resize proceed without a
+   * lease, because it takes no input control and revokes nothing the desktop
+   * holds. `resizeSession` stays as it was and means "the desktop did this".
+   */
+  async function resizeSessionFromDevice(input: {
+    readonly sessionId: string
+    readonly cols: number
+    readonly rows: number
+    readonly deviceLabel: string
+    readonly mobileClientInstanceId: string
+  }): Promise<TerminalSession> {
+    return applySessionResize(input.sessionId, input.cols, input.rows, {
+      kind: "mobile",
+      deviceLabel: input.deviceLabel,
+      mobileClientInstanceId: input.mobileClientInstanceId,
+    })
+  }
+
+  /**
+   * Hands the grid back to the desktop without touching the PTY.
+   *
+   * The renderer calls this and then re-runs its own fit, so the size moves once
+   * instead of snapping to a placeholder and moving again. The PTY keeps the
+   * phone's grid until that fit lands, which is deliberate: releasing ownership
+   * is a statement about who decides, not about what the size currently is.
+   */
+  function releaseSizeOwnership(sessionId: string): TerminalSession {
+    const current = getSessionOrThrow(sessionId)
+    if (!current.sizeOwner) return current
+    const updated: TerminalSession = {
+      ...current,
+      sizeOwner: undefined,
+      stateRevision: current.stateRevision + 1,
+      updatedAt: now(),
+    }
+    sessions.set(current.id, updated)
+    events.emit("sessionChanged", updated)
+    events.emit("stateChanged", {
       sessionId,
-      cols,
-      rows,
-      sizeRevision: barrier.sizeRevision,
-      throughOutputSeq: barrier.throughOutputSeq,
+      stateRevision: updated.stateRevision,
+      throughOutputSeq: updated.lastOutputSeq,
+      changeTypes: ["size"],
     })
     scheduleRuntimePersist(sessionId)
     return updated
+  }
+
+  /**
+   * Drops ownership held by a phone that is gone.
+   *
+   * The PTY is left where it is: shrinking it out from under a terminal nobody is
+   * watching would reflow output the local user is about to read, and the
+   * desktop's next layout change sets the size anyway.
+   */
+  function releaseSizeOwnershipForClient(mobileClientInstanceId: string): void {
+    for (const session of sessions.values()) {
+      if (session.sizeOwner?.mobileClientInstanceId === mobileClientInstanceId) {
+        releaseSizeOwnership(session.id)
+      }
+    }
   }
 
   async function stopControlledSession(input: TerminalStopInput, controller: TerminalControllerContext) {
@@ -2908,6 +3034,9 @@ export function createTerminalService(deps: {
     getCurrentWorkingDirectory,
     readSession,
     attachSession,
+    resizeSessionFromDevice,
+    releaseSizeOwnership,
+    releaseSizeOwnershipForClient,
     renameSession,
     writeSession,
     resizeSession,

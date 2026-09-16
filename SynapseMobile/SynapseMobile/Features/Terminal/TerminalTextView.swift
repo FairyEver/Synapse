@@ -74,7 +74,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// `true` means Reduce Motion shows a steady block with no timer at all.
     private var cursorPhaseOn = true
 
-    private static let horizontalInset: CGFloat = 20
+    /// Both edges together. Derived from the cell metrics rather than given its own
+    /// number: the row label's leading is the same measurement seen once, and two
+    /// literals describing one edge is how they drift.
+    private static var horizontalInset: CGFloat { TerminalCellMetrics.contentInset * 2 }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -115,13 +118,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// The desktop wraps at its own width; only the phone knows how wide the
     /// phone is, so the column count is measured here and pushed to the store.
     private func reportColumnsIfNeeded() {
-        let available = bounds.width - Self.horizontalInset
-        guard available > 0, fontSize > 0 else { return }
-        let advance = ("0" as NSString).size(withAttributes: [
-            .font: TerminalRowCell.font(ofSize: fontSize),
-        ]).width
-        guard advance > 0 else { return }
-        let columns = max(20, Int(available / advance))
+        guard fontSize > 0 else { return }
+        let columns = max(
+            TerminalCellMetrics.minimumColumns,
+            TerminalCellMetrics.columns(fitting: bounds.width, fontSize: fontSize)
+        )
         guard columns != reportedColumns else { return }
         reportedColumns = columns
         onWidthChanged?(columns)
@@ -443,7 +444,10 @@ final class TerminalRowCell: UICollectionViewCell {
             continuationBar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 2),
             continuationBar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -2),
 
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
+            label.leadingAnchor.constraint(
+                equalTo: contentView.leadingAnchor,
+                constant: TerminalCellMetrics.contentInset
+            ),
             label.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -10),
             label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
         ])
@@ -458,7 +462,7 @@ final class TerminalRowCell: UICollectionViewCell {
     }
 
     static func rowHeight(for size: CGFloat) -> CGFloat {
-        ceil(font(ofSize: size).lineHeight) + 1
+        TerminalCellMetrics.rowHeight(forFontSize: size)
     }
 
     func configure(row: DisplayRow, fontSize: CGFloat, cursorColumn: Int?) {

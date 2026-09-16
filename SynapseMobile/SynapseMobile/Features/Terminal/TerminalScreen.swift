@@ -4,12 +4,14 @@ import UIKit
 /// One terminal, full screen.
 struct TerminalScreen: View {
     @Environment(SynapseAppModel.self) private var model
+    @Environment(TerminalDisplaySettings.self) private var display
     @Environment(\.dismiss) private var dismiss
 
     let sessionId: String
     @State private var draft = ""
-    /// Matches the desktop's default terminal size, so the two read the same.
-    @State private var fontSize: CGFloat = 14
+    /// Follows the density in force for this session rather than being held as view
+    /// state: it is a setting, and a copy here is how the two drift apart.
+    private var fontSize: CGFloat { display.density(for: sessionId).fontSize }
     @State private var showingRename = false
     @State private var renamingTitle = ""
     @State private var showingStopConfirm = false
@@ -17,6 +19,15 @@ struct TerminalScreen: View {
 
     private var store: TerminalStore { model.store(for: sessionId) }
     private var session: MobileSummarySession? { model.session(sessionId) }
+
+    /// Optional-tagged so "follow the system setting" is a choice the picker can
+    /// show rather than an absence it cannot.
+    private var sessionDensityBinding: Binding<TerminalDensity?> {
+        Binding(
+            get: { display.isOverridingDensity(sessionId) ? display.density(for: sessionId) : nil },
+            set: { display.setDensity($0, for: sessionId) }
+        )
+    }
 
     var body: some View {
         @Bindable var model = model
@@ -93,6 +104,14 @@ struct TerminalScreen: View {
             .frame(maxWidth: .infinity)
 
             Menu {
+                Picker(selection: sessionDensityBinding) {
+                    Text("跟随系统").tag(TerminalDensity?.none)
+                    ForEach(TerminalDensity.allCases, id: \.self) { value in
+                        Text(value.label).tag(TerminalDensity?.some(value))
+                    }
+                } label: {
+                    Label("本会话显示密度", systemImage: "textformat.size")
+                }
                 Button {
                     renamingTitle = session?.title ?? ""
                     showingRename = true

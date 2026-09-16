@@ -266,12 +266,53 @@ export class MobileIntentExecutor {
         return accepted(intent.intentId, { sessionId: intent.sessionId })
       }
 
+      /**
+       * The phone sets the grid, for the display mode where it drives the size so
+       * its own rendering is exact instead of wrapped.
+       *
+       * This is a UI resize, not an automated one: ADR 0063 lets it proceed
+       * without a lease, because it takes no input control and revokes nothing the
+       * desktop holds. The desktop records who asked so it can show a badge and
+       * offer to take the grid back.
+       */
+      case "resize": {
+        await this.deps.authorize("terminal.session.resize", sessionResource(intent.sessionId))
+        await terminal.resizeSessionFromDevice({
+          sessionId: intent.sessionId,
+          cols: intent.cols,
+          rows: intent.rows,
+          deviceLabel: intent.deviceLabel,
+          mobileClientInstanceId,
+        })
+        return accepted(intent.intentId, { sessionId: intent.sessionId })
+      }
+
       case "create": {
         await this.deps.authorize("terminal.session.create", `terminal.group:${intent.groupId}`)
+        // Explicit starting dimensions are also a resize. ADR 0063 requires both
+        // permissions for them, and says so in as many words.
+        const sized = intent.cols !== undefined && intent.rows !== undefined
+        if (sized) {
+          await this.deps.authorize("terminal.session.resize", `terminal.group:${intent.groupId}`)
+        }
         const session = await terminal.createSession({
           groupId: intent.groupId,
           title: intent.title,
+          cols: intent.cols,
+          rows: intent.rows,
         })
+        // A phone that created the terminal at its own shape keeps deciding that
+        // shape, so the desktop shows the badge from the first frame. The size was
+        // already established at creation, so this only records the owner.
+        if (sized && intent.deviceLabel !== undefined) {
+          await terminal.resizeSessionFromDevice({
+            sessionId: session.id,
+            cols: intent.cols as number,
+            rows: intent.rows as number,
+            deviceLabel: intent.deviceLabel,
+            mobileClientInstanceId,
+          })
+        }
         await this.adoptCreatedSession(mobileClientInstanceId, session.id)
         return accepted(intent.intentId, { createdSessionId: session.id })
       }

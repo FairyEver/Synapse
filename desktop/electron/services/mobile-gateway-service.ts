@@ -63,6 +63,18 @@ const LEASE_RENEW_INTERVAL_MS = 15_000
  */
 const CLIENT_IDLE_TIMEOUT_MS = 5 * 60_000
 
+/**
+ * How long a phone keeps deciding a terminal's grid after it stops responding.
+ *
+ * Far shorter than the idle timeout: the phone pings every 25 s while a terminal
+ * is open, so three missed pings mean it is gone. A desktop left claiming a phone
+ * sized the grid — while actually holding a grid the local user did not pick — is
+ * a worse outcome than releasing the claim a little early. Only the claim is
+ * dropped: the PTY keeps its size until the desktop's next layout change, so
+ * nothing reflows out from under a terminal someone is reading.
+ */
+const SIZE_OWNERSHIP_IDLE_TIMEOUT_MS = 90_000
+
 export type MobileGatewayServiceDeps = {
   readonly terminal: TerminalService
   readonly permissionGuard: PermissionGuard
@@ -191,6 +203,9 @@ export class MobileGatewayService {
     for (const attachment of this.registry.detachClient(mobileClientInstanceId)) {
       await this.releaseAttachmentLease(attachment)
     }
+    // A phone that left stops deciding the grid. Its claim goes with it; the size
+    // stays until the desktop's own layout decides otherwise.
+    this.terminal.releaseSizeOwnershipForClient(mobileClientInstanceId)
     this.executor.forgetClient(mobileClientInstanceId)
     this.bytesByClient.delete(mobileClientInstanceId)
     this.scheduleSummary()
@@ -681,7 +696,13 @@ export class MobileGatewayService {
   private async expireIdleClients(): Promise<void> {
     const nowMs = this.nowMs()
     for (const [mobileClientInstanceId, lastAtMs] of [...this.lastActivityByClient]) {
-      if (nowMs - lastAtMs < CLIENT_IDLE_TIMEOUT_MS) continue
+      const idleMs = nowMs - lastAtMs
+      // Checked first, and on its own shorter clock: a phone that vanished mid-use
+      // should stop deciding the grid long before the gateway forgets it entirely.
+      if (idleMs >= SIZE_OWNERSHIP_IDLE_TIMEOUT_MS) {
+        this.terminal.releaseSizeOwnershipForClient(mobileClientInstanceId)
+      }
+      if (idleMs < CLIENT_IDLE_TIMEOUT_MS) continue
       for (const attachment of this.registry.detachClient(mobileClientInstanceId)) {
         await this.releaseAttachmentLease(attachment)
       }

@@ -63,6 +63,9 @@
 - 终端会话深度链接是会话级纯导航：唯一格式为 `synapse://terminals/<payload>.<checksum>`，只携带由 `sessionId` 派生的本机短校验引用，由主进程按当前 session 列表反查唯一目标并复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane。链接只在本机当前运行期间有效，失效时不得新建会话、不得聚焦主窗口，也不得扩展为命令执行、输出读取或 workspace/pane 链接；复制入口只出现在既有 Terminal UI 的会话列表与会话标签菜单。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
 - 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
+- 尺寸归属是独立于写入租约的运行时维度：只有手机自己的 resize 主张它，任何其它 resize（桌面 fit、自动化 resize、创建初始尺寸）都释放它，因此不需要额外的释放调用。归属变化即使格子数没变也必须广播，且不推进 `sizeRevision`。手机 detach 或超过更短的归属空闲阈值即释放；应用重启不恢复归属。同一会话只能有一个归属方，多端并发后写者胜，不做仲裁。完整规格见 `docs/adr/0216-coordinate-terminal-size-ownership-separately-from-leases.md`。
+- 手机终端有两种显示模式，属于手机端的呈现选择：优先移动端（手机上报自己的格数，PTY 随之重排，手机 1:1 渲染）与优先还原（PTY 不变，手机按桌面网格整帧缩放，可双指放大）。桌面端在归属为手机时抑制自身 fit，并在 pane 顶栏显示归属徽标与「重置为电脑尺寸」按钮；该按钮只走 UI 私有 IPC，不新增 MCP 工具，也不改变 `app.terminal.session.resize` 的自动化契约。
+- 手机显示密度是设备级偏好，三档存「一个字符格子的宽×高」而不是行列数——行列数由单位尺寸与可用面积推导，所以换机型、换方向时观感密度不变。会话级覆盖只影响该会话且不落盘。密度属于手机设置，不在桌面设置中重复入口。
 - 结构元数据使用已注册 `app.terminal.*` DataRepository；原始输出/检查点只进入专属有界加密块存储，安全存储不可用时不得回退明文。
 - 普通备份排除输出、检查点、命令正文、用户快捷输入正文、活动租约、删除意图和短期幂等记录；恢复时必须丢弃所有 Terminal session/workspace 和关联操作，不得重建 PTY 或重投生命周期操作。
 

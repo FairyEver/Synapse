@@ -58,6 +58,14 @@ type FakeSession = {
   startedAt: string
   lastOutputSeq: number
   attention: { state: string; kind: string }
+  /** Present while a phone is deciding the grid; mirrors the session schema. */
+  sizeOwner?: {
+    kind: "mobile"
+    deviceLabel: string
+    mobileClientInstanceId: string
+    cols: number
+    rows: number
+  }
 }
 
 type FakeWorkspace = {
@@ -157,6 +165,45 @@ class FakeTerminal {
     this.calls.push("releaseControl")
     this.leaseOwner = null
     return { released: true, noOp: false, stateRevision: 1 }
+  }
+
+  async resizeSessionFromDevice(input: {
+    sessionId: string
+    cols: number
+    rows: number
+    deviceLabel: string
+    mobileClientInstanceId: string
+  }) {
+    this.calls.push("resizeSessionFromDevice")
+    const session = this.sessions.get(input.sessionId)
+    if (session) {
+      session.cols = input.cols
+      session.rows = input.rows
+      session.sizeOwner = {
+        kind: "mobile",
+        deviceLabel: input.deviceLabel,
+        mobileClientInstanceId: input.mobileClientInstanceId,
+        cols: input.cols,
+        rows: input.rows,
+      }
+    }
+    return session
+  }
+
+  releaseSizeOwnership(sessionId: string) {
+    this.calls.push("releaseSizeOwnership")
+    const session = this.sessions.get(sessionId)
+    if (session) session.sizeOwner = undefined
+    return session
+  }
+
+  releaseSizeOwnershipForClient(mobileClientInstanceId: string) {
+    this.calls.push("releaseSizeOwnershipForClient")
+    for (const session of this.sessions.values()) {
+      if (session.sizeOwner?.mobileClientInstanceId === mobileClientInstanceId) {
+        session.sizeOwner = undefined
+      }
+    }
   }
 
   async sendCommand() {
@@ -567,6 +614,137 @@ describe("MobileGatewayService", () => {
 
     expect(harness.gateway.getState().attachments).toBe(0)
     expect(harness.terminal.calls).toContain("releaseControl")
+  })
+
+  it("records which phone set a terminal's grid", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    harness.terminal.calls.length = 0
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-resize",
+      kind: "resize",
+      sessionId: "sess-1",
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+    }))
+
+    expect(harness.terminal.calls).toContain("resizeSessionFromDevice")
+    expect(harness.terminal.sessions.get("sess-1")).toMatchObject({
+      cols: 54,
+      rows: 37,
+      sizeOwner: { deviceLabel: "iPhone", cols: 54, rows: 37 },
+    })
+  })
+
+  /** A phone that is gone must stop deciding the grid, or the badge lies. */
+  it("drops size ownership when the owning phone goes away", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-resize",
+      kind: "resize",
+      sessionId: "sess-1",
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+    }))
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeDefined()
+
+    await harness.gateway.releaseClient("phone-1")
+
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
+  })
+
+  /**
+   * The idle sweep releases ownership on its own shorter clock — a phone that
+   * vanished mid-use should stop deciding the grid long before the gateway
+   * forgets it entirely.
+   */
+  it("drops size ownership from a phone that stopped responding", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-resize",
+      kind: "resize",
+      sessionId: "sess-1",
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+    }))
+
+    // Still within the ownership timeout: the claim stands even though every
+    // other trace of activity is old.
+    await harness.timers.advance(60_000)
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-tick", kind: "ping" }))
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeDefined()
+
+    await harness.timers.advance(2 * 60_000)
+
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
+  })
+
+  /** Creating at the phone's shape claims it, so the badge is right from frame one. */
+  it("claims the grid for a phone that created the session at its own size", async () => {
+    const harness = createHarness()
+    harness.terminal.sessions.set("sess-new", {
+      id: "sess-new",
+      groupId: "g1",
+      title: "shell",
+      status: "running",
+      cwd: "/tmp",
+      cols: 54,
+      rows: 37,
+      startedAt: new Date().toISOString(),
+      lastOutputSeq: 0,
+      attention: { state: "unknown", kind: "unknown" },
+    })
+    harness.terminal.lines.set("sess-new", [])
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-create-sized",
+      kind: "create",
+      groupId: "g1",
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+    }))
+
+    expect(harness.terminal.sessions.get("sess-new")?.sizeOwner).toMatchObject({
+      deviceLabel: "iPhone",
+    })
+  })
+
+  /** A phone that sends no dimensions leaves the grid to the desktop. */
+  it("does not claim the grid for a phone that created without one", async () => {
+    const harness = createHarness()
+    harness.terminal.sessions.set("sess-plain", {
+      id: "sess-plain",
+      groupId: "g1",
+      title: "shell",
+      status: "running",
+      cwd: "/tmp",
+      cols: 80,
+      rows: 24,
+      startedAt: new Date().toISOString(),
+      lastOutputSeq: 0,
+      attention: { state: "unknown", kind: "unknown" },
+    })
+    harness.terminal.lines.set("sess-plain", [])
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-create-plain",
+      kind: "create",
+      groupId: "g1",
+    }))
+
+    expect(harness.terminal.sessions.get("sess-plain")?.sizeOwner).toBeUndefined()
   })
 
   it("takes over a created session so the phone lands on a live terminal", async () => {

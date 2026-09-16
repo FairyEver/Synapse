@@ -38,6 +38,9 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxIntentTextLength: number,
  *   readonly maxKeyActions: number,
  *   readonly maxTitleLength: number,
+ *   readonly maxResizeCols: number,
+ *   readonly maxResizeRows: number,
+ *   readonly maxDeviceLabelLength: number,
  * }}
  */
 exports.MOBILE_FRAME_LIMITS = {
@@ -61,6 +64,11 @@ exports.MOBILE_FRAME_LIMITS = {
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
+  /** Restated from the terminal capability's own resize ceiling; keep the two in step. */
+  maxResizeCols: 500,
+  maxResizeRows: 200,
+  /** Display-only, for the desktop badge naming the phone that set the size. */
+  maxDeviceLabelLength: 40,
 }
 
 /**

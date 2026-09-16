@@ -983,6 +983,58 @@ describe("TerminalService core", () => {
     })
   })
 
+  it("records the phone that set the grid, and lets the desktop take it back", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+
+    await service.resizeSessionFromDevice({
+      sessionId: session.id,
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+      mobileClientInstanceId: "phone-1",
+    })
+    expect(service.getSession({ sessionId: session.id }).sizeOwner).toMatchObject({
+      deviceLabel: "iPhone",
+      cols: 54,
+      rows: 37,
+    })
+
+    // Any resize that is not a phone's own releases the grid — this is the whole
+    // mechanism by which ownership returns to the desktop, so it needs no separate
+    // release call from the fit path.
+    await service.resizeSession({ sessionId: session.id, cols: 100, rows: 30 })
+
+    expect(service.getSession({ sessionId: session.id }).sizeOwner).toBeUndefined()
+    expect(pty.resize).toHaveBeenLastCalledWith(100, 30)
+  })
+
+  it("announces a change of grid owner even when the grid itself is unchanged", async () => {
+    const { service } = await startedHarness()
+    const session = await service.createSession({})
+    await service.resizeSession({ sessionId: session.id, cols: 54, rows: 37 })
+    const before = service.getSession({ sessionId: session.id })
+    const changed = new Promise<Record<string, unknown>>((resolve) => {
+      service.events.once("sessionChanged", resolve as (value: unknown) => void)
+    })
+
+    // A phone adopting a terminal that already happens to be its shape. Nothing
+    // moves, but the desktop has to hear about it or the badge never appears.
+    await service.resizeSessionFromDevice({
+      sessionId: session.id,
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+      mobileClientInstanceId: "phone-1",
+    })
+
+    await expect(changed).resolves.toMatchObject({ id: session.id })
+    const after = service.getSession({ sessionId: session.id })
+    expect(after.sizeOwner).toMatchObject({ deviceLabel: "iPhone" })
+    // No dimension moved, so the size revision must not advance.
+    expect(after.sizeRevision).toBe(before.sizeRevision)
+  })
+
   it("keeps normal stop asynchronous, reports the terminal transition, then destroys the session", async () => {
     const { service, pty } = await startedHarness()
     const session = await service.createSession({})

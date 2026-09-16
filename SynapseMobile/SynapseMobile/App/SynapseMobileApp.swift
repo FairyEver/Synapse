@@ -6,11 +6,13 @@ struct SynapseMobileApp: App {
     /// without any scene attached.
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = SynapseAppModel()
+    @State private var display = TerminalDisplaySettings()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(display)
                 .tint(Theme.ink)
         }
     }

@@ -174,6 +174,27 @@ export const terminalSessionSchema = z.object({
   endedAt: z.string().min(1).optional(),
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
+  /**
+   * Set while a phone is driving the grid size, absent when the desktop's own fit
+   * decides it.
+   *
+   * This is what the pane header reads to say who set the size and to offer taking
+   * it back, and what the renderer checks before letting a local layout change
+   * resize the PTY. It is deliberately *not* part of the persisted session record:
+   * ownership is a live coordination fact, and a restart should return every
+   * terminal to the desktop rather than restore a phone that may never come back.
+   *
+   * Distinct from the write lease. A phone typing in a terminal preempts the
+   * desktop's lease but says nothing about who set the size, and vice versa.
+   */
+  sizeOwner: z.object({
+    kind: z.literal("mobile"),
+    deviceLabel: z.string().min(1).max(40),
+    mobileClientInstanceId: z.string().min(1).max(120),
+    /** What the phone asked for, so the badge can show it even before a resize lands. */
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive(),
+  }).optional(),
   lastOutputSeq: z.number().int().nonnegative(),
   metadataRevision: z.number().int().positive().default(1),
   stateRevision: z.number().int().positive().default(1),

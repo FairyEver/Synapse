@@ -353,6 +353,15 @@ struct MobileIntentRequest: Encodable {
     /// History paging: the oldest line the client holds, and how many to fetch below it.
     var before: Int?
     var limit: Int?
+    /// Grid the phone wants the PTY to adopt, for the display mode where the phone
+    /// drives the size. Also the starting grid on `create`, where it has to arrive
+    /// with the session: a shell prints its banner and first prompt within
+    /// milliseconds, laid out for whatever width the PTY had at the time, and those
+    /// lines stay in scrollback at that width forever.
+    var cols: Int?
+    var rows: Int?
+    /// Shown on the desktop badge that names the device deciding the grid.
+    var deviceLabel: String?
 }
 
 struct MobileIntentPayloadOut: Encodable {

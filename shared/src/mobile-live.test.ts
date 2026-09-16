@@ -154,6 +154,64 @@ describe("mobile live protocol", () => {
       .toBe(false)
   })
 
+  it("validates the resize intent and its grid bounds", () => {
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "resize",
+      sessionId: "s1", cols: 54, rows: 37, deviceLabel: "iPhone",
+    })).toBe(true)
+
+    // Every part is load-bearing. A resize with no terminal, no grid, or no name
+    // for the device claiming it cannot be acted on or reported.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "resize", cols: 54, rows: 37, deviceLabel: "iPhone" })).toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "resize", sessionId: "s1", rows: 37, deviceLabel: "iPhone" })).toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "resize", sessionId: "s1", cols: 54, deviceLabel: "iPhone" })).toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "resize", sessionId: "s1", cols: 54, rows: 37 })).toBe(false)
+
+    // The ceiling restates the terminal capability's own, so a request refused
+    // here is one the service would have refused anyway.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "resize", sessionId: "s1",
+      cols: MOBILE_FRAME_LIMITS.maxResizeCols + 1, rows: 37, deviceLabel: "iPhone",
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "resize", sessionId: "s1",
+      cols: 54, rows: MOBILE_FRAME_LIMITS.maxResizeRows + 1, deviceLabel: "iPhone",
+    })).toBe(false)
+
+    // A grid is whole cells, and no terminal has zero of either dimension.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "resize", sessionId: "s1", cols: 54.5, rows: 37, deviceLabel: "iPhone",
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "resize", sessionId: "s1", cols: 0, rows: 37, deviceLabel: "iPhone",
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "resize", sessionId: "s1", cols: 54, rows: -1, deviceLabel: "iPhone",
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "resize", sessionId: "s1", cols: 54, rows: 37,
+      deviceLabel: "x".repeat(MOBILE_FRAME_LIMITS.maxDeviceLabelLength + 1),
+    })).toBe(false)
+  })
+
+  it("accepts starting dimensions on create only as a pair", () => {
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "create", groupId: "g1", cols: 54, rows: 37, deviceLabel: "iPhone",
+    })).toBe(true)
+    // Optional, so a phone that never sends them still creates a terminal.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "create", groupId: "g1" })).toBe(true)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "create", groupId: "g1", title: "api", cols: 80, rows: 24 })).toBe(true)
+
+    // Half a grid is not a grid — the PTY has to be born some shape.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "create", groupId: "g1", cols: 54 })).toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "create", groupId: "g1", rows: 37 })).toBe(false)
+    // Same ceiling as an explicit resize, because that is what it becomes.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "create", groupId: "g1",
+      cols: MOBILE_FRAME_LIMITS.maxResizeCols + 1, rows: 37,
+    })).toBe(false)
+  })
+
   it("bounds intent text", () => {
     expect(isMobileIntent({
       v: 1,

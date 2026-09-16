@@ -2,12 +2,30 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(SynapseAppModel.self) private var model
+    @Environment(TerminalDisplaySettings.self) private var display
     @State private var showingSignOut = false
 
     var body: some View {
+        @Bindable var display = display
+
         List {
             Section("账号") {
                 LabeledContent("邮箱", value: model.email ?? "未登录")
+            }
+
+            // A density names a cell size, not a column count, so the same choice
+            // reads the same on a phone of any size — the grid recomputes around it.
+            Section {
+                Picker("显示密度", selection: $display.density) {
+                    ForEach(TerminalDensity.allCases, id: \.self) { density in
+                        Text(density.label).tag(density)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("终端")
+            } footer: {
+                Text(display.density.detail)
             }
 
             Section("已连接的电脑") {
