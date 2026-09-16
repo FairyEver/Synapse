@@ -21,6 +21,9 @@ server/.env.local
 .superpowers/
 cdn-release-mac/
 
+# MCP 工具产物 —— 运行时生成在仓库根目录，机器本地，不应共享
+.playwright-mcp/
+
 # Xcode —— 用户态文件，机器本地，不应共享
 xcuserdata/
 *.xcuserstate
