@@ -16,6 +16,23 @@ enum TerminalFont {
     private static let regularName = "MapleMono-NF-CN-Regular"
     private static let boldName = "MapleMono-NF-CN-Bold"
 
+    /// Width of one ASCII cell as a fraction of the point size — 0.6 em, the
+    /// advance Maple Mono gives every Latin glyph (600/1000 units).
+    ///
+    /// Every grid measurement is derived from this rather than from a second,
+    /// hand-written table of point sizes: the display density names a cell size
+    /// and the font size follows from it, so the two cannot drift apart.
+    ///
+    /// `TerminalFontTests` pins this to the actual font metrics. It also pins the
+    /// companion fact that a Han character advances by exactly twice this, since
+    /// the grid allots Han two cells and anything else misaligns a line.
+    static let asciiAdvanceRatio: CGFloat = 0.6
+
+    /// Font size that renders one ASCII cell `cellWidth` points wide.
+    static func size(forCellWidth cellWidth: CGFloat) -> CGFloat {
+        cellWidth / asciiAdvanceRatio
+    }
+
     /// Whether the bundled family resolved at all. False means private-use
     /// characters will draw as replacement boxes, which is worth knowing when
     /// diagnosing a rendering report.

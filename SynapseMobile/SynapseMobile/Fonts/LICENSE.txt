@@ -11,13 +11,27 @@ Bundled fonts in this directory
 
 Licensed under the SIL Open Font License, Version 1.1, reproduced in full below.
 
-These files are MODIFIED copies: they are subsets of the originals with the CJK
-blocks removed (U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+20000-3FFFF). The
-private-use and Latin glyphs are untouched. Chinese text in the terminal comes
-from the platform font instead, which is what the desktop does as well — its
-terminal face has no CJK either. The subset was produced with fontTools
-(pyftsubset). No Reserved Font Name is declared by the original, so the modified
-files keep the original names.
+These files are MODIFIED copies: subsets of the originals produced with fontTools
+(pyftsubset) by `SynapseMobile/scripts/subset-terminal-fonts.py`, which also
+documents what each kept block is for. No Reserved Font Name is declared by the
+original, so the modified files keep the original names.
+
+Kept in full: Latin, punctuation, box drawing, kana, fullwidth forms, and the
+private-use area where Nerd Font keeps the branch / folder / language markers a
+shell prompt draws — iOS has no font covering that area, so without it every
+marker renders as a replacement box.
+
+Han is restricted to the 6763 characters reachable through GB2312. Leaving Han
+out entirely was the earlier choice, and it was cheaper (2.2 MB per weight), but
+the terminal grid needs Han to advance by exactly two 0.6 em cells. The platform
+font advances ideographs by 1.0 em, so every Han character drifted a fifth of a
+cell, and the drift accumulated across a line until box-drawing frames no longer
+lined up. Carrying the real glyphs keeps the advance at 1.2 em. Characters
+outside GB2312 (rare in terminal output) still fall back to the platform font and
+drift as before.
+
+The remaining CJK extension blocks (U+3400-4DBF, U+F900-FAFF, U+20000-3FFFF) are
+not included.
 
 --------------------------------------------------------------------------------
 
