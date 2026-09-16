@@ -246,6 +246,9 @@ describe("SynapseSkillService", () => {
     // The two-tool surface is the main path, not a fallback; a future edit that
     // demotes it back to "only when not visible" turns this red.
     expect(detail.content).toContain("publishes only two tools")
+    // Clients namespace the two tools differently; naming the Codex form saves a
+    // discovery round trip. Verified against a live Codex session.
+    expect(detail.content).toContain("mcp__synapse_mcp__search")
     expect(attachmentNames).toEqual([
       "app/api-reference.md",
       "app/index.md",
