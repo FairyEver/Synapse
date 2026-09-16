@@ -101,12 +101,21 @@ struct AsrTranscriptTests {
     @Test func onlyRealChangesAreReported() {
         var accumulator = AsrTranscriptAccumulator()
 
+        // `apply` 是 mutating 的，不能直接写进 `#expect`：宏会把表达式包进闭包，
+        // 那里面捕获到的 accumulator 是只读的，编译不过。所以先把结果取出来。
+        //
         // 同一句的非稳态结果会重复下发，内容是全量而非增量。
-        #expect(accumulator.apply(index: 0, sliceType: 1, text: "帮我看看"))
-        #expect(!accumulator.apply(index: 0, sliceType: 1, text: "帮我看看"))
-        #expect(accumulator.apply(index: 0, sliceType: 1, text: "帮我看看终端"))
-        #expect(accumulator.apply(index: 0, sliceType: 2, text: "帮我看看终端"))
+        let first = accumulator.apply(index: 0, sliceType: 1, text: "帮我看看")
+        let repeated = accumulator.apply(index: 0, sliceType: 1, text: "帮我看看")
+        let extended = accumulator.apply(index: 0, sliceType: 1, text: "帮我看看终端")
+        let settled = accumulator.apply(index: 0, sliceType: 2, text: "帮我看看终端")
         // 已经定稿的句子再来一次同样的定稿，文本没有变。
-        #expect(!accumulator.apply(index: 0, sliceType: 2, text: "帮我看看终端"))
+        let settledAgain = accumulator.apply(index: 0, sliceType: 2, text: "帮我看看终端")
+
+        #expect(first)
+        #expect(!repeated)
+        #expect(extended)
+        #expect(settled)
+        #expect(!settledAgain)
     }
 }

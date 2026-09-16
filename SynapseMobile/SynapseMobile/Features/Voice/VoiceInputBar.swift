@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 /// 录音态这条 bar 的状态机：权限、采集、连接、送包节奏、收尾。
 ///
