@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardHeader } from "@/components/ui/card"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
+import { VoiceInputPanel } from "@/modules/settings/components/voice-input-panel"
 import { AccountPanel } from "@/modules/settings/components/account-panel"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
@@ -300,6 +301,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
 
         {isReady && activeCategory === "account" && accountUiVisible ? <AccountPanel /> : null}
 
+        {isReady && activeCategory === "general" ? <VoiceInputPanel /> : null}
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}
         {isReady && activeCategory === "general" ? <AppResetPanel /> : null}
