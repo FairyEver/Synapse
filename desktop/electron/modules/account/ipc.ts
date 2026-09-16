@@ -983,15 +983,19 @@ export const accountIpcModule: IpcModule = {
   id: "account",
   methods: {
     getState: {
+      // A capability, not a UI-only operation: an Agent needs the same answer the button
+      // does. `app.account.operation.*` could never be one — a capability action has to
+      // come from the closed action vocabulary, and `get_state` / `start_login` are not
+      // in it — so the id is the capability's, and the UI calls it through the same one.
       kind: "invoke",
-      operationId: "app.account.operation.get_state",
+      operationId: "app.account.state.get",
       request: z.void(),
       response: accountStateSchema,
       handler: async () => accountService.getState(),
     },
     startLogin: {
       kind: "invoke",
-      operationId: "app.account.operation.start_login",
+      operationId: "app.account.login.start",
       request: z.void(),
       response: accountStateSchema,
       handler: async () => (await accountService.startLogin()).state,

@@ -699,17 +699,24 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.git.getCommit)({ hash, repositoryId }),
   },
   account: {
-    getState: invoke(IPC_CHANNELS.account.getState),
-    startLogin: invoke(IPC_CHANNELS.account.startLogin),
+    // `state.get` and `login.start` are nested because they are capabilities, and a
+    // capability's bridge mirrors its id (`app.account.state.get`). The flat entries
+    // below are UI-only operations with no capability behind them.
+    state: {
+      get: invoke(IPC_CHANNELS.account.getState),
+      onChanged: createDomainEventPayloadSubscription<SynapseAccountStateChangedEvent>(
+        subscribe,
+        "account",
+        "account.stateChanged",
+      ),
+    },
+    login: {
+      start: invoke(IPC_CHANNELS.account.startLogin),
+    },
     cancelLogin: invoke(IPC_CHANNELS.account.cancelLogin),
     refresh: invoke(IPC_CHANNELS.account.refresh),
     logout: invoke(IPC_CHANNELS.account.logout),
     listWebhooks: invoke(IPC_CHANNELS.account.listWebhooks),
-    onStateChanged: createDomainEventPayloadSubscription<SynapseAccountStateChangedEvent>(
-      subscribe,
-      "account",
-      "account.stateChanged",
-    ),
   },
   drive: {
     item: {

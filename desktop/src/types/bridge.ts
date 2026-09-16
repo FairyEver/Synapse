@@ -1340,13 +1340,17 @@ export type SynapseBridge = {
     getCommit: (repositoryId: string, hash: string) => Promise<SynapseGitCommitDetail>
   }
   account: {
-    getState: () => Promise<SynapseAccountState>
-    startLogin: () => Promise<SynapseAccountState>
+    state: {
+      get: () => Promise<SynapseAccountState>
+      onChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
+    }
+    login: {
+      start: () => Promise<SynapseAccountState>
+    }
     cancelLogin: () => Promise<SynapseAccountState>
     refresh: () => Promise<SynapseAccountState>
     logout: () => Promise<SynapseAccountState>
     listWebhooks: () => Promise<DashboardWebhookDto[]>
-    onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
   }
   drive: {
     item: {

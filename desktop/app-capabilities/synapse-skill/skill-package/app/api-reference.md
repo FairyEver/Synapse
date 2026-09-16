@@ -1,5 +1,30 @@
 # Synapse App MCP API Reference
 
+## `app_account_state_get`
+
+Read the signed-in account state of the desktop application.
+
+- Input: none.
+- Output: `{ status, ... }`, one of:
+  - `{ status: "unauthenticated" }` — nobody is signed in.
+  - `{ status: "authenticating", loginUrl? }` — a sign-in is in flight.
+  - `{ status: "authenticated", connectivity: "online" | "offline", profile, offlineReason?, retry? }` — `profile` carries `user.{id,email,handle,status}` and `syncedAt`. `connectivity: "offline"` means the session is intact but the server is currently unreachable; `retry.nextRetryAt` is when the client will try again on its own.
+  - `{ status: "error", message, profile? }` — the last account operation failed.
+
+## `app_account_login_start`
+
+Start a desktop account sign-in, or resume the one already in flight. Equivalent to pressing the sign-in button: it opens the login page in the default browser.
+
+- Input: none.
+- Output: `{ state, loginUrl?, outcome }`. `state` is the account state as described above. `loginUrl` is the page that was opened, and is absent only when `outcome` is `already_authenticated`. `outcome` is one of:
+  - `opened` — a new attempt was persisted and the browser opened on it.
+  - `reused_attempt` — a login was already in flight; the same URL was reopened and that attempt was left untouched.
+  - `already_authenticated` — the account is signed in and online. Nothing was changed.
+  - `open_failed` — the attempt is live but the browser could not be opened. `loginUrl` is still returned, so it can be handed to the user or opened manually.
+  - `start_failed` — no attempt was established. Reported as an error with code `login_unavailable`; there is nothing to poll.
+- **The sign-in completes asynchronously.** This tool returns as soon as the page is opened; it does not wait for the sign-in. Poll `app_account_state_get` until `status` is `authenticated` before reporting success.
+- The call is idempotent. An account that is signed in **and online** is left untouched, and a login already in flight is resumed rather than restarted, so repeating the call cannot invalidate the page the user already has open. An account that is signed in but **offline** is deliberately not covered by that guard, because re-login is a remedy for that state.
+
 ## `app_agent_provider_list`
 
 - Input: `{ providerId?, query?, offset?, limit? }`. Exact provider ID filter; query searches provider/model names case-insensitively. Offset defaults to 0; limit defaults to 50, maximum 100.

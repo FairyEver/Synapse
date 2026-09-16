@@ -46,6 +46,12 @@ import {
   SOUND_NOTIFIER_MIN_REPEAT_COUNT,
   SOUND_NOTIFIER_PRESET_IDS,
 } from "../../app-capabilities/sound-notifier/shared/defaults"
+import {
+  ACCOUNT_LOGIN_START_CAPABILITY_ID,
+  ACCOUNT_LOGIN_START_MCP_TOOL_NAME,
+  ACCOUNT_STATE_GET_CAPABILITY_ID,
+  ACCOUNT_STATE_GET_MCP_TOOL_NAME,
+} from "../../app-capabilities/account/shared/capability"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import {
   FILE_OPENER_CAPABILITY_ID,
@@ -93,6 +99,18 @@ import {
 import { buildAgentConversationMcpTools } from "../../app-capabilities/agent/shared/mcp-tools"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
+  {
+    id: ACCOUNT_STATE_GET_CAPABILITY_ID,
+    title: "Get account state",
+    description: "Read the signed-in account state, including whether anyone is signed in and whether the account is online.",
+    mutates: false,
+  },
+  {
+    id: ACCOUNT_LOGIN_START_CAPABILITY_ID,
+    title: "Start account login",
+    description: "Start the desktop account login, or resume one already in flight. Opens the login page in the default browser and returns immediately; the sign-in itself completes separately.",
+    mutates: true,
+  },
   ...AGENT_CONVERSATION_CAPABILITY_CATALOG,
   {
     id: TEXT_EXTRACTOR_CAPABILITY_ID,
@@ -216,6 +234,8 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 }
 
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
+  [ACCOUNT_STATE_GET_MCP_TOOL_NAME]: ACCOUNT_STATE_GET_CAPABILITY_ID,
+  [ACCOUNT_LOGIN_START_MCP_TOOL_NAME]: ACCOUNT_LOGIN_START_CAPABILITY_ID,
   ...AGENT_CONVERSATION_MCP_TOOL_ACTIONS,
   [TEXT_EXTRACTOR_MCP_TOOL_NAME]: TEXT_EXTRACTOR_CAPABILITY_ID,
   [TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME]: TEXT_EXTRACTOR_TO_FILE_CAPABILITY_ID,
@@ -257,6 +277,16 @@ const strictEmptyInputSchema = {
 }
 export function buildAppTools(): McpToolDefinition[] {
   return [
+    {
+      name: ACCOUNT_STATE_GET_MCP_TOOL_NAME,
+      description: "Read the signed-in Synapse account state on this computer. Call it before starting a login to see whether anyone is signed in, and after starting one to find out when the sign-in has completed. Returns `status` (`unauthenticated`, `authenticating`, `authenticated`, or `error`); an `authenticated` state also carries `connectivity`, and `offline` there means the session is intact but the server is unreachable.",
+      inputSchema: strictEmptyInputSchema,
+    },
+    {
+      name: ACCOUNT_LOGIN_START_MCP_TOOL_NAME,
+      description: "Open the Synapse account login page in the default browser, exactly as pressing the sign-in button would. Returns as soon as the page is opened — the sign-in itself happens in the browser and finishes later, so poll `app_account_state_get` until `status` is `authenticated` (roughly every 2 seconds, for up to about 2 minutes) rather than assuming this call completed the login. Calling it again is safe: an account that is already signed in and online is left untouched, and a login already in flight is resumed instead of restarted. Returns `outcome` (`opened`, `reused_attempt`, `already_authenticated`, `open_failed`, or `start_failed`) plus the `loginUrl` that was opened.",
+      inputSchema: strictEmptyInputSchema,
+    },
     ...buildAgentConversationMcpTools(),
     {
       name: TEXT_EXTRACTOR_MCP_TOOL_NAME,

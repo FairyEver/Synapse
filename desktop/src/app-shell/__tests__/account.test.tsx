@@ -32,12 +32,14 @@ function createDeferred<T>() {
 
 function installBridge(startLogin: () => Promise<SynapseAccountState>) {
   const account = {
-    getState: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState),
-    startLogin: vi.fn(startLogin),
+    state: {
+      get: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState),
+      onChanged: vi.fn(() => () => undefined),
+    },
+    login: { start: vi.fn(startLogin) },
     cancelLogin: vi.fn(),
     refresh: vi.fn(),
     logout: vi.fn(),
-    onStateChanged: vi.fn(() => () => undefined),
   }
   ;(window as unknown as { synapse: SynapseBridge }).synapse = {
     account,
@@ -88,7 +90,7 @@ describe("AccountProvider", () => {
       button?.click()
     })
 
-    expect(accountBridge.startLogin).toHaveBeenCalledTimes(1)
+    expect(accountBridge.login.start).toHaveBeenCalledTimes(1)
     expect(button?.dataset.pending).toBe("login")
 
     await act(async () => {

@@ -4,6 +4,18 @@ Use this domain when directly invoking MCP tools provided by Synapse system apps
 
 When an App capability is configured as a node inside a Workflow, use `workflow/index.md` instead. The Workflow guide owns node schemas, reserved bindings, graph edges, layout, definition validation, and run behavior. Do not read both guides merely because a Workflow node is backed by an App capability.
 
+## Account Sign-in
+
+Use `app_account_state_get` and `app_account_login_start` when the account may not be signed in — the desktop client went offline, or another Synapse call reports that it needs a signed-in account. Signing in is a self-service action here: the browser already holds the session, so this is something to complete on the user's behalf rather than hand back to them.
+
+- Check first -> `app_account_state_get`. It answers whether anyone is signed in and whether the account is currently reachable. Read `status` first; when it is `authenticated`, `connectivity` tells you whether the server is reachable right now. `offline` there means the session is intact and the client will retry on its own, so a plain retry is often enough.
+- Sign in -> `app_account_login_start`. It opens the login page in the desktop's default browser, exactly as pressing the sign-in button would. This is the remedy when the state is `unauthenticated`, or when an `authenticated` account has stayed `offline` across retries.
+- **The start call does not wait for the sign-in.** The sign-in happens in the browser and finishes later. Do not report the user as signed in because this call returned; poll `app_account_state_get` — roughly every 2 seconds, up to about 2 minutes — until `status` is `authenticated`, and report success only then.
+- Stop polling early on `status: "error"` and report what it says. If the budget runs out while the state is still `authenticating`, say so plainly rather than looping; the sign-in can still complete afterwards, and the state can be checked again at any time.
+- The call is safe to repeat, so a retry needs no special handling: an account that is signed in and online is left untouched, and a login already in flight is resumed with the same URL instead of being restarted, which means a repeat never invalidates the page the user already has open.
+- `outcome` states what the call did — `opened`, `reused_attempt`, `already_authenticated`, `open_failed`, or `start_failed`. On `open_failed` the `loginUrl` is still returned; give it to the user. On `start_failed` nothing was established and there is nothing to poll.
+- There is no tool to sign out. Signing out ends the user's session, so it remains a user-only action; do not reach for another mechanism to end it.
+
 ## Agent Conversation Creation, Models and Groups
 
 - Discover available providers/models -> `app_agent_provider_list` with optional `query` (provider or model name) or `providerId`; page with `nextOffset`. It lists the same non-archived providers and selectable configured tiers as “创建自定义对话”, not the vendor's remote model catalog. Use returned `providerId` and `models[].modelTier` together when creating with a requested model. Resolve ambiguous matches with the user; never guess IDs or silently substitute another model. A local Claude Code default can have `modelName: null`; use its returned default tier without inventing a concrete name.

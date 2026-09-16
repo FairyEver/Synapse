@@ -37,7 +37,7 @@ export function WebhookTriggerConfigForm({
     }
     setStatus("loading")
     void (async () => {
-      const accountState = await accountBridge.getState()
+      const accountState = await accountBridge.state.get()
       if (accountState.status !== "authenticated") {
         setWebhooks([])
         setStatus("logged-out")
@@ -56,7 +56,7 @@ export function WebhookTriggerConfigForm({
 
   useEffect(() => {
     loadWebhooks()
-    return window.synapse?.account?.onStateChanged((event) => {
+    return window.synapse?.account?.state.onChanged((event) => {
       if (event.state.status === "authenticated") {
         loadWebhooks()
         return

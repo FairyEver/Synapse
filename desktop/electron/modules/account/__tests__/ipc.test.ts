@@ -156,8 +156,10 @@ function createAccountSecurityContext(permissionResult: PermissionResultForTest 
 describe("accountIpcModule", () => {
   it("declares account invoke channels", () => {
     expect(accountIpcModule.id).toBe("account")
-    expect(accountIpcModule.methods.getState.operationId).toBe("app.account.operation.get_state")
-    expect(accountIpcModule.methods.startLogin.operationId).toBe("app.account.operation.start_login")
+    // Reading the state and starting a login are capabilities, so they carry capability
+    // ids an Agent can reach; the rest stay UI-only operations with no tool behind them.
+    expect(accountIpcModule.methods.getState.operationId).toBe("app.account.state.get")
+    expect(accountIpcModule.methods.startLogin.operationId).toBe("app.account.login.start")
     expect(accountIpcModule.methods.cancelLogin.operationId).toBe("app.account.operation.cancel_login")
     expect(accountIpcModule.methods.refresh.operationId).toBe("app.account.operation.refresh")
     expect(accountIpcModule.methods.logout.operationId).toBe("app.account.operation.logout")

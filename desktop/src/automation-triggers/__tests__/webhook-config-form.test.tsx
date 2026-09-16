@@ -32,13 +32,21 @@ const webhook: DashboardWebhookDto = {
 }
 
 type AccountBridgeMock = {
-  getState: ReturnType<typeof vi.fn>
-  startLogin: ReturnType<typeof vi.fn>
+  state: {
+    get: ReturnType<typeof vi.fn>
+    onChanged: ReturnType<typeof vi.fn>
+  }
+  login: { start: ReturnType<typeof vi.fn> }
   cancelLogin: ReturnType<typeof vi.fn>
   refresh: ReturnType<typeof vi.fn>
   logout: ReturnType<typeof vi.fn>
   listWebhooks: ReturnType<typeof vi.fn>
-  onStateChanged: ReturnType<typeof vi.fn>
+}
+
+/** Overrides mirror the bridge's own shape so a call site reads like the call it stands for. */
+type AccountBridgeOverrides = {
+  readonly state?: Partial<AccountBridgeMock["state"]>
+  readonly listWebhooks?: ReturnType<typeof vi.fn>
 }
 
 describe("WebhookTriggerConfigForm", () => {
@@ -56,7 +64,7 @@ describe("WebhookTriggerConfigForm", () => {
 
   it("keeps the saved webhook visible when webhook list loading fails", async () => {
     installAccountBridge({
-      getState: vi.fn().mockResolvedValue(authenticatedState),
+      state: { get: vi.fn().mockResolvedValue(authenticatedState) },
       listWebhooks: vi.fn().mockRejectedValue(new Error("账号未登录。")),
     })
 
@@ -72,7 +80,7 @@ describe("WebhookTriggerConfigForm", () => {
 
   it("shows the logged-out state instead of a load error", async () => {
     const account = installAccountBridge({
-      getState: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState),
+      state: { get: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState) },
       listWebhooks: vi.fn().mockRejectedValue(new Error("账号未登录")),
     })
 
@@ -86,14 +94,16 @@ describe("WebhookTriggerConfigForm", () => {
   it("reloads webhooks after the account becomes authenticated", async () => {
     let accountListener: ((event: { readonly state: SynapseAccountState }) => void) | undefined
     const account = installAccountBridge({
-      getState: vi.fn()
-        .mockResolvedValueOnce({ status: "unauthenticated" } satisfies SynapseAccountState)
-        .mockResolvedValue(authenticatedState),
+      state: {
+        get: vi.fn()
+          .mockResolvedValueOnce({ status: "unauthenticated" } satisfies SynapseAccountState)
+          .mockResolvedValue(authenticatedState),
+        onChanged: vi.fn((listener) => {
+          accountListener = listener as (event: SynapseAccountStateChangedEvent) => void
+          return vi.fn()
+        }),
+      },
       listWebhooks: vi.fn().mockResolvedValue([webhook]),
-      onStateChanged: vi.fn((listener) => {
-        accountListener = listener as (event: SynapseAccountStateChangedEvent) => void
-        return vi.fn()
-      }),
     })
 
     await renderForm()
@@ -109,7 +119,7 @@ describe("WebhookTriggerConfigForm", () => {
 
   it("warns when the selected webhook is disabled", async () => {
     installAccountBridge({
-      getState: vi.fn().mockResolvedValue(authenticatedState),
+      state: { get: vi.fn().mockResolvedValue(authenticatedState) },
       listWebhooks: vi.fn().mockResolvedValue([
         { ...webhook, enabled: false },
       ]),
@@ -136,16 +146,18 @@ describe("WebhookTriggerConfigForm", () => {
   }
 })
 
-function installAccountBridge(overrides: Partial<AccountBridgeMock>) {
+function installAccountBridge(overrides: AccountBridgeOverrides = {}) {
   const account = {
-    getState: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState),
-    startLogin: vi.fn(),
+    state: {
+      get: vi.fn().mockResolvedValue({ status: "unauthenticated" } satisfies SynapseAccountState),
+      onChanged: vi.fn(() => () => undefined),
+      ...overrides.state,
+    },
+    login: { start: vi.fn() },
     cancelLogin: vi.fn(),
     refresh: vi.fn(),
     logout: vi.fn(),
-    listWebhooks: vi.fn().mockResolvedValue([]),
-    onStateChanged: vi.fn(() => () => undefined),
-    ...overrides,
+    listWebhooks: overrides.listWebhooks ?? vi.fn().mockResolvedValue([]),
   } satisfies AccountBridgeMock
   ;(window as unknown as { synapse?: Partial<SynapseBridge> }).synapse = {
     account: account as unknown as SynapseBridge["account"],

@@ -33,6 +33,7 @@ import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
 import { createAppCapabilityDispatcher } from "../../app-capabilities/dispatcher"
+import { createAccountCapabilityDispatcher } from "../../app-capabilities/account/main/dispatcher"
 import { createAgentConversationCapabilityDispatcher } from "../../app-capabilities/agent/main/dispatcher"
 import { AgentConversationControlService } from "../../app-capabilities/agent/main/control-service"
 import { AgentConversationNavigationService } from "../../app-capabilities/agent/main/service"
@@ -1576,7 +1577,9 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       auditSink,
       actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
     })
+    const accountDispatcher = createAccountCapabilityDispatcher({ service: accountService })
     const appDispatcher = createAppCapabilityDispatcher({
+      account: accountDispatcher,
       agentConversation: agentConversationDispatcher,
       textExtractor: textExtractorDispatcher,
       documentTemplate: documentTemplateDispatcher,

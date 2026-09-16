@@ -23,6 +23,10 @@ import {
 } from "../../synapse-capabilities/shared/app-domain"
 import { TERMINAL_CAPABILITY_CATALOG } from "../../app-capabilities/terminal/shared/capability"
 import {
+  ACCOUNT_LOGIN_START_MCP_TOOL_NAME,
+  ACCOUNT_STATE_GET_MCP_TOOL_NAME,
+} from "../../app-capabilities/account/shared/capability"
+import {
   SECRETS_CAPABILITY_IDS,
   SECRETS_MCP_TOOL_NAMES,
 } from "../../app-capabilities/secrets/shared/capability"
@@ -109,6 +113,8 @@ describe("App capability domain", () => {
       .toBe(TEXT_EXTRACTOR_CAPABILITY_ID)
     expect(APP_MCP_TOOL_ACTIONS.app_document_template_docx_generate).toBe("app.document_template.docx.generate")
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
+      ACCOUNT_STATE_GET_MCP_TOOL_NAME,
+      ACCOUNT_LOGIN_START_MCP_TOOL_NAME,
       ...AGENT_CONVERSATION_CAPABILITY_CATALOG.map((capability) => capability.toolName),
       TEXT_EXTRACTOR_MCP_TOOL_NAME,
       TEXT_EXTRACTOR_TO_FILE_MCP_TOOL_NAME,

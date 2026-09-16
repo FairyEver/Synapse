@@ -13,11 +13,13 @@ import { HTML_GENERATOR_CAPABILITY_IDS } from "./html-generator/shared/capabilit
 import { PROBLEM_FEEDBACK_SUBMIT_CAPABILITY_ID } from "./problem-feedback/shared/capability"
 import { JSON_REPAIR_CAPABILITY_ID } from "./json-repair/shared/capability"
 import { AGENT_CONVERSATION_CAPABILITY_IDS } from "./agent/shared/capability"
+import { ACCOUNT_CAPABILITY_IDS } from "./account/shared/capability"
 
 type AppCapabilitySubDispatcher = {
   dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult>
 }
 
+const accountCapabilityIds = new Set<string>(ACCOUNT_CAPABILITY_IDS)
 const secretsCapabilityIds = new Set<string>(SECRETS_CAPABILITY_IDS)
 const htmlGeneratorCapabilityIds = new Set<string>(HTML_GENERATOR_CAPABILITY_IDS)
 const agentConversationCapabilityIds = new Set<string>(AGENT_CONVERSATION_CAPABILITY_IDS)
@@ -25,6 +27,7 @@ const agentConversationCapabilityIds = new Set<string>(AGENT_CONVERSATION_CAPABI
 export type AppCapabilityDispatcher = AppCapabilitySubDispatcher
 
 export function createAppCapabilityDispatcher(deps: {
+  readonly account: AppCapabilitySubDispatcher
   readonly agentConversation: AppCapabilitySubDispatcher
   readonly textExtractor: AppCapabilitySubDispatcher
   readonly documentTemplate: AppCapabilitySubDispatcher
@@ -39,6 +42,9 @@ export function createAppCapabilityDispatcher(deps: {
 }): AppCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
+      if (accountCapabilityIds.has(action)) {
+        return deps.account.dispatch(action, params, context)
+      }
       if (agentConversationCapabilityIds.has(action)) {
         return deps.agentConversation.dispatch(action, params, context)
       }

@@ -55,7 +55,7 @@ function AccountProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false
-    void bridge.account.getState()
+    void bridge.account.state.get()
       .then((nextState) => {
         if (!cancelled) setState(nextState)
       })
@@ -67,7 +67,7 @@ function AccountProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setIsLoading(false)
       })
 
-    const unsubscribe = bridge.account.onStateChanged((event) => {
+    const unsubscribe = bridge.account.state.onChanged((event) => {
       setState(event.state)
     })
 
@@ -103,7 +103,7 @@ function AccountProvider({ children }: { children: ReactNode }) {
       setState(nextState)
       return nextState
     }
-    return runAccountAction("login", bridge.account.startLogin)
+    return runAccountAction("login", bridge.account.login.start)
   }, [runAccountAction])
 
   const refresh = useCallback(async () => {
