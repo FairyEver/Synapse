@@ -6,10 +6,10 @@ import { SettingsFieldRow } from "@/modules/settings/components/settings-field-r
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { useVoiceSettings } from "@/modules/settings/hooks/use-voice-settings"
 
-/** 官方实时语音识别在售的引擎。默认是大模型 2.0 的中英混合档。 */
+/** 官方实时语音识别在售的引擎。默认那条是实测选出来的，理由见 capability.ts。 */
 const ENGINE_OPTIONS = [
+  { value: "Hy-ASR-3.0-preview", label: "Hy-ASR-3.0-preview（混元 · 默认）" },
   { value: "16k_zh_en_2.0", label: "16k_zh_en_2.0（中英混合 · 大模型2.0）" },
-  { value: "Hy-ASR-3.0-preview", label: "Hy-ASR-3.0-preview（混元内测）" },
   { value: "16k_zh_en", label: "16k_zh_en（中英混合 · 大模型1.0）" },
   { value: "16k_zh", label: "16k_zh（普通话 · 通用）" },
 ] as const
