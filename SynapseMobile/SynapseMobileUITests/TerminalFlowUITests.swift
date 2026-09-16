@@ -296,6 +296,14 @@ final class TerminalFlowUITests: XCTestCase {
         let loose = app.staticTexts["claude-code"].frame.minX
         XCTAssertGreaterThan(pane, loose, "the split tab's panes are not indented under it")
         capture(app, name: "18-list-with-split-tab")
+
+        // Delete and rename must keep working inside the tab: a pane row still has
+        // to answer a swipe, and the disclosure gesture must not eat it.
+        revealSwipeActions(on: "web-a", in: app)
+        XCTAssertTrue(
+            app.buttons["重命名"].waitForExistence(timeout: 5),
+            "a pane inside a split tab does not answer a swipe"
+        )
     }
 
     /// Leaving the terminal must show the list already in the system's appearance.
