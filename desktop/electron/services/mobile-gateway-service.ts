@@ -141,6 +141,7 @@ export class MobileGatewayService {
       nowMs: () => this.nowMs(),
       markDirty: (sessionId) => this.markDirty(sessionId),
       requestSummary: () => this.scheduleSummary(),
+      resendSummary: () => this.resendSummary(),
       pushSnapshot: (attachment) => this.pushSnapshot(attachment),
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
     })
@@ -527,6 +528,25 @@ export class MobileGatewayService {
       this.summaryTimer = null
       void this.flushSummary()
     }, SUMMARY_INTERVAL_MS)
+  }
+
+  /**
+   * Sends the list again even if nothing about it has changed.
+   *
+   * `flushSummary` compares against what was last sent, which is what keeps an idle
+   * desktop from producing traffic at all — but "last sent" is only meaningful to a
+   * listener that was there to receive it. A phone that has just connected has
+   * received nothing, and the summary it needed may have gone to a *previous* cloud
+   * process: when the relay restarts, its cache of the last summary per desktop goes
+   * with it. Deduplicating against a send nobody can still read leaves every phone
+   * on an empty list until a terminal happens to print something.
+   *
+   * So an explicit ask — the `sync` a phone sends whenever it connects — clears the
+   * comparison first. The routine, event-driven path keeps the deduplication.
+   */
+  private resendSummary(): void {
+    this.lastSummaryContent = ""
+    this.scheduleSummary()
   }
 
   private async flushSummary(): Promise<void> {

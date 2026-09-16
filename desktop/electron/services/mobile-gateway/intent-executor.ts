@@ -49,6 +49,13 @@ export type IntentExecutorDeps = {
   readonly markDirty: (sessionId: string) => void
   /** Asks the gateway to re-send the session list. */
   readonly requestSummary: () => void
+  /**
+   * Asks for the list even if it has not changed since the last one was sent.
+   *
+   * For a caller that has just arrived and therefore holds nothing — see
+   * `MobileGatewayService.resendSummary`.
+   */
+  readonly resendSummary: () => void
   /** Sends a full-window frame immediately, for attach and resync. */
   readonly pushSnapshot: (attachment: MobileAttachment) => Promise<void>
   /** Sends one page of scrollback below `before`, or an empty page at the end. */
@@ -110,7 +117,10 @@ export class MobileIntentExecutor {
 
       case "sync": {
         await this.deps.authorize("terminal.discover", "terminal:sessions")
-        this.deps.requestSummary()
+        // Not `requestSummary`: a phone sends this the moment it connects, so it is
+        // exactly the caller that has received nothing and cannot be answered with
+        // "the list has not changed".
+        this.deps.resendSummary()
         for (const attachment of registry.forClient(mobileClientInstanceId)) {
           await this.deps.pushSnapshot(attachment)
         }

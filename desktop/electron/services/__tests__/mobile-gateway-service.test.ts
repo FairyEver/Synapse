@@ -988,6 +988,29 @@ describe("MobileGatewayService", () => {
     expect(harness.summaries.length).toBe(afterFirst)
   })
 
+  it("answers a sync with the list even though nothing about it changed", async () => {
+    /*
+     * The deduplication above is what keeps an idle desktop silent — and it is also
+     * what left every phone showing an empty terminal list after the cloud was
+     * redeployed. The desktop had sent its list to a process that no longer exists,
+     * and "unchanged since I last sent it" is an answer to a listener that is no
+     * longer there. A `sync` comes from a client that has just connected, so it has
+     * received nothing and the list has to go out again.
+     *
+     * The cost of getting this wrong is invisible from the desktop: its terminals
+     * are all there and working, and only the phone is blank.
+     */
+    const harness = createHarness()
+    await harness.timers.advance(1_000)
+    const afterFirst = harness.summaries.length
+    expect(afterFirst).toBeGreaterThan(0)
+
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    await harness.timers.advance(1_000)
+
+    expect(harness.summaries.length).toBeGreaterThan(afterFirst)
+  })
+
   it("checks policy under the narrow agent identity, never the user", async () => {
     const harness = createHarness()
     await attach(harness)
