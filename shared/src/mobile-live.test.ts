@@ -20,6 +20,7 @@ import {
   isMobileTerminalFrame,
   type MobileIntent,
   type MobileSummaryPayload,
+  type MobileSummaryWorkspace,
   type MobileTerminalFrame,
 } from "./mobile-live.js"
 
@@ -243,6 +244,47 @@ describe("mobile live protocol", () => {
 
     expect(isMobileSummaryPayload(payload)).toBe(true)
     expect(Buffer.byteLength(JSON.stringify(payload), "utf8")).toBeLessThanOrEqual(limits.maxSummaryBytes)
+  })
+
+  it("treats the tab layer as optional and validates it when a producer sends one", () => {
+    // Absent is the normal case: with no splits the flat list is the hierarchy, and
+    // a client that ignores the field must keep working exactly as it did before.
+    expect(isMobileSummaryPayload(summary())).toBe(true)
+
+    const tab: MobileSummaryWorkspace = {
+      id: "workspace-1",
+      groupId: "g1",
+      title: "前端开发",
+      panes: [{ paneId: "pane-1", sessionId: "sess-1" }],
+    }
+    expect(isMobileSummaryPayload(summary({ workspaces: [tab] }))).toBe(true)
+
+    const malformed = [
+      // A tab that names no pane is not something the phone could draw.
+      { ...tab, panes: [] },
+      // A pane without its conversation.
+      { ...tab, panes: [{ paneId: "pane-1" }] },
+      { ...tab, title: "" },
+      { ...tab, id: "w".repeat(MOBILE_FRAME_LIMITS.maxSummaryIdLength + 1) },
+      {
+        ...tab,
+        panes: Array.from(
+          { length: MOBILE_FRAME_LIMITS.maxSummaryWorkspacePanes + 1 },
+          (_, index) => ({ paneId: `pane-${index}`, sessionId: `sess-${index}` }),
+        ),
+      },
+    ]
+    for (const workspace of malformed) {
+      expect(isMobileSummaryPayload(summary({
+        workspaces: [workspace] as unknown as readonly MobileSummaryWorkspace[],
+      }))).toBe(false)
+    }
+    expect(isMobileSummaryPayload(summary({
+      workspaces: Array.from(
+        { length: MOBILE_FRAME_LIMITS.maxSummaryWorkspaces + 1 },
+        () => tab,
+      ),
+    }))).toBe(false)
   })
 
   it("keeps the attachment routing fields required", () => {

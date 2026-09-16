@@ -42,6 +42,13 @@ export const MOBILE_FRAME_LIMITS = {
   maxSummarySessions: 256,
   maxSummaryGroups: 128,
   /**
+   * Tab layer. A tab holds at most eight panes — `TERMINAL_WORKSPACE_PANE_LIMIT` in
+   * the terminal capability — and there can never be more non-empty tabs than there
+   * are sessions, since every pane names one.
+   */
+  maxSummaryWorkspaces: 256,
+  maxSummaryWorkspacePanes: 8,
+  /**
    * Summary field bounds. Every one of these is the *producer's* clamp as well as
    * the relay's guard, so a field can never be long enough to fail validation.
    *
@@ -199,6 +206,27 @@ export interface MobileSummaryGroup {
   readonly name: string
 }
 
+/** One split inside a tab: the pane's own identity, and the conversation it shows. */
+export interface MobileSummaryWorkspacePane {
+  readonly paneId: string
+  readonly sessionId: string
+}
+
+/**
+ * A tab — the layer between a group and its conversations.
+ *
+ * Panes come in the order the desktop lays them out, which is the split tree's own
+ * left-to-right, top-to-bottom order, so a client that renders them in array order
+ * matches the desktop without needing the tree. The geometry (split direction and
+ * ratio) is deliberately absent: it describes a screen a phone does not have.
+ */
+export interface MobileSummaryWorkspace {
+  readonly id: string
+  readonly groupId: string
+  readonly title: string
+  readonly panes: readonly MobileSummaryWorkspacePane[]
+}
+
 export interface MobileSummaryAttention {
   readonly state: "waiting" | "not_waiting" | "unknown"
   readonly kind: "shell_ready" | "agent_question" | "approval" | "password" | "other_interaction" | "unknown"
@@ -232,6 +260,16 @@ export interface MobileSummaryPayload {
   readonly desktopName: string
   readonly revision: number
   readonly groups: readonly MobileSummaryGroup[]
+  /**
+   * Present only when some tab actually holds more than one pane.
+   *
+   * A desktop gives every new conversation its own tab, so with no splits the flat
+   * `sessions` list already *is* the hierarchy and restating it would be pure
+   * overhead. Omitting it keeps the common payload byte-for-byte what it was before
+   * this layer existed, and leaves a client that ignores the field rendering exactly
+   * the same list it always did.
+   */
+  readonly workspaces?: readonly MobileSummaryWorkspace[]
   readonly sessions: readonly MobileSummarySession[]
 }
 
@@ -380,6 +418,11 @@ export function isMobileSummaryPayload(value: unknown): value is MobileSummaryPa
   if (!nonNegativeInteger(value.revision)) return false
   if (!boundedArray(value.groups, MOBILE_FRAME_LIMITS.maxSummaryGroups)) return false
   if (!boundedArray(value.sessions, MOBILE_FRAME_LIMITS.maxSummarySessions)) return false
+  // Absent is the normal case and always accepted: it means "no tab has a split".
+  if (value.workspaces !== undefined) {
+    if (!boundedArray(value.workspaces, MOBILE_FRAME_LIMITS.maxSummaryWorkspaces)) return false
+    if (!(value.workspaces as readonly unknown[]).every(isSummaryWorkspace)) return false
+  }
   return (value.groups as readonly unknown[]).every(isSummaryGroup) &&
     (value.sessions as readonly unknown[]).every(isSummarySession)
 }
@@ -524,6 +567,23 @@ function isSummaryGroup(value: unknown): value is MobileSummaryGroup {
   return isRecord(value) &&
     boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength) &&
     boundedString(value.name, MOBILE_FRAME_LIMITS.maxSummaryGroupNameLength)
+}
+
+function isSummaryWorkspacePane(value: unknown): value is MobileSummaryWorkspacePane {
+  if (!isRecord(value)) return false
+  return boundedString(value.paneId, MOBILE_FRAME_LIMITS.maxSummaryIdLength) &&
+    boundedString(value.sessionId, MOBILE_FRAME_LIMITS.maxSummaryIdLength)
+}
+
+function isSummaryWorkspace(value: unknown): value is MobileSummaryWorkspace {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength)) return false
+  if (!boundedString(value.groupId, MOBILE_FRAME_LIMITS.maxSummaryIdLength)) return false
+  if (!boundedString(value.title, MOBILE_FRAME_LIMITS.maxTitleLength)) return false
+  // A tab with no panes would name nothing, so it is not a tab the phone could draw.
+  if (!boundedArray(value.panes, MOBILE_FRAME_LIMITS.maxSummaryWorkspacePanes)) return false
+  if ((value.panes as readonly unknown[]).length === 0) return false
+  return (value.panes as readonly unknown[]).every(isSummaryWorkspacePane)
 }
 
 function isSummarySession(value: unknown): value is MobileSummarySession {
