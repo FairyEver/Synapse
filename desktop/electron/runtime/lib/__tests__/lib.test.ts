@@ -2,8 +2,12 @@
  * Phase 0 — Shared lib helpers tests.
  */
 
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { buildKey, makeIdempotentDisposer, makeUnrefInterval, makeUnrefTimeout } from "../index"
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe("buildKey", () => {
   it("joins parts with '|' and stringifies non-strings", () => {
@@ -23,18 +27,22 @@ describe("buildKey", () => {
 })
 
 describe("makeUnrefTimeout", () => {
-  it("calls the callback after the delay and returns a cancel fn", async () => {
+  it("calls the callback after the delay and returns a cancel fn", () => {
+    vi.useFakeTimers()
     const fn = vi.fn()
     makeUnrefTimeout(5, fn)
-    await new Promise((r) => setTimeout(r, 20))
+    vi.advanceTimersByTime(4)
+    expect(fn).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
     expect(fn).toHaveBeenCalledOnce()
   })
 
-  it("cancel prevents the callback from running", async () => {
+  it("cancel prevents the callback from running", () => {
+    vi.useFakeTimers()
     const fn = vi.fn()
     const cancel = makeUnrefTimeout(50, fn)
     cancel()
-    await new Promise((r) => setTimeout(r, 60))
+    vi.advanceTimersByTime(60)
     expect(fn).not.toHaveBeenCalled()
   })
 
@@ -46,14 +54,15 @@ describe("makeUnrefTimeout", () => {
 })
 
 describe("makeUnrefInterval", () => {
-  it("fires repeatedly until cancelled", async () => {
+  it("fires repeatedly until cancelled", () => {
+    vi.useFakeTimers()
     const fn = vi.fn()
     const cancel = makeUnrefInterval(5, fn)
-    await new Promise((r) => setTimeout(r, 30))
-    cancel()
+    vi.advanceTimersByTime(30)
     const count = fn.mock.calls.length
-    expect(count).toBeGreaterThanOrEqual(2)
-    await new Promise((r) => setTimeout(r, 20))
+    expect(count).toBe(6)
+    cancel()
+    vi.advanceTimersByTime(20)
     expect(fn.mock.calls.length).toBe(count)
   })
 })
