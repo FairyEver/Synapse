@@ -17,6 +17,19 @@ export const MOBILE_GATEWAY_ACTOR = { kind: "agent", id: MOBILE_GATEWAY_ACTOR_ID
  * Actions a phone may perform on a terminal. Deliberately excludes group and
  * command management: those mutate persisted configuration and stay on the
  * desktop, where the user has a keyboard and can see what they are editing.
+ *
+ * Deleting a session *is* allowed, which follows from the same rule: a session is
+ * runtime state, not configuration, and `stop` — which is already allowed — removes a
+ * running one on its own, because the PTY exiting destroys the session. Deleting only
+ * adds the removal of an already-ended session's record.
+ *
+ * `terminal.session.resize` is listed although nothing currently authorizes it: it is
+ * kept for the phone-side resize this table was written to allow. Leaving it here with
+ * a reason is the point — a permission entry with no stated purpose is what made the
+ * missing `session.delete` entry hard to spot.
+ *
+ * `mobile-gateway-permissions.test.ts` keeps this table and the executor's calls in
+ * step, so a new capability cannot ship unauthorised and fail on a user's phone.
  */
 export const MOBILE_GATEWAY_ALLOWED_ACTIONS: ReadonlySet<PermissionAction> = new Set([
   "terminal.discover",
@@ -24,6 +37,7 @@ export const MOBILE_GATEWAY_ALLOWED_ACTIONS: ReadonlySet<PermissionAction> = new
   "terminal.output.read",
   "terminal.command.launch",
   "terminal.session.create",
+  "terminal.session.delete",
   "terminal.session.control",
   "terminal.session.resize",
   "terminal.session.stop",
