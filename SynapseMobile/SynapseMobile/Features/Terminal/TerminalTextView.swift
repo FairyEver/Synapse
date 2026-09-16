@@ -65,10 +65,24 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// it so the cell layout and the scroll behaviour can follow.
     private var displayMode: TerminalDisplayMode = .phoneDriven
     private var desktopGrid: DesktopGrid?
-    /// Pinch scaling on top of the fitted size, in the desktop-grid mode only.
-    /// Fitted is 1, and it never goes below — shrinking past "the whole screen"
-    /// would be a third mode nobody asked for.
+    /// How much the canvas is magnified, in the desktop-grid mode only. Fitted is 1
+    /// and it never goes below — shrinking past "the whole screen" would be a third
+    /// mode nobody asked for.
+    ///
+    /// A scale on the container, not a size for the text. Re-laying every row out at
+    /// a new font size as the finger moves makes the screen pop and reflow under the
+    /// gesture; scaling one view makes the whole thing grow together, the way a photo
+    /// does, and costs nothing per frame.
     private var zoom: CGFloat = 1
+    /// Where the magnified canvas has been dragged to, in the pane's own coordinates.
+    private var canvasOffset: CGPoint = .zero
+    /// The view the zoom transform is applied to. Sits between this view and the
+    /// collection view so the magnification is one transform over everything the
+    /// terminal draws, insets included.
+    private let canvas = UIView()
+    /// Kept so it can be switched on only while the canvas is magnified — a pan that
+    /// is always live would take drags away from the terminal's own scrolling.
+    private var canvasPan: UIPanGestureRecognizer?
     /// The identities last handed to the data source. A row that holds the cursor
     /// has the cursor woven into its identity, so a cursor that moves — or blinks —
     /// is a change the diff can see for itself. That is what keeps this view off
@@ -142,6 +156,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // is the only predictable starting point.
         if gridChanged {
             zoom = 1
+            canvasOffset = .zero
             // What the computer is showing now is the bottom of the buffer, so that
             // is where a reader arriving at this grid expects to be.
             pendingLandingScroll = true
@@ -180,11 +195,13 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// grid, only the size changes.
     private func renderedFontSize(base: CGFloat) -> CGFloat {
         guard displayMode == .desktopDriven, let grid = desktopGrid, base > 0 else { return base }
-        // Floored, not rounded. Rounding up leaves the grid a fraction of a point
-        // wider than the pane, and a fraction of a point across eighty columns is
-        // several points of sideways travel — enough that the whole screen looks
-        // like it is meant to scroll when it is not.
-        return max(1, (base * fitScale(for: grid, base: base) * zoom).rounded(.down))
+        // Rounded to a tenth of a point, not to a whole one. A whole point is seven
+        // per cent of a fourteen-point cell, and across a hundred-odd columns that
+        // leaves the grid some fifty points narrower than the pane — which shows up
+        // as a margin down both sides of a screen that is meant to be filled edge to
+        // edge. Truncated rather than rounded so the grid can only ever come out
+        // narrower, never wider than the space it was fitted into.
+        return max(1, (base * fitScale(for: grid, base: base) * 10).rounded(.down) / 10)
     }
 
     /// How much the desktop's grid has to shrink to fit the pane.
@@ -215,8 +232,36 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// top: the lines a reader looks for are the last ones, and empty space below
     /// them goes unnoticed where empty space above them would not. A grid taller
     /// than the pane is centred instead.
+    /// Magnifies the canvas, or puts it back.
+    ///
+    /// One transform over the whole container, so everything the terminal draws —
+    /// rows, alignment insets, the cursor — grows together and nothing reflows under
+    /// the finger. While it is magnified the collection view stops scrolling, because
+    /// a drag is then about where in the screen the reader is looking rather than
+    /// where in the buffer.
+    private func applyCanvasTransform() {
+        let magnified = zoom > 1.001
+        collectionView.isScrollEnabled = !magnified
+        canvasPan?.isEnabled = magnified
+        guard displayMode == .desktopDriven else {
+            canvas.transform = .identity
+            collectionView.isScrollEnabled = true
+            return
+        }
+        // Scaling is about the canvas's centre, so the content overhangs each edge by
+        // this much and the drag has that far to travel before it would show a gap.
+        let slackX = (bounds.width * (zoom - 1)) / 2
+        let slackY = (bounds.height * (zoom - 1)) / 2
+        canvasOffset.x = max(-slackX, min(slackX, canvasOffset.x))
+        canvasOffset.y = max(-slackY, min(slackY, canvasOffset.y))
+        canvas.transform = CGAffineTransform(translationX: canvasOffset.x, y: canvasOffset.y)
+            .scaledBy(x: zoom, y: zoom)
+    }
+
     private func applyInsets() {
         let pane = bounds
+        canvas.frame = pane
+        defer { applyCanvasTransform() }
         guard displayMode == .desktopDriven, let grid = desktopGrid, pane.width > 0, pane.height > 0 else {
             collectionView.contentInset = .zero
             collectionView.alwaysBounceHorizontal = false
@@ -266,6 +311,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // itself a layout-affecting change, so doing this on every pass makes the
         // two call each other: a continuous redraw, which the reader sees as the
         // picture flickering while they are trying to read it.
+        canvas.frame = bounds
         let paneSize = bounds.size
         if displayMode == .desktopDriven, desktopGrid != nil, paneSize != lastLaidOutPaneSize {
             lastLaidOutPaneSize = paneSize
@@ -526,13 +572,19 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         )
         // A stable handle for UI tests; also what VoiceOver announces the region as.
         collectionView.accessibilityIdentifier = "terminal.text"
-        addSubview(collectionView)
+
+        // Frame-based, because a transformed view is positioned by its frame and not
+        // by constraints; the collection view inside it is laid out normally.
+        canvas.backgroundColor = .clear
+        canvas.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(canvas)
+        canvas.addSubview(collectionView)
 
         NSLayoutConstraint.activate([
-            collectionView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            collectionView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            collectionView.topAnchor.constraint(equalTo: topAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            collectionView.leadingAnchor.constraint(equalTo: canvas.leadingAnchor),
+            collectionView.trailingAnchor.constraint(equalTo: canvas.trailingAnchor),
+            collectionView.topAnchor.constraint(equalTo: canvas.topAnchor),
+            collectionView.bottomAnchor.constraint(equalTo: canvas.bottomAnchor),
         ])
 
         dataSource = UICollectionViewDiffableDataSource<Int, String>(
@@ -581,6 +633,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         pinch.delegate = self
         collectionView.addGestureRecognizer(pinch)
 
+        let canvasPan = UIPanGestureRecognizer(target: self, action: #selector(handleCanvasPan))
+        canvasPan.isEnabled = false
+        self.canvasPan = canvasPan
+        collectionView.addGestureRecognizer(canvasPan)
+
         // Half a second of holding still is how iOS says "select". `allowableMovement`
         // is what keeps that from swallowing an ordinary flick: past it this gesture
         // fails and the collection view's own pan takes over, so a press that was
@@ -622,11 +679,26 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // Reset each step so the next callback reports an incremental change rather
         // than the whole gesture again.
         gesture.scale = 1
+        // Nothing is re-measured and no row is laid out again: the scale is a
+        // transform on one view, which is what makes the magnification follow the
+        // fingers instead of jumping to a new size and leaving the reader somewhere
+        // else in the buffer.
+        applyCanvasTransform()
+    }
 
-        let target = renderedFontSize(base: baseFontSize)
-        guard target != fontSize else { return }
-        fontSize = target
-        remeasureRows()
+    /// Drags the magnified canvas.
+    ///
+    /// Enabled only while magnified. At the fit there is nothing to move, and the
+    /// drag belongs to the terminal's own scrolling.
+    @objc private func handleCanvasPan(_ gesture: UIPanGestureRecognizer) {
+        guard displayMode == .desktopDriven, zoom > 1.001 else { return }
+        guard gesture.state == .changed else { return }
+
+        let delta = gesture.translation(in: self)
+        gesture.setTranslation(.zero, in: self)
+        canvasOffset.x += delta.x
+        canvasOffset.y += delta.y
+        applyCanvasTransform()
     }
 
     // MARK: - Selection
