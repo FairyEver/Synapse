@@ -4,6 +4,7 @@ import {
   isSkillRepositoryCosConfigured,
   isDriveCosConfigured,
   isPlatformMediaCosConfigured,
+  isTencentAsrConfigured,
   loadEnv,
 } from "./env"
 
@@ -464,6 +465,37 @@ describe("loadEnv", () => {
 
     expect(env.driveCosSecretId).toBeUndefined()
     expect(isDriveCosConfigured(env)).toBe(false)
+  })
+
+  it("语音识别三项齐了才算配好", () => {
+    const configured = loadEnv({
+      ...baseEnv,
+      TENCENT_ASR_APP_ID: "1252371654",
+      TENCENT_ASR_SECRET_ID: "AKIDzzzz",
+      TENCENT_ASR_SECRET_KEY: "secret-key",
+    })
+    expect(isTencentAsrConfigured(configured)).toBe(true)
+
+    // 缺任何一项都当没配：宁可客户端隐藏麦克风入口，也不要签出一条连不上的 URL
+    // 让用户对着麦克风白说一段。
+    for (const missing of ["TENCENT_ASR_APP_ID", "TENCENT_ASR_SECRET_ID", "TENCENT_ASR_SECRET_KEY"]) {
+      const env = loadEnv({
+        ...baseEnv,
+        TENCENT_ASR_APP_ID: "1252371654",
+        TENCENT_ASR_SECRET_ID: "AKIDzzzz",
+        TENCENT_ASR_SECRET_KEY: "secret-key",
+        [missing]: "",
+      })
+      expect(isTencentAsrConfigured(env)).toBe(false)
+    }
+  })
+
+  it("语音识别没配时也是合法配置——这是可选能力", () => {
+    const env = loadEnv(baseEnv)
+    expect(isTencentAsrConfigured(env)).toBe(false)
+    // 引擎有默认值，不配也能起来；热词不配就是不传。
+    expect(env.tencentAsrEngineModelType).toBe("Hy-ASR-3.0-preview")
+    expect(env.tencentAsrHotwordList).toBeUndefined()
   })
 
   it("ignores legacy COS settings", () => {

@@ -132,6 +132,13 @@ const envSchema = z
     BACKUP_COS_SECRET_KEY: optionalEnvString,
     BACKUP_COS_BUCKET: optionalEnvString,
     BACKUP_COS_REGION: optionalEnvString,
+    // 语音识别：平台统一提供的能力，一把密钥一份配额给所有用户共用。三项齐了
+    // 才算配好，缺一项就当没配（客户端隐藏麦克风入口），不做部分启用。
+    TENCENT_ASR_APP_ID: optionalEnvString,
+    TENCENT_ASR_SECRET_ID: optionalEnvString,
+    TENCENT_ASR_SECRET_KEY: optionalEnvString,
+    TENCENT_ASR_ENGINE_MODEL_TYPE: optionalEnvString.default("Hy-ASR-3.0-preview"),
+    TENCENT_ASR_HOTWORD_LIST: optionalEnvString,
   })
   .superRefine((env, ctx) => {
     for (const group of cosConfigGroups) {
@@ -253,6 +260,12 @@ export interface ServerEnv {
   readonly backupCosSecretKey?: string
   readonly backupCosBucket?: string
   readonly backupCosRegion?: string
+  /** 语音识别。三项齐了才 enabled，见 `isTencentAsrConfigured`。 */
+  readonly tencentAsrAppId?: string
+  readonly tencentAsrSecretId?: string
+  readonly tencentAsrSecretKey?: string
+  readonly tencentAsrEngineModelType: string
+  readonly tencentAsrHotwordList?: string
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
@@ -300,7 +313,23 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     backupCosSecretKey: result.data.BACKUP_COS_SECRET_KEY,
     backupCosBucket: result.data.BACKUP_COS_BUCKET,
     backupCosRegion: result.data.BACKUP_COS_REGION,
+    tencentAsrAppId: result.data.TENCENT_ASR_APP_ID,
+    tencentAsrSecretId: result.data.TENCENT_ASR_SECRET_ID,
+    tencentAsrSecretKey: result.data.TENCENT_ASR_SECRET_KEY,
+    tencentAsrEngineModelType: result.data.TENCENT_ASR_ENGINE_MODEL_TYPE,
+    tencentAsrHotwordList: result.data.TENCENT_ASR_HOTWORD_LIST,
   }
+}
+
+/**
+ * 语音识别是否可用。
+ *
+ * 这是平台统一提供的能力，所以「能不能用」是服务端的部署事实，不是客户端的配置。
+ * 三项缺任何一项都当没配：宁可让客户端隐藏麦克风入口，也不要签出一条连不上的
+ * URL 让用户对着麦克风白说一段。
+ */
+export function isTencentAsrConfigured(env: ServerEnv): boolean {
+  return !!(env.tencentAsrAppId && env.tencentAsrSecretId && env.tencentAsrSecretKey)
 }
 
 export function isDriveCosConfigured(env: ServerEnv): boolean {

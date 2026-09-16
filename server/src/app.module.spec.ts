@@ -11,6 +11,7 @@ import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { OpenApiModule } from "./open-api/open-api.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { UpdateIntentModule } from "./update-intent/update-intent.module"
+import { VoiceModule } from "./voice/voice.module"
 
 describe("AppModule", () => {
   it("registers audit logging at the application level", () => {
@@ -26,6 +27,7 @@ describe("AppModule", () => {
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([UpdateIntentModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([ApiKeyModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([OpenApiModule]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([VoiceModule]))
   })
 
   it("does not assemble retired team or invitation modules", () => {

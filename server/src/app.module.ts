@@ -24,6 +24,7 @@ import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
 import { WebhookModule } from "./webhooks/webhook.module"
 import { UpdateIntentModule } from "./update-intent/update-intent.module"
+import { VoiceModule } from "./voice/voice.module"
 import { DEFAULT_API_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_TTL_MS } from "./common/rate-limits"
 
 type RequestLogObject = {
@@ -91,6 +92,7 @@ type RequestLogObject = {
     BackupModule,
     ProblemFeedbackModule,
     UpdateIntentModule,
+    VoiceModule,
     HealthModule,
   ],
   providers: [
