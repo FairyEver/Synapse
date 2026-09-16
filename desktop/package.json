@@ -9,7 +9,7 @@
   "main": "dist-electron/electron/main.js",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && node scripts/build/generate-definitions-registry.mjs && node scripts/dev/dev.mjs",
+    "dev": "pnpm --filter @synapse/shared run build && SYNAPSE_DESKTOP_PUBLIC_APP_URL=\"${SYNAPSE_DESKTOP_PUBLIC_APP_URL:-http://localhost:3000}\" pnpm generate:deployment-config && node scripts/build/generate-definitions-registry.mjs && node scripts/dev/dev.mjs",
     "dev:renderer": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && node scripts/build/generate-definitions-registry.mjs && node scripts/dev/dev-renderer.mjs",
     "dev:electron:build": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && node scripts/build/generate-definitions-registry.mjs && node scripts/build/generate-ipc.mjs && concurrently --kill-others-on-fail \"tsc -p tsconfig.electron.json --watch --preserveWatchOutput\" \"pnpm build:preload --watch\"",
     "dev:electron:app": "node scripts/dev/dev-electron-app.mjs",

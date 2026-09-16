@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
@@ -54,14 +54,65 @@ function parseArgs(args) {
   return options
 }
 
-function resolvePublicAppUrl(env, requirePublicAppUrl) {
+/**
+ * Reads the public app URL out of a config this script generated earlier.
+ *
+ * The generator runs from ordinary rebuilds and test runs, so a machine that already has a
+ * deployment config must not have it repointed just because that particular shell happens to
+ * lack the variable. The previous value is the source of truth for "the environment this
+ * checkout is already configured for".
+ */
+async function readExistingPublicAppUrl(outputPaths) {
+  for (const outputPath of outputPaths) {
+    let contents
+    try {
+      contents = await readFile(outputPath, "utf8")
+    } catch {
+      continue
+    }
+    const match = /publicAppUrl:\s*("(?:[^"\\]|\\.)*")/u.exec(contents)
+    if (!match) continue
+    try {
+      const value = JSON.parse(match[1])
+      if (typeof value !== "string") continue
+      return normalizeAndValidatePublicAppUrl(value)
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+function resolvePublicAppUrl(env, requirePublicAppUrl, existingPublicAppUrl) {
   const configured = env.SYNAPSE_DESKTOP_PUBLIC_APP_URL?.trim()
-  if (configured) return normalizeAndValidatePublicAppUrl(configured)
+  if (configured) return { publicAppUrl: normalizeAndValidatePublicAppUrl(configured), source: "environment" }
   if (requirePublicAppUrl) {
     throw new Error("SYNAPSE_DESKTOP_PUBLIC_APP_URL is required for desktop release builds.")
   }
-  if (env.CI) return ciPublicAppUrl
-  return developmentPublicAppUrl
+  if (env.CI) return { publicAppUrl: ciPublicAppUrl, source: "ci" }
+  if (existingPublicAppUrl) return { publicAppUrl: existingPublicAppUrl, source: "existing" }
+  return { publicAppUrl: developmentPublicAppUrl, source: "development" }
+}
+
+/** Never change the environment quietly: say what was kept, or why localhost was assumed. */
+function reportResolution({ publicAppUrl, source }) {
+  if (source === "existing") {
+    console.log(
+      `SYNAPSE_DESKTOP_PUBLIC_APP_URL is not set; keeping the existing deployment config (${publicAppUrl}).\n`
+      + "Set SYNAPSE_DESKTOP_PUBLIC_APP_URL explicitly to point the desktop app at another environment.",
+    )
+    return
+  }
+  if (source !== "development") return
+  console.warn([
+    "",
+    "SYNAPSE_DESKTOP_PUBLIC_APP_URL is not set and no deployment config exists yet.",
+    `Falling back to ${developmentPublicAppUrl}.`,
+    "The desktop app will only reach locally running services and will not be reachable from other devices.",
+    "Set the variable explicitly, or start the stack with `pnpm dev:prod`:",
+    `  SYNAPSE_DESKTOP_PUBLIC_APP_URL=https://synapse.d2.pub pnpm generate:deployment-config`,
+    "",
+  ].join("\n"))
 }
 
 function normalizeAndValidatePublicAppUrl(value) {
@@ -97,14 +148,16 @@ export const SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG = {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
-  const publicAppUrl = resolvePublicAppUrl(process.env, options.requirePublicAppUrl)
-  const output = renderConfig(publicAppUrl)
   const outputPaths = Array.from(new Set([options.outputPath, options.rendererOutputPath].filter(Boolean)))
+  const existingPublicAppUrl = await readExistingPublicAppUrl(outputPaths)
+  const resolved = resolvePublicAppUrl(process.env, options.requirePublicAppUrl, existingPublicAppUrl)
+  const output = renderConfig(resolved.publicAppUrl)
   await Promise.all(outputPaths.map(async (outputPath) => {
     await mkdir(path.dirname(outputPath), { recursive: true })
     await writeFile(outputPath, output, "utf8")
   }))
   console.log(`generated ${outputPaths.map((outputPath) => path.relative(process.cwd(), outputPath)).join(", ")}`)
+  reportResolution(resolved)
 }
 
 main().catch((error) => {
