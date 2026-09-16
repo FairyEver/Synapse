@@ -18,6 +18,8 @@
     "kb:sync-template": "node scripts/knowledge-base/sync-template.mjs",
     "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
     "desktop:release:mac": "pnpm --filter @synapse/desktop run release:mac",
+    "mobile:build": "SynapseMobile/scripts/release-ios.sh",
+    "mobile:release": "SynapseMobile/scripts/release-ios.sh --upload",
     "auto": "pnpm --filter @synapse/auto run start",
     "dev:shadcn-admin": "pnpm --filter @synapse/shadcn-admin run dev"
   }
