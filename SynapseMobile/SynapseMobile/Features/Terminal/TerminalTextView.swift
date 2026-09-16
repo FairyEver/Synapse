@@ -41,14 +41,22 @@ struct TerminalTextView: UIViewRepresentable {
 
 final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetching {
     private var collectionView: UICollectionView!
-    /// Identified by row id rather than by `DisplayRow` itself. The project
+    /// Identified by a `String` key rather than by `DisplayRow` itself. The project
     /// defaults to `MainActor` isolation, which makes a custom type's `Hashable`
     /// conformance unusable where the data source needs a `Sendable` identifier;
     /// a `String` sidesteps that and is a natural key anyway.
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
-    private var rowsById: [String: DisplayRow] = [:]
+    private var rowsByKey: [String: DisplayRow] = [:]
     private var fontSize: CGFloat = 12
-    private var appliedIds: [String] = []
+    /// The identities last handed to the data source. A row that holds the cursor
+    /// has the cursor woven into its identity, so a cursor that moves — or blinks —
+    /// is a change the diff can see for itself. That is what keeps this view off
+    /// `reloadItems`, which asserts whenever the view and the data source disagree
+    /// about which items exist.
+    private var appliedKeys: [String] = []
+    /// What those identities stand for, kept so the cursor can be re-keyed on a
+    /// blink without waiting for new rows to arrive.
+    private var appliedRows: [DisplayRow] = []
     private var isPinnedToBottom = true
     private var atHistoryFloor = false
     private var requestsInFlight = false
@@ -83,8 +91,12 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         fontSize = size
         collectionView.collectionViewLayout.invalidateLayout()
         // Row height depends on the font, so every visible cell must re-measure.
-        appliedIds = []
-        rowsById.removeAll()
+        // Every row is re-keyed from scratch below, so the cursor is drawn solid
+        // rather than left at whatever phase the blink was in.
+        appliedKeys = []
+        appliedRows = []
+        rowsByKey.removeAll()
+        cursorPhaseOn = true
         reportColumnsIfNeeded()
     }
 
@@ -116,38 +128,32 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     }
 
     func apply(rows: [DisplayRow], atHistoryFloor: Bool, cursor: TerminalStore.CursorPosition?) {
-        let ids = rows.map(\.id)
+        let keys = identities(for: rows, cursor: cursor)
         let floorChanged = atHistoryFloor != self.atHistoryFloor
-        let rowsChanged = ids != appliedIds
-        let cursorChanged = cursor != appliedCursor
-        // Moving the cursor changes no row's identity, so it has to take part in
-        // the change check — otherwise the new position would never be drawn.
-        guard rowsChanged || floorChanged || cursorChanged else { return }
-        let previousCursor = appliedCursor
+        let rowsChanged = keys != appliedKeys
+        guard rowsChanged || floorChanged else { return }
+        let cursorMoved = cursor != appliedCursor
+        // A cursor that has just landed is drawn solid, whatever phase the blink
+        // was in — so the phase is settled *before* the rows are keyed. Settling it
+        // afterwards would leave a freshly typed cursor invisible until the next
+        // tick, which reads as the cursor vanishing mid-keystroke.
+        if cursorMoved { cursorPhaseOn = true }
         appliedCursor = cursor
         self.atHistoryFloor = atHistoryFloor
         let wasAtBottom = isPinnedToBottom
-        let previousFirstId = appliedIds.first
+        let previousFirstId = appliedRows.first?.id
 
         // Loading a page inserts rows *above* the viewport. Without compensating,
         // the content jumps by the height of the inserted page every time.
         let insertedAbove: Int
-        if let previousFirstId, let newIndex = ids.firstIndex(of: previousFirstId) {
+        if let previousFirstId, let newIndex = rows.firstIndex(where: { $0.id == previousFirstId }) {
             insertedAbove = newIndex
         } else {
             insertedAbove = 0
         }
         let offsetBefore = collectionView.contentOffset.y
 
-        appliedIds = ids
-        rowsById = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
-
-        var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
-        snapshot.appendSections([0])
-        snapshot.appendItems(ids, toSection: 0)
-        // No animation: frames arrive far faster than an animation could finish,
-        // and animating each one would make scrolling feel like it is lagging.
-        dataSource.apply(snapshot, animatingDifferences: false)
+        push(rows: rows, keys: keys)
 
         if insertedAbove > 0 {
             collectionView.contentOffset.y = offsetBefore
@@ -158,12 +164,50 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         if floorChanged {
             collectionView.collectionViewLayout.invalidateLayout()
         }
-        if cursorChanged {
-            // The snapshot only reconfigures rows whose identity changed, and the
-            // cursor moves without changing any. Reload the two rows it left and
-            // arrived at so the block is erased from one and drawn on the other.
-            reloadRows(at: [previousCursor?.rowIndex, cursor?.rowIndex])
-            updateBlink()
+        // The blink restarts with every move, so the block is solid exactly when
+        // the cursor lands and only then begins to blink.
+        if cursorMoved {
+            startBlinkTimer()
+        }
+    }
+
+    /// Hands `rows` to the data source under `keys`.
+    ///
+    /// The cursor is part of those identities rather than a reload performed after
+    /// the fact, so every change — output, a cursor move, a blink — reaches the
+    /// collection view through the one mechanism that keeps the two in step.
+    private func push(rows: [DisplayRow], keys: [String]) {
+        appliedKeys = keys
+        appliedRows = rows
+        rowsByKey = Dictionary(uniqueKeysWithValues: zip(keys, rows))
+
+        var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
+        snapshot.appendSections([0])
+        snapshot.appendItems(keys, toSection: 0)
+        // No animation: frames arrive far faster than an animation could finish,
+        // and animating each one would make scrolling feel like it is lagging.
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    /// The identity each row is handed to the data source under.
+    ///
+    /// Normally the row's own id. The row the cursor sits on gets the cursor woven
+    /// in, which makes moving it a change the diff reports instead of one this view
+    /// has to force — the two rows involved are the only ones that need rebuilding.
+    private func identities(for rows: [DisplayRow], cursor: TerminalStore.CursorPosition?) -> [String] {
+        Self.identities(for: rows, cursor: cursor, cursorVisible: cursorPhaseOn)
+    }
+
+    /// Static and parameterised on the blink phase so both halves of the property
+    /// below can be asserted without a collection view.
+    static func identities(
+        for rows: [DisplayRow],
+        cursor: TerminalStore.CursorPosition?,
+        cursorVisible: Bool
+    ) -> [String] {
+        rows.enumerated().map { index, row in
+            guard cursorVisible, let cursor, cursor.rowIndex == index else { return row.id }
+            return "\(row.id)#cursor:\(cursor.column)"
         }
     }
 
@@ -174,14 +218,26 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     override func didMoveToWindow() {
         super.didMoveToWindow()
         // A timer that outlives the screen would keep waking the app for nothing.
-        if window == nil { stopBlinking() } else { updateBlink() }
+        guard window != nil else {
+            stopBlinking()
+            return
+        }
+        // Leaving and coming back starts the cursor solid again. Only a blink that
+        // was caught mid-off has anything to redraw, so the ordinary appearance
+        // pushes nothing at all.
+        let wasHidden = !cursorPhaseOn
+        cursorPhaseOn = true
+        if wasHidden {
+            push(rows: appliedRows, keys: identities(for: appliedRows, cursor: appliedCursor))
+        }
+        startBlinkTimer()
     }
 
-    /// Blinks the cursor. With Reduce Motion on it stays solid instead — the block
-    /// is still visible, it just does not move.
-    private func updateBlink() {
+    /// Blinks the cursor. With Reduce Motion on the block simply stays solid —
+    /// visible, it just does not move — which is why this is the only place that
+    /// decides whether a timer is needed at all.
+    private func startBlinkTimer() {
         stopBlinking()
-        cursorPhaseOn = true
         guard appliedCursor != nil, !UIAccessibility.isReduceMotionEnabled else { return }
         blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -196,20 +252,14 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     }
 
     private func advanceCursorPhase() {
-        guard appliedCursor != nil else {
+        guard let cursor = appliedCursor, !appliedRows.isEmpty else {
             stopBlinking()
             return
         }
         cursorPhaseOn.toggle()
-        reloadRows(at: [appliedCursor?.rowIndex])
-    }
-
-    private func reloadRows(at indices: [Int?]) {
-        let paths = Set(indices.compactMap { $0 })
-            .filter { $0 >= 0 && $0 < appliedIds.count }
-            .map { IndexPath(item: $0, section: 0) }
-        guard !paths.isEmpty else { return }
-        collectionView.reloadItems(at: paths)
+        // The row's identity carries the phase, so this is an ordinary diff of the
+        // rows already on screen — no reload, and no new rows to lay out.
+        push(rows: appliedRows, keys: identities(for: appliedRows, cursor: cursor))
     }
 
     /// The column the cursor occupies on a given row, or nil when it is elsewhere
@@ -220,8 +270,8 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     }
 
     func scrollToBottom() {
-        guard !appliedIds.isEmpty else { return }
-        let last = IndexPath(item: appliedIds.count - 1, section: 0)
+        guard !appliedKeys.isEmpty else { return }
+        let last = IndexPath(item: appliedKeys.count - 1, section: 0)
         collectionView.scrollToItem(at: last, at: .bottom, animated: false)
         isPinnedToBottom = true
     }
@@ -258,12 +308,12 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
 
         dataSource = UICollectionViewDiffableDataSource<Int, String>(
             collectionView: collectionView
-        ) { [weak self] collectionView, indexPath, rowId in
+        ) { [weak self] collectionView, indexPath, key in
             let cell = collectionView.dequeueReusableCell(
                 withReuseIdentifier: TerminalRowCell.reuseIdentifier,
                 for: indexPath
             ) as! TerminalRowCell
-            if let row = self?.rowsById[rowId] {
+            if let row = self?.rowsByKey[key] {
                 cell.configure(
                     row: row,
                     fontSize: self?.fontSize ?? 14,
@@ -319,7 +369,7 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
 
         // Reaching the top asks for the next page. One request at a time, and
         // never past the point the desktop has already said is the end.
-        if scrollView.contentOffset.y < 240, !requestsInFlight, !atHistoryFloor, !appliedIds.isEmpty {
+        if scrollView.contentOffset.y < 240, !requestsInFlight, !atHistoryFloor, !appliedKeys.isEmpty {
             onRequestHistory?()
         }
     }
