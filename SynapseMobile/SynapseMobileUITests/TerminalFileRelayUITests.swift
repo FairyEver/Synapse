@@ -96,59 +96,32 @@ final class TerminalFileRelayUITests: XCTestCase {
         XCTAssertTrue(terminal.waitForExistence(timeout: 20), "the terminal never appeared")
     }
 
-    /// The picker is the system's, and its furniture differs between iOS versions,
-    /// so this looks for the confirm button by any of the names it has had rather
-    /// than by one — and falls back to where it always is.
-    private func pickFirstPhoto(_ app: XCUIApplication) throws {
-        guard let photo = firstPhotoThumbnail(app, timeout: 25) else {
-            XCTFail("no photo thumbnail in the picker; seed the library with `simctl addmedia`")
-            return
-        }
-        photo.tap()
-
-        for label in ["添加", "Add", "完成", "Done"] {
-            let confirm = app.buttons[label]
-            if confirm.waitForExistence(timeout: 2), confirm.isHittable {
-                confirm.tap()
-                return
-            }
-        }
-        // The confirm control is a bare checkmark with no name of its own on this
-        // version, which is why the position is the fallback rather than the other
-        // way round: it is always the top-right of the sheet.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.17)).tap()
-
-        XCTAssertTrue(
-            waitForPickerToClose(app, timeout: 15),
-            "a photo was selected but the picker never dismissed"
-        )
-    }
-
-    /// The photo grid, not the banner above it.
+    /// Taps a photo and confirms, touching the picker's tree as little as possible.
     ///
-    /// The "private access" notice carries an app icon that is also an image, and it
-    /// comes first in the tree — tapping it selects nothing and the picker sits
-    /// there. Thumbnails are the large images; the icon is a small one.
-    private func firstPhotoThumbnail(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
-        let deadline = Date().addingTimeInterval(timeout)
-        repeat {
-            if let first = photoThumbnails(app).first { return first }
-            usleep(300_000)
-        } while Date() < deadline
-        return nil
-    }
+    /// The picker holds the user's whole photo library, so its accessibility tree is
+    /// enormous and every query against it costs a full snapshot of that tree.
+    /// Asking it for "all the images" — which is how the first version of this looked
+    /// for a thumbnail rather than the notice's icon — was slow enough to stall the
+    /// test outright on a library of any size. One `firstMatch` wait to know the
+    /// sheet is up, then the points a person would actually press.
+    private func pickFirstPhoto(_ app: XCUIApplication) throws {
+        XCTAssertTrue(
+            app.images.firstMatch.waitForExistence(timeout: 25),
+            "the picker never showed any photos; seed the library with `simctl addmedia`"
+        )
 
-    private func photoThumbnails(_ app: XCUIApplication) -> [XCUIElement] {
-        app.images.allElementsBoundByIndex.filter { $0.frame.width > 90 && $0.frame.height > 90 }
-    }
+        // The first tile of the grid.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.45)).tap()
 
-    private func waitForPickerToClose(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        repeat {
-            if photoThumbnails(app).isEmpty { return true }
-            usleep(300_000)
-        } while Date() < deadline
-        return false
+        let confirm = app.buttons["添加"]
+        if confirm.exists, confirm.isHittable {
+            confirm.tap()
+        } else {
+            // The confirm control is a bare checkmark with no name of its own on this
+            // version, which is why the position is the fallback: it is always the
+            // top-right of the sheet.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.90, dy: 0.17)).tap()
+        }
     }
 
     private func signIn(_ app: XCUIApplication) {
