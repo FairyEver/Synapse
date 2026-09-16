@@ -121,7 +121,8 @@ async function normalizeSingleResourceParam(
   const ref = normalizeResourceInput(param, raw)
   if ("error" in ref) return ref
   if (ref.value.kind !== "local_path") {
-    return paramError(param, `暂不支持 ${ref.value.kind} ${param.type === "file" ? "文件" : "文件夹"}引用`)
+    // `paramError` already prefixes `参数「<name>」`, so the message must not name the param.
+    return paramError(param, `仅支持本地路径的${param.type === "file" ? "文件" : "文件夹"}引用`)
   }
   const statResult = await statLocalResource(param, ref.value.path)
   if ("error" in statResult) return statResult
@@ -145,7 +146,7 @@ async function normalizeMultipleResourceParam(
     const ref = normalizeResourceInput(param, item, index)
     if ("error" in ref) return ref
     if (ref.value.kind !== "local_path") {
-      return paramItemError(param, index, `暂不支持 ${ref.value.kind} ${param.type === "file" ? "文件" : "文件夹"}引用`)
+      return paramItemError(param, index, `仅支持本地路径的${param.type === "file" ? "文件" : "文件夹"}引用`)
     }
     const statResult = await statLocalResource(param, ref.value.path, index)
     if ("error" in statResult) return statResult

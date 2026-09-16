@@ -30,16 +30,20 @@ export const AGENT_PERMISSION_TIMEOUT_MESSAGE = "等待用户确认超时，已�
 export const AGENT_USER_QUESTION_TIMEOUT_MESSAGE = "等待用户回复超时，已停止本次操作。"
 export const AGENT_PERMISSION_NOT_PENDING_MESSAGE = "该权限请求已不在等待中。"
 export const AGENT_PERMISSION_SESSION_MISMATCH_MESSAGE = "该权限请求不属于当前会话。"
-export const AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE = "普通工具权限不支持修改入参后批准。"
+export const AGENT_PERMISSION_UPDATED_INPUT_UNSUPPORTED_MESSAGE = "普通工具权限不支持修改参数后批准。"
 export const AGENT_ASK_USER_QUESTION_ANSWERS_REQUIRED_MESSAGE = "继续前需要先提供用户回复。"
 export const AGENT_ASK_USER_QUESTION_ALL_ANSWERS_REQUIRED_MESSAGE = "继续前需要回答所有问题。"
 export const AGENT_ASK_USER_QUESTION_QUESTIONS_REQUIRED_MESSAGE = "继续前需要保留原始问题。"
 export const AGENT_USER_QUESTION_PERSISTENCE_FAILED_MESSAGE = "用户回复保存失败，请重试。"
 export const AGENT_INVALID_ASK_USER_QUESTION_INPUT_MESSAGE = "用户确认请求格式无效，已停止本次操作。"
+// The first two are handed to the SDK as the reason a permission was denied, so they are read
+// by the model, not by a user. The last two become the turn's error event and are shown to
+// the user, which is why only they name the situation in the product's own words rather than
+// the internal term for this session kind.
 export const AGENT_RELAY_PERMISSION_DENY_MESSAGE = "中继会话不能批准工具权限。"
 export const AGENT_RELAY_QUESTION_DENY_MESSAGE = "中继会话不能代替用户回答问题。"
-export const AGENT_RELAY_PERMISSION_ERROR_MESSAGE = "中继会话请求了工具权限，已停止本次操作。"
-export const AGENT_RELAY_QUESTION_ERROR_MESSAGE = "中继会话请求了用户回复，已停止本次操作。"
+export const AGENT_RELAY_PERMISSION_ERROR_MESSAGE = "连接器发起的运行无法批准工具权限，已停止本次操作。"
+export const AGENT_RELAY_QUESTION_ERROR_MESSAGE = "连接器发起的运行无法回答提问，已停止本次操作。"
 
 const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
 const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
@@ -157,7 +161,17 @@ export function webFetchPreflightFailureMeta(diagnostic: string | undefined): Re
 }
 
 export function scheduledTimeoutMessage(timeoutMs: number | undefined): string {
-  return `执行超过 ${timeoutMs ?? 0}ms，已超时停止。`
+  return `执行超过 ${formatTimeoutDuration(timeoutMs ?? 0)}，已超时停止。`
+}
+
+/**
+ * Milliseconds are a developer's unit. The rounding is floored at one so a short budget reads
+ * as "1 秒" rather than "0 秒" — the number is there to tell the user how long the run was
+ * allowed to take, and "0" says the opposite of what happened.
+ */
+function formatTimeoutDuration(timeoutMs: number): string {
+  if (timeoutMs < 60_000) return `${Math.max(1, Math.round(timeoutMs / 1_000))} 秒`
+  return `${Math.max(1, Math.round(timeoutMs / 60_000))} 分钟`
 }
 
 export function conversationNotFoundMessage(conversationId: string): string {

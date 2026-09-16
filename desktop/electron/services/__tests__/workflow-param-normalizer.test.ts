@@ -123,7 +123,7 @@ describe("normalizeWorkflowRunParams", () => {
       input: { kind: "drive", entryType: "file", id: "drive-file-1" },
     })
 
-    expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「input」暂不支持 drive 文件引用" })
+    expect(result.errors[0]).toMatchObject({ type: "invalid_config", message: "参数「input」仅支持本地路径的文件引用" })
   })
 
   it("normalizes ordered multi-file inputs and serializes paths as JSON", async () => {

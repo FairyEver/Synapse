@@ -392,7 +392,10 @@ describe("GitModule repository list", () => {
     }))
     await renderGitModule(roots)
 
-    expect(document.body.textContent).toContain("当前系统暂不支持图形化引导")
+    expect(document.body.textContent).toContain("需手动安装")
+    expect(document.body.textContent).toContain("请在系统中安装 Git 后重新检测。")
+    // Still no raw package-manager command here: this panel offers the guided download and
+    // the diagnostics copy, and the install hint is shown by the environment panel instead.
     expect(document.body.textContent).not.toContain("sudo apt install git")
     expect(countButtons("Git for Windows")).toBe(0)
 

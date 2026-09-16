@@ -3344,7 +3344,7 @@ describe("ConversationRouter", () => {
 
     expect(result).toMatchObject({
       timedOut: false,
-      error: "中继会话请求了工具权限，已停止本次操作。",
+      error: "连接器发起的运行无法批准工具权限，已停止本次操作。",
     })
     expect(result.events.map((event) => event.type)).toEqual(["permissionRequest", "error"])
     expect(events.filter((event) => event.type === "error")).toEqual([
@@ -3352,7 +3352,7 @@ describe("ConversationRouter", () => {
         payload: expect.objectContaining({
           event: expect.objectContaining({
             type: "error",
-            message: "中继会话请求了工具权限，已停止本次操作。",
+            message: "连接器发起的运行无法批准工具权限，已停止本次操作。",
           }),
         }),
       }),
@@ -3367,7 +3367,7 @@ describe("ConversationRouter", () => {
       }),
       expect.objectContaining({
         role: "system",
-        content: "中继会话请求了工具权限，已停止本次操作。",
+        content: "连接器发起的运行无法批准工具权限，已停止本次操作。",
         metadata: expect.objectContaining({ agentEventType: "error" }),
       }),
     ])
@@ -3406,11 +3406,11 @@ describe("ConversationRouter", () => {
 
     expect(result).toMatchObject({
       timedOut: false,
-      error: "中继会话请求了用户回复，已停止本次操作。",
+      error: "连接器发起的运行无法回答提问，已停止本次操作。",
     })
     expect(persisted.map((entry) => entry.eventType)).toEqual(["permissionRequest", "error"])
     expect(persisted[1]?.payload).toEqual(expect.objectContaining({
-      message: "中继会话请求了用户回复，已停止本次操作。",
+      message: "连接器发起的运行无法回答提问，已停止本次操作。",
     }))
     expect(saved?.history.find((entry) => entry.metadata?.requestId === "question-1")?.metadata)
       .toMatchObject({ userQuestionResolution: { status: "skipped" } })

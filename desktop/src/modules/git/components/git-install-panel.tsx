@@ -48,7 +48,7 @@ function downloadTarget(platform: string | null | undefined): DownloadTarget | n
 function installState(environment: SynapseGitEnvironmentState | null): string {
   if (!environment) return "检测中"
   if (environment.gitAvailable) return "已安装"
-  if (environment.platform === "linux") return "当前系统暂不支持图形化引导"
+  if (environment.platform === "linux") return "需手动安装"
   return "未检测到"
 }
 
@@ -164,7 +164,7 @@ export function GitInstallPanel({
             {!environment?.gitAvailable && environment?.platform === "linux" ? (
               <Alert>
                 <AlertTitle>Linux</AlertTitle>
-                <AlertDescription>当前系统暂不支持图形化引导</AlertDescription>
+                <AlertDescription>请在系统中安装 Git 后重新检测。</AlertDescription>
               </Alert>
             ) : null}
 
