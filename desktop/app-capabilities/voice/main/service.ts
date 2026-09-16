@@ -37,14 +37,28 @@ export class VoiceUnavailableError extends Error {
  * 带上、替渲染进程去问一条签好的 URL，再把响应原样交回去。密钥从头到尾没有到过
  * 这台机器。
  */
+/**
+ * 可用性缓存时长。
+ *
+ * 渲染进程每次挂载输入区都会问一次（切换对话就会重新挂载），而这个答案只随平台
+ * 配置变化。没有缓存的话，切一次对话就是一次多余请求。
+ */
+const STATUS_CACHE_MS = 60_000
+
 export function createVoiceService(deps: VoiceServiceDeps) {
+  let cached: { readonly at: number; readonly status: VoiceStatus } | null = null
+
   async function getStatus(): Promise<VoiceStatus> {
+    if (cached && Date.now() - cached.at < STATUS_CACHE_MS) return cached.status
     try {
       const response = await deps.fetchAuthenticated("/voice/asr", {}, "读取语音识别状态失败。")
       const body = await response.json() as { available?: unknown }
-      return { available: body.available === true }
+      const status: VoiceStatus = { available: body.available === true }
+      cached = { at: Date.now(), status }
+      return status
     } catch (error) {
       // 服务端不可达时按"不可用"处理：入口不出现，比出现一个点了必然失败的按钮好。
+      // 不缓存失败：网络恢复后应该立刻能拿到真话，而不是再等一个 TTL。
       deps.logger.warn("Failed to read voice availability.", {
         errorName: error instanceof Error ? error.name : typeof error,
       })

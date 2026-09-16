@@ -32,6 +32,21 @@ describe("desktop voice service", () => {
     await expect(service.getStatus()).resolves.toEqual({ available: false })
   })
 
+  it("可用性有缓存，切对话不会每次都去问一遍", async () => {
+    const { service, fetchAuthenticated } = createService([jsonResponse({ available: true })])
+    await service.getStatus()
+    await service.getStatus()
+    await service.getStatus()
+    expect(fetchAuthenticated).toHaveBeenCalledTimes(1)
+  })
+
+  it("读失败不进缓存：网络恢复后要能立刻拿到真话", async () => {
+    const { service, fetchAuthenticated } = createService([new Error("offline"), jsonResponse({ available: true })])
+    await expect(service.getStatus()).resolves.toEqual({ available: false })
+    await expect(service.getStatus()).resolves.toEqual({ available: true })
+    expect(fetchAuthenticated).toHaveBeenCalledTimes(2)
+  })
+
   it("服务端返回的形状不对时也算不可用", async () => {
     const { service } = createService([jsonResponse({ available: "yes" })])
     await expect(service.getStatus()).resolves.toEqual({ available: false })
