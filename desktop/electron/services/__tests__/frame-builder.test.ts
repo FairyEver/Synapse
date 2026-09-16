@@ -14,7 +14,9 @@ function plain(text: string): TerminalStyledLine {
   return { text }
 }
 
-function styled(text: string, overrides: Partial<TerminalStyledLine["runs"] extends (infer R)[] | undefined ? R : never> = {}) {
+// `runs` is a readonly array, so the conditional has to match the readonly form
+// too — `(infer R)[]` alone never matches it and collapses the parameter to `never`.
+function styled(text: string, overrides: Partial<TerminalStyledLine["runs"] extends readonly (infer R)[] | undefined ? R : never> = {}) {
   return {
     text,
     runs: [{
