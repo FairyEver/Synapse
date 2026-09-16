@@ -104,7 +104,7 @@ function GlobalOverview({
   if (!result.rulesSupported) {
     return (
       <p className="text-sm text-muted-foreground">
-        {result.editorLabel} 暂不支持全局规则目录
+        {result.editorLabel} 仅支持项目级规则
       </p>
     )
   }

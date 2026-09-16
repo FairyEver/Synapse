@@ -5,8 +5,23 @@ import type {
   SynapseEditorResolvedTarget,
   SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
+import { getContentTypeDefinition } from "../../src/config/content-types"
+import type { SynapseContentType } from "../../src/types/content"
 import { editorAdapterById, editorAdapters } from "./editor-adapters"
 import { createUnavailableTarget, createUnsupportedTarget } from "./editor-adapters/utils"
+
+/**
+ * The user-facing name of what an adapter does support, for the message that says so.
+ *
+ * The message used to name what it did *not* support, and to name it with the raw
+ * `contentType` value — so a user reading it saw an internal identifier for something they
+ * could not do, instead of the things they could.
+ */
+function supportedContentTypeLabels(adapter: { readonly supportedContentTypes: readonly SynapseContentType[] }): string {
+  return adapter.supportedContentTypes
+    .map((contentType) => getContentTypeDefinition(contentType).pluralLabel)
+    .join("、")
+}
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -79,7 +94,7 @@ class EditorAdapterService {
       return createUnsupportedTarget({
         adapter,
         contentType: payload.contentType,
-        message: `${adapter.label} 暂不支持 ${payload.contentType} 类型。`,
+        message: `${adapter.label} 仅支持${supportedContentTypeLabels(adapter)}。`,
         scope: payload.scope,
       })
     }

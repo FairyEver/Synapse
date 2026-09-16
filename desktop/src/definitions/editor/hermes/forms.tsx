@@ -35,7 +35,7 @@ function HermesRuleProjectInstallForm({
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">SOUL.md 是 Hermes 的人格文件</p>
               <p className="text-sm text-muted-foreground">
-                SOUL.md 专门定义 Hermes 的语气和交互风格，不是为代码规则设计的。将规则安装到此处会与人格内容混合。建议改用"项目"范围，安装到项目的 .hermes.md 文件。
+                将规则安装到这里会与人格内容混合，建议改用「项目」范围，安装到项目的 .hermes.md 文件。
               </p>
               <p className="text-xs text-muted-foreground">超过 20,000 字符时内容会被截断。</p>
             </div>

@@ -299,7 +299,7 @@ function ChoicesEditorDialog({
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
           {usageError ? (
-            <p className="text-xs text-destructive">选项使用量加载失败，无法查看使用情况。保存后端会验证删除操作。</p>
+            <p className="text-xs text-destructive">选项使用量加载失败，无法查看使用情况。</p>
           ) : null}
 
           <p className="text-xs text-muted-foreground">

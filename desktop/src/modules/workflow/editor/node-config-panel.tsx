@@ -162,7 +162,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
             <div className="p-3">
               {(() => {
                 const PanelComponent = getPanel(node.type)
-                if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>该节点类型暂不支持配置编辑</p></div>
+                if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>此节点没有可配置项</p></div>
                 return (
                   <>
                     {validationItems.length > 0 && (

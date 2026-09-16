@@ -78,6 +78,6 @@ describe("WorkBuddy Skill installation", () => {
   it("does not expose Rule scanning or installation", async () => {
     await expect(scanStrategy.scanRules("/unused")).resolves.toEqual([])
     await expect(installStrategy.prepareRuleFileContent({} as never))
-      .rejects.toThrow("WorkBuddy 暂不支持 Rule 安装。")
+      .rejects.toThrow("WorkBuddy 仅支持 Skill 安装。")
   })
 })
