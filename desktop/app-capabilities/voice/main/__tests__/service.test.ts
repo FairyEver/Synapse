@@ -82,6 +82,20 @@ describe("voice service", () => {
     await expect(service.signSession({})).rejects.toBeInstanceOf(VoiceNotConfiguredError)
   })
 
+  /**
+   * 手机拿不到"这台电脑配没配"，只能从这次失败的 code 里知道。`classifyError` 认
+   * 的就是 error 上的字符串 `code`，所以这个值本身是一份对外契约 —— 改了它，手机
+   * 那边就会退化成一句"操作没有完成"。
+   */
+  it("未配置的错误带一个手机认得出来的 code", async () => {
+    const { service } = createService(null, {})
+    const error = await service.signSession({}).catch((cause: unknown) => cause)
+    expect(error).toBeInstanceOf(VoiceNotConfiguredError)
+    expect((error as VoiceNotConfiguredError).code).toBe("voice_not_configured")
+    // 文案也要能直接给用户看，不能是给开发者看的。
+    expect((error as Error).message).toContain("语音识别")
+  })
+
   it("签名用的是设置里的引擎与热词", async () => {
     const { service } = createService({ ...configured }, { [SECRET_KEY_NAME]: "secret" })
     const signed = await service.signSession({ voiceId: "voice-1" })
