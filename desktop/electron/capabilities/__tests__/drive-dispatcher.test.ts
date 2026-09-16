@@ -151,16 +151,20 @@ describe("createDriveCapabilityDispatcher", () => {
     expect(buildDriveTools().some((tool) => tool.name.startsWith("drive_"))).toBe(false)
   })
 
-  it("lists Drive items under root by default", async () => {
-    const page = { items: [driveItem({ id: "item-1", name: "a.txt" })], page: drivePage() }
+  it("lists Drive items under root by default without the derived display fields", async () => {
+    const item = driveItem({ id: "item-1", name: "a.txt" })
+    const page = { items: [item], page: drivePage() }
     const accountService = createAccountService({
       listDriveItemsPage: vi.fn(async () => page),
     })
     const dispatcher = createDriveCapabilityDispatcher({ accountService })
 
+    // Enumeration drops these three; everything else must survive untouched.
+    const { storageStatus: _status, shared: _shared, ...enumerable } = item
+
     await expect(dispatcher.dispatch("app.drive.item.list", {}, { source: "mcp-stdio" })).resolves.toEqual({
       ok: true,
-      data: page,
+      data: { ...page, items: [enumerable] },
       total: 1,
     })
     expect(accountService.listDriveItemsPage).toHaveBeenCalledWith({
@@ -170,9 +174,22 @@ describe("createDriveCapabilityDispatcher", () => {
     })
   })
 
+  it("keeps the full item shape on a single-item get", async () => {
+    const item = driveItem({ id: "item-1", name: "a.txt" })
+    const accountService = createAccountService({
+      getDriveItem: vi.fn(async () => item),
+    })
+    const dispatcher = createDriveCapabilityDispatcher({ accountService })
+
+    await expect(dispatcher.dispatch("app.drive.item.get", { itemId: "item-1" }, { source: "mcp-stdio" }))
+      .resolves.toEqual({ ok: true, data: item })
+  })
+
   it("routes Drive organization reads and path ensure without reading file contents in bulk", async () => {
+    const treeItem = driveTreeItem({ id: "file-1", path: "Inbox/report.md" })
+    const { storageStatus: _treeStatus, shared: _treeShared, ...enumerableTreeItem } = treeItem
     const treePage = {
-      items: [driveTreeItem({ id: "file-1", path: "Inbox/report.md" })],
+      items: [treeItem],
       total: 1,
       fileCount: 1,
       folderCount: 0,
@@ -191,7 +208,7 @@ describe("createDriveCapabilityDispatcher", () => {
     await expect(dispatcher.dispatch("app.drive.stats.get", {}, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: stats })
     await expect(dispatcher.dispatch("app.drive.item_tree.list", { parentId: null, offset: 5, limit: 10 }, { source: "mcp-stdio" }))
-      .resolves.toEqual({ ok: true, data: treePage, total: 1 })
+      .resolves.toEqual({ ok: true, data: { ...treePage, items: [enumerableTreeItem] }, total: 1 })
     await expect(dispatcher.dispatch("app.drive.folder_path.ensure", { segments: ["Work"] }, { source: "mcp-stdio" }))
       .resolves.toEqual({ ok: true, data: { item: folder, created: [], reused: [folder] } })
 

@@ -642,7 +642,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_item_tree_list",
-      description: "Recursively list Synapse Drive file and folder metadata without reading file contents. Use this before organizing Drive files.",
+      description: "Recursively list Synapse Drive file and folder metadata without reading file contents. Use this before organizing or reorganizing; to browse one folder, prefer the non-recursive listing tool. Output can be large, so paginate.",
       inputSchema: {
         type: "object",
         properties: {

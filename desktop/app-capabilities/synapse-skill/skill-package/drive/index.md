@@ -253,7 +253,7 @@ Updating either route does not live-reload pages already open in a visitor's bro
 ## Default Flow
 
 1. Apply **Upload Destination Selection**. Only a single local file with no requested destination goes directly to the Drive root; a local folder or multiple selected files use one shared Drive folder.
-2. When listing a folder with `app_drive_item_list`, pass `limit` for large folders and continue with `page.nextOffset` until `page.hasMore` is false.
+2. When listing a folder with `app_drive_item_list`, pass `limit` for large folders and continue with `page.nextOffset` until `page.hasMore` is false. Prefer a small page (around 20) over a large one; a large page costs the user real time and context. To answer "what is in my Drive", use `app_drive_item_list` on the folder the user means and offer to expand — do not reach for `app_drive_item_tree_list`, which walks the entire subtree and is meant for organizing.
 3. For a single local file, call `app_drive_file_upload` with `filePath`, optional `parentId`, optional `name`, and optional `mimeType`.
 4. For a local folder, call `app_drive_folder_upload` with `folderPath`, optional `parentId`, and optional `folderName`. Preserve `uploadedFiles[].relativePath` and `createdDirectories[].relativePath` from the result.
    - Uploading a same-name file to the same Drive folder overwrites the existing newest active file while preserving its item id and share links.

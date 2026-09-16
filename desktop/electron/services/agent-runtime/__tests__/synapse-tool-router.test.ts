@@ -74,6 +74,30 @@ describe("Synapse tool router catalog", () => {
     expect(result.domains).toContain("drive")
   })
 
+  it("hints at a small page size only when a match accepts a limit", async () => {
+    const paginated = await searchSynapseTools({ query: "list drive files", limit: 3 })
+    const noMatch = await searchSynapseTools({ query: "zzzz-no-synapse-tool-匹配-999999" })
+
+    expect(paginated.tools.length).toBeGreaterThan(0)
+    expect(paginated.guidance).toContain("limit")
+    expect(paginated.guidance).toContain("nextOffset")
+    expect(noMatch.guidance).toBeUndefined()
+  })
+
+  it("scopes the recursive drive tree to organizing instead of browsing", () => {
+    const tools = buildAllMcpTools()
+    const treeList = tools.find((tool) => tool.name === "app_drive_item_tree_list")
+    const itemList = tools.find((tool) => tool.name === "app_drive_item_list")
+
+    expect(treeList?.description).toContain("organizing")
+    expect(treeList?.description).toContain("non-recursive listing tool")
+    // Naming app_drive_item_list here would hand the tree tool every browse query
+    // alias token (drive/item/list) and let it outrank the listing tool, which is
+    // the opposite of the intent. Referring to it descriptively keeps the ordering.
+    expect(treeList?.description).not.toContain("app_drive_item_list")
+    expect(itemList?.description).not.toContain("organizing")
+  })
+
   it("validates query and limit", async () => {
     await expect(searchSynapseTools({ query: " " })).rejects.toThrow("query must not be empty")
     await expect(searchSynapseTools({ query: "table", limit: 6 })).rejects.toThrow("limit must be an integer from 1 to 5")
@@ -174,6 +198,17 @@ describe("Published tool definitions", () => {
     expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("invoke")
     expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("app_*")
     expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("toolName")
+  })
+
+  it("keeps the worked example consistent with the page-size rule", () => {
+    const example = /"arguments":\{"limit":(\d+)\}/.exec(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS)
+    const advised = /for example (\d+)\)/.exec(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS)
+
+    expect(example?.[1]).toBeDefined()
+    expect(advised?.[1]).toBeDefined()
+    // Models follow the example over the prose, so a larger example would quietly
+    // undo the rule.
+    expect(Number(example?.[1])).toBeLessThanOrEqual(Number(advised?.[1]))
   })
 
   it("exposes the surface without reaching the executor for unknown names", async () => {

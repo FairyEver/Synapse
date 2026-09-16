@@ -89,6 +89,11 @@ const SEARCH_TOOL_DESCRIPTION =
 const INVOKE_TOOL_DESCRIPTION =
   "Invoke one Synapse MCP tool by the exact original name returned by search."
 
+// Returned alongside matches that take a `limit`, because models otherwise ask
+// for 100-500 items at once and pay for it in result size and round trips.
+const PAGE_SIZE_GUIDANCE =
+  "One or more matches accept a `limit`. Request a small page (for example limit 20) and continue with the returned nextOffset or nextCursor instead of fetching everything at once."
+
 // Single source of truth for the router's two tools. The SDK path consumes these
 // zod shapes directly; the HTTP path derives its JSON Schema from the same shapes,
 // so the two surfaces cannot drift apart.
@@ -148,12 +153,14 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "   and `arguments` matching that tool's returned `inputSchema`.",
   "",
   "Example: search {\"query\":\"list drive files\"} returns app_drive_item_list with its",
-  "inputSchema; then call invoke {\"toolName\":\"app_drive_item_list\",\"arguments\":{\"limit\":50}}.",
+  "inputSchema; then call invoke {\"toolName\":\"app_drive_item_list\",\"arguments\":{\"limit\":20}}.",
   "",
   "Rules:",
   "- Never call an `app_*` name that `search` did not return, and never guess arguments.",
   "- If `search` returns no reliable match, search again with different words or with `domain`;",
   "  do not invent a tool name. The returned `domains` list shows the domains that exist.",
+  "- Prefer a small `limit` (for example 20) and continue with the returned `nextOffset` or",
+  "  `nextCursor` rather than asking for one large page; big results are slow and costly.",
   "- Retired `database_*`, `drive_*`, `workflow_*`, `content_*`, `automation_*`,",
   "  `model_price_*`, `repository_*` names are not supported.",
   "- `invoke` runs with the original tool's permissions, permission prompts, and audit. A",
@@ -303,6 +310,10 @@ export async function searchSynapseTools(input: SynapseToolSearchInput) {
     ...ranked,
   ]).slice(0, limit)
 
+  const paginated = entries.some((entry) => (
+    Object.prototype.hasOwnProperty.call(entry.inputSchema.properties ?? {}, "limit")
+  ))
+
   return {
     tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({
       name,
@@ -311,6 +322,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput) {
       inputSchema,
     })),
     domains: availableDomains,
+    ...(paginated ? { guidance: PAGE_SIZE_GUIDANCE } : {}),
   }
 }
 

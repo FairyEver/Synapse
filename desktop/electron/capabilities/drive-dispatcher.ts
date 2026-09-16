@@ -216,6 +216,27 @@ const defaultFileSystem: FileSystemPort = { createReadStream, lstat, readdir, st
 const DRIVE_ACCESS_EXPIRES_IN_VALUES = new Set<DriveAccessExpiresIn>(["3d", "7d", "30d", "1y", "forever"])
 const DRIVE_SITE_STATUS_VALUES = new Set<DriveSiteListInput["status"]>(["active", "disabled", "expired", "deleted", "failed", "all"])
 
+// Enumeration views (list and tree) drop fields that are derived or that only the
+// Drive UI renders. `shared` is literally `activeShares.length > 0` and is
+// redundant with `activeShareId` at every call site; `activeShare` is a five-field
+// display sub-object; `storageStatus` is "active" for everything these views can
+// return, and its one behavioural guard reads it through `app.drive.item.get`.
+// Timestamps stay: they are information the user asks for, not rendering detail.
+// `app.drive.item.get` keeps returning the full object. Neither the renderer nor
+// Drive sync reaches this dispatcher, so only the Agent/MCP surface sees this shape.
+const DRIVE_ENUMERATION_OMITTED_KEYS: readonly string[] = ["activeShare", "shared", "storageStatus"]
+
+function toDriveEnumerationItem(item: unknown): unknown {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return item
+  const projected = { ...(item as Record<string, unknown>) }
+  for (const key of DRIVE_ENUMERATION_OMITTED_KEYS) delete projected[key]
+  return projected
+}
+
+function toDriveEnumerationPage<T extends { readonly items: readonly unknown[] }>(page: T): T {
+  return { ...page, items: page.items.map(toDriveEnumerationItem) } as T
+}
+
 export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherDeps) {
   const fileSystem = deps.fileSystem ?? defaultFileSystem
   const fetchImpl = deps.fetch ?? fetch
@@ -231,7 +252,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
               offset: optionalNumber(params.offset),
               limit: optionalNumber(params.limit),
             })
-            return { ok: true, data: page, total: page.items.length }
+            return { ok: true, data: toDriveEnumerationPage(page), total: page.items.length }
           })
         case "app.drive.item.get":
           return dispatchDriveRead(deps, action, params, context, async () => ({
@@ -531,7 +552,7 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
         case "app.drive.item_tree.list":
           return dispatchDriveRead(deps, action, params, context, async () => {
             const tree = await deps.accountService.listDriveItemTree(parseDriveTreeListInput(params))
-            return { ok: true, data: tree, total: tree.total }
+            return { ok: true, data: toDriveEnumerationPage(tree), total: tree.total }
           })
         case "app.drive.folder_path.ensure":
           return dispatchDriveMutation(deps, action, params, context, async () => ({
