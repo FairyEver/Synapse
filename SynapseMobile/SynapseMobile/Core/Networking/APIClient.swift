@@ -1,6 +1,16 @@
 import Foundation
 import os
 
+/// 服务端签好的一条语音识别会话。
+struct AsrSessionTicket: Decodable {
+    let url: String
+    let voiceId: String
+    /// 签名过期时刻，epoch 秒。
+    let expiredAt: Int
+}
+
+private struct EmptyBody: Encodable {}
+
 struct APIError: Error, LocalizedError {
     let status: Int
     let code: String?
@@ -255,6 +265,26 @@ actor APIClient {
         return response.summary
     }
 
+    /// 平台有没有开语音识别。
+    ///
+    /// 这是服务端的部署事实——腾讯云密钥在服务端，不是每台设备的设置——所以麦克风
+    /// 入口显不显示由这个答案决定。
+    func asrAvailability() async throws -> Bool {
+        struct Response: Decodable {
+            let available: Bool
+        }
+        let response: Response = try await send(path: "/voice/asr", method: "GET")
+        return response.available
+    }
+
+    /// 要一条已签名的实时语音识别会话。
+    ///
+    /// 密钥只在服务端：回来的 URL 已经带好 signature，手机拿它直连腾讯云。每次都要
+    /// 换新的，中断之后旧的一律作废。
+    func asrSession() async throws -> AsrSessionTicket {
+        try await send(path: "/voice/asr/session", method: "POST", body: EmptyBody())
+    }
+
     /// Sends an intent over HTTP instead of the socket.
     ///
     /// Notification actions run without a live connection, so the request has to
@@ -293,10 +323,7 @@ actor APIClient {
             message: response.delivered ? nil : "电脑离线。",
             sessionId: nil,
             createdSessionId: nil,
-            landedPath: nil,
-            signedAsrUrl: nil,
-            asrVoiceId: nil,
-            asrExpiresAt: nil
+            landedPath: nil
         )
     }
 

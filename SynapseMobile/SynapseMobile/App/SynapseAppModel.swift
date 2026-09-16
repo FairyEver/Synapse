@@ -444,30 +444,34 @@ final class SynapseAppModel {
     /// Every call is a fresh signature and therefore a fresh voice id, which is what
     /// the engine requires per connection — a retry after an interruption must come
     /// back through here rather than reusing the last one.
+    /// 向服务端要一条已签名的语音识别会话。
+    ///
+    /// 不经过电脑：语音识别是平台统一提供的能力，密钥在服务端，手机自己也连得上
+    /// 服务端。走电脑反而多一个「电脑得在线」的前提，而那是别的事才需要的。
     func requestAsrSignature() async -> AsrSignOutcome {
         // No banner here: the caller is the voice bar, which says what went wrong in
         // place already. Two different sentences for one failure read as two.
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+        do {
+            let ticket = try await apiClient.asrSession()
+            guard let url = URL(string: ticket.url), !ticket.voiceId.isEmpty else {
+                AppLog.voice.warning("asr session response was not usable.")
+                return .unreachable
+            }
+            return .signed(AsrSignature(
+                url: url,
+                voiceId: ticket.voiceId,
+                expiresAt: Date(timeIntervalSince1970: TimeInterval(ticket.expiredAt))
+            ))
+        } catch let error as APIError {
+            // 平台没配腾讯云密钥是唯一一个用户改得动的原因，单独报出去；其余都归
+            // 「没连上」。
+            if error.code == "VOICE_ASR_NOT_CONFIGURED" { return .notConfigured }
+            AppLog.voice.warning("asr session request failed: \(error.code ?? "no_code", privacy: .public)")
+            return .unreachable
+        } catch {
+            AppLog.voice.warning("asr session request failed.")
             return .unreachable
         }
-        let result = await awaitResult(
-            of: MobileIntentRequest(intentId: UUID().uuidString, kind: "asrSign"),
-            sentTo: desktop,
-            timeoutSeconds: 5
-        )
-        // 电脑上没配密钥是唯一一个用户改得动的原因，单独报出去；其余都归「没连上」。
-        if result?.code == "voice_not_configured" { return .notConfigured }
-        guard let result, result.isAccepted,
-              let raw = result.signedAsrUrl, let url = URL(string: raw),
-              let voiceId = result.asrVoiceId, !voiceId.isEmpty else {
-            AppLog.voice.warning("asr signature request refused: \(result?.code ?? "no_result", privacy: .public)")
-            return .unreachable
-        }
-        return .signed(AsrSignature(
-            url: url,
-            voiceId: voiceId,
-            expiresAt: result.asrExpiresAt.map { Date(timeIntervalSince1970: TimeInterval($0)) }
-        ))
     }
 
     func sendKey(_ sessionId: String, _ key: MobileKey) {

@@ -14,15 +14,15 @@ struct AsrSignature: Equatable {
     let expiresAt: Date?
 }
 
-/// 向电脑要一条签名 URL 的结果。
+/// 向服务端要一条签名 URL 的结果。
 ///
-/// 「电脑不在线」和「电脑上没配语音识别」必须分开：两者的下一步完全不同 —— 等
-/// 网络回来，还是去电脑上把密钥填上 —— 合并成一句话会把人支到错的方向去。
+/// 「没连上」和「平台没配语音识别」必须分开：两者的下一步完全不同 —— 等网络回来，
+/// 还是等平台把密钥配上 —— 合并成一句话会把人支到错的方向去。
 enum AsrSignOutcome {
     case signed(AsrSignature)
-    /// 电脑不在线，或者这次请求没有回音。
+    /// 请求没有回音，或者服务端返回了没法用的东西。
     case unreachable
-    /// 电脑上没有设置腾讯云语音识别的密钥。对应网关的 `voice_not_configured`。
+    /// 平台没有配置腾讯云语音识别的密钥。对应服务端的 `VOICE_ASR_NOT_CONFIGURED`。
     case notConfigured
 }
 
