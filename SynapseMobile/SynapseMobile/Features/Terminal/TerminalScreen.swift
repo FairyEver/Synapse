@@ -169,13 +169,25 @@ struct TerminalScreen: View {
                 } label: {
                     Label("显示模式", systemImage: "rectangle.split.2x1")
                 }
-                Picker(selection: sessionDensityBinding) {
-                    Text("跟随系统").tag(TerminalDensity?.none)
-                    ForEach(TerminalDensity.allCases, id: \.self) { value in
-                        Text(value.label).tag(TerminalDensity?.some(value))
+                // Offered only where it decides anything. The density is a choice
+                // about how many columns fit across the pane, and only the
+                // phone-driven mode has columns to choose: the desktop-grid mode
+                // takes the computer's column count and sizes the cell to fill the
+                // pane with it, so a density there would be a control wired to
+                // nothing — a reader would move it, see no change, and stop
+                // trusting the rest of the menu.
+                //
+                // The value itself is kept either way, so switching modes does not
+                // throw away a choice made in the other one.
+                if displayMode == .phoneDriven {
+                    Picker(selection: sessionDensityBinding) {
+                        Text("跟随系统").tag(TerminalDensity?.none)
+                        ForEach(TerminalDensity.allCases, id: \.self) { value in
+                            Text(value.label).tag(TerminalDensity?.some(value))
+                        }
+                    } label: {
+                        Label("本会话显示密度", systemImage: "textformat.size")
                     }
-                } label: {
-                    Label("本会话显示密度", systemImage: "textformat.size")
                 }
                 Button {
                     renamingTitle = session?.title ?? ""

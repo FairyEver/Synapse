@@ -47,12 +47,16 @@ struct TerminalRestoreModeLayoutTests {
         return nil
     }
 
-    private func terminal(columns: Int, rows: Int) -> (view: TerminalCollectionView, list: UICollectionView) {
+    private func terminal(
+        columns: Int,
+        rows: Int,
+        base: CGFloat = TerminalDensity.normal.fontSize
+    ) -> (view: TerminalCollectionView, list: UICollectionView) {
         let view = TerminalCollectionView(frame: pane)
         view.applyLayout(
             displayMode: .desktopDriven,
             desktopGrid: DesktopGrid(columns: columns, rows: rows),
-            fontSize: 14
+            fontSize: base
         )
         view.setNeedsLayout()
         view.layoutIfNeeded()
@@ -60,6 +64,12 @@ struct TerminalRestoreModeLayoutTests {
             fatalError("the terminal has no collection view")
         }
         return (view, list)
+    }
+
+    /// The height one row is drawn at — the whole of what the reader's density used
+    /// to decide in this mode.
+    private func cellHeight(in list: UICollectionView) -> CGFloat {
+        list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame.height ?? 0
     }
 
     /// Where a row actually lands on the pane, insets and offset included.
@@ -130,6 +140,30 @@ struct TerminalRestoreModeLayoutTests {
 
         #expect(abs(list.contentOffset.y + list.bounds.height - list.contentSize.height) < 1)
         #expect(visibleFrame(ofRow: 209, in: list)?.maxY == list.bounds.height)
+    }
+
+    /// The reader's density has no way into this mode.
+    ///
+    /// Not "the picker is hidden" — the number behind it does not reach the drawing.
+    /// The narrow grid is this test's point: there the fit used to stop at whatever
+    /// size the density named, so the density *was* the answer, and hiding its picker
+    /// would have left a setting still working from off screen. The wide one is the
+    /// case a reader actually lives in, where it was already a no-op — asserted too,
+    /// so neither half of the claim rests on reasoning alone.
+    @Test func theDensityDoesNotReachThisMode() {
+        for (columns, gridRows) in [(30, 24), (95, 30)] {
+            for other in [TerminalDensity.compact, .spacious] {
+                let normal = terminal(columns: columns, rows: gridRows)
+                let differing = terminal(columns: columns, rows: gridRows, base: other.fontSize)
+                for (view, list) in [normal, differing] {
+                    view.apply(rows: lines(50), atHistoryFloor: false, cursor: nil)
+                    list.layoutIfNeeded()
+                }
+
+                #expect(cellHeight(in: normal.list) > 0)
+                #expect(cellHeight(in: normal.list) == cellHeight(in: differing.list))
+            }
+        }
     }
 
     /// A reader who scrolled up to read something is not dragged back down.

@@ -3,13 +3,13 @@ import Testing
 
 @testable import SynapseMobile
 
-/// The arithmetic that decides how much of the desktop's grid fits, and how small.
+/// The arithmetic that decides how big the desktop's grid is drawn in the pane.
 ///
-/// It is the whole of what the desktop-grid mode promises, and it has already been
-/// wrong once — the margins were left out of the fit, so the grid came out a hair
-/// wider than the pane and the whole screen acquired sideways travel it was never
-/// meant to have. These pin down the parts that were wrong and the parts a later
-/// "improvement" would be tempted to take away.
+/// It is the whole of what the desktop-grid mode promises, and every part of it has
+/// been wrong at least once — the margins were left out of the fit, so the grid came
+/// out a hair wider than the pane and the whole screen acquired sideways travel it
+/// was never meant to have. These pin down the parts that were wrong and the parts a
+/// later "improvement" would be tempted to take away.
 struct TerminalGridFitTests {
     private let cell = CGSize(width: 8.4, height: 20)
     private let inset: CGFloat = 10
@@ -66,17 +66,50 @@ struct TerminalGridFitTests {
         #expect(abs(scale - 400 / (200 * cell.height)) < 0.0001)
     }
 
-    /// Never enlarges. A grid smaller than the pane stays its own size, because
-    /// magnifying past the desktop's own rendering is a different claim than fitting.
-    @Test func neverEnlarges() {
+    /// A grid narrower than the pane grows to fill it.
+    ///
+    /// It used to stop at 1: blowing a picture up past its own size is a different
+    /// claim than fitting it, and that was the rule while this mode was a photograph
+    /// of the computer's screen. It is a terminal viewport now, where the computer's
+    /// grid *is* the pane's width — a thirty-column terminal on a phone is thirty
+    /// fat columns, not thirty thin ones with a gap beside them.
+    ///
+    /// Deliberately not cosmetic. While the fit stopped at 1, the reader's display
+    /// density was a hidden input to this mode: it decided the size in exactly the
+    /// case the fit declined to enlarge. Without this, removing the density picker
+    /// from this mode would have left a setting that still worked from off screen.
+    @Test func aNarrowGridIsEnlargedToFillThePane() {
+        let grid = DesktopGrid(columns: 10, rows: 3)
         let scale = terminalGridFitScale(
-            grid: DesktopGrid(columns: 10, rows: 3),
+            grid: grid,
             paneSize: phone,
             contentInset: inset,
             cellSize: cell
         )
 
-        #expect(scale == 1)
+        #expect(scale > 1)
+        // Width is what binds for a grid this shape, so it comes out exactly as wide
+        // as the space it was given.
+        #expect(abs(CGFloat(grid.columns) * cell.width * scale - (phone.width - inset * 2)) < 0.0001)
+    }
+
+    /// Enlarged, but still inside the pane — on both axes.
+    ///
+    /// The bound that stops a narrow grid from growing without limit is the same one
+    /// that shrinks a wide one: the whole screen has to fit. Here the height is what
+    /// runs out first, so that is the ratio that comes back.
+    @Test func anEnlargedGridStillFitsThePane() {
+        let grid = DesktopGrid(columns: 4, rows: 30)
+        let scale = terminalGridFitScale(
+            grid: grid,
+            paneSize: phone,
+            contentInset: inset,
+            cellSize: cell
+        )
+
+        #expect(scale > 1)
+        #expect(abs(scale - phone.height / (CGFloat(grid.rows) * cell.height)) < 0.0001)
+        #expect(CGFloat(grid.columns) * cell.width * scale <= phone.width - inset * 2 + 0.0001)
     }
 
     /// A pane measured before it has a size must not produce a zero scale, or the

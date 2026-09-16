@@ -192,35 +192,47 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
 
     /// The size cells are actually drawn at.
     ///
-    /// The density's size in the phone-driven mode. In the desktop-grid mode the
-    /// whole desktop screen has to fit, so it is that size scaled down — which is
-    /// how the mode keeps its promise with no transform anywhere: the grid stays a
-    /// grid, only the size changes.
+    /// The reader's density in the phone-driven mode, where it is a real choice:
+    /// there the pane's width is the wrap, so the density decides how much fits
+    /// across it.
+    ///
+    /// In the desktop-grid mode there is nothing to choose. The columns are the
+    /// computer's and the whole screen has to fit, which leaves the cell exactly one
+    /// size — the largest the pane holds it at. That is why the density picker is
+    /// not offered there: it would be a control wired to nothing.
     private func renderedFontSize(base: CGFloat) -> CGFloat {
-        guard displayMode == .desktopDriven, let grid = desktopGrid, base > 0 else { return base }
+        guard displayMode == .desktopDriven, let grid = desktopGrid else { return base }
+        return fittedFontSize(for: grid)
+    }
+
+    /// The computer's grid, drawn as large as the pane holds it.
+    ///
+    /// Measured against the default reading size rather than the reader's. That is
+    /// not a preference being applied on the quiet: it is a ruler. What comes out is
+    /// a ratio between the grid and the pane, so the size it is measured at cancels
+    /// — the one place it survives is the row box's own rounding to whole points,
+    /// and there by a fraction of one.
+    ///
+    /// Asking twice gives the same answer as asking once, because the reference is a
+    /// constant rather than the size currently drawn at.
+    private func fittedFontSize(for grid: DesktopGrid) -> CGFloat {
+        let reference = TerminalDensity.normal.fontSize
+        let scale = terminalGridFitScale(
+            grid: grid,
+            paneSize: bounds.size,
+            contentInset: TerminalCellMetrics.contentInset,
+            cellSize: CGSize(
+                width: TerminalCellMetrics.advance(forFontSize: reference),
+                height: TerminalCellMetrics.rowHeight(forFontSize: reference)
+            )
+        )
         // Rounded to a tenth of a point, not to a whole one. A whole point is seven
         // per cent of a fourteen-point cell, and across a hundred-odd columns that
         // leaves the grid some fifty points narrower than the pane — which shows up
         // as a margin down both sides of a screen that is meant to be filled edge to
         // edge. Truncated rather than rounded so the grid can only ever come out
         // narrower, never wider than the space it was fitted into.
-        return max(1, (base * fitScale(for: grid, base: base) * 10).rounded(.down) / 10)
-    }
-
-    /// How much the desktop's grid has to shrink to fit the pane.
-    ///
-    /// Measured at `base` rather than at the current size, so asking twice gives
-    /// the same answer instead of compounding.
-    private func fitScale(for grid: DesktopGrid, base: CGFloat) -> CGFloat {
-        terminalGridFitScale(
-            grid: grid,
-            paneSize: bounds.size,
-            contentInset: TerminalCellMetrics.contentInset,
-            cellSize: CGSize(
-                width: TerminalCellMetrics.advance(forFontSize: base),
-                height: TerminalCellMetrics.rowHeight(forFontSize: base)
-            )
-        )
+        return max(1, (reference * scale * 10).rounded(.down) / 10)
     }
 
     /// Magnifies the canvas, or puts it back.

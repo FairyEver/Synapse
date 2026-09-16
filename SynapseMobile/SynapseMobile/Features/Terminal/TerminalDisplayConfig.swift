@@ -178,22 +178,32 @@ enum TerminalDisplayConfig {
     static let wideGridEmptyRatio: CGFloat = 0.4
 }
 
-/// The scale that makes one screen of the desktop's grid fit inside a pane.
+/// The scale that makes one screen of the desktop's grid fill a pane.
 ///
 /// Pure, and tested on its own, because it is the whole of what the desktop-grid
 /// mode promises. Every part of it has been wrong at least once: the margins were
 /// left out, which made the grid permanently a hair too wide for the pane and gave
 /// the whole screen a few points of sideways travel it was never meant to have.
 ///
+/// It scales in both directions. A grid wider than the pane shrinks; one narrower
+/// than the pane grows, because in this mode the computer's grid *is* the pane's
+/// width — that is what "the layout matches the computer" means once the mode is a
+/// terminal viewport rather than a photograph. It used to stop at 1, and while it
+/// did, the reader's display density was a hidden input here: the size only became
+/// the reader's business when the fit stopped short of enlarging. There is no such
+/// input now, which is why the density picker is not offered in this mode.
+///
 /// - Parameters:
 ///   - grid: the desktop's grid, in cells.
 ///   - paneSize: the space the grid has to fit inside.
 ///   - contentInset: padding on each side of a row. The grid fits *inside* this,
 ///     not merely equal to it.
-///   - cellSize: one cell at the size the grid would be drawn at unscaled.
-/// - Returns: at most 1, because enlarging past the desktop's own size is a
-///   different claim than fitting it; and exactly 1 rather than 0 for a pane with
-///   no size yet, so a measurement taken mid-layout cannot make the text vanish.
+///   - cellSize: one cell at the size the grid would be drawn at unscaled. Any size
+///     will do — the ratio between grid and pane is what comes out — but it has to
+///     be *a* size, because a cell's metrics are rounded to whole points.
+/// - Returns: the scale that fits the grid inside the pane; and exactly 1 rather
+///   than 0 for a pane with no size yet, so a measurement taken mid-layout cannot
+///   make the text vanish.
 func terminalGridFitScale(
     grid: DesktopGrid,
     paneSize: CGSize,
@@ -209,11 +219,13 @@ func terminalGridFitScale(
     let usableHeight = paneSize.height
     guard usableWidth > 0, usableHeight > 0 else { return 1 }
 
-    // No lower bound. The mode's promise is the whole screen, and the reader
-    // accepts small text as the price of it — that is the trade they picked this
-    // mode for. A floor here would quietly turn "the whole screen, tiny" into
-    // "part of the screen, legible", which is the other mode's behaviour.
-    return min(1, min(usableWidth / gridWidth, usableHeight / gridHeight))
+    // No bound on either side. The mode's promise is the whole screen: the reader
+    // accepts text too small to read as the price of a wide terminal, and gets text
+    // larger than they asked for from a narrow one. A floor here would quietly turn
+    // "the whole screen, tiny" into "part of the screen, legible", which is the
+    // other mode's behaviour; a ceiling would leave the grid short of the pane and
+    // hand the difference back to a setting.
+    return min(usableWidth / gridWidth, usableHeight / gridHeight)
 }
 
 /// The width rows should be wrapped at.
