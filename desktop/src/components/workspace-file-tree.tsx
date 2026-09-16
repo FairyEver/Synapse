@@ -298,6 +298,13 @@ function WorkspaceFileTreeNode({
   return (
     <div
       draggable
+      // A tree row is a raw `div`, so the interaction is recorded through the native
+      // capture path rather than a `track()` call inside each handler: the same shape the
+      // other raw-element rows use (see `image-crop-dialog.tsx`, `module-sidebar.tsx`).
+      // The key stays static on purpose — a row's identity is volatile, and the point is
+      // to record that a file-tree row was acted on, not which path it was.
+      data-track="workspace-file-tree.node"
+      data-track-native="true"
       style={style as CSSProperties}
       className={cn(
         "flex h-full w-full min-w-0 cursor-pointer items-center gap-1 overflow-hidden py-1 pr-2 text-sm outline-none",
