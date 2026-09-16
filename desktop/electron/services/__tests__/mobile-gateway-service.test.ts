@@ -943,6 +943,33 @@ describe("MobileGatewayService", () => {
     expect(draft.workspaces?.[0].panes.map((pane) => pane.sessionId)).toEqual(["sess-1", "sess-2"])
   })
 
+  it("treats closing a pane as a change worth pushing too", async () => {
+    const harness = createHarness()
+    addSession(harness, "sess-2", "前端开发 #2")
+    seedWorkspace(harness, {
+      type: "split",
+      splitId: "split-1",
+      direction: "horizontal",
+      ratio: 0.5,
+      first: { type: "leaf", paneId: "pane-1", sessionId: "sess-1" },
+      second: { type: "leaf", paneId: "pane-2", sessionId: "sess-2" },
+    })
+    await harness.timers.advance(1_000)
+    const withSplit = harness.summaries.length
+    expect((harness.summaries.at(-1) as MobileSummaryDraft).workspaces).toHaveLength(1)
+
+    // Closing the pane takes its session with it and collapses the tab back to one
+    // leaf, which is the point where the layer stops carrying information.
+    harness.terminal.sessions.delete("sess-2")
+    seedWorkspace(harness, { type: "leaf", paneId: "pane-1", sessionId: "sess-1" })
+    harness.terminal.events.emit("sessionDeleted", { sessionId: "sess-2" })
+
+    await harness.timers.advance(1_000)
+
+    expect(harness.summaries.length).toBeGreaterThan(withSplit)
+    expect((harness.summaries.at(-1) as MobileSummaryDraft).workspaces).toBeUndefined()
+  })
+
   it("never names a conversation the summary does not carry", async () => {
     const harness = createHarness()
     // A persisted layout whose second session did not survive the reload: the tab is
