@@ -64,7 +64,7 @@ struct TerminalRelayStrip: View {
 
             statusGlyph(for: attachment)
 
-            if attachment.state.isDelivered || attachment.state.isFailed {
+            if attachment.canBeDismissed {
                 Button {
                     onDismiss(attachment.id)
                 } label: {

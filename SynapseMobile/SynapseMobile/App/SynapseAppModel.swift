@@ -898,10 +898,24 @@ final class SynapseAppModel {
         }
     }
 
+    /// Takes a file off the strip.
+    ///
+    /// A file the computer never got is removed from the drive at the same moment:
+    /// the user has stopped waiting for it, and leaving a copy behind would be
+    /// keeping something nobody asked to keep. A delivered file is left alone —
+    /// the desktop already removed its copy, and the file itself is now the user's,
+    /// sitting in the folder they can open.
     func dismissRelay(_ attachmentId: String) {
+        guard let attachment = relayAttachments.first(where: { $0.id == attachmentId }) else { return }
         relayAttachments.removeAll { $0.id == attachmentId }
         relayPendingFiles.removeValue(forKey: attachmentId)
         relayByIntent = relayByIntent.filter { $0.value != attachmentId }
+
+        guard !attachment.state.isDelivered, let itemId = attachment.driveItemId else { return }
+        Task { [weak self] in
+            try? await self?.apiClient.permanentlyDeleteDriveItem(itemId: itemId)
+            self?.relayLedger.resolve(itemId: itemId)
+        }
     }
 
     /// Takes back what this phone typed, by pressing backspace once per character.

@@ -131,11 +131,21 @@ struct RelaySelectionTests {
 }
 
 /// Which uploads the phone still owes a delivery.
-struct RelayLedgerTests {
+///
+/// A class rather than a struct so the suite it writes to can be removed when the
+/// test ends: `UserDefaults(suiteName:)` leaves a plist behind in the host app's
+/// container, and a run that litters is a run that makes the next one harder to
+/// read.
+final class RelayLedgerTests {
+    private static let suiteName = "SynapseRelayLedgerTests"
+
+    deinit {
+        UserDefaults().removePersistentDomain(forName: Self.suiteName)
+    }
+
     private func freshLedger() throws -> RelayLedger {
-        let name = "SynapseRelayLedgerTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defaults.removePersistentDomain(forName: name)
+        let defaults = try #require(UserDefaults(suiteName: Self.suiteName))
+        defaults.removePersistentDomain(forName: Self.suiteName)
         return RelayLedger(defaults: defaults)
     }
 
@@ -169,9 +179,8 @@ struct RelayLedgerTests {
     }
 
     @Test func theLedgerIsPersisted() throws {
-        let name = "SynapseRelayLedgerTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defaults.removePersistentDomain(forName: name)
+        let defaults = try #require(UserDefaults(suiteName: Self.suiteName))
+        defaults.removePersistentDomain(forName: Self.suiteName)
 
         var first = RelayLedger(defaults: defaults)
         first.record(itemId: "item-1")
@@ -207,6 +216,18 @@ struct TerminalAttachmentStateTests {
         #expect(attachment(.delivered(path: nil)).insertedPath == nil)
         #expect(attachment(.waitingForComputer).insertedPath == nil)
         #expect(attachment(.failed("no")).insertedPath == nil)
+    }
+
+    @Test func aFileWaitingOnAnAbsentComputerCanStillBeGotRidOf() {
+        // The batch limit counts what is still waiting, so a file that could not be
+        // dismissed would leave a user whose computer stayed offline unable to send
+        // anything at all.
+        #expect(attachment(.waitingForComputer).canBeDismissed)
+        #expect(attachment(.failed("no")).canBeDismissed)
+        #expect(attachment(.delivered(path: "/tmp/a.png")).canBeDismissed)
+        // But not while the bytes are still moving: there is nothing to take back yet.
+        #expect(!attachment(.queued).canBeDismissed)
+        #expect(!attachment(.uploading(0.5)).canBeDismissed)
     }
 
     @Test func aWaitingTransferKeepsTheIntentIdItWillBeResentWith() {

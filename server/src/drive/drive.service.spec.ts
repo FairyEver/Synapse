@@ -250,6 +250,65 @@ describe("DriveService", () => {
     expect(usage.reservedBytes).toBe(0n)
   })
 
+  it("reclaims the stored bytes when an item is permanently deleted", async () => {
+    /*
+     * The whole reason this path exists: a relayed file is only ever passing through,
+     * and the two delete routes users already have move an item along its lifecycle
+     * while leaving the object in the bucket forever. Only this one reaches the
+     * storage port, so it is the only one that can honestly be called cleanup.
+     */
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = { ...storageMock, deleteObject }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "送到电脑.png",
+      size: "11",
+      mimeType: "image/png",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+    const stored = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    expect(stored.storageStatus).toBe("active")
+
+    await service.permanentlyDeleteItem("user-1", prepared.item.id)
+
+    expect(deleteObject).toHaveBeenCalledWith(stored.storageKey)
+    const after = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    expect(after.deletedAt).not.toBeNull()
+    expect(after.storageStatus).toBe("deleted")
+    // The quota it was holding goes back, which is the other half of the promise
+    // that the file left nothing behind.
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(0n)
+  })
+
+  it("will not permanently delete an item that belongs to someone else", async () => {
+    // This route is wider than the trash ones — nothing can be restored from it —
+    // so the ownership check is the thing that keeps a phone from being able to
+    // destroy an account it merely holds a token for.
+    const prisma = createPrismaMemory()
+    const service = new DriveService(prisma as unknown as PrismaService, storageMock)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    await prisma.user.create({ data: { id: "user-2", email: "other@example.com", passwordHash: "hash" } })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "private.txt",
+      size: "11",
+      mimeType: "text/plain",
+      publicAppUrl: "https://synapse.test",
+    })
+    await service.completeUpload("user-1", prepared.sessionId)
+
+    await expect(service.permanentlyDeleteItem("user-2", prepared.item.id)).rejects.toThrow("文件不存在。")
+    const after = await prisma.driveItem.findUniqueOrThrow({ where: { id: prepared.item.id } })
+    expect(after.deletedAt).toBeNull()
+  })
+
   it("rejects stale concurrent online edit quota checks before used quota exceeds the limit", async () => {
     const prisma = createPrismaMemory({ staleUsageReads: true })
     const storage: DriveStoragePort = {

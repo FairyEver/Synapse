@@ -69,6 +69,21 @@ struct TerminalAttachment: Identifiable, Equatable {
         return false
     }
 
+    /// Whether the user may take this file off the strip.
+    ///
+    /// Not while its bytes are still moving — there is nothing to take back yet.
+    /// A file waiting on a computer that may never come back is dismissible, and
+    /// has to be: the batch limit counts what is waiting, so without this a user
+    /// whose computer stayed offline could be left unable to send anything at all.
+    var canBeDismissed: Bool {
+        switch state {
+        case .queued, .uploading:
+            return false
+        case .waitingForComputer, .delivered, .failed:
+            return true
+        }
+    }
+
     /// The last path the computer reported for this file, for undo. Only a
     /// delivered file with a typed path can be undone.
     var insertedPath: String? {
