@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { useVoiceInput } from "../../../src/modules/voice/use-voice-input"
+import { VoiceInputStrip } from "../../../src/modules/voice/voice-input-strip"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import {
   AlertDialog,
@@ -134,6 +136,9 @@ export function TerminalModule({
   const [sessions, setSessions] = useState<SynapseTerminalSession[]>([])
   const [customToolbarActions, setCustomToolbarActions] = useState<SynapseTerminalCustomToolbarAction[]>([])
   const [toolbarManagerOpen, setToolbarManagerOpen] = useState(false)
+  /** 已填入命令行、还没按 Enter 的语音转写文本。 */
+  const [pendingVoiceText, setPendingVoiceText] = useState<string | null>(null)
+  const voice = useVoiceInput()
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [activePaneIds, setActivePaneIds] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -1177,6 +1182,35 @@ export function TerminalModule({
     }
   }, [activeSession, terminalBridge])
 
+  /**
+   * 确认语音输入后写进 PTY，**不补 "\r"**。
+   *
+   * 这里不能走 buildTerminalCommandWrites —— 那个 helper 会给每一行补 `\r`，是
+   * 「执行」语义。终端命令错一个字符就可能是破坏性操作，执行与否必须留给用户按
+   * Enter 决定。
+   */
+  const commitVoiceInput = useCallback(async () => {
+    const text = await voice.confirm()
+    if (!text.trim()) return
+    if (!activeSession || activeSession.status !== "running") return
+    try {
+      await terminalBridge.session.write({ sessionId: activeSession.id, data: text })
+      setPendingVoiceText(text)
+    } catch (error) {
+      logger.error("Failed to write voice input to the terminal.", error)
+      toast.error("写入终端失败")
+    }
+  }, [activeSession, terminalBridge, voice.confirm])
+
+  // 会话一换，之前那条待执行提示就不再成立。
+  useEffect(() => {
+    setPendingVoiceText(null)
+  }, [activeSession?.id])
+
+  useEffect(() => {
+    if (voice.state.phase === "recording") setPendingVoiceText(null)
+  }, [voice.state.phase])
+
   const createCustomToolbarAction = useCallback(async (
     input: SynapseTerminalCreateCustomToolbarActionInput,
   ) => {
@@ -1528,6 +1562,39 @@ export function TerminalModule({
                   )
                 })}
               </div>
+              {voice.state.phase === "recording" ? (
+                <VoiceInputStrip
+                  transcript={voice.state.transcript}
+                  elapsedMs={voice.state.elapsedMs}
+                  failure={voice.state.failure}
+                  onCancel={voice.cancel}
+                  onConfirm={() => { void commitVoiceInput() }}
+                  onRetry={voice.retry}
+                  showTranscript
+                />
+              ) : pendingVoiceText ? (
+                /* 语音已经填进命令行了，但还没执行 —— 提示挂在转写条自己身上，
+                   不去动 pane 头，改动半径最小。 */
+                <div
+                  className="flex shrink-0 items-center gap-2 border-t border-border bg-card px-2.5 py-1.5"
+                  data-terminal-pending-voice
+                >
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
+                    {pendingVoiceText}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">待执行 · Enter 执行</span>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className="shrink-0 text-foreground/75 hover:text-foreground"
+                    aria-label="忽略待执行提示"
+                    onClick={() => setPendingVoiceText(null)}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ) : null}
               {toolbarActions.length ? (
                 <div
                   data-terminal-toolbar
@@ -1578,6 +1645,19 @@ export function TerminalModule({
                       <Pencil />
                     </Button>
                   </div>
+                  {voice.available ? (
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      className="text-foreground/75 hover:text-foreground"
+                      aria-label="语音输入"
+                      disabled={terminalSessionStatus !== "running" || voice.state.phase === "recording"}
+                      onClick={() => { void voice.start() }}
+                    >
+                      <Mic />
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
             </div>

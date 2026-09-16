@@ -65,6 +65,43 @@ const bridgeState = vi.hoisted(() => ({
   },
 }))
 
+/**
+ * 语音 hook 在这里换成脚本化的替身：真正的一段录音要过麦克风权限、AudioContext
+ * 和 WebSocket，在 jsdom 里跑不起来。这里要锁的是「终端拿识别结果做什么」。
+ */
+const voiceState = vi.hoisted(() => ({
+  available: false,
+  phase: "idle" as "idle" | "recording",
+  transcript: { stable: "", unstable: "", combined: "" },
+  elapsedMs: 0,
+  failure: null as null | "network" | "silence" | "permission" | "unavailable",
+  confirmResult: "",
+  start: vi.fn(),
+  cancel: vi.fn(),
+  // 真实实现里 confirm 会把状态机推回 idle，转写条随之让位给「待执行」提示。
+  confirm: vi.fn(async () => {
+    voiceState.phase = "idle"
+    return voiceState.confirmResult
+  }),
+  retry: vi.fn(),
+}))
+
+vi.mock("../../../../src/modules/voice/use-voice-input", () => ({
+  useVoiceInput: () => ({
+    state: {
+      phase: voiceState.phase,
+      transcript: voiceState.transcript,
+      elapsedMs: voiceState.elapsedMs,
+      failure: voiceState.failure,
+    },
+    available: voiceState.available,
+    start: voiceState.start,
+    cancel: voiceState.cancel,
+    confirm: voiceState.confirm,
+    retry: voiceState.retry,
+  }),
+}))
+
 const terminalBridge = vi.hoisted(() => ({
   chooseCwd: vi.fn(async () => "/repo/app"),
   revealEnvironmentValue: vi.fn(async () => null),
@@ -764,6 +801,16 @@ let roots: Root[] = []
 beforeEach(() => {
   setDocumentVisibility("visible")
   window.synapse = { platform: "darwin" } as typeof window.synapse
+  voiceState.available = false
+  voiceState.phase = "idle"
+  voiceState.transcript = { stable: "", unstable: "", combined: "" }
+  voiceState.elapsedMs = 0
+  voiceState.failure = null
+  voiceState.confirmResult = ""
+  voiceState.start.mockClear()
+  voiceState.cancel.mockClear()
+  voiceState.confirm.mockClear()
+  voiceState.retry.mockClear()
   window.localStorage.clear()
   bridgeState.globalLaunch = { revision: 1, updatedAt: "2026-08-08T00:00:00.000Z" }
   bridgeState.agentNotifications = {
@@ -1470,6 +1517,77 @@ describe("TerminalModule", () => {
     expect(manageButton?.className).toContain("text-foreground/75")
     expect(manageButton?.className).toContain("hover:text-foreground")
     expect(toolbar.querySelector("[aria-hidden='true']")?.className).toContain("bg-border")
+  })
+
+  it("凭据没配好时工具栏里没有麦克风入口", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(document.body.querySelector("button[aria-label='语音输入']")).toBeNull()
+  })
+
+  it("凭据配好后麦克风出现在工具栏末尾", async () => {
+    voiceState.available = true
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const toolbar = document.body.querySelector("[data-terminal-toolbar]")
+    const mic = toolbar?.querySelector("button[aria-label='语音输入']")
+    expect(mic).toBeTruthy()
+    // 排在「管理自定义快捷输入」之后，也就是整条工具栏的最后。
+    const manage = toolbar?.querySelector("button[aria-label='管理自定义快捷输入']")
+    expect(manage).toBeTruthy()
+    if (!manage || !mic) throw new Error("Missing toolbar buttons")
+    expect(manage.compareDocumentPosition(mic)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
+  /**
+   * 这是这个功能最关键的一条：终端命令错一个字符就可能是破坏性操作，语音只能把
+   * 文字填进命令行，绝不能替用户按下回车。断言的是"写进去的字节里没有 \r"。
+   */
+  it("确认语音后只填入命令行，不补回车", async () => {
+    voiceState.available = true
+    voiceState.phase = "recording"
+    voiceState.transcript = { stable: "git status --short", unstable: "", combined: "git status --short" }
+    voiceState.confirmResult = "git status --short"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.writeSession.mockClear()
+
+    await renderModule()
+    await clickButtonByAriaLabel("完成语音输入")
+
+    expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "git status --short",
+    })
+    const written = terminalBridge.writeSession.mock.calls.map(([input]) => input.data as string)
+    expect(written.some((data) => data.includes("\r"))).toBe(false)
+
+    // 写完之后给出「待执行」提示，而不是当作已执行。
+    const pending = document.body.querySelector("[data-terminal-pending-voice]")
+    expect(pending?.textContent).toContain("待执行 · Enter 执行")
+    expect(pending?.textContent).toContain("git status --short")
+  })
+
+  it("识别结果为空时不写终端", async () => {
+    voiceState.available = true
+    voiceState.phase = "recording"
+    voiceState.confirmResult = "   "
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.writeSession.mockClear()
+
+    await renderModule()
+    await clickButtonByAriaLabel("完成语音输入")
+
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+    expect(document.body.querySelector("[data-terminal-pending-voice]")).toBeNull()
   })
 
   it("renders the terminal toolbar when renderer platform is unavailable", async () => {
