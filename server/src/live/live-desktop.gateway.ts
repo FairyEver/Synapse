@@ -8,6 +8,9 @@ import {
   isLiveDesktopClientMessage,
   type LiveDesktopClientMessage,
   type LiveDesktopServerMessage,
+  type MobileFramePayload,
+  type MobileIntentResultPayload,
+  type MobileSummaryPayload,
 } from "@synapse/shared"
 import { RawData, WebSocket, WebSocketServer } from "ws"
 import { UserAuthService } from "../auth/user-auth.service"
@@ -16,7 +19,7 @@ import { LiveClientRegistry } from "./live-client-registry"
 import { LiveDeviceService } from "./live-device.service"
 import { toPublicDto } from "./live-query.service"
 import { LiveStreamService } from "./live-stream.service"
-import type { LiveClientInstance } from "./live.types"
+import type { LiveClientDisconnectReason, LiveClientInstance } from "./live.types"
 
 interface LiveDesktopGatewayClock {
   readonly randomId: () => string
@@ -44,6 +47,24 @@ export interface WebhookDeliveryAckHandler {
   }) => Promise<void> | void
 }
 
+/**
+ * Receives the terminal payloads a desktop produces for phones.
+ *
+ * Installed by the mobile relay at startup. Kept as a setter rather than a
+ * constructor dependency because the relay itself depends on this gateway to
+ * deliver in the other direction, and the live module must not import it.
+ */
+export interface LiveMobileRelayHandler {
+  readonly handleSummary: (userId: string, payload: MobileSummaryPayload) => void
+  readonly handleFrame: (userId: string, payload: MobileFramePayload) => void
+  readonly handleIntentResult: (userId: string, payload: MobileIntentResultPayload) => void
+  /**
+   * One of the user's computers became reachable, or stopped being reachable.
+   * Fired on every change, so it carries the current list rather than a delta.
+   */
+  readonly handleDesktopPresence: (userId: string, desktopClientInstanceIds: readonly string[]) => void
+}
+
 export interface LiveBroadcastClientResult {
   readonly clientInstanceId: string
   readonly deviceName: string
@@ -56,6 +77,8 @@ export interface LiveBroadcastClientResult {
 const liveDesktopPath = "/api/live/desktop"
 const heartbeatIntervalMs = 20_000
 const heartbeatTimeoutMs = 45_000
+/** Only a cache of the last list sent; users past this simply get the next change. */
+const liveDesktopPresenceCacheLimit = 2_000
 export const liveDesktopMaxPayloadBytes = 16 * 1024
 
 @Injectable()
@@ -66,6 +89,9 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
   private staleInterval: NodeJS.Timeout | null = null
   private clock: LiveDesktopGatewayClock = { randomId: randomUUID, now: () => new Date() }
   private webhookDeliveryAckHandler: WebhookDeliveryAckHandler | null = null
+  private mobileRelayHandler: LiveMobileRelayHandler | null = null
+  /** Last presence list sent per user, so an unchanged one is not re-sent. */
+  private readonly presenceByUser = new Map<string, string>()
 
   constructor(
     private readonly auth: UserAuthService,
@@ -83,6 +109,94 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
 
   setWebhookDeliveryAckHandler(handler: WebhookDeliveryAckHandler): void {
     this.webhookDeliveryAckHandler = handler
+  }
+
+  setMobileRelayHandler(handler: LiveMobileRelayHandler): void {
+    this.mobileRelayHandler = handler
+  }
+
+  /**
+   * Delivers one message to a single desktop connection.
+   *
+   * `offline` is a normal answer, not an error: a phone can ask about a computer
+   * that is simply not running, and the caller turns that into a user-facing
+   * "desktop offline" rather than retrying.
+   */
+  sendToClientInstance(input: {
+    readonly userId: string
+    readonly clientInstanceId: string
+    readonly message: LiveDesktopServerMessage
+  }): "sent" | "offline" | "send_failed" {
+    const client = this.registry
+      .listOnlineByUser(input.userId)
+      .find((entry) => entry.clientInstanceId === input.clientInstanceId)
+    const connectionId = client?.connectionId
+    if (!connectionId) return "offline"
+    const socket = this.socketsByConnectionId.get(connectionId)
+    if (!socket || socket.readyState !== WebSocket.OPEN) return "offline"
+    try {
+      sendJson(socket, input.message)
+      return "sent"
+    } catch (error) {
+      this.logger.warn({
+        clientInstanceId: input.clientInstanceId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        userId: input.userId,
+      }, "Live desktop targeted send failed")
+      return "send_failed"
+    }
+  }
+
+  /** The devices this user can currently reach, for resolving a phone's target. */
+  listOnlineClientInstanceIds(userId: string): string[] {
+    return this.registry.listOnlineByUser(userId).map((entry) => entry.clientInstanceId)
+  }
+
+  /**
+   * Tells the user's phones which computers are reachable.
+   *
+   * Safe to call from every transition, including the heartbeat-driven ones: an
+   * unchanged list is dropped, so a desktop that keeps heartbeating does not turn
+   * a rare event into a steady stream at the phone.
+   */
+  private notifyDesktopPresence(userId: string): void {
+    const relay = this.mobileRelayHandler
+    if (!relay) return
+    const clientInstanceIds = this.listOnlineClientInstanceIds(userId)
+    const fingerprint = clientInstanceIds.join("\x00")
+    if (this.presenceByUser.get(userId) === fingerprint) return
+    this.rememberPresence(userId, fingerprint)
+    relay.handleDesktopPresence(userId, clientInstanceIds)
+  }
+
+  private rememberPresence(userId: string, fingerprint: string): void {
+    this.presenceByUser.set(userId, fingerprint)
+    if (this.presenceByUser.size <= liveDesktopPresenceCacheLimit) return
+    const oldest = this.presenceByUser.keys().next()
+    if (!oldest.done) this.presenceByUser.delete(oldest.value)
+  }
+
+  /**
+   * The single way a desktop stops being online.
+   *
+   * Presence has to fire on every one of them — socket close, socket error,
+   * server shutdown, a disabled account — and any path that forgets leaves phones
+   * showing a computer that is gone. Routing them all through here is what makes
+   * that impossible to get wrong one call site at a time.
+   */
+  private markDesktopOffline(input: {
+    readonly connectionId: string
+    readonly reason: LiveClientDisconnectReason
+  }): LiveClientInstance | undefined {
+    const client = this.registry.markDisconnected({
+      connectionId: input.connectionId,
+      now: this.clock.now(),
+      reason: input.reason,
+    })
+    if (!client) return undefined
+    this.publish(client)
+    this.notifyDesktopPresence(client.userId)
+    return client
   }
 
   attach(httpServer: HttpServer): void {
@@ -141,14 +255,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       this.staleInterval = null
     }
     for (const [connectionId, socket] of sockets) {
-      const client = this.registry.markDisconnected({
-        connectionId,
-        now: this.clock.now(),
-        reason: "server_shutdown",
-      })
-      if (client) {
-        this.publish(client)
-      }
+      this.markDesktopOffline({ connectionId, reason: "server_shutdown" })
       try {
         socket.close(1012, "server_shutdown")
         socket.terminate()
@@ -233,6 +340,9 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         }, "Live desktop client registered")
         this.upsertDeviceMetadata(client, seenAt)
         this.publish(client)
+        // A computer signing in is the whole point: a phone that was already open
+        // and showing "电脑离线" learns about it here, not by asking again.
+        this.notifyDesktopPresence(client.userId)
         const serverTime = this.clock.now().toISOString()
         sendJson(socket, createLiveEnvelope(LIVE_MESSAGE_TYPES.welcome, {
           connectionId,
@@ -253,6 +363,9 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       if (client) {
         registeredClient = client
         this.publish(client)
+        // A client that missed its heartbeat window is off the reachable list
+        // until it speaks again, so this is also how it comes back.
+        this.notifyDesktopPresence(client.userId)
       }
       if (message.type === LIVE_MESSAGE_TYPES.webhookDeliveryAck) {
         const ackClient = client ?? registeredClient
@@ -278,6 +391,15 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         })
         return
       }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileSummary
+        || message.type === LIVE_MESSAGE_TYPES.mobileFrame
+        || message.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
+        // Terminal payloads for phones go to the relay, not back to the sender.
+        // Without a relay installed they are dropped rather than answered.
+        this.handleMobileRelayMessage(auth.userId, message)
+        return
+      }
+
       const serverTime = this.clock.now().toISOString()
       sendJson(socket, createLiveEnvelope(LIVE_MESSAGE_TYPES.pong, {
         serverTime,
@@ -292,14 +414,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         connectionId,
         userId: auth.userId,
       }, "Live desktop websocket closed")
-      const client = this.registry.markDisconnected({
-        connectionId,
-        now: this.clock.now(),
-        reason: "socket_close",
-      })
-      if (client) {
-        this.publish(client)
-      }
+      this.markDesktopOffline({ connectionId, reason: "socket_close" })
     })
 
     socket.on("error", (error) => {
@@ -309,14 +424,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         errorName: error instanceof Error ? error.name : typeof error,
         userId: auth.userId,
       }, "Live desktop websocket error")
-      const client = this.registry.markDisconnected({
-        connectionId,
-        now: this.clock.now(),
-        reason: "socket_error",
-      })
-      if (client) {
-        this.publish(client)
-      }
+      this.markDesktopOffline({ connectionId, reason: "socket_error" })
     })
   }
 
@@ -343,6 +451,10 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         }
       }
       this.publish(client)
+      // This path marks clients offline through the registry rather than through
+      // `markDesktopOffline`, so it has to report presence itself. Both "stale"
+      // and "offline" drop the client off the reachable list.
+      this.notifyDesktopPresence(client.userId)
     }
   }
 
@@ -356,14 +468,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       const socket = this.socketsByConnectionId.get(connectionId)
       this.socketsByConnectionId.delete(connectionId)
 
-      const disconnected = this.registry.markDisconnected({
-        connectionId,
-        now: this.clock.now(),
-        reason: "user_disabled",
-      })
-      if (disconnected) {
-        this.publish(disconnected)
-      }
+      this.markDesktopOffline({ connectionId, reason: "user_disabled" })
 
       if (!socket) continue
 
@@ -439,6 +544,32 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       occurredAt: this.clock.now().toISOString(),
       client: toPublicDto(client, { includeUserId: true }),
     })
+  }
+
+  private handleMobileRelayMessage(userId: string, message: LiveDesktopClientMessage): void {
+    const relay = this.mobileRelayHandler
+    if (!relay) {
+      this.logger.warn({ messageType: message.type }, "Live mobile relay message dropped")
+      return
+    }
+    try {
+      if (message.type === LIVE_MESSAGE_TYPES.mobileSummary) {
+        relay.handleSummary(userId, message.payload)
+        return
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileFrame) {
+        relay.handleFrame(userId, message.payload)
+        return
+      }
+      relay.handleIntentResult(userId, message.payload as MobileIntentResultPayload)
+    } catch (error) {
+      // A relay failure must not tear down the desktop's own connection.
+      this.logger.warn({
+        messageType: message.type,
+        errorName: error instanceof Error ? error.name : typeof error,
+        userId,
+      }, "Live mobile relay message failed")
+    }
   }
 
   private closeStaleSocket(connectionId: string, client: LiveClientInstance): void {

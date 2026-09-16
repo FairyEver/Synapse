@@ -105,6 +105,19 @@ const envSchema = z
     DRIVE_COS_REGION: optionalEnvString,
     SYNAPSE_DRIVE_LOCAL_ROOT: optionalEnvString,
     DRIVE_COLLABORATION_ENABLED: z.enum(["true", "false"]).default("false"),
+    // Kill switch for the phone-facing socket. Enabled by default because the
+    // endpoint is authenticated and isolated from the desktop channel; a deployment
+    // sets it to "false" to withdraw remote terminal access without a code change.
+    MOBILE_LIVE_ENABLED: z.enum(["true", "false"]).default("true"),
+    // APNs credentials for terminal notifications. All optional: without them the
+    // app still works, only lock-screen delivery is missing.
+    APNS_KEY_ID: optionalEnvString,
+    APNS_TEAM_ID: optionalEnvString,
+    APNS_KEY_PATH: optionalEnvString,
+    APNS_BUNDLE_ID: optionalEnvString,
+    // A build installed straight from Xcode uses the sandbox gateway; TestFlight
+    // and App Store builds use production.
+    APNS_USE_SANDBOX: z.enum(["true", "false"]).default("false"),
     PDF_RENDERER_URL: optionalHttpUrl,
     PDF_RENDERER_INTERNAL_SECRET: optionalEnvString,
     SKILL_REPOSITORY_COS_SECRET_ID: optionalEnvString,
@@ -220,6 +233,12 @@ export interface ServerEnv {
   readonly driveCosRegion?: string
   readonly driveLocalRoot?: string
   readonly driveCollaborationEnabled: boolean
+  readonly mobileLiveEnabled: boolean
+  readonly apnsKeyId?: string
+  readonly apnsTeamId?: string
+  readonly apnsKeyPath?: string
+  readonly apnsBundleId?: string
+  readonly apnsUseSandbox: boolean
   readonly pdfRendererUrl?: string
   readonly pdfRendererInternalSecret?: string
   readonly skillRepositoryCosSecretId?: string
@@ -261,6 +280,12 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     driveCosRegion: result.data.DRIVE_COS_REGION,
     driveLocalRoot: result.data.SYNAPSE_DRIVE_LOCAL_ROOT,
     driveCollaborationEnabled: result.data.DRIVE_COLLABORATION_ENABLED === "true",
+    mobileLiveEnabled: result.data.MOBILE_LIVE_ENABLED === "true",
+    apnsKeyId: result.data.APNS_KEY_ID,
+    apnsTeamId: result.data.APNS_TEAM_ID,
+    apnsKeyPath: result.data.APNS_KEY_PATH,
+    apnsBundleId: result.data.APNS_BUNDLE_ID,
+    apnsUseSandbox: result.data.APNS_USE_SANDBOX === "true",
     pdfRendererUrl: result.data.PDF_RENDERER_URL,
     pdfRendererInternalSecret: result.data.PDF_RENDERER_INTERNAL_SECRET,
     skillRepositoryCosSecretId: result.data.SKILL_REPOSITORY_COS_SECRET_ID,

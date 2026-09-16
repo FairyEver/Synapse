@@ -2,6 +2,7 @@ export const API_PATH_PREFIX = "/api"
 export const DASHBOARD_PATH_PREFIX = "/console"
 export const PASSWORD_RESET_PATH = `${DASHBOARD_PATH_PREFIX}/reset-password`
 export const LIVE_DESKTOP_API_PATH = `${API_PATH_PREFIX}/live/desktop`
+export const LIVE_MOBILE_API_PATH = `${API_PATH_PREFIX}/live/mobile`
 export const WEBHOOK_PUBLIC_PATH_PREFIX = "/webhooks"
 
 export const DESKTOP_CLIENT_ID = "synapse-desktop"
@@ -66,9 +67,17 @@ export function maskWebhookUrl(url: string): string {
 }
 
 export function buildLiveDesktopSocketUrl(apiBaseUrl: string): string {
+  return buildLiveSocketUrl(apiBaseUrl, LIVE_DESKTOP_API_PATH)
+}
+
+export function buildLiveMobileSocketUrl(apiBaseUrl: string): string {
+  return buildLiveSocketUrl(apiBaseUrl, LIVE_MOBILE_API_PATH)
+}
+
+function buildLiveSocketUrl(apiBaseUrl: string, apiPath: string): string {
   const url = new URL(apiBaseUrl)
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-  url.pathname = `${url.pathname.replace(/\/+$/u, "")}${LIVE_DESKTOP_API_PATH.slice(API_PATH_PREFIX.length)}`
+  url.pathname = `${url.pathname.replace(/\/+$/u, "")}${apiPath.slice(API_PATH_PREFIX.length)}`
   url.search = ""
   url.hash = ""
   return url.toString()

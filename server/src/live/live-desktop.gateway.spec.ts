@@ -200,6 +200,101 @@ describe("parseLiveDesktopMessage", () => {
 })
 
 describe("LiveDesktopGateway", () => {
+  it("tells the user's phones when a desktop signs in", () => {
+    const socket = new FakeSocket()
+    const desktop = createClient({ clientInstanceId: "client-a" })
+    const presence = vi.fn()
+    const gateway = createGateway({
+      registry: {
+        register: vi.fn().mockReturnValue(desktop),
+        // What the registry answers right after that registration.
+        listOnlineByUser: vi.fn().mockReturnValue([desktop]),
+      },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleDesktopPresence: presence,
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    // Before hello the desktop is not registered yet, so this is the connection
+    // becoming usable rather than the socket merely opening.
+    expect(presence).not.toHaveBeenCalled()
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+
+    expect(presence).toHaveBeenCalledWith("user-1", ["client-a"])
+    expect(presence).toHaveBeenCalledTimes(1)
+  })
+
+  it("tells the user's phones when a desktop goes away", () => {
+    const socket = new FakeSocket()
+    const presence = vi.fn()
+    const desktop = createClient({ clientInstanceId: "client-a" })
+    // Reachable while connected, gone once the socket closes.
+    let online: LiveClientInstance[] = [desktop]
+    const gateway = createGateway({
+      registry: {
+        register: vi.fn().mockReturnValue(desktop),
+        markDisconnected: vi.fn().mockReturnValue(
+          createClient({ clientInstanceId: "client-a", status: "offline", connectionId: null }),
+        ),
+        listOnlineByUser: vi.fn(() => online),
+      },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleDesktopPresence: presence,
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    expect(presence).toHaveBeenCalledWith("user-1", ["client-a"])
+    presence.mockClear()
+    online = []
+
+    socket.emit("close", 1006, Buffer.from("network_lost"))
+
+    // An empty list is the message: it is what makes the phone stop claiming the
+    // computer is online.
+    expect(presence).toHaveBeenCalledWith("user-1", [])
+  })
+
+  it("does not re-send an unchanged presence list on every heartbeat", () => {
+    const socket = new FakeSocket()
+    const desktop = createClient({ clientInstanceId: "client-a" })
+    const presence = vi.fn()
+    const gateway = createGateway({
+      registry: {
+        register: vi.fn().mockReturnValue(desktop),
+        touch: vi.fn().mockReturnValue(desktop),
+        listOnlineByUser: vi.fn().mockReturnValue([desktop]),
+      },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleDesktopPresence: presence,
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: "live.ping",
+      id: "msg-ping",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: { sentAt: "2026-06-06T10:00:01.000Z" },
+    }))
+
+    // Heartbeats arrive every 20s per desktop; forwarding each one would turn a
+    // rare event into a steady stream at every phone of the account.
+    expect(presence).toHaveBeenCalledTimes(1)
+  })
+
   it("caps inbound websocket payloads before message parsing", () => {
     const gateway = createGateway()
     const server = gateway.createWebSocketServer() as ReturnType<LiveDesktopGateway["createWebSocketServer"]> & {

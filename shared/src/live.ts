@@ -1,3 +1,11 @@
+import {
+  isMobileDetachedPayload,
+  isMobileFramePayload,
+  isMobileIntentPayload,
+  isMobileIntentResultPayload,
+  isMobileSummaryPayload,
+} from "./mobile-live.js"
+import { isMobilePresencePayload } from "./mobile-live.js"
 import { isWebhookDeliveryReceivedPayload } from "./webhook.js"
 
 export const LIVE_MESSAGE_TYPES = {
@@ -7,6 +15,12 @@ export const LIVE_MESSAGE_TYPES = {
   pong: "live.pong",
   webhookDeliveryReceived: "webhook.delivery.received",
   webhookDeliveryAck: "webhook.delivery.ack",
+  mobileSummary: "mobile.summary",
+  mobileFrame: "mobile.frame",
+  mobileIntent: "mobile.intent",
+  mobileIntentResult: "mobile.intentResult",
+  mobileDetached: "mobile.detached",
+  mobilePresence: "mobile.presence",
 } as const
 
 export const LIVE_HELLO_FIELD_LIMITS = {
@@ -55,11 +69,58 @@ export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.hello, LiveDesktopHelloPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.ping, LiveDesktopPingPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.webhookDeliveryAck, LiveWebhookDeliveryAckPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileSummary, import("./mobile-live.js").MobileSummaryPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileFrame, import("./mobile-live.js").MobileFramePayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntentResult, import("./mobile-live.js").MobileIntentResultPayload>
 
 export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.pong, LiveDesktopPongPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.webhookDeliveryReceived, import("./webhook.js").WebhookDeliveryReceivedPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntent, import("./mobile-live.js").MobileIntentPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileDetached, import("./mobile-live.js").MobileDetachedPayload>
+
+/**
+ * A phone reuses the desktop handshake (hello/welcome/ping/pong) so there is one
+ * connection lifecycle to reason about, and adds only the terminal families.
+ *
+ * These unions exist because the phone sits on the opposite side of the same
+ * envelopes: it sends what a desktop receives and receives what a desktop sends.
+ * Naming them from the phone's perspective keeps the iOS client readable.
+ */
+export type LiveMobileClientMessage =
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.hello, LiveDesktopHelloPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.ping, LiveDesktopPingPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntent, import("./mobile-live.js").MobileIntentPayload>
+
+export type LiveMobileServerMessage =
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.pong, LiveDesktopPongPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileSummary, import("./mobile-live.js").MobileSummaryPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileFrame, import("./mobile-live.js").MobileFramePayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntentResult, import("./mobile-live.js").MobileIntentResultPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobilePresence, import("./mobile-live.js").MobilePresencePayload>
+
+export function isLiveMobileClientMessage(value: unknown): value is LiveMobileClientMessage {
+  if (!isLiveEnvelope(value)) return false
+  if (value.type === LIVE_MESSAGE_TYPES.hello) return isHelloPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.ping) return isPingPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileIntent) return isMobileIntentPayload(value.payload)
+  return false
+}
+
+export function isLiveMobileServerMessage(value: unknown): value is LiveMobileServerMessage {
+  if (!isLiveEnvelope(value)) return false
+  if (value.type === LIVE_MESSAGE_TYPES.welcome) return isWelcomePayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.pong) return isPongPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileSummary) return isMobileSummaryPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileFrame) return isMobileFramePayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
+    return isMobileIntentResultPayload(value.payload)
+  }
+  if (value.type === LIVE_MESSAGE_TYPES.mobilePresence) return isMobilePresencePayload(value.payload)
+  return false
+}
 
 export function createLiveEnvelope<TType extends LiveMessageType, TPayload>(
   type: TType,
@@ -83,6 +144,11 @@ export function isLiveDesktopClientMessage(value: unknown): value is LiveDesktop
   if (value.type === LIVE_MESSAGE_TYPES.hello) return isHelloPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.ping) return isPingPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.webhookDeliveryAck) return isWebhookDeliveryAckPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileSummary) return isMobileSummaryPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileFrame) return isMobileFramePayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
+    return isMobileIntentResultPayload(value.payload)
+  }
   return false
 }
 
@@ -93,6 +159,8 @@ export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktop
   if (value.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived) {
     return isWebhookDeliveryReceivedPayload(value.payload)
   }
+  if (value.type === LIVE_MESSAGE_TYPES.mobileIntent) return isMobileIntentPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileDetached) return isMobileDetachedPayload(value.payload)
   return false
 }
 

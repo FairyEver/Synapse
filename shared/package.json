@@ -22,6 +22,12 @@
       "import": "./dist/versioned-data-migrator.cjs",
       "require": "./dist/versioned-data-migrator.cjs",
       "default": "./dist/versioned-data-migrator.cjs"
+    },
+    "./mobile-live-constants": {
+      "types": "./dist/mobile-live-constants.d.cts",
+      "import": "./dist/mobile-live-constants.cjs",
+      "require": "./dist/mobile-live-constants.cjs",
+      "default": "./dist/mobile-live-constants.cjs"
     }
   },
   "scripts": {

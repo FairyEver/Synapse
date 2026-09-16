@@ -53,6 +53,12 @@ services:
       BACKUP_COS_REGION: ${BACKUP_COS_REGION:-}
       SYNAPSE_DRIVE_LOCAL_ROOT: /app/data/drive
       DRIVE_COLLABORATION_ENABLED: ${DRIVE_COLLABORATION_ENABLED:-false}
+      MOBILE_LIVE_ENABLED: ${MOBILE_LIVE_ENABLED:-true}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_KEY_PATH: ${APNS_KEY_PATH:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-com.liy.SynapseMobile}
+      APNS_USE_SANDBOX: ${APNS_USE_SANDBOX:-false}
       PDF_RENDERER_URL: http://pdf-renderer:3010
       PDF_RENDERER_INTERNAL_SECRET: ${PDF_RENDERER_INTERNAL_SECRET:?PDF_RENDERER_INTERNAL_SECRET is required}
       PORT: "3001"
@@ -70,6 +76,10 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./data/drive:/app/data/drive
+      # APNs signing key. Deliberately outside the app directory: deploy.sh rsyncs
+      # that tree with --delete, and a key that only exists on the server would be
+      # removed by the next deployment.
+      - ../secrets/apns:/app/secrets/apns:ro
     depends_on:
       postgres:
         condition: service_healthy

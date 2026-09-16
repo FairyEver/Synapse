@@ -7,6 +7,7 @@ import { ApiKeyModule } from "./api-keys/api-key.module"
 import { AppModule } from "./app.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { LiveModule } from "./live/live.module"
+import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { OpenApiModule } from "./open-api/open-api.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { UpdateIntentModule } from "./update-intent/update-intent.module"
@@ -20,6 +21,7 @@ describe("AppModule", () => {
       { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     ]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([LiveModule]))
+    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([MobileLiveModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([SkillRepositoryModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([UpdateIntentModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([ApiKeyModule]))

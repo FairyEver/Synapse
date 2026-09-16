@@ -16,6 +16,7 @@ import { HealthModule } from "./health/health.module"
 import { ClientTelemetryModule } from "./client-telemetry/client-telemetry.module"
 import { OpenApiModule } from "./open-api/open-api.module"
 import { LiveModule } from "./live/live.module"
+import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
@@ -77,6 +78,7 @@ type RequestLogObject = {
     UserAuthModule,
     ClientTelemetryModule,
     LiveModule,
+    MobileLiveModule,
     WebhookModule,
     AdminAuthModule,
     DashboardModule,

@@ -10,6 +10,7 @@ import { registerHttpBodyParsers } from "./common/http-body-parser"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
 import { DriveCollaborationGateway } from "./drive/drive-collaboration.gateway"
+import { MobileLiveGateway } from "./mobile-live/mobile-live.gateway"
 import { registerLiveShutdownSignalHandlers } from "./live/live-shutdown-signals"
 import { isProblemFeedbackPublicPath } from "./problem-feedback/problem-feedback-http"
 
@@ -39,6 +40,11 @@ async function bootstrap(): Promise<void> {
   registerLiveShutdownSignalHandlers(liveDesktopGateway)
   liveDesktopGateway.attach(app.getHttpServer())
   app.get(DriveCollaborationGateway).attach(app.getHttpServer())
+  // Phones connect over their own path; the three gateways share one upgrade
+  // event and each claims its own pathname.
+  if (env.mobileLiveEnabled) {
+    app.get(MobileLiveGateway).attach(app.getHttpServer())
+  }
   await app.listen(env.port)
 }
 

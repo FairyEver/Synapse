@@ -290,6 +290,12 @@ model UserDevice {
   lastSeenAt       DateTime
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  /// Notification target for a mobile client. All nullable: the deploy migration
+  /// scanner treats a NOT NULL addition as risky, and a null token already means
+  /// "not registered", so a separate enabled flag would be redundant.
+  pushToken        String?  @db.VarChar(200)
+  pushPlatform     String?  @db.VarChar(20)
+  lastPushAt       DateTime?
 
   @@unique([userId, clientInstanceId])
   @@index([userId, lastSeenAt])
