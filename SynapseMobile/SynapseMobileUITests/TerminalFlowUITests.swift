@@ -260,13 +260,14 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "12-deleted")
     }
 
-    /// Can the terminal be left without the back button?
+    /// The terminal can be left by the system's edge-swipe gesture.
     ///
-    /// The screen hides the navigation bar, which historically disables the
-    /// interactive pop gesture — but "historically" is not "on this OS". If the
-    /// gesture does work, it is a second way off this screen, and any work tied to
-    /// the back button alone does not cover it.
-    func testWhetherTheTerminalCanBeLeftByEdgeSwipe() throws {
+    /// This test previously asserted the opposite — that the swipe did *nothing* —
+    /// because hiding the navigation bar turns the gesture off. That assertion was
+    /// correct for the code as it stood and deliberately inverted here, when the
+    /// gesture was restored. Its failing on the change was the proof the gesture
+    /// had actually come back, rather than being assumed to.
+    func testTerminalCanBeLeftByEdgeSwipe() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
         app.launch()
@@ -279,19 +280,59 @@ final class TerminalFlowUITests: XCTestCase {
 
         let terminal = app.descendants(matching: .any)["terminal.text"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
-        capture(app, name: "19-terminal-before-edge-swipe")
 
-        // The system pop gesture: begin at the left edge and drag right.
         let edge = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
         edge.press(forDuration: 0.05, thenDragTo: edge.withOffset(CGVector(dx: 320, dy: 0)))
-        Thread.sleep(forTimeInterval: 1.0)
-        capture(app, name: "20-terminal-after-edge-swipe")
-
-        // Asserting the gesture does NOT pop. A failure here is the finding, not a
-        // broken test: it would mean this screen has two ways out.
         XCTAssertTrue(
-            terminal.exists,
-            "EDGE SWIPE POPPED THE TERMINAL — there is an exit that never touches the back button"
+            app.staticTexts["claude-code"].waitForExistence(timeout: 8),
+            "the edge swipe did not go back to the list"
+        )
+        XCTAssertFalse(terminal.exists, "the terminal is still on screen after the swipe")
+        capture(app, name: "21-edge-swipe-back")
+
+        // The recogniser keeps its delegate after the pop, so the guard has to hold
+        // on the stack's root too. An ungated swipe there is the classic way this
+        // technique leaves the stack wedged.
+        // From the screen's own left edge, which is where the system gesture
+        // starts — dragging from a row's left edge is a different gesture.
+        let rootEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
+        rootEdge.press(forDuration: 0.05, thenDragTo: rootEdge.withOffset(CGVector(dx: 320, dy: 0)))
+        Thread.sleep(forTimeInterval: 0.8)
+        // `claude-code` rather than another row: the swipe-actions test deletes one
+        // fixture and renames another, and this test has to survive running after it.
+        XCTAssertTrue(app.staticTexts["claude-code"].exists, "an edge swipe at the stack root disturbed the list")
+
+        // And the stack still works afterwards.
+        app.staticTexts["claude-code"].tap()
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10), "the stack stopped working after a root swipe")
+    }
+
+    /// A swipe that is dragged and released without completing must leave nothing
+    /// behind — the back button is the fallback for a gesture that was abandoned.
+    func testCancelledEdgeSwipeLeavesTheScreenUsable() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        XCTAssertTrue(app.staticTexts["claude-code"].waitForExistence(timeout: 20), "session list never arrived")
+        app.staticTexts["claude-code"].tap()
+
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
+
+        // A fifth of the way across, then released: not enough to commit.
+        let edge = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.0, dy: 0.5))
+        edge.press(forDuration: 0.05, thenDragTo: edge.withOffset(CGVector(dx: 80, dy: 0)))
+        Thread.sleep(forTimeInterval: 0.8)
+        XCTAssertTrue(terminal.exists, "a short drag popped the terminal")
+
+        app.buttons["chevron.left"].firstMatch.tap()
+        XCTAssertTrue(
+            app.staticTexts["claude-code"].waitForExistence(timeout: 8),
+            "the back button stopped working after a cancelled swipe"
         )
     }
 

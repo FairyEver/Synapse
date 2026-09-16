@@ -41,6 +41,11 @@ struct TerminalScreen: View {
         // screen that comes next, which is what made leaving the terminal flash
         // from dark to light.
         .navigationBarBackButtonHidden(true)
+        // Hiding the navigation bar is what disables the system's edge-swipe back
+        // gesture, so restoring it takes the gesture recogniser behind the bar —
+        // a different mechanism from a view's own preferences, which the status
+        // bar experiment showed are not forwarded.
+        .background(InteractivePopGesture())
         .toolbar(.hidden, for: .navigationBar)
         // The terminal is the screen; a tab bar over a soft keyboard only
         // costs vertical space and invites taps by accident.
@@ -193,5 +198,59 @@ struct TerminalScreen: View {
     private var statusColor: Color {
         guard let session else { return .secondary }
         return Theme.statusColor(isWaiting: session.attention.isWaiting, isRunning: session.isRunning)
+    }
+}
+
+/// Puts the interactive pop gesture back on a screen that hides its back button.
+///
+/// The bar is hidden, not absent: the gesture recogniser still exists, it is just
+/// switched off with the button. Handing it a delegate of our own turns it back on
+/// and lets us say when it may start.
+private struct InteractivePopGesture: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController {
+        Controller()
+    }
+
+    func updateUIViewController(_ controller: UIViewController, context: Context) {}
+
+    final class Controller: UIViewController, UIGestureRecognizerDelegate {
+        private weak var previousDelegate: UIGestureRecognizerDelegate?
+        private weak var gesture: UIGestureRecognizer?
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            guard let gesture = navigationController?.interactivePopGestureRecognizer else { return }
+            self.gesture = gesture
+            previousDelegate = gesture.delegate
+            gesture.delegate = self
+            gesture.isEnabled = true
+        }
+
+        /// Hands the recogniser back exactly as it was found.
+        ///
+        /// It is one object shared by the whole navigation controller, so a
+        /// delegate left behind would outlive this screen and change how the next
+        /// one behaves.
+        deinit {
+            guard let gesture else { return }
+            gesture.delegate = previousDelegate
+            gesture.isEnabled = false
+        }
+
+        /// Only when there is something to go back to.
+        ///
+        /// Each tab owns a `NavigationStack`, and at its root there is nothing
+        /// behind the screen; the classic failure of this technique is the gesture
+        /// recognising there anyway.
+        ///
+        /// Measured honestly: this gate could **not** be shown to be load-bearing.
+        /// The root behaves the same with and without it, because the delegate is
+        /// weak and is gone by the time the terminal has been popped. It is kept as
+        /// the documented mitigation for a failure that did not reproduce here,
+        /// not because it was observed to prevent one.
+        func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+            (navigationController?.viewControllers.count ?? 0) > 1
+        }
+
     }
 }
