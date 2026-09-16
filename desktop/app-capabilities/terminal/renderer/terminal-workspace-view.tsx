@@ -20,12 +20,18 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Terminal } from "@xterm/xterm"
-import { Columns3, Folder, Maximize2, Minimize2, Rows3, Square, X } from "lucide-react"
+import { Columns3, Folder, Maximize2, Minimize2, Pencil, Rows3, Square, X } from "lucide-react"
 import "@xterm/xterm/css/xterm.css"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { Button } from "../../../src/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../../../src/components/ui/context-menu"
 import { Spinner } from "../../../src/components/ui/spinner"
 import { WorkspaceFileTree } from "../../../src/components/workspace-file-tree"
 import {
@@ -113,6 +119,7 @@ export function TerminalWorkspaceView({
   onClosePane,
   onEqualizePane,
   onMovePane,
+  onRenameSession,
   onSessionChanged,
   onSessionDeleted,
   onSplitPane,
@@ -134,6 +141,7 @@ export function TerminalWorkspaceView({
     targetPaneId: string,
     edge: SynapseTerminalPaneDropEdge,
   ) => void
+  readonly onRenameSession: (sessionId: string, returnFocus: HTMLElement | null) => void
   readonly onSessionChanged: (session: SynapseTerminalSession) => void
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onSplitPane: (paneId: string, direction: "right" | "down") => void
@@ -470,6 +478,7 @@ export function TerminalWorkspaceView({
             onPaneDragEnd={handlePaneDragEnd}
             onPaneDragStart={() => handlePaneDragStart(pane.paneId)}
             onPaneDragTargetChange={(edge) => handlePaneDragTargetChange(pane.paneId, edge)}
+            onRenameSession={onRenameSession}
             onSessionChanged={onSessionChanged}
             onSessionDeleted={onSessionDeleted}
             onShortcut={(shortcut) => handleShortcut(pane.paneId, shortcut)}
@@ -674,6 +683,45 @@ function captureTerminalSplitLayouts(
   return snapshot
 }
 
+/**
+ * The conversation name in a pane header. Renaming is offered through the same gestures as the
+ * sidebar tab row: double-click, or the context menu. The header doubles as the pane drag handle,
+ * so both gestures stay on the title and the drag keeps working on the rest of the header.
+ *
+ * The title stays unfocusable on purpose: a focusable label would pull focus away from the
+ * terminal on every click on the header.
+ */
+function TerminalPaneTitle({
+  onActive,
+  onRename,
+  title,
+}: {
+  readonly onActive: () => void
+  readonly onRename: () => void
+  readonly title: string
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <span
+          className="truncate text-xs font-medium text-foreground/75"
+          data-track="terminal-pane-title"
+          onClick={onActive}
+          onDoubleClick={onRename}
+        >
+          {title}
+        </span>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onRename}>
+          <Pencil />
+          重命名
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
 function TerminalPane({
   active,
   appearanceSize,
@@ -698,6 +746,7 @@ function TerminalPane({
   onPaneDragEnd,
   onPaneDragStart,
   onPaneDragTargetChange,
+  onRenameSession,
   onSessionChanged,
   onSessionDeleted,
   onShortcut,
@@ -737,6 +786,7 @@ function TerminalPane({
   readonly onPaneDragEnd: () => void
   readonly onPaneDragStart: () => void
   readonly onPaneDragTargetChange: (edge: SynapseTerminalPaneDropEdge | null) => void
+  readonly onRenameSession: (sessionId: string, returnFocus: HTMLElement | null) => void
   readonly onSessionChanged: (session: SynapseTerminalSession) => void
   readonly onSessionDeleted: (sessionId: string) => void
   readonly onShortcut: (shortcut: TerminalPaneShortcut) => void
@@ -753,6 +803,7 @@ function TerminalPane({
   const workspaceTreeBridge = terminalBridge.workspaceTree
   const shellBridge = requireBridgeDomain("shell")
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const paneRootRef = useRef<HTMLDivElement | null>(null)
   const paneContentRef = useRef<HTMLDivElement | null>(null)
   const fileTreeOverlayRef = useRef<HTMLDivElement | null>(null)
   const fileTreeTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -1317,7 +1368,10 @@ function TerminalPane({
 
   return (
     <div
-      ref={(element) => registerElement(paneId, element)}
+      ref={(element) => {
+        paneRootRef.current = element
+        registerElement(paneId, element)
+      }}
       role="region"
       aria-label={`终端输出与输入：${session.title}`}
       data-terminal-pane-maximized={maximized ? "true" : undefined}
@@ -1348,9 +1402,11 @@ function TerminalPane({
         )}
       >
         <div className="flex min-w-0 items-center gap-0.5">
-          <span className="truncate text-xs font-medium text-foreground/75" title={session.title}>
-            {session.title}
-          </span>
+          <TerminalPaneTitle
+            onActive={onActive}
+            onRename={() => onRenameSession(session.id, paneRootRef.current)}
+            title={session.title}
+          />
           {workspaceTreeBridge ? <Button
             ref={fileTreeTriggerRef}
             type="button"

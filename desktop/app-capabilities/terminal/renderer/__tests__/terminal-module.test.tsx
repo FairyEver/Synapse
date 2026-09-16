@@ -1190,6 +1190,55 @@ describe("TerminalModule", () => {
     expect(document.activeElement).toBe(headerSessionTab("构建日志"))
   })
 
+  it("renames a conversation from its pane header context menu", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+    await openPaneTitleMenu("开发终端")
+    await clickContextMenuItem("重命名")
+
+    expect(document.body.textContent).toContain("重命名对话")
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="对话名称"]')?.value).toBe("开发终端")
+
+    await changeInput("对话名称", "  构建日志  ")
+    await clickButton("保存")
+
+    expect(terminalBridge.renameSession).toHaveBeenCalledWith({ sessionId: "session-1", title: "构建日志" })
+    expect(paneTitle("构建日志")).toBeTruthy()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(document.activeElement).toBe(document.querySelector('[data-track="terminal.pane.surface"]'))
+  })
+
+  it("renames a conversation by double-clicking its pane header title", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+    await doubleClickPaneTitle("开发终端")
+
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="对话名称"]')?.value).toBe("开发终端")
+
+    await changeInput("对话名称", "日志终端")
+    await clickButton("保存")
+
+    expect(terminalBridge.renameSession).toHaveBeenCalledWith({ sessionId: "session-1", title: "日志终端" })
+    expect(paneTitle("日志终端")).toBeTruthy()
+  })
+
+  it("keeps the pane header draggable while the conversation can be renamed", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
+
+    await renderEmbeddedModule()
+
+    const header = document.querySelector("[data-terminal-pane-header]")
+    expect(header?.getAttribute("draggable")).toBe("true")
+    expect(header?.getAttribute("data-track")).toBe("terminal.pane.drag")
+  })
+
   it("closes a workspace from its header session tab context menu", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })
@@ -3540,6 +3589,27 @@ function headerSessionMenuItems(): HTMLElement[] {
 function sidebarSessionRow(title: string): HTMLElement | null {
   return Array.from(document.body.querySelectorAll<HTMLElement>('[data-track="terminal-session-select"]'))
     .find((element) => element.textContent?.includes(title)) ?? null
+}
+
+function paneTitle(title: string): HTMLElement | null {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('[data-track="terminal-pane-title"]'))
+    .find((element) => element.textContent === title) ?? null
+}
+
+async function openPaneTitleMenu(title: string): Promise<void> {
+  const element = paneTitle(title)
+  await act(async () => {
+    element?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, button: 2 }))
+    await Promise.resolve()
+  })
+}
+
+async function doubleClickPaneTitle(title: string): Promise<void> {
+  const element = paneTitle(title)
+  await act(async () => {
+    element?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
+    await Promise.resolve()
+  })
 }
 
 async function openSidebarSessionMenu(title: string): Promise<void> {

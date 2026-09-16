@@ -152,6 +152,9 @@ export function TerminalModule({
   const [renameTarget, setRenameTarget] = useState<SynapseTerminalWorkspace | null>(null)
   const [renameTitle, setRenameTitle] = useState("")
   const [renameSaving, setRenameSaving] = useState(false)
+  const [sessionRenameTarget, setSessionRenameTarget] = useState<SynapseTerminalSession | null>(null)
+  const [sessionRenameTitle, setSessionRenameTitle] = useState("")
+  const [sessionRenameSaving, setSessionRenameSaving] = useState(false)
   const [closingWorkspaceId, setClosingWorkspaceId] = useState<string | null>(null)
   const [pendingClosePaneIds, setPendingClosePaneIds] = useState<ReadonlySet<string>>(() => new Set())
   const [groupDialogMode, setGroupDialogMode] = useState<"create" | "rename" | null>(null)
@@ -182,6 +185,7 @@ export function TerminalModule({
   const [mountedWorkspaceIds, setMountedWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
   const workspaceViewRefs = useRef(new Map<string, TerminalWorkspaceViewHandle>())
   const renameReturnFocusRef = useRef<HTMLElement | null>(null)
+  const sessionRenameReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteGroupReturnFocusRef = useRef<HTMLButtonElement | null>(null)
   const createSessionActionRef = useRef<HTMLButtonElement | null>(null)
   const createGroupActionRef = useRef<HTMLButtonElement | null>(null)
@@ -434,6 +438,23 @@ export function TerminalModule({
     }, 0)
   }, [])
 
+  const openSessionRenameDialog = useCallback((sessionId: string, returnFocus: HTMLElement | null) => {
+    const session = sessions.find((item) => item.id === sessionId)
+    if (!session) return
+    sessionRenameReturnFocusRef.current = returnFocus
+    setSessionRenameTarget(session)
+    setSessionRenameTitle(session.title)
+  }, [sessions])
+
+  const closeSessionRenameDialog = useCallback(() => {
+    setSessionRenameTarget(null)
+    setSessionRenameTitle("")
+    globalThis.setTimeout(() => {
+      sessionRenameReturnFocusRef.current?.focus()
+      sessionRenameReturnFocusRef.current = null
+    }, 0)
+  }, [])
+
   const closeDeleteGroupDialog = useCallback(() => {
     setDeleteGroupTarget(null)
     globalThis.setTimeout(() => {
@@ -621,6 +642,26 @@ export function TerminalModule({
       setRenameSaving(false)
     }
   }, [closeRenameDialog, enqueueWorkspaceMutation, getCurrentWorkspace, refreshAfterWorkspaceMutation, renameTarget, renameTitle, terminalBridge])
+
+  const renameSession = useCallback(async () => {
+    if (!sessionRenameTarget) return
+    const title = sessionRenameTitle.trim()
+    if (!title) return
+    setSessionRenameSaving(true)
+    try {
+      const session = await runTrackedOperation(
+        { component: "terminal", eventKey: "terminal.session.rename" },
+        () => terminalBridge.session.rename({ sessionId: sessionRenameTarget.id, title }),
+      )
+      setSessions((current) => mergeSession(current, session))
+      closeSessionRenameDialog()
+    } catch (error) {
+      logger.error("Failed to rename terminal session.", error)
+      toast.error("重命名对话失败")
+    } finally {
+      setSessionRenameSaving(false)
+    }
+  }, [closeSessionRenameDialog, sessionRenameTarget, sessionRenameTitle, terminalBridge])
 
   const closeWorkspace = useCallback(async (target: SynapseTerminalWorkspace, force = false) => {
     setClosingWorkspaceId(target.id)
@@ -1467,6 +1508,7 @@ export function TerminalModule({
                         onClosePane={closePane}
                         onEqualizePane={equalizePane}
                         onMovePane={movePane}
+                        onRenameSession={openSessionRenameDialog}
                         onSessionChanged={handleSessionChanged}
                         onSessionDeleted={handleSessionDeleted}
                         onSplitPane={splitPane}
@@ -1888,6 +1930,47 @@ export function TerminalModule({
               type="button"
               disabled={renameSaving || !renameTitle.trim()}
               onClick={() => { void renameWorkspace() }}
+            >
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={sessionRenameTarget !== null} onOpenChange={(open) => {
+        if (!open) closeSessionRenameDialog()
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>重命名对话</DialogTitle>
+            <DialogDescription className="sr-only">
+              输入新的对话名称。
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            aria-label="对话名称"
+            value={sessionRenameTitle}
+            onChange={(event) => setSessionRenameTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void renameSession()
+              }
+            }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={sessionRenameSaving}
+              onClick={closeSessionRenameDialog}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={sessionRenameSaving || !sessionRenameTitle.trim()}
+              onClick={() => { void renameSession() }}
             >
               保存
             </Button>
