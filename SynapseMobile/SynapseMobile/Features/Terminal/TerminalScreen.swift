@@ -115,7 +115,7 @@ struct TerminalScreen: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 15, weight: .semibold))
                     .frame(width: 30, height: 30)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(Color(uiColor: .secondarySystemBackground), in: Circle())
             }
             .tint(.primary)
         }
@@ -123,9 +123,12 @@ struct TerminalScreen: View {
         .padding(.vertical, 8)
         .background {
             Rectangle()
-                .fill(.ultraThinMaterial)
-                // Extend through the status bar: the window background would
-                // otherwise show as a light band above a dark navigation bar.
+                // Opaque, not a material. A material samples what is behind it,
+                // and what is behind here is the dark canvas — which is what
+                // turned this bar into a grey gradient in light appearance.
+                .fill(Color(uiColor: .systemBackground))
+                // Extend through the status bar so the bar and the status bar
+                // area are one surface.
                 .ignoresSafeArea(edges: .top)
         }
         .overlay(alignment: .bottom) {
@@ -148,13 +151,13 @@ struct TerminalScreen: View {
                     .frame(minWidth: 40)
                     .padding(.vertical, 7)
                     .padding(.horizontal, 8)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
         }
-        .background(.ultraThinMaterial)
+        .background(Color(uiColor: .systemBackground))
     }
 
     private var inputBar: some View {
@@ -178,7 +181,7 @@ struct TerminalScreen: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .background(Color(uiColor: .systemBackground))
         .overlay(alignment: .top) { Divider().opacity(0.3) }
     }
 
