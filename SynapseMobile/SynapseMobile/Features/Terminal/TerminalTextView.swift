@@ -679,6 +679,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
 
     /// Puts the handles on the selection's two ends and redraws the tinted rows.
     private func refreshSelection() {
+        // Nothing on screen to re-key yet. Rebuilding the snapshot from an empty list
+        // is not "nothing changed" — it is an empty snapshot, and applying it wipes
+        // the view. The next frame renders everything with the selection already in
+        // its identity, so skipping here loses nothing.
+        guard !appliedRows.isEmpty else { return }
         guard let selection else {
             selectionOverlay.hide()
             return
