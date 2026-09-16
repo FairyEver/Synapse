@@ -22,6 +22,21 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!--
+	  The terminal grid font. iOS ships nothing that covers the private use area a
+	  shell prompt draws its branch and language markers from, so the family is
+	  bundled; without it those characters render as replacement boxes.
+
+	  These are bare file names on purpose: the target uses a synchronised folder
+	  group, which flattens resources into the bundle root rather than preserving
+	  `Fonts/`. A path with a directory in it would not resolve, and the failure is
+	  silent — the terminal would just fall back to the system monospace face.
+	-->
+	<key>UIAppFonts</key>
+	<array>
+		<string>MapleMono-NF-CN-Regular.ttf</string>
+		<string>MapleMono-NF-CN-Bold.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>

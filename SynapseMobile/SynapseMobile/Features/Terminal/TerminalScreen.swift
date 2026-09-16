@@ -8,7 +8,8 @@ struct TerminalScreen: View {
 
     let sessionId: String
     @State private var draft = ""
-    @State private var fontSize: CGFloat = 12
+    /// Matches the desktop's default terminal size, so the two read the same.
+    @State private var fontSize: CGFloat = 14
     @State private var showingRename = false
     @State private var renamingTitle = ""
     @State private var showingStopConfirm = false

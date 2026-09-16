@@ -31,7 +31,23 @@ final class TerminalStore {
     /// Rows the collection view renders. Stable ids let the diffable data source
     /// tell an append from a rewrite without comparing text.
     private(set) var rows: [DisplayRow] = []
-    private(set) var cursorRow: Int?
+
+    /// Where the terminal's cursor sits on the rows this store renders.
+    ///
+    /// The desktop reports a line index and a column in *its* grid. The phone wraps
+    /// the same characters at its own width, so that column has to be split back
+    /// into the display row that carries it and an offset within that row.
+    struct CursorPosition: Equatable {
+        /// Index into `rows`.
+        let rowIndex: Int
+        /// Character offset within that row.
+        let column: Int
+    }
+
+    private(set) var cursorPosition: CursorPosition?
+    /// The last cursor the desktop sent, kept so the position can be recomputed
+    /// when the wrap width changes underneath it.
+    private var lastCursor: TerminalCursor = .hidden
     private(set) var isAlternateScreen = false
     private(set) var didTruncate = false
     private(set) var columns: Int = 80
@@ -69,7 +85,8 @@ final class TerminalStore {
         firstLineIndex = 0
         rowsFirstLine = 0
         lastWrappedLine = -1
-        cursorRow = nil
+        lastCursor = .hidden
+        cursorPosition = nil
         isAlternateScreen = false
         didTruncate = false
         oldestIndex = 0
@@ -119,7 +136,27 @@ final class TerminalStore {
 
         rewrap(from: frame.from)
         trimToLimit()
-        cursorRow = frame.cursor.visible ? frame.cursor.row : nil
+        lastCursor = frame.cursor
+        refreshCursorPosition()
+    }
+
+    /// Maps the desktop's cursor onto the wrapped rows. Hidden, or pointing at a
+    /// line this store no longer holds, means nothing to draw.
+    private func refreshCursorPosition() {
+        guard lastCursor.visible,
+              let base = rowOffsetByLine[lastCursor.row],
+              lastCursor.col >= 0
+        else {
+            cursorPosition = nil
+            return
+        }
+        let width = max(1, columns)
+        let rowIndex = base + lastCursor.col / width
+        guard rowIndex < rows.count else {
+            cursorPosition = nil
+            return
+        }
+        cursorPosition = CursorPosition(rowIndex: rowIndex, column: lastCursor.col % width)
     }
 
     /// Inserts a page of scrollback below what is already held.
@@ -187,6 +224,8 @@ final class TerminalStore {
         rowsFirstLine = firstLineIndex
         lastWrappedLine = firstLineIndex - 1
         appendWrapped(from: firstLineIndex)
+        // Row indices just changed, so the cursor's row does too.
+        refreshCursorPosition()
     }
 
     private func trimToLimit() {

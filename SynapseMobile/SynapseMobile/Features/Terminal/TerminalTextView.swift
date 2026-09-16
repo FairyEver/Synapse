@@ -30,7 +30,11 @@ struct TerminalTextView: UIViewRepresentable {
 
     func updateUIView(_ view: TerminalCollectionView, context: Context) {
         view.applyFont(size: fontSize)
-        view.apply(rows: store.rows, atHistoryFloor: store.reachedHistoryFloor)
+        view.apply(
+            rows: store.rows,
+            atHistoryFloor: store.reachedHistoryFloor,
+            cursor: store.cursorPosition
+        )
         view.setRequestsInFlight(store.isLoadingHistory)
     }
 }
@@ -56,6 +60,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     var onTap: (() -> Void)?
     private var reportedColumns = 0
     private var lastLayoutHeight: CGFloat = 0
+    private var appliedCursor: TerminalStore.CursorPosition?
+    private var blinkTimer: Timer?
+    /// Blink phase. The cursor is solid whenever blinking is off, so starting from
+    /// `true` means Reduce Motion shows a steady block with no timer at all.
+    private var cursorPhaseOn = true
 
     private static let horizontalInset: CGFloat = 20
 
@@ -106,10 +115,16 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         onWidthChanged?(columns)
     }
 
-    func apply(rows: [DisplayRow], atHistoryFloor: Bool) {
+    func apply(rows: [DisplayRow], atHistoryFloor: Bool, cursor: TerminalStore.CursorPosition?) {
         let ids = rows.map(\.id)
         let floorChanged = atHistoryFloor != self.atHistoryFloor
-        guard ids != appliedIds || floorChanged else { return }
+        let rowsChanged = ids != appliedIds
+        let cursorChanged = cursor != appliedCursor
+        // Moving the cursor changes no row's identity, so it has to take part in
+        // the change check — otherwise the new position would never be drawn.
+        guard rowsChanged || floorChanged || cursorChanged else { return }
+        let previousCursor = appliedCursor
+        appliedCursor = cursor
         self.atHistoryFloor = atHistoryFloor
         let wasAtBottom = isPinnedToBottom
         let previousFirstId = appliedIds.first
@@ -143,10 +158,65 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         if floorChanged {
             collectionView.collectionViewLayout.invalidateLayout()
         }
+        if cursorChanged {
+            // The snapshot only reconfigures rows whose identity changed, and the
+            // cursor moves without changing any. Reload the two rows it left and
+            // arrived at so the block is erased from one and drawn on the other.
+            reloadRows(at: [previousCursor?.rowIndex, cursor?.rowIndex])
+            updateBlink()
+        }
     }
 
     func setRequestsInFlight(_ inFlight: Bool) {
         requestsInFlight = inFlight
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // A timer that outlives the screen would keep waking the app for nothing.
+        if window == nil { stopBlinking() } else { updateBlink() }
+    }
+
+    /// Blinks the cursor. With Reduce Motion on it stays solid instead — the block
+    /// is still visible, it just does not move.
+    private func updateBlink() {
+        stopBlinking()
+        cursorPhaseOn = true
+        guard appliedCursor != nil, !UIAccessibility.isReduceMotionEnabled else { return }
+        blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.advanceCursorPhase()
+            }
+        }
+    }
+
+    private func stopBlinking() {
+        blinkTimer?.invalidate()
+        blinkTimer = nil
+    }
+
+    private func advanceCursorPhase() {
+        guard appliedCursor != nil else {
+            stopBlinking()
+            return
+        }
+        cursorPhaseOn.toggle()
+        reloadRows(at: [appliedCursor?.rowIndex])
+    }
+
+    private func reloadRows(at indices: [Int?]) {
+        let paths = Set(indices.compactMap { $0 })
+            .filter { $0 >= 0 && $0 < appliedIds.count }
+            .map { IndexPath(item: $0, section: 0) }
+        guard !paths.isEmpty else { return }
+        collectionView.reloadItems(at: paths)
+    }
+
+    /// The column the cursor occupies on a given row, or nil when it is elsewhere
+    /// or the blink is in its off phase.
+    private func cursorColumn(forRowAt index: Int) -> Int? {
+        guard cursorPhaseOn, appliedCursor?.rowIndex == index else { return nil }
+        return appliedCursor?.column
     }
 
     func scrollToBottom() {
@@ -194,7 +264,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
                 for: indexPath
             ) as! TerminalRowCell
             if let row = self?.rowsById[rowId] {
-                cell.configure(row: row, fontSize: self?.fontSize ?? 12)
+                cell.configure(
+                    row: row,
+                    fontSize: self?.fontSize ?? 14,
+                    cursorColumn: self?.cursorColumn(forRowAt: indexPath.item)
+                )
             }
             return cell
         }
@@ -330,28 +404,31 @@ final class TerminalRowCell: UICollectionViewCell {
     }
 
     static func font(ofSize size: CGFloat) -> UIFont {
-        UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        TerminalFont.regular(ofSize: size)
     }
 
     static func rowHeight(for size: CGFloat) -> CGFloat {
         ceil(font(ofSize: size).lineHeight) + 1
     }
 
-    func configure(row: DisplayRow, fontSize: CGFloat) {
+    func configure(row: DisplayRow, fontSize: CGFloat, cursorColumn: Int?) {
         label.font = Self.font(ofSize: fontSize)
-        label.attributedText = Self.attributed(row: row, fontSize: fontSize)
+        label.attributedText = Self.attributed(
+            row: row,
+            fontSize: fontSize,
+            cursorColumn: cursorColumn
+        )
         continuationBar.isHidden = !row.isContinuation
     }
 
-    private static func attributed(row: DisplayRow, fontSize: CGFloat) -> NSAttributedString {
+    /// Internal rather than private so the cursor block can be asserted without
+    /// going through a collection view.
+    static func attributed(
+        row: DisplayRow,
+        fontSize: CGFloat,
+        cursorColumn: Int?
+    ) -> NSAttributedString {
         let font = Self.font(ofSize: fontSize)
-        guard !row.runs.isEmpty else {
-            return NSAttributedString(string: row.text, attributes: [
-                .font: font,
-                .foregroundColor: UIColor(TerminalPalette.defaultForeground),
-            ])
-        }
-
         let attributed = NSMutableAttributedString(string: row.text, attributes: [
             .font: font,
             .foregroundColor: UIColor(TerminalPalette.defaultForeground),
@@ -373,11 +450,14 @@ final class TerminalRowCell: UICollectionViewCell {
             if run.background != StyleRun.defaultColor || run.isInverse {
                 attributed.addAttribute(.backgroundColor, value: UIColor(background), range: range)
             }
-            if run.isBold || run.isUnderline {
+            if run.isBold || run.isItalic || run.isUnderline {
                 var traits: UIFontDescriptor.SymbolicTraits = []
                 if run.isBold { traits.insert(.traitBold) }
                 if run.isItalic { traits.insert(.traitItalic) }
-                var descriptor = font.fontDescriptor
+                // The bundled family ships its own bold face, which is what keeps
+                // bold text distinguishable instead of relying on synthesis.
+                var descriptor = (run.isBold ? TerminalFont.bold(ofSize: fontSize) : nil)?.fontDescriptor
+                    ?? font.fontDescriptor
                 if !traits.isEmpty, let withTraits = descriptor.withSymbolicTraits(traits) {
                     descriptor = withTraits
                 }
@@ -391,6 +471,36 @@ final class TerminalRowCell: UICollectionViewCell {
                 attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
             }
         }
+        applyCursor(at: cursorColumn, to: attributed, font: font)
         return attributed
+    }
+
+    /// Draws the terminal cursor as a block.
+    ///
+    /// The character under it keeps its own cell but swaps colours with the block —
+    /// the same swap the emulator's `Inverse` style performs — so the block is the
+    /// width of exactly one character and the grid does not shift.
+    private static func applyCursor(
+        at column: Int?,
+        to attributed: NSMutableAttributedString,
+        font: UIFont
+    ) {
+        guard let column, column >= 0 else { return }
+        guard column < (attributed.string as NSString).length else {
+            // Past the end of the text there is no character to invert, so the
+            // block is a filled space instead.
+            attributed.append(NSAttributedString(string: " ", attributes: [
+                .font: font,
+                .backgroundColor: UIColor(TerminalPalette.defaultForeground),
+            ]))
+            return
+        }
+        let range = NSRange(location: column, length: 1)
+        let foreground = attributed.attribute(.foregroundColor, at: column, effectiveRange: nil) as? UIColor
+            ?? UIColor(TerminalPalette.defaultForeground)
+        let background = attributed.attribute(.backgroundColor, at: column, effectiveRange: nil) as? UIColor
+            ?? UIColor(TerminalPalette.defaultBackground)
+        attributed.addAttribute(.foregroundColor, value: background, range: range)
+        attributed.addAttribute(.backgroundColor, value: foreground, range: range)
     }
 }
