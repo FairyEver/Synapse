@@ -7,6 +7,9 @@ import { createPermissionGuard, type PermissionAction } from "../../runtime/secu
 import {
   MOBILE_GATEWAY_ACTOR,
   MOBILE_GATEWAY_ALLOWED_ACTIONS,
+  MOBILE_GATEWAY_RELAY_ACTIONS,
+  MOBILE_RELAY_RESOURCE,
+  mobileGatewayFileRelayPolicy,
   mobileGatewayTerminalPolicy,
 } from "../mobile-gateway/controller"
 
@@ -110,17 +113,28 @@ function scan(source: string, file: string): { readonly authorizes: readonly Cal
 
 const scanned = gatewaySourceFiles().map(({ file, source }) => ({ file, ...scan(source, file) }))
 
+/**
+ * Both ways the gateway may be let through: the terminal table, which grants by
+ * action, and the file relay, which grants by action *and* resource. An action the
+ * gateway asks for has to appear in one of them or it fails on the user's phone.
+ */
+const GRANTED_ACTIONS = new Set<string>([
+  ...MOBILE_GATEWAY_ALLOWED_ACTIONS,
+  ...MOBILE_GATEWAY_RELAY_ACTIONS,
+])
+
 describe("mobile gateway permission table", () => {
   it("allows every action the gateway authorizes", () => {
     const unlisted: string[] = []
     for (const { authorizes } of scanned) {
       for (const call of authorizes) {
         if (call.action === null) continue // reported by the literal assertion below
-        if (MOBILE_GATEWAY_ALLOWED_ACTIONS.has(call.action as PermissionAction)) continue
+        if (GRANTED_ACTIONS.has(call.action as PermissionAction)) continue
         unlisted.push(
-          `${call.file}:${call.line} authorizes "${call.action}", which is not in `
-          + `MOBILE_GATEWAY_ALLOWED_ACTIONS (controller.ts). Add it there, or this action `
-          + `fails on the phone as "本地策略拒绝了这个操作。" — ${call.snippet}`,
+          `${call.file}:${call.line} authorizes "${call.action}", which is in neither `
+          + `MOBILE_GATEWAY_ALLOWED_ACTIONS nor MOBILE_GATEWAY_RELAY_ACTIONS (controller.ts). `
+          + `Add it to the one that matches how it is granted, or this action fails on the `
+          + `phone as "本地策略拒绝了这个操作。" — ${call.snippet}`,
         )
       }
     }
@@ -166,6 +180,43 @@ describe("mobile gateway permission table", () => {
       resource,
       context: {},
     })).resolves.toMatchObject({ allowed: false })
+  })
+
+  it("scopes the file relay's disk write to its own landing directory", async () => {
+    /*
+     * `fs.write.outside-userdata` is a whole-home-directory power, so unlike the
+     * terminal actions it cannot be granted on the action alone. The policy pairs it
+     * with a resource, and this is the assertion that the pairing is real: the same
+     * action against anything else has to stay denied, or a phone that could deliver
+     * one file could write anywhere the desktop can.
+     */
+    const guard = createPermissionGuard()
+    guard.registerPolicy(mobileGatewayFileRelayPolicy)
+
+    await expect(guard.check({
+      action: "fs.write.outside-userdata",
+      actor: MOBILE_GATEWAY_ACTOR,
+      resource: MOBILE_RELAY_RESOURCE,
+      context: {},
+    })).resolves.toMatchObject({ allowed: true })
+
+    for (const resource of [
+      "/Users/someone",
+      "/Users/someone/Downloads",
+      "/Users/someone/Downloads/SynapseTemp",
+      "downloads:SynapseTemp/../..",
+      "downloads:synapsetemp",
+    ]) {
+      await expect(guard.check({
+        action: "fs.write.outside-userdata",
+        actor: MOBILE_GATEWAY_ACTOR,
+        resource,
+        context: {},
+      })).resolves.toMatchObject({ allowed: false })
+    }
+
+    // The terminal table must not have grown this action in the process.
+    expect(MOBILE_GATEWAY_ALLOWED_ACTIONS.has("fs.write.outside-userdata")).toBe(false)
   })
 
   it("funnels every permission check through the gateway's own authorize method", () => {

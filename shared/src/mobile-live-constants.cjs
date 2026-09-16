@@ -41,6 +41,9 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxResizeCols: number,
  *   readonly maxResizeRows: number,
  *   readonly maxDeviceLabelLength: number,
+ *   readonly maxRelayedFileBytes: number,
+ *   readonly maxRelayedFileNameLength: number,
+ *   readonly maxUploadDriveItemIdLength: number,
  * }}
  */
 exports.MOBILE_FRAME_LIMITS = {
@@ -69,6 +72,10 @@ exports.MOBILE_FRAME_LIMITS = {
   maxResizeRows: 200,
   /** Display-only, for the desktop badge naming the phone that set the size. */
   maxDeviceLabelLength: 40,
+  /** Relay ceilings for the file hand-off; the bytes travel over HTTP, not this socket. */
+  maxRelayedFileBytes: 100 * 1024 * 1024,
+  maxRelayedFileNameLength: 120,
+  maxUploadDriveItemIdLength: 64,
 }
 
 /**

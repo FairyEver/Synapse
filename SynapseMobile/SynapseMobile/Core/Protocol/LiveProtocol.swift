@@ -312,6 +312,9 @@ struct MobileIntentResult: Decodable {
     let message: String?
     let sessionId: String?
     let createdSessionId: String?
+    /// Set for `fileUpload`: where the file ended up on the computer. The phone
+    /// cannot derive it, and needs it to undo the insertion it caused.
+    let landedPath: String?
 
     var isAccepted: Bool { outcome == "accepted" }
     var isNoOp: Bool { outcome == "no_op" }
@@ -362,6 +365,11 @@ struct MobileIntentRequest: Encodable {
     var rows: Int?
     /// Shown on the desktop badge that names the device deciding the grid.
     var deviceLabel: String?
+    /// File hand-off. The bytes never travel on this socket: they are uploaded to
+    /// the drive over HTTP first, and these two name what the computer should fetch
+    /// and what it should call the result. See `shared/src/mobile-live.ts`.
+    var driveItemId: String?
+    var fileName: String?
 }
 
 struct MobileIntentPayloadOut: Encodable {

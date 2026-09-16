@@ -55,6 +55,51 @@ export const mobileGatewayTerminalPolicy: PermissionPolicy = {
 }
 
 /**
+ * The one place a phone may cause a file to be written outside the app's own data
+ * directory: the relay directory a phone-delivered file lands in.
+ *
+ * `fs.write.outside-userdata` is a whole-disk power, so the action alone cannot be
+ * the unit of permission here the way it is for the terminal table above — that
+ * would hand a phone the user's entire home directory. The resource names the
+ * directory, and only that exact resource is allowed.
+ */
+export const MOBILE_RELAY_DIRECTORY_NAME = "SynapseTemp"
+
+/**
+ * Derived from the directory rather than written out again, because this string is
+ * the *only* thing standing between the action above and a phone writing anywhere
+ * on the disk: if the two drifted, the policy would be guarding a path the relay
+ * does not use.
+ *
+ * The bootstrap descriptor takes the directory name from here too, so the value
+ * checked and the value written are the same one.
+ */
+export const MOBILE_RELAY_RESOURCE = `downloads:${MOBILE_RELAY_DIRECTORY_NAME}`
+
+/**
+ * The actions `mobileGatewayFileRelayPolicy` can allow, declared separately from the
+ * terminal table because they are granted on different grounds — these are paired
+ * with a resource, those are not — and a future edit should have to say which kind
+ * it is adding. `mobile-gateway-permissions.test.ts` checks the executor's calls
+ * against the union of both.
+ */
+export const MOBILE_GATEWAY_RELAY_ACTIONS: ReadonlySet<PermissionAction> = new Set([
+  "fs.write.outside-userdata",
+])
+
+export const mobileGatewayFileRelayPolicy: PermissionPolicy = {
+  id: "mobile-gateway-file-relay",
+  decide: (request) => {
+    const isMobileGateway = request.actor.kind === MOBILE_GATEWAY_ACTOR.kind
+      && request.actor.id === MOBILE_GATEWAY_ACTOR_ID
+    if (!isMobileGateway) return "defer-to-next"
+    return request.action === "fs.write.outside-userdata" && request.resource === MOBILE_RELAY_RESOURCE
+      ? "allow"
+      : "defer-to-next"
+  },
+}
+
+/**
  * Lease ownership is a `(clientId, controllerInstanceId)` pair, and the terminal
  * service caps concurrent leases per controller at four.
  *

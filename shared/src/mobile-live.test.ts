@@ -194,6 +194,35 @@ describe("mobile live protocol", () => {
     })).toBe(false)
   })
 
+  it("validates the file upload intent against both name and item bounds", () => {
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "fileUpload",
+      sessionId: "s1", driveItemId: "clx0abc123", fileName: "报错截图.png",
+    })).toBe(true)
+
+    // All three name something the desktop cannot do the job without: where to
+    // type, what to fetch, and what to call the result.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "fileUpload", driveItemId: "clx0abc123", fileName: "a.png" }))
+      .toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "fileUpload", sessionId: "s1", fileName: "a.png" }))
+      .toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "fileUpload", sessionId: "s1", driveItemId: "clx0abc123" }))
+      .toBe(false)
+    // An empty name is not a name the desktop could write.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "fileUpload", sessionId: "s1", driveItemId: "clx0abc123", fileName: "",
+    })).toBe(false)
+
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "fileUpload", sessionId: "s1", driveItemId: "clx0abc123",
+      fileName: "x".repeat(MOBILE_FRAME_LIMITS.maxRelayedFileNameLength + 1),
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "fileUpload", sessionId: "s1",
+      driveItemId: "x".repeat(MOBILE_FRAME_LIMITS.maxUploadDriveItemIdLength + 1), fileName: "a.png",
+    })).toBe(false)
+  })
+
   it("accepts a grid release, and only with a terminal to release", () => {
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "releaseGrid", sessionId: "s1" })).toBe(true)
     // Handing back a grid nobody named is not expressible.

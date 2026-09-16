@@ -21,6 +21,7 @@ import type {
 import type { MobileAttachment } from "./mobile-gateway/attachment-registry"
 import { AttachmentRegistry } from "./mobile-gateway/attachment-registry"
 import { MOBILE_GATEWAY_ACTOR } from "./mobile-gateway/controller"
+import type { MobileFileRelay } from "./mobile-gateway/file-relay"
 import { buildTerminalFrames } from "./mobile-gateway/frame-builder"
 import type { MobileGatewayLogger } from "./mobile-gateway/intent-executor"
 import { MobileIntentError, MobileIntentExecutor } from "./mobile-gateway/intent-executor"
@@ -77,6 +78,7 @@ const SIZE_OWNERSHIP_IDLE_TIMEOUT_MS = 90_000
 
 export type MobileGatewayServiceDeps = {
   readonly terminal: TerminalService
+  readonly fileRelay: MobileFileRelay
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly logger: MobileGatewayLogger
@@ -125,6 +127,7 @@ export class MobileGatewayService {
     this.executor = new MobileIntentExecutor({
       terminal: deps.terminal,
       registry: this.registry,
+      fileRelay: deps.fileRelay,
       auditSink: deps.auditSink,
       logger: deps.logger,
       authorize: (action, resource, context) => this.authorize(action, resource, context),

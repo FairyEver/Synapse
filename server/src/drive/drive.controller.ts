@@ -568,6 +568,18 @@ export class DriveUserController {
     return this.drive.deleteItem(request.user!.id, id, request.user!.id, request.ip)
   }
 
+  /**
+   * Deletes an item and its stored bytes, with no way back.
+   *
+   * Distinct from `DELETE /items/:id`, which only moves the item to the trash and
+   * leaves the object in the bucket. This is the only route that reclaims storage,
+   * and the only one a relayed upload's leftover can be cleaned up with.
+   */
+  @Delete("/items/:id/permanent")
+  permanentlyDeleteItem(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    return this.drive.permanentlyDeleteItem(request.user!.id, id, request.user!.id, request.ip)
+  }
+
   @Get("/trash")
   listTrash(
     @Query("offset") offset: string | undefined,

@@ -54,4 +54,28 @@ enum AppConfiguration {
     /// size. Sending them all would be a burst of `SIGWINCH` while the user is still
     /// turning the phone, and a full-screen program redraws for every one.
     static let terminalGridDebounce: TimeInterval = 0.3
+
+    // MARK: - File hand-off
+
+    /// Mirrors `MOBILE_FRAME_LIMITS.maxRelayedFileBytes` in
+    /// `shared/src/mobile-live.ts`. The server refuses a larger upload and the
+    /// desktop refuses a larger download, so refusing here as well is what lets the
+    /// user be told why while they are still picking, instead of after a long
+    /// upload that was never going to be accepted.
+    static let relayMaxFileBytes = 100 * 1024 * 1024
+
+    /// One selection. The whole batch is uploaded to the same place and named in
+    /// the same terminal, so a larger one is a burst of typing rather than a
+    /// feature.
+    static let relayMaxFileCount = 9
+
+    /// How long an uploaded file waits for the computer before the phone gives up
+    /// and removes it from the drive.
+    ///
+    /// The drive has no expiry of its own — nothing on the server reclaims a
+    /// relayed copy — so this is the only thing that keeps an undelivered file from
+    /// sitting in the user's drive forever. It is deliberately long: while the copy
+    /// exists the transfer is still recoverable, and the computer coming back three
+    /// days later is worth more than the storage.
+    static let relayPendingExpiry: TimeInterval = 72 * 60 * 60
 }

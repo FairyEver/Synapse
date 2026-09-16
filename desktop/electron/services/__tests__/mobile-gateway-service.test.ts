@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { isMobileSummaryPayload, MOBILE_FRAME_LIMITS } from "@synapse/shared"
 import type { MobileIntent, MobileTerminalFrame } from "@synapse/shared"
@@ -8,6 +10,7 @@ import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main
 import type { TerminalLayoutNode } from "../../../app-capabilities/terminal/shared/workspace"
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
 import { clampSummaryText, MobileGatewayService } from "../mobile-gateway-service"
+import { MobileFileRelay } from "../mobile-gateway/file-relay"
 import type { MobileGatewayTransport, MobileSummaryDraft } from "../mobile-gateway/transport"
 
 /* ------------------------------------------------------------------ *
@@ -211,8 +214,18 @@ class FakeTerminal {
     return { outcome: "accepted" }
   }
 
-  async sendSemanticInput() {
+  /** What was typed, not just that typing happened: the text is the whole point. */
+  readonly semanticWrites: {
+    readonly sessionId: string
+    readonly actions: readonly { readonly type: string; readonly text?: string; readonly key?: string }[]
+  }[] = []
+
+  async sendSemanticInput(input: {
+    readonly sessionId: string
+    readonly actions: readonly { readonly type: string; readonly text?: string; readonly key?: string }[]
+  }) {
     this.calls.push("sendSemanticInput")
+    this.semanticWrites.push({ sessionId: input.sessionId, actions: input.actions })
     return { outcome: "accepted" }
   }
 
@@ -278,8 +291,35 @@ function createHarness(options: { sessionLines?: number } = {}) {
       : { allowed: true })),
   } as unknown as PermissionGuard
 
+  /*
+   * The relay is injected rather than left out because it is a required
+   * collaborator: a `fileUpload` intent that reaches the executor without one
+   * throws where the phone can only report a generic failure. Stubbed here so the
+   * harness stays a complete gateway, with the real file-handling behaviour
+   * covered by `file-relay.test.ts`.
+   */
+  const landings: { readonly driveItemId: string; readonly fileName: string }[] = []
+  const discarded: string[] = []
+  const fileRelay = new MobileFileRelay({
+    downloadDriveFile: async () => {
+      throw new Error("The harness does not download.")
+    },
+    permanentlyDeleteDriveItem: async () => ({ ok: true }),
+    directory: path.join(tmpdir(), "synapse-mobile-gateway-test"),
+    logger: { info: () => {}, warn: () => {} },
+  })
+  vi.spyOn(fileRelay, "land").mockImplementation(async (input) => {
+    landings.push(input)
+    return { path: `/tmp/${input.fileName}`, fileName: input.fileName }
+  })
+  vi.spyOn(fileRelay, "discardCloudCopy").mockImplementation(async (itemId) => {
+    discarded.push(itemId)
+    return true
+  })
+
   const gateway = new MobileGatewayService({
     terminal: terminal as unknown as TerminalService,
+    fileRelay,
     permissionGuard,
     auditSink: { record: (event: unknown) => audits.push(event), list: () => [], clearForTests: () => {} },
     logger: { info: () => {}, warn: () => {} },
@@ -291,7 +331,10 @@ function createHarness(options: { sessionLines?: number } = {}) {
   gateway.start()
   gateway.setTransport(transport)
 
-  return { gateway, terminal, timers, transport, frames, summaries, results, audits, permissionGuard }
+  return {
+    gateway, terminal, timers, transport, frames, summaries, results, audits,
+    permissionGuard, fileRelay, landings, discarded,
+  }
 }
 
 /** Seeds one tab under a fixed id. The gateway walks this layout, never the tree's storage. */
@@ -419,6 +462,76 @@ describe("MobileGatewayService", () => {
       const result = (entry as { result: { intentId: string } }).result
       return result.intentId === "i-cmd"
     })).toHaveLength(2)
+  })
+
+  it("lands a relayed file, drops the cloud copy, and types its path", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    harness.terminal.calls.length = 0
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-file",
+      kind: "fileUpload",
+      sessionId: "sess-1",
+      driveItemId: "item-1",
+      fileName: "报错截图.png",
+    }))
+
+    expect(harness.landings).toEqual([{ driveItemId: "item-1", fileName: "报错截图.png" }])
+    // The copy goes as soon as the bytes are local — before the path is typed, so a
+    // terminal that cannot take the text still leaves no copy behind.
+    expect(harness.discarded).toEqual(["item-1"])
+    expect(harness.terminal.calls).toContain("sendSemanticInput")
+    const write = harness.terminal.semanticWrites.at(-1)
+    expect(write?.actions).toEqual([{ type: "text", text: "/tmp/报错截图.png" }])
+    // Typed, not submitted: the user still gets to look at it before pressing Enter.
+    expect(write?.actions.some((action) => action.type === "key")).toBe(false)
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+  })
+
+  it("still lands the file when the terminal can no longer take the path", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    // The desktop's own user typed, which takes the write lease back by design.
+    harness.terminal.leaseOwner = "desktop-user"
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-file",
+      kind: "fileUpload",
+      sessionId: "sess-1",
+      driveItemId: "item-1",
+      fileName: "a.png",
+    }))
+
+    // The file is on the disk and the cloud copy is gone, so this is not a failure —
+    // but the phone has to hear that the path was not typed rather than being told
+    // it was.
+    expect(harness.landings).toHaveLength(1)
+    expect(harness.discarded).toEqual(["item-1"])
+    const result = (harness.results.at(-1) as { result: { outcome: string; message?: string } }).result
+    expect(result.outcome).toBe("accepted")
+    expect(result.message).toContain("路径没有插入")
+  })
+
+  it("keeps the cloud copy when the file never landed", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    vi.spyOn(harness.fileRelay, "land").mockRejectedValueOnce(new Error("drive unavailable"))
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-file",
+      kind: "fileUpload",
+      sessionId: "sess-1",
+      driveItemId: "item-1",
+      fileName: "a.png",
+    }))
+
+    // The cloud copy is the only copy left, so deleting it here would lose the file.
+    expect(harness.discarded).toEqual([])
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "rejected" } })
   })
 
   it("rejects a write when another client takes the lease", async () => {

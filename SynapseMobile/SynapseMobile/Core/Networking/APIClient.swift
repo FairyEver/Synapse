@@ -292,8 +292,74 @@ actor APIClient {
             code: response.code ?? (response.delivered ? "no_result" : "delivery_failed"),
             message: response.delivered ? nil : "电脑离线。",
             sessionId: nil,
-            createdSessionId: nil
+            createdSessionId: nil,
+            landedPath: nil
         )
+    }
+
+    // MARK: - File hand-off
+
+    struct DriveItem: Decodable {
+        let id: String
+        let name: String
+        let size: String
+    }
+
+    /// Where to put the bytes, and what the drive will call the result.
+    struct DriveUploadTicket: Decodable {
+        struct Destination: Decodable {
+            let method: String
+            let url: String
+            let expiresAt: String
+            let headers: [String: String]
+        }
+
+        let sessionId: String
+        let item: DriveItem
+        let upload: Destination
+    }
+
+    /// Reserves a place in the drive for a file the phone is about to upload.
+    ///
+    /// `size` is a decimal string because the server's schema says so, and the
+    /// declared size is checked against the object that arrives — a file whose real
+    /// size disagrees is refused at completion rather than stored.
+    func prepareDriveUpload(name: String, size: Int64, mimeType: String?) async throws -> DriveUploadTicket {
+        struct Body: Encodable {
+            let name: String
+            let size: String
+            let mimeType: String?
+        }
+        return try await send(
+            path: "/drive/uploads/prepare",
+            method: "POST",
+            body: Body(name: name, size: String(size), mimeType: mimeType)
+        )
+    }
+
+    /// Turns the reserved upload into a real file. Only after this can the desktop
+    /// download it.
+    func completeDriveUpload(sessionId: String) async throws -> DriveItem {
+        try await send(path: "/drive/uploads/\(escaped(sessionId))/complete", method: "POST")
+    }
+
+    /// Releases a reservation whose bytes never arrived, or that is no longer wanted.
+    func cancelDriveUpload(sessionId: String) async throws {
+        let _: EmptyResponse = try await send(path: "/drive/uploads/\(escaped(sessionId))/cancel", method: "POST")
+    }
+
+    /// Removes a file and the object behind it, with no way back.
+    ///
+    /// This is not the trash: `DELETE /drive/items/:id` only moves an item along its
+    /// lifecycle and leaves the bytes in the bucket. The desktop normally does this
+    /// as soon as a relayed file is on its disk; the phone does it for a transfer
+    /// that was never delivered.
+    func permanentlyDeleteDriveItem(itemId: String) async throws {
+        let _: EmptyResponse = try await send(path: "/drive/items/\(escaped(itemId))/permanent", method: "DELETE")
+    }
+
+    private func escaped(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
     }
 
     // MARK: - Transport

@@ -98,6 +98,18 @@ export const MOBILE_FRAME_LIMITS = {
    * size. Display-only, so it is clamped well below what a device name can hold.
    */
   maxDeviceLabelLength: 40,
+  /**
+   * Relay ceilings for the phone → cloud → desktop file hand-off.
+   *
+   * The bytes travel over HTTP rather than this socket, but both ends still have
+   * to agree on the size: the phone refuses a selection over this bound before it
+   * uploads, and the desktop refuses again before it writes anything to the user's
+   * disk. A drive id is a cuid, so 64 is generous; the file name is clamped at
+   * what a real file name holds, well under the drive's own 255.
+   */
+  maxRelayedFileBytes: 100 * 1024 * 1024,
+  maxRelayedFileNameLength: 120,
+  maxUploadDriveItemIdLength: 64,
 } as const
 
 /** Style attribute bits packed into the fifth element of a run tuple. */
@@ -391,6 +403,35 @@ export type MobileIntent =
     readonly deviceLabel?: string
   })
   | (MobileIntentEnvelope<"launchCommand"> & { readonly groupId: string; readonly commandId: string })
+  /**
+   * One file the phone has already put in the user's drive, to be brought down to
+   * this computer and named in the terminal.
+   *
+   * The bytes deliberately do not travel over this socket. The phone uploads them
+   * to the drive over HTTP and this intent carries only the reference, which is
+   * what keeps the relay free of a data plane — a file here would otherwise have
+   * to be chunked, checksummed and quota'd against `maxIntentTextLength`.
+   *
+   * One intent per file rather than one per batch, for two reasons: the per-file
+   * result is what the phone needs to report which file failed, and `intentId`
+   * replay protection then covers each file on its own, so a retry after a flaky
+   * link can never re-type a path that already landed.
+   *
+   * The desktop deletes the cloud copy once the file is on its disk. A session
+   * that has ended in the meantime is not a failure: the file still lands, and the
+   * result says the path was not typed.
+   */
+  | (MobileIntentEnvelope<"fileUpload"> & {
+    readonly sessionId: string
+    /** The uploaded copy in the user's drive; the desktop deletes it after the file lands. */
+    readonly driveItemId: string
+    /**
+     * Bare file name to write on the computer. The phone sets it, having already
+     * converted HEIC to JPEG and fixed the extension; the desktop sanitizes it
+     * again before touching the filesystem.
+     */
+    readonly fileName: string
+  })
 
 type MobileIntentEnvelope<TKind extends string> = {
   readonly v: typeof MOBILE_PROTOCOL_VERSION
@@ -414,6 +455,14 @@ export interface MobileIntentResult {
   readonly sessionId?: string
   /** Set for `create` and `launchCommand`, so the phone can open the new session immediately. */
   readonly createdSessionId?: string
+  /**
+   * Set for `fileUpload`, once the file is on the computer's disk.
+   *
+   * The phone cannot derive this: the directory a file lands in is the computer's
+   * fact, not the phone's. It needs the path to offer an undo — which is a
+   * backspace per character — and to say truthfully where the file went.
+   */
+  readonly landedPath?: string
 }
 
 /* ------------------------------------------------------------------ *
@@ -581,6 +630,10 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
           boundedString(value.deviceLabel, MOBILE_FRAME_LIMITS.maxDeviceLabelLength))
     case "launchCommand":
       return boundedString(value.groupId, 120) && boundedString(value.commandId, 120)
+    case "fileUpload":
+      return boundedString(value.sessionId, 120) &&
+        boundedString(value.driveItemId, MOBILE_FRAME_LIMITS.maxUploadDriveItemIdLength) &&
+        boundedString(value.fileName, MOBILE_FRAME_LIMITS.maxRelayedFileNameLength)
     default:
       return false
   }
@@ -594,6 +647,7 @@ export function isMobileIntentResult(value: unknown): value is MobileIntentResul
   if (value.message !== undefined && !boundedString(value.message, 500)) return false
   if (value.sessionId !== undefined && !boundedString(value.sessionId, 120)) return false
   if (value.createdSessionId !== undefined && !boundedString(value.createdSessionId, 120)) return false
+  if (value.landedPath !== undefined && !boundedString(value.landedPath, 512)) return false
   return true
 }
 

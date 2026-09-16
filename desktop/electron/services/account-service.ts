@@ -582,9 +582,18 @@ export class AccountService {
     readonly outputPath: string
     readonly signal?: AbortSignal
     readonly onProgress?: (completedBytes: number, totalBytes: number) => void
+    /**
+     * Ceiling for a caller that already knows how large the file is allowed to be.
+     * Enforced while streaming rather than from `Content-Length`, so a response
+     * that understates its size still cannot write past the limit to disk.
+     */
+    readonly maxBytes?: number
   }): Promise<{ readonly ok: true; readonly path: string }> {
     const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), { signal: input.signal }, "文件下载失败。")
-    await writeResponseBodyToFile(response, input.outputPath, { onProgress: input.onProgress })
+    await writeResponseBodyToFile(response, input.outputPath, {
+      onProgress: input.onProgress,
+      maxBytes: input.maxBytes,
+    })
     return { ok: true, path: input.outputPath }
   }
 
@@ -1079,6 +1088,21 @@ export class AccountService {
 
   async deleteDriveItem(itemId: string): Promise<{ ok: true }> {
     return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}`, undefined, "删除失败。")
+  }
+
+  /**
+   * Deletes an item and the object behind it, with no way back.
+   *
+   * `deleteDriveItem` is the trash; this is the one that reclaims storage. Only
+   * what a relayed upload left behind should be sent here.
+   */
+  async permanentlyDeleteDriveItem(itemId: string): Promise<{ ok: true }> {
+    return this.requestAuthenticatedJson<{ ok: true }>(
+      "DELETE",
+      `${apiBaseUrl()}/drive/items/${encodeURIComponent(itemId)}/permanent`,
+      undefined,
+      "删除失败。",
+    )
   }
 
   async shareDriveItem(itemId: string, settings?: DriveAccessSettingsUpdateInput): Promise<DriveShareDto> {

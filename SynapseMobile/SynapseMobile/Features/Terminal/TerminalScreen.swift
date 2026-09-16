@@ -17,8 +17,26 @@ struct TerminalScreen: View {
     @State private var showingStopConfirm = false
     @FocusState private var inputFocused: Bool
 
+    @State private var showingSources = false
+    @State private var showingPhotoPicker = false
+    @State private var showingDocumentPicker = false
+    @State private var showingCamera = false
+    /// Read when the menu opens rather than kept in sync: the pasteboard changes
+    /// while the app is not looking, and there is no notification for that.
+    @State private var pasteboardHoldsImage = false
+    /// Files picked but not yet sent, while the user is being asked whether a
+    /// terminal that is waiting for input should really receive them.
+    @State private var pendingFiles: [PickedFile] = []
+    @State private var showingBusyConfirm = false
+
     private var store: TerminalStore { model.store(for: sessionId) }
     private var session: MobileSummarySession? { model.session(sessionId) }
+
+    /// Files on their way to the computer from this terminal, and the ones that
+    /// arrived recently enough to be worth undoing.
+    private var relayAttachments: [TerminalAttachment] {
+        model.relayAttachments.filter { $0.sessionId == sessionId }
+    }
 
     private var modeBinding: Binding<TerminalDisplayMode> {
         Binding(
@@ -100,6 +118,12 @@ struct TerminalScreen: View {
             .onChange(of: store.columns) { reportGridToDesktop() }
             .onChange(of: store.visibleRows) { reportGridToDesktop() }
             .onChange(of: inputFocused) { reportGridToDesktop() }
+            TerminalRelayStrip(
+                attachments: relayAttachments,
+                onUndo: { model.undoTypedPaths($0) },
+                onDismiss: { model.dismissRelay($0) },
+                onRetry: { model.retryRelay($0) }
+            )
             accessoryBar
             inputBar
         }
@@ -132,6 +156,56 @@ struct TerminalScreen: View {
             Button("停止", role: .destructive) { model.stop(sessionId) }
         } message: {
             Text("终端将被停止，未保存的进程状态会丢失。")
+        }
+        .confirmationDialog("发送到电脑", isPresented: $showingSources, titleVisibility: .hidden) {
+            Button("照片") { showingPhotoPicker = true }
+            // Hidden where there is no camera — the simulator, and any device
+            // without one — rather than offered and then failing.
+            if CameraPicker.isAvailable {
+                Button("拍照") { showingCamera = true }
+            }
+            Button("文件") { showingDocumentPicker = true }
+            if pasteboardHoldsImage {
+                Button("粘贴图片") { sendPastedImage() }
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .alert("这个终端正在等待操作", isPresented: $showingBusyConfirm) {
+            Button("取消", role: .cancel) { pendingFiles = [] }
+            Button("仍然插入") { hand(pendingFiles, confirmed: true) }
+        } message: {
+            Text("它正在等你回答一个问题或输入密码，插入路径可能被当成回答。")
+        }
+        .sheet(isPresented: $showingPhotoPicker) {
+            PhotoLibraryPicker(
+                selectionLimit: AppConfiguration.relayMaxFileCount,
+                onPicked: { providers in
+                    showingPhotoPicker = false
+                    Task { await intake(providers: providers) }
+                },
+                onCancelled: { showingPhotoPicker = false }
+            )
+            .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showingDocumentPicker) {
+            DocumentPicker(
+                onPicked: { urls in
+                    showingDocumentPicker = false
+                    Task { await intake(urls: urls) }
+                },
+                onCancelled: { showingDocumentPicker = false }
+            )
+            .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraPicker(
+                onPicked: { image in
+                    showingCamera = false
+                    Task { await intake(cameraImage: image) }
+                },
+                onCancelled: { showingCamera = false }
+            )
+            .ignoresSafeArea()
         }
     }
 
@@ -259,6 +333,19 @@ struct TerminalScreen: View {
 
     private var inputBar: some View {
         HStack(spacing: 8) {
+            Button {
+                // Read now, not on every body pass: `hasImages` touches the
+                // pasteboard, and the answer can only be right at the moment the
+                // menu is opened.
+                pasteboardHoldsImage = UIPasteboard.general.hasImages
+                showingSources = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Theme.ink)
+            }
+            .accessibilityIdentifier("attach")
+
             TextField("输入命令", text: $draft)
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
@@ -287,6 +374,69 @@ struct TerminalScreen: View {
         guard !text.isEmpty else { return }
         draft = ""
         model.sendCommand(sessionId, text: text)
+    }
+
+    // MARK: - Sending files to the computer
+
+    private func intake(providers: [NSItemProvider]) async {
+        var files: [PickedFile] = []
+        for provider in providers {
+            if let file = await TerminalFileIntake.prepare(imageProvider: provider) {
+                files.append(file)
+            }
+        }
+        hand(files)
+    }
+
+    private func intake(urls: [URL]) async {
+        var files: [PickedFile] = []
+        for url in urls {
+            if let file = await TerminalFileIntake.prepare(documentURL: url) {
+                files.append(file)
+            }
+        }
+        hand(files)
+    }
+
+    private func intake(cameraImage: UIImage) async {
+        guard let file = await TerminalFileIntake.prepare(cameraImage: cameraImage) else {
+            model.banner = "没有读取到可发送的图片。"
+            return
+        }
+        hand([file])
+    }
+
+    private func sendPastedImage() {
+        guard let image = UIPasteboard.general.image else { return }
+        Task {
+            guard let file = await TerminalFileIntake.prepare(pastedImage: image) else {
+                model.banner = "没有读取到可发送的图片。"
+                return
+            }
+            hand([file])
+        }
+    }
+
+    /// Starts the transfer, or asks first when the terminal is waiting on a person.
+    ///
+    /// The design's caution, narrowed to where the risk actually is. A terminal in
+    /// `waiting` is one an agent has stopped at — an approval, a question, a
+    /// password — and the path inserted there can be read as the answer. `unknown`,
+    /// the state of every plain shell, is not evidence of anything and asking on it
+    /// would put a dialog in front of the common case until the user learned to tap
+    /// through it.
+    private func hand(_ files: [PickedFile], confirmed: Bool = false) {
+        guard !files.isEmpty else {
+            model.banner = "没有读取到可发送的文件。"
+            return
+        }
+        if !confirmed, session?.attention.isWaiting == true {
+            pendingFiles = files
+            showingBusyConfirm = true
+            return
+        }
+        pendingFiles = []
+        model.sendFiles(files, to: sessionId)
     }
 
     private var statusLabel: String {

@@ -274,7 +274,12 @@ import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { ActorIdentity, PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, webhookShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy, systemDataMaintenancePolicy } from "../runtime/security"
 import { createMobileGatewayService, type MobileGatewayService } from "../services/mobile-gateway-service"
-import { mobileGatewayTerminalPolicy } from "../services/mobile-gateway/controller"
+import {
+  MOBILE_RELAY_DIRECTORY_NAME,
+  mobileGatewayFileRelayPolicy,
+  mobileGatewayTerminalPolicy,
+} from "../services/mobile-gateway/controller"
+import { createMobileFileRelay } from "../services/mobile-gateway/file-relay"
 import type { ProcessRuntime } from "../runtime/process"
 import {
   buildHostEnvironment,
@@ -521,6 +526,14 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
   create(ctx) {
     return createMobileGatewayService({
       terminal: ctx.registry.get<TerminalService>("core.terminal"),
+      fileRelay: createMobileFileRelay({
+        downloadDriveFile: (input) => accountService.downloadDriveFile(input),
+        permanentlyDeleteDriveItem: (itemId) => accountService.permanentlyDeleteDriveItem(itemId),
+        // Resolved here rather than inside the relay: the service layer does not
+        // import Electron, and the directory is a deployment fact, not a behaviour.
+        directory: path.join(app.getPath("downloads"), MOBILE_RELAY_DIRECTORY_NAME),
+        logger: ctx.logger.child("mobile-file-relay"),
+      }),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("mobile-gateway"),
@@ -2258,6 +2271,10 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     // Narrow on purpose: cloud-delivered mobile commands run as an agent, never as
     // the user, so anything outside the listed terminal actions stays denied.
     guard.registerPolicy(mobileGatewayTerminalPolicy)
+    // Paired with a resource rather than granted outright: the file relay is the
+    // only thing outside the terminal a phone may cause, and only into its own
+    // landing directory.
+    guard.registerPolicy(mobileGatewayFileRelayPolicy)
     return guard
   },
 }

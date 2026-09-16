@@ -1443,6 +1443,33 @@ export class DriveService implements OnApplicationBootstrap {
     return { ok: true }
   }
 
+  /**
+   * Removes an owned item and its stored bytes for good.
+   *
+   * `deleteItem` and `hideTrashedItem` only move an item along its lifecycle —
+   * `active → trashed → hidden` — and never touch the bucket. Nothing else does
+   * either, so without this an object outlives every route a user can reach.
+   *
+   * It is deliberately the *owner's view* of `deleteItemInternal`, which until now
+   * had no caller at all: a file that a relayed upload leaves behind has to be
+   * reclaimed, and the alternative — a permanent-delete route reachable only by an
+   * internal identity — would be unreachable from the desktop that is the sole
+   * reason the file exists.
+   *
+   * This is a wider power than the trash routes grant: a trashed item can be
+   * restored, and a hidden one by an administrator, but this cannot be undone at
+   * all. Callers should reach for it only when they mean it.
+   */
+  async permanentlyDeleteItem(
+    userId: string,
+    itemId: string,
+    actorEmail = userId,
+    ipAddress = "system",
+  ): Promise<{ readonly ok: true }> {
+    await this.deleteItemInternal({ itemId, userId, actorEmail, ipAddress, admin: false })
+    return { ok: true }
+  }
+
   listTrash(userId: string, input: { readonly offset?: number; readonly limit?: number; readonly search?: string } = {}): Promise<DriveTrashListPageDto> {
     return this.getLifecycleService().listTrash(userId, input)
   }

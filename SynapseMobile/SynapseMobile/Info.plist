@@ -83,5 +83,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!--
+	  The only picker source that runs in this app's own process. Photos and Files
+	  are chosen inside system extensions and need no usage description, so the
+	  camera is the sole reason this key exists.
+	-->
+	<key>NSCameraUsageDescription</key>
+	<string>拍一张照片发给电脑上的终端。</string>
 </dict>
 </plist>

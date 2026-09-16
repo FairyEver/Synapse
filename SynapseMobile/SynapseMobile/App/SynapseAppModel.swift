@@ -52,6 +52,25 @@ final class SynapseAppModel {
     /// History requests in flight, so a lost reply cannot wedge the loader.
     private var pendingHistory: [String: String] = [:]
 
+    // MARK: - File hand-off
+
+    /// Files on their way to the computer, newest last.
+    ///
+    /// Held here rather than per screen because the transfer outlives the screen:
+    /// the user is free to leave the terminal, and a file that is still uploading
+    /// or still owed to a computer that is offline has to keep its place.
+    private(set) var relayAttachments: [TerminalAttachment] = []
+    /// Which attachment an in-flight intent belongs to, so its result lands on the
+    /// right chip.
+    private var relayByIntent: [String: String] = [:]
+    /// Where the bytes for a not-yet-uploaded attachment are. Cleared per file as
+    /// soon as it is up, so the temporary copies the pickers made do not outlive
+    /// the transfer.
+    private var relayPendingFiles: [String: PickedFile] = [:]
+    private var relayLedger = RelayLedger()
+    private let uploader = FileUploader()
+    private var relayDrainTask: Task<Void, Never>?
+
     var clientInstanceId: String { tokens.clientInstanceId }
 
     init() {
@@ -175,6 +194,15 @@ final class SynapseAppModel {
             }
             self.pendingIntentResults.removeValue(forKey: result.intentId)?(result)
 
+            // A file transfer has its own idea of what a failure means — a refusal
+            // because the computer is away is a wait, not an error — so it is
+            // answered before the generic handling below, which would report every
+            // non-accepted outcome as a banner.
+            if self.relayByIntent[result.intentId] != nil {
+                self.handleRelayResult(result)
+                return
+            }
+
             // `lease_preempted` is the desktop confirming the command did not run,
             // which is the only rejection this client is allowed to replay.
             if result.code == "lease_preempted",
@@ -203,6 +231,11 @@ final class SynapseAppModel {
         }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
+            // The computer may have been away for days while this phone was closed;
+            // anything it never acknowledged is either obsolete by now or worth one
+            // more try before it is.
+            Task { await self.sweepRelayLedger() }
+            self.retryWaitingAttachments()
             guard let desktop = self.selectedDesktopClientInstanceId else {
                 // Nothing is selected because nothing was online when this app
                 // started. The connection is the only news we have, so the list
@@ -236,6 +269,9 @@ final class SynapseAppModel {
     /// further filtering to do.
     private func applyPresence(_ clientInstanceIds: [String]) {
         onlineDesktops = clientInstanceIds
+        // A computer appearing is exactly the event the cloud refuses to wait for,
+        // so it is the moment to hand over anything that was left waiting.
+        retryWaitingAttachments()
         let selectedIsReachable = selectedDesktopClientInstanceId
             .map(clientInstanceIds.contains) ?? false
         if selectedIsReachable { return }
@@ -676,5 +712,268 @@ final class SynapseAppModel {
     func summaryConnectivityLabel() -> String {
         if onlineDesktops.isEmpty { return "电脑离线" }
         return realtime.state.label
+    }
+
+    // MARK: - Sending files to the computer
+
+    /// Takes a selection and starts moving it.
+    ///
+    /// Nothing here is awaited by the caller: the bytes go up over HTTP at their own
+    /// pace, and the terminal stays usable the whole time. The chips appear
+    /// immediately so the user can see what was accepted and what was refused
+    /// without waiting for a transfer to finish.
+    func sendFiles(_ files: [PickedFile], to sessionId: String) {
+        let alreadyWaiting = relayAttachments.filter { $0.sessionId == sessionId && !$0.state.isFailed }.count
+        let (accepted, rejections) = screenPickedFiles(files, alreadyWaiting: alreadyWaiting)
+
+        for rejection in rejections { banner = rejection.message }
+        guard !accepted.isEmpty else { return }
+
+        let uploads = accepted.map { file in
+            (
+                file,
+                TerminalAttachment(
+                    id: UUID().uuidString,
+                    name: file.name,
+                    sessionId: sessionId,
+                    intentId: UUID().uuidString,
+                    driveItemId: nil,
+                    state: .queued
+                )
+            )
+        }
+        relayAttachments.append(contentsOf: uploads.map(\.1))
+        for (file, attachment) in uploads { relayPendingFiles[attachment.id] = file }
+        Task { await drainRelayQueue() }
+    }
+
+    /// Uploads whatever is waiting to go up, one file at a time.
+    ///
+    /// Serial on purpose. A batch of nine going up at once would divide the link
+    /// nine ways and make every one of them slower to finish, and the user is
+    /// watching a per-file progress bar.
+    private func drainRelayQueue() async {
+        while let next = relayAttachments.first(where: \.needsUpload) {
+            guard let file = relayPendingFiles[next.id] else {
+                update(next.id) { $0.state = .failed("这个文件已经不在了，请重新选择。") }
+                continue
+            }
+            await uploadAndDeliver(next.id, file: file)
+        }
+    }
+
+    private func uploadAndDeliver(_ attachmentId: String, file: PickedFile) async {
+        let ticket: APIClient.DriveUploadTicket
+        do {
+            ticket = try await apiClient.prepareDriveUpload(
+                name: relayAttachments.first(where: { $0.id == attachmentId })?.name ?? file.name,
+                size: file.size,
+                mimeType: file.mimeType
+            )
+        } catch {
+            update(attachmentId) { $0.state = .failed(Self.relayMessage(for: error)) }
+            relayPendingFiles.removeValue(forKey: attachmentId)
+            return
+        }
+
+        do {
+            try await uploader.upload(
+                fileURL: file.url,
+                to: ticket.upload.url,
+                headers: ticket.upload.headers
+            ) { [weak self] fraction in
+                Task { @MainActor in self?.update(attachmentId) { $0.state = .uploading(fraction) } }
+            }
+            _ = try await apiClient.completeDriveUpload(sessionId: ticket.sessionId)
+        } catch {
+            // The reservation is released so a half-written object does not sit in
+            // the bucket waiting for the server's own expiry sweep.
+            try? await apiClient.cancelDriveUpload(sessionId: ticket.sessionId)
+            update(attachmentId) { $0.state = .failed(Self.relayMessage(for: error)) }
+            relayPendingFiles.removeValue(forKey: attachmentId)
+            return
+        }
+
+        relayPendingFiles.removeValue(forKey: attachmentId)
+        // The item id is recorded before the intent is sent, so a transfer that is
+        // never confirmed is still reclaimable.
+        relayLedger.record(itemId: ticket.item.id)
+        update(attachmentId) {
+            $0.driveItemId = ticket.item.id
+            $0.state = .waitingForComputer
+        }
+        deliver(attachmentId)
+    }
+
+    /// Hands one uploaded file to the computer, or leaves it waiting if there is
+    /// none to hand it to.
+    ///
+    /// A send is safe to repeat: the desktop replays its stored answer for an
+    /// `intentId` it has already seen, so a resend after a lost reply cannot put the
+    /// same file on the computer twice.
+    private func deliver(_ attachmentId: String) {
+        guard let attachment = relayAttachments.first(where: { $0.id == attachmentId }),
+              let driveItemId = attachment.driveItemId
+        else { return }
+        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+            update(attachmentId) { $0.state = .waitingForComputer }
+            return
+        }
+
+        relayByIntent[attachment.intentId] = attachmentId
+        send(
+            MobileIntentRequest(
+                intentId: attachment.intentId,
+                kind: "fileUpload",
+                sessionId: attachment.sessionId,
+                driveItemId: driveItemId,
+                fileName: attachment.name
+            ),
+            to: desktop
+        )
+    }
+
+    /// Re-sends everything the computer has not answered for.
+    ///
+    /// The cloud does not queue for an offline computer — it refuses outright — so
+    /// the queue has to live here. Called when the computer appears and when the
+    /// socket comes back, which are the two moments a refusal can have stopped
+    /// being true.
+    private func retryWaitingAttachments() {
+        guard realtime.state.isConnected, selectedDesktopClientInstanceId != nil else { return }
+        for attachment in relayAttachments where attachment.state == .waitingForComputer {
+            deliver(attachment.id)
+        }
+    }
+
+    private func handleRelayResult(_ result: MobileIntentResult) {
+        guard let attachmentId = relayByIntent.removeValue(forKey: result.intentId) else { return }
+
+        if result.isAccepted {
+            if let landedPath = result.landedPath {
+                let name = (landedPath as NSString).lastPathComponent
+                if !name.isEmpty {
+                    update(attachmentId) { $0.name = name }
+                }
+            }
+            // The desktop has removed the cloud copy; the ledger no longer owes it.
+            // Resolved on the item recorded at upload time, not on the result, which
+            // does not carry it.
+            if let itemId = relayAttachments.first(where: { $0.id == attachmentId })?.driveItemId {
+                relayLedger.resolve(itemId: itemId)
+            }
+            update(attachmentId) { $0.state = .delivered(path: result.landedPath) }
+            // A file that landed but could not be typed is a success with a caveat.
+            // Saying nothing would leave the user waiting for text that is not coming.
+            if let message = result.message { banner = message }
+            return
+        }
+
+        // `no_result` and `delivery_failed` mean the computer never answered. The
+        // file is safely in the drive, so this is a wait rather than a failure.
+        switch result.code {
+        case "no_result", "delivery_failed", "timeout":
+            update(attachmentId) { $0.state = .waitingForComputer }
+        default:
+            update(attachmentId) { $0.state = .failed(result.message ?? "电脑没有接收这个文件。") }
+        }
+    }
+
+    /// Sends a failed transfer again, under a new intent id.
+    ///
+    /// A refusal is cached by the deskop against the intent id it answered, so
+    /// repeating the old one would replay the refusal instead of retrying.
+    func retryRelay(_ attachmentId: String) {
+        guard let attachment = relayAttachments.first(where: { $0.id == attachmentId }),
+              attachment.state.isFailed
+        else { return }
+        update(attachmentId) {
+            $0.intentId = UUID().uuidString
+            $0.state = attachment.driveItemId == nil ? .queued : .waitingForComputer
+        }
+        if attachment.driveItemId == nil {
+            Task { await drainRelayQueue() }
+        } else {
+            deliver(attachmentId)
+        }
+    }
+
+    func dismissRelay(_ attachmentId: String) {
+        relayAttachments.removeAll { $0.id == attachmentId }
+        relayPendingFiles.removeValue(forKey: attachmentId)
+        relayByIntent = relayByIntent.filter { $0.value != attachmentId }
+    }
+
+    /// Takes back what this phone typed, by pressing backspace once per character.
+    ///
+    /// That is the only undo a terminal offers, and it is why the desktop reports
+    /// the path it inserted: the phone cannot count the characters of a path it
+    /// never knew. The chips go regardless of the answer — the row describes what
+    /// this phone put in the terminal, and the request to remove it has been made.
+    func undoTypedPaths(_ attachmentIds: [String]) {
+        for id in attachmentIds {
+            guard let attachment = relayAttachments.first(where: { $0.id == id }),
+                  let path = attachment.insertedPath,
+                  !path.isEmpty
+            else { continue }
+            let count = path.count
+            Task { [weak self] in
+                var remaining = count
+                while remaining > 0 {
+                    let chunk = min(remaining, Self.backspaceChunk)
+                    remaining -= chunk
+                    await self?.write(
+                        MobileIntentRequest(
+                            intentId: UUID().uuidString,
+                            kind: "keys",
+                            sessionId: attachment.sessionId,
+                            actions: Array(repeating: .key(.backspace), count: chunk)
+                        ),
+                        to: attachment.sessionId
+                    )
+                }
+            }
+        }
+        for id in attachmentIds { dismissRelay(id) }
+    }
+
+    /// Well under the desktop's 128-action ceiling, so a long path is undone in a
+    /// few intents rather than refused as one oversized one.
+    private static let backspaceChunk = 64
+
+    /// Removes relayed files whose computer never came back.
+    ///
+    /// The drive has no expiry and its delete routes leave the bytes in the bucket,
+    /// so an undelivered transfer would otherwise stay in the user's drive forever.
+    /// Only the phone knows which uploads are still owed a delivery, so only the
+    /// phone can decide they have waited long enough.
+    private func sweepRelayLedger() async {
+        for entry in relayLedger.expired() {
+            do {
+                try await apiClient.permanentlyDeleteDriveItem(itemId: entry.itemId)
+                relayLedger.resolve(itemId: entry.itemId)
+                update(byDriveItemId: entry.itemId) {
+                    $0.state = .failed("电脑一直没有上线，云端副本已清理。")
+                }
+            } catch {
+                // Left in the ledger so the next sweep tries again; nothing about the
+                // user's file has been lost by failing to clean up.
+                continue
+            }
+        }
+    }
+
+    private func update(_ attachmentId: String, _ change: (inout TerminalAttachment) -> Void) {
+        guard let index = relayAttachments.firstIndex(where: { $0.id == attachmentId }) else { return }
+        change(&relayAttachments[index])
+    }
+
+    private func update(byDriveItemId itemId: String, _ change: (inout TerminalAttachment) -> Void) {
+        guard let index = relayAttachments.firstIndex(where: { $0.driveItemId == itemId }) else { return }
+        change(&relayAttachments[index])
+    }
+
+    private static func relayMessage(for error: Error) -> String {
+        (error as? APIError)?.message ?? "传输没有完成，请重试。"
     }
 }

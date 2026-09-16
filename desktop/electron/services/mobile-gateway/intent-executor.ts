@@ -10,7 +10,9 @@ import type { TerminalService } from "../../../app-capabilities/terminal/main/se
 import type { AuditSink, PermissionAction } from "../../runtime/security/permission-guard"
 import type { MobileAttachment } from "./attachment-registry"
 import { AttachmentRegistry, createAttachment } from "./attachment-registry"
-import { mobileControllerFor } from "./controller"
+import { mobileControllerFor, MOBILE_RELAY_RESOURCE } from "./controller"
+import type { MobileFileRelay } from "./file-relay"
+import { MobileFileRelayError } from "./file-relay"
 
 /** Long enough that an actively used terminal never loses control mid-sentence. */
 const LEASE_DURATION_MS = 60_000
@@ -26,6 +28,7 @@ export type MobileGatewayLogger = {
 export type IntentExecutorDeps = {
   readonly terminal: TerminalService
   readonly registry: AttachmentRegistry
+  readonly fileRelay: MobileFileRelay
   readonly auditSink: AuditSink
   readonly logger: MobileGatewayLogger
   readonly authorize: (
@@ -333,6 +336,42 @@ export class MobileIntentExecutor {
         return accepted(intent.intentId, { createdSessionId: session.id })
       }
 
+      /**
+       * A file the phone uploaded to the user's drive, to be brought down here and
+       * named in the terminal.
+       *
+       * Order matters. The bytes are fetched first and the cloud copy is dropped
+       * the moment they are local, because "the file is on this computer" is the
+       * promise the phone made to the user; typing the path is the convenience on
+       * top of it. A terminal that has since ended, or a lease the desktop's own
+       * user has taken, therefore costs the insertion and nothing else — and the
+       * result says so rather than reporting a failure that did not happen.
+       */
+      case "fileUpload": {
+        await this.deps.authorize("fs.write.outside-userdata", MOBILE_RELAY_RESOURCE)
+        const landed = await this.deps.fileRelay.land({
+          driveItemId: intent.driveItemId,
+          fileName: intent.fileName,
+        })
+        await this.deps.fileRelay.discardCloudCopy(intent.driveItemId)
+        const note = await this.typeRelayedPath(
+          mobileClientInstanceId,
+          intent.sessionId,
+          landed.path,
+          intent.intentId,
+        )
+        return {
+          intentId: intent.intentId,
+          outcome: "accepted",
+          sessionId: intent.sessionId,
+          // The phone has no way to know this — the directory a file lands in is
+          // this computer's fact. It needs the path both to say where the file went
+          // and to undo the insertion, which is one backspace per character.
+          landedPath: landed.path,
+          ...(note === undefined ? {} : { message: note }),
+        }
+      }
+
       case "launchCommand": {
         await this.deps.authorize("terminal.command.launch", `terminal.group:${intent.groupId}`)
         const session = await terminal.launchGroupCommand({
@@ -372,6 +411,58 @@ export class MobileIntentExecutor {
     await this.tryAcquireLease(attachment)
     // A brand new session has no output yet; the first flush catches its banner.
     this.deps.markDirty(sessionId)
+  }
+
+  /**
+   * Types a landed path at the terminal's prompt, without pressing Enter.
+   *
+   * Never turns a failure into a rejected result. By the time this runs the file
+   * is already on the user's disk and the cloud copy is already gone, so the only
+   * thing left that can go wrong is the insertion — and the phone has to hear
+   * "landed, but not typed" rather than an error that would make it queue a retry
+   * for a file that is already there.
+   *
+   * The text is the bare path, unquoted: `file-relay.ts` reduces a name to
+   * letters, digits, `._-` and CJK, and the directory it lands in has no spaces
+   * either, so there is nothing left for a shell to split on.
+   */
+  private async typeRelayedPath(
+    mobileClientInstanceId: string,
+    sessionId: string,
+    filePath: string,
+    intentId: string,
+  ): Promise<string | undefined> {
+    try {
+      await this.deps.authorize("terminal.session.control", sessionResource(sessionId))
+      const attachment = requireWritable(this.deps.registry, mobileClientInstanceId, sessionId)
+      const lease = await this.requireLease(attachment)
+      await this.deps.terminal.sendSemanticInput({
+        sessionId,
+        leaseId: lease.leaseId,
+        expectedInputRevision: lease.inputRevision,
+        actions: [{ type: "text", text: filePath }],
+        // Stable per intent, so a resend after an uncertain link cannot type the
+        // same path twice. The executor's own result cache catches most of these
+        // first; this is the layer that holds if that cache has evicted the entry.
+        idempotencyKey: intentKey(`${intentId}:path`),
+      }, lease.controller)
+      this.deps.markDirty(sessionId)
+      return undefined
+    } catch (error) {
+      const code = classifyError(error)
+      if (code === "not_attached" || code === "session_not_found") {
+        return "文件已落到电脑，但这个终端已经不在了，路径没有插入。"
+      }
+      if (code === "lease_preempted" || code === "control_busy" || code === "lease_expired" ||
+        code === "lease_invalid") {
+        return "文件已落到电脑，但桌面端正在使用这个终端，路径没有插入。"
+      }
+      this.deps.logger.warn("Relayed path could not be typed into the terminal.", {
+        sessionId,
+        code,
+      })
+      return "文件已落到电脑，但路径没有插入。"
+    }
   }
 
   /**
@@ -565,5 +656,8 @@ function classifyError(error: unknown): string {
 
 function describeError(error: unknown): string {
   if (error instanceof MobileIntentError) return error.message
+  // The relay's failures are all things the user can act on — the file was too
+  // large, the cloud item was gone — so its own wording beats a generic one.
+  if (error instanceof MobileFileRelayError) return error.message
   return "操作没有完成。"
 }
