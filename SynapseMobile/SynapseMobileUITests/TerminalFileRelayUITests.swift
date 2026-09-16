@@ -98,25 +98,57 @@ final class TerminalFileRelayUITests: XCTestCase {
 
     /// The picker is the system's, and its furniture differs between iOS versions,
     /// so this looks for the confirm button by any of the names it has had rather
-    /// than by one.
+    /// than by one — and falls back to where it always is.
     private func pickFirstPhoto(_ app: XCUIApplication) throws {
-        let photo = app.images.element(boundBy: 0)
-        XCTAssertTrue(photo.waitForExistence(timeout: 25), "the photo library is empty; seed it with `simctl addmedia`")
+        guard let photo = firstPhotoThumbnail(app, timeout: 25) else {
+            XCTFail("no photo thumbnail in the picker; seed the library with `simctl addmedia`")
+            return
+        }
         photo.tap()
 
         for label in ["添加", "Add", "完成", "Done"] {
             let confirm = app.buttons[label]
-            if confirm.waitForExistence(timeout: 3), confirm.isHittable {
+            if confirm.waitForExistence(timeout: 2), confirm.isHittable {
                 confirm.tap()
                 return
             }
         }
-        // A single-selection picker dismisses on the tap itself, which is a
-        // legitimate way for this to have worked.
-        XCTAssertFalse(
-            app.images.element(boundBy: 0).exists,
-            "a photo was tapped but the picker never dismissed"
+        // The confirm control is a bare checkmark with no name of its own on this
+        // version, which is why the position is the fallback rather than the other
+        // way round: it is always the top-right of the sheet.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.17)).tap()
+
+        XCTAssertTrue(
+            waitForPickerToClose(app, timeout: 15),
+            "a photo was selected but the picker never dismissed"
         )
+    }
+
+    /// The photo grid, not the banner above it.
+    ///
+    /// The "private access" notice carries an app icon that is also an image, and it
+    /// comes first in the tree — tapping it selects nothing and the picker sits
+    /// there. Thumbnails are the large images; the icon is a small one.
+    private func firstPhotoThumbnail(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let first = photoThumbnails(app).first { return first }
+            usleep(300_000)
+        } while Date() < deadline
+        return nil
+    }
+
+    private func photoThumbnails(_ app: XCUIApplication) -> [XCUIElement] {
+        app.images.allElementsBoundByIndex.filter { $0.frame.width > 90 && $0.frame.height > 90 }
+    }
+
+    private func waitForPickerToClose(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if photoThumbnails(app).isEmpty { return true }
+            usleep(300_000)
+        } while Date() < deadline
+        return false
     }
 
     private func signIn(_ app: XCUIApplication) {
