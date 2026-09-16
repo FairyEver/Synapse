@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  `development` selects the APNs sandbox gateway, which is what a build
+	  installed straight from Xcode uses. A distribution profile replaces this
+	  with `production` at archive time, and the server switches with
+	  APNS_USE_SANDBOX.
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
