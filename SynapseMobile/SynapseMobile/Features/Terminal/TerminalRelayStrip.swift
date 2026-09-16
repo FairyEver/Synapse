@@ -81,7 +81,7 @@ struct TerminalRelayStrip: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture {
-            if attachment.state.isFailed { onRetry(attachment.id) }
+            if attachment.canRetry { onRetry(attachment.id) }
         }
     }
 
@@ -108,9 +108,9 @@ struct TerminalRelayStrip: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.running)
         case .failed:
-            // Tapping the chip retries, so the glyph says so rather than only
-            // reporting that something went wrong.
-            Image(systemName: "arrow.clockwise")
+            // Tapping the chip retries where a retry is possible, so the glyph says
+            // so rather than only reporting that something went wrong.
+            Image(systemName: attachment.canRetry ? "arrow.clockwise" : "exclamationmark")
                 .font(.caption2)
                 .foregroundStyle(Theme.failure)
         }

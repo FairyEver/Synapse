@@ -772,7 +772,7 @@ final class SynapseAppModel {
             )
         } catch {
             update(attachmentId) { $0.state = .failed(Self.relayMessage(for: error)) }
-            relayPendingFiles.removeValue(forKey: attachmentId)
+            discardLocalCopy(attachmentId)
             return
         }
 
@@ -790,11 +790,11 @@ final class SynapseAppModel {
             // the bucket waiting for the server's own expiry sweep.
             try? await apiClient.cancelDriveUpload(sessionId: ticket.sessionId)
             update(attachmentId) { $0.state = .failed(Self.relayMessage(for: error)) }
-            relayPendingFiles.removeValue(forKey: attachmentId)
+            discardLocalCopy(attachmentId)
             return
         }
 
-        relayPendingFiles.removeValue(forKey: attachmentId)
+        discardLocalCopy(attachmentId)
         // The item id is recorded before the intent is sent, so a transfer that is
         // never confirmed is still reclaimable.
         relayLedger.record(itemId: ticket.item.id)
@@ -975,6 +975,16 @@ final class SynapseAppModel {
                 continue
             }
         }
+    }
+
+    /// Drops the copy the picker made, once its bytes are in the drive.
+    ///
+    /// The pickers write into the app's temporary directory, and a selection can be
+    /// a hundred megabytes. Waiting for iOS to reclaim that on its own schedule is
+    /// not a plan; the file has served its purpose the moment the upload ends.
+    private func discardLocalCopy(_ attachmentId: String) {
+        guard let file = relayPendingFiles.removeValue(forKey: attachmentId) else { return }
+        try? FileManager.default.removeItem(at: file.url)
     }
 
     private func update(_ attachmentId: String, _ change: (inout TerminalAttachment) -> Void) {

@@ -75,6 +75,15 @@ struct TerminalAttachment: Identifiable, Equatable {
     /// A file waiting on a computer that may never come back is dismissible, and
     /// has to be: the batch limit counts what is waiting, so without this a user
     /// whose computer stayed offline could be left unable to send anything at all.
+    /// Whether there is anything left to retry with.
+    ///
+    /// A failure after the upload left nothing to resend — the picker's copy is
+    /// gone and the drive holds no item — so offering a retry there would only be
+    /// offering a button that immediately fails again.
+    var canRetry: Bool {
+        state.isFailed && driveItemId != nil
+    }
+
     var canBeDismissed: Bool {
         switch state {
         case .queued, .uploading:

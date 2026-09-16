@@ -230,6 +230,21 @@ struct TerminalAttachmentStateTests {
         #expect(!attachment(.uploading(0.5)).canBeDismissed)
     }
 
+    @Test func aRetryIsOfferedOnlyWhereThereIsSomethingToRetryWith() {
+        let uploaded = TerminalAttachment(
+            id: "a1", name: "a.png", sessionId: "s1",
+            intentId: "i1", driveItemId: "item-1", state: .failed("电脑没有接收")
+        )
+        // The bytes are in the drive, so sending it again can work.
+        #expect(uploaded.canRetry)
+
+        // A failure on the way up left nothing behind: the picker's copy has been
+        // discarded and there is no drive item, so a retry button would only fail
+        // again.
+        #expect(!attachment(.failed("上传失败")).canRetry)
+        #expect(!attachment(.delivered(path: "/tmp/a.png")).canRetry)
+    }
+
     @Test func aWaitingTransferKeepsTheIntentIdItWillBeResentWith() {
         // The id is fixed at creation and the same one is reused on every resend,
         // which is what lets the desktop dedupe a file it has already been told
