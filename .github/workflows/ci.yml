@@ -102,6 +102,13 @@ jobs:
         run: pnpm --filter @synapse/desktop run check:ipc-codegen
       - name: Verify Phase 0 hard constraints
         run: pnpm --filter @synapse/desktop run check:hard-constraints
+      # Wired in on 2026-09-16, long after the check itself was written. Until then it was a
+      # command someone could run by hand and nobody did: it first went red on 2026-09-04, when
+      # a renderer file was added three days *after* the check existed, and stayed red for
+      # twelve days without anyone noticing. The two checks above are in CI and have never
+      # drifted; this one was not, and did.
+      - name: Verify UI tracking coverage
+        run: pnpm --filter @synapse/desktop run check:ui-tracking-coverage
 
   desktop-windows:
     name: Desktop Windows typecheck + Agent/Git tests + package
