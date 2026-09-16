@@ -45,7 +45,10 @@ export function useVoiceInput(): VoiceInputController {
   useEffect(() => {
     disposedRef.current = false
     let cancelled = false
-    void requireSynapseBridge().voice.settings.get()
+    // 桥里没有 voice 域（旧 preload、降级环境）时按"不可用"处理：入口不出现，
+    // 而不是把整个输入区一起带崩。
+    void Promise.resolve()
+      .then(() => requireSynapseBridge().voice.settings.get())
       .then((settings) => { if (!cancelled) setAvailable(settings.configured) })
       .catch(() => { if (!cancelled) setAvailable(false) })
     return () => {

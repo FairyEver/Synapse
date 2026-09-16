@@ -79,6 +79,54 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+describe("AgentComposer 语音输入", () => {
+  async function renderVoiceComposer(options?: { readonly voiceConfigured?: boolean }) {
+    installShellBridge(undefined, options)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={(event) => event.preventDefault()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+    return container
+  }
+
+  it("凭据没配好时不显示麦克风入口", async () => {
+    const container = await renderVoiceComposer({ voiceConfigured: false })
+    expect(container.querySelector('button[aria-label="语音输入"]')).toBeNull()
+  })
+
+  it("凭据配好后才出现麦克风入口", async () => {
+    const container = await renderVoiceComposer()
+    expect(container.querySelector('button[aria-label="语音输入"]')).toBeTruthy()
+  })
+
+  it("麦克风入口在发送按钮左边", async () => {
+    const container = await renderVoiceComposer()
+    const mic = container.querySelector('button[aria-label="语音输入"]')
+    const send = container.querySelector('button[aria-label="发送"]')
+    expect(mic).toBeTruthy()
+    expect(send).toBeTruthy()
+    if (!mic || !send) throw new Error("Expected mic and send buttons")
+    // compareDocumentPosition 返回 FOLLOWING(4) 表示 send 排在 mic 之后。
+    expect(mic.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
 describe("AgentComposer", () => {
   it("does not transfer send-button focus to the stop action while a turn starts", async () => {
     const container = document.createElement("div")
@@ -3766,6 +3814,7 @@ function installShellBridge(
     readonly chooseAttachments?: ReturnType<typeof vi.fn>
     readonly resolveAttachmentPaths?: ReturnType<typeof vi.fn>
     readonly resolveWorkspaceTreePaths?: ReturnType<typeof vi.fn>
+    readonly voiceConfigured?: boolean
   },
 ) {
   const filesByPath = new Map<string, File>()
@@ -3842,6 +3891,22 @@ function installShellBridge(
   }).synapse = {
     shell: {
       filePathForDroppedFile: filePathForDroppedFileMock,
+    },
+    voice: {
+      settings: {
+        get: vi.fn(async () => ({
+          appId: "1252371654",
+          secretId: "AKIDtest",
+          engineModelType: "16k_zh_en_2.0",
+          hotwordList: "",
+          domain: 1,
+          hasSecretKey: true,
+          configured: options?.voiceConfigured ?? true,
+        })),
+      },
+      session: {
+        sign: vi.fn(async () => ({ url: "wss://asr.example/session", voiceId: "voice-1", expiredAt: 0 })),
+      },
     },
     agent: {
       chooseAttachments,

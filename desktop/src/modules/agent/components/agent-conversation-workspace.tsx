@@ -364,18 +364,26 @@ function AgentConversationWorkspace({
     return true
   }
 
-  const submitDraft = (attachments: readonly AgentDraftAttachment[] = []): Promise<boolean> => {
-    return submitContent(draft.trim(), { attachments })
+  const submitDraft = (
+    attachments: readonly AgentDraftAttachment[] = [],
+    /**
+     * 录音中直接点发送时，文字还没走完 setDraft 那一轮，父组件的 draft 是旧的，
+     * 所以由输入区把这句话显式带过来。
+     */
+    contentOverride?: string,
+  ): Promise<boolean> => {
+    return submitContent(contentOverride ?? draft.trim(), { attachments })
   }
 
   const handleSubmit = (
     event: FormEvent,
     attachments: readonly AgentDraftAttachment[],
     acceptAttachments: () => (() => void) & { complete?: () => void },
+    contentOverride?: string,
   ) => {
     event.preventDefault()
     const restoreAttachments = acceptAttachments()
-    void submitDraft(attachments).then((accepted) => {
+    void submitDraft(attachments, contentOverride).then((accepted) => {
       if (accepted) restoreAttachments.complete?.()
       else restoreAttachments()
     })

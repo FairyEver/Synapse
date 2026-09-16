@@ -10,7 +10,7 @@ import {
   useState,
 } from "react"
 import { createPortal } from "react-dom"
-import { ArrowUp, ChevronDown, CornerDownRight, Folder, RotateCcw, Square, Trash2 } from "lucide-react"
+import { ArrowUp, ChevronDown, CornerDownRight, Folder, Mic, RotateCcw, Square, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,8 @@ import {
 } from "@/lib/workspace-file-tree-drag"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
+import { useVoiceInput } from "@/modules/voice/use-voice-input"
+import { VoiceInputStrip } from "@/modules/voice/voice-input-strip"
 import { insertTextAtComposerSelection } from "../composer-insert"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
@@ -137,6 +139,8 @@ function AgentComposer({
     event: FormEvent,
     attachments: readonly AgentDraftAttachment[],
     acceptAttachments: AcceptAttachments,
+    /** 语音输入结束时带上这句话，避开 setDraft 与提交之间的那一轮。 */
+    contentOverride?: string,
   ) => void
   readonly onCancelTurn: () => void
   readonly onForceKillTurn: () => void
@@ -164,6 +168,7 @@ function AgentComposer({
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const voice = useVoiceInput()
   const [multiline, setMultiline] = useState(false)
   const [pendingMode, setPendingMode] = useState<SynapseAgentPermissionMode | null>(null)
   const [pendingModeAction, setPendingModeAction] = useState<"switch" | "new-session">("switch")
@@ -448,7 +453,35 @@ function AgentComposer({
     }
   }
 
+  /** 识别结果接到已有草稿后面，不动用户已经敲进去的内容。 */
+  const appendVoiceTranscript = (text: string): string => {
+    const trimmed = text.trim()
+    if (!trimmed) return draft
+    return draft.trim() ? `${draft.trimEnd()} ${trimmed}` : trimmed
+  }
+
+  const startVoiceInput = () => {
+    // 录音态绝不能弹键盘：先把焦点从输入框摘掉，再让输入框整个让位给展示节点。
+    textareaRef.current?.blur()
+    voice.start()
+  }
+
+  const commitVoiceInput = async () => {
+    const text = await voice.confirm()
+    onDraftChange(appendVoiceTranscript(text))
+  }
+
   const handleSubmit = (event: FormEvent) => {
+    if (voice.state.phase === "recording") {
+      // 录音中点了发送：先把语音落成文字，再走原来的提交路径。
+      event.preventDefault()
+      void voice.confirm().then((text) => {
+        const content = appendVoiceTranscript(text)
+        onDraftChange(content)
+        if (content.trim()) onSubmit(event, attachments, () => acceptSubmittedAttachments(attachments), content)
+      })
+      return
+    }
     track({
       component: "agent",
       name: "agent-message-submit",
@@ -756,7 +789,19 @@ function AgentComposer({
               onRemove={removeAttachment}
             />
           ) : null}
-          editor={(
+          editor={voice.state.phase === "recording" ? (
+            /**
+             * 录音时把 Textarea 整个换成展示节点，而不是去隐藏键盘：没有可聚焦的
+             * 元素，键盘自然不会出现。样式对齐 Textarea，文字不会跳位。
+             */
+            <div
+              className="agent-composer__voice-live min-h-9 px-2 py-2 text-sm leading-6 break-words whitespace-pre-wrap"
+              data-voice-live
+            >
+              {voice.state.transcript.stable}
+              <span className="text-muted-foreground">{voice.state.transcript.unstable}</span>
+            </div>
+          ) : (
             <Textarea
               ref={textareaRef}
               className="agent-composer__input max-h-40 min-h-9 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent dark:disabled:bg-transparent"
@@ -848,6 +893,20 @@ function AgentComposer({
                   </Button>
                 )}
               />
+              {voice.available && voice.state.phase === "idle" ? (
+                <Button
+                  key="voice"
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="语音输入"
+                  data-track="agent-voice-start"
+                  disabled={disabled}
+                  onClick={startVoiceInput}
+                >
+                  <Mic />
+                </Button>
+              ) : null}
               {sending || cancelPhase === "cancel_pending" ? (
                 <Button
                   key="stop"
@@ -875,6 +934,16 @@ function AgentComposer({
               )}
             </>
           )}
+          footer={voice.state.phase === "recording" ? (
+            <VoiceInputStrip
+              transcript={voice.state.transcript}
+              elapsedMs={voice.state.elapsedMs}
+              failure={voice.state.failure}
+              onCancel={voice.cancel}
+              onConfirm={() => { void commitVoiceInput() }}
+              onRetry={voice.retry}
+            />
+          ) : null}
         />
       </form>
       <Dialog open={pendingMode !== null} onOpenChange={(open) => {
