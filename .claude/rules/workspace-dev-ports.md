@@ -2,10 +2,12 @@
 name: workspace-dev-ports
 paths:
   - package.json
+  - desktop/package.json
   - desktop/vite.config.ts
-  - desktop/scripts/dev*.mjs
+  # The dev scripts live under `scripts/dev/`, not directly in `scripts/`. The previous
+  # `desktop/scripts/dev*.mjs` matched nothing at all, because `*` does not cross `/`.
+  - desktop/scripts/dev/**
   - document/.vitepress/config.*
-  - document/vite.config.*
 ---
 
 # workspace 子包 dev 端口分配
@@ -14,7 +16,7 @@ paths:
 
 ## 原则
 
-- **`desktop` 独占 5173**：Electron 主进程 dev 下通过 `http://127.0.0.1:5173` 加载渲染端；改动面大（`desktop/scripts/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs` 都有这个默认值），基线保留不动。
+- **`desktop` 独占 5173**：Electron 主进程 dev 下通过 `http://127.0.0.1:5173` 加载渲染端；改动面大（`desktop/scripts/dev/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs` 都有这个默认值），基线保留不动。
 - **其他子包必须显式配非 5173 端口**：在子包自己的 dev 配置里**写死端口号**，不要依赖 Vite / VitePress "端口被占就自动顺延" 的默认行为——`pnpm dev` 并行启动顺序不稳定，会让每次拿到的端口都不一样。
 - **端口分配唯一**：同一端口不允许两个子包同时占用。新增子包时从下表往后顺延一个空位。
 
@@ -22,7 +24,7 @@ paths:
 
 | 子包 | dev 端口 | 配置位置 |
 | --- | --- | --- |
-| `@synapse/desktop` | 5173 | `desktop/scripts/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs`（三处都有默认值，可由 `SYNAPSE_DEV_PORT` 环境变量覆盖） |
+| `@synapse/desktop` | 5173 | `desktop/scripts/dev/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs`（三处都有默认值，可由 `SYNAPSE_DEV_PORT` 环境变量覆盖） |
 | `@synapse/document` | 19773 | `document/.vitepress/config.mts` 的 `vite.server.port` |
 
 ## 新增子包时
@@ -42,7 +44,7 @@ paths:
 - **不要依赖端口自动顺延来规避冲突**：`pnpm dev` 并行启动顺序不稳定，端口随机漂移会让 URL 记忆混乱、也会破坏 Electron 主进程对固定端口的依赖。
 - **不要为了"跟 desktop 一致"给其他子包也配 5173**：直接撞车。
 - **不要把端口只藏在本地环境变量里**：新机器 / 新成员第一次跑 `pnpm dev` 会直接崩。
-- **不要随意改 desktop 的 5173**：要改就同时改 `desktop/scripts/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs` 三处默认值，并确认 Electron 主进程加载 URL 的逻辑没有硬编码。
+- **不要随意改 desktop 的 5173**：要改就同时改 `desktop/scripts/dev/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs` 三处默认值，并确认 Electron 主进程加载 URL 的逻辑没有硬编码。
 
 ## 相关下游
 

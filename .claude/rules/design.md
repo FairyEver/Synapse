@@ -5,6 +5,12 @@ paths:
   - desktop/src/**/*.css
   - desktop/src/styles/**
   - desktop/components.json
+  # Renderer UI outside `desktop/src`, kept identical to `.claude/rules/ui-rules.md`: the two
+  # are read together for any renderer UI, so a file that loads one must load the other.
+  - desktop/app-capabilities/**/*.tsx
+  - desktop/action-packages/**/*.tsx
+  - desktop/workflow-nodes/**/*.tsx
+  - desktop/automation-trigger-packages/**/*.tsx
 ---
 
 # Synapse Design Baseline

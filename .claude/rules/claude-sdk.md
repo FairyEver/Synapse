@@ -1,3 +1,15 @@
+---
+name: claude-sdk
+# Without `paths` this rule loaded in every session, including ones that never touch the
+# SDK. The scope below is where the package is actually imported: `agent-runtime` is the
+# only service that reaches for it, and the docs directory is what the rule tells you to
+# read. Deliberately *not* included: `desktop/package.json` (a dependency bump is a one-line
+# change, not SDK development) and the packaging checks that merely name the package.
+paths:
+  - desktop/electron/services/agent-runtime/**
+  - docs/claude/sdk/**
+---
+
 # Claude Agent SDK 使用规则
 
 涉及 Claude Agent SDK（`@anthropic-ai/claude-agent-sdk` / `claude_agent_sdk`）的开发时，必须先查阅本地文档再编码。

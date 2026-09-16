@@ -3,6 +3,19 @@ name: frontend
 paths:
   - desktop/src/**/*.ts
   - desktop/src/**/*.tsx
+  # Renderer code outside `desktop/src`. The `renderer/` directories hold hooks, helpers and
+  # manifests, not just components, so `*.ts` is included there; the mixed packages carry
+  # main-process and shared `.ts` beside their renderer files, so only the two unambiguous
+  # signals are taken — the `.tsx` extension and the `*.renderer.ts` naming convention that
+  # those packages use for their renderer entry points.
+  - desktop/app-capabilities/**/renderer/**/*.ts
+  - desktop/app-capabilities/**/renderer/**/*.tsx
+  - desktop/action-packages/**/*.tsx
+  - desktop/workflow-nodes/**/*.tsx
+  - desktop/automation-trigger-packages/**/*.tsx
+  - desktop/action-packages/**/*.renderer.ts
+  - desktop/workflow-nodes/**/*.renderer.ts
+  - desktop/automation-trigger-packages/**/*.renderer.ts
 ---
 
 # 前端架构约定

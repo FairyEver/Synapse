@@ -5,6 +5,16 @@ paths:
   - desktop/src/**/*.css
   - desktop/src/styles/**
   - desktop/components.json
+  # Renderer UI outside `desktop/src`. `docs/agents/ui-and-product.md` states these rules
+  # apply to *any* renderer UI and names no directory, so the app-capability renderers,
+  # action packages, workflow nodes and automation triggers are in scope. Plain `.tsx` is
+  # the whole filter on purpose: JSX only ever runs in the renderer, so these four globs
+  # cannot reach main-process code, and the remaining `.ts` files in those trees are shared
+  # or main-process by design (they belong to `.claude/rules/api.md`).
+  - desktop/app-capabilities/**/*.tsx
+  - desktop/action-packages/**/*.tsx
+  - desktop/workflow-nodes/**/*.tsx
+  - desktop/automation-trigger-packages/**/*.tsx
 ---
 
 # Synapse UI 编写规则
