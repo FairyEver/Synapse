@@ -1,5 +1,7 @@
 # Synapse Terminal MCP
 
+> **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
+
 Use Terminal tools to operate Synapse-managed interactive PTY sessions. Terminal is a shared UI/MCP object space, not a one-shot command runner. Use the current tool schemas directly and immutable ids for every sensitive read or mutation. Call `app_terminal_capabilities_get` only when runtime or platform support facts are needed, after reconnecting, or after an unsupported/degraded result.
 
 Read `api-reference.md` before constructing requests. Read `examples.md` when translating a user goal into a multi-step Terminal workflow.

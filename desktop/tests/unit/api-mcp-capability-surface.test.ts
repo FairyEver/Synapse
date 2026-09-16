@@ -10,6 +10,7 @@ import {
 } from "../../synapse-capabilities/shared/registry"
 import { capabilityIdToMcpTool, type CapabilityId } from "../../synapse-capabilities/shared/naming"
 import { APP_DOMAIN, buildAppTools } from "../../synapse-capabilities/shared/app-domain"
+import { buildSynapseToolRouterTools } from "../../electron/services/agent-runtime/synapse-tool-router"
 import {
   JAVASCRIPT_RUN_CAPABILITY_ID,
   NODEJS_RUN_CAPABILITY_ID,
@@ -118,6 +119,17 @@ describe("API and MCP capability surface", () => {
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
 
+  it("publishes the two router tools while keeping the full capability catalog intact", () => {
+    const published = buildSynapseToolRouterTools()
+
+    expect(published.map((tool) => tool.name).sort()).toEqual(["invoke", "search"])
+    expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
+    // The catalog is still the backing index for search/invoke; only the eager
+    // tools/list payload shrank. Re-adding it here turns this assertion red.
+    expect(buildAllMcpTools()).toHaveLength(237)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(237)
+  })
+
   it("documents model price rule IDs as opaque rule IDs", () => {
     const tools = buildAllMcpTools()
     const updateTool = tools.find((tool) => tool.name === "app_model_price_rule_update")
@@ -206,6 +218,24 @@ describe("API and MCP capability surface", () => {
       .filter((toolName) => docsText.includes(`\`${toolName}\``))
 
     expect(documentedRetiredToolNames).toEqual([])
+  })
+
+  it("teaches the two-tool surface in every skill domain doc", () => {
+    const docs = readMarkdownFiles(
+      new URL("app-capabilities/synapse-skill/skill-package/", repoRoot),
+    )
+    // skill-authoring/ covers local Skill file authoring and calls no Synapse
+    // MCP tools, so it carries no reaching-Synapse guidance.
+    const routingDocs = docs.filter((file) => (
+      /(?:^|\/)(?:index|api-reference)\.md$/.test(file.path)
+      && !file.path.startsWith("skill-authoring/")
+    ))
+
+    expect(routingDocs).toHaveLength(22)
+    for (const doc of routingDocs) {
+      expect(doc.content, doc.path).toContain("Reaching Synapse tools")
+      expect(doc.content, doc.path).toContain("publishes only two tools")
+    }
   })
 
   it("documents the Agent conversation deep link without a shell or content-reading fallback", () => {

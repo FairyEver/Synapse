@@ -3,11 +3,11 @@
 
 import {
   MCP_TOOL_ACTIONS,
-  buildAllMcpTools,
   getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
 import { sanitizeError } from "../../src/lib/error-sanitize"
 import { JSON_REPAIR_CAPABILITY_ID } from "../../app-capabilities/json-repair/shared/capability"
+import type { McpToolDefinition } from "../../synapse-capabilities/shared/types"
 
 type JsonRpcId = number | string | null
 
@@ -26,6 +26,7 @@ type McpRpcResponse =
 type McpServerIdentity = {
   name: string
   version: string
+  instructions?: string
 }
 
 type ToolExecutor = (toolName: string, args: Record<string, unknown>) => unknown | Promise<unknown>
@@ -33,6 +34,14 @@ type ToolExecutor = (toolName: string, args: Record<string, unknown>) => unknown
 type McpToolCallResult = {
   content: Array<{ type: "text"; text: string }>
   isError?: true
+}
+
+// What a transport publishes. The caller supplies the surface so this module
+// stays independent of whichever implementation backs it.
+type McpToolSurface = {
+  readonly instructions?: string
+  listTools(): McpToolDefinition[]
+  callTool(name: string, args: Record<string, unknown>): Promise<McpToolCallResult>
 }
 
 const PROTOCOL_VERSION = "2024-11-05"
@@ -126,16 +135,26 @@ function sanitizeMcpErrorMessage(error: unknown): string {
   return sanitizeError(errorMessage(error)) || "unknown error"
 }
 
+// Teaches the two-step flow instead of dead-ending. A client that cached the
+// tool list across an upgrade still reaches the recovery path from here.
+function unknownToolResult(toolName: string): McpToolCallResult {
+  return {
+    content: [{
+      type: "text",
+      text: `Unknown tool: ${toolName}. This MCP server exposes only search and invoke; `
+        + "call search with the user's intent or the exact app_* name, then invoke with the returned name.",
+    }],
+    isError: true,
+  }
+}
+
 async function executeMcpToolCall(
   toolName: string,
   toolArgs: Record<string, unknown>,
   executeTool: ToolExecutor,
 ): Promise<McpToolCallResult> {
   if (!(toolName in MCP_TOOL_ACTIONS)) {
-    return {
-      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    }
+    return unknownToolResult(toolName)
   }
 
   try {
@@ -157,10 +176,11 @@ async function executeMcpToolCall(
 async function processMcpRequest(
   req: JsonRpcRequest,
   identity: McpServerIdentity,
-  executeTool: ToolExecutor,
+  surface: McpToolSurface,
 ): Promise<McpRpcResponse> {
   const id = req.id ?? null
   const method = req.method
+  const instructions = identity.instructions ?? surface.instructions
 
   if (method === "initialize") {
     return {
@@ -169,7 +189,10 @@ async function processMcpRequest(
       result: {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: identity,
+        serverInfo: { name: identity.name, version: identity.version },
+        // InitializeResult.instructions is top-level per spec; nesting it under
+        // serverInfo means clients never surface it.
+        ...(instructions ? { instructions } : {}),
       },
     }
   }
@@ -184,7 +207,7 @@ async function processMcpRequest(
   }
 
   if (method === "tools/list") {
-    return { kind: "result", id, result: { tools: buildAllMcpTools() } }
+    return { kind: "result", id, result: { tools: surface.listTools() } }
   }
 
   if (method === "tools/call") {
@@ -199,7 +222,7 @@ async function processMcpRequest(
     const toolName = (params as { name: string }).name
     const toolArgs = (params as { arguments?: Record<string, unknown> }).arguments ?? {}
 
-    return { kind: "result", id, result: await executeMcpToolCall(toolName, toolArgs, executeTool) }
+    return { kind: "result", id, result: await surface.callTool(toolName, toolArgs) }
   }
 
   return { kind: "error", id, code: -32601, message: `Method not found: ${method}` }
@@ -213,5 +236,20 @@ function serializeJsonRpcPayload(response: McpRpcResponse): string | null {
   return JSON.stringify({ jsonrpc: "2.0", id: response.id, error: { code: response.code, message: response.message } })
 }
 
-export { executeMcpToolCall, processMcpRequest, sanitizeMcpErrorMessage, serializeJsonRpcPayload, PROTOCOL_VERSION }
-export type { JsonRpcId, JsonRpcRequest, McpRpcResponse, McpServerIdentity, McpToolCallResult, ToolExecutor }
+export {
+  executeMcpToolCall,
+  processMcpRequest,
+  sanitizeMcpErrorMessage,
+  serializeJsonRpcPayload,
+  unknownToolResult,
+  PROTOCOL_VERSION,
+}
+export type {
+  JsonRpcId,
+  JsonRpcRequest,
+  McpRpcResponse,
+  McpServerIdentity,
+  McpToolCallResult,
+  McpToolSurface,
+  ToolExecutor,
+}

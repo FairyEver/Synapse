@@ -1,5 +1,7 @@
 # Synapse App MCP
 
+> **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
+
 Use this domain when directly invoking MCP tools provided by Synapse system apps.
 
 When an App capability is configured as a node inside a Workflow, use `workflow/index.md` instead. The Workflow guide owns node schemas, reserved bindings, graph edges, layout, definition validation, and run behavior. Do not read both guides merely because a Workflow node is backed by an App capability.

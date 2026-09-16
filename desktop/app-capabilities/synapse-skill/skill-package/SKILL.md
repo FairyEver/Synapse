@@ -9,7 +9,7 @@ Use this skill when the user wants to operate Synapse through MCP tools or autho
 
 Use only the canonical `app_*` MCP tool names documented by each domain. Retired names such as `database_*`, `drive_*`, `workflow_*`, and `content_*` are not supported aliases.
 
-When canonical Synapse tools are directly visible, call them normally. When they are not visible but `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke` are available, first call `search` with the user's intent or the required canonical tool name. Then call `invoke` with the exact original `app_*` name and arguments that match the returned complete `inputSchema`. Never guess a tool name or arguments when search returns no reliable match. Router execution keeps the original tool's permissions and domain rules.
+The Synapse MCP server publishes only two tools. In Synapse Agent conversations they are `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`; in every other client they are the `search` and `invoke` tools of the `synapse-mcp` server. Always call `search` first with the user's intent or the required canonical tool name, then call `invoke` with the exact original `app_*` name and arguments that match the returned complete `inputSchema`. Never guess a tool name or arguments when search returns no reliable match. If a client still lists the canonical `app_*` tools directly, call them normally instead. Router execution keeps the original tool's permissions and domain rules.
 
 ## Routing
 

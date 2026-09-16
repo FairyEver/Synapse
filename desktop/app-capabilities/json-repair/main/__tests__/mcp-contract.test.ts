@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest"
 import { processMcpRequest } from "../../../../database/shared/mcp-rpc"
+import { createSynapseToolRouterSurface } from "../../../../electron/services/agent-runtime/synapse-tool-router"
 import { JSON_REPAIR_MCP_TOOL_NAME } from "../../shared/capability"
 
 const identity = { name: "test", version: "1.0.0" }
+
+// Reached through the production surface, so the JSON Repair contract is proven
+// to survive the search/invoke indirection.
+const surfaceFor = (result: unknown) => createSynapseToolRouterSurface(async () => result)
 
 describe("JSON Repair MCP contract", () => {
   it("returns only { json } for a successful tool call", async () => {
@@ -11,10 +16,10 @@ describe("JSON Repair MCP contract", () => {
       id: 1,
       method: "tools/call",
       params: {
-        name: JSON_REPAIR_MCP_TOOL_NAME,
-        arguments: { text: "{ok:true}" },
+        name: "invoke",
+        arguments: { toolName: JSON_REPAIR_MCP_TOOL_NAME, arguments: { text: "{ok:true}" } },
       },
-    }, identity, async () => ({
+    }, identity, surfaceFor({
       ok: true,
       data: { json: "{\"ok\":true}" },
     }))
@@ -42,10 +47,10 @@ describe("JSON Repair MCP contract", () => {
       id: 2,
       method: "tools/call",
       params: {
-        name: JSON_REPAIR_MCP_TOOL_NAME,
-        arguments: { text: "no json" },
+        name: "invoke",
+        arguments: { toolName: JSON_REPAIR_MCP_TOOL_NAME, arguments: { text: "no json" } },
       },
-    }, identity, async () => ({
+    }, identity, surfaceFor({
       ok: false,
       code: error.code,
       error: error.message,

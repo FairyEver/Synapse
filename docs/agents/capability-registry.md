@@ -10,7 +10,8 @@
 | Dock | 默认固定、用户可固定、条件显示 | 各 App 的 `app-definition.ts` 中 `dock` 元数据、`desktop/src/modules/apps/dock.ts` |
 | Workflow Node | 节点类型、Renderer manifest、Main executor | `desktop/workflow-nodes/register.renderer.ts`、`register.main.ts` |
 | Automation Action | 动作类型、Renderer 配置、Main executor | `desktop/src/action-runtime/builtin-actions.ts`、`desktop/electron/action-runtime/builtin-actions.ts` |
-| MCP Capability / Tool | capability catalog、`tools/list`、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
+| MCP Capability / Tool | capability catalog、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
+| MCP 公开工具表面 | `tools/list` 载荷、`initialize` instructions | `desktop/electron/services/agent-runtime/synapse-tool-router.ts` |
 | Deep Link | 默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host | `desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts` |
 
 ## `desktop/app-capabilities` 产品表面
@@ -96,7 +97,7 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 
 | Domain | Capability 数 | MCP Tool 数 |
 |---|---:|---:|
-| `app` | 75 | 71 |
+| `app` | 78 | 74 |
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
@@ -105,9 +106,11 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 63 | 63 |
-| 合计 | 238 | 234 |
+| 合计 | 241 | 237 |
 
-Agent 实验功能可在第三方 Anthropic-compatible 新对话中向 SDK 临时注入进程内 `synapse-tool-router`，其 `search`、`invoke` 仅用于按需发现和调用上表已有的 234 个工具。它们不通过 `/mcp`、Claude Code 注册、capability catalog 或 `tools/list` 公开，因此不计入 capability 或 MCP Tool 数量。
+`synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
+
+上表 237 个 `app_*` 工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

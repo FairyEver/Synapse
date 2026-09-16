@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest"
 import { processMcpRequest, sanitizeMcpErrorMessage } from "../../database/shared/mcp-rpc"
-import { MCP_TOOL_ACTIONS, getActionDomainId } from "../../synapse-capabilities/shared/registry"
+import { MCP_TOOL_ACTIONS, buildAllMcpTools, getActionDomainId } from "../../synapse-capabilities/shared/registry"
+import { createSynapseToolRouterSurface } from "../../electron/services/agent-runtime/synapse-tool-router"
 
 const identity = { name: "test-database", version: "0.0.0" }
+
+// Every call below goes through the production surface, so these assertions
+// exercise the real search/invoke path rather than a bespoke shortcut.
+function surfaceFor(dispatcherResult: unknown) {
+  return createSynapseToolRouterSurface(async () => dispatcherResult)
+}
 
 async function callTool(toolName: string, dispatcherResult: unknown): Promise<unknown> {
   const result = await callToolResult(toolName, dispatcherResult)
@@ -19,12 +26,12 @@ async function callToolResult(
       id: 1,
       method: "tools/call",
       params: {
-        name: toolName,
-        arguments: {},
+        name: "invoke",
+        arguments: { toolName, arguments: {} },
       },
     },
     identity,
-    async () => dispatcherResult,
+    surfaceFor(dispatcherResult),
   )
 
   expect(response.kind).toBe("result")
@@ -103,14 +110,14 @@ describe("Database MCP RPC", () => {
         id: 1,
         method: "tools/call",
         params: {
-          name: "app_database_table_list",
-          arguments: {},
+          name: "invoke",
+          arguments: { toolName: "app_database_table_list", arguments: {} },
         },
       },
       identity,
-      async () => {
+      createSynapseToolRouterSurface(async () => {
         throw new Error("open /Users/liyang/private/db.sqlite sk-ant-test123456")
-      },
+      }),
     )
 
     expect(response.kind).toBe("result")
@@ -200,11 +207,13 @@ describe("Database MCP RPC", () => {
 })
 
 describe("MCP RPC capability normalization coverage", () => {
-  it("rejects retired MCP tool names", async () => {
+  it("rejects retired MCP tool names and teaches the two-step flow", async () => {
     const result = await callToolResult("database_table_list", { ok: true, data: [] })
 
     expect(result.isError).toBe(true)
-    expect(result.content[0]?.text).toBe("Unknown tool: database_table_list")
+    expect(result.content[0]?.text).toMatch(/^Unknown tool: database_table_list\./)
+    expect(result.content[0]?.text).toContain("search")
+    expect(result.content[0]?.text).toContain("invoke")
   })
 
   it("marks dispatcher ok false results as MCP tool errors while preserving the failure payload", async () => {
@@ -292,5 +301,93 @@ describe("Repository and Secrets MCP RPC", () => {
     expect(payload).toEqual({
       secret: { id: "secret-1", name: "TOKEN", hasValue: true },
     })
+  })
+})
+
+describe("Public MCP surface", () => {
+  async function request(
+    method: string,
+    params: Record<string, unknown> | undefined,
+    executeTool: () => unknown = () => ({ ok: true }),
+  ): Promise<Record<string, unknown>> {
+    const response = await processMcpRequest(
+      { jsonrpc: "2.0", id: 1, method, ...(params ? { params } : {}) },
+      identity,
+      createSynapseToolRouterSurface(async () => executeTool()),
+    )
+    expect(response.kind).toBe("result")
+    if (response.kind !== "result") throw new Error("Expected result response")
+    return response.result as Record<string, unknown>
+  }
+
+  it("publishes exactly the two router tools", async () => {
+    const result = await request("tools/list", undefined)
+    const tools = result.tools as Array<{ name: string }>
+
+    expect(tools.map((tool) => tool.name).sort()).toEqual(["invoke", "search"])
+    expect(tools.some((tool) => tool.name.startsWith("app_"))).toBe(false)
+  })
+
+  it("keeps the published payload far below the full registry", async () => {
+    const result = await request("tools/list", undefined)
+    const published = Buffer.byteLength(JSON.stringify(result.tools))
+
+    expect(published).toBeLessThan(Buffer.byteLength(JSON.stringify(buildAllMcpTools())) * 0.02)
+  })
+
+  it("carries server instructions on initialize", async () => {
+    const result = await request("initialize", { protocolVersion: "2024-11-05" })
+    const instructions = result.instructions as string
+
+    expect(typeof instructions).toBe("string")
+    expect(Buffer.byteLength(instructions)).toBeLessThanOrEqual(2048)
+    expect(instructions).toContain("search")
+    expect(instructions).toContain("invoke")
+  })
+
+  it("refuses a bare capability name without executing it", async () => {
+    let executed = 0
+    const result = await request(
+      "tools/call",
+      { name: "app_database_table_list", arguments: {} },
+      () => { executed += 1; return { ok: true } },
+    )
+
+    expect(result.isError).toBe(true)
+    expect((result.content as Array<{ text: string }>)[0]?.text).toMatch(/^Unknown tool: app_database_table_list\./)
+    expect(executed).toBe(0)
+  })
+
+  it("refuses an invoke with an unregistered tool name without executing it", async () => {
+    let executed = 0
+    const result = await request(
+      "tools/call",
+      { name: "invoke", arguments: { toolName: "app_not_a_real_tool" } },
+      () => { executed += 1; return { ok: true } },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(executed).toBe(0)
+  })
+
+  it("finds a capability through search and reaches it through invoke", async () => {
+    const found = await request("tools/call", {
+      name: "search",
+      arguments: { query: "查看云盘文件列表", limit: 3 },
+    })
+    const matches = JSON.parse((found.content as Array<{ text: string }>)[0].text) as {
+      tools: Array<{ name: string; inputSchema: { properties?: Record<string, unknown> } }>
+    }
+    const driveItemList = matches.tools.find((tool) => tool.name === "app_drive_item_list")
+
+    expect(driveItemList).toBeDefined()
+    expect(driveItemList?.inputSchema.properties).toHaveProperty("parentId")
+
+    const invoked = await request("tools/call", {
+      name: "invoke",
+      arguments: { toolName: "app_drive_item_list", arguments: { limit: 2 } },
+    })
+
+    expect(invoked.isError).toBeUndefined()
   })
 })

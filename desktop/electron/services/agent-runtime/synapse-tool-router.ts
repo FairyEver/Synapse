@@ -1,6 +1,11 @@
 import { z } from "zod"
 
-import { executeMcpToolCall, type McpToolCallResult } from "../../../database/shared/mcp-rpc"
+import {
+  executeMcpToolCall,
+  unknownToolResult,
+  type McpToolCallResult,
+  type McpToolSurface,
+} from "../../../database/shared/mcp-rpc"
 import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
@@ -76,6 +81,151 @@ type SynapseToolSearchInput = {
 type SynapseToolInvokeInput = {
   readonly toolName: string
   readonly arguments?: Record<string, unknown>
+}
+
+const SEARCH_TOOL_DESCRIPTION =
+  "Search the available Synapse MCP tools. Returns original tool names and complete input schemas."
+
+const INVOKE_TOOL_DESCRIPTION =
+  "Invoke one Synapse MCP tool by the exact original name returned by search."
+
+// Single source of truth for the router's two tools. The SDK path consumes these
+// zod shapes directly; the HTTP path derives its JSON Schema from the same shapes,
+// so the two surfaces cannot drift apart.
+const SEARCH_TOOL_INPUT_SHAPE = {
+  query: z.string().trim().min(1),
+  domain: z.string().trim().min(1).optional(),
+  limit: z.number().int().min(1).max(5).default(5),
+}
+
+const INVOKE_TOOL_INPUT_SHAPE = {
+  toolName: z.string().trim().min(1),
+  arguments: z.record(z.string(), z.unknown()).optional(),
+}
+
+type SynapseToolRouterInputShape = NonNullable<Parameters<typeof z.object>[0]>
+
+type SynapseToolRouterToolDefinition = {
+  readonly name: string
+  readonly description: string
+  readonly inputShape: SynapseToolRouterInputShape
+  readonly annotations: {
+    readonly readOnlyHint: boolean
+    readonly destructiveHint: boolean
+    readonly openWorldHint: boolean
+  }
+}
+
+export const SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS: readonly SynapseToolRouterToolDefinition[] = [
+  {
+    name: "search",
+    description: SEARCH_TOOL_DESCRIPTION,
+    inputShape: SEARCH_TOOL_INPUT_SHAPE,
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  },
+  {
+    name: "invoke",
+    description: INVOKE_TOOL_DESCRIPTION,
+    inputShape: INVOKE_TOOL_INPUT_SHAPE,
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  },
+]
+
+// Shipped from `initialize` on both surfaces. Keep well under the 2 KB truncation
+// limit clients apply, and keep the worked example: the nested `invoke` argument
+// shape is what non-Claude models get wrong most often.
+export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
+  "Synapse is the local desktop app this MCP server belongs to. It manages Database, Drive,",
+  "Workflow, Automation, Content (Rules/Skills/Prompts), Skill Repository, model price rules,",
+  "local secrets and repositories, Terminal sessions, and App capabilities.",
+  "",
+  "This server publishes exactly two tools. Every Synapse capability is reached in two steps:",
+  "",
+  "1. `search` - call it first with the user's intent in natural language (Chinese or English)",
+  "   or with an exact `app_*` tool name. It returns matching tools with their full",
+  "   `inputSchema`. Optional `domain` narrows the search; `limit` is 1-5.",
+  "2. `invoke` - call it with `toolName` set to the exact `app_*` name that `search` returned,",
+  "   and `arguments` matching that tool's returned `inputSchema`.",
+  "",
+  "Example: search {\"query\":\"list drive files\"} returns app_drive_item_list with its",
+  "inputSchema; then call invoke {\"toolName\":\"app_drive_item_list\",\"arguments\":{\"limit\":50}}.",
+  "",
+  "Rules:",
+  "- Never call an `app_*` name that `search` did not return, and never guess arguments.",
+  "- If `search` returns no reliable match, search again with different words or with `domain`;",
+  "  do not invent a tool name. The returned `domains` list shows the domains that exist.",
+  "- Retired `database_*`, `drive_*`, `workflow_*`, `content_*`, `automation_*`,",
+  "  `model_price_*`, `repository_*` names are not supported.",
+  "- `invoke` runs with the original tool's permissions, permission prompts, and audit. A",
+  "  high-risk tool can still ask the user for approval, and a denial is not an error to retry.",
+  "- When `invoke` returns an error result, read the error text before retrying.",
+  "",
+  "Before destructive or high-risk operations, read the Synapse Skill domain guide that matches",
+  "the task.",
+].join("\n")
+
+export function buildSynapseToolRouterTools(): McpToolDefinition[] {
+  return SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS.map(({ name, description, inputShape }) => ({
+    name,
+    description,
+    inputSchema: toMcpInputSchema(inputShape),
+  }))
+}
+
+function toMcpInputSchema(shape: SynapseToolRouterInputShape): McpToolDefinition["inputSchema"] {
+  const { $schema: _schema, ...derived } = z.toJSONSchema(
+    z.object(shape),
+    { io: "input" },
+  ) as Record<string, unknown>
+  return { ...derived, additionalProperties: false } as McpToolDefinition["inputSchema"]
+}
+
+export function createSynapseToolRouterSurface(
+  executeTool: SynapseToolRouterExecutor,
+): McpToolSurface {
+  return {
+    instructions: SYNAPSE_TOOL_ROUTER_INSTRUCTIONS,
+    listTools: buildSynapseToolRouterTools,
+    callTool: (name, args) => {
+      if (name === "search") return searchSynapseToolsSurfaceResult(args)
+      if (name === "invoke") return invokeSynapseToolSurfaceResult(args, executeTool)
+      return Promise.resolve(unknownToolResult(name))
+    },
+  }
+}
+
+async function searchSynapseToolsSurfaceResult(
+  args: Record<string, unknown>,
+): Promise<McpToolCallResult> {
+  try {
+    return textResult(await searchSynapseTools({
+      query: typeof args.query === "string" ? args.query : "",
+      ...(typeof args.domain === "string" ? { domain: args.domain } : {}),
+      ...(typeof args.limit === "number" ? { limit: args.limit } : {}),
+    }))
+  } catch (error) {
+    return { content: [{ type: "text", text: `Error: ${errorMessage(error)}` }], isError: true }
+  }
+}
+
+async function invokeSynapseToolSurfaceResult(
+  args: Record<string, unknown>,
+  executeTool: SynapseToolRouterExecutor,
+): Promise<McpToolCallResult> {
+  if (typeof args.toolName !== "string") {
+    return {
+      content: [{ type: "text", text: "Error: toolName must be a string" }],
+      isError: true,
+    }
+  }
+  return invokeSynapseTool({
+    toolName: args.toolName,
+    ...(isRecord(args.arguments) ? { arguments: args.arguments } : {}),
+  }, executeTool)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 const catalog = buildSynapseToolCatalog()
@@ -193,10 +343,7 @@ export async function invokeSynapseTool(
 ): Promise<McpToolCallResult> {
   const toolName = input.toolName.trim()
   if (!catalogByName.has(toolName)) {
-    return {
-      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    }
+    return unknownToolResult(toolName)
   }
   return executeMcpToolCall(
     toolName,
@@ -230,35 +377,30 @@ export function createSynapseToolRouterServer(
   >,
   executeTool: SynapseToolRouterExecutor,
 ) {
+  const [searchDefinition, invokeDefinition] = SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS
   return sdk.createSdkMcpServer({
     name: SYNAPSE_TOOL_ROUTER_SERVER_NAME,
     version: "1.0.0",
     alwaysLoad: true,
+    instructions: SYNAPSE_TOOL_ROUTER_INSTRUCTIONS,
     tools: [
       sdk.tool(
-        "search",
-        "Search the available Synapse MCP tools. Returns original tool names and complete input schemas.",
-        {
-          query: z.string().trim().min(1),
-          domain: z.string().trim().min(1).optional(),
-          limit: z.number().int().min(1).max(5).default(5),
-        },
+        searchDefinition.name,
+        searchDefinition.description,
+        SEARCH_TOOL_INPUT_SHAPE,
         async (args) => textResult(await searchSynapseTools(args)),
         {
-          annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+          annotations: searchDefinition.annotations,
           alwaysLoad: true,
         },
       ),
       sdk.tool(
-        "invoke",
-        "Invoke one Synapse MCP tool by the exact original name returned by search.",
-        {
-          toolName: z.string().trim().min(1),
-          arguments: z.record(z.string(), z.unknown()).optional(),
-        },
+        invokeDefinition.name,
+        invokeDefinition.description,
+        INVOKE_TOOL_INPUT_SHAPE,
         async (args, extra) => invokeSynapseTool(args, executeTool, abortSignalFromExtra(extra)),
         {
-          annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+          annotations: invokeDefinition.annotations,
           alwaysLoad: true,
         },
       ),

@@ -1,5 +1,7 @@
 # Terminal MCP API Reference
 
+> **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
+
 Terminal MCP currently exposes one development contract. Tool names are the full `app.terminal.<subdomain>.<action>` id with dots replaced by underscores. Requests do not include `contractVersion`, and there are no v1/v2 or legacy aliases to negotiate. Machine logic must use `code`, `category`, `outcome`, revisions, watermarks, and operation ids rather than human messages.
 
 The Terminal UI may group multiple sessions into one split workspace. MCP still addresses each underlying session by `sessionId`; it does not expose or mutate UI workspace, pane, focus, or split-layout state.

@@ -180,8 +180,8 @@ describe("MCP HTTP server", () => {
       id: 3,
       method: "tools/call",
       params: {
-        name: "app_automation_item_create",
-        arguments: { name: "unsafe" },
+        name: "invoke",
+        arguments: { toolName: "app_automation_item_create", arguments: { name: "unsafe" } },
       },
     }, undefined, "https://example.com")
 
@@ -211,7 +211,7 @@ describe("MCP HTTP server", () => {
     expect(JSON.parse(response.body)).toEqual({ error: "Not found" })
   })
 
-  it("lists Automation and Terminal MCP tools", async () => {
+  it("publishes exactly the two router tools", async () => {
     const { startMcpServer } = await import("../mcp-server")
     const port = await startMcpServer({
       dispatch: vi.fn(),
@@ -225,22 +225,50 @@ describe("MCP HTTP server", () => {
 
     expect(response.status).toBe(200)
     const payload = JSON.parse(response.body)
-    expect(payload.result.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([
-      "app_automation_item_list",
-      "app_automation_item_create",
-      "app_automation_run_execute",
-      "app_automation_webhook_list",
-      "app_automation_trigger_type_list",
-      "app_automation_executor_type_list",
-      "app_terminal_capabilities_get",
-      "app_terminal_group_list",
-      "app_terminal_session_create",
-      "app_terminal_session_output_read",
-      "app_terminal_session_input_send",
-      "app_terminal_session_stop",
-    ]))
-    expect(payload.result.tools.map((tool: { name: string }) => tool.name))
-      .not.toContain("automation_item_list")
+    const names: string[] = payload.result.tools.map((tool: { name: string }) => tool.name)
+
+    expect(names.slice().sort()).toEqual(["invoke", "search"])
+    expect(names.some((name) => name.startsWith("app_"))).toBe(false)
+    for (const tool of payload.result.tools) {
+      expect(tool.inputSchema.type).toBe("object")
+    }
+  })
+
+  it("carries instructions that explain the two-step flow", async () => {
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({
+      dispatch: vi.fn(),
+    })
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "initialize",
+      params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1.0.0" } },
+    })
+
+    const result = JSON.parse(response.body).result
+    expect(typeof result.instructions).toBe("string")
+    expect(Buffer.byteLength(result.instructions)).toBeLessThanOrEqual(2048)
+    expect(result.instructions).toContain("search")
+    expect(result.instructions).toContain("invoke")
+  })
+
+  it("refuses a bare capability name and does not dispatch it", async () => {
+    const dispatch = vi.fn()
+    const { startMcpServer } = await import("../mcp-server")
+    const port = await startMcpServer({ dispatch })
+
+    const response = await postJson(port, {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "app_automation_item_list", arguments: { enabled: true } },
+    })
+
+    expect(response.status).toBe(200)
+    expect(JSON.parse(response.body).result.isError).toBe(true)
+    expect(dispatch).not.toHaveBeenCalled()
   })
 
   it("calls Automation tools through the action router", async () => {
@@ -253,8 +281,8 @@ describe("MCP HTTP server", () => {
       id: 3,
       method: "tools/call",
       params: {
-        name: "app_automation_item_list",
-        arguments: { enabled: true },
+        name: "invoke",
+        arguments: { toolName: "app_automation_item_list", arguments: { enabled: true } },
       },
     })
 
@@ -289,8 +317,8 @@ describe("MCP HTTP server", () => {
       id: 4,
       method: "tools/call",
       params: {
-        name: "app_terminal_group_list",
-        arguments: {},
+        name: "invoke",
+        arguments: { toolName: "app_terminal_group_list", arguments: {} },
       },
     })
 

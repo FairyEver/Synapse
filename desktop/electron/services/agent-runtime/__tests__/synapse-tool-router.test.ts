@@ -2,11 +2,15 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   buildSynapseToolCatalog,
+  buildSynapseToolRouterTools,
   createSynapseToolRouterServer,
+  createSynapseToolRouterSurface,
   invokeSynapseTool,
   isSynapseToolReadOnly,
   parseSynapseToolRouterInvoke,
   searchSynapseTools,
+  SYNAPSE_TOOL_ROUTER_INSTRUCTIONS,
+  SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS,
 } from "../synapse-tool-router"
 import { buildAllMcpTools } from "../../../../synapse-capabilities/shared/registry"
 
@@ -131,5 +135,64 @@ describe("Synapse tool router invocation", () => {
     })).toEqual({ toolName: "app_database_table_list", arguments: {} })
     expect(parseSynapseToolRouterInvoke({ toolName: "missing" })).toBeNull()
     expect(isSynapseToolReadOnly("app_database_table_list")).toBe(true)
+  })
+})
+
+describe("Published tool definitions", () => {
+  it("derives every property from the same zod shapes the SDK consumes", () => {
+    const tools = buildSynapseToolRouterTools()
+
+    expect(tools.map((tool) => tool.name)).toEqual(["search", "invoke"])
+
+    tools.forEach((tool, index) => {
+      const shape = SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS[index].inputShape
+      const expectedRequired = Object.entries(shape)
+        .filter(([, schema]) => !(schema as { safeParse(value: unknown): { success: boolean } })
+          .safeParse(undefined).success)
+        .map(([key]) => key)
+
+      expect(Object.keys(tool.inputSchema.properties).sort()).toEqual(Object.keys(shape).sort())
+      expect([...(tool.inputSchema.required ?? [])].sort()).toEqual(expectedRequired.sort())
+      expect(tool.description).toBe(SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS[index].description)
+    })
+  })
+
+  it("avoids top-level combinators that some MCP clients reject", () => {
+    for (const tool of buildSynapseToolRouterTools()) {
+      expect(tool.inputSchema.type).toBe("object")
+      expect(tool.inputSchema).not.toHaveProperty("oneOf")
+      expect(tool.inputSchema).not.toHaveProperty("anyOf")
+      expect(tool.inputSchema).not.toHaveProperty("allOf")
+    }
+  })
+
+  it("ships instructions a model can act on", () => {
+    const bytes = Buffer.byteLength(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS)
+
+    expect(bytes).toBeLessThanOrEqual(2048)
+    expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("search")
+    expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("invoke")
+    expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("app_*")
+    expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("toolName")
+  })
+
+  it("exposes the surface without reaching the executor for unknown names", async () => {
+    const execute = vi.fn(async () => ({ ok: true, data: [] }))
+    const surface = createSynapseToolRouterSurface(execute)
+
+    expect(surface.listTools().map((tool) => tool.name).sort()).toEqual(["invoke", "search"])
+    expect(surface.instructions).toBe(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS)
+
+    const invoked = await surface.callTool("invoke", { toolName: "app_database_table_list", arguments: {} })
+    expect(execute).toHaveBeenCalledWith("app_database_table_list", {}, undefined)
+    expect(invoked.isError).toBeUndefined()
+
+    const unknown = await surface.callTool("invoke", { toolName: "missing_tool" })
+    expect(unknown.isError).toBe(true)
+    expect(execute).toHaveBeenCalledTimes(1)
+
+    const bare = await surface.callTool("app_database_table_list", {})
+    expect(bare.isError).toBe(true)
+    expect(execute).toHaveBeenCalledTimes(1)
   })
 })

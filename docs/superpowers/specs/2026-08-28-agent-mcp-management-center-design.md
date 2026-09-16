@@ -376,8 +376,9 @@ totalTools = mcpServerStatus.tools?.length ?? null
 - `isLoaded` 缺失时按已加载处理，兼容旧返回。
 - context 调用失败不影响连接状态；该 Server 显示 `—`，保留工具数。
 - 第三方 Provider 一律显示 Tooltip：`由 Agent SDK 估算，不代表供应商计费。`
-- `synapse-tool-router` 产品名显示为 `Synapse（按需加载）`：实际暴露 `2` 个 wrapper 工具，另显示 `可检索 223`；223 来自当前 capability registry，不计入已暴露工具数。
-- 完整 `synapse-mcp` 按 `mcpServerStatus.tools.length` 显示真实公开工具数，不写死 223。
+- `synapse-tool-router` 产品名显示为 `Synapse（按需加载）`：实际暴露 `2` 个 wrapper 工具，另显示 `可检索 N`；N 为当前 capability registry 的实际条目数，必须动态读取，不得写死，也不计入已暴露工具数。
+- 完整 `synapse-mcp` 按 `mcpServerStatus.tools.length` 显示真实公开工具数，不写死 N。
+- 公开 `/mcp` 表面现在本身就是按需模式（`tools/list` 只返回 `search` 与 `invoke`），因此外部编辑器看到的已暴露工具数恒为 2；该差异现在只剩内置 Agent 会话是否走进程内 router。
 
 ## 12. Elicitation
 

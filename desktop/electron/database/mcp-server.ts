@@ -11,6 +11,7 @@ import {
   type McpRpcResponse,
 } from "../../database/shared/mcp-rpc"
 import { SYNAPSE_MCP_SERVER_IDENTITY } from "../../database/shared/server-identity"
+import { createSynapseToolRouterSurface } from "../services/agent-runtime/synapse-tool-router"
 
 const logger = createMainLogger("database.mcp-server")
 
@@ -154,11 +155,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   req.once("aborted", abort)
   res.once("close", abort)
   try {
-    const response = await processMcpRequest(
-      body,
-      SYNAPSE_MCP_SERVER_IDENTITY,
+    // Built per request so the surface's executor closes over this request's
+    // abort signal; the transport identity inside executeTool never changes.
+    const surface = createSynapseToolRouterSurface(
       (toolName, args) => executeTool(toolName, args, controller.signal),
     )
+    const response = await processMcpRequest(body, SYNAPSE_MCP_SERVER_IDENTITY, surface)
     sendRpcResponse(res, response)
   } finally {
     req.off("aborted", abort)

@@ -243,6 +243,9 @@ describe("SynapseSkillService", () => {
     expect(detail.content).toContain("mcp__synapse-tool-router__search")
     expect(detail.content).toContain("mcp__synapse-tool-router__invoke")
     expect(detail.content).toContain("exact original `app_*` name")
+    // The two-tool surface is the main path, not a fallback; a future edit that
+    // demotes it back to "only when not visible" turns this red.
+    expect(detail.content).toContain("publishes only two tools")
     expect(attachmentNames).toEqual([
       "app/api-reference.md",
       "app/index.md",

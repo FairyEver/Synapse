@@ -1,5 +1,7 @@
 # Agent Synapse MCP 工具按需加载设计
 
+> Superseded note: `search`/`invoke` 已从进程内实验升级为 `/mcp` 的**唯一**公开工具表面。本文件中「`/mcp`、Claude Code 注册、公开工具名、schema 与 225/223 能力数量不变」以及「两个 router 工具只存在于 Agent SDK 进程内会话」的描述已失效；权威现状见 `docs/agents/capability-registry.md` 与 `docs/agents/agent-runtime-security.md`。进程内注入流程本身仍然有效。
+
 ## 目标
 
 在不改变公开 Synapse MCP、权限语义或已有对话的前提下，为第三方 Anthropic-compatible Provider 提供默认开启的工具按需加载实验，降低 223 个 Synapse 工具 schema 的初始上下文占用。

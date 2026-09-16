@@ -1,5 +1,7 @@
 # Synapse Automation MCP
 
+> **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
+
 You have access to Synapse Automation MCP tools for managing Automation items and runs. Automation is the current MCP surface for scheduled tasks, cron/interval triggers, run history, and runtime inspection. Legacy Scheduler MCP tools are retired.
 
 ## Scope Boundary
