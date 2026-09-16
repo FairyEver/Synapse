@@ -83,11 +83,6 @@ export const MOBILE_FRAME_LIMITS = {
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
-  /** ASR 引擎标识，腾讯云目前最长的是 `Hy-ASR-3.0-preview`。 */
-  maxEngineModelTypeLength: 64,
-  /** 已签名的 wss URL。签名本身约 60 字符，其余是主机、路径与握手参数。 */
-  maxSignedAsrUrlLength: 2048,
-  maxAsrVoiceIdLength: 120,
   /**
    * Grid bounds a phone may ask the desktop to adopt.
    *
@@ -409,16 +404,6 @@ export type MobileIntent =
   })
   | (MobileIntentEnvelope<"launchCommand"> & { readonly groupId: string; readonly commandId: string })
   /**
-   * 手机要一条已经签好名的腾讯云实时语音识别 URL。
-   *
-   * 只有桌面的主进程持有 SecretKey，手机从头到尾不接触密钥。签名原文只覆盖握手
-   * 参数、不含音频数据，所以可以预签：桌面签好完整 URL 下发，手机拿它直连腾讯云。
-   *
-   * 不挂 sessionId —— 语音输入与具体终端无关，签名也不需要终端上下文。结果里带
-   * voiceId，每次连接都要换新的，中断后旧的一律作废。
-   */
-  | (MobileIntentEnvelope<"asrSign"> & { readonly engineModelType?: string })
-  /**
    * One file the phone has already put in the user's drive, to be brought down to
    * this computer and named in the terminal.
    *
@@ -478,15 +463,6 @@ export interface MobileIntentResult {
    * backspace per character — and to say truthfully where the file went.
    */
   readonly landedPath?: string
-  /**
-   * Set for `asrSign`: 一条可直接连接的腾讯云实时语音识别 URL，以及配套的 voiceId。
-   *
-   * URL 里已经带上 signature，密钥本身不在里面 —— 手机拿到的只是一次性的入场券。
-   */
-  readonly signedAsrUrl?: string
-  readonly asrVoiceId?: string
-  /** 签名过期时刻（epoch 秒）；客户端据此在过期后重新要一条。 */
-  readonly asrExpiresAt?: number
 }
 
 /* ------------------------------------------------------------------ *
@@ -654,9 +630,6 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
           boundedString(value.deviceLabel, MOBILE_FRAME_LIMITS.maxDeviceLabelLength))
     case "launchCommand":
       return boundedString(value.groupId, 120) && boundedString(value.commandId, 120)
-    case "asrSign":
-      return value.engineModelType === undefined ||
-        boundedString(value.engineModelType, MOBILE_FRAME_LIMITS.maxEngineModelTypeLength)
     case "fileUpload":
       return boundedString(value.sessionId, 120) &&
         boundedString(value.driveItemId, MOBILE_FRAME_LIMITS.maxUploadDriveItemIdLength) &&
@@ -675,11 +648,6 @@ export function isMobileIntentResult(value: unknown): value is MobileIntentResul
   if (value.sessionId !== undefined && !boundedString(value.sessionId, 120)) return false
   if (value.createdSessionId !== undefined && !boundedString(value.createdSessionId, 120)) return false
   if (value.landedPath !== undefined && !boundedString(value.landedPath, 512)) return false
-  if (value.signedAsrUrl !== undefined &&
-    !boundedString(value.signedAsrUrl, MOBILE_FRAME_LIMITS.maxSignedAsrUrlLength)) return false
-  if (value.asrVoiceId !== undefined &&
-    !boundedString(value.asrVoiceId, MOBILE_FRAME_LIMITS.maxAsrVoiceIdLength)) return false
-  if (value.asrExpiresAt !== undefined && !nonNegativeInteger(value.asrExpiresAt)) return false
   return true
 }
 

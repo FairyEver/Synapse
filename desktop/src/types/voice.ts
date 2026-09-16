@@ -1,11 +1,9 @@
 import type {
   VoiceSessionSignInput,
-  VoiceSettingsPatch,
-  VoiceSettingsView,
   VoiceSignedSession,
+  VoiceStatus,
 } from "../../app-capabilities/voice/shared/schema"
 
-export type SynapseVoiceSettings = VoiceSettingsView
-export type SynapseVoiceSettingsPatch = VoiceSettingsPatch
+export type SynapseVoiceStatus = VoiceStatus
 export type SynapseVoiceSessionSignInput = VoiceSessionSignInput
 export type SynapseVoiceSignedSession = VoiceSignedSession

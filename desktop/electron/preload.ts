@@ -505,9 +505,8 @@ const synapseBridge: SynapseBridge = {
     ),
   },
   voice: {
-    settings: {
-      get: () => invoke(IPC_CHANNELS.voice.getSettings)(),
-      update: (input) => invoke(IPC_CHANNELS.voice.updateSettings)(input),
+    status: {
+      get: () => invoke(IPC_CHANNELS.voice.getStatus)(),
     },
     session: {
       sign: (input = {}) => invoke(IPC_CHANNELS.voice.signSession)(input),

@@ -38,9 +38,6 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxIntentTextLength: number,
  *   readonly maxKeyActions: number,
  *   readonly maxTitleLength: number,
- *   readonly maxEngineModelTypeLength: number,
- *   readonly maxSignedAsrUrlLength: number,
- *   readonly maxAsrVoiceIdLength: number,
  *   readonly maxResizeCols: number,
  *   readonly maxResizeRows: number,
  *   readonly maxDeviceLabelLength: number,
@@ -70,11 +67,6 @@ exports.MOBILE_FRAME_LIMITS = {
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
-  /** ASR 引擎标识，腾讯云目前最长的是 `Hy-ASR-3.0-preview`。 */
-  maxEngineModelTypeLength: 64,
-  /** 已签名的 wss URL。签名本身约 60 字符，其余是主机、路径与握手参数。 */
-  maxSignedAsrUrlLength: 2048,
-  maxAsrVoiceIdLength: 120,
   /** Restated from the terminal capability's own resize ceiling; keep the two in step. */
   maxResizeCols: 500,
   maxResizeRows: 200,

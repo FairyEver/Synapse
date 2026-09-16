@@ -104,9 +104,8 @@ import type {
 } from "./sound-notifier"
 import type {
   SynapseVoiceSessionSignInput,
-  SynapseVoiceSettings,
-  SynapseVoiceSettingsPatch,
   SynapseVoiceSignedSession,
+  SynapseVoiceStatus,
 } from "./voice"
 import type {
   SynapseSystemNotificationResult,
@@ -1155,9 +1154,8 @@ export type SynapseBridge = {
     onChanged: (listener: (snapshot: DriveSyncSnapshotDto) => void) => () => void
   }
   voice: {
-    settings: {
-      get: () => Promise<SynapseVoiceSettings>
-      update: (input: SynapseVoiceSettingsPatch) => Promise<SynapseVoiceSettings>
+    status: {
+      get: () => Promise<SynapseVoiceStatus>
     }
     session: {
       sign: (input?: SynapseVoiceSessionSignInput) => Promise<SynapseVoiceSignedSession>

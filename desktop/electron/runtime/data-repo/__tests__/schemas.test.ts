@@ -104,7 +104,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.terminal.sessions",
         "app.terminal.toolbar-actions",
         "app.terminal.workspaces",
-        "app.voice.settings",
         "automation.items",
         "automation.runs",
         "cheat-code.states",

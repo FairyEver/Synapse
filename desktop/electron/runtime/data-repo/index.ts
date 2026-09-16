@@ -165,7 +165,6 @@ export {
   type SoundNotifierSettingsEntryV2,
   type SoundNotifierSettingsEntryV3,
   type SystemNotifierSettingsEntryV1,
-  type VoiceSettingsEntryV1,
   type PendingUpdateInstallAttemptV1,
   type UpdateInstallRecoveryEntryV1,
   type UpdateInstallRecoveryPhase,

@@ -45,11 +45,12 @@ export function useVoiceInput(): VoiceInputController {
   useEffect(() => {
     disposedRef.current = false
     let cancelled = false
+    // 可用性由服务端决定（平台有没有配腾讯云密钥），不是这台机器的设置。
     // 桥里没有 voice 域（旧 preload、降级环境）时按"不可用"处理：入口不出现，
     // 而不是把整个输入区一起带崩。
     void Promise.resolve()
-      .then(() => requireSynapseBridge().voice.settings.get())
-      .then((settings) => { if (!cancelled) setAvailable(settings.configured) })
+      .then(() => requireSynapseBridge().voice.status.get())
+      .then((status) => { if (!cancelled) setAvailable(status.available) })
       .catch(() => { if (!cancelled) setAvailable(false) })
     return () => {
       cancelled = true

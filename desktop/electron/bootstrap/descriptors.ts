@@ -112,15 +112,7 @@ import {
   QUICK_INPUT_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
-import {
-  createVoiceService,
-  type VoiceSecretPort,
-  type VoiceService,
-} from "../../app-capabilities/voice/main/service"
-import {
-  VOICE_SECRET_KEY_NAME,
-  VOICE_SETTINGS_NAMESPACE,
-} from "../../app-capabilities/voice/shared/capability"
+import { createVoiceService, type VoiceService } from "../../app-capabilities/voice/main/service"
 import {
   SCRIPT_RUNTIME_SERVICE_ID,
   ScriptRuntimeService,
@@ -209,7 +201,6 @@ import type {
   SecretSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
   SystemNotifierSettingsEntryV1,
-  VoiceSettingsEntryV1,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
@@ -278,7 +269,6 @@ import {
   MOBILE_RELAY_DIRECTORY_NAME,
   mobileGatewayFileRelayPolicy,
   mobileGatewayTerminalPolicy,
-  mobileGatewayVoicePolicy,
 } from "../services/mobile-gateway/controller"
 import { createMobileFileRelay } from "../services/mobile-gateway/file-relay"
 import type { ProcessRuntime } from "../runtime/process"
@@ -523,12 +513,10 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
 export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService> = {
   id: "core.mobile-gateway",
   criticality: "degraded",
-  dependsOn: ["core.terminal", "core.permission-guard", "core.audit-sink", "core.voice"],
+  dependsOn: ["core.terminal", "core.permission-guard", "core.audit-sink"],
   create(ctx) {
-    const voice = ctx.registry.get<VoiceService>("core.voice")
     return createMobileGatewayService({
       terminal: ctx.registry.get<TerminalService>("core.terminal"),
-      signAsrSession: (input) => voice.signSession(input),
       fileRelay: createMobileFileRelay({
         downloadDriveFile: (input) => accountService.downloadDriveFile(input),
         permanentlyDeleteDriveItem: (itemId) => accountService.permanentlyDeleteDriveItem(itemId),
@@ -638,39 +626,13 @@ export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
   },
 }
 
-/**
- * 密钥服务按名字读写，但会为不存在的名字抛错；语音这边只想知道"配没配"，所以
- * 先 list 再取，避免把"没配"当成异常路径。
- */
-function createVoiceSecretPort(secrets: SecretsService): VoiceSecretPort {
-  const has = async (name: string): Promise<boolean> => {
-    const { secrets: items } = await secrets.list()
-    const normalized = name.toLowerCase()
-    return items.some((item) => item.name.toLowerCase() === normalized)
-  }
-  return {
-    read: async (name) => {
-      if (!await has(name)) return undefined
-      const found = await secrets.get({ name, includeValue: true })
-      return "value" in found ? found.value : undefined
-    },
-    write: async (name, value) => { await secrets.upsert({ name, value }) },
-    clear: async (name) => {
-      if (await has(name)) await secrets.delete({ name })
-    },
-  }
-}
-
 export const coreVoiceDescriptor: ServiceDescriptor<VoiceService> = {
   id: "core.voice",
   criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.secrets"],
   create(ctx) {
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createVoiceService({
-      settings: dataRepository.namespace<VoiceSettingsEntryV1>(VOICE_SETTINGS_NAMESPACE),
-      secrets: createVoiceSecretPort(ctx.registry.get<SecretsService>("core.secrets")),
-      secretKeyName: VOICE_SECRET_KEY_NAME,
+      fetchAuthenticated: (path, init, errorMessage) =>
+        accountService.fetchAuthenticated(path, init, errorMessage),
       logger: ctx.logger.child("voice"),
     })
   },
@@ -2278,8 +2240,6 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     // only thing outside the terminal a phone may cause, and only into its own
     // landing directory.
     guard.registerPolicy(mobileGatewayFileRelayPolicy)
-    // 语音签名同样成对：一个动作配一个资源，手机只能拿签名，碰不到别的。
-    guard.registerPolicy(mobileGatewayVoicePolicy)
     return guard
   },
 }

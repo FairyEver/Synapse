@@ -80,7 +80,7 @@ afterEach(() => {
 })
 
 describe("AgentComposer 语音输入", () => {
-  async function renderVoiceComposer(options?: { readonly voiceConfigured?: boolean }) {
+  async function renderVoiceComposer(options?: { readonly voiceAvailable?: boolean }) {
     installShellBridge(undefined, options)
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -106,7 +106,7 @@ describe("AgentComposer 语音输入", () => {
   }
 
   it("凭据没配好时不显示麦克风入口", async () => {
-    const container = await renderVoiceComposer({ voiceConfigured: false })
+    const container = await renderVoiceComposer({ voiceAvailable: false })
     expect(container.querySelector('button[aria-label="语音输入"]')).toBeNull()
   })
 
@@ -3814,7 +3814,7 @@ function installShellBridge(
     readonly chooseAttachments?: ReturnType<typeof vi.fn>
     readonly resolveAttachmentPaths?: ReturnType<typeof vi.fn>
     readonly resolveWorkspaceTreePaths?: ReturnType<typeof vi.fn>
-    readonly voiceConfigured?: boolean
+    readonly voiceAvailable?: boolean
   },
 ) {
   const filesByPath = new Map<string, File>()
@@ -3879,7 +3879,7 @@ function installShellBridge(
         filePathForDroppedFile: typeof filePathForDroppedFileMock
       }
       voice: {
-        settings: { get: () => Promise<unknown> }
+        status: { get: () => Promise<unknown> }
         session: { sign: () => Promise<unknown> }
       }
       agent: {
@@ -3897,16 +3897,8 @@ function installShellBridge(
       filePathForDroppedFile: filePathForDroppedFileMock,
     },
     voice: {
-      settings: {
-        get: vi.fn(async () => ({
-          appId: "1252371654",
-          secretId: "AKIDtest",
-          engineModelType: "16k_zh_en_2.0",
-          hotwordList: "",
-          domain: 1,
-          hasSecretKey: true,
-          configured: options?.voiceConfigured ?? true,
-        })),
+      status: {
+        get: vi.fn(async () => ({ available: options?.voiceAvailable ?? true })),
       },
       session: {
         sign: vi.fn(async () => ({ url: "wss://asr.example/session", voiceId: "voice-1", expiredAt: 0 })),
