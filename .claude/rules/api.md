@@ -2,6 +2,9 @@
 name: api
 paths:
   - desktop/electron/**/*.ts
+  - desktop/app-capabilities/**/*.ts
+  - desktop/synapse-capabilities/**/*.ts
+  - desktop/database/**/*.ts
 ---
 
 # 主进程 Service / IPC Handler 设计约定
@@ -38,6 +41,15 @@ paths:
 - 本地 HTTP 路径保持 `POST /api`，请求体 `action` 必须是已注册的规范 `app.*` capability id。
 - MCP 工具名只能由 capability id 把点号替换为下划线得到，例如 `app.database.table.list` 对应 `app_database_table_list`。
 - dispatcher 直接接收规范 action；禁止旧 action 转译、别名、fallback 或双重注册。
+
+## 分页约定
+
+- 分页工具必须在自己的 description 里声明分页风格与续页字段，句式统一为 `Pagination: <cursor|offset>-based. <如何续页>`，位置在 `Permissions:` 页脚之前。
+- 两种风格语义不同，不得互相替换：
+  - `cursor`：不可随机访问、无总数；游标绑定查询，改任何过滤条件都从头开始。用于高频增删、需要抗漂移的数据（终端会话）。
+  - `offset`：可随机访问；翻页期间数据变动会重复或漏项。用于需要页码或总数的数据（数据库行、Drive 列表）。
+- 续页字段名必须与实现一致：`nextCursor`、`nextOffset`、`page.nextOffset`；没有续页字段时用 `total`，并在句式里写明由调用方自行计算。
+- 不得声明实现不消费的分页参数：description 或 schema 接受了 `limit` / `cursor` / `offset`，就必须真的按它分页。
 
 ## 日志
 
