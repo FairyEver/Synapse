@@ -19,7 +19,7 @@ Synapse 的 Agent、Relay、Workflow 与 Automation 统一依赖 Claude Agent SD
 - 所有 SDK query 不传 `maxTurns`、`autoCompactEnabled`、`autoCompactWindow`、`precomputeCompactionEnabled` 或宿主 token/body/tool-output 预算。
 - Read、Bash、MCP 数组、`structuredContent` 与图片结果保持 SDK 原始形态。Synapse 不使用 PostToolUse/PostToolBatch hook 截断、落盘替换或做结构完整性门禁。
 - SDK `compacting`/`compact_boundary` 事件继续进入 timeline。只在 compact 完成或一轮结束后读取 `getContextUsage()`；读取失败不改变会话生命周期。
-- 请求体过大、rapid refill 和其它 Provider/SDK 异常只产生一次普通失败。不得重试、轮换 Session、注入恢复 prompt 或阻断下一条用户消息。
+- 请求体过大、rapid refill 和其它 Provider/SDK 异常只产生一次普通失败。已知的 6 MiB 请求体超限应显示为不可恢复的容量错误，给出减少图片或大型工具结果、或新建对话的操作建议，不得误报为网络中断。不得重试、轮换 Session、注入恢复 prompt 或阻断下一条用户消息。
 - 保留权限审批、工作区直接写入边界、AskUserQuestion、文件 checkpoint/rewind、Persona/子 Agent 工具策略、连接器、项目规则和 Skills。
 - Agent 与内置 Claude Code 终端只透传 Provider 显式配置的 `CLAUDE_CODE_MAX_CONTEXT_TOKENS`。模型能力目录不得推导该变量。
 

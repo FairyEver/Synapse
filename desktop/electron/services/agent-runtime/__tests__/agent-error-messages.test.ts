@@ -49,11 +49,14 @@ describe("agent error messages", () => {
     expect(message).not.toContain("stop_reason")
   })
 
-  it("treats the Bailian request-body limit as an ordinary terminal failure", () => {
-    const raw = "API Error: Exceeded limit on max bytes to request body : 6291456"
+  it("translates the Bailian request-body limit into an actionable terminal failure", () => {
+    const raw = [
+      "API Error: 400 Exceeded limit on max bytes to request body : 6291456",
+      "terminal_reason=api_error",
+    ].join("\n")
 
     expect(agentDiagnosticPresentation(raw)).toEqual({
-      message: `Agent 执行失败。诊断信息：${raw}`,
+      message: "发送给模型的内容超过供应商 6 MiB 单次请求限制，任务尚未完成。请减少图片或大型工具结果，或新建对话后重试。",
       errorKind: "execution_failed",
       recoverable: false,
     })

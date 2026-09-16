@@ -15,7 +15,7 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 - Read、Bash、MCP、`structuredContent`、数组及图片工具结果不得由 Synapse 截断、替换或因结构完整性检查阻断；SDK 对工具结果和上下文的处理是唯一运行权威。
 - 不注入任务清单、证据账本、完成度修正或 Stop 阻断。历史 conversation 中的 `taskListId`、`taskProgressScope`、`contextHandoff`、`contextRecovery` 仅为兼容读取字段，运行时忽略，并在下次正常保存时剥离。`agent.task-progress` 只保留兼容清理，清理失败不得影响保存。
 - SDK 的 `status=compacting` 与 `compact_boundary` 继续投影到 timeline。只在 compact 完成或一轮结束后调用 `getContextUsage()`，展示 SDK 返回的 used tokens、窗口、模型及可选 compact threshold；不得混入模型目录上限或本地估算。
-- Provider/SDK 返回的请求体过大、rapid refill 或其它异常只结束当前轮，按普通失败投影；不得重试、换 Session、生成恢复状态或提供“整理上下文”操作。内部日志可记录脱敏分类布尔值，但不得记录 prompt、工具正文、路径、Base64 或凭据。
+- Provider/SDK 返回的请求体过大、rapid refill 或其它异常只结束当前轮，按普通失败投影；不得重试、换 Session、生成恢复状态或提供“整理上下文”操作。已知的 6 MiB 请求体超限必须显示为不可恢复的容量错误，并提示用户减少图片或大型工具结果、或新建对话，不得误报为网络连接中断。内部日志可记录脱敏分类布尔值，但不得记录 prompt、工具正文、路径、Base64 或凭据。
 
 ## 跨平台验证
 

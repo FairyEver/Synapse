@@ -128,6 +128,32 @@ describe("SDK event bridge", () => {
     })
   })
 
+  it("projects the provider request-body limit as a clear non-recoverable failure", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "success",
+      session_id: "sdk-request-too-large",
+      uuid: "result-request-too-large",
+      is_error: true,
+      result: "API Error: 400 Exceeded limit on max bytes to request body : 6291456",
+      terminal_reason: "api_error",
+      api_error_status: 400,
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "发送给模型的内容超过供应商 6 MiB 单次请求限制，任务尚未完成。请减少图片或大型工具结果，或新建对话后重试。",
+      errorKind: "execution_failed",
+      recoverable: false,
+      sdkSessionId: "sdk-request-too-large",
+      sdkResultUuid: "result-request-too-large",
+      payload: expect.objectContaining({
+        is_error: true,
+        terminal_reason: "api_error",
+        api_error_status: 400,
+      }),
+      ...baseEnvelope,
+    })
+  })
+
   it("treats the SDK rapid-refill breaker as an ordinary failed turn", () => {
     const event = bridgeSdkMessage({
       type: "result",

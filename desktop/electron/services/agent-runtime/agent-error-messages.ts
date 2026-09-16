@@ -45,6 +45,7 @@ const AGENT_EXECUTION_FAILED_MESSAGE = "Agent 执行失败。"
 const WEBFETCH_PREFLIGHT_FAILED_MESSAGE = "WebFetch 域名预检失败。当前供应商或网络拒绝了 Claude Code 的安全检查，已停止本轮执行。"
 export const AGENT_TOOL_USE_INTERRUPTED_MESSAGE = "Agent 在工具调用后中断，发送“继续”可接着执行。"
 export const AGENT_CONNECTION_INTERRUPTED_MESSAGE = "模型连接中断，任务尚未完成。"
+export const AGENT_REQUEST_BODY_TOO_LARGE_MESSAGE = "发送给模型的内容超过供应商 6 MiB 单次请求限制，任务尚未完成。请减少图片或大型工具结果，或新建对话后重试。"
 export const AGENT_RENDERER_UNAVAILABLE_MESSAGE = "界面异常，本次运行已停止。"
 
 export type AgentErrorKind =
@@ -94,6 +95,13 @@ export function sdkQueryErrorPresentation(diagnostic: string | undefined): Agent
 }
 
 export function agentDiagnosticPresentation(diagnostic: string | undefined): AgentErrorPresentation {
+  if (isRequestBodyTooLargeDiagnostic(diagnostic)) {
+    return {
+      message: AGENT_REQUEST_BODY_TOO_LARGE_MESSAGE,
+      errorKind: "execution_failed",
+      recoverable: false,
+    }
+  }
   if (isConnectionInterruptedDiagnostic(diagnostic)) {
     return {
       message: AGENT_CONNECTION_INTERRUPTED_MESSAGE,
