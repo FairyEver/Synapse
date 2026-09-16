@@ -403,6 +403,11 @@ export const IPC_CHANNELS = {
     "changed": "synapse:app:sound_notifier:operation:changed",
     "playRequested": "synapse:app:sound_notifier:operation:play_requested",
   },
+  "voice": {
+    "getSettings": "synapse:app:voice:settings:get",
+    "updateSettings": "synapse:app:voice:settings:update",
+    "signSession": "synapse:app:voice:session:sign",
+  },
   "systemNotifier": {
     "getSettings": "synapse:app:system_notifier:settings:get",
     "updateSettings": "synapse:app:system_notifier:settings:update",

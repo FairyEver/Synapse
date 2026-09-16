@@ -103,6 +103,12 @@ import type {
   SynapseSoundNotifierSettingsPatch,
 } from "./sound-notifier"
 import type {
+  SynapseVoiceSessionSignInput,
+  SynapseVoiceSettings,
+  SynapseVoiceSettingsPatch,
+  SynapseVoiceSignedSession,
+} from "./voice"
+import type {
   SynapseSystemNotificationResult,
   SynapseSystemNotifierSettings,
   SynapseSystemNotifierSettingsPatch,
@@ -1147,6 +1153,15 @@ export type SynapseBridge = {
     resolveConflict: (input: DriveSyncConflictResolutionInput) => Promise<void>
     chooseLocalPath: (input: { kind: "file" | "folder"; mode?: "bind_existing" | "remote_to_local" | "local_to_remote"; defaultName?: string }) => Promise<string | null>
     onChanged: (listener: (snapshot: DriveSyncSnapshotDto) => void) => () => void
+  }
+  voice: {
+    settings: {
+      get: () => Promise<SynapseVoiceSettings>
+      update: (input: SynapseVoiceSettingsPatch) => Promise<SynapseVoiceSettings>
+    }
+    session: {
+      sign: (input?: SynapseVoiceSessionSignInput) => Promise<SynapseVoiceSignedSession>
+    }
   }
   soundNotifier: {
     settings: {

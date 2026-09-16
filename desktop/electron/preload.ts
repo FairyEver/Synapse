@@ -504,6 +504,15 @@ const synapseBridge: SynapseBridge = {
       IPC_CHANNELS.driveSync.changed,
     ),
   },
+  voice: {
+    settings: {
+      get: () => invoke(IPC_CHANNELS.voice.getSettings)(),
+      update: (input) => invoke(IPC_CHANNELS.voice.updateSettings)(input),
+    },
+    session: {
+      sign: (input = {}) => invoke(IPC_CHANNELS.voice.signSession)(input),
+    },
+  },
   soundNotifier: {
     settings: {
       get: () => invoke(IPC_CHANNELS.soundNotifier.getSettings)(),

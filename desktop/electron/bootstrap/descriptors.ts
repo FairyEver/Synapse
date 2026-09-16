@@ -113,6 +113,15 @@ import {
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
 import {
+  createVoiceService,
+  type VoiceSecretPort,
+  type VoiceService,
+} from "../../app-capabilities/voice/main/service"
+import {
+  VOICE_SECRET_KEY_NAME,
+  VOICE_SETTINGS_NAMESPACE,
+} from "../../app-capabilities/voice/shared/capability"
+import {
   SCRIPT_RUNTIME_SERVICE_ID,
   ScriptRuntimeService,
 } from "../../app-capabilities/script-runtime/main/service"
@@ -200,6 +209,7 @@ import type {
   SecretSettingsEntryV1,
   SoundNotifierSettingsEntryV3,
   SystemNotifierSettingsEntryV1,
+  VoiceSettingsEntryV1,
 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { SideChannelService } from "../services/side-channel"
@@ -609,6 +619,44 @@ export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
   },
   async start(instance) {
     await instance.initialize()
+  },
+}
+
+/**
+ * 密钥服务按名字读写，但会为不存在的名字抛错；语音这边只想知道"配没配"，所以
+ * 先 list 再取，避免把"没配"当成异常路径。
+ */
+function createVoiceSecretPort(secrets: SecretsService): VoiceSecretPort {
+  const has = async (name: string): Promise<boolean> => {
+    const { secrets: items } = await secrets.list()
+    const normalized = name.toLowerCase()
+    return items.some((item) => item.name.toLowerCase() === normalized)
+  }
+  return {
+    read: async (name) => {
+      if (!await has(name)) return undefined
+      const found = await secrets.get({ name, includeValue: true })
+      return "value" in found ? found.value : undefined
+    },
+    write: async (name, value) => { await secrets.upsert({ name, value }) },
+    clear: async (name) => {
+      if (await has(name)) await secrets.delete({ name })
+    },
+  }
+}
+
+export const coreVoiceDescriptor: ServiceDescriptor<VoiceService> = {
+  id: "core.voice",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.secrets"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createVoiceService({
+      settings: dataRepository.namespace<VoiceSettingsEntryV1>(VOICE_SETTINGS_NAMESPACE),
+      secrets: createVoiceSecretPort(ctx.registry.get<SecretsService>("core.secrets")),
+      secretKeyName: VOICE_SECRET_KEY_NAME,
+      logger: ctx.logger.child("voice"),
+    })
   },
 }
 
@@ -1369,6 +1417,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     "core.terminal",
     SYSTEM_APP_WINDOW_SERVICE_ID,
     "core.sound-notifier",
+    "core.voice",
     SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
     PROBLEM_FEEDBACK_SERVICE_ID,
     JSON_REPAIR_SERVICE_ID,

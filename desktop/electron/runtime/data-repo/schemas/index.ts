@@ -116,6 +116,12 @@ export {
   type SoundNotifierSettingsEntryV3,
 } from "./sound-notifier"
 export {
+  defaultVoiceSettingsEntry,
+  normalizeVoiceSettingsEntry,
+  voiceSettingsSchemaDefinition,
+  type VoiceSettingsEntryV1,
+} from "./voice"
+export {
   systemNotifierSettingsSchemaDefinition,
   type SystemNotifierSettingsEntryV1,
 } from "./system-notifier"
@@ -240,6 +246,7 @@ import { agentPersonaItemsSchema, agentPersonaSettingsSchema } from "./agent-per
 import { agentPersonaRemoteCacheSchema } from "./agent-persona-remote-cache"
 import { agentFileCheckpointsSchema } from "./agent-file-checkpoints"
 import { soundNotifierSettingsSchemaDefinition } from "./sound-notifier"
+import { voiceSettingsSchemaDefinition } from "./voice"
 import { systemNotifierSettingsSchemaDefinition } from "./system-notifier"
 import { updateInstallRecoverySchema } from "./update-install-recovery"
 import {
@@ -315,6 +322,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentFileCheckpointsSchema,
   agentTaskProgressSchema,
   soundNotifierSettingsSchemaDefinition,
+  voiceSettingsSchemaDefinition,
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,
   terminalAgentNotificationSettingsSchemaDefinition,
