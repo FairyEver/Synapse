@@ -3752,3 +3752,94 @@ function preparedFolderEntry(relativePath: string, sessionId: string, url: strin
     },
   }
 }
+
+
+/**
+ * What a server error body looks like once it reaches the user.
+ *
+ * These drive `createHttpError` through a real call rather than through the
+ * helpers it uses, because those helpers are module-private and the behaviour
+ * that matters is what ends up in the thrown message.
+ *
+ * The redaction is **by key name only**. That is a real and limited protection,
+ * and the last case here pins the limit down rather than implying the whole body
+ * is scrubbed: a value under a harmless key — a path, an English message, an
+ * internal enum — is passed through. Only its length is bounded.
+ */
+describe("AccountService server error text", () => {
+  async function failingDownload(body: string, status = 400) {
+    const fetch = vi.fn(async () => new Response(body, { status })) as unknown as typeof globalThis.fetch
+    const { service } = await createTestAccountService({ fetch })
+    // Reaching `createHttpError` needs a token; without one the call stops at
+    // `AccountAuthenticationRequiredError` and never builds a server message.
+    ;(service as unknown as { accessToken: string | null }).accessToken = "access-1"
+    return service
+  }
+
+  async function downloadError(body: string, status = 400): Promise<string> {
+    const service = await failingDownload(body, status)
+    try {
+      await service.downloadDriveFile({ itemId: "item-1", outputPath: "/tmp/unused" })
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+    throw new Error("expected the download to fail")
+  }
+
+  it("redacts values whose key names a credential", async () => {
+    const message = await downloadError(JSON.stringify({
+      password: "hunter2",
+      token: "tok-1",
+      api_key: "key-1",
+      secret: "sec-1",
+      credential: "cred-1",
+      cookie: "ck-1",
+      authorization: "Bearer abc",
+    }))
+
+    for (const value of ["hunter2", "tok-1", "key-1", "sec-1", "cred-1", "ck-1", "Bearer abc"]) {
+      expect(message).not.toContain(value)
+    }
+    expect(message).toContain("[REDACTED]")
+  })
+
+  it("keeps the server's own explanation when it is not under a sensitive key", async () => {
+    const message = await downloadError(JSON.stringify({ reason: "磁盘空间不足。" }))
+    expect(message).toContain("磁盘空间不足。")
+  })
+
+  it("keeps the fallback wording, the request line and the status", async () => {
+    const message = await downloadError(JSON.stringify({ reason: "x" }))
+    // The wording a user reads is the fallback plus the request line the app
+    // built — method, endpoint path (the `/api` prefix is stripped) and status.
+    expect(message).toContain("文件下载失败。")
+    expect(message).toContain("GET /drive/items/item-1/download HTTP 400")
+  })
+
+  it("bounds the body at 200 characters", async () => {
+    const message = await downloadError(JSON.stringify({ reason: `${"x".repeat(400)}TAIL-MARKER` }))
+    const detail = message.slice(message.indexOf("): ") + 3)
+
+    expect(detail.endsWith("...")).toBe(true)
+    expect(detail.length).toBe(203)
+    expect(detail).not.toContain("TAIL-MARKER")
+  })
+
+  /**
+   * The limit of the protection, stated as a test so it cannot be mistaken for
+   * full scrubbing: a value under a harmless key is passed through untouched.
+   * Bounded in length, not in content.
+   */
+  it("does not redact a sensitive-looking value under a harmless key", async () => {
+    const message = await downloadError(JSON.stringify({
+      message: "open /Users/someone/private/notes.txt failed",
+    }))
+    expect(message).toContain("/Users/someone/private/notes.txt")
+  })
+
+  it("falls back to text redaction when the body is not JSON", async () => {
+    const message = await downloadError("upload rejected token=sekrit-value")
+    expect(message).not.toContain("sekrit-value")
+    expect(message).toContain("[redacted]")
+  })
+})
