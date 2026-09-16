@@ -1,12 +1,13 @@
 import { EventEmitter } from "node:events"
 import { describe, expect, it, vi } from "vitest"
+import { isMobileSummaryPayload, MOBILE_FRAME_LIMITS } from "@synapse/shared"
 import type { MobileIntent, MobileTerminalFrame } from "@synapse/shared"
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
-import { MobileGatewayService } from "../mobile-gateway-service"
-import type { MobileGatewayTransport } from "../mobile-gateway/transport"
+import { clampSummaryText, MobileGatewayService } from "../mobile-gateway-service"
+import type { MobileGatewayTransport, MobileSummaryDraft } from "../mobile-gateway/transport"
 
 /* ------------------------------------------------------------------ *
  * Test doubles
@@ -764,5 +765,78 @@ describe("MobileGatewayService", () => {
     const frame = harness.frames[0].frame
     expect(frame.from).toBe(0)
     expect(frame.lines).toHaveLength(200)
+  })
+
+  it("clamps a session field that outgrows the wire bound rather than failing validation", async () => {
+    const harness = createHarness()
+    const existing = harness.terminal.sessions.get("sess-1")!
+    harness.terminal.sessions.set("sess-1", {
+      ...existing,
+      title: "t".repeat(MOBILE_FRAME_LIMITS.maxTitleLength + 500),
+      cwd: "/".concat("d".repeat(MOBILE_FRAME_LIMITS.maxSummaryCwdLength + 500)),
+    })
+    harness.terminal.lines.set("sess-1", [
+      { text: "l".repeat(MOBILE_FRAME_LIMITS.maxSummaryLastLineLength + 500) },
+    ])
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    const session = draft.sessions[0]
+    expect(session.title).toHaveLength(MOBILE_FRAME_LIMITS.maxTitleLength)
+    expect(session.cwd).toHaveLength(MOBILE_FRAME_LIMITS.maxSummaryCwdLength)
+    expect(session.lastLine).toHaveLength(MOBILE_FRAME_LIMITS.maxSummaryLastLineLength)
+    // The point of clamping is not the truncation itself but that what the desktop
+    // emits is accepted by the relay; a rejection here closes the socket.
+    expect(isMobileSummaryPayload({
+      desktopClientInstanceId: "desktop-1",
+      desktopName: "MacBook Pro",
+      ...draft,
+    })).toBe(true)
+  })
+
+  it("keeps the largest admissible session list inside the summary's byte budget", async () => {
+    const harness = createHarness()
+    const limits = MOBILE_FRAME_LIMITS
+    harness.terminal.sessions.clear()
+    harness.terminal.lines.clear()
+    for (let index = 0; index < limits.maxSummarySessions; index += 1) {
+      // Long enough to hit every field bound, and unique so the per-session caches
+      // and line lookups cannot collapse the rows into one.
+      const suffix = String(index).padStart(4, "0")
+      const id = `${"i".repeat(limits.maxSummaryIdLength - 4)}${suffix}`
+      harness.terminal.sessions.set(id, {
+        id,
+        groupId: "g".repeat(limits.maxSummaryIdLength),
+        title: "t".repeat(limits.maxTitleLength),
+        status: "running",
+        cwd: "/".concat("d".repeat(limits.maxSummaryCwdLength - 1)),
+        cols: 500,
+        rows: 200,
+        startedAt: new Date().toISOString(),
+        lastOutputSeq: index,
+        attention: { state: "not_waiting", kind: "unknown" },
+      })
+      harness.terminal.lines.set(id, [
+        { text: "l".repeat(limits.maxSummaryLastLineLength) },
+      ])
+    }
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.sessions).toHaveLength(limits.maxSummarySessions)
+    expect(Buffer.byteLength(JSON.stringify(draft), "utf8")).toBeLessThanOrEqual(limits.maxSummaryBytes)
+    expect(isMobileSummaryPayload({
+      desktopClientInstanceId: "desktop-1",
+      desktopName: "MacBook Pro",
+      ...draft,
+    })).toBe(true)
+  })
+
+  it("never splits a surrogate pair when clamping", () => {
+    expect(clampSummaryText("👍".repeat(10), 5)).toBe("👍".repeat(2))
+    expect(clampSummaryText("ab👍", 3)).toBe("ab")
+    expect(clampSummaryText("abc", 10)).toBe("abc")
   })
 })

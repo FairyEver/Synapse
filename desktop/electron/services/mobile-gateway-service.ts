@@ -505,6 +505,21 @@ export class MobileGatewayService {
       const content = JSON.stringify({ groups, sessions })
       if (content === this.lastSummaryContent) return
       this.lastSummaryContent = content
+      const bytes = Buffer.byteLength(content, "utf8")
+      if (bytes > MOBILE_FRAME_LIMITS.maxSummaryBytes) {
+        /*
+         * Unreachable while the field bounds hold — the boundary test in the shared
+         * package proves the largest admissible summary fits. It exists because the
+         * failure it guards against is invisible: the socket would close, and the
+         * user would see their computer drop offline with nothing in the summary to
+         * point at. A future field that outgrows the budget lands here instead.
+         */
+        this.deps.logger.warn("Mobile summary exceeded its byte budget and was not sent.", {
+          bytes,
+          budget: MOBILE_FRAME_LIMITS.maxSummaryBytes,
+        })
+        return
+      }
       this.summaryRevision += 1
       transport.sendSummary({ revision: this.summaryRevision, groups, sessions })
     } catch (error) {
@@ -513,7 +528,10 @@ export class MobileGatewayService {
   }
 
   private summaryGroups(): MobileSummaryGroup[] {
-    return this.terminal.listGroups().map((group) => ({ id: group.id, name: group.name }))
+    return this.terminal.listGroups().map((group) => ({
+      id: clampSummaryText(group.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+      name: clampSummaryText(group.name, MOBILE_FRAME_LIMITS.maxSummaryGroupNameLength),
+    }))
   }
 
   private async summarySessions(): Promise<MobileSummarySession[]> {
@@ -521,16 +539,16 @@ export class MobileGatewayService {
     const rows: MobileSummarySession[] = []
     for (const session of sessions) {
       rows.push({
-        id: session.id,
-        groupId: session.groupId,
-        title: session.title,
+        id: clampSummaryText(session.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+        groupId: clampSummaryText(session.groupId, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+        title: clampSummaryText(session.title, MOBILE_FRAME_LIMITS.maxTitleLength),
         status: session.status,
         attention: { state: session.attention.state, kind: session.attention.kind },
-        cwd: session.cwd,
+        cwd: clampSummaryText(session.cwd, MOBILE_FRAME_LIMITS.maxSummaryCwdLength),
         cols: session.cols,
         rows: session.rows,
-        startedAt: session.startedAt,
-        lastLine: await this.lastLineFor(session.id),
+        startedAt: clampSummaryText(session.startedAt, MOBILE_FRAME_LIMITS.maxSummaryStartedAtLength),
+        lastLine: clampSummaryText(await this.lastLineFor(session.id), MOBILE_FRAME_LIMITS.maxSummaryLastLineLength),
         lastOutputSeq: session.lastOutputSeq,
       })
     }
@@ -700,6 +718,23 @@ export class MobileGatewayService {
 
 export function createMobileGatewayService(deps: MobileGatewayServiceDeps): MobileGatewayService {
   return new MobileGatewayService(deps)
+}
+
+/**
+ * Trims one summary field to its wire bound.
+ *
+ * These bounds are the shared package's contract rather than a local preference:
+ * the relay validates against the same numbers, and a summary that fails validation
+ * is answered with a closed connection instead of a dropped message. Clamping here
+ * is what makes the summary's byte budget provable rather than hopeful, since a
+ * session title and a working directory are otherwise unbounded.
+ */
+export function clampSummaryText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  const clipped = value.slice(0, maxLength)
+  // Never leave half a surrogate pair behind; JSON.stringify would escape it and
+  // the phone would render a replacement character.
+  return /[\uD800-\uDBFF]$/.test(clipped) ? clipped.slice(0, -1) : clipped
 }
 
 /**
