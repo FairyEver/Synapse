@@ -14,6 +14,8 @@ const SILENCE_HINT_MS = 3_000
 /** 点完成后等引擎把最后一句定稿回来的上限。 */
 const FINALIZE_TIMEOUT_MS = 1_200
 const TIMER_TICK_MS = 100
+/** 腾讯云的「鉴权失败」。签名过期就是这个码，换一条新签名重连一次就好。 */
+const ASR_AUTH_REJECTED_CODE = 4002
 
 export type VoiceFailure = "network" | "silence" | "permission" | "unavailable"
 
@@ -78,23 +80,30 @@ export class VoiceSession {
         this.transcript = transcript
         this.events.onTranscript(transcript)
       },
-      onFailure: (kind) => { this.handleSocketFailure(kind) },
+      onFailure: (kind, code) => { this.handleSocketFailure(kind, code) },
       onFinished: () => { this.finalize?.() },
     })
     logger.info("Voice session connected.", { voiceId: signed.voiceId })
   }
 
-  private handleSocketFailure(kind: "network" | "server"): void {
+  private handleSocketFailure(kind: "network" | "server", code?: number): void {
     if (this.stopped) return
-    // 已经听到内容了就不再自动重连：重连会丢掉上下文，不如把已识别的部分留着让
-    // 用户决定重试还是直接完成。
-    if (!this.retried && !this.transcript.combined) {
+    /*
+     * 只有「换个签名可能就好」的失败才值得重连一次：传输中断，或者鉴权被拒
+     * （签名过期就是这个样子）。服务端说服务没开通之类的错误，重连只是原地打转，
+     * 不如直接把话说清楚。
+     *
+     * 已经听到内容了也不再自动重连：重连丢上下文，不如把已识别的部分留着让用户
+     * 决定重试还是直接完成。
+     */
+    const worthRetrying = kind === "network" || code === ASR_AUTH_REJECTED_CODE
+    if (worthRetrying && !this.retried && !this.transcript.combined) {
       this.retried = true
       this.socket = null
       void this.connect().catch(() => { this.reportFailure("network") })
       return
     }
-    this.reportFailure(kind === "server" ? "network" : kind)
+    this.reportFailure(kind === "network" ? "network" : "unavailable")
   }
 
   private reportFailure(failure: VoiceFailure): void {

@@ -11,7 +11,8 @@ export type AsrFailureKind = "network" | "server"
 
 export type AsrSocketHandlers = {
   readonly onTranscript: (transcript: AsrTranscript) => void
-  readonly onFailure: (kind: AsrFailureKind) => void
+  /** 服务端错误会带上它自己的 code，调用方据此判断重连有没有意义。 */
+  readonly onFailure: (kind: AsrFailureKind, code?: number) => void
   /** 引擎确认收尾（final=1）或连接正常关闭。 */
   readonly onFinished: () => void
 }
@@ -37,9 +38,11 @@ export class AsrSocket {
     this.socket.onerror = () => { this.reportFailure("network") }
     this.socket.onclose = () => {
       if (this.closed) return
-      this.closed = true
+      // 先报失败再置 closed —— reportFailure 自己会看 closed，顺序反了就报不出去，
+      // 界面会静静停住，看起来像"没反应"而不是"网络断了"。
       // 没走到 final 就断了，对用户来说就是"网络已断开"，不是正常结束。
       if (!this.finished) this.reportFailure("network")
+      this.closed = true
       this.handlers.onFinished()
     }
   }
@@ -74,7 +77,7 @@ export class AsrSocket {
       return
     }
     if (typeof message.code === "number" && message.code !== 0) {
-      this.reportFailure("server")
+      this.reportFailure("server", message.code)
       this.close()
       return
     }
@@ -93,9 +96,9 @@ export class AsrSocket {
     }
   }
 
-  private reportFailure(kind: AsrFailureKind): void {
+  private reportFailure(kind: AsrFailureKind, code?: number): void {
     if (this.failureReported || this.closed) return
     this.failureReported = true
-    this.handlers.onFailure(kind)
+    this.handlers.onFailure(kind, code)
   }
 }
