@@ -706,8 +706,24 @@ function TerminalPaneTitle({
         <span
           className="truncate text-xs font-medium text-foreground/75"
           data-track="terminal-pane-title"
-          onClick={onActive}
-          onDoubleClick={onRename}
+          onClick={() => {
+            track({
+              component: "terminal",
+              name: "terminal.pane.title_select",
+              action: "select",
+              eventKey: "terminal.pane.title_select",
+            })
+            onActive()
+          }}
+          onDoubleClick={() => {
+            track({
+              component: "terminal",
+              name: "terminal.pane.rename",
+              action: "open",
+              eventKey: "terminal.pane.rename",
+            })
+            onRename()
+          }}
         >
           {title}
         </span>
