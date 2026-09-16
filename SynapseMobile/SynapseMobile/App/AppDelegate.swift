@@ -72,7 +72,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // socket that is not open.
         let tokens = TokenStore()
         let client = APIClient(tokens: tokens) {}
-        guard await client.restoreSession() else { return }
+        // Only a restored session is any use here: if the server cannot be reached
+        // the answer cannot be delivered either, so there is nothing to do.
+        guard await client.restoreSession() == .restored else { return }
 
         let intent = MobileIntentRequest(
             intentId: UUID().uuidString,

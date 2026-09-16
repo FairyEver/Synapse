@@ -73,11 +73,21 @@ final class SynapseAppModel {
 
     func bootstrap() async {
         email = tokens.accountEmail
-        if await apiClient.restoreSession() {
+        switch await apiClient.restoreSession() {
+        case .restored:
             authState = .signedIn
             await startLiveSession()
-        } else {
+        case .noCredentials:
             authState = .signedOut
+        case .unreachable:
+            // The credential is intact and only the server was unreachable. Showing
+            // the login screen here would tell the user their account is gone when
+            // it is not — and retyping a password would not have helped. Staying
+            // signed in also lets the connection recover on its own: the socket
+            // reconnects, and the next refresh succeeds once the server is back.
+            authState = .signedIn
+            await startLiveSession()
+            banner = "暂时连不上服务器，正在重试。"
         }
     }
 

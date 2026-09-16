@@ -29,11 +29,22 @@ actor APIClient {
     /// When the current access token stops being accepted; `nil` when its lifetime
     /// cannot be read from the token itself.
     private var accessTokenExpiresAt: Date?
-    private var refreshInFlight: Task<String?, Never>?
+    private var refreshInFlight: Task<Result<String, RefreshFailure>, Never>?
+
+    /// A bound on the whole request, not just the gap between packets.
+    ///
+    /// `timeoutIntervalForRequest` covers the gap between packets, but
+    /// `waitsForConnectivity` means a request with no usable path waits for a path
+    /// to appear instead of failing. With no resource timeout that wait is
+    /// unbounded, so a launch that awaits one never finishes and the app looks
+    /// frozen rather than offline. Measured on a device: a refresh pointed at an
+    /// unreachable host had still not returned after five minutes.
+    private static let requestResourceTimeout: TimeInterval = 30
 
     init(tokens: TokenStore, onCredentialsChanged: @escaping @Sendable () -> Void) {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = AppConfiguration.requestTimeout
+        configuration.timeoutIntervalForResource = Self.requestResourceTimeout
         configuration.waitsForConnectivity = true
         self.session = URLSession(configuration: configuration)
         self.tokens = tokens
@@ -110,6 +121,17 @@ actor APIClient {
         accessTokenExpiresAt = Self.expiry(of: response.accessToken)
         tokens.refreshToken = response.refreshToken
         tokens.accountEmail = email
+        // Writing to the keychain can fail, and it used to fail silently: the token
+        // lived only in memory, the login looked like it worked, and the next launch
+        // had nothing to restore. Reading it back is what keeps that from being
+        // reported as a successful sign-in.
+        guard tokens.refreshToken != nil else {
+            throw APIError(
+                status: 0,
+                code: "credential_storage_failed",
+                message: "登录成功但凭证没能保存，重启后需要重新登录。请检查系统存储权限。"
+            )
+        }
         onCredentialsChanged()
     }
 
@@ -128,12 +150,34 @@ actor APIClient {
         onCredentialsChanged()
     }
 
-    /// Restores a session from the keychain at launch. Returns whether a usable
-    /// token was obtained.
-    @discardableResult
-    func restoreSession() async -> Bool {
-        guard tokens.refreshToken != nil else { return false }
-        return await refreshAccessToken() != nil
+    /// What happened when the app tried to restore a session at launch.
+    ///
+    /// `noCredentials` and `unreachable` are deliberately separate. They used to
+    /// be one `false`, which sent a user whose token was sitting safely in the
+    /// keychain to the login screen because the server happened to be restarting —
+    /// telling them their account was gone when it was not, and hiding the one
+    /// thing that would have explained it.
+    enum SessionRestoreOutcome {
+        /// A usable token was obtained.
+        case restored
+        /// There is nothing stored to restore, or the server rejected the token.
+        case noCredentials
+        /// The credential is intact; the server could not be reached.
+        case unreachable
+    }
+
+    /// Restores a session from the keychain at launch.
+    func restoreSession() async -> SessionRestoreOutcome {
+        guard tokens.refreshToken != nil else { return .noCredentials }
+        switch await refreshAccessTokenOutcome() {
+        case .success:
+            return .restored
+        case .failure(.rejected):
+            // The token was discarded on the way out; there is nothing left to use.
+            return .noCredentials
+        case .failure(.unreachable):
+            return .unreachable
+        }
     }
 
     // MARK: - Mobile endpoints
@@ -233,13 +277,26 @@ actor APIClient {
 
     // MARK: - Transport
 
-    private func refreshAccessToken() async -> String? {
-        if let inFlight = refreshInFlight { return await inFlight.value }
-        guard let refreshToken = tokens.refreshToken else { return nil }
+    /// Why a refresh did not produce an access token.
+    private enum RefreshFailure: Error {
+        /// The server refused the token. It is dead, and has been discarded.
+        case rejected
+        /// The server could not be reached, or did not answer. The stored token is
+        /// untouched and may well still be good.
+        case unreachable
+    }
 
-        let task = Task<String?, Never> { [weak self] in
-            guard let self else { return nil }
+    /// Refreshes, or explains which kind of failure it was.
+    ///
+    /// One refresh runs at a time whichever caller asked: a socket reconnect and a
+    /// 401 from a normal request must not race two refreshes against each other.
+    private func refreshAccessTokenOutcome() async -> Result<String, RefreshFailure> {
+        if let inFlight = refreshInFlight { return await inFlight.value }
+
+        let task = Task<Result<String, RefreshFailure>, Never> { [weak self] in
+            guard let self else { return .failure(.rejected) }
             defer { Task { await self.clearRefreshInFlight() } }
+            guard let refreshToken = await self.tokens.refreshToken else { return .failure(.rejected) }
             do {
                 let response: TokenPair = try await self.send(
                     path: "/auth/refresh",
@@ -249,25 +306,32 @@ actor APIClient {
                     allowRefresh: false
                 )
                 await self.storeRefreshed(response)
-                return response.accessToken
+                return .success(response.accessToken)
             } catch {
+                let apiError = error as? APIError
                 // A rejected refresh token is dead; keeping it would make every
-                // later request fail the same way.
-                if let apiError = error as? APIError, apiError.isUnauthorized {
-                    await self.discardCredentials()
-                } else {
-                    // Worth recording: a refresh that fails for any other reason
-                    // leaves the websocket unable to reconnect, and this is the only
-                    // place that knows why it could not.
+                // later request fail the same way. Anything else — no usable network
+                // path, a timeout, a server that is restarting — says nothing about
+                // the token, so the token is left alone.
+                guard let apiError, apiError.isUnauthorized else {
                     AppLog.network.warning(
-                        "token refresh failed: \(error.localizedDescription, privacy: .public)"
+                        "token refresh could not reach the server: \(error.localizedDescription, privacy: .public)"
                     )
+                    return .failure(.unreachable)
                 }
-                return nil
+                await self.discardCredentials()
+                return .failure(.rejected)
             }
         }
         refreshInFlight = task
         return await task.value
+    }
+
+    private func refreshAccessToken() async -> String? {
+        switch await refreshAccessTokenOutcome() {
+        case .success(let accessToken): return accessToken
+        case .failure: return nil
+        }
     }
 
     private func storeRefreshed(_ pair: TokenPair) {
