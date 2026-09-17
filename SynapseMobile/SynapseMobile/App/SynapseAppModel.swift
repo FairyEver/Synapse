@@ -629,9 +629,10 @@ final class SynapseAppModel {
 
     /// Stops deciding a session's grid and lets the desktop's own layout take over.
     ///
-    /// The phone cannot restore the desktop's size by itself: everything it was ever
-    /// told is the size the PTY currently has, which is the phone's. So it gives up
-    /// the claim and the desktop re-fits.
+    /// The phone cannot name the size the desktop would have chosen: everything it was
+    /// ever told is the size the PTY currently has, which is the phone's. So it gives
+    /// up the claim, and the desktop puts the PTY back at its own layout's shape in the
+    /// same call rather than on its next fit, which only runs while a pane is on screen.
     func releaseGrid(for sessionId: String) {
         gridSizeTasks[sessionId]?.cancel()
         gridSizeTasks[sessionId] = nil

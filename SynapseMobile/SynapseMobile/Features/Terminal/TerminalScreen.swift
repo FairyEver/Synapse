@@ -72,9 +72,10 @@ struct TerminalScreen: View {
         if displayMode == .phoneDriven {
             reportGridToDesktop()
         } else {
-            // The desktop's own layout decides again from here. The phone has no way
-            // to name the size the desktop would have chosen — all it ever heard is
-            // the size the PTY currently has, which is the phone's.
+            // The desktop's own layout decides again from here, and restores the PTY to
+            // its shape as part of this call. The phone has no way to name the size the
+            // desktop would have chosen — all it ever heard is the size the PTY
+            // currently has, which is the phone's.
             model.releaseGrid(for: sessionId)
         }
     }
