@@ -38,7 +38,7 @@ final class TerminalFileRelayUITests: XCTestCase {
 
     func testSendsAPhotoAndGetsItsPathTypedIntoTheTerminal() throws {
         let app = XCUIApplication()
-        app.pointAtServer(baseURL)
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
         app.launch()
 
         signIn(app)
@@ -112,7 +112,7 @@ final class TerminalFileRelayUITests: XCTestCase {
     /// right kind of session to point `SYNAPSE_TEST_SESSION_TITLE` at.
     func testSubmittingTakesTheDeliveredChipOffTheStrip() throws {
         let app = XCUIApplication()
-        app.pointAtServer(baseURL)
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
         app.launch()
 
         signIn(app)
