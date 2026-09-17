@@ -3,6 +3,7 @@ import type { CCProvider } from "../../../electron/services/provider"
 import {
   MODEL_TIER_DISPLAY_ORDER, isProviderModelTierSelectable, resolveModelName, resolveModelDisplayName,
 } from "../../../src/lib/provider-model-selection"
+import type { ModelTier } from "../../../src/types/provider-model"
 
 import type { ConversationEntryV1, DataRepository } from "../../../electron/runtime/data-repo"
 import type { EventBus, DomainEvent } from "../../../electron/runtime/event-bus"
@@ -36,6 +37,25 @@ import { agentConversationSourceForPlatform } from "../shared/source"
 import { agentConversationReference } from "./conversation-reference"
 import { AgentConversationTargetError, resolvePersistedAgentConversation } from "./conversation-target"
 
+/**
+ * The tiers one Provider can actually be asked for, with the name to show for each.
+ *
+ * A Provider may name no model for a tier, which means that tier is not a choice it
+ * offers — the desktop's own picker disables it for the same reason. `resolveModelName`
+ * first, because the ordinary case is a model id; the display name covers the one that
+ * resolves to a label rather than an id, the bundled Claude Code following the
+ * computer's own login.
+ */
+function selectableTierModels(provider: CCProvider): Partial<Record<ModelTier, string>> {
+  const models: Partial<Record<ModelTier, string>> = {}
+  for (const tier of MODEL_TIER_DISPLAY_ORDER) {
+    if (!isProviderModelTierSelectable(provider, tier)) continue
+    const name = resolveModelName(provider, tier) ?? resolveModelDisplayName(provider, tier)
+    if (name) models[tier] = name
+  }
+  return models
+}
+
 const ITEM_BYTE_LIMIT = 64 * 1024
 const PAGE_BYTE_LIMIT = 1024 * 1024
 const TIMELINE_PAGE_BYTE_LIMIT = 800 * 1024
@@ -67,6 +87,26 @@ type Waiter = {
   readonly clientId: string
   readonly afterRevision: number
   resolve(): void
+}
+
+/** One row of the project directory `listAllGroups` returns, and `listGroups` pages over. */
+export type AgentGroupChoice = {
+  readonly projectId: string
+  readonly name: string
+  readonly isDefault: boolean
+}
+
+/**
+ * One Provider as a phone may see it: no endpoint, no credential, no environment.
+ *
+ * Declared here rather than derived from the provider record so that adding a field to
+ * that record cannot silently widen what leaves the desktop.
+ */
+export type AgentProviderChoice = {
+  readonly id: string
+  readonly name: string
+  readonly isDefault: boolean
+  readonly models: Partial<Record<ModelTier, string>>
 }
 
 export class AgentConversationControlService {
@@ -122,7 +162,16 @@ export class AgentConversationControlService {
     }
   }
 
-  private async groups() {
+  /**
+   * The whole project directory, unpaged.
+   *
+   * Public because it is the same list two consumers need for different reasons:
+   * `listGroups` pages over it for the capability, and the mobile gateway hands the
+   * desktop's own project list to a phone so its new-conversation panel offers the
+   * same choices the desktop's sidebar does. A second builder here would be a second
+   * answer to "which projects exist".
+   */
+  async listAllGroups(): Promise<readonly AgentGroupChoice[]> {
     const projects = await this.deps.listProjects()
     return [DEFAULT_AGENT_WORKSPACE_PROJECT, ...projects.filter(
       (project) => project.id !== DEFAULT_AGENT_WORKSPACE_PROJECT.id,
@@ -133,9 +182,35 @@ export class AgentConversationControlService {
     }))
   }
 
+  /**
+   * Every Provider a conversation may be started with, reduced to what a phone may know.
+   *
+   * The reduction is the point. `deps.listProviders()` answers with the full provider
+   * record, credentials and endpoint included, and this is the boundary where that stops:
+   * `id`, `name`, which one is active, and the model each tier resolves to are copied out
+   * and the rest is never read. Not filtered afterwards — never carried — so there is no
+   * version of the returned value that could have a key in it.
+   *
+   * A tier the Provider does not name is left out rather than sent empty, which is what
+   * the phone's picker disables.
+   */
+  async listProviderChoices(): Promise<readonly AgentProviderChoice[]> {
+    return (await this.deps.listProviders())
+      // Archived is "the user put this away", and a phone must not offer to start a
+      // conversation with one. The capability's own `listProviders` filters the same
+      // way; this reads the same unfiltered source, so it filters for itself.
+      .filter((provider) => !provider.archived)
+      .map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        isDefault: Boolean(provider.active),
+        models: selectableTierModels(provider),
+      }))
+  }
+
   async listGroups(input: AgentGroupListInput): Promise<Record<string, unknown>> {
     const query = input.query?.toLocaleLowerCase()
-    const groups = (await this.groups()).filter((group) => !query || group.name.toLocaleLowerCase().includes(query))
+    const groups = (await this.listAllGroups()).filter((group) => !query || group.name.toLocaleLowerCase().includes(query))
     const end = input.offset + input.limit
     return {
       groups: groups.slice(input.offset, end),
@@ -166,7 +241,7 @@ export class AgentConversationControlService {
 
   async create(input: AgentConversationCreateInput, clientId: string): Promise<Record<string, unknown>> {
     return this.runIdempotent(clientId, "create", input.idempotencyKey, input, async () => {
-      const groups = await this.groups()
+      const groups = await this.listAllGroups()
       const projectId = input.sameGroupAs
         ? (await this.resolveTarget(input.sameGroupAs)).projectId
         : input.projectId

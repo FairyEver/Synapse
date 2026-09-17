@@ -9,7 +9,12 @@ import type { TerminalService } from "../../../app-capabilities/terminal/main/se
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
 import type { TerminalLayoutNode } from "../../../app-capabilities/terminal/shared/workspace"
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
-import { clampSummaryText, MobileGatewayService } from "../mobile-gateway-service"
+import {
+  clampSummaryText,
+  MobileGatewayService,
+  type MobileGatewayAgentGroup,
+  type MobileGatewayAgentProvider,
+} from "../mobile-gateway-service"
 import { MobileFileRelay } from "../mobile-gateway/file-relay"
 import type { ClaudeCodeConversationLaunch } from "../mobile-gateway/intent-executor"
 import type { MobileGatewayTransport, MobileSummaryDraft } from "../mobile-gateway/transport"
@@ -381,10 +386,34 @@ function createHarness(options: { sessionLines?: number } = {}) {
     return { id: "sess-cc" }
   })
 
+  /*
+   * The directories the phone's panel is drawn from. Mutable so a test can rename a
+   * project or archive a Provider and watch the next summary carry the change — which
+   * is how the content fingerprint is exercised.
+   */
+  const agentGroups: MobileGatewayAgentGroup[] = [
+    { projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true },
+    { projectId: "project-1", name: "Synapse", isDefault: false },
+  ]
+  const agentProviders: MobileGatewayAgentProvider[] = [
+    { id: "local-claude-code", name: "Claude Code 本地", isDefault: false, models: { default: "Claude Code 默认" } },
+    {
+      id: "preferred",
+      name: "Anthropic 官方",
+      isDefault: true,
+      models: { default: "claude-sonnet-4-5", opus: "claude-opus-4-5" },
+    },
+  ]
+
+  const listAgentConversationGroups = vi.fn(async () => agentGroups)
+  const listAgentConversationProviders = vi.fn(async () => agentProviders)
+
   const gateway = new MobileGatewayService({
     terminal: terminal as unknown as TerminalService,
     fileRelay,
     createClaudeCodeConversation,
+    listAgentConversationGroups,
+    listAgentConversationProviders,
     permissionGuard,
     auditSink: { record: (event: unknown) => audits.push(event), list: () => [], clearForTests: () => {} },
     logger: { info: () => {}, warn: () => {} },
@@ -399,7 +428,8 @@ function createHarness(options: { sessionLines?: number } = {}) {
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits,
     permissionGuard, fileRelay, landings, discarded, progress,
-    launches, createClaudeCodeConversation,
+    launches, createClaudeCodeConversation, agentGroups, agentProviders,
+    listAgentConversationGroups, listAgentConversationProviders,
   }
 }
 
@@ -1520,17 +1550,154 @@ describe("MobileGatewayService", () => {
         { text: "l".repeat(limits.maxSummaryLastLineLength) },
       ])
     }
+    // The directories count towards the same budget — it bounds what the socket has to
+    // carry, not which block spent it — so the widest summary is the one with these at
+    // their own maxima too.
+    harness.agentGroups.push(...Array.from(
+      { length: limits.maxSummaryAgentGroups - harness.agentGroups.length },
+      (_, index) => ({
+        projectId: `p${"x".repeat(limits.maxSummaryIdLength - 2)}${String(index).padStart(1, "0")}`.slice(0, limits.maxSummaryIdLength),
+        name: "n".repeat(limits.maxSummaryAgentNameLength),
+        isDefault: false,
+      }),
+    ))
+    harness.agentProviders.push(...Array.from(
+      { length: limits.maxSummaryAgentProviders - harness.agentProviders.length },
+      (_, index) => ({
+        id: `v${"x".repeat(limits.maxSummaryIdLength - 4)}${String(index).padStart(3, "0")}`,
+        name: "n".repeat(limits.maxSummaryAgentNameLength),
+        isDefault: false,
+        models: {
+          default: "m".repeat(limits.maxSummaryModelNameLength),
+          opus: "m".repeat(limits.maxSummaryModelNameLength),
+          sonnet: "m".repeat(limits.maxSummaryModelNameLength),
+          haiku: "m".repeat(limits.maxSummaryModelNameLength),
+        },
+      }),
+    ))
 
     await harness.timers.advance(1_000)
 
     const draft = harness.summaries.at(-1) as MobileSummaryDraft
     expect(draft.sessions).toHaveLength(limits.maxSummarySessions)
+    expect(draft.agentGroups).toHaveLength(limits.maxSummaryAgentGroups)
+    expect(draft.agentProviders).toHaveLength(limits.maxSummaryAgentProviders)
     expect(Buffer.byteLength(JSON.stringify(draft), "utf8")).toBeLessThanOrEqual(limits.maxSummaryBytes)
     expect(isMobileSummaryPayload({
       desktopClientInstanceId: "desktop-1",
       desktopName: "MacBook Pro",
       ...draft,
     })).toBe(true)
+  })
+
+  /**
+   * The panel's two directories ride on the summary rather than being fetched, so a
+   * phone that has just connected can draw it with nothing to wait for — which is the
+   * whole point of `＋` → 开始对话 with no loading state in between.
+   */
+  it("carries the projects and Providers a phone may start a conversation in", async () => {
+    const harness = createHarness()
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.agentGroups).toEqual([
+      { projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true },
+      { projectId: "project-1", name: "Synapse", isDefault: false },
+    ])
+    expect(draft.agentProviders).toEqual([
+      { id: "local-claude-code", name: "Claude Code 本地", isDefault: false, models: { default: "Claude Code 默认" } },
+      {
+        id: "preferred",
+        name: "Anthropic 官方",
+        isDefault: true,
+        models: { default: "claude-sonnet-4-5", opus: "claude-opus-4-5" },
+      },
+    ])
+    // What the phone is handed has to clear the relay's guard, and the Provider rows
+    // are the ones worth checking: a field added to the desktop's provider record must
+    // not be able to arrive here, or the guard would reject the whole summary.
+    expect(isMobileSummaryPayload({
+      desktopClientInstanceId: "desktop-1",
+      desktopName: "MacBook Pro",
+      ...draft,
+    })).toBe(true)
+  })
+
+  it("sends the list again when a project is renamed, and says nothing when it is not", async () => {
+    const harness = createHarness()
+    await harness.timers.advance(1_000)
+    const afterFirst = harness.summaries.length
+    expect(afterFirst).toBeGreaterThan(0)
+
+    // Something happened on the desktop, so a summary is scheduled — but nothing in
+    // it changed, so the serialized bytes are identical to the last ones and it is
+    // deduplicated away. This is the same fingerprint the session list already relies
+    // on, and the directories are inside it.
+    harness.terminal.events.emit("sessionChanged", { sessionId: "sess-1" })
+    await harness.timers.advance(1_000)
+    expect(harness.summaries.length).toBe(afterFirst)
+
+    // A rename is a change to the directory, so the next one does go out — a phone
+    // that kept showing the old name would be showing a project that no longer exists.
+    harness.agentGroups[1] = { ...harness.agentGroups[1]!, name: "Synapse 重命名" }
+    harness.terminal.events.emit("sessionChanged", { sessionId: "sess-1" })
+    await harness.timers.advance(1_000)
+
+    expect(harness.summaries.length).toBeGreaterThan(afterFirst)
+    expect((harness.summaries.at(-1) as MobileSummaryDraft).agentGroups?.[1]?.name).toBe("Synapse 重命名")
+  })
+
+  it("clamps a directory entry that outgrows the wire bound rather than failing validation", async () => {
+    const harness = createHarness()
+    harness.agentGroups.push({
+      projectId: "p".repeat(MOBILE_FRAME_LIMITS.maxSummaryIdLength + 400),
+      name: "n".repeat(MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength + 400),
+      isDefault: false,
+    })
+    harness.agentProviders.push({
+      id: "v".repeat(MOBILE_FRAME_LIMITS.maxSummaryIdLength + 400),
+      name: "n".repeat(MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength + 400),
+      isDefault: false,
+      models: { opus: "m".repeat(MOBILE_FRAME_LIMITS.maxSummaryModelNameLength + 400) },
+    })
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    const group = draft.agentGroups?.at(-1)
+    const provider = draft.agentProviders?.at(-1)
+    expect(group?.projectId).toHaveLength(MOBILE_FRAME_LIMITS.maxSummaryIdLength)
+    expect(group?.name).toHaveLength(MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength)
+    expect(provider?.name).toHaveLength(MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength)
+    expect(provider?.models.opus).toHaveLength(MOBILE_FRAME_LIMITS.maxSummaryModelNameLength)
+    // A project name is whatever the user typed, so this is the ordinary case rather
+    // than an edge one — and an unclamped field is answered by a closed socket.
+    expect(isMobileSummaryPayload({
+      desktopClientInstanceId: "desktop-1",
+      desktopName: "MacBook Pro",
+      ...draft,
+    })).toBe(true)
+  })
+
+  /**
+   * A directory that cannot be read is left out of the payload rather than sent empty.
+   * An empty list would say "you have no projects", which is a worse answer than saying
+   * nothing — and either way the terminals in the same message are unaffected, because
+   * the panel is an addition to the list rather than part of it.
+   */
+  it("omits a directory it could not read without dropping the conversations", async () => {
+    const harness = createHarness()
+    harness.listAgentConversationProviders.mockRejectedValueOnce(new Error("data repository unavailable"))
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.agentProviders).toBeUndefined()
+    expect(draft.agentGroups).toEqual([
+      { projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true },
+      { projectId: "project-1", name: "Synapse", isDefault: false },
+    ])
+    expect(draft.sessions.map((session) => session.id)).toEqual(["sess-1"])
   })
 
   it("never splits a surrogate pair when clamping", () => {

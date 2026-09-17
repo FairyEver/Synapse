@@ -2,6 +2,9 @@ import { MOBILE_FRAME_LIMITS } from "@synapse/shared/mobile-live-constants"
 import type {
   MobileIntent,
   MobileIntentResult,
+  MobileModelTier,
+  MobileSummaryAgentGroup,
+  MobileSummaryAgentProvider,
   MobileSummaryGroup,
   MobileSummarySession,
   MobileSummaryWorkspace,
@@ -92,10 +95,51 @@ export type MobileGatewayServiceDeps = {
   readonly createClaudeCodeConversation: (
     input: ClaudeCodeConversationLaunch,
   ) => Promise<{ readonly id: string }>
+  /**
+   * The desktop's own project directory — the same list the sidebar's 新建 offers.
+   *
+   * A phone's new-conversation panel is drawn from this, so it is the desktop's answer
+   * to "which projects exist" and not a second one. Injected rather than reached for,
+   * for the reason the launcher is: the agent capability owns that list.
+   */
+  readonly listAgentConversationGroups: () => Promise<readonly MobileGatewayAgentGroup[]>
+  /**
+   * Every Provider a conversation may be started with, already reduced to what a phone
+   * may know. The reduction happens on the far side of this call, where the provider
+   * record is — nothing with an endpoint or a credential in it crosses over.
+   */
+  readonly listAgentConversationProviders: () => Promise<readonly MobileGatewayAgentProvider[]>
   readonly now?: () => Date
   readonly setTimeout?: (callback: () => void, delayMs: number) => NodeJS.Timeout
   readonly clearTimeout?: (handle: NodeJS.Timeout) => void
   readonly lineWindowLines?: number
+}
+
+/**
+ * One project a phone may start a conversation in, as the desktop's sidebar sees it.
+ *
+ * Deliberately not the capability's own type: this is the wire shape's input, and the
+ * two agreeing structurally is what lets the bootstrap pass one to the other without
+ * either module importing the other.
+ */
+export type MobileGatewayAgentGroup = {
+  readonly projectId: string
+  readonly name: string
+  readonly isDefault: boolean
+}
+
+/**
+ * One Provider a phone may start a conversation with.
+ *
+ * There is no `baseUrl` and no credential field here, and there is no version of the
+ * provider record in which one could arrive: the field list is fixed at the point the
+ * value is built, on the other side of the injection.
+ */
+export type MobileGatewayAgentProvider = {
+  readonly id: string
+  readonly name: string
+  readonly isDefault: boolean
+  readonly models: Partial<Record<MobileModelTier, string>>
 }
 
 export type MobileGatewayState = {
@@ -560,10 +604,19 @@ export class MobileGatewayService {
     if (!transport) return
     try {
       const sessions = await this.summarySessions()
+      const [agentGroups, agentProviders] = await Promise.all([
+        this.summaryAgentGroups(),
+        this.summaryAgentProviders(),
+      ])
       const content = this.fitSummaryToBudget({
         groups: this.summaryGroups(),
         workspaces: this.summaryWorkspaces(sessions),
         sessions,
+        // Spread rather than assigned so an unreadable source adds no key at all: the
+        // phone tells "nothing to choose from" (an empty list) apart from "this
+        // computer cannot say" (no key), and only the first offers an empty panel.
+        ...(agentGroups === undefined ? {} : { agentGroups }),
+        ...(agentProviders === undefined ? {} : { agentProviders }),
       })
       if (!content) return
       // Compared without the revision so an idle desktop produces no traffic at all.
@@ -588,17 +641,34 @@ export class MobileGatewayService {
    * is invisible: an oversized summary is answered by the socket closing, so the user
    * sees their computer go offline with nothing in the list to point at.
    *
-   * The tab layer is sacrificed first because losing it degrades to precisely the flat
-   * list the phone rendered before the layer existed — whereas dropping sessions would
-   * make terminals disappear, and sending an oversized payload would take the whole
-   * connection with it. If even that does not fit, the summary is not sent and the
-   * phone keeps the list it already has.
+   * The optional blocks go in order of what their loss costs. The tab layer is
+   * sacrificed first because losing it degrades to precisely the flat list the phone
+   * rendered before the layer existed. The project and Provider directories go next:
+   * without them the phone cannot start a new Claude Code conversation, but every
+   * conversation it already has is still there. Dropping sessions would make terminals
+   * disappear, and sending an oversized payload would take the whole connection with
+   * it. If even the bare list does not fit, the summary is not sent and the phone keeps
+   * the list it already has.
    */
   private fitSummaryToBudget(content: MobileSummaryContent): MobileSummaryContent | null {
     if (summaryBytes(content) <= MOBILE_FRAME_LIMITS.maxSummaryBytes) return content
-    const withoutTabs: MobileSummaryContent = { groups: content.groups, sessions: content.sessions }
-    const bytes = summaryBytes(withoutTabs)
-    if (bytes <= MOBILE_FRAME_LIMITS.maxSummaryBytes) return withoutTabs
+    const withoutTabs: MobileSummaryContent = {
+      groups: content.groups,
+      sessions: content.sessions,
+      ...(content.agentGroups === undefined ? {} : { agentGroups: content.agentGroups }),
+      ...(content.agentProviders === undefined ? {} : { agentProviders: content.agentProviders }),
+    }
+    if (summaryBytes(withoutTabs) <= MOBILE_FRAME_LIMITS.maxSummaryBytes) return withoutTabs
+    // The directories go next, and for the same reason the tab layer did: a phone
+    // without them can still see, open and type into every conversation it has — it
+    // just cannot start a new Claude Code one until the list shrinks again. Dropping a
+    // session would make a terminal disappear, which is the one thing this must never do.
+    const withoutDirectories: MobileSummaryContent = {
+      groups: withoutTabs.groups,
+      sessions: withoutTabs.sessions,
+    }
+    const bytes = summaryBytes(withoutDirectories)
+    if (bytes <= MOBILE_FRAME_LIMITS.maxSummaryBytes) return withoutDirectories
     this.deps.logger.warn("Mobile summary exceeded its byte budget and was not sent.", {
       bytes,
       budget: MOBILE_FRAME_LIMITS.maxSummaryBytes,
@@ -660,6 +730,61 @@ export class MobileGatewayService {
       id: clampSummaryText(group.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
       name: clampSummaryText(group.name, MOBILE_FRAME_LIMITS.maxSummaryGroupNameLength),
     }))
+  }
+
+  /**
+   * The projects a phone may start a conversation in, or nothing when unreadable.
+   *
+   * Clamped per field and then truncated to the count the wire admits, so the block can
+   * never be long enough to fail validation — which matters more here than for a
+   * session, because a summary that is rejected is answered by a closed connection
+   * rather than a dropped field.
+   *
+   * `undefined` when the directory could not be read at all. An empty array would tell
+   * the user they have no projects, which is a different and worse lie than saying
+   * nothing; the sessions in the same payload are unaffected either way.
+   */
+  private async summaryAgentGroups(): Promise<readonly MobileSummaryAgentGroup[] | undefined> {
+    try {
+      return (await this.deps.listAgentConversationGroups())
+        .slice(0, MOBILE_FRAME_LIMITS.maxSummaryAgentGroups)
+        .map((group) => ({
+          projectId: clampSummaryText(group.projectId, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+          name: clampSummaryText(group.name, MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength),
+          isDefault: group.isDefault,
+        }))
+    } catch (error) {
+      this.logWarn("Mobile summary could not read the project directory.", error)
+      return undefined
+    }
+  }
+
+  /**
+   * The Providers a phone may start a conversation with, or nothing when unreadable.
+   *
+   * The rows arrive already reduced — no endpoint, no credential, and no field for one
+   * to arrive in — so this only has to bound them for the wire. The model names come
+   * out of the provider's own configuration, which is a setting a person typed, so each
+   * is clamped like any other display string.
+   */
+  private async summaryAgentProviders(): Promise<readonly MobileSummaryAgentProvider[] | undefined> {
+    try {
+      return (await this.deps.listAgentConversationProviders())
+        .slice(0, MOBILE_FRAME_LIMITS.maxSummaryAgentProviders)
+        .map((provider) => ({
+          id: clampSummaryText(provider.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
+          name: clampSummaryText(provider.name, MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength),
+          isDefault: provider.isDefault,
+          models: Object.fromEntries(
+            Object.entries(provider.models)
+              .filter((entry): entry is [MobileModelTier, string] => typeof entry[1] === "string")
+              .map(([tier, model]) => [tier, clampSummaryText(model, MOBILE_FRAME_LIMITS.maxSummaryModelNameLength)]),
+          ),
+        }))
+    } catch (error) {
+      this.logWarn("Mobile summary could not read the Provider directory.", error)
+      return undefined
+    }
   }
 
   private async summarySessions(): Promise<MobileSummarySession[]> {
@@ -883,6 +1008,8 @@ type MobileSummaryContent = {
   readonly groups: readonly MobileSummaryGroup[]
   readonly workspaces?: readonly MobileSummaryWorkspace[]
   readonly sessions: readonly MobileSummarySession[]
+  readonly agentGroups?: readonly MobileSummaryAgentGroup[]
+  readonly agentProviders?: readonly MobileSummaryAgentProvider[]
 }
 
 /** What the socket will have to carry, measured the same way the budget is stated. */

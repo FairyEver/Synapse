@@ -514,7 +514,14 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
 export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService> = {
   id: "core.mobile-gateway",
   criticality: "degraded",
-  dependsOn: ["core.terminal", "core.permission-guard", "core.audit-sink"],
+  dependsOn: [
+    "core.terminal",
+    "core.permission-guard",
+    "core.audit-sink",
+    // The phone's new-conversation panel is drawn from this service's directory, and
+    // starting one goes through the same launcher the desktop's own shortcut uses.
+    AGENT_CONVERSATION_CONTROL_SERVICE_ID,
+  ],
   create(ctx) {
     return createMobileGatewayService({
       terminal: ctx.registry.get<TerminalService>("core.terminal"),
@@ -535,6 +542,15 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
           <T,>(serviceId: string) => ctx.registry.get<T>(serviceId),
           input,
         ),
+      // The same directory the Agent sidebar's 新建 offers. Both come from the
+      // conversation control service rather than from a second reading of the config,
+      // so the phone cannot be shown a project the desktop's own picker would not.
+      listAgentConversationGroups: () =>
+        ctx.registry.get<AgentConversationControlService>(AGENT_CONVERSATION_CONTROL_SERVICE_ID)
+          .listAllGroups(),
+      listAgentConversationProviders: () =>
+        ctx.registry.get<AgentConversationControlService>(AGENT_CONVERSATION_CONTROL_SERVICE_ID)
+          .listProviderChoices(),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("mobile-gateway"),

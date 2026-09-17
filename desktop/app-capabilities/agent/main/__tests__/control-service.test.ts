@@ -158,6 +158,49 @@ describe("AgentConversationControlService", () => {
     })
   })
 
+  it("hands the whole project directory to a consumer that is not paging", async () => {
+    // The mobile gateway draws the phone's project picker from this, so it has to be
+    // the same list `listGroups` pages over — one answer to "which projects exist",
+    // not two that can drift apart.
+    const { service } = createHarness()
+    await expect(service.listAllGroups()).resolves.toEqual([
+      { projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true },
+      { projectId: "project-1", name: "Project One", isDefault: false },
+    ])
+    service.dispose()
+  })
+
+  it("offers a phone only what it may know about a Provider", async () => {
+    const { service } = createHarness()
+    await expect(service.listProviderChoices()).resolves.toEqual([
+      {
+        id: "local-claude-code",
+        name: "Local",
+        isDefault: false,
+        models: { default: "Claude Code 默认" },
+      },
+      {
+        id: "custom",
+        name: "Custom",
+        isDefault: false,
+        models: { default: "model-one", opus: "model-two" },
+      },
+    ])
+    // Archived is "the user put this away", and a phone must not be offered it —
+    // even though this reads the unfiltered source the capability's own list filters.
+    const choices = await service.listProviderChoices()
+    expect(choices.map((choice) => choice.id)).not.toContain("archived")
+
+    // The harness plants a canary in every place a provider record can hold one. A
+    // phone's copy of a Provider names an id, a name and some model names, and there
+    // is no field in the projection where any of the rest could arrive.
+    const serialized = JSON.stringify(choices)
+    expect(serialized).not.toContain("secret-canary")
+    expect(serialized).not.toContain("private-url")
+    expect(serialized).not.toContain("TOKEN")
+    service.dispose()
+  })
+
   it("creates in 本地对话 without a selector and returns a target usable by inspect and send", async () => {
     const { service, createConversation, runtime } = createHarness()
     const result = await service.create({ idempotencyKey }, "client")
