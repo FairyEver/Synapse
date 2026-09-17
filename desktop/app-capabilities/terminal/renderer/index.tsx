@@ -2266,7 +2266,7 @@ function TerminalSidebarWorkspaceRow({
           <ModuleSidebarRow
             active={active}
             data-track="terminal-session-select"
-            icon={<TerminalSessionStatusIcon status={status} />}
+            icon={waiting ? <TerminalAttentionIndicator /> : <TerminalSessionStatusIcon status={status} />}
             rowRef={rowRef}
             trailing={
               <TerminalWorkspaceLifecycleButton
@@ -2281,7 +2281,6 @@ function TerminalSidebarWorkspaceRow({
             onSelect={onSelect}
             onDoubleClick={(event) => onRename(event.currentTarget)}
           >
-            {waiting ? <TerminalAttentionIndicator className="mr-1" /> : null}
             {title}
           </ModuleSidebarRow>
         </div>
@@ -2370,14 +2369,11 @@ function TerminalSessionStatusIcon({ status }: { readonly status: SynapseTermina
   )
 }
 
-function TerminalAttentionIndicator({ className }: { readonly className?: string }) {
+function TerminalAttentionIndicator() {
   return (
     <span
       title="等待输入"
-      className={cn(
-        "inline-flex size-3.5 shrink-0 items-center justify-center text-amber-600 dark:text-amber-400",
-        className,
-      )}
+      className="inline-flex size-3.5 shrink-0 items-center justify-center text-amber-600 dark:text-amber-400"
     >
       <CircleHelp className="size-3.5" aria-hidden="true" />
       <span className="sr-only">等待输入</span>

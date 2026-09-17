@@ -1247,7 +1247,10 @@ describe("TerminalModule", () => {
     const waitingRow = sidebarSessionRow("Claude 会话")
     expect(waitingRow?.textContent).toContain("等待输入")
     expect(waitingRow?.querySelector('[title="等待输入"]')).toBeTruthy()
+    // 等待输入的图标替换运行状态图标，同一行不同时出现两个图标
+    expect(waitingRow?.querySelector('[title="运行中"]')).toBeFalsy()
     expect(sidebarSessionRow("开发终端")?.textContent).not.toContain("等待输入")
+    expect(sidebarSessionRow("开发终端")?.querySelector('[title="运行中"]')).toBeTruthy()
 
     expect(headerSessionTab("Claude 会话")?.textContent).toContain("等待输入")
     expect(headerSessionTab("开发终端")?.textContent).not.toContain("等待输入")
