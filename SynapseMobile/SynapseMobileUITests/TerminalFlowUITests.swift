@@ -635,6 +635,30 @@ final class TerminalFlowUITests: XCTestCase {
             "a second modifier stacked onto the first instead of replacing it"
         )
         capture(app, name: "15-keyboard-panel-shift")
+
+        // Double-tapping locks the modifier, which is how a chord gets pressed several
+        // times in a row. Two different letters have to go out as two different chords
+        // without the modifier letting go in between, and the single tap after them has
+        // to unlock it — otherwise the assert below would still arrive as a chord.
+        let control = app.buttons["panelkey-modifier-Ctrl"]
+        control.doubleTap()
+        app.buttons["panelkey-letter-c"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Ctrl+C", in: app, timeout: 20),
+            "the first chord after a locking double-tap did not arrive"
+        )
+        app.buttons["panelkey-letter-d"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Ctrl+D", in: app, timeout: 20),
+            "a locked modifier let go after one key"
+        )
+        control.tap()
+        app.buttons["panelkey-letter-e"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:e", in: app, timeout: 20),
+            "the lock did not release, so the next key was still a chord"
+        )
+        capture(app, name: "16-keyboard-panel-locked")
     }
 
     /// Nothing here can be pressed once the terminal is gone.
