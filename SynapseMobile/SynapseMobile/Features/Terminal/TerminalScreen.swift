@@ -146,7 +146,12 @@ struct TerminalScreen: View {
             accessoryBar
             inputBar
         }
-        .background(Theme.terminalBackground.ignoresSafeArea(edges: .bottom))
+        // The bottom safe area is the input bar's surface, not the canvas's: it is
+        // what shows through the keyboard's rounded top corners, and what shows under
+        // the bar once the keyboard is down. Filled with the canvas colour it read as
+        // two dark corners — the terminal bleeding out from under a bar that no
+        // longer shares its colour.
+        .background(Color(uiColor: .systemBackground).ignoresSafeArea(edges: .bottom))
         // The canvas keeps its own dark surface — its colours come from the
         // desktop's emulator and the fixed terminal palette, not from the app's
         // theme — while the bars above and below it follow the system. Nothing
