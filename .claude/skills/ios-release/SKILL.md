@@ -25,7 +25,8 @@ description: SynapseMobile 的 iOS 发版与装机。打包上传 TestFlight、�
 | 看构建状态 | `node SynapseMobile/scripts/asc.mjs builds` | 只读 |
 | 看已用构建号 | `node SynapseMobile/scripts/asc.mjs next-build` | 只读 |
 | 打包 + 上传 | `pnpm mobile:release` | 对外 |
-| 只出 ipa | `pnpm mobile:build` | 本地 |
+| 只出 ipa（**App Store 签名，装不上机**） | `pnpm mobile:build` | 本地 |
+| 出开发签名包 | `xcodebuild build -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile -configuration Debug -destination 'platform=iOS,id=<udid>' -allowProvisioningUpdates` | 本地 |
 | 装开发包 | `xcrun devicectl device install app --device <id> <app>` | 本地写 |
 | 装 TestFlight 包 | 手机上手动点 | 人工 |
 | 切推送网关 | 改 `server/.env.server` 后 `./deploy.sh` | 生产 |
@@ -42,6 +43,22 @@ description: SynapseMobile 的 iOS 发版与装机。打包上传 TestFlight、�
 device token 分环境，一个开关只能伺候一边。**设反的后果不是报错，是静默失败**：苹果回 `BadDeviceToken`，服务端把它当死号**永久删除且不重试**（`server/src/mobile-live/mobile-push.service.ts:93-95`），日志里只有一句 `Mobile push token rejected`，不会提示「你网关配错了」。修好配置后，**手机还得重开一次 App 才会重新注册 token**。
 
 另外两条路径不能混：`devicectl` **装不了 TestFlight 的包**（App Store 签名，不是开发签名），那个只能在手机上点。
+
+`pnpm mobile:build` 出的就是那种装不上的包。它走 `release-ios.sh` 的 export 段，`ExportOptions.plist` 里 `method = app-store-connect`，出来是 App Store 签名的 ipa；`devicectl` 装它会死在 `0xe800801f`：「Attempted to install a Beta profile without the proper entitlement」。**装机要的是开发签名的 `.app`**，得单独构建：
+
+```bash
+xcodebuild build -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
+  -configuration Debug -destination 'platform=iOS,id=<udid>' \
+  -allowProvisioningUpdates -derivedDataPath /tmp/synapse-device-build
+# 产物：/tmp/synapse-device-build/Build/Products/Debug-iphoneos/SynapseMobile.app
+xcrun devicectl device install app --device <udid> /tmp/synapse-device-build/Build/Products/Debug-iphoneos/SynapseMobile.app
+```
+
+`-allowProvisioningUpdates` 是这条命令成立的前提：自动签名下 Xcode 拿已登录账号去 Developer Portal 认领这台设备、签发 development provisioning profile，设备没进过 profile 也能一次装上。漏了它会在「No profiles for 'com.liy.SynapseMobile' were found」上死掉——和 export 段那条注释是同一个原因。装的是 `.app` 目录，不是 ipa。
+
+两条别混的第二层：这个包 `aps-environment = development`，**装上那一刻就开始吃上面那条 APNs 的坑**（生产网关会把它的 token 当死号删掉）。装机前先确认当前网关值配不配得上。
+
+版本号是**每个包各自**的：Debug 构建不走 `release-ios.sh` 的构建号认领，`CFBundleVersion` 就是 pbxproj 里的默认值，和同期 `mobile:build` 出的 ipa 不是同一个号。设备上那个以 `devicectl device info apps` 为准。
 
 ## 构建号
 
