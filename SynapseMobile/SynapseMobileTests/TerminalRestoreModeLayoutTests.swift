@@ -79,25 +79,80 @@ struct TerminalRestoreModeLayoutTests {
         return attributes.frame.offsetBy(dx: -list.contentOffset.x, dy: -list.contentOffset.y)
     }
 
-    /// Less than a pane of output sits at the top, the way the computer shows it.
+    /// Less than a pane of output sits against the bottom edge, under the newest line.
     ///
-    /// A fresh session's prompt is at the top of the computer's screen and the lines
-    /// below it are empty. The phone showed it a third of the way down the pane
-    /// instead, centred inside a box as tall as the computer's screen — which is the
-    /// one arrangement nobody's terminal ever has.
+    /// A terminal fills its window from the top, so a buffer shorter than the pane
+    /// leaves the unused space below its last line. That is the space a keyboard takes
+    /// when one comes up — which is why the newest line of a session that had only just
+    /// started slid out of sight and had to be scrolled back to. The inset is exactly
+    /// what is left over, so the content ends where the pane ends and nothing is left
+    /// beneath it to be taken away.
     ///
     /// Grown a frame at a time, because that is when it was wrong in the other
-    /// direction: the box gave content that fitted a scroll range, so every frame
-    /// that arrived could move it, and the reader watched the picture twitch.
-    @Test func lessThanAPaneOfOutputSitsAtTheTop() {
+    /// direction: the box the grid used to sit in gave content that fitted a scroll
+    /// range, so every frame that arrived could move it, and the reader watched the
+    /// picture twitch.
+    ///
+    /// The expectation is reversed rather than the test removed. What stood here said
+    /// the opposite — content shorter than the pane sitting at the top — and that is
+    /// precisely the behaviour this replaces.
+    @Test func lessThanAPaneOfOutputSitsAtTheBottom() {
         let (view, list) = terminal(columns: 80, rows: 24)
         for count in [5, 10, 15] {
             view.apply(rows: lines(count), atHistoryFloor: false, cursor: nil)
             list.layoutIfNeeded()
 
-            #expect(list.contentOffset.y == 0)
-            #expect(visibleFrame(ofRow: 0, in: list)?.minY == 0)
+            #expect(list.contentInset.top > 0)
+            #expect(abs(list.contentOffset.y + list.contentInset.top) < 1)
+            #expect(visibleFrame(ofRow: 0, in: list)?.minY == list.contentInset.top)
+            #expect(
+                abs((visibleFrame(ofRow: count - 1, in: list)?.maxY ?? 0) - list.bounds.height) < 1,
+                "the last of it does not end where the pane ends"
+            )
         }
+    }
+
+    /// A buffer longer than the pane is left exactly as it was.
+    ///
+    /// The other half of what makes the inset safe: on content with more than a
+    /// screenful in it there is nothing left over to push, so the inset is zero and the
+    /// ordinary scrolling carries the reader — which is the behaviour every session
+    /// reaches within a minute of starting.
+    @Test func aFullPaneIsLeftAlone() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(200), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        #expect(list.contentInset.top == 0)
+
+        // At the head of the buffer, where a terminal's text starts.
+        list.setContentOffset(.zero, animated: false)
+        list.layoutIfNeeded()
+        #expect(visibleFrame(ofRow: 0, in: list)?.minY == 0)
+    }
+
+    /// The inset arrives and goes away as the buffer crosses a pane.
+    ///
+    /// The two tests above are each about one state; this is the move between them. A
+    /// session starts short and grows long, and an inset left behind after it does
+    /// would pad a buffer that has no room to be padded — the failure the change would
+    /// have if only the first state were handled.
+    @Test func theInsetArrivesAndGoesAwayWithTheOutput() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(5), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        #expect(list.contentInset.top > 0)
+
+        view.apply(rows: lines(200), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        #expect(list.contentInset.top == 0)
+        // Still following the newest line, as it was before the inset ever applied.
+        #expect(abs(list.contentOffset.y + list.bounds.height - list.contentSize.height) < 1)
+
+        view.apply(rows: lines(5), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        #expect(list.contentInset.top > 0)
+        #expect(abs(list.contentOffset.y + list.contentInset.top) < 1)
     }
 
     /// The grid starts at the left edge however narrow it is.

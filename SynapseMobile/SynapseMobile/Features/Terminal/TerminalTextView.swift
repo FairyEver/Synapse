@@ -315,6 +315,9 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             }
         }
         reportColumnsIfNeeded()
+        // Before the size change is acted on, because the inset is part of what the
+        // newest line's position is made of — see `updateBottomInset`.
+        updateBottomInset()
         // The keyboard appearing shrinks this view. Nothing new was appended, so
         // no snapshot runs — without this the newest output would slide below the
         // fold and the user would have to scroll to find it.
@@ -323,10 +326,45 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // centred inside a one-screen box: there, pinning scrolled the top of the
         // picture off, which is the opposite of showing one whole screen. With the
         // box gone, staying with the newest line means the same thing in both modes.
+        //
+        // This and `updateBottomInset` answer two different questions and both are
+        // needed: this one is about a buffer taller than the pane, that one about a
+        // buffer shorter than it. A pane can only be in one of the two states, so
+        // one of them does nothing every time.
         if bounds.height != lastLayoutHeight {
             lastLayoutHeight = bounds.height
             if isPinnedToBottom { scrollToBottom() }
         }
+    }
+
+    /// Puts the output against the bottom edge while it is shorter than the pane.
+    ///
+    /// A terminal fills its window from the top left, so a buffer holding less than a
+    /// screenful leaves the unused space *below* its last line. That space is what a
+    /// keyboard eats into when one comes up, which is why the newest line of a session
+    /// that had only just started slid out of sight and had to be scrolled back to. An
+    /// inset of exactly what is left over moves the content down to the bottom edge
+    /// instead, where the newest line already is, and leaves nothing beneath it to be
+    /// taken away.
+    ///
+    /// Zero the moment the rows fill the pane: there is nothing left over to push, and
+    /// from there the ordinary scrolling behaviour above is what carries the reader.
+    ///
+    /// Written only when it changes. Assigning `contentInset` lays the collection view
+    /// out again, so an unconditional write would have `layoutSubviews` and this taking
+    /// turns for as long as the screen is up.
+    private func updateBottomInset() {
+        // A row change that has not been laid out yet leaves the `contentSize` of the
+        // previous one behind, and the inset would be measured from that.
+        collectionView.layoutIfNeeded()
+        let inset = max(0, collectionView.bounds.height - collectionView.contentSize.height)
+        guard abs(inset - collectionView.contentInset.top) > 0.5 else { return }
+        collectionView.contentInset.top = inset
+        // An inset moves the range the offset is measured in, not the offset itself, so
+        // on its own it would leave the content at the head of the range. Only while the
+        // reader is at the bottom: an inset only ever changes on content too short to
+        // have a scroll position to be partway through in the first place.
+        if isPinnedToBottom { scrollToBottom() }
     }
 
     /// The desktop wraps at its own width; only the phone knows how wide the
@@ -385,6 +423,9 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         let offsetBefore = collectionView.contentOffset.y
 
         push(rows: rows, keys: keys)
+        // New rows change how much is left over, so the inset is measured again before
+        // anything below decides where the viewport goes.
+        updateBottomInset()
 
         if insertedAbove > 0 {
             collectionView.contentOffset.y = offsetBefore
