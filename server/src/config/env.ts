@@ -234,6 +234,8 @@ export interface ServerEnv {
   readonly trustProxy: TrustProxySetting
   readonly databasePoolSize: number
   readonly port: number
+  /** 部署事实：只有正式部署的容器是 `production`（Dockerfile 里设定）。 */
+  readonly nodeEnv?: string
   readonly driveCosSecretId?: string
   readonly driveCosSecretKey?: string
   readonly driveCosBucket?: string
@@ -287,6 +289,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     trustProxy: parseTrustProxySetting(result.data.TRUST_PROXY),
     databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,
+    nodeEnv: result.data.NODE_ENV,
     driveCosSecretId: result.data.DRIVE_COS_SECRET_ID,
     driveCosSecretKey: result.data.DRIVE_COS_SECRET_KEY,
     driveCosBucket: result.data.DRIVE_COS_BUCKET,

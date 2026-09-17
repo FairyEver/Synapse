@@ -127,6 +127,14 @@ export class BackupService {
 
   @Cron("0 3 * * *")
   async scheduledBackup(): Promise<void> {
+    // Only the deployed server backs up on a schedule. A development machine can
+    // carry the production backup credentials, and without this check it would
+    // push its own local database into the production backup bucket. Manual
+    // backups stay available everywhere.
+    if (this.env.nodeEnv !== "production") {
+      this.logger.info("Skipping scheduled backup outside production")
+      return
+    }
     if (!isBackupCosConfigured(this.env)) {
       this.logger.info("Backup not configured, skipping scheduled backup")
       return

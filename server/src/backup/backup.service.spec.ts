@@ -394,6 +394,27 @@ describe("BackupService", () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("/tmp/backup")
   })
 
+  it("does not run the scheduled backup outside production", async () => {
+    for (const nodeEnv of [undefined, "development"]) {
+      vi.clearAllMocks()
+      const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+      const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+      const service = createBackupService({}, logger, auditLog, { nodeEnv })
+      const performBackup = vi.spyOn(service, "performBackup").mockResolvedValue({
+        filename: "synapse-backup-2026-05-23.tar.gz",
+        size: 1024,
+        uploadedAt: "2026-05-23T03:00:00.000Z",
+        status: "success",
+      })
+
+      await service.scheduledBackup()
+
+      expect(performBackup).not.toHaveBeenCalled()
+      expect(auditLog.record).not.toHaveBeenCalled()
+      expect(logger.info).toHaveBeenCalledWith("Skipping scheduled backup outside production")
+    }
+  })
+
   it("records scheduled backup results in audit logs", async () => {
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
@@ -865,7 +886,7 @@ function createBackupService(cos: unknown, logger: {
   error: ReturnType<typeof vi.fn>
   info?: ReturnType<typeof vi.fn>
   warn?: ReturnType<typeof vi.fn>
-}, auditLog?: { record: ReturnType<typeof vi.fn> }): BackupService {
+}, auditLog?: { record: ReturnType<typeof vi.fn> }, env: Record<string, unknown> = {}): BackupService {
   const service = Object.create(BackupService.prototype) as BackupService
   Object.assign(service as unknown as {
     auditLog?: typeof auditLog
@@ -880,11 +901,13 @@ function createBackupService(cos: unknown, logger: {
     cos,
     bucket: "bucket",
     env: {
+      nodeEnv: "production",
       backupCosBucket: "bucket",
       backupCosRegion: "ap-guangzhou",
       backupCosSecretId: "secret-id",
       backupCosSecretKey: "secret-key",
       databaseUrl: "postgresql://synapse:secret@localhost:5432/synapse",
+      ...env,
     },
     region: "ap-guangzhou",
     prefix: "backups/",
