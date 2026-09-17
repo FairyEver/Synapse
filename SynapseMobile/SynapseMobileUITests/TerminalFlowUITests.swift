@@ -560,6 +560,56 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "13-keyboard-panel-stays-open")
     }
 
+    /// Nothing here can be pressed once the terminal is gone.
+    ///
+    /// Every one of these sends something into a terminal — a key, a command — and a
+    /// terminal that has stopped has nowhere to receive it. Leaving them live would
+    /// turn each press into a rejected intent the user cannot act on, so the bar and
+    /// the panel go grey together, and this is what says they do.
+    func testEverythingGreysOutWhenTheTerminalStops() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        // `scratch` rather than one of the shared fixtures: the others are renamed and
+        // deleted by later tests, and stopping one here would take it away from them.
+        let sessionRow = app.staticTexts["scratch"]
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the scratch session never appeared")
+        XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
+        sessionRow.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["terminal.text"].waitForExistence(timeout: 15),
+            "terminal never appeared"
+        )
+        XCTAssertTrue(app.buttons["toolbar-enter"].waitForExistence(timeout: 15), "the bar never arrived")
+        XCTAssertTrue(app.buttons["toolbar-enter"].isEnabled, "the bar is greyed out on a running terminal")
+
+        // Stop it from the screen's own menu, the way a user would.
+        app.buttons["更多"].tap()
+        let stop = app.buttons["停止终端"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5), "the more menu has no stop entry")
+        stop.tap()
+        let confirm = app.alerts.firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "stopping asked for no confirmation")
+        confirm.buttons["停止"].tap()
+
+        // The list has to say so before the bar can be judged: the bar greys out as a
+        // consequence of the session ending, not on its own.
+        XCTAssertTrue(
+            waitForLabel(containing: "已结束", in: app, timeout: 20) || !app.buttons["toolbar-enter"].isEnabled,
+            "the terminal never reported itself as ended"
+        )
+        XCTAssertFalse(app.buttons["toolbar-enter"].isEnabled, "the bar is still live on an ended terminal")
+
+        app.buttons["toolbar-keyboard"].tap()
+        XCTAssertTrue(app.buttons["panelkey-Escape"].waitForExistence(timeout: 10), "the panel never opened")
+        XCTAssertFalse(app.buttons["panelkey-Escape"].isEnabled, "the panel is still live on an ended terminal")
+        capture(app, name: "16-ended-greyed-out")
+    }
+
     /// A computer that cannot describe its buttons gets the phone's own built-ins.
     ///
     /// "I have no buttons" and "I am too old to say" arrive at the phone as the same

@@ -7,7 +7,8 @@
  * (which holds a single-instance lock and may be signed into another account).
  *
  * Usage: node test/mock-desktop.mjs <email> <password> [baseUrl]
- *          [--contend <title>] [--control-port <port>] [--splits]
+ *          [--contend <title>] [--control-port <port>] [--control-host <host>]
+ *          [--splits] [--no-toolbar]
  */
 
 import { randomUUID } from "node:crypto"
@@ -68,7 +69,8 @@ const positional = rawArgs.filter((_, index) => !flagIndexes.has(index))
 const [email, password, baseUrl = "http://127.0.0.1:3001"] = positional
 if (!email || !password) {
   console.error(
-    "usage: node test/mock-desktop.mjs <email> <password> [baseUrl] [--contend <title>] [--control-port <port>] [--splits]",
+    "usage: node test/mock-desktop.mjs <email> <password> [baseUrl] [--contend <title>]"
+    + " [--control-port <port>] [--control-host <host>] [--splits] [--no-toolbar]",
   )
   process.exit(1)
 }
@@ -77,6 +79,18 @@ const desktopClientInstanceId = `mock-desktop-${randomUUID().slice(0, 8)}`
 const groupId = randomUUID()
 const claudeSessionId = randomUUID()
 const buildSessionId = randomUUID()
+/**
+ * A terminal nothing else uses, so a test that has to stop one can.
+ *
+ * The fixtures above are each consumed by a test — `api-logs` is renamed, `build` is
+ * deleted — and stopping one of them would take it away from whoever runs next. This
+ * one exists only to be ended, which is the state a test of "everything greys out"
+ * needs and cannot produce any other way.
+ */
+const scratchSessionId = randomUUID()
+
+/** The plain shell `TerminalFileRelayUITests` sends files to; see its seeding below. */
+const relaySessionId = randomUUID()
 const logSessionId = randomUUID()
 const splitLeftId = randomUUID()
 const splitRightId = randomUUID()
@@ -130,6 +144,14 @@ function makeSession(id, title, cwd, initialLines) {
 }
 
 
+/**
+ * `MOBILE_FRAME_LIMITS.maxSummaryLastLineLength`, restated here because this file is
+ * plain JavaScript and does not import the shared package. A summary that exceeds it
+ * is not trimmed by the relay — the socket is closed — so a double that can produce
+ * one takes its own connection down.
+ */
+const SUMMARY_LAST_LINE_LIMIT = 120
+
 function buildSummary() {
   return {
     desktopClientInstanceId,
@@ -151,8 +173,27 @@ function buildSummary() {
           }],
         }
       : {}),
-    sessions: [...sessions.values()],
+    // Clamped, like the real desktop clamps it: `lastLine` is a display string the
+    // wire bounds at `maxSummaryLastLineLength`, and a producer that can exceed that
+    // bound does not get a truncated summary — it gets its whole connection closed,
+    // which is what happened here the first time this double echoed a long line.
+    sessions: [...sessions.values()].map((session) => ({
+      ...session,
+      lastLine: String(session.lastLine ?? "").slice(0, SUMMARY_LAST_LINE_LIMIT),
+    })),
   }
+}
+
+/**
+ * Sends only over a socket that is actually open.
+ *
+ * `ws` throws when `send` is called while the socket is still connecting, and this
+ * double reconnects on its own — so a timer firing mid-reconnect would take the whole
+ * process down instead of being the harmless dropped message it should be.
+ */
+function sendIfOpen(payload) {
+  if (socket?.readyState !== WebSocket.OPEN) return
+  socket.send(payload)
 }
 
 let summaryRevision = 0
@@ -160,7 +201,7 @@ let socket = null
 
 function sendSummary() {
   summaryRevision += 1
-  socket?.send(JSON.stringify(envelope("mobile.summary", buildSummary())))
+  sendIfOpen(JSON.stringify(envelope("mobile.summary", buildSummary())))
 }
 
 /*
@@ -185,7 +226,7 @@ let toolbarRevision = 0
 function sendToolbar() {
   if (toolbarSuppressed) return
   toolbarRevision += 1
-  socket?.send(JSON.stringify(envelope("mobile.toolbar", {
+  sendIfOpen(JSON.stringify(envelope("mobile.toolbar", {
     desktopClientInstanceId,
     revision: toolbarRevision,
     buttons: toolbarButtons,
@@ -202,7 +243,7 @@ function sendFrame(sessionId, from, lines, extra = {}) {
     session.lastLine = plainText(lines.at(-1)) || session.lastLine
     session.lastOutputSeq += 1
   }
-  socket?.send(JSON.stringify(envelope("mobile.frame", {
+  sendIfOpen(JSON.stringify(envelope("mobile.frame", {
     desktopClientInstanceId,
     mobileClientInstanceId: currentPhoneId ?? "unknown",
     frame: {
@@ -277,7 +318,7 @@ function handleIntent(message) {
   currentPhoneId = payload.mobileClientInstanceId
   const intent = payload.intent
   const reply = (result) => {
-    socket?.send(JSON.stringify(envelope("mobile.intentResult", {
+    sendIfOpen(JSON.stringify(envelope("mobile.intentResult", {
       mobileClientInstanceId: payload.mobileClientInstanceId,
       result: { intentId: intent.intentId, ...result },
     })))
@@ -301,7 +342,7 @@ function handleIntent(message) {
     sendToolbar()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     const lines = frames.get(intent.sessionId) ?? []
-    socket?.send(JSON.stringify(envelope("mobile.frame", {
+    sendIfOpen(JSON.stringify(envelope("mobile.frame", {
       desktopClientInstanceId,
       mobileClientInstanceId: payload.mobileClientInstanceId,
       frame: {
@@ -376,6 +417,22 @@ function handleIntent(message) {
     ])
     sendSummary()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
+    return
+  }
+  if (intent.kind === "fileUpload") {
+    /*
+     * A file the phone has already put in the drive, to be brought down and named in the
+     * terminal. The real desktop fetches the bytes over HTTP and writes them next to the
+     * session's directory; what this double reproduces is the part the phone depends on,
+     * which is the answer: where the file landed is the computer's fact and the phone
+     * cannot derive it. It is also what the phone undoes the insertion with.
+     */
+    const session = sessions.get(intent.sessionId)
+    const landedPath = `${session?.cwd ?? "/tmp"}/${intent.fileName}`
+    const current = frames.get(intent.sessionId) ?? []
+    sendFrame(intent.sessionId, current.length, [`$ echo ${landedPath}`])
+    sendSummary()
+    reply({ outcome: "accepted", sessionId: intent.sessionId, landedPath })
     return
   }
   if (intent.kind === "rename") {
@@ -548,6 +605,14 @@ makeSession(buildSessionId, "build", "/Users/liy/code/synapse", [
 ])
 
 // Only when asked: two terminals sharing one tab.
+// Kept apart from the fixtures the other tests read, so ending it costs nobody else.
+makeSession(scratchSessionId, "scratch", "/Users/liy/code/scratch", [`$ sleep 30`, ""])
+
+// A plain shell, for the file relay: submitting a path into it is harmless, which is
+// what `TerminalFileRelayUITests` needs to send a file to. It is addressed by title
+// through `SYNAPSE_TEST_SESSION_TITLE`, and this is that title's default.
+makeSession(relaySessionId, "relay-test", "/Users/liy/code/relay", [`$ echo ready`, ""])
+
 if (splitFixturesEnabled) {
   makeSession(splitLeftId, "web-a", "/Users/liy/code/web", [`$ pnpm dev`, `  ready in 812 ms`, ""])
   makeSession(splitRightId, "web-b", "/Users/liy/code/web", [`$ pnpm test`, `  24 passed`, ""])

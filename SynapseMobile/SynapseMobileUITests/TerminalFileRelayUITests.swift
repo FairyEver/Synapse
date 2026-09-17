@@ -136,7 +136,10 @@ final class TerminalFileRelayUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 10), "the input bar has no text field")
         field.tap()
         field.typeText("echo relay-commit")
-        app.buttons["send"].tap()
+        // `firstMatch`, like the terminal suite's own sends: the on-screen keyboard's
+        // return key carries the same label while the field is focused, and an
+        // unfiltered query matches both.
+        app.buttons["send"].firstMatch.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["relay-strip"].waitForNonExistence(timeout: 10),
             "the strip stayed after the send button submitted the draft: " + describeStrip(app)
@@ -175,12 +178,26 @@ final class TerminalFileRelayUITests: XCTestCase {
     }
 
     private func openTerminal(_ app: XCUIApplication) {
+        // The app reopens the terminal it was last in, so a test that runs after
+        // another one starts *inside* a terminal rather than on the list — and the
+        // session row it is looking for is simply not on screen. Leaving first is what
+        // makes these two able to run in the same session rather than needing the app
+        // reinstalled between them.
+        let back = app.buttons["返回"]
+        if back.waitForExistence(timeout: 3) {
+            back.tap()
+        }
+
         let row = app.staticTexts[sessionTitle]
-        XCTAssertTrue(
-            row.waitForExistence(timeout: 30),
-            "no terminal named \"\(sessionTitle)\" in the list. The computer has to be signed in "
-            + "and have that session open before this test can run."
-        )
+        if !row.waitForExistence(timeout: 30) {
+            capture(app, name: "00-no-such-terminal")
+            let texts = app.staticTexts.allElementsBoundByIndex.prefix(15).map { $0.label }
+            XCTFail(
+                "no terminal named \"\(sessionTitle)\" in the list. The computer has to be signed in "
+                + "and have that session open before this test can run. On screen: \(texts)"
+            )
+            return
+        }
         row.tap()
 
         let terminal = app.descendants(matching: .any)["terminal.text"]
