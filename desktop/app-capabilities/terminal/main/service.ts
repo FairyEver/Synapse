@@ -1959,17 +1959,32 @@ export function createTerminalService(deps: {
     readonly shell: string
     readonly args?: readonly string[]
     readonly environment: Record<string, string>
+    /**
+     * The grid the CLI is born into. Omitted, the session takes the default shape.
+     *
+     * A CLI paints its banner and first prompt within the opening milliseconds and those lines
+     * keep whatever width the PTY had, so asking for a size after creation is too late — ADR 0063
+     * requires explicit dimensions to be part of the creation itself.
+     */
+    readonly cols?: number
+    readonly rows?: number
     /** Runs once when the session process ends; used to release caller-owned launch assets. */
     readonly onEnded?: () => void
   }): Promise<TerminalSession> {
     const session = await createSessionRecord({
       title: input.title,
       cwd: input.cwd,
+      cols: input.cols,
+      rows: input.rows,
     }, "ui", {
       shell: input.shell,
       args: input.args,
       environment: input.environment,
-      overriddenFields: ["cwd", "shell", "environment"],
+      overriddenFields: [
+        "cwd", "shell", "environment",
+        ...(input.cols === undefined ? [] : ["cols" as const]),
+        ...(input.rows === undefined ? [] : ["rows" as const]),
+      ],
       persistEnvironment: false,
     })
     if (input.onEnded) endCallbacks.set(session.id, input.onEnded)

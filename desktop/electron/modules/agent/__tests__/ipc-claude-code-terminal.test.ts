@@ -24,11 +24,11 @@ import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
-import {
-  claudeCodeTerminalMethods,
-  removeStaleClaudeCodeLaunchDirectories,
-  resolveClaudeCodeTerminalPermissionMode,
-} from "../ipc-claude-code-terminal"
+// The launcher and its two helpers moved out of the handler when the mobile gateway
+// became a second caller; only these import paths changed, never an assertion.
+import { removeStaleClaudeCodeLaunchDirectories } from "../claude-code-terminal-launch-dirs"
+import { resolveClaudeCodeTerminalPermissionMode } from "../claude-code-terminal"
+import { claudeCodeTerminalMethods } from "../ipc-claude-code-terminal"
 
 const method = claudeCodeTerminalMethods.createClaudeCodeTerminal!
 

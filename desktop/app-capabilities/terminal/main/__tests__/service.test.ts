@@ -644,6 +644,50 @@ describe("TerminalService core", () => {
     expect(onEnded).toHaveBeenCalledTimes(1)
   })
 
+  it("births an embedded agent CLI at the requested grid, in the PTY and in the record", async () => {
+    // The CLI paints its banner at whatever width the PTY has, and those lines stay in
+    // scrollback at that width forever — so the size has to be part of the spawn, not a
+    // resize afterwards (ADR 0063). Asserted on the spawn call itself because a session
+    // record that merely *says* the right size would still have launched at the default.
+    const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-ephemeral-grid-"))
+    const spawnPty = vi.fn(() => fakePty())
+    const service = createTerminalService({
+      store: memoryStore(),
+      spawnPty,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => cwd,
+      resolveEffectivePath: () => "/usr/bin:/bin",
+    })
+    await service.start()
+
+    const session = await service.createSessionWithEphemeralEnvironment({
+      title: "Claude Code · Synapse",
+      cwd,
+      shell: "/bin/zsh",
+      environment: { ANTHROPIC_AUTH_TOKEN: "secret-token" },
+      cols: 54,
+      rows: 37,
+    })
+
+    expect(spawnPty).toHaveBeenCalledWith(expect.objectContaining({ cols: 54, rows: 37 }))
+    expect(session).toMatchObject({ cols: 54, rows: 37 })
+    // Recorded as an override so the group's own default shape cannot be read back over it.
+    expect(session.launchFacts?.overriddenFields).toEqual(["cwd", "shell", "environment", "cols", "rows"])
+
+    // Omitted, the session keeps taking the default shape; the pair stays optional.
+    const unsized = await service.createSessionWithEphemeralEnvironment({
+      title: "Claude Code · Synapse",
+      cwd,
+      shell: "/bin/zsh",
+      environment: { ANTHROPIC_AUTH_TOKEN: "secret-token" },
+    })
+    expect(unsized.launchFacts?.overriddenFields).toEqual(["cwd", "shell", "environment"])
+    expect(spawnPty).toHaveBeenLastCalledWith(expect.objectContaining({
+      cols: unsized.cols,
+      rows: unsized.rows,
+    }))
+  })
+
   it("applies global, group, and command launch settings to new PTYs only", async () => {
     const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-layers-"))
     const spawnPty = vi.fn(() => fakePty())
