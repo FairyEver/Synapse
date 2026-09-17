@@ -58,7 +58,13 @@ xcrun devicectl device install app --device <udid> /tmp/synapse-device-build/Bui
 
 两条别混的第二层：这个包 `aps-environment = development`，**装上那一刻就开始吃上面那条 APNs 的坑**（生产网关会把它的 token 当死号删掉）。装机前先确认当前网关值配不配得上。
 
-版本号是**每个包各自**的：Debug 构建不走 `release-ios.sh` 的构建号认领，`CFBundleVersion` 就是 pbxproj 里的默认值，和同期 `mobile:build` 出的 ipa 不是同一个号。设备上那个以 `devicectl device info apps` 为准。
+构建号是**每个包各自**的：Debug 构建不走 `release-ios.sh` 的构建号认领，`CFBundleVersion` 就是 pbxproj 里的默认值，和同期 `mobile:build` 出的 ipa 不是同一个号。设备上那个以 `devicectl device info apps` 为准。
+
+## 版本号跟桌面端是同一个
+
+`MARKETING_VERSION`（TestFlight 里那个 `1.0.0`）**不是 iOS 自己的数**，它和 `desktop/package.json` 的 `version` 是同一个。桌面端发版时 `pnpm desktop:bump:commit:push`（由 `release:mac` 串起来）把新号同时写进 `desktop/package.json` 和 `SynapseMobile.xcodeproj`——所以桌面端发到 1.0.1，下次打的 iOS 包就是 1.0.1。
+
+**`release-ios.sh` 从不改版本号，只递增构建号。** 它上线前先比对这两处，不一致就退出（见故障排查）。所以想让 iOS 换版本号，只有一条路：走桌面端的发版流程，别手改 pbxproj——改了一边另一边不认，脚本会拦下来。
 
 ## 构建号
 
@@ -71,6 +77,9 @@ xcrun devicectl device install app --device <udid> /tmp/synapse-device-build/Bui
 - 凭证、`.p8` 内容、原始 API 报错，不要贴进提交、issue、PR 或聊天记录。
 
 ## 故障排查
+
+**`版本号不一致：`**
+`desktop/package.json` 和 Xcode 工程里的 `MARKETING_VERSION` 对不上了，多半是手改了其中一边。跑 `pnpm desktop:bump:commit:push` 让两边归位（它会把两边一起推进一个号），或者把 pbxproj 手改回 `desktop/package.json` 的值。
 
 **`The bundle version must be higher than the previously uploaded version`**
 撞号。`release-ios.sh` 已内置自愈（读报错里的数字 +1 重打），正常会自己过去。如果反复出现，跑 `asc.mjs next-build` 看苹果那边到底到几号了。

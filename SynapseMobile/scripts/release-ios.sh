@@ -13,6 +13,9 @@
 # number instead of colliding with the same one forever. The project file keeps
 # its checked-in value, because it is shared with other working copies and is
 # not the record of what has shipped.
+#
+# The version is a different matter, and is not set here at all: it is shared
+# with the desktop app, which is where it advances. See desktop_version() below.
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,7 +38,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --upload) UPLOAD=true; shift ;;
     --build) BUILD_NUMBER="${2:?--build needs a number}"; shift 2 ;;
-    -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -69,7 +72,20 @@ next_build() {
   echo $(( (recorded > project ? recorded : project) + 1 ))
 }
 
-current_marketing() {
+# The version the app must ship under. It is not this script's to choose: the
+# iOS app carries the same number as the desktop release, so "v1.0.1" names one
+# release of the product instead of two. desktop/package.json is the single
+# source, and desktop's own release bumps it -- through the Xcode project as
+# well, so the two are meant to be identical. Nothing here ever moves it; this
+# script only increments the build number.
+DESKTOP_PACKAGE="$PROJECT_DIR/../desktop/package.json"
+
+desktop_version() {
+  node -p "require('$DESKTOP_PACKAGE').version"
+}
+
+# What Xcode would actually put in the bundle: the checked-in build setting.
+project_marketing() {
   xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showBuildSettings 2>/dev/null \
     | awk -F' = ' '/ MARKETING_VERSION = /{print $2; exit}'
 }
@@ -117,7 +133,20 @@ if ! [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-MARKETING_VERSION="$(current_marketing)"
+MARKETING_VERSION="$(desktop_version)"
+PROJECT_MARKETING="$(project_marketing)"
+
+# Both readers have to agree before anything is archived. A divergence means the
+# number was moved by hand in one place and not the other, and the point of
+# sharing it is that App Store Connect, the desktop manifest and the phone all
+# mean the same release -- so stop rather than pick a winner.
+if [ "$MARKETING_VERSION" != "$PROJECT_MARKETING" ]; then
+  echo "版本号不一致：" >&2
+  echo "  desktop/package.json          $MARKETING_VERSION" >&2
+  echo "  SynapseMobile.xcodeproj       $PROJECT_MARKETING" >&2
+  echo "iOS 的版本号跟着桌面端发版走（pnpm desktop:bump:commit:push 会同时改这两处），这里不单独改。" >&2
+  exit 2
+fi
 
 # The export step re-signs with a distribution profile, which carries the
 # production APNs entitlement. A development-signed build reaching testers

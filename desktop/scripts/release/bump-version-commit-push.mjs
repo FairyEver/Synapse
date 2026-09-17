@@ -7,6 +7,14 @@ import { fileURLToPath } from "node:url"
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const packageRoot = path.resolve(scriptDir, "../..")
 
+// The iOS app ships under the same version number as the desktop app, so that
+// "v1.0.1" names one release of the product instead of two numbers that have
+// to be reconciled by hand. Its bundle reads the number from MARKETING_VERSION
+// (Info.plist just points at that build setting), which makes this file the
+// whole of the iOS side. release-ios.sh never moves the version itself -- it
+// only increments the build number, and refuses to ship if the two disagree.
+const IOS_PROJECT_RELATIVE = "SynapseMobile/SynapseMobile.xcodeproj/project.pbxproj"
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -63,6 +71,21 @@ async function bumpPackageVersion() {
   return packageJson.version
 }
 
+async function syncIosMarketingVersion(repoRoot, version) {
+  const projectPath = path.join(repoRoot, IOS_PROJECT_RELATIVE)
+  const project = await readFile(projectPath, "utf8")
+
+  if (!project.includes("MARKETING_VERSION")) {
+    throw new Error(`${IOS_PROJECT_RELATIVE} has no MARKETING_VERSION build setting to sync`)
+  }
+
+  const updated = project.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${version};`)
+  await writeFile(projectPath, updated, "utf8")
+
+  const configurations = updated.match(/MARKETING_VERSION = [^;]+;/g) ?? []
+  return configurations.length
+}
+
 async function main() {
   const repoRootResult = await run("git", ["-C", packageRoot, "rev-parse", "--show-toplevel"], {
     capture: true,
@@ -73,6 +96,7 @@ async function main() {
   }
 
   const newVersion = await bumpPackageVersion()
+  const configurations = await syncIosMarketingVersion(repoRoot, newVersion)
 
   await run("git", ["add", "-A"], { cwd: repoRoot })
   await run("git", ["commit", "-m", `chore: bump version to ${newVersion}`], { cwd: repoRoot })
@@ -92,7 +116,10 @@ async function main() {
   }).catch(() => undefined)
   await run("git", ["push", "-u", "origin", currentBranch], { cwd: repoRoot })
 
-  process.stdout.write(`Bumped version to ${newVersion} and pushed the current branch.\n`)
+  process.stdout.write(
+    `Bumped version to ${newVersion} and pushed the current branch.\n` +
+    `Synced SynapseMobile MARKETING_VERSION in ${configurations} build configurations.\n`,
+  )
 }
 
 main().catch((error) => {
