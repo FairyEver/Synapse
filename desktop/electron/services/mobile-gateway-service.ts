@@ -139,6 +139,7 @@ export type MobileGatewayAgentProvider = {
   readonly id: string
   readonly name: string
   readonly isDefault: boolean
+  readonly defaultTier: MobileModelTier
   readonly models: Partial<Record<MobileModelTier, string>>
 }
 
@@ -775,6 +776,7 @@ export class MobileGatewayService {
           id: clampSummaryText(provider.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength),
           name: clampSummaryText(provider.name, MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength),
           isDefault: provider.isDefault,
+          defaultTier: provider.defaultTier,
           models: Object.fromEntries(
             Object.entries(provider.models)
               .filter((entry): entry is [MobileModelTier, string] => typeof entry[1] === "string")

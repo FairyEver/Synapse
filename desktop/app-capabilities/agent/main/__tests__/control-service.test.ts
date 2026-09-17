@@ -99,9 +99,11 @@ function createHarness(entry = conversation(), overrides: Partial<AgentRuntimeSe
     entries.set(created.id, created)
     return created
   })
+  const readDefaultProviderModel = vi.fn(async () => null as null | { providerId: string; modelTier: "default" | "opus" | "sonnet" | "haiku" })
   const service = new AgentConversationControlService({
     listProjects,
     listProviders,
+    readDefaultProviderModel,
     createConversation,
     dataRepository,
     eventBus,
@@ -109,7 +111,10 @@ function createHarness(entry = conversation(), overrides: Partial<AgentRuntimeSe
     peekRuntime: vi.fn(() => runtime),
     logger: { warn: vi.fn() },
   })
-  return { service, runtime, eventBus, entries, listeners, listProjects, createConversation }
+  return {
+    service, runtime, eventBus, entries, listeners, listProjects, createConversation,
+    listProviders, readDefaultProviderModel,
+  }
 }
 
 describe("AgentConversationControlService", () => {
@@ -176,13 +181,17 @@ describe("AgentConversationControlService", () => {
       {
         id: "local-claude-code",
         name: "Local",
-        isDefault: false,
+        isDefault: true,
+        defaultTier: "default",
         models: { default: "Claude Code 默认" },
       },
       {
         id: "custom",
         name: "Custom",
         isDefault: false,
+        // Its own best tier is `default`, because it names no sonnet model — which is
+        // also the order the desktop's picker would offer them in.
+        defaultTier: "default",
         models: { default: "model-one", opus: "model-two" },
       },
     ])
@@ -198,6 +207,46 @@ describe("AgentConversationControlService", () => {
     expect(serialized).not.toContain("secret-canary")
     expect(serialized).not.toContain("private-url")
     expect(serialized).not.toContain("TOKEN")
+    service.dispose()
+  })
+
+  it("marks the Provider the desktop itself would use, not merely the active one", async () => {
+    /*
+     * The two are not the same thing. The desktop's own shortcut resolves the
+     * *configured* default first and falls back to the active Provider only when that
+     * setting names nothing usable — so a phone that marked the active one would be
+     * showing a decision that is not the one the computer is about to make.
+     */
+    const { service, readDefaultProviderModel } = createHarness()
+    readDefaultProviderModel.mockResolvedValueOnce({ providerId: "custom", modelTier: "opus" })
+
+    const choices = await service.listProviderChoices()
+    expect(choices.filter((choice) => choice.isDefault).map((choice) => choice.id)).toEqual(["custom"])
+    // And the marked row carries the configured tier, not the Provider's own best one.
+    expect(choices.find((choice) => choice.id === "custom")?.defaultTier).toBe("opus")
+
+    // With nothing configured, the fallback is the first usable Provider — the same
+    // answer the desktop's own resolution gives.
+    readDefaultProviderModel.mockResolvedValue(null)
+    const fallback = await service.listProviderChoices()
+    expect(fallback.filter((choice) => choice.isDefault).map((choice) => choice.id)).toEqual(["local-claude-code"])
+    service.dispose()
+  })
+
+  it("leaves out a Provider that names no model at all, rather than sending a row with no tier", async () => {
+    const { service, listProviders } = createHarness()
+    listProviders.mockResolvedValueOnce([
+      { id: "empty", name: "Empty", env: {} },
+      { id: "custom", name: "Custom", model: "model-one" },
+    ] as never)
+
+    const choices = await service.listProviderChoices()
+    // It cannot start anything: the desktop's own resolution would find no tier for
+    // it, and offering it would put a row on the phone with nothing to name.
+    expect(choices.map((choice) => choice.id)).toEqual(["custom"])
+    // Every surviving row is usable, which is what lets `defaultTier` be required
+    // rather than optional on the wire.
+    expect(choices.every((choice) => Object.keys(choice.models).length > 0)).toBe(true)
     service.dispose()
   })
 

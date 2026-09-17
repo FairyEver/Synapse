@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto"
 import type { CCProvider } from "../../../electron/services/provider"
 import {
-  MODEL_TIER_DISPLAY_ORDER, isProviderModelTierSelectable, resolveModelName, resolveModelDisplayName,
+  MODEL_TIER_DISPLAY_ORDER,
+  isProviderModelTierSelectable,
+  pickDefaultProviderModelTier,
+  pickInitialProviderModelSelection,
+  resolveModelName,
+  resolveModelDisplayName,
 } from "../../../src/lib/provider-model-selection"
 import type { ModelTier } from "../../../src/types/provider-model"
 
@@ -105,7 +110,10 @@ export type AgentGroupChoice = {
 export type AgentProviderChoice = {
   readonly id: string
   readonly name: string
+  /** The Provider this desktop's own resolution picks, when a caller names none. */
   readonly isDefault: boolean
+  /** The tier this Provider would be used at. Always present: unusable ones are not offered. */
+  readonly defaultTier: ModelTier
   readonly models: Partial<Record<ModelTier, string>>
 }
 
@@ -126,6 +134,14 @@ export class AgentConversationControlService {
     readonly peekRuntime: RuntimePeek
     readonly listProjects: () => Promise<readonly { readonly id: string; readonly name: string }[]>
     readonly listProviders: () => Promise<readonly CCProvider[]>
+    /**
+     * The Provider and tier the desktop was configured to use by default, or null.
+     *
+     * Read rather than held because it is a setting the user can change while the
+     * service is alive, and what it decides — which Provider a phone's new-conversation
+     * panel marks as the default — has to follow the setting rather than a snapshot.
+     */
+    readonly readDefaultProviderModel: () => Promise<{ readonly providerId: string; readonly modelTier: ModelTier } | null>
     readonly createConversation: (input: Pick<AgentConversationCreateInput, "name" | "providerId" | "modelTier"> & { readonly projectId: string }) => Promise<ConversationEntryV1>
     readonly logger: Logger
     readonly now?: () => number
@@ -195,17 +211,34 @@ export class AgentConversationControlService {
    * the phone's picker disables.
    */
   async listProviderChoices(): Promise<readonly AgentProviderChoice[]> {
-    return (await this.deps.listProviders())
+    const providers = (await this.deps.listProviders())
       // Archived is "the user put this away", and a phone must not offer to start a
       // conversation with one. The capability's own `listProviders` filters the same
       // way; this reads the same unfiltered source, so it filters for itself.
       .filter((provider) => !provider.archived)
-      .map((provider) => ({
+    const defaultSelection = pickInitialProviderModelSelection(
+      providers,
+      await this.deps.readDefaultProviderModel(),
+    )
+    const choices: AgentProviderChoice[] = []
+    for (const provider of providers) {
+      // A Provider that names no model for any tier cannot start anything, so it is
+      // not a choice a phone may make — and it is the same condition that decides
+      // whether any tier can be named for it at all.
+      const ownTier = pickDefaultProviderModelTier(provider)
+      if (!ownTier) continue
+      const isDefault = provider.id === defaultSelection?.providerId
+      choices.push({
         id: provider.id,
         name: provider.name,
-        isDefault: Boolean(provider.active),
+        isDefault,
+        // What this Provider would be used at: the configured default tier when this
+        // is the Provider that default names, otherwise the Provider's own best one.
+        defaultTier: isDefault && defaultSelection ? defaultSelection.modelTier : ownTier,
         models: selectableTierModels(provider),
-      }))
+      })
+    }
+    return choices
   }
 
   async listGroups(input: AgentGroupListInput): Promise<Record<string, unknown>> {

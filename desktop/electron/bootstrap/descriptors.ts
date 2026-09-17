@@ -1993,6 +1993,7 @@ export const coreAgentConversationControlDescriptor: ServiceDescriptor<AgentConv
     return new AgentConversationControlService({
       listProjects: async () => (await configStore.load()).global.projects.map(({ id, name }) => ({ id, name })),
       listProviders: () => ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID).listAllProviders(),
+      readDefaultProviderModel: async () => (await configStore.load()).agent?.defaultProviderModel ?? null,
       createConversation: (input) => createLocalAgentConversation(
         <T>(serviceId: string) => ctx.registry.get<T>(serviceId), input,
       ),

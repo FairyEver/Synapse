@@ -333,7 +333,25 @@ export interface MobileSummaryAgentProviderModels {
 export interface MobileSummaryAgentProvider {
   readonly id: string
   readonly name: string
+  /**
+   * The Provider the desktop itself would use if the phone named none.
+   *
+   * Not "whichever is active": the desktop's own shortcut resolves a *configured*
+   * default first and only then falls back to the active Provider, and the two can
+   * name different Providers. A phone that showed the active one while the desktop
+   * launched with the configured one would be describing a decision that is not the
+   * one being made — which is the whole thing this panel exists to avoid.
+   */
   readonly isDefault: boolean
+  /**
+   * The tier this Provider would be used at, so the phone can show a model name
+   * without working anything out for itself.
+   *
+   * Required, because a Provider that names no selectable tier at all cannot be used
+   * to start anything and is not sent. The phone's request carries no such field:
+   * it names a Provider and a tier, or neither, and the desktop has the last word.
+   */
+  readonly defaultTier: MobileModelTier
   readonly models: MobileSummaryAgentProviderModels
 }
 
@@ -956,6 +974,7 @@ function isSummaryAgentProvider(value: unknown): value is MobileSummaryAgentProv
   return boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength) &&
     boundedString(value.name, MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength) &&
     typeof value.isDefault === "boolean" &&
+    isModelTier(value.defaultTier) &&
     isSummaryAgentProviderModels(value.models)
 }
 

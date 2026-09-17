@@ -479,6 +479,7 @@ describe("mobile live protocol", () => {
         id: "v".repeat(limits.maxSummaryIdLength),
         name: "n".repeat(limits.maxSummaryAgentNameLength),
         isDefault: false,
+        defaultTier: "opus" as const,
         models: {
           default: "m".repeat(limits.maxSummaryModelNameLength),
           opus: "m".repeat(limits.maxSummaryModelNameLength),
@@ -546,7 +547,8 @@ describe("mobile live protocol", () => {
     const provider: MobileSummaryAgentProvider = {
       id: "anthropic",
       name: "Anthropic 官方",
-      isDefault: false,
+      isDefault: true,
+      defaultTier: "opus",
       models: { default: "claude-sonnet-4-5", opus: "claude-opus-4-5" },
     }
     expect(isMobileSummaryPayload(summary({ agentGroups: [group], agentProviders: [provider] }))).toBe(true)
@@ -573,6 +575,10 @@ describe("mobile live protocol", () => {
       { ...provider, models: { opus: "" } },
       { ...provider, models: { opus: "m".repeat(MOBILE_FRAME_LIMITS.maxSummaryModelNameLength + 1) } },
       { ...provider, models: undefined },
+      // The tier is what makes the row's model name mean something: without it the
+      // phone would have to derive one, which is exactly what it must not do.
+      { ...provider, defaultTier: undefined },
+      { ...provider, defaultTier: "gpt" },
     ]
     for (const bad of malformedProviders) {
       expect(isMobileSummaryPayload(summary({

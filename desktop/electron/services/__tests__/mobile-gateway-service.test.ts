@@ -396,11 +396,18 @@ function createHarness(options: { sessionLines?: number } = {}) {
     { projectId: "project-1", name: "Synapse", isDefault: false },
   ]
   const agentProviders: MobileGatewayAgentProvider[] = [
-    { id: "local-claude-code", name: "Claude Code 本地", isDefault: false, models: { default: "Claude Code 默认" } },
+    {
+      id: "local-claude-code",
+      name: "Claude Code 本地",
+      isDefault: false,
+      defaultTier: "default",
+      models: { default: "Claude Code 默认" },
+    },
     {
       id: "preferred",
       name: "Anthropic 官方",
       isDefault: true,
+      defaultTier: "opus",
       models: { default: "claude-sonnet-4-5", opus: "claude-opus-4-5" },
     },
   ]
@@ -1567,6 +1574,7 @@ describe("MobileGatewayService", () => {
         id: `v${"x".repeat(limits.maxSummaryIdLength - 4)}${String(index).padStart(3, "0")}`,
         name: "n".repeat(limits.maxSummaryAgentNameLength),
         isDefault: false,
+        defaultTier: "opus" as const,
         models: {
           default: "m".repeat(limits.maxSummaryModelNameLength),
           opus: "m".repeat(limits.maxSummaryModelNameLength),
@@ -1605,11 +1613,18 @@ describe("MobileGatewayService", () => {
       { projectId: "project-1", name: "Synapse", isDefault: false },
     ])
     expect(draft.agentProviders).toEqual([
-      { id: "local-claude-code", name: "Claude Code 本地", isDefault: false, models: { default: "Claude Code 默认" } },
+      {
+        id: "local-claude-code",
+        name: "Claude Code 本地",
+        isDefault: false,
+        defaultTier: "default",
+        models: { default: "Claude Code 默认" },
+      },
       {
         id: "preferred",
         name: "Anthropic 官方",
         isDefault: true,
+        defaultTier: "opus",
         models: { default: "claude-sonnet-4-5", opus: "claude-opus-4-5" },
       },
     ])
@@ -1658,6 +1673,7 @@ describe("MobileGatewayService", () => {
       id: "v".repeat(MOBILE_FRAME_LIMITS.maxSummaryIdLength + 400),
       name: "n".repeat(MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength + 400),
       isDefault: false,
+      defaultTier: "opus",
       models: { opus: "m".repeat(MOBILE_FRAME_LIMITS.maxSummaryModelNameLength + 400) },
     })
 
