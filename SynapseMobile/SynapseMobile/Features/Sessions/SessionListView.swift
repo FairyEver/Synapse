@@ -64,6 +64,7 @@ struct SessionListView: View {
                     Image(systemName: "plus")
                 }
                 .disabled(model.selectedDesktopClientInstanceId == nil)
+                .accessibilityIdentifier("new-session")
             }
         }
         .refreshable { await model.refreshDesktops() }

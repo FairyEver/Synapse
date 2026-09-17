@@ -78,6 +78,7 @@ struct NewSessionSheet: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 6)
+                .accessibilityIdentifier("new-session-segment")
 
                 List {
                     switch segment {
@@ -146,6 +147,7 @@ struct NewSessionSheet: View {
                     badge: selection.projectIsRemembered ? "上次" : nil,
                     route: .project
                 )
+                .accessibilityIdentifier("new-session-project")
                 // No badge here, unlike the project: a Provider the reader chose and one
                 // the computer would have chosen lead to the same launch, so marking
                 // the difference would be a label that changes nothing.
@@ -155,12 +157,14 @@ struct NewSessionSheet: View {
                     badge: nil,
                     route: .provider
                 )
+                .accessibilityIdentifier("new-session-provider")
                 agentRow(
                     title: "模型",
                     value: modelLabel,
                     badge: nil,
                     route: .model
                 )
+                .accessibilityIdentifier("new-session-model")
             }
 
             Section {
@@ -183,6 +187,7 @@ struct NewSessionSheet: View {
                 .disabled(starting || !selection.canStart)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
+                .accessibilityIdentifier("start-conversation")
             }
         }
     }
