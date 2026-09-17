@@ -68,19 +68,22 @@ struct SessionListView: View {
         }
         .refreshable { await model.refreshDesktops() }
         .sheet(isPresented: $showingNewSession) {
-            NewSessionSheet { groupId in
-                Task {
-                    if let created = await model.createSession(groupId: groupId) {
-                        // The terminal was born at this phone's shape — the desktop's
-                        // own fit is suppressed from the moment it exists — so the
-                        // phone shows it the way it made it. Shrinking the computer's
-                        // grid down to fit would be the other mode's answer to a
-                        // question the reader never asked.
-                        display.setMode(.phoneDriven, for: created)
-                        path.append(.terminal(created))
+            NewSessionSheet(
+                onCreated: { groupId in
+                    Task {
+                        if let created = await model.createSession(groupId: groupId) {
+                            openNewlyCreated(created)
+                        }
                     }
+                },
+                onConversationStarted: { sessionId in
+                    // The computer made this terminal at the phone's request, so the
+                    // phone sizes it — the same landing as creating a plain terminal,
+                    // because on the wire it is the same thing: a terminal, with a
+                    // command that happens to be Claude Code.
+                    openNewlyCreated(sessionId)
                 }
-            }
+            )
         }
         .alert("重命名终端", isPresented: isRenaming, presenting: renameTarget) { session in
             TextField("名称", text: $renameTitle)
@@ -181,6 +184,17 @@ struct SessionListView: View {
 
     private var isDeleting: Binding<Bool> {
         Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
+    }
+
+    /// Lands on a terminal the phone just made.
+    ///
+    /// The terminal was born at this phone's shape — the desktop's own fit is
+    /// suppressed from the moment it exists — so the phone shows it the way it made
+    /// it. Shrinking the computer's grid down to fit would be the other mode's answer
+    /// to a question the reader never asked.
+    private func openNewlyCreated(_ sessionId: String) {
+        display.setMode(.phoneDriven, for: sessionId)
+        path.append(.terminal(sessionId))
     }
 
     private var ungroupedSessions: [MobileSummarySession] {
@@ -302,46 +316,3 @@ struct SessionRow: View {
     }
 }
 
-/// Creating a terminal or running a saved command.
-///
-/// A saved command is delivered by creating a terminal and typing into it, so
-/// both paths end the same way: a new session the caller can navigate to.
-struct NewSessionSheet: View {
-    @Environment(SynapseAppModel.self) private var model
-    @Environment(\.dismiss) private var dismiss
-
-    let onCreated: (String) -> Void
-    @State private var selectedGroupId: String?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("新建终端") {
-                    ForEach(model.summary?.groups ?? []) { group in
-                        Button {
-                            dismiss()
-                            onCreated(group.id)
-                        } label: {
-                            // The group name is the whole choice; the subtitle only
-                            // restated the sheet's own title.
-                            Text(group.name)
-                                .font(.subheadline)
-                        }
-                    }
-                }
-                if (model.summary?.groups ?? []).isEmpty {
-                    Text("电脑上还没有分组，请先在电脑端创建。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .navigationTitle("新建")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-            }
-        }
-    }
-}

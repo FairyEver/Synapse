@@ -131,6 +131,117 @@ struct AgentConversationTests {
     }
 }
 
+/// What the panel's three rows show, and what the request will therefore say.
+struct AgentConversationSelectionTests {
+    private let groups: [MobileSummaryAgentGroup] = [
+        MobileSummaryAgentGroup(projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true),
+        MobileSummaryAgentGroup(projectId: "project-1", name: "Synapse", isDefault: false),
+    ]
+
+    /// Deliberately not in `isDefault` order: which Provider is the computer's default
+    /// is a fact the desktop states, and taking the first row instead would be a
+    /// different answer that happens to look the same on an ordered list.
+    private let providers: [MobileSummaryAgentProvider] = [
+        MobileSummaryAgentProvider(
+            id: "bailian", name: "百炼", isDefault: false, defaultTier: .default,
+            models: ["default": "qwen3-max"]
+        ),
+        MobileSummaryAgentProvider(
+            id: "preferred", name: "Anthropic 官方", isDefault: true, defaultTier: .opus,
+            models: ["default": "claude-sonnet-4-5", "opus": "claude-opus-4-5"]
+        ),
+    ]
+
+    private func resolve(_ remembered: AgentConversationChoice) -> AgentConversationSelection {
+        resolveAgentConversationSelection(groups: groups, providers: providers, remembered: remembered)
+    }
+
+    /// First use has no last project, and the panel does not invent one.
+    ///
+    /// The computer does mark a group, but that mark means "the built-in workspace",
+    /// not "where you were" — starting someone in a directory they never chose is the
+    /// failure the phone cannot undo afterwards.
+    @Test func firstUsePreselectsTheComputersProviderAndNoProject() {
+        let selection = resolve(.none)
+
+        #expect(selection.project == nil)
+        #expect(selection.canStart == false)
+        #expect(selection.projectIsRemembered == false)
+        // The Provider and tier it *would* use are shown, because the computer said
+        // which ones those are — so the row reads as an answer rather than a blank.
+        #expect(selection.provider?.id == "preferred")
+        #expect(selection.modelTier == .opus)
+        // …and because the reader never decided, the request names neither.
+        #expect(selection.providerIsChosen == false)
+    }
+
+    @Test func showsTheProjectUsedLastTime() {
+        let selection = resolve(AgentConversationChoice(projectId: "project-1"))
+
+        #expect(selection.project?.projectId == "project-1")
+        #expect(selection.projectIsRemembered)
+        #expect(selection.canStart)
+    }
+
+    /// A project removed on the computer cannot be started in, so the panel goes back
+    /// to asking rather than preselecting something that will be refused.
+    @Test func doesNotPreselectAProjectTheComputerNoLongerOffers() {
+        let selection = resolve(AgentConversationChoice(projectId: "deleted-project"))
+
+        #expect(selection.project == nil)
+        #expect(selection.projectIsRemembered == false)
+        #expect(selection.canStart == false)
+    }
+
+    /// Once the reader has actually chosen, the choice is what the request carries —
+    /// that is what makes the second visit need no reading.
+    @Test func showsAProviderTheReaderChose() {
+        let selection = resolve(AgentConversationChoice(projectId: "project-1", providerId: "bailian"))
+
+        #expect(selection.provider?.id == "bailian")
+        #expect(selection.modelTier == .default)
+        #expect(selection.providerIsChosen)
+        #expect(selection.canStart)
+    }
+
+    /// A Provider the reader removed on the computer is no more usable than a project
+    /// they did, and the fallback is the computer's own answer — not a refusal.
+    @Test func fallsBackToTheComputersProviderWhenTheRememberedOneIsGone() {
+        let selection = resolve(AgentConversationChoice(projectId: "project-1", providerId: "removed"))
+
+        #expect(selection.provider?.id == "preferred")
+        #expect(selection.modelTier == .opus)
+        // Nothing was chosen that survives, so the computer decides again.
+        #expect(selection.providerIsChosen == false)
+    }
+
+    /// A tier belongs to the Provider it was chosen for: carrying it across would name
+    /// a model the new Provider does not have.
+    @Test func dropsATierTheProviderDoesNotOffer() {
+        // `opus` is Anthropic's; 百炼 names only its default.
+        let selection = resolve(AgentConversationChoice(
+            projectId: "project-1", providerId: "bailian", modelTier: .opus
+        ))
+
+        #expect(selection.provider?.id == "bailian")
+        #expect(selection.modelTier == .default)
+    }
+
+    /// A computer that has nothing to offer leaves the button unable to do anything,
+    /// rather than sending a request the desktop would refuse.
+    @Test func cannotStartWithoutAProvider() {
+        let selection = resolveAgentConversationSelection(
+            groups: groups,
+            providers: [],
+            remembered: AgentConversationChoice(projectId: "project-1")
+        )
+
+        #expect(selection.provider == nil)
+        #expect(selection.modelTier == nil)
+        #expect(selection.canStart == false)
+    }
+}
+
 /// What the phone remembers between visits, and what it refuses to remember.
 ///
 /// Main-actor isolated like the store itself, which is what lets the panel read it
