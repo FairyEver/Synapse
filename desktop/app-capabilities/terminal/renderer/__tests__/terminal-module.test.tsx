@@ -1684,6 +1684,37 @@ describe("TerminalModule", () => {
     expect(voiceState.retry).toHaveBeenCalledTimes(1)
   })
 
+  /**
+   * 断网前已经听到的那半句要留得下来。重试会把这次录音连同转写一起清掉，所以
+   * 有字时右槽是确认而不是重试 —— 否则刚说出来的命令只能看、提交不出去。
+   */
+  it("断网前已经出字时右槽给确认，文字仍然进得了命令行", async () => {
+    voiceState.available = true
+    voiceState.phase = "recording"
+    voiceState.failure = "network"
+    voiceState.transcript = { stable: "git status", unstable: "", combined: "git status" }
+    voiceState.confirmResult = "git status"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.writeSession.mockClear()
+
+    await renderModule()
+
+    expect(document.body.querySelector("button[aria-label='重试语音输入']")).toBeNull()
+    const confirm = document.body.querySelector<HTMLButtonElement>("button[aria-label='完成语音输入']")
+    expect(confirm).toBeTruthy()
+    expect(confirm?.disabled).toBe(false)
+
+    await act(async () => {
+      confirm?.click()
+      await Promise.resolve()
+    })
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "git status",
+    })
+  })
+
   it("renders the terminal toolbar when renderer platform is unavailable", async () => {
     window.synapse = {} as typeof window.synapse
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]

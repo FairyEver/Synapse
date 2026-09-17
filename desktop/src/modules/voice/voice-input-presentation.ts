@@ -43,10 +43,11 @@ function isRetryable(failure: VoiceFailure): boolean {
  *
  * **判定顺序本身就是规格**，不要重排：
  *
- * 1. 失败优先 —— 录音中途断网也要先显示失败，而不是继续显示转写。
+ * 1. 失败优先 —— 录音中途断网也要先显示失败文案，而不是继续显示「聆听中」。
  * 2. 失败态同样算 `active` —— 权限被拒时录音根本没起来（`use-voice-input` 的 catch
  *    把 phase 留在 `idle`），只按录音态渲染的话界面上什么都不会发生。
- * 3. 没识别到字时确定键置灰不可点 —— 提交空文本没有任何意义。
+ * 3. 有没有字决定确定键 —— 没字时置灰不可点（提交空文本没有意义）；**失败时也一
+ *    样看字**：已经听到的内容要留得下来，而重试会把这次录音连同转写一起清掉。
  */
 export function describeVoiceInput(input: {
   // 用字面量而不是 import VoicePhase，免得为了一个类型把 hook 依赖引进来。
@@ -56,18 +57,21 @@ export function describeVoiceInput(input: {
 }): VoiceInputPresentation {
   const { phase, transcript, failure } = input
 
+  // 只有定稿的句子才写进输入框，未定稿的部分还会变；有没有字按能提交的文本算。
+  const hasText = transcript.combined.trim() !== ""
+
   if (failure !== null) {
     return {
       active: true,
       placeholder: FAILURE_TEXT[failure],
       caretVisible: false,
-      action: isRetryable(failure) ? "retry" : "retry-disabled",
+      // 已经听到的字比失败本身重要：有字就先给「把它留下」。重试会把这次录音
+      // 连同转写一起清掉，只有空手而回时才谈得上重来。
+      action: hasText ? "confirm" : isRetryable(failure) ? "retry" : "retry-disabled",
     }
   }
 
   if (phase === "recording") {
-    // 只有定稿的句子才写进输入框，未定稿的部分还会变；有没有字按能提交的文本算。
-    const hasText = transcript.combined.trim() !== ""
     return {
       active: true,
       placeholder: hasText ? "" : "聆听中",

@@ -57,9 +57,24 @@ describe("describeVoiceInput", () => {
   })
 
   /**
-   * 失败优先于录音态：中途断网时继续显示转写，用户会以为还在录。
+   * 失败优先于录音态：继续显示「聆听中」会让用户以为还在录。
    */
-  it("录音中失败时先显示失败文案，不再显示转写占位", () => {
+  it("录音中失败时先显示失败文案", () => {
+    expect(
+      describeVoiceInput({ phase: "recording", transcript: EMPTY, failure: "network" }),
+    ).toEqual({
+      active: true,
+      placeholder: "网络已断开",
+      caretVisible: false,
+      action: "retry",
+    })
+  })
+
+  /**
+   * 已经听到的字比失败本身重要。重试会把这次录音连同转写一起清掉，不能拿它当
+   * 断网后唯一的出口 —— 否则用户刚说出来的那句话只能看、提交不出去。
+   */
+  it("失败但已经出了字时给确认键，把听到的留下", () => {
     expect(
       describeVoiceInput({
         phase: "recording",
@@ -70,8 +85,18 @@ describe("describeVoiceInput", () => {
       active: true,
       placeholder: "网络已断开",
       caretVisible: false,
-      action: "retry",
+      action: "confirm",
     })
+  })
+
+  it("不可重试的失败即使有字也给确认键", () => {
+    expect(
+      describeVoiceInput({
+        phase: "recording",
+        transcript: transcript("已经说出来的", ""),
+        failure: "unavailable",
+      }).action,
+    ).toBe("confirm")
   })
 
   /**
