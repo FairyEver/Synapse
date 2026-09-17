@@ -1596,23 +1596,95 @@ describe("TerminalModule", () => {
     expect(unstable?.textContent).toBe("pnpm dev")
     expect(unstable?.className).toContain("text-muted-foreground")
 
+    // 转写和两个按钮在同一行 —— 这一行就是命令条让位后的那一行。
+    const row = strip?.closest("[data-voice-toolbar]")
+    expect(row).toBeTruthy()
+    expect(row?.querySelector("button[aria-label='取消语音输入']")).toBeTruthy()
+    expect(row?.querySelector("button[aria-label='完成语音输入']")).toBeTruthy()
+
     // 录音态不该顺手把命令填进去 —— 那要等用户点完成。
     expect(terminalBridge.writeSession).not.toHaveBeenCalled()
   })
 
-  it("识别结果为空时不写终端", async () => {
+  /**
+   * 没字时确定键置灰、点不动。断言「点了之后没写终端」在这里会退化成恒真 ——
+   * 不可点的按钮本来就不会有反应，所以要点在按钮自己的状态上。
+   */
+  it("识别结果为空时确定键不可点", async () => {
     voiceState.available = true
     voiceState.phase = "recording"
+    voiceState.transcript = { stable: "", unstable: "", combined: "   " }
     voiceState.confirmResult = "   "
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
     terminalBridge.writeSession.mockClear()
 
     await renderModule()
-    await clickButtonByAriaLabel("完成语音输入")
+    await renderModule()
+
+    const confirm = document.body.querySelector<HTMLButtonElement>("button[aria-label='完成语音输入']")
+    expect(confirm).toBeTruthy()
+    expect(confirm?.disabled).toBe(true)
 
     expect(terminalBridge.writeSession).not.toHaveBeenCalled()
     expect(document.body.querySelector("[data-terminal-pending-voice]")).toBeNull()
+  })
+
+  /**
+   * 命令条整条让位，连 Ctrl+C 也不例外 —— 它紧挨着麦克风，录音时误触代价高。
+   */
+  it("录音期间命令条整条让位", async () => {
+    voiceState.available = true
+    voiceState.phase = "recording"
+    voiceState.transcript = { stable: "git status", unstable: "", combined: "git status" }
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const toolbar = document.body.querySelector("[data-terminal-toolbar]")
+    expect(toolbar?.querySelector("button[aria-label='中断当前进程']")).toBeNull()
+    expect(toolbar?.querySelector("button[aria-label='管理自定义快捷输入']")).toBeNull()
+    expect(toolbar?.querySelector("button[aria-label='语音输入']")).toBeNull()
+    expect(toolbar?.textContent).not.toContain("Ctrl+C")
+  })
+
+  /**
+   * 失败提示落在常驻的输入栏上，不再依附录音态 —— 权限被拒时录音根本没起来，
+   * 只按 phase 渲染的话界面上什么都不会发生。
+   */
+  it("不可重试的失败把重试键置灰", async () => {
+    voiceState.available = true
+    voiceState.failure = "unavailable"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const transcript = document.body.querySelector("[data-voice-transcript]")
+    expect(transcript?.textContent).toBe("语音输入不可用")
+    const retry = document.body.querySelector<HTMLButtonElement>("button[aria-label='重试语音输入']")
+    expect(retry).toBeTruthy()
+    expect(retry?.disabled).toBe(true)
+  })
+
+  it("可以重试的失败给一个点得动的重试键", async () => {
+    voiceState.available = true
+    voiceState.failure = "network"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    const transcript = document.body.querySelector("[data-voice-transcript]")
+    expect(transcript?.textContent).toBe("网络已断开")
+    const retry = document.body.querySelector<HTMLButtonElement>("button[aria-label='重试语音输入']")
+    expect(retry?.disabled).toBe(false)
+    await act(async () => {
+      retry?.click()
+      await Promise.resolve()
+    })
+    expect(voiceState.retry).toHaveBeenCalledTimes(1)
   })
 
   it("renders the terminal toolbar when renderer platform is unavailable", async () => {

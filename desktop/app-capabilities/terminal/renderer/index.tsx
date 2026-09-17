@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
-import { ArrowDown, ArrowUp, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Plus, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
 import { useVoiceInput } from "../../../src/modules/voice/use-voice-input"
-import { VoiceInputStrip } from "../../../src/modules/voice/voice-input-strip"
+import { describeVoiceInput } from "../../../src/modules/voice/voice-input-presentation"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
 import {
   AlertDialog,
@@ -139,6 +139,16 @@ export function TerminalModule({
   /** 已填入命令行、还没按 Enter 的语音转写文本。 */
   const [pendingVoiceText, setPendingVoiceText] = useState<string | null>(null)
   const voice = useVoiceInput()
+  const voicePresentation = describeVoiceInput(voice.state)
+  // 右槽一个位置两件事:能重试就给旋转箭头,否则给对勾。置灰的那两种点不动。
+  const isVoiceRetry = voicePresentation.action === "retry" || voicePresentation.action === "retry-disabled"
+  const isVoiceActionDisabled = voicePresentation.action === "confirm-disabled" || voicePresentation.action === "retry-disabled"
+  /** 转写那一行。终端是宽容器，但一条命令说长了照样撑满，撑满就滚到光标。 */
+  const voiceTranscriptRef = useRef<HTMLParagraphElement | null>(null)
+  useEffect(() => {
+    const element = voiceTranscriptRef.current
+    if (element) element.scrollLeft = element.scrollWidth
+  }, [voice.state.transcript])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [activePaneIds, setActivePaneIds] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -1562,17 +1572,59 @@ export function TerminalModule({
                   )
                 })}
               </div>
-              {voice.state.phase === "recording" ? (
-                <VoiceInputStrip
-                  transcript={voice.state.transcript}
-                  elapsedMs={voice.state.elapsedMs}
-                  failure={voice.state.failure}
-                  onCancel={voice.cancel}
-                  onConfirm={() => { void commitVoiceInput() }}
-                  onRetry={voice.retry}
-                  showTranscript
-                />
-              ) : pendingVoiceText ? (
+              {voicePresentation.active ? (
+                /* 录音时命令条整条让位:转写和两个按钮共用这一行,高度就是命令条那一行。
+                   没有快捷键是有意的 —— Ctrl+C 紧挨着麦克风,误触代价高。 */
+                <div
+                  data-terminal-toolbar
+                  data-voice-toolbar
+                  className="flex min-h-10 shrink-0 items-center gap-2 border-t bg-card px-2.5 py-1.5"
+                >
+                  <p
+                    ref={voiceTranscriptRef}
+                    data-voice-transcript
+                    className="min-w-0 flex-1 overflow-hidden font-mono text-xs whitespace-nowrap text-foreground"
+                  >
+                    {voice.state.transcript.combined ? (
+                      <>
+                        {voice.state.transcript.stable}
+                        {/* 未定稿的部分还会变，用次要色和定稿文字区分开。 */}
+                        <span className="text-muted-foreground">{voice.state.transcript.unstable}</span>
+                        {voicePresentation.caretVisible ? (
+                          <span aria-hidden="true" className="ml-px inline-block h-3.5 w-0.5 bg-foreground align-middle" />
+                        ) : null}
+                      </>
+                    ) : (
+                      /* 刚开录、静音、失败都走这里:占位是这三件事在终端唯一说得出口的地方。 */
+                      <span className="text-muted-foreground">{voicePresentation.placeholder}</span>
+                    )}
+                  </p>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    className="shrink-0 text-foreground/75 hover:text-foreground"
+                    aria-label="取消语音输入"
+                    onClick={voice.cancel}
+                  >
+                    放弃
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    className="shrink-0 rounded-full"
+                    aria-label={isVoiceRetry ? "重试语音输入" : "完成语音输入"}
+                    disabled={isVoiceActionDisabled}
+                    onClick={() => {
+                      if (isVoiceRetry) voice.retry()
+                      else void commitVoiceInput()
+                    }}
+                  >
+                    {isVoiceRetry ? <RotateCw /> : <Check />}
+                  </Button>
+                </div>
+              ) : null}
+              {pendingVoiceText && !voicePresentation.active ? (
                 /* 语音已经填进命令行了，但还没执行 —— 提示挂在转写条自己身上，
                    不去动 pane 头，改动半径最小。 */
                 <div
@@ -1595,7 +1647,7 @@ export function TerminalModule({
                   </Button>
                 </div>
               ) : null}
-              {toolbarActions.length ? (
+              {toolbarActions.length && !voicePresentation.active ? (
                 <div
                   data-terminal-toolbar
                   className="no-scrollbar flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-t bg-card px-2.5 py-1.5 whitespace-nowrap"
