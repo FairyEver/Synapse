@@ -35,6 +35,10 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxSummaryStartedAtLength: number,
  *   readonly maxSummaryGroupNameLength: number,
  *   readonly maxSummaryGridOwnerIdLength: number,
+ *   readonly maxSummaryAgentGroups: number,
+ *   readonly maxSummaryAgentProviders: number,
+ *   readonly maxSummaryAgentNameLength: number,
+ *   readonly maxSummaryModelNameLength: number,
  *   readonly maxSummaryBytes: number,
  *   readonly maxIntentTextLength: number,
  *   readonly maxKeyActions: number,
@@ -65,7 +69,15 @@ exports.MOBILE_FRAME_LIMITS = {
   maxSummaryStartedAtLength: 48,
   maxSummaryGroupNameLength: 80,
   maxSummaryGridOwnerIdLength: 48,
-  maxSummaryBytes: 240 * 1024,
+  /** The project and Provider directories a phone picks from; see `mobile-live.ts`. */
+  maxSummaryAgentGroups: 32,
+  maxSummaryAgentProviders: 12,
+  /** One project or Provider name, which is what a picker row shows. */
+  maxSummaryAgentNameLength: 80,
+  /** One tier's model name as the Provider resolves it. */
+  maxSummaryModelNameLength: 64,
+  /** Bounds the widest *admissible* summary; see the arithmetic in `mobile-live.ts`. */
+  maxSummaryBytes: 248 * 1024,
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,

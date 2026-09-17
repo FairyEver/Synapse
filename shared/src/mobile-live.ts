@@ -71,6 +71,25 @@ export const MOBILE_FRAME_LIMITS = {
    */
   maxSummaryGridOwnerIdLength: 48,
   /**
+   * The project and Provider directories a phone picks from when it starts a
+   * Claude Code conversation.
+   *
+   * Sized for what a person configures by hand rather than for what the wire could
+   * carry: these are repositories and Providers somebody added one at a time, and a
+   * desktop past these numbers would have a picker longer than anyone would read
+   * through on a phone. The producer drops the tail instead of the whole block, so
+   * even such a desktop still gets a usable list.
+   *
+   * The counts are also what keeps `maxSummaryBytes` provable — see that entry,
+   * where the widest admissible summary is added up.
+   */
+  maxSummaryAgentGroups: 32,
+  maxSummaryAgentProviders: 12,
+  /** One project or Provider name, which is what a picker row shows. */
+  maxSummaryAgentNameLength: 80,
+  /** One tier's model name as the Provider resolves it. Real model ids are ~30. */
+  maxSummaryModelNameLength: 64,
+  /**
    * Byte budget for one serialized summary payload, measured without the envelope.
    *
    * The desktop's producer must never exceed this. It cannot: with every field at
@@ -93,8 +112,18 @@ export const MOBILE_FRAME_LIMITS = {
    * so it could not be moved off the summary — and at 256 sessions naming a 48-byte
    * id apiece the widest summary is 9 KiB past the old budget. The desktop hop's
    * 256 KiB still clears it with room for the envelope.
+   *
+   * Raised again, 240 → 248 KiB, when the summary took on the project and Provider
+   * directories the phone's new-conversation panel is drawn from. Those blocks are
+   * small in any real account, but this budget bounds the *widest admissible*
+   * summary, not the typical one: at the previous 240 KiB only 6 KiB was left under
+   * it, and the two directories cost 11 KiB at their own maxima. The arithmetic the
+   * boundary test pins is 256 sessions + 128 terminal groups (239 KiB) plus 32
+   * projects and 12 Providers (11 KiB), 250 KiB in all. The desktop hop is still
+   * the binding socket and its 256 KiB still clears this with the 4 KiB envelope
+   * allowance `live-desktop.gateway.spec.ts` requires.
    */
-  maxSummaryBytes: 240 * 1024,
+  maxSummaryBytes: 248 * 1024,
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
@@ -249,6 +278,65 @@ export interface MobileSummaryGroup {
   readonly name: string
 }
 
+/**
+ * The four model tiers a Provider can name, in the order the desktop shows them.
+ *
+ * The desktop has its own `ModelTier` in its provider types; this is the wire's
+ * copy, because the cloud and the phone read this module and neither can see the
+ * desktop's renderer code.
+ */
+export const MOBILE_MODEL_TIERS = ["default", "haiku", "sonnet", "opus"] as const
+
+export type MobileModelTier = typeof MOBILE_MODEL_TIERS[number]
+
+/**
+ * One thing a phone can start a Claude Code conversation in: the desktop's
+ * `app.agent.group.list` row, which is either a configured project or the
+ * built-in local workspace.
+ *
+ * `projectId` is what the phone sends back in `createAgentConversation`, and what
+ * the desktop already resolves projects by — the id of the built-in workspace is
+ * an id like any other.
+ */
+export interface MobileSummaryAgentGroup {
+  readonly projectId: string
+  readonly name: string
+  readonly isDefault: boolean
+}
+
+/**
+ * The model each tier resolves to on this desktop, for one Provider.
+ *
+ * Present as the *resolved model name* rather than the tier's label because the
+ * label alone does not tell a user what they are choosing: two Providers both
+ * offering "Sonnet" can point at different models. A tier the Provider does not
+ * name is absent, which is what the desktop's picker disables.
+ */
+export interface MobileSummaryAgentProviderModels {
+  readonly default?: string
+  readonly opus?: string
+  readonly sonnet?: string
+  readonly haiku?: string
+}
+
+/**
+ * One Provider a phone may start a conversation with.
+ *
+ * Deliberately not the desktop's own `SynapseAgentProviderSummary`: that one
+ * carries `baseUrl`, and a Provider's endpoint has no business leaving the
+ * computer. The phone picks an id; the desktop never needs to be told where its
+ * own Providers live.
+ *
+ * There is likewise no field here for a credential, and adding one would be a
+ * different feature — the desktop reads keys from its own store at launch time.
+ */
+export interface MobileSummaryAgentProvider {
+  readonly id: string
+  readonly name: string
+  readonly isDefault: boolean
+  readonly models: MobileSummaryAgentProviderModels
+}
+
 /** One split inside a tab: the pane's own identity, and the conversation it shows. */
 export interface MobileSummaryWorkspacePane {
   readonly paneId: string
@@ -329,6 +417,25 @@ export interface MobileSummaryPayload {
    * the same list it always did.
    */
   readonly workspaces?: readonly MobileSummaryWorkspace[]
+  /**
+   * Where a phone may start a Claude Code conversation, and with which Provider.
+   *
+   * Both are directories rather than state: they change when the user edits their
+   * projects or Providers on the computer, which is rare, and the summary is
+   * already the message that carries what the desktop has. Riding along costs about
+   * a kilobyte in any real account and saves the phone a round trip before it can
+   * draw its panel — and a round trip is a loading state, on a screen whose whole
+   * point is `＋` → 开始对话 with nothing to decide in between.
+   *
+   * Optional rather than nullable so the common payload stays byte-for-byte what it
+   * was before these fields existed: a desktop that predates them omits both, and a
+   * phone that predates them renders exactly the list it always did. A desktop with
+   * no projects or no Providers sends `[]` for that block rather than omitting it,
+   * because "there are none" and "this computer is too old to say" are different
+   * answers and the phone has to tell them apart.
+   */
+  readonly agentGroups?: readonly MobileSummaryAgentGroup[]
+  readonly agentProviders?: readonly MobileSummaryAgentProvider[]
   readonly sessions: readonly MobileSummarySession[]
 }
 
@@ -435,6 +542,45 @@ export type MobileIntent =
     readonly deviceLabel?: string
   })
   | (MobileIntentEnvelope<"launchCommand"> & { readonly groupId: string; readonly commandId: string })
+  /**
+   * Starts the bundled Claude Code in one of the computer's projects, using the
+   * desktop's own configuration and credentials.
+   *
+   * This is the phone-side twin of the desktop's ⌘-click shortcut, and it is the
+   * same act: a terminal is opened in a project directory with the bundled Claude
+   * Code as its shell. Nothing about a conversation is created on the phone, and
+   * nothing about a credential is sent to it — the phone names a project and,
+   * optionally, a Provider and tier, and the desktop resolves the rest.
+   *
+   * `providerId` and `modelTier` are optional *because the desktop resolves them*:
+   * absent, it applies the same default selection the desktop's own shortcut uses,
+   * so the phone's default and the computer's default can never drift apart.
+   * Present, they are taken as an explicit choice. A phone therefore does not have
+   * to know which Provider is active to start a conversation — but it is also not
+   * allowed to guess half of one, which is why the validator treats them as a pair.
+   *
+   * `projectId` is required for the opposite reason: the desktop's shortcut gets
+   * its project from the sidebar row the `＋` was clicked on, and the phone's `＋`
+   * sits in a navigation bar with no such context. The phone therefore always has
+   * an answer — the last project used, or one the user just picked — and says so
+   * rather than leaving the desktop to guess a directory.
+   */
+  | (MobileIntentEnvelope<"createAgentConversation"> & {
+    readonly projectId: string
+    readonly providerId?: string
+    readonly modelTier?: MobileModelTier
+    /**
+     * Initial grid, so the session is born the right shape.
+     *
+     * Same requirement as `create` and for the same reason: Claude Code paints its
+     * banner and prompt in the opening milliseconds, and those lines keep whatever
+     * width the PTY had. ADR 0063 authorizes explicit initial dimensions as both a
+     * creation and a resize, and says so for this intent too.
+     */
+    readonly cols?: number
+    readonly rows?: number
+    readonly deviceLabel?: string
+  })
   /**
    * One file the phone has already put in the user's drive, to be brought down to
    * this computer and named in the terminal.
@@ -590,6 +736,16 @@ export function isMobileSummaryPayload(value: unknown): value is MobileSummaryPa
     if (!boundedArray(value.workspaces, MOBILE_FRAME_LIMITS.maxSummaryWorkspaces)) return false
     if (!(value.workspaces as readonly unknown[]).every(isSummaryWorkspace)) return false
   }
+  // Absent means the desktop predates these directories, which is a different
+  // answer from an empty list and both are accepted — see the field's own comment.
+  if (value.agentGroups !== undefined) {
+    if (!boundedArray(value.agentGroups, MOBILE_FRAME_LIMITS.maxSummaryAgentGroups)) return false
+    if (!(value.agentGroups as readonly unknown[]).every(isSummaryAgentGroup)) return false
+  }
+  if (value.agentProviders !== undefined) {
+    if (!boundedArray(value.agentProviders, MOBILE_FRAME_LIMITS.maxSummaryAgentProviders)) return false
+    if (!(value.agentProviders as readonly unknown[]).every(isSummaryAgentProvider)) return false
+  }
   return (value.groups as readonly unknown[]).every(isSummaryGroup) &&
     (value.sessions as readonly unknown[]).every(isSummarySession)
 }
@@ -695,6 +851,18 @@ export function isMobileIntent(value: unknown): value is MobileIntent {
           boundedString(value.deviceLabel, MOBILE_FRAME_LIMITS.maxDeviceLabelLength))
     case "launchCommand":
       return boundedString(value.groupId, 120) && boundedString(value.commandId, 120)
+    case "createAgentConversation": {
+      if (!boundedString(value.projectId, 120)) return false
+      // A Provider without a tier names no model, and a tier without a Provider
+      // names no endpoint, so half a choice is refused rather than half-applied.
+      // Both absent is the ordinary case: the desktop resolves the pair itself.
+      if ((value.providerId === undefined) !== (value.modelTier === undefined)) return false
+      if (value.providerId !== undefined && !boundedString(value.providerId, 120)) return false
+      if (value.modelTier !== undefined && !isModelTier(value.modelTier)) return false
+      return resizeShape(value.cols, value.rows) &&
+        (value.deviceLabel === undefined ||
+          boundedString(value.deviceLabel, MOBILE_FRAME_LIMITS.maxDeviceLabelLength))
+    }
     case "fileUpload":
       return boundedString(value.sessionId, 120) &&
         boundedString(value.driveItemId, MOBILE_FRAME_LIMITS.maxUploadDriveItemIdLength) &&
@@ -776,6 +944,28 @@ function isSummaryWorkspace(value: unknown): value is MobileSummaryWorkspace {
   return (value.panes as readonly unknown[]).every(isSummaryWorkspacePane)
 }
 
+function isSummaryAgentGroup(value: unknown): value is MobileSummaryAgentGroup {
+  if (!isRecord(value)) return false
+  return boundedString(value.projectId, MOBILE_FRAME_LIMITS.maxSummaryIdLength) &&
+    boundedString(value.name, MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength) &&
+    typeof value.isDefault === "boolean"
+}
+
+function isSummaryAgentProvider(value: unknown): value is MobileSummaryAgentProvider {
+  if (!isRecord(value)) return false
+  return boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength) &&
+    boundedString(value.name, MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength) &&
+    typeof value.isDefault === "boolean" &&
+    isSummaryAgentProviderModels(value.models)
+}
+
+/** A tier a Provider does not name is simply absent; an empty string is not a model name. */
+function isSummaryAgentProviderModels(value: unknown): value is MobileSummaryAgentProviderModels {
+  if (!isRecord(value)) return false
+  return MOBILE_MODEL_TIERS.every((tier) => value[tier] === undefined ||
+    boundedString(value[tier], MOBILE_FRAME_LIMITS.maxSummaryModelNameLength))
+}
+
 function isSummarySession(value: unknown): value is MobileSummarySession {
   if (!isRecord(value)) return false
   if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxSummaryIdLength)) return false
@@ -848,6 +1038,10 @@ function boundedCols(value: unknown): value is number {
 
 function boundedRows(value: unknown): value is number {
   return nonNegativeInteger(value) && value > 0 && value <= MOBILE_FRAME_LIMITS.maxResizeRows
+}
+
+function isModelTier(value: unknown): value is MobileModelTier {
+  return typeof value === "string" && (MOBILE_MODEL_TIERS as readonly string[]).includes(value)
 }
 
 /** Dimensions travel as a pair; half a grid is not a grid. */

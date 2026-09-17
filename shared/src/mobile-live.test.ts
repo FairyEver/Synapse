@@ -21,6 +21,8 @@ import {
   isMobileTerminalFrame,
   isMobileTransferProgressPayload,
   type MobileIntent,
+  type MobileSummaryAgentGroup,
+  type MobileSummaryAgentProvider,
   type MobileSummaryPayload,
   type MobileSummaryWorkspace,
   type MobileTerminalFrame,
@@ -263,6 +265,76 @@ describe("mobile live protocol", () => {
     })).toBe(false)
   })
 
+  it("validates starting a Claude Code conversation, where the Provider choice is whole or absent", () => {
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1" })).toBe(true)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation",
+      projectId: "p1", providerId: "anthropic", modelTier: "opus",
+    })).toBe(true)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1",
+      cols: 54, rows: 37, deviceLabel: "iPhone",
+    })).toBe(true)
+
+    // The project is the one thing the desktop cannot supply: its own shortcut
+    // reads it off the sidebar row a phone's `＋` does not have.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "createAgentConversation" })).toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "" })).toBe(false)
+
+    // Half a choice is not a choice. A Provider with no tier names no model, and a
+    // tier with no Provider names no endpoint, so neither is expressible — the
+    // desktop would otherwise have to guess which half the phone meant.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1", providerId: "anthropic",
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1", modelTier: "opus",
+    })).toBe(false)
+
+    // A tier is one of four names the desktop resolves; anything else is not a
+    // selection the terminal service could look up.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation",
+      projectId: "p1", providerId: "anthropic", modelTier: "gpt",
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation",
+      projectId: "p1", providerId: "anthropic", modelTier: "Auto",
+    })).toBe(false)
+
+    // Same pair rule as `create`: the PTY has to be born some shape, and Claude
+    // Code's banner keeps whatever width it had (ADR 0063).
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1", cols: 54,
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1", rows: 37,
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1",
+      cols: MOBILE_FRAME_LIMITS.maxResizeCols + 1, rows: 37,
+    })).toBe(false)
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1",
+      cols: 54, rows: 37, deviceLabel: "x".repeat(MOBILE_FRAME_LIMITS.maxDeviceLabelLength + 1),
+    })).toBe(false)
+
+    // A near-miss kind is not a kind. This is the `default: return false` that the
+    // upgrade order exists for — an unknown kind is dropped at the edge in silence,
+    // so a new phone talking to an older desktop waits out a timeout rather than
+    // being told why. Pinned here so it stays a decision rather than an accident.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversations", projectId: "p1",
+    })).toBe(false)
+
+    // The guard is shallow on purpose — it exists to bound what the relay is asked
+    // to carry, not to be a schema — so an extra field rides along unread rather
+    // than failing an intent the desktop could have executed.
+    expect(isMobileIntent({
+      v: 1, intentId: "i1", kind: "createAgentConversation", projectId: "p1", tier: "opus",
+    })).toBe(true)
+  })
+
   it("bounds intent text", () => {
     expect(isMobileIntent({
       v: 1,
@@ -396,6 +468,24 @@ describe("mobile live protocol", () => {
         // widest summary the wire admits, not the widest one this app produces.
         gridOwnerId: "o".repeat(limits.maxSummaryGridOwnerIdLength),
       })),
+      // The directories count here for the same reason the sessions do: the budget
+      // is a property of the wire, and the wire admits these at their own bounds.
+      agentGroups: Array.from({ length: limits.maxSummaryAgentGroups }, () => ({
+        projectId: "p".repeat(limits.maxSummaryIdLength),
+        name: "n".repeat(limits.maxSummaryAgentNameLength),
+        isDefault: false,
+      })),
+      agentProviders: Array.from({ length: limits.maxSummaryAgentProviders }, () => ({
+        id: "v".repeat(limits.maxSummaryIdLength),
+        name: "n".repeat(limits.maxSummaryAgentNameLength),
+        isDefault: false,
+        models: {
+          default: "m".repeat(limits.maxSummaryModelNameLength),
+          opus: "m".repeat(limits.maxSummaryModelNameLength),
+          sonnet: "m".repeat(limits.maxSummaryModelNameLength),
+          haiku: "m".repeat(limits.maxSummaryModelNameLength),
+        },
+      })),
     }
 
     expect(isMobileSummaryPayload(payload)).toBe(true)
@@ -441,6 +531,80 @@ describe("mobile live protocol", () => {
         () => tab,
       ),
     }))).toBe(false)
+  })
+
+  it("carries the project and Provider directories, and treats their absence as a desktop that predates them", () => {
+    // Absent is the older desktop, and it has to keep working: this guard is the
+    // only gate between a computer's summary and a phone's list.
+    expect(isMobileSummaryPayload(summary())).toBe(true)
+
+    // "This computer has no projects" is a different answer from "this computer is
+    // too old to say", so an empty block stays on the wire and is accepted.
+    expect(isMobileSummaryPayload(summary({ agentGroups: [], agentProviders: [] }))).toBe(true)
+
+    const group: MobileSummaryAgentGroup = { projectId: "p1", name: "Synapse", isDefault: true }
+    const provider: MobileSummaryAgentProvider = {
+      id: "anthropic",
+      name: "Anthropic 官方",
+      isDefault: false,
+      models: { default: "claude-sonnet-4-5", opus: "claude-opus-4-5" },
+    }
+    expect(isMobileSummaryPayload(summary({ agentGroups: [group], agentProviders: [provider] }))).toBe(true)
+
+    const malformedGroups = [
+      { projectId: "", name: "Synapse", isDefault: true },
+      { projectId: "p1", name: "", isDefault: true },
+      { projectId: "p1", name: "Synapse" },
+      { projectId: "p1", name: "n".repeat(MOBILE_FRAME_LIMITS.maxSummaryAgentNameLength + 1), isDefault: true },
+      { projectId: "p".repeat(MOBILE_FRAME_LIMITS.maxSummaryIdLength + 1), name: "Synapse", isDefault: true },
+    ]
+    for (const bad of malformedGroups) {
+      expect(isMobileSummaryPayload(summary({
+        agentGroups: [bad] as unknown as readonly MobileSummaryAgentGroup[],
+      }))).toBe(false)
+    }
+
+    const malformedProviders = [
+      // A Provider the phone could pick but not name is not a row it could draw.
+      { ...provider, name: "" },
+      { ...provider, id: "" },
+      // A tier with no model is expressed by leaving the key out; an empty string
+      // would be a model name the desktop does not have.
+      { ...provider, models: { opus: "" } },
+      { ...provider, models: { opus: "m".repeat(MOBILE_FRAME_LIMITS.maxSummaryModelNameLength + 1) } },
+      { ...provider, models: undefined },
+    ]
+    for (const bad of malformedProviders) {
+      expect(isMobileSummaryPayload(summary({
+        agentProviders: [bad] as unknown as readonly MobileSummaryAgentProvider[],
+      }))).toBe(false)
+    }
+
+    expect(isMobileSummaryPayload(summary({
+      agentGroups: Array.from({ length: MOBILE_FRAME_LIMITS.maxSummaryAgentGroups + 1 }, () => group),
+    }))).toBe(false)
+    expect(isMobileSummaryPayload(summary({
+      agentProviders: Array.from({ length: MOBILE_FRAME_LIMITS.maxSummaryAgentProviders + 1 }, () => provider),
+    }))).toBe(false)
+  })
+
+  it("adds no bytes to a summary that predates the directories", () => {
+    // The gateway fingerprints summaries by their serialized bytes and sends one
+    // only when that string changes, so a field that appeared with a default value
+    // would make every idle desktop a repeating sender. Optional-rather-than-
+    // nullable is what prevents that, and this is the check that keeps it so.
+    const before = summary()
+    expect(Object.keys(before)).toEqual([
+      "desktopClientInstanceId", "desktopName", "revision", "groups", "sessions",
+    ])
+    expect(Object.keys(before.sessions[0])).toEqual([
+      "id", "groupId", "title", "status", "attention", "cwd", "cols", "rows",
+      "startedAt", "lastLine", "lastOutputSeq",
+    ])
+    // The exact bytes this shape produced before either block existed. A field
+    // that arrived with a default, or one made required, moves this number.
+    expect(Buffer.byteLength(JSON.stringify(before), "utf8")).toBe(393)
+    expect(JSON.stringify({ ...before, agentGroups: undefined })).toBe(JSON.stringify(before))
   })
 
   it("keeps the attachment routing fields required", () => {
