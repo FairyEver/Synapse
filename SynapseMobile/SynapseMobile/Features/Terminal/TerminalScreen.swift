@@ -40,6 +40,12 @@ struct TerminalScreen: View {
         model.relayAttachments.filter { $0.sessionId == sessionId }
     }
 
+    /// Only this terminal's. A refusal belongs to the session it came from, so it is
+    /// not carried across a switch to be shown against a different screen.
+    private var terminalMessages: [TerminalMessage] {
+        model.terminalMessages.filter { $0.sessionId == sessionId }
+    }
+
     private var modeBinding: Binding<TerminalDisplayMode> {
         Binding(
             get: { display.mode(for: sessionId) },
@@ -137,6 +143,10 @@ struct TerminalScreen: View {
             // change `visibleRows`, which is reported to the desktop as a grid size, and a
             // one-second notice would resize the PTY twice.
             .noticeOverlay(model)
+            TerminalMessageList(
+                messages: terminalMessages,
+                onDismiss: { model.dismissTerminalMessage($0) }
+            )
             TerminalRelayStrip(
                 attachments: relayAttachments,
                 onUndo: { model.undoTypedPaths($0) },
@@ -193,7 +203,15 @@ struct TerminalScreen: View {
         }
         .onChange(of: voice.notice) { _, message in
             guard let message else { return }
-            model.banner = message
+            // The one refusal here that cannot be acted on inside the app: the
+            // microphone is a system permission, so it carries a way to go and grant
+            // it. Stable id, because it is the same problem every time it appears.
+            model.raiseTerminalMessage(
+                message,
+                sessionId: sessionId,
+                id: "voice.notice",
+                opensSettings: true
+            )
             voice.notice = nil
         }
         .alert("重命名终端", isPresented: $showingRename) {
@@ -600,7 +618,7 @@ struct TerminalScreen: View {
 
     private func intake(cameraImage: UIImage) async {
         guard let file = await TerminalFileIntake.prepare(cameraImage: cameraImage) else {
-            model.banner = "没有读取到可发送的图片。"
+            model.raiseTerminalMessage("没有读取到可发送的图片。", sessionId: sessionId)
             return
         }
         hand([file])
@@ -618,13 +636,13 @@ struct TerminalScreen: View {
         // The offer was made from a reading taken earlier, and the pasteboard is
         // the one thing on screen that another app can change underneath it.
         guard let image = UIPasteboard.general.image else {
-            model.banner = "剪贴板里已经没有图片了。"
+            model.raiseTerminalMessage("剪贴板里已经没有图片了。", sessionId: sessionId)
             pasteboardHoldsImage = false
             return
         }
         Task {
             guard let file = await TerminalFileIntake.prepare(pastedImage: image) else {
-                model.banner = "没有读取到可发送的图片。"
+                model.raiseTerminalMessage("没有读取到可发送的图片。", sessionId: sessionId)
                 return
             }
             hand([file])
@@ -641,7 +659,7 @@ struct TerminalScreen: View {
     /// through it.
     private func hand(_ files: [PickedFile], confirmed: Bool = false) {
         guard !files.isEmpty else {
-            model.banner = "没有读取到可发送的文件。"
+            model.raiseTerminalMessage("没有读取到可发送的文件。", sessionId: sessionId)
             return
         }
         if !confirmed, session?.attention.isWaiting == true {

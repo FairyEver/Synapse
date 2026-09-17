@@ -9,6 +9,8 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isSubmitting = false
+    /// Why the last attempt was refused, shown under the fields it came from.
+    @State private var errorMessage: String?
     @FocusState private var focus: Field?
 
     private enum Field { case email, password }
@@ -53,6 +55,21 @@ struct LoginView: View {
                     .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             }
             .padding(.horizontal, 24)
+
+            // Between the fields and the button, and left-aligned with them. A rejected
+            // credential is about what was typed above it, and the screen has room to
+            // say so in place — it does not need to be carried to the bottom of the
+            // screen, where the user would have to connect the sentence to this form
+            // themselves.
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.failure)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 10)
+            }
 
             Button(action: submit) {
                 Group {
@@ -99,8 +116,9 @@ struct LoginView: View {
     private func submit() {
         guard !email.isEmpty, !password.isEmpty, !isSubmitting else { return }
         isSubmitting = true
+        errorMessage = nil
         Task {
-            await model.signIn(email: email, password: password)
+            errorMessage = await model.signIn(email: email, password: password)
             isSubmitting = false
         }
     }

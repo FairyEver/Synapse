@@ -73,6 +73,12 @@ struct TerminalRelayStrip: View {
                 .accessibilityIdentifier("relay-chip-\(attachment.state.identifier)")
         } else {
             Menu {
+                // Opening the chip is the only place the reason can be read. The chip
+                // has room for a filename and a mark, and the sentence that decides
+                // whether retrying is worth it is longer than that.
+                if case .failed(let reason) = attachment.state, !reason.isEmpty {
+                    Text(reason)
+                }
                 ForEach(attachment.availableActions, id: \.self) { action in
                     Button(action.label, role: action.isDestructive ? .destructive : nil) {
                         perform(action, on: attachment)

@@ -191,6 +191,49 @@ final class SynapseAppModel {
         noticeTimers[id] = nil
     }
 
+    // MARK: - Terminal messages
+
+    /// A few at once at most. One selection can be refused file by file, and a wall of
+    /// reasons stacked above the keyboard is its own problem.
+    private static let maxTerminalMessages = 4
+
+    /// What the open terminal has to say about something the user just tried.
+    private(set) var terminalMessages: [TerminalMessage] = []
+
+    /// Raises a message against one terminal.
+    ///
+    /// `id` names the message rather than the occurrence, so the same refusal arriving
+    /// twice — a retry that fails the same way — replaces rather than stacks.
+    func raiseTerminalMessage(
+        _ text: String,
+        sessionId: String,
+        id: String? = nil,
+        opensSettings: Bool = false
+    ) {
+        let key = id ?? "text:\(text)"
+        if let index = terminalMessages.firstIndex(where: { $0.id == key }) {
+            terminalMessages[index].text = text
+            terminalMessages[index].opensSettings = opensSettings
+            return
+        }
+        terminalMessages.append(
+            TerminalMessage(id: key, sessionId: sessionId, text: text, opensSettings: opensSettings)
+        )
+        if terminalMessages.count > Self.maxTerminalMessages {
+            terminalMessages.removeFirst(terminalMessages.count - Self.maxTerminalMessages)
+        }
+    }
+
+    func dismissTerminalMessage(_ id: String) {
+        terminalMessages.removeAll { $0.id == id }
+    }
+
+    /// A closed terminal takes its refusals with it: they are about a session that is
+    /// no longer open, and nothing on screen is left for them to belong to.
+    private func clearTerminalMessages(for sessionId: String) {
+        terminalMessages.removeAll { $0.sessionId == sessionId }
+    }
+
     // MARK: - File hand-off
 
     /// Files on their way to the computer, newest last.
@@ -260,16 +303,23 @@ final class SynapseAppModel {
         }
     }
 
-    func signIn(email address: String, password: String) async {
+    /// Returns the message to show beside the form, or nil once the account is in.
+    ///
+    /// Handed back rather than pushed to the queue: a sentence about a rejected
+    /// credential belongs next to the field it came from, not at the bottom of the
+    /// screen. See `LoginView`.
+    @discardableResult
+    func signIn(email address: String, password: String) async -> String? {
         do {
             try await apiClient.login(email: address, password: password)
             email = address
             authState = .signedIn
             await startLiveSession()
+            return nil
         } catch let error as APIError {
-            banner = error.message
+            return error.message
         } catch {
-            banner = "登录失败，请稍后重试。"
+            return "登录失败，请稍后重试。"
         }
     }
 
@@ -281,6 +331,7 @@ final class SynapseAppModel {
         pendingWrites.removeAll()
         openSessions.removeAll()
         pendingHistory.removeAll()
+        terminalMessages.removeAll()
         summary = nil
         gridClaims = GridClaimLedger()
         selectedDesktopClientInstanceId = nil
@@ -363,16 +414,28 @@ final class SynapseAppModel {
                 if write.replayed {
                     // The one replay already happened and was refused too. Staying
                     // quiet here would be dropping the user's input for real.
-                    self.banner = result.message ?? "命令没有发送，请重试。"
+                    self.raiseTerminalMessage(
+                        result.message ?? "命令没有发送，请重试。",
+                        sessionId: write.sessionId
+                    )
                 } else {
                     Task { await self.replay(write) }
                 }
                 return
             }
 
-            self.pendingWrites.removeValue(forKey: result.intentId)
+            let write = self.pendingWrites.removeValue(forKey: result.intentId)
             if !result.isAccepted, !result.isNoOp, result.code != "no_result" {
-                self.banner = result.message ?? "操作没有完成。"
+                let message = result.message ?? "操作没有完成。"
+                // Only a write this client can still name has a terminal to belong to.
+                // Creating a session or launching a command is awaited instead of
+                // queued, so its refusal arrives with nothing to attribute it to —
+                // and there is no terminal on screen for it to be shown in.
+                if let write {
+                    self.raiseTerminalMessage(message, sessionId: write.sessionId)
+                } else {
+                    self.notice(message, tone: .failure)
+                }
             }
         }
         realtime.onTransferProgress = { [weak self] payload in
@@ -573,6 +636,7 @@ final class SynapseAppModel {
     }
 
     func closeTerminal(_ sessionId: String) {
+        clearTerminalMessages(for: sessionId)
         guard let desktop = selectedDesktopClientInstanceId else { return }
         send(MobileIntentRequest(intentId: UUID().uuidString, kind: "detach", sessionId: sessionId),
              to: desktop)
@@ -694,12 +758,12 @@ final class SynapseAppModel {
     /// worth turning into a loop.
     private func replay(_ write: PendingWrite) async {
         guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
-            banner = "电脑离线，命令没有发送。"
+            raiseTerminalMessage("电脑离线，命令没有发送。", sessionId: write.sessionId)
             return
         }
         await reclaimControl(write.sessionId)
         guard !preemptedSessions.contains(write.sessionId) else {
-            banner = "电脑正在使用这个终端，命令没有发送。"
+            raiseTerminalMessage("电脑正在使用这个终端，命令没有发送。", sessionId: write.sessionId)
             return
         }
         // The gateway answers a repeated intentId from its cache, which would hand
@@ -988,7 +1052,16 @@ final class SynapseAppModel {
         let alreadyWaiting = relayAttachments.filter { $0.sessionId == sessionId && !$0.state.isFailed }.count
         let (accepted, rejections) = screenPickedFiles(files, alreadyWaiting: alreadyWaiting)
 
-        for rejection in rejections { banner = rejection.message }
+        for rejection in rejections {
+            raiseTerminalMessage(
+                rejection.message,
+                sessionId: sessionId,
+                // Keyed on the reason, so two files refused for the same cause read as
+                // one message and two different causes read as two. The single slot
+                // this replaces could only ever show the last one.
+                id: "pick.\(rejection.message)"
+            )
+        }
         guard !accepted.isEmpty else { return }
 
         let uploads = accepted.map { file in

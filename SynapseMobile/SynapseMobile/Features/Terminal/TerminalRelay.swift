@@ -157,7 +157,11 @@ struct TerminalAttachment: Identifiable, Equatable {
         case .waitingForComputer: return "等待电脑接收"
         case .receiving: return "电脑正在接收"
         case .delivered: return "已插入"
-        case .failed: return "没有送达"
+        // The reason was carried on the case but never read, so a reader was told a
+        // file had not arrived and not one word about why — the one thing that
+        // decides whether retrying is worth it.
+        case .failed(let reason):
+            return reason.isEmpty ? "没有送达" : reason
         }
     }
 
@@ -317,6 +321,26 @@ func generatedFileName(prefix: String, extension ext: String, at date: Date = Da
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyyMMdd-HHmm"
     return "\(prefix)-\(formatter.string(from: date)).\(ext)"
+}
+
+/// Something the user tried in a terminal that did not happen.
+///
+/// It stays until they dismiss it, unlike the notice queue at the bottom of the
+/// screen: these are answers to an action they just took, and one that leaves on a
+/// clock can be gone before they look up from the keyboard. It sits in the terminal
+/// rather than in the queue because a refusal to send a command belongs beside the
+/// field the command was typed into — and because the reasons are often several at
+/// once, which a single slot could not hold.
+struct TerminalMessage: Identifiable, Equatable {
+    /// Names the message, not the occurrence: raising the same id again replaces it,
+    /// so a retry that fails the same way does not stack a second copy.
+    let id: String
+    let sessionId: String
+    var text: String
+    /// Set when the only way forward is outside the app. The message then carries a
+    /// button, because naming a path in Settings without offering to open it asks
+    /// the user to navigate a maze from memory.
+    var opensSettings: Bool = false
 }
 
 /// Why a pick was refused, so the user is told at the moment they pick rather

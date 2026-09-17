@@ -208,6 +208,30 @@ struct TerminalAttachmentStateTests {
         )
     }
 
+    /// The reason was carried on `.failed` but never read, so a file that did not
+    /// arrive was described as "没有送达" and nothing else. Which reason it was is the
+    /// part that decides whether retrying is worth it, so it is the part that must
+    /// not go missing.
+    @Test func aFailureSaysWhyItFailed() {
+        #expect(
+            attachment(.failed("传输没有完成，请重试。")).stateDescription == "传输没有完成，请重试。"
+        )
+    }
+
+    /// A transfer can fail without the desktop saying anything useful. The chip still
+    /// has to describe itself rather than announce an empty sentence.
+    @Test func aFailureWithNothingToSayFallsBackToThePlainWord() {
+        #expect(attachment(.failed("")).stateDescription == "没有送达")
+    }
+
+    @Test func theStatesThatAreNotFailuresKeepTheirOwnWords() {
+        #expect(attachment(.queued).stateDescription == "准备上传")
+        #expect(attachment(.uploading(nil)).stateDescription == "上传中")
+        #expect(attachment(.waitingForComputer).stateDescription == "等待电脑接收")
+        #expect(attachment(.receiving(nil)).stateDescription == "电脑正在接收")
+        #expect(attachment(.delivered(path: nil)).stateDescription == "已插入")
+    }
+
     @Test func onlyAQueuedTransferIsUploaded() {
         #expect(attachment(.queued).needsUpload)
         // A file with a drive item that is uploaded again becomes a second file on
