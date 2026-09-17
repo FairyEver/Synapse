@@ -136,6 +136,14 @@ struct RelaySelectionTests {
 /// test ends: `UserDefaults(suiteName:)` leaves a plist behind in the host app's
 /// container, and a run that litters is a run that makes the next one harder to
 /// read.
+///
+/// Serialized because every case here writes to that one shared suite and `deinit`
+/// deletes it. Run in parallel — which is the default — the `deinit` of whichever case
+/// finishes first lands in the middle of another one's `record` / re-open pair and
+/// takes its data with it, so `theLedgerIsPersisted` read back an empty ledger about
+/// half the time. The alternative is a suite name per case, which loses the shared
+/// cleanup this deliberately relies on.
+@Suite(.serialized)
 final class RelayLedgerTests {
     private static let suiteName = "SynapseRelayLedgerTests"
 
