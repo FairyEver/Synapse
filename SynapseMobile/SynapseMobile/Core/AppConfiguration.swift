@@ -13,8 +13,38 @@ enum AppConfiguration {
 
     static var apiBaseURL: URL {
         let raw = UserDefaults.standard.string(forKey: apiBaseURLKey) ?? defaultAPIBaseURL
-        if let url = URL(string: raw) { return url }
+        if let url = URL(string: raw), url.host != nil { return url }
+        // A scheme written with one slash instead of two — `http:/host` rather than
+        // `http://host`. It is what arrives when the address is handed over by
+        // something that normalises paths on the way; `XCUIApplication` does exactly
+        // that to its launch arguments, so the override a test run passes reaches the
+        // app in this shape.
+        //
+        // Repaired rather than rejected, because `URL` accepts it and the failure is
+        // silent and misleading: with no host it still parses, requests still go out —
+        // `URLSession` reads the authority off the path — so sign-in and every list
+        // fill in normally. Only the live socket refuses it, with a `bad URL` in the
+        // log, and the symptom is a terminal that renders nothing at all. That reads
+        // as a broken terminal rather than as a mistyped address, and it cost a round
+        // of looking in the wrong place.
+        if let url = URL(string: repairingFoldedSchemeSlash(raw)), url.host != nil { return url }
         return URL(string: defaultAPIBaseURL)!
+    }
+
+    /// Puts back the second slash of a scheme separator that was folded into one.
+    ///
+    /// Narrow on purpose: `scheme:/rest` becomes `scheme://rest`, and nothing else is
+    /// touched. An address already written correctly has a `/` where this looks for a
+    /// host, so it comes straight back.
+    private static func repairingFoldedSchemeSlash(_ raw: String) -> String {
+        guard let separator = raw.range(of: ":/") else { return raw }
+        let scheme = raw[raw.startIndex..<separator.lowerBound]
+        guard scheme.first?.isLetter == true,
+              scheme.allSatisfy({ $0.isLetter || $0.isNumber || "+-.".contains($0) })
+        else { return raw }
+        let rest = raw[separator.upperBound...]
+        guard rest.first != nil, rest.first != "/" else { return raw }
+        return "\(scheme)://\(rest)"
     }
 
     static var apiBaseURLString: String {
