@@ -293,6 +293,17 @@ struct TerminalScreen: View {
                     Text(statusLabel)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    // Which build of the app is asking. On the status line rather
+                    // than a line of its own: it is the number a report quotes back,
+                    // not something anyone needs at a glance, and a third line would
+                    // cost the terminal a row on every screen. Both texts are held
+                    // to one line so a narrow phone truncates this row instead of
+                    // wrapping it — a wrap would cost that row anyway.
+                    Text("· \(AppVersion.label)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity)
