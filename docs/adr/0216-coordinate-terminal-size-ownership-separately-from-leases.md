@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Superseded in part by ADR-0218, which drops the rule below that a local layout change
+takes the grid back. Ownership, the lease, persistence and the phone's own release are
+unchanged.
 
 ## Context
 

@@ -104,6 +104,25 @@ struct TerminalScreen: View {
         )
     }
 
+    /// Puts the display mode back when the terminal's grid stops being this phone's.
+    ///
+    /// Taking the grid back is a local act on the computer — its pane's own release,
+    /// or another phone claiming the size — so a summary is the only way the phone
+    /// hears about it. Without this the stored mode would go on saying "优先移动端"
+    /// for a terminal the phone is no longer sizing, and the reader would have no way
+    /// to tell.
+    private func applyGridOwnershipChange(from previousOwnerId: String?, to ownerId: String?) {
+        guard gridClaimState(
+            previousOwnerId: previousOwnerId,
+            ownerId: ownerId,
+            phoneClientInstanceId: model.clientInstanceId
+        ) == .lost else { return }
+        // Dropped before the mode moves, so the mode's own change does not send a
+        // release for a claim the desktop has already taken.
+        model.forgetClaimedGrid(for: sessionId)
+        display.setMode(.desktopDriven, for: sessionId)
+    }
+
     var body: some View {
         @Bindable var model = model
 
@@ -123,6 +142,9 @@ struct TerminalScreen: View {
             .onChange(of: displayMode) { syncDisplayMode() }
             .onChange(of: session?.cols) { syncDisplayMode() }
             .onChange(of: session?.rows) { syncDisplayMode() }
+            .onChange(of: session?.gridOwnerId) { previous, current in
+                applyGridOwnershipChange(from: previous, to: current)
+            }
             // Both are measured by the view, so they are what the desktop is asked
             // to adopt. Rotation and a dismissed keyboard both land here.
             .onChange(of: store.columns) { reportGridToDesktop() }

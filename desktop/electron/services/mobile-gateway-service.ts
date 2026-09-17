@@ -665,6 +665,15 @@ export class MobileGatewayService {
         startedAt: clampSummaryText(session.startedAt, MOBILE_FRAME_LIMITS.maxSummaryStartedAtLength),
         lastLine: clampSummaryText(await this.lastLineFor(session.id), MOBILE_FRAME_LIMITS.maxSummaryLastLineLength),
         lastOutputSeq: session.lastOutputSeq,
+        // Named only when a phone holds it, which is how a phone that has been
+        // preempted — by the desktop's own handler or by another device — stops
+        // believing its grid claim still stands.
+        //
+        // Omitted rather than clamped if the id does not fit, unlike every other
+        // field here. They are display strings, where a truncated one still reads;
+        // this one is compared for identity, so a truncated id names no phone at
+        // all — and could name a different one. Absence is the honest answer.
+        ...(ownerIdForSummary(session) ?? {}),
       })
     }
     return rows
@@ -851,6 +860,25 @@ type MobileSummaryContent = {
 /** What the socket will have to carry, measured the same way the budget is stated. */
 function summaryBytes(content: MobileSummaryContent): number {
   return Buffer.byteLength(JSON.stringify(content), "utf8")
+}
+
+/**
+ * The grid owner to name for one session, as a field to spread, or nothing.
+ *
+ * Spread-shaped so the absent case adds no key at all: most sessions are the
+ * desktop's own, and a summary that carried `gridOwnerId: undefined` for every one
+ * of them would cost the byte budget a field it does not need. See the call site
+ * for why an id too long to send is left out rather than clipped.
+ */
+function ownerIdForSummary(session: {
+  readonly sizeOwner?: { readonly kind: string; readonly mobileClientInstanceId: string }
+}): { readonly gridOwnerId: string } | null {
+  const owner = session.sizeOwner
+  if (owner?.kind !== "mobile") return null
+  const id = owner.mobileClientInstanceId
+  return id.length > 0 && id.length <= MOBILE_FRAME_LIMITS.maxSummaryGridOwnerIdLength
+    ? { gridOwnerId: id }
+    : null
 }
 
 /**

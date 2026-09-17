@@ -1320,6 +1320,33 @@ describe("MobileGatewayService", () => {
     expect(clampSummaryText("abc", 10)).toBe("abc")
   })
 
+  it("names the phone deciding a session's grid, and says nothing when none is", async () => {
+    const harness = createHarness()
+    const session = harness.terminal.sessions.get("sess-1")!
+    session.sizeOwner = {
+      kind: "mobile",
+      deviceLabel: "iPhone",
+      mobileClientInstanceId: "phone-1",
+      cols: 54,
+      rows: 37,
+    }
+
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.sessions[0]?.gridOwnerId).toBe("phone-1")
+
+    // The ordinary case, and the reason the field is optional: a terminal the
+    // desktop's own layout decides carries no key at all rather than a null.
+    session.sizeOwner = undefined
+    harness.terminal.events.emit("sessionChanged", { sessionId: "sess-1" })
+    await harness.timers.advance(1_000)
+
+    const after = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(after.sessions[0]?.gridOwnerId).toBeUndefined()
+    expect(JSON.stringify(after.sessions[0])).not.toContain("gridOwnerId")
+  })
+
   it("omits the tab layer while no tab is split", async () => {
     const harness = createHarness()
     // A conversation's own tab, which is what every session gets by default.

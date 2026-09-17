@@ -62,11 +62,17 @@ export const MOBILE_FRAME_LIMITS = {
   /** Group names are capped at 80 by the terminal schema; this only restates it. */
   maxSummaryGroupNameLength: 80,
   /**
+   * A grid owner, named by client instance id. That id is a UUID on both sides, so
+   * this is generous — and it has to be clamped, because the field rides on every
+   * session of the one message that cannot be split.
+   */
+  maxSummaryGridOwnerIdLength: 48,
+  /**
    * Byte budget for one serialized summary payload, measured without the envelope.
    *
    * The desktop's producer must never exceed this. It cannot: with every field at
    * the limits above, the largest summary the wire admits — 256 sessions and 128
-   * groups — serializes to 218 KiB. The boundary test in `mobile-live.test.ts`
+   * groups — serializes to 234 KiB. The boundary test in `mobile-live.test.ts`
    * pins that arithmetic down, and `live-desktop.gateway.spec.ts` asserts the
    * socket clears it.
    *
@@ -78,8 +84,14 @@ export const MOBILE_FRAME_LIMITS = {
    * is the binding one and is set to 256 KiB in
    * `server/src/live/live-desktop.gateway.ts`; raise that first, and keep this
    * below it.
+   *
+   * Raised from 224 KiB when sessions grew a grid owner. The owner is the one field
+   * a phone needs on every session to know whether its own grid claim still stands,
+   * so it could not be moved off the summary — and at 256 sessions naming a 48-byte
+   * id apiece the widest summary is 9 KiB past the old budget. The desktop hop's
+   * 256 KiB still clears it with room for the envelope.
    */
-  maxSummaryBytes: 224 * 1024,
+  maxSummaryBytes: 240 * 1024,
   maxIntentTextLength: 8 * 1024,
   maxKeyActions: 128,
   maxTitleLength: 200,
@@ -272,6 +284,22 @@ export interface MobileSummarySession {
   /** Last non-blank rendered line, so the list is useful without opening the session. */
   readonly lastLine: string
   readonly lastOutputSeq: number
+  /**
+   * The phone deciding this session's grid, when one is, named by its client
+   * instance id.
+   *
+   * Absent in the ordinary case, where the desktop's own layout decides. A phone
+   * reads its own id here as "the claim I made still stands"; its own id's absence
+   * — or somebody else's id — means the grid is no longer its to size, which is how
+   * a desktop that took the grid back says so. Nothing would otherwise tell it: the
+   * desktop's release is a local act and reaches the phone only as a summary whose
+   * `cols` changed, and a phone cannot tell that apart from a claim it has just
+   * made and the desktop has not adopted yet.
+   *
+   * Optional rather than nullable so the common payload stays byte-for-byte what it
+   * was before this field existed.
+   */
+  readonly gridOwnerId?: string
 }
 
 /**
@@ -725,6 +753,10 @@ function isSummarySession(value: unknown): value is MobileSummarySession {
   if (!boundedString(value.startedAt, MOBILE_FRAME_LIMITS.maxSummaryStartedAtLength)) return false
   if (!boundedText(value.lastLine, MOBILE_FRAME_LIMITS.maxSummaryLastLineLength)) return false
   if (!nonNegativeInteger(value.lastOutputSeq)) return false
+  // Absent whenever the desktop's own layout decides, which is the ordinary case,
+  // so this is allowed to be missing but not to be empty or oversized when present.
+  if (value.gridOwnerId !== undefined &&
+    !boundedString(value.gridOwnerId, MOBILE_FRAME_LIMITS.maxSummaryGridOwnerIdLength)) return false
   return true
 }
 

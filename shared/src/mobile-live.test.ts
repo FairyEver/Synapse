@@ -304,6 +304,27 @@ describe("mobile live protocol", () => {
     }))).toBe(true)
   })
 
+  it("carries the phone owning a session's grid, and tolerates its absence", () => {
+    // The desktop's own layout decides most terminals, and saying so costs a field
+    // on every session of the one message that cannot be split — so an unowned
+    // session omits it rather than sending a null.
+    expect(isMobileSummaryPayload(summary())).toBe(true)
+
+    const owned = summary({
+      sessions: [{ ...summary().sessions[0], gridOwnerId: "a".repeat(MOBILE_FRAME_LIMITS.maxSummaryGridOwnerIdLength) }],
+    })
+    expect(isMobileSummaryPayload(owned)).toBe(true)
+
+    const tooLong = summary({
+      sessions: [{ ...summary().sessions[0], gridOwnerId: "a".repeat(MOBILE_FRAME_LIMITS.maxSummaryGridOwnerIdLength + 1) }],
+    })
+    expect(isMobileSummaryPayload(tooLong)).toBe(false)
+    // Empty names no phone, which is what absence already says.
+    expect(isMobileSummaryPayload(summary({
+      sessions: [{ ...summary().sessions[0], gridOwnerId: "" }],
+    }))).toBe(false)
+  })
+
   it("keeps the largest summary the wire admits inside the declared budget", () => {
     /*
      * A summary is the one message a phone cannot reassemble: it replaces the whole
@@ -332,6 +353,10 @@ describe("mobile live protocol", () => {
         startedAt: "2".repeat(limits.maxSummaryStartedAtLength),
         lastLine: "l".repeat(limits.maxSummaryLastLineLength),
         lastOutputSeq: 999_999_999,
+        // Every session owned at once is unreachable — a grid has one owner and a
+        // phone claims what it is looking at — but the budget has to hold for the
+        // widest summary the wire admits, not the widest one this app produces.
+        gridOwnerId: "o".repeat(limits.maxSummaryGridOwnerIdLength),
       })),
     }
 

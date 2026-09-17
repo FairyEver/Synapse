@@ -44,6 +44,39 @@ func applyGridRelease(
     display.setMode(.phoneDriven, for: sessionId)
 }
 
+/// Whether the phone may go on treating a terminal's grid as its own.
+///
+/// A summary is the only place the desktop's decision appears: taking the grid back
+/// is a local act on the computer, and it reaches the phone as ownership moving off
+/// this device. Both endings mean the same thing here — another phone holds it, or
+/// nobody does — so the phone stops rendering a mode it can no longer honour.
+enum GridClaimState: Equatable {
+    /// Nothing to decide: the phone holds the grid, or never asked for it.
+    case keep
+    /// The phone asked to size this terminal and the grid is no longer its to size.
+    case lost
+}
+
+/// Reads ownership out of a summary, against the phone's own identity.
+///
+/// The unowned case is the one that needs a previous value, and it is why this
+/// takes two. A claim this phone has just made but the desktop has not adopted yet
+/// *also* reads as unowned — the debounce, the round trip and the summary's own
+/// interval all land inside that window — and rolling back then would undo the
+/// reader's choice before it had a chance to take effect. Ownership that was this
+/// phone's a moment ago and is nobody's now has no such explanation: the desktop
+/// took it back.
+func gridClaimState(
+    previousOwnerId: String?,
+    ownerId: String?,
+    phoneClientInstanceId: String
+) -> GridClaimState {
+    if ownerId == phoneClientInstanceId { return .keep }
+    // Another device holds it, so this one cannot, whoever thought otherwise.
+    if ownerId != nil { return .lost }
+    return previousOwnerId == phoneClientInstanceId ? .lost : .keep
+}
+
 /// Reads the desktop's answer, or its absence.
 ///
 /// The reply carries no dimensions, so there is nothing to reconcile here — only

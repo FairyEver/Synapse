@@ -125,6 +125,14 @@ struct MobileSummarySession: Decodable, Identifiable, Hashable {
     let startedAt: String
     let lastLine: String
     let lastOutputSeq: Int
+    /// The phone deciding this session's grid, by its client instance id.
+    ///
+    /// Absent for a terminal the computer's own layout decides, which is the
+    /// ordinary case. Seeing this phone's id means its claim still stands; seeing
+    /// somebody else's, or none where this phone's used to be, means the grid is no
+    /// longer its to size — which is the only way the desktop's own release reaches
+    /// here, since it is a local act there.
+    let gridOwnerId: String?
 
     var isRunning: Bool { status == "running" }
     var startedAtDate: Date? { ISO8601DateFormatter().date(from: startedAt) }

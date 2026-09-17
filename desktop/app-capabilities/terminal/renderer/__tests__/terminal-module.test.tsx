@@ -3386,6 +3386,40 @@ describe("TerminalModule", () => {
     expect(document.querySelector("[data-terminal-pane-mobile-overlay]")).toBeNull()
   })
 
+  it("leaves a phone's grid alone when the pane itself is resized", async () => {
+    // Taking the grid back is the pane's own release, and nothing else. Dragging the
+    // window or re-splitting the tab is not a statement about who should decide the
+    // terminal's shape, so it must not end the mode a phone asked for.
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      cols: 45,
+      rows: 33,
+      sizeOwner: {
+        kind: "mobile",
+        deviceLabel: "iPhone",
+        mobileClientInstanceId: "client-1",
+        cols: 45,
+        rows: 33,
+      },
+    })]
+
+    await renderModule()
+
+    act(() => {
+      resizeObservers[0]?.trigger()
+      resizeObservers[0]?.trigger()
+    })
+
+    expect(terminalBridge.releaseSizeOwnership).not.toHaveBeenCalled()
+    // The fit would have proposed 100x30, which is exactly the size the phone did
+    // not choose — so a resize here would be the mode ending behind the reader's back.
+    expect(terminalBridge.resizeSession).not.toHaveBeenCalled()
+    expect(document.querySelector("[data-terminal-pane-mobile-overlay]")).not.toBeNull()
+  })
+
   it("leaves an unclaimed pane uncovered", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]

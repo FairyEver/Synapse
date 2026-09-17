@@ -131,4 +131,33 @@ struct TerminalGridReleaseTests {
         #expect(gridReleaseOutcome(for: answer("no_op")) == .handedBack)
         #expect(gridReleaseOutcome(for: nil) == .unanswered)
     }
+
+    // MARK: - Ownership moving in a summary
+
+    /// The desktop's pane offers its own release, and this is how the phone learns
+    /// it was used: ownership that was this phone's and is now nobody's.
+    @Test func aGridTheDesktopTookBackReadsAsLost() {
+        #expect(gridClaimState(previousOwnerId: "phone-1", ownerId: nil, phoneClientInstanceId: "phone-1") == .lost)
+    }
+
+    /// Another phone asked for the size. Two phones cannot both be deciding one
+    /// terminal's grid, so this one has to stop saying it is.
+    @Test func aGridAnotherPhoneTookReadsAsLost() {
+        #expect(gridClaimState(previousOwnerId: "phone-1", ownerId: "phone-2", phoneClientInstanceId: "phone-1") == .lost)
+    }
+
+    /// The claim this phone just made has not reached the desktop yet, and until it
+    /// does the summary describes a terminal nobody is sizing. Reading that as a
+    /// loss would undo the reader's choice inside the debounce that carries it.
+    @Test func aClaimNotYetAdoptedIsNotALoss() {
+        #expect(gridClaimState(previousOwnerId: nil, ownerId: nil, phoneClientInstanceId: "phone-1") == .keep)
+        #expect(gridClaimState(previousOwnerId: "phone-2", ownerId: nil, phoneClientInstanceId: "phone-1") == .keep)
+    }
+
+    /// The ordinary case for a terminal at the computer's own size, and for one this
+    /// phone is already sizing: nothing here moves either.
+    @Test func aGridThisPhoneHoldsIsKept() {
+        #expect(gridClaimState(previousOwnerId: nil, ownerId: "phone-1", phoneClientInstanceId: "phone-1") == .keep)
+        #expect(gridClaimState(previousOwnerId: "phone-1", ownerId: "phone-1", phoneClientInstanceId: "phone-1") == .keep)
+    }
 }

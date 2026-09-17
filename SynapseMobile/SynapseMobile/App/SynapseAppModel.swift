@@ -665,6 +665,22 @@ final class SynapseAppModel {
         return gridReleaseOutcome(for: result)
     }
 
+    /// Drops a claim without telling the desktop, for a grid the desktop has
+    /// already taken back.
+    ///
+    /// Nothing is sent, because there is nothing to give back: the claim is gone
+    /// there, and a `releaseGrid` would be answered with a refusal the reader never
+    /// asked for. What this does is stop the phone believing it still holds the
+    /// grid — the dedupe in `setGridSize` compares against this map, so a claim left
+    /// here would be treated as already made and never re-sent. Without that, going
+    /// back to the phone's own layout could not re-claim the size, and the mode
+    /// would be a picker that moves and changes nothing.
+    func forgetClaimedGrid(for sessionId: String) {
+        gridSizeTasks[sessionId]?.cancel()
+        gridSizeTasks[sessionId] = nil
+        requestedGrid.removeValue(forKey: sessionId)
+    }
+
     /// Says it again after a reconnect.
     ///
     /// The desktop releases a phone's claim when it disconnects, so a claim made

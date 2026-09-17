@@ -20,8 +20,10 @@ iPhone ──wss──▶ Synapse 云 ──wss──▶ 桌面端网关 ──�
   抢占租约；手机不提示这件事，下一次发送时自动把租约接管回来。
 - **手机可以改 PTY 尺寸**。显示模式里的「优先移动端」让手机决定终端多宽：它把自己量到的
   格数上报，桌面据此重排，这样长行不折行、TUI 的方框也不会被打散。这与写租约正交，另有一套
-  「尺寸归属」：手机断开即释放，桌面用户拖动窗口或重新分屏即夺回。规则见
-  `docs/adr/0216-coordinate-terminal-size-ownership-separately-from-leases.md`。
+  「尺寸归属」：手机断开即释放，桌面端只有点面板上的「转移到电脑」才夺回——拖动窗口、重新
+  分屏都不算。桌面夺回后手机跟着切回「优先还原」，归属随摘要里的 `gridOwnerId` 下发。规则见
+  `docs/adr/0216-coordinate-terminal-size-ownership-separately-from-leases.md` 和
+  `docs/adr/0218-take-the-terminal-grid-back-only-on-an-explicit-release.md`。
 - **默认「优先还原」**：PTY 尺寸不动，手机把电脑整屏缩放显示，布局与电脑逐格一致。
 
 ## 开发

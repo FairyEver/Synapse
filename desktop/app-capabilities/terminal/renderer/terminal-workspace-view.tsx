@@ -79,7 +79,6 @@ import {
   getTerminalAppearanceOptions,
   type TerminalAppearanceSize,
 } from "./terminal-appearance"
-import { decideTerminalGrid } from "./terminal-grid-ownership"
 import {
   constrainTerminalCompositionToViewport,
   createTerminalRenderingOptions,
@@ -976,20 +975,6 @@ function TerminalPane({
     compositionTextarea?.addEventListener("compositionupdate", constrainComposition)
 
     /**
-     * The pane area's size at the last sync, so a genuine layout change can be told
-     * apart from the observer merely firing again.
-     *
-     * Null until the first look, which only establishes the baseline. Starting from
-     * zero instead would make mounting the pane read as a resize — and a pane
-     * remounts whenever its workspace is switched back to, which would take the grid
-     * away from a phone that had done nothing.
-     */
-    let lastPaneSize: { width: number; height: number } | null = null
-    /** Set once this pane has asked to give the grid back, so it asks once. Cleared
-     *  when the claim is gone, which is what lets a later claim preempt again. */
-    let ownershipReleaseRequested = false
-
-    /**
      * Sizes the mount to the phone's grid, or takes it back to filling the pane.
      *
      * The screen element is measured rather than a cell size computed, because xterm
@@ -1037,10 +1022,7 @@ function TerminalPane({
         .releaseSizeOwnership({ sessionId: session.id })
         .then(() => syncTerminalGeometryRef.current?.(true))
         .catch((error) => {
-          ownershipReleaseRequested = false
           logger.warn("Failed to release terminal grid ownership.", error)
-          // Only when the reader asked for it. Preemption happens because they
-          // resized something, and they are already looking at the result.
           if (announceFailure) toast.error("重置终端尺寸失败")
         })
     }
@@ -1050,31 +1032,18 @@ function TerminalPane({
       if (disposed || !projectionVisible || !geometrySyncReady || !projectionAvailable) return
       if (refreshRenderer) xterm.refresh(0, xterm.rows - 1)
 
-      // Measured on the pane, not on the mount: in the remote-sized mode the mount
-      // is set to the phone's grid, so measuring that would make this component's
-      // own layout look like someone resizing the pane.
-      const pane = frameRef.current
-      const size = { width: pane?.clientWidth ?? 0, height: pane?.clientHeight ?? 0 }
-      const paneChanged = lastPaneSize !== null
-        && (size.width !== lastPaneSize.width || size.height !== lastPaneSize.height)
-      lastPaneSize = size
-
-      const owner = sessionRef.current.sizeOwner
-      const decision = decideTerminalGrid({
-        hasMobileOwner: owner?.kind === "mobile",
-        releaseRequested: ownershipReleaseRequested,
-        paneChanged,
-      })
       const canvasWasRemote = remoteCanvasApplied
       syncRemoteCanvas()
-      if (decision === "hold") return
-      if (decision === "release") {
-        ownershipReleaseRequested = true
-        releaseGridOwnership()
-        return
-      }
-      // No claim left, so a later one is free to preempt all over again.
-      if (!owner) ownershipReleaseRequested = false
+
+      // A phone owns the grid, so this fit has nothing to say: whatever it proposes
+      // is a size the phone did not choose.
+      //
+      // Local acts deliberately do *not* clear the claim. Dragging the window,
+      // re-splitting a pane and toggling the sidebar all land here, and none of them
+      // is a statement about who should decide the terminal's shape — a window moved
+      // for any other reason would otherwise end the phone's mode silently. Taking
+      // the grid back is the pane's own release button, and nothing else.
+      if (sessionRef.current.sizeOwner?.kind === "mobile") return
 
       // The mount is still sized to the phone's grid, and React has not re-rendered to
       // take that off it yet. Measuring it here proposes the phone's grid — which is

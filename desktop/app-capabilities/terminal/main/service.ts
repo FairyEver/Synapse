@@ -2405,9 +2405,11 @@ export function createTerminalService(deps: {
    * ownership changes too.
    *
    * `source` names who asked. Anything that is not a phone clears mobile
-   * ownership, which is how ownership returns to the desktop without a separate
-   * release call: the desktop's own fit, an automated resize and creation all
-   * arrive here as non-mobile. Only a phone's own request re-establishes it.
+   * ownership, and only a phone's own request re-establishes it. That rule is a
+   * backstop rather than the way ownership normally returns — taking the grid back
+   * is the desktop's explicit release, which does not come through here at all —
+   * but it is what keeps a write from landing on a claim nobody made: an
+   * automated resize and creation both arrive as non-mobile.
    */
   async function applySessionResize(
     sessionId: string,
