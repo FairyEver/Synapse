@@ -139,6 +139,66 @@ struct MobileSummarySession: Decodable, Identifiable, Hashable {
     var startedAtDate: Date? { ISO8601DateFormatter().date(from: startedAt) }
 }
 
+/// The four model tiers a Provider can name, in the order the desktop shows them.
+///
+/// The desktop's own `ModelTier` and this are the same closed set; the wire carries
+/// the raw strings, so this is a decode target rather than a mapping.
+enum MobileModelTier: String, Codable, CaseIterable, Hashable, Sendable {
+    case `default`
+    case opus
+    case sonnet
+    case haiku
+
+    /// The order the desktop's picker lists them in — its own `MODEL_TIER_DISPLAY_ORDER`.
+    static let displayOrder: [MobileModelTier] = [.default, .opus, .sonnet, .haiku]
+
+    var label: String {
+        switch self {
+        case .default: return "主模型"
+        case .opus: return "Opus"
+        case .sonnet: return "Sonnet"
+        case .haiku: return "Haiku"
+        }
+    }
+}
+
+/// One project a conversation may be started in.
+///
+/// `projectId` is what goes back in `createAgentConversation`; it is the desktop's
+/// own project identity, including for the built-in workspace it always offers.
+struct MobileSummaryAgentGroup: Decodable, Identifiable, Hashable {
+    let projectId: String
+    let name: String
+    let isDefault: Bool
+
+    var id: String { projectId }
+}
+
+/// One Provider a conversation may be started with.
+///
+/// There is no endpoint here and no credential, deliberately: the computer reads its
+/// own key when it launches, and the phone is never in a position to hold one.
+struct MobileSummaryAgentProvider: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    /// The Provider the computer itself would use if this phone named none.
+    ///
+    /// Not "the active one" — the desktop resolves a configured default first. This is
+    /// therefore what the panel preselects, because it is what would actually happen.
+    let isDefault: Bool
+    /// The tier this Provider would be used at, so no row's model name is a guess.
+    let defaultTier: MobileModelTier
+    /// Model name by tier. A tier the Provider does not name is absent.
+    let models: [String: String]
+
+    func modelName(for tier: MobileModelTier) -> String? { models[tier.rawValue] }
+
+    /// The tiers this Provider offers, in the desktop's own display order.
+    var selectableTiers: [MobileModelTier] {
+        MobileModelTier.displayOrder.filter { models[$0.rawValue] != nil }
+    }
+}
+
 struct MobileSummaryPayload: Decodable {
     let desktopClientInstanceId: String
     let desktopName: String
@@ -150,6 +210,14 @@ struct MobileSummaryPayload: Decodable {
     /// and one that predates it never sends it. Both decode to `nil`, which is why
     /// the list falls back to its flat form without needing a branch of its own.
     let workspaces: [MobileSummaryWorkspace]?
+    /// Where a Claude Code conversation may be started, and with which Provider.
+    ///
+    /// Optional for a different reason than `workspaces`: absent means the computer
+    /// cannot say — it predates these intents. An empty array is a computer that can
+    /// say and has nothing to offer. The new-conversation panel is offered for the
+    /// first and unavailable for the second, so the two must not be conflated.
+    let agentGroups: [MobileSummaryAgentGroup]?
+    let agentProviders: [MobileSummaryAgentProvider]?
     let sessions: [MobileSummarySession]
 }
 
@@ -376,6 +444,16 @@ struct MobileIntentRequest: Encodable {
     var title: String?
     var groupId: String?
     var commandId: String?
+    /// Starting a Claude Code conversation: which project, and optionally which
+    /// Provider and tier.
+    ///
+    /// The two optional ones travel together and are omitted together. Absent means
+    /// "the computer decides", which is the ordinary case — the phone's own default
+    /// would be a second answer to a question the desktop already answers for its
+    /// ⌘-click shortcut, and the two could disagree. See `shared/src/mobile-live.ts`.
+    var projectId: String?
+    var providerId: String?
+    var modelTier: String?
     /// History paging: the oldest line the client holds, and how many to fetch below it.
     var before: Int?
     var limit: Int?

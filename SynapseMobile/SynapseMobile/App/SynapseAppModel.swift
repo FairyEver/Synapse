@@ -262,6 +262,13 @@ final class SynapseAppModel {
     /// `GridClaimLedger`.
     let display = TerminalDisplaySettings()
 
+    /// What this phone last used to start a Claude Code conversation.
+    ///
+    /// Owned here because starting one is here: the values are worth remembering only
+    /// once the computer has accepted them, and the model is the one place that knows
+    /// both what was asked and what came back.
+    let conversationDefaults = AgentConversationPreferences()
+
     /// Which terminals this phone is sizing, as the summaries have last said.
     private var gridClaims = GridClaimLedger()
 
@@ -386,6 +393,12 @@ final class SynapseAppModel {
             self.summary = payload
             self.pruneTerminalStores(keeping: Set(payload.sessions.map(\.id)))
             self.applyGridClaims(payload.sessions)
+            // Only against a list the computer actually sent: an older desktop omits
+            // the block entirely, and forgetting the reader's project there would
+            // punish them for something that is not theirs.
+            if let groups = payload.agentGroups {
+                self.conversationDefaults.prune(keepingProjectIds: Set(groups.map(\.projectId)))
+            }
         }
         realtime.onFrame = { [weak self] payload in
             guard let self else { return }
@@ -814,6 +827,79 @@ final class SynapseAppModel {
             MobileIntentRequest(intentId: UUID().uuidString, kind: "create", title: title, groupId: groupId)
         )
     }
+
+    /// How asking the computer to start a Claude Code conversation ended.
+    ///
+    /// A reason rather than a bare `nil`, because the panel keeps the reader's three
+    /// choices on screen while it says what went wrong — and because one of the reasons
+    /// is a computer too old to know this intent at all, which is a different thing to
+    /// tell someone than a refusal.
+    enum AgentConversationStart: Equatable {
+        case created(String)
+        case failed(String)
+    }
+
+    /// Starts the bundled Claude Code on the computer, in one of its projects.
+    ///
+    /// The phone names a project and, when the user has chosen, a Provider and tier;
+    /// the computer supplies everything else, including the credentials, which are read
+    /// there and never travel. `nil` for either of the optional pair means the computer
+    /// decides, and it always decides both together — half a choice names no model.
+    ///
+    /// The grid travels with the creation rather than as a follow-up resize: Claude Code
+    /// paints its banner and first prompt within milliseconds, at whatever width the PTY
+    /// had, and those lines stay in scrollback at that width.
+    func createAgentConversation(
+        projectId: String,
+        providerId: String?,
+        modelTier: MobileModelTier?,
+        cols: Int?,
+        rows: Int?,
+        deviceLabel: String?
+    ) async -> AgentConversationStart {
+        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+            return .failed("电脑离线。")
+        }
+
+        let result = await awaitResult(
+            of: MobileIntentRequest(
+                intentId: UUID().uuidString,
+                kind: "createAgentConversation",
+                projectId: projectId,
+                providerId: providerId,
+                modelTier: modelTier?.rawValue,
+                cols: cols,
+                rows: rows,
+                deviceLabel: deviceLabel
+            ),
+            sentTo: desktop,
+            timeoutSeconds: 10
+        )
+
+        guard let result else {
+            // Nothing came back at all. The cause a reader can act on is a computer
+            // whose Synapse predates this intent: an unknown kind is refused at the
+            // edge — by the cloud, or by the desktop — rather than reported, so the
+            // request simply disappears. Both ends of that are fixed the same way,
+            // and the reader can only do one of them.
+            return .failed(Self.desktopTooOldMessage)
+        }
+        if result.isAccepted, let created = result.createdSessionId {
+            // Only what the computer accepted is worth repeating next time.
+            conversationDefaults.remember(projectId: projectId, providerId: providerId, modelTier: modelTier)
+            return .created(created)
+        }
+        // The cloud's own timeout, which means the intent reached a computer that did
+        // not answer because it does not know the kind. Same advice; the eight-second
+        // wait is the only difference.
+        if result.code == "timeout" { return .failed(Self.desktopTooOldMessage) }
+        return .failed(result.message ?? "电脑没有启动这个对话。")
+    }
+
+    /// The one sentence for "this computer's Synapse is too old", used for both the
+    /// silent drop and the cloud's timeout because the reader's next step is the same
+    /// one, and naming two different causes would only make them doubt the advice.
+    private static let desktopTooOldMessage = "电脑端版本太旧，请在电脑上升级 Synapse。"
 
     func launchCommand(groupId: String, commandId: String) async -> String? {
         await performReturningSession(

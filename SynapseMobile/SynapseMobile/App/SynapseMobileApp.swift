@@ -15,6 +15,9 @@ struct SynapseMobileApp: App {
                 // terminal's display mode, and summaries arrive whatever screen is
                 // showing.
                 .environment(model.display)
+                // Owned by the model for the same reason: what was last used is
+                // recorded where the request was decided, not where it was drawn.
+                .environment(model.conversationDefaults)
                 .tint(Theme.ink)
         }
     }
