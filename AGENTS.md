@@ -2,6 +2,8 @@
 
 本文件只保留每次任务都必须看到的仓库级规则。详细约束按任务类型分流到 `docs/agents/`、`.claude/rules/` 和模块设计文档；命中某一领域时，必须先阅读对应文档再修改。
 
+根目录 `CLAUDE.md` 是指向本文件的软链接（Claude Code 自动读 CLAUDE.md，不读 AGENTS.md）。**内容只改本文件**；不要删掉软链接去建一个真的 CLAUDE.md，两份会分叉。
+
 ## 每次任务都必须遵守
 
 - 当前对话中用户的明确要求优先级最高。规则、设计文档、现有实现与用户要求冲突时，不要静默选择，先指出冲突并请求确认。
@@ -92,6 +94,14 @@ pnpm --filter @synapse/desktop run test
 - 更新恢复必须在后台执行；launchctl、缓存清理、DataRepository 恢复判断和重新下载不得阻塞主窗口创建。
 - launchd 与缓存操作必须经过 `PermissionGuard`、`AuditSink` 和受控进程执行器；只能操作设计文档规定的两个精确缓存目录，并设置可终止的硬超时。
 - 不得删除或弱化 ShipIt 未启动、启动验证超时、缓存删除卡死和恢复不阻塞启动的回归测试。相关修改至少运行更新专项测试、desktop typecheck、`check:hard-constraints`；涉及打包边界时还要运行 `check:packaged-asar`，正式发布前完成真实 macOS 跨版本更新验收。
+
+## 移动端推送网关固定走生产
+
+服务端 `APNS_USE_SANDBOX` 长期固定 `false`，**不要动它**，也不要为了「我手机上装的是数据线开发的包」翻成 `true`。
+
+苹果的推送 token 分环境：数据线装的开发包拿到 sandbox token，TestFlight / App Store 的包拿到生产 token，而服务端只有这一个开关（`server/src/mobile-live/mobile-push.service.ts:105`）。翻成 `true` 会让**所有** TestFlight 用户的推送失效，而且不会报错：苹果回 `BadDeviceToken`，服务端把这个 token 当死号**永久删掉**（同文件 159 行），日志里只留一句 `Mobile push token rejected`。
+
+开发包收不到推送是**接受的代价**——不需要为它做 per-token 环境分流，也不需要为它切网关。开发包调试完，装回 TestFlight 并**重开一次 App** 就能恢复（旧 token 被删了，不会自己回来）。
 
 ## 开发命令
 
