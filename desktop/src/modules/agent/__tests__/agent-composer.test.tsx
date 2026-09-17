@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AgentComposer as AgentComposerImpl } from "../components/agent-composer"
 import type { AgentDraftAttachment } from "../attachments"
 import { getPermissionModeCapability } from "../permission-mode-capability"
+import { MicrophonePermissionError } from "@/modules/voice/microphone-capture"
 import {
   WORKSPACE_FILE_TREE_DRAG_TYPE,
   writeWorkspaceFileTreeDrag,
@@ -31,6 +32,34 @@ Object.defineProperty(URL, "revokeObjectURL", {
 
 const track = vi.hoisted(() => vi.fn())
 const toast = vi.hoisted(() => vi.fn())
+
+/**
+ * 录音态要真的进得去：真 `VoiceSession` 要麦克风和 WebSocket，jsdom 里起不来。
+ * 只换掉它，`useVoiceInput` 本身照跑 —— 录音态的判断和失败回退都在那一层。
+ */
+const voiceSession = vi.hoisted(() => ({
+  events: null as null | {
+    onTranscript: (transcript: { stable: string; unstable: string; combined: string }) => void
+    onElapsed: (elapsedMs: number) => void
+    onFailure: (failure: string) => void
+  },
+  startError: null as Error | null,
+  confirmResult: "",
+}))
+
+vi.mock("@/modules/voice/voice-session", () => ({
+  VoiceSession: {
+    begin: vi.fn(async (events: typeof voiceSession.events) => {
+      if (voiceSession.startError) throw voiceSession.startError
+      voiceSession.events = events
+      return {
+        cancel: () => {},
+        finish: async () => voiceSession.confirmResult,
+      }
+    }),
+  },
+}))
+
 const logger = vi.hoisted(() => ({
   debug: vi.fn(),
   error: vi.fn(),
@@ -44,6 +73,9 @@ function AgentComposer(props: ComponentProps<typeof AgentComposerImpl>) {
 
 beforeEach(() => {
   installShellBridge()
+  voiceSession.events = null
+  voiceSession.startError = null
+  voiceSession.confirmResult = ""
 })
 
 vi.mock("@/lib/ui-tracking", () => ({
@@ -80,7 +112,11 @@ afterEach(() => {
 })
 
 describe("AgentComposer 语音输入", () => {
-  async function renderVoiceComposer(options?: { readonly voiceAvailable?: boolean }) {
+  async function renderVoiceComposer(options?: {
+    readonly voiceAvailable?: boolean
+    readonly draft?: string
+    readonly onDraftChange?: (value: string) => void
+  }) {
     installShellBridge(undefined, options)
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -89,12 +125,12 @@ describe("AgentComposer 语音输入", () => {
     await act(async () => {
       root.render(
         <AgentComposer
-          draft=""
+          draft={options?.draft ?? ""}
           disabled={false}
           canSend={false}
           sending={false}
           cancelPhase="idle"
-          onDraftChange={vi.fn()}
+          onDraftChange={options?.onDraftChange ?? vi.fn()}
           onInputKeyDown={vi.fn()}
           onSubmit={(event) => event.preventDefault()}
           onCancelTurn={vi.fn()}
@@ -103,6 +139,28 @@ describe("AgentComposer 语音输入", () => {
       )
     })
     return container
+  }
+
+  function buttonByAriaLabel(container: HTMLElement, label: string): HTMLButtonElement | null {
+    return container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  }
+
+  async function clickButton(button: HTMLButtonElement | null): Promise<void> {
+    await act(async () => {
+      button?.click()
+      await Promise.resolve()
+    })
+  }
+
+  /** 点麦克风进录音态。真 VoiceSession 要麦克风，这里由文件头的替身接管。 */
+  async function startVoice(container: HTMLElement): Promise<void> {
+    await clickButton(buttonByAriaLabel(container, "语音输入"))
+  }
+
+  function emitTranscript(stable: string, unstable: string): void {
+    act(() => {
+      voiceSession.events?.onTranscript({ stable, unstable, combined: `${stable}${unstable}` })
+    })
   }
 
   it("凭据没配好时不显示麦克风入口", async () => {
@@ -124,6 +182,111 @@ describe("AgentComposer 语音输入", () => {
     if (!mic || !send) throw new Error("Expected mic and send buttons")
     // compareDocumentPosition 返回 FOLLOWING(4) 表示 send 排在 mic 之后。
     expect(mic.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  /**
+   * 录音落在输入区本体上，底栏整组换成 ✗ 和 ✓ —— 文件、快捷输入、跳过权限确认
+   * 这几秒里一个也用不上。
+   */
+  it("录音时输入区换成展示节点，底栏只剩取消和确认", async () => {
+    const container = await renderVoiceComposer()
+    await startVoice(container)
+
+    expect(container.querySelector("[data-voice-live]")).toBeTruthy()
+    expect(container.querySelector(".agent-composer__input")).toBeNull()
+    // 按前缀匹配：当前是哪个权限模式无所谓，录音期间这一组整个不该在。
+    expect(container.querySelector('button[aria-label^="权限模式："]')).toBeNull()
+    expect(buttonByAriaLabel(container, "语音输入")).toBeNull()
+    expect(container.querySelector('button[aria-label="发送"]')).toBeNull()
+
+    const cancel = buttonByAriaLabel(container, "取消语音输入")
+    const confirm = buttonByAriaLabel(container, "完成语音输入")
+    expect(cancel).toBeTruthy()
+    expect(confirm).toBeTruthy()
+    if (!cancel || !confirm) throw new Error("Expected voice actions")
+    // PC 两个面一致：取消也在右侧，排在确认前面。
+    expect(cancel.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it("录音时先占位聆听中，出字后按定稿与未定稿分开显示", async () => {
+    const container = await renderVoiceComposer()
+    await startVoice(container)
+
+    expect(container.querySelector("[data-voice-live]")?.textContent).toBe("聆听中")
+
+    emitTranscript("跑一下 ", "pnpm dev")
+    const live = container.querySelector("[data-voice-live]")
+    expect(live?.textContent).toBe("跑一下 pnpm dev")
+    // 未定稿的那半边单独包着一个次要色的节点。
+    const unstable = live?.querySelector("span")
+    expect(unstable?.textContent).toBe("pnpm dev")
+    expect(unstable?.className).toContain("text-muted-foreground")
+  })
+
+  it("没出字时确定键置灰", async () => {
+    const container = await renderVoiceComposer()
+    await startVoice(container)
+
+    expect(buttonByAriaLabel(container, "完成语音输入")?.disabled).toBe(true)
+
+    emitTranscript("跑一下", "")
+    expect(buttonByAriaLabel(container, "完成语音输入")?.disabled).toBe(false)
+  })
+
+  it("取消回到点麦克风之前的内容", async () => {
+    const onDraftChange = vi.fn()
+    const container = await renderVoiceComposer({ draft: "先跑测试", onDraftChange })
+    await startVoice(container)
+    emitTranscript("这半句不要", "")
+
+    const cancel = buttonByAriaLabel(container, "取消语音输入")
+    // 取消和确定在底栏那一排里，不是另外浮出来的一条。
+    expect(cancel?.closest(".agent-composer-input-box__toolbar")).toBeTruthy()
+    await clickButton(cancel)
+
+    // 转写只在确认时才落进草稿，取消天然回滚 —— 已经打好的那半句一个字没动。
+    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(container.querySelector("[data-voice-live]")).toBeNull()
+    expect(container.querySelector(".agent-composer__input")).toBeTruthy()
+  })
+
+  it("确认留下原内容加转写，不自动发送", async () => {
+    voiceSession.confirmResult = "再 git status 看看"
+    const onDraftChange = vi.fn()
+    const container = await renderVoiceComposer({ draft: "先跑测试", onDraftChange })
+    await startVoice(container)
+    emitTranscript("再 git status 看看", "")
+
+    const confirm = buttonByAriaLabel(container, "完成语音输入")
+    // 确认键就在发送键原来的位置上（底栏那一排的右端）。
+    expect(confirm?.closest(".agent-composer-input-box__toolbar")).toBeTruthy()
+    await clickButton(confirm)
+
+    expect(onDraftChange).toHaveBeenCalledTimes(1)
+    expect(onDraftChange).toHaveBeenCalledWith("先跑测试 再 git status 看看")
+    expect(container.querySelector("[data-voice-live]")).toBeNull()
+  })
+
+  /**
+   * 权限被拒时录音根本没起来、phase 回到 idle：旧实现只按 phase 渲染，界面上
+   * 什么都不会发生。失败提示现在落在常驻的输入区上。
+   */
+  it("麦克风起不来时输入区说明是哪种情况，取消后回到普通输入态", async () => {
+    voiceSession.startError = new MicrophonePermissionError()
+    const container = await renderVoiceComposer()
+    await startVoice(container)
+
+    expect(container.querySelector(".agent-composer__input")).toBeNull()
+    expect(container.querySelector("[data-voice-live]")?.textContent).toBe("麦克风权限未开启")
+    const retry = buttonByAriaLabel(container, "重试语音输入")
+    expect(retry).toBeTruthy()
+    // 要去系统设置里解决，原地再点一次不会变。
+    expect(retry?.disabled).toBe(true)
+
+    await clickButton(buttonByAriaLabel(container, "取消语音输入"))
+
+    expect(container.querySelector("[data-voice-live]")).toBeNull()
+    expect(container.querySelector(".agent-composer__input")).toBeTruthy()
   })
 })
 

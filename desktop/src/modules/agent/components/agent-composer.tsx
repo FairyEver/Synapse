@@ -10,7 +10,7 @@ import {
   useState,
 } from "react"
 import { createPortal } from "react-dom"
-import { ArrowUp, ChevronDown, CornerDownRight, Folder, Mic, RotateCcw, Square, Trash2 } from "lucide-react"
+import { ArrowUp, Check, ChevronDown, CornerDownRight, Folder, Mic, RotateCcw, RotateCw, Square, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
@@ -35,7 +35,7 @@ import {
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
 import { useVoiceInput } from "@/modules/voice/use-voice-input"
-import { VoiceInputStrip } from "@/modules/voice/voice-input-strip"
+import { describeVoiceInput } from "@/modules/voice/voice-input-presentation"
 import { insertTextAtComposerSelection } from "../composer-insert"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
@@ -169,6 +169,16 @@ function AgentComposer({
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const voice = useVoiceInput()
+  const voicePresentation = describeVoiceInput(voice.state)
+  // 右槽一个位置两件事:能重试就给旋转箭头,否则给对勾。置灰的那两种点不动。
+  const isVoiceRetry = voicePresentation.action === "retry" || voicePresentation.action === "retry-disabled"
+  const isVoiceActionDisabled = voicePresentation.action === "confirm-disabled" || voicePresentation.action === "retry-disabled"
+  /** 录音态的展示节点。说长了要一直看得到刚说出口的几个字，所以滚到底。 */
+  const voiceLiveRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const element = voiceLiveRef.current
+    if (element) element.scrollTop = element.scrollHeight
+  }, [voice.state.transcript])
   const [multiline, setMultiline] = useState(false)
   const [pendingMode, setPendingMode] = useState<SynapseAgentPermissionMode | null>(null)
   const [pendingModeAction, setPendingModeAction] = useState<"switch" | "new-session">("switch")
@@ -789,17 +799,29 @@ function AgentComposer({
               onRemove={removeAttachment}
             />
           ) : null}
-          editor={voice.state.phase === "recording" ? (
+          editor={voicePresentation.active ? (
             /**
              * 录音时把 Textarea 整个换成展示节点，而不是去隐藏键盘：没有可聚焦的
              * 元素，键盘自然不会出现。样式对齐 Textarea，文字不会跳位。
              */
             <div
-              className="agent-composer__voice-live min-h-9 px-2 py-2 text-sm leading-6 break-words whitespace-pre-wrap"
+              ref={voiceLiveRef}
+              className="agent-composer__voice-live max-h-40 min-h-9 overflow-y-auto px-2 py-2 text-sm leading-6 break-words whitespace-pre-wrap"
               data-voice-live
             >
-              {voice.state.transcript.stable}
-              <span className="text-muted-foreground">{voice.state.transcript.unstable}</span>
+              {voice.state.transcript.combined ? (
+                <>
+                  {voice.state.transcript.stable}
+                  {/* 未定稿的部分还会变，用次要色和定稿文字区分开。 */}
+                  <span className="text-muted-foreground">{voice.state.transcript.unstable}</span>
+                  {voicePresentation.caretVisible ? (
+                    <span aria-hidden="true" className="ml-px inline-block h-3.5 w-0.5 bg-foreground align-middle" />
+                  ) : null}
+                </>
+              ) : (
+                /* 刚开录、静音、失败都落在这里:麦克风起不来时这是界面上唯一的说明。 */
+                <span className="text-muted-foreground">{voicePresentation.placeholder}</span>
+              )}
             </div>
           ) : (
             <Textarea
@@ -824,7 +846,7 @@ function AgentComposer({
               rows={1}
             />
           )}
-          leadingActions={(
+          leadingActions={voicePresentation.active ? null : (
             <>
               {workspacePanel?.fileTreeAvailable ? (
                 <Button
@@ -874,7 +896,37 @@ function AgentComposer({
                 ) : null}
             </>
           )}
-          trailingActions={(
+          trailingActions={voicePresentation.active ? (
+            /**
+             * 录音期间这一排只剩取消和确定：文件、快捷输入、跳过权限确认这几秒里
+             * 都用不上。两个都在右侧 —— PC 的两端一致，和 iOS 的左取消右确定不同。
+             * `ml-auto` 是因为工具栏是 justify-between，收起左边之后不能靠它定位。
+             */
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="取消语音输入"
+                onClick={voice.cancel}
+              >
+                <X />
+              </Button>
+              <Button
+                type="button"
+                className="agent-composer__send rounded-full"
+                size="icon-sm"
+                aria-label={isVoiceRetry ? "重试语音输入" : "完成语音输入"}
+                disabled={isVoiceActionDisabled}
+                onClick={() => {
+                  if (isVoiceRetry) voice.retry()
+                  else void commitVoiceInput()
+                }}
+              >
+                {isVoiceRetry ? <RotateCw /> : <Check />}
+              </Button>
+            </div>
+          ) : (
             <>
               <AgentPermissionModeMenu
                 selectedMode={permissionMode}
@@ -934,16 +986,6 @@ function AgentComposer({
               )}
             </>
           )}
-          footer={voice.state.phase === "recording" ? (
-            <VoiceInputStrip
-              transcript={voice.state.transcript}
-              elapsedMs={voice.state.elapsedMs}
-              failure={voice.state.failure}
-              onCancel={voice.cancel}
-              onConfirm={() => { void commitVoiceInput() }}
-              onRetry={voice.retry}
-            />
-          ) : null}
         />
       </form>
       <Dialog open={pendingMode !== null} onOpenChange={(open) => {

@@ -12,8 +12,6 @@ type AgentComposerInputBoxProps = {
   readonly slashMenu?: ReactNode
   readonly attachments?: ReactNode
   readonly dropActive?: boolean
-  /** 工具栏下方的整行区域，语音输入的控制条用它。 */
-  readonly footer?: ReactNode
 }
 
 function AgentComposerInputBox({
@@ -26,7 +24,6 @@ function AgentComposerInputBox({
   slashMenu,
   attachments,
   dropActive,
-  footer,
 }: AgentComposerInputBoxProps) {
   return (
     <div
@@ -69,11 +66,6 @@ function AgentComposerInputBox({
             {trailingActions}
           </div>
         </div>
-        {footer ? (
-          <div className="agent-composer-input-box__footer mt-1 -mx-2 -mb-2">
-            {footer}
-          </div>
-        ) : null}
       </div>
     </div>
   )
