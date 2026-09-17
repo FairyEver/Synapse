@@ -44,37 +44,53 @@ func applyGridRelease(
     display.setMode(.phoneDriven, for: sessionId)
 }
 
-/// Whether the phone may go on treating a terminal's grid as its own.
+/// Watches who owns each terminal's grid across summaries, and names the claims that
+/// move off this phone.
 ///
 /// A summary is the only place the desktop's decision appears: taking the grid back
 /// is a local act on the computer, and it reaches the phone as ownership moving off
 /// this device. Both endings mean the same thing here — another phone holds it, or
 /// nobody does — so the phone stops rendering a mode it can no longer honour.
-enum GridClaimState: Equatable {
-    /// Nothing to decide: the phone holds the grid, or never asked for it.
-    case keep
-    /// The phone asked to size this terminal and the grid is no longer its to size.
-    case lost
-}
-
-/// Reads ownership out of a summary, against the phone's own identity.
 ///
-/// The unowned case is the one that needs a previous value, and it is why this
-/// takes two. A claim this phone has just made but the desktop has not adopted yet
-/// *also* reads as unowned — the debounce, the round trip and the summary's own
-/// interval all land inside that window — and rolling back then would undo the
-/// reader's choice before it had a chance to take effect. Ownership that was this
-/// phone's a moment ago and is nobody's now has no such explanation: the desktop
-/// took it back.
-func gridClaimState(
-    previousOwnerId: String?,
-    ownerId: String?,
-    phoneClientInstanceId: String
-) -> GridClaimState {
-    if ownerId == phoneClientInstanceId { return .keep }
-    // Another device holds it, so this one cannot, whoever thought otherwise.
-    if ownerId != nil { return .lost }
-    return previousOwnerId == phoneClientInstanceId ? .lost : .keep
+/// This is a ledger rather than a per-screen check because the claim outlives the
+/// screen: leaving a terminal sends `detach`, which releases the write lease but not
+/// the grid. The desktop's release can therefore land while the reader is on the
+/// session list, where no terminal view is mounted to hear about it, and the claim
+/// would go on being believed until the next reconnect re-asserted it.
+///
+/// It remembers rather than compares because the unowned case needs a before. A
+/// claim this phone has just made and the desktop has not adopted yet *also* reads
+/// as unowned — the debounce, the round trip and the summary's own interval all land
+/// inside that window — and rolling back there would undo the reader's choice before
+/// it had a chance to take effect.
+struct GridClaimLedger {
+    /// Sessions whose last summary named this phone as the grid's owner.
+    private var claims: Set<String> = []
+
+    /// Records one summary and returns the sessions whose claim this phone lost.
+    ///
+    /// A session the ledger has not seen before cannot have lost anything: the first
+    /// summary about it says what is, not what changed.
+    mutating func apply(
+        sessions: [MobileSummarySession],
+        phoneClientInstanceId: String
+    ) -> [String] {
+        var lost: [String] = []
+        var live: Set<String> = []
+        for session in sessions {
+            live.insert(session.id)
+            if session.gridOwnerId == phoneClientInstanceId {
+                claims.insert(session.id)
+            } else if claims.contains(session.id) {
+                claims.remove(session.id)
+                lost.append(session.id)
+            }
+        }
+        // Terminals that have ended say nothing more, and a ledger that kept them
+        // would grow with every terminal the reader ever opened.
+        claims.formIntersection(live)
+        return lost
+    }
 }
 
 /// Reads the desktop's answer, or its absence.

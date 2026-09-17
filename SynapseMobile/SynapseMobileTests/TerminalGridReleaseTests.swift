@@ -134,30 +134,86 @@ struct TerminalGridReleaseTests {
 
     // MARK: - Ownership moving in a summary
 
+    private func session(_ id: String, owner: String?) -> MobileSummarySession {
+        MobileSummarySession(
+            id: id,
+            groupId: "g1",
+            title: id,
+            status: "running",
+            attention: MobileSummaryAttention(state: "not_waiting", kind: "unknown"),
+            cwd: "/tmp",
+            cols: 54,
+            rows: 37,
+            startedAt: "2026-01-01T00:00:00.000Z",
+            lastLine: "",
+            lastOutputSeq: 0,
+            gridOwnerId: owner
+        )
+    }
+
     /// The desktop's pane offers its own release, and this is how the phone learns
     /// it was used: ownership that was this phone's and is now nobody's.
-    @Test func aGridTheDesktopTookBackReadsAsLost() {
-        #expect(gridClaimState(previousOwnerId: "phone-1", ownerId: nil, phoneClientInstanceId: "phone-1") == .lost)
+    @Test func aGridTheDesktopTookBackIsReported() {
+        var ledger = GridClaimLedger()
+        _ = ledger.apply(sessions: [session("s1", owner: "phone-1")], phoneClientInstanceId: "phone-1")
+
+        #expect(ledger.apply(sessions: [session("s1", owner: nil)], phoneClientInstanceId: "phone-1") == ["s1"])
     }
 
     /// Another phone asked for the size. Two phones cannot both be deciding one
     /// terminal's grid, so this one has to stop saying it is.
-    @Test func aGridAnotherPhoneTookReadsAsLost() {
-        #expect(gridClaimState(previousOwnerId: "phone-1", ownerId: "phone-2", phoneClientInstanceId: "phone-1") == .lost)
+    @Test func aGridAnotherPhoneTookIsReported() {
+        var ledger = GridClaimLedger()
+        _ = ledger.apply(sessions: [session("s1", owner: "phone-1")], phoneClientInstanceId: "phone-1")
+
+        #expect(ledger.apply(sessions: [session("s1", owner: "phone-2")], phoneClientInstanceId: "phone-1") == ["s1"])
     }
 
     /// The claim this phone just made has not reached the desktop yet, and until it
     /// does the summary describes a terminal nobody is sizing. Reading that as a
     /// loss would undo the reader's choice inside the debounce that carries it.
     @Test func aClaimNotYetAdoptedIsNotALoss() {
-        #expect(gridClaimState(previousOwnerId: nil, ownerId: nil, phoneClientInstanceId: "phone-1") == .keep)
-        #expect(gridClaimState(previousOwnerId: "phone-2", ownerId: nil, phoneClientInstanceId: "phone-1") == .keep)
+        var ledger = GridClaimLedger()
+        #expect(ledger.apply(sessions: [session("s1", owner: nil)], phoneClientInstanceId: "phone-1").isEmpty)
+        // Nor is the first summary about a terminal another phone already holds:
+        // there was no claim of this phone's to lose.
+        #expect(ledger.apply(sessions: [session("s2", owner: "phone-2")], phoneClientInstanceId: "phone-1").isEmpty)
     }
 
     /// The ordinary case for a terminal at the computer's own size, and for one this
     /// phone is already sizing: nothing here moves either.
     @Test func aGridThisPhoneHoldsIsKept() {
-        #expect(gridClaimState(previousOwnerId: nil, ownerId: "phone-1", phoneClientInstanceId: "phone-1") == .keep)
-        #expect(gridClaimState(previousOwnerId: "phone-1", ownerId: "phone-1", phoneClientInstanceId: "phone-1") == .keep)
+        var ledger = GridClaimLedger()
+        #expect(ledger.apply(sessions: [session("s1", owner: "phone-1")], phoneClientInstanceId: "phone-1").isEmpty)
+        #expect(ledger.apply(sessions: [session("s1", owner: "phone-1")], phoneClientInstanceId: "phone-1").isEmpty)
+    }
+
+    /// One terminal's grid changing hands says nothing about another's, and the
+    /// report names only the ones that actually moved.
+    @Test func onlyTheTerminalsThatChangedHandsAreReported() {
+        var ledger = GridClaimLedger()
+        _ = ledger.apply(sessions: [
+            session("s1", owner: "phone-1"),
+            session("s2", owner: "phone-1"),
+            session("s3", owner: nil),
+        ], phoneClientInstanceId: "phone-1")
+
+        #expect(ledger.apply(sessions: [
+            session("s1", owner: nil),
+            session("s2", owner: "phone-1"),
+            session("s3", owner: nil),
+        ], phoneClientInstanceId: "phone-1") == ["s1"])
+    }
+
+    /// A terminal that has ended stops being remembered. Without this the ledger
+    /// would grow with every terminal the reader ever opened.
+    @Test func aTerminalThatIsGoneIsForgotten() {
+        var ledger = GridClaimLedger()
+        _ = ledger.apply(sessions: [session("s1", owner: "phone-1")], phoneClientInstanceId: "phone-1")
+        _ = ledger.apply(sessions: [], phoneClientInstanceId: "phone-1")
+
+        // Seen again with no owner: the ledger has no memory of the claim, so this
+        // reads as a terminal nobody is sizing rather than one taken away.
+        #expect(ledger.apply(sessions: [session("s1", owner: nil)], phoneClientInstanceId: "phone-1").isEmpty)
     }
 }

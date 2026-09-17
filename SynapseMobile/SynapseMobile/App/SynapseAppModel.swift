@@ -74,6 +74,17 @@ final class SynapseAppModel {
 
     var clientInstanceId: String { tokens.clientInstanceId }
 
+    /// How the reader has asked terminals to be laid out.
+    ///
+    /// Owned here so a summary can move a display mode without a screen in the way.
+    /// Taking the grid back on the computer reaches the phone only as a summary, and
+    /// the reader may well be looking at the session list when it does — see
+    /// `GridClaimLedger`.
+    let display = TerminalDisplaySettings()
+
+    /// Which terminals this phone is sizing, as the summaries have last said.
+    private var gridClaims = GridClaimLedger()
+
     init() {
         apiClient = APIClient(tokens: tokens) { [weak self] in
             Task { @MainActor in await self?.handleCredentialsChanged() }
@@ -133,6 +144,7 @@ final class SynapseAppModel {
         openSessions.removeAll()
         pendingHistory.removeAll()
         summary = nil
+        gridClaims = GridClaimLedger()
         selectedDesktopClientInstanceId = nil
         await apiClient.logout()
         authState = .signedOut
@@ -182,6 +194,7 @@ final class SynapseAppModel {
             guard payload.desktopClientInstanceId == self.selectedDesktopClientInstanceId else { return }
             self.summary = payload
             self.pruneTerminalStores(keeping: Set(payload.sessions.map(\.id)))
+            self.applyGridClaims(payload.sessions)
         }
         realtime.onFrame = { [weak self] payload in
             guard let self else { return }
@@ -689,6 +702,21 @@ final class SynapseAppModel {
             timeoutSeconds: 5
         )
         return gridReleaseOutcome(for: result)
+    }
+
+    /// Puts each terminal whose grid left this phone back on the computer's layout.
+    ///
+    /// Run on every summary rather than from the terminal screen, because that is the
+    /// one message that arrives whatever the reader is looking at: a claim outlives
+    /// the screen it was made from, so the desktop's release can land while the phone
+    /// shows the session list.
+    private func applyGridClaims(_ sessions: [MobileSummarySession]) {
+        for sessionId in gridClaims.apply(sessions: sessions, phoneClientInstanceId: clientInstanceId) {
+            // Dropped before the mode moves, so the mode's own change does not send a
+            // release for a claim the desktop has already taken.
+            forgetClaimedGrid(for: sessionId)
+            display.setMode(.desktopDriven, for: sessionId)
+        }
     }
 
     /// Drops a claim without telling the desktop, for a grid the desktop has

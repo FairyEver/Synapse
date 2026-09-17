@@ -42,11 +42,18 @@ grid it reports, so the grid it had already asked for was never sent again.
   none where this phone's used to be, puts the display mode back to `.desktopDriven`
   and drops the phone's record of the grid it asked for — without which a later
   switch back to the phone's layout would be deduplicated away and change nothing.
-- **The unowned case needs a previous value.** A claim this phone has just made and
-  the desktop has not adopted yet also reads as unowned — the debounce, the round
-  trip and the summary's own interval all land inside that window — so a grid that
-  was nobody's before and is nobody's now is left alone. Only ownership moving off
-  this phone is a loss.
+- **The comparison runs on every summary, not on the screen showing the terminal.**
+  A claim outlives the screen it was made from: leaving a terminal sends `detach`,
+  which releases the write lease and not the grid, so the desktop's release can land
+  while the reader is on the session list. A view that reacted to its own session's
+  owner would miss that one, and the claim would go on being believed until the next
+  reconnect re-asserted it. The ledger therefore lives behind the summary handler.
+- **The unowned case needs a before.** A claim this phone has just made and the
+  desktop has not adopted yet also reads as unowned — the debounce, the round trip
+  and the summary's own interval all land inside that window — so the ledger
+  remembers which terminals this phone was last seen sizing, and reports only those
+  moving off it. A terminal it has never been named the owner of cannot have lost
+  anything.
 - **The summary's byte budget is raised from 224 KiB to 240 KiB.** The owner had to
   ride on every session rather than be sent separately, because a phone needs it per
   session and the summary is the one message a phone cannot reassemble. At 256

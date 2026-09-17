@@ -6,13 +6,15 @@ struct SynapseMobileApp: App {
     /// without any scene attached.
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = SynapseAppModel()
-    @State private var display = TerminalDisplaySettings()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
-                .environment(display)
+                // Owned by the model rather than made here: a summary can move a
+                // terminal's display mode, and summaries arrive whatever screen is
+                // showing.
+                .environment(model.display)
                 .tint(Theme.ink)
         }
     }
