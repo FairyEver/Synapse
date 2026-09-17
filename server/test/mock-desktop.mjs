@@ -38,6 +38,16 @@ const controlHost = controlHostFlag >= 0 && rawArgs[controlHostFlag + 1]
  * that a run which is about the flat list sees exactly the flat list.
  */
 const splitFixturesEnabled = rawArgs.includes("--splits")
+/**
+ * Behave like a desktop from before `mobile.toolbar` existed: one that cannot describe
+ * its buttons at all.
+ *
+ * That is a different answer from a computer that says it has none, and the phone is
+ * supposed to show its own built-ins for it rather than an empty bar — without which a
+ * phone has no way to confirm anything in a TUI. Worth being able to produce on demand,
+ * because the two answers look identical from here.
+ */
+const toolbarSuppressed = rawArgs.includes("--no-toolbar")
 const contendFlag = rawArgs.indexOf("--contend")
 /**
  * Which session stands in for "the desktop user is typing right now" — see the
@@ -173,6 +183,7 @@ let toolbarButtons = [
 let toolbarRevision = 0
 
 function sendToolbar() {
+  if (toolbarSuppressed) return
   toolbarRevision += 1
   socket?.send(JSON.stringify(envelope("mobile.toolbar", {
     desktopClientInstanceId,

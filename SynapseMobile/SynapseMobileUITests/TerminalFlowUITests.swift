@@ -560,6 +560,59 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "13-keyboard-panel-stays-open")
     }
 
+    /// A computer that cannot describe its buttons gets the phone's own built-ins.
+    ///
+    /// "I have no buttons" and "I am too old to say" arrive at the phone as the same
+    /// state — no list has been adopted — and it must not answer them the same way. An
+    /// empty bar is correct for the first and would be a dead end for the second: with
+    /// no keyboard of its own, a phone with no return key cannot confirm anything in a
+    /// TUI, including the approval prompts Claude Code waits on.
+    ///
+    /// Needs a computer that genuinely does not send the message, so it is skipped
+    /// unless the run is set up for one — a mock desktop started with `--no-toolbar`.
+    /// Asserting it by reading the fallback constant would only prove the constant
+    /// exists, not that the bar ever reaches for it.
+    func testAnOldComputerStillGetsAUsableBar() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["SYNAPSE_TEST_OLD_DESKTOP"] == "1",
+            "run with a mock desktop started --no-toolbar and SYNAPSE_TEST_OLD_DESKTOP=1"
+        )
+
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        let sessionRow = app.staticTexts["claude-code"]
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the claude-code session never appeared")
+        XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
+        sessionRow.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["terminal.text"].waitForExistence(timeout: 15),
+            "terminal never appeared"
+        )
+
+        // Long enough that a list which was going to arrive would have.
+        XCTAssertTrue(app.buttons["toolbar-enter"].waitForExistence(timeout: 15), "no return key: a TUI cannot be confirmed")
+        for id in ["toolbar-interrupt", "toolbar-slash-exit", "toolbar-slash-clear"] {
+            XCTAssertTrue(app.buttons[id].exists, "the fallback bar is missing \(id)")
+        }
+        XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "the keyboard button is the phone's own and must stay")
+        // The assertion that makes this test mean anything. The four built-ins are also
+        // what a computer that *can* describe itself sends, so checking only for them
+        // passes either way. `mock-deploy` is a command this mock owns and the fallback
+        // has never heard of, so its absence is what says nothing was received — and if
+        // that computer ever did send a list, this test fails rather than quietly
+        // passing for the wrong reason.
+        XCTAssertFalse(
+            app.buttons["toolbar-mock-deploy"].exists,
+            "the computer sent its own list after all — this test proves nothing about the fallback"
+        )
+        capture(app, name: "15-old-desktop-fallback")
+    }
+
     /// What the computer offers follows the user's edits.
     ///
     /// The computer's list is a snapshot the phone replaces wholesale, so all three
