@@ -460,17 +460,19 @@ struct TerminalScreen: View {
         // otherwise has to guess its way back to.
         .accessibilityIdentifier("toolbar-scroll")
         .sheet(isPresented: $keyboardPanelPresented) {
-            TerminalKeyboardPanel(isEnabled: isRunning) { key in
-                model.sendKey(sessionId, key)
+            // The panel sends a list rather than a single key because one chord needs
+            // two actions: Alt is an Escape prefix, and both halves have to travel in
+            // one intent for the terminal not to act on the bare Escape in between.
+            TerminalKeyboardPanel(isEnabled: isRunning) { actions in
+                model.sendKeys(sessionId, actions)
                 // The panel stays up — pressing several keys, or holding an arrow, is
                 // the ordinary way to use it, and a panel that closed after each one
                 // would have to be reopened for each one.
-                if key == .enter { model.commitDeliveredAttachments(for: sessionId) }
+                if actions.contains(.key(.enter)) { model.commitDeliveredAttachments(for: sessionId) }
             }
-            // Opens at its resting height and can be pulled up from there. The grid is
-            // meant to be pressed while watching the terminal, so it takes as little of
-            // the screen as it can.
-            .presentationDetents([.height(KeyboardPanelMetrics.restingHeight), .large])
+            // Its resting height — and therefore its detent — belongs to the page the
+            // panel is on, so the panel sets it: the full keyboard is four rows where
+            // the others are two or three. See `KeyboardPanelMetrics`.
             .presentationDragIndicator(.visible)
         }
     }

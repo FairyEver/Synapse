@@ -544,20 +544,97 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["panelkey-Escape"].waitForExistence(timeout: 10), "the panel never opened")
         capture(app, name: "11-keyboard-panel-common")
 
-        for (category, key) in [("方向", "panelkey-ArrowUp"), ("功能", "panelkey-PageUp"), ("控制", "panelkey-Ctrl+A")] {
+        // `⇧tab` has no iPhone keyboard of its own, and it cannot be composed in the
+        // panel either — Shift is on the full keyboard page and Tab is on this one, and
+        // changing page drops a latched modifier. It is the key that cycles Claude
+        // Code's permission mode, which is why it earns a slot of its own.
+        XCTAssertTrue(app.buttons["panelkey-Shift+Tab"].exists, "the common page has no ⇧tab")
+        app.buttons["panelkey-Shift+Tab"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Shift+Tab", in: app, timeout: 20),
+            "⇧tab did not reach the computer"
+        )
+
+        for (category, key) in [("方向", "panelkey-ArrowUp"), ("功能", "panelkey-PageUp"),
+                                ("全键盘", "panelkey-modifier-Ctrl")] {
             app.buttons[category].tap()
             XCTAssertTrue(app.buttons[key].waitForExistence(timeout: 5), "\(category) has no \(key)")
         }
-        capture(app, name: "12-keyboard-panel-control")
+        capture(app, name: "12-keyboard-panel-full")
 
-        app.buttons["panelkey-Ctrl+A"].tap()
+        // The point of the page: a chord is two taps, and what the computer receives is
+        // the combination rather than the letter. Latched first, then the letter.
+        app.buttons["panelkey-modifier-Ctrl"].tap()
+        XCTAssertTrue(app.buttons["panelkey-letter-a"].waitForExistence(timeout: 5),
+                      "the full keyboard has no letter keys")
+        app.buttons["panelkey-letter-a"].tap()
         XCTAssertTrue(
             waitForLabel(containing: "[mock] keys key:Ctrl+A", in: app, timeout: 20),
-            "a panel key did not reach the computer"
+            "a latched chord did not reach the computer"
         )
         // Still up: pressing several keys in a row is the ordinary way to use it.
-        XCTAssertTrue(app.buttons["panelkey-Ctrl+A"].exists, "the panel closed after one key")
+        XCTAssertTrue(app.buttons["panelkey-modifier-Ctrl"].exists, "the panel closed after one key")
         capture(app, name: "13-keyboard-panel-stays-open")
+
+        // `I` and `M` are the two chords the wire has no separate name for — their bytes
+        // are Tab's and Return's — so they are sent as those keys. This is the assertion
+        // that the panel knows it: pressing the chord has to produce `Tab`, not nothing
+        // and not a name the computer would reject.
+        //
+        // `Shift` is tapped first each time, and not only to prove a second modifier
+        // replaces the first. Two taps on one modifier in quick succession are the
+        // double-tap that locks it, and here the interval is a network round trip that
+        // nothing keeps above the threshold. Interleaving another modifier makes every
+        // pair of `Ctrl` taps unambiguously separate, so the latch is always a single
+        // tap and the assertion can only be about the chord.
+        for (letter, expected) in [("i", "Tab"), ("m", "Enter")] {
+            app.buttons["panelkey-modifier-Shift"].tap()
+            app.buttons["panelkey-modifier-Ctrl"].tap()
+            XCTAssertTrue(app.buttons["panelkey-letter-\(letter)"].waitForExistence(timeout: 5),
+                          "no \(letter) key")
+            app.buttons["panelkey-letter-\(letter)"].tap()
+            XCTAssertTrue(
+                waitForLabel(containing: "[mock] keys key:\(expected)", in: app, timeout: 20),
+                "Ctrl+\(letter.uppercased()) did not arrive as \(expected)"
+            )
+        }
+
+        // Alt is an Escape prefix, and both halves have to arrive as one intent — sent
+        // separately the terminal would act on the bare Escape first.
+        app.buttons["panelkey-modifier-Alt"].tap()
+        app.buttons["panelkey-letter-b"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Escape text:b", in: app, timeout: 20),
+            "the Alt chord did not arrive as one intent"
+        )
+        capture(app, name: "14-keyboard-panel-alt-chord")
+
+        // With nothing latched the panel types the character, which is the whole reason
+        // it can answer a TUI's `y`/`n` or a permission prompt's `1`/`2`/`3` without
+        // being lowered to reach the system keyboard. A chord here would be wrong.
+        app.buttons["panelkey-digit-3"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:3", in: app, timeout: 20),
+            "an unlatched digit did not go out as text"
+        )
+        app.buttons["panelkey-letter-y"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:y", in: app, timeout: 20),
+            "an unlatched letter did not go out as lower-case text"
+        )
+
+        // `Ctrl` is latched first and then replaced by `Shift`. What the computer
+        // receives is what tells the two possibilities apart: if the modifiers stacked
+        // instead of replacing, this would have gone out as `Ctrl+C` rather than as the
+        // capital `C` — and a board that stacks has no key left that can be pressed.
+        app.buttons["panelkey-modifier-Ctrl"].tap()
+        app.buttons["panelkey-modifier-Shift"].tap()
+        app.buttons["panelkey-letter-c"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:C", in: app, timeout: 20),
+            "a second modifier stacked onto the first instead of replacing it"
+        )
+        capture(app, name: "15-keyboard-panel-shift")
     }
 
     /// Nothing here can be pressed once the terminal is gone.
