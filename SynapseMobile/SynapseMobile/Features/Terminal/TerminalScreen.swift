@@ -6,6 +6,7 @@ struct TerminalScreen: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(TerminalDisplaySettings.self) private var display
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     let sessionId: String
     @State private var draft = ""
@@ -17,12 +18,12 @@ struct TerminalScreen: View {
     @State private var showingStopConfirm = false
     @FocusState private var inputFocused: Bool
 
-    @State private var showingSources = false
     @State private var showingPhotoPicker = false
     @State private var showingDocumentPicker = false
     @State private var showingCamera = false
-    /// Read when the menu opens rather than kept in sync: the pasteboard changes
-    /// while the app is not looking, and there is no notification for that.
+    /// Refreshed at the moments an image can have arrived rather than read where it
+    /// is used: the pasteboard changes while the app is not looking, there is no
+    /// notification for that, and the menu that asks is built before it opens.
     @State private var pasteboardHoldsImage = false
     /// Files picked but not yet sent, while the user is being asked whether a
     /// terminal that is waiting for input should really receive them.
@@ -126,7 +127,10 @@ struct TerminalScreen: View {
             // to adopt. Rotation and a dismissed keyboard both land here.
             .onChange(of: store.columns) { reportGridToDesktop() }
             .onChange(of: store.visibleRows) { reportGridToDesktop() }
-            .onChange(of: inputFocused) { reportGridToDesktop() }
+            .onChange(of: inputFocused) {
+                reportGridToDesktop()
+                refreshPasteboardImage()
+            }
             TerminalRelayStrip(
                 attachments: relayAttachments,
                 onUndo: { model.undoTypedPaths($0) },
@@ -167,7 +171,16 @@ struct TerminalScreen: View {
         // The terminal is the screen; a tab bar over a soft keyboard only
         // costs vertical space and invites taps by accident.
         .toolbar(.hidden, for: .tabBar)
-        .onAppear { model.openTerminal(sessionId) }
+        .onAppear {
+            model.openTerminal(sessionId)
+            refreshPasteboardImage()
+        }
+        // Coming back to the front is how an image copied in another app — or on the
+        // computer the user is sitting at — reaches this device's pasteboard while
+        // this screen is the one being looked at.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshPasteboardImage() }
+        }
         .onDisappear {
             // Leaving the screen ends the recording with it: a microphone left open
             // behind a pushed-back list is the kind of thing that only gets noticed
@@ -190,19 +203,6 @@ struct TerminalScreen: View {
             Button("停止", role: .destructive) { model.stop(sessionId) }
         } message: {
             Text("终端将被停止，未保存的进程状态会丢失。")
-        }
-        .confirmationDialog("发送到电脑", isPresented: $showingSources, titleVisibility: .hidden) {
-            Button("照片") { showingPhotoPicker = true }
-            // Hidden where there is no camera — the simulator, and any device
-            // without one — rather than offered and then failing.
-            if CameraPicker.isAvailable {
-                Button("拍照") { showingCamera = true }
-            }
-            Button("文件") { showingDocumentPicker = true }
-            if pasteboardHoldsImage {
-                Button("粘贴图片") { sendPastedImage() }
-            }
-            Button("取消", role: .cancel) {}
         }
         .alert("这个终端正在等待操作", isPresented: $showingBusyConfirm) {
             Button("取消", role: .cancel) { pendingFiles = [] }
@@ -379,17 +379,44 @@ struct TerminalScreen: View {
 
     private var inputBar: some View {
         HStack(spacing: 8) {
-            Button {
-                // Read now, not on every body pass: `hasImages` touches the
-                // pasteboard, and the answer can only be right at the moment the
-                // menu is opened.
-                pasteboardHoldsImage = UIPasteboard.general.hasImages
-                showingSources = true
+            // The sources are offered where the + is, not from the middle of the
+            // screen: the list is short, and the hand that opened it is already
+            // there. `Menu` builds its contents while the body is being evaluated,
+            // which is why `pasteboardHoldsImage` is kept as state refreshed at the
+            // moments the answer can change — see `refreshPasteboardImage`.
+            Menu {
+                Button {
+                    showingPhotoPicker = true
+                } label: {
+                    Label("照片", systemImage: "photo")
+                }
+                // Hidden where there is no camera — the simulator, and any device
+                // without one — rather than offered and then failing.
+                if CameraPicker.isAvailable {
+                    Button {
+                        showingCamera = true
+                    } label: {
+                        Label("拍照", systemImage: "camera")
+                    }
+                }
+                Button {
+                    showingDocumentPicker = true
+                } label: {
+                    Label("文件", systemImage: "folder")
+                }
+                if pasteboardHoldsImage {
+                    Button {
+                        sendPastedImage()
+                    } label: {
+                        Label("粘贴图片", systemImage: "doc.on.clipboard")
+                    }
+                }
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 20))
                     .foregroundStyle(Theme.ink)
             }
+            .tint(Theme.ink)
             .accessibilityIdentifier("attach")
 
             TextField("输入命令", text: $draft)
@@ -476,8 +503,22 @@ struct TerminalScreen: View {
         hand([file])
     }
 
+    /// Whether the pasteboard holds an image, answered at the few moments the answer
+    /// can have changed. `hasImages` talks to the pasteboard service, so it is not
+    /// something to ask on every pass of a body that a keystroke already re-runs —
+    /// and the menu it feeds cannot ask for itself, being built before it opens.
+    private func refreshPasteboardImage() {
+        pasteboardHoldsImage = UIPasteboard.general.hasImages
+    }
+
     private func sendPastedImage() {
-        guard let image = UIPasteboard.general.image else { return }
+        // The offer was made from a reading taken earlier, and the pasteboard is
+        // the one thing on screen that another app can change underneath it.
+        guard let image = UIPasteboard.general.image else {
+            model.banner = "剪贴板里已经没有图片了。"
+            pasteboardHoldsImage = false
+            return
+        }
         Task {
             guard let file = await TerminalFileIntake.prepare(pastedImage: image) else {
                 model.banner = "没有读取到可发送的图片。"
