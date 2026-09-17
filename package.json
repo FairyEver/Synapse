@@ -20,6 +20,7 @@
     "desktop:release:mac": "pnpm --filter @synapse/desktop run release:mac",
     "mobile:build": "SynapseMobile/scripts/release-ios.sh",
     "mobile:release": "SynapseMobile/scripts/release-ios.sh --upload",
+    "mobile:install": "SynapseMobile/scripts/install-ios.sh",
     "auto": "pnpm --filter @synapse/auto run start",
     "dev:shadcn-admin": "pnpm --filter @synapse/shadcn-admin run dev"
   }

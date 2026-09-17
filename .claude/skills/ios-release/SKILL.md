@@ -26,8 +26,7 @@ description: SynapseMobile 的 iOS 发版与装机。打包上传 TestFlight、�
 | 看已用构建号 | `node SynapseMobile/scripts/asc.mjs next-build` | 只读 |
 | 打包 + 上传 | `pnpm mobile:release` | 对外 |
 | 只出 ipa（**App Store 签名，装不上机**） | `pnpm mobile:build` | 本地 |
-| 出开发签名包 | `xcodebuild build -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile -configuration Debug -destination 'platform=iOS,id=<udid>' -allowProvisioningUpdates` | 本地 |
-| 装开发包 | `xcrun devicectl device install app --device <id> <app>` | 本地写 |
+| 装到手机（开发签名，构建 + 安装一条命令） | `pnpm mobile:install` | 本地写 |
 | 装 TestFlight 包 | 手机上手动点 | 人工 |
 
 `asc.mjs` **只读**是刻意的：写操作各自有完整的脚本（`release-ios.sh` / `deploy.sh`），可以整体审阅，其中一个还会重启生产；这个脚本只是让 agent 能**看见** App Store Connect 的状态，而不是等失败之后从报错里反推。
@@ -45,21 +44,20 @@ device token 分环境，服务端只有**一个**开关（`server/src/mobile-li
 
 另外两条路径不能混：`devicectl` **装不了 TestFlight 的包**（App Store 签名，不是开发签名），那个只能在手机上点。
 
-`pnpm mobile:build` 出的就是那种装不上的包。它走 `release-ios.sh` 的 export 段，`ExportOptions.plist` 里 `method = app-store-connect`，出来是 App Store 签名的 ipa；`devicectl` 装它会死在 `0xe800801f`：「Attempted to install a Beta profile without the proper entitlement」。**装机要的是开发签名的 `.app`**，得单独构建：
+`pnpm mobile:build` 出的就是那种装不上的包。它走 `release-ios.sh` 的 export 段，`ExportOptions.plist` 里 `method = app-store-connect`，出来是 App Store 签名的 ipa；`devicectl` 装它会死在 `0xe800801f`：「Attempted to install a Beta profile without the proper entitlement」。**装机要的是开发签名的 `.app`**，这条路径收在一条命令里：
 
 ```bash
-xcodebuild build -project SynapseMobile/SynapseMobile.xcodeproj -scheme SynapseMobile \
-  -configuration Debug -destination 'platform=iOS,id=<udid>' \
-  -allowProvisioningUpdates -derivedDataPath /tmp/synapse-device-build
-# 产物：/tmp/synapse-device-build/Build/Products/Debug-iphoneos/SynapseMobile.app
-xcrun devicectl device install app --device <udid> /tmp/synapse-device-build/Build/Products/Debug-iphoneos/SynapseMobile.app
+pnpm mobile:install                       # 唯一连着的那台
+pnpm mobile:install --device 李杨的iPhone  # 连了多台时指定名字或 identifier
 ```
+
+它做三件事：Debug 构建、`devicectl device install app`、把这次装上去的版本号和构建号打出来。设备按 `devicectl list devices` 的 `tunnelState == connected` 挑——只是配过对、人不在场的 iPad 不会被选中；一台都没有时它直接说明，不要手工拼命令绕过去。
 
 `-allowProvisioningUpdates` 是这条命令成立的前提：自动签名下 Xcode 拿已登录账号去 Developer Portal 认领这台设备、签发 development provisioning profile，设备没进过 profile 也能一次装上。漏了它会在「No profiles for 'com.liy.SynapseMobile' were found」上死掉——和 export 段那条注释是同一个原因。装的是 `.app` 目录，不是 ipa。
 
-两条别混的第二层：这个包 `aps-environment = development`，**装上那一刻就开始吃上面那条 APNs 的坑**（生产网关会把它的 token 当死号删掉）。装机前先确认当前网关值配不配得上。
+两条别混的第二层：这个包 `aps-environment = development`，**装上那一刻就开始吃上面那条 APNs 的坑**（生产网关会把它的 token 当死号删掉）。知道这一点就够了，**不要**为此去改网关值——那是固定值，见上文。
 
-构建号是**每个包各自**的：Debug 构建不走 `release-ios.sh` 的构建号认领，`CFBundleVersion` 就是 pbxproj 里的默认值，和同期 `mobile:build` 出的 ipa 不是同一个号。设备上那个以 `devicectl device info apps` 为准。
+构建号是**每个包各自**的：Debug 构建不走 `release-ios.sh` 的构建号认领，`CFBundleVersion` 就是 pbxproj 里的默认值，和同期 `mobile:build` 出的 ipa 不是同一个号。所以数据线装的包显示的号会比 TestFlight 的号小，这不是装错了。装机命令会把实际装上去的号打出来，App 里终端页标题栏也显示同一个值，两边可以直接对上。
 
 ## 版本号跟桌面端是同一个
 

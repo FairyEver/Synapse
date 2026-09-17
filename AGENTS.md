@@ -103,6 +103,14 @@ pnpm --filter @synapse/desktop run test
 
 开发包收不到推送是**接受的代价**——不需要为它做 per-token 环境分流，也不需要为它切网关。开发包调试完，装回 TestFlight 并**重开一次 App** 就能恢复（旧 token 被删了，不会自己回来）。
 
+## 装到手机上就是一条命令
+
+用户说「装到手机」「装机」「安装到手机」「打个包装上」时，直接运行 `pnpm mobile:install`（`SynapseMobile/scripts/install-ios.sh`）：Debug 开发签名构建 → `devicectl` 安装 → 打印这次装上去的版本号和构建号。不要再重新推导 `xcodebuild` 加 `devicectl` 的调用方式，也不要手工拼命令。
+
+手机需要数据线连着并解锁。没有可用设备时脚本会直接说明，照它说的做，不要改用别的路径兜底。
+
+装上去的是开发包，代价见上一节：**收不到推送**。这是已知且接受的，装机时不必重新讨论，更不要为此去动网关。只出 ipa 用 `pnpm mobile:build`（App Store 签名，装不上机），上传 TestFlight 用 `pnpm mobile:release`；发版细节见 `.claude/skills/ios-release`。
+
 ## 开发命令
 
 - 根目录：`pnpm dev`、`pnpm dev:desktop`、`pnpm dev:server`、`pnpm dev:document`
