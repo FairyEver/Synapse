@@ -64,13 +64,18 @@ const desktopTokenSchema = z.object({
 export class UserAuthController {
   constructor(private readonly auth: UserAuthService) {}
 
+  // These limits are keyed by client IP, so one client's retry burst cannot
+  // spend the budget of every other client. `TRUST_PROXY` must stay configured
+  // for the real address to reach the app; otherwise every request shares a
+  // single bucket. Login stays the tightest of the three because each attempt
+  // runs a bcrypt compare on the event loop.
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/register")
   register(@Body() body: unknown, @Req() request: Request) {
     return this.auth.register(parseBody(registerSchema, body, "注册请求无效。"), request.ip)
   }
 
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @Post("/login")
   login(@Body() body: unknown, @Req() request: Request) {
     return this.auth.login(parseBody(loginSchema, body, "登录请求无效。"), request.ip)
@@ -95,13 +100,13 @@ export class UserAuthController {
     )
   }
 
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: 60 } })
   @Post("/refresh")
   refresh(@Body() body: unknown, @Req() request: Request) {
     return this.auth.refresh(parseBody(refreshSchema, body, "刷新请求无效。"), request.ip)
   }
 
-  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Throttle({ default: { ttl: 60000, limit: 60 } })
   @Post("/logout")
   logout(@Body() body: unknown, @Req() request: Request) {
     return this.auth.logout(parseBody(refreshSchema, body, "退出请求无效。"), request.ip)
