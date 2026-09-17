@@ -1,30 +1,37 @@
 import SwiftUI
 import os
 
-/// 录音态这条 bar 的状态机：权限、采集、连接、送包节奏、收尾。
+/// 录音态的状态机：权限、采集、连接、送包节奏、收尾。录音的界面不在这里 ——
+/// 转写和 ✗ / ✓ 都落进 `TerminalScreen.inputBar`，摆成什么样由
+/// `VoiceInputPresentation` 决定。
 ///
-/// 和视图放在同一个文件里，是因为它只服务于这条 bar，也因为它要在视图重建之间活
-/// 着：转写、计时、和引擎的连接都不该因为一次重绘而重来。
+/// 它要在视图重建之间活着：转写和引擎的连接都不该因为一次重绘而重来。
 @MainActor
 @Observable
 final class VoiceInputController {
-    /// 失败时要给用户看的东西。允许的文案只有这两句，别的一律不编。
+    /// 失败时要给用户看的东西。允许的文案只有这几句，别的一律不编。
     enum Failure: Equatable {
         case noSpeech
         case network
-        /// 电脑上没有设置腾讯云语音识别的密钥。
+        /// 平台还没有配语音识别。
         ///
-        /// 和「网络已断开」分开：两者的下一步完全不同（等网络 vs 去电脑上配置），
-        /// 说成断网会把人支到错的方向去。
+        /// 和「网络已断开」分开：两者的下一步完全不同（等网络 vs 等配置），说成
+        /// 断网会把人支到错的方向去。密钥在服务端，不在电脑上，所以这里不写
+        /// 「电脑上」—— 那句话在签名搬到服务端之后就不再成立。
         case notConfigured
 
         var message: String {
             switch self {
             case .noSpeech: return "没有听到声音"
             case .network: return "网络已断开"
-            case .notConfigured: return "电脑上还没有配置语音识别"
+            case .notConfigured: return "语音识别未配置"
             }
         }
+
+        /// 换一条签名就能接着说的失败才值得给重试。
+        ///
+        /// `.notConfigured` 要在这次通话之外先被解决，原地再点一次不会变。
+        var isRetryable: Bool { self != .notConfigured }
     }
 
     enum Phase: Equatable {
@@ -51,6 +58,8 @@ final class VoiceInputController {
 
     private(set) var phase: Phase = .idle
     private(set) var transcript = AsrTranscript.empty
+    /// 这次录音已经录了多久。录音界面里没有计时，所以它不再被显示 —— 留着是因为
+    /// 节拍本身还要用它判断静音，只是不再是给人看的。
     private(set) var elapsed: TimeInterval = 0
     /// 不进录音态时给用户看的一句话。调用方转发给 banner。
     var notice: String?
@@ -278,100 +287,74 @@ final class VoiceInputController {
     }
 }
 
-/// 录音态的 bar，替换 `inputBar`。
+/// 录音期间输入栏该显示什么。对应桌面端的 `voice-input-presentation`：三端各写
+/// 一遍这套判断会自然地漂开，所以抽成一个纯值 —— 不认识控制器以外的状态，也
+/// 不认识视图，能被单测完整覆盖。
 ///
-/// 两行：上面是实时转写，下面是计时、取消和完成。纯展示 —— 状态在
-/// `VoiceInputController` 里，和 `TerminalRelayStrip` 对 `TerminalStore` 的关系一样。
-struct VoiceInputBar: View {
-    let transcript: AsrTranscript
-    let elapsed: TimeInterval
-    let phase: VoiceInputController.Phase
-    let onRetry: () -> Void
-    let onCancel: () -> Void
-    let onConfirm: () -> Void
+/// 判定顺序本身就是规格，不要重排：
+///
+/// 1. 失败优先 —— 录音中途断网时继续显示「聆听中」，用户会以为还在录。
+/// 2. 失败态同样算 `active` —— 麦克风起不来时这条栏也得说话，不能什么都不发生。
+/// 3. 有没有字决定右槽 —— 没字时确认键置灰（提交空文本没有意义）；**失败时也一
+///    样看字**：已经听到的内容要留得下来，而重试会把这次录音连同转写一起清掉。
+struct VoiceInputPresentation: Equatable {
+    /// 右槽那个键。位置与尺寸都继承发送键 —— 确认之后发送键就回到刚才 ✓ 在的地方。
+    enum RightKey: Equatable {
+        /// 空闲：发送。
+        case send
+        case confirm
+        case confirmDisabled
+        case retry
+        case retryDisabled
+    }
 
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 8) {
-                RecordingDot(isActive: phase.isListening)
-                transcriptText
-                    .font(.system(.body, design: .monospaced))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
+    /// 语音界面是否接管了输入栏（✗ / 转写 / ✓ 顶掉 ＋ / 输入框 / 麦克风 / 发送）。
+    let active: Bool
+    /// 转写为空时的占位。空串表示不放占位。
+    let placeholder: String
+    /// 插入点只在有内容时出现。它就是落点，不是装饰。
+    let caretVisible: Bool
+    let right: RightKey
 
-            HStack(spacing: 14) {
-                if let message = failureMessage {
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(Theme.failure)
-                    Button("重试", action: onRetry)
-                        .font(.footnote)
-                        .foregroundStyle(Theme.ink)
-                        .accessibilityIdentifier("voice-retry")
-                } else {
-                    Text(timeLabel)
-                        .font(.footnote)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
+    init(phase: VoiceInputController.Phase, transcript: AsrTranscript) {
+        // 未定稿的尾巴也一起算：用户已经在屏幕上看见它了。
+        let hasText = !transcript.finalText.isEmpty
 
-                Spacer(minLength: 0)
+        switch phase {
+        case .idle:
+            active = false
+            placeholder = ""
+            caretVisible = false
+            right = .send
 
-                Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Theme.ink)
-                        .frame(width: 30, height: 30)
-                }
-                .accessibilityIdentifier("voice-cancel")
+        case .failed(let failure):
+            // 已经听到的字比失败本身重要。重试会把这次录音连同转写一起清掉，
+            // 不能拿它当断网后唯一的出口。
+            active = true
+            placeholder = failure.message
+            caretVisible = false
+            right = hasText ? .confirm : (failure.isRetryable ? .retry : .retryDisabled)
 
-                Button(action: onConfirm) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(Theme.ink)
-                        .frame(width: 30, height: 30)
-                }
-                .accessibilityIdentifier("voice-confirm")
-            }
+        case .finalizing:
+            // 用户刚点过确认，这里再把键交回去只会把收尾重复提交一次。
+            active = true
+            placeholder = hasText ? "" : "聆听中"
+            caretVisible = hasText
+            right = .confirmDisabled
+
+        case .interrupted:
+            // 来电和切后台不是用户的取消：已经定稿的文本留着等他处置。没有文本时
+            // 不为这个状态编一句话 —— 空着比说一句不准的强。
+            active = true
+            placeholder = ""
+            caretVisible = hasText
+            right = hasText ? .confirm : .confirmDisabled
+
+        case .listening:
+            active = true
+            placeholder = hasText ? "" : "聆听中"
+            caretVisible = hasText
+            right = hasText ? .confirm : .confirmDisabled
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(uiColor: .systemBackground))
-        .overlay(alignment: .top) { Divider().opacity(0.3) }
-        .accessibilityIdentifier("voice-bar")
-    }
-
-    /// 定稿用正常前景色，当前句用次要色 —— 一眼能看出哪半截还会变。
-    private var transcriptText: Text {
-        guard !transcript.isEmpty else { return Text(verbatim: " ") }
-        return Text(transcript.stable) + Text(transcript.unstable).foregroundStyle(.secondary)
-    }
-
-    private var failureMessage: String? {
-        if case .failed(let failure) = phase { return failure.message }
-        return nil
-    }
-
-    private var timeLabel: String {
-        String(format: "%02d:%02d", Int(elapsed) / 60, Int(elapsed) % 60)
-    }
-}
-
-/// 录音指示。用失败色加一点脉冲：这是「正在占用麦克风」，不是「需要人介入」。
-private struct RecordingDot: View {
-    let isActive: Bool
-    @State private var dimmed = false
-
-    var body: some View {
-        Circle()
-            .fill(isActive ? Theme.failure : Color.secondary)
-            .frame(width: 8, height: 8)
-            .opacity(isActive && dimmed ? 0.3 : 1)
-            .animation(
-                isActive ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true) : .default,
-                value: dimmed
-            )
-            .onAppear { if isActive { dimmed = true } }
     }
 }

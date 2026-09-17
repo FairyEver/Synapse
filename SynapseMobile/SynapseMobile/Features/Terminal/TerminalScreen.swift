@@ -137,22 +137,14 @@ struct TerminalScreen: View {
                 onDismiss: { model.dismissRelay($0) },
                 onRetry: { model.retryRelay($0) }
             )
+            // There used to be a second bar stacked on top of this one while
+            // recording. There is one bar now, and it changes parts: the transcript
+            // goes where the command field is, ✗ where the ＋ was, ✓ where send was.
+            // Nothing moves but the icons, so confirming leaves send under the same
+            // finger. `accessoryBar` above stays live throughout — dictating and
+            // pressing return are not mutually exclusive.
             accessoryBar
-            // Recording replaces the whole bar rather than hiding the keyboard: with
-            // no focusable view left on screen there is nothing for the keyboard to
-            // come up for.
-            if voice.isActive {
-                VoiceInputBar(
-                    transcript: voice.transcript,
-                    elapsed: voice.elapsed,
-                    phase: voice.phase,
-                    onRetry: { voice.retry() },
-                    onCancel: { voice.cancel() },
-                    onConfirm: { Task { await finishVoice() } }
-                )
-            } else {
-                inputBar
-            }
+            inputBar
         }
         .background(Theme.terminalBackground.ignoresSafeArea(edges: .bottom))
         // The canvas keeps its own dark surface — its colours come from the
@@ -377,69 +369,146 @@ struct TerminalScreen: View {
         .background(Color(uiColor: .systemBackground))
     }
 
+    /// The one bar under the terminal. Recording does not add a second one: the
+    /// transcription takes the command field's place, ✗ takes the ＋'s, ✓ takes
+    /// send's, and the microphone slot collapses so the width goes to the words.
+    /// The bar's height and the field's width are the same in both states, so the
+    /// only thing that changes is what the controls mean.
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            // The sources are offered where the + is, not from the middle of the
-            // screen: the list is short, and the hand that opened it is already
-            // there. `Menu` builds its contents while the body is being evaluated,
-            // which is why `pasteboardHoldsImage` is kept as state refreshed at the
-            // moments the answer can change — see `refreshPasteboardImage`.
-            Menu {
+        let presentation = VoiceInputPresentation(phase: voice.phase, transcript: voice.transcript)
+        return HStack(spacing: 8) {
+            if presentation.active {
+                // ✗ rolls the field back to what it held before the microphone was
+                // tapped, so it belongs where the ＋ that started it was.
                 Button {
-                    showingPhotoPicker = true
+                    voice.cancel()
                 } label: {
-                    Label("照片", systemImage: "photo")
+                    Image(systemName: "xmark")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Theme.ink)
                 }
-                // Hidden where there is no camera — the simulator, and any device
-                // without one — rather than offered and then failing.
-                if CameraPicker.isAvailable {
+                .accessibilityIdentifier("voice-cancel")
+            } else {
+                // The sources are offered where the + is, not from the middle of the
+                // screen: the list is short, and the hand that opened it is already
+                // there. `Menu` builds its contents while the body is being evaluated,
+                // which is why `pasteboardHoldsImage` is kept as state refreshed at the
+                // moments the answer can change — see `refreshPasteboardImage`.
+                Menu {
                     Button {
-                        showingCamera = true
+                        showingPhotoPicker = true
                     } label: {
-                        Label("拍照", systemImage: "camera")
+                        Label("照片", systemImage: "photo")
                     }
+                    // Hidden where there is no camera — the simulator, and any device
+                    // without one — rather than offered and then failing.
+                    if CameraPicker.isAvailable {
+                        Button {
+                            showingCamera = true
+                        } label: {
+                            Label("拍照", systemImage: "camera")
+                        }
+                    }
+                    Button {
+                        showingDocumentPicker = true
+                    } label: {
+                        Label("文件", systemImage: "folder")
+                    }
+                    if pasteboardHoldsImage {
+                        Button {
+                            sendPastedImage()
+                        } label: {
+                            Label("粘贴图片", systemImage: "doc.on.clipboard")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Theme.ink)
                 }
+                .tint(Theme.ink)
+                .accessibilityIdentifier("attach")
+            }
+
+            if presentation.active {
+                transcription(presentation)
+            } else {
+                TextField("输入命令", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.send)
+                    .focused($inputFocused)
+                    .onSubmit(sendDraft)
+            }
+
+            // The slot collapses while recording instead of greying out: the words
+            // need the width, and a second recording is not something to start from
+            // inside this one.
+            if !presentation.active {
                 Button {
-                    showingDocumentPicker = true
+                    // Dropped before the bar swaps: the keyboard would otherwise be
+                    // dismissed by a view that no longer exists.
+                    inputFocused = false
+                    voice.start { await model.requestAsrSignature() }
                 } label: {
-                    Label("文件", systemImage: "folder")
+                    Image(systemName: "mic")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Theme.ink)
                 }
-                if pasteboardHoldsImage {
-                    Button {
-                        sendPastedImage()
-                    } label: {
-                        Label("粘贴图片", systemImage: "doc.on.clipboard")
-                    }
-                }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Theme.ink)
+                .accessibilityIdentifier("voice-start")
             }
-            .tint(Theme.ink)
-            .accessibilityIdentifier("attach")
 
-            TextField("输入命令", text: $draft)
-                .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .submitLabel(.send)
-                .focused($inputFocused)
-                .onSubmit(sendDraft)
+            rightKey(presentation)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(uiColor: .systemBackground))
+        .overlay(alignment: .top) { Divider().opacity(0.3) }
+    }
 
-            Button {
-                // Dropped before the bar swaps: the keyboard would otherwise be
-                // dismissed by a view that no longer exists.
-                inputFocused = false
-                voice.start { await model.requestAsrSignature() }
-            } label: {
-                Image(systemName: "mic")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Theme.ink)
-            }
-            .accessibilityIdentifier("voice-start")
+    /// The live transcription, in the command field's own place.
+    ///
+    /// `.truncationMode(.head)` is what keeps the newest words on screen: text that
+    /// outgrows the width is cut at the front, so the tail — the part just said —
+    /// stays visible. A scrolling reader would have to keep scroll state and would
+    /// re-lay-out the line every time the unstable half is rewritten.
+    ///
+    /// The field is a plain display node here, not a hidden-keyboard text field: with
+    /// nothing focusable left on screen there is nothing for the keyboard to come up
+    /// for.
+    private func transcription(_ presentation: VoiceInputPresentation) -> some View {
+        let text: Text
+        if voice.transcript.isEmpty {
+            text = Text(verbatim: presentation.placeholder).foregroundStyle(.secondary)
+        } else {
+            // Settled text in the normal colour, the current sentence in the secondary
+            // one — which half is still going to change has to be visible. The caret
+            // is a thin block character rather than a shape: it has to flow with the
+            // text so it stays at the end of it, and it does not blink.
+            let caret = presentation.caretVisible
+                ? Text(verbatim: "▏").foregroundStyle(Theme.ink)
+                : Text(verbatim: "")
+            text = Text(voice.transcript.stable)
+                + Text(voice.transcript.unstable).foregroundStyle(.secondary)
+                + caret
+        }
+        return text
+            .font(.system(.body, design: .monospaced))
+            .lineLimit(1)
+            .truncationMode(.head)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityIdentifier("voice-transcript")
+    }
 
+    /// The key at the right end. Nothing is added or moved while recording — only
+    /// the icon and its meaning change, so confirming puts send back exactly where
+    /// the ✓ was.
+    @ViewBuilder
+    private func rightKey(_ presentation: VoiceInputPresentation) -> some View {
+        switch presentation.right {
+        case .send:
             Button(action: sendDraft) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 26))
@@ -447,11 +516,31 @@ struct TerminalScreen: View {
             }
             .disabled(draft.isEmpty)
             .accessibilityIdentifier("send")
+
+        case .confirm, .confirmDisabled:
+            let enabled = presentation.right == .confirm
+            Button {
+                Task { await finishVoice() }
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(enabled ? Theme.ink : Color.secondary)
+            }
+            .disabled(!enabled)
+            .accessibilityIdentifier("voice-confirm")
+
+        case .retry, .retryDisabled:
+            let enabled = presentation.right == .retry
+            Button {
+                voice.retry()
+            } label: {
+                Image(systemName: "arrow.clockwise.circle.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(enabled ? Theme.ink : Color.secondary)
+            }
+            .disabled(!enabled)
+            .accessibilityIdentifier("voice-retry")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(uiColor: .systemBackground))
-        .overlay(alignment: .top) { Divider().opacity(0.3) }
     }
 
     private func sendDraft() {
