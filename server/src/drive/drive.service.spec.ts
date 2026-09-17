@@ -366,6 +366,33 @@ describe("DriveService", () => {
     expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({ body: Buffer.from(text) }))
   })
 
+  it("rejects a document save based on a version that is no longer current", async () => {
+    const prisma = createPrismaMemory()
+    const storage = { ...storageMock, putObject: vi.fn(async () => undefined) }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const file = await createCompletedUpload(service, "user-1", { parentId: null, name: "note.md", mimeType: "text/markdown" })
+    const baseVersion = (await service.listFileVersions("user-1", file.id, { offset: 0, limit: 20 })).items[0]!
+
+    const saved = await service.updateOwnerFileText("user-1", file.id, {
+      contentType: "text",
+      text: "# 第二版",
+      baseVersionId: baseVersion.id,
+    })
+    expect(saved.version.id).not.toBe(baseVersion.id)
+
+    const stale = await service.updateOwnerFileText("user-1", file.id, {
+      contentType: "text",
+      text: "# 用旧基线再写一次",
+      baseVersionId: baseVersion.id,
+    }).then(() => null, (error: unknown) => error)
+
+    expect(stale).toBeInstanceOf(ConflictException)
+    expect((stale as ConflictException).getResponse()).toMatchObject({ code: "DRIVE_FILE_CONTENT_STALE" })
+    const versions = await service.listFileVersions("user-1", file.id, { offset: 0, limit: 20 })
+    expect(versions.items.find((version) => version.isCurrent)?.id).toBe(saved.version.id)
+  })
+
   it("records a content change when an upload is completed", async () => {
     const prisma = createPrismaMemory()
     const changes = createDriveChangeLogMock()

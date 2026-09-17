@@ -3024,7 +3024,7 @@ export class DriveService implements OnApplicationBootstrap {
     const currentVersionId = await this.findCurrentDriveFileVersionId(input.item)
     if (!currentVersionId || currentVersionId !== input.input.baseVersionId) {
       this.collaboration?.resumeExternalChange(input.item.id)
-      throw new ConflictException("文件已有新内容。")
+      throw driveFileContentStaleConflict()
     }
 
     const nextVersionId = createDriveFileVersionId()
@@ -3048,7 +3048,7 @@ export class DriveService implements OnApplicationBootstrap {
           select: { id: true },
         })
         if (!transactionCurrentVersion || transactionCurrentVersion.id !== input.input.baseVersionId) {
-          throw new ConflictException("文件已有新内容。")
+          throw driveFileContentStaleConflict()
         }
         await reserveDriveUsageBytes(tx, input.ownerId, bodySize)
         await updateDriveUsageAfterUploadCompletion(tx, input.ownerId, {
@@ -3122,7 +3122,7 @@ export class DriveService implements OnApplicationBootstrap {
     } catch (error) {
       if (!committed) await this.deleteTemporaryUploadObject(nextStorageKey)
       if (!committed) this.collaboration?.resumeExternalChange(input.item.id)
-      if (isUniqueConstraintError(error)) throw new ConflictException("文件已有新内容。")
+      if (isUniqueConstraintError(error)) throw driveFileContentStaleConflict()
       throw error
     }
   }
