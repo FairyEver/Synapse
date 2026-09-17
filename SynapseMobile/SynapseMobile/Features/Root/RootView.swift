@@ -27,14 +27,6 @@ struct RootView: View {
                 tabs
             }
         }
-        .overlay(alignment: .top) {
-            if let banner = model.banner {
-                ToastBanner(text: banner) { model.banner = nil }
-                    .padding(.horizontal, 16)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.snappy(duration: 0.25), value: model.banner)
         .task {
             await model.bootstrap()
             // A tap that launched the app parked its destination before any view
@@ -98,37 +90,6 @@ struct RootView: View {
             model.selectDesktop(desktopClientInstanceId)
             selectedTab = .terminals
             terminalPath = [.terminal(sessionId)]
-        }
-    }
-}
-
-/// Short-lived message. Used for failures that have no natural home on screen —
-/// a rejected intent, a dropped desktop — rather than for narration.
-struct ToastBanner: View {
-    let text: String
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.attention)
-            Text(text)
-                .font(.system(size: 13))
-                .lineLimit(2)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08))
-        )
-        .onTapGesture(perform: onDismiss)
-        .task {
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            onDismiss()
         }
     }
 }

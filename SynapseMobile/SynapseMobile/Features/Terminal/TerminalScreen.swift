@@ -131,6 +131,12 @@ struct TerminalScreen: View {
                 reportGridToDesktop()
                 refreshPasteboardImage()
             }
+            // Anchored to the canvas rather than to the screen, so the queue clears both
+            // the back button above it and the input bar below it. An overlay rather than
+            // an inset for a reason particular to this screen: a reserved strip would
+            // change `visibleRows`, which is reported to the desktop as a grid size, and a
+            // one-second notice would resize the PTY twice.
+            .noticeOverlay(model)
             TerminalRelayStrip(
                 attachments: relayAttachments,
                 onUndo: { model.undoTypedPaths($0) },
@@ -302,7 +308,10 @@ struct TerminalScreen: View {
                 }
                 Button {
                     UIPasteboard.general.string = store.plainText
-                    model.banner = "已复制终端输出。"
+                    // The one message on this screen that is not a problem. It carries
+                    // its own id so copying twice restarts one second rather than
+                    // queueing a second confirmation.
+                    model.notice("已复制终端输出。", tone: .success, id: "terminal.copied")
                 } label: {
                     Label("复制全部输出", systemImage: "doc.on.doc")
                 }

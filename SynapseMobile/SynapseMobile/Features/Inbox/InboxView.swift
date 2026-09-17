@@ -57,6 +57,7 @@ struct InboxView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .noticeOverlay(model)
         .navigationTitle("需要我")
         .refreshable { await model.refreshDesktops() }
     }

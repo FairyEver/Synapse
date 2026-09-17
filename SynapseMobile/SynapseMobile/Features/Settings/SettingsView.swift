@@ -61,6 +61,7 @@ struct SettingsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .noticeOverlay(model)
         .navigationTitle("我的")
         .alert("退出登录？", isPresented: $showingSignOut) {
             Button("取消", role: .cancel) {}

@@ -54,6 +54,7 @@ struct SessionListView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .noticeOverlay(model)
         .navigationTitle("终端")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

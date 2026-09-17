@@ -89,6 +89,11 @@ struct LoginView: View {
             Spacer()
         }
         .onAppear { focus = .email }
+        // Nothing here is the form's own yet, so the queue is the only place a failure
+        // from this screen can land. It has a home to be given — a rejected credential
+        // belongs beside the field it came from — but that is a change to make here
+        // rather than to route around.
+        .noticeOverlay(model)
     }
 
     private func submit() {

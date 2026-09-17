@@ -26,7 +26,34 @@ final class SynapseAppModel {
     /// Sessions where the desktop's own user typed and took the write lease back.
     /// The phone does not ask about this — the next write reclaims it.
     private var preemptedSessions: Set<String> = []
-    var banner: String?
+    private(set) var notices = NoticeQueue()
+
+    /// One countdown per visible notice.
+    ///
+    /// Kept out of the observation graph deliberately: nothing draws a clock, and making
+    /// it observable would invalidate every view that reads `notices` each time one is
+    /// armed or stopped.
+    @ObservationIgnored private var noticeTimers: [String: NoticeTimer] = [:]
+
+    /// The old single slot, kept so the call sites that predate the queue keep compiling
+    /// while each gains a tone on its own schedule.
+    ///
+    /// A setter cannot know a tone, and `.failure` is the honest default: it is what
+    /// nearly all of those sites report, and it is the weight the amber banner already
+    /// carried. Reading it back gives the newest message, which is the most any caller
+    /// ever asked of it.
+    var banner: String? {
+        get { notices.notices.last?.text }
+        set {
+            guard let newValue else {
+                noticeTimers.values.forEach { $0.task?.cancel() }
+                noticeTimers.removeAll()
+                notices.removeAll()
+                return
+            }
+            notice(newValue, tone: .failure)
+        }
+    }
 
     private let tokens = TokenStore()
     private var apiClient: APIClient!
@@ -52,6 +79,117 @@ final class SynapseAppModel {
     private var openSessions: Set<String> = []
     /// History requests in flight, so a lost reply cannot wedge the loader.
     private var pendingHistory: [String: String] = [:]
+
+    // MARK: - Notices
+
+    /// A countdown, and what is left of it when a finger interrupts.
+    private struct NoticeTimer {
+        var task: Task<Void, Never>?
+        /// When the task fires. Holding the deadline rather than a running countdown is
+        /// what lets a drag stop the clock and keep the remainder.
+        var deadline: ContinuousClock.Instant
+        var remaining: Duration
+        /// The revision this clock was armed for, so a re-post of the same id is
+        /// recognised as a new clock rather than as the old one still counting.
+        var revision: Int
+    }
+
+    /// Posts a message to the bottom of the screen.
+    ///
+    /// `id` names the message rather than the event: posting an id that is already up
+    /// replaces its text and restarts its clock instead of stacking a duplicate, which is
+    /// what a reconnect loop or the same rejection arriving twice actually needs. It
+    /// defaults to the text, so an identical sentence never queues behind itself either.
+    func notice(_ text: String, tone: NoticeTone = .info, id: String? = nil) {
+        let key = id ?? "text:\(text)"
+        for dropped in notices.post(text, tone: tone, id: key) {
+            cancelNoticeTimer(dropped)
+        }
+        syncNoticeTimers()
+        // Posted from here rather than from the view: the bar is a transient overlay that
+        // never takes focus, so an announcement is the only way the sentence is reached
+        // at all — and doing it here means it happens once, however many screens happen
+        // to be mounting a copy of the view that draws it.
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(notification: .announcement, argument: text)
+        }
+    }
+
+    func dismissNotice(_ id: String) {
+        cancelNoticeTimer(id)
+        notices.remove(id)
+        // Taking one away is what makes room for the next: a queued notice spends no time
+        // on a clock, so it gets its whole duration once it is actually shown.
+        syncNoticeTimers()
+    }
+
+    /// A finger is on the bar. Stop the clock, and keep what was left of it.
+    func holdNotice(_ id: String) {
+        guard var timer = noticeTimers[id], timer.task != nil else { return }
+        timer.task?.cancel()
+        timer.task = nil
+        timer.remaining = max(.zero, ContinuousClock.now.duration(to: timer.deadline))
+        noticeTimers[id] = timer
+    }
+
+    /// The finger left without throwing the bar away.
+    func resumeNotice(_ id: String) {
+        guard let timer = noticeTimers[id], timer.task == nil else { return }
+        // Never with less than a moment to read: a message that vanishes the instant it
+        // snaps back reads as a broken gesture rather than as a timer expiring.
+        armNotice(id, duration: max(timer.remaining, .milliseconds(600)))
+    }
+
+    /// Arms whatever is visible and unarmed, stops whatever is no longer visible, and
+    /// re-arms anything whose message changed underneath it. Idempotent, so every path
+    /// that changes the queue can simply call it.
+    private func syncNoticeTimers() {
+        let visible = notices.armed
+        let ids = Set(visible.map(\.id))
+        for id in noticeTimers.keys where !ids.contains(id) { cancelNoticeTimer(id) }
+
+        for notice in visible {
+            // A new id needs a clock; an id whose revision moved needs a new one. Missing
+            // this second case is the old banner's bug, one level down: the clock has to
+            // key on the message's content, not on the id merely still being present.
+            guard let timer = noticeTimers[notice.id], timer.task != nil else {
+                armNotice(notice.id, duration: noticeDuration(for: notice.tone))
+                continue
+            }
+            if timer.revision != notice.revision {
+                armNotice(notice.id, duration: noticeDuration(for: notice.tone))
+            }
+        }
+    }
+
+    /// A one-second success is long enough to catch out of the corner of an eye and
+    /// nowhere near long enough to hear, and under VoiceOver the announcement is the only
+    /// way the sentence arrives at all. Kept here rather than on `NoticeTone` so that what
+    /// a tone means stays a pure value a test can assert.
+    private func noticeDuration(for tone: NoticeTone) -> Duration {
+        if tone == .success, UIAccessibility.isVoiceOverRunning { return .seconds(5) }
+        return tone.duration
+    }
+
+    private func armNotice(_ id: String, duration: Duration) {
+        cancelNoticeTimer(id)
+        guard let revision = notices.armed.first(where: { $0.id == id })?.revision else { return }
+        noticeTimers[id] = NoticeTimer(
+            task: Task { [weak self] in
+                try? await Task.sleep(for: duration)
+                guard !Task.isCancelled else { return }
+                self?.dismissNotice(id)
+            },
+            deadline: ContinuousClock.now.advanced(by: duration),
+            remaining: duration,
+            revision: revision
+        )
+    }
+
+    private func cancelNoticeTimer(_ id: String) {
+        noticeTimers[id]?.task?.cancel()
+        noticeTimers[id] = nil
+    }
 
     // MARK: - File hand-off
 
@@ -1014,7 +1152,9 @@ final class SynapseAppModel {
             update(attachmentId) { $0.state = .delivered(path: result.landedPath) }
             // A file that landed but could not be typed is a success with a caveat.
             // Saying nothing would leave the user waiting for text that is not coming.
-            if let message = result.message { banner = message }
+            // A success with a caveat: the file landed, it just could not be typed.
+            // `.info` rather than `.failure` because nothing needs doing about it.
+            if let message = result.message { notice(message, tone: .info, id: "relay.delivered") }
             return
         }
 
