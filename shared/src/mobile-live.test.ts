@@ -19,6 +19,7 @@ import {
   isMobileIntentResult,
   isMobileSummaryPayload,
   isMobileTerminalFrame,
+  isMobileToolbarPayload,
   isMobileTransferProgressPayload,
   type MobileIntent,
   type MobileSummaryAgentGroup,
@@ -26,6 +27,7 @@ import {
   type MobileSummaryPayload,
   type MobileSummaryWorkspace,
   type MobileTerminalFrame,
+  type MobileToolbarPayload,
 } from "./mobile-live.js"
 
 const envelopeMeta = { id: "msg-1", sentAt: "2026-09-15T10:00:00.000Z" }
@@ -66,6 +68,19 @@ function summary(overrides: Partial<MobileSummaryPayload> = {}): MobileSummaryPa
       lastLine: "ready in 312 ms",
       lastOutputSeq: 12,
     }],
+    ...overrides,
+  }
+}
+
+function toolbar(overrides: Partial<MobileToolbarPayload> = {}): MobileToolbarPayload {
+  return {
+    desktopClientInstanceId: "desktop-1",
+    revision: 1,
+    buttons: [
+      { id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } },
+      { id: "slash-exit", label: "/exit", group: "command", action: { type: "text", text: "/exit", pressEnter: true } },
+      { id: "c1", label: "部署", group: "custom", action: { type: "text", text: "pnpm deploy", pressEnter: false } },
+    ],
     ...overrides,
   }
 }
@@ -164,7 +179,12 @@ describe("mobile live protocol", () => {
     // session-scoped intent.
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "delete" })).toBe(false)
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "command", sessionId: "s1" })).toBe(false)
-    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "Ctrl+Z" }] }))
+    // A key the terminal service has no bytes for. Not `Ctrl+Z`: the phone's panel
+    // added it, so it is inside the vocabulary now, and `MOBILE_KEYS` is where the
+    // boundary is written down — this checks that the boundary is enforced at all.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "Ctrl+P" }] }))
+      .toBe(false)
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "F5" }] }))
       .toBe(false)
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "close", sessionId: "s1" })).toBe(false)
     // A raw control byte must never be expressible as a key.
@@ -611,6 +631,164 @@ describe("mobile live protocol", () => {
     // that arrived with a default, or one made required, moves this number.
     expect(Buffer.byteLength(JSON.stringify(before), "utf8")).toBe(393)
     expect(JSON.stringify({ ...before, agentGroups: undefined })).toBe(JSON.stringify(before))
+  })
+
+  it("routes the toolbar through both sides of the relay", () => {
+    // One guard each way, and the two failures look nothing alike from the phone:
+    // rejected on the desktop's hop, the cloud answers with a 1003 close and the
+    // computer simply goes offline; rejected on the phone's hop, the list never
+    // arrives and every phone quietly shows its own fallback buttons.
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileToolbar,
+      toolbar(),
+      envelopeMeta,
+    ))).toBe(true)
+    expect(isLiveMobileServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileToolbar,
+      toolbar(),
+      envelopeMeta,
+    ))).toBe(true)
+  })
+
+  it("accepts both toolbar action shapes, and a computer with no buttons", () => {
+    expect(isMobileToolbarPayload(toolbar())).toBe(true)
+    // An empty list is a computer saying "I have none", which is a different answer
+    // from the one a computer too old to send this message gives — the phone shows
+    // an empty bar for the first and its own built-ins for the second.
+    expect(isMobileToolbarPayload(toolbar({ buttons: [] }))).toBe(true)
+    // Both text arms are legitimate: with Enter is the desktop's own click, without
+    // it is a button that only types, and the flag is what tells them apart.
+    expect(isMobileToolbarPayload(toolbar({
+      buttons: [
+        { id: "a", label: "只输入", group: "custom", action: { type: "text", text: "lsof -i :3001", pressEnter: false } },
+        { id: "b", label: "执行", group: "custom", action: { type: "text", text: "pnpm deploy", pressEnter: true } },
+      ],
+    }))).toBe(true)
+  })
+
+  it("rejects a malformed toolbar payload", () => {
+    const button = toolbar().buttons[0]
+
+    // Absent rather than empty: without it a phone cannot tell which of its
+    // computers the list belongs to.
+    const withoutDesktop: Record<string, unknown> = { ...toolbar() }
+    delete withoutDesktop.desktopClientInstanceId
+    expect(isMobileToolbarPayload(withoutDesktop)).toBe(false)
+    expect(isMobileToolbarPayload(toolbar({ desktopClientInstanceId: "" }))).toBe(false)
+    expect(isMobileToolbarPayload(toolbar({ revision: -1 }))).toBe(false)
+    expect(isMobileToolbarPayload(toolbar({ revision: 1.5 }))).toBe(false)
+    expect(isMobileToolbarPayload({ ...toolbar(), buttons: "none" })).toBe(false)
+
+    const limits = MOBILE_FRAME_LIMITS
+    const many = Array.from({ length: limits.maxToolbarButtons + 1 }, (_value, index) => ({
+      ...button, id: `b${index}`,
+    }))
+    expect(isMobileToolbarPayload(toolbar({ buttons: many }))).toBe(false)
+    // The bounds the desktop's own schema enforces, restated on the wire.
+    expect(isMobileToolbarPayload(toolbar({
+      buttons: [{ ...button, label: "l".repeat(limits.maxToolbarLabelLength + 1) }],
+    }))).toBe(false)
+    expect(isMobileToolbarPayload(toolbar({
+      buttons: [{ ...button, id: "i".repeat(limits.maxToolbarButtonIdLength + 1) }],
+    }))).toBe(false)
+    expect(isMobileToolbarPayload(toolbar({
+      buttons: [{
+        ...button,
+        action: { type: "text", text: "t".repeat(limits.maxToolbarTextLength + 1), pressEnter: true },
+      }],
+    }))).toBe(false)
+
+    const malformedButtons = [
+      // A group the phone would have no separator rule for.
+      { ...button, group: "builtin" },
+      { ...button, group: undefined },
+      // A label or an id a user could never have stored.
+      { ...button, label: "" },
+      { ...button, id: "" },
+      // A key outside the vocabulary the terminal service can encode.
+      { ...button, action: { type: "key", key: "F5" } },
+      { ...button, action: { type: "key", key: "Ctrl+P" } },
+      { ...button, action: { type: "key" } },
+      // An action shape neither side knows how to execute.
+      { ...button, action: { type: "script", text: "rm -rf /" } },
+      { ...button, action: { type: "text", text: "/exit" } },
+      { ...button, action: { type: "text", text: "/exit", pressEnter: "yes" } },
+      { ...button, action: { type: "text", text: "", pressEnter: true } },
+      { ...button, action: undefined },
+      { ...button, action: null },
+    ]
+    for (const malformed of malformedButtons) {
+      expect(isMobileToolbarPayload(toolbar({
+        buttons: [malformed] as unknown as MobileToolbarPayload["buttons"],
+      }))).toBe(false)
+    }
+  })
+
+  it("keeps the toolbar's vocabulary to the keys the terminal service can encode", () => {
+    // Every key the panel can draw has to be one the desktop's `KEY_BYTES` can turn
+    // into bytes; a name that is only in this list would be accepted by the cloud and
+    // then rejected by the computer, which reads to a user as a key that does nothing.
+    expect(MOBILE_KEYS).toHaveLength(23)
+    expect(MOBILE_KEYS).toEqual([
+      "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+      "Backspace", "Ctrl+C", "Ctrl+D",
+      "Home", "End", "PageUp", "PageDown", "Delete",
+      "Ctrl+A", "Ctrl+E", "Ctrl+U", "Ctrl+K", "Ctrl+W", "Ctrl+L", "Ctrl+R", "Ctrl+Z",
+    ])
+    expect(new Set<string>(MOBILE_KEYS).size).toBe(MOBILE_KEYS.length)
+  })
+
+  it("adds no bytes to the messages that predate the toolbar", () => {
+    /*
+     * The toolbar is a family of its own precisely so that nothing already on the
+     * wire grows, and this is what holds that line. Each shape below is serialized
+     * exactly as its producer sends it, so a field that arrived with a default — or
+     * one that became required — moves a number here even though every existing
+     * client would still parse it.
+     */
+    const shapes: readonly { readonly name: string; readonly payload: unknown; readonly bytes: number }[] = [
+      { name: "summary", payload: summary(), bytes: 393 },
+      { name: "frame", payload: frame(), bytes: 180 },
+      {
+        name: "intent",
+        payload: {
+          desktopClientInstanceId: "desktop-1",
+          mobileClientInstanceId: "phone-1",
+          intent: { v: MOBILE_PROTOCOL_VERSION, intentId: "i1", kind: "sync" },
+        },
+        bytes: 121,
+      },
+      {
+        name: "intentResult",
+        payload: { mobileClientInstanceId: "phone-1", result: { intentId: "i1", outcome: "accepted" } },
+        bytes: 84,
+      },
+      {
+        name: "transferProgress",
+        payload: { mobileClientInstanceId: "phone-1", intentId: "i1", completedBytes: 0, totalBytes: 0 },
+        bytes: 86,
+      },
+      { name: "presence", payload: { desktopClientInstanceIds: ["desktop-1"] }, bytes: 42 },
+      { name: "detached", payload: { mobileClientInstanceId: "phone-1", reason: "closed" }, bytes: 54 },
+    ]
+
+    for (const shape of shapes) {
+      expect({ name: shape.name, bytes: Buffer.byteLength(JSON.stringify(shape.payload), "utf8") })
+        .toEqual({ name: shape.name, bytes: shape.bytes })
+    }
+
+    // The one field a phone tells "no buttons" apart from "too old to say" by: it is
+    // on the toolbar's own message, and nowhere else.
+    expect(JSON.stringify(summary())).not.toContain("toolbar")
+    expect(JSON.stringify(frame())).not.toContain("toolbar")
+
+    // And the same holds on the new message itself: every field is required, none
+    // arrived with a default, so the button the desktop builds and the button this
+    // test builds serialize to the same bytes.
+    expect(Object.keys(toolbar())).toEqual(["desktopClientInstanceId", "revision", "buttons"])
+    expect(Object.keys(toolbar().buttons[0])).toEqual(["id", "label", "group", "action"])
+    expect(Object.keys(toolbar().buttons[0].action)).toEqual(["type", "key"])
+    expect(Object.keys(toolbar().buttons[2].action)).toEqual(["type", "text", "pressEnter"])
   })
 
   it("keeps the attachment routing fields required", () => {

@@ -154,6 +154,35 @@ export const MOBILE_FRAME_LIMITS = {
   maxRelayedFileBytes: 100 * 1024 * 1024,
   maxRelayedFileNameLength: 120,
   maxUploadDriveItemIdLength: 64,
+  /**
+   * The command buttons a desktop mirrors onto a phone.
+   *
+   * Every one of these restates a bound the terminal capability's own schema already
+   * enforces on the custom actions it stores (`TERMINAL_CUSTOM_TOOLBAR_ACTION_LIMIT`
+   * and the two lengths beside it), plus room for the built-ins. They are repeated
+   * rather than shared because the cloud validates this payload as it passes through
+   * and cannot see the desktop's schema module.
+   *
+   * `maxToolbarButtons` is the one with real headroom: 50 stored actions plus 4
+   * built-ins is 54, and the producer drops the tail rather than truncating a button.
+   */
+  maxToolbarButtons: 64,
+  maxToolbarButtonIdLength: 64,
+  maxToolbarLabelLength: 32,
+  maxToolbarTextLength: 4096,
+  /**
+   * Byte budget for one serialized toolbar payload, measured without the envelope.
+   *
+   * The widest admissible list — 64 buttons of 4096 characters — is about 270 KiB
+   * raw, so unlike the summary this one genuinely has to be trimmed: the desktop
+   * stops after the last button that fits rather than cutting one in half, because a
+   * truncated command is one the phone would run differently from the computer. In
+   * practice 50 real commands total a couple of kilobytes.
+   *
+   * Kept far below the 256 KiB the desktop→cloud socket carries, so an oversized
+   * payload can never be the thing that closes the connection.
+   */
+  maxToolbarBytes: 64 * 1024,
 } as const
 
 /** Style attribute bits packed into the fifth element of a run tuple. */
@@ -171,7 +200,16 @@ export const MOBILE_TRUECOLOR_BASE = 0x100_0000
 
 /**
  * The only keys the terminal service can encode, and therefore the complete
- * vocabulary of the phone's accessory bar.
+ * vocabulary of the phone's keyboard panel.
+ *
+ * Text is the other route onto the wire and it is deliberately narrow: the terminal
+ * service refuses every control byte except Tab, so an arrow key or an Escape cannot
+ * be smuggled through as "just some characters". Anything that is not a printable
+ * character has to be named here.
+ *
+ * Append-only. A key is identified by this string on both sides of the relay —
+ * the phone's own enum, the desktop's `KEY_BYTES` and this list all have to agree —
+ * so reordering or removing one quietly changes what an existing client sends.
  */
 export const MOBILE_KEYS = [
   "Enter",
@@ -184,6 +222,19 @@ export const MOBILE_KEYS = [
   "Backspace",
   "Ctrl+C",
   "Ctrl+D",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  "Delete",
+  "Ctrl+A",
+  "Ctrl+E",
+  "Ctrl+U",
+  "Ctrl+K",
+  "Ctrl+W",
+  "Ctrl+L",
+  "Ctrl+R",
+  "Ctrl+Z",
 ] as const
 
 export const MOBILE_MESSAGE_TYPES = {
@@ -455,6 +506,78 @@ export interface MobileSummaryPayload {
   readonly agentGroups?: readonly MobileSummaryAgentGroup[]
   readonly agentProviders?: readonly MobileSummaryAgentProvider[]
   readonly sessions: readonly MobileSummarySession[]
+}
+
+/* ------------------------------------------------------------------ *
+ * Toolbar
+ * ------------------------------------------------------------------ */
+
+/**
+ * One button the phone shows, mirroring one button on the computer.
+ *
+ * `group` is what the phone draws separators from, and it exists so that drawing
+ * them is a pure function of the payload: the desktop's own rule is positional
+ * ("the line goes before the first remaining shell command"), which a phone cannot
+ * reproduce without re-deriving the desktop's list. Sending the answer instead of
+ * the rule is the whole difference.
+ */
+export interface MobileToolbarButton {
+  /** Stable across sends: a built-in's own id, or the stored action's uuid. */
+  readonly id: string
+  /** Display text, rendered verbatim — it is the user's own label. */
+  readonly label: string
+  readonly group: "key" | "command" | "custom"
+  readonly action: MobileToolbarAction
+}
+
+/**
+ * What pressing the button makes the computer do.
+ *
+ * A superset of `MobileKeyAction` with `pressEnter` added to the text arm, and the
+ * two arms exist because the computer has two different ways of running a command
+ * and they are not interchangeable. `command` writes the text and then a carriage
+ * return after a short flush delay, which is the desktop's own click; a bare `text`
+ * action writes exactly what it is given and nothing else, which is what a custom
+ * button with `pressEnter` off does.
+ *
+ * Sending a `pressEnter: false` button as a `command` would therefore press Enter
+ * on the user's behalf — a different, and potentially destructive, act.
+ */
+export type MobileToolbarAction =
+  | { readonly type: "key"; readonly key: MobileKey }
+  | { readonly type: "text"; readonly text: string; readonly pressEnter: boolean }
+
+/**
+ * The command buttons on one computer, fanned out to every phone of the account.
+ *
+ * A family of its own rather than part of `MobileSummaryPayload`, and the reason is
+ * arithmetic rather than taste: a summary cannot be split — a phone replaces its
+ * whole list with whatever arrives — so its byte budget has to cover every field at
+ * once. The summary's own budget is already within 3 KiB of the socket that carries
+ * it, and a list of custom commands at the schema's own limits is far larger than
+ * that. Carrying them here keeps `maxSummaryBytes` proved and gives this message a
+ * ceiling it can be trimmed against on its own.
+ *
+ * `desktopClientInstanceId` is required for the reason it is on a frame: a phone may
+ * be connected to several computers, and only one of them owns the list it is
+ * looking at.
+ *
+ * `revision` is the producer's own counter, bumped per send. It is not compared by
+ * the phone — the list is a full snapshot, so there is nothing to order — but it
+ * makes a captured payload self-describing.
+ */
+export interface MobileToolbarPayload {
+  readonly desktopClientInstanceId: string
+  readonly revision: number
+  /**
+   * The whole list, in the desktop's own order, built-ins first.
+   *
+   * Empty is a legitimate value and is *not* the same as absent: an empty list says
+   * this computer has no buttons, while a phone that has never received this message
+   * falls back to its own built-ins. Those are different answers to "what can I
+   * press", and a desktop is allowed to give the first one.
+   */
+  readonly buttons: readonly MobileToolbarButton[]
 }
 
 /* ------------------------------------------------------------------ *
@@ -800,6 +923,14 @@ export function isMobileDetachedPayload(value: unknown): value is MobileDetached
   return boundedString(value.mobileClientInstanceId, 120) && boundedString(value.reason, 120)
 }
 
+export function isMobileToolbarPayload(value: unknown): value is MobileToolbarPayload {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.desktopClientInstanceId, 120)) return false
+  if (!nonNegativeInteger(value.revision)) return false
+  if (!boundedArray(value.buttons, MOBILE_FRAME_LIMITS.maxToolbarButtons)) return false
+  return (value.buttons as readonly unknown[]).every(isMobileToolbarButton)
+}
+
 export function isMobilePresencePayload(value: unknown): value is MobilePresencePayload {
   if (!isRecord(value)) return false
   const ids = value.desktopClientInstanceIds
@@ -910,6 +1041,34 @@ function isKeyAction(value: unknown): value is MobileKeyAction {
   if (!isRecord(value)) return false
   if (value.type === "key") return isMobileKey(value.key)
   if (value.type === "text") return boundedString(value.text, MOBILE_FRAME_LIMITS.maxIntentTextLength)
+  return false
+}
+
+/**
+ * A button is bounded the way the desktop's own stored action is, not more loosely
+ * because the computer that sent it is the user's own: a payload that reaches the
+ * phone is a payload the phone will act on, and "trusted sender" is not a reason to
+ * accept a text that could never have been stored.
+ *
+ * `label` and `text` are non-empty for the same reason — they cannot be blank on the
+ * desktop either, since both are created through a schema that trims and requires one
+ * character. `id` is checked against the widest id either kind of button has: a uuid.
+ */
+function isMobileToolbarButton(value: unknown): value is MobileToolbarButton {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxToolbarButtonIdLength)) return false
+  if (!boundedString(value.label, MOBILE_FRAME_LIMITS.maxToolbarLabelLength)) return false
+  if (value.group !== "key" && value.group !== "command" && value.group !== "custom") return false
+  return isMobileToolbarAction(value.action)
+}
+
+function isMobileToolbarAction(value: unknown): value is MobileToolbarAction {
+  if (!isRecord(value)) return false
+  if (value.type === "key") return isMobileKey(value.key)
+  if (value.type === "text") {
+    return boundedString(value.text, MOBILE_FRAME_LIMITS.maxToolbarTextLength) &&
+      typeof value.pressEnter === "boolean"
+  }
   return false
 }
 

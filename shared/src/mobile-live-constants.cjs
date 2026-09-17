@@ -49,6 +49,11 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxRelayedFileBytes: number,
  *   readonly maxRelayedFileNameLength: number,
  *   readonly maxUploadDriveItemIdLength: number,
+ *   readonly maxToolbarButtons: number,
+ *   readonly maxToolbarButtonIdLength: number,
+ *   readonly maxToolbarLabelLength: number,
+ *   readonly maxToolbarTextLength: number,
+ *   readonly maxToolbarBytes: number,
  * }}
  */
 exports.MOBILE_FRAME_LIMITS = {
@@ -90,6 +95,13 @@ exports.MOBILE_FRAME_LIMITS = {
   maxRelayedFileBytes: 100 * 1024 * 1024,
   maxRelayedFileNameLength: 120,
   maxUploadDriveItemIdLength: 64,
+  /** Restated from the terminal capability's own custom-action schema; see `mobile-live.ts`. */
+  maxToolbarButtons: 64,
+  maxToolbarButtonIdLength: 64,
+  maxToolbarLabelLength: 32,
+  maxToolbarTextLength: 4096,
+  /** Bounds one serialized toolbar payload, which is trimmed button-by-button. */
+  maxToolbarBytes: 64 * 1024,
 }
 
 /**
@@ -111,9 +123,18 @@ exports.MOBILE_TRUECOLOR_BASE = 0x1000000
 
 /**
  * The only keys the terminal service can encode. Clients cannot send arbitrary
- * control bytes, so this list is the complete vocabulary of the accessory bar.
+ * control bytes, so this list is the complete vocabulary of the phone's panel.
  *
- * @type {readonly ["Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Backspace", "Ctrl+C", "Ctrl+D"]}
+ * Append-only: each entry is an identifier the phone, the cloud and the desktop
+ * all match by string, so reordering or removing one changes what an already
+ * released client sends. `mobile-live.test.ts` keeps this identical to the ESM copy.
+ *
+ * @type {readonly [
+ *   "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+ *   "Backspace", "Ctrl+C", "Ctrl+D",
+ *   "Home", "End", "PageUp", "PageDown", "Delete",
+ *   "Ctrl+A", "Ctrl+E", "Ctrl+U", "Ctrl+K", "Ctrl+W", "Ctrl+L", "Ctrl+R", "Ctrl+Z"
+ * ]}
  */
 exports.MOBILE_KEYS = [
   "Enter",
@@ -126,4 +147,17 @@ exports.MOBILE_KEYS = [
   "Backspace",
   "Ctrl+C",
   "Ctrl+D",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  "Delete",
+  "Ctrl+A",
+  "Ctrl+E",
+  "Ctrl+U",
+  "Ctrl+K",
+  "Ctrl+W",
+  "Ctrl+L",
+  "Ctrl+R",
+  "Ctrl+Z",
 ]
