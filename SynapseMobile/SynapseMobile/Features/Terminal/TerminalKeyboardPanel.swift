@@ -11,8 +11,8 @@ import SwiftUI
 ///
 /// The last category is a real keyboard rather than a picture of one. A modifier is
 /// latched by tapping it and the next letter completes the chord, which is the only
-/// vocabulary a touch screen has for "hold Ctrl and press C" — a real hold would fight
-/// the sheet's dismiss gesture, and a `Button` cannot report being held down anyway.
+/// vocabulary a touch screen has for "hold Ctrl and press C" — a `Button` reports a tap
+/// on the way up and has no state to read while a finger is still down.
 ///
 /// Read-only, deliberately. These are keys, not commands: there is nothing to add,
 /// rename or delete, and no menu on a long press.
@@ -121,14 +121,6 @@ private struct KeyboardPanelCategory: Identifiable {
 
     /// A grid of fixed keys, drawn by hand rather than from `rows`.
     var isFullKeyboard: Bool { id == Self.fullKeyboardId }
-
-    var gridHeight: CGFloat {
-        isFullKeyboard ? KeyboardPanelMetrics.fullKeyboardGridHeight : KeyboardPanelMetrics.gridHeight
-    }
-
-    var restingHeight: CGFloat {
-        isFullKeyboard ? KeyboardPanelMetrics.fullKeyboardRestingHeight : KeyboardPanelMetrics.restingHeight
-    }
 
     static let fullKeyboardId = "full"
 }
@@ -294,14 +286,19 @@ struct TerminalKeyboardPanel: View {
                 hint
             } else {
                 staticGrid
+                // The three shorter pages keep their keys at the top and leave the rest
+                // of the panel empty — the visible cost of one height for all four, and
+                // the reason a page change no longer moves what is above the panel.
+                Spacer(minLength: 0)
             }
         }
         .padding(.top, 8)
         .padding(.bottom, 14)
-        // The page decides how tall the sheet rests, because the full keyboard is four
-        // rows where the others are two or three. The grid is meant to be pressed while
-        // watching the terminal, so it takes as little of the screen as its rows allow.
-        .presentationDetents([.height(category.restingHeight), .large])
+        // It sits in the layout at the height it is given rather than sizing itself the
+        // way a sheet did. It is a keyboard now: what is above it is the terminal being
+        // watched, and what is below it is the bottom of the screen.
+        .frame(height: KeyboardPanelMetrics.height)
+        .background(Color(uiColor: .systemBackground))
         .onChange(of: selectedCategoryId) { _, _ in
             // Changing page is changing what the keys mean, so a latched modifier is
             // dropped rather than carried into a board it does not belong to.
@@ -321,7 +318,7 @@ struct TerminalKeyboardPanel: View {
                 rowView(row)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: category.gridHeight, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .padding(.horizontal, 14)
     }
 
@@ -388,7 +385,6 @@ struct TerminalKeyboardPanel: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(height: category.gridHeight)
         .padding(.horizontal, 14)
     }
 
@@ -661,15 +657,15 @@ struct TerminalKeyboardPanel: View {
 }
 
 enum KeyboardPanelMetrics {
-    /// The grid's height for the pages whose keys sit at fixed sizes. Deep enough for
-    /// the widest of them and no deeper, so the terminal above stays visible while the
-    /// panel is open — the keys are pressed by someone watching the screen.
-    static let gridHeight: CGFloat = 152
-    /// The full keyboard is four rows — modifiers, digits, and three of letters — so it
-    /// needs the depth to hold them without squeezing the rows together.
-    static let fullKeyboardGridHeight: CGFloat = 240
-    /// Where the panel rests. It can be pulled up from here; this is what it opens at.
-    static let restingHeight: CGFloat = 280
-    /// The full keyboard's own resting height, for the same reason as its grid.
-    static let fullKeyboardRestingHeight: CGFloat = 370
+    /// How much of the screen the panel occupies, the same on every page.
+    ///
+    /// Sized for the tallest page — the full keyboard's four rows of modifiers, digits
+    /// and letters, with its readout above them and its hint below — and no taller, so
+    /// that the terminal stays visible above the keys being pressed to drive it.
+    ///
+    /// One height rather than one per page. The three shorter pages leave the rest of
+    /// the panel empty, and that waste is the price of a page change that moves nothing
+    /// under the reader's finger: a panel that grew and shrank pushed the toolbar, the
+    /// input bar and the terminal up and down again with every category.
+    static let height: CGFloat = 370
 }

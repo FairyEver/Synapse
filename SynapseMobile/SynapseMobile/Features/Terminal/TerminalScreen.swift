@@ -106,12 +106,14 @@ struct TerminalScreen: View {
     /// Tells the desktop which grid to adopt, when the reader has asked the phone to
     /// drive the size.
     ///
-    /// Skipped while the input has focus. The keyboard shrinks the pane, and
-    /// reporting that shrink would resize the PTY every time someone taps the input
-    /// — a redraw for a keyboard the desktop cannot see. The size that stands is the
-    /// one measured before the keyboard came up.
+    /// Skipped while a keyboard of this phone's is up — the system one, or the panel.
+    /// Both shrink the pane, and reporting that shrink would resize the PTY every time
+    /// someone tapped the input or opened the panel: a redraw on the computer for a
+    /// keyboard it cannot see. The size that stands is the one measured before the
+    /// keyboard came up, and the closing of either reports the size again.
     private func reportGridToDesktop() {
-        guard displayMode == .phoneDriven, !inputFocused, store.visibleRows > 0 else { return }
+        guard displayMode == .phoneDriven, !inputFocused, !keyboardPanelPresented,
+              store.visibleRows > 0 else { return }
         model.setGridSize(
             DesktopGrid(columns: store.columns, rows: store.visibleRows),
             for: sessionId,
@@ -170,6 +172,9 @@ struct TerminalScreen: View {
             // pressing return are not mutually exclusive.
             accessoryBar
             inputBar
+            // Last, so that everything above it keeps its place and the terminal is
+            // what gives up the room — the same bargain the system keyboard makes.
+            keyboardPanel
         }
         // The bottom safe area is the input bar's surface, not the canvas's: it is
         // what shows through the keyboard's rounded top corners, and what shows under
@@ -459,10 +464,24 @@ struct TerminalScreen: View {
         // has a few commands, and a control that has been scrolled past is one a test
         // otherwise has to guess its way back to.
         .accessibilityIdentifier("toolbar-scroll")
-        .sheet(isPresented: $keyboardPanelPresented) {
-            // The panel sends a list rather than a single key because one chord needs
-            // two actions: Alt is an Escape prefix, and both halves have to travel in
-            // one intent for the terminal not to act on the bare Escape in between.
+    }
+
+    /// The keys the system keyboard cannot express, in the slot the system keyboard
+    /// would take.
+    ///
+    /// A row of the screen rather than a sheet over it, which is the whole difference:
+    /// a sheet floats above the layout and hides what is under it, so the toolbar and
+    /// the input bar — the two things that say what this screen is doing — went behind
+    /// it, and the terminal's newest lines with them. A keyboard is not something you
+    /// put in front of a terminal; it is something that takes room from it. Sitting
+    /// here, below the input bar, everything above is simply laid out on what is left.
+    ///
+    /// The panel sends a list rather than a single key because one chord needs two
+    /// actions: Alt is an Escape prefix, and both halves have to travel in one intent
+    /// for the terminal not to act on the bare Escape in between.
+    @ViewBuilder
+    private var keyboardPanel: some View {
+        if keyboardPanelPresented {
             TerminalKeyboardPanel(isEnabled: isRunning) { actions in
                 model.sendKeys(sessionId, actions)
                 // The panel stays up — pressing several keys, or holding an arrow, is
