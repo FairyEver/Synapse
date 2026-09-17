@@ -103,6 +103,19 @@ final class DisplayModeUITests: XCTestCase {
         shot(app, "05-selection-dragged")
         print("=== DIAG 05-selection-dragged: \(terminal.value ?? "nil") ===")
 
+        // Leave it in the phone-driven mode, so the desktop's own screen can be
+        // checked afterwards for the badge that says a phone set its size.
+        let more = app.buttons["More"]
+        if more.waitForExistence(timeout: 5) {
+            more.tap()
+            let option = app.buttons["优先移动端"]
+            if option.waitForExistence(timeout: 5) {
+                option.tap()
+                settle(seconds: 8)
+                shot(app, "06-phone-driven")
+            }
+        }
+
         print("=== SECOND TREE START ===")
         print(app.debugDescription)
         print("=== SECOND TREE END ===")
