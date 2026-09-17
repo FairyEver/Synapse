@@ -293,6 +293,10 @@ struct NewSessionSheet: View {
                     selected: group.projectId == selection.project?.projectId
                 ) {
                     choice.projectId = group.projectId
+                    // The reason belongs to the attempt that failed. Leaving it up
+                    // under a changed row would describe a request nobody is about to
+                    // make.
+                    failure = nil
                     path.removeAll()
                 }
             }
@@ -314,6 +318,7 @@ struct NewSessionSheet: View {
                     // The tier belonged to the Provider being left. Clearing it lets the
                     // new Provider name its own, which it already told us.
                     choice.modelTier = nil
+                    failure = nil
                     path.removeAll()
                 }
             }
@@ -334,6 +339,7 @@ struct NewSessionSheet: View {
                     ) {
                         choice.providerId = selection.provider?.id
                         choice.modelTier = tier
+                        failure = nil
                         path.removeAll()
                     }
                 }
