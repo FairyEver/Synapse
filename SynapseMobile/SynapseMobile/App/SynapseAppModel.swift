@@ -21,7 +21,6 @@ final class SynapseAppModel {
     private(set) var onlineDesktops: [String] = []
     private(set) var selectedDesktopClientInstanceId: String?
     private(set) var summary: MobileSummaryPayload?
-    private(set) var connectionState: RealtimeState = .idle
     private(set) var terminalStores: [String: TerminalStore] = [:]
     /// Sessions where the desktop's own user typed and took the write lease back.
     /// The phone does not ask about this — the next write reclaims it.
@@ -299,7 +298,10 @@ final class SynapseAppModel {
             // reconnects, and the next refresh succeeds once the server is back.
             authState = .signedIn
             await startLiveSession()
-            banner = "连不上服务器，正在重试。"
+            // No notice here. The socket's own words are already on screen — the
+            // device row of the session list says which kind of wait this is, and it
+            // keeps saying it until the connection is back, which a five-second
+            // sentence cannot do.
         }
     }
 
@@ -441,9 +443,6 @@ final class SynapseAppModel {
         realtime.onTransferProgress = { [weak self] payload in
             self?.applyTransferProgress(payload)
         }
-        realtime.onDesktopDetached = { [weak self] _ in
-            self?.banner = "电脑已断开连接。"
-        }
         realtime.onPresence = { [weak self] clientInstanceIds in
             self?.applyPresence(clientInstanceIds)
         }
@@ -540,7 +539,11 @@ final class SynapseAppModel {
                 retryWaitingAttachments()
             }
         } catch {
-            banner = "无法获取电脑列表。"
+            // Nothing to say that the screen is not already saying: the device row
+            // carries the socket's own words, and a list that has never been fetched
+            // says why in its empty state. Logged because the one case the screen
+            // cannot explain is a refresh failing while the socket is up.
+            AppLog.network.warning("desktop list refresh failed")
         }
     }
 
@@ -1035,9 +1038,15 @@ final class SynapseAppModel {
         }
     }
 
-    func summaryConnectivityLabel() -> String {
-        if onlineDesktops.isEmpty { return "电脑离线" }
-        return realtime.state.label
+    /// What stands between this phone and a terminal, when something does.
+    ///
+    /// The socket comes first: while it is down the computer list means nothing —
+    /// either it is empty because it was never fetched, or it is stale from before the
+    /// connection went. Reporting which one it is here keeps every screen from having
+    /// to work it out, and from getting it wrong in its own way.
+    var connectivity: Connectivity {
+        guard realtime.state.isConnected else { return .noServer(realtime.state.label) }
+        return onlineDesktops.isEmpty ? .noComputer : .online
     }
 
     // MARK: - Sending files to the computer

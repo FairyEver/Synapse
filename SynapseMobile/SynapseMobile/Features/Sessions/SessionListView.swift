@@ -194,12 +194,15 @@ struct SessionListView: View {
         Section {
             HStack(spacing: 8) {
                 Circle()
-                    .fill(model.onlineDesktops.isEmpty ? Color.secondary : Theme.running)
+                    // Green only when a computer is actually reachable. A list that is
+                    // empty because it could not be fetched is not a computer that is
+                    // online, and the dot must not claim otherwise.
+                    .fill(model.connectivity == .online ? Theme.running : Color.secondary)
                     .frame(width: 7, height: 7)
                 Text(model.summary?.desktopName ?? model.selectedDesktopClientInstanceId ?? "未连接电脑")
                     .font(.system(size: 14, weight: .medium))
                 Spacer()
-                Text(model.summaryConnectivityLabel())
+                Text(model.connectivity.label)
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -209,11 +212,16 @@ struct SessionListView: View {
     private var offlineSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
-                Text("电脑不在线")
+                // Names the actual problem, and the actual next step. This said "电脑
+                // 不在线" whatever the reason, which sent anyone whose phone simply had
+                // no network off to look at a computer that was already running.
+                Text(model.connectivity.label)
                     .font(.system(size: 15, weight: .semibold))
-                Text("请在电脑上打开 Synapse 并登录。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+                if let guidance = model.connectivity.guidance {
+                    Text(guidance)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.vertical, 4)
         }

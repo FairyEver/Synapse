@@ -672,7 +672,7 @@ struct TerminalScreen: View {
     }
 
     private var statusLabel: String {
-        guard let session else { return model.summaryConnectivityLabel() }
+        guard let session else { return model.connectivity.label }
         if session.attention.isWaiting { return "等待确认" }
         return session.isRunning ? "运行中" : "已结束"
     }

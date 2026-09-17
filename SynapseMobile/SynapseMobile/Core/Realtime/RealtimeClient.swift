@@ -16,8 +16,52 @@ enum RealtimeState: Equatable {
         case .idle: return "未连接"
         case .connecting: return "连接中"
         case .connected: return "已连接"
-        case .waiting: return "等待网络"
+        // The reason was carried on the case from the start and never read, so a phone
+        // waiting on its network and a phone waiting on its credential both said
+        // "等待网络". Which one it is decides what the user should go and check.
+        case .waiting(let reason): return reason.isEmpty ? "等待网络" : reason
         case .unauthenticated: return "需要登录"
+        }
+    }
+}
+
+/// What stands between this phone and a terminal, when something does.
+///
+/// One value rather than a sentence, because the session list and the terminal both
+/// have to say the same thing about the same situation, and two places working it out
+/// separately is how they drift apart.
+enum Connectivity: Equatable {
+    /// The socket is up and at least one computer is signed in.
+    case online
+    /// The socket is down, so nothing about any computer is knowable from here. Carries
+    /// the socket's own words, which tell waiting-on-a-network apart from
+    /// waiting-on-a-credential.
+    case noServer(String)
+    /// The socket is up and no computer is online.
+    case noComputer
+
+    /// The one line to show beside the computer's name, and under the terminal's title
+    /// when no terminal is open.
+    ///
+    /// These two used to be the same sentence. A phone that could not reach the server
+    /// at all said "电脑离线" — the computer was fine, the list was simply empty because
+    /// it had never been fetched — and sent the user to go and look at a computer that
+    /// was already running.
+    var label: String {
+        switch self {
+        case .online: return "已连接"
+        case .noServer(let reason): return reason
+        case .noComputer: return "电脑不在线"
+        }
+    }
+
+    /// The next step, for the empty state. Nil when there is nothing for this user to
+    /// do — there is no empty state to explain while the connection is fine.
+    var guidance: String? {
+        switch self {
+        case .online: return nil
+        case .noServer: return "请检查这台手机的网络。"
+        case .noComputer: return "请在电脑上打开 Synapse 并登录。"
         }
     }
 }
@@ -49,7 +93,6 @@ final class RealtimeClient {
     /// Anything that must be re-established per connection belongs here: a send
     /// issued before this point is dropped, not queued.
     var onConnected: (() -> Void)?
-    var onDesktopDetached: ((String) -> Void)?
 
     /// One session for every socket this client opens.
     ///
@@ -277,10 +320,13 @@ final class RealtimeClient {
             if let payload = envelope.payload.decode(MobileTransferProgressPayload.self) {
                 onTransferProgress?(payload)
             }
-        case LiveMessageType.mobileDetached:
-            if let payload = envelope.payload.decode(DetachedPayload.self) {
-                onDesktopDetached?(payload.mobileClientInstanceId)
-            }
+        // `mobile.detached` is deliberately not handled. The server sends it to
+        // *desktops* when a phone's socket closes — "only the desktops know which
+        // terminals that phone had open and therefore which write leases to release"
+        // — and there is no path back to a phone. This client decoded it and dispatched
+        // it for a long time without it ever firing once; the handler it fed claimed to
+        // report a computer dropping and could not.
+        // See server/src/mobile-live/mobile-live-relay.service.ts:249.
         case LiveMessageType.mobilePresence:
             if let payload = envelope.payload.decode(MobilePresencePayload.self) {
                 onPresence?(payload.desktopClientInstanceIds)
@@ -288,11 +334,6 @@ final class RealtimeClient {
         default:
             break
         }
-    }
-
-    private struct DetachedPayload: Decodable {
-        let mobileClientInstanceId: String
-        let reason: String
     }
 
     private func scheduleReconnect() {
