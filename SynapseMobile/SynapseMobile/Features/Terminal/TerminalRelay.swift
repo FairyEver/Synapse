@@ -283,6 +283,19 @@ func screenPickedFiles(_ files: [PickedFile], alreadyWaiting: Int) -> (accepted:
     return (accepted, rejections)
 }
 
+/// The files a submission has committed, and which may therefore leave the strip.
+///
+/// Only a delivered file is committed. Its path is in the line that was just sent,
+/// so the undo behind it went with that line — pressing it now would backspace into
+/// whatever the user types next. Every other state still has something to do: the
+/// bytes are going up, the computer has not answered, or the transfer failed and
+/// the user may retry, so those stay where the user can see and act on them.
+func committedAttachmentIds(_ attachments: [TerminalAttachment], sessionId: String) -> [String] {
+    attachments
+        .filter { $0.sessionId == sessionId && $0.state.isDelivered }
+        .map(\.id)
+}
+
 /// The MIME type the drive should record for a file, from its name.
 func mimeType(forFileNamed name: String) -> String? {
     let ext = (name as NSString).pathExtension

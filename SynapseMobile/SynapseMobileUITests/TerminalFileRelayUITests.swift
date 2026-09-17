@@ -81,7 +81,76 @@ final class TerminalFileRelayUITests: XCTestCase {
         capture(app, name: "04-after-undo")
     }
 
+    /// A submitted line takes the chip with it.
+    ///
+    /// The chip is the undo for an inserted path, so it lives exactly as long as
+    /// that path is still in the terminal's prompt. Both ways of submitting are
+    /// covered because they are different code paths — the arrow sends the draft as
+    /// a command, the accessory bar's return is a raw key — and a fix that only knew
+    /// about one of them would still leave a chip stranded.
+    ///
+    /// Needs a terminal that submitting into is harmless: the return phase sends the
+    /// inserted path itself, and the draft phase sends `echo`. A plain shell is the
+    /// right kind of session to point `SYNAPSE_TEST_SESSION_TITLE` at.
+    func testSubmittingTakesTheDeliveredChipOffTheStrip() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+
+        signIn(app)
+        openTerminal(app)
+
+        try deliverAPhoto(app, name: "01-return-delivered")
+        let returnKey = app.buttons["key-Enter"]
+        XCTAssertTrue(returnKey.waitForExistence(timeout: 10), "the accessory bar has no return key")
+        returnKey.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["relay-strip"].waitForNonExistence(timeout: 10),
+            "the strip stayed after the accessory return key submitted the line: " + describeStrip(app)
+        )
+        capture(app, name: "02-after-return")
+
+        try deliverAPhoto(app, name: "03-draft-delivered")
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "the input bar has no text field")
+        field.tap()
+        field.typeText("echo relay-commit")
+        app.buttons["send"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["relay-strip"].waitForNonExistence(timeout: 10),
+            "the strip stayed after the send button submitted the draft: " + describeStrip(app)
+        )
+        capture(app, name: "04-after-send")
+    }
+
     // MARK: - Steps
+
+    /// Picks a photo and waits until the computer has typed its path.
+    ///
+    /// The undo row is the only signal that covers every hop — upload, hand-off,
+    /// download onto the computer's disk, and the path going into the terminal — so
+    /// waiting for it is what makes anything asserted after it mean something.
+    private func deliverAPhoto(_ app: XCUIApplication, name: String) throws {
+        let attach = app.buttons["attach"]
+        XCTAssertTrue(attach.waitForExistence(timeout: 15), "the input bar has no + button")
+        attach.tap()
+
+        let photos = app.buttons["照片"]
+        XCTAssertTrue(photos.waitForExistence(timeout: 8), "the source menu did not offer the photo library")
+        photos.tap()
+
+        try pickFirstPhoto(app)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["relay-strip"].waitForExistence(timeout: 30),
+            "no relay strip appeared after picking a photo"
+        )
+        XCTAssertTrue(
+            app.buttons["relay-undo"].waitForExistence(timeout: 90),
+            "the computer never reported a landed path. The strip still showed: " + describeStrip(app)
+        )
+        capture(app, name: name)
+    }
 
     private func openTerminal(_ app: XCUIApplication) {
         let row = app.staticTexts[sessionTitle]

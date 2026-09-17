@@ -342,6 +342,14 @@ struct TerminalScreen: View {
                 ForEach(MobileKey.allCases, id: \.self) { key in
                     Button(key.label) {
                         model.sendKey(sessionId, key)
+                        // Return submits the same line the arrow does, so it commits
+                        // an inserted path the same way. ^C also discards the line,
+                        // but whether it abandoned one or interrupted a running
+                        // command is not something this bar can tell, so it is left
+                        // holding the chip that the discarded line no longer can undo.
+                        if key == .enter {
+                            model.commitDeliveredAttachments(for: sessionId)
+                        }
                         inputFocused = true
                     }
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -349,6 +357,10 @@ struct TerminalScreen: View {
                     .padding(.vertical, 7)
                     .padding(.horizontal, 8)
                     .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    // Named rather than matched by its label: the on-screen keyboard
+                    // has a return key of its own, and one of these two is a submit
+                    // whose consequences a test has to be able to tell apart.
+                    .accessibilityIdentifier("key-\(key.rawValue)")
                 }
             }
             .padding(.horizontal, 10)
@@ -412,6 +424,9 @@ struct TerminalScreen: View {
         guard !text.isEmpty else { return }
         draft = ""
         model.sendCommand(sessionId, text: text)
+        // The path an inserted file typed goes out with this line, so the chip that
+        // carried it has nothing left to undo.
+        model.commitDeliveredAttachments(for: sessionId)
     }
 
     /// Voice is only another way of filling `draft` — sending stays the arrow's job.

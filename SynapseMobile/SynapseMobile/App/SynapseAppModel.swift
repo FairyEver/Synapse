@@ -958,6 +958,21 @@ final class SynapseAppModel {
         }
     }
 
+    /// Takes the chips a submission has committed off the strip.
+    ///
+    /// Called when a command is actually submitted, which is the only moment the
+    /// phone learns the line carrying an inserted path has gone. Until then the chip
+    /// is the undo for that insertion and has to stay; afterwards the insertion is
+    /// spent, and a chip still offering to take it back would be offering to delete
+    /// characters the user has since typed. The files themselves are left alone —
+    /// `dismissRelay` does not touch a delivered one — because they are the user's
+    /// now, sitting on the computer where the terminal said they are.
+    func commitDeliveredAttachments(for sessionId: String) {
+        for id in committedAttachmentIds(relayAttachments, sessionId: sessionId) {
+            dismissRelay(id)
+        }
+    }
+
     /// Takes back what this phone typed, by pressing backspace once per character.
     ///
     /// That is the only undo a terminal offers, and it is why the desktop reports

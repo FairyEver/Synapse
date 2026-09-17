@@ -253,3 +253,56 @@ struct TerminalAttachmentStateTests {
         #expect(first.intentId == "i1")
     }
 }
+
+/// What a submitted line takes off the strip with it.
+struct RelayCommitTests {
+    private func attachment(
+        _ id: String,
+        session: String,
+        _ state: TerminalAttachment.State
+    ) -> TerminalAttachment {
+        TerminalAttachment(
+            id: id, name: "\(id).png", sessionId: session,
+            intentId: "i-\(id)", driveItemId: nil, state: state
+        )
+    }
+
+    @Test func submittingTakesOffOnlyTheFilesThatLanded() {
+        let attachments = [
+            attachment("landed", session: "s1", .delivered(path: "/tmp/a.png")),
+            attachment("waiting", session: "s1", .waitingForComputer),
+            attachment("failed", session: "s1", .failed("电脑没有接收")),
+            attachment("queued", session: "s1", .queued),
+            attachment("uploading", session: "s1", .uploading(0.5)),
+        ]
+        // Only the delivered one. The rest still have something to say — bytes to
+        // send, a computer to wait for, or a retry the user may yet take — and a
+        // chip that vanished mid-upload would look like the file was dropped.
+        #expect(committedAttachmentIds(attachments, sessionId: "s1") == ["landed"])
+    }
+
+    @Test func oneTerminalDoesNotClearAnothersChips() {
+        let attachments = [
+            attachment("mine", session: "s1", .delivered(path: "/tmp/a.png")),
+            attachment("theirs", session: "s2", .delivered(path: "/tmp/b.png")),
+        ]
+        // Submitting in one terminal says nothing about what another terminal's
+        // prompt still holds.
+        #expect(committedAttachmentIds(attachments, sessionId: "s1") == ["mine"])
+    }
+
+    @Test func aFileThatLandedWithoutAPathStillGoes() {
+        let attachments = [attachment("landed", session: "s1", .delivered(path: nil))]
+        // The desktop got the file but could not type its path. There was never an
+        // undo to offer, and the transfer itself is over.
+        #expect(committedAttachmentIds(attachments, sessionId: "s1") == ["landed"])
+    }
+
+    @Test func aStripWithNothingDeliveredKeepsEverything() {
+        let attachments = [
+            attachment("waiting", session: "s1", .waitingForComputer),
+            attachment("failed", session: "s1", .failed("上传失败")),
+        ]
+        #expect(committedAttachmentIds(attachments, sessionId: "s1").isEmpty)
+    }
+}
