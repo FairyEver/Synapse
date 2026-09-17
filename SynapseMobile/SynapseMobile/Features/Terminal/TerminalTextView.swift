@@ -891,6 +891,7 @@ extension TerminalCollectionView: UIEditMenuInteractionDelegate {
         guard let selection, !selection.isEmpty else { return nil }
         return UIMenu(children: [
             UIAction(title: "拷贝") { [weak self] _ in self?.copySelection() },
+            UIAction(title: "分享") { [weak self] _ in self?.shareSelection() },
             UIAction(title: "全选") { [weak self] _ in self?.selectAllRows() },
         ])
     }
@@ -904,16 +905,58 @@ extension TerminalCollectionView: UIEditMenuInteractionDelegate {
         editMenu = nil
     }
 
-    /// Puts the selected cells on the pasteboard.
+    /// The text the reader has selected, as they can see it.
     ///
     /// Straight from the rows the view is showing, which is what the reader sees and
     /// therefore what they meant — not from the store's lines, which are wrapped
-    /// differently and would paste text that was never on screen.
+    /// differently and would hand over text that was never on screen.
+    private var selectedText: String {
+        guard let selection else { return "" }
+        return selection.lines(from: appliedRows.map(\.text)).joined(separator: "\n")
+    }
+
+    /// Puts the selected cells on the pasteboard.
     private func copySelection() {
-        guard let selection else { return }
-        let text = selection.lines(from: appliedRows.map(\.text)).joined(separator: "\n")
-        UIPasteboard.general.string = text
+        UIPasteboard.general.string = selectedText
         clearSelection()
+    }
+
+    /// Hands the selected cells to the system share sheet.
+    ///
+    /// Presented on the next runloop turn: the edit menu is still animating away when
+    /// its action fires, and asking for a sheet while that happens is how it ends up
+    /// never appearing. The selection is deliberately left in place — cancelling the
+    /// sheet is common, and it should not cost the reader their selection.
+    private func shareSelection() {
+        guard let presenter = topmostViewController() else { return }
+        let controller = UIActivityViewController(
+            activityItems: [selectedText],
+            applicationActivities: nil
+        )
+        // A popover needs somewhere to point; without an anchor iPad raises instead of
+        // laying the sheet out.
+        let anchor = selection.map { caretRect(for: $0.end) } ?? bounds
+        controller.popoverPresentationController?.sourceView = self
+        controller.popoverPresentationController?.sourceRect = anchor
+        DispatchQueue.main.async {
+            presenter.present(controller, animated: true)
+        }
+    }
+
+    /// The nearest view controller, with whatever it is presenting on top.
+    ///
+    /// The sheet has to be presented by the frontmost controller, not by the screen
+    /// sitting underneath an already-open one.
+    private func topmostViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let current = responder, !(current is UIViewController) {
+            responder = current.next
+        }
+        var top = (responder as? UIViewController) ?? window?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
     }
 
     private func selectAllRows() {

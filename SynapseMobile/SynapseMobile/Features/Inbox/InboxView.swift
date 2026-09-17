@@ -6,7 +6,6 @@ import SwiftUI
 /// a question is the one case where nothing progresses until someone looks.
 struct InboxView: View {
     @Environment(SynapseAppModel.self) private var model
-    @Binding var path: [Route]
 
     var body: some View {
         List {
@@ -14,9 +13,9 @@ struct InboxView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("暂无待处理事项")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.subheadline.weight(.semibold))
                         Text("Claude Code 或 Codex 请求确认或提问时，会推送通知。")
-                            .font(.system(size: 13))
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 4)
@@ -24,34 +23,35 @@ struct InboxView: View {
             } else {
                 Section("等待中") {
                     ForEach(model.waitingSessions) { session in
-                        Button {
-                            path.append(.terminal(session.id))
-                        } label: {
+                        // NavigationLink, not Button: the plain button style was
+                        // suppressing the chevron that marks this row as pushing
+                        // one level deeper. NavigationLink draws it for free and
+                        // appends to the NavigationStack path on its own.
+                        NavigationLink(value: Route.terminal(session.id)) {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text(session.title)
-                                        .font(.system(size: 15, weight: .semibold))
+                                        .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(.primary)
                                     Spacer()
                                     Text(model.groupName(session.groupId))
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.tertiary)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
                                 }
                                 Text(session.attention.kind == "approval"
                                      ? "请求执行一个命令"
                                      : "正在等待你的回答")
-                                    .font(.system(size: 12))
+                                    .font(.caption)
                                     .foregroundStyle(Theme.attention)
                                 if !session.lastLine.isEmpty {
                                     Text(session.lastLine)
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(.system(.caption2, design: .monospaced))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(2)
                                 }
                             }
                             .padding(.vertical, 3)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }

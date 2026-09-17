@@ -68,12 +68,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<!-- Terminal alerts are worth waking a suspended app for. -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
 	<!--
+	  No UIBackgroundModes on purpose. The app never receives a silent push: the
+	  server sends every alert as `apns-push-type: alert`, and the app delegate has
+	  no `didReceiveRemoteNotification:fetchCompletionHandler:`. Claiming a
+	  background mode nothing exercises is something App Review asks about.
+
 	  Narrow transport exception, not a blanket one: it permits cleartext only to
 	  hosts on the local network, which is what the simulator and a LAN development
 	  server need. Everything remote still requires TLS.

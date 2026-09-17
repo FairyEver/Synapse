@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Colours carried over from the desktop's design system.
 ///
@@ -18,10 +19,57 @@ enum Theme {
     /// The colour that reads on top of `ink` — the label of a filled button.
     static let paper = Color(uiColor: .systemBackground)
 
-    static let attention = Color(red: 0.78, green: 0.47, blue: 0.0)
+    /// The one colour that means a person is needed.
+    ///
+    /// Adaptive, because a single fixed value cannot be legible in both appearances:
+    /// the amber that reads on white is too dark to read on black, and the one that
+    /// reads on black is invisible on white. Both ends are held to WCAG AA's 4.5:1
+    /// for body text — the single value this replaced measured 3.4:1 on white, which
+    /// is what iOS's own `systemRed` and `systemOrange` do too, and it is used here
+    /// at 11–12 pt, where that is not good enough.
+    static let attention = dynamic(
+        light: (red: 0.60, green: 0.36, blue: 0.00),
+        dark: (red: 0.95, green: 0.65, blue: 0.25)
+    )
+
+    /// A wash of `attention` for a badge that carries text on top of it.
+    ///
+    /// Opaque and adaptive rather than `attention.opacity(0.12)`: a 12% wash over
+    /// white is nearly white, and the amber on top of it measured 2.5:1 — the text
+    /// was drawn on a background that was effectively its own colour.
+    static let attentionFill = dynamic(
+        light: (red: 0.99, green: 0.96, blue: 0.90),
+        dark: (red: 0.28, green: 0.21, blue: 0.10)
+    )
+
     static let running = Color(red: 0.11, green: 0.54, blue: 0.31)
-    static let failure = Color(red: 0.78, green: 0.21, blue: 0.18)
+
+    /// Same reasoning as `attention`: 5.3:1 on white, but only 3.2:1 on a dark list
+    /// cell, so dark appearance gets a red of its own.
+    static let failure = dynamic(
+        light: (red: 0.78, green: 0.21, blue: 0.18),
+        dark: (red: 1.00, green: 0.45, blue: 0.40)
+    )
+
     static let terminalBackground = Color(red: 0.063, green: 0.063, blue: 0.071)
+
+    /// One colour, two appearances.
+    ///
+    /// `UIColor`'s own dynamic provider rather than SwiftUI's `Color(light:dark:)`,
+    /// which is not available before iOS 18's `Color.Resolved` — and the deployment
+    /// target is 18.0, but this also keeps the resolution in the same place the rest
+    /// of the system colours are resolved, so mixing this with `Color(.systemBackground)`
+    /// cannot end up in two different appearance contexts.
+    private static func dynamic(
+        light: (red: Double, green: Double, blue: Double),
+        dark: (red: Double, green: Double, blue: Double)
+    ) -> Color {
+        Color(uiColor: UIColor { traits in
+            let value = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: value.red, green: value.green, blue: value.blue, alpha: 1)
+        })
+    }
+
 
     static func statusColor(isWaiting: Bool, isRunning: Bool) -> Color {
         if isWaiting { return attention }

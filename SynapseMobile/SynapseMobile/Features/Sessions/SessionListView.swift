@@ -146,9 +146,7 @@ struct SessionListView: View {
     /// implements the physics, the full-swipe, the VoiceOver actions, and the
     /// rule that only one row stays open.
     private func sessionRow(_ session: MobileSummarySession) -> some View {
-        SessionRow(session: session) {
-            path.append(.terminal(session.id))
-        }
+        SessionRow(session: session)
         // Swipe actions are the one place the app's tint is a *fill* rather than
         // an accent: the button paints its background with it and then draws the
         // icon and text on top in that same colour. The app-wide tint is
@@ -200,10 +198,10 @@ struct SessionListView: View {
                     .fill(model.connectivity == .online ? Theme.running : Color.secondary)
                     .frame(width: 7, height: 7)
                 Text(model.summary?.desktopName ?? model.selectedDesktopClientInstanceId ?? "未连接电脑")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                 Spacer()
                 Text(model.connectivity.label)
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
@@ -216,10 +214,10 @@ struct SessionListView: View {
                 // 不在线" whatever the reason, which sent anyone whose phone simply had
                 // no network off to look at a computer that was already running.
                 Text(model.connectivity.label)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                 if let guidance = model.connectivity.guidance {
                     Text(guidance)
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -232,17 +230,20 @@ struct SessionListView: View {
     private var emptySection: some View {
         Section {
             Text("没有正在运行的终端")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
         }
     }
 }
 
 struct SessionRow: View {
     let session: MobileSummarySession
-    let onOpen: () -> Void
 
+    /// `NavigationLink` rather than a `Button` that appends to the path itself: it
+    /// is what draws the disclosure indicator this row owes the reader, and it
+    /// supplies the system's press highlight for free. A `.plain` button draws
+    /// neither, so the row looked like static text even though it opened something.
     var body: some View {
-        Button(action: onOpen) {
+        NavigationLink(value: Route.terminal(session.id)) {
             HStack(alignment: .top, spacing: 11) {
                 Circle()
                     .fill(Theme.statusColor(isWaiting: session.attention.isWaiting, isRunning: session.isRunning))
@@ -252,38 +253,43 @@ struct SessionRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(session.title)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.subheadline.weight(.semibold))
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         Text(relativeTime)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
+                            .font(.caption2)
+                            // `.secondary`, not `.tertiary`: at this size tertiary
+                            // measured 2.11:1 on the light background, well under the
+                            // 4.5:1 the text needs to be legible at all.
+                            .foregroundStyle(.secondary)
                     }
                     Text(session.cwd)
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
                     if !session.lastLine.isEmpty {
                         Text(session.lastLine)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     if session.attention.isWaiting {
                         Text(session.attention.kind == "approval" ? "等待确认" : "等待输入")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(Theme.attention)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
-                            .background(Theme.attention.opacity(0.12), in: Capsule())
+                            // An opaque wash, not `attention.opacity(0.12)`: the
+                            // translucent version let the page show through, so the
+                            // amber text sat on something close to its own colour.
+                            .background(Theme.attentionFill, in: Capsule())
                             .padding(.top, 1)
                     }
                 }
             }
             .padding(.vertical, 3)
         }
-        .buttonStyle(.plain)
     }
 
     private var relativeTime: String {
@@ -319,13 +325,13 @@ struct NewSessionSheet: View {
                             // The group name is the whole choice; the subtitle only
                             // restated the sheet's own title.
                             Text(group.name)
-                                .font(.system(size: 15))
+                                .font(.subheadline)
                         }
                     }
                 }
                 if (model.summary?.groups ?? []).isEmpty {
                     Text("电脑上还没有分组，请先在电脑端创建。")
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }

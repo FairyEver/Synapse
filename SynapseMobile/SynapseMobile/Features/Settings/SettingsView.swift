@@ -34,7 +34,7 @@ struct SettingsView: View {
             Section("已连接的电脑") {
                 if model.onlineDesktops.isEmpty {
                     Text("没有在线的电脑")
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(model.onlineDesktops, id: \.self) { desktop in
@@ -43,12 +43,12 @@ struct SettingsView: View {
                                 .fill(Theme.running)
                                 .frame(width: 7, height: 7)
                             Text(desktop)
-                                .font(.system(size: 14))
+                                .font(.subheadline)
                                 .lineLimit(1)
                             Spacer()
                             if desktop == model.selectedDesktopClientInstanceId {
                                 Text("当前")
-                                    .font(.system(size: 11))
+                                    .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
                         }

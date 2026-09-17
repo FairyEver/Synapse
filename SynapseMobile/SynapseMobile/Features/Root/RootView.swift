@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 enum Route: Hashable {
     case terminal(String)
@@ -41,10 +42,13 @@ struct RootView: View {
         }
         .onChange(of: model.waitingSessions.count) { _, count in
             // Surface waiting work on the tab even when the user is elsewhere.
-            if count > 0, selectedTab != .inbox {
-                UIApplication.shared.applicationIconBadgeNumber = count
-            } else {
-                UIApplication.shared.applicationIconBadgeNumber = 0
+            let badge = (count > 0 && selectedTab != .inbox) ? count : 0
+            Task {
+                // Setting the badge needs no permission, but it does need the user to
+                // have granted notifications at all. This app treats push as best
+                // effort — everything works without it — so a refusal is not an error
+                // worth surfacing, and there is no UI here to surface it in anyway.
+                try? await UNUserNotificationCenter.current().setBadgeCount(badge)
             }
         }
     }
@@ -59,7 +63,9 @@ struct RootView: View {
             .tag(Tab.terminals)
 
             NavigationStack(path: $inboxPath) {
-                InboxView(path: $inboxPath)
+                // No path binding: the inbox's rows are `NavigationLink`s, which append
+                // to the stack on their own.
+                InboxView()
                     .navigationDestination(for: Route.self, destination: destination)
             }
             .tabItem { Label("需要我", systemImage: "exclamationmark.circle") }

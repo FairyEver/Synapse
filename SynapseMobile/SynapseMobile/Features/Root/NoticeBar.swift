@@ -85,10 +85,15 @@ struct NoticeBar: View {
         // High priority on purpose: three of the screens this floats over are `List`s,
         // whose own pan recogniser would otherwise take the drag.
         .highPriorityGesture(drag)
+        // The tap and the drag cannot fight over the same touch: the drag does not begin
+        // until it has travelled `minimumDistance`, so a touch that never moves leaves
+        // only the tap. Downward, because the bar sits at the bottom and down is the way
+        // out of it.
+        .onTapGesture { dismiss(going: 1) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(notice.text))
-        // A double tap and the two-finger scrub both throw it away. The bar carries no
-        // other affordance a screen reader could reach, and it is on a clock.
+        // A double tap and the two-finger scrub both throw it away. The throw is not
+        // something a screen reader can perform, and the bar is on a clock.
         .accessibilityAction { onDismiss() }
         .accessibilityAction(.escape) { onDismiss() }
     }
@@ -151,18 +156,25 @@ struct NoticeBar: View {
                     return
                 }
 
-                // Leaves the way it was thrown, and only then tells the model. Dismissing
-                // first would take the offset with it: the bar would snap back into place
-                // and the removal would animate from there.
-                let direction: CGFloat = projected >= 0 ? 1 : -1
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
-                    dragOffset = direction * 160
-                }
-                Task {
-                    try? await Task.sleep(for: .milliseconds(170))
-                    onDismiss()
-                }
+                // Leaves the way it was thrown, and only then tells the model.
+                dismiss(going: projected >= 0 ? 1 : -1)
             }
+    }
+
+    /// The single exit. The tap and the flick both come through here, so the animation
+    /// length and the delay before the model hears about it cannot drift apart.
+    ///
+    /// Leaves first, and only then tells the model. Dismissing first would take the
+    /// offset with it: the bar would snap back into place and the removal would animate
+    /// from there.
+    private func dismiss(going direction: CGFloat) {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+            dragOffset = direction * 160
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(170))
+            onDismiss()
+        }
     }
 
     private var spring: Animation? {

@@ -49,6 +49,11 @@ struct TerminalMessageList: View {
                     UIApplication.shared.open(settings)
                 }
                 .font(.footnote.weight(.medium))
+                // Word-sized control, thumb-sized target. The shape goes on after
+                // the frame: the frame is only layout, and the band it adds around
+                // the text would not answer a tap on its own.
+                .frame(minWidth: Metrics.minimumTapTarget, minHeight: Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
             }
 
             Button {
@@ -57,8 +62,11 @@ struct TerminalMessageList: View {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    // The glyph is small; the target it sits in is not.
-                    .frame(width: 28, height: 28)
+                    // The glyph is small; the target it sits in is not. At 44 the
+                    // target is taller than the text beside it, so this row grows
+                    // with it — that height is what a thumb is owed, and an answer
+                    // the user cannot reliably dismiss is worse than a taller row.
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("关闭")

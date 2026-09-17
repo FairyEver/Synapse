@@ -1,15 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Apple's minimum tappable area, in points.
-///
-/// It is what the two bars under the terminal are sized from, and it is a floor
-/// rather than a preference: a glyph is drawn at the size it reads at and handed
-/// this much room to be hit in, and the row is as tall as the roomiest control in
-/// it. Drawn-and-tappable being the same rectangle is what left the bar shorter
-/// than a finger.
-private let minimumTapTarget: CGFloat = 44
-
 /// One terminal, full screen.
 struct TerminalScreen: View {
     @Environment(SynapseAppModel.self) private var model
@@ -282,18 +273,25 @@ struct TerminalScreen: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 17, weight: .semibold))
+                    // This bar is one we lay out ourselves, so there is no system
+                    // 44pt floor behind the button: the glyph is drawn at 17 and is
+                    // handed its own room to be hit in — declared as the shape, or
+                    // the room is drawn but not hit.
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
+            .accessibilityLabel("返回")
 
             VStack(spacing: 1) {
                 Text(session?.title ?? "终端")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 5) {
                     Circle()
                         .fill(statusColor)
                         .frame(width: 6, height: 6)
                     Text(statusLabel)
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -354,8 +352,14 @@ struct TerminalScreen: View {
                     .font(.system(size: 15, weight: .semibold))
                     .frame(width: 30, height: 30)
                     .background(Color(uiColor: .secondarySystemBackground), in: Circle())
+                    // The circle is the control; this is the room around it. Applied
+                    // after the background so the circle keeps its own size and only
+                    // the tappable box grows to the minimum.
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
             .tint(.primary)
+            .accessibilityLabel("更多")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -382,6 +386,7 @@ struct TerminalScreen: View {
             HStack(spacing: 8) {
                 ForEach(MobileKey.allCases, id: \.self) { key in
                     Button(key.label) {
+                        Haptics.select()
                         model.sendKey(sessionId, key)
                         // Return submits the same line the arrow does, so it commits
                         // an inserted path the same way. ^C also discards the line,
@@ -393,15 +398,17 @@ struct TerminalScreen: View {
                         }
                         inputFocused = true
                     }
-                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                    .font(.system(.subheadline, design: .monospaced, weight: .medium))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
                     .frame(minWidth: 48, minHeight: 36)
                     .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     // The pill is the control; this is the room around it. Applied
                     // after the background so the pill keeps its own size and only
-                    // the tappable box grows to the minimum.
-                    .frame(minHeight: minimumTapTarget)
+                    // the tappable box grows to the minimum — and declared as the
+                    // shape, or the room is drawn but not hit.
+                    .frame(minHeight: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
                     // Named rather than matched by its label: the on-screen keyboard
                     // has a return key of its own, and one of these two is a submit
                     // whose consequences a test has to be able to tell apart.
@@ -426,14 +433,17 @@ struct TerminalScreen: View {
                 // ✗ rolls the field back to what it held before the microphone was
                 // tapped, so it belongs where the ＋ that started it was.
                 Button {
+                    Haptics.record()
                     voice.cancel()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 22))
                         .foregroundStyle(Theme.ink)
-                        .frame(width: minimumTapTarget, height: minimumTapTarget)
+                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("voice-cancel")
+                .accessibilityLabel("取消语音输入")
             } else {
                 // The sources are offered where the + is, not from the middle of the
                 // screen: the list is short, and the hand that opened it is already
@@ -471,10 +481,12 @@ struct TerminalScreen: View {
                     Image(systemName: "plus")
                         .font(.system(size: 22))
                         .foregroundStyle(Theme.ink)
-                        .frame(width: minimumTapTarget, height: minimumTapTarget)
+                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .tint(Theme.ink)
                 .accessibilityIdentifier("attach")
+                .accessibilityLabel("添加附件")
             }
 
             if presentation.active {
@@ -483,7 +495,7 @@ struct TerminalScreen: View {
                 TextField("输入命令", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: minimumTapTarget)
+                    .frame(minHeight: Metrics.minimumTapTarget)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .submitLabel(.send)
@@ -496,6 +508,7 @@ struct TerminalScreen: View {
             // inside this one.
             if !presentation.active {
                 Button {
+                    Haptics.record()
                     // Dropped before the bar swaps: the keyboard would otherwise be
                     // dismissed by a view that no longer exists.
                     inputFocused = false
@@ -504,9 +517,11 @@ struct TerminalScreen: View {
                     Image(systemName: "mic")
                         .font(.system(size: 22))
                         .foregroundStyle(Theme.ink)
-                        .frame(width: minimumTapTarget, height: minimumTapTarget)
+                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("voice-start")
+                .accessibilityLabel("语音输入")
             }
 
             rightKey(presentation)
@@ -562,10 +577,12 @@ struct TerminalScreen: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 30))
                     .foregroundStyle(draft.isEmpty ? Color.secondary : Theme.ink)
-                    .frame(width: minimumTapTarget, height: minimumTapTarget)
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
             .disabled(draft.isEmpty)
             .accessibilityIdentifier("send")
+            .accessibilityLabel("发送")
 
         case .confirm, .confirmDisabled:
             let enabled = presentation.right == .confirm
@@ -575,29 +592,37 @@ struct TerminalScreen: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 30))
                     .foregroundStyle(enabled ? Theme.ink : Color.secondary)
-                    .frame(width: minimumTapTarget, height: minimumTapTarget)
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
             .disabled(!enabled)
             .accessibilityIdentifier("voice-confirm")
+            .accessibilityLabel("确认语音输入")
 
         case .retry, .retryDisabled:
             let enabled = presentation.right == .retry
             Button {
+                Haptics.select()
                 voice.retry()
             } label: {
                 Image(systemName: "arrow.clockwise.circle.fill")
                     .font(.system(size: 30))
                     .foregroundStyle(enabled ? Theme.ink : Color.secondary)
-                    .frame(width: minimumTapTarget, height: minimumTapTarget)
+                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
             .disabled(!enabled)
             .accessibilityIdentifier("voice-retry")
+            .accessibilityLabel("重试")
         }
     }
 
     private func sendDraft() {
         let text = draft
         guard !text.isEmpty else { return }
+        // After the guard: a send with nothing to send does nothing, and a tap
+        // felt there would say something happened.
+        Haptics.commit()
         draft = ""
         model.sendCommand(sessionId, text: text)
         // The path an inserted file typed goes out with this line, so the chip that
@@ -608,6 +633,9 @@ struct TerminalScreen: View {
     /// Voice is only another way of filling `draft` — sending stays the arrow's job.
     private func finishVoice() async {
         guard let text = await voice.confirm() else { return }
+        // After the guard, so a confirmation that failed has no tap claiming it
+        // worked — the words are what is being announced, not the press.
+        Haptics.commit()
         // Appended rather than assigned: whatever was typed before the microphone
         // was tapped is still the user's, and dictation after it reads as a
         // continuation.

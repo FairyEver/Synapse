@@ -86,6 +86,16 @@ struct TerminalRelayStrip: View {
                 }
             } label: {
                 chipChrome(attachment)
+                    // The chip is the control; this is the room around it, the same
+                    // split the terminal's key pills use. Only this one gets it: the
+                    // waiting-count chip and the plain chips are sentences, and a
+                    // taller sentence would just make the strip fatter.
+                    //
+                    // The shape is declared again out here because the one inside
+                    // chipChrome is measured against the pill: a frame is only layout,
+                    // and the transparent band it adds would not answer a tap.
+                    .frame(minHeight: Metrics.minimumTapTarget)
+                    .contentShape(Rectangle())
             }
             // On the menu rather than on its label: the label is what the menu
             // draws, and hiding its children from the accessibility tree would take
