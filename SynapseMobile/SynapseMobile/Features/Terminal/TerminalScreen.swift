@@ -121,6 +121,37 @@ struct TerminalScreen: View {
         )
     }
 
+    // MARK: - Keyboards
+
+    /// Puts away whichever keyboard this screen has up.
+    ///
+    /// The one entry point for it, because there is one rule: this screen has two
+    /// keyboards and neither is allowed up while the other is. Tapping the canvas,
+    /// tapping the input, and the keyboard button when it is already open all mean the
+    /// same thing. Written out at each site instead, the copies drift, and the one that
+    /// gets forgotten leaves a keyboard on screen with nothing left that closes it.
+    private func dismissKeyboards() {
+        inputFocused = false
+        keyboardPanelPresented = false
+    }
+
+    /// The keyboard button is a switch between the two keyboards, not a way in.
+    ///
+    /// It did not have a second press to answer while the panel was a sheet, because a
+    /// sheet covered the button that had raised it. Sitting in the layout, the button
+    /// stays where it was and is reachable again — which is how a keyboard button
+    /// behaves everywhere else on the system.
+    private func toggleKeyboardPanel() {
+        guard !keyboardPanelPresented else {
+            dismissKeyboards()
+            return
+        }
+        // Lowered before the panel rises rather than after, so that the two are never
+        // both up: with both, the lower one cannot be reached.
+        inputFocused = false
+        keyboardPanelPresented = true
+    }
+
     var body: some View {
         @Bindable var model = model
 
@@ -133,7 +164,7 @@ struct TerminalScreen: View {
                 desktopGrid: desktopGrid,
                 revision: store.renderRevision,
                 onRequestHistory: { model.requestHistory(sessionId) },
-                onTap: { inputFocused = false }
+                onTap: { dismissKeyboards() }
             )
             .background(Theme.terminalBackground)
             .onAppear { syncDisplayMode() }
@@ -145,6 +176,11 @@ struct TerminalScreen: View {
             .onChange(of: store.columns) { reportGridToDesktop() }
             .onChange(of: store.visibleRows) { reportGridToDesktop() }
             .onChange(of: inputFocused) {
+                // Asking for the system keyboard is asking for the other one to go:
+                // only one of the two can be up, and this is the only place either is
+                // asked for by name. Tapping the field, and the toolbar buttons that
+                // type into it, all arrive here.
+                if inputFocused { keyboardPanelPresented = false }
                 reportGridToDesktop()
                 refreshPasteboardImage()
             }
@@ -417,12 +453,8 @@ struct TerminalScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 Button {
-                    // The system keyboard and this panel are both keyboards, and two of
-                    // them at once means the lower one cannot be reached. Lowered before
-                    // the panel rises rather than after, so they are never both up.
-                    inputFocused = false
                     Haptics.select()
-                    keyboardPanelPresented = true
+                    toggleKeyboardPanel()
                 } label: {
                     Image(systemName: "keyboard")
                         .font(.system(size: 16))
@@ -489,10 +521,6 @@ struct TerminalScreen: View {
                 // would have to be reopened for each one.
                 if actions.contains(.key(.enter)) { model.commitDeliveredAttachments(for: sessionId) }
             }
-            // Its resting height — and therefore its detent — belongs to the page the
-            // panel is on, so the panel sets it: the full keyboard is four rows where
-            // the others are two or three. See `KeyboardPanelMetrics`.
-            .presentationDragIndicator(.visible)
         }
     }
 

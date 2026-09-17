@@ -661,6 +661,77 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "16-keyboard-panel-locked")
     }
 
+    /// The panel is a keyboard, so it answers what a keyboard answers.
+    ///
+    /// None of this was reachable while the panel was a sheet. A sheet covers the
+    /// button that raised it, the input bar and the terminal underneath, so there was
+    /// nothing left on screen to press — the button could only ever go one way. In the
+    /// layout those three are all still there, and the rule they now serve is that
+    /// this screen has two keyboards and only one of them may be up.
+    func testThePanelAnswersTheKeyboardGestures() throws {
+        let app = XCUIApplication()
+        app.pointAtServer(baseURL)
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        app.staticTexts["claude-code"].tap()
+
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
+        XCTAssertTrue(
+            waitForLabel(containing: "Claude Code v2.1.0", in: app, timeout: 15),
+            "the terminal never rendered the desktop's output"
+        )
+
+        let keyboardButton = app.buttons["toolbar-keyboard"]
+        let escapeKey = app.buttons["panelkey-Escape"]
+        XCTAssertTrue(waitForHittable(keyboardButton, timeout: 10), "no way into the panel")
+
+        // Up, and showing that what is above it keeps its place: the toolbar and the
+        // input bar are not covered, and the terminal is what gave up the room.
+        keyboardButton.tap()
+        XCTAssertTrue(escapeKey.waitForExistence(timeout: 10), "the panel never opened")
+        capture(app, name: "17-panel-in-the-keyboard-slot")
+        let withPanel = terminal.frame.height
+
+        // Down again from the same button. A keyboard button that cannot put its
+        // keyboard away is the one thing a sheet could not offer.
+        keyboardButton.tap()
+        XCTAssertTrue(
+            escapeKey.waitForNonExistence(timeout: 10),
+            "a second press did not put the panel away"
+        )
+        XCTAssertGreaterThan(
+            terminal.frame.height, withPanel,
+            "the terminal did not get its height back when the panel closed"
+        )
+
+        // The input is the other keyboard. Asking for it is asking for this one to go,
+        // and never both at once.
+        keyboardButton.tap()
+        XCTAssertTrue(escapeKey.waitForExistence(timeout: 10), "the panel never came back")
+        app.textFields.firstMatch.tap()
+        XCTAssertTrue(
+            escapeKey.waitForNonExistence(timeout: 10),
+            "tapping the input left the panel up underneath the system keyboard"
+        )
+
+        // The canvas puts away whichever one is up — the same gesture that has always
+        // dismissed the system keyboard here, so it is the same entry point.
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        keyboardButton.tap()
+        XCTAssertTrue(escapeKey.waitForExistence(timeout: 10), "the panel never came back")
+        capture(app, name: "18-panel-before-canvas-tap")
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        XCTAssertTrue(
+            escapeKey.waitForNonExistence(timeout: 10),
+            "tapping the canvas did not put the panel away"
+        )
+        capture(app, name: "19-panel-dismissed-by-canvas")
+    }
+
     /// Nothing here can be pressed once the terminal is gone.
     ///
     /// Every one of these sends something into a terminal — a key, a command — and a
