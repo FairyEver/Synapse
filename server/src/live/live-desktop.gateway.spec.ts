@@ -216,6 +216,7 @@ describe("LiveDesktopGateway", () => {
       handleFrame: vi.fn(),
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -249,6 +250,7 @@ describe("LiveDesktopGateway", () => {
       handleFrame: vi.fn(),
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -281,6 +283,7 @@ describe("LiveDesktopGateway", () => {
       handleFrame: vi.fn(),
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -553,6 +556,7 @@ describe("LiveDesktopGateway", () => {
       handleFrame: vi.fn(),
       handleIntentResult: vi.fn(),
       handleTransferProgress,
+      handleToolbar: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -577,6 +581,44 @@ describe("LiveDesktopGateway", () => {
       totalBytes: 4096,
     })
     expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
+  })
+
+  it("hands a desktop's toolbar to the relay instead of the unhandled fallback", () => {
+    // The fallback below `handleMobileRelayMessage` is a plain warn, so a type that
+    // reached it would look exactly like a desktop with nothing to say: no error
+    // anywhere, and every phone quietly showing its own built-in buttons.
+    const socket = new FakeSocket()
+    const handleToolbar = vi.fn()
+    const gateway = createGateway({
+      registry: { listOnlineByUser: vi.fn().mockReturnValue([createClient({ clientInstanceId: "client-a" })]) },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar,
+      handleDesktopPresence: vi.fn(),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.mobileToolbar,
+      id: "msg-toolbar",
+      sentAt: "2026-06-06T10:00:03.000Z",
+      payload: {
+        desktopClientInstanceId: "client-a",
+        revision: 1,
+        buttons: [{ id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } }],
+      },
+    }))
+
+    expect(handleToolbar).toHaveBeenCalledWith("user-1", {
+      desktopClientInstanceId: "client-a",
+      revision: 1,
+      buttons: [{ id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } }],
+    })
   })
 
   it("closes invalid messages", () => {

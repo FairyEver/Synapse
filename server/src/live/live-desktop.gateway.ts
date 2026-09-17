@@ -11,6 +11,7 @@ import {
   type MobileFramePayload,
   type MobileIntentResultPayload,
   type MobileSummaryPayload,
+  type MobileToolbarPayload,
   type MobileTransferProgressPayload,
 } from "@synapse/shared"
 import { RawData, WebSocket, WebSocketServer } from "ws"
@@ -64,6 +65,15 @@ export interface LiveMobileRelayHandler {
    * between the intent and its result, and is worthless once that result lands.
    */
   readonly handleTransferProgress: (userId: string, payload: MobileTransferProgressPayload) => void
+  /**
+   * The command buttons one of a user's computers offers its phones.
+   *
+   * Relayed and fanned out but never stored: unlike a summary, which a phone needs
+   * before it can draw anything at all, this only means something while the computer
+   * that sent it is reachable — and a button that runs a command somewhere that is
+   * offline is not a button.
+   */
+  readonly handleToolbar: (userId: string, payload: MobileToolbarPayload) => void
   /**
    * One of the user's computers became reachable, or stopped being reachable.
    * Fired on every change, so it carries the current list rather than a delta.
@@ -410,10 +420,14 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         })
         return
       }
+      // A type missing from this list is not relayed at all — it falls through to
+      // the pong below and is dropped without a word, which is why every phone-side
+      // family has to be named here as well as in `handleMobileRelayMessage`.
       if (message.type === LIVE_MESSAGE_TYPES.mobileSummary
         || message.type === LIVE_MESSAGE_TYPES.mobileFrame
         || message.type === LIVE_MESSAGE_TYPES.mobileIntentResult
-        || message.type === LIVE_MESSAGE_TYPES.mobileTransferProgress) {
+        || message.type === LIVE_MESSAGE_TYPES.mobileTransferProgress
+        || message.type === LIVE_MESSAGE_TYPES.mobileToolbar) {
         // Terminal payloads for phones go to the relay, not back to the sender.
         // Without a relay installed they are dropped rather than answered.
         this.handleMobileRelayMessage(auth.userId, message)
@@ -587,6 +601,10 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
         relay.handleIntentResult(userId, message.payload)
+        return
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileToolbar) {
+        relay.handleToolbar(userId, message.payload)
         return
       }
       // Named rather than cast into the last handler that happens to accept this

@@ -9,6 +9,7 @@ import {
   type MobileIntentResult,
   type MobileIntentResultPayload,
   type MobileSummaryPayload,
+  type MobileToolbarPayload,
   type MobileTransferProgressPayload,
 } from "@synapse/shared"
 import { LiveClientRegistry } from "../live/live-client-registry"
@@ -74,6 +75,7 @@ export class MobileLiveRelayService implements OnModuleInit {
       handleFrame: (userId, payload) => this.handleFrame(userId, payload),
       handleIntentResult: (userId, payload) => this.handleIntentResult(userId, payload),
       handleTransferProgress: (userId, payload) => this.handleTransferProgress(userId, payload),
+      handleToolbar: (userId, payload) => this.handleToolbar(userId, payload),
       handleDesktopPresence: (userId, clientInstanceIds) =>
         this.handleDesktopPresence(userId, clientInstanceIds),
     })
@@ -177,6 +179,27 @@ export class MobileLiveRelayService implements OnModuleInit {
       clientInstanceId: payload.mobileClientInstanceId,
       message: createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileTransferProgress, payload, envelopeMeta()),
     })
+  }
+
+  /**
+   * The command buttons one of the user's computers offers.
+   *
+   * Fanned out to every phone of the account, like a summary and unlike a frame:
+   * the payload names its own computer, and each phone keeps only the list belonging
+   * to the computer it is showing, so sending it to a phone that is looking at a
+   * different one costs a comparison and nothing else.
+   *
+   * Deliberately not cached. A phone that connects mid-session asks for this
+   * directly — its `sync` intent reaches the desktop, which answers — so a cache
+   * would only exist to serve a phone whose computer has since gone away, and there
+   * it would be wrong: the buttons would run commands on a machine that is no longer
+   * there.
+   */
+  handleToolbar(userId: string, payload: MobileToolbarPayload): void {
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileToolbar, payload, envelopeMeta())
+    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
+      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
+    }
   }
 
   handleIntentResult(userId: string, payload: MobileIntentResultPayload): void {
