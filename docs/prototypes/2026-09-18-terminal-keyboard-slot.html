@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>键盘面板改为键盘槽位 · 理解原型 v2</title>
+<style>
+  :root {
+    --zinc-50:#fafafa; --zinc-100:#f4f4f5; --zinc-200:#e4e4e7; --zinc-300:#d4d4d8;
+    --zinc-400:#a1a1aa; --zinc-500:#71717a; --zinc-600:#52525b; --zinc-700:#3f3f46;
+    --zinc-800:#27272a; --zinc-900:#18181b; --zinc-950:#09090b;
+    --term-bg:#141413; --term-fg:#d8d4cc; --term-dim:#8a857c;
+    --orange:#d97757; --pink:#e08fa8; --amber:#d4a05a;
+    --ok:#15803d;
+    --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px 22px 70px; background:var(--zinc-100); color:var(--zinc-900);
+    font-family:var(--ui); font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .head { max-width:1180px; margin:0 auto 22px; }
+  .head h1 { font-size:20px; font-weight:600; margin:0 0 6px; letter-spacing:-.01em; }
+  .head p { margin:0; color:var(--zinc-500); font-size:13px; max-width:840px; }
+
+  .layout { max-width:1180px; margin:0 auto; display:grid;
+    grid-template-columns:390px minmax(0,1fr); gap:40px; align-items:start; }
+  @media (max-width:980px){ .layout{ grid-template-columns:minmax(0,1fr); } }
+
+  .phone-col { position:sticky; top:20px; }
+  .phone { width:390px; height:844px; background:var(--zinc-950); border-radius:46px; padding:10px;
+    box-shadow:0 0 0 1px var(--zinc-800), 0 24px 48px -12px rgba(0,0,0,.35); margin:0 auto; }
+  .screen { position:relative; height:100%; background:var(--zinc-950); border-radius:37px;
+    overflow:hidden; display:flex; flex-direction:column; }
+
+  .nav { flex:none; height:54px; display:flex; align-items:center; gap:10px; padding:0 14px;
+    border-bottom:1px solid var(--zinc-800); }
+  .nav .back { color:var(--zinc-300); font-size:19px; }
+  .nav .title { flex:1; min-width:0; text-align:center; }
+  .nav .title .n { font-size:14px; font-weight:600; color:var(--zinc-100); }
+  .nav .title .s { font-size:10.5px; color:var(--zinc-500); }
+  .nav .dot { width:6px; height:6px; border-radius:50%; background:#34d399; display:inline-block;
+    margin-right:4px; vertical-align:1px; }
+  .nav .more { color:var(--zinc-400); letter-spacing:2px; }
+
+  .canvas { flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column;
+    background:var(--term-bg); }
+  .term { font-family:var(--mono); font-size:10.5px; line-height:1.5; color:var(--term-fg);
+    padding:8px 10px; white-space:pre-wrap; word-break:break-all; }
+  /* 内容不满一屏时：贴顶（现状）还是贴底（新提案） */
+  .canvas.glue .term { margin-top:auto; }
+  .term .dim { color:var(--term-dim); }
+  .term .pk { color:var(--pink); }
+  .box { border:1px solid var(--orange); border-radius:4px; padding:6px 8px; margin:6px 0;
+    text-align:center; font-family:var(--mono); }
+  .rule { border-top:1px solid var(--zinc-700); margin:8px 0; }
+
+  .accessory { flex:none; display:flex; align-items:center; gap:8px; padding:7px 12px;
+    background:var(--zinc-50); border-top:1px solid var(--zinc-200); overflow:hidden; }
+  .pill { flex:none; font-family:var(--mono); font-size:12px; padding:6px 10px; border-radius:10px;
+    background:var(--zinc-200); color:var(--zinc-800); white-space:nowrap; }
+  .pill.icon { display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer; }
+  .pill.icon.active { background:var(--zinc-900); color:#fff; }
+  .divide { flex:none; width:1px; height:16px; background:var(--zinc-300); }
+
+  .inputbar { flex:none; display:flex; align-items:center; gap:10px; padding:8px 12px;
+    background:var(--zinc-50); border-top:1px solid var(--zinc-200); cursor:pointer; }
+  .inputbar .plus { font-size:22px; color:var(--zinc-700); }
+  .inputbar .field { flex:1; color:var(--zinc-400); font-size:15px; }
+  .inputbar .mic { font-size:18px; color:var(--zinc-700); }
+  .inputbar .send { width:26px; height:26px; border-radius:50%; background:var(--zinc-300);
+    color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; }
+
+  .slot { flex:none; }
+  .slot.empty { display:none; }
+
+  .syskb { background:#d1d3d9; padding:6px 3px 4px; }
+  .syskb .sug { display:flex; gap:6px; padding:0 3px 6px; }
+  .syskb .sug div { flex:1; height:32px; border-radius:6px; background:#f7f7f9;
+    display:flex; align-items:center; justify-content:center; font-size:12px; color:#333; }
+  .syskb .row { display:flex; gap:6px; margin-bottom:6px; padding:0 3px; }
+  .syskb .k { flex:1; height:42px; border-radius:6px; background:#fff; display:flex;
+    align-items:center; justify-content:center; font-size:16px; color:#111;
+    box-shadow:0 1px 0 rgba(0,0,0,.28); }
+  .syskb .k.fn { background:#adb3bd; font-size:13px; }
+  .syskb .k.num { background:#adb3bd; font-size:14px; }
+  .syskb .k.ret { background:#fff; font-size:13px; }
+  .syskb .k.send { background:#0a84ff; color:#fff; font-size:13px; flex:1.6; }
+  .syskb .k.space { flex:4.2; }
+  .syskb .k.gray { background:#adb3bd; }
+
+  /* 改后：面板坐在键盘槽位里。高度固定 = 够放全键盘，四页一样。 */
+  .panel { flex:none; height:370px; background:var(--zinc-900);
+    border-top:1px solid var(--zinc-800); display:flex; flex-direction:column; }
+  /* 改前：悬浮 sheet，盖住工具栏与输入栏 */
+  .panel.floating { position:absolute; left:0; right:0; bottom:0; z-index:20; height:auto;
+    border-radius:18px 18px 37px 37px; padding-top:10px;
+    box-shadow:0 -12px 30px -8px rgba(0,0,0,.55); }
+  .panel.floating .grabber { width:36px; height:5px; border-radius:3px; background:var(--zinc-700);
+    margin:0 auto 8px; }
+
+  .segmented { flex:none; display:flex; gap:2px; margin:0 12px 10px; background:var(--zinc-800);
+    border-radius:9px; padding:2px; }
+  .seg { flex:1; text-align:center; font-size:12.5px; padding:5px 0; border-radius:7px;
+    color:var(--zinc-300); cursor:pointer; user-select:none; }
+  .seg.on { background:var(--zinc-600); color:#fff; font-weight:500; }
+  .readout { flex:none; display:flex; align-items:center; gap:6px; margin:0 12px 8px; height:26px;
+    padding:0 9px; border-radius:8px; background:var(--zinc-950); border:1px solid var(--zinc-800);
+    font-family:var(--mono); font-size:11px; color:var(--zinc-100); white-space:nowrap; overflow:hidden; }
+  .readout .ph { color:var(--zinc-600); }
+  .readout .r { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--zinc-400); }
+  .grid { padding:0 12px; }
+  .krow { display:flex; gap:4px; margin-bottom:4px; }
+  .krow.spread { justify-content:space-between; }
+  .krow.tight { margin-bottom:0; }
+  .key { --kw:48px; --kh:42px; flex:0 0 auto; width:var(--kw); height:var(--kh); display:flex;
+    align-items:center; justify-content:center; border-radius:9px; background:var(--zinc-700);
+    color:var(--zinc-100); font-family:var(--mono); font-size:14px; user-select:none; }
+  .key.wide { font-size:12px; }
+  .key.mod { width:62px; height:34px; font-size:12.5px; }
+  .key.ghost { background:transparent; pointer-events:none; }
+  .hint { flex:none; margin:9px 12px 0; font-size:10.5px; color:var(--zinc-500);
+    text-align:center; height:15px; }
+  /* 常用页在固定高度里只占两行，其余是留白——这是这个决定的可见代价 */
+  .void { flex:1; position:relative; }
+  .void .tag { position:absolute; inset:auto 12px 10px 12px; text-align:center;
+    font-size:10.5px; color:var(--zinc-600); }
+
+  .notes { min-width:0; }
+  .card { background:#fff; border:1px solid var(--zinc-200); border-radius:14px; padding:18px 20px;
+    margin-bottom:16px; }
+  .card > h2 { font-size:14px; font-weight:600; margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+  .card > h2 .num { flex:none; width:20px; height:20px; border-radius:6px; background:var(--zinc-900);
+    color:#fff; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; }
+  h3 { font-size:12.5px; font-weight:600; margin:14px 0 6px; }
+  h3:first-of-type { margin-top:0; }
+  p { margin:0 0 9px; }
+  ul,ol { margin:0 0 9px; padding-left:18px; }
+  li { margin-bottom:4px; }
+  code { font-family:var(--mono); font-size:11.5px; background:var(--zinc-100);
+    border:1px solid var(--zinc-200); border-radius:5px; padding:1px 5px; }
+  .mono { font-family:var(--mono); font-size:11.5px; }
+  .muted { color:var(--zinc-500); font-size:12px; }
+  .box-ok { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+  .box-bad { background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+  .box-note { background:var(--zinc-50); border:1px solid var(--zinc-200); border-radius:8px;
+    padding:10px 12px; margin-bottom:10px; }
+  .opts { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  .opt { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--zinc-200);
+    border-radius:999px; padding:5px 13px; font-size:12.5px; cursor:pointer; background:#fff; user-select:none; }
+  .opt.on { border-color:var(--zinc-900); background:var(--zinc-900); color:#fff; }
+  .table { width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:10px; }
+  .table th, .table td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--zinc-200); }
+  .table th { font-size:11.5px; color:var(--zinc-500); background:var(--zinc-50); font-weight:600; }
+  .yes { color:var(--ok); font-weight:600; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>键盘面板改为键盘槽位 · 理解原型 <span style="font-size:12px;font-weight:400;color:var(--zinc-500)">v2（范围已收窄）</span></h1>
+  <p>左边可点。<strong>系统键盘那部分不改了</strong>——现状就是你要的效果，代码里是故意写的。这次只改一件事：工具栏的 ⌨ 弹出来的面板，从"悬浮 sheet"变成"坐在键盘槽位里"。</p>
+</div>
+
+<div class="layout">
+
+  <div class="phone-col">
+    <div class="phone">
+      <div class="screen" id="screen">
+
+        <div class="nav">
+          <div class="back">‹</div>
+          <div class="title">
+            <div class="n">Claude Code · Projects_Js</div>
+            <div class="s"><span class="dot"></span>运行中 · 1.0.2 (1)</div>
+          </div>
+          <div class="more">···</div>
+        </div>
+
+        <div class="canvas" id="canvas">
+          <div class="term" id="term"></div>
+        </div>
+
+        <div class="accessory">
+          <div class="pill icon" id="kbBtn" title="键盘">⌨</div>
+          <div class="divide"></div>
+          <div class="pill">回车</div>
+          <div class="pill">Ctrl+C</div>
+          <div class="pill">/exit</div>
+          <div class="pill">/clear</div>
+        </div>
+
+        <div class="inputbar" id="inputbar">
+          <div class="plus">＋</div>
+          <div class="field">输入命令</div>
+          <div class="mic">🎤</div>
+          <div class="send">↑</div>
+        </div>
+
+        <div class="slot empty" id="slot"></div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+
+    <div class="card">
+      <h2><span class="num">1</span>范围：只改这一件事</h2>
+
+      <div class="opts">
+        <div class="opt on" data-state="none">收起</div>
+        <div class="opt" data-state="system">系统键盘（不改，现状）</div>
+        <div class="opt" data-state="panel">键盘面板</div>
+      </div>
+      <div class="opts" id="modeRow" style="margin-bottom:12px;">
+        <div class="opt on" data-mode="after">面板：改后</div>
+        <div class="opt" data-mode="before">面板：改前（对照）</div>
+      </div>
+
+      <div class="opts" style="margin-bottom:12px;">
+        <div class="opt" data-tail="keep">内容不满屏：贴顶（现状）</div>
+        <div class="opt on" data-tail="glue">内容不满屏：贴底（新提案）</div>
+      </div>
+
+      <table class="table">
+        <tr><th>部分</th><th>这次动不动</th></tr>
+        <tr><td>系统键盘弹起时终端内容跟着上移</td><td><span class="yes">不改</span> —— 已经就是你要的，代码故意写的</td></tr>
+        <tr><td>工具栏、输入框</td><td><span class="yes">不改</span> —— 面板弹起时留着、被一起顶上去</td></tr>
+        <tr><td><strong>键盘面板的弹出方式</strong></td><td><strong>改</strong> —— 从悬浮 sheet 变成坐在键盘槽位</td></tr>
+        <tr><td>面板高度</td><td><strong>改</strong> —— 一个固定高度，四页一样，不可拖拽</td></tr>
+        <tr><td>面板里的按键、分类、锁存</td><td><span class="yes">不改</span> —— 一个字都不动</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">2</span>面板怎么变</h2>
+
+      <h3>改前（现在）</h3>
+      <div class="box-bad">
+        <p style="margin-bottom:0;">它是个 <code>.sheet</code>，浮在整个界面之上，把工具栏和输入框一起盖住。还有一个下拉把手、可以往上拖到全屏。</p>
+      </div>
+
+      <h3>改后</h3>
+      <div class="box-ok">
+        <p style="margin-bottom:0;">它占据的就是<strong>系统键盘那个槽位</strong>：工具栏和输入框原样待在上面、跟着一起被顶上去，终端也照旧跟着底部上移。没有"盖住"，没有悬浮阴影，没有下拉把手，也拖不动——它现在是一个键盘，不是一个抽屉。</p>
+      </div>
+
+      <h3>内容不满一屏时，尾部留白怎么办</h3>
+      <div class="box-note">
+        <p style="margin-bottom:6px;">用上面那两个开关切着看：<strong>贴顶</strong>是现状（内容从顶往下长，底部留白），<strong>贴底</strong>是提案（内容的底边贴着工具栏，上面留白）。</p>
+        <p style="margin-bottom:6px;">贴底的好处正是你提的那件事：键盘弹起时不用"跟着上移"，因为内容本来就贴在底边上，可视区变矮它自然还在那儿。</p>
+        <p style="margin-bottom:0;">代价有两个：① 只要没满屏，每来一行新输出整块就往上顶一格；② 它和"手机只是把电脑整屏缩放着看、逐格一致"有张力——去掉尾部空行之后，提示符在手机上的位置就和电脑上不一样了。</p>
+      </div>
+
+      <h3>固定高度的代价，先摆在明处</h3>
+      <div class="box-note">
+        <p style="margin-bottom:6px;">四页一个高度，就得取够放全键盘的那一档（高约 370）。所以切到<strong>常用 / 方向 / 功能</strong>这三页时，下面会空出一块——左边把面板切到「常用」页就能看到。</p>
+        <p style="margin-bottom:0;">换来的是：切分类时手底下的东西<strong>完全不动</strong>，工具栏和终端也不会再被顶一次。这也是这个面板最早的写法（那时四个分类共用 152 的键位格高度，注释写的就是"免得切页时面板在手指底下挪动"）。</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">3</span>已经查实的旧问题</h2>
+      <p>你最早报的"系统键盘把终端内容盖住"，查下来是<strong>故意的</strong>，而且现在真机上表现正确：</p>
+      <p class="mono" style="background:var(--zinc-100);border:1px solid var(--zinc-200);border-radius:8px;padding:10px;">TerminalTextView.swift:318<br>
+      // The keyboard appearing shrinks this view. Nothing new was appended,<br>
+      // so no snapshot runs — without this the newest output would slide<br>
+      // below the fold and the user would have to scroll to find it.<br>
+      if bounds.height != lastLayoutHeight { … if isPinnedToBottom { scrollToBottom() } }</p>
+      <p>它只在 <code>isPinnedToBottom</code>（用户本来就在底部）时生效；翻到历史里看旧内容时<strong>故意不</strong>把你拽回底部。保留这样。</p>
+      <p class="muted">唯一可能的残留边角：内容没超出可视区时"贴底"没有可滚的余量。你那张最早的截图疑似就是这种情况。要不要我按"会话刚启动、内容不满一屏、再弹键盘"复现一次确认？</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">4</span>明确不做</h2>
+      <ul>
+        <li>系统键盘的任何行为、样式、输入法。</li>
+        <li>面板里的按键内容、分类、锁存交互（上一轮刚做完，这次一个字不动）。</li>
+        <li>工具栏那排按钮。</li>
+        <li>面板的拖拽调整、全屏 detent。</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const TERM = [
+  `Claude Code v2.1.0`,
+  `<span class="dim">几点说明：</span>`,
+  `- 法美两国差距很小（约 3%），不同统计口径下偶尔会互换位置。`,
+  `- 若只算领海（基线外 12 海里），排名会完全不同。`,
+  `- 若论「海岸线长度」，第一名则是加拿大（约 20 万公里）。`,
+  ``,
+  `所以答案取决于口径，但通常说的「海洋面积最大」指的是 EEZ。`,
+  ``,
+  `* Crunched for 2s`,
+  ``,
+  `<span class="dim">─────────────────────────────────────</span>`,
+  `<span class="pk">❯</span> `,
+  `<span class="dim">─────────────────────────────────────</span>`,
+  `<span class="pk">▸▸ bypass permissions on</span> <span class="dim">(shift+tab to cycle)</span>`,
+].join("\n");
+
+const state = { mode: "after", state: "panel", page: "common", tail: "glue" };
+
+const slot = document.getElementById("slot");
+const screen = document.getElementById("screen");
+const kbBtn = document.getElementById("kbBtn");
+
+function sysKeyboard() {
+  return `
+  <div class="syskb">
+    <div class="sug"><div>，"</div><div>。？</div><div>！…</div></div>
+    <div class="row">
+      <div class="k fn">⌘</div><div class="k fn">✂️</div><div class="k fn">🎤 点击说话</div>
+      <div class="k fn">⚡</div><div class="k fn">⌄</div>
+    </div>
+    <div class="row">
+      <div class="k num">,</div><div class="k">@#</div><div class="k">ABC</div>
+      <div class="k">DEF</div><div class="k">⌫</div>
+    </div>
+    <div class="row">
+      <div class="k num">。</div><div class="k">GHI</div><div class="k">JKL</div>
+      <div class="k">MNO</div><div class="k ret">换行</div>
+    </div>
+    <div class="row">
+      <div class="k num">?</div><div class="k">PQRS</div><div class="k">TUV</div>
+      <div class="k">WXYZ</div><div class="k send">发送</div>
+    </div>
+    <div class="row" style="margin-bottom:0;">
+      <div class="k num">符号</div><div class="k num">123</div><div class="k space">🎙️</div>
+      <div class="k gray">中/英</div>
+    </div>
+  </div>`;
+}
+
+function segRow(page) {
+  const on = p => (p === page ? " on" : "");
+  return `<div class="segmented">
+    <div class="seg${on("common")}" data-page="common">常用</div>
+    <div class="seg${on("arrows")}" data-page="arrows">方向</div>
+    <div class="seg${on("function")}" data-page="function">功能</div>
+    <div class="seg${on("full")}" data-page="full">全键盘</div>
+  </div>`;
+}
+
+function commonPage() {
+  return `
+    ${segRow("common")}
+    <div class="grid">
+      <div class="krow spread">
+        <div class="key wide" style="--kw:78px">esc</div>
+        <div class="key wide" style="--kw:92px">⇧tab</div>
+        <div class="key" style="--kw:78px">⌫</div>
+      </div>
+      <div class="krow" style="margin-top:4px">
+        <div class="key wide" style="--kw:96px">tab</div>
+        <div class="key ghost" style="flex:1 1 auto"></div>
+        <div class="key wide" style="--kw:112px">回车</div>
+      </div>
+    </div>
+    <div class="void"><div class="tag">↑ 固定高度留出来的空白 —— 这就是"四页一样高"的代价</div></div>
+    <div class="hint">面板点一下不会收起 · 可以连着按</div>`;
+}
+
+function fullPage() {
+  const digits = ["1","2","3","4","5","6","7","8","9","0"]
+    .map(d => `<div class="key" style="--kw:32px">${d}</div>`).join("");
+  const rows = [["q","w","e","r","t","y","u","i","o","p"],["a","s","d","f","g","h","j","k","l"],["z","x","c","v","b","n","m"]]
+    .map(r => `<div class="krow" style="justify-content:center">${r.map(c=>`<div class="key" style="--kw:32px">${c}</div>`).join("")}</div>`).join("");
+  return `
+    ${segRow("full")}
+    <div class="readout"><span>未锁修饰键 <span class="ph">· 按字母就是直接输入</span></span><span class="ph">→</span><span class="r">按一个字母试试</span></div>
+    <div class="grid">
+      <div class="krow spread">
+        <div class="krow tight"><div class="key mod">Ctrl</div><div class="key mod">Shift</div></div>
+        <div class="key mod">Alt</div>
+      </div>
+      <div class="krow" style="margin-top:4px">${digits}</div>
+      ${rows}
+    </div>
+    <div class="void"></div>
+    <div class="hint">点一下修饰键锁住 → 再按字母 · 一次只锁一个</div>`;
+}
+
+function placeholderPage(name) {
+  return `
+    ${segRow(name)}
+    <div class="grid" style="padding-top:6px">
+      <div class="krow" style="justify-content:flex-end">
+        <div class="key wide" style="--kw:64px">↑</div>
+      </div>
+      <div class="krow" style="justify-content:flex-end">
+        <div class="key wide" style="--kw:64px">←</div>
+        <div class="key wide" style="--kw:64px">↓</div>
+        <div class="key wide" style="--kw:64px">→</div>
+      </div>
+    </div>
+    <div class="void"><div class="tag">（示意：${name === "arrows" ? "方向" : "功能"}页，键位不变）</div></div>
+    <div class="hint"></div>`;
+}
+
+function panelBody(page) {
+  if (page === "common") return commonPage();
+  if (page === "full") return fullPage();
+  return placeholderPage(page);
+}
+
+function render() {
+  document.getElementById("term").innerHTML = TERM;
+  document.getElementById("canvas").classList.toggle("glue", state.tail === "glue");
+  slot.className = "slot";
+  slot.innerHTML = "";
+  kbBtn.classList.remove("active");
+  screen.querySelectorAll(".panel.floating").forEach(n => n.remove());
+
+  document.querySelectorAll("[data-tail]").forEach(o =>
+    o.classList.toggle("on", o.dataset.tail === state.tail));
+
+  document.querySelectorAll("[data-state]").forEach(o =>
+    o.classList.toggle("on", o.dataset.state === state.state));
+  document.getElementById("modeRow").style.display =
+    state.state === "panel" ? "flex" : "none";
+
+  if (state.state === "system") {
+    slot.classList.remove("empty");
+    slot.innerHTML = sysKeyboard();
+  } else if (state.state === "panel") {
+    kbBtn.classList.add("active");
+    if (state.mode === "before") {
+      const html = `<div class="panel floating"><div class="grabber"></div>${panelBody(state.page)}</div>`;
+      screen.insertAdjacentHTML("beforeend", html);
+    } else {
+      slot.classList.remove("empty");
+      slot.innerHTML = `<div class="panel">${panelBody(state.page)}</div>`;
+    }
+    bindPages();
+  }
+}
+
+function bindPages() {
+  document.querySelectorAll("[data-page]").forEach(el => {
+    el.addEventListener("click", () => { state.page = el.dataset.page; render(); });
+  });
+}
+
+document.querySelectorAll("[data-state]").forEach(el => {
+  el.addEventListener("click", () => {
+    const t = el.dataset.state;
+    state.state = (t === "none" || state.state === t) ? "none" : t;
+    render();
+  });
+});
+
+document.querySelectorAll("[data-tail]").forEach(el => {
+  el.addEventListener("click", () => {
+    state.tail = el.dataset.tail;
+    render();
+  });
+});
+
+document.querySelectorAll("[data-mode]").forEach(el => {
+  el.addEventListener("click", () => {
+    document.querySelectorAll("[data-mode]").forEach(o => o.classList.remove("on"));
+    el.classList.add("on");
+    state.mode = el.dataset.mode;
+    render();
+  });
+});
+
+kbBtn.addEventListener("click", () => {
+  state.state = state.state === "panel" ? "none" : "panel";
+  render();
+});
+
+document.getElementById("inputbar").addEventListener("click", () => {
+  state.state = state.state === "system" ? "none" : "system";
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
