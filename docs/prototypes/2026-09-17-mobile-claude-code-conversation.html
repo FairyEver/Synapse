@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>手机端创建 Claude Code 对话 · 产品需求与原型</title>
+<style>
+  :root{
+    --ink:#0a0a0a;
+    --paper:#ffffff;
+    --page:#f5f5f5;
+    --card:#ffffff;
+    --line:#e3e3e3;
+    --text:#0a0a0a;
+    --text-2:#6b6b6b;
+    --text-3:#9a9a9a;
+    /* iOS system grouped list */
+    --ios-bg:#f2f2f7;
+    --ios-card:#ffffff;
+    --ios-sep:rgba(60,60,67,.29);
+    --ios-label:#000000;
+    --ios-label2:rgba(60,60,67,.6);
+    --ios-label3:rgba(60,60,67,.3);
+    --ios-nav:#f9f9f9;
+    /* Synapse mobile theme (Theme.swift) */
+    --attention:#c77800;
+    --running:#1c8a4f;
+    --failure:#c7362e;
+    --term-bg:#101012;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font);
+    background:var(--page);
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    font-size:14px;
+    line-height:1.6;
+  }
+  .app{display:grid;grid-template-columns:minmax(420px,1fr) 520px;min-height:100vh}
+  @media (max-width:1080px){.app{grid-template-columns:1fr}}
+
+  /* ---------- 左：需求 ---------- */
+  .doc{padding:40px 44px 80px;max-width:780px}
+  .doc h1{font-size:26px;font-weight:600;letter-spacing:-.01em;line-height:1.3}
+  .doc .sub{color:var(--text-2);margin-top:10px;font-size:14px}
+  .doc h2{
+    font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--text-3);margin:36px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line);
+  }
+  .doc h3{font-size:15px;font-weight:600;margin:20px 0 6px}
+  .doc p{margin:8px 0;color:#2b2b2b}
+  .doc ul,.doc ol{margin:8px 0 8px 20px;color:#2b2b2b}
+  .doc li{margin:5px 0}
+  .doc code{font-family:var(--mono);font-size:12.5px;background:#ececec;border-radius:4px;padding:1px 5px}
+  .doc strong{font-weight:600}
+  .lede{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-top:22px}
+  .lede p{margin:0;font-size:15px}
+  .lede .k{font-weight:600}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-weight:600;color:var(--text-2);font-size:12px}
+  td code{font-size:12px}
+  .callout{border-left:3px solid var(--ink);background:var(--card);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .callout.warn{border-left-color:var(--attention)}
+  .callout.stop{border-left-color:var(--failure)}
+  .callout p{margin:0}
+  .callout .t{font-weight:600;display:block;margin-bottom:2px}
+  .muted{color:var(--text-2);font-size:13px}
+
+  /* ---------- 右：原型 ---------- */
+  .stage{
+    position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:18px;
+    background:var(--page);border-left:1px solid var(--line);padding:24px;
+  }
+  @media (max-width:1080px){.stage{position:static;height:auto;border-left:0;border-top:1px solid var(--line)}}
+  .switcher{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:460px}
+  .switcher button{
+    font-family:var(--font);font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--line);background:var(--card);color:var(--text-2);
+  }
+  .switcher button:hover{border-color:#c9c9c9}
+  .switcher button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  .phone{
+    width:390px;height:844px;background:var(--ios-bg);border-radius:54px;
+    border:11px solid #1b1b1d;position:relative;overflow:hidden;
+    box-shadow:0 20px 50px rgba(0,0,0,.22);
+    display:flex;flex-direction:column;
+  }
+  .statusbar{
+    height:54px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 30px 6px;font-size:14px;font-weight:600;flex:0 0 auto;color:var(--ios-label);
+  }
+  .statusbar .right{display:flex;gap:5px;align-items:center;font-size:13px;font-weight:500}
+  .screen{flex:1;display:none;flex-direction:column;min-height:0}
+  .screen.on{display:flex}
+  .navbar{
+    flex:0 0 auto;height:44px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;font-size:17px;
+    background:rgba(249,249,249,.94);backdrop-filter:blur(20px);
+    border-bottom:1px solid rgba(60,60,67,.18);
+  }
+  .navbar .title{font-weight:600;position:absolute;left:0;right:0;text-align:center;pointer-events:none}
+  .navbar .bar{position:relative;width:100%;display:flex;align-items:center;justify-content:space-between}
+  .navbar button{
+    background:none;border:0;font:inherit;font-size:17px;color:var(--ink);
+    cursor:pointer;padding:2px 0;
+  }
+  .navbar .plus{font-size:22px;line-height:1;font-weight:400}
+  .large-title{font-size:34px;font-weight:700;letter-spacing:-.02em;padding:6px 20px 10px;flex:0 0 auto}
+
+  .scroll{flex:1;overflow-y:auto;min-height:0;padding-bottom:8px}
+  .scroll::-webkit-scrollbar{width:0}
+
+  .sec{margin:0 0 26px}
+  .sec-h{
+    font-size:13px;color:var(--ios-label2);text-transform:none;padding:0 20px 6px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .card{background:var(--ios-card);margin:0 16px;border-radius:12px;overflow:hidden}
+  .row{
+    display:flex;align-items:center;gap:10px;padding:11px 16px;min-height:44px;
+    position:relative;cursor:pointer;background:var(--ios-card);
+  }
+  .row+.row::before{
+    content:"";position:absolute;left:16px;right:0;top:0;height:1px;background:var(--ios-sep);
+  }
+  .row.static{cursor:default}
+  .row:active:not(.static){background:#f0f0f3}
+  .row .grow{flex:1;min-width:0}
+  .row .name{font-size:17px;color:var(--ios-label);line-height:1.35}
+  .row .desc{font-size:13px;color:var(--ios-label2);line-height:1.35;margin-top:1px}
+  .row .value{font-size:17px;color:var(--ios-label2);text-align:right;max-width:170px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chev{color:var(--ios-label3);font-size:14px;font-weight:600;flex:0 0 auto}
+  .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .dot.run{background:var(--running)}
+  .dot.wait{background:var(--attention)}
+  .dot.off{background:#b0b0b5}
+
+  .session{padding:11px 16px;position:relative;cursor:pointer;background:var(--ios-card)}
+  .session+.session::before{content:"";position:absolute;left:16px;right:0;top:0;height:1px;background:var(--ios-sep)}
+  .session:active{background:#f0f0f3}
+  .s-top{display:flex;gap:11px;align-items:flex-start}
+  .s-title{font-size:15px;font-weight:600;line-height:1.35}
+  .s-ago{font-size:11px;color:var(--ios-label3);margin-left:auto;flex:0 0 auto;padding-top:2px}
+  .s-cwd{font-size:11px;color:var(--ios-label2);overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;direction:rtl;text-align:left;margin-top:1px}
+  .s-last{font-size:11px;font-family:var(--mono);color:var(--ios-label2);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+  .chip{
+    display:inline-block;font-size:11px;font-weight:600;color:var(--attention);
+    background:rgba(199,120,0,.12);border-radius:999px;padding:1px 7px;margin-top:4px;
+  }
+  .tag{
+    display:inline-block;font-size:11px;font-weight:500;color:var(--ios-label2);
+    background:rgba(120,120,128,.14);border-radius:5px;padding:1px 6px;margin-left:6px;
+    vertical-align:1px;
+  }
+
+  /* 主操作按钮行 */
+  .primary{
+    display:block;width:calc(100% - 32px);margin:0 16px;padding:13px;border:0;border-radius:11px;
+    background:var(--ink);color:#fff;font:inherit;font-size:17px;font-weight:600;cursor:pointer;
+  }
+  .primary:active{opacity:.85}
+  .primary[disabled]{background:#c7c7cc;cursor:default}
+  .primary.note{margin-bottom:6px}
+
+  .foot{font-size:13px;color:var(--ios-label2);padding:8px 20px 0;margin:0}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 4px}
+  .sheet-head .t{font-size:20px;font-weight:700}
+
+  /* 终端页（成功落地） */
+  .termsurface{
+    flex:1;background:var(--term-bg);color:#e6e6e9;font-family:var(--mono);
+    font-size:11.5px;line-height:1.5;padding:12px 10px;overflow:hidden;white-space:pre;
+  }
+  .termsurface .g{color:#3fb950}
+  .termsurface .b{color:#58a6ff}
+  .termsurface .d{color:#6e7681}
+  .termsurface .y{color:#d29922}
+  .inputbar{
+    flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:9px 12px;
+    background:#f7f7f8;border-top:1px solid rgba(0,0,0,.1);
+  }
+  .inputbar .field{
+    flex:1;background:#fff;border:1px solid #d8d8dc;border-radius:9px;padding:8px 11px;
+    font-size:14px;color:var(--ios-label3);
+  }
+  .inputbar .send{width:30px;height:30px;border-radius:50%;background:var(--ink);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
+
+  .tabbar{
+    flex:0 0 auto;height:78px;display:flex;align-items:flex-start;padding-top:8px;
+    background:rgba(249,249,249,.94);backdrop-filter:blur(20px);
+    border-top:1px solid rgba(60,60,67,.18);
+  }
+  .tabbar .t{flex:1;text-align:center;font-size:10px;color:var(--ios-label2)}
+  .tabbar .t.on{color:var(--ink)}
+  .tabbar .ic{display:block;font-size:19px;line-height:1.25}
+  .tabbar .badge{
+    display:inline-block;min-width:16px;height:16px;line-height:16px;border-radius:999px;
+    background:var(--failure);color:#fff;font-size:10px;font-weight:600;
+    padding:0 4px;position:relative;top:-15px;left:11px;
+  }
+
+  /* ---------- 底部面板 ---------- */
+  .sheet-layer{position:absolute;inset:0;display:none;z-index:6}
+  .sheet-layer.on{display:block}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.34)}
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;height:75%;background:var(--ios-bg);
+    border-radius:14px 14px 0 0;display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 -6px 24px rgba(0,0,0,.14);transition:height .2s ease;
+  }
+  .sheet[data-h="full"]{height:96%}
+  .grabber{width:36px;height:5px;border-radius:3px;background:rgba(60,60,67,.3);
+    margin:6px auto 2px;flex:0 0 auto}
+  .sheet-title{font-size:20px;font-weight:700;padding:2px 20px 10px;flex:0 0 auto}
+  .segmented{
+    display:flex;gap:2px;margin:0 16px 6px;padding:2px;border-radius:9px;
+    background:rgba(120,120,128,.12);flex:0 0 auto;
+  }
+  .segmented button{
+    flex:1;border:0;background:transparent;font-family:var(--font);font-size:13px;font-weight:500;
+    color:var(--ios-label);padding:6px 0;border-radius:7px;cursor:pointer;
+  }
+  .segmented button.on{background:#fff;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.13)}
+  .sheet-nav{
+    flex:0 0 auto;height:42px;display:none;align-items:center;padding:0 16px;
+    font-size:17px;position:relative;
+  }
+  .sheet-nav.on{display:flex}
+  .sheet-nav .back{background:none;border:0;font-family:var(--font);font-size:17px;
+    color:var(--ios-label);cursor:pointer;padding:0;z-index:1}
+  .sheet-nav .ttl{position:absolute;left:0;right:0;text-align:center;font-weight:600;
+    pointer-events:none}
+  .sheet-body{flex:1;min-height:0;overflow-y:auto;display:none;padding-bottom:10px}
+  .sheet-body.on{display:block}
+  .sheet-body::-webkit-scrollbar{width:0}
+  .errbanner{
+    display:none;margin:2px 16px 14px;padding:11px 14px;border-radius:11px;
+    background:rgba(199,54,46,.1);border:1px solid rgba(199,54,46,.28);
+    font-size:13px;line-height:1.45;color:#8f2620;
+  }
+  .errbanner .h{display:block;font-weight:600;margin-bottom:1px}
+  .sheet.err .errbanner{display:block}
+  .hidden{display:none}
+
+  .home{width:130px;height:5px;border-radius:3px;background:#000;opacity:.28;
+    position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:9}
+
+  .toast{
+    position:absolute;left:14px;right:14px;bottom:96px;background:rgba(28,28,30,.94);
+    color:#fff;border-radius:12px;padding:11px 14px;font-size:13.5px;line-height:1.45;
+  }
+  .toast.err{background:rgba(60,20,18,.95)}
+  .toast.err .h{color:#ff8a80;font-weight:600}
+
+  .spinner{
+    width:16px;height:16px;border-radius:50%;border:2px solid rgba(120,120,128,.25);
+    border-top-color:var(--ios-label2);animation:spin .8s linear infinite;flex:0 0 auto;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .centered{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:12px;padding:60px 32px;text-align:center;color:var(--ios-label2);font-size:14px}
+  .centered .big{font-size:15px;font-weight:600;color:var(--ios-label)}
+  .check{font-size:34px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ======================= 左：产品需求 ======================= -->
+<div class="doc">
+  <h1>手机端创建 Claude Code 对话</h1>
+  <p class="sub">产品需求与交互原型 · 2026-09-17</p>
+
+  <div class="lede">
+    <p><span class="k">一句话：手机上「选参数」，电脑上「照办」。</span><br>
+    手机把<strong>项目、供应商、模型</strong>三件事发给电脑，电脑用自己本地的配置和密钥，在项目目录里起一个内置 Claude Code。手机全程不接触任何 API Key。</p>
+  </div>
+
+  <h2>为什么只能这么设计</h2>
+  <p>桌面端 <code>⌘ + 加号</code> 走的是一条只有电脑能走的路：</p>
+  <ol>
+    <li>解析默认供应商与模型（<code>pickInitialProviderModelSelection</code>，读全局默认 <code>config.agent.defaultProviderModel</code>，回退到当前激活 / 首个可用供应商）；</li>
+    <li>主进程 <code>createClaudeCodeTerminal({projectId, providerId, modelTier})</code> 取该供应商的凭据环境；</li>
+    <li>按档位解析出真实模型名，写一份 <code>0600</code> 的临时 <code>settings.json</code>；</li>
+    <li>在 <strong>项目目录</strong> 里用这份临时环境起一个终端进程，标题 <code>Claude Code · 项目名</code>。</li>
+  </ol>
+  <p>这里第 2、3 步是死结：<strong>凭据只存在于主进程，设计上从不进渲染进程、也不进终端记录</strong>；手机端与电脑之间又只有一条由云端转发的窄链路，云端明确「不解释、不存储」。所以它不可能变成「手机自己开一个 Claude Code」。</p>
+  <p>而手机端本来就是<strong>瘦客户端</strong>——终端仍然跑在电脑上，手机看到的是电脑合成好的行，手机只发意图、电脑执行。把「创建」也做成一条意图，正好落进现有架构，不用新增一条通道。</p>
+
+  <div class="callout">
+    <p><span class="t">这条功能补的是闭环的入口</span>
+    「Claude Code 提问 / 要授权 → 推送 + 锁屏批准」这条链路已经完整存在了。缺的只是<strong>在手机上把它开起来</strong>。做完之后，出门在外才第一次能完整跑完一轮。</p>
+  </div>
+
+  <h2>交互</h2>
+
+  <h3>入口：终端列表的 <code>+</code>，弹一个从底部升起的面板</h3>
+  <p>面板默认停在约 <strong>3/4 屏高</strong>，可以继续往上拉满；顶部是<strong>分段选择器</strong>：<strong>对话</strong>（默认选中）与<strong>终端</strong>。两段各自对应电脑上两个不同的侧边栏：</p>
+  <table>
+    <tr><th>分段</th><th>选什么</th><th>电脑上对应</th><th>结果</th></tr>
+    <tr>
+      <td><strong>对话</strong></td>
+      <td>项目（「本地对话」+ 已配置项目）</td>
+      <td>Agent 对话侧边栏的顶层分组（<code>app.agent.group.list</code>）</td>
+      <td>在该项目目录里建一个 Claude Code 对话</td>
+    </tr>
+    <tr>
+      <td><strong>终端</strong></td>
+      <td>终端分组</td>
+      <td>终端应用左侧的终端分组</td>
+      <td>在该分组里建一个普通终端</td>
+    </tr>
+  </table>
+
+  <div class="callout">
+    <p><span class="t">分段切换的是「你要新建什么」，不是「你在看什么」</span>
+    这一点容易读错：建好的 Claude Code 对话照样会出现在「终端」页的列表里（落在电脑的默认终端分组下）。分段只决定这次从哪个面进去、按哪套分组去选目标——两个入口，一个列表。</p>
+  </div>
+
+  <h3>默认供应商与模型这条能力，落在哪</h3>
+  <p>桌面端敢一键完成，靠的是两件事：</p>
+  <ol>
+    <li>那个 <code>+</code> <strong>挂在某个项目行上</strong>——项目本身是已知的，不用选；</li>
+    <li>供应商和模型的默认值<strong>由电脑当场解析</strong>，解析不出来才回退到弹窗。</li>
+  </ol>
+  <p>手机上的 <code>＋</code> 在导航栏，没有第 1 点这个上下文。所以要把这条能力补齐，得补两处：</p>
+  <table>
+    <tr><th>参数</th><th>默认从哪来</th><th>说明</th></tr>
+    <tr>
+      <td>项目</td>
+      <td><strong>记住上次在这个手机上建过的项目</strong>，预选好并标「上次」；首次使用没有默认，就退化成从列表里选一个</td>
+      <td>补上桌面「项目行自带上下文」那一半</td>
+    </tr>
+    <tr>
+      <td>供应商 / 模型</td>
+      <td><strong>不写死，交给电脑解析</strong>——和桌面 <code>⌘+加号</code> 用同一套规则</td>
+      <td>只显示未归档的；四档，每档<strong>显示解析后的真实模型名</strong>，避免用户选了不知道选的是什么</td>
+    </tr>
+  </table>
+
+  <div class="callout">
+    <p><span class="t">关键判断：默认值由电脑算，不由手机算</span>
+    手机请求里供应商和模型<b>都可以缺省</b>，缺省时电脑按 <code>config.agent.defaultProviderModel</code> 解析。这样「手机上的默认」和「电脑上 <code>⌘+加号</code> 的默认」永远是同一个东西，不会因为两端各算一遍而分叉。</p>
+  </div>
+  <p>这不是新发明——桌面端自己的 MCP 能力 <code>app.agent.conversation.create</code> 已经是这个形状：入参里供应商和模型可选，缺省就走 <code>createLocalAgentConversation</code> 里同一份选型函数。<strong>手机端照抄这个形状即可</strong>，不必另立一套。</p>
+
+  <h3>于是「对话」段长这样</h3>
+  <p>三行参数<strong>都已经解析好</strong>，加一颗主按钮：</p>
+  <pre style="font-family:var(--mono);font-size:12.5px;background:#ececec;border-radius:8px;padding:12px 14px;line-height:1.7;color:#2b2b2b">项目      Synapse  <span style="color:#6b6b6b">[上次]</span>        ›
+供应商    Anthropic 官方        ›
+模型      Opus                  ›
+
+        [    开始对话    ]</pre>
+  <p><strong><code>＋</code> → 开始对话 = 两次点击，零个决定</strong>。三行里没有任何一行需要用户先读再判断——这正是「默认供应商模型」这条能力的落点：它不是把值预填进输入框，而是<strong>让用户不必做那个决定</strong>。</p>
+  <p>要换项目、供应商或模型，点对应那行进面板内的下一层（顶部换成返回 + 标题），不再叠第二层面板。</p>
+
+  <p><strong>「终端」段不这么改</strong>：它保持现在的行为——点分组即建，不加确认按钮。因为终端分组没有可省的默认值，硬加一颗「开始」只是纯摩擦。两段在这里不一致是<strong>故意的</strong>：对话段有默认可省，终端段没有。</p>
+
+  <div class="callout warn">
+    <p><span class="t">想过、但不建议：把 <code>＋</code> 本身做成真·一键（长按才开面板）</span>
+    这样确实能压到一次点击，但代价更大：<br>
+    · <code>＋</code> 现在的语义是「我要新建东西」，直接建出一个用户没点过名的对话会让人意外；<br>
+    · 首次使用没有「上次的项目」，必然建错地方；<br>
+    · 长按是隐藏手势，换项目这件事会变成没人发现得了的功能；<br>
+    · 桌面端敢一键，是因为<b>失败能回退到弹窗</b>（「快捷创建无法解析可用模型或创建失败时，也回退到同一弹窗」）。手机上弹窗本来就是开着的，没有非要抢那一次点击的理由。<br><br>
+    真正值得省的是<b>判断</b>，不是<b>点击</b>。上面那个方案把判断省掉了，这个方案只是把点击藏起来。</p>
+  </div>
+
+  <h3>创建之后</h3>
+  <p>电脑返回新的会话 id，手机直接进入终端页——和现在新建终端一样，落地即能看、能输入。</p>
+  <div class="callout">
+    <p><span class="t">不做特例：尺寸一律「优先移动端」，分组不另建</span>
+    在手机上建 Claude Code 对话，本质就是<strong>开一个终端、附带一条启动命令</strong>——和平时先开终端再跑 Claude Code 是同一件事。所以它不在尺寸上另立规则（与「新建终端」完全一致，默认由手机决定栅格），也不用给它单独开一个分组：落点与桌面端 <code>⌘+加号</code> 一致，进电脑上的默认分组，靠标题「Claude Code · 项目名」和「需要我」标记被人认出来。</p>
+  </div>
+
+  <h3>失败与离线</h3>
+  <ul>
+    <li><strong>电脑不在线</strong>：不排队、不假装成功。创建必须由电脑执行，所以如实说明并保持禁用。</li>
+    <li><strong>创建失败</strong>（电脑缺内置 Claude Code runtime、供应商凭据缺失、项目不可用）：面板保持打开，供应商 / 模型的选择不丢，错误就地显示在面板里。桌面端已有的文案口径直接复用。</li>
+    <li><strong>电脑端版本太旧</strong>：老版本电脑会回「不支持的操作」。手机要把它翻成一句能照做的话，而不是原样抛错误码。</li>
+  </ul>
+
+  <h2>非目标</h2>
+  <ul>
+    <li><strong>不在手机上管理供应商</strong>——增删改、填 Key 全部留在电脑。手机只做只读选择。</li>
+    <li><strong>不支持中途换模型</strong>。模型是启动参数，换等于重开；手机上重开一次比加一个伪切换更诚实。</li>
+    <li><strong>不动桌面端「智能体对话」那条线</strong>（SDK 聊天）。本次只做 Claude Code 终端对话。</li>
+    <li><strong>不做手机端排队创建</strong>。电脑关机就是关机。</li>
+    <li><strong>不顺手接「已保存命令」</strong>。手机协议里其实已经有 <code>launchCommand</code>，但手机端既没有界面、也拿不到命令列表，一直是条死路。它和本次是同一个形状（开终端 + 启动命令），将来可以一并收口，但不是这次。</li>
+  </ul>
+
+  <h2>已定</h2>
+  <div class="callout">
+    <p><span class="t">叫法统一到「Claude Code」</span>
+    桌面端按钮现在写的是「创建终端cc对话」，而它建出来的会话标题是「Claude Code · 项目名」——同一个东西两个名字。界面上一律用 <b>Claude Code</b>，「cc」只留在模板文件名这类内部位置。桌面端那个按钮文案一并改成「创建 Claude Code 对话」。</p>
+  </div>
+  <div class="callout">
+    <p><span class="t">尺寸不做特例，也不考虑 Claude Code 在手机宽度下的排版</span>
+    手机上建 Claude Code 对话就是「开终端 + 一条启动命令」，与平时先开终端再跑 Claude Code 是同一件事。尺寸沿用新建终端的既有行为（优先移动端），不为它新增设置或第三种显示模式；TUI 在窄宽度下的观感不在本次范围内。</p>
+  </div>
+
+  <h2>验收标准</h2>
+  <ol>
+    <li>电脑在线时，<strong>点 <code>＋</code> → 点「开始对话」，两次点击、零个决定</strong>就建出一个 Claude Code 对话并直接进入终端。</li>
+    <li>第二次打开面板时，项目 / 供应商 / 模型三行都已经是上次用的值，用户不需要读它们就能直接按「开始对话」。</li>
+    <li>面板默认停在约 3/4 屏高，向上能拉满，向下能关掉；分段默认停在「对话」。</li>
+    <li>「终端」段的行为与现在完全一致（点分组即建），原有使用习惯不被打断。</li>
+    <li>手机全程不出现、不传输任何 API Key 或供应商地址。</li>
+    <li>电脑不在线时不能创建，且说清原因。</li>
+    <li>创建失败不产生半成品会话；面板保持打开，三行的选择不丢。</li>
+    <li>电脑端缺内置 Claude Code runtime 时，手机看到的提示与桌面端同一口径。</li>
+    <li>老版本电脑 + 新手机：提示升级，不崩、不卡在加载中。</li>
+  </ol>
+
+  <h2>给实现者的边界（不属于用户可见文案）</h2>
+  <ul>
+    <li>新增一条意图（形如 <code>createAgentConversation</code>），字段为 <code>projectId</code> / <code>providerId</code> / <code>modelTier</code>，均可选，另带初始 <code>cols</code>/<code>rows</code>/<code>deviceLabel</code>。初始尺寸必须随创建一起到达，否则 shell banner 会永久烙在旧宽度上（ADR 0063）。</li>
+    <li>桌面端执行逻辑必须抽成 service 方法后被意图复用，<strong>不要照抄一份</strong> <code>ipc-claude-code-terminal.ts</code>。</li>
+    <li>「对话」段那份项目列表，就是电脑上 <code>app.agent.group.list</code> 的结果（「本地对话」+ 已配置项目，形状 <code>{projectId, name, isDefault}</code>）——<strong>直接复用，不要另建一套选项目录</strong>。它和「供应商摘要」都只含 id、名称、四个档位对应的模型名，不含 baseUrl、不含任何密钥；建议做成按需拉取的独立意图，不要塞进按内容变化下发的会话摘要里，避免常驻流量。</li>
+    <li>授权沿用 <code>terminal.session.create</code>（带初始尺寸时再加 <code>terminal.session.resize</code>），与现有 <code>create</code> 一致，并经过权限与审计。</li>
+    <li>手机端新建终端当前没有随 <code>create</code> 带初始 <code>cols</code>/<code>rows</code>（靠后续 <code>resize</code> 补），与 ADR 0063 不一致。新意图不要再继承这个缺口。</li>
+  </ul>
+
+  <p class="muted" style="margin-top:34px">右侧可点击操作：列表的 <code>+</code>、面板里的三行参数、<code>开始对话</code>；顶部分别是各状态。</p>
+</div>
+
+<!-- ======================= 右：原型 ======================= -->
+<div class="stage">
+  <div class="switcher" id="switcher"></div>
+
+  <div class="phone">
+    <div class="statusbar">
+      <span>9:41</span>
+      <span class="right">▮▮▮ ᯤ ▰</span>
+    </div>
+
+    <!-- 基础层：终端列表 -->
+    <div class="screen on" data-s="list">
+      <div class="navbar">
+        <div class="bar"><span></span><span class="title">终端</span>
+          <button class="plus" data-go="sheet-chat">＋</button></div>
+      </div>
+      <div class="scroll">
+        <div class="sec" style="margin-top:12px">
+          <div class="card">
+            <div class="row static">
+              <span class="dot run"></span>
+              <span class="grow"><span class="name" style="font-size:14px">李杨的 MacBook Pro</span></span>
+              <span class="value" style="font-size:12px">已连接</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-h">默认</div>
+          <div class="card">
+            <div class="session" data-go="terminal">
+              <div class="s-top">
+                <span class="dot wait" style="margin-top:5px"></span>
+                <div class="grow" style="min-width:0">
+                  <div style="display:flex">
+                    <span class="s-title">Claude Code · Synapse</span>
+                    <span class="s-ago">2 分</span>
+                  </div>
+                  <div class="s-cwd">/Users/liyang/Documents/code/github/Synapse</div>
+                  <div class="s-last">Do you want to make this edit to intent-executor.ts?</div>
+                  <span class="chip">等待确认</span>
+                </div>
+              </div>
+            </div>
+            <div class="session" data-go="terminal">
+              <div class="s-top">
+                <span class="dot run" style="margin-top:5px"></span>
+                <div class="grow" style="min-width:0">
+                  <div style="display:flex">
+                    <span class="s-title">zsh 1</span>
+                    <span class="s-ago">18 分</span>
+                  </div>
+                  <div class="s-cwd">/Users/liyang</div>
+                  <div class="s-last">pnpm dev:desktop</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="t on"><span class="ic">▨</span>终端</div>
+        <div class="t"><span class="ic">◍</span>需要我<span class="badge">1</span></div>
+        <div class="t"><span class="ic">◔</span>我的</div>
+      </div>
+    </div>
+
+    <!-- 创建成功后的终端页 -->
+    <div class="screen" data-s="terminal">
+      <div class="navbar">
+        <div class="bar"><button data-go="list">‹ 终端</button>
+          <span class="title" style="font-size:15px">Claude Code · Synapse</span>
+          <button style="font-size:19px">⋯</button></div>
+      </div>
+      <div class="termsurface">  <span class="d">Claude Code  v2.0.1</span>
+  <span class="d">cwd  ~/Documents/code/github/Synapse</span>
+  <span class="d">model  claude-opus-4-5</span>
+
+<span class="g">›</span> 把终端意图执行器的错误分类补齐
+
+<span class="b">●</span> Read(desktop/electron/services/
+  mobile-gateway/intent-executor.ts)
+  <span class="d">⎿  Read 758 lines</span>
+
+<span class="b">●</span> Edit(intent-executor.ts)
+
+<span class="y">Do you want to make this edit?</span>
+<span class="y">❯ 1. Yes</span>
+  2. Yes, and don't ask again
+  3. No, and tell Claude what
+     to do differently</div>
+      <div class="inputbar">
+        <div class="field">发送…</div>
+        <div class="send">↑</div>
+      </div>
+    </div>
+
+    <!-- 创建中 -->
+    <div class="screen" data-s="creating">
+      <div class="centered">
+        <div class="spinner"></div>
+        <div class="big">正在电脑上启动</div>
+        <div>Synapse · Anthropic 官方 · claude-opus-4-5</div>
+      </div>
+    </div>
+
+    <!-- 电脑不在线 -->
+    <div class="screen" data-s="offline">
+      <div class="navbar">
+        <div class="bar"><span></span><span class="title">终端</span>
+          <button class="plus" disabled style="color:var(--ios-label3)">＋</button></div>
+      </div>
+      <div class="scroll">
+        <div class="sec" style="margin-top:12px">
+          <div class="card">
+            <div class="row static">
+              <span class="dot off"></span>
+              <span class="grow"><span class="name" style="font-size:14px">未连接电脑</span></span>
+            </div>
+          </div>
+        </div>
+        <div class="sec">
+          <div class="card">
+            <div class="row static">
+              <span class="grow"><span class="name" style="font-size:14px;color:var(--ios-label2)">请在电脑上打开 Synapse 并登录。</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="t on"><span class="ic">▨</span>终端</div>
+        <div class="t"><span class="ic">◍</span>需要我</div>
+        <div class="t"><span class="ic">◔</span>我的</div>
+      </div>
+    </div>
+
+    <!-- ================= 底部面板 ================= -->
+    <div class="sheet-layer" id="sheetLayer">
+      <div class="scrim"></div>
+      <div class="sheet" id="sheet" data-h="tq">
+        <div class="grabber"></div>
+        <div class="sheet-title" id="sheetTitle">新建</div>
+
+        <div class="segmented" id="seg">
+          <button class="on" data-sheet="sheet-chat">对话</button>
+          <button data-sheet="sheet-term">终端</button>
+        </div>
+
+        <div class="sheet-nav" id="sheetNav">
+          <button class="back" data-sheet="sheet-chat">‹ 新建</button>
+          <span class="ttl" id="navTitle"></span>
+        </div>
+
+        <!-- 对话 -->
+        <div class="sheet-body on" data-b="chat">
+          <div class="errbanner">
+            <span class="h">无法启动 Claude Code</span>
+            内置 Claude Code runtime 缺失，请在电脑上更新或重新安装 Synapse。
+          </div>
+          <div class="card" style="margin-top:2px">
+            <div class="row" data-sheet="sheet-project">
+              <span class="grow"><span class="name">项目</span></span>
+              <span class="value">Synapse<span class="tag">上次</span></span><span class="chev">›</span>
+            </div>
+            <div class="row" data-sheet="sheet-provider">
+              <span class="grow"><span class="name">供应商</span></span>
+              <span class="value">Anthropic 官方</span><span class="chev">›</span>
+            </div>
+            <div class="row" data-sheet="sheet-model">
+              <span class="grow"><span class="name">模型</span></span>
+              <span class="value">Opus</span><span class="chev">›</span>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <button class="primary" data-go="creating">开始对话</button>
+          <p class="foot">在电脑上 <span style="color:var(--ios-label)">Synapse</span> 目录里启动 Claude Code。</p>
+        </div>
+
+        <!-- 选择项目 -->
+        <div class="sheet-body" data-b="project">
+          <div class="card" style="margin-top:2px">
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">Synapse<span class="tag">上次</span></span>
+                <span class="desc">~/Documents/code/github/Synapse</span></span><span class="chev">✓</span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">本地对话</span>
+                <span class="desc">Synapse 内置工作区</span></span><span class="chev"></span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">obsidian</span>
+                <span class="desc">~/Documents/code/github/obsidian</span></span><span class="chev"></span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">brickhub</span>
+                <span class="desc">~/Documents/code/github/brickhub</span></span><span class="chev"></span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">d2pub</span>
+                <span class="desc">~/Documents/code/github/d2pub</span></span><span class="chev"></span></div>
+          </div>
+          <p class="foot">项目在电脑端添加，这里只做选择。</p>
+        </div>
+
+        <!-- 终端 -->
+        <div class="sheet-body" data-b="term">
+          <div class="card" style="margin-top:2px">
+            <div class="row" data-go="creating">
+              <span class="grow"><span class="name">默认</span></span><span class="chev">›</span></div>
+            <div class="row" data-go="creating">
+              <span class="grow"><span class="name">d2pub</span></span><span class="chev">›</span></div>
+          </div>
+        </div>
+
+        <!-- 供应商 -->
+        <div class="sheet-body" data-b="provider">
+          <div class="card" style="margin-top:2px">
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">Anthropic 官方<span class="tag">当前</span></span>
+                <span class="desc">claude-opus-4-5</span></span><span class="chev">✓</span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">百炼</span>
+                <span class="desc">qwen3-max</span></span><span class="chev"></span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">Claude Code 本地</span>
+                <span class="desc">跟随电脑上的登录</span></span><span class="chev"></span></div>
+          </div>
+          <p class="foot">供应商在电脑端配置，密钥不会传到手机。</p>
+        </div>
+
+        <!-- 模型 -->
+        <div class="sheet-body" data-b="model">
+          <div class="sec-h" style="margin-top:12px">Anthropic 官方</div>
+          <div class="card">
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">主模型<span class="tag">#1</span></span>
+                <span class="desc">claude-sonnet-4-5</span></span><span class="chev"></span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">Opus<span class="tag">#2</span></span>
+                <span class="desc">claude-opus-4-5</span></span><span class="chev">✓</span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">Sonnet<span class="tag">#3</span></span>
+                <span class="desc">claude-sonnet-4-5</span></span><span class="chev"></span></div>
+            <div class="row" data-sheet="sheet-chat">
+              <span class="grow"><span class="name">Haiku<span class="tag">#4</span></span>
+                <span class="desc">claude-haiku-4-5</span></span><span class="chev"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="home"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+  const LABELS = [
+    ["list","终端列表"],
+    ["sheet-chat","新建 · 对话"],
+    ["sheet-term","新建 · 终端"],
+    ["sheet-full","新建 · 拉满"],
+    ["sheet-project","选项目"],
+    ["sheet-provider","选供应商"],
+    ["sheet-model","选模型"],
+    ["creating","创建中"],
+    ["terminal","创建成功"],
+    ["sheet-failed","创建失败"],
+    ["offline","电脑不在线"],
+  ];
+
+  const SHEET_VIEWS = {
+    "sheet-chat":     { tab:"sheet-chat", h:"tq",   body:"chat",     nav:null,  err:false },
+    "sheet-term":     { tab:"sheet-term", h:"tq",   body:"term",     nav:null,  err:false },
+    "sheet-full":     { tab:"sheet-chat", h:"full", body:"chat",     nav:null,  err:false },
+    "sheet-project":  { tab:"sheet-chat", h:"full", body:"project",  nav:"项目", err:false },
+    "sheet-provider": { tab:"sheet-chat", h:"tq",   body:"provider", nav:"供应商", err:false },
+    "sheet-model":    { tab:"sheet-chat", h:"tq",   body:"model",    nav:"模型",  err:false },
+    "sheet-failed":   { tab:"sheet-chat", h:"tq",   body:"chat",     nav:null,  err:true  },
+  };
+
+  const screens  = [...document.querySelectorAll(".screen")];
+  const switcher = document.getElementById("switcher");
+  const layer    = document.getElementById("sheetLayer");
+  const sheet    = document.getElementById("sheet");
+  const seg      = document.getElementById("seg");
+  const sheetNav = document.getElementById("sheetNav");
+  const navTitle = document.getElementById("navTitle");
+  const bodies   = [...document.querySelectorAll(".sheet-body")];
+
+  LABELS.forEach(([key,label])=>{
+    const b=document.createElement("button");
+    b.textContent=label; b.dataset.s=key;
+    b.addEventListener("click",()=>show(key));
+    switcher.appendChild(b);
+  });
+
+  let current = "list";
+
+  function show(key){
+    const v = SHEET_VIEWS[key];
+    if (v){
+      // 面板打开时底板始终是终端列表，取中间那层导航
+      screens.forEach(s=>s.classList.toggle("on", s.dataset.s==="list"));
+      layer.classList.add("on");
+      sheet.dataset.h = v.h;
+      sheet.classList.toggle("err", v.err);
+      seg.classList.toggle("hidden", v.nav!==null);
+      sheetNav.classList.toggle("on", v.nav!==null);
+      navTitle.textContent = v.nav ?? "";
+      bodies.forEach(b=>b.classList.toggle("on", b.dataset.b===v.body));
+      [...seg.children].forEach(b=>b.classList.toggle("on", b.dataset.sheet===v.tab));
+      document.querySelectorAll(".sheet-body").forEach(b=>b.scrollTop=0);
+    } else {
+      layer.classList.remove("on");
+      screens.forEach(s=>s.classList.toggle("on", s.dataset.s===key));
+    }
+    current = key;
+    [...switcher.children].forEach(b=>b.classList.toggle("on", b.dataset.s===key));
+    if (key==="creating") setTimeout(()=>{ if(current==="creating") show("terminal"); },1400);
+  }
+
+  document.addEventListener("click",(e)=>{
+    const el = e.target.closest("[data-sheet],[data-go]");
+    if (!el || el.disabled) return;
+    if (el.dataset.sheet) show(el.dataset.sheet);
+    else if (el.dataset.go) show(el.dataset.go);
+  });
+
+  show("list");
+</script>
+</body>
+</html>
