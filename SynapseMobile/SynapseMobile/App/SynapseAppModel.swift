@@ -627,29 +627,42 @@ final class SynapseAppModel {
         }
     }
 
-    /// Stops deciding a session's grid and lets the desktop's own layout take over.
+    /// Stops deciding a session's grid and asks the desktop's own layout to take over.
     ///
     /// The phone cannot name the size the desktop would have chosen: everything it was
     /// ever told is the size the PTY currently has, which is the phone's. So it gives
     /// up the claim, and the desktop puts the PTY back at its own layout's shape in the
     /// same call rather than on its next fit, which only runs while a pane is on screen.
-    func releaseGrid(for sessionId: String) {
+    ///
+    /// The answer is returned rather than dropped, because it decides what the reader's
+    /// display mode should say afterwards: a refusal means the terminal is still the
+    /// phone's to size, and the caller puts the mode back. See `applyGridRelease` for
+    /// what each ending means, and note that a release which never left the phone is
+    /// reported as its own case — nothing was refused there, and the reader's choice
+    /// has to survive for the reconnect to honour it.
+    func releaseGrid(for sessionId: String) async -> GridReleaseOutcome {
         gridSizeTasks[sessionId]?.cancel()
         gridSizeTasks[sessionId] = nil
 
         // Nothing was claimed, so there is nothing to give back. This is also what
         // keeps a phone that was never in the mode from sending a release at all.
-        guard requestedGrid.removeValue(forKey: sessionId) != nil else { return }
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else { return }
+        guard requestedGrid.removeValue(forKey: sessionId) != nil else { return .notSent }
+        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+            return .notSent
+        }
 
-        send(
-            MobileIntentRequest(
+        // The desktop answers in milliseconds; this only guards a lost reply, and it
+        // is deliberately short because the mode is left alone until it arrives.
+        let result = await awaitResult(
+            of: MobileIntentRequest(
                 intentId: UUID().uuidString,
                 kind: "releaseGrid",
                 sessionId: sessionId
             ),
-            to: desktop
+            sentTo: desktop,
+            timeoutSeconds: 5
         )
+        return gridReleaseOutcome(for: result)
     }
 
     /// Says it again after a reconnect.

@@ -76,7 +76,14 @@ struct TerminalScreen: View {
             // its shape as part of this call. The phone has no way to name the size the
             // desktop would have chosen — all it ever heard is the size the PTY
             // currently has, which is the phone's.
-            model.releaseGrid(for: sessionId)
+            //
+            // What the desktop answers decides where the mode ends up, and that rule
+            // lives in `applyGridRelease` rather than here: it is about the protocol,
+            // not about layout, and it has to be testable without a view.
+            Task {
+                let outcome = await model.releaseGrid(for: sessionId)
+                applyGridRelease(outcome, for: sessionId, to: display)
+            }
         }
     }
 

@@ -313,8 +313,13 @@ export class MobileIntentExecutor {
        * the phone's grid while the phone drew the desktop's.
        *
        * Refused, not silently accepted, when the desktop has never laid the
-       * terminal out — see `restoreGridForDesktop`. The phone shows the message;
-       * the pane appearing later fixes it on its own.
+       * terminal out — see `restoreGridForDesktop`. That refusal is half of a
+       * protocol, not an error report: it tells the phone the grid could not be
+       * handed back at all, so the phone returns its display mode to the one where
+       * it sizes the terminal itself. The reader is not left on a mode that
+       * describes nothing. The message below is therefore a statement of the state
+       * that follows it, and the two halves change together — see
+       * `applyGridRelease` on the phone.
        */
       case "releaseGrid": {
         await this.deps.authorize("terminal.session.resize", sessionResource(intent.sessionId))
@@ -324,7 +329,7 @@ export class MobileIntentExecutor {
             intentId: intent.intentId,
             outcome: "rejected",
             code: "desktop_grid_unknown",
-            message: "电脑端还没有显示过这个终端，请先在电脑上打开它。",
+            message: "电脑端还没有显示过这个终端，已恢复为优先移动端。",
             sessionId: intent.sessionId,
           }
         }

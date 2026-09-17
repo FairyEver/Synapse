@@ -869,10 +869,16 @@ describe("MobileGatewayService", () => {
       sessionId: "sess-1",
     }))
 
-    // Rejected and not silently accepted: the phone shows the message, and a
-    // silent no-op would leave the reader staring at a layout that never came back.
+    // Rejected and not silently accepted: a silent no-op would leave the reader on
+    // a mode the phone is not in. The wording is part of the protocol — it is what
+    // the phone's banner says, and it names the state its rollback puts the reader
+    // in, so the two sides move together.
     expect(harness.results.at(-1)).toMatchObject({
-      result: { outcome: "rejected", code: "desktop_grid_unknown" },
+      result: {
+        outcome: "rejected",
+        code: "desktop_grid_unknown",
+        message: "电脑端还没有显示过这个终端，已恢复为优先移动端。",
+      },
     })
     // The claim still goes back — it is the size that could not be restored.
     expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
