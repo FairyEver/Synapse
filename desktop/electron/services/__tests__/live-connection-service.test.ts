@@ -305,6 +305,52 @@ describe("LiveConnectionService", () => {
     expect(webhookDeliveryHandler.handle).not.toHaveBeenCalled()
   })
 
+  it("stamps the toolbar with this computer's identity, and drops it without one", async () => {
+    /*
+     * A phone files the button list under the computer that sent it and discards the
+     * rest, so the identity is what makes the message mean anything. A desktop that
+     * cannot name itself must say nothing rather than send a list that would be filed
+     * under nothing — and overwrite another computer's buttons doing it.
+     */
+    const socket = new FakeSocket()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      now: () => new Date("2026-06-06T10:00:00.000Z"),
+    })
+
+    await service.sendMobileToolbar({ revision: 1, buttons: [] })
+    expect(socket.sent).toHaveLength(0)
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("open")
+    await waitForCondition(() => socket.sent.length > 0)
+    socket.emit("message", JSON.stringify({
+      type: "live.welcome",
+      id: "msg-welcome",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: { connectionId: "conn-a", serverTime: "2026-06-06T10:00:01.000Z", heartbeatIntervalMs: 20_000, heartbeatTimeoutMs: 45_000 },
+    }))
+    await flushPromises()
+    socket.sent.length = 0
+
+    await service.sendMobileToolbar({
+      revision: 2,
+      buttons: [{ id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } }],
+    })
+
+    expect(JSON.parse(socket.sent[0] ?? "{}")).toMatchObject({
+      type: "mobile.toolbar",
+      payload: {
+        desktopClientInstanceId: "client-a",
+        revision: 2,
+        buttons: [{ id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } }],
+      },
+    })
+  })
+
   it("sends heartbeat ping envelopes", async () => {
     const socket = new FakeSocket()
     const timers = createTimerFns()

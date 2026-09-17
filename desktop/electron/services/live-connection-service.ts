@@ -17,6 +17,7 @@ import { createMainLogger } from "./log-store"
 import type {
   MobileIntentHandler,
   MobileSummaryDraft,
+  MobileToolbarDraft,
 } from "./mobile-gateway/transport"
 
 const logger = createMainLogger("service.live")
@@ -349,6 +350,23 @@ export class LiveConnectionService {
     this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileSummary, {
       desktopClientInstanceId: clientInstanceId,
       desktopName: this.deviceName(),
+      ...draft,
+    }, this.envelopeMetadata()))
+  }
+
+  /**
+   * The command buttons this computer offers its phones.
+   *
+   * Drops the message without an identity, like a summary: a phone keys the list by
+   * which computer sent it, so one that cannot say would be filed under nothing and
+   * overwrite another computer's buttons.
+   */
+  async sendMobileToolbar(draft: MobileToolbarDraft): Promise<void> {
+    const clientInstanceId = this.state.clientInstanceId
+    if (!clientInstanceId) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileToolbar, {
+      desktopClientInstanceId: clientInstanceId,
       ...draft,
     }, this.envelopeMetadata()))
   }

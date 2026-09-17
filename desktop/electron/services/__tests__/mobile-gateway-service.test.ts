@@ -3,7 +3,12 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { isMobileSummaryPayload, MOBILE_FRAME_LIMITS } from "@synapse/shared"
-import type { MobileIntent, MobileTerminalFrame, MobileTransferProgressPayload } from "@synapse/shared"
+import type {
+  MobileIntent,
+  MobileTerminalFrame,
+  MobileToolbarButton,
+  MobileTransferProgressPayload,
+} from "@synapse/shared"
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
@@ -17,7 +22,7 @@ import {
 } from "../mobile-gateway-service"
 import { MobileFileRelay } from "../mobile-gateway/file-relay"
 import type { ClaudeCodeConversationLaunch } from "../mobile-gateway/intent-executor"
-import type { MobileGatewayTransport, MobileSummaryDraft } from "../mobile-gateway/transport"
+import type { MobileGatewayTransport, MobileSummaryDraft, MobileToolbarDraft } from "../mobile-gateway/transport"
 
 /* ------------------------------------------------------------------ *
  * Test doubles
@@ -95,6 +100,21 @@ class FakeTerminal {
 
   listGroups() {
     return [{ id: "g1", name: "前端开发" }]
+  }
+
+  /**
+   * What the terminal capability projects for a phone, as the real one does from its
+   * registry and the user's stored actions. Mutable so a test can change the buttons
+   * and see whether the gateway notices.
+   */
+  mobileToolbarButtons: readonly MobileToolbarButton[] = [
+    { id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } },
+    { id: "slash-exit", label: "/exit", group: "command", action: { type: "text", text: "/exit", pressEnter: true } },
+  ]
+
+  listMobileToolbarButtons(): readonly MobileToolbarButton[] {
+    this.calls.push("listMobileToolbarButtons")
+    return this.mobileToolbarButtons
   }
 
   listSessions(): FakeSession[] {
@@ -317,6 +337,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
   const summaries: unknown[] = []
   const results: unknown[] = []
   const progress: MobileTransferProgressPayload[] = []
+  const toolbars: MobileToolbarDraft[] = []
   const transport: MobileGatewayTransport = {
     sendSummary: (draft) => summaries.push(draft),
     sendFrame: (mobileClientInstanceId, frame) => frames.push({ mobileClientInstanceId, frame }),
@@ -324,6 +345,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
       results.push({ mobileClientInstanceId, result })
     },
     sendTransferProgress: (payload) => progress.push(payload),
+    sendToolbar: (draft) => toolbars.push(draft),
   }
   const audits: unknown[] = []
   const permissionGuard = {
@@ -433,7 +455,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
   gateway.setTransport(transport)
 
   return {
-    gateway, terminal, timers, transport, frames, summaries, results, audits,
+    gateway, terminal, timers, transport, frames, summaries, results, audits, toolbars,
     permissionGuard, fileRelay, landings, discarded, progress,
     launches, createClaudeCodeConversation, agentGroups, agentProviders,
     listAgentConversationGroups, listAgentConversationProviders,
@@ -1313,6 +1335,120 @@ describe("MobileGatewayService", () => {
     await harness.timers.advance(1_000)
 
     expect(harness.summaries.length).toBeGreaterThan(afterFirst)
+  })
+
+  it("sends the button list on sync, then deduplicates it against session activity", async () => {
+    /*
+     * Two halves of one rule. A phone that has just connected holds nothing, so the
+     * list has to go out even though the desktop has not touched a command since the
+     * last time it was sent — that is the `sync` half. And an idle desktop that is
+     * merely printing to a terminal must not turn its buttons into a steady stream,
+     * which is what the fingerprint is for.
+     */
+    const harness = createHarness()
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+
+    expect(harness.toolbars).toHaveLength(1)
+    expect(harness.toolbars[0]?.buttons.map((button) => button.id)).toEqual(["enter", "slash-exit"])
+    const afterSync = harness.toolbars.length
+
+    // Several summary ticks and a line of output: none of it is a reason to re-send.
+    await harness.timers.advance(3_000)
+    harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 2 } })
+    await harness.timers.advance(3_000)
+
+    expect(harness.toolbars).toHaveLength(afterSync)
+
+    // And the other half: a *second* phone connecting gets the list too, even though
+    // by now it has been fingerprinted and nothing about it has changed. Without this
+    // the deduplication above would leave every phone but the first with no buttons.
+    await harness.gateway.handleIntent("phone-2", intent({ v: 1, intentId: "i-sync-2", kind: "sync" }))
+    expect(harness.toolbars.length).toBeGreaterThan(afterSync)
+  })
+
+  it("sends the buttons again when the phone opens a terminal", async () => {
+    // Opening a terminal is when a stale list is most visible, and it is a deliberate
+    // act rather than idle churn — so it refreshes even though nothing changed.
+    const harness = createHarness()
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    const afterSync = harness.toolbars.length
+
+    await attach(harness)
+
+    expect(harness.toolbars.length).toBeGreaterThan(afterSync)
+    expect(harness.toolbars.at(-1)?.buttons.map((button) => button.id))
+      .toEqual(["enter", "slash-exit"])
+  })
+
+  it("picks up an edited button list on the next summary tick", async () => {
+    /*
+     * The buttons are not watched for changes — the terminal event emitter is at
+     * Node's listener limit and is not allowed to grow — so they are re-read on the
+     * ticks that already happen. This is what says that reading them again is enough:
+     * the fingerprint is over the content, not over a revision counter.
+     */
+    const harness = createHarness()
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    const before = harness.toolbars.at(-1)
+
+    harness.terminal.mobileToolbarButtons = [
+      ...harness.terminal.mobileToolbarButtons,
+      { id: "c1", label: "部署", group: "custom", action: { type: "text", text: "pnpm deploy", pressEnter: true } },
+    ]
+    await harness.timers.advance(1_000)
+
+    const after = harness.toolbars.at(-1)
+    expect(after?.buttons.map((button) => button.id)).toEqual(["enter", "slash-exit", "c1"])
+    // The revision moves with the content, so a captured payload is self-describing.
+    expect(after!.revision).toBeGreaterThan(before!.revision)
+  })
+
+  it("stops at the last button that fits rather than truncating one", async () => {
+    // Half a command is a command the phone would run differently from the computer,
+    // and the destructive ones are exactly the ones a user writes a button for. A
+    // button that is simply absent is the safe failure.
+    const harness = createHarness()
+    const filler = "x".repeat(MOBILE_FRAME_LIMITS.maxToolbarTextLength)
+    harness.terminal.mobileToolbarButtons = [
+      { id: "keep", label: "部署", group: "custom", action: { type: "text", text: "pnpm deploy", pressEnter: true } },
+      // 20 × 4 KiB is past the 64 KiB budget, so the tail has to go.
+      ...Array.from({ length: 20 }, (_value, index) => ({
+        id: `bulk-${index}`,
+        label: "批量",
+        group: "custom" as const,
+        action: { type: "text" as const, text: filler, pressEnter: true },
+      })),
+    ]
+
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+
+    const buttons = harness.toolbars.at(-1)?.buttons ?? []
+    expect(buttons[0]?.id).toBe("keep")
+    expect(buttons.length).toBeGreaterThan(1)
+    expect(buttons.length).toBeLessThan(21)
+    // Every button that did go is whole — none of them was cut to fit.
+    for (const button of buttons) {
+      if (button.action.type === "text" && button.id !== "keep") {
+        expect(button.action.text).toHaveLength(MOBILE_FRAME_LIMITS.maxToolbarTextLength)
+      }
+    }
+    expect(Buffer.byteLength(JSON.stringify(buttons), "utf8"))
+      .toBeLessThanOrEqual(MOBILE_FRAME_LIMITS.maxToolbarBytes)
+  })
+
+  it("keeps the toolbar's own fingerprint separate from the summary's", async () => {
+    // The two change on different occasions — the session list churns constantly, the
+    // button list only when the user edits it. Sharing one fingerprint would make
+    // every terminal that printed a line look like a reason to re-send the buttons.
+    const harness = createHarness()
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    const toolbarsAfterSync = harness.toolbars.length
+    const summariesAfterSync = harness.summaries.length
+
+    await harness.timers.advance(1_000)
+
+    expect(harness.summaries.length).toBeGreaterThan(summariesAfterSync)
+    expect(harness.toolbars).toHaveLength(toolbarsAfterSync)
   })
 
   it("checks policy under the narrow agent identity, never the user", async () => {

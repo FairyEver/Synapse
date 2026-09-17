@@ -59,6 +59,15 @@ export type IntentExecutorDeps = {
    * `MobileGatewayService.resendSummary`.
    */
   readonly resendSummary: () => void
+  /**
+   * Pushes the computer's command buttons to its phones, unconditionally.
+   *
+   * Called from the two intents that mean a phone is looking at a terminal right
+   * now. Neither may be gated on the button list having changed: both are sent by a
+   * phone that has just arrived, and "this computer has not edited its commands
+   * lately" is not an answer to someone who has not yet been told what they are.
+   */
+  readonly sendToolbar: () => void
   /** Sends a full-window frame immediately, for attach and resync. */
   readonly pushSnapshot: (attachment: MobileAttachment) => Promise<void>
   /** Sends one page of scrollback below `before`, or an empty page at the end. */
@@ -159,8 +168,11 @@ export class MobileIntentExecutor {
         await this.deps.authorize("terminal.discover", "terminal:sessions")
         // Not `requestSummary`: a phone sends this the moment it connects, so it is
         // exactly the caller that has received nothing and cannot be answered with
-        // "the list has not changed".
+        // "the list has not changed". The toolbar rides along for the same reason —
+        // a computer that has not edited its commands since an earlier phone
+        // connected would otherwise fingerprint as unchanged and say nothing.
         this.deps.resendSummary()
+        this.deps.sendToolbar()
         for (const attachment of registry.forClient(mobileClientInstanceId)) {
           await this.deps.pushSnapshot(attachment)
         }
@@ -179,6 +191,10 @@ export class MobileIntentExecutor {
             sessionId: session.id,
           }
         }
+        // Opening a terminal is when a stale button list is most visible, and it is a
+        // deliberate act rather than idle churn — so this refreshes unconditionally,
+        // like `sync` does, instead of waiting for the fingerprint to move.
+        this.deps.sendToolbar()
         const existing = registry.get(mobileClientInstanceId, intent.sessionId)
         if (existing) {
           await this.deps.pushSnapshot(existing)

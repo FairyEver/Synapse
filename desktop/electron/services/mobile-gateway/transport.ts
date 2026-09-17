@@ -3,6 +3,7 @@ import type {
   MobileIntentResult,
   MobileSummaryPayload,
   MobileTerminalFrame,
+  MobileToolbarPayload,
   MobileTransferProgressPayload,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
@@ -11,6 +12,15 @@ import type {
  * appended by the live connection, which is the only component that knows it.
  */
 export type MobileSummaryDraft = Omit<MobileSummaryPayload, "desktopClientInstanceId" | "desktopName">
+
+/**
+ * The toolbar, minus the identity for the same reason.
+ *
+ * A phone filters by computer, so which computer this is has to be on the message —
+ * but it is not something the gateway can know, and asking it to hold a copy would
+ * be a second source of truth for an id the connection already owns.
+ */
+export type MobileToolbarDraft = Omit<MobileToolbarPayload, "desktopClientInstanceId">
 
 /**
  * Outbound side of the gateway.
@@ -28,6 +38,14 @@ export type MobileGatewayTransport = {
    * next one, so nothing here waits on a send and nothing is retried.
    */
   readonly sendTransferProgress: (payload: MobileTransferProgressPayload) => void
+  /**
+   * The command buttons this computer offers its phones.
+   *
+   * A full snapshot every time, never a delta, for the reason a summary is: a phone
+   * replaces what it has with what arrives, so a lost message costs nothing beyond
+   * waiting for the next one.
+   */
+  readonly sendToolbar: (draft: MobileToolbarDraft) => void
 }
 
 /** Inbound side: the live connection hands cloud-delivered events to the gateway. */

@@ -3,6 +3,7 @@ import type {
   MobileIntent,
   MobileIntentResult,
   MobileModelTier,
+  MobileToolbarButton,
   MobileSummaryAgentGroup,
   MobileSummaryAgentProvider,
   MobileSummaryGroup,
@@ -44,6 +45,16 @@ const FLUSH_INTERVAL_MS = 60
 
 /** The session list changes far less often than the screen; 1 Hz is plenty. */
 const SUMMARY_INTERVAL_MS = 1_000
+
+/**
+ * Slack for the fields a toolbar payload carries besides its buttons.
+ *
+ * The gateway builds a draft and the live connection appends the computer's identity
+ * and wraps it in an envelope, so the bytes measured here are not quite the bytes
+ * sent. A kilobyte is far more than those cost and far less than the gap between this
+ * budget and the socket underneath it — see `maxToolbarBytes`.
+ */
+const TOOLBAR_ENVELOPE_ALLOWANCE_BYTES = 1_024
 
 /** Tail lines read to answer "what is this terminal doing right now". */
 const SUMMARY_TAIL_LINES = 4
@@ -168,6 +179,16 @@ export class MobileGatewayService {
 
   private summaryRevision = 0
   private lastSummaryContent = ""
+  /**
+   * Fingerprint of the last toolbar sent, kept apart from the summary's.
+   *
+   * Separate on purpose: the two change on entirely different occasions — the session
+   * list churns constantly, the button list only when the user edits it — so sharing
+   * one fingerprint would make every terminal that printed a line look like a reason
+   * to re-send the buttons.
+   */
+  private toolbarRevision = 0
+  private lastToolbarContent = ""
   private readonly bytesByClient = new Map<string, { windowStartedMs: number; bytes: number }>()
   private readonly lastLineCache = new Map<string, string>()
   private readonly lastLineDirty = new Set<string>()
@@ -190,6 +211,7 @@ export class MobileGatewayService {
       markDirty: (sessionId) => this.markDirty(sessionId),
       requestSummary: () => this.scheduleSummary(),
       resendSummary: () => this.resendSummary(),
+      sendToolbar: () => this.resendToolbar(),
       pushSnapshot: (attachment) => this.pushSnapshot(attachment),
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
       reportTransferProgress: (mobileClientInstanceId, intentId, completedBytes, totalBytes) =>
@@ -242,6 +264,7 @@ export class MobileGatewayService {
     this.lastLineCache.clear()
     this.lastLineDirty.clear()
     this.lastSummaryContent = ""
+    this.lastToolbarContent = ""
   }
 
   /** Called by the live connection when a phone sends an intent. */
@@ -600,9 +623,77 @@ export class MobileGatewayService {
     this.scheduleSummary()
   }
 
+  /* ------------------------------------------------------------------ *
+   * Toolbar
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Sends the computer's command buttons in the same shape as everything else here:
+   * a full snapshot, fingerprinted so an idle desktop produces no traffic.
+   *
+   * The list only changes when the user edits a command, which is not a terminal
+   * event and does not reach this service. Rather than watch for it — which would
+   * cost a listener the budget does not have — it is refreshed at the three moments
+   * it can be seen: a phone connecting, a phone opening a terminal, and any tick
+   * that sends a summary. The gap that leaves is a desktop whose user edits a
+   * command while a phone is already connected, idle, and looking at nothing; the
+   * phone learns on its next reconnect, terminal, or session activity, and until
+   * then it is not on a screen where the difference shows.
+   */
+  private flushToolbar(): void {
+    const transport = this.transport
+    if (!transport) return
+    try {
+      const buttons = this.fitToolbarToBudget(this.terminal.listMobileToolbarButtons())
+      // Compared without the revision, so an unchanged list produces nothing at all.
+      const serialized = JSON.stringify(buttons)
+      if (serialized === this.lastToolbarContent) return
+      this.lastToolbarContent = serialized
+      this.toolbarRevision += 1
+      transport.sendToolbar({ revision: this.toolbarRevision, buttons })
+    } catch (error) {
+      // A phone without a toolbar is a phone without a toolbar; the terminals it can
+      // still drive are the part that matters.
+      this.logWarn("Mobile toolbar flush failed.", error)
+    }
+  }
+
+  /** Sends even when nothing changed, for a caller that has nothing yet. */
+  private resendToolbar(): void {
+    this.lastToolbarContent = ""
+    this.flushToolbar()
+  }
+
+  /**
+   * Drops trailing buttons until the payload fits `maxToolbarBytes`.
+   *
+   * The tail goes rather than the last button being cut in half, and that is the
+   * whole point of the rule: half a command is a command the phone would run
+   * differently from the computer, and a destructive one is exactly the kind a user
+   * writes a button for. A button that is not there is merely absent.
+   *
+   * Unreachable for any list the product can produce — the desktop's own limit is 50
+   * actions and a real command is tens of bytes — so this exists for the case where
+   * it is not, and prefers losing buttons to losing the connection.
+   */
+  private fitToolbarToBudget(buttons: readonly MobileToolbarButton[]): readonly MobileToolbarButton[] {
+    const budget = MOBILE_FRAME_LIMITS.maxToolbarBytes - TOOLBAR_ENVELOPE_ALLOWANCE_BYTES
+    const kept: MobileToolbarButton[] = []
+    for (const button of buttons) {
+      const candidate = [...kept, button]
+      if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budget) break
+      kept.push(button)
+    }
+    return kept
+  }
+
   private async flushSummary(): Promise<void> {
     const transport = this.transport
     if (!transport) return
+    // Piggy-backed on this tick rather than on a listener of its own: the terminal
+    // event emitter is at Node's default limit of ten listeners and this list is not
+    // allowed to grow. See the note on `start()`.
+    this.flushToolbar()
     try {
       const sessions = await this.summarySessions()
       const [agentGroups, agentProviders] = await Promise.all([

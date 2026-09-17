@@ -141,6 +141,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       sendTransferProgress: (payload) => {
         void liveConnectionService.sendMobileTransferProgress(payload)
       },
+      sendToolbar: (draft) => void liveConnectionService.sendMobileToolbar(draft),
     })
   } catch (error) {
     logger.warn("Mobile terminal gateway transport not installed.", {
