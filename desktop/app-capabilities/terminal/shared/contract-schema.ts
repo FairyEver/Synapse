@@ -476,6 +476,17 @@ export const terminalRenewControlInputSchema = terminalLeaseOperationInputSchema
   requestedLeaseMs: z.number().int().min(1_000).max(60_000),
 }).strict()
 
+/**
+ * The keys a controller may name, which is exactly the set `MOBILE_KEYS` in
+ * `@synapse/shared` describes — the phone's keyboard panel is drawn from one and
+ * delivered through the other, so the two lists have to stay equal.
+ *
+ * Written out rather than derived from that module on purpose: this file is loaded by
+ * the renderer through Vite as well as by the main process, and the constants module
+ * is CommonJS precisely because the main process cannot take the ESM one. A test
+ * asserts the two lists are equal, which is how the rest of the repo keeps its
+ * duplicated numeric contracts honest.
+ */
 export const terminalSemanticKeySchema = z.enum([
   "Enter",
   "Tab",
@@ -487,6 +498,19 @@ export const terminalSemanticKeySchema = z.enum([
   "Backspace",
   "Ctrl+C",
   "Ctrl+D",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  "Delete",
+  "Ctrl+A",
+  "Ctrl+E",
+  "Ctrl+U",
+  "Ctrl+K",
+  "Ctrl+W",
+  "Ctrl+L",
+  "Ctrl+R",
+  "Ctrl+Z",
 ])
 
 export const terminalSemanticActionSchema = z.discriminatedUnion("type", [

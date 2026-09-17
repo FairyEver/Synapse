@@ -1,3 +1,4 @@
+import type { MobileToolbarButton } from "@synapse/shared" with { "resolution-mode": "import" }
 import { createHash, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { chmodSync, existsSync, statSync } from "node:fs"
@@ -97,6 +98,7 @@ import {
   type TerminalStyledLine,
 } from "./emulator"
 import type { TerminalAgentNotificationService } from "./agent-notification-service"
+import { projectMobileToolbarButtons } from "./mobile-toolbar"
 import {
   resolveTerminalEnvironment,
   resolveTerminalLaunchConfiguration,
@@ -233,7 +235,23 @@ const MAX_SEMANTIC_BYTES = 256 * 1024
 const NODE_PTY_SPAWN_HELPER_ENV = "SYNAPSE_NODE_PTY_SPAWN_HELPER"
 const requireNodePty = createRequire(__filename)
 let nodePtyModule: typeof import("node-pty") | undefined
-const KEY_BYTES: Readonly<Record<string, string>> = {
+/**
+ * The bytes behind every key name the phone may send; `MOBILE_KEYS` is the list, and
+ * the two are kept in step deliberately rather than by convention — a name in one and
+ * not the other is a key that validates on the cloud and then throws here.
+ *
+ * Arrows, Home/End and PageUp/PageDown use normal-mode sequences. That is not an
+ * oversight about DECCKM: the existing entries were already normal-mode, and the
+ * application-mode alternative would silently change what ArrowUp has always sent.
+ *
+ * `Backspace` (`\x7f`) and `Delete` (`\x1b[3~`) are different keys, as are the
+ * desktop toolbar's local `Clear` (which never reaches the PTY) and `Ctrl+L`.
+ *
+ * Exported so the mobile toolbar's tests can hold it against a table written out by
+ * hand: every value here is a byte string someone has to get right, and nothing else
+ * in the codebase would notice a typo in one of them.
+ */
+export const KEY_BYTES: Readonly<Record<string, string>> = {
   Enter: "\r",
   Tab: "\t",
   Escape: "\x1b",
@@ -244,6 +262,19 @@ const KEY_BYTES: Readonly<Record<string, string>> = {
   Backspace: "\x7f",
   "Ctrl+C": "\x03",
   "Ctrl+D": "\x04",
+  Home: "\x1b[H",
+  End: "\x1b[F",
+  PageUp: "\x1b[5~",
+  PageDown: "\x1b[6~",
+  Delete: "\x1b[3~",
+  "Ctrl+A": "\x01",
+  "Ctrl+E": "\x05",
+  "Ctrl+U": "\x15",
+  "Ctrl+K": "\x0b",
+  "Ctrl+W": "\x17",
+  "Ctrl+L": "\x0c",
+  "Ctrl+R": "\x12",
+  "Ctrl+Z": "\x1a",
 }
 
 export function createTerminalService(deps: {
@@ -1139,6 +1170,25 @@ export function createTerminalService(deps: {
 
   function listCustomToolbarActions(): TerminalCustomToolbarAction[] {
     return [...toolbarActions.values()]
+  }
+
+  /**
+   * The buttons a phone is shown for this computer: the built-ins followed by the
+   * user's own, in the order the desktop draws them.
+   *
+   * Read by the mobile gateway, which runs in this process. Deliberately not an IPC
+   * operation and not a capability: nothing outside the desktop asks for it, so it
+   * would only widen the surface the app advertises.
+   *
+   * The platform is this process's own, not a caller's: which built-ins exist is a
+   * fact about the computer, not about who is asking.
+   */
+  function listMobileToolbarButtons(): readonly MobileToolbarButton[] {
+    return projectMobileToolbarButtons({
+      custom: listCustomToolbarActions(),
+      platform: process.platform,
+      keyBytes: KEY_BYTES,
+    })
   }
 
   function getCustomToolbarAction(id: string): TerminalCustomToolbarAction {
@@ -3080,6 +3130,7 @@ export function createTerminalService(deps: {
     stop,
     getGlobalLaunchSettings,
     listCustomToolbarActions,
+    listMobileToolbarButtons,
     createCustomToolbarAction,
     updateCustomToolbarAction,
     deleteCustomToolbarAction,

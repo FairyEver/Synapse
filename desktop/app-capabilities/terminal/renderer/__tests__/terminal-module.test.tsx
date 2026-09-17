@@ -1842,7 +1842,7 @@ describe("TerminalModule", () => {
     const toolbar = document.body.querySelector("[data-terminal-toolbar]")
     const labels = Array.from(toolbar?.querySelectorAll("button") ?? []).map((button) =>
       button.getAttribute("aria-label") ?? button.textContent)
-    expect(labels).toEqual(["中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "运行快捷输入：检查状态", "输入快捷输入：输入路径", "管理自定义快捷输入"])
+    expect(labels).toEqual(["发送回车", "中断当前进程", "清空终端显示", "运行 /exit", "运行 /clear", "运行快捷输入：检查状态", "输入快捷输入：输入路径", "管理自定义快捷输入"])
 
     await clickButton("检查状态")
     expect(terminalBridge.writeSession).toHaveBeenLastCalledWith({ sessionId: "session-1", data: "git status" })
