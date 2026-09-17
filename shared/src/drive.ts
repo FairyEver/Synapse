@@ -392,6 +392,21 @@ export interface DriveUploadPrepareResult {
     readonly expiresAt: string
     readonly headers: Record<string, string>
   }
+  // Absent when the server predates overwrite reporting; present as null for a
+  // brand-new file. A client must treat a missing value as "unknown target".
+  readonly overwrite?: DriveUploadOverwriteTargetDto | null
+}
+
+export interface DriveUploadOverwriteTargetDto {
+  readonly itemId: string
+  readonly name: string
+  readonly currentVersionId: string | null
+  /**
+   * The target is a Markdown or plain-text document: hand-authored content that
+   * the online editor can also change at any time. Standalone HTML is excluded
+   * because republishing a rebuilt page over it is an intentional replacement.
+   */
+  readonly documentText: boolean
 }
 
 export interface DriveDocumentImageUploadPrepareResult {

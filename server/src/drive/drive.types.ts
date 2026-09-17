@@ -20,6 +20,7 @@ export type DrivePrepareUploadInput = {
   readonly size: string
   readonly mimeType?: string | null
   readonly expectedItemId?: string | null
+  readonly expectedVersionId?: string | null
   readonly publicAppUrl: string
 }
 

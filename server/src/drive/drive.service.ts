@@ -45,6 +45,7 @@ import {
   type DriveShareListItemDto,
   type DriveShareAccessMode,
   type DriveTrashListPageDto,
+  type DriveUploadOverwriteTargetDto,
   type DriveUploadPrepareResult,
   type DriveUsageDto,
   type DriveMarkdownProjectionDto,
@@ -262,6 +263,7 @@ export type DriveMarkdownPdfSource = {
 
 type PreparedUploadRecord = {
   readonly item: DriveItemRecord
+  readonly overwrite: DriveUploadOverwriteTargetDto | null
   readonly session: {
     readonly id: string
     readonly itemId: string
@@ -849,6 +851,7 @@ export class DriveService implements OnApplicationBootstrap {
       requestedSize,
       mimeType: input.mimeType ?? null,
       expectedItemId: input.expectedItemId ?? null,
+      expectedVersionId: input.expectedVersionId ?? null,
     }))
 
     let upload: Awaited<ReturnType<DriveStoragePort["createUploadInstruction"]>>
@@ -871,6 +874,7 @@ export class DriveService implements OnApplicationBootstrap {
         expiresAt: upload.expiresAt.toISOString(),
         headers: upload.headers,
       },
+      overwrite: result.overwrite,
     }
   }
 
@@ -883,6 +887,7 @@ export class DriveService implements OnApplicationBootstrap {
       readonly requestedSize: bigint
       readonly mimeType: string | null
       readonly expectedItemId: string | null
+      readonly expectedVersionId: string | null
     },
   ): Promise<PreparedUploadRecord> {
     const existingFile = input.expectedItemId
@@ -917,6 +922,18 @@ export class DriveService implements OnApplicationBootstrap {
     if (input.expectedItemId && !existingFile) throw new BadRequestException("上传目标文件已变更。")
     const reservedBytes = input.requestedSize
     if (existingFile) {
+      const currentVersionId = existingFile.storageKey
+        ? (await tx.driveFileVersion.findFirst({
+            where: { itemId: existingFile.id, storageKey: existingFile.storageKey, deletedAt: null },
+            select: { id: true },
+          }))?.id ?? null
+        : null
+      // A caller that declares the version it read must still be looking at it.
+      // Files without a version row cannot be checked here; they are covered by
+      // the completion-time check once the existing version is materialized.
+      if (input.expectedVersionId && currentVersionId && currentVersionId !== input.expectedVersionId) {
+        throw driveFileContentStaleConflict()
+      }
       const sessionId = randomUUID()
       const storageKey = driveOverwriteStorageKeyForSession(existingFile.id, sessionId)
       const session = await tx.driveUploadSession.create({
@@ -928,6 +945,7 @@ export class DriveService implements OnApplicationBootstrap {
           expectedName: input.name,
           expectedSize: input.requestedSize,
           expectedMime: input.mimeType,
+          expectedVersionId: input.expectedVersionId,
           reservedBytes,
           status: DRIVE_UPLOAD_STATUS.pending,
           credentialKind: "presigned_put",
@@ -935,7 +953,17 @@ export class DriveService implements OnApplicationBootstrap {
         },
       })
       await reserveDriveUsageBytes(tx, userId, reservedBytes)
-      return { item: existingFile, session }
+      const previewKind = resolveDriveBrowserPreviewKind(toDriveBrowserSourceItem(existingFile))
+      return {
+        item: existingFile,
+        session,
+        overwrite: {
+          itemId: existingFile.id,
+          name: existingFile.name,
+          currentVersionId,
+          documentText: previewKind === "markdown" || previewKind === "text",
+        },
+      }
     }
     const item = await tx.driveItem.create({
       data: {
@@ -970,7 +998,7 @@ export class DriveService implements OnApplicationBootstrap {
       },
     })
     await reserveDriveUsageBytes(tx, userId, input.requestedSize)
-    return { item: updatedItem, session }
+    return { item: updatedItem, session, overwrite: null }
   }
 
   async prepareFolderUpload(userId: string, input: DrivePrepareFolderUploadInput, auditContext: DriveAuditContext = {}): Promise<DriveFolderUploadPrepareResult> {
@@ -1039,6 +1067,7 @@ export class DriveService implements OnApplicationBootstrap {
         readonly requestedSize: bigint
         readonly mimeType: string | null
         readonly expectedItemId: string | null
+        readonly expectedVersionId: string | null
       }> = []
       for (const planned of plannedFiles) {
         const { file, parts, relativePath } = planned
@@ -1054,6 +1083,7 @@ export class DriveService implements OnApplicationBootstrap {
           requestedSize,
           mimeType: file.mimeType ?? null,
           expectedItemId: null,
+          expectedVersionId: null,
         })
       }
 
@@ -1150,6 +1180,28 @@ export class DriveService implements OnApplicationBootstrap {
     const result = await this.prisma.$transaction(async (tx) => {
       await lockDriveItemMutation(tx, session.itemId)
       const isOverwrite = isOverwriteUploadSession(session)
+      if (isOverwrite && session.expectedVersionId) {
+        // Re-read the target under the lock: the version the caller declared it
+        // based its bytes on must still be the current one. Between prepare and
+        // complete an editor can save, and overwriting then would drop that save.
+        const lockedItem = await tx.driveItem.findFirst({
+          where: {
+            id: session.itemId,
+            userId,
+            type: DRIVE_ITEM_TYPE.file,
+            deletedAt: null,
+            lifecycleStatus: DRIVE_ITEM_LIFECYCLE_STATUS.active,
+          },
+          select: { storageKey: true },
+        })
+        const currentVersion = lockedItem?.storageKey
+          ? await tx.driveFileVersion.findFirst({
+              where: { itemId: session.itemId, storageKey: lockedItem.storageKey, deletedAt: null },
+              select: { id: true },
+            })
+          : null
+        if (currentVersion && currentVersion.id !== session.expectedVersionId) throw driveFileContentStaleConflict()
+      }
       const transitioned = await tx.driveUploadSession.updateMany({
         where: { id: session.id, userId, status: DRIVE_UPLOAD_STATUS.pending },
         data: { status: DRIVE_UPLOAD_STATUS.completed, completedAt: new Date() },
@@ -4843,6 +4895,19 @@ function createDriveShareUnlockRequiredException(): UnauthorizedException {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
+/**
+ * Raised when a write is based on a version that is no longer current. The
+ * caller must re-read the file and redo its change on top of the newest content
+ * instead of replacing it. The message carries that instruction because MCP
+ * surfaces only the message string to the agent.
+ */
+function driveFileContentStaleConflict(): ConflictException {
+  return new ConflictException({
+    code: "DRIVE_FILE_CONTENT_STALE",
+    message: "文件已有新内容，请重新读取最新版本后再改。",
+  })
 }
 
 async function lockDriveItemMutation(client: Prisma.TransactionClient, itemId: string): Promise<void> {

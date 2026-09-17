@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Logger, NotFoundException } from "@nestjs/common"
+import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import type { DriveMarkdownProjectionImageDto } from "@synapse/shared"
 import { Readable } from "node:stream"
@@ -1216,6 +1216,140 @@ describe("DriveService", () => {
     expect(await service.getItem("user-1", older.id)).toMatchObject({ id: older.id, name: "report.txt", size: "5", mimeType: "text/markdown" })
     expect(await service.getItem("user-1", newer.id)).toMatchObject({ id: newer.id, name: "report.txt", size: "11" })
     expect(await service.listItems("user-1", null)).toHaveLength(2)
+  })
+
+  it("rejects an upload that declares a version the file has already moved past", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.md", mimeType: "text/markdown" })
+    const current = await prisma.driveFileVersion.findFirst({ where: { itemId: first.id, deletedAt: null } })
+
+    const failure = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "5",
+      mimeType: "text/markdown",
+      expectedVersionId: "dfv_no_longer_current",
+      publicAppUrl: "https://synapse.test",
+    }).then(() => null, (error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(ConflictException)
+    expect((failure as ConflictException).getResponse()).toMatchObject({ code: "DRIVE_FILE_CONTENT_STALE" })
+    const usage = await prisma.driveUsage.findUniqueOrThrow({ where: { userId: "user-1" } })
+    expect(usage.usedBytes).toBe(11n)
+    expect(usage.reservedBytes).toBe(0n)
+    expect(await prisma.driveUploadSession.findMany({ where: { itemId: first.id } })).toHaveLength(1)
+    expect(current).not.toBeNull()
+  })
+
+  it("overwrites the file when the declared base version is still current", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.md", mimeType: "text/markdown" })
+    const current = await prisma.driveFileVersion.findFirst({ where: { itemId: first.id, deletedAt: null } })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "5",
+      mimeType: "text/markdown",
+      expectedVersionId: current.id,
+      publicAppUrl: "https://synapse.test",
+    })
+    expect(prepared.overwrite).toEqual({
+      itemId: first.id,
+      name: "report.md",
+      currentVersionId: current.id,
+      documentText: true,
+    })
+
+    await expect(service.completeUpload("user-1", prepared.sessionId))
+      .resolves.toMatchObject({ id: first.id, name: "report.md", size: "5", mimeType: "text/markdown" })
+  })
+
+  it("keeps the newer content when an overwrite completes after the file moved on", async () => {
+    const prisma = createPrismaMemory()
+    const deleteObject = vi.fn(async () => undefined)
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject,
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const first = await createCompletedUpload(service, "user-1", { parentId: null, name: "report.md", mimeType: "text/markdown" })
+    const current = await prisma.driveFileVersion.findFirst({ where: { itemId: first.id, deletedAt: null } })
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "report.md",
+      size: "5",
+      mimeType: "text/markdown",
+      expectedVersionId: current.id,
+      publicAppUrl: "https://synapse.test",
+    })
+
+    await createCompletedUpload(service, "user-1", {
+      parentId: null,
+      name: "report.md",
+      mimeType: "text/markdown",
+      size: "5",
+    })
+    const saved = await prisma.driveItem.findUniqueOrThrow({ where: { id: first.id } })
+
+    const failure = await service.completeUpload("user-1", prepared.sessionId)
+      .then(() => null, (error: unknown) => error)
+    expect(failure).toBeInstanceOf(ConflictException)
+    expect((failure as ConflictException).getResponse()).toMatchObject({ code: "DRIVE_FILE_CONTENT_STALE" })
+    expect(await prisma.driveItem.findUniqueOrThrow({ where: { id: first.id } })).toMatchObject({
+      storageKey: saved.storageKey,
+      size: 5n,
+      mimeType: "text/markdown",
+      storageStatus: "active",
+      uploadStatus: "completed",
+    })
+    expect(deleteObject).toHaveBeenCalledWith(expect.stringContaining("/versions/"))
+  })
+
+  it("reports whether an overwrite target is a hand-authored document", async () => {
+    const prisma = createPrismaMemory()
+    const storage: DriveStoragePort = {
+      ...storageMock,
+      headObject: vi.fn(async (key) => ({ key, size: key.includes("/overwrites/") ? 5n : 11n, etag: "etag" })),
+      deleteObject: vi.fn(async () => undefined),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage)
+    await prisma.user.create({ data: { id: "user-1", email: "user@example.com", passwordHash: "hash" } })
+    const page = await createCompletedUpload(service, "user-1", { parentId: null, name: "page.html", mimeType: "text/html" })
+
+    const prepared = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "page.html",
+      size: "5",
+      mimeType: "text/html",
+      publicAppUrl: "https://synapse.test",
+    })
+    expect(prepared.overwrite).toMatchObject({ itemId: page.id, name: "page.html", documentText: false })
+
+    const fresh = await service.prepareUpload("user-1", {
+      parentId: null,
+      name: "brand-new.md",
+      size: "5",
+      mimeType: "text/markdown",
+      publicAppUrl: "https://synapse.test",
+    })
+    expect(fresh.overwrite).toBeNull()
   })
 
   it("lists Drive items with page metadata when pagination is requested", async () => {

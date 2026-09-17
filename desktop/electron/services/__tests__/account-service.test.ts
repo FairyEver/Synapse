@@ -2704,7 +2704,7 @@ describe("AccountService", () => {
         imageUrl: null,
         visitUrl: `${expectedPublicAppUrl}/drive/items/item-1/render`,
       },
-      edit: null,
+      edit: { canEdit: true, editorKind: "html-source", currentVersionId: "version-9", reason: null },
       canDownload: true,
       canZip: false,
     }
@@ -2765,6 +2765,7 @@ describe("AccountService", () => {
       text: "<h1>报",
       html: null,
       truncated: true,
+      versionId: "version-9",
     })
     await expect(service.shareDriveItem("item-1", shareSettings)).resolves.toEqual(expectedShareResult)
     await expect(service.listDriveFileVersions("item-1", { offset: 10, limit: 5 })).resolves.toEqual({

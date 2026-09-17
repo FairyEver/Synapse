@@ -34,6 +34,7 @@ import type {
   DriveBrowserSnapshotDto,
   DriveChangeListInput,
   DriveChangeListPageDto,
+  DriveFileContentUpdateResult,
   DriveFileVersionDto,
   DriveFileVersionListInput,
   DriveFileVersionListPageDto,
@@ -322,6 +323,7 @@ type DriveFileContentReadResult = {
   readonly text: string | null
   readonly html: string | null
   readonly truncated: boolean
+  readonly versionId: string | null
 }
 
 function isLocalApiBaseUrl(value: string): boolean {
@@ -574,7 +576,22 @@ export class AccountService {
       text: text.value,
       html: html.value,
       truncated: snapshot.preview.truncated || text.truncated || html.truncated,
+      versionId: snapshot.edit?.currentVersionId ?? snapshot.collaboration?.checkpointVersionId ?? null,
     }
+  }
+
+  async writeDriveFileContent(input: {
+    readonly itemId: string
+    readonly text: string
+    readonly baseVersionId: string
+  }): Promise<{ readonly itemId: string; readonly versionId: string }> {
+    const result = await this.requestAuthenticatedJson<DriveFileContentUpdateResult>(
+      "PATCH",
+      `${apiBaseUrl()}/drive/browser/owner/items/${encodeURIComponent(input.itemId)}/content`,
+      { contentType: "text", text: input.text, baseVersionId: input.baseVersionId },
+      "文档内容保存失败。",
+    )
+    return { itemId: result.item.id, versionId: result.version.id }
   }
 
   async downloadDriveFile(input: {
@@ -953,6 +970,7 @@ export class AccountService {
     size: string
     mimeType?: string | null
     expectedItemId?: string | null
+    expectedVersionId?: string | null
   }, options: { readonly signal?: AbortSignal } = {}): Promise<DriveUploadPrepareResult> {
     return this.requestAuthenticatedJson<DriveUploadPrepareResult>("POST", `${apiBaseUrl()}/drive/uploads/prepare`, {
       parentId: input.parentId ?? null,
@@ -960,6 +978,7 @@ export class AccountService {
       size: input.size,
       mimeType: input.mimeType ?? null,
       ...(input.expectedItemId ? { expectedItemId: input.expectedItemId } : {}),
+      ...(input.expectedVersionId ? { expectedVersionId: input.expectedVersionId } : {}),
     }, "上传准备失败。", options)
   }
 

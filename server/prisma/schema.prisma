@@ -610,6 +610,7 @@ model DriveUploadSession {
   expectedName              String       @db.VarChar(255)
   expectedSize              BigInt
   expectedMime              String?      @db.VarChar(255)
+  expectedVersionId         String?      @db.VarChar(64)
   reservedBytes             BigInt       @default(0)
   purpose                   String       @default("drive_upload") @db.VarChar(32)
   publicAssetId             String?

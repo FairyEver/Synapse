@@ -18,6 +18,7 @@ Use these tools only for Synapse Drive:
 - `app_drive_item_delete`
 - `app_drive_item_preview_get`
 - `app_drive_file_content_read`
+- `app_drive_file_content_write`
 - `app_drive_file_download_create`
 - `app_drive_file_version_list`
 - `app_drive_file_version_download_create`
@@ -74,7 +75,7 @@ Use these tools only for Synapse Drive:
 
 Do not use this skill for database records, Resource Repository resources, Automation schedules/items, workflow definitions, provider settings, or general local file editing unrelated to a Drive operation.
 
-Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared Markdown documents identified by a `.md` name or `text/markdown` / `text/x-markdown` MIME type. These annotation calls do not join a browser collaboration room, and MCP file content writes continue to use the versioned file APIs.
+Markdown realtime collaboration, presence, collaboration-room control, and shared-document content editing remain browser UI capabilities. Drive MCP can manage comments only through the six `app_drive_link_annotation_*` tools for shared Markdown documents identified by a `.md` name or `text/markdown` / `text/x-markdown` MIME type. These annotation calls do not join a browser collaboration room, and MCP content writes go through the versioned file APIs: changing the body of an existing document uses `app_drive_file_content_write` on top of the version it was read from.
 
 Images pasted, dropped, or selected in the browser Markdown/MDX editor use a separate platform-owned `/object/<objectId>` store and do not consume user Drive quota. This browser-only convenience has no MCP upload, list, migration, or ownership tool. MCP uploads continue to follow the local Markdown, HTML, and explicit public-asset rules below.
 
@@ -250,6 +251,23 @@ Identify the existing public identity before uploading. Resolve a provided `/sha
 
 Updating either route does not live-reload pages already open in a visitor's browser. Tell the user that no new link is needed, but visitors must refresh or reopen the page. Public site HTML revalidates on refresh; unchanged CSS, JavaScript, image, or font URLs may remain cached for up to five minutes. Password-protected site assets are not stored in the browser cache.
 
+## Editing An Existing Document
+
+Use this flow whenever the user asks to change, fix, update, or append to a document that already exists in Drive. Never rebuild it from a copy you produced earlier in the conversation.
+
+1. Resolve the item id. When the user gives a share or site URL, use the Drive Link tools to resolve it; when they name a file in their own Drive, resolve it with `app_drive_item_list` or `app_drive_item_tree_list`.
+2. Call `app_drive_file_content_read` for that item id. Keep `text` and `versionId` together: the text is the only valid base for the new content, and `versionId` is the only valid `baseVersionId`.
+   - When `truncated` is `true`, the read is not the whole document. Do not write it back. Download the file with `app_drive_file_download_create`, edit the local copy, and upload with `app_drive_file_upload` and `expectedVersionId` set to that `versionId`.
+3. Apply the user's change to that exact text and call `app_drive_file_content_write` with `itemId`, the full new `text`, and `baseVersionId`.
+4. If the call fails with `DRIVE_FILE_CONTENT_STALE`, or an upload fails the same way, the file was saved by someone else after your read. Read it again, redo the change on the new text, and write again. Report the retry to the user when the content differs from what you first saw.
+5. For several edits in one turn, chain them: each successful call returns the new `versionId`, which becomes the next `baseVersionId`.
+
+Rules:
+
+- Editing an existing document is never done by uploading a local file built from an earlier copy, and never by calling `app_drive_file_upload` without `expectedVersionId`. That path is refused for Markdown and plain-text files precisely because it drops content someone saved in the meantime.
+- Creating a new document, replacing a standalone HTML page, replacing a binary file, or uploading a folder keeps using `app_drive_file_upload` / `app_drive_folder_upload`. HTML pages are rebuilt and replaced deliberately, so they are not part of the refusal.
+- A user's own edits made in the online editor are versions too. Preserve them: the user asked to keep their changes and get yours on top.
+
 ## Default Flow
 
 1. Apply **Upload Destination Selection**. Only a single local file with no requested destination goes directly to the Drive root; a local folder or multiple selected files use one shared Drive folder.
@@ -309,6 +327,7 @@ Public asset access logs are admin-only and are not available through MCP. Do no
 
 ## Common Requests
 
+- "改一下云盘上这份文档 / 在这份文档里加一段 / 把这份文档里的 X 改成 Y": apply **Editing An Existing Document**: read it with `app_drive_file_content_read`, change that text, write it back with `app_drive_file_content_write` and the returned `versionId`.
 - "用 Synapse Skill 把这个 Markdown 上传到云盘": apply **Local Markdown Publishing Flow**; preserve and upload supported relative images before the Markdown, publish referenced local HTML separately, but do not share the Markdown itself.
 - "用 Synapse Skill 把这个 Markdown 上传到云盘并分享": apply **Local Markdown Publishing Flow**, then share the uploaded Markdown item separately.
 - "把这几个文件上传到云盘": apply **Upload Destination Selection** and place every ordinary Drive item in the automatically named shared folder.

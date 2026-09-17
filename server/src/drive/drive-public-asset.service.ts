@@ -733,6 +733,7 @@ export class DrivePublicAssetService {
         expiresAt: upload.expiresAt.toISOString(),
         headers: upload.headers,
       },
+      overwrite: null,
     }
   }
 

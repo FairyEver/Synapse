@@ -32,7 +32,7 @@ Input:
 
 ### `app_drive_file_upload`
 
-Upload one local file to Drive once. This does not create persistent sync. A same-name file in the target folder is overwritten while preserving its item id and share links.
+Upload one local file to Drive once. This does not create persistent sync. A same-name file in the target folder is replaced while preserving its item id and share links.
 
 Input:
 
@@ -40,6 +40,11 @@ Input:
 - `parentId` optional: target folder id. Omit or pass `null` for Drive root.
 - `name` optional: Drive display name; defaults to local basename.
 - `mimeType` optional.
+- `expectedVersionId` optional: version of the existing file these bytes are based on. Required when the upload would replace an existing Markdown or plain-text file; omit it for a new file, an HTML page, or a binary file. Take the value from `app_drive_file_content_read` or `app_drive_file_version_list`.
+
+Replacing an existing Markdown or plain-text file without `expectedVersionId` is rejected before any byte is uploaded, and the error points at `app_drive_file_content_write`. When `expectedVersionId` is supplied and the file has moved on since that version, the upload fails with `DRIVE_FILE_CONTENT_STALE` and the current file is left untouched. Rebuilding a standalone HTML page and replacing it stays a plain overwrite.
+
+To change the content of an existing document, use `app_drive_file_content_write` instead of building a local copy and uploading it.
 
 ### `app_drive_folder_upload`
 
@@ -126,6 +131,34 @@ Input:
 
 - `itemId` required: Drive file item id.
 - `maxBytes` optional: maximum UTF-8 bytes to return.
+
+Output:
+
+- `text`: previewable text, or `null` when the file has none.
+- `html`: rendered HTML where the file kind provides it.
+- `truncated`: `true` when the returned text is a prefix of the file. Do not rewrite a file you only saw truncated.
+- `versionId`: the version this text came from. Pass it as `baseVersionId` to `app_drive_file_content_write`.
+
+### `app_drive_file_content_write`
+
+Replace the text content of an existing Markdown, text, or HTML source file, on top of the version you read.
+
+Input:
+
+- `itemId` required: Drive file item id.
+- `text` required: complete new text content of the file.
+- `baseVersionId` required: the `versionId` returned by `app_drive_file_content_read` for the text this change was made on.
+
+Output:
+
+- `itemId`: the file that was updated.
+- `versionId`: the new version. Use it as the next `baseVersionId` when applying another change in the same turn.
+
+Limits:
+
+- Only existing owner Drive files of an editable text kind. New files use `app_drive_file_upload`.
+- The full text is replaced. Produce it from the text you read, not from an older copy.
+- If the file changed since `baseVersionId`, the call fails with `DRIVE_FILE_CONTENT_STALE` and the file keeps its newer content. Read it again, redo the change on the new text, and retry. Do not fall back to an unconditional upload.
 
 ### `app_drive_file_download_create`
 

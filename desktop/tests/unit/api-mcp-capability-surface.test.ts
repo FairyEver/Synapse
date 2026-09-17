@@ -111,10 +111,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(241)
+    expect(allCapabilityIds()).toHaveLength(242)
     expect(APP_DOMAIN.capabilities).toHaveLength(78)
     expect(buildAppTools()).toHaveLength(74)
-    expect(toolNames).toHaveLength(237)
+    expect(toolNames).toHaveLength(238)
     expect(toolNames.every((toolName) => toolName.startsWith("app_"))).toBe(true)
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -126,8 +126,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(237)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(237)
+    expect(buildAllMcpTools()).toHaveLength(238)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(238)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
@@ -151,7 +151,7 @@ describe("API and MCP capability surface", () => {
       .map((match) => [match[1], match[2]] as const)
 
     expect(documentedPairs).toEqual(retiredMcpToolNamePairs())
-    expect(documentedPairs).toHaveLength(145)
+    expect(documentedPairs).toHaveLength(146)
   })
 
   it("routes every registered API action to its owning domain dispatcher", async () => {

@@ -105,12 +105,12 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 | `automation` | 14 | 14 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
-| `drive` | 63 | 63 |
-| 合计 | 241 | 237 |
+| `drive` | 64 | 64 |
+| 合计 | 242 | 238 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 237 个 `app_*` 工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 238 个 `app_*` 工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -124,6 +124,8 @@ Drive 的 `app.drive.share.create` 与 `app.drive.site.create` 在未传访问�
 Drive 本地同步通过 9 个 `app.drive.sync.*` capability 暴露给 MCP：快照、预检、创建、暂停、恢复、停止、排除规则、完整扫描和冲突处理。它们复用桌面端 `core.drive-sync`，不新增独立同步引擎或 Web 端能力。
 
 Drive 分享评论通过 6 个 `app.drive.link.annotation.*` capability 暴露给 MCP：线程列表、新建线程、回复、编辑评论、删除评论和删除线程。文字评论直接提交 quote；整图评论先通过 `app_drive_link_read_text` 取得 `imageId`，再创建线程。图片或文字目标失效后保留为未定位线程，不提供手动重关联。删除评论会连带删除其全部后代回复，删除首评会移除整条讨论。它们只接受当前 Synapse `/share/...` 下文件名以 `.md` 结尾或 MIME 为 `text/markdown`、`text/x-markdown` 的 Markdown 文档，复用现有分享访问、评论权限和审计；不开放文档编辑、presence 或协同房间控制。
+
+Drive 文档正文改写通过 `app.drive.file_content.write` 暴露给 MCP，只处理 owner 自己云盘里已存在的 Markdown、纯文本和 HTML 源文件，必须带 `baseVersionId`，复用浏览器在线编辑器的并发校验（版本不匹配返回 `DRIVE_FILE_CONTENT_STALE`）与版本历史。对应的文本上传覆盖路径（`app.drive.file_upload`）在覆盖这类文件时要求同样的基线声明。分享场景、文件夹上传与二进制文件不在此契约内。
 
 浏览器 Markdown/MDX 编辑器的平台托管图片属于现有 Drive Web UI 私有能力，使用 `/object/<objectId>`，不注册 System App、MCP capability/tool、Automation Action 或 Deep Link。`/object` 是平台托管对象的公共命名空间，不限定未来对象类型。Agent 处理本地 Markdown、HTML 与明确的图床/直链请求时仍使用既有 Drive 文件、Site 和 `app.drive.direct_link.*` 能力。
 

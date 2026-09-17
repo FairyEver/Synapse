@@ -153,6 +153,7 @@
 | `drive_item_delete` | `app_drive_item_delete` |
 | `drive_item_preview_get` | `app_drive_item_preview_get` |
 | `drive_file_content_read` | `app_drive_file_content_read` |
+| `drive_file_content_write` | `app_drive_file_content_write` |
 | `drive_file_download_create` | `app_drive_file_download_create` |
 | `drive_file_version_list` | `app_drive_file_version_list` |
 | `drive_file_version_download_create` | `app_drive_file_version_download_create` |

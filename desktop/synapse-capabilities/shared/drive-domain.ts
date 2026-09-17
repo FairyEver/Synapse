@@ -10,7 +10,7 @@ const PUBLIC_ASSET_SUPPORTED_FORMATS = "PNG, JPG, JPEG, GIF, WebP, AVIF, ICO, PD
 const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.item.list" as CapabilityId, title: "List drive items", description: "List Synapse Drive files and folders under a parent folder.", mutates: false },
   { id: "app.drive.item.get" as CapabilityId, title: "Get drive item", description: "Get metadata for one Synapse Drive file or folder.", mutates: false },
-  { id: "app.drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive once, overwriting the newest same-name file in the target folder. This does not create a persistent local sync binding.", mutates: true },
+  { id: "app.drive.file.upload" as CapabilityId, title: "Upload file", description: "Upload one local file to Synapse Drive once, creating a new file or replacing the newest same-name one. Replacing an existing text-like file requires declaring the version it is based on. This does not create a persistent local sync binding.", mutates: true },
   { id: "app.drive.folder.upload" as CapabilityId, title: "Upload folder", description: "Upload a local folder to Synapse Drive once, merging same-name folders and overwriting same-name files. This does not create a persistent local sync binding.", mutates: true },
   { id: "app.drive.folder.create" as CapabilityId, title: "Create folder", description: "Create a Synapse Drive folder.", mutates: true },
   { id: "app.drive.item.rename" as CapabilityId, title: "Rename item", description: "Rename a Synapse Drive file or folder.", mutates: true },
@@ -18,6 +18,7 @@ const driveCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.drive.item.delete" as CapabilityId, title: "Delete item", description: "Move a Synapse Drive file or folder to Drive trash.", mutates: true, risk: "high" },
   { id: "app.drive.item_preview.get" as CapabilityId, title: "Get item preview", description: "Get the owner browser preview snapshot for a Synapse Drive item.", mutates: false },
   { id: "app.drive.file_content.read" as CapabilityId, title: "Read file content", description: "Read previewable text content from a Synapse Drive file.", mutates: false },
+  { id: "app.drive.file_content.write" as CapabilityId, title: "Write file content", description: "Replace the text content of an existing text-like Synapse Drive file on top of the version the caller read.", mutates: true },
   { id: "app.drive.file_download.create" as CapabilityId, title: "Create file download", description: "Download a Synapse Drive file to a local path.", mutates: true },
   { id: "app.drive.file_version.list" as CapabilityId, title: "List file versions", description: "List historical versions for an owned Synapse Drive file.", mutates: false },
   { id: "app.drive.file_version_download.create" as CapabilityId, title: "Create file version download", description: "Download a specific Synapse Drive file version that is not pending cleanup to a local path.", mutates: true },
@@ -194,7 +195,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_upload",
-      description: "Upload one local file to Synapse Drive once using server-prepared direct upload. This does not create persistent sync; when the user asks to sync, keep synchronized, or upload and sync, use drive_sync_binding_preview then drive_sync_binding_create instead. A same-name file in the target folder is overwritten while preserving its item id and share links. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
+      description: "Upload one local file to Synapse Drive once using server-prepared direct upload. This does not create persistent sync; when the user asks to sync, keep synchronized, or upload and sync, use drive_sync_binding_preview then drive_sync_binding_create instead. A same-name file in the target folder is replaced while preserving its item id and share links. To change the content of an existing Markdown or plain-text document, use drive_file_content_write instead: replacing one here requires expectedVersionId, which must be the version you read before producing the bytes. Standalone HTML pages and binary files stay plain overwrites. The result never returns COS credentials, Authorization headers, or presigned upload URLs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -202,6 +203,7 @@ export function buildDriveTools(): McpToolDefinition[] {
           parentId: optionalParentId,
           name: stringField("Optional Drive display name. Defaults to the local file basename."),
           mimeType: stringField("Optional MIME type."),
+          expectedVersionId: stringField("Version of the existing file these bytes are based on. Required when the upload replaces an existing Markdown or plain-text file; take it from drive_file_content_read or drive_file_version_list. Omit for a new file, an HTML page, or a binary file."),
         },
         required: ["filePath"],
       },
@@ -285,7 +287,7 @@ export function buildDriveTools(): McpToolDefinition[] {
     },
     {
       name: "drive_file_content_read",
-      description: "Read previewable small text content from a Drive file, such as text, Markdown, or HTML source. Binary, oversized, or non-previewable files should be downloaded with drive_file_download_create.",
+      description: "Read previewable small text content from a Drive file, such as text, Markdown, or HTML source. The result carries versionId, the current version of the text it just returned. Pass that value as baseVersionId to drive_file_content_write when changing this text so a newer save is not overwritten. Skip rewrites when the result is truncated. Binary, oversized, or non-previewable files should be downloaded with drive_file_download_create.",
       inputSchema: {
         type: "object",
         properties: {
@@ -293,6 +295,19 @@ export function buildDriveTools(): McpToolDefinition[] {
           maxBytes: { type: "number", description: "Optional maximum UTF-8 bytes to return from preview text." },
         },
         required: ["itemId"],
+      },
+    },
+    {
+      name: "drive_file_content_write",
+      description: "Replace the text content of an existing Markdown, text, or HTML source file in Synapse Drive, on top of the version you read. This is the way to edit a document an existing file already holds: read it with drive_file_content_read first, apply your change to that exact text, then call this with the versionId the read returned. Prefer this over downloading, editing locally, and uploading. If the file changed since that version, the call fails with DRIVE_FILE_CONTENT_STALE instead of overwriting the newer content; read the file again, redo your change on the new text, and retry. Do not use this for new files, binary files, or content you only saw truncated.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          itemId: stringField("Drive file item id to replace the content of."),
+          text: stringField("Complete new text content of the file."),
+          baseVersionId: stringField("Version the text above is based on, taken from drive_file_content_read versionId."),
+        },
+        required: ["itemId", "text", "baseVersionId"],
       },
     },
     {

@@ -17,6 +17,7 @@ describe("Drive capability domain", () => {
       "app_drive_item_delete",
       "app_drive_item_preview_get",
       "app_drive_file_content_read",
+      "app_drive_file_content_write",
       "app_drive_file_download_create",
       "app_drive_file_version_list",
       "app_drive_file_version_download_create",

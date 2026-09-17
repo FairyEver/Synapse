@@ -56,6 +56,7 @@ import type {
   DriveSyncInitialDirection,
   DriveTrashItemDto,
   DriveTrashListPageDto,
+  DriveUploadOverwriteTargetDto,
   DriveUploadPrepareResult,
   DriveUsageDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
@@ -83,6 +84,7 @@ type DriveAccountServicePort = {
     readonly name: string
     readonly size: string
     readonly mimeType?: string | null
+    readonly expectedVersionId?: string | null
   }) => Promise<DriveUploadPrepareResult>
   readonly prepareDriveFolderUpload: (input: {
     readonly parentId?: string | null
@@ -122,6 +124,11 @@ type DriveAccountServicePort = {
     readonly itemId: string
     readonly maxBytes?: number
   }) => Promise<unknown>
+  readonly writeDriveFileContent: (input: {
+    readonly itemId: string
+    readonly text: string
+    readonly baseVersionId: string
+  }) => Promise<{ readonly itemId: string; readonly versionId: string }>
   readonly downloadDriveFile: (input: { readonly itemId: string; readonly outputPath: string }) => Promise<unknown>
   readonly listDriveFileVersions: (itemId: string, input?: DriveFileVersionListInput) => Promise<DriveFileVersionListPageDto>
   readonly downloadDriveFileVersion: (input: {
@@ -314,6 +321,15 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
             data: await deps.accountService.readDriveFileContent({
               itemId: requireString(params, "itemId"),
               maxBytes: optionalNumber(params.maxBytes),
+            }),
+          }))
+        case "app.drive.file_content.write":
+          return dispatchDriveMutation(deps, action, params, context, async () => ({
+            ok: true,
+            data: await deps.accountService.writeDriveFileContent({
+              itemId: requireString(params, "itemId"),
+              text: requireDocumentText(params, "text"),
+              baseVersionId: requireString(params, "baseVersionId"),
             }),
           }))
         case "app.drive.file_download.create":
@@ -702,6 +718,10 @@ export function createDriveCapabilityDispatcher(deps: DriveCapabilityDispatcherD
   }
 }
 
+function describeUnbasedOverwrite(target: DriveUploadOverwriteTargetDto): string {
+  return `"${target.name}" already exists in the target folder (itemId: ${target.itemId}). To change an existing document, read it with app_drive_file_content_read and write it back with app_drive_file_content_write using the versionId that read returns. Pass expectedVersionId to app_drive_file_upload only when the bytes being uploaded were produced from that exact version.`
+}
+
 async function uploadFile(
   deps: DriveCapabilityDispatcherDeps,
   fileSystem: FileSystemPort,
@@ -713,12 +733,21 @@ async function uploadFile(
   await authorizeFileRead(deps, filePath, context, "app.drive.file.upload")
   const fileStat = await requireLocalUploadFile(fileSystem, filePath)
 
+  const expectedVersionId = optionalString(params.expectedVersionId)
   const prepared = await deps.accountService.prepareDriveUpload({
     parentId: optionalNullableString(params.parentId),
     name: optionalString(params.name) ?? path.basename(filePath),
     size: String(fileStat.size),
     mimeType: optionalString(params.mimeType) ?? null,
+    ...(expectedVersionId ? { expectedVersionId } : {}),
   })
+  // Replacing a document without saying which version the bytes came from is how
+  // an agent silently drops content someone saved in the meantime. Refuse before
+  // any byte is uploaded and point at the read-then-write path instead.
+  if (!expectedVersionId && prepared.overwrite?.documentText) {
+    await deps.accountService.cancelDriveUpload(prepared.sessionId).catch(() => undefined)
+    throw new Error(describeUnbasedOverwrite(prepared.overwrite))
+  }
 
   try {
     await putPreparedUploadFromPath(fetchImpl, fileSystem, prepared.upload, filePath, fileStat.size)
@@ -1439,6 +1468,14 @@ function requireString(params: Record<string, unknown>, key: string): string {
     throw new Error(`Missing or invalid '${key}': expected non-empty string`)
   }
   return value.trim()
+}
+
+function requireDocumentText(params: Record<string, unknown>, key: string): string {
+  const value = params[key]
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`Missing or invalid '${key}': expected non-empty string`)
+  }
+  return value
 }
 
 function requireAbsoluteOutputPath(params: Record<string, unknown>): string {
