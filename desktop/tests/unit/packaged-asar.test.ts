@@ -770,6 +770,23 @@ describe("packaged asar verification", () => {
     expect(entitlements).not.toContain("com.apple.security.inherit")
   })
 
+  it("grants the packaged app microphone access for voice input", async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as { readonly build?: { readonly mac?: { readonly extendInfo?: Record<string, string> } } }
+    const entitlements = await readFile(path.join(process.cwd(), "build/entitlements.mac.plist"), "utf8")
+    const inheritEntitlements = await readFile(
+      path.join(process.cwd(), "build/entitlements.mac.inherit.plist"),
+      "utf8",
+    )
+
+    // Hardened Runtime 下没有这个 entitlement 就拿不到麦克风，系统还不弹权限框，
+    // 只在渲染进程报 NotAllowedError —— 开发环境（Electron.app 未开 Hardened Runtime）看不出差别。
+    expect(entitlements).toContain("com.apple.security.device.audio-input")
+    expect(inheritEntitlements).toContain("com.apple.security.device.audio-input")
+    expect(packageJson.build?.mac?.extendInfo?.NSMicrophoneUsageDescription).toBeTruthy()
+  })
+
   async function writeUnpackedFixture(
     resourcesPath: string,
     segments: readonly string[],

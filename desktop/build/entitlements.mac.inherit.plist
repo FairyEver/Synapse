@@ -6,5 +6,9 @@
   <true/>
   <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
+  <!-- 音频采集跑在 Chromium 的 Helper 进程里，继承的 entitlement 里同样要有，
+       否则主二进制放行、Helper 仍被 Hardened Runtime 拦下。 -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
 </dict>
 </plist>
