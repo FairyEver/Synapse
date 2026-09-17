@@ -161,10 +161,17 @@ validate_env_file() {
 validate_env_file "$remote_tmp"
 
 if [ -f "$REMOTE_ENV_FILE" ]; then
-  mkdir -p "$(dirname "$ENV_BACKUP_FILE")"
+  env_backup_dir="$(dirname "$ENV_BACKUP_FILE")"
+  mkdir -p "$env_backup_dir"
   cp "$REMOTE_ENV_FILE" "$ENV_BACKUP_FILE"
   chmod 600 "$ENV_BACKUP_FILE"
   printf "remote env backup: %s\n" "$ENV_BACKUP_FILE"
+
+  # 每份备份都是完整生产 .env（数据库口令、JWT、云厂商密钥），文件名带 DEPLOY_ID 所以每次部署都会新增一份。
+  # 只保留最近 10 份，够回滚用，不会无限堆积。
+  ls -1t "$env_backup_dir"/synapse-env-before-sync-*.env 2>/dev/null \
+    | tail -n +11 \
+    | xargs -r rm -f || true
 fi
 
 cp "$remote_tmp" "$REMOTE_ENV_FILE"
