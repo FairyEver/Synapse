@@ -76,11 +76,13 @@ export class ProblemFeedbackService {
     readonly ipAddress: string
   }): Promise<ProblemFeedbackAdminPage> {
     const offset = (input.page - 1) * PROBLEM_FEEDBACK_PAGE_SIZE
+    // Prisma binds a JS number as bigint, while make_interval(days => ...) only
+    // accepts int, so the parameter needs the explicit ::int cast.
     return this.prisma.$transaction(async (transaction) => {
       const data = await transaction.$queryRaw<ProblemFeedbackRow[]>(Prisma.sql`
         SELECT "id", "content", "receivedAt"
         FROM "ProblemFeedback"
-        WHERE "receivedAt" > CURRENT_TIMESTAMP - make_interval(days => ${PROBLEM_FEEDBACK_RETENTION_DAYS})
+        WHERE "receivedAt" > CURRENT_TIMESTAMP - make_interval(days => ${PROBLEM_FEEDBACK_RETENTION_DAYS}::int)
         ORDER BY "receivedAt" DESC, "id" DESC
         LIMIT ${PROBLEM_FEEDBACK_PAGE_SIZE}
         OFFSET ${offset}
@@ -88,7 +90,7 @@ export class ProblemFeedbackService {
       const totals = await transaction.$queryRaw<Array<{ total: number }>>(Prisma.sql`
         SELECT COUNT(*)::integer AS "total"
         FROM "ProblemFeedback"
-        WHERE "receivedAt" > CURRENT_TIMESTAMP - make_interval(days => ${PROBLEM_FEEDBACK_RETENTION_DAYS})
+        WHERE "receivedAt" > CURRENT_TIMESTAMP - make_interval(days => ${PROBLEM_FEEDBACK_RETENTION_DAYS}::int)
       `)
       await this.auditLog.recordWithClient(transaction, {
         adminEmail: input.adminEmail,

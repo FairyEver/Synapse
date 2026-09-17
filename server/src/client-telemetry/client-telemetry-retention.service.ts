@@ -15,11 +15,13 @@ export class ClientTelemetryRetentionService {
   async deleteExpired(): Promise<number> {
     let deleted = 0
     for (let batch = 0; batch < maximumCleanupBatches; batch += 1) {
+      // Prisma binds a JS number as bigint, while make_interval(days => ...) only
+      // accepts int, so the parameter needs the explicit ::int cast.
       const result = await this.prisma.$executeRaw(Prisma.sql`
         WITH expired AS (
           SELECT "eventId"
           FROM "ClientTelemetryEvent"
-          WHERE "occurredAt" < CURRENT_TIMESTAMP - make_interval(days => ${CLIENT_TELEMETRY_RETENTION_DAYS})
+          WHERE "occurredAt" < CURRENT_TIMESTAMP - make_interval(days => ${CLIENT_TELEMETRY_RETENTION_DAYS}::int)
           ORDER BY "occurredAt" ASC
           LIMIT ${cleanupBatchSize}
         )

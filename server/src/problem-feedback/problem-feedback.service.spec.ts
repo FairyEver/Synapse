@@ -113,7 +113,7 @@ describe("problem feedback service", () => {
     })
     for (const [query] of queryRaw.mock.calls) {
       expect(query.strings.join("?")).toContain(
-        "CURRENT_TIMESTAMP - make_interval(days => ?)",
+        "CURRENT_TIMESTAMP - make_interval(days => ?::int)",
       )
       expect(query.values).toContain(PROBLEM_FEEDBACK_RETENTION_DAYS)
     }
