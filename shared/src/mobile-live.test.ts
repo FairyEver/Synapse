@@ -4,6 +4,7 @@ import {
   createLiveEnvelope,
   isLiveDesktopClientMessage,
   isLiveDesktopServerMessage,
+  isLiveMobileServerMessage,
 } from "./live.js"
 import {
   MOBILE_DEFAULT_COLOR,
@@ -18,6 +19,7 @@ import {
   isMobileIntentResult,
   isMobileSummaryPayload,
   isMobileTerminalFrame,
+  isMobileTransferProgressPayload,
   type MobileIntent,
   type MobileSummaryPayload,
   type MobileSummaryWorkspace,
@@ -85,6 +87,20 @@ describe("mobile live protocol", () => {
     expect(isLiveDesktopClientMessage(createLiveEnvelope(
       LIVE_MESSAGE_TYPES.mobileIntentResult,
       { mobileClientInstanceId: "phone-1", result: { intentId: "i1", outcome: "accepted" } },
+      envelopeMeta,
+    ))).toBe(true)
+
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileTransferProgress,
+      { mobileClientInstanceId: "phone-1", intentId: "i1", completedBytes: 0, totalBytes: 0 },
+      envelopeMeta,
+    ))).toBe(true)
+
+    // The desktop sends progress and the phone receives it, so the phone's own
+    // whitelist is the one this has to clear.
+    expect(isLiveMobileServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileTransferProgress,
+      { mobileClientInstanceId: "phone-1", intentId: "i1", completedBytes: 512, totalBytes: 4096 },
       envelopeMeta,
     ))).toBe(true)
 
@@ -263,6 +279,28 @@ describe("mobile live protocol", () => {
       .toBe(true)
     expect(isMobileIntentResult({ intentId: "i1", outcome: "maybe" })).toBe(false)
     expect(isMobileIntentResult({ outcome: "accepted" })).toBe(false)
+  })
+
+  it("validates transfer progress, where a zero total is a statement rather than a missing field", () => {
+    const progress = (overrides: Record<string, unknown> = {}) => ({
+      mobileClientInstanceId: "phone-1",
+      intentId: "i1",
+      completedBytes: 512,
+      totalBytes: 4096,
+      ...overrides,
+    })
+
+    expect(isMobileTransferProgressPayload(progress())).toBe(true)
+    // Zero means "this download declared no length". The phone draws a moving
+    // indicator for it instead of a bar, so it has to survive the guard.
+    expect(isMobileTransferProgressPayload(progress({ completedBytes: 0, totalBytes: 0 }))).toBe(true)
+
+    expect(isMobileTransferProgressPayload(progress({ completedBytes: -1 }))).toBe(false)
+    expect(isMobileTransferProgressPayload(progress({ totalBytes: 1.5 }))).toBe(false)
+    expect(isMobileTransferProgressPayload(progress({ completedBytes: "512" }))).toBe(false)
+    expect(isMobileTransferProgressPayload(progress({ intentId: "" }))).toBe(false)
+    expect(isMobileTransferProgressPayload(progress({ intentId: undefined }))).toBe(false)
+    expect(isMobileTransferProgressPayload(progress({ mobileClientInstanceId: undefined }))).toBe(false)
   })
 
   it("validates the summary and every session inside it", () => {

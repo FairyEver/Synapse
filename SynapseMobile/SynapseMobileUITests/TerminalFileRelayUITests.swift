@@ -61,24 +61,42 @@ final class TerminalFileRelayUITests: XCTestCase {
         let strip = app.descendants(matching: .any)["relay-strip"]
         XCTAssertTrue(strip.waitForExistence(timeout: 30), "no relay strip appeared after picking a photo")
 
-        // Undo is offered only for a file the desktop actually typed. It is the one
-        // signal in the app that every hop completed — upload, hand-off, download
-        // onto the computer's disk, and the path going into the terminal — so it is
-        // what the test waits for, rather than something weaker that would pass on a
-        // transfer that never arrived.
-        let undo = app.buttons["relay-undo"]
+        // A chip only calls itself delivered once the desktop has reported a landed
+        // path. That is the one signal in the app that every hop completed — upload,
+        // hand-off, download onto the computer's disk, and the path going into the
+        // terminal — so it is what the test waits for, rather than something weaker
+        // that would pass on a transfer that never arrived.
+        let chip = deliveredChip(app)
         XCTAssertTrue(
-            undo.waitForExistence(timeout: 90),
+            chip.waitForExistence(timeout: 90),
             "the computer never reported a landed path. The strip still showed: "
             + describeStrip(app)
         )
         capture(app, name: "03-delivered")
 
-        // And it is a real undo: pressing it takes the text back out of the terminal,
-        // which the terminal only reflects because the desktop accepted the keys.
+        // Undo lives behind the chip now, so that is how a user reaches it and how
+        // this has to reach it too.
+        chip.tap()
+        let undo = app.buttons["撤销插入"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 5), "the chip's menu offered no undo")
         undo.tap()
-        XCTAssertFalse(undo.waitForExistence(timeout: 5), "the undo row stayed after being used")
+
+        // And it is a real undo: pressing it takes the text back out of the terminal,
+        // which the terminal only reflects because the desktop accepted the keys, and
+        // it takes the chip with it.
+        XCTAssertTrue(
+            app.descendants(matching: .any)["relay-strip"].waitForNonExistence(timeout: 5),
+            "the chip stayed after its undo was used: " + describeStrip(app)
+        )
         capture(app, name: "04-after-undo")
+    }
+
+    /// The chip for a file the computer has finished with.
+    ///
+    /// Matched on the state rather than on the file name, which the test never learns
+    /// — the picker chooses the photo, not this.
+    private func deliveredChip(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["relay-chip-delivered"]
     }
 
     /// A submitted line takes the chip with it.
@@ -127,9 +145,10 @@ final class TerminalFileRelayUITests: XCTestCase {
 
     /// Picks a photo and waits until the computer has typed its path.
     ///
-    /// The undo row is the only signal that covers every hop — upload, hand-off,
-    /// download onto the computer's disk, and the path going into the terminal — so
-    /// waiting for it is what makes anything asserted after it mean something.
+    /// The chip turning itself delivered is the only signal that covers every hop —
+    /// upload, hand-off, download onto the computer's disk, and the path going into
+    /// the terminal — so waiting for it is what makes anything asserted after it mean
+    /// something.
     private func deliverAPhoto(_ app: XCUIApplication, name: String) throws {
         let attach = app.buttons["attach"]
         XCTAssertTrue(attach.waitForExistence(timeout: 15), "the input bar has no + button")
@@ -146,7 +165,7 @@ final class TerminalFileRelayUITests: XCTestCase {
             "no relay strip appeared after picking a photo"
         )
         XCTAssertTrue(
-            app.buttons["relay-undo"].waitForExistence(timeout: 90),
+            deliveredChip(app).waitForExistence(timeout: 90),
             "the computer never reported a landed path. The strip still showed: " + describeStrip(app)
         )
         capture(app, name: name)

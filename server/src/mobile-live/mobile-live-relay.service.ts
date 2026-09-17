@@ -9,6 +9,7 @@ import {
   type MobileIntentResult,
   type MobileIntentResultPayload,
   type MobileSummaryPayload,
+  type MobileTransferProgressPayload,
 } from "@synapse/shared"
 import { LiveClientRegistry } from "../live/live-client-registry"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
@@ -72,6 +73,7 @@ export class MobileLiveRelayService implements OnModuleInit {
       handleSummary: (userId, payload) => this.handleSummary(userId, payload),
       handleFrame: (userId, payload) => this.handleFrame(userId, payload),
       handleIntentResult: (userId, payload) => this.handleIntentResult(userId, payload),
+      handleTransferProgress: (userId, payload) => this.handleTransferProgress(userId, payload),
       handleDesktopPresence: (userId, clientInstanceIds) =>
         this.handleDesktopPresence(userId, clientInstanceIds),
     })
@@ -158,6 +160,22 @@ export class MobileLiveRelayService implements OnModuleInit {
       userId,
       clientInstanceId: payload.mobileClientInstanceId,
       message: createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileFrame, payload, envelopeMeta()),
+    })
+  }
+
+  /**
+   * How far along a computer is in fetching a relayed file.
+   *
+   * Addressed to the one phone that sent the intent rather than fanned out: unlike a
+   * summary, which every phone needs so it can show a list, this only means anything
+   * to the device whose own chip is waiting on it. Nothing is cached here — a lost
+   * progress message costs a later one, not a wrong answer.
+   */
+  handleTransferProgress(userId: string, payload: MobileTransferProgressPayload): void {
+    this.fanout?.sendToMobile({
+      userId,
+      clientInstanceId: payload.mobileClientInstanceId,
+      message: createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileTransferProgress, payload, envelopeMeta()),
     })
   }
 

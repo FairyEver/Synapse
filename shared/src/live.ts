@@ -4,6 +4,7 @@ import {
   isMobileIntentPayload,
   isMobileIntentResultPayload,
   isMobileSummaryPayload,
+  isMobileTransferProgressPayload,
 } from "./mobile-live.js"
 import { isMobilePresencePayload } from "./mobile-live.js"
 import { isWebhookDeliveryReceivedPayload } from "./webhook.js"
@@ -19,6 +20,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobileFrame: "mobile.frame",
   mobileIntent: "mobile.intent",
   mobileIntentResult: "mobile.intentResult",
+  mobileTransferProgress: "mobile.transferProgress",
   mobileDetached: "mobile.detached",
   mobilePresence: "mobile.presence",
 } as const
@@ -72,6 +74,7 @@ export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileSummary, import("./mobile-live.js").MobileSummaryPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileFrame, import("./mobile-live.js").MobileFramePayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntentResult, import("./mobile-live.js").MobileIntentResultPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileTransferProgress, import("./mobile-live.js").MobileTransferProgressPayload>
 
 export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
@@ -99,6 +102,7 @@ export type LiveMobileServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileSummary, import("./mobile-live.js").MobileSummaryPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileFrame, import("./mobile-live.js").MobileFramePayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntentResult, import("./mobile-live.js").MobileIntentResultPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileTransferProgress, import("./mobile-live.js").MobileTransferProgressPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobilePresence, import("./mobile-live.js").MobilePresencePayload>
 
 export function isLiveMobileClientMessage(value: unknown): value is LiveMobileClientMessage {
@@ -117,6 +121,9 @@ export function isLiveMobileServerMessage(value: unknown): value is LiveMobileSe
   if (value.type === LIVE_MESSAGE_TYPES.mobileFrame) return isMobileFramePayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
     return isMobileIntentResultPayload(value.payload)
+  }
+  if (value.type === LIVE_MESSAGE_TYPES.mobileTransferProgress) {
+    return isMobileTransferProgressPayload(value.payload)
   }
   if (value.type === LIVE_MESSAGE_TYPES.mobilePresence) return isMobilePresencePayload(value.payload)
   return false
@@ -148,6 +155,9 @@ export function isLiveDesktopClientMessage(value: unknown): value is LiveDesktop
   if (value.type === LIVE_MESSAGE_TYPES.mobileFrame) return isMobileFramePayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
     return isMobileIntentResultPayload(value.payload)
+  }
+  if (value.type === LIVE_MESSAGE_TYPES.mobileTransferProgress) {
+    return isMobileTransferProgressPayload(value.payload)
   }
   return false
 }

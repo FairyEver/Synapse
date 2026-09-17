@@ -15,6 +15,7 @@ enum LiveMessageType {
     static let mobileFrame = "mobile.frame"
     static let mobileIntent = "mobile.intent"
     static let mobileIntentResult = "mobile.intentResult"
+    static let mobileTransferProgress = "mobile.transferProgress"
     static let mobileDetached = "mobile.detached"
     static let mobilePresence = "mobile.presence"
 }
@@ -331,6 +332,20 @@ struct MobileIntentResult: Decodable {
 struct MobileIntentResultPayload: Decodable {
     let mobileClientInstanceId: String
     let result: MobileIntentResult
+}
+
+/// How far along the computer is in fetching a file this phone relayed.
+///
+/// Keyed by the intent the phone sent rather than by a file name, because the
+/// intent is what the strip is already showing the transfer under — the computer's
+/// answer carries the same id, so progress and completion land on the same chip.
+struct MobileTransferProgressPayload: Decodable {
+    let mobileClientInstanceId: String
+    let intentId: String
+    let completedBytes: Double
+    /// Zero when the download declared no length, which is a different statement
+    /// from a total of zero bytes.
+    let totalBytes: Double
 }
 
 struct MobileIntentPayload: Decodable {

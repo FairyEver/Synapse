@@ -18,6 +18,15 @@ struct TerminalAttachment: Identifiable, Equatable {
         /// In the drive and waiting to be handed to the computer. The reason is
         /// shown to the user, because "waiting" alone does not say what for.
         case waitingForComputer
+        /// The computer has begun fetching it. The fraction is 0…1, or nil when the
+        /// download declared no length.
+        ///
+        /// A separate state from `waitingForComputer` because it answers a different
+        /// question, and the one the user is actually asking: "已上传，等待电脑接收"
+        /// is a statement about this phone's uplink, and it is true both while the
+        /// computer is away and while it is halfway through a large download. Only
+        /// the computer can tell those apart, and this is that answer arriving.
+        case receiving(Double?)
         /// On the computer. `path` is where, as the computer reported it — nil when
         /// the file landed but the path could not be typed, which is still a
         /// success and is reported as one.
@@ -34,9 +43,32 @@ struct TerminalAttachment: Identifiable, Equatable {
             return false
         }
 
+        var isReceiving: Bool {
+            if case .receiving = self { return true }
+            return false
+        }
+
+        /// How far along the transfer is, whichever side is moving the bytes.
         var fraction: Double? {
-            if case .uploading(let fraction) = self { return fraction }
-            return nil
+            switch self {
+            case .uploading(let fraction), .receiving(let fraction):
+                return fraction
+            case .queued, .waitingForComputer, .delivered, .failed:
+                return nil
+            }
+        }
+
+        /// A stable word for this state, for the accessibility identifier a test
+        /// waits on. Not shown to anyone: what the user reads is `stateDescription`.
+        var identifier: String {
+            switch self {
+            case .queued: return "queued"
+            case .uploading: return "uploading"
+            case .waitingForComputer: return "waiting"
+            case .receiving: return "receiving"
+            case .delivered: return "delivered"
+            case .failed: return "failed"
+            }
         }
     }
 
@@ -86,7 +118,7 @@ struct TerminalAttachment: Identifiable, Equatable {
 
     var canBeDismissed: Bool {
         switch state {
-        case .queued, .uploading:
+        case .queued, .uploading, .receiving:
             return false
         case .waitingForComputer, .delivered, .failed:
             return true
@@ -98,6 +130,53 @@ struct TerminalAttachment: Identifiable, Equatable {
     var insertedPath: String? {
         if case .delivered(let path) = state { return path }
         return nil
+    }
+
+    /// What the chip's menu offers, in the order it shows them.
+    ///
+    /// Empty for a transfer that is still moving, which is also what tells the strip
+    /// to draw a plain chip: a menu with nothing in it opens onto a blank sheet and
+    /// reads as a bug. Computed here rather than in the view so the combinations —
+    /// delivered with a path, failed with nothing left to resend, still uploading —
+    /// are testable without a screen.
+    var availableActions: [Action] {
+        var actions: [Action] = []
+        if insertedPath != nil { actions.append(.undoInsert) }
+        if canRetry { actions.append(.retry) }
+        if canBeDismissed { actions.append(.dismiss) }
+        return actions
+    }
+
+    /// One line for VoiceOver, and the state a UI test reads off the chip. The
+    /// strip shows most of these by shape — a bar, a spinner — which says nothing
+    /// to a reader who cannot see it.
+    var stateDescription: String {
+        switch state {
+        case .queued: return "准备上传"
+        case .uploading: return "上传中"
+        case .waitingForComputer: return "等待电脑接收"
+        case .receiving: return "电脑正在接收"
+        case .delivered: return "已插入"
+        case .failed: return "没有送达"
+        }
+    }
+
+    enum Action: CaseIterable {
+        case undoInsert
+        case retry
+        case dismiss
+
+        var label: String {
+            switch self {
+            case .undoInsert: return "撤销插入"
+            case .retry: return "重试"
+            case .dismiss: return "移除"
+            }
+        }
+
+        /// Taking a file off the strip drops the cloud copy the computer never came
+        /// for, so it is not the harmless dismissal the other two are.
+        var isDestructive: Bool { self == .dismiss }
     }
 }
 
@@ -294,6 +373,31 @@ func committedAttachmentIds(_ attachments: [TerminalAttachment], sessionId: Stri
     attachments
         .filter { $0.sessionId == sessionId && $0.state.isDelivered }
         .map(\.id)
+}
+
+/// What one progress report from the computer does to a transfer's state.
+///
+/// A free function so the rule that matters can be tested without a socket: a
+/// report is only ever allowed to move a transfer into `.receiving`, and only from
+/// a state that is still waiting on the computer. Anything else is a message that
+/// crossed the computer's own answer on the way here, and letting it land would put
+/// a file that is already on the computer back into a state saying it is not.
+///
+/// `completedBytes` of 0 with `totalBytes` of 0 is the opening tick — the computer
+/// saying it has begun, before it knows how much there is. That is deliberately not
+/// the same as a fraction of zero, which is why the fraction is optional.
+func attachmentStateAfterTransferProgress(
+    _ state: TerminalAttachment.State,
+    completedBytes: Double,
+    totalBytes: Double
+) -> TerminalAttachment.State? {
+    switch state {
+    case .waitingForComputer, .receiving:
+        guard totalBytes > 0 else { return .receiving(nil) }
+        return .receiving(min(1, max(0, completedBytes / totalBytes)))
+    case .queued, .uploading, .delivered, .failed:
+        return nil
+    }
 }
 
 /// The MIME type the drive should record for a file, from its name.

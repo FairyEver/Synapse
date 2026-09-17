@@ -4,6 +4,7 @@ import WebSocket from "ws"
 import type {
   MobileIntentResult,
   MobileTerminalFrame,
+  MobileTransferProgressPayload,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseLiveState } from "../../src/types/live"
@@ -372,6 +373,11 @@ export class LiveConnectionService {
       mobileClientInstanceId,
       result,
     }, this.envelopeMetadata()))
+  }
+
+  async sendMobileTransferProgress(payload: MobileTransferProgressPayload): Promise<void> {
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileTransferProgress, payload, this.envelopeMetadata()))
   }
 
   private async getProtocol(): Promise<Awaited<typeof liveProtocolPromise>> {

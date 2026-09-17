@@ -40,6 +40,8 @@ export type MobileFileRelayDeps = {
     readonly itemId: string
     readonly outputPath: string
     readonly maxBytes?: number
+    /** `totalBytes` is 0 when the response declared no length. */
+    readonly onProgress?: (completedBytes: number, totalBytes: number) => void
   }) => Promise<{ readonly ok: true; readonly path: string }>
   /** Removes the cloud copy for good, bytes included. */
   readonly permanentlyDeleteDriveItem: (itemId: string) => Promise<{ readonly ok: true }>
@@ -84,6 +86,13 @@ export class MobileFileRelay {
   async land(input: {
     readonly driveItemId: string
     readonly fileName: string
+    /**
+     * Called with a zero-progress tick the moment the fetch is about to start, then
+     * with byte counts as they arrive. The first tick is what lets the phone tell
+     * "the computer has begun" from "the computer is still away" before any bytes
+     * have crossed, which is the question the user is actually asking.
+     */
+    readonly onProgress?: (completedBytes: number, totalBytes: number) => void
   }): Promise<{ readonly path: string; readonly fileName: string }> {
     const fileName = sanitizeRelayedFileName(input.fileName)
     if (!fileName) {
@@ -94,6 +103,12 @@ export class MobileFileRelay {
     await mkdir(directory, { recursive: true })
     const target = await this.availablePath(directory, fileName)
 
+    // Announced before the request rather than on its first byte: the destination
+    // directory and the free name are already settled by now, so this is the moment
+    // the computer committed to fetching the file, and a user watching the phone
+    // should see that rather than a wait that looks unchanged.
+    input.onProgress?.(0, 0)
+
     try {
       await this.deps.downloadDriveFile({
         itemId: input.driveItemId,
@@ -101,6 +116,7 @@ export class MobileFileRelay {
         // The phone enforces the same ceiling while picking; this is the second
         // line, because this is the side that owns the user's disk.
         maxBytes: MOBILE_FRAME_LIMITS.maxRelayedFileBytes,
+        onProgress: input.onProgress,
       })
     } catch (error) {
       throw new MobileFileRelayError("download_failed", describeDownloadFailure(error))

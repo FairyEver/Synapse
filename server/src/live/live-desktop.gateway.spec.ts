@@ -215,6 +215,7 @@ describe("LiveDesktopGateway", () => {
       handleSummary: vi.fn(),
       handleFrame: vi.fn(),
       handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -247,6 +248,7 @@ describe("LiveDesktopGateway", () => {
       handleSummary: vi.fn(),
       handleFrame: vi.fn(),
       handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -278,6 +280,7 @@ describe("LiveDesktopGateway", () => {
       handleSummary: vi.fn(),
       handleFrame: vi.fn(),
       handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -528,6 +531,50 @@ describe("LiveDesktopGateway", () => {
       platform: "darwin-arm64",
       appVersion: "0.2.253",
       acknowledgedAt: new Date("2026-06-06T10:00:02.000Z"),
+    })
+    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
+  })
+
+  /**
+   * The dispatch chain is a whitelist, and a type that is missing from it does not
+   * fail — it falls through to the pong branch, parses cleanly, and is answered as
+   * a heartbeat. Nothing logs, nothing closes, and the feature is simply dead. So
+   * the assertion that matters is the negative one: progress must not be answered
+   * with a pong.
+   */
+  it("hands a desktop's transfer progress to the relay instead of answering it", () => {
+    const socket = new FakeSocket()
+    const handleTransferProgress = vi.fn()
+    const gateway = createGateway({
+      registry: { listOnlineByUser: vi.fn().mockReturnValue([createClient({ clientInstanceId: "client-a" })]) },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress,
+      handleDesktopPresence: vi.fn(),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.mobileTransferProgress,
+      id: "msg-progress",
+      sentAt: "2026-06-06T10:00:02.000Z",
+      payload: {
+        mobileClientInstanceId: "phone-1",
+        intentId: "intent-1",
+        completedBytes: 512,
+        totalBytes: 4096,
+      },
+    }))
+
+    expect(handleTransferProgress).toHaveBeenCalledWith("user-1", {
+      mobileClientInstanceId: "phone-1",
+      intentId: "intent-1",
+      completedBytes: 512,
+      totalBytes: 4096,
     })
     expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
   })

@@ -252,6 +252,118 @@ struct TerminalAttachmentStateTests {
         let first = attachment(.waitingForComputer)
         #expect(first.intentId == "i1")
     }
+
+    @Test func aFileTheComputerIsFetchingIsNotUploadedOrRemovable() {
+        #expect(!attachment(.receiving(nil)).needsUpload)
+        #expect(!attachment(.receiving(0.4)).needsUpload)
+        // The bytes are coming down on the other side. Taking the file off the strip
+        // would delete the drive copy the computer is reading from.
+        #expect(!attachment(.receiving(0.4)).canBeDismissed)
+        #expect(!attachment(.receiving(0.4)).canRetry)
+        #expect(attachment(.receiving(0.4)).insertedPath == nil)
+    }
+}
+
+/// What one progress report from the computer does to a chip.
+struct RelayTransferProgressTests {
+    @Test func theFirstReportIsWhatTurnsWaitingIntoReceiving() {
+        // Zero of zero is the computer saying it has begun, before it knows how much
+        // there is. A file that has stopped waiting must stop saying it is waiting.
+        #expect(
+            attachmentStateAfterTransferProgress(.waitingForComputer, completedBytes: 0, totalBytes: 0)
+                == .receiving(nil)
+        )
+    }
+
+    @Test func aKnownLengthBecomesAFraction() {
+        #expect(
+            attachmentStateAfterTransferProgress(.waitingForComputer, completedBytes: 512, totalBytes: 4096)
+                == .receiving(0.125)
+        )
+    }
+
+    @Test func anUnknownLengthStaysIndeterminateRatherThanFull() {
+        // Reporting `completed` as the total would draw a bar that is already full
+        // for a download that has just started.
+        #expect(
+            attachmentStateAfterTransferProgress(.receiving(nil), completedBytes: 900_000, totalBytes: 0)
+                == .receiving(nil)
+        )
+    }
+
+    @Test func aReportNeverMovesAFinishedTransferBackwards() {
+        // A report that crossed the computer's own answer on the way here. Letting it
+        // land would put a file that is already on the computer back into a state
+        // that says it is still coming.
+        #expect(attachmentStateAfterTransferProgress(.delivered(path: "/tmp/a.png"), completedBytes: 10, totalBytes: 20) == nil)
+        #expect(attachmentStateAfterTransferProgress(.failed("no"), completedBytes: 10, totalBytes: 20) == nil)
+    }
+
+    @Test func aReportDoesNotTurnThisPhoneIntoTheOneUploading() {
+        // The states below describe bytes going the other way. A report is the
+        // computer talking about its own download, so it has nothing to say here.
+        #expect(attachmentStateAfterTransferProgress(.queued, completedBytes: 10, totalBytes: 20) == nil)
+        #expect(attachmentStateAfterTransferProgress(.uploading(0.5), completedBytes: 10, totalBytes: 20) == nil)
+    }
+
+    @Test func aFractionIsNeverOutOfRange() {
+        // A body longer than its declared length is a real case, and a bar drawn past
+        // full is the same as no bar at all.
+        #expect(
+            attachmentStateAfterTransferProgress(.receiving(nil), completedBytes: 3000, totalBytes: 1000)
+                == .receiving(1)
+        )
+    }
+}
+
+/// What a chip's menu is allowed to offer.
+struct RelayActionMenuTests {
+    private func attachment(
+        _ state: TerminalAttachment.State,
+        driveItemId: String? = nil
+    ) -> TerminalAttachment {
+        TerminalAttachment(
+            id: "a1", name: "a.png", sessionId: "s1",
+            intentId: "i1", driveItemId: driveItemId, state: state
+        )
+    }
+
+    @Test func aTransferThatIsStillMovingOffersNothing() {
+        // An empty menu opens onto a blank sheet and reads as a bug, so the strip
+        // draws these as plain chips instead.
+        #expect(attachment(.queued).availableActions.isEmpty)
+        #expect(attachment(.uploading(0.5)).availableActions.isEmpty)
+        #expect(attachment(.receiving(0.5)).availableActions.isEmpty)
+    }
+
+    @Test func aDeliveredFileOffersUndoAndRemoval() {
+        #expect(attachment(.delivered(path: "/tmp/a.png")).availableActions == [.undoInsert, .dismiss])
+        // A file that landed without a path was never typed, so there is nothing to
+        // take back out of the terminal.
+        #expect(attachment(.delivered(path: nil)).availableActions == [.dismiss])
+    }
+
+    @Test func aFailureOffersARetryOnlyWhenThereIsSomethingToResend() {
+        #expect(attachment(.failed("no"), driveItemId: "item-1").availableActions == [.retry, .dismiss])
+        // Nothing was uploaded, so a retry would fail the same way immediately.
+        #expect(attachment(.failed("no")).availableActions == [.dismiss])
+    }
+
+    @Test func aFileWaitingOnAnAbsentComputerCanStillBeGotRidOf() {
+        #expect(attachment(.waitingForComputer).availableActions == [.dismiss])
+    }
+
+    @Test func removalIsTheOneThatTakesSomethingAway() {
+        #expect(TerminalAttachment.Action.dismiss.isDestructive)
+        #expect(!TerminalAttachment.Action.undoInsert.isDestructive)
+        #expect(!TerminalAttachment.Action.retry.isDestructive)
+    }
+
+    @Test func everyActionHasALabel() {
+        for action in TerminalAttachment.Action.allCases {
+            #expect(!action.label.isEmpty)
+        }
+    }
 }
 
 /// What a submitted line takes off the strip with it.

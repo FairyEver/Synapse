@@ -20,6 +20,16 @@ const LEASE_DURATION_MS = 60_000
 /** Result cache size per phone. Small: it only needs to cover an in-flight retry. */
 const INTENT_HISTORY_LIMIT = 256
 
+/**
+ * How often a phone is told how far along a relayed file is.
+ *
+ * The download underneath reports every 100 ms, which would be ten socket messages
+ * a second for something the user reads as a bar. Coarser than this and the bar
+ * visibly steps on a fast link. The opening tick and the closing one always go, so
+ * even a transfer too quick to need a bar still says it started and finished.
+ */
+const TRANSFER_PROGRESS_INTERVAL_MS = 250
+
 export type MobileGatewayLogger = {
   info(message: string, meta?: Record<string, unknown>): void
   warn(message: string, meta?: Record<string, unknown>): void
@@ -52,6 +62,19 @@ export type IntentExecutorDeps = {
   readonly pushSnapshot: (attachment: MobileAttachment) => Promise<void>
   /** Sends one page of scrollback below `before`, or an empty page at the end. */
   readonly sendHistory: (attachment: MobileAttachment, before: number, limit: number) => Promise<void>
+  /**
+   * Tells one phone how far along the computer is in fetching a file it relayed.
+   *
+   * Out-of-band rather than part of the intent's answer, because the answer is a
+   * single value at the end and this is what there is to say while the file is
+   * still coming down.
+   */
+  readonly reportTransferProgress: (
+    mobileClientInstanceId: string,
+    intentId: string,
+    completedBytes: number,
+    totalBytes: number,
+  ) => void
 }
 
 export class MobileIntentExecutor {
@@ -382,6 +405,15 @@ export class MobileIntentExecutor {
         const landed = await this.deps.fileRelay.land({
           driveItemId: intent.driveItemId,
           fileName: intent.fileName,
+          onProgress: createTransferProgressReporter(
+            this.deps.nowMs,
+            (completedBytes, totalBytes) => this.deps.reportTransferProgress(
+              mobileClientInstanceId,
+              intent.intentId,
+              completedBytes,
+              totalBytes,
+            ),
+          ),
         })
         await this.deps.fileRelay.discardCloudCopy(intent.driveItemId)
         const note = await this.typeRelayedPath(
@@ -594,6 +626,38 @@ export class MobileIntentExecutor {
     if (this.results.size <= INTENT_HISTORY_LIMIT) return
     const oldest = this.results.keys().next()
     if (!oldest.done) this.results.delete(oldest.value)
+  }
+}
+
+/**
+ * Rate-limits a download's own progress callbacks onto the live socket.
+ *
+ * `totalBytes` of 0 means the download declared no length, so there is no point at
+ * which it can be told to be finished — which is why the "the last one always goes"
+ * rule keys on a known total rather than on a final call.
+ *
+ * That same rule is latched: a body longer than its declared length keeps reporting
+ * `completed >= total` for every remaining chunk, and letting each of those past the
+ * throttle would turn the one message worth sending into a flood.
+ */
+function createTransferProgressReporter(
+  nowMs: () => number,
+  report: (completedBytes: number, totalBytes: number) => void,
+): (completedBytes: number, totalBytes: number) => void {
+  let lastSentAtMs: number | null = null
+  let settledSent = false
+  return (completedBytes, totalBytes) => {
+    const now = nowMs()
+    if (totalBytes > 0 && completedBytes >= totalBytes) {
+      if (settledSent) return
+      settledSent = true
+      lastSentAtMs = now
+      report(completedBytes, totalBytes)
+      return
+    }
+    if (lastSentAtMs !== null && now - lastSentAtMs < TRANSFER_PROGRESS_INTERVAL_MS) return
+    lastSentAtMs = now
+    report(completedBytes, totalBytes)
   }
 }
 

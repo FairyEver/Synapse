@@ -224,6 +224,9 @@ final class SynapseAppModel {
                 self.banner = result.message ?? "操作没有完成。"
             }
         }
+        realtime.onTransferProgress = { [weak self] payload in
+            self?.applyTransferProgress(payload)
+        }
         realtime.onDesktopDetached = { [weak self] _ in
             self?.banner = "电脑已断开连接。"
         }
@@ -282,7 +285,23 @@ final class SynapseAppModel {
         // went away. Both are answered the same way: resolve again from scratch.
         summary = nil
         selectedDesktopClientInstanceId = nil
+        // A file the computer had begun fetching is not being fetched any more: it
+        // died, or lost the network, partway through. It goes back to waiting rather
+        // than staying in a state that claims progress that has stopped, and the
+        // next time the computer is reachable the ordinary resend picks it up — from
+        // the top, which is exactly the restart that case needs.
+        releaseReceivingAttachments()
         Task { await refreshDesktops() }
+    }
+
+    /// Puts anything mid-receive back to waiting.
+    ///
+    /// Deliberately not a resend: the computer being gone is what calls this, so
+    /// there is nothing to send to yet.
+    private func releaseReceivingAttachments() {
+        for attachment in relayAttachments where attachment.state.isReceiving {
+            update(attachment.id) { $0.state = .waitingForComputer }
+        }
     }
 
     func refreshDesktops() async {
@@ -298,6 +317,13 @@ final class SynapseAppModel {
                     summary = try? await apiClient.cachedSummary(desktopClientInstanceId: desktop)
                 }
                 realtime.requestSync(desktopClientInstanceId: desktop)
+                // Resolving a computer here is the third way one can come back —
+                // the other two being the socket reconnecting and presence pushing a
+                // new list — and it is the only one that happens when a computer
+                // returns while this phone never lost its connection. Without this,
+                // a file that went back to waiting when that computer dropped would
+                // sit there until something unrelated made the phone re-resolve.
+                retryWaitingAttachments()
             }
         } catch {
             banner = "无法获取电脑列表。"
@@ -885,7 +911,14 @@ final class SynapseAppModel {
         guard let attachment = relayAttachments.first(where: { $0.id == attachmentId }),
               let driveItemId = attachment.driveItemId
         else { return }
-        guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
+        guard let desktop = selectedDesktopClientInstanceId,
+              realtime.state.isConnected,
+              // The cloud refuses an intent for a computer that is not there, and it
+              // says so as a rejection rather than as a wait — so a file handed to a
+              // computer the phone already knows has gone would come back failed
+              // instead of staying in the queue. Presence is the only way to know.
+              onlineDesktops.contains(desktop)
+        else {
             update(attachmentId) { $0.state = .waitingForComputer }
             return
         }
@@ -914,6 +947,24 @@ final class SynapseAppModel {
         for attachment in relayAttachments where attachment.state == .waitingForComputer {
             deliver(attachment.id)
         }
+    }
+
+    /// One report from the computer about a file it is fetching.
+    ///
+    /// Keyed on the intent, which is the same key the answer arrives on. A report
+    /// for an intent this phone is no longer tracking is one that crossed the answer
+    /// on the way here — the transfer is over, and there is nothing to say about it.
+    private func applyTransferProgress(_ payload: MobileTransferProgressPayload) {
+        guard let attachmentId = relayByIntent[payload.intentId],
+              let attachment = relayAttachments.first(where: { $0.id == attachmentId }),
+              let state = attachmentStateAfterTransferProgress(
+                  attachment.state,
+                  completedBytes: payload.completedBytes,
+                  totalBytes: payload.totalBytes
+              )
+        else { return }
+
+        update(attachmentId) { $0.state = state }
     }
 
     private func handleRelayResult(_ result: MobileIntentResult) {

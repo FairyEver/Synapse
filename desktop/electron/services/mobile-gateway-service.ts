@@ -137,6 +137,8 @@ export class MobileGatewayService {
       resendSummary: () => this.resendSummary(),
       pushSnapshot: (attachment) => this.pushSnapshot(attachment),
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
+      reportTransferProgress: (mobileClientInstanceId, intentId, completedBytes, totalBytes) =>
+        this.reportTransferProgress(mobileClientInstanceId, intentId, completedBytes, totalBytes),
     })
   }
 
@@ -822,6 +824,21 @@ export class MobileGatewayService {
     const transport = this.transport
     if (!transport) return
     transport.sendIntentResult(mobileClientInstanceId, result)
+  }
+
+  /**
+   * Dropped rather than queued when there is no transport: the next tick carries
+   * the same story, and a bar that arrives after its file has landed is noise.
+   */
+  private reportTransferProgress(
+    mobileClientInstanceId: string,
+    intentId: string,
+    completedBytes: number,
+    totalBytes: number,
+  ): void {
+    const transport = this.transport
+    if (!transport) return
+    transport.sendTransferProgress({ mobileClientInstanceId, intentId, completedBytes, totalBytes })
   }
 
   private nowMs(): number {

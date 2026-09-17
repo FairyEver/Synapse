@@ -3,6 +3,7 @@ import type {
   MobileIntentResult,
   MobileSummaryPayload,
   MobileTerminalFrame,
+  MobileTransferProgressPayload,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
 /**
@@ -22,6 +23,11 @@ export type MobileGatewayTransport = {
   readonly sendSummary: (draft: MobileSummaryDraft) => void
   readonly sendFrame: (mobileClientInstanceId: string, frame: MobileTerminalFrame) => void
   readonly sendIntentResult: (mobileClientInstanceId: string, result: MobileIntentResult) => void
+  /**
+   * Fire-and-forget by design: progress that arrives late is worth less than the
+   * next one, so nothing here waits on a send and nothing is retried.
+   */
+  readonly sendTransferProgress: (payload: MobileTransferProgressPayload) => void
 }
 
 /** Inbound side: the live connection hands cloud-delivered events to the gateway. */

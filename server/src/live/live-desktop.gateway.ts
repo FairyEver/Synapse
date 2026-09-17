@@ -11,6 +11,7 @@ import {
   type MobileFramePayload,
   type MobileIntentResultPayload,
   type MobileSummaryPayload,
+  type MobileTransferProgressPayload,
 } from "@synapse/shared"
 import { RawData, WebSocket, WebSocketServer } from "ws"
 import { UserAuthService } from "../auth/user-auth.service"
@@ -58,6 +59,11 @@ export interface LiveMobileRelayHandler {
   readonly handleSummary: (userId: string, payload: MobileSummaryPayload) => void
   readonly handleFrame: (userId: string, payload: MobileFramePayload) => void
   readonly handleIntentResult: (userId: string, payload: MobileIntentResultPayload) => void
+  /**
+   * A computer's progress fetching a file a phone relayed. Arrives repeatedly
+   * between the intent and its result, and is worthless once that result lands.
+   */
+  readonly handleTransferProgress: (userId: string, payload: MobileTransferProgressPayload) => void
   /**
    * One of the user's computers became reachable, or stopped being reachable.
    * Fired on every change, so it carries the current list rather than a delta.
@@ -406,7 +412,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileSummary
         || message.type === LIVE_MESSAGE_TYPES.mobileFrame
-        || message.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
+        || message.type === LIVE_MESSAGE_TYPES.mobileIntentResult
+        || message.type === LIVE_MESSAGE_TYPES.mobileTransferProgress) {
         // Terminal payloads for phones go to the relay, not back to the sender.
         // Without a relay installed they are dropped rather than answered.
         this.handleMobileRelayMessage(auth.userId, message)
@@ -574,7 +581,18 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         relay.handleFrame(userId, message.payload)
         return
       }
-      relay.handleIntentResult(userId, message.payload as MobileIntentResultPayload)
+      if (message.type === LIVE_MESSAGE_TYPES.mobileTransferProgress) {
+        relay.handleTransferProgress(userId, message.payload)
+        return
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileIntentResult) {
+        relay.handleIntentResult(userId, message.payload)
+        return
+      }
+      // Named rather than cast into the last handler that happens to accept this
+      // shape: a type added to the union without a branch here would otherwise be
+      // delivered as something it is not.
+      this.logger.warn({ messageType: message.type, userId }, "Unhandled mobile relay message")
     } catch (error) {
       // A relay failure must not tear down the desktop's own connection.
       this.logger.warn({

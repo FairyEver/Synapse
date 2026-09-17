@@ -581,6 +581,13 @@ export class AccountService {
     readonly itemId: string
     readonly outputPath: string
     readonly signal?: AbortSignal
+    /**
+     * `totalBytes` is 0 when the response did not declare a length, which is a
+     * different statement from "the total is zero bytes". The transform underneath
+     * reports `max(total, completed)` instead — right for an upload, where the
+     * caller's own file is the total, and wrong here, where it would draw a full
+     * bar for a download that has not started.
+     */
     readonly onProgress?: (completedBytes: number, totalBytes: number) => void
     /**
      * Ceiling for a caller that already knows how large the file is allowed to be.
@@ -590,8 +597,10 @@ export class AccountService {
     readonly maxBytes?: number
   }): Promise<{ readonly ok: true; readonly path: string }> {
     const response = await this.fetchAuthenticated(currentOwnerDriveDownloadUrl(input.itemId), { signal: input.signal }, "文件下载失败。")
+    const declaredBytes = parseDownloadContentLength(response.headers.get("Content-Length"))
     await writeResponseBodyToFile(response, input.outputPath, {
-      onProgress: input.onProgress,
+      onProgress: input.onProgress &&
+        ((completedBytes) => input.onProgress?.(completedBytes, declaredBytes ?? 0)),
       maxBytes: input.maxBytes,
     })
     return { ok: true, path: input.outputPath }

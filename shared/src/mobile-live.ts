@@ -7,6 +7,9 @@
  * - `mobile.summary` desktop → cloud → phone (fanned out per desktop)
  * - `mobile.frame`   desktop → cloud → one phone (only for the attached session)
  * - `mobile.intent`  phone → cloud → one desktop, answered by `mobile.intentResult`
+ * - `mobile.transferProgress` desktop → cloud → one phone, while a relayed file is
+ *   being fetched. Additive to `mobile.intentResult`, which still ends the transfer;
+ *   the phone uses it only to say how far along the computer is.
  *
  * Producers are self-bounded, and they are bounded separately because they fail
  * differently. A frame that is too large is split; a *summary* cannot be split —
@@ -159,6 +162,7 @@ export const MOBILE_MESSAGE_TYPES = {
   frame: "mobile.frame",
   intent: "mobile.intent",
   intentResult: "mobile.intentResult",
+  transferProgress: "mobile.transferProgress",
   detached: "mobile.detached",
 } as const
 
@@ -515,6 +519,31 @@ export interface MobileIntentResultPayload {
 }
 
 /**
+ * How far along the computer is in fetching a file the phone relayed.
+ *
+ * Exists because "已上传，等待电脑接收" is a statement about the phone's uplink, and
+ * the user watching it cannot tell a computer that has not started from one that is
+ * halfway through a large download. Without this the strip can only ever say "still
+ * waiting", which is true at exactly one of those moments.
+ *
+ * `intentId` rather than a file name is what makes this usable: the phone already
+ * keys the transfer it is showing on the intent it sent, and the desktop's answer
+ * carries the same id, so progress and completion land on the same chip.
+ */
+export interface MobileTransferProgressPayload {
+  readonly mobileClientInstanceId: string
+  readonly intentId: string
+  readonly completedBytes: number
+  /**
+   * Zero when the download's length is not known. A fraction cannot be drawn from
+   * that, and reporting `completed` as the total instead would draw a full bar for
+   * a file with nothing in it yet — so the phone is told plainly that it is not
+   * known and shows a moving indicator rather than a proportion.
+   */
+  readonly totalBytes: number
+}
+
+/**
  * Which of the user's computers a phone can reach right now.
  *
  * The phone's socket is to the cloud, not to a computer, so a desktop signing in
@@ -582,6 +611,14 @@ export function isMobileIntentPayload(value: unknown): value is MobileIntentPayl
 export function isMobileIntentResultPayload(value: unknown): value is MobileIntentResultPayload {
   if (!isRecord(value)) return false
   return boundedString(value.mobileClientInstanceId, 120) && isMobileIntentResult(value.result)
+}
+
+export function isMobileTransferProgressPayload(value: unknown): value is MobileTransferProgressPayload {
+  if (!isRecord(value)) return false
+  return boundedString(value.mobileClientInstanceId, 120) &&
+    boundedString(value.intentId, 120) &&
+    nonNegativeInteger(value.completedBytes) &&
+    nonNegativeInteger(value.totalBytes)
 }
 
 export function isMobileDetachedPayload(value: unknown): value is MobileDetachedPayload {

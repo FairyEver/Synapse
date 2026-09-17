@@ -502,6 +502,50 @@ describe("AccountService", () => {
     expect(service.completeDriveUpload).toHaveBeenCalledTimes(2)
   })
 
+  it("keeps a download's total at what the response declared, however long the body runs", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-progress-"))
+    const outputPath = path.join(dir, "report.txt")
+    const { service } = await createTestAccountService()
+    // The body is deliberately longer than the length it declares, which is the one
+    // case where the honest answer and the convenient one differ: the transform
+    // underneath reports `max(total, completed)`, so a bar drawn from it would run
+    // past full.
+    vi.spyOn(service, "fetchAuthenticated").mockResolvedValue(new Response("hello world, and then some", {
+      headers: { "Content-Length": "11" },
+    }))
+    const seen: [number, number][] = []
+
+    await service.downloadDriveFile({
+      itemId: "item-1",
+      outputPath,
+      onProgress: (completedBytes, totalBytes) => seen.push([completedBytes, totalBytes]),
+    })
+
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.every(([, totalBytes]) => totalBytes === 11)).toBe(true)
+    expect(seen.at(-1)?.[0]).toBe(26)
+  })
+
+  it("says a download's total is unknown rather than reporting a full one", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-progress-"))
+    const outputPath = path.join(dir, "report.txt")
+    const { service } = await createTestAccountService()
+    // A chunked response declares no length. Counting what has arrived as the total
+    // would draw a bar that is already full for a file still being written.
+    vi.spyOn(service, "fetchAuthenticated").mockResolvedValue(new Response("hello world"))
+    const seen: [number, number][] = []
+
+    await service.downloadDriveFile({
+      itemId: "item-1",
+      outputPath,
+      onProgress: (completedBytes, totalBytes) => seen.push([completedBytes, totalBytes]),
+    })
+
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.every(([, totalBytes]) => totalBytes === 0)).toBe(true)
+    expect(seen.at(-1)?.[0]).toBe(11)
+  })
+
   it("keeps existing Drive download output when the response stream fails", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-drive-download-"))
     const outputPath = path.join(dir, "report.txt")

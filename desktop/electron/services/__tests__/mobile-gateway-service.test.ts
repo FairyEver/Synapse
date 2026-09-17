@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { isMobileSummaryPayload, MOBILE_FRAME_LIMITS } from "@synapse/shared"
-import type { MobileIntent, MobileTerminalFrame } from "@synapse/shared"
+import type { MobileIntent, MobileTerminalFrame, MobileTransferProgressPayload } from "@synapse/shared"
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
@@ -310,12 +310,14 @@ function createHarness(options: { sessionLines?: number } = {}) {
   const frames: { mobileClientInstanceId: string; frame: MobileTerminalFrame }[] = []
   const summaries: unknown[] = []
   const results: unknown[] = []
+  const progress: MobileTransferProgressPayload[] = []
   const transport: MobileGatewayTransport = {
     sendSummary: (draft) => summaries.push(draft),
     sendFrame: (mobileClientInstanceId, frame) => frames.push({ mobileClientInstanceId, frame }),
     sendIntentResult: (mobileClientInstanceId, result) => {
       results.push({ mobileClientInstanceId, result })
     },
+    sendTransferProgress: (payload) => progress.push(payload),
   }
   const audits: unknown[] = []
   const permissionGuard = {
@@ -342,7 +344,9 @@ function createHarness(options: { sessionLines?: number } = {}) {
     logger: { info: () => {}, warn: () => {} },
   })
   vi.spyOn(fileRelay, "land").mockImplementation(async (input) => {
-    landings.push(input)
+    // The two fields the caller decides; the progress callback is per-call and is
+    // observed through `progress` instead.
+    landings.push({ driveItemId: input.driveItemId, fileName: input.fileName })
     return { path: `/tmp/${input.fileName}`, fileName: input.fileName }
   })
   vi.spyOn(fileRelay, "discardCloudCopy").mockImplementation(async (itemId) => {
@@ -366,7 +370,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
 
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits,
-    permissionGuard, fileRelay, landings, discarded,
+    permissionGuard, fileRelay, landings, discarded, progress,
   }
 }
 
@@ -521,6 +525,64 @@ describe("MobileGatewayService", () => {
     // Typed, not submitted: the user still gets to look at it before pressing Enter.
     expect(write?.actions.some((action) => action.type === "key")).toBe(false)
     expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+  })
+
+  it("tells the phone how far along the fetch is, without flooding it", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    // The download underneath reports roughly ten times a second. The phone draws a
+    // bar, so the middle of that burst is nine messages a second that change
+    // nothing — but the first tick and the last one both have to survive, because
+    // they are the two the user actually reads.
+    vi.spyOn(harness.fileRelay, "land").mockImplementation(async (input) => {
+      input.onProgress?.(0, 0)
+      harness.timers.nowMs += 40
+      input.onProgress?.(256, 1024)
+      input.onProgress?.(512, 1024)
+      harness.timers.nowMs += 400
+      input.onProgress?.(1024, 1024)
+      return { path: `/tmp/${input.fileName}`, fileName: input.fileName }
+    })
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-file",
+      kind: "fileUpload",
+      sessionId: "sess-1",
+      driveItemId: "item-1",
+      fileName: "a.png",
+    }))
+
+    expect(harness.progress).toEqual([
+      { mobileClientInstanceId: "phone-1", intentId: "i-file", completedBytes: 0, totalBytes: 0 },
+      { mobileClientInstanceId: "phone-1", intentId: "i-file", completedBytes: 1024, totalBytes: 1024 },
+    ])
+  })
+
+  it("says a transfer is finished once, even if the body outruns its declared length", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    // A server that understates `Content-Length` makes every remaining chunk look
+    // settled. The bar is finished after the first one; the rest are the same news.
+    vi.spyOn(harness.fileRelay, "land").mockImplementation(async (input) => {
+      input.onProgress?.(0, 0)
+      harness.timers.nowMs += 400
+      input.onProgress?.(1024, 1024)
+      input.onProgress?.(2048, 1024)
+      input.onProgress?.(4096, 1024)
+      return { path: `/tmp/${input.fileName}`, fileName: input.fileName }
+    })
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-file",
+      kind: "fileUpload",
+      sessionId: "sess-1",
+      driveItemId: "item-1",
+      fileName: "a.png",
+    }))
+
+    expect(harness.progress.map((entry) => entry.completedBytes)).toEqual([0, 1024])
   })
 
   it("still lands the file when the terminal can no longer take the path", async () => {

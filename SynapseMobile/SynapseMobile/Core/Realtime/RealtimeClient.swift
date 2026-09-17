@@ -38,6 +38,10 @@ final class RealtimeClient {
     var onSummary: ((MobileSummaryPayload) -> Void)?
     var onFrame: ((MobileFramePayload) -> Void)?
     var onIntentResult: ((MobileIntentResult) -> Void)?
+    /// The computer has begun fetching a file this phone relayed, or moved on with
+    /// it. Arrives repeatedly between the intent and its answer, and means nothing
+    /// once that answer is here.
+    var onTransferProgress: ((MobileTransferProgressPayload) -> Void)?
     /// The user's reachable computers changed. Pushed, so the list stays right
     /// without the phone asking on a schedule.
     var onPresence: (([String]) -> Void)?
@@ -245,6 +249,7 @@ final class RealtimeClient {
             onConnected?()
         case LiveMessageType.pong, LiveMessageType.mobileFrame,
              LiveMessageType.mobileSummary, LiveMessageType.mobileIntentResult,
+             LiveMessageType.mobileTransferProgress,
              LiveMessageType.mobileDetached, LiveMessageType.mobilePresence:
             // Any server traffic proves the connection is healthy.
             if !state.isConnected { state = .connected }
@@ -267,6 +272,10 @@ final class RealtimeClient {
         case LiveMessageType.mobileIntentResult:
             if let payload = envelope.payload.decode(MobileIntentResultPayload.self) {
                 onIntentResult?(payload.result)
+            }
+        case LiveMessageType.mobileTransferProgress:
+            if let payload = envelope.payload.decode(MobileTransferProgressPayload.self) {
+                onTransferProgress?(payload)
             }
         case LiveMessageType.mobileDetached:
             if let payload = envelope.payload.decode(DetachedPayload.self) {
