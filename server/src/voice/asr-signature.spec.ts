@@ -94,6 +94,27 @@ describe("signAsrSession", () => {
     expect(signed.url.split("signature=")[1]).not.toMatch(/[+=]/u)
   })
 
+  /**
+   * 反证：把上面 `.map` 里的 `percentEncode` 去掉，这条必须变红。
+   *
+   * 热词表里的空格和 `|` 曾经是裸着拼进 URL 的。Foundation 只要发现串里有非法
+   * 字符，就会把**整条 query** 重编一遍——连已经转义好的 signature 一起，
+   * `%2F` 变成 `%252F`。腾讯云解码后对不上，判签名错误 4002；iOS 那边握手失败，
+   * 界面显示成「网络已断开」。Node 容忍畸形 URL，所以只有 Apple 端会踩。
+   */
+  it("URL 里不留裸字符，否则严格解析的客户端会把签名二次转义", () => {
+    const signed = signAsrSession(
+      credentials,
+      { ...request, hotwordList: "git status|10,Synapse|8" },
+      FIXED,
+    )
+    const query = signed.url.slice(signed.url.indexOf("?") + 1)
+    // RFC 3986 的 query 允许集。空格和 | 都不在里面。
+    expect(query).toMatch(/^[A-Za-z0-9\-._~!$&'()*+,;=:@\/?%]*$/)
+    // 转义之后值还得能原样解回来，别把热词表改坏。
+    expect(new URL(signed.url).searchParams.get("hotword_list")).toBe("git status|10,Synapse|8")
+  })
+
   it("时间戳与有效期按秒，有效期 5 分钟", () => {
     const signed = signAsrSession(credentials, request, FIXED)
     const params = new URL(signed.url).searchParams

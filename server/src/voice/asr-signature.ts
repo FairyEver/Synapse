@@ -64,6 +64,9 @@ export function percentEncode(value: string): string {
  * 签名原文：除 signature 外的全部参数按字典序排序后拼成不带协议的 URL。
  * 排序是字节序（`<`），不是 `localeCompare` —— 后者受 locale 影响，会让某些
  * 参数顺序与文档样例不一致。
+ *
+ * 值一律用**裸值**，和 `signAsrSession` 拼 URL 时的转义不对称，这不是笔误：
+ * 腾讯云收到的是编码后的 query，核对前先解码，再按解码结果重建原文。
  */
 export function buildSignatureSource(
   appId: string,
@@ -102,9 +105,16 @@ export function signAsrSession(
     .update(buildSignatureSource(credentials.appId, params))
     .digest("base64")
 
+  // 与签名原文不同，这里每个值都要转义：原文用裸值（腾讯云解码后重建原文再核对），
+  // 而**发出去的 URL 必须只含合法字符**。
+  //
+  // 留一个裸的空格或者 `|`（热词表里很常见，比如 `git status|10`），Foundation 就
+  // 判定整条 URL 非法、把整个 query 重编一遍——包括已经转义好的 signature，
+  // `%2F` 变成 `%252F`，腾讯云解出来对不上，判签名错误（4002）。Node 容忍畸形
+  // URL，所以只有 Apple 平台会中招，而且握手失败被显示成「网络已断开」。
   const query = Object.keys(params)
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .map((key) => `${key}=${params[key]}`)
+    .map((key) => `${key}=${percentEncode(params[key])}`)
     .join("&")
 
   return {
