@@ -106,9 +106,10 @@ struct LoginView: View {
                     // Ink fill, paper label: the pair has to invert together with the
                     // appearance, or the button turns into a blank rectangle in dark mode.
                     // The disabled cue dims the fill only — fading the label too would
-                    // leave grey text on a grey rectangle.
+                    // leave grey text on a grey rectangle — which is why the dimming is
+                    // bounded by what keeps the label readable (see the constant).
                     .background(
-                        Theme.ink.opacity(canSubmit ? 1 : 0.4),
+                        Theme.ink.opacity(canSubmit ? 1 : Theme.disabledInkOpacity),
                         in: RoundedRectangle(cornerRadius: 12, style: .continuous)
                     )
                     .foregroundStyle(Theme.paper)

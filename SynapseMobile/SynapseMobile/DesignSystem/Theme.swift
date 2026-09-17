@@ -19,6 +19,15 @@ enum Theme {
     /// The colour that reads on top of `ink` — the label of a filled button.
     static let paper = Color(uiColor: .systemBackground)
 
+    /// How much of `ink` a filled button keeps when it cannot be pressed.
+    ///
+    /// The label stays `paper` in both states — fading it too would leave grey text on a
+    /// grey rectangle — so the fill is the only thing carrying the cue, and it has to
+    /// stay dark enough for `paper` to read on top of it. At 0.4 the fill measured 2.85:1
+    /// against `paper` in light appearance, under the 3:1 floor even for large text; this
+    /// measures 4.8:1 there and 6.3:1 in dark.
+    static let disabledInkOpacity: Double = 0.55
+
     /// The one colour that means a person is needed.
     ///
     /// Adaptive, because a single fixed value cannot be legible in both appearances:

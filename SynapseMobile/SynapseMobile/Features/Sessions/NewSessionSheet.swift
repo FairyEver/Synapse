@@ -171,26 +171,38 @@ struct NewSessionSheet: View {
                 Button {
                     Task { await start() }
                 } label: {
-                    HStack {
-                        Spacer()
+                    Group {
                         if starting {
                             ProgressView()
                         } else {
-                            Text("开始对话")
+                            Text("开始对话").font(.callout.weight(.semibold))
                         }
-                        Spacer()
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.ink)
-                .controlSize(.large)
-                .disabled(starting || !selection.canStart)
+                // Ink fill, paper label — the same pair the sign-in button uses, and for
+                // the same reason. `.borderedProminent` with `Color.primary` as the tint
+                // does not pair them: it painted the fill with the ink and then drew the
+                // label in white as well, so in dark appearance this was a blank white
+                // pill with nothing written on it.
+                .background(
+                    Theme.ink.opacity(canStart ? 1 : Theme.disabledInkOpacity),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .foregroundStyle(Theme.paper)
+                .disabled(!canStart)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
                 .accessibilityIdentifier("start-conversation")
             }
         }
     }
+
+    /// One place for the two reasons the button cannot be pressed — a request already
+    /// in flight, and nothing chosen yet — so the fill and the `disabled` state cannot
+    /// disagree about which one it is.
+    private var canStart: Bool { !starting && selection.canStart }
 
     /// The model row shows the resolved model name, not the tier's label: "Opus" alone
     /// does not say which model, and two Providers offering "Opus" may name different ones.

@@ -118,9 +118,9 @@ struct NoticeBar: View {
         }
     }
 
-    /// The tone is carried by the ring and the glyph, never by the sentence: all three
-    /// theme colours are fixed RGB values that do not adapt to appearance, and body copy
-    /// in `Theme.failure` over dark material is a legibility problem, not a taste one.
+    /// The tone is carried by the ring and the glyph, never by the sentence: `Theme.running`
+    /// is one fixed green in both appearances, and body copy in it over dark material is a
+    /// legibility problem, not a taste one.
     private var border: Color {
         switch notice.tone {
         case .success: Theme.running.opacity(0.35)
