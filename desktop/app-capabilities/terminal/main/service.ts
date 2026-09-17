@@ -1968,6 +1968,14 @@ export function createTerminalService(deps: {
      */
     readonly cols?: number
     readonly rows?: number
+    /**
+     * Who asked for it, when that is a remote client rather than the desktop's own UI.
+     *
+     * Recorded on the session so a terminal the user did not open locally can be told
+     * apart from one they did. Absent for the UI's own launches, which is every launch
+     * this method had before the mobile gateway became a caller.
+     */
+    readonly createdByClientId?: string
     /** Runs once when the session process ends; used to release caller-owned launch assets. */
     readonly onEnded?: () => void
   }): Promise<TerminalSession> {
@@ -1986,7 +1994,7 @@ export function createTerminalService(deps: {
         ...(input.rows === undefined ? [] : ["rows" as const]),
       ],
       persistEnvironment: false,
-    })
+    }, input.createdByClientId)
     if (input.onEnded) endCallbacks.set(session.id, input.onEnded)
     return session
   }

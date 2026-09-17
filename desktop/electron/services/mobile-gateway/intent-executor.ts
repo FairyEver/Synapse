@@ -4,6 +4,7 @@ import type {
   MobileIntentResult,
   MobileKey,
   MobileKeyAction,
+  MobileModelTier,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
@@ -75,6 +76,30 @@ export type IntentExecutorDeps = {
     completedBytes: number,
     totalBytes: number,
   ) => void
+  /**
+   * Starts the bundled Claude Code in one of the computer's projects.
+   *
+   * Injected rather than imported: the launcher lives in the agent module, which this
+   * service has no other reason to know about, and the wiring belongs where every
+   * other cross-module assembly is. Structurally typed for the same reason — the two
+   * sides agree on the shape without sharing a module to say so.
+   *
+   * The Provider's credentials are read on the far side of this call and never cross
+   * it: everything that goes in is a project, an optional choice, and a grid.
+   */
+  readonly createClaudeCodeConversation: (
+    input: ClaudeCodeConversationLaunch,
+  ) => Promise<{ readonly id: string }>
+}
+
+/** What a phone may name, and nothing else. No credential, no environment, no path. */
+export type ClaudeCodeConversationLaunch = {
+  readonly projectId: string
+  readonly providerId?: string
+  readonly modelTier?: MobileModelTier
+  readonly cols?: number
+  readonly rows?: number
+  readonly createdByClientId?: string
 }
 
 export class MobileIntentExecutor {
@@ -434,6 +459,39 @@ export class MobileIntentExecutor {
         }
       }
 
+      /**
+       * Starts the bundled Claude Code in a project, at the phone's request.
+       *
+       * The phone names a project and, optionally, a Provider and tier. Everything
+       * else is the computer's: its own default selection when neither was named, and
+       * the Provider's credentials, which are read here and go nowhere near the phone.
+       *
+       * Authorized exactly as `create` is, and for the same reasons — a conversation
+       * started this way is a terminal, and starting one from a phone is the same act
+       * as starting one from the desktop's own shortcut.
+       */
+      case "createAgentConversation": {
+        await this.deps.authorize("terminal.session.create", `terminal.group:${intent.projectId}`)
+        // Explicit starting dimensions are also a resize. ADR 0063 requires both
+        // permissions for them, and says so in as many words.
+        const sized = intent.cols !== undefined && intent.rows !== undefined
+        if (sized) {
+          await this.deps.authorize("terminal.session.resize", `terminal.group:${intent.projectId}`)
+        }
+        const session = await this.deps.createClaudeCodeConversation({
+          projectId: intent.projectId,
+          ...(intent.providerId === undefined ? {} : { providerId: intent.providerId }),
+          ...(intent.modelTier === undefined ? {} : { modelTier: intent.modelTier }),
+          ...(intent.cols === undefined ? {} : { cols: intent.cols }),
+          ...(intent.rows === undefined ? {} : { rows: intent.rows }),
+          // Same attribution `launchCommand` uses, so a terminal started from a phone
+          // is recorded as such rather than looking like the desktop's own doing.
+          createdByClientId: `mobile:${mobileClientInstanceId}`,
+        })
+        await this.adoptCreatedSession(mobileClientInstanceId, session.id)
+        return accepted(intent.intentId, { createdSessionId: session.id })
+      }
+
       case "launchCommand": {
         await this.deps.authorize("terminal.command.launch", `terminal.group:${intent.groupId}`)
         const session = await terminal.launchGroupCommand({
@@ -753,5 +811,14 @@ function describeError(error: unknown): string {
   // The relay's failures are all things the user can act on — the file was too
   // large, the cloud item was gone — so its own wording beats a generic one.
   if (error instanceof MobileFileRelayError) return error.message
+  // Same bargain for an injected capability that raises errors written for the user:
+  // the Claude Code launcher's failures are a missing runtime and an unconfigured
+  // Provider, both of which the user fixes on the computer. Recognised by the flag
+  // rather than by its class, so this module does not have to import the agent
+  // module — and an error that does not carry the flag still cannot put its own
+  // wording on the user's screen.
+  if (error instanceof Error && (error as { readonly userFacing?: unknown }).userFacing === true) {
+    return error.message
+  }
   return "操作没有完成。"
 }

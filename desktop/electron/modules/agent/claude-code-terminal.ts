@@ -28,6 +28,13 @@ const CLAUDE_CODE_TERMINAL_TITLE = "Claude Code"
  */
 export class ClaudeCodeTerminalError extends Error {
   readonly code: string
+  /**
+   * Tells the mobile gateway that `message` is already written for the user, so it
+   * can be shown verbatim rather than replaced by a generic sentence. Declared as a
+   * property rather than a shared class so neither module has to import the other to
+   * agree on it — the gateway's `describeError` reads exactly this flag.
+   */
+  readonly userFacing = true
 
   constructor(code: string, message: string) {
     super(message)
@@ -53,6 +60,13 @@ export interface CreateClaudeCodeTerminalSessionInput {
   /** Initial grid; see `createSessionWithEphemeralEnvironment`. Omitted, the default holds. */
   readonly cols?: number
   readonly rows?: number
+  /**
+   * The remote client that asked for the session, as `mobile:<client instance id>`.
+   *
+   * Absent for the desktop's own launches. Present, it is recorded on the terminal so
+   * a conversation started from a phone is distinguishable from one started here.
+   */
+  readonly createdByClientId?: string
 }
 
 /**
@@ -126,6 +140,7 @@ export async function createClaudeCodeTerminalSession(
       environment,
       ...(input.cols === undefined ? {} : { cols: input.cols }),
       ...(input.rows === undefined ? {} : { rows: input.rows }),
+      ...(input.createdByClientId === undefined ? {} : { createdByClientId: input.createdByClientId }),
       onEnded: () => { void rm(directory, { recursive: true, force: true }).catch(() => undefined) },
     })
   } catch (error) {

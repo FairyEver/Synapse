@@ -141,6 +141,7 @@ import { createRepositoryCapabilityDispatcher } from "../capabilities/repository
 import { createSkillRepositoryCapabilityDispatcher } from "../capabilities/skill-repository-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
+import { createClaudeCodeTerminalSession } from "../modules/agent/claude-code-terminal"
 import { createLocalAgentConversation } from "../modules/agent/conversation-creation"
 import { listTrustedSkillRoots } from "../services/editor-scan-roots"
 import { logStore, createMainLogger } from "../services/log-store"
@@ -525,6 +526,15 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
         directory: path.join(app.getPath("downloads"), MOBILE_RELAY_DIRECTORY_NAME),
         logger: ctx.logger.child("mobile-file-relay"),
       }),
+      // The one place the gateway reaches the agent module, and the reason it is here
+      // rather than inside either of them: starting a Claude Code conversation is the
+      // same launcher the renderer's shortcut uses, so it must be that function and
+      // not a copy of it.
+      createClaudeCodeConversation: (input) =>
+        createClaudeCodeTerminalSession(
+          <T,>(serviceId: string) => ctx.registry.get<T>(serviceId),
+          input,
+        ),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("mobile-gateway"),

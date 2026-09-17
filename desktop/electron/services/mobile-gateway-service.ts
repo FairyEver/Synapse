@@ -23,7 +23,7 @@ import { AttachmentRegistry } from "./mobile-gateway/attachment-registry"
 import { MOBILE_GATEWAY_ACTOR } from "./mobile-gateway/controller"
 import type { MobileFileRelay } from "./mobile-gateway/file-relay"
 import { buildTerminalFrames } from "./mobile-gateway/frame-builder"
-import type { MobileGatewayLogger } from "./mobile-gateway/intent-executor"
+import type { ClaudeCodeConversationLaunch, MobileGatewayLogger } from "./mobile-gateway/intent-executor"
 import { MobileIntentError, MobileIntentExecutor } from "./mobile-gateway/intent-executor"
 import type { MobileGatewayTransport } from "./mobile-gateway/transport"
 
@@ -82,6 +82,16 @@ export type MobileGatewayServiceDeps = {
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly logger: MobileGatewayLogger
+  /**
+   * Starts the bundled Claude Code for a phone that asked for one.
+   *
+   * Supplied by the bootstrap rather than imported here: the launcher lives in the
+   * agent module, and this service has no other reason to depend on it. See
+   * `IntentExecutorDeps.createClaudeCodeConversation`.
+   */
+  readonly createClaudeCodeConversation: (
+    input: ClaudeCodeConversationLaunch,
+  ) => Promise<{ readonly id: string }>
   readonly now?: () => Date
   readonly setTimeout?: (callback: () => void, delayMs: number) => NodeJS.Timeout
   readonly clearTimeout?: (handle: NodeJS.Timeout) => void
@@ -139,6 +149,7 @@ export class MobileGatewayService {
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
       reportTransferProgress: (mobileClientInstanceId, intentId, completedBytes, totalBytes) =>
         this.reportTransferProgress(mobileClientInstanceId, intentId, completedBytes, totalBytes),
+      createClaudeCodeConversation: (input) => deps.createClaudeCodeConversation(input),
     })
   }
 

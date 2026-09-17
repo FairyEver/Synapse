@@ -11,6 +11,7 @@ import type { TerminalLayoutNode } from "../../../app-capabilities/terminal/shar
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
 import { clampSummaryText, MobileGatewayService } from "../mobile-gateway-service"
 import { MobileFileRelay } from "../mobile-gateway/file-relay"
+import type { ClaudeCodeConversationLaunch } from "../mobile-gateway/intent-executor"
 import type { MobileGatewayTransport, MobileSummaryDraft } from "../mobile-gateway/transport"
 
 /* ------------------------------------------------------------------ *
@@ -354,9 +355,36 @@ function createHarness(options: { sessionLines?: number } = {}) {
     return true
   })
 
+  /*
+   * The launcher is injected, so the gateway's own tests do not need a project, a
+   * Provider or a Claude runtime — those are covered where the launcher lives, in
+   * `modules/agent/__tests__/claude-code-terminal.test.ts`. What is under test here
+   * is what the gateway does with an answer: authorize, remember the choice, adopt
+   * the session and report its id back.
+   */
+  const launches: ClaudeCodeConversationLaunch[] = []
+  const createClaudeCodeConversation = vi.fn(async (input: ClaudeCodeConversationLaunch) => {
+    launches.push(input)
+    terminal.sessions.set("sess-cc", {
+      id: "sess-cc",
+      groupId: "g1",
+      title: "Claude Code · Synapse",
+      status: "running",
+      cwd: "/Users/liy/code",
+      cols: input.cols ?? 80,
+      rows: input.rows ?? 24,
+      startedAt: new Date().toISOString(),
+      lastOutputSeq: 0,
+      attention: { state: "unknown", kind: "unknown" },
+    })
+    terminal.lines.set("sess-cc", [])
+    return { id: "sess-cc" }
+  })
+
   const gateway = new MobileGatewayService({
     terminal: terminal as unknown as TerminalService,
     fileRelay,
+    createClaudeCodeConversation,
     permissionGuard,
     auditSink: { record: (event: unknown) => audits.push(event), list: () => [], clearForTests: () => {} },
     logger: { info: () => {}, warn: () => {} },
@@ -371,6 +399,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits,
     permissionGuard, fileRelay, landings, discarded, progress,
+    launches, createClaudeCodeConversation,
   }
 }
 
@@ -1062,6 +1091,134 @@ describe("MobileGatewayService", () => {
       result: { outcome: "accepted", createdSessionId: "sess-new" },
     })
     expect(harness.gateway.getState().attachments).toBe(1)
+  })
+
+  /**
+   * The phone's `＋` → 开始对话, end to end on the desktop side: it names a project and
+   * nothing else, the computer resolves the rest, and the answer is the new terminal.
+   */
+  it("starts a Claude Code conversation from a phone that named only a project", async () => {
+    const harness = createHarness()
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-cc",
+      kind: "createAgentConversation",
+      projectId: "project-1",
+    }))
+
+    // The choice is left to the desktop, which is the whole point: the phone has no
+    // Provider list and no key, and its default must be the desktop's default.
+    expect(harness.launches).toEqual([{
+      projectId: "project-1",
+      createdByClientId: "mobile:phone-1",
+    }])
+    expect(harness.results.at(-1)).toMatchObject({
+      result: { outcome: "accepted", createdSessionId: "sess-cc" },
+    })
+    // The phone lands on a live terminal rather than an empty row, exactly as it does
+    // for a plain terminal it created.
+    expect(harness.gateway.getState().attachments).toBe(1)
+  })
+
+  it("passes a phone's Provider and tier through, and its grid into creation", async () => {
+    const harness = createHarness()
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-cc-explicit",
+      kind: "createAgentConversation",
+      projectId: "project-1",
+      providerId: "vendor",
+      modelTier: "opus",
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+    }))
+
+    // The grid travels with the creation rather than as a follow-up resize: Claude Code
+    // paints its banner at once, and those lines keep the width the PTY was born with.
+    expect(harness.launches).toEqual([{
+      projectId: "project-1",
+      providerId: "vendor",
+      modelTier: "opus",
+      cols: 54,
+      rows: 37,
+      createdByClientId: "mobile:phone-1",
+    }])
+  })
+
+  it("creates nothing when the phone is not allowed to start a session", async () => {
+    const harness = createHarness()
+    harness.terminal.deny = true
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-cc-denied",
+      kind: "createAgentConversation",
+      projectId: "project-1",
+    }))
+
+    expect(harness.createClaudeCodeConversation).not.toHaveBeenCalled()
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "rejected" } })
+    expect(harness.terminal.sessions.has("sess-cc")).toBe(false)
+  })
+
+  /**
+   * A short link is the ordinary way this arrives twice — the phone resends when the
+   * first answer is slow — and a second launch would be a second terminal in the
+   * user's project, which is a side effect nobody asked for.
+   */
+  it("starts only one conversation when the same intent arrives twice", async () => {
+    const harness = createHarness()
+    const duplicate = intent({
+      v: 1,
+      intentId: "i-cc-twice",
+      kind: "createAgentConversation",
+      projectId: "project-1",
+    })
+
+    await harness.gateway.handleIntent("phone-1", duplicate)
+    await harness.gateway.handleIntent("phone-1", duplicate)
+
+    expect(harness.createClaudeCodeConversation).toHaveBeenCalledTimes(1)
+    expect(harness.results.at(-1)).toMatchObject({
+      result: { outcome: "accepted", createdSessionId: "sess-cc" },
+    })
+  })
+
+  /**
+   * The launcher's failures are the user's to fix — no runtime installed, no Provider
+   * that can name a model — and its wording is already the desktop's. Passing it
+   * through is the difference between "在电脑上更新或重新安装 Synapse" and a phone
+   * that only ever says 操作没有完成。
+   */
+  it("shows the launcher's own wording when the conversation cannot be started", async () => {
+    const harness = createHarness()
+    const failure = Object.assign(new Error("内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。"), {
+      code: "runtime_missing",
+      userFacing: true,
+    })
+    harness.createClaudeCodeConversation.mockRejectedValueOnce(failure)
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-cc-failed",
+      kind: "createAgentConversation",
+      projectId: "project-1",
+    }))
+
+    expect(harness.results.at(-1)).toMatchObject({
+      result: {
+        outcome: "rejected",
+        code: "runtime_missing",
+        message: "内置 Claude Code runtime 缺失，请更新或重新安装 Synapse。",
+      },
+    })
+    // Nothing half-made is left behind, and the phone is not attached to a terminal
+    // that does not exist.
+    expect(harness.terminal.sessions.has("sess-cc")).toBe(false)
+    expect(harness.gateway.getState().attachments).toBe(0)
   })
 
   it("reports no_op for a keepalive and keeps the attachment alive", async () => {
