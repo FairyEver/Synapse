@@ -511,6 +511,21 @@ export const terminalSemanticKeySchema = z.enum([
   "Ctrl+L",
   "Ctrl+R",
   "Ctrl+Z",
+  "Ctrl+B",
+  "Ctrl+F",
+  "Ctrl+G",
+  "Ctrl+H",
+  "Ctrl+J",
+  "Ctrl+N",
+  "Ctrl+O",
+  "Ctrl+P",
+  "Ctrl+Q",
+  "Ctrl+S",
+  "Ctrl+T",
+  "Ctrl+V",
+  "Ctrl+X",
+  "Ctrl+Y",
+  "Shift+Tab",
 ])
 
 export const terminalSemanticActionSchema = z.discriminatedUnion("type", [

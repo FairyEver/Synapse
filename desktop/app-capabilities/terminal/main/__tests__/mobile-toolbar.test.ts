@@ -44,6 +44,21 @@ const EXPECTED_KEY_BYTES: Readonly<Record<string, string>> = {
   "Ctrl+L": "\x0c",
   "Ctrl+R": "\x12",
   "Ctrl+Z": "\x1a",
+  "Ctrl+B": "\x02",
+  "Ctrl+F": "\x06",
+  "Ctrl+G": "\x07",
+  "Ctrl+H": "\x08",
+  "Ctrl+J": "\x0a",
+  "Ctrl+N": "\x0e",
+  "Ctrl+O": "\x0f",
+  "Ctrl+P": "\x10",
+  "Ctrl+Q": "\x11",
+  "Ctrl+S": "\x13",
+  "Ctrl+T": "\x14",
+  "Ctrl+V": "\x16",
+  "Ctrl+X": "\x18",
+  "Ctrl+Y": "\x19",
+  "Shift+Tab": "\x1b[Z",
 }
 
 const BUILT_IN = TERMINAL_TOOLBAR_ACTIONS
@@ -244,6 +259,37 @@ describe("mobile toolbar projection", () => {
     // the byte table — and the phone is only audible if all four agree. This is the
     // one comparison that would fail loudly rather than as a rejected keystroke.
     expect([...terminalSemanticKeySchema.options]).toEqual([...MOBILE_KEYS])
+  })
+
+  it("means the two control bytes a hand-written table swaps", () => {
+    // The full-keyboard page's worst pair. `Ctrl+H` is a backspace *character* and
+    // `Ctrl+J` is a line feed, while `\x7f` and `\x0d` — which look like the obvious
+    // answers — are the bytes `Backspace` and `Enter` already send. Getting this
+    // wrong sends a different key than the user pressed, and nothing reports it.
+    expect(DESKTOP_KEY_BYTES["Ctrl+H"]).toBe("\x08")
+    expect(DESKTOP_KEY_BYTES["Ctrl+J"]).toBe("\x0a")
+    expect(DESKTOP_KEY_BYTES["Ctrl+H"]).not.toBe(DESKTOP_KEY_BYTES.Backspace)
+    expect(DESKTOP_KEY_BYTES["Ctrl+J"]).not.toBe(DESKTOP_KEY_BYTES.Enter)
+    // And the other two of the four: a swapped pair here is Ctrl+Q's byte for
+    // Ctrl+S, and `\x1b[I` for the back-tab.
+    expect(DESKTOP_KEY_BYTES["Ctrl+S"]).toBe("\x13")
+    expect(DESKTOP_KEY_BYTES["Ctrl+Q"]).toBe("\x11")
+    expect(DESKTOP_KEY_BYTES["Shift+Tab"]).toBe("\x1b[Z")
+  })
+
+  it("gains no toolbar buttons from the keys the panel added", () => {
+    // The projection reads the byte table backwards, so a built-in that happened to
+    // write one of the new sequences would become a new button on the phone. None
+    // does: the fifteen new keys belong to the keyboard panel alone, and the
+    // mirrored bar has to stay exactly what the computer's own toolbar is.
+    // The list is append-only, so everything past the first twenty-three is this
+    // round's addition — no separate copy of the fifteen to drift.
+    const addedKeys: readonly string[] = MOBILE_KEYS.slice(23)
+    expect(addedKeys).toHaveLength(15)
+
+    const named = project()
+      .flatMap((button) => (button.action.type === "key" ? [button.action.key as string] : []))
+    expect(named.filter((key) => addedKeys.includes(key))).toEqual([])
   })
 
   it("keeps the newly added keys distinct from the ones they could be confused with", () => {

@@ -210,6 +210,16 @@ export const MOBILE_TRUECOLOR_BASE = 0x100_0000
  * Append-only. A key is identified by this string on both sides of the relay —
  * the phone's own enum, the desktop's `KEY_BYTES` and this list all have to agree —
  * so reordering or removing one quietly changes what an existing client sends.
+ *
+ * The `Ctrl+` group stops short of the full alphabet on purpose. `Ctrl+I` is `\x09`
+ * and `Ctrl+M` is `\x0d` — the bytes `Tab` and `Enter` already own — so naming them
+ * here would give `KEY_BYTES` two keys with one sequence, and the toolbar projection
+ * reads that table backwards ("sequence → key") and would silently pick whichever
+ * came last. A panel that wants those chords sends the key that owns the byte.
+ *
+ * `Shift+Tab` is here rather than being composed on the phone: Shift lives on the
+ * full-keyboard page and Tab on the common one, and switching pages drops a latched
+ * modifier, so the two could never meet.
  */
 export const MOBILE_KEYS = [
   "Enter",
@@ -235,6 +245,21 @@ export const MOBILE_KEYS = [
   "Ctrl+L",
   "Ctrl+R",
   "Ctrl+Z",
+  "Ctrl+B",
+  "Ctrl+F",
+  "Ctrl+G",
+  "Ctrl+H",
+  "Ctrl+J",
+  "Ctrl+N",
+  "Ctrl+O",
+  "Ctrl+P",
+  "Ctrl+Q",
+  "Ctrl+S",
+  "Ctrl+T",
+  "Ctrl+V",
+  "Ctrl+X",
+  "Ctrl+Y",
+  "Shift+Tab",
 ] as const
 
 export const MOBILE_MESSAGE_TYPES = {

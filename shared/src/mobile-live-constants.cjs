@@ -129,11 +129,16 @@ exports.MOBILE_TRUECOLOR_BASE = 0x1000000
  * all match by string, so reordering or removing one changes what an already
  * released client sends. `mobile-live.test.ts` keeps this identical to the ESM copy.
  *
+ * `Ctrl+I` and `Ctrl+M` are deliberately absent — see the note on the ESM copy.
+ *
  * @type {readonly [
  *   "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
  *   "Backspace", "Ctrl+C", "Ctrl+D",
  *   "Home", "End", "PageUp", "PageDown", "Delete",
- *   "Ctrl+A", "Ctrl+E", "Ctrl+U", "Ctrl+K", "Ctrl+W", "Ctrl+L", "Ctrl+R", "Ctrl+Z"
+ *   "Ctrl+A", "Ctrl+E", "Ctrl+U", "Ctrl+K", "Ctrl+W", "Ctrl+L", "Ctrl+R", "Ctrl+Z",
+ *   "Ctrl+B", "Ctrl+F", "Ctrl+G", "Ctrl+H", "Ctrl+J", "Ctrl+N", "Ctrl+O",
+ *   "Ctrl+P", "Ctrl+Q", "Ctrl+S", "Ctrl+T", "Ctrl+V", "Ctrl+X", "Ctrl+Y",
+ *   "Shift+Tab"
  * ]}
  */
 exports.MOBILE_KEYS = [
@@ -160,4 +165,19 @@ exports.MOBILE_KEYS = [
   "Ctrl+L",
   "Ctrl+R",
   "Ctrl+Z",
+  "Ctrl+B",
+  "Ctrl+F",
+  "Ctrl+G",
+  "Ctrl+H",
+  "Ctrl+J",
+  "Ctrl+N",
+  "Ctrl+O",
+  "Ctrl+P",
+  "Ctrl+Q",
+  "Ctrl+S",
+  "Ctrl+T",
+  "Ctrl+V",
+  "Ctrl+X",
+  "Ctrl+Y",
+  "Shift+Tab",
 ]

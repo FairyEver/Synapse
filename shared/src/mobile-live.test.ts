@@ -179,10 +179,12 @@ describe("mobile live protocol", () => {
     // session-scoped intent.
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "delete" })).toBe(false)
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "command", sessionId: "s1" })).toBe(false)
-    // A key the terminal service has no bytes for. Not `Ctrl+Z`: the phone's panel
-    // added it, so it is inside the vocabulary now, and `MOBILE_KEYS` is where the
-    // boundary is written down — this checks that the boundary is enforced at all.
-    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "Ctrl+P" }] }))
+    // A key the terminal service has no bytes for. `Ctrl+I` rather than a name like
+    // `F5`, because it is one a client could plausibly send — it is the chord the
+    // full-keyboard page draws — and it is refused precisely so that `Tab` stays the
+    // only name for `\x09`. `MOBILE_KEYS` is where the boundary is written down;
+    // this checks that the boundary is enforced at all.
+    expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "Ctrl+I" }] }))
       .toBe(false)
     expect(isMobileIntent({ v: 1, intentId: "i1", kind: "keys", sessionId: "s1", actions: [{ type: "key", key: "F5" }] }))
       .toBe(false)
@@ -707,7 +709,8 @@ describe("mobile live protocol", () => {
       { ...button, id: "" },
       // A key outside the vocabulary the terminal service can encode.
       { ...button, action: { type: "key", key: "F5" } },
-      { ...button, action: { type: "key", key: "Ctrl+P" } },
+      { ...button, action: { type: "key", key: "Ctrl+I" } },
+      { ...button, action: { type: "key", key: "Ctrl+M" } },
       { ...button, action: { type: "key" } },
       // An action shape neither side knows how to execute.
       { ...button, action: { type: "script", text: "rm -rf /" } },
@@ -728,14 +731,26 @@ describe("mobile live protocol", () => {
     // Every key the panel can draw has to be one the desktop's `KEY_BYTES` can turn
     // into bytes; a name that is only in this list would be accepted by the cloud and
     // then rejected by the computer, which reads to a user as a key that does nothing.
-    expect(MOBILE_KEYS).toHaveLength(23)
+    expect(MOBILE_KEYS).toHaveLength(38)
     expect(MOBILE_KEYS).toEqual([
+      // The original twenty-three, in the order they were first released in.
       "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
       "Backspace", "Ctrl+C", "Ctrl+D",
       "Home", "End", "PageUp", "PageDown", "Delete",
       "Ctrl+A", "Ctrl+E", "Ctrl+U", "Ctrl+K", "Ctrl+W", "Ctrl+L", "Ctrl+R", "Ctrl+Z",
+      // The full-keyboard page's additions, appended rather than sorted in: the
+      // list is append-only, and a name's position is not what identifies it.
+      "Ctrl+B", "Ctrl+F", "Ctrl+G", "Ctrl+H", "Ctrl+J", "Ctrl+N", "Ctrl+O",
+      "Ctrl+P", "Ctrl+Q", "Ctrl+S", "Ctrl+T", "Ctrl+V", "Ctrl+X", "Ctrl+Y",
+      "Shift+Tab",
     ])
     expect(new Set<string>(MOBILE_KEYS).size).toBe(MOBILE_KEYS.length)
+    // `Ctrl+I` and `Ctrl+M` are the two letters of the alphabet missing from the
+    // `Ctrl+` run, and they have to stay missing: `I` is `\x09` and `M` is `\x0d`,
+    // which `Tab` and `Enter` already name. A second name for either byte would make
+    // the desktop's reverse lookup pick one of them silently.
+    expect(MOBILE_KEYS).not.toContain("Ctrl+I")
+    expect(MOBILE_KEYS).not.toContain("Ctrl+M")
   })
 
   it("adds no bytes to the messages that predate the toolbar", () => {

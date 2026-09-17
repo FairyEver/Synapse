@@ -275,6 +275,28 @@ export const KEY_BYTES: Readonly<Record<string, string>> = {
   "Ctrl+L": "\x0c",
   "Ctrl+R": "\x12",
   "Ctrl+Z": "\x1a",
+  "Ctrl+B": "\x02",
+  "Ctrl+F": "\x06",
+  "Ctrl+G": "\x07",
+  // `\x08`, not `\x7f`: Backspace is the *delete* key on a terminal, and `\x08` is
+  // what a real Ctrl+H sends. The two are the pair this table is most likely to get
+  // wrong, so the test spells them out a second time.
+  "Ctrl+H": "\x08",
+  // `\x0a`, not `\x0d`: Ctrl+J is a line feed, which Enter already owns as a
+  // carriage return. See the same note on `Ctrl+H`.
+  "Ctrl+J": "\x0a",
+  "Ctrl+N": "\x0e",
+  "Ctrl+O": "\x0f",
+  "Ctrl+P": "\x10",
+  "Ctrl+Q": "\x11",
+  "Ctrl+S": "\x13",
+  "Ctrl+T": "\x14",
+  "Ctrl+V": "\x16",
+  "Ctrl+X": "\x18",
+  "Ctrl+Y": "\x19",
+  // Back-tab. Claude Code cycles its permission mode on it, which is why it earns a
+  // key of its own rather than being composed from Shift and Tab on the phone.
+  "Shift+Tab": "\x1b[Z",
 }
 
 export function createTerminalService(deps: {
