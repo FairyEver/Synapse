@@ -129,6 +129,12 @@ type TerminalRuntime = {
   readonly buffer: TerminalOutputBuffer
   readonly emulator: TerminalCoreEmulator
   readonly disposables: PtyDisposable[]
+  /**
+   * The last grid the desktop's own layout asked for. Runtime state, like the
+   * dimensions a phone claims: it is not persisted and dies with the PTY, which
+   * is exactly as long as this terminal can still be resized back.
+   */
+  desktopGrid: { cols: number; rows: number } | null
 }
 
 export type TerminalControllerContext = {
@@ -182,11 +188,19 @@ export type TerminalService = ReturnType<typeof createTerminalService>
 /**
  * Who asked for a grid change.
  *
- * Only a phone's own request claims size ownership; the desktop's fit, an
- * automated resize and creation all release it. See `applySessionResize`.
+ * Only a phone's own request claims size ownership; every other source releases
+ * it. See `applySessionResize`.
+ *
+ * The two desktop branches differ in whether the grid is remembered as the one
+ * the local layout wants. `desktop-layout` is the renderer's fit, and it is the
+ * only source that knows what shape the pane would have: recording it is what
+ * lets a phone's `releaseGrid` restore the size without the desktop being
+ * visible to re-fit. `desktop` is an automated resize, which is a caller picking
+ * dimensions for its own reasons and says nothing about the local layout.
  */
 type SessionResizeSource =
   | { readonly kind: "desktop" }
+  | { readonly kind: "desktop-layout" }
   | {
     readonly kind: "mobile"
     readonly deviceLabel: string
@@ -850,7 +864,13 @@ export function createTerminalService(deps: {
       if (published && removed) events.emit("sessionDeleted", { sessionId: session.id })
       void flushPersist()
     })
-    runtimes.set(session.id, { pty: child, buffer, emulator, disposables: [dataDisposable, exitDisposable] })
+    runtimes.set(session.id, {
+      pty: child,
+      buffer,
+      emulator,
+      disposables: [dataDisposable, exitDisposable],
+      desktopGrid: null,
+    })
   }
 
   function enforceGlobalOutputQuota(): void {
@@ -2104,7 +2124,7 @@ export function createTerminalService(deps: {
   }
 
   async function resizeSession(input: TerminalResizeSessionInput): Promise<void> {
-    await applySessionResize(input.sessionId, input.cols, input.rows)
+    await applySessionResize(input.sessionId, input.cols, input.rows, { kind: "desktop-layout" })
   }
 
   async function deleteSession(input: TerminalDeleteSessionInput): Promise<void> {
@@ -2409,6 +2429,10 @@ export function createTerminalService(deps: {
       : undefined
     const ownerChanged = !sameSizeOwner(current.sizeOwner, nextOwner)
     const sizeChanged = current.cols !== cols || current.rows !== rows
+    // Before the early return below, not after: the record has to track the last
+    // shape the layout asked for even when the grid did not move, or a restore
+    // would put the terminal back at a shape the pane has since outgrown.
+    if (source.kind === "desktop-layout") runtime.desktopGrid = { cols, rows }
     // Ownership can change with the grid unchanged — a phone adopting a session
     // that already happens to be its shape. The renderer still has to hear about
     // that, or the badge never appears.
@@ -2499,6 +2523,40 @@ export function createTerminalService(deps: {
     })
     scheduleRuntimePersist(sessionId)
     return updated
+  }
+
+  /**
+   * Puts the PTY back at the size the local layout wants, and returns whether it
+   * could.
+   *
+   * This is what a phone's `releaseGrid` means. Handing ownership back is only
+   * half the job — the other half is moving the grid, and the phone cannot do
+   * that itself: everything it was ever told is the size the PTY currently has.
+   * The desktop normally moves it on its own next fit, but that fit only runs
+   * while a pane is actually on screen, so a window that is closed or in the
+   * background would leave the PTY at the phone's grid indefinitely while the
+   * phone, now in a mode that draws the desktop's layout, shows the wrong shape.
+   *
+   * One call does both because a non-mobile resize releases ownership by itself
+   * (ADR 0216): releasing first and resizing after would emit two state batches
+   * for one user action.
+   *
+   * `false` means the desktop has never laid this terminal out — nothing has ever
+   * told us what shape it would want. There is no honest size to substitute, so
+   * the caller reports that rather than inventing one; the next time the pane is
+   * shown, the fit records a grid and the phone picks it up from the resize
+   * event. Ownership is still handed back either way.
+   */
+  async function restoreGridForDesktop(sessionId: string): Promise<boolean> {
+    const current = getSessionOrThrow(sessionId)
+    if (!current.sizeOwner) return true
+    const grid = runtimes.get(sessionId)?.desktopGrid
+    if (!grid) {
+      releaseSizeOwnership(sessionId)
+      return false
+    }
+    await applySessionResize(sessionId, grid.cols, grid.rows, { kind: "desktop-layout" })
+    return true
   }
 
   /**
@@ -3036,6 +3094,7 @@ export function createTerminalService(deps: {
     attachSession,
     resizeSessionFromDevice,
     releaseSizeOwnership,
+    restoreGridForDesktop,
     releaseSizeOwnershipForClient,
     renameSession,
     writeSession,

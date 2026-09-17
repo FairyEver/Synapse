@@ -200,6 +200,39 @@ class FakeTerminal {
     return session
   }
 
+  /**
+   * The shape the desktop's own layout last asked for, per session. Only the
+   * desktop's fit writes it, so a phone's resize deliberately does not — the real
+   * service makes the same distinction between its two non-mobile resize sources.
+   */
+  readonly desktopGrids = new Map<string, { cols: number; rows: number }>()
+
+  /** Stands in for the renderer's fit, which is the only writer in production. */
+  fitToDesktopGrid(sessionId: string, cols: number, rows: number): void {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.cols = cols
+      session.rows = rows
+      session.sizeOwner = undefined
+    }
+    this.desktopGrids.set(sessionId, { cols, rows })
+  }
+
+  async restoreGridForDesktop(sessionId: string): Promise<boolean> {
+    this.calls.push("restoreGridForDesktop")
+    const session = this.sessions.get(sessionId)
+    if (!session?.sizeOwner) return true
+    const grid = this.desktopGrids.get(sessionId)
+    if (!grid) {
+      this.releaseSizeOwnership(sessionId)
+      return false
+    }
+    session.cols = grid.cols
+    session.rows = grid.rows
+    session.sizeOwner = undefined
+    return true
+  }
+
   releaseSizeOwnershipForClient(mobileClientInstanceId: string) {
     this.calls.push("releaseSizeOwnershipForClient")
     for (const session of this.sessions.values()) {
@@ -772,8 +805,51 @@ describe("MobileGatewayService", () => {
     expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
   })
 
-  /** Leaving the phone-driven mode hands the grid back to the desktop. */
-  it("releases the grid for a phone that stops driving it", async () => {
+  /**
+   * Leaving the phone-driven mode hands the grid back to the desktop, and the
+   * desktop puts the PTY at its own shape in the same step.
+   *
+   * The desktop's fit is not a reliable second half: it only runs while a pane is
+   * on screen, so a window that is closed or in the background would leave the
+   * terminal at the phone's grid while the phone drew the desktop's.
+   */
+  it("restores the desktop's grid for a phone that stops driving it", async () => {
+    const harness = createHarness()
+    await attach(harness)
+    // The desktop showed this terminal at its own shape before the phone took over.
+    harness.terminal.fitToDesktopGrid("sess-1", 120, 40)
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-resize",
+      kind: "resize",
+      sessionId: "sess-1",
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+    }))
+    expect(harness.terminal.sessions.get("sess-1")).toMatchObject({ cols: 54, rows: 37 })
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeDefined()
+    harness.terminal.calls.length = 0
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-release",
+      kind: "releaseGrid",
+      sessionId: "sess-1",
+    }))
+
+    expect(harness.terminal.calls).toContain("restoreGridForDesktop")
+    expect(harness.terminal.sessions.get("sess-1")).toMatchObject({ cols: 120, rows: 40 })
+    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+  })
+
+  /**
+   * A terminal the desktop has never drawn has no shape to restore, and inventing
+   * one would be a second wrong size to move away from. The phone is told so
+   * rather than left believing the switch worked.
+   */
+  it("refuses a restore when the desktop has never drawn the terminal", async () => {
     const harness = createHarness()
     await attach(harness)
     await harness.gateway.handleIntent("phone-1", intent({
@@ -785,8 +861,6 @@ describe("MobileGatewayService", () => {
       rows: 37,
       deviceLabel: "iPhone",
     }))
-    expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeDefined()
-    harness.terminal.calls.length = 0
 
     await harness.gateway.handleIntent("phone-1", intent({
       v: 1,
@@ -795,8 +869,14 @@ describe("MobileGatewayService", () => {
       sessionId: "sess-1",
     }))
 
-    expect(harness.terminal.calls).toContain("releaseSizeOwnership")
+    // Rejected and not silently accepted: the phone shows the message, and a
+    // silent no-op would leave the reader staring at a layout that never came back.
+    expect(harness.results.at(-1)).toMatchObject({
+      result: { outcome: "rejected", code: "desktop_grid_unknown" },
+    })
+    // The claim still goes back — it is the size that could not be restored.
     expect(harness.terminal.sessions.get("sess-1")?.sizeOwner).toBeUndefined()
+    expect(harness.terminal.sessions.get("sess-1")).toMatchObject({ cols: 54, rows: 37 })
   })
 
   /**

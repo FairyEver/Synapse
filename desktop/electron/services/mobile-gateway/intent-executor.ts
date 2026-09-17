@@ -306,13 +306,28 @@ export class MobileIntentExecutor {
        *
        * Authorized as a resize because that is what it is the other half of: the
        * same permission that lets a phone choose the size lets it stop choosing.
-       * The PTY keeps whatever size it has — the desktop's own fit sets it on its
-       * next layout pass, and shrinking it out from under a terminal in the
-       * meantime would reflow text nobody asked to move.
+       * The desktop moves the PTY back to its own layout's shape as part of the
+       * same call, because the phone has just switched to drawing that shape and
+       * has no other way to learn it: the desktop's fit only runs while a pane is
+       * on screen, so a backgrounded window would otherwise leave the terminal at
+       * the phone's grid while the phone drew the desktop's.
+       *
+       * Refused, not silently accepted, when the desktop has never laid the
+       * terminal out — see `restoreGridForDesktop`. The phone shows the message;
+       * the pane appearing later fixes it on its own.
        */
       case "releaseGrid": {
         await this.deps.authorize("terminal.session.resize", sessionResource(intent.sessionId))
-        terminal.releaseSizeOwnership(intent.sessionId)
+        const restored = await terminal.restoreGridForDesktop(intent.sessionId)
+        if (!restored) {
+          return {
+            intentId: intent.intentId,
+            outcome: "rejected",
+            code: "desktop_grid_unknown",
+            message: "电脑端还没有显示过这个终端，请先在电脑上打开它。",
+            sessionId: intent.sessionId,
+          }
+        }
         return accepted(intent.intentId, { sessionId: intent.sessionId })
       }
 

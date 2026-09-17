@@ -1035,6 +1035,129 @@ describe("TerminalService core", () => {
     expect(after.sizeRevision).toBe(before.sizeRevision)
   })
 
+  /**
+   * The renderer's fit is the only source that knows what shape the pane would
+   * have, so it is the only one that records it — and that record is what lets a
+   * phone's `releaseGrid` move the PTY on its own.
+   *
+   * It has to work with nobody at the desktop, which is the whole point: the fit
+   * only runs while a pane is on screen, so waiting for it would leave the
+   * terminal at the phone's grid for as long as the window stayed closed.
+   */
+  it("restores the grid the local layout asked for when a phone hands it back", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    await service.resizeSession({ sessionId: session.id, cols: 120, rows: 40 })
+    await service.resizeSessionFromDevice({
+      sessionId: session.id,
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+      mobileClientInstanceId: "phone-1",
+    })
+    expect(service.getSession({ sessionId: session.id }).sizeOwner).toBeDefined()
+
+    await expect(service.restoreGridForDesktop(session.id)).resolves.toBe(true)
+
+    expect(pty.resize).toHaveBeenLastCalledWith(120, 40)
+    const restored = service.getSession({ sessionId: session.id })
+    expect(restored).toMatchObject({ cols: 120, rows: 40 })
+    expect(restored.sizeOwner).toBeUndefined()
+  })
+
+  /**
+   * An automated resize picks dimensions for its own reasons and says nothing
+   * about the local layout, so it must not become the shape a restore lands on.
+   */
+  it("does not mistake an automated resize for the local layout's grid", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    await service.resizeSession({ sessionId: session.id, cols: 120, rows: 40 })
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000070",
+    }, controllerA)
+    await service.resizeControlledSession({
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedSizeRevision: 2, cols: 200, rows: 60,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000071",
+    }, controllerA)
+    await service.resizeSessionFromDevice({
+      sessionId: session.id,
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+      mobileClientInstanceId: "phone-1",
+    })
+
+    await expect(service.restoreGridForDesktop(session.id)).resolves.toBe(true)
+
+    expect(pty.resize).toHaveBeenLastCalledWith(120, 40)
+  })
+
+  /**
+   * The record is the last shape the layout asked for, not the last shape that
+   * moved. A fit that lands on dimensions the PTY already has still changes the
+   * layout's opinion, and the next restore has to use the new one.
+   */
+  it("records the layout's grid even when the PTY already has that size", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    await service.resizeSession({ sessionId: session.id, cols: 120, rows: 40 })
+    const lease = service.acquireControl({
+      sessionId: session.id, requestedLeaseMs: 10_000,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000072",
+    }, controllerA)
+    await service.resizeControlledSession({
+      sessionId: session.id, leaseId: lease.leaseId,
+      expectedSizeRevision: 2, cols: 100, rows: 30,
+      idempotencyKey: "019f8a39-0000-7000-8000-000000000073",
+    }, controllerA)
+    // The pane re-fits onto the shape it now has: no dimension moves, so nothing
+    // is emitted, but (120, 40) is no longer what the layout wants.
+    await service.resizeSession({ sessionId: session.id, cols: 100, rows: 30 })
+    await service.resizeSessionFromDevice({
+      sessionId: session.id,
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+      mobileClientInstanceId: "phone-1",
+    })
+
+    await expect(service.restoreGridForDesktop(session.id)).resolves.toBe(true)
+
+    expect(pty.resize).toHaveBeenLastCalledWith(100, 30)
+  })
+
+  /**
+   * A terminal the desktop has never displayed has no shape to go back to, and a
+   * default would be a second wrong size to move away from. The claim still goes
+   * back — it is the size that could not be restored — and the pane appearing
+   * later fixes it on its own.
+   */
+  it("reports that it cannot restore a grid the desktop has never drawn", async () => {
+    const { service, pty } = await startedHarness()
+    const session = await service.createSession({})
+    await service.resizeSessionFromDevice({
+      sessionId: session.id,
+      cols: 54,
+      rows: 37,
+      deviceLabel: "iPhone",
+      mobileClientInstanceId: "phone-1",
+    })
+    pty.resize.mockClear()
+
+    await expect(service.restoreGridForDesktop(session.id)).resolves.toBe(false)
+
+    expect(pty.resize).not.toHaveBeenCalled()
+    const after = service.getSession({ sessionId: session.id })
+    expect(after).toMatchObject({ cols: 54, rows: 37 })
+    expect(after.sizeOwner).toBeUndefined()
+    // Nothing left to hand back. Retrying must not re-report a failure the reader
+    // can do nothing about.
+    await expect(service.restoreGridForDesktop(session.id)).resolves.toBe(true)
+  })
+
   it("keeps normal stop asynchronous, reports the terminal transition, then destroys the session", async () => {
     const { service, pty } = await startedHarness()
     const session = await service.createSession({})
