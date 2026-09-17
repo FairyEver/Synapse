@@ -361,6 +361,27 @@ enum MobileKey: String, Codable, CaseIterable {
     case controlL = "Ctrl+L"
     case controlR = "Ctrl+R"
     case controlZ = "Ctrl+Z"
+    // The full-keyboard page's additions. `Ctrl+I` and `Ctrl+M` are deliberately
+    // absent: their bytes are Tab's and Return's, which already have names, and a
+    // second name for one byte would break the computer's reverse lookup. A panel
+    // that wants those chords sends the key that owns the byte.
+    case controlB = "Ctrl+B"
+    case controlF = "Ctrl+F"
+    case controlG = "Ctrl+G"
+    case controlH = "Ctrl+H"
+    case controlJ = "Ctrl+J"
+    case controlN = "Ctrl+N"
+    case controlO = "Ctrl+O"
+    case controlP = "Ctrl+P"
+    case controlQ = "Ctrl+Q"
+    case controlS = "Ctrl+S"
+    case controlT = "Ctrl+T"
+    case controlV = "Ctrl+V"
+    case controlX = "Ctrl+X"
+    case controlY = "Ctrl+Y"
+    /// Back-tab. Claude Code cycles its permission mode on it, and the panel keeps it
+    /// as a key of its own because Shift and Tab live on different pages.
+    case shiftTab = "Shift+Tab"
 }
 
 enum MobileKeyAction: Encodable, Equatable {

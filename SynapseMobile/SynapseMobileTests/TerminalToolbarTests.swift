@@ -46,12 +46,15 @@ struct TerminalToolbarTests {
     @Test func decodesEveryKeyThePanelCanSend() throws {
         // The panel draws its keys from `MobileKey`, and the computer sends names. A
         // name this build does not know is a button it cannot press, so the two lists
-        // have to be the same length — and `MOBILE_KEYS` is 23.
+        // have to be the same length — and `MOBILE_KEYS` is 38.
         let names = [
             "Enter", "Tab", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
             "Backspace", "Ctrl+C", "Ctrl+D",
             "Home", "End", "PageUp", "PageDown", "Delete",
             "Ctrl+A", "Ctrl+E", "Ctrl+U", "Ctrl+K", "Ctrl+W", "Ctrl+L", "Ctrl+R", "Ctrl+Z",
+            "Ctrl+B", "Ctrl+F", "Ctrl+G", "Ctrl+H", "Ctrl+J", "Ctrl+N", "Ctrl+O",
+            "Ctrl+P", "Ctrl+Q", "Ctrl+S", "Ctrl+T", "Ctrl+V", "Ctrl+X", "Ctrl+Y",
+            "Shift+Tab",
         ]
         let buttons = names.map {
             """
@@ -62,10 +65,43 @@ struct TerminalToolbarTests {
         {"desktopClientInstanceId": "d", "revision": 1, "buttons": [\(buttons)]}
         """))
 
-        #expect(payload.buttons.count == 23)
+        #expect(payload.buttons.count == 38)
         for name in names {
             #expect(MobileKey(rawValue: name) != nil, "\(name) is not a key this build knows")
         }
+        // The two the alphabet is missing, and the reason it is missing them: their
+        // bytes belong to Tab and Return, so a chord on I or M is sent as that key.
+        #expect(MobileKey(rawValue: "Ctrl+I") == nil)
+        #expect(MobileKey(rawValue: "Ctrl+M") == nil)
+        // Every case is one of the names above: a case the panel can draw but the
+        // computer has never heard of would be a key that is rejected on press.
+        #expect(MobileKey.allCases.count == 38)
+        #expect(Set(MobileKey.allCases.map(\.rawValue)) == Set(names))
+    }
+
+    @Test func anAltChordTravelsAsOneIntent() throws {
+        /*
+         * Alt is an Escape prefix in a terminal, so `Alt+B` is two actions. They have
+         * to ride in one intent: sent as two, the terminal sees the bare Escape on its
+         * own and acts on it before the letter arrives — which for Escape means
+         * leaving whatever mode the user was in.
+         */
+        let request = MobileIntentRequest(
+            intentId: "i1",
+            kind: "keys",
+            sessionId: "s1",
+            actions: [.key(.escape), .text("b")]
+        )
+        let encoded = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(request)
+        ) as? [String: Any]
+        let actions = try #require(encoded?["actions"] as? [[String: Any]])
+
+        #expect(actions.count == 2)
+        #expect(actions[0]["type"] as? String == "key")
+        #expect(actions[0]["key"] as? String == "Escape")
+        #expect(actions[1]["type"] as? String == "text")
+        #expect(actions[1]["text"] as? String == "b")
     }
 
     @Test func dropsOnlyTheButtonsThisBuildCannotActOn() {

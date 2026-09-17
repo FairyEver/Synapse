@@ -741,12 +741,26 @@ final class SynapseAppModel {
     }
 
     func sendKey(_ sessionId: String, _ key: MobileKey) {
+        sendKeys(sessionId, [.key(key)])
+    }
+
+    /// Sends several actions as one intent.
+    ///
+    /// The `keys` intent has always taken an array — it is how a sequence is meant to
+    /// travel — and the panel needs it for exactly one thing: an Alt chord is an
+    /// Escape prefix followed by the letter, and splitting that into two intents would
+    /// let the terminal echo the bare Escape in between.
+    ///
+    /// An empty list is refused here rather than sent: the computer's schema requires
+    /// at least one action, so it would only ever come back rejected.
+    func sendKeys(_ sessionId: String, _ actions: [MobileKeyAction]) {
+        guard !actions.isEmpty else { return }
         Task {
             await write(MobileIntentRequest(
                 intentId: UUID().uuidString,
                 kind: "keys",
                 sessionId: sessionId,
-                actions: [.key(key)]
+                actions: actions
             ), to: sessionId)
         }
     }
