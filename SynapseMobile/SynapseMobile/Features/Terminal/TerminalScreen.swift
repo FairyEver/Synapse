@@ -1,6 +1,15 @@
 import SwiftUI
 import UIKit
 
+/// Apple's minimum tappable area, in points.
+///
+/// It is what the two bars under the terminal are sized from, and it is a floor
+/// rather than a preference: a glyph is drawn at the size it reads at and handed
+/// this much room to be hit in, and the row is as tall as the roomiest control in
+/// it. Drawn-and-tappable being the same rectangle is what left the bar shorter
+/// than a finger.
+private let minimumTapTarget: CGFloat = 44
+
 /// One terminal, full screen.
 struct TerminalScreen: View {
     @Environment(SynapseAppModel.self) private var model
@@ -370,7 +379,7 @@ struct TerminalScreen: View {
     /// or a free-form key could not be delivered even if it were drawn.
     private var accessoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 ForEach(MobileKey.allCases, id: \.self) { key in
                     Button(key.label) {
                         model.sendKey(sessionId, key)
@@ -384,19 +393,23 @@ struct TerminalScreen: View {
                         }
                         inputFocused = true
                     }
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .frame(minWidth: 40)
-                    .padding(.vertical, 7)
-                    .padding(.horizontal, 8)
-                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .frame(minWidth: 48, minHeight: 36)
+                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    // The pill is the control; this is the room around it. Applied
+                    // after the background so the pill keeps its own size and only
+                    // the tappable box grows to the minimum.
+                    .frame(minHeight: minimumTapTarget)
                     // Named rather than matched by its label: the on-screen keyboard
                     // has a return key of its own, and one of these two is a submit
                     // whose consequences a test has to be able to tell apart.
                     .accessibilityIdentifier("key-\(key.rawValue)")
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 2)
         }
         .background(Color(uiColor: .systemBackground))
     }
@@ -416,8 +429,9 @@ struct TerminalScreen: View {
                     voice.cancel()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 20))
+                        .font(.system(size: 22))
                         .foregroundStyle(Theme.ink)
+                        .frame(width: minimumTapTarget, height: minimumTapTarget)
                 }
                 .accessibilityIdentifier("voice-cancel")
             } else {
@@ -455,8 +469,9 @@ struct TerminalScreen: View {
                     }
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 20))
+                        .font(.system(size: 22))
                         .foregroundStyle(Theme.ink)
+                        .frame(width: minimumTapTarget, height: minimumTapTarget)
                 }
                 .tint(Theme.ink)
                 .accessibilityIdentifier("attach")
@@ -468,6 +483,7 @@ struct TerminalScreen: View {
                 TextField("输入命令", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: minimumTapTarget)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .submitLabel(.send)
@@ -486,8 +502,9 @@ struct TerminalScreen: View {
                     voice.start { await model.requestAsrSignature() }
                 } label: {
                     Image(systemName: "mic")
-                        .font(.system(size: 20))
+                        .font(.system(size: 22))
                         .foregroundStyle(Theme.ink)
+                        .frame(width: minimumTapTarget, height: minimumTapTarget)
                 }
                 .accessibilityIdentifier("voice-start")
             }
@@ -495,7 +512,7 @@ struct TerminalScreen: View {
             rightKey(presentation)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .background(Color(uiColor: .systemBackground))
         .overlay(alignment: .top) { Divider().opacity(0.3) }
     }
@@ -543,8 +560,9 @@ struct TerminalScreen: View {
         case .send:
             Button(action: sendDraft) {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 26))
+                    .font(.system(size: 30))
                     .foregroundStyle(draft.isEmpty ? Color.secondary : Theme.ink)
+                    .frame(width: minimumTapTarget, height: minimumTapTarget)
             }
             .disabled(draft.isEmpty)
             .accessibilityIdentifier("send")
@@ -555,8 +573,9 @@ struct TerminalScreen: View {
                 Task { await finishVoice() }
             } label: {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 26))
+                    .font(.system(size: 30))
                     .foregroundStyle(enabled ? Theme.ink : Color.secondary)
+                    .frame(width: minimumTapTarget, height: minimumTapTarget)
             }
             .disabled(!enabled)
             .accessibilityIdentifier("voice-confirm")
@@ -567,8 +586,9 @@ struct TerminalScreen: View {
                 voice.retry()
             } label: {
                 Image(systemName: "arrow.clockwise.circle.fill")
-                    .font(.system(size: 26))
+                    .font(.system(size: 30))
                     .foregroundStyle(enabled ? Theme.ink : Color.secondary)
+                    .frame(width: minimumTapTarget, height: minimumTapTarget)
             }
             .disabled(!enabled)
             .accessibilityIdentifier("voice-retry")
