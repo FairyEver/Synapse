@@ -18,6 +18,9 @@ enum LiveMessageType {
     static let mobileTransferProgress = "mobile.transferProgress"
     static let mobileDetached = "mobile.detached"
     static let mobilePresence = "mobile.presence"
+    /// The command buttons a computer offers this phone. A family of its own rather
+    /// than part of the summary, whose byte budget cannot carry them.
+    static let mobileToolbar = "mobile.toolbar"
 }
 
 /// Which of the user's computers are reachable right now.
@@ -345,25 +348,22 @@ enum MobileKey: String, Codable, CaseIterable {
     case backspace = "Backspace"
     case controlC = "Ctrl+C"
     case controlD = "Ctrl+D"
-
-    /// Short label for the accessory bar.
-    var label: String {
-        switch self {
-        case .enter: return "return"
-        case .tab: return "tab"
-        case .escape: return "esc"
-        case .arrowUp: return "↑"
-        case .arrowDown: return "↓"
-        case .arrowLeft: return "←"
-        case .arrowRight: return "→"
-        case .backspace: return "⌫"
-        case .controlC: return "^C"
-        case .controlD: return "^D"
-        }
-    }
+    case home = "Home"
+    case end = "End"
+    case pageUp = "PageUp"
+    case pageDown = "PageDown"
+    case delete = "Delete"
+    case controlA = "Ctrl+A"
+    case controlE = "Ctrl+E"
+    case controlU = "Ctrl+U"
+    case controlK = "Ctrl+K"
+    case controlW = "Ctrl+W"
+    case controlL = "Ctrl+L"
+    case controlR = "Ctrl+R"
+    case controlZ = "Ctrl+Z"
 }
 
-enum MobileKeyAction: Encodable {
+enum MobileKeyAction: Encodable, Equatable {
     case text(String)
     case key(MobileKey)
 
@@ -414,6 +414,168 @@ struct MobileTransferProgressPayload: Decodable {
     /// Zero when the download declared no length, which is a different statement
     /// from a total of zero bytes.
     let totalBytes: Double
+}
+
+// MARK: - Toolbar
+
+/// What pressing a mirrored button makes the computer do.
+///
+/// Two arms because the computer has two different ways of running something and
+/// they are not interchangeable: `command` writes the text and then a carriage
+/// return, which is the desktop's own click, while a bare `text` action writes
+/// exactly what it is given. Sending the second as the first would press Enter on
+/// the user's behalf.
+enum MobileToolbarAction: Decodable {
+    case key(MobileKey)
+    case text(String, pressEnter: Bool)
+
+    private enum CodingKeys: String, CodingKey { case type, key, text, pressEnter }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(String.self, forKey: .type) {
+        case "key":
+            guard let key = MobileKey(rawValue: try container.decode(String.self, forKey: .key)) else {
+                // A key this build does not know cannot be sent, and it also cannot be
+                // drawn as something it is not — so the whole button is dropped rather
+                // than shown doing nothing.
+                throw DecodingError.dataCorruptedError(
+                    forKey: .key, in: container, debugDescription: "unknown mobile key"
+                )
+            }
+            self = .key(key)
+        case "text":
+            self = .text(
+                try container.decode(String.self, forKey: .text),
+                pressEnter: try container.decode(Bool.self, forKey: .pressEnter)
+            )
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .type, in: container, debugDescription: "unknown toolbar action"
+            )
+        }
+    }
+}
+
+/// Where a button sits in the desktop's own toolbar.
+///
+/// Sent rather than derived: the desktop's rule is positional — its separator goes
+/// before the first remaining slash command — which this client cannot reproduce
+/// without re-deriving the computer's list, and the whole point is that the phone
+/// shows the computer's list.
+enum MobileToolbarGroup: String, Decodable {
+    case key
+    case command
+    case custom
+}
+
+struct MobileToolbarButton: Decodable, Identifiable, Hashable {
+    let id: String
+    /// The computer's own wording, rendered verbatim.
+    let label: String
+    let group: MobileToolbarGroup
+    let action: MobileToolbarAction
+
+    static func == (lhs: MobileToolbarButton, rhs: MobileToolbarButton) -> Bool {
+        lhs.id == rhs.id && lhs.label == rhs.label
+            && lhs.group == rhs.group && lhs.action == rhs.action
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+extension MobileToolbarAction: Equatable {
+    static func == (lhs: MobileToolbarAction, rhs: MobileToolbarAction) -> Bool {
+        switch (lhs, rhs) {
+        case (.key(let a), .key(let b)): return a == b
+        case (.text(let a, let x), .text(let b, let y)): return a == b && x == y
+        default: return false
+        }
+    }
+
+    /// The intent pressing this button sends.
+    ///
+    /// Every arm maps onto an intent that already existed, which is what made this
+    /// feature one more kind of data rather than a new protocol — and it is why the
+    /// mapping is one function rather than three call sites: the difference between
+    /// running a command and only typing it is a single flag, and getting that flag
+    /// backwards presses Enter on the user's behalf.
+    ///
+    /// Deliberately not `command` for the typing case. `command` writes the text and
+    /// then a carriage return, so it *runs* the line; `keys` with a text action writes
+    /// exactly what it is given.
+    func intent(sessionId: String, intentId: String) -> MobileIntentRequest {
+        switch self {
+        case .key(let key):
+            return MobileIntentRequest(
+                intentId: intentId, kind: "keys", sessionId: sessionId, actions: [.key(key)]
+            )
+        case .text(let text, let pressEnter):
+            guard pressEnter else {
+                return MobileIntentRequest(
+                    intentId: intentId, kind: "keys", sessionId: sessionId, actions: [.text(text)]
+                )
+            }
+            return MobileIntentRequest(
+                intentId: intentId, kind: "command", sessionId: sessionId, text: text
+            )
+        }
+    }
+
+    /// Whether pressing this button submits a line, and therefore spends the chip an
+    /// inserted path was holding.
+    var submitsLine: Bool {
+        switch self {
+        case .key(let key): return key == .enter
+        case .text(_, let pressEnter): return pressEnter
+        }
+    }
+}
+
+/// The command buttons the computer offers, which this phone shows read-only.
+///
+/// A full snapshot every time: the client replaces what it holds, so a lost message
+/// costs nothing beyond waiting for the next one. An empty `buttons` is a real
+/// answer — "this computer has none" — and is not the same as never having received
+/// this message at all, which is what the fallback below stands for.
+struct MobileToolbarPayload: Decodable {
+    let desktopClientInstanceId: String
+    let revision: Int
+    let buttons: [MobileToolbarButton]
+
+    init(desktopClientInstanceId: String, revision: Int, buttons: [MobileToolbarButton]) {
+        self.desktopClientInstanceId = desktopClientInstanceId
+        self.revision = revision
+        self.buttons = buttons
+    }
+
+    private enum CodingKeys: String, CodingKey { case desktopClientInstanceId, revision, buttons }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Strict where the message as a whole is concerned: without an identity the list
+        // cannot be filed under a computer, and filing it under the wrong one would show
+        // one machine's commands while another is on screen.
+        desktopClientInstanceId = try container.decode(String.self, forKey: .desktopClientInstanceId)
+        revision = try container.decode(Int.self, forKey: .revision)
+        // Lossy where the buttons are concerned, and that asymmetry is deliberate. A
+        // button this build cannot act on — a key from a newer desktop — is one button
+        // lost, and failing the whole message over it would freeze the entire bar on
+        // every older phone the moment a computer gained one new key.
+        buttons = try container.decode([LossyButton].self, forKey: .buttons).compactMap(\.value)
+    }
+
+    /// Decodes a button, or nothing. Used to skip an unusable one without giving up the
+    /// rest of the list.
+    private struct LossyButton: Decodable {
+        let value: MobileToolbarButton?
+
+        init(from decoder: Decoder) throws {
+            value = try? MobileToolbarButton(from: decoder)
+        }
+    }
 }
 
 struct MobileIntentPayload: Decodable {

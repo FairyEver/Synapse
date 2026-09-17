@@ -69,10 +69,16 @@ final class TerminalFlowUITests: XCTestCase {
         // No gate to open: opening the terminal is enough to type into it.
         XCTAssertFalse(app.buttons["解锁输入"].exists, "the removed read-only gate is still on screen")
 
-        XCTAssertTrue(app.buttons["esc"].exists, "accessory keys missing")
-        XCTAssertTrue(app.buttons["^C"].exists, "control key missing")
-        // Anything the desktop cannot encode must not be offered.
-        XCTAssertFalse(app.buttons["ctrl"].exists, "accessory bar offers a key the backend rejects")
+        // The bar is the computer's own toolbar, mirrored — not this phone's fixed keys.
+        // The return key is the one that must be here: without it a TUI cannot be
+        // answered at all, since the input field sends text and an empty send is not a
+        // message the protocol can carry.
+        XCTAssertTrue(app.buttons["toolbar-enter"].exists, "the mirrored toolbar has no return key")
+        XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "the bar has no way into the keyboard panel")
+
+        // The keys that left this bar are behind the keyboard button, in the panel.
+        XCTAssertFalse(app.buttons["esc"].exists, "a fixed key is still on the accessory bar")
+        XCTAssertFalse(app.buttons["^C"].exists, "a fixed key is still on the accessory bar")
 
         let input = app.textFields.firstMatch
         XCTAssertTrue(input.waitForExistence(timeout: 5), "the input field is missing from an opened terminal")
@@ -87,8 +93,10 @@ final class TerminalFlowUITests: XCTestCase {
             "the command never reached the desktop"
         )
 
-        // Answering the prompt is a key press, from the accessory bar.
-        app.buttons["return"].tap()
+        // Answering the prompt is a key press. Return is the computer's own built-in,
+        // mirrored onto this bar — which is why it is here at all, and why it is
+        // addressed by the computer's id for it rather than by a label this phone chose.
+        app.buttons["toolbar-enter"].tap()
         XCTAssertTrue(
             waitForLabel(containing: "built in 4.21s", in: app, timeout: 15),
             "the approval round trip produced no output"
@@ -450,6 +458,101 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "09-preempted-send-replayed")
     }
 
+    /// The bar under the terminal is the computer's own, and the keys that left it are
+    /// behind the keyboard button.
+    ///
+    /// Both halves are the feature. The bar shows what the computer offers — its
+    /// built-ins and the user's own commands, with `Clear` absent because it never
+    /// reaches the terminal — and the panel is where the arrows, Tab and Escape went
+    /// when the ten fixed keys stopped being drawn here.
+    func testToolbarMirrorsTheComputerAndTheKeyboardPanelSendsKeys() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        // `claude-code` rather than `build`: tests run in name order, this one sorts last,
+        // and by then `testSwipeActionsRenameAndDelete` has deleted `build` and renamed
+        // `api-logs`. The first session is the only fixture nobody consumes.
+        let sessionRow = app.staticTexts["claude-code"]
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the claude-code session never appeared")
+        XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
+        sessionRow.tap()
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
+
+        // The mock's own list: two built-ins, two slash commands, two of its own.
+        for id in ["toolbar-enter", "toolbar-interrupt", "toolbar-slash-exit", "toolbar-slash-clear",
+                   "toolbar-mock-deploy", "toolbar-mock-port"] {
+            XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 10), "the bar is missing \(id)")
+        }
+        // Not projected: it clears the desktop's own renderer and never reaches the
+        // terminal, so drawing it here would promise something that cannot happen.
+        XCTAssertFalse(app.buttons["toolbar-clear"].exists, "Clear was projected onto the phone")
+        // Read-only: managing the commands belongs to the computer.
+        XCTAssertEqual(
+            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'toolbar-'")).count, 7,
+            "the bar has an unexpected number of buttons (7 = keyboard icon + 6 commands)"
+        )
+        capture(app, name: "10-toolbar-mirrored")
+
+        // Return, through the mirrored bar. It is the one button that has to work: the
+        // input field sends text and an empty send is not a message the protocol can
+        // carry, so without this there is no way to answer a TUI at all — including the
+        // approval prompts Claude Code waits on. Pressed first, while the bar is still
+        // at its leading edge.
+        app.buttons["toolbar-enter"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Enter", in: app, timeout: 20),
+            "the mirrored return key did not reach the computer"
+        )
+
+        // A button that runs its command: the computer echoes it, and the echo is proof
+        // the press crossed the socket rather than being drawn and dropped. The user's
+        // own commands sit past the built-ins, so the bar is scrolled first — the same
+        // gesture a user makes, and the reason the bar scrolls at all.
+        let bar = app.scrollViews["toolbar-scroll"]
+        XCTAssertTrue(bar.exists, "the toolbar is not a scroll view")
+        bar.swipeLeft()
+        XCTAssertTrue(
+            waitForHittable(app.buttons["toolbar-mock-deploy"], timeout: 10),
+            "the user's own command never came into view"
+        )
+        app.buttons["toolbar-mock-deploy"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "mock desktop received: pnpm mock-deploy", in: app, timeout: 20),
+            "a mirrored command button did not reach the computer"
+        )
+
+        // The keyboard panel, and a key from it. The mock echoes which key arrived,
+        // which is the only way this test can tell one key from another.
+        bar.swipeRight()
+        XCTAssertTrue(
+            waitForHittable(app.buttons["toolbar-keyboard"], timeout: 10),
+            "the keyboard button never came back into view"
+        )
+        app.buttons["toolbar-keyboard"].tap()
+        XCTAssertTrue(app.buttons["panelkey-Escape"].waitForExistence(timeout: 10), "the panel never opened")
+        capture(app, name: "11-keyboard-panel-common")
+
+        for (category, key) in [("方向", "panelkey-ArrowUp"), ("功能", "panelkey-PageUp"), ("控制", "panelkey-Ctrl+A")] {
+            app.buttons[category].tap()
+            XCTAssertTrue(app.buttons[key].waitForExistence(timeout: 5), "\(category) has no \(key)")
+        }
+        capture(app, name: "12-keyboard-panel-control")
+
+        app.buttons["panelkey-Ctrl+A"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:Ctrl+A", in: app, timeout: 20),
+            "a panel key did not reach the computer"
+        )
+        // Still up: pressing several keys in a row is the ordinary way to use it.
+        XCTAssertTrue(app.buttons["panelkey-Ctrl+A"].exists, "the panel closed after one key")
+        capture(app, name: "13-keyboard-panel-stays-open")
+    }
+
     /// Where the mock desktop listens for control commands.
     ///
     /// The test process runs inside the simulator, which shares the host's
@@ -543,6 +646,18 @@ final class TerminalFlowUITests: XCTestCase {
 
     /// XCTest matches accessibility labels exactly; terminal content is
     /// indented, so presence checks have to be substring matches.
+    /// Exists and can be tapped are different things: a row that is on screen while the
+    /// list is still settling fails a tap with "not hittable", which reads as a missing
+    /// control rather than as a race.
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists && element.isHittable { return true }
+            usleep(200_000)
+        }
+        return false
+    }
+
     private func waitForLabel(containing text: String, in app: XCUIApplication, timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "label CONTAINS %@", text)
         let element = app.staticTexts.matching(predicate).firstMatch

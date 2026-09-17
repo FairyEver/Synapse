@@ -16,6 +16,7 @@ struct TerminalScreen: View {
     @State private var showingRename = false
     @State private var renamingTitle = ""
     @State private var showingStopConfirm = false
+    @State private var keyboardPanelPresented = false
     @FocusState private var inputFocused: Bool
 
     @State private var showingPhotoPicker = false
@@ -33,6 +34,14 @@ struct TerminalScreen: View {
 
     private var store: TerminalStore { model.store(for: sessionId) }
     private var session: MobileSummarySession? { model.session(sessionId) }
+
+    /// Only a running terminal can be typed into, and the bar and the panel both say so
+    /// by greying out together rather than each deciding for itself.
+    private var isRunning: Bool { session?.isRunning == true }
+
+    /// The buttons the computer under this terminal offers, or the built-in fallback
+    /// when it is too old to have said. See `SynapseAppModel.activeToolbarButtons`.
+    private var buttons: [MobileToolbarButton] { model.activeToolbarButtons }
 
     /// Files on their way to the computer from this terminal, and the ones that
     /// arrived recently enough to be worth undoing.
@@ -389,47 +398,87 @@ struct TerminalScreen: View {
         }
     }
 
-    /// Exactly the keys the desktop can encode. Nothing here is aspirational:
-    /// the terminal service rejects arbitrary control bytes, so a Ctrl modifier
-    /// or a free-form key could not be delivered even if it were drawn.
+    /// The computer's own toolbar, mirrored.
+    ///
+    /// These are the buttons the desktop shows under its terminal — its built-ins and
+    /// whatever the user added there — with its separators in the same places. The list
+    /// is read-only: adding, editing and deleting a command belong to the computer, and
+    /// there is deliberately no pencil here.
+    ///
+    /// The keyboard button at the front is the one thing that is this phone's own. It
+    /// opens the panel holding the keys a bare list of commands cannot express, which is
+    /// what the ten fixed keys that used to sit here were for.
     private var accessoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(MobileKey.allCases, id: \.self) { key in
-                    Button(key.label) {
+                Button {
+                    // The system keyboard and this panel are both keyboards, and two of
+                    // them at once means the lower one cannot be reached. Lowered before
+                    // the panel rises rather than after, so they are never both up.
+                    inputFocused = false
+                    Haptics.select()
+                    keyboardPanelPresented = true
+                } label: {
+                    Image(systemName: "keyboard")
+                        .font(.system(size: 16))
+                }
+                .terminalKeyPill()
+                .accessibilityLabel("打开键盘")
+                .accessibilityIdentifier("toolbar-keyboard")
+
+                divider
+
+                ForEach(Array(buttons.enumerated()), id: \.element.id) { index, button in
+                    // A separator wherever the computer's own list changes kind — before
+                    // the first slash command, and before the user's own — so the two
+                    // bars read as the same list rather than merely similar ones. The
+                    // group travels with the button precisely so this needs no rule.
+                    if index > 0, buttons[index - 1].group != button.group {
+                        divider
+                    }
+                    Button(button.label) {
                         Haptics.select()
-                        model.sendKey(sessionId, key)
-                        // Return submits the same line the arrow does, so it commits
-                        // an inserted path the same way. ^C also discards the line,
-                        // but whether it abandoned one or interrupted a running
-                        // command is not something this bar can tell, so it is left
-                        // holding the chip that the discarded line no longer can undo.
-                        if key == .enter {
-                            model.commitDeliveredAttachments(for: sessionId)
-                        }
+                        model.runToolbarButton(button, sessionId: sessionId)
                         inputFocused = true
                     }
-                    .font(.system(.subheadline, design: .monospaced, weight: .medium))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .frame(minWidth: 48, minHeight: 36)
-                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    // The pill is the control; this is the room around it. Applied
-                    // after the background so the pill keeps its own size and only
-                    // the tappable box grows to the minimum — and declared as the
-                    // shape, or the room is drawn but not hit.
-                    .frame(minHeight: Metrics.minimumTapTarget)
-                    .contentShape(Rectangle())
-                    // Named rather than matched by its label: the on-screen keyboard
-                    // has a return key of its own, and one of these two is a submit
-                    // whose consequences a test has to be able to tell apart.
-                    .accessibilityIdentifier("key-\(key.rawValue)")
+                    .terminalKeyPill()
+                    .buttonStyle(.plain)
+                    .disabled(!isRunning)
+                    .opacity(isRunning ? 1 : 0.4)
+                    // Named by the button's own id, which is stable across renames —
+                    // a test has to be able to press the same command after its label
+                    // changed, and a label is the one thing here that is the user's.
+                    .accessibilityIdentifier("toolbar-\(button.id)")
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 2)
         }
         .background(Color(uiColor: .systemBackground))
+        // Named so a test can scroll it: the bar is wider than the screen once a user
+        // has a few commands, and a control that has been scrolled past is one a test
+        // otherwise has to guess its way back to.
+        .accessibilityIdentifier("toolbar-scroll")
+        .sheet(isPresented: $keyboardPanelPresented) {
+            TerminalKeyboardPanel(isEnabled: isRunning) { key in
+                model.sendKey(sessionId, key)
+                // The panel stays up — pressing several keys, or holding an arrow, is
+                // the ordinary way to use it, and a panel that closed after each one
+                // would have to be reopened for each one.
+                if key == .enter { model.commitDeliveredAttachments(for: sessionId) }
+            }
+            // Opens at its resting height and can be pulled up from there. The grid is
+            // meant to be pressed while watching the terminal, so it takes as little of
+            // the screen as it can.
+            .presentationDetents([.height(KeyboardPanelMetrics.restingHeight), .large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color(uiColor: .separator))
+            .frame(width: 1, height: 16)
     }
 
     /// The one bar under the terminal. Recording does not add a second one: the

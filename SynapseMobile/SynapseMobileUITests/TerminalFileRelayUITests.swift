@@ -119,8 +119,11 @@ final class TerminalFileRelayUITests: XCTestCase {
         openTerminal(app)
 
         try deliverAPhoto(app, name: "01-return-delivered")
-        let returnKey = app.buttons["key-Enter"]
-        XCTAssertTrue(returnKey.waitForExistence(timeout: 10), "the accessory bar has no return key")
+        // The bar's own return key, which is the desktop's built-in as projected onto
+        // this phone. It is the one control that submits a line — the input field's send
+        // button is the other, and it is exercised further down.
+        let returnKey = app.buttons["toolbar-enter"]
+        XCTAssertTrue(returnKey.waitForExistence(timeout: 10), "the toolbar has no return key")
         returnKey.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["relay-strip"].waitForNonExistence(timeout: 10),

@@ -22,6 +22,9 @@ final class SynapseAppModel {
     private(set) var selectedDesktopClientInstanceId: String?
     private(set) var summary: MobileSummaryPayload?
     private(set) var terminalStores: [String: TerminalStore] = [:]
+    /// The buttons the last `mobile.toolbar` carried, and which computer sent them.
+    /// See `TerminalToolbarState` for why one slot is enough.
+    private var toolbar = TerminalToolbarState()
     /// Sessions where the desktop's own user typed and took the write lease back.
     /// The phone does not ask about this — the next write reclaims it.
     private var preemptedSessions: Set<String> = []
@@ -344,6 +347,9 @@ final class SynapseAppModel {
         summary = nil
         gridClaims = GridClaimLedger()
         selectedDesktopClientInstanceId = nil
+        // These are another account's computers' commands, and nothing here is
+        // persisted, so the next sign-in starts from the fallback as it should.
+        toolbar.reset()
         await apiClient.logout()
         authState = .signedOut
     }
@@ -458,6 +464,9 @@ final class SynapseAppModel {
         }
         realtime.onPresence = { [weak self] clientInstanceIds in
             self?.applyPresence(clientInstanceIds)
+        }
+        realtime.onToolbar = { [weak self] payload in
+            self?.toolbar.adopt(payload)
         }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
@@ -739,6 +748,35 @@ final class SynapseAppModel {
                 sessionId: sessionId,
                 actions: [.key(key)]
             ), to: sessionId)
+        }
+    }
+
+    // MARK: - Terminal toolbar
+
+    /// The buttons shown under the terminal for the computer being viewed.
+    ///
+    /// A computer that has sent `mobile.toolbar` decides this completely — including
+    /// by sending an empty list, which means it has no buttons. Only a computer that
+    /// has never sent one falls back, and that is a computer too old to know about
+    /// this message: without the fallback its phone would show an empty bar and, with
+    /// no keyboard of its own, nothing could be confirmed in a TUI at all.
+    var activeToolbarButtons: [MobileToolbarButton] {
+        toolbar.buttons(forSelected: selectedDesktopClientInstanceId)
+    }
+
+    /// Runs one of the toolbar's buttons against a terminal.
+    ///
+    /// The command text is passed on untouched — no trimming, no quoting. The computer
+    /// runs the command the user wrote, character for character, and a phone that
+    /// tidied it up would be running a different one.
+    func runToolbarButton(_ button: MobileToolbarButton, sessionId: String) {
+        let intent = button.action.intent(sessionId: sessionId, intentId: UUID().uuidString)
+        Task { await write(intent, to: sessionId) }
+        // Only when the button submits a line: that is the moment the chip an inserted
+        // path was holding has nothing left to undo, which is the same moment the input
+        // bar's own send button reaches it.
+        if button.action.submitsLine {
+            commitDeliveredAttachments(for: sessionId)
         }
     }
 

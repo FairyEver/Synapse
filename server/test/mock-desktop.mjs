@@ -141,6 +141,34 @@ function sendSummary() {
   socket?.send(JSON.stringify(envelope("mobile.summary", buildSummary())))
 }
 
+/*
+ * What this stand-in offers as its toolbar, and the buttons the UI tests press.
+ *
+ * Both text arms are here on purpose: a button that runs its command and one that only
+ * types it are the difference the phone has to keep straight, and a mock offering only
+ * the first would let that distinction go untested. `Clear` is absent for the reason the
+ * real projection leaves it out — it never reaches the terminal.
+ */
+const toolbarButtons = [
+  { id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } },
+  { id: "interrupt", label: "Ctrl+C", group: "key", action: { type: "key", key: "Ctrl+C" } },
+  { id: "slash-exit", label: "/exit", group: "command", action: { type: "text", text: "/exit", pressEnter: true } },
+  { id: "slash-clear", label: "/clear", group: "command", action: { type: "text", text: "/clear", pressEnter: true } },
+  { id: "mock-deploy", label: "部署", group: "custom", action: { type: "text", text: "pnpm mock-deploy", pressEnter: true } },
+  { id: "mock-port", label: "查端口", group: "custom", action: { type: "text", text: "lsof -i :3001", pressEnter: false } },
+]
+
+let toolbarRevision = 0
+
+function sendToolbar() {
+  toolbarRevision += 1
+  socket?.send(JSON.stringify(envelope("mobile.toolbar", {
+    desktopClientInstanceId,
+    revision: toolbarRevision,
+    buttons: toolbarButtons,
+  })))
+}
+
 /** Emits frames as `suffix` updates, mirroring what the desktop gateway does. */
 function sendFrame(sessionId, from, lines, extra = {}) {
   const all = frames.get(sessionId) ?? []
@@ -234,6 +262,9 @@ function handleIntent(message) {
 
   if (intent.kind === "sync") {
     sendSummary()
+    // Unconditional, like the real desktop: a phone that has just connected holds
+    // nothing, and "unchanged since I last sent it" is not an answer to it.
+    sendToolbar()
     reply({ outcome: "accepted" })
     return
   }
@@ -244,6 +275,7 @@ function handleIntent(message) {
   if (intent.kind === "attach") {
     // Re-armed per attach so a test run is reproducible against a long-lived mock.
     armContention(intent.sessionId)
+    sendToolbar()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     const lines = frames.get(intent.sessionId) ?? []
     socket?.send(JSON.stringify(envelope("mobile.frame", {
@@ -297,6 +329,17 @@ function handleIntent(message) {
         [`● Bash(npm run build)`, [[0, 1, 2, -1, 1]]],
         [`  ⎿  ✓ built in 4.21s`, [[5, 1, 2, -1, 0], [7, 14, -1, -1, 8]]],
       ])
+      sendSummary()
+    }
+    // Echoed so a test can see which key arrived rather than only that something did.
+    // A name is all this double can print — the bytes are the real desktop's business,
+    // and are pinned by the terminal capability's own tests.
+    const described = (intent.actions ?? [])
+      .map((action) => action.type === "key" ? `key:${action.key}` : `text:${action.text}`)
+      .join(" ")
+    if (described) {
+      const current = frames.get(intent.sessionId) ?? []
+      sendFrame(intent.sessionId, current.length, [`[mock] keys ${described}`])
       sendSummary()
     }
     reply({ outcome: "accepted", sessionId: intent.sessionId })
@@ -412,6 +455,7 @@ function connect() {
     if (message.type === "live.welcome") {
       console.log(`mock desktop online as ${desktopClientInstanceId}`)
       sendSummary()
+      sendToolbar()
       return
     }
     if (message.type === "mobile.intent") handleIntent(message)
