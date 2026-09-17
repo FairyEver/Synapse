@@ -26,7 +26,7 @@ final class TerminalFlowUITests: XCTestCase {
 
     func testSignInBrowseSessionsAndOpenTerminal() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
 
         signIn(app)
@@ -110,7 +110,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// the terminal with no way to put it away short of leaving the screen.
     func testKeyboardKeepsNewestOutputVisibleAndDismissesOnTap() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -154,7 +154,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// the page and not just the code behind it.
     func testSettingsListsOnlyAccountDesktopsAndSignOut() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -184,7 +184,7 @@ final class TerminalFlowUITests: XCTestCase {
         )
 
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -213,7 +213,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// already finished with by the time this one runs.
     func testSwipeActionsRenameAndDelete() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -277,7 +277,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// had actually come back, rather than being assumed to.
     func testTerminalCanBeLeftByEdgeSwipe() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -319,7 +319,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// behind — the back button is the fallback for a gesture that was abandoned.
     func testCancelledEdgeSwipeLeavesTheScreenUsable() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -351,7 +351,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// assertion here covers, so this test is meaningful in both runs.
     func testSplitTabGroupsItsTerminals() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -398,7 +398,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// what show whether the transition is there.
     func testLeavingTheTerminalShowsTheListImmediately() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -427,7 +427,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// arrive. Nothing in this test answers a prompt or sends a second time.
     func testSendSurvivesAPreemptedLeaseWithoutASecondTap() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -467,7 +467,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// when the ten fixed keys stopped being drawn here.
     func testToolbarMirrorsTheComputerAndTheKeyboardPanelSendsKeys() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -669,7 +669,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// the panel go grey together, and this is what says they do.
     func testEverythingGreysOutWhenTheTerminalStops() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -730,7 +730,7 @@ final class TerminalFlowUITests: XCTestCase {
         )
 
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 
@@ -772,7 +772,7 @@ final class TerminalFlowUITests: XCTestCase {
     /// a deleted command forever, which is the failure this pins down.
     func testToolbarFollowsTheComputerWhenItsCommandsChange() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         signIn(app)
 

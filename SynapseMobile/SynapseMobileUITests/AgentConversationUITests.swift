@@ -88,7 +88,7 @@ final class AgentConversationUITests: XCTestCase {
         // what is being checked is that the choice survived the app, not that it
         // survived a navigation, and the terminal screen owns its own chrome.
         app.terminate()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         app.launch()
         XCTAssertTrue(app.buttons["new-session"].waitForExistence(timeout: 30), "never got back to the list")
 
@@ -150,7 +150,7 @@ final class AgentConversationUITests: XCTestCase {
     /// remembered project" means to the panel.
     private func launch(freshChoice: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.pointAtServer(baseURL)
         if freshChoice {
             app.launchArguments += [
                 "-SynapseAgentConversationProject", "__never_chosen__",
