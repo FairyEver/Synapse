@@ -298,6 +298,9 @@ struct TerminalKeyboardPanel: View {
         // way a sheet did. It is a keyboard now: what is above it is the terminal being
         // watched, and what is below it is the bottom of the screen.
         .frame(height: KeyboardPanelMetrics.height)
+        // Its own surface, the same one the two bars above it wear — the panel, the
+        // toolbar and the input bar are the light half of this screen together, and
+        // the dark canvas is what they are all sitting on.
         .background(Color(uiColor: .systemBackground))
         .onChange(of: selectedCategoryId) { _, _ in
             // Changing page is changing what the keys mean, so a latched modifier is
