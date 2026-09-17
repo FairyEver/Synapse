@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { ArrowDown, ArrowUp, Check, CircleDot, CircleHelp, Code2, Copy, Folder, FolderOpen, Link2Off, Mic, MoreHorizontal, PanelLeft, Pencil, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { useVoiceActionKey } from "../../../src/modules/voice/use-voice-action-key"
 import { useVoiceInput } from "../../../src/modules/voice/use-voice-input"
 import { describeVoiceInput } from "../../../src/modules/voice/voice-input-presentation"
 import { shouldBypassDeleteConfirm } from "../../../src/lib/delete-confirm-bypass"
@@ -1211,6 +1212,17 @@ export function TerminalModule({
       toast.error("写入终端失败")
     }
   }, [activeSession, terminalBridge, voice.confirm])
+
+  /**
+   * 录音时命令条整条让位，焦点不在 xterm 上，Enter 只能靠这一层接住。按 Enter 和点
+   * 对号是同一条路：文字进命令行但不补回车，执行与否仍由用户决定；焦点如果回到
+   * xterm，那个回车归终端，这里不抢。
+   */
+  useVoiceActionKey({
+    action: voicePresentation.action,
+    onConfirm: () => { void commitVoiceInput() },
+    onRetry: voice.retry,
+  })
 
   // 会话一换，之前那条待执行提示就不再成立。
   useEffect(() => {

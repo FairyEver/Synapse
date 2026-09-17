@@ -115,6 +115,7 @@ describe("AgentComposer 语音输入", () => {
     readonly voiceAvailable?: boolean
     readonly draft?: string
     readonly onDraftChange?: (value: string) => void
+    readonly onSubmit?: (event: FormEvent) => void
   }) {
     installShellBridge(undefined, options)
     const container = document.createElement("div")
@@ -131,7 +132,7 @@ describe("AgentComposer 语音输入", () => {
           cancelPhase="idle"
           onDraftChange={options?.onDraftChange ?? vi.fn()}
           onInputKeyDown={vi.fn()}
-          onSubmit={(event) => event.preventDefault()}
+          onSubmit={options?.onSubmit ?? ((event) => event.preventDefault())}
           onCancelTurn={vi.fn()}
           onForceKillTurn={vi.fn()}
         />,
@@ -263,6 +264,28 @@ describe("AgentComposer 语音输入", () => {
 
     expect(onDraftChange).toHaveBeenCalledTimes(1)
     expect(onDraftChange).toHaveBeenCalledWith("先跑测试 再 git status 看看")
+    expect(container.querySelector("[data-voice-live]")).toBeNull()
+  })
+
+  /**
+   * 录音时输入框整个让位，焦点不在任何可编辑节点上，回车只能靠全局那一层接住。
+   * 按回车和点对号是同一条路：转写落进草稿，发不发仍由用户决定。
+   */
+  it("录音中按回车等价于点对号：转写落进草稿，不发送", async () => {
+    voiceSession.confirmResult = "把日志拉出来"
+    const onDraftChange = vi.fn()
+    const onSubmit = vi.fn()
+    const container = await renderVoiceComposer({ onDraftChange, onSubmit })
+    await startVoice(container)
+    emitTranscript("把日志拉出来", "")
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(onDraftChange).toHaveBeenCalledWith("把日志拉出来")
+    expect(onSubmit).not.toHaveBeenCalled()
     expect(container.querySelector("[data-voice-live]")).toBeNull()
   })
 

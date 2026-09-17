@@ -1576,6 +1576,34 @@ describe("TerminalModule", () => {
   })
 
   /**
+   * 录音时命令条整条让位，焦点不在 xterm 上，回车只能靠全局那一层接住。它和对号
+   * 是同一条路，所以「不补回车」这条底线在这里同样成立。
+   */
+  it("录音中按回车等价于点对号：文字进命令行，不补回车", async () => {
+    voiceState.available = true
+    voiceState.phase = "recording"
+    voiceState.transcript = { stable: "git status", unstable: "", combined: "git status" }
+    voiceState.confirmResult = "git status"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    terminalBridge.writeSession.mockClear()
+
+    await renderModule()
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(terminalBridge.writeSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      data: "git status",
+    })
+    const written = terminalBridge.writeSession.mock.calls.map(([input]) => input.data as string)
+    expect(written.some((data) => data.includes("\r"))).toBe(false)
+  })
+
+  /**
    * 未定稿的文字还会变，必须和已定稿的部分在视觉上分开 —— 用户眼看着字变了会很
    * 难受，分级显示是让这件事可预期的方式。
    */

@@ -34,6 +34,7 @@ import {
 } from "@/lib/workspace-file-tree-drag"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import type { SynapseQuickInputItem } from "@/types/quick-input"
+import { useVoiceActionKey } from "@/modules/voice/use-voice-action-key"
 import { useVoiceInput } from "@/modules/voice/use-voice-input"
 import { describeVoiceInput } from "@/modules/voice/voice-input-presentation"
 import { insertTextAtComposerSelection } from "../composer-insert"
@@ -480,6 +481,16 @@ function AgentComposer({
     const text = await voice.confirm()
     onDraftChange(appendVoiceTranscript(text))
   }
+
+  /**
+   * 录音时输入框整个让位，焦点不在任何可编辑节点上，Enter 只能靠这一层接住。
+   * 按 Enter 和点对号是同一条路：转写落进草稿，发不发仍由用户决定。
+   */
+  useVoiceActionKey({
+    action: voicePresentation.action,
+    onConfirm: () => { void commitVoiceInput() },
+    onRetry: voice.retry,
+  })
 
   const handleSubmit = (event: FormEvent) => {
     if (voice.state.phase === "recording") {
