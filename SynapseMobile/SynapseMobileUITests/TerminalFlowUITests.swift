@@ -478,7 +478,14 @@ final class TerminalFlowUITests: XCTestCase {
         // `api-logs`. The first session is the only fixture nobody consumes.
         let sessionRow = app.staticTexts["claude-code"]
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the claude-code session never appeared")
-        XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
+        if !waitForHittable(sessionRow, timeout: 10) {
+            capture(app, name: "00-session-row-not-tappable")
+            let visible = app.descendants(matching: .any).allElementsBoundByIndex
+                .prefix(12)
+                .map { "\($0.elementType.rawValue):\($0.identifier.isEmpty ? $0.label : $0.identifier)" }
+            XCTFail("the session never became tappable; visible: \(visible)")
+            return
+        }
         sessionRow.tap()
         let terminal = app.descendants(matching: .any)["terminal.text"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
@@ -553,6 +560,105 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "13-keyboard-panel-stays-open")
     }
 
+    /// What the computer offers follows the user's edits.
+    ///
+    /// The computer's list is a snapshot the phone replaces wholesale, so all three
+    /// edits a user can make are the same event seen from here: add, rename and delete
+    /// each arrive as "the list is now this". A merge rather than a replace would show
+    /// a deleted command forever, which is the failure this pins down.
+    func testToolbarFollowsTheComputerWhenItsCommandsChange() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        let sessionRow = app.staticTexts["claude-code"]
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the claude-code session never appeared")
+        XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
+        sessionRow.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["terminal.text"].waitForExistence(timeout: 15),
+            "terminal never appeared"
+        )
+        XCTAssertTrue(app.buttons["toolbar-mock-deploy"].waitForExistence(timeout: 15), "the computer's own commands are missing")
+
+        // Added on the computer.
+        try setMockToolbar([
+            button("enter", "回车", "key", key: "Enter"),
+            button("fresh", "刚建的", "custom", text: "pnpm fresh", pressEnter: true),
+        ])
+        XCTAssertTrue(
+            app.buttons["toolbar-fresh"].waitForExistence(timeout: 15),
+            "a command added on the computer never reached the phone"
+        )
+        XCTAssertFalse(app.buttons["toolbar-mock-deploy"].exists, "a removed command is still on the bar")
+
+        // Renamed, which keeps the id and changes only the wording.
+        try setMockToolbar([
+            button("enter", "回车", "key", key: "Enter"),
+            button("fresh", "改过名的", "custom", text: "pnpm fresh", pressEnter: true),
+        ])
+        XCTAssertTrue(
+            app.buttons["toolbar-fresh"].waitForExistence(timeout: 15),
+            "the renamed command disappeared instead of being renamed"
+        )
+        XCTAssertTrue(
+            app.buttons["toolbar-fresh"].label == "改过名的",
+            "the phone is still showing the old wording: \(app.buttons["toolbar-fresh"].label)"
+        )
+
+        // Deleted, leaving a computer that has said it has nothing — which is an empty
+        // bar, not the built-in fallback. The fallback is for a computer that cannot
+        // describe itself at all, and inventing four buttons here would offer commands
+        // this computer never had.
+        try setMockToolbar([])
+        XCTAssertTrue(
+            app.buttons["toolbar-fresh"].waitForNonExistence(timeout: 15),
+            "a command deleted on the computer is still on the phone"
+        )
+        XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "the keyboard button is not this phone's own and must stay")
+        XCTAssertFalse(app.buttons["toolbar-enter"].exists, "an empty list fell back to invented buttons")
+        capture(app, name: "14-toolbar-empty")
+
+        // Left how it was found: the mock outlives this test, and the ones after it
+        // expect the fixtures they were written against.
+        try setMockToolbar([
+            button("enter", "回车", "key", key: "Enter"),
+            button("interrupt", "Ctrl+C", "key", key: "Ctrl+C"),
+            button("slash-exit", "/exit", "command", text: "/exit", pressEnter: true),
+            button("slash-clear", "/clear", "command", text: "/clear", pressEnter: true),
+            button("mock-deploy", "部署", "custom", text: "pnpm mock-deploy", pressEnter: true),
+            button("mock-port", "查端口", "custom", text: "lsof -i :3001", pressEnter: false),
+        ])
+        XCTAssertTrue(
+            app.buttons["toolbar-mock-deploy"].waitForExistence(timeout: 15),
+            "the toolbar was not restored for the tests that follow"
+        )
+    }
+
+    private func button(
+        _ id: String,
+        _ label: String,
+        _ group: String,
+        key: String? = nil,
+        text: String? = nil,
+        pressEnter: Bool = true
+    ) -> [String: Any] {
+        let action: [String: Any] = key.map { ["type": "key", "key": $0] }
+            ?? ["type": "text", "text": text ?? "", "pressEnter": pressEnter]
+        return ["id": id, "label": label, "group": group, "action": action]
+    }
+
+    private func setMockToolbar(_ buttons: [[String: Any]]) throws {
+        let body = try JSONSerialization.data(withJSONObject: buttons)
+        XCTAssertEqual(
+            post("/desktop/toolbar", body: body), 200,
+            "the mock desktop control channel is unreachable at \(controlBaseURL)"
+        )
+    }
+
     /// Where the mock desktop listens for control commands.
     ///
     /// The test process runs inside the simulator, which shares the host's
@@ -563,11 +669,17 @@ final class TerminalFlowUITests: XCTestCase {
 
     /// Drives the mock desktop. A UI test cannot start a host process, so making
     /// a computer come and go has to go through the mock's own control channel.
-    private func post(_ path: String) -> Int? {
+    private func post(_ path: String) -> Int? { post(path, body: nil) }
+
+    private func post(_ path: String, body: Data?) -> Int? {
         guard let url = URL(string: controlBaseURL + path) else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 10
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "content-type")
+        }
         let finished = DispatchSemaphore(value: 0)
         var status: Int?
         URLSession.shared.dataTask(with: request) { _, response, _ in
@@ -614,7 +726,15 @@ final class TerminalFlowUITests: XCTestCase {
         }
         if !tabs.exists {
             guard emailField.exists else {
-                XCTFail("neither the login screen nor a restored session appeared")
+                // The screen at the moment it was given up on. Without it the only
+                // message this failure can give is that nothing was found, which is
+                // equally true of a stuck launch, a system permission alert and a
+                // build that never installed.
+                capture(app, name: "00-signin-never-appeared")
+                let visible = app.descendants(matching: .any).allElementsBoundByIndex
+                    .prefix(12)
+                    .map { "\($0.elementType.rawValue):\($0.identifier.isEmpty ? $0.label : $0.identifier)" }
+                XCTFail("neither the login screen nor a restored session appeared; visible: \(visible)")
                 return
             }
             emailField.tap()

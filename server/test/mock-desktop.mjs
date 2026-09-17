@@ -20,6 +20,18 @@ const controlPortFlag = rawArgs.indexOf("--control-port")
 const controlPort = controlPortFlag >= 0 && rawArgs[controlPortFlag + 1]
   ? Number(rawArgs[controlPortFlag + 1])
   : 3011
+const controlHostFlag = rawArgs.indexOf("--control-host")
+/**
+ * Which interface the control channel listens on.
+ *
+ * Loopback by default, because that is all a simulator needs and this channel has no
+ * authentication — it can make the double come and go. Running the UI tests on a
+ * physical device is the case that needs `0.0.0.0`: the phone is not on this machine's
+ * loopback, and neither is the test runner.
+ */
+const controlHost = controlHostFlag >= 0 && rawArgs[controlHostFlag + 1]
+  ? rawArgs[controlHostFlag + 1]
+  : "127.0.0.1"
 /**
  * Draws the group/tab/pane hierarchy: two of the sessions below share one tab,
  * which is what makes the desktop publish `workspaces` at all. Off by default so
@@ -37,7 +49,7 @@ const contendTitles = contendFlag >= 0 && rawArgs[contendFlag + 1]
   : ["build"]
 /** Drops each `--flag value` pair so only the positional arguments remain. */
 const flagIndexes = new Set()
-for (const flag of [contendFlag, controlPortFlag]) {
+for (const flag of [contendFlag, controlPortFlag, controlHostFlag]) {
   if (flag < 0) continue
   flagIndexes.add(flag)
   flagIndexes.add(flag + 1)
@@ -149,7 +161,7 @@ function sendSummary() {
  * the first would let that distinction go untested. `Clear` is absent for the reason the
  * real projection leaves it out — it never reaches the terminal.
  */
-const toolbarButtons = [
+let toolbarButtons = [
   { id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } },
   { id: "interrupt", label: "Ctrl+C", group: "key", action: { type: "key", key: "Ctrl+C" } },
   { id: "slash-exit", label: "/exit", group: "command", action: { type: "text", text: "/exit", pressEnter: true } },
@@ -428,10 +440,36 @@ function startControlServer(port) {
       response.writeHead(200).end("connected")
       return
     }
+    /*
+     * Replaces this double's command list — add, rename and delete all end up here,
+     * because all three are "the list is now this".
+     *
+     * Sent straight away, which the real desktop does not do: it pushes on a phone's
+     * sync, on an attach, and on the summary tick, never on the edit itself. The
+     * difference is only in *when* a snapshot arrives, which is the desktop's business
+     * and is covered by its own tests — what is being driven from here is the phone,
+     * and the phone does the same thing with the snapshot whenever it lands.
+     */
+    if (route === "/desktop/toolbar") {
+      let body = ""
+      request.on("data", (chunk) => { body += chunk })
+      request.on("end", () => {
+        try {
+          const parsed = JSON.parse(body || "[]")
+          if (!Array.isArray(parsed)) throw new Error("expected an array of buttons")
+          toolbarButtons = parsed
+          sendToolbar()
+          response.writeHead(200).end("ok")
+        } catch (error) {
+          response.writeHead(400).end(String(error?.message ?? error))
+        }
+      })
+      return
+    }
     response.writeHead(404).end()
   })
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`mock desktop control listening on http://127.0.0.1:${port}`)
+  server.listen(port, controlHost, () => {
+    console.log(`mock desktop control listening on http://${controlHost}:${port}`)
   })
 }
 
