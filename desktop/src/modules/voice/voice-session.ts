@@ -21,7 +21,6 @@ export type VoiceFailure = "network" | "silence" | "permission" | "unavailable"
 
 export type VoiceSessionEvents = {
   readonly onTranscript: (transcript: AsrTranscript) => void
-  readonly onElapsed: (elapsedMs: number) => void
   readonly onFailure: (failure: VoiceFailure) => void
 }
 
@@ -122,9 +121,10 @@ export class VoiceSession {
       this.socket?.send(this.chunker?.takeChunk() ?? new Uint8Array())
     }, SEND_INTERVAL_MS)
 
+    // 这一拍只用来判断「多久没出字」。它不再往上报耗时：录音界面里没有计时，
+    // 每 100ms 推一次 state 只会让 composer 白重渲染。
     this.tickTimer = setInterval(() => {
       const elapsedMs = Date.now() - this.startedAt
-      this.events.onElapsed(elapsedMs)
       if (!this.transcript.combined && elapsedMs > SILENCE_HINT_MS) {
         this.events.onFailure("silence")
       }

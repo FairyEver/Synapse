@@ -95,7 +95,6 @@ async function beginSession(events: Partial<Parameters<typeof import("../voice-s
   const failures: string[] = []
   const session = await VoiceSession.begin({
     onTranscript: (transcript) => transcripts.push(transcript),
-    onElapsed: () => {},
     onFailure: (failure) => failures.push(failure),
     ...events,
   })

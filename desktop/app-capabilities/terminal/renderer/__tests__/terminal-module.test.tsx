@@ -73,7 +73,6 @@ const voiceState = vi.hoisted(() => ({
   available: false,
   phase: "idle" as "idle" | "recording",
   transcript: { stable: "", unstable: "", combined: "" },
-  elapsedMs: 0,
   failure: null as null | "network" | "silence" | "permission" | "unavailable",
   confirmResult: "",
   start: vi.fn(),
@@ -91,7 +90,6 @@ vi.mock("../../../../src/modules/voice/use-voice-input", () => ({
     state: {
       phase: voiceState.phase,
       transcript: voiceState.transcript,
-      elapsedMs: voiceState.elapsedMs,
       failure: voiceState.failure,
     },
     available: voiceState.available,
@@ -804,7 +802,6 @@ beforeEach(() => {
   voiceState.available = false
   voiceState.phase = "idle"
   voiceState.transcript = { stable: "", unstable: "", combined: "" }
-  voiceState.elapsedMs = 0
   voiceState.failure = null
   voiceState.confirmResult = ""
   voiceState.start.mockClear()

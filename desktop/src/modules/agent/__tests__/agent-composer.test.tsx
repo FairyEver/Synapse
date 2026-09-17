@@ -40,7 +40,6 @@ const toast = vi.hoisted(() => vi.fn())
 const voiceSession = vi.hoisted(() => ({
   events: null as null | {
     onTranscript: (transcript: { stable: string; unstable: string; combined: string }) => void
-    onElapsed: (elapsedMs: number) => void
     onFailure: (failure: string) => void
   },
   startError: null as Error | null,

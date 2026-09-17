@@ -13,14 +13,12 @@ export type VoicePhase = "idle" | "recording"
 export type VoiceInputState = {
   readonly phase: VoicePhase
   readonly transcript: AsrTranscript
-  readonly elapsedMs: number
   readonly failure: VoiceFailure | null
 }
 
 const IDLE_STATE: VoiceInputState = {
   phase: "idle",
   transcript: EMPTY_TRANSCRIPT,
-  elapsedMs: 0,
   failure: null,
 }
 
@@ -62,13 +60,12 @@ export function useVoiceInput(): VoiceInputController {
 
   const start = useCallback(() => {
     if (sessionRef.current) return
-    setState({ phase: "recording", transcript: EMPTY_TRANSCRIPT, elapsedMs: 0, failure: null })
+    setState({ phase: "recording", transcript: EMPTY_TRANSCRIPT, failure: null })
     void VoiceSession.begin({
       onTranscript: (transcript) => {
         // 出字了就把静音提示撤掉。
         setState((current) => ({ ...current, transcript, failure: current.failure === "silence" ? null : current.failure }))
       },
-      onElapsed: (elapsedMs) => { setState((current) => ({ ...current, elapsedMs })) },
       onFailure: (failure) => { setState((current) => ({ ...current, failure })) },
     }).then((session) => {
       if (disposedRef.current) { session.cancel(); return }
