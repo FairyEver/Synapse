@@ -89,6 +89,43 @@ struct AgentConversationTests {
         #expect(empty.agentProviders?.isEmpty == true)
     }
 
+    /// A phone that predates both blocks, reading a summary that carries them.
+    ///
+    /// Staged as a separate type rather than by dropping fields from the current one:
+    /// the claim is about a *shipped* build, and the only faithful stand-in for it is a
+    /// decoder that knows exactly the fields that build knew. Swift ignores JSON keys a
+    /// type does not declare, so this is what "the extra blocks do not affect existing
+    /// rendering" means at the wire level — the alternative, a payload the old phone
+    /// could not decode, would blank the whole terminal list for anyone who had not
+    /// updated yet, which is the one outcome the upgrade order exists to avoid.
+    private struct OldPhoneSummary: Decodable {
+        struct Session: Decodable {
+            let id: String
+            let title: String
+        }
+        let desktopName: String
+        let revision: Int
+        let sessions: [Session]
+    }
+
+    @Test func anOlderPhoneStillDecodesASummaryThatCarriesTheDirectories() throws {
+        let decoded = try JSONDecoder().decode(OldPhoneSummary.self, from: summaryJSON(directories: """
+          "agentGroups": [
+            { "projectId": "project-1", "name": "Synapse", "isDefault": false }
+          ],
+          "agentProviders": [
+            {
+              "id": "preferred", "name": "Anthropic 官方", "isDefault": true, "defaultTier": "opus",
+              "models": { "opus": "claude-opus-4-5" }
+            }
+          ],
+        """))
+
+        #expect(decoded.desktopName == "MacBook Pro")
+        #expect(decoded.revision == 4)
+        #expect(decoded.sessions.map(\.title) == ["zsh 1"])
+    }
+
     /// The outbound half of the protocol: what the desktop reads off the wire.
     ///
     /// `providerId` and `modelTier` are absent together whenever the user has not
