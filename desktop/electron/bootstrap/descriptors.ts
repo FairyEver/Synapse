@@ -521,6 +521,8 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
     // The phone's new-conversation panel is drawn from this service's directory, and
     // starting one goes through the same launcher the desktop's own shortcut uses.
     AGENT_CONVERSATION_CONTROL_SERVICE_ID,
+    // The sentences a phone can tap into its composer instead of typing.
+    "core.quick-input",
   ],
   create(ctx) {
     return createMobileGatewayService({
@@ -554,6 +556,11 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
       listAgentConversationProviders: () =>
         ctx.registry.get<AgentConversationControlService>(AGENT_CONVERSATION_CONTROL_SERVICE_ID)
           .listProviderChoices(),
+      // Read straight from the quick-input App rather than through a copy kept here:
+      // the user's own table is the only source of truth for what a phone may tap in,
+      // and this service has no business holding a second one. The list is already
+      // ordered the way the desktop shows it, which is what the phone draws.
+      listQuickPhrases: () => ctx.registry.get<QuickInputService>("core.quick-input").list(),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("mobile-gateway"),

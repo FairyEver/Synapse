@@ -69,6 +69,16 @@ export type IntentExecutorDeps = {
    * lately" is not an answer to someone who has not yet been told what they are.
    */
   readonly sendToolbar: () => void
+  /**
+   * Pushes the computer's 快捷输入 sentences, unconditionally, for the same two
+   * callers and the same reason: a phone that has just arrived has been told nothing
+   * yet, and "the user has not edited their sentences lately" is not an answer.
+   *
+   * It shares the toolbar's two moments rather than having any of its own because
+   * those are the only two moments a phone is known to be looking at this computer —
+   * and a phone looking at a different one would discard the list anyway.
+   */
+  readonly sendQuickPhrases: () => void
   /** Sends a full-window frame immediately, for attach and resync. */
   readonly pushSnapshot: (attachment: MobileAttachment) => Promise<void>
   /** Sends one page of scrollback below `before`, or an empty page at the end. */
@@ -174,6 +184,7 @@ export class MobileIntentExecutor {
         // connected would otherwise fingerprint as unchanged and say nothing.
         this.deps.resendSummary()
         this.deps.sendToolbar()
+        this.deps.sendQuickPhrases()
         for (const attachment of registry.forClient(mobileClientInstanceId)) {
           await this.pushSnapshotOrForget(attachment)
         }
@@ -200,6 +211,7 @@ export class MobileIntentExecutor {
         // deliberate act rather than idle churn — so this refreshes unconditionally,
         // like `sync` does, instead of waiting for the fingerprint to move.
         this.deps.sendToolbar()
+        this.deps.sendQuickPhrases()
         const existing = registry.get(mobileClientInstanceId, intent.sessionId)
         if (existing) {
           await this.deps.pushSnapshot(existing)

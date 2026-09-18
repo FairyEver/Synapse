@@ -1,6 +1,7 @@
 import type {
   MobileIntent,
   MobileIntentResult,
+  MobileQuickPhrasesPayload,
   MobileSummaryPayload,
   MobileTerminalFrame,
   MobileToolbarPayload,
@@ -21,6 +22,9 @@ export type MobileSummaryDraft = Omit<MobileSummaryPayload, "desktopClientInstan
  * be a second source of truth for an id the connection already owns.
  */
 export type MobileToolbarDraft = Omit<MobileToolbarPayload, "desktopClientInstanceId">
+
+/** The 快捷输入 sentences, minus the identity, for the same reason. */
+export type MobileQuickPhrasesDraft = Omit<MobileQuickPhrasesPayload, "desktopClientInstanceId">
 
 /**
  * Outbound side of the gateway.
@@ -46,6 +50,17 @@ export type MobileGatewayTransport = {
    * waiting for the next one.
    */
   readonly sendToolbar: (draft: MobileToolbarDraft) => void
+  /**
+   * The 快捷输入 sentences this computer keeps, for its phones to tap into a
+   * composer.
+   *
+   * A separate message rather than more buttons on the one above: the two come from
+   * two different desktop apps and change on two different events, and — the part
+   * that matters to a phone — "this computer has no phrases" and "this computer has
+   * never heard of phrases" have to stay tellable apart. A list riding on the
+   * toolbar could only ever say the first.
+   */
+  readonly sendQuickPhrases: (draft: MobileQuickPhrasesDraft) => void
 }
 
 /** Inbound side: the live connection hands cloud-delivered events to the gateway. */

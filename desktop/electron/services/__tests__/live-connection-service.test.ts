@@ -351,6 +351,49 @@ describe("LiveConnectionService", () => {
     })
   })
 
+  it("stamps the sentences with this computer's identity, and drops them without one", async () => {
+    // The same rule as the toolbar's, and the same reason: a phone files the list under
+    // the computer that sent it, so a desktop that cannot name itself would file its
+    // user's own sentences under nothing — and overwrite another machine's doing it.
+    const socket = new FakeSocket()
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+      now: () => new Date("2026-06-06T10:00:00.000Z"),
+    })
+
+    await service.sendMobileQuickPhrases({ revision: 1, phrases: [] })
+    expect(socket.sent).toHaveLength(0)
+
+    service.handleAccountState(authenticatedState)
+    await flushPromises()
+    socket.emit("open")
+    await waitForCondition(() => socket.sent.length > 0)
+    socket.emit("message", JSON.stringify({
+      type: "live.welcome",
+      id: "msg-welcome",
+      sentAt: "2026-06-06T10:00:01.000Z",
+      payload: { connectionId: "conn-a", serverTime: "2026-06-06T10:00:01.000Z", heartbeatIntervalMs: 20_000, heartbeatTimeoutMs: 45_000 },
+    }))
+    await flushPromises()
+    socket.sent.length = 0
+
+    await service.sendMobileQuickPhrases({
+      revision: 2,
+      phrases: [{ id: "q1", content: "整理成提交说明" }],
+    })
+
+    expect(JSON.parse(socket.sent[0] ?? "{}")).toMatchObject({
+      type: "mobile.quickPhrases",
+      payload: {
+        desktopClientInstanceId: "client-a",
+        revision: 2,
+        phrases: [{ id: "q1", content: "整理成提交说明" }],
+      },
+    })
+  })
+
   it("sends heartbeat ping envelopes", async () => {
     const socket = new FakeSocket()
     const timers = createTimerFns()

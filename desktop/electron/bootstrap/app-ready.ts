@@ -26,8 +26,20 @@ import { createSynapseSkillPreparedSourceProvider } from "../../app-capabilities
 import type { SynapseSkillService } from "../../app-capabilities/synapse-skill/main/service"
 import { SYNAPSE_SKILL_SERVICE_ID } from "../../app-capabilities/synapse-skill/shared/capability"
 import type { CoreDatabaseService } from "./descriptors"
+import type { QuickInputService } from "../../app-capabilities/quick-input/main/service"
 
 const logger = createMainLogger("bootstrap.app-ready")
+
+/**
+ * Guards the quick-input subscription below, in the same shape the App's own IPC
+ * module uses to guard its renderer broadcast.
+ *
+ * That module resolves the service on every call wire, so its guard is load-bearing;
+ * this one is not — `initializeReadyApp` runs once per launch — but it costs a line
+ * and it means a second caller, if one ever appears, cannot end up with the sentences
+ * being sent twice per edit.
+ */
+const quickPhraseSubscriptionWired = new WeakSet<QuickInputService>()
 
 type InitializeReadyAppDeps = {
   focusOrCreateMainWindow: () => void
@@ -142,9 +154,31 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
         void liveConnectionService.sendMobileTransferProgress(payload)
       },
       sendToolbar: (draft) => void liveConnectionService.sendMobileToolbar(draft),
+      sendQuickPhrases: (draft) => void liveConnectionService.sendMobileQuickPhrases(draft),
     })
   } catch (error) {
     logger.warn("Mobile terminal gateway transport not installed.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+  }
+  try {
+    // The one edit to the user's 快捷输入 table that a phone has to hear about, and
+    // the only place that can hear it: the quick-input App emits `changed` to its own
+    // renderer, which is a window broadcast with nothing to do with the gateway. Its
+    // own try/catch rather than the transport's above, so that an App unavailable at
+    // this moment cannot cost the mobile gateway everything else it does.
+    const mobileGateway = registry.get<MobileGatewayService>("core.mobile-gateway")
+    const quickInputService = registry.get<QuickInputService>("core.quick-input")
+    if (!quickPhraseSubscriptionWired.has(quickInputService)) {
+      // The fingerprinted flush rather than the unconditional resend: the event fires
+      // on every save, including one that rewrote the same sentence, so it means "look
+      // again" — and an unchanged table must cost no traffic at all. The unconditional
+      // resend is for a phone that has received nothing, which is `sync` and `attach`.
+      quickInputService.events.on("changed", () => void mobileGateway.flushQuickPhrases())
+      quickPhraseSubscriptionWired.add(quickInputService)
+    }
+  } catch (error) {
+    logger.warn("Mobile quick phrase subscription not installed.", {
       errorName: error instanceof Error ? error.name : typeof error,
     })
   }

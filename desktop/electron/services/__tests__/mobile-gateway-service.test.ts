@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 import { isMobileSummaryPayload, MOBILE_FRAME_LIMITS } from "@synapse/shared"
 import type {
   MobileIntent,
+  MobileQuickPhrase,
   MobileTerminalFrame,
   MobileToolbarButton,
   MobileTransferProgressPayload,
@@ -23,7 +24,12 @@ import {
 } from "../mobile-gateway-service"
 import { MobileFileRelay } from "../mobile-gateway/file-relay"
 import type { ClaudeCodeConversationLaunch } from "../mobile-gateway/intent-executor"
-import type { MobileGatewayTransport, MobileSummaryDraft, MobileToolbarDraft } from "../mobile-gateway/transport"
+import type {
+  MobileGatewayTransport,
+  MobileQuickPhrasesDraft,
+  MobileSummaryDraft,
+  MobileToolbarDraft,
+} from "../mobile-gateway/transport"
 
 /* ------------------------------------------------------------------ *
  * Test doubles
@@ -351,6 +357,7 @@ function createHarness(options: { sessionLines?: number } = {}) {
   const results: unknown[] = []
   const progress: MobileTransferProgressPayload[] = []
   const toolbars: MobileToolbarDraft[] = []
+  const quickPhrases: MobileQuickPhrasesDraft[] = []
   const transport: MobileGatewayTransport = {
     sendSummary: (draft) => summaries.push(draft),
     sendFrame: (mobileClientInstanceId, frame) => frames.push({ mobileClientInstanceId, frame }),
@@ -359,8 +366,10 @@ function createHarness(options: { sessionLines?: number } = {}) {
     },
     sendTransferProgress: (payload) => progress.push(payload),
     sendToolbar: (draft) => toolbars.push(draft),
+    sendQuickPhrases: (draft) => quickPhrases.push(draft),
   }
   const audits: unknown[] = []
+  const warns: { message: string; meta?: Record<string, unknown> }[] = []
   const permissionGuard = {
     check: vi.fn(async () => (terminal.deny
       ? { allowed: false, reason: "denied" }
@@ -449,6 +458,11 @@ function createHarness(options: { sessionLines?: number } = {}) {
 
   const listAgentConversationGroups = vi.fn(async () => agentGroups)
   const listAgentConversationProviders = vi.fn(async () => agentProviders)
+  /** Mutable so a test can edit the user's table and see whether the gateway notices. */
+  const quickPhraseItems: MobileQuickPhrase[] = [
+    { id: "q1", content: "整理成提交说明" },
+  ]
+  const listQuickPhrases = vi.fn(async () => [...quickPhraseItems])
 
   const gateway = new MobileGatewayService({
     terminal: terminal as unknown as TerminalService,
@@ -456,9 +470,10 @@ function createHarness(options: { sessionLines?: number } = {}) {
     createClaudeCodeConversation,
     listAgentConversationGroups,
     listAgentConversationProviders,
+    listQuickPhrases,
     permissionGuard,
     auditSink: { record: (event: unknown) => audits.push(event), list: () => [], clearForTests: () => {} },
-    logger: { info: () => {}, warn: () => {} },
+    logger: { info: () => {}, warn: (message: string, meta?: Record<string, unknown>) => warns.push({ message, meta }) },
     now: () => new Date(timers.nowMs),
     setTimeout: timers.set,
     clearTimeout: timers.clear,
@@ -469,7 +484,8 @@ function createHarness(options: { sessionLines?: number } = {}) {
 
   return {
     gateway, terminal, timers, transport, frames, summaries, results, audits, toolbars,
-    permissionGuard, fileRelay, landings, discarded, progress,
+    quickPhrases, quickPhraseItems, listQuickPhrases,
+    permissionGuard, fileRelay, landings, discarded, progress, warns,
     launches, createClaudeCodeConversation, agentGroups, agentProviders,
     listAgentConversationGroups, listAgentConversationProviders,
   }
@@ -1578,6 +1594,189 @@ describe("MobileGatewayService", () => {
 
     expect(harness.summaries.length).toBeGreaterThan(summariesAfterSync)
     expect(harness.toolbars).toHaveLength(toolbarsAfterSync)
+  })
+
+  /*
+   * The 快捷输入 sentences are the third payload family out of this gateway, and they
+   * fail differently from the other two: a toolbar that goes missing leaves a phone
+   * with its own built-in buttons, but sentences have no fallback — and, worse, a
+   * phone that never hears this message at all cannot tell "this computer has none"
+   * from "this computer is too old to have any". Both of those hinge on this side.
+   */
+  describe("quick phrases", () => {
+    /** Lets the flush — which reads through an async source — run to completion. */
+    async function settle(): Promise<void> {
+      for (let index = 0; index < 5; index += 1) await Promise.resolve()
+    }
+
+    it("sends the sentences on sync, then deduplicates them against idle activity", async () => {
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+
+      expect(harness.quickPhrases).toHaveLength(1)
+      expect(harness.quickPhrases[0]?.phrases.map((phrase) => phrase.content))
+        .toEqual(["整理成提交说明"])
+      const afterSync = harness.quickPhrases.length
+
+      // Summary ticks and terminal output: neither is a reason to re-send the table.
+      await harness.timers.advance(3_000)
+      harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 2 } })
+      await harness.timers.advance(3_000)
+      await settle()
+
+      expect(harness.quickPhrases).toHaveLength(afterSync)
+    })
+
+    it("sends the sentences to a second phone that has just connected", async () => {
+      // The deduplication above is an answer to a listener that was there. A phone
+      // that has just connected received nothing — including when the desktop's
+      // earlier send went to a cloud process that has since been replaced.
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const afterFirstPhone = harness.quickPhrases.length
+
+      await harness.gateway.handleIntent("phone-2", intent({ v: 1, intentId: "i-sync-2", kind: "sync" }))
+      await settle()
+
+      expect(harness.quickPhrases.length).toBeGreaterThan(afterFirstPhone)
+    })
+
+    it("sends the sentences again when the phone opens a terminal", async () => {
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const afterSync = harness.quickPhrases.length
+
+      await attach(harness)
+      await settle()
+
+      expect(harness.quickPhrases.length).toBeGreaterThan(afterSync)
+      expect(harness.quickPhrases.at(-1)?.phrases.map((phrase) => phrase.id)).toEqual(["q1"])
+    })
+
+    it("pushes an edited table without waiting for anything else to happen", async () => {
+      // What the quick-input App's own `changed` event is wired to. Unlike the buttons,
+      // which are re-read on ticks that already happen, this has a real signal — so a
+      // user who edits a sentence while a phone is already connected, idle and looking
+      // at the menu, does not have to wait for a reconnect to see it.
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const before = harness.quickPhrases.at(-1)
+
+      harness.quickPhraseItems.push({ id: "q2", content: "这次改动整理成提交说明" })
+      await harness.gateway.flushQuickPhrases()
+      await settle()
+
+      const after = harness.quickPhrases.at(-1)
+      expect(after?.phrases.map((phrase) => phrase.id)).toEqual(["q1", "q2"])
+      // The revision moves with the content, so a captured payload is self-describing.
+      expect(after!.revision).toBeGreaterThan(before!.revision)
+    })
+
+    it("stays silent when the table is saved without changing what a phone would see", async () => {
+      /*
+       * The quick-input app emits `changed` on *every* save, including one that rewrote
+       * the same sentence — so the event means "look again", not "something differs".
+       * Without the fingerprint, opening the app's edit dialog and pressing 保存 without
+       * touching anything would re-send the user's whole table to every phone.
+       *
+       * Idle still costs nothing either way, because the event only fires on a save. This
+       * is about the noise a user's own harmless action would otherwise make.
+       */
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const afterSync = harness.quickPhrases.length
+
+      await harness.gateway.flushQuickPhrases()
+      await settle()
+
+      expect(harness.quickPhrases).toHaveLength(afterSync)
+    })
+
+    it("sends an empty list rather than staying silent when the user has none", async () => {
+      /*
+       * The whole reason the phone can draw its second segment. `[]` says "this
+       * computer has none" and the phone answers with an empty state; *no message at
+       * all* says "this computer is too old to know about phrases" and the phone
+       * draws no second segment. Suppressing the empty send erases that distinction,
+       * and it fails in the direction a user reads as their configuration being lost.
+       */
+      const harness = createHarness()
+      harness.quickPhraseItems.length = 0
+
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+
+      expect(harness.quickPhrases).toHaveLength(1)
+      expect(harness.quickPhrases[0]?.phrases).toEqual([])
+    })
+
+    it("drops a sentence past the wire limit whole rather than truncating it", async () => {
+      // A sentence shortened to fit would be typed into the composer and sent as if it
+      // were the one the user wrote on the computer. Absent is the safe failure, and
+      // it is not silent: the desktop says which entry it left out and why.
+      const harness = createHarness()
+      harness.quickPhraseItems.push({
+        id: "q2",
+        content: "长".repeat(MOBILE_FRAME_LIMITS.maxQuickPhraseLength + 1),
+      })
+
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+
+      const sent = harness.quickPhrases.at(-1)?.phrases ?? []
+      expect(sent.map((phrase) => phrase.id)).toEqual(["q1"])
+      for (const phrase of sent) {
+        expect(phrase.content.length).toBeLessThanOrEqual(MOBILE_FRAME_LIMITS.maxQuickPhraseLength)
+      }
+      expect(harness.warns.some((entry) => entry.message.includes("exceeding the wire limit"))).toBe(true)
+    })
+
+    it("stops at the last sentence that fits rather than cutting one", async () => {
+      const harness = createHarness()
+      const filler = "长".repeat(MOBILE_FRAME_LIMITS.maxQuickPhraseLength)
+      harness.quickPhraseItems.push(
+        // Far past the 64 KiB budget once serialized, so the tail has to go.
+        ...Array.from({ length: 40 }, (_value, index) => ({ id: `bulk-${index}`, content: filler })),
+      )
+
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+
+      const sent = harness.quickPhrases.at(-1)?.phrases ?? []
+      expect(sent[0]?.id).toBe("q1")
+      expect(sent.length).toBeGreaterThan(1)
+      expect(sent.length).toBeLessThan(41)
+      // Every sentence that did go is whole — none was cut to fit.
+      for (const phrase of sent) {
+        if (phrase.id === "q1") continue
+        expect(phrase.content).toHaveLength(MOBILE_FRAME_LIMITS.maxQuickPhraseLength)
+      }
+      expect(Buffer.byteLength(JSON.stringify(sent), "utf8"))
+        .toBeLessThanOrEqual(MOBILE_FRAME_LIMITS.maxQuickPhrasesBytes)
+    })
+
+    it("keeps the sentences' fingerprint separate from the toolbar's and the summary's", async () => {
+      // Three lists that change on three different occasions. One shared fingerprint
+      // would make any edit of any of them re-send all three.
+      const harness = createHarness()
+      await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+      await settle()
+      const phrasesAfterSync = harness.quickPhrases.length
+      const toolbarsAfterSync = harness.toolbars.length
+      const summariesAfterSync = harness.summaries.length
+
+      await harness.timers.advance(1_000)
+      await settle()
+
+      expect(harness.summaries.length).toBeGreaterThan(summariesAfterSync)
+      expect(harness.toolbars).toHaveLength(toolbarsAfterSync)
+      expect(harness.quickPhrases).toHaveLength(phrasesAfterSync)
+    })
   })
 
   it("checks policy under the narrow agent identity, never the user", async () => {

@@ -3,6 +3,7 @@ import type {
   MobileIntent,
   MobileIntentResult,
   MobileModelTier,
+  MobileQuickPhrase,
   MobileToolbarButton,
   MobileSummaryAgentGroup,
   MobileSummaryAgentProvider,
@@ -55,6 +56,9 @@ const SUMMARY_INTERVAL_MS = 1_000
  * budget and the socket underneath it — see `maxToolbarBytes`.
  */
 const TOOLBAR_ENVELOPE_ALLOWANCE_BYTES = 1_024
+
+/** The same slack, on the same terms, for the 快捷输入 payload. */
+const QUICK_PHRASES_ENVELOPE_ALLOWANCE_BYTES = 1_024
 
 /** Tail lines read to answer "what is this terminal doing right now". */
 const SUMMARY_TAIL_LINES = 4
@@ -120,6 +124,15 @@ export type MobileGatewayServiceDeps = {
    * record is — nothing with an endpoint or a credential in it crosses over.
    */
   readonly listAgentConversationProviders: () => Promise<readonly MobileGatewayAgentProvider[]>
+  /**
+   * The sentences the user keeps in the desktop's own 快捷输入 app.
+   *
+   * Injected rather than reached for, like the two lists above: the quick-input App
+   * owns that data, and this service has no other reason to depend on it. Read-only
+   * on purpose — a phone taps a sentence into its composer and sends what it likes;
+   * nothing writes back to the computer's table from here.
+   */
+  readonly listQuickPhrases: () => Promise<readonly MobileQuickPhrase[]>
   readonly now?: () => Date
   readonly setTimeout?: (callback: () => void, delayMs: number) => NodeJS.Timeout
   readonly clearTimeout?: (handle: NodeJS.Timeout) => void
@@ -189,6 +202,15 @@ export class MobileGatewayService {
    */
   private toolbarRevision = 0
   private lastToolbarContent = ""
+  /**
+   * Fingerprint of the last 快捷输入 list sent, kept apart from both of the above.
+   *
+   * The third occasion in its own right: the sentences change when the user edits
+   * the quick-input app, which is neither a terminal event nor a command edit. A
+   * shared fingerprint would re-send every one of them whenever anything else moved.
+   */
+  private quickPhrasesRevision = 0
+  private lastQuickPhrasesContent = ""
   private readonly bytesByClient = new Map<string, { windowStartedMs: number; bytes: number }>()
   private readonly lastLineCache = new Map<string, string>()
   private readonly lastLineDirty = new Set<string>()
@@ -212,6 +234,7 @@ export class MobileGatewayService {
       requestSummary: () => this.scheduleSummary(),
       resendSummary: () => this.resendSummary(),
       sendToolbar: () => this.resendToolbar(),
+      sendQuickPhrases: () => this.resendQuickPhrases(),
       pushSnapshot: (attachment) => this.pushSnapshot(attachment),
       sendHistory: (attachment, before, limit) => this.sendHistory(attachment, before, limit),
       reportTransferProgress: (mobileClientInstanceId, intentId, completedBytes, totalBytes) =>
@@ -265,6 +288,7 @@ export class MobileGatewayService {
     this.lastLineDirty.clear()
     this.lastSummaryContent = ""
     this.lastToolbarContent = ""
+    this.lastQuickPhrasesContent = ""
   }
 
   /** Called by the live connection when a phone sends an intent. */
@@ -939,6 +963,96 @@ export class MobileGatewayService {
     } catch {
       return known ?? ""
     }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Quick phrases
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Sends the desktop's 快捷输入 sentences to its phones: a full snapshot, fingerprinted
+   * so an idle desktop produces no traffic.
+   *
+   * Unlike the toolbar, this one has a real change signal — the quick-input service
+   * emits `changed` whenever the user edits the table — so it is pushed rather than
+   * polled on the summary tick. The two arrivals the event cannot cover are a phone
+   * connecting and a phone opening a terminal, and those call `resendQuickPhrases`
+   * directly, the way they already do for the toolbar.
+   *
+   * The list is read through an injected function rather than held here, so there is
+   * no second copy of the user's table to drift from the first.
+   *
+   * Public because the change signal arrives as an event rather than as one of this
+   * service's own calls: the bootstrap subscribes the quick-input app's `changed` to
+   * this method. The event says "look again", not "something differs" — `update`
+   * emits it on every save, including one that rewrote the same sentence — which is
+   * precisely the difference the fingerprint below is here to absorb.
+   */
+  async flushQuickPhrases(): Promise<void> {
+    const transport = this.transport
+    if (!transport) return
+    try {
+      const phrases = this.fitQuickPhrasesToBudget(await this.deps.listQuickPhrases())
+      // Compared without the revision, so an unchanged list produces nothing at all.
+      const serialized = JSON.stringify(phrases)
+      if (serialized === this.lastQuickPhrasesContent) return
+      this.lastQuickPhrasesContent = serialized
+      this.quickPhrasesRevision += 1
+      transport.sendQuickPhrases({ revision: this.quickPhrasesRevision, phrases })
+    } catch (error) {
+      // A phone without the sentences still has the command buttons and the terminal
+      // itself; failing to read one app's table is not a reason to lose either.
+      this.logWarn("Mobile quick phrases flush failed.", error)
+    }
+  }
+
+  /**
+   * Sends even when nothing changed, for a caller that has nothing yet.
+   *
+   * `flushQuickPhrases` compares against what was last sent, which is what keeps an
+   * idle desktop from producing traffic — but "last sent" only means something to a
+   * listener that was there. A phone that has just connected received nothing, and
+   * the sentences it needs may have gone to a previous cloud process. Clearing the
+   * comparison first is what makes this an answer to that phone rather than to the
+   * fingerprint.
+   */
+  resendQuickPhrases(): void {
+    this.lastQuickPhrasesContent = ""
+    void this.flushQuickPhrases()
+  }
+
+  /**
+   * Drops what does not fit, entry by entry, without ever shortening an entry.
+   *
+   * Two limits, applied for the same reason: the phone's composer is about to hold
+   * this sentence and its user is about to send it believing it is the one they
+   * wrote. A sentence trimmed to fit would leave that belief intact and be wrong,
+   * which is worse than the sentence being visibly absent — so an over-long one is
+   * dropped whole and *said so*, and the byte budget drops the tail rather than
+   * cutting the entry it lands on.
+   *
+   * Unreachable for any table the product produces — the app bounds nothing, but a
+   * person does not write sixty-five sentences — so like the toolbar's budget this
+   * exists for the case where it is not, and prefers losing entries to losing the
+   * connection.
+   */
+  private fitQuickPhrasesToBudget(phrases: readonly MobileQuickPhrase[]): readonly MobileQuickPhrase[] {
+    const budget = MOBILE_FRAME_LIMITS.maxQuickPhrasesBytes - QUICK_PHRASES_ENVELOPE_ALLOWANCE_BYTES
+    const kept: MobileQuickPhrase[] = []
+    for (const phrase of phrases) {
+      if (phrase.content.length > MOBILE_FRAME_LIMITS.maxQuickPhraseLength) {
+        this.logWarn("Mobile quick phrase dropped for exceeding the wire limit.", {
+          phraseId: phrase.id,
+          length: phrase.content.length,
+        })
+        continue
+      }
+      if (kept.length >= MOBILE_FRAME_LIMITS.maxQuickPhrases) break
+      const candidate = [...kept, phrase]
+      if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budget) break
+      kept.push(phrase)
+    }
+    return kept
   }
 
   /* ------------------------------------------------------------------ *

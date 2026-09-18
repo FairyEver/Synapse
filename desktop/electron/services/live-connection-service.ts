@@ -16,6 +16,7 @@ import { createLiveReconnectDelay } from "./live-reconnect-policy"
 import { createMainLogger } from "./log-store"
 import type {
   MobileIntentHandler,
+  MobileQuickPhrasesDraft,
   MobileSummaryDraft,
   MobileToolbarDraft,
 } from "./mobile-gateway/transport"
@@ -366,6 +367,24 @@ export class LiveConnectionService {
     if (!clientInstanceId) return
     const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
     this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileToolbar, {
+      desktopClientInstanceId: clientInstanceId,
+      ...draft,
+    }, this.envelopeMetadata()))
+  }
+
+  /**
+   * The 快捷输入 sentences this computer keeps, for its phones.
+   *
+   * Drops the message without an identity, exactly as the toolbar does and for the
+   * same reason: a phone files a list under the computer that sent it, so one that
+   * cannot say which it is would land under nothing and overwrite another machine's
+   * sentences.
+   */
+  async sendMobileQuickPhrases(draft: MobileQuickPhrasesDraft): Promise<void> {
+    const clientInstanceId = this.state.clientInstanceId
+    if (!clientInstanceId) return
+    const { LIVE_MESSAGE_TYPES, createLiveEnvelope } = await this.getProtocol()
+    this.sendLiveEnvelope(createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileQuickPhrases, {
       desktopClientInstanceId: clientInstanceId,
       ...draft,
     }, this.envelopeMetadata()))
