@@ -90,8 +90,7 @@ const buildSessionId = randomUUID()
  *
  * The fixtures above are each consumed by a test — `api-logs` is renamed, `build` is
  * deleted — and stopping one of them would take it away from whoever runs next. This
- * one exists only to be ended, which is the state a test of "everything greys out"
- * needs and cannot produce any other way.
+ * one exists only to be ended, which is a state no other fixture can be put in.
  */
 const scratchSessionId = randomUUID()
 
@@ -494,8 +493,14 @@ function handleIntent(message) {
     return
   }
   if (intent.kind === "stop") {
-    const session = sessions.get(intent.sessionId)
-    if (session) session.status = "ended"
+    // Stopping a running terminal does not leave a row behind on the real desktop:
+    // the stop kills the PTY, and the exit is what takes the session out of the list
+    // this summary is built from. Leaving it here as `ended` was this double
+    // promising the phone a state the real computer never puts it in — and a test
+    // that read the phone against it passed while the phone was showing something
+    // else entirely.
+    sessions.delete(intent.sessionId)
+    frames.delete(intent.sessionId)
     sendSummary()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     return

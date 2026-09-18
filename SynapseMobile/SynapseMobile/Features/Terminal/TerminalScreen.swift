@@ -82,6 +82,22 @@ struct TerminalScreen: View {
     /// by greying out together rather than each deciding for itself.
     private var isRunning: Bool { session?.isRunning == true }
 
+    /// The computer's list no longer carries this terminal, which is the one thing
+    /// that can end this screen.
+    ///
+    /// A terminal that is stopped is gone rather than merely idle: the computer
+    /// destroys the session when its process exits, so the next list it sends simply
+    /// does not mention it. What is left on this screen then is a canvas nobody is
+    /// writing to and an input bar with no recipient — the user's only way out is the
+    /// back button, and nothing says so.
+    ///
+    /// An absent list is not the same as a list that says no. With no list at all —
+    /// the computer has not answered, or the user just switched computers — every
+    /// terminal is missing from it, and one that is unreachable is not one that ended.
+    private var sessionIsGone: Bool {
+        model.summary != nil && session == nil
+    }
+
     /// The buttons the computer under this terminal offers, or the built-in fallback
     /// when it is too old to have said. See `SynapseAppModel.activeToolbarButtons`.
     private var buttons: [MobileToolbarButton] { model.activeToolbarButtons }
@@ -513,6 +529,15 @@ struct TerminalScreen: View {
             // from the status bar.
             voice.cancel()
             model.closeTerminal(sessionId)
+        }
+        // 终端没了，这个页面跟着走。停止、删除、在电脑上关掉、进程自己退出，最后都
+        // 落在同一件事上：电脑送来的列表里不再有它。留着这一页就是把人摆在一个没有
+        // 出口的空屏幕上 —— 它既不是「已结束」，也没有第二句话可说。
+        //
+        // 判据只能是「列表里没有」，不能是「不是运行中」：刚建出来的终端是先跳进来
+        // 再等下一份列表的，那一瞬间它也「不是运行中」。
+        .onChange(of: sessionIsGone) { _, gone in
+            if gone { dismiss() }
         }
         .onChange(of: voice.phase) { _, phase in
             // 录音中途断网、或者来电把这次录音打断：手指可能还按着，但这次已经录不

@@ -769,13 +769,15 @@ final class TerminalFlowUITests: XCTestCase {
         capture(app, name: "19-panel-dismissed-by-canvas")
     }
 
-    /// Nothing here can be pressed once the terminal is gone.
+    /// 在终端页上把它停掉，这一页就该自己回到列表上。
     ///
-    /// Every one of these sends something into a terminal — a key, a command — and a
-    /// terminal that has stopped has nowhere to receive it. Leaving them live would
-    /// turn each press into a rejected intent the user cannot act on, so the bar and
-    /// the panel go grey together, and this is what says they do.
-    func testEverythingGreysOutWhenTheTerminalStops() throws {
+    /// 停止之后电脑那边就没有这个会话了：进程退出，下一份列表里不再有它。留下来的
+    /// 那一页既没有内容可画（画布上最后几行是会消失的），输入栏也没有收件人，退出
+    /// 只能靠用户自己想起返回键 —— 而屏幕上没有任何地方说过这件事。
+    ///
+    /// 用 `scratch` 而不是别的 fixture：那几只各自被后面的用例改名或删掉，停掉一只
+    /// 就等于把它从那些用例手里拿走。
+    func testStoppingTheTerminalReturnsToTheList() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
         app.launch()
@@ -783,18 +785,14 @@ final class TerminalFlowUITests: XCTestCase {
 
         let terminals = app.tabBars.firstMatch
         XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
-        // `scratch` rather than one of the shared fixtures: the others are renamed and
-        // deleted by later tests, and stopping one here would take it away from them.
         let sessionRow = app.staticTexts["scratch"]
         XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the scratch session never appeared")
         XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
         sessionRow.tap()
-        XCTAssertTrue(
-            app.descendants(matching: .any)["terminal.text"].waitForExistence(timeout: 15),
-            "terminal never appeared"
-        )
+
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
         XCTAssertTrue(app.buttons["toolbar-enter"].waitForExistence(timeout: 15), "the bar never arrived")
-        XCTAssertTrue(app.buttons["toolbar-enter"].isEnabled, "the bar is greyed out on a running terminal")
 
         // Stop it from the screen's own menu, the way a user would.
         app.buttons["更多"].tap()
@@ -805,18 +803,71 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "stopping asked for no confirmation")
         confirm.buttons["停止"].tap()
 
-        // The list has to say so before the bar can be judged: the bar greys out as a
-        // consequence of the session ending, not on its own.
+        // Nothing below taps back: the screen has to leave on its own.
         XCTAssertTrue(
-            waitForLabel(containing: "已结束", in: app, timeout: 20) || !app.buttons["toolbar-enter"].isEnabled,
-            "the terminal never reported itself as ended"
+            terminal.waitForNonExistence(timeout: 20),
+            "the terminal screen stayed up after the terminal was stopped"
         )
-        XCTAssertFalse(app.buttons["toolbar-enter"].isEnabled, "the bar is still live on an ended terminal")
+        XCTAssertTrue(
+            app.buttons["toolbar-enter"].waitForNonExistence(timeout: 10),
+            "the input bar was still up after the terminal was stopped"
+        )
+        XCTAssertTrue(
+            app.staticTexts["claude-code"].waitForExistence(timeout: 10),
+            "the list never came back"
+        )
+        XCTAssertTrue(
+            sessionRow.waitForNonExistence(timeout: 10),
+            "the stopped terminal is still in the list"
+        )
+        capture(app, name: "16-stop-returns-to-the-list")
+    }
 
+    /// 电脑联系不上的时候，这一页留着，但栏上的东西点不动。
+    ///
+    /// 与上面那条划的是同一条线：终端「没了」和终端「够不着」不是一件事。电脑掉线时
+    /// 列表整个是空的，哪个会话都不在里面 —— 这不是这些会话结束了，所以这一页必须留
+    /// 着（人还坐在这个终端前面，电脑回来时他还在原地），而这段时间里按下的每一个键
+    /// 都发不出去，栏得说出这件事。
+    func testTheBarGreysOutWhenTheComputerGoesAway() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL] + keyboardBarAtLaunch
+        app.launch()
+        signIn(app)
+
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        let sessionRow = app.staticTexts["claude-code"]
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the claude-code session never appeared")
+        XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
+        sessionRow.tap()
+
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
+        let enter = app.buttons["toolbar-enter"]
+        XCTAssertTrue(enter.waitForExistence(timeout: 15), "the bar never arrived")
+        XCTAssertTrue(enter.isEnabled, "the bar is greyed out on a running terminal")
+
+        // 这条用例要把电脑从整轮运行里拿走一会儿，所以无论成败都要还回去：mock 的断开
+        // 是持久的（它自己不会重连），而后面每一个用例都指望着一台在线的电脑。
+        addTeardownBlock {
+            XCTAssertEqual(self.post("/desktop/connect"), 200, "the mock desktop would not come back")
+        }
+        XCTAssertEqual(
+            post("/desktop/disconnect"), 200,
+            "the mock desktop control channel is unreachable at \(controlBaseURL)"
+        )
+
+        XCTAssertTrue(waitForDisabled(enter, timeout: 30), "the bar stayed live with no computer behind it")
+        XCTAssertTrue(terminal.exists, "the terminal screen left when the computer went away")
+
+        // 面板照旧打得开 —— 它里面是这颗手机自己认识的字，读一读不欠谁什么 —— 但一颗
+        // 键都按不动：按下去就是一条没人接的 intent。
         app.buttons["toolbar-keyboard"].tap()
-        XCTAssertTrue(app.buttons["panelkey-Escape"].waitForExistence(timeout: 10), "the panel never opened")
-        XCTAssertFalse(app.buttons["panelkey-Escape"].isEnabled, "the panel is still live on an ended terminal")
-        capture(app, name: "16-ended-greyed-out")
+        let escape = app.buttons["panelkey-Escape"]
+        XCTAssertTrue(escape.waitForExistence(timeout: 10), "the panel never opened")
+        XCTAssertTrue(waitForDisabled(escape, timeout: 10), "a panel key is still live with no computer behind it")
+        capture(app, name: "16-greyed-out-with-no-computer")
     }
 
     /// A computer that cannot describe its buttons gets the phone's own built-ins.
@@ -1598,6 +1649,19 @@ final class TerminalFlowUITests: XCTestCase {
             usleep(200_000)
         }
         return false
+    }
+
+    /// Waits for a control to grey out.
+    ///
+    /// The phone learns that from the computer, so the test has to wait for it rather
+    /// than read it right after the call that caused it. Case the element is missing
+    /// entirely, which reads as disabled too, so callers assert it is there first.
+    private func waitForDisabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "enabled == false")
+        return XCTWaiter().wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
+            timeout: timeout
+        ) == .completed
     }
 
     private func waitForLabel(containing text: String, in app: XCUIApplication, timeout: TimeInterval) -> Bool {
