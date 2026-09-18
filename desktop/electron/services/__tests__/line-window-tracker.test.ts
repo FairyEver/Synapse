@@ -79,6 +79,25 @@ describe("LineWindowTracker", () => {
     expect(tracker.snapshot().total).toBe(27)
   })
 
+  it("recognises a slide larger than half the window", () => {
+    // Bursty output can advance further in one flush than half a window. The probe
+    // has to reach that far, or it gives up and reports a divergence instead — and a
+    // divergence resends the whole window, on every flush, for as long as the
+    // terminal keeps producing that fast.
+    const tracker = new LineWindowTracker()
+    tracker.push(windowOf("row", 500))
+
+    const update = tracker.push(windowOf("row", 500, 300))
+
+    expect(update).toMatchObject({
+      newWindowStart: 300,
+      from: 500,
+      total: 800,
+      truncated: true,
+    })
+    expect(update?.lines).toHaveLength(300)
+  })
+
   it("does not claim an eviction from a short coincidental overlap", () => {
     // Only one line bridges the two windows, which duplicate content makes possible
     // by accident. Trusting it would skip content the client never received.

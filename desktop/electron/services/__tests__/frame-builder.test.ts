@@ -147,6 +147,20 @@ describe("terminal frame builder", () => {
     expect(expected).toBe(lines.length)
   })
 
+  it("declares the truncation boundary once, on the frame that defines it", () => {
+    // `truncated` means "everything before this frame's `from` is gone". Only the
+    // first chunk's `from` is that boundary; on the followers the same flag lands
+    // inside the window the leading chunks just delivered, and a client that
+    // honours it discards them and keeps the tail of an update it was sent whole.
+    const lines = Array.from({ length: 900 }, (_, index) => plain(`line ${index}`))
+
+    const frames = buildTerminalFrames({ ...base, truncated: true, lines, total: lines.length })
+
+    expect(frames.length).toBeGreaterThan(1)
+    expect(frames[0].truncated).toBe(true)
+    expect(frames.slice(1).map((frame) => frame.truncated)).toEqual(frames.slice(1).map(() => false))
+  })
+
   it("leaves a split suffix and a split history alone", () => {
     const lines = Array.from({ length: 900 }, (_, index) => plain(`line ${index}`))
 

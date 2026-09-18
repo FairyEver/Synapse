@@ -22,8 +22,18 @@ import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main
  *    the first line that differs.
  */
 
-/** How many eviction candidates to probe before admitting the windows diverged. */
-const MAX_EVICTION_PROBE = 256
+/**
+ * How many eviction candidates to probe before admitting the windows diverged.
+ *
+ * Has to reach the end of the window the gateway reads (`lineWindowLines`, 500),
+ * or a slide larger than half a window is unprovable however plainly the evidence
+ * sits in the two reads. A failed probe is not a harmless misread: it reports a
+ * divergence, and a divergence resends the whole window — on every flush, for as
+ * long as the terminal keeps producing that fast. Eight flushes a second of a
+ * 500-line window is already twice the phone's uplink budget, so the updates get
+ * dropped exactly when the session has the most to say.
+ */
+const MAX_EVICTION_PROBE = 512
 
 /**
  * Minimum matching lines before an eviction offset is trusted. Duplicate lines

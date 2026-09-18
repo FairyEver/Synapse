@@ -68,12 +68,18 @@ export type TerminalFrameInput = {
  * Frames carry increasing `from`s, so a client that applies them in order
  * converges on exactly the same state as one that receives a single frame.
  *
- * `reset` is the exception, and only in its first frame. A reset means "discard
- * everything you hold"; a client that honours that literally discards the
- * preceding chunk too, and comes out holding the last chunk alone — a window
- * arriving as four frames left the client with a quarter of it. Only the first
- * frame discards; the rest are ordinary suffix frames, which say "from here on
- * the content is this", precisely what the remaining chunks are.
+ * `reset` and `truncated` are the exception, and both only in the first frame. A
+ * reset means "discard everything you hold"; a client that honours that literally
+ * discards the preceding chunk too, and comes out holding the last chunk alone — a
+ * window arriving as four frames left the client with a quarter of it. Only the
+ * first frame discards; the rest are ordinary suffix frames, which say "from here
+ * on the content is this", precisely what the remaining chunks are.
+ *
+ * `truncated` is a statement about the frame's own `from`: everything before it is
+ * gone and must be discarded. Only the first chunk's `from` is that boundary. On
+ * the followers the same flag lands on a `from` deep inside the window the leading
+ * chunks just delivered, and a client that acts on it drops the lines it was sent
+ * a moment ago and keeps the tail.
  */
 export function buildTerminalFrames(input: TerminalFrameInput): MobileTerminalFrame[] {
   const frames: MobileTerminalFrame[] = []
@@ -95,6 +101,8 @@ export function buildTerminalFrames(input: TerminalFrameInput): MobileTerminalFr
     const consumed = wireLines.length
     // The discard belongs to the first frame only; later chunks amend what it left.
     const kind = frames.length === 0 || input.kind !== "reset" ? input.kind : "suffix"
+    // Same for the truncation claim: it is about the boundary this frame defines.
+    const truncated = frames.length === 0 ? input.truncated : false
     frames.push({
       v: MOBILE_PROTOCOL_VERSION,
       sessionId: input.sessionId,
@@ -104,7 +112,7 @@ export function buildTerminalFrames(input: TerminalFrameInput): MobileTerminalFr
       total: input.total,
       cursor: input.cursor,
       alt: input.alt,
-      truncated: input.truncated,
+      truncated,
       seq: input.seq,
       sizeRevision: input.sizeRevision,
     })

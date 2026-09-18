@@ -493,7 +493,15 @@ export class MobileGatewayService {
     // flush sends a fresh window instead of queueing frames the phone will never
     // catch up on. On a metered link the latest screen always beats a full history.
     if (!mustSnapshot && !this.consumeBudget(attachment.mobileClientInstanceId, frames)) {
+      // The snapshot that replaces this update only exists on the next flush, and
+      // flush scheduling rides on `markDirty` — which rides on terminal output. A
+      // drop therefore strands the phone whenever the burst it landed on was the
+      // session's last: the update is gone, nothing is left to trigger the repair,
+      // and the phone keeps that screen for good. Arm the timer here instead, so
+      // the recovery owes nothing to output that may never come.
       attachment.needsSnapshot = true
+      attachment.dirty = true
+      this.scheduleFlush()
       return
     }
     for (const frame of frames) {

@@ -333,6 +333,13 @@ final class TerminalStore {
         }
         // Cheapest correct response to dropping the head: re-wrap the tail.
         firstLineIndex = max(firstLineIndex, newFirst)
+        // The cursor may never sit below what is still held. A page is served as
+        // `[oldestIndex - count, oldestIndex)`, so a cursor left behind by the trim
+        // asks for lines below the buffer and lands them under it, leaving a gap
+        // between the page and the oldest line still here. `appendWrapped` stops at
+        // that gap, and the rows end there for good — the newest lines are held and
+        // never drawn.
+        oldestIndex = max(oldestIndex, firstLineIndex)
         didTruncate = true
         rebuildAllRows()
     }

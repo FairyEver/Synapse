@@ -1789,6 +1789,41 @@ describe("MobileGatewayService", () => {
       action: "terminal.state.read",
     }))
   })
+  it("sends the recovery snapshot after a dropped update with no further output", async () => {
+    /*
+     * A dropped update is recovered by the *next* flush, and the timer that drives
+     * the next flush is armed by terminal output. When the drop lands on the last
+     * burst a session produces, there is no next output to arm it: the update is
+     * gone, no repair is ever attempted, and the phone keeps the previous screen
+     * for good — the session looks like it stopped mid-sentence.
+     */
+    const harness = createHarness()
+    await attach(harness)
+    harness.frames.length = 0
+
+    // Far past the 64 KiB uplink budget once serialized, so the update is dropped.
+    harness.terminal.lines.set(
+      "sess-1",
+      Array.from({ length: 100 }, (_value, index) => ({
+        text: `line-${index} ${"x".repeat(2_100)}`,
+      })),
+    )
+    harness.terminal.events.emit("data", { sessionId: "sess-1", chunk: { seq: 2 } })
+
+    // First flush: the update is over budget and goes nowhere.
+    await harness.timers.advance(60)
+    expect(harness.frames).toHaveLength(0)
+
+    // Second flush: the repair, owed to no output in particular.
+    await harness.timers.advance(60)
+    expect(harness.frames.length).toBeGreaterThan(0)
+    const recovered = harness.frames.flatMap((entry) => entry.frame)
+    expect(recovered[0].kind).toBe("reset")
+    expect(recovered.at(-1)?.from).toBeGreaterThanOrEqual(0)
+    const tail = recovered.filter((frame) => frame.lines.length > 0).at(-1)
+    expect(tail?.lines.at(-1)?.[0]).toContain("line-99")
+  })
+
   it("anchors gateway indices to the emulator's own so history can be named", async () => {
     // 300 lines behind a 100-line window: the window starts at emulator index 200,
     // and the client's oldest line must be index 200 rather than 0, or nothing
