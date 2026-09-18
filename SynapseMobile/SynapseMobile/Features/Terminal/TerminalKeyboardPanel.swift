@@ -207,6 +207,17 @@ struct TerminalKeyPill: ViewModifier {
     /// committing action `prominent` is reserved for, and inverting a key that is
     /// merely open would make the toolbar's loudest control the one that does least.
     var pressed: Bool = false
+    /// Drawn as a bare glyph, with no pill behind it.
+    ///
+    /// For the toolbar's two fixed keys, which are not commands. The commands sit in pills
+    /// because they are one list of interchangeable actions; the two keys that never
+    /// scroll are not part of that list, and taking the fill away is what says so — a bare
+    /// glyph beside a row of capsules. The tap target and the pill's widths stay, so the
+    /// glyph is still as easy to hit as any command.
+    ///
+    /// With no fill to change, `pressed` shows as the glyph going from secondary to full
+    /// strength — the quietest state change that still reads as "this one is down".
+    var bare: Bool = false
     /// The room between the label and the pill's edge. Ten keys have to share one row
     /// on the full keyboard, so its keys are about a third the width of these and
     /// cannot afford the padding a two-key row can.
@@ -219,15 +230,26 @@ struct TerminalKeyPill: ViewModifier {
     /// `systemFill` is what iOS draws under a press, so the held state needs no
     /// definition of its own to look like one.
     private var fill: Color {
+        if bare { return .clear }
         if prominent { return Color.primary }
         if pressed { return Color(uiColor: .systemFill) }
         return Color(uiColor: .secondarySystemBackground)
     }
 
+    /// What the label is drawn in.
+    ///
+    /// `prominent` inverts it against its own fill; a bare key has no fill, so its two
+    /// states are told apart by weight of colour instead.
+    private var labelColor: Color {
+        if prominent { return Color(uiColor: .systemBackground) }
+        if bare { return pressed ? Color.primary : Color.secondary }
+        return Color.primary
+    }
+
     func body(content: Content) -> some View {
         content
             .font(.system(.subheadline, design: .monospaced, weight: .medium))
-            .foregroundStyle(prominent ? Color(uiColor: .systemBackground) : Color.primary)
+            .foregroundStyle(labelColor)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, 9)
             .frame(minWidth: minWidth, minHeight: 36)
@@ -247,12 +269,14 @@ extension View {
         minWidth: CGFloat = 48,
         prominent: Bool = false,
         pressed: Bool = false,
+        bare: Bool = false,
         horizontalPadding: CGFloat = 12
     ) -> some View {
         modifier(TerminalKeyPill(
             minWidth: minWidth,
             prominent: prominent,
             pressed: pressed,
+            bare: bare,
             horizontalPadding: horizontalPadding
         ))
     }

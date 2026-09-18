@@ -17,6 +17,8 @@ struct TerminalScreen: View {
     @State private var renamingTitle = ""
     @State private var showingStopConfirm = false
     @State private var keyboardPanelPresented = false
+    /// 键盘槽位正在滑进或滑出。
+    @State private var panelIsSettling = false
     /// Whether the command panel is open. The bar's right-hand key owns this, and the
     /// panel that reads it is presented as a sheet at the end of the screen.
     @State private var shortcutPanelPresented = false
@@ -45,6 +47,15 @@ struct TerminalScreen: View {
     /// 这次按住现在算哪一态。视图只负责把坐标喂进 `HoldToTalkGesture`，判定不在
     /// 这里（设计文档 §6）。
     @State private var holdZone: HoldToTalkGesture.Outcome = .speaking
+    /// 两块方块亮出来了没。由往上滑请出来，不是一按就亮。
+    @State private var zonesShown = false
+    /// 两块方块**量出来的**位置，报在手势所用的那个坐标系里。
+    ///
+    /// 不自己按宽度算：浮层的左右内边距、两块的间距、以及将来可能出现的任何变化都会
+    /// 让算式和实际差一点，而这一点正好决定手指停在边上时算不算选中。量出来就没有
+    /// 第二份真相。
+    @State private var cancelZoneRect: CGRect = .zero
+    @State private var lockZoneRect: CGRect = .zero
     /// 收尾只能走一次。失败可能与松手撞在一起，两个 `confirm()` 同时进来会把这段
     /// 录音提交两遍。
     @State private var settlingVoice = false
@@ -140,7 +151,7 @@ struct TerminalScreen: View {
     /// keyboard came up, and the closing of either reports the size again.
     private func reportGridToDesktop() {
         guard displayMode == .phoneDriven, !inputFocused, !keyboardPanelPresented,
-              store.visibleRows > 0 else { return }
+              !panelIsSettling, store.visibleRows > 0 else { return }
         let grid = DesktopGrid(columns: store.columns, rows: store.visibleRows)
         // 锁定态进出那两次高度变化都不该进桌面（§4.9）。判定在 `VoiceGridHold` 里，
         // 单测逐条走完 —— 留在这里就只能靠人盯着电脑屏幕看。
@@ -159,7 +170,26 @@ struct TerminalScreen: View {
     /// gets forgotten leaves a keyboard on screen with nothing left that closes it.
     private func dismissKeyboards() {
         inputFocused = false
-        keyboardPanelPresented = false
+        setKeyboardPanel(false)
+    }
+
+    /// 收起或放下键盘槽位，并让版面跟着滑过去。
+    ///
+    /// 它是**槽位**：开关它改变的是终端分到的高度，工具栏和输入栏会跟着整整移动一个
+    /// 面板的高度。没有动画时那是一记瞬移 —— 系统键盘是滑的，我们自己这块是跳的，
+    /// 两下一比就是用户说的「一个往上跳」。这里让它滑。
+    ///
+    /// 滑动期间**不向电脑报网格**：终端报的是自己量到的尺寸，而滑动途中的尺寸是用
+    /// 户从没选过的中间值。落位之后补报一次，且只报一次。
+    private func setKeyboardPanel(_ presented: Bool) {
+        guard keyboardPanelPresented != presented else { return }
+        panelIsSettling = true
+        withAnimation(.easeOut(duration: 0.26)) { keyboardPanelPresented = presented }
+        Task {
+            try? await Task.sleep(nanoseconds: 320_000_000)
+            panelIsSettling = false
+            reportGridToDesktop()
+        }
     }
 
     /// The keyboard button is a switch between the two keyboards, not a way in.
@@ -176,7 +206,7 @@ struct TerminalScreen: View {
         // Lowered before the panel rises rather than after, so that the two are never
         // both up: with both, the lower one cannot be reached.
         inputFocused = false
-        keyboardPanelPresented = true
+        setKeyboardPanel(true)
     }
 
     /// The toggle at the left end of the input bar: typing, or talking.
@@ -343,36 +373,43 @@ struct TerminalScreen: View {
                 onDismiss: { model.dismissRelay($0) },
                 onRetry: { model.retryRelay($0) }
             )
-            // One bar, two modes: typing, or talking. Voice is a mode of this bar
-            // rather than a button on it, so the four slots hold still and only what
-            // the field is changes. The words land in a bubble floating above the bar
-            // while a finger is on it, and only come back into the bar itself once the
-            // recording is locked. `accessoryBar` above stays live throughout —
-            // dictating and pressing return are not mutually exclusive.
-            // 工具栏与输入栏合成一组，只为给气泡一个正确的落脚点。它原来挂在输入栏
-            // 上，浮出来的那一行正好是工具栏 —— 按住说话时把指令按钮盖住，而那时候
-            // 指令按钮正是产品负责人明确要求保持可用的。挂在这一组上，气泡浮在整组
-            // 之上，也就是终端画面上；语音提示盖住终端，比盖住一排按钮有道理得多。
+            // One bar, two modes: typing, or talking. Voice is a mode of this bar rather
+            // than a button on it, so the four slots hold still and only what the field
+            // *is* changes. `accessoryBar` above stays live throughout — dictating and
+            // pressing a command are not mutually exclusive.
+            //
+            // 工具栏与输入栏合成一组，语音浮层就挂在这一组上：它浮在**整条输入区之上**，
+            // 也就是终端画面上。挂在这一组而不是挂输入栏，是因为按住说话时工具栏要保持
+            // 可用 —— 浮层压住那一排按钮，正是产品负责人指出过的问题。
             VStack(spacing: 0) {
                 accessoryBar
                 inputBar
             }
             .overlay(alignment: .top) {
-                // 气泡挂在栏上而不是进了 `VStack`：它是浮层，一旦参与布局就会改变终端
-                // 的可视高度，进而让 `reportGridToDesktop` 往电脑上报一个错的格子数。
-                //
                 // 位置靠一个**零高度的框**而不是 `alignmentGuide` 拿到：框的顶边就是
-                // 这一组的顶边（`overlay` 的 `.top`），框自己 0 高，里面的气泡按
+                // 这一组的顶边（`overlay` 的 `.top`），框自己 0 高，里面的浮层按
                 // `.bottom` 对齐 —— 于是它整个挂在框上方。`alignmentGuide(.top)`
-                // 在这里不生效：气泡会落到下方，一路顶着屏幕底边跑出去。
-                if voicePresentation.bubbleVisible {
-                    voiceBubble(voicePresentation)
-                        .fixedSize()
-                        .frame(height: 0, alignment: .bottom)
-                        // 它盖在终端上。能点它就等于在终端上多出一块点不到的区域。
-                        .allowsHitTesting(false)
+                // 在这里不生效：浮层会落到下方，一路顶着屏幕底边跑出去。
+                //
+                // 零高度还保证它**不参与布局**：进了 `VStack` 就会改变终端的可视高度，
+                // 进而让 `reportGridToDesktop` 往电脑上报一个错的格子数。
+                if voicePresentation.panelVisible {
+                    TerminalVoiceDock(
+                        presentation: voicePresentation,
+                        cancelZoneRect: $cancelZoneRect,
+                        lockZoneRect: $lockZoneRect,
+                        onCancelLocked: cancelLockedVoice
+                    )
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(height: 0, alignment: .bottom)
                 }
             }
+            // 坐标系开在**最外层**，把输入栏和浮层一起圈进来。
+            //
+            // 挂在那两格的 `VStack` 上是不够的：`overlay` 不是它的子视图，而是套在它
+            // 外面的另一层，浮层里的 `frame(in: .named(...))` 会量到零矩形 —— 而判定里
+            // 「零矩形永不命中」那条正好把零矩形挡掉，于是怎么滑都是「松手发送」。
+            .coordinateSpace(.named(Self.voiceSpace))
             // Last, so that everything above it keeps its place and the terminal is
             // what gives up the room — the same bargain the system keyboard makes.
             keyboardPanel
@@ -677,7 +714,9 @@ struct TerminalScreen: View {
                 Image(systemName: "command")
                     .font(.system(size: 16))
             }
-            .terminalKeyPill()
+            // 没有胶囊底：它不是一条指令，是工具栏上两颗钉住的键之一，与中间那排胶囊
+            // 分开才读得出这个区别。
+            .terminalKeyPill(bare: true)
             // The panel's own keys have always been drawn plain, and these two were not:
             // the default button style is what put a press animation on a key that is
             // just a key. Nothing here is a link or a tinted action.
@@ -734,7 +773,7 @@ struct TerminalScreen: View {
                 Image(systemName: "chevron.up")
                     .font(.system(size: 16))
             }
-            .terminalKeyPill(pressed: shortcutPanelPresented)
+            .terminalKeyPill(pressed: shortcutPanelPresented, bare: true)
             .buttonStyle(.plain)
             .accessibilityLabel("全部指令")
             .accessibilityIdentifier("toolbar-all")
@@ -783,48 +822,18 @@ struct TerminalScreen: View {
     /// under the same thumb when the mode changes back, and what makes the bar's
     /// height the same in both.
     private var inputBar: some View {
-        let presentation = voicePresentation
-        return Group {
-            if presentation.locked {
-                lockedBar(presentation)
+        HStack(spacing: 8) {
+            modeToggle(voicePresentation)
+
+            if voicePresentation.barIsVoice {
+                holdToTalk(voicePresentation)
             } else {
-                HStack(spacing: 8) {
-                    modeToggle(presentation)
-
-                    if presentation.barIsVoice {
-                        holdToTalk(presentation)
-                    } else {
-                        commandField
-                    }
-
-                    attachMenu(presentation)
-
-                    sendKey(presentation)
-                }
-                // 两个落点画在两端，**不进这棵树的布局**。
-                //
-                // 试过把左右三格在按住时收掉、让落点占满整条栏 —— 那是错的：收掉它们
-                // 就是改这一层的结构，而挂着手势的那一格就在同一层里，SwiftUI 会在手指
-                // 还压着的时候把它重建，手势当场结束，左滑取消变成"松手即转文字"。用
-                // `overlay` 就没有这个问题：它不参与布局，下面那棵树的标识一个没动。
-                //
-                // 腾地方靠的是中间那格自己加内边距 —— 加内边距是同标识的修饰，安全。
-                .overlay(alignment: .leading) {
-                    if presentation.fieldPressed {
-                        target(HoldToTalkPresentation.cancelLegend, ready: presentation.cancelReady, tone: .cancel)
-                            // 它们是**指示**，不是控件：滑到上面松手这件事由挂在中间那一格
-                            // 上的手势判定，落点自己不接任何触摸。不写这一句，手指滑到
-                            // 落点上时那一格会把触摸从手势底下抢走。
-                            .allowsHitTesting(false)
-                    }
-                }
-                .overlay(alignment: .trailing) {
-                    if presentation.fieldPressed {
-                        target(HoldToTalkPresentation.lockLegend, ready: presentation.lockReady, tone: .lock)
-                            .allowsHitTesting(false)
-                    }
-                }
+                commandField
             }
+
+            attachMenu(voicePresentation)
+
+            sendKey(voicePresentation)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -841,7 +850,10 @@ struct TerminalScreen: View {
             phase: voice.phase,
             voiceMode: voiceMode,
             hasDraft: !draft.isEmpty,
+            transcript: voice.transcript,
+            elapsed: voice.elapsed,
             gesture: holdZone,
+            zonesRevealed: zonesShown,
             locked: voiceGrid.isLocked
         )
     }
@@ -883,45 +895,24 @@ struct TerminalScreen: View {
     /// 期间有用，而按住期间手一定压着。挪到两端之后，滑出去、停在上面、松手这三步都
     /// 发生在眼睛能看见的地方。
     private func holdToTalk(_ presentation: HoldToTalkPresentation) -> some View {
-        Text(presentation.fieldLabel)
-            .font(.system(.subheadline, design: .monospaced))
-            .foregroundStyle(Theme.ink)
+        // 录着就是红的（苹果给「正在录」的颜色），固定之后翻成实心那一对，其余时候
+        // 是这根栏上普通的输入格。
+        let fill: AnyShapeStyle = presentation.recording
+            ? AnyShapeStyle(Color(uiColor: .systemRed))
+            : presentation.locked ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
+        return Text(presentation.barLabel)
+            .font(.subheadline)
+            .foregroundStyle(presentation.recording || presentation.locked ? Theme.paper : Theme.ink)
             .lineLimit(1)
             .frame(maxWidth: .infinity)
             .frame(minHeight: Metrics.minimumTapTarget)
-            .background(
-                Color(uiColor: presentation.fieldPressed ? .systemGray5 : .secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-            // 按住期间往两边让出落点的地方。加内边距是**同一个视图**上的修饰，不动这一
-            // 层的结构 —— 收掉两边的格子会让挂手势的那一格被重建（见 `inputBar` 里那段
-            // 注释），这一条不会。
-            .padding(.horizontal, presentation.fieldPressed ? Self.holdTargetsGutter : 0)
+            .background(fill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             // 整格都是手势区，而不只是字画到的地方。
             .contentShape(Rectangle())
             .gesture(holdGesture)
+            // 固定之后手指早走了，这一格上不再有手势 —— 它变成一枚「完成」，点一下就收尾。
+            .onTapGesture { if presentation.locked { finishLockedVoice() } }
             .accessibilityIdentifier("voice-hold")
-    }
-
-    /// 手势的一个落点。按住期间常驻，滑到它上面时整块反白。
-    ///
-    /// 常驻而不是滑近了才出现：它要回答的是「我还能往哪滑」，出现得太晚就等于没有。
-    private func target(
-        _ text: String,
-        ready: Bool,
-        tone: HoldToTalkPresentation.Tone
-    ) -> some View {
-        Text(text)
-            .font(.subheadline)
-            .fontWeight(.medium)
-            .foregroundStyle(ready ? Theme.paper : Color.secondary)
-            .lineLimit(1)
-            .padding(.horizontal, 10)
-            .frame(minHeight: Metrics.minimumTapTarget)
-            .background(
-                ready ? bubbleFill(tone) : Color(uiColor: .secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
     }
 
     /// 按住说话那一格上的手势。
@@ -929,19 +920,52 @@ struct TerminalScreen: View {
     /// `DragGesture(minimumDistance: 0)` 一步到位地给了按下、拖动、松开 —— 自己写
     /// UIKit 识别器只会多出一份要和 SwiftUI 布局对齐的状态。
     private var holdGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
+        // 位置报在**浮层所在的那个坐标系**里。要选的东西是上面那两块方块，判定就得
+        // 用它们真正的位置，而不是「手指往左滑了多少」—— 滑到哪一块上面是二维的事。
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.voiceSpace))
             .onChanged { value in
                 if !holdLatched { beginHold() }
-                let next = HoldToTalkGesture.outcome(translationX: value.translation.width)
-                // `onChanged` 每一帧都来，写一次状态就是一次整屏重算。
-                if next != holdZone { holdZone = next }
+                updateHold(at: value.location, from: value.startLocation.y)
             }
             .onEnded { _ in endHold() }
     }
 
+    /// 手指动了：先决定两块要不要亮出来，再决定它压在哪一块上。
+    ///
+    /// 两道阈值（原型 56 / 36）而不是一道：手指停在临界点上来回抖的时候，只有一道
+    /// 阈值会让两块一闪一闪。
+    private func updateHold(at point: CGPoint, from startY: CGFloat) {
+        let lifted = startY - point.y
+        if !zonesShown, lifted > Self.zoneReveal { zonesShown = true }
+        if zonesShown, lifted < Self.zoneRelease { zonesShown = false }
+
+        let next = zonesShown
+            ? HoldToTalkGesture.outcome(
+                at: point,
+                cancelZone: cancelZoneRect,
+                lockZone: lockZoneRect,
+                armed: holdZone
+            )
+            : .speaking
+        // `onChanged` 每一帧都来，写一次状态就是一次整屏重算。
+        if next != holdZone { holdZone = next }
+    }
+
+    /// 上滑多少才把两块亮出来，以及回落多少才收回去。
+    ///
+    /// 它是「我要选点什么」的那个起手动作，所以要比拇指一次抖动大得多；56 是原型给
+    /// 的数，正好与手势判定那两档外扩同一个量级。
+    private static let zoneReveal: CGFloat = 56
+    private static let zoneRelease: CGFloat = 36
+    /// 手势与两块方块共用的坐标系名字。
+    private static let voiceSpace = "terminalVoice" 
+
     private func beginHold() {
         holdLatched = true
         holdZone = .speaking
+        // 两块不是一按就亮：它们由「往上滑」这个动作请出来（`updateHold`）。一按就亮
+        // 等于在用户还没表达意图之前先摆出两个选项，而多数时候他要的只是说一句就发。
+        zonesShown = false
         // 上一次那句「没有听到声音」到此为止（§5.3）。
         emptyVoiceMessage = nil
         Haptics.record()
@@ -954,6 +978,7 @@ struct TerminalScreen: View {
         holdLatched = false
         let zone = holdZone
         holdZone = .speaking
+        zonesShown = false
 
         switch zone {
         case .cancelling:
@@ -966,6 +991,25 @@ struct TerminalScreen: View {
         case .speaking:
             Task { await settleVoice() }
         }
+    }
+
+    /// 固定态里按下「取消」：这一段不要了，并且回键盘态。
+    ///
+    /// 与「松手取消」不是一回事：取消是手指还在栏上、多半想重说，所以留在语音态；
+    /// 这个是长录之后主动收摊，接着多半要打字，所以连模式一起退出去。
+    private func cancelLockedVoice() {
+        voice.cancel()
+        voiceGrid.unlock()
+        voiceMode = false
+    }
+
+    /// 固定之后按「完成」：把这一段收掉，发出去。
+    ///
+    /// 与「松手发送」走同一条落定路径 —— 分流只有 `VoiceLanding` 那一处实现。
+    private func finishLockedVoice() {
+        Haptics.commit()
+        voiceGrid.unlock()
+        Task { await settleVoice() }
     }
 
     /// The command field. A plain field with no microphone beside it: voice moved to the
@@ -986,88 +1030,6 @@ struct TerminalScreen: View {
             .onChange(of: draft) { emptyVoiceMessage = nil }
     }
 
-    /// 锁定之后这一格变成一条录音会话栏：`[✗] [录音中 + 转写] [确定]`（§4.9）。
-    ///
-    /// 这是**唯一允许改几何**的状态。输入栏长高到三行，手机上终端的可视区跟着变矮，
-    /// 换来「能回看刚才说了什么」—— 对一段长提示词，这比几行终端输出值。代价由
-    /// `reportGridToDesktop` 那一处的守卫处理：本地重排，不向电脑报新的网格。
-    private func lockedBar(_ presentation: HoldToTalkPresentation) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                Haptics.select()
-                // 「放弃」与「左滑取消」不是一回事：取消是手指还在栏上、多半想重说，
-                // 放弃是长录之后主动收摊，接着多半要打字 —— 所以它回键盘态（§4.9）。
-                voice.cancel()
-                voiceGrid.unlock()
-                voiceMode = false
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Theme.ink)
-                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityIdentifier("voice-lock-discard")
-            .accessibilityLabel(HoldToTalkPresentation.lockCancelLabel)
-
-            VStack(alignment: .leading, spacing: 3) {
-                // 麦克风还开着这件事不写出来只能靠猜，而它决定的正是「我能不能走开去
-                // 做点别的」。
-                Text(presentation.lockTitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                lockTranscript(presentation)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Color(uiColor: .secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-
-            Button {
-                // 收尾与落地交给松手那条同一条路 —— 包括那一次 `Haptics.commit()`
-                // （§4.7、§4.9），以及解锁的时机：这条栏要一直挂到结果回来为止。
-                Task { await settleVoice() }
-            } label: {
-                Text(HoldToTalkPresentation.lockConfirmLabel)
-            }
-            // 实心胶囊：它是一次长输入的落槌，与这条栏上别的键不同一个分量。
-            .terminalKeyPill(prominent: true)
-            .accessibilityIdentifier("voice-lock-confirm")
-        }
-    }
-
-    /// 锁定栏中间那三行。手指走了，落点回到输入栏本体（§3.7）。
-    private func lockTranscript(_ presentation: HoldToTalkPresentation) -> some View {
-        let text: Text
-        if presentation.lockText.isEmpty {
-            text = Text(verbatim: presentation.placeholder).foregroundStyle(.secondary)
-        } else {
-            let caret = presentation.lockText.caret
-                ? Text(verbatim: "▏").foregroundStyle(Theme.ink)
-                : Text(verbatim: "")
-            text = Text(presentation.lockText.stable).foregroundStyle(Theme.ink)
-                + Text(presentation.lockText.unstable).foregroundStyle(.secondary)
-                + caret
-        }
-        return text
-            .font(.system(.footnote, design: .monospaced))
-            .lineLimit(3)
-            // 永远滚到最新：超出三行时切掉最早说的那句（§4.9）。
-            .truncationMode(.head)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityIdentifier("voice-lock-text")
-    }
-
-    /// The sources the ＋ offers. It sits beside the field rather than at the far left
-    /// now that the toggle owns that end — the same order WeChat uses, and the same
-    /// distance from the thumb either way.
-    ///
-    /// `Menu` builds its contents while the body is being evaluated, which is why
-    /// `pasteboardHoldsImage` is kept as state refreshed at the moments the answer can
-    /// change — see `refreshPasteboardImage`.
     private func attachMenu(_ presentation: HoldToTalkPresentation) -> some View {
         Menu {
             Button {
@@ -1133,88 +1095,6 @@ struct TerminalScreen: View {
 
     // MARK: - 手指上方的气泡
 
-    /// 实时转写与手势提示，浮在输入栏正上方。
-    ///
-    /// **它是浮层，不进 `VStack` 的布局流** —— 进了就会改变终端的可视高度，`report-
-    /// GridToDesktop` 随即往电脑上报一个错的格子数。
-    private func voiceBubble(_ presentation: HoldToTalkPresentation) -> some View {
-        VStack(spacing: 8) {
-            VStack(spacing: 0) {
-                bubbleBody(presentation)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        bubbleFill(presentation.bubbleTone),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    )
-                // 朝下的尖，指着按住的那一格。
-                BubbleTail()
-                    .fill(bubbleFill(presentation.bubbleTone))
-                    .frame(width: 14, height: 7)
-            }
-            // 终端底色是固定深色的，浅色的气泡在深色外观下和它几乎同一个亮度 ——
-            // 没有这层抬升，气泡会沉进终端里。
-            .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
-
-            Text(presentation.hint)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(bubbleLegible(presentation.bubbleTone))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(bubbleFill(presentation.bubbleTone), in: Capsule())
-                .accessibilityIdentifier("voice-bubble-hint")
-        }
-        .frame(maxWidth: 300)
-    }
-
-    /// 气泡里的字。两级：已定稿的正常色，还在变的当前句次要色，末尾一个光标（§3.7）。
-    private func bubbleBody(_ presentation: HoldToTalkPresentation) -> some View {
-        // 取消就绪是红的、锁定就绪是深的，两级文字都得跟着翻过来，否则会落在和自己
-        // 一样的底色上。
-        let settled = bubbleLegible(presentation.bubbleTone)
-        let changing = bubbleEcho(presentation.bubbleTone)
-
-        let text: Text
-        if presentation.bubbleText.isEmpty {
-            text = Text(verbatim: presentation.placeholder).foregroundStyle(changing)
-        } else {
-            let caret = presentation.bubbleText.caret
-                ? Text(verbatim: "▏").foregroundStyle(settled)
-                : Text(verbatim: "")
-            text = Text(presentation.bubbleText.stable).foregroundStyle(settled)
-                + Text(presentation.bubbleText.unstable).foregroundStyle(changing)
-                + caret
-        }
-        return text
-            .font(.system(.body, design: .monospaced))
-            .lineLimit(2)
-            // 超出两行时从前面截：被切掉的是最早说的那句，最新那句留在屏幕上（§4.4）。
-            .truncationMode(.head)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityIdentifier("voice-bubble-text")
-    }
-
-    /// 气泡与提示条的底色（§4.5）。用输入栏自己的面色，气泡读起来像是从这条栏浮上去的。
-    private func bubbleFill(_ tone: HoldToTalkPresentation.Tone) -> Color {
-        switch tone {
-        case .normal: return Color(uiColor: .systemBackground)
-        case .cancel: return Color(uiColor: .systemRed)
-        case .lock: return Theme.ink
-        }
-    }
-
-    /// 写在那个底色上的正文色。
-    private func bubbleLegible(_ tone: HoldToTalkPresentation.Tone) -> Color {
-        switch tone {
-        // 红底上一律白字：`systemRed` 在两种外观下都是中间调的红，白字都读得出来。
-        case .normal: return Theme.ink
-        case .cancel: return .white
-        case .lock: return Theme.paper
-        }
-    }
-
-    /// 还在变的那半句：同一根颜色的弱化版，与输入框里那条两级规则一致。
     private func bubbleEcho(_ tone: HoldToTalkPresentation.Tone) -> Color {
         switch tone {
         case .normal: return Color.secondary
@@ -1328,21 +1208,6 @@ struct TerminalScreen: View {
     private var statusColor: Color {
         guard let session else { return .secondary }
         return Theme.statusColor(isWaiting: session.attention.isWaiting, isRunning: session.isRunning)
-    }
-}
-
-/// 气泡下方那个朝下的尖，指着按住的那一格。
-///
-/// 画成一个平顶的三角形而不是一个旋转的方块：它要和气泡的下边缘严丝合缝地接上，
-/// 差一点就是一道缝。
-private struct BubbleTail: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }
 

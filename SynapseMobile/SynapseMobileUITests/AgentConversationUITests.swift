@@ -34,10 +34,17 @@ final class AgentConversationUITests: XCTestCase {
         // MARK: First visit — the project has to be chosen once, and only once.
 
         app.buttons["new-session"].tap()
-        XCTAssertTrue(
-            app.buttons["new-session-project"].waitForExistence(timeout: 10),
-            "the panel never appeared"
-        )
+        if !app.buttons["new-session-project"].waitForExistence(timeout: 10) {
+            // 「面板没出现」有两个完全不同的原因，而它们在屏幕上长得一样：那一格被
+            // 禁用了（没有可用的电脑），或者点了没反应。把当时的状态一起报出来。
+            capture(app, name: "new-session-never-appeared")
+            XCTFail("""
+            the panel never appeared; \
+            new-session exists=\(app.buttons["new-session"].exists) \
+            enabled=\(app.buttons["new-session"].isEnabled) \
+            hittable=\(app.buttons["new-session"].isHittable)
+            """)
+        }
         // Scoped to the segmented control, because the screen behind the sheet has a
         // 终端 tab of its own — and addressed by label rather than by an identifier,
         // since a `Picker` in this style is a container of buttons and the container is

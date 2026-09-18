@@ -1,10 +1,11 @@
+import Foundation
 import Testing
 
 @testable import SynapseMobile
 
-/// 按住式下输入栏与气泡各显示什么，以及说完之后那句字往哪里落。
+/// 按住说话时浮层与输入栏各显示什么，以及说完之后那句字往哪里落。
 ///
-/// 每一条钉的都是「屏幕上会不会说错话」：锁上了还在教人松手、手指走了气泡还在、
+/// 每一条钉的都是「屏幕上会不会说错话」：固定了还在教人松手、手指走了两块方块还挂着、
 /// 一个字都没听到却把发送键点亮。判定顺序本身就是规格，所以顺序错了这里会红。
 struct HoldToTalkPresentationTests {
     private func presentation(
@@ -12,7 +13,9 @@ struct HoldToTalkPresentationTests {
         _ transcript: AsrTranscript = .empty,
         voiceMode: Bool = true,
         hasDraft: Bool = false,
+        elapsed: TimeInterval = 0,
         gesture: HoldToTalkGesture.Outcome = .speaking,
+        zonesRevealed: Bool = false,
         locked: Bool = false
     ) -> HoldToTalkPresentation {
         HoldToTalkPresentation(
@@ -20,7 +23,9 @@ struct HoldToTalkPresentationTests {
             voiceMode: voiceMode,
             hasDraft: hasDraft,
             transcript: transcript,
+            elapsed: elapsed,
             gesture: gesture,
+            zonesRevealed: zonesRevealed,
             locked: locked
         )
     }
@@ -32,10 +37,10 @@ struct HoldToTalkPresentationTests {
     @Test func theKeyboardBarIsLeftAlone() {
         let value = presentation(.idle, voiceMode: false)
         #expect(value.barIsVoice == false)
-        #expect(value.fieldPressed == false)
+        #expect(value.recording == false)
+        #expect(value.zonesVisible == false)
+        #expect(value.panelVisible == false)
         #expect(value.controlsEnabled)
-        #expect(value.bubbleVisible == false)
-        #expect(value.lockTitle.isEmpty)
     }
 
     /// 发送键的启用照旧只看输入框里有没有字。
@@ -49,9 +54,9 @@ struct HoldToTalkPresentationTests {
     @Test func voiceModeWaitsToBeHeld() {
         let value = presentation(.idle)
         #expect(value.barIsVoice)
-        #expect(value.fieldLabel == "按住 说话")
-        #expect(value.fieldPressed == false)
-        #expect(value.bubbleVisible == false)
+        #expect(value.barLabel == "按住 说话")
+        #expect(value.recording == false)
+        #expect(value.panelVisible == false)
         // ＋ 与切换键都还能用：此刻手指不在栏上。
         #expect(value.controlsEnabled)
     }
@@ -63,84 +68,95 @@ struct HoldToTalkPresentationTests {
 
     // MARK: - 按住
 
-    @Test func holdingShowsTheBubbleAndDimsTheRest() {
+    @Test func holdingShowsThePanelAndDimsTheRest() {
         let value = presentation(.listening)
-        #expect(value.fieldPressed)
-        #expect(value.fieldLabel == "聆听中")
+        #expect(value.recording)
+        // 输入栏那一格说的是「松手会发生什么」，不是「我在听」。
+        #expect(value.barLabel == "松手 发送")
         #expect(value.controlsEnabled == false)
-        #expect(value.bubbleVisible)
-        #expect(value.bubbleTone == .normal)
-        #expect(value.hint == "松开 转文字")
+        #expect(value.panelVisible)
+        #expect(value.tone == .normal)
+        #expect(value.hint == "上滑选择 取消 / 固定 · 松手发送")
     }
 
-    /// 气泡里一个字都还没有时得说点什么，否则按住的那几秒是一片空白。
-    @Test func anEmptyBubbleSaysItIsListening() {
-        #expect(presentation(.listening).placeholder == "聆听中")
-        #expect(presentation(.listening).bubbleText.isEmpty)
-        #expect(presentation(.listening).bubbleText.caret == false)
+    /// **两块方块不是一按就亮。** 它们由「往上滑」请出来 —— 一按就摆出两个选项，等于
+    /// 在用户还没表达意图之前先替他决定这一句可能要说错。
+    @Test func theTwoBlocksWaitForTheUpwardSlide() {
+        #expect(presentation(.listening).zonesVisible == false)
+        #expect(presentation(.listening, zonesRevealed: true).zonesVisible)
+        // 固定之后手指早走了，两块没有存在的理由。
+        #expect(presentation(.listening, zonesRevealed: true, locked: true).zonesVisible == false)
     }
 
-    @Test func theBubbleCarriesWhatWasHeard() {
+    /// 面板里一个字都还没有时得说点什么，否则按住的那几秒是一片空白。
+    @Test func anEmptyPanelSaysItIsRecording() {
+        #expect(presentation(.listening).placeholder == "录音中")
+        #expect(presentation(.listening).text.isEmpty)
+        #expect(presentation(.listening).text.caret == false)
+    }
+
+    @Test func thePanelCarriesWhatWasHeard() {
         let value = presentation(.listening, spoken)
-        #expect(value.bubbleText.stable == "把日志拉出来")
-        #expect(value.bubbleText.caret)
+        #expect(value.text.stable == "把日志拉出来")
+        #expect(value.text.caret)
         #expect(value.placeholder.isEmpty)
     }
 
-    /// 未定稿的那半句用户已经在屏幕上看见了，所以它也要出现在气泡里。
+    /// 未定稿的那半句用户已经在屏幕上看见了，所以它也要出现在面板里。
     @Test func aStillChangingSentenceIsShownToo() {
         let value = presentation(.listening, AsrTranscript(stable: "", unstable: "git sta"))
-        #expect(value.bubbleText.unstable == "git sta")
-        #expect(value.bubbleText.caret)
+        #expect(value.text.unstable == "git sta")
+        #expect(value.text.caret)
         #expect(value.placeholder.isEmpty)
     }
 
-    // MARK: - 滑动
+    // MARK: - 滑到某一块上面
 
-    @Test func slidingLeftReadiesTheCancel() {
-        let value = presentation(.listening, spoken, gesture: .cancelling)
+    @Test func stoppingOnTheCancelBlockReadiesTheCancel() {
+        let value = presentation(.listening, spoken, gesture: .cancelling, zonesRevealed: true)
         #expect(value.cancelReady)
         #expect(value.lockReady == false)
-        #expect(value.bubbleTone == .cancel)
-        #expect(value.hint == "松开 取消")
-        #expect(value.fieldLabel == "松开 取消")
+        #expect(value.tone == .cancel)
+        #expect(value.hint == "松手取消本次录音")
+        #expect(value.barLabel == "松手 取消")
     }
 
-    @Test func slidingRightReadiesTheLock() {
-        let value = presentation(.listening, spoken, gesture: .locking)
+    @Test func stoppingOnThePinBlockReadiesTheLock() {
+        let value = presentation(.listening, spoken, gesture: .locking, zonesRevealed: true)
         #expect(value.lockReady)
         #expect(value.cancelReady == false)
-        #expect(value.bubbleTone == .lock)
-        #expect(value.hint == "松开 锁定")
-        #expect(value.fieldLabel == "松开 锁定")
+        #expect(value.tone == .lock)
+        #expect(value.hint == "松手固定，继续说话")
+        #expect(value.barLabel == "松手 固定")
     }
 
-    /// 滑回阈值以内要退干净：配色、提示、两侧的高亮一起复原。
+    /// 滑回两块之外要退干净：配色、提示、两块的高亮一起复原。
     @Test func slidingBackUndoesAllThreeSignals() {
-        let value = presentation(.listening, spoken, gesture: .speaking)
+        let value = presentation(.listening, spoken, gesture: .speaking, zonesRevealed: true)
         #expect(value.cancelReady == false)
         #expect(value.lockReady == false)
-        #expect(value.bubbleTone == .normal)
-        #expect(value.hint == "松开 转文字")
-        #expect(value.fieldLabel == "聆听中")
+        #expect(value.tone == .normal)
+        #expect(value.hint == "上滑选择 取消 / 固定 · 松手发送")
+        #expect(value.barLabel == "松手 发送")
     }
 
     // MARK: - 收尾中
 
-    /// 手指已经松开了，这时候还摆着一句「松开 取消」是一句作废的指导。
+    /// 手指已经松开了，这时候还摆着一句「松手取消」是一句作废的指导。
     @Test func wrappingUpIgnoresTheGesture() {
-        let value = presentation(.finalizing, spoken, gesture: .cancelling)
+        let value = presentation(.finalizing, spoken, gesture: .cancelling, zonesRevealed: true)
         #expect(value.hint == "转文字中")
         #expect(value.cancelReady == false)
         #expect(value.lockReady == false)
-        #expect(value.bubbleTone == .normal)
+        #expect(value.tone == .normal)
+        #expect(value.zonesVisible == false)
     }
 
-    /// 气泡要留到文字落定为止：先消失再冒字是两段感。
-    @Test func theBubbleStaysUpWhileWrappingUp() {
+    /// 面板要留到文字落定为止：先消失再冒字是两段感。
+    @Test func thePanelStaysUpWhileWrappingUp() {
         let value = presentation(.finalizing, spoken)
-        #expect(value.bubbleVisible)
-        #expect(value.fieldPressed == false)
+        #expect(value.panelVisible)
+        #expect(value.recording == false)
         #expect(value.controlsEnabled == false)
     }
 
@@ -149,54 +165,73 @@ struct HoldToTalkPresentationTests {
     /// 静音满 3 秒只是换一句话：麦克风还开着，用户接着说就能接上。
     @Test func silenceHintReplacesTheWordsWithoutEndingTheHold() {
         let value = presentation(.failed(.noSpeech))
-        #expect(value.fieldPressed)
-        #expect(value.bubbleVisible)
+        #expect(value.recording)
+        #expect(value.panelVisible)
         #expect(value.placeholder == "没有听到声音")
-        #expect(value.hint == "松开 转文字")
+        #expect(value.hint == "上滑选择 取消 / 固定 · 松手发送")
     }
 
     /// 已经听到的字比失败本身重要。
     @Test func aFailureKeepsWhatWasHeardOnScreen() {
         let value = presentation(.failed(.noSpeech), spoken)
         #expect(value.placeholder.isEmpty)
-        #expect(value.bubbleText.stable == "把日志拉出来")
+        #expect(value.text.stable == "把日志拉出来")
     }
 
-    /// 连接没了就没有可按住的东西，气泡立刻让位（视图随即收尾）。
-    @Test func aDeadConnectionDoesNotKeepTheBubbleUp() {
-        #expect(presentation(.failed(.network)).bubbleVisible == false)
+    /// 连接没了就没有可按住的东西，面板立刻让位（视图随即收尾）。
+    @Test func aDeadConnectionDoesNotKeepThePanelUp() {
+        #expect(presentation(.failed(.network)).panelVisible == false)
         #expect(presentation(.failed(.network)).hint.isEmpty)
     }
 
-    @Test func anInterruptionDoesNotKeepTheBubbleUpEither() {
-        #expect(presentation(.interrupted, spoken).bubbleVisible == false)
+    @Test func anInterruptionDoesNotKeepThePanelUpEither() {
+        #expect(presentation(.interrupted, spoken).panelVisible == false)
     }
 
-    // MARK: - 锁定态
+    // MARK: - 固定
 
-    /// 手指走了，气泡就没有存在的理由：落点回到输入栏本体（§3.7、§4.9）。
-    @Test func lockingMovesTheWordsIntoTheBar() {
-        let value = presentation(.listening, spoken, locked: true)
+    /// 固定之后手指走了，面板接着显示同一段字 —— 只是「走哪条路」那两块收起来了。
+    @Test func lockingKeepsThePanelAndTakesTheTwoBlocksAway() {
+        let value = presentation(.listening, spoken, zonesRevealed: true, locked: true)
         #expect(value.locked)
-        #expect(value.bubbleVisible == false)
-        #expect(value.lockTitle == "录音中")
-        #expect(value.lockText.stable == "把日志拉出来")
-        #expect(value.lockText.caret)
-        // 那一格画的已经是转写栏，不是按钮。
-        #expect(value.fieldLabel.isEmpty)
+        #expect(value.panelVisible)
+        #expect(value.zonesVisible == false)
+        #expect(value.stateText == "已固定 · 持续录音")
+        #expect(value.text.stable == "把日志拉出来")
+        // 那一格画的已经是「完成」，不再是按住说话。
+        #expect(value.barLabel == "完成")
+        #expect(value.hint == "点击底部「完成」结束并发送")
     }
 
-    /// 锁上之后手指不在了，手势就该停止说话 —— 否则「松开 取消」会挂在一个已经
+    /// 固定之后手指不在了，手势就该停止说话 —— 否则「松手取消」会挂在一个已经
     /// 松开的屏幕上。
     @Test func aLockedBarStopsSpeakingForTheFinger() {
-        let value = presentation(.listening, spoken, gesture: .cancelling, locked: true)
+        let value = presentation(.listening, spoken, gesture: .cancelling, zonesRevealed: true, locked: true)
         #expect(value.cancelReady == false)
         #expect(value.lockReady == false)
-        #expect(value.bubbleTone == .normal)
-        #expect(value.hint.isEmpty)
+        #expect(value.tone == .lock)
+        #expect(value.controlsEnabled == false)
     }
 
-    // MARK: - 该不该发（§4.7、§8.28）
+    // MARK: - 计时
+
+    /// 面板右上角那个数：分秒都补零，录音时数字不会跳宽度。
+    @Test func theTimerIsPaddedSoItDoesNotJump() {
+        #expect(HoldToTalkPresentation.timer(0) == "00:00")
+        #expect(HoldToTalkPresentation.timer(7) == "00:07")
+        #expect(HoldToTalkPresentation.timer(61) == "01:01")
+        #expect(HoldToTalkPresentation.timer(600) == "10:00")
+        // 负数是没意义的输入，不该画成负号。
+        #expect(HoldToTalkPresentation.timer(-3) == "00:00")
+    }
+
+    @Test func theTimerReachesThePanel() {
+        let value = presentation(.listening, elapsed: 12)
+        #expect(value.timerText == "00:12")
+        #expect(value.timerSeconds == 12)
+    }
+
+    // MARK: - 该不该发
 
     @Test func nothingHeardMeansNothingHappens() {
         #expect(VoiceLanding.resolve(transcript: nil, draft: "") == .nothing)
