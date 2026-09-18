@@ -542,12 +542,15 @@ export const coreMobileGatewayDescriptor: ServiceDescriptor<MobileGatewayService
           <T,>(serviceId: string) => ctx.registry.get<T>(serviceId),
           input,
         ),
-      // The same directory the Agent sidebar's 新建 offers. Both come from the
-      // conversation control service rather than from a second reading of the config,
-      // so the phone cannot be shown a project the desktop's own picker would not.
-      listAgentConversationGroups: () =>
-        ctx.registry.get<AgentConversationControlService>(AGENT_CONVERSATION_CONTROL_SERVICE_ID)
-          .listAllGroups(),
+      // The same directory the Agent sidebar's 新建 offers, listed in the order that
+      // sidebar shows it. Both come from the conversation control service rather than
+      // from a second reading of the config, so the phone cannot be shown a project — or
+      // an order — the desktop's own picker would not.
+      listAgentConversationGroups: async () => {
+        const order = (await configStore.load()).global.agentProjectOrder
+        return ctx.registry.get<AgentConversationControlService>(AGENT_CONVERSATION_CONTROL_SERVICE_ID)
+          .listAllGroups(order)
+      },
       listAgentConversationProviders: () =>
         ctx.registry.get<AgentConversationControlService>(AGENT_CONVERSATION_CONTROL_SERVICE_ID)
           .listProviderChoices(),

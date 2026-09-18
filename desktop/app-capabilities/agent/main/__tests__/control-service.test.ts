@@ -175,6 +175,42 @@ describe("AgentConversationControlService", () => {
     service.dispose()
   })
 
+  it("lists the directory in the sidebar's own order for a consumer standing in for it", async () => {
+    const { service, listProjects } = createHarness()
+    listProjects.mockResolvedValue([
+      { id: "project-1", name: "Project One" },
+      { id: "project-2", name: "Project Two" },
+      { id: "project-3", name: "Project Three" },
+    ])
+
+    // 本地对话 stays pinned first because the sidebar pins it there, the recorded
+    // project leads the rest, and an id that no longer exists is dropped rather than
+    // taking a position with it.
+    await expect(service.listAllGroups(["project-3", "project-gone", "project-3"])).resolves.toEqual([
+      { projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true },
+      { projectId: "project-3", name: "Project Three", isDefault: false },
+      { projectId: "project-1", name: "Project One", isDefault: false },
+      { projectId: "project-2", name: "Project Two", isDefault: false },
+    ])
+
+    // With no preference the directory answers in configured order, and the capability
+    // that pages over it never reads a display preference at all.
+    await expect(service.listAllGroups()).resolves.toEqual([
+      { projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true },
+      { projectId: "project-1", name: "Project One", isDefault: false },
+      { projectId: "project-2", name: "Project Two", isDefault: false },
+      { projectId: "project-3", name: "Project Three", isDefault: false },
+    ])
+    await expect(service.listGroups({ offset: 0, limit: 2 })).resolves.toEqual({
+      groups: [
+        { projectId: "builtin:default-agent-workspace", name: "本地对话", isDefault: true },
+        { projectId: "project-1", name: "Project One", isDefault: false },
+      ],
+      nextOffset: 2,
+    })
+    service.dispose()
+  })
+
   it("offers a phone only what it may know about a Provider", async () => {
     const { service } = createHarness()
     await expect(service.listProviderChoices()).resolves.toEqual([

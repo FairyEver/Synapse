@@ -98,8 +98,11 @@ class FakeTerminal {
   leaseOwner: string | null = null
   deny = false
 
+  /** Mutable so a test can hand the phone a group order of its own to carry. */
+  groups: Array<{ id: string; name: string }> = [{ id: "g1", name: "前端开发" }]
+
   listGroups() {
-    return [{ id: "g1", name: "前端开发" }]
+    return this.groups
   }
 
   /**
@@ -1665,6 +1668,23 @@ describe("MobileGatewayService", () => {
       desktopName: "MacBook Pro",
       ...draft,
     })).toBe(true)
+  })
+
+  it("carries the computer's group order to the phone unchanged", async () => {
+    const harness = createHarness()
+    // Deliberately neither alphabetical nor creation-ordered: the phone's 新建 panel is
+    // standing in for the computer's own sidebar, so the only sequence it may offer is
+    // the one that sidebar shows — anything else is a list the user cannot explain.
+    harness.terminal.groups = [
+      { id: "g1", name: "Synapse" },
+      { id: "g2", name: "brick lab" },
+      { id: "g3", name: "前端开发" },
+    ]
+    harness.terminal.events.emit("sessionChanged", { sessionId: "sess-1" })
+    await harness.timers.advance(1_000)
+
+    const draft = harness.summaries.at(-1) as MobileSummaryDraft
+    expect(draft.groups.map((group) => group.name)).toEqual(["Synapse", "brick lab", "前端开发"])
   })
 
   it("keeps the largest admissible session list inside the summary's byte budget", async () => {

@@ -23,6 +23,11 @@ import { redactSensitiveValue } from "../../../electron/services/agent-runtime/r
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 import { boundedTimelinePage } from "../../../electron/services/agent-runtime/timeline-page"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "../../../src/lib/default-agent-workspace"
+import {
+  normalizeAgentProjectOrder,
+  orderAgentProjects,
+  splitPinnedAgentProjects,
+} from "../../../src/modules/agent/project-order"
 import type { DispatchActorIdentity } from "../../../synapse-capabilities/shared/types"
 import { AgentConversationCapabilityError } from "../shared/errors"
 import type {
@@ -186,12 +191,23 @@ export class AgentConversationControlService {
    * desktop's own project list to a phone so its new-conversation panel offers the
    * same choices the desktop's sidebar does. A second builder here would be a second
    * answer to "which projects exist".
+   *
+   * `displayOrder` is a consumer that stands in for the sidebar passing on the sidebar's
+   * own order preference (`global.agentProjectOrder`), so a list the user reads is in
+   * the order they dragged it into. Omitted, the directory answers in configured order,
+   * which is what the capability pages over: that preference is a display fact about one
+   * sidebar, not a property of the projects themselves.
    */
-  async listAllGroups(): Promise<readonly AgentGroupChoice[]> {
+  async listAllGroups(displayOrder: readonly unknown[] = []): Promise<readonly AgentGroupChoice[]> {
     const projects = await this.deps.listProjects()
-    return [DEFAULT_AGENT_WORKSPACE_PROJECT, ...projects.filter(
+    const listed = [DEFAULT_AGENT_WORKSPACE_PROJECT, ...projects.filter(
       (project) => project.id !== DEFAULT_AGENT_WORKSPACE_PROJECT.id,
-    )].map((project) => ({
+    )]
+    // Split rather than ordered whole: 本地对话 leads the sidebar by position, so the
+    // preference is only ever read against the projects that can actually move.
+    const { pinned, sortable } = splitPinnedAgentProjects(listed)
+    const ordered = [...pinned, ...orderAgentProjects(sortable, normalizeAgentProjectOrder(sortable, displayOrder))]
+    return ordered.map((project) => ({
       projectId: project.id,
       name: project.name,
       isDefault: project.id === DEFAULT_AGENT_WORKSPACE_PROJECT.id,

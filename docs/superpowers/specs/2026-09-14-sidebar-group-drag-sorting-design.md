@@ -24,12 +24,14 @@
 - 服务端只在顺序确实变化时按 index 重写 `sortOrder`，更新 `updatedAt` 并递增 `groupRevision`，发出 `group.reordered` 领域事件后落盘；顺序未变时不写盘、不发事件。
 - 渲染层先做乐观更新，调用失败时提示「调整分组顺序失败」并重新拉取列表回滚；重排请求进行中禁用拖拽与上移/下移。
 - 该能力属于 UI 私有 IPC，不注册 MCP capability / tool / Workflow Node / Deep Link；`createGroup` 的 `sortOrder: groups.size` 追加语义不变，新分组仍排在末尾。
+- 手机端「新建 → 终端」直接读服务端 `listGroups()`，因此与侧栏同一份 `sortOrder` 顺序，不做二次排序；侧栏末尾合成的「会话」（未归组）行不是分组，不下发。
 
 ## Agent 项目分组顺序
 
 - 全局配置新增 `global.agentProjectOrder`，只用于侧栏展示顺序：`orderAgentProjects` 先按该偏好排列，再把未记录的项目按 `config.global.projects` 顺序追加；`normalizeAgentProjectOrder` 负责去重、丢弃非法值与已不存在的项目 id。
 - 不重排 `config.global.projects` 本身，因为多处把 `projects[0]` 当作默认项目，重排会改变 Workflow、Prompt、Automation 等模块的默认项目与下拉顺序。
 - 渲染层使用乐观顺序，落库失败时回滚并通知；「本地对话」与「已归档」不参与排序。
+- 手机端「新建 → 对话 → 项目」是这份顺序的第二个展示面：它读同一个偏好，不另排；MCP capability `app.agent.conversation.group.list` 只列举项目，不读该偏好。
 
 ## 非目标
 
