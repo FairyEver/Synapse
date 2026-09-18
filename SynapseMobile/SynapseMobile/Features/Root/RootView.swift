@@ -3,6 +3,7 @@ import UserNotifications
 
 enum Route: Hashable {
     case terminal(String)
+    case meeting(String)
 }
 
 struct RootView: View {
@@ -10,11 +11,12 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = Tab.terminals
     @State private var terminalPath: [Route] = []
+    @State private var meetingPath: [Route] = []
     @State private var inboxPath: [Route] = []
     @State private var settingsPath: [Route] = []
 
     private enum Tab: Hashable {
-        case terminals, inbox, settings
+        case terminals, meetings, inbox, settings
     }
 
     var body: some View {
@@ -68,6 +70,13 @@ struct RootView: View {
             .tabItem { Label("终端", systemImage: "terminal") }
             .tag(Tab.terminals)
 
+            NavigationStack(path: $meetingPath) {
+                MeetingListView()
+                    .navigationDestination(for: Route.self, destination: destination)
+            }
+            .tabItem { Label("会议", systemImage: "waveform") }
+            .tag(Tab.meetings)
+
             NavigationStack(path: $inboxPath) {
                 // No path binding: the inbox's rows are `NavigationLink`s, which append
                 // to the stack on their own.
@@ -91,6 +100,8 @@ struct RootView: View {
         switch route {
         case .terminal(let sessionId):
             TerminalScreen(sessionId: sessionId)
+        case .meeting(let meetingId):
+            MeetingDetailView(meetingId: meetingId)
         }
     }
 
@@ -102,6 +113,10 @@ struct RootView: View {
             model.selectDesktop(desktopClientInstanceId)
             selectedTab = .terminals
             terminalPath = [.terminal(sessionId)]
+        case .meeting(let meetingId):
+            // 转写结果在服务端，不依赖任何一台电脑，所以这里不需要选桌面。
+            selectedTab = .meetings
+            meetingPath = [.meeting(meetingId)]
         }
     }
 }

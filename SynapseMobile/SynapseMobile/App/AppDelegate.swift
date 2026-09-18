@@ -46,6 +46,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse
     ) async {
         let info = response.notification.request.content.userInfo
+        // 转写完成的通知只带一个会议号：结果在服务端，点开直接看逐字稿，不需要电脑
+        // 在线，也没有要在锁屏上做的决定。
+        if let meetingId = info["meetingId"] as? String {
+            NotificationRouter.shared.route(to: .meeting(meetingId: meetingId))
+            return
+        }
         guard let desktopClientInstanceId = info["desktopClientInstanceId"] as? String,
               let sessionId = info["sessionId"] as? String else { return }
 

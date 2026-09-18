@@ -38,7 +38,15 @@ final class PushRegistrar: NSObject {
             intentIdentifiers: [],
             options: []
         )
-        center.setNotificationCategories([category])
+        // 转写完成的通知没有要在锁屏上做的决定，点开就是看逐字稿，所以只登记一个
+        // 没有动作的 category —— 服务端按名字投递，名字必须在这里有一份。
+        let meetingCategory = UNNotificationCategory(
+            identifier: NotificationCategory.meetingTranscription,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([category, meetingCategory])
         // AppDelegate owns the notification-centre delegate. Claiming it here too
         // would silently replace the object that handles notification taps, and a
         // delegate that does not implement `didReceive` turns every tap into a no-op.
@@ -54,6 +62,10 @@ final class PushRegistrar: NSObject {
     func handleRegistrationFailure() {
         // Nothing to do: the app works without push.
     }
+}
+
+enum NotificationCategory {
+    static let meetingTranscription = "MEETING_TRANSCRIPTION"
 }
 
 enum NotificationAction {

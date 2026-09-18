@@ -16,6 +16,7 @@ final class NotificationRouter {
 
     enum Destination: Equatable {
         case terminal(sessionId: String, desktopClientInstanceId: String)
+        case meeting(meetingId: String)
     }
 
     /// Non-nil until the UI consumes it.

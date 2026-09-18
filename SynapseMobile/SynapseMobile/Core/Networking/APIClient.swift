@@ -285,6 +285,20 @@ actor APIClient {
         try await send(path: "/voice/asr/session", method: "POST", body: EmptyBody())
     }
 
+    /// 会议列表。转写结果在服务端，和电脑在不在线无关。
+    func listMeetings() async throws -> [MeetingSummary] {
+        struct Response: Decodable {
+            let items: [MeetingSummary]
+        }
+        let response: Response = try await send(path: "/meetings", method: "GET")
+        return response.items
+    }
+
+    func meetingDetail(_ meetingId: String) async throws -> MeetingDetail {
+        let encoded = meetingId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? meetingId
+        return try await send(path: "/meetings/\(encoded)", method: "GET")
+    }
+
     /// Sends an intent over HTTP instead of the socket.
     ///
     /// Notification actions run without a live connection, so the request has to
