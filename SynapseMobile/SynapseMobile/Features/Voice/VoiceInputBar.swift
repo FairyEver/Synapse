@@ -73,15 +73,47 @@ final class VoiceInputController {
     private static let silenceHint: TimeInterval = 3
     /// 点完成后等引擎把最后一句定稿回来的上限。
     private static let finalizeTimeout = Duration.milliseconds(1_200)
+    /// 换连接之后等旧连接把最后一句定稿回来的上限。
+    ///
+    /// 比收尾那条宽：旧连接发完 `end` 还要把手上积着的音频算完，实测这段等待在
+    /// 1.1~1.2 秒，1.2 秒的宽限会刚好被超时抢先，拿不到引擎改写后的那一版
+    /// —— 也就是接缝处那半截词补不回来。
+    private static let settleTimeout = Duration.milliseconds(2_000)
 
     private var signing: (() async -> AsrSignOutcome)?
     private var capture: AudioCapture?
+    /// 活连接：音频正在进的那一条。
     private var session: AsrSession?
     private var loop: Task<Void, Never>?
     private var finalizeWaiter: CheckedContinuation<Void, Never>?
     private var startedAt = Date()
     /// 一次录音的代号。异步的启动过程里用户可能已经按了取消，回来时要认得出。
     private var generation = 0
+
+    // MARK: - 轮换
+
+    /// 换连接之前冻结的那一段。它在活连接的前面，位置一旦定下就不再动。
+    private var seam: AsrSeam?
+    /// 正在收尾的旧连接：`end` 已经发出去了，等它把最后一句定稿回来。
+    private var drain: AsrSession?
+    private var drainTimer: Task<Void, Never>?
+    /// 预热好的连接：握完手在那儿等着，活连接一撞上停顿就由它接手。
+    private var warm: AsrSession?
+    /// 暖连接是否已经握手完成。没握完手就接棒，第一包会被丢掉、年龄也会多算。
+    private var warmReady = false
+    private var warming = false
+    private var warmRetryAfter = Date.distantPast
+    private var warmBackoff: TimeInterval = 1
+    /// 每条连接的代号。回调是建连接时闭包捕获的，改不了接线，只能让它认不出自己。
+    private var liveToken = 0
+    private var drainToken = 0
+    private var warmToken = 0
+    private var nextToken = 0
+    /// 活连接是否已经握手完成。`connectedAt` 在它之前是上一次录音留下的，不能拿来
+    /// 算年龄。
+    private var liveReady = false
+    /// 活连接就绪的时刻。引擎从这一刻起收音频，它那 60 秒的额度也从这里算。
+    private var connectedAt = Date()
 
     // MARK: - 入口
 
@@ -128,6 +160,9 @@ final class VoiceInputController {
         phase = .finalizing
         // 网络已经断了就没有什么可等的了。
         if let session, !session.isClosed { await waitForFinalize() }
+        // 点「完成」正好赶在接棒那一下，接缝还没定稿：等它定下来再交，否则交出去的是
+        // 引擎马上要改写的版本 —— 实测差的就是接缝处最后半个词。
+        if let drainTimer { await drainTimer.value }
         capture?.stop()
 
         // 等待期间用户可能已经取消了，那这次完成就作废。
@@ -193,18 +228,13 @@ final class VoiceInputController {
         }
         self.capture = capture
 
-        let session = AsrSession(url: signed.url, events: AsrSession.Events(
-            onTranscript: { [weak self] transcript in
-                guard let self else { return }
-                self.transcript = transcript
-                // 声音来了，刚才那句「没有听到声音」就不成立了。
-                if self.phase == .failed(.noSpeech) { self.phase = .listening }
-            },
-            onFailure: { [weak self] failure in self?.handleSocketFailure(failure) },
-            onFinished: { [weak self] in self?.releaseFinalizeWaiter() }
-        ))
+        nextToken += 1
+        liveToken = nextToken
+        let session = AsrSession(url: signed.url, events: events(for: liveToken))
         session.connect()
         self.session = session
+        liveReady = false
+        connectedAt = Date()
         // 只记 voiceId。签名 URL 里带着入场券，日志里不留。
         AppLog.voice.info("asr session opened voiceId=\(signed.voiceId, privacy: .public)")
 
@@ -236,12 +266,178 @@ final class VoiceInputController {
         // 只在整秒变化时才写：这个值驱动整屏重算（终端画布也是它的一部分），200ms
         // 一次没有意义。
         if Int(now) != Int(elapsed) { elapsed = now }
-        session.send(capture.pcm.takeChunk(AsrSession.chunkBytes))
+
+        // 一拍只取一次，取完立刻决定这一包去哪条连接：分两次取就等于把中间的 200ms
+        // 音频切丢了。
+        let chunk = capture.pcm.takeChunk(AsrSession.chunkBytes)
+        let age = Date().timeIntervalSince(connectedAt)
+
+        if let warm, warmReady,
+           AsrRenewal.shouldHandOver(rms: AsrRenewal.rms(ofChunk: chunk), connectionAge: age) {
+            handOver(to: warm, chunk: chunk)
+        } else {
+            session.send(chunk)
+            // 接棒得有人接。连接还没握手完时 `connectedAt` 还是上一次录音留下的，
+            // 那时候算出来的年龄没有意义 —— 不挡这一下，第一次录音就会立刻去预热。
+            if warm == nil, liveReady, AsrRenewal.shouldStartWarming(connectionAge: age) {
+                startWarming()
+            }
+        }
+
         // 录音不因为没人声而停：引擎那边还在收包，用户接着说就能接上，所以这里只是
         // 把提示摆出来，送包照旧。
         if phase == .listening, transcript.isEmpty, now >= Self.silenceHint {
             phase = .failed(.noSpeech)
         }
+    }
+
+    // MARK: - 接棒
+
+    /// 一条连接的回调。代号在建连接时定下 —— `Events` 是不可变字段，接棒之后改不了
+    /// 旧连接的接线，只能让它认不出自己该不该说话。
+    private func events(for token: Int) -> AsrSession.Events {
+        AsrSession.Events(
+            onOpen: { [weak self] in self?.handleOpen(token: token) },
+            onTranscript: { [weak self] text in
+                self?.handleTranscript(text, token: token)
+            },
+            onFailure: { [weak self] failure in
+                self?.handleSocketFailure(failure, token: token)
+            },
+            onFinished: { [weak self] in self?.handleFinished(token: token) }
+        )
+    }
+
+    private func handleOpen(token: Int) {
+        // 引擎收音频是从握手完成那一刻开始的，年龄也从这里算。
+        if token == liveToken {
+            liveReady = true
+            connectedAt = Date()
+        } else if token == warmToken {
+            warmReady = true
+            AppLog.voice.info("asr warm connection ready")
+        }
+    }
+
+    /// 只有活连接在写转写。换下去的那一条还在往回吐定稿，但它那一段已经冻结在
+    /// `seam` 里了，再让它写一次就是跟接缝打架。
+    private func handleTranscript(_ text: AsrTranscript, token: Int) {
+        guard token == liveToken else { return }
+        publish(AsrRenewal.merge(seam: seam, live: text))
+    }
+
+    private func handleFinished(token: Int) {
+        if token == drainToken {
+            settleSeam()
+        } else if token == liveToken {
+            releaseFinalizeWaiter()
+        }
+    }
+
+    /// 转写是整体赋值的。接棒期间它一刻都不能空 —— 一空界面就退回占位、确定键置灰，
+    /// 三秒之后还会误报「没有听到声音」。
+    private func publish(_ text: AsrTranscript) {
+        transcript = text
+        // 声音来了，刚才那句「没有听到声音」就不成立了。
+        if phase == .failed(.noSpeech) { phase = .listening }
+    }
+
+    /// 预热一条新连接。它只握手，不出声 —— 引擎的 60 秒额度数的是**收到的音频**，
+    /// 这会儿喂它静音等于提前把新额度烧掉。
+    ///
+    /// 等它是就绪了就摆在那儿，活连接一撞上停顿就接手；这条路要在 46~50 秒这个窗口
+    /// 里走完，所以窗口本身就是它能被闲置的上限（4 秒），不会撞上引擎「两包间隔超过
+    /// 6 秒就断开」那条。
+    private func startWarming() {
+        guard !warming, warm == nil, Date() >= warmRetryAfter, let signing else { return }
+        warming = true
+        nextToken += 1
+        warmToken = nextToken
+        let token = warmToken
+
+        Task { [weak self] in
+            guard let self else { return }
+            switch await signing() {
+            case .signed(let signed):
+                // 签名的这段时间里用户可能已经收尾了，或者又按了一次。
+                guard self.warming, token == self.warmToken else { return }
+                let session = AsrSession(url: signed.url, events: self.events(for: token))
+                session.connect()
+                self.warm = session
+            case .notConfigured:
+                self.warmUpFailed("not configured", token: token)
+            case .unreachable:
+                self.warmUpFailed("unreachable", token: token)
+            }
+        }
+    }
+
+    /// 预热失败不是用户的事：他要的那条连接还活着，接着说不受影响，这里只是等下一拍
+    /// 再试。隔一拍就重试会把签名接口打满，所以退一步再撞。
+    private func warmUpFailed(_ reason: String, token: Int) {
+        guard token == warmToken else { return }
+        AppLog.voice.warning("asr warm-up signing failed: \(reason, privacy: .public)")
+        dropWarm()
+    }
+
+    /// 接棒。全同步，一拍之内做完 —— 中间一旦 await，这一拍的音频就没人接。
+    private func handOver(to next: AsrSession, chunk: Data) {
+        let age = Date().timeIntervalSince(connectedAt)
+        let retiring = session
+        drain = retiring
+        drainToken = liveToken
+        // 前缀就是旧连接此刻的文本。它还没定稿（引擎收完 `end` 才会重写最后一句），
+        // 所以只能算暂定 —— 但位置从这一刻起就定死了。
+        seam = AsrSeam(text: retiring?.transcript.finalText ?? "", provisional: true)
+
+        retiring?.finish()
+        // 等定稿用的是自己的定时器。`finalizeWaiter` 是单槽的，拿它等接缝，用户这时
+        // 点「完成」就会把第一个 continuation 顶掉 —— 那一个永远不会被 resume。
+        let token = drainToken
+        drainTimer = Task { [weak self] in
+            try? await Task.sleep(for: Self.settleTimeout)
+            guard let self, self.drainToken == token else { return }
+            self.settleSeam()
+        }
+
+        session = next
+        liveToken = warmToken
+        liveReady = true
+        connectedAt = Date()
+        warm = nil
+        warmToken = 0
+        warmReady = false
+        warming = false
+        warmBackoff = 1
+        warmRetryAfter = .distantPast
+
+        // 先按接缝发布一次。屏幕上那一段原来就在未定稿那一半（引擎要跑满一分钟才吐
+        // 第一个定稿），所以这一步换的是连接，不是画面。
+        publish(AsrRenewal.merge(seam: seam, live: next.transcript))
+        next.send(chunk)
+
+        // 年龄贴着 46~47 秒是撞上停顿换的，靠近 50 秒是一直没停、到硬顶才换的 ——
+        // 线上判断接缝干不干净就看这个数。
+        let frozen = seam?.text.count ?? 0
+        AppLog.voice.info(
+            "asr handover frozen=\(frozen, privacy: .public) chars age=\(age, privacy: .public)"
+        )
+    }
+
+    /// 接缝定稿：拿引擎改写后的那一份**换掉**暂定的那一份。
+    ///
+    /// `final: 1` 先到就用它；超时或者连接先断，就是手上有什么算什么 —— 到点了还
+    /// 挂着不定稿，屏幕上那段字会一直是灰的。
+    private func settleSeam() {
+        guard let current = seam, current.provisional, let retiring = drain else { return }
+        drainToken = 0
+        drain = nil
+        drainTimer?.cancel()
+        drainTimer = nil
+        retiring.close()
+
+        seam = AsrRenewal.settle(current, to: retiring.transcript.finalText)
+        if let session { publish(AsrRenewal.merge(seam: seam, live: session.transcript)) }
     }
 
     // MARK: - 收尾与失败
@@ -266,12 +462,40 @@ final class VoiceInputController {
     ///
     /// 提示了「没有听到声音」的录音也在这里：麦克风虽然还开着，连接已经没了，再往
     /// 一个断掉的 socket 里补静音只会把提示一直挂着。
-    private func handleSocketFailure(_ failure: AsrSession.Failure) {
+    private func handleSocketFailure(_ failure: AsrSession.Failure, token: Int) {
+        // 预热那条出事不是用户的事：他要的那条还活着，接着说照旧。换下去收尾的那条
+        // 也一样 —— 它断开是接棒的正常结局，报出来就会变成 46 秒突然弹「网络已断开」。
+        guard token == liveToken else {
+            if token == warmToken {
+                AppLog.voice.warning("asr warm connection failed: \(String(describing: failure), privacy: .public)")
+                dropWarm()
+            }
+            return
+        }
         guard phase.isListening else { return }
         AppLog.voice.warning("asr session failed: \(String(describing: failure), privacy: .public)")
+        dropWarm()
         loop?.cancel()
         loop = nil
         phase = .failed(.network)
+    }
+
+    /// 放掉预热的那条，隔一会儿再试一次。
+    ///
+    /// 失败多半是网络，隔一拍就重试会在 46~50 秒这个窗口里把签名接口打满。
+    private func dropWarm() {
+        clearWarm()
+        warmRetryAfter = Date().addingTimeInterval(warmBackoff)
+        warmBackoff = min(warmBackoff * 2, 4)
+    }
+
+    /// 不留重试窗口地放掉（收尾和取消时用）。
+    private func clearWarm() {
+        warm?.close()
+        warm = nil
+        warmReady = false
+        warmToken = 0
+        warming = false
     }
 
     private func handleInterruption() {
@@ -288,6 +512,18 @@ final class VoiceInputController {
     /// 只放资源，不动 `phase` 和 `transcript` —— 文本该留还是该丢，调用方比这里清楚。
     private func teardown() {
         releaseFinalizeWaiter()
+        // 换连接留下的东西一并清掉：接缝和还在收尾的那条不再有归属，定稿也不该在
+        // 用户已经拿走文本之后再回来改它。
+        drainTimer?.cancel()
+        drainTimer = nil
+        drain?.close()
+        drain = nil
+        drainToken = 0
+        clearWarm()
+        warmBackoff = 1
+        warmRetryAfter = .distantPast
+        seam = nil
+        liveReady = false
         capture?.stop()
         capture = nil
         session?.close()
