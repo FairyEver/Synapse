@@ -9,7 +9,7 @@ enum ShortcutPanelSegment: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .commands: return "快捷命令"
+        case .commands: return "自定义命令"
         case .phrases: return "快捷输入"
         }
     }
@@ -91,11 +91,14 @@ struct TerminalShortcutPanel: View {
             case .phrases: phraseList
             }
         }
-        // Room for the sheet's drag indicator, which the system draws *over* this content
-        // rather than above it — so without this the first thing in the panel is drawn
-        // under the grabber. The prototype's own number: ten above the grabber, five for
-        // it, eight below.
-        .padding(.top, 24)
+        // 上下与左右取**同一个值**，这不是随手定的：面板圆角的圆心在 (R, R)，而里面
+        // 第一件控件的圆角圆心在 (X + r, Y + r) —— 只有 X == Y 时两个圆心才会落在同
+        // 一条对角线上，两段弧看起来才是同心的一圈。上一版为了躲拖条只把上边加到 24、
+        // 左右还是 16，于是两段弧错开了一截，正是产品负责人指出的那处。
+        //
+        // 16 同时是拖条下方的安全距离（系统拖条占顶边不到 12pt），也是下方那些分节
+        // 卡片自己的左右留白 —— 于是分段器与卡片左右对齐，三样东西同一条竖线。
+        .padding(.top, 16)
         // The sheet's own base is the grouped grey, and it is set here rather than inside
         // either section so that switching segments cannot change it. It is also what the
         // command pills stand on: their resting fill is the plain background, and on a
@@ -111,67 +114,70 @@ struct TerminalShortcutPanel: View {
         // reader was looking at one sentence, not leaving the list.
         .sheet(item: $previewing) { phrase in
             PhrasePreviewSheet(phrase: phrase)
-                .presentationDetents([.medium, .large])
+                // 从贴合内容的高度起，而不是半屏。一句话通常只有一两行，半屏的弹窗会
+                // 有九成是空的 —— 用户看到的是「一句话浮在一大片灰里」。往上拖还是能
+                // 到半屏和全屏，长句子照样读得完（内容是滚动视图）。
+                .presentationDetents([.fraction(0.32), .medium, .large])
                 .presentationDragIndicator(.visible)
         }
     }
 
     // MARK: - 快捷命令
 
-    /// The commands, one per row — the shape the sentences take one segment over.
+    /// The commands **the user added themselves**, one per row — the shape the sentences
+    /// take one segment over.
     ///
-    /// They were a two-column grid at first, on the argument that command labels are
-    /// short and a grid shows more of them at once. That argument does not survive a real
-    /// list: 「提交开发测试部署」 is an entirely ordinary name and it wraps inside its
-    /// cell, which makes that row twice the height of the one beside it and stops the
-    /// grid reading as a grid at all. One command per row, one line each, is what the
-    /// panel is shaped like now.
+    /// The built-ins are deliberately not here. They sit at the leading edge of the bar,
+    /// one short swipe away and right against the terminal, so reaching them already
+    /// costs almost nothing — while this panel exists for the opposite problem: "I do not
+    /// remember what I added on the computer." Listing the built-ins alongside would push
+    /// the real answer further down the screen for no gain, which is also why the segment
+    /// is named after what it actually holds.
     ///
-    /// A section per group, which is how a grouped list says "these are not the same
-    /// kind of thing" — the job the full-width rule used to do, done the way the system
-    /// does it. The rows are tinted rather than plain, unlike the sentences: these run
-    /// something, and every iOS list says so the same way.
+    /// One row each, one line each. They were a two-column grid at first, on the argument
+    /// that command labels are short and a grid shows more at once — an argument that does
+    /// not survive a real list, since 「提交开发测试部署」 is an entirely ordinary name and
+    /// it wraps inside its cell, making that row twice the height of the one beside it.
+    ///
+    /// Tinted rather than plain, unlike the sentences: these run something, and every iOS
+    /// list says so the same way.
     private var commands: some View {
         List {
-            ForEach(Array(commandGroups.enumerated()), id: \.offset) { _, group in
-                Section {
-                    ForEach(group) { button in
-                        Button(button.label) {
-                            Haptics.select()
-                            onRun(button)
-                        }
-                        // One line always, ellipsised at the tail, for the reason the
-                        // sentences are: a label allowed to wrap would make one row
-                        // taller than its neighbours.
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        // Greyed by the system rather than by an opacity of ours, so a
-                        // stopped terminal looks like every other disabled row.
-                        .disabled(!isRunning)
-                        .accessibilityIdentifier("shortcut-\(button.id)")
+            if customCommands.isEmpty {
+                Text("暂无自定义快捷命令")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("shortcut-commands-empty")
+            } else {
+                ForEach(customCommands) { button in
+                    Button(button.label) {
+                        Haptics.select()
+                        onRun(button)
                     }
+                    // One line always, ellipsised at the tail, for the reason the
+                    // sentences are: a label allowed to wrap would make one row taller
+                    // than its neighbours.
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    // Greyed by the system rather than by an opacity of ours, so a
+                    // stopped terminal looks like every other disabled row.
+                    .disabled(!isRunning)
+                    .accessibilityIdentifier("shortcut-\(button.id)")
                 }
             }
         }
         .listStyle(.insetGrouped)
     }
 
-    /// The buttons, split where the computer says the list changes kind.
+    /// What this segment is for: the commands the user put on their computer themselves.
     ///
-    /// Consecutive runs rather than a grouping by value: the computer's order is what
-    /// the user sees, and two runs of the same kind either side of another one are two
-    /// groups, not one merged one.
-    private var commandGroups: [[MobileToolbarButton]] {
-        var groups: [[MobileToolbarButton]] = []
-        for button in buttons {
-            if groups.last?.last?.group == button.group {
-                groups[groups.count - 1].append(button)
-            } else {
-                groups.append([button])
-            }
-        }
-        return groups
+    /// `custom` and nothing else. The bar's own grouping rule — a separator wherever the
+    /// computer's list changes kind — is about drawing one continuous line of buttons;
+    /// here it would only be a way of re-admitting the built-ins that were just taken out.
+    private var customCommands: [MobileToolbarButton] {
+        buttons.filter { $0.group == .custom }
     }
+
 
     // MARK: - 快捷输入
 

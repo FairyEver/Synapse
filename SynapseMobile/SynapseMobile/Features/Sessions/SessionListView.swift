@@ -19,7 +19,12 @@ struct SessionListView: View {
 
     var body: some View {
         List {
-            deviceSection
+            // 设备行只在真的有一台电脑时才画。它要说的是「你在看哪一台」，没有电脑
+            // 的时候它无话可说，却会把下面那句「电脑不在线」再重复一遍 —— 同一屏里
+            // 同一句话出现两次，读起来像是这个应用坏了。
+            if !model.onlineDesktops.isEmpty {
+                deviceSection
+            }
             if model.onlineDesktops.isEmpty {
                 offlineSection
             } else if model.sessions.isEmpty {

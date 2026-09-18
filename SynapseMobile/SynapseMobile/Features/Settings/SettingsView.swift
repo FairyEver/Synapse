@@ -10,7 +10,12 @@ struct SettingsView: View {
 
         List {
             Section("账号") {
-                LabeledContent("邮箱", value: model.email ?? "未登录")
+                // 只读的值用次要色，与系统「设置」里那些信息行一致：它是给你认的，
+                // 不是给你点的，更不该比它自己的标签还显眼。
+                LabeledContent("邮箱") {
+                    Text(model.email ?? "未登录")
+                        .foregroundStyle(.secondary)
+                }
             }
 
             // A density names a cell size, not a column count, so the same choice
@@ -42,7 +47,13 @@ struct SettingsView: View {
                             Circle()
                                 .fill(Theme.running)
                                 .frame(width: 7, height: 7)
-                            Text(desktop)
+                            // 正在看的这台显示它的名字，与「终端」那一屏的设备行同一套
+                            // 写法。名字只有一个来源：这台电脑自己发来的 summary ——
+                            // `mobile.presence` 只带 id，所以**别的**电脑叫什么，手机
+                            // 无从得知，只能显示 id。这不是这一处能修的，要改协议。
+                            Text(desktop == model.selectedDesktopClientInstanceId
+                                 ? (model.summary?.desktopName ?? desktop)
+                                 : desktop)
                                 .font(.subheadline)
                                 .lineLimit(1)
                             Spacer()

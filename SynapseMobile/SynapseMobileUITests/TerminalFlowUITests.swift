@@ -1115,10 +1115,10 @@ final class TerminalFlowUITests: XCTestCase {
         // survives a close and a relaunch — not what it happened to be when this test
         // started, which depends on every test that ran before it and on whatever the
         // simulator's defaults still hold from the last run.
-        if !segment.buttons["快捷命令"].isSelected {
-            segment.buttons["快捷命令"].tap()
+        if !segment.buttons["自定义命令"].isSelected {
+            segment.buttons["自定义命令"].tap()
         }
-        XCTAssertTrue(segment.buttons["快捷命令"].isSelected, "the panel would not go back to the commands")
+        XCTAssertTrue(segment.buttons["自定义命令"].isSelected, "the panel would not go back to the commands")
         segment.buttons["快捷输入"].tap()
         XCTAssertTrue(
             app.staticTexts["phrase-row-mock-log"].waitForExistence(timeout: 10),
@@ -1155,8 +1155,51 @@ final class TerminalFlowUITests: XCTestCase {
 
         // Put back on the commands: the tests that follow open the panel expecting them,
         // and this preference is the app's own, not the mock's.
-        afterRelaunch.buttons["快捷命令"].tap()
-        XCTAssertTrue(app.buttons["shortcut-enter"].waitForExistence(timeout: 10))
+        afterRelaunch.buttons["自定义命令"].tap()
+        XCTAssertTrue(app.buttons["shortcut-mock-deploy"].waitForExistence(timeout: 10))
+    }
+
+    /// A computer whose owner has added nothing of their own says so.
+    ///
+    /// The common case, and the one this segment is named for. With nothing but the
+    /// built-ins — which live on the bar, one swipe away — this segment has nothing to
+    /// show, and saying that in place beats an empty card with no explanation.
+    func testThePanelSaysWhenThereAreNoCustomCommands() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        // The mock's built-ins only: no 部署, no 查端口.
+        try setMockToolbar([
+            button("enter", "回车", "key", key: "Enter"),
+            button("interrupt", "Ctrl+C", "key", key: "Ctrl+C"),
+            button("slash-exit", "/exit", "command", text: "/exit", pressEnter: true),
+            button("slash-clear", "/clear", "command", text: "/clear", pressEnter: true),
+        ])
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        segment.buttons["自定义命令"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["shortcut-commands-empty"].waitForExistence(timeout: 10),
+            "a computer with no commands of its own did not say so"
+        )
+        XCTAssertFalse(app.buttons["shortcut-enter"].exists, "a built-in was listed in the panel")
+        capture(app, name: "23-command-panel-empty")
+
+        // Left as the tests that follow expect it: the mock outlives this run.
+        try setMockToolbar([
+            button("enter", "回车", "key", key: "Enter"),
+            button("interrupt", "Ctrl+C", "key", key: "Ctrl+C"),
+            button("slash-exit", "/exit", "command", text: "/exit", pressEnter: true),
+            button("slash-clear", "/clear", "command", text: "/clear", pressEnter: true),
+            button("mock-deploy", "部署", "custom", text: "pnpm mock-deploy", pressEnter: true),
+            button("mock-port", "查端口", "custom", text: "lsof -i :3001", pressEnter: false),
+        ])
     }
 
     /// The panel's command section: the whole list at once, and it sends like the bar.
@@ -1178,15 +1221,18 @@ final class TerminalFlowUITests: XCTestCase {
         // fail on the order it happened to run in.
         let segment = app.segmentedControls["shortcut-panel-segment"]
         XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
-        segment.buttons["快捷命令"].tap()
+        segment.buttons["自定义命令"].tap()
 
         // Everything the computer offers, which is the point of the panel: the bar has
         // to be scrolled to be read, and this does not.
-        for id in ["shortcut-enter", "shortcut-interrupt", "shortcut-slash-exit", "shortcut-slash-clear",
-                   "shortcut-mock-deploy", "shortcut-mock-port"] {
+        for id in ["shortcut-mock-deploy", "shortcut-mock-port"] {
             XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 10), "the panel is missing \(id)")
         }
-        XCTAssertFalse(app.buttons["shortcut-clear"].exists, "Clear was projected onto the phone")
+        // 内置那四条**不进面板**：它们在工具栏最前面，贴着终端横滑一下就有，而面板是
+        // 给「我不记得自己加过什么」用的。列出它们只会把真正的自定义挤下去。
+        for id in ["shortcut-enter", "shortcut-interrupt", "shortcut-slash-exit", "shortcut-slash-clear"] {
+            XCTAssertFalse(app.buttons[id].exists, "\(id) is a built-in and belongs on the bar, not in the panel")
+        }
         capture(app, name: "15-command-panel")
 
         // A command sent from the panel crosses the socket exactly as one sent from the
@@ -1198,7 +1244,7 @@ final class TerminalFlowUITests: XCTestCase {
         )
         // And the panel is gone, the way it is for a command pressed on the bar.
         XCTAssertTrue(
-            app.buttons["shortcut-enter"].waitForNonExistence(timeout: 10),
+            app.buttons["shortcut-mock-port"].waitForNonExistence(timeout: 10),
             "the panel stayed open after a command was sent"
         )
 
@@ -1298,7 +1344,7 @@ final class TerminalFlowUITests: XCTestCase {
 
         app.buttons["toolbar-all"].tap()
         XCTAssertTrue(
-            app.buttons["shortcut-enter"].waitForExistence(timeout: 10),
+            app.staticTexts["shortcut-commands-empty"].waitForExistence(timeout: 10),
             "the panel never opened, so the segment assertion below would prove nothing"
         )
         XCTAssertFalse(
