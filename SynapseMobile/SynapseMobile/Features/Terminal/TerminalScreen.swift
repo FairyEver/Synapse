@@ -390,7 +390,10 @@ struct TerminalScreen: View {
                     renamingTitle = session?.title ?? ""
                     showingRename = true
                 } label: {
-                    Label("重命名", systemImage: "pencil")
+                    // 菜单里三行操作不带图标：上面那两组选项本来就只画文字，只有
+                    // 这三行各多一个图标，摆在一起是两种样子。选中仍然由系统在对
+                    // 勾那一列画出来，不靠图标区分。
+                    Text("重命名")
                 }
                 Button {
                     UIPasteboard.general.string = store.plainText
@@ -399,13 +402,13 @@ struct TerminalScreen: View {
                     // queueing a second confirmation.
                     model.notice("已复制终端输出。", tone: .success, id: "terminal.copied")
                 } label: {
-                    Label("复制全部输出", systemImage: "doc.on.doc")
+                    Text("复制全部输出")
                 }
                 if session?.isRunning == true {
                     Button(role: .destructive) {
                         showingStopConfirm = true
                     } label: {
-                        Label("停止终端", systemImage: "stop.circle")
+                        Text("停止终端")
                     }
                 }
             } label: {
