@@ -2,8 +2,8 @@ import SwiftUI
 import os
 
 /// 录音态的状态机：权限、采集、连接、送包节奏、收尾。录音的界面不在这里 ——
-/// 转写和 ✗ / ✓ 都落进 `TerminalScreen.inputBar`，摆成什么样由
-/// `VoiceInputPresentation` 决定。
+/// 转写落在手指上方的气泡里、锁定之后回到 `TerminalScreen.inputBar`，摆成什么样
+/// 由 `HoldToTalkPresentation` 决定。
 ///
 /// 它要在视图重建之间活着：转写和引擎的连接都不该因为一次重绘而重来。
 @MainActor
@@ -284,77 +284,5 @@ final class VoiceInputController {
         capture = nil
         session?.close()
         session = nil
-    }
-}
-
-/// 录音期间输入栏该显示什么。对应桌面端的 `voice-input-presentation`：三端各写
-/// 一遍这套判断会自然地漂开，所以抽成一个纯值 —— 不认识控制器以外的状态，也
-/// 不认识视图，能被单测完整覆盖。
-///
-/// 判定顺序本身就是规格，不要重排：
-///
-/// 1. 失败优先 —— 录音中途断网时继续显示「聆听中」，用户会以为还在录。
-/// 2. 失败态同样算 `active` —— 麦克风起不来时这条栏也得说话，不能什么都不发生。
-/// 3. 有没有字决定右槽 —— 没字时确认键置灰（提交空文本没有意义）；**失败时也一
-///    样看字**：已经听到的内容要留得下来，而重试会把这次录音连同转写一起清掉。
-struct VoiceInputPresentation: Equatable {
-    /// 右槽那个键。位置与尺寸都继承发送键 —— 确认之后发送键就回到刚才 ✓ 在的地方。
-    enum RightKey: Equatable {
-        /// 空闲：发送。
-        case send
-        case confirm
-        case confirmDisabled
-        case retry
-        case retryDisabled
-    }
-
-    /// 语音界面是否接管了输入栏（✗ / 转写 / ✓ 顶掉 ＋ / 输入框 / 麦克风 / 发送）。
-    let active: Bool
-    /// 转写为空时的占位。空串表示不放占位。
-    let placeholder: String
-    /// 插入点只在有内容时出现。它就是落点，不是装饰。
-    let caretVisible: Bool
-    let right: RightKey
-
-    init(phase: VoiceInputController.Phase, transcript: AsrTranscript) {
-        // 未定稿的尾巴也一起算：用户已经在屏幕上看见它了。
-        let hasText = !transcript.finalText.isEmpty
-
-        switch phase {
-        case .idle:
-            active = false
-            placeholder = ""
-            caretVisible = false
-            right = .send
-
-        case .failed(let failure):
-            // 已经听到的字比失败本身重要。重试会把这次录音连同转写一起清掉，
-            // 不能拿它当断网后唯一的出口。
-            active = true
-            placeholder = failure.message
-            caretVisible = false
-            right = hasText ? .confirm : (failure.isRetryable ? .retry : .retryDisabled)
-
-        case .finalizing:
-            // 用户刚点过确认，这里再把键交回去只会把收尾重复提交一次。
-            active = true
-            placeholder = hasText ? "" : "聆听中"
-            caretVisible = hasText
-            right = .confirmDisabled
-
-        case .interrupted:
-            // 来电和切后台不是用户的取消：已经定稿的文本留着等他处置。没有文本时
-            // 不为这个状态编一句话 —— 空着比说一句不准的强。
-            active = true
-            placeholder = ""
-            caretVisible = hasText
-            right = hasText ? .confirm : .confirmDisabled
-
-        case .listening:
-            active = true
-            placeholder = hasText ? "" : "聆听中"
-            caretVisible = hasText
-            right = hasText ? .confirm : .confirmDisabled
-        }
     }
 }

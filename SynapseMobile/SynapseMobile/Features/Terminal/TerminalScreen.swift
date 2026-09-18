@@ -31,6 +31,9 @@ struct TerminalScreen: View {
     @State private var pendingFiles: [PickedFile] = []
     @State private var showingBusyConfirm = false
     @State private var voice = VoiceInputController()
+    /// 输入栏现在是哪一种模式。语音不是栏上的一个按钮，而是这条栏的一个状态
+    /// （设计文档 §3.2），所以它由这一格决定 —— 四个位置在两种模式下都不搬家。
+    @State private var voiceMode = false
 
     private var store: TerminalStore { model.store(for: sessionId) }
     private var session: MobileSummarySession? { model.session(sessionId) }
@@ -152,6 +155,20 @@ struct TerminalScreen: View {
         keyboardPanelPresented = true
     }
 
+    /// The toggle at the left end of the input bar: typing, or talking.
+    ///
+    /// Leaving is unconditional — a mode nothing is happening in has to be escapable.
+    private func toggleVoiceMode() {
+        guard !voiceMode else {
+            voiceMode = false
+            return
+        }
+        // The two keyboards and this mode cannot share the screen: either would sit
+        // over the field the finger is about to cover.
+        dismissKeyboards()
+        voiceMode = true
+    }
+
     var body: some View {
         @Bindable var model = model
 
@@ -200,12 +217,12 @@ struct TerminalScreen: View {
                 onDismiss: { model.dismissRelay($0) },
                 onRetry: { model.retryRelay($0) }
             )
-            // There used to be a second bar stacked on top of this one while
-            // recording. There is one bar now, and it changes parts: the transcript
-            // goes where the command field is, ✗ where the ＋ was, ✓ where send was.
-            // Nothing moves but the icons, so confirming leaves send under the same
-            // finger. `accessoryBar` above stays live throughout — dictating and
-            // pressing return are not mutually exclusive.
+            // One bar, two modes: typing, or talking. Voice is a mode of this bar
+            // rather than a button on it, so the four slots hold still and only what
+            // the field is changes. The words land in a bubble floating above the bar
+            // while a finger is on it, and only come back into the bar itself once the
+            // recording is locked. `accessoryBar` above stays live throughout —
+            // dictating and pressing return are not mutually exclusive.
             accessoryBar
             inputBar
             // Last, so that everything above it keeps its place and the terminal is
@@ -533,110 +550,31 @@ struct TerminalScreen: View {
             .frame(width: 1, height: 16)
     }
 
-    /// The one bar under the terminal. Recording does not add a second one: the
-    /// transcription takes the command field's place, ✗ takes the ＋'s, ✓ takes
-    /// send's, and the microphone slot collapses so the width goes to the words.
-    /// The bar's height and the field's width are the same in both states, so the
-    /// only thing that changes is what the controls mean.
+    /// The one bar under the terminal, in two modes: typing, or talking.
+    ///
+    /// Voice is a mode of this bar rather than a button on it (设计文档 §3.2), so both
+    /// modes are the same four slots at the same four widths — the toggle, the field,
+    /// ＋ and send. Only what the field *is* changes. That is what keeps the toggle
+    /// under the same thumb when the mode changes back, and what makes the bar's
+    /// height the same in both.
     private var inputBar: some View {
-        let presentation = VoiceInputPresentation(phase: voice.phase, transcript: voice.transcript)
+        let presentation = HoldToTalkPresentation(
+            phase: voice.phase,
+            voiceMode: voiceMode,
+            hasDraft: !draft.isEmpty
+        )
         return HStack(spacing: 8) {
-            if presentation.active {
-                // ✗ rolls the field back to what it held before the microphone was
-                // tapped, so it belongs where the ＋ that started it was.
-                Button {
-                    Haptics.record()
-                    voice.cancel()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Theme.ink)
-                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityIdentifier("voice-cancel")
-                .accessibilityLabel("取消语音输入")
+            modeToggle(presentation)
+
+            if presentation.barIsVoice {
+                holdToTalk(presentation)
             } else {
-                // The sources are offered where the + is, not from the middle of the
-                // screen: the list is short, and the hand that opened it is already
-                // there. `Menu` builds its contents while the body is being evaluated,
-                // which is why `pasteboardHoldsImage` is kept as state refreshed at the
-                // moments the answer can change — see `refreshPasteboardImage`.
-                Menu {
-                    Button {
-                        showingPhotoPicker = true
-                    } label: {
-                        Label("照片", systemImage: "photo")
-                    }
-                    // Hidden where there is no camera — the simulator, and any device
-                    // without one — rather than offered and then failing.
-                    if CameraPicker.isAvailable {
-                        Button {
-                            showingCamera = true
-                        } label: {
-                            Label("拍照", systemImage: "camera")
-                        }
-                    }
-                    Button {
-                        showingDocumentPicker = true
-                    } label: {
-                        Label("文件", systemImage: "folder")
-                    }
-                    if pasteboardHoldsImage {
-                        Button {
-                            sendPastedImage()
-                        } label: {
-                            Label("粘贴图片", systemImage: "doc.on.clipboard")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Theme.ink)
-                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                        .contentShape(Rectangle())
-                }
-                .tint(Theme.ink)
-                .accessibilityIdentifier("attach")
-                .accessibilityLabel("添加附件")
+                commandField
             }
 
-            if presentation.active {
-                transcription(presentation)
-            } else {
-                TextField("输入命令", text: $draft)
-                    .textFieldStyle(.plain)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: Metrics.minimumTapTarget)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .submitLabel(.send)
-                    .focused($inputFocused)
-                    .onSubmit(sendDraft)
-            }
+            attachMenu(presentation)
 
-            // The slot collapses while recording instead of greying out: the words
-            // need the width, and a second recording is not something to start from
-            // inside this one.
-            if !presentation.active {
-                Button {
-                    Haptics.record()
-                    // Dropped before the bar swaps: the keyboard would otherwise be
-                    // dismissed by a view that no longer exists.
-                    inputFocused = false
-                    voice.start { await model.requestAsrSignature() }
-                } label: {
-                    Image(systemName: "mic")
-                        .font(.system(size: 22))
-                        .foregroundStyle(Theme.ink)
-                        .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityIdentifier("voice-start")
-                .accessibilityLabel("语音输入")
-            }
-
-            rightKey(presentation)
+            sendKey(presentation)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -644,89 +582,130 @@ struct TerminalScreen: View {
         .overlay(alignment: .top) { Divider().opacity(0.3) }
     }
 
-    /// The live transcription, in the command field's own place.
+    /// 左端常驻的键盘 / 语音切换键。
     ///
-    /// `.truncationMode(.head)` is what keeps the newest words on screen: text that
-    /// outgrows the width is cut at the front, so the tail — the part just said —
-    /// stays visible. A scrolling reader would have to keep scroll state and would
-    /// re-lay-out the line every time the unstable half is rewritten.
-    ///
-    /// The field is a plain display node here, not a hidden-keyboard text field: with
-    /// nothing focusable left on screen there is nothing for the keyboard to come up
-    /// for.
-    private func transcription(_ presentation: VoiceInputPresentation) -> some View {
-        let text: Text
-        if voice.transcript.isEmpty {
-            text = Text(verbatim: presentation.placeholder).foregroundStyle(.secondary)
-        } else {
-            // Settled text in the normal colour, the current sentence in the secondary
-            // one — which half is still going to change has to be visible. The caret
-            // is a thin block character rather than a shape: it has to flow with the
-            // text so it stays at the end of it, and it does not blink.
-            let caret = presentation.caretVisible
-                ? Text(verbatim: "▏").foregroundStyle(Theme.ink)
-                : Text(verbatim: "")
-            text = Text(voice.transcript.stable)
-                + Text(voice.transcript.unstable).foregroundStyle(.secondary)
-                + caret
+    /// 它是这套结构里唯一的锚点，位置永远不变 —— 它动了整套就散了（§3.2）。
+    private func modeToggle(_ presentation: HoldToTalkPresentation) -> some View {
+        Button {
+            Haptics.select()
+            toggleVoiceMode()
+        } label: {
+            Image(systemName: presentation.barIsVoice ? "keyboard" : "mic")
+                .font(.system(size: 22))
+                .foregroundStyle(Theme.ink)
+                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
         }
-        return text
-            .font(.system(.body, design: .monospaced))
-            .lineLimit(1)
-            .truncationMode(.head)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityIdentifier("voice-transcript")
+        .disabled(!presentation.controlsEnabled)
+        .opacity(presentation.controlsEnabled ? 1 : 0.4)
+        .accessibilityIdentifier("voice-mode-toggle")
+        .accessibilityLabel(presentation.barIsVoice ? "切换到键盘" : "切换到语音")
+        // 模式报在这一格上，而不是包着四格的 HStack 上：`accessibilityIdentifier`
+        // 加在容器上会向下盖掉每一个子元素的标识 —— 那样 `attach` 和 `send` 会连同
+        // 它们的测试一起消失，而屏幕上看起来什么都没变。
+        .accessibilityValue(presentation.barIsVoice ? "voice" : "keyboard")
     }
 
-    /// The key at the right end. Nothing is added or moved while recording — only
-    /// the icon and its meaning change, so confirming puts send back exactly where
-    /// the ✓ was.
-    @ViewBuilder
-    private func rightKey(_ presentation: VoiceInputPresentation) -> some View {
-        switch presentation.right {
-        case .send:
-            Button(action: sendDraft) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(draft.isEmpty ? Color.secondary : Theme.ink)
-                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                    .contentShape(Rectangle())
-            }
-            .disabled(draft.isEmpty)
-            .accessibilityIdentifier("send")
-            .accessibilityLabel("发送")
+    /// 语音态下顶上输入框那一格的东西。
+    ///
+    /// 它不是文本域而是按钮，但宽度、高度与位置与文本域逐格一致 —— §8 第 2 条要
+    /// 靠这个过。手指按住时的样子与手势图例在下一个文件里接上。
+    private func holdToTalk(_ presentation: HoldToTalkPresentation) -> some View {
+        Text(presentation.fieldLabel)
+            .font(.system(.body, design: .monospaced))
+            .foregroundStyle(Theme.ink)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, minHeight: Metrics.minimumTapTarget)
+            .background(
+                Color(uiColor: .secondarySystemBackground),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .accessibilityIdentifier("voice-hold")
+    }
 
-        case .confirm, .confirmDisabled:
-            let enabled = presentation.right == .confirm
-            Button {
-                Task { await finishVoice() }
-            } label: {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(enabled ? Theme.ink : Color.secondary)
-                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                    .contentShape(Rectangle())
-            }
-            .disabled(!enabled)
-            .accessibilityIdentifier("voice-confirm")
-            .accessibilityLabel("确认语音输入")
+    /// The command field. A plain field with no microphone beside it: voice moved to the
+    /// left end and became a mode, and a second way in would only make people guess
+    /// which one is different (设计文档 §3.2).
+    private var commandField: some View {
+        TextField("输入命令", text: $draft)
+            .textFieldStyle(.plain)
+            .font(.system(.body, design: .monospaced))
+            .frame(minHeight: Metrics.minimumTapTarget)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .submitLabel(.send)
+            .focused($inputFocused)
+            .onSubmit(sendDraft)
+    }
 
-        case .retry, .retryDisabled:
-            let enabled = presentation.right == .retry
+    /// The sources the ＋ offers. It sits beside the field rather than at the far left
+    /// now that the toggle owns that end — the same order WeChat uses, and the same
+    /// distance from the thumb either way.
+    ///
+    /// `Menu` builds its contents while the body is being evaluated, which is why
+    /// `pasteboardHoldsImage` is kept as state refreshed at the moments the answer can
+    /// change — see `refreshPasteboardImage`.
+    private func attachMenu(_ presentation: HoldToTalkPresentation) -> some View {
+        Menu {
             Button {
-                Haptics.select()
-                voice.retry()
+                showingPhotoPicker = true
             } label: {
-                Image(systemName: "arrow.clockwise.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(enabled ? Theme.ink : Color.secondary)
-                    .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
-                    .contentShape(Rectangle())
+                Label("照片", systemImage: "photo")
             }
-            .disabled(!enabled)
-            .accessibilityIdentifier("voice-retry")
-            .accessibilityLabel("重试")
+            // Hidden where there is no camera — the simulator, and any device
+            // without one — rather than offered and then failing.
+            if CameraPicker.isAvailable {
+                Button {
+                    showingCamera = true
+                } label: {
+                    Label("拍照", systemImage: "camera")
+                }
+            }
+            Button {
+                showingDocumentPicker = true
+            } label: {
+                Label("文件", systemImage: "folder")
+            }
+            if pasteboardHoldsImage {
+                Button {
+                    sendPastedImage()
+                } label: {
+                    Label("粘贴图片", systemImage: "doc.on.clipboard")
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 22))
+                .foregroundStyle(Theme.ink)
+                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
         }
+        .tint(Theme.ink)
+        // Dimmed while a finger is on the field, rather than taken away: the slot keeps
+        // its place, so nothing has to be found again afterwards (设计文档 §4.1).
+        .disabled(!presentation.controlsEnabled)
+        .opacity(presentation.controlsEnabled ? 1 : 0.4)
+        .accessibilityIdentifier("attach")
+        .accessibilityLabel("添加附件")
+    }
+
+    /// The key at the right end. It holds its place in voice mode and fades there: the
+    /// words that mode produces are sent on release without passing through this key
+    /// (设计文档 §4.3). Nothing is added or moved, so switching back leaves send exactly
+    /// where it was.
+    private func sendKey(_ presentation: HoldToTalkPresentation) -> some View {
+        let enabled = presentation.sendEnabled
+        return Button(action: sendDraft) {
+            Image(systemName: "arrow.up.circle.fill")
+                .font(.system(size: 30))
+                .foregroundStyle(enabled ? Theme.ink : Color.secondary)
+                .frame(width: Metrics.minimumTapTarget, height: Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
+        }
+        .disabled(!enabled)
+        .opacity(presentation.barIsVoice ? 0.4 : 1)
+        .accessibilityIdentifier("send")
+        .accessibilityLabel("发送")
     }
 
     private func sendDraft() {
@@ -740,18 +719,6 @@ struct TerminalScreen: View {
         // The path an inserted file typed goes out with this line, so the chip that
         // carried it has nothing left to undo.
         model.commitDeliveredAttachments(for: sessionId)
-    }
-
-    /// Voice is only another way of filling `draft` — sending stays the arrow's job.
-    private func finishVoice() async {
-        guard let text = await voice.confirm() else { return }
-        // After the guard, so a confirmation that failed has no tap claiming it
-        // worked — the words are what is being announced, not the press.
-        Haptics.commit()
-        // Appended rather than assigned: whatever was typed before the microphone
-        // was tapped is still the user's, and dictation after it reads as a
-        // continuation.
-        draft = draft.isEmpty ? text : draft + " " + text
     }
 
     // MARK: - Sending files to the computer

@@ -188,7 +188,8 @@ enum VoiceLanding: Equatable {
         // 让「该不该发」在纯值这一层就是完整的，不依赖上游已经 trim 过。
         let heard = (transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !heard.isEmpty else { return .nothing }
-        // 「原内容 + 一个空格 + 转写」，与既有 `finishVoice()` 逐字一致。
+        // 「原内容 + 一个空格 + 转写」，与改造前点击式那条追加规则逐字一致 —— 换了
+        // 手势不该换来另一种拼接方式。
         return draft.isEmpty ? .send(heard) : .append(draft + " " + heard)
     }
 }
