@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SynapseMobile 终端工具栏改造 · 原型</title>
+<style>
+  :root{
+    --ink:#000;
+    --ink2:#8a8a8e;
+    --ink3:#c7c7cc;
+    --sep:rgba(60,60,67,.29);
+    --surface:#ffffff;
+    --surface2:#f2f2f7;
+    --surface3:#e5e5ea;
+    --surface4:#d1d3d9;
+    --canvas:#1c1c1e;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    font-family:var(--ui);
+    background:#f0f0f2;
+    color:var(--ink);
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    gap:56px;
+    padding:40px 32px 80px;
+    min-height:100vh;
+  }
+
+  /* ---------------- phone ---------------- */
+  .phone{
+    width:390px;height:844px;
+    flex:0 0 auto;
+    background:var(--surface);
+    border-radius:44px;
+    overflow:hidden;
+    display:flex;flex-direction:column;
+    position:relative;
+    box-shadow:0 0 0 10px #dcdce0, 0 24px 60px rgba(0,0,0,.18);
+  }
+  .statusbar{
+    height:44px;flex:0 0 44px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 26px 0 32px;
+    font-size:15px;font-weight:600;
+    position:relative;
+  }
+  .island{
+    position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    width:112px;height:30px;border-radius:16px;background:#000;
+  }
+  .status-right{display:flex;align-items:center;gap:5px;}
+  .bars{display:flex;align-items:flex-end;gap:1.5px;height:11px;}
+  .bars i{width:3px;background:#000;border-radius:1px;display:block;}
+  .bars i:nth-child(1){height:4px}.bars i:nth-child(2){height:6px}
+  .bars i:nth-child(3){height:8px}.bars i:nth-child(4){height:11px}
+  .batt{width:24px;height:12px;border:1.2px solid rgba(0,0,0,.35);border-radius:3.5px;position:relative;}
+  .batt::after{content:"";position:absolute;right:-3px;top:3.5px;width:1.6px;height:5px;background:rgba(0,0,0,.35);border-radius:0 1px 1px 0;}
+  .batt i{position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:66%;background:#000;border-radius:2px;display:block;}
+
+  .navbar{
+    height:44px;flex:0 0 44px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;
+    border-bottom:.5px solid var(--sep);
+  }
+  .navbar .t{font-size:16px;font-weight:600;}
+  .navbar .ic{color:var(--ink);opacity:.9;display:flex;}
+
+  /* ---------------- canvas ---------------- */
+  .canvas{
+    flex:1 1 auto;min-height:0;
+    background:var(--canvas);
+    color:#e6e6e8;
+    font-family:var(--mono);
+    font-size:11px;line-height:1.55;
+    padding:12px 12px 10px;
+    overflow:hidden;
+    position:relative;
+  }
+  .canvas .dim{color:#8e8e93;}
+  .canvas .grn{color:#5fd08a;}
+  .canvas .amb{color:#e0a458;}
+  .canvas .ln{white-space:pre-wrap;word-break:break-all;}
+
+  .notice{
+    position:absolute;left:12px;right:12px;bottom:12px;
+    background:rgba(58,58,60,.96);
+    color:#fff;font-family:var(--ui);font-size:13px;
+    border-radius:10px;padding:10px 12px;
+    display:flex;align-items:center;gap:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.35);
+  }
+
+  /* ---------------- 工具栏（本次改造的对象） ---------------- */
+  /* 结构：左固定 · 中横滑 · 右固定。两侧不参与滚动，中间的横向滑动不再把键盘键带走。 */
+  .accessory{
+    flex:0 0 auto;
+    display:flex;align-items:center;
+    background:var(--surface);
+    border-top:.5px solid rgba(60,60,67,.18);
+  }
+  .acc-fixed{
+    flex:0 0 auto;display:flex;align-items:center;
+    background:var(--surface);
+    position:relative;z-index:1;
+  }
+  .acc-fixed.lead{padding:8px 0 8px 12px;gap:8px;}
+  .acc-fixed.trail{padding:8px 12px 8px 0;gap:8px;}
+  .acc-scroll{
+    flex:1 1 auto;min-width:0;
+    display:flex;align-items:center;gap:8px;
+    overflow-x:auto;overflow-y:hidden;
+    padding:8px;
+    scrollbar-width:none;
+  }
+  .acc-scroll::-webkit-scrollbar{display:none}
+
+  .pill{
+    flex:0 0 auto;
+    font-family:var(--mono);font-size:13px;font-weight:500;
+    padding:9px 12px;border-radius:10px;
+    background:var(--surface2);color:var(--ink);
+    min-width:48px;text-align:center;white-space:nowrap;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    cursor:pointer;
+  }
+  .pill.icon{min-width:44px;padding:9px 10px;}
+  .pill:active{background:var(--surface3)}
+  .pill.on{background:var(--surface3)}
+  .bar-sep{flex:0 0 auto;width:1px;height:16px;background:var(--sep);}
+
+  /* ---------------- 输入栏（另一 Agent 正在改，这里照改后的样子画） ---------------- */
+  .inputbar{
+    display:flex;align-items:center;gap:8px;
+    padding:6px 12px;
+    background:var(--surface);
+    border-top:.5px solid rgba(60,60,67,.18);
+    min-height:56px;
+    flex:0 0 auto;
+  }
+  .btn{
+    flex:0 0 44px;width:44px;height:44px;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink);cursor:pointer;
+    border:none;background:none;padding:0;
+  }
+  .btn:active{opacity:.5}
+  .field{
+    flex:1 1 auto;min-width:0;
+    min-height:44px;
+    display:flex;align-items:center;
+    font-family:var(--mono);font-size:15px;
+    padding:0 14px;border-radius:9px;
+    background:transparent;
+    overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;
+    white-space:nowrap;
+  }
+  .field::-webkit-scrollbar{display:none}
+  .field .ph{color:var(--ink2);}
+  .caret{display:inline-block;width:2px;height:17px;background:var(--ink);vertical-align:-3px;margin-left:1px;}
+
+  /* ---------------- 浮动面板 ---------------- */
+  .scrim{
+    position:absolute;inset:0;z-index:5;
+    background:rgba(0,0,0,.32);
+    opacity:0;pointer-events:none;
+    transition:opacity .3s;
+  }
+  .scrim.on{opacity:1;pointer-events:auto;}
+
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;z-index:6;
+    height:422px;
+    background:var(--surface2);
+    border-radius:14px 14px 0 0;
+    box-shadow:0 -8px 30px rgba(0,0,0,.18);
+    display:flex;flex-direction:column;
+    transform:translateY(100%);
+    transition:transform .34s cubic-bezier(.32,.72,0,1), height .34s cubic-bezier(.32,.72,0,1);
+  }
+  .sheet.dragging{transition:none;}
+  .grabber-zone{
+    flex:0 0 auto;
+    padding:10px 0 8px;
+    display:flex;justify-content:center;
+    cursor:grab;
+    touch-action:none;
+  }
+  .grabber-zone:active{cursor:grabbing;}
+  .grabber{width:36px;height:5px;border-radius:3px;background:var(--ink3);}
+
+  .sheet-head{flex:0 0 auto;padding:0 16px 12px;}
+  .segmented{
+    display:flex;height:32px;padding:2px;
+    background:var(--surface3);border-radius:9px;
+  }
+  .segmented .seg{
+    flex:1 1 0;min-width:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:500;border-radius:7px;
+    color:var(--ink);cursor:pointer;
+    white-space:nowrap;
+  }
+  .segmented .seg.on{
+    background:var(--surface);
+    font-weight:600;
+    box-shadow:0 3px 8px rgba(0,0,0,.12);
+  }
+
+  .sheet-body{
+    flex:1 1 auto;min-height:0;
+    overflow-y:auto;
+    padding:0 16px 24px;
+  }
+  /* 从左到右排、排满一行就换行 —— 区别于横滑的一条，这里是「一眼看全」 */
+  .flow{display:flex;flex-wrap:wrap;gap:8px;padding-top:2px;}
+  /* 灰底上胶囊要白底才立得起来 */
+  .flow .pill{background:var(--surface);padding:11px 14px;}
+  .flow .pill:active{background:var(--surface3);}
+  /* 按键 / 指令 / 自定义之间的分界：横滑区那根竖线，在这里换成一根通栏的横线 */
+  .flow-sep{flex:0 0 100%;height:1px;background:var(--sep);margin:3px 0;}
+  .empty{font-size:13px;color:var(--ink2);padding:10px 2px;}
+
+  /* Apple 的列表：灰底 + 白卡片 + 内缩分隔线；一行放不下就省略 */
+  .list{background:var(--surface);border-radius:10px;overflow:hidden;}
+  .row{
+    position:relative;
+    min-height:44px;
+    display:flex;align-items:center;
+    padding:0 16px;
+    font-size:17px;
+    cursor:pointer;
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  }
+  .row:active{background:var(--surface2);}
+  .row + .row::before{
+    content:"";position:absolute;left:16px;right:0;top:0;
+    height:.5px;background:var(--sep);
+  }
+  .row .text{
+    flex:1 1 auto;min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .row .text.mono{font-family:var(--mono);font-size:15px;}
+  /* 每行右侧的预览键：只看一眼，不是发送 */
+  .row-action{
+    flex:0 0 auto;margin-left:12px;
+    width:30px;height:30px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink2);
+  }
+  .row-action:active{background:var(--surface3);}
+
+  /* 长按抬起的那张卡片，和它身后的模糊 */
+  .lift{
+    position:absolute;z-index:7;
+    background:var(--surface);
+    border-radius:12px;
+    padding:12px 16px;
+    font-size:17px;line-height:1.5;
+    box-shadow:0 12px 34px rgba(0,0,0,.22);
+    pointer-events:none;
+  }
+  .sheet.dim .sheet-body{filter:blur(1.6px);opacity:.55;}
+
+  /* 完整预览：浮在面板之上的一张卡片 */
+  .preview-scrim{
+    position:absolute;inset:0;z-index:9;
+    background:rgba(0,0,0,.4);
+    opacity:0;pointer-events:none;
+    transition:opacity .24s;
+  }
+  .preview-scrim.on{opacity:1;pointer-events:auto;}
+  .preview{
+    position:absolute;left:12px;right:12px;bottom:12px;z-index:10;
+    max-height:70%;
+    background:var(--surface);
+    border-radius:14px;
+    box-shadow:0 -6px 30px rgba(0,0,0,.25);
+    display:flex;flex-direction:column;
+    opacity:0;transform:scale(.96) translateY(12px);pointer-events:none;
+    transition:opacity .22s, transform .26s cubic-bezier(.32,.72,0,1);
+  }
+  .preview.on{opacity:1;transform:none;pointer-events:auto;}
+  .preview .grabber-zone{padding:10px 0 4px;}
+  .preview-text{
+    overflow-y:auto;
+    padding:6px 18px 22px;
+    font-size:17px;line-height:1.55;
+    white-space:pre-wrap;word-break:break-word;
+    /* 就是一段普通文字：长按能勾选、能复制，不拦系统的选择菜单 */
+    user-select:text;-webkit-user-select:text;-webkit-touch-callout:default;
+  }
+
+  /* ---------------- side panel ---------------- */
+  .side{width:350px;flex:0 0 auto;padding-top:8px;}
+  .side h1{font-size:19px;font-weight:600;margin:0 0 6px;}
+  .side .lede{font-size:13px;line-height:1.6;color:#4a4a4f;margin:0 0 22px;}
+  .side section{margin-bottom:22px;}
+  .side h2{font-size:13px;font-weight:600;margin:0 0 10px;color:#1c1c1e;}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .chips .chip{
+    font-size:12px;padding:6px 10px;border-radius:8px;
+    background:#fff;border:.5px solid rgba(60,60,67,.22);
+    cursor:pointer;display:flex;align-items:center;gap:6px;
+  }
+  .chips .chip.on{background:#1c1c1e;color:#fff;border-color:#1c1c1e;}
+  .chips .chip .g{font-size:15px;line-height:1;}
+  .hint{font-size:12px;line-height:1.6;color:#6c6c70;margin:10px 0 0;}
+  .meta{font-size:12px;line-height:1.7;color:#4a4a4f;margin:0;}
+  .meta code{
+    font-family:var(--mono);font-size:11px;
+    background:#e7e7ea;border-radius:4px;padding:1px 4px;
+  }
+  .q{margin:0;padding-left:18px;font-size:12.5px;line-height:1.8;color:#3a3a3f;}
+</style>
+</head>
+<body>
+
+<!-- ======================= 手机 ======================= -->
+<div class="phone">
+  <div class="statusbar">
+    <div class="island"></div>
+    <span>9:41</span>
+    <div class="status-right">
+      <div class="bars"><i></i><i></i><i></i><i></i></div>
+      <div class="batt"><i></i></div>
+    </div>
+  </div>
+
+  <div class="navbar">
+    <div class="ic">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="t">mac-studio</div>
+    <div class="ic">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+  </div>
+
+  <div class="canvas" id="canvas">
+    <div class="ln dim">Last login: Thu Sep 18 09:02:11 on ttys004</div>
+    <div class="ln">&nbsp;</div>
+    <div class="ln"><span class="grn">➜</span> <span class="amb">server</span> git:(main) pnpm test</div>
+    <div class="ln dim">  Test Files  42 passed (42)</div>
+    <div class="ln dim">       Tests  318 passed (318)</div>
+    <div class="ln">&nbsp;</div>
+    <div class="ln"><span class="grn">➜</span> <span class="amb">server</span> git:(main) git status -s</div>
+    <div class="ln dim">  M src/mobile-live/mobile-push.service.ts</div>
+    <div class="ln">&nbsp;</div>
+    <div class="ln"><span class="grn">➜</span> <span class="amb">server</span> git:(main) <span class="caret"></span></div>
+    <div id="noticeSlot"></div>
+  </div>
+
+  <!-- 工具栏：左固定 · 中横滑 · 右固定 -->
+  <div class="accessory" id="accessory">
+    <div class="acc-fixed lead">
+      <div class="pill icon" id="leadBtn" title="按键面板"></div>
+      <div class="bar-sep"></div>
+    </div>
+    <div class="acc-scroll" id="accScroll"></div>
+    <div class="acc-fixed trail">
+      <div class="bar-sep"></div>
+      <div class="pill icon" id="trailBtn" title="全部指令"></div>
+    </div>
+  </div>
+
+  <!-- 输入栏（照另一 Agent 改后的样子：左端是键盘图标） -->
+  <div class="inputbar">
+    <button class="btn" title="切换到键盘（另一 Agent 实施中）">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2.4" y="6" width="19.2" height="12" rx="2.6" stroke="currentColor" stroke-width="1.7"/><path d="M6.2 10h.01M9.6 10h.01M13 10h.01M16.4 10h.01M6.2 13.4h.01M9.6 13.4h.01M13 13.4h.01M16.4 13.4h.01M9.2 16.1h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <div class="field" id="field"></div>
+    <button class="btn">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button class="btn" id="sendBtn" title="发送">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="#8e8e93"/><path d="M12 17V8M8 11.5L12 7.5l4 4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet">
+    <div class="grabber-zone" id="grabberZone"><div class="grabber"></div></div>
+    <div class="sheet-head">
+      <div class="segmented" id="segmented">
+        <div class="seg" data-v="commands">快捷命令</div>
+        <div class="seg" data-v="phrases">快捷输入</div>
+      </div>
+    </div>
+    <div class="sheet-body" id="sheetBody">
+      <div class="flow" id="flow"></div>
+      <div id="listArea"></div>
+    </div>
+  </div>
+
+  <div class="preview-scrim" id="previewScrim"></div>
+  <div class="preview" id="preview">
+    <div class="grabber-zone" id="previewGrabber"><div class="grabber"></div></div>
+    <div class="preview-text" id="previewText"></div>
+  </div>
+</div>
+
+<!-- ======================= 侧栏 ======================= -->
+<div class="side">
+  <h1>终端工具栏改造 · 原型</h1>
+  <p class="lede">
+    工具栏改成「左固定 · 中横滑 · 右固定」。左边是按键面板的入口（不再用键盘图标），
+    右边是上箭头，点开一个默认半屏、可拖到全屏的浮动面板；面板里分「快捷命令 / 快捷输入」两段。
+    点手机里的按钮试试。
+  </p>
+
+  <section>
+    <h2>① 左侧按钮换成哪个图标</h2>
+    <div class="chips" id="chipsIcon">
+      <div class="chip" data-v="command"><span class="g">⌘</span>command</div>
+      <div class="chip" data-v="escape"><span class="g">⎋</span>escape</div>
+      <div class="chip" data-v="control"><span class="g">⌃</span>control</div>
+    </div>
+    <p class="hint">
+      键盘图标留给输入栏左端。⌘ 与键盘的轮廓差别最大、最不像一个键帽，
+      且 iOS 上「⌘ = 快捷键」的认知最稳。
+    </p>
+  </section>
+
+  <section>
+    <h2>② 指令数量</h2>
+    <div class="chips" id="chipsCount">
+      <div class="chip" data-v="few">4 条</div>
+      <div class="chip" data-v="many">14 条</div>
+    </div>
+    <p class="hint">看中间横滑区够不够用，以及右侧面板在指令多时的样子。</p>
+  </section>
+
+  <section>
+    <h2>③ 快捷输入条数</h2>
+    <div class="chips" id="chipsPhrases">
+      <div class="chip" data-v="some">4 条</div>
+      <div class="chip" data-v="none">电脑上没配</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>④ 预览怎么触发</h2>
+    <div class="chips" id="chipsTrigger">
+      <div class="chip" data-v="button">右侧按钮</div>
+      <div class="chip" data-v="long">长按</div>
+      <div class="chip" data-v="both">两个都要</div>
+    </div>
+    <div class="chips" id="chipsPreviewIcon" style="margin-top:8px">
+      <div class="chip" data-v="eye"><span class="g">👁</span>eye</div>
+      <div class="chip" data-v="expand">⤢ 放大</div>
+    </div>
+    <p class="hint">
+      右侧按钮 = 看得见的入口；长按 = 相册那种抬起来看，继续按住会展开成大弹窗。
+      两个都要的话，长按是熟手的捷径。
+    </p>
+  </section>
+
+  <section>
+    <h2>⑤ 数据来源</h2>
+    <p class="meta">
+      短语取自桌面端「快捷输入」App 里那份列表：DataRepository 的
+      <code>app.quick-input.items</code>，每条就是一段文本（现在桌面端只有 id、内容、排序）。
+      手机侧要新增一条桌面端 → 手机的消息把这份列表推下来，形态与 <code>mobile.toolbar</code> 一致：
+      按 <code>desktopClientInstanceId</code> 归属、有字节预算、列表一变就重推。
+      不新增协议族，也不走 MCP。
+    </p>
+  </section>
+
+  <section>
+    <h2>⑥ 已定</h2>
+    <ul class="q">
+      <li>预览只给看，不放「填入」；里面的字就是普通文字，长按能勾选复制。</li>
+      <li>「快捷命令」保持浮动排法，不换成列表。</li>
+      <li>点短语只填进输入框，不唤系统键盘。</li>
+      <li>打开面板停在用户上次那段（原型里关掉重开也记得，刷新页面也记得）。</li>
+      <li>面板没有标题；半屏是固定高度，不按内容自适应。</li>
+      <li>按键和指令分开显示 —— 面板里是一根通栏横线，意思等同横滑区那根竖线。</li>
+    </ul>
+    <h2 style="margin-top:16px">还剩两条</h2>
+    <ul class="q">
+      <li>分组那条横线要不要换成带名字的小标题（按键 / 指令 / 自定义）？现在是纯一条线，和桌面工具栏一致，但看不出分的是哪类。</li>
+      <li>如果上次停在「快捷输入」而电脑上一条都没配，下次打开还停在那段（看到空状态），还是自动退回「快捷命令」？</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+  const escapeHtml = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // ---------- 数据 ----------
+  // 与 TerminalToolbarState.fallback 一致：桌面端内置按键 + 斜杠命令 + 用户自己加的
+  const FEW = [
+    {id:'enter', label:'回车', group:'key'},
+    {id:'interrupt', label:'Ctrl+C', group:'key'},
+    {id:'slash-exit', label:'/exit', group:'command'},
+    {id:'slash-clear', label:'/clear', group:'command'}
+  ];
+  const MANY = FEW.concat([
+    {id:'slash-compact', label:'/compact', group:'command'},
+    {id:'slash-review', label:'/review', group:'command'},
+    {id:'slash-help', label:'/help', group:'command'},
+    {id:'c-build', label:'构建', group:'custom'},
+    {id:'c-deploy', label:'部署', group:'custom'},
+    {id:'c-logs', label:'看日志', group:'custom'},
+    {id:'c-test', label:'跑测试', group:'custom'},
+    {id:'c-restart', label:'重启服务', group:'custom'},
+    {id:'c-git', label:'git status', group:'custom'},
+    {id:'c-migrate', label:'数据库迁移', group:'custom'}
+  ]);
+
+  // 桌面端「快捷输入」里用户自己配的短语
+  const PHRASES = [
+    {id:'p1', content:'用 Easy Worklog 初始化今天的工作日志'},
+    {id:'p2', content:'这次改动整理成提交说明，中文，说清楚改了什么和为什么'},
+    {id:'p3', content:'只给结论，不要解释过程'},
+    {id:'p4', content:'检查这段代码的边界情况，列出可能出问题的地方'}
+  ];
+
+  // SF Symbols 的近似写法（原型用系统字体字形代打）
+  const ICONS = { command:'⌘', escape:'⎋', control:'⌃' };
+
+  // 预览键的两个候选：eye 是「看一眼」，放大那对箭头是「展开看全」。
+  // 都不能长成纸飞机 / 箭头的样子 —— 那一按就发出去的联想太强。
+  const PREVIEW_ICONS = {
+    eye: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+       + ' stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+       + '<path d="M2.2 12S6 5.9 12 5.9 21.8 12 21.8 12 18 18.1 12 18.1 2.2 12 2.2 12Z"/>'
+       + '<circle cx="12" cy="12" r="2.7"/></svg>',
+    expand: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+       + ' stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+       + '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/>'
+       + '<path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>'
+  };
+
+  const S = {
+    icon: 'command',
+    count: 'many',          // few | many
+    phrases: 'some',        // some | none
+    previewIcon: 'eye',     // eye | expand
+    trigger: 'button',      // button | long | both
+    segment: 'commands',    // commands | phrases
+    sheet: 'closed',     // closed | medium | large
+    dragH: null,         // 拖动中的高度（px）
+    draft: ''            // 输入框里的内容（短语点进来就落在这）
+  };
+
+  let panMoved = false;   // 刚滑动过：这一次松手不算点按钮
+  const PHONE_H = 844;
+  const detent = k => k === 'large' ? PHONE_H - 48 : Math.round(PHONE_H * 0.5);
+  const buttons = () => S.count === 'many' ? MANY : FEW;
+  const phrases = () => S.phrases === 'some' ? PHRASES : [];
+
+  // ---------- 工具栏 ----------
+  function drawBar(){
+    const lead = $('leadBtn');
+    lead.innerHTML = '<span style="font-size:19px;line-height:1">' + ICONS[S.icon] + '</span>';
+    lead.onclick = () => flash('按键面板 · esc ⇧tab tab 方向键 …');
+
+    const trail = $('trailBtn');
+    trail.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none">'
+      + '<path d="M6 15l6-6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    trail.onclick = () => {
+      S.sheet = S.sheet === 'closed' ? 'medium' : 'closed';
+      drawSheet();
+    };
+
+    const scroll = $('accScroll');
+    const keep = scroll.scrollLeft;
+    const list = buttons();
+    scroll.innerHTML = '';
+    list.forEach((b, i) => {
+      if (i > 0 && list[i-1].group !== b.group) scroll.appendChild(el('div','bar-sep'));
+      const p = el('div','pill', escapeHtml(b.label));
+      p.onclick = () => { if (panMoved) return; send(b.label); };
+      scroll.appendChild(p);
+    });
+    scroll.scrollLeft = keep;
+  }
+
+  // ---------- 输入栏 ----------
+  function drawField(){
+    const field = $('field');
+    if (!S.draft){
+      field.innerHTML = '<span class="ph">输入命令</span>';
+      return;
+    }
+    field.innerHTML = '<span>' + escapeHtml(S.draft) + '</span><span class="caret"></span>';
+    field.scrollLeft = field.scrollWidth;
+  }
+
+  $('sendBtn').onclick = () => {
+    if (!S.draft) return;
+    const text = S.draft;
+    S.draft = '';
+    drawField();
+    flash('已发送 ' + text.slice(0, 12) + (text.length > 12 ? '…' : ''));
+  };
+
+  // 指令：点了就发。短语：只填进输入框，发不发由用户自己按。
+  function send(label){ flash('已发送 ' + label); }
+  function insert(content){
+    S.draft = content;
+    drawField();
+  }
+
+  // 列表里的一行：一行放不下就省略
+  function rowFor(label, mono, onTap){
+    const row = el('div','row');
+    row.appendChild(el('span','text' + (mono ? ' mono' : ''), escapeHtml(label)));
+    row.onclick = onTap;
+    return row;
+  }
+
+  // ---------- 预览 ----------
+  let suppressClick = false;   // 长按预览刚结束，别让这一下顺带把短语填进去
+
+  function previewButton(content){
+    const btn = el('div','row-action');
+    btn.innerHTML = PREVIEW_ICONS[S.previewIcon];
+    btn.title = '预览';
+    btn.onclick = e => { e.stopPropagation(); openPreview(content); };  // 只看，不填不发
+    return btn;
+  }
+
+  function openPreview(content){
+    const box = $('previewText');
+    box.textContent = content;
+    box.scrollTop = 0;
+    $('preview').classList.add('on');
+    $('previewScrim').classList.add('on');
+  }
+  function closePreview(){
+    $('preview').classList.remove('on');
+    $('previewScrim').classList.remove('on');
+  }
+  $('previewScrim').onclick = closePreview;
+
+  // 长按：先抬起来（相册那种），继续按住就展开成完整预览
+  let press = null;
+  function armLongPress(row, content){
+    row.addEventListener('pointerdown', e => {
+      if (e.target.closest('.row-action')) return;
+      press = { content, row, lifted:false, x:e.clientX, y:e.clientY, timer:null, expandTimer:null };
+      press.timer = setTimeout(() => lift(press), 320);
+    });
+  }
+  function lift(p){
+    if (!press || press !== p) return;
+    const phone = document.querySelector('.phone').getBoundingClientRect();
+    const rect = p.row.getBoundingClientRect();
+    const card = el('div','lift', escapeHtml(p.content));
+    card.style.left = (rect.left - phone.left + 6) + 'px';
+    card.style.width = (rect.width - 12) + 'px';
+    card.style.top = (rect.top - phone.top) + 'px';
+    $('sheet').appendChild(card);
+    $('sheet').classList.add('dim');
+    p.lifted = true;
+    p.card = card;
+    p.expandTimer = setTimeout(() => expand(p), 700);
+  }
+  function expand(p){
+    if (!press || press !== p || !p.lifted) return;
+    p.expanded = true;
+    endLift(p);
+    openPreview(p.content);
+  }
+  function endLift(p){
+    if (p.card) p.card.remove();
+    p.card = null;
+    $('sheet').classList.remove('dim');
+  }
+  function endPress(){
+    if (!press) return;
+    const p = press;
+    press = null;
+    clearTimeout(p.timer);
+    clearTimeout(p.expandTimer);
+    if (p.lifted){
+      endLift(p);
+      // 抬起过就不算点了行；这一下点击还要走完，所以放开前先标上
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+    }
+  }
+  window.addEventListener('pointerup', endPress);
+  window.addEventListener('pointercancel', endPress);
+  window.addEventListener('pointermove', e => {
+    if (!press || press.lifted) return;
+    if (Math.abs(e.clientX - press.x) > 10 || Math.abs(e.clientY - press.y) > 10) endPress();
+  });
+
+  // 预览卡片往下拖就关掉
+  (function(){
+    const zone = $('previewGrabber');
+    let drag = null;
+    zone.addEventListener('pointerdown', e => {
+      drag = { y: e.clientY };
+      e.preventDefault();
+    });
+    window.addEventListener('pointermove', e => {
+      if (!drag) return;
+      $('preview').style.transform = 'translateY(' + Math.max(0, e.clientY - drag.y) + 'px)';
+    });
+    window.addEventListener('pointerup', e => {
+      if (!drag) return;
+      const dy = e.clientY - drag.y;
+      drag = null;
+      $('preview').style.transform = '';
+      if (dy > 60) closePreview();
+    });
+  })();
+
+  // ---------- 面板 ----------
+  function drawSheet(){
+    const sheet = $('sheet'), scrim = $('scrim');
+    const flowBox = $('flow'), listBox = $('listArea');
+
+    [...$('segmented').children].forEach(s => s.classList.toggle('on', s.dataset.v === S.segment));
+
+    flowBox.innerHTML = '';
+    listBox.innerHTML = '';
+    const runCommand = b => () => { S.sheet = 'closed'; drawSheet(); send(b.label); };
+
+    if (S.segment === 'phrases'){
+      const list = phrases();
+      if (!list.length){
+        listBox.appendChild(el('div','empty','电脑上还没有快捷输入'));
+      } else {
+        const card = el('div','list');
+        list.forEach(p => {
+          const row = rowFor(p.content, false, () => {
+            if (suppressClick) return;      // 刚做完长按预览，这一下不算点行
+            S.sheet = 'closed';
+            insert(p.content);              // 只填进输入框，发不发由用户自己按
+            drawSheet();
+          });
+          if (S.trigger !== 'long') row.appendChild(previewButton(p.content));
+          if (S.trigger !== 'button') armLongPress(row, p.content);
+          card.appendChild(row);
+        });
+        listBox.appendChild(card);
+      }
+    } else {
+      // 按键 / 指令 / 自定义之间横着分一次，意思就是横滑区那根竖线
+      let group = null;
+      buttons().forEach(b => {
+        if (b.group !== group){
+          if (group !== null) flowBox.appendChild(el('div','flow-sep'));
+          group = b.group;
+        }
+        const p = el('div','pill', escapeHtml(b.label));
+        p.onclick = runCommand(b);
+        flowBox.appendChild(p);
+      });
+    }
+
+    if (S.dragH != null){
+      sheet.classList.add('dragging');
+      sheet.style.height = S.dragH + 'px';
+      sheet.style.transform = 'translateY(0)';
+    } else {
+      sheet.classList.remove('dragging');
+      sheet.style.height = detent(S.sheet === 'large' ? 'large' : 'medium') + 'px';
+      sheet.style.transform = S.sheet === 'closed' ? 'translateY(100%)' : 'translateY(0)';
+    }
+    $('trailBtn').classList.toggle('on', S.sheet !== 'closed');
+    const open = S.dragH != null ? S.dragH > detent('medium') * 0.6 : S.sheet !== 'closed';
+    scrim.classList.toggle('on', open);
+  }
+
+  // 上次停在哪一段，下次打开面板还停在哪一段
+  const SEGMENT_KEY = 'synapse.proto.segment';
+  try {
+    const saved = localStorage.getItem(SEGMENT_KEY);
+    if (saved === 'commands' || saved === 'phrases') S.segment = saved;
+  } catch (error) { /* 文件直接打开时可能没有 storage，忽略即可 */ }
+
+  $('segmented').onclick = e => {
+    const seg = e.target.closest('.seg');
+    if (!seg || seg.dataset.v === S.segment) return;
+    S.segment = seg.dataset.v;
+    try { localStorage.setItem(SEGMENT_KEY, S.segment); } catch (error) { /* 同上 */ }
+    $('sheetBody').scrollTop = 0;
+    drawSheet();
+  };
+
+  // 拖动上边缘：半屏 ⇄ 全屏，往下拖过头就是关掉
+  (function(){
+    const zone = $('grabberZone');
+    let drag = null;
+    zone.addEventListener('pointerdown', e => {
+      if (S.sheet === 'closed') return;
+      e.preventDefault();
+      drag = { y: e.clientY, h: detent(S.sheet) };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+    });
+    function move(e){
+      if (!drag) return;
+      S.dragH = Math.max(80, Math.min(detent('large'), drag.h + (drag.y - e.clientY)));
+      drawSheet();
+    }
+    function up(){
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (!drag) return;
+      const h = S.dragH;
+      drag = null; S.dragH = null;
+      if (h == null) return;
+      if (h < detent('medium') * 0.72) S.sheet = 'closed';
+      else if (h < (detent('medium') + detent('large')) / 2) S.sheet = 'medium';
+      else S.sheet = 'large';
+      drawSheet();
+    }
+  })();
+
+  $('scrim').onclick = () => { S.sheet = 'closed'; drawSheet(); };
+
+  // 横滑区：鼠标滚轮 / 拖拽都能滑（桌面上演示用）
+  (function(){
+    const scroll = $('accScroll');
+    scroll.addEventListener('wheel', e => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      scroll.scrollLeft += e.deltaY;
+    }, {passive:false});
+    let pan = null;
+    scroll.addEventListener('pointerdown', e => {
+      pan = { x: e.clientX, left: scroll.scrollLeft, moved: false };
+      panMoved = false;
+    });
+    window.addEventListener('pointermove', e => {
+      if (!pan) return;
+      const dx = e.clientX - pan.x;
+      if (Math.abs(dx) > 6) pan.moved = true;
+      scroll.scrollLeft = pan.left - dx;
+    });
+    window.addEventListener('pointerup', () => {
+      // 拖过一小段就当成滑动，别在松手时顺带触发按钮
+      if (pan && pan.moved) panMoved = true;
+      pan = null;
+    });
+  })();
+
+  // ---------- 提示 ----------
+  let timer = null;
+  function flash(text){
+    const slot = $('noticeSlot');
+    slot.innerHTML = '<div class="notice"><span>' + escapeHtml(text) + '</span></div>';
+    clearTimeout(timer);
+    timer = setTimeout(() => { slot.innerHTML = ''; }, 2200);
+  }
+
+  // ---------- 侧栏 ----------
+  function bindChips(id, key){
+    $(id).addEventListener('click', e => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      [...$(id).children].forEach(c => c.classList.toggle('on', c === chip));
+      S[key] = chip.dataset.v;
+      drawBar(); drawSheet();
+    });
+  }
+  bindChips('chipsIcon','icon');
+  bindChips('chipsCount','count');
+  bindChips('chipsPhrases','phrases');
+  bindChips('chipsTrigger','trigger');
+  bindChips('chipsPreviewIcon','previewIcon');
+  [['chipsIcon',S.icon],['chipsCount',S.count],['chipsPhrases',S.phrases],
+   ['chipsTrigger',S.trigger],['chipsPreviewIcon',S.previewIcon]].forEach(([id, v]) => {
+    [...$(id).children].forEach(c => c.classList.toggle('on', c.dataset.v === v));
+  });
+
+  drawBar();
+  drawField();
+  drawSheet();
+})();
+</script>
+</body>
+</html>
