@@ -111,11 +111,6 @@ final class AsrSession {
     }
 
     struct Events {
-        /// 连接真的通了，从这一刻起送出去的音频引擎才开始收。
-        ///
-        /// 握手是异步的：`connect()` 返回时它可能还没连上。轮换的计时起点要的是**引擎
-        /// 那边**开始收音频的时刻，早了会把额度算多。
-        let onOpen: () -> Void
         let onTranscript: (AsrTranscript) -> Void
         let onFailure: (Failure) -> Void
         /// 引擎确认收尾（`final: 1`），或连接关闭。
@@ -133,7 +128,6 @@ final class AsrSession {
     private var closed = false
     private var finished = false
     private var failureReported = false
-    private var opened = false
 
     init(url: URL, events: Events) {
         self.url = url
@@ -200,7 +194,6 @@ final class AsrSession {
         @unknown default: return
         }
         guard let message = try? JSONDecoder().decode(ServerMessage.self, from: data) else { return }
-        reportOpen()
 
         if let code = message.code, code != 0 {
             reportFailure(.server(code: code, message: message.message))
@@ -223,13 +216,6 @@ final class AsrSession {
             finished = true
             events.onFinished()
         }
-    }
-
-    /// 只报一次。轮换的计时起点是它，重复报会把连接年龄算小，等于往后拖接棒。
-    private func reportOpen() {
-        guard !opened, !closed else { return }
-        opened = true
-        events.onOpen()
     }
 
     private func reportFailure(_ failure: Failure) {

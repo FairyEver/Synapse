@@ -61,6 +61,17 @@ final class TerminalStore {
     /// without this it keeps the old wrap until some later frame happens to land.
     /// That is why a rotated terminal looked wrong only sometimes.
     private(set) var renderRevision = 0
+
+    /// Bumped whenever a frame replaces the whole buffer rather than amending it.
+    ///
+    /// The view cannot work this out from the rows it is handed. A replacement
+    /// whose window still holds the line the reader was on looks exactly like a
+    /// page of history arriving above them — same rows, same order, only the head
+    /// has moved — and the two want opposite things: history keeps the reader's
+    /// place, a replacement has destroyed the place they were keeping. Without
+    /// this the reader is left sitting in the middle of the buffer, and the newest
+    /// line stays below the fold for the rest of the visit.
+    private(set) var resetRevision = 0
     /// The oldest line index this store holds; the cursor a history request sends.
     private(set) var oldestIndex = 0
     /// True once the desktop has said there is nothing older.
@@ -148,6 +159,7 @@ final class TerminalStore {
             oldestIndex = frame.from
             reachedHistoryFloor = false
             isLoadingHistory = false
+            resetRevision += 1
         } else if frame.truncated, frame.from > firstLineIndex {
             // The desktop evicted history the phone still had. Keeping the older
             // rows would show a prefix that can never be corrected.

@@ -65,10 +65,15 @@ export type TerminalFrameInput = {
 /**
  * Splits one logical update into as many frames as the size budget requires.
  *
- * Every frame keeps the same `kind` and carries an increasing `from`, so a client
- * that applies them in order converges on exactly the same state as one that
- * receives a single frame. Splitting is a transport concern and never changes
- * what the client ends up displaying.
+ * Frames carry increasing `from`s, so a client that applies them in order
+ * converges on exactly the same state as one that receives a single frame.
+ *
+ * `reset` is the exception, and only in its first frame. A reset means "discard
+ * everything you hold"; a client that honours that literally discards the
+ * preceding chunk too, and comes out holding the last chunk alone — a window
+ * arriving as four frames left the client with a quarter of it. Only the first
+ * frame discards; the rest are ordinary suffix frames, which say "from here on
+ * the content is this", precisely what the remaining chunks are.
  */
 export function buildTerminalFrames(input: TerminalFrameInput): MobileTerminalFrame[] {
   const frames: MobileTerminalFrame[] = []
@@ -88,10 +93,12 @@ export function buildTerminalFrames(input: TerminalFrameInput): MobileTerminalFr
       index += 1
     }
     const consumed = wireLines.length
+    // The discard belongs to the first frame only; later chunks amend what it left.
+    const kind = frames.length === 0 || input.kind !== "reset" ? input.kind : "suffix"
     frames.push({
       v: MOBILE_PROTOCOL_VERSION,
       sessionId: input.sessionId,
-      kind: input.kind,
+      kind,
       from: input.from + index - consumed,
       lines: wireLines,
       total: input.total,

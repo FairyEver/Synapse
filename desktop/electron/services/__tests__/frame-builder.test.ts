@@ -123,6 +123,41 @@ describe("terminal frame builder", () => {
     expect(frames[0].total).toBe(42)
   })
 
+  it("discards once when a reset is split, not once per frame", () => {
+    // A reset means "throw away everything you hold". A client that reads that on
+    // every chunk ends up holding the last chunk alone, so the window has to
+    // arrive as one discard followed by amendments.
+    const lines = Array.from({ length: 900 }, (_, index) => plain(`line ${index}`))
+
+    const frames = buildTerminalFrames({ ...base, kind: "reset", lines, total: lines.length })
+
+    expect(frames.length).toBeGreaterThan(1)
+    expect(frames.map((frame) => frame.kind)).toEqual([
+      "reset",
+      ...frames.slice(1).map(() => "suffix"),
+    ])
+
+    // Contiguity is what makes the amendments land on top of the discard, and it
+    // is also what proves the chunks still tile the whole window.
+    let expected = 0
+    for (const frame of frames) {
+      expect(frame.from).toBe(expected)
+      expected += frame.lines.length
+    }
+    expect(expected).toBe(lines.length)
+  })
+
+  it("leaves a split suffix and a split history alone", () => {
+    const lines = Array.from({ length: 900 }, (_, index) => plain(`line ${index}`))
+
+    for (const kind of ["suffix", "history"] as const) {
+      const frames = buildTerminalFrames({ ...base, kind, lines, total: lines.length })
+
+      expect(frames.length).toBeGreaterThan(1)
+      expect(frames.every((frame) => frame.kind === kind)).toBe(true)
+    }
+  })
+
   it("truncates a pathological line instead of dropping the frame", () => {
     const frames = buildTerminalFrames({
       ...base,

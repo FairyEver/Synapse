@@ -43,7 +43,8 @@ struct TerminalTextView: UIViewRepresentable {
         view.apply(
             rows: store.rows,
             atHistoryFloor: store.reachedHistoryFloor,
-            cursor: store.cursorPosition
+            cursor: store.cursorPosition,
+            resetRevision: store.resetRevision
         )
         view.setRequestsInFlight(store.isLoadingHistory)
     }
@@ -100,6 +101,9 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// applies whenever the reader is at the bottom, and a reader who has just been
     /// switched to another grid has not been anywhere yet.
     private var pendingLandingScroll = false
+    /// The store revision this view last applied. `nil` until the first apply, so
+    /// the view's own first paint is not mistaken for a buffer replacement.
+    private var appliedResetRevision: Int?
     private var atHistoryFloor = false
     private var requestsInFlight = false
     /// Reports how many monospace columns fit, so the wrap matches the phone.
@@ -396,7 +400,21 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         }
     }
 
-    func apply(rows: [DisplayRow], atHistoryFloor: Bool, cursor: TerminalStore.CursorPosition?) {
+    /// - Parameter resetRevision: the store's count of buffers that were replaced
+    ///   outright rather than amended. Read before the early return below, so a
+    ///   replacement is not consumed by a frame that happened to change nothing.
+    func apply(
+        rows: [DisplayRow],
+        atHistoryFloor: Bool,
+        cursor: TerminalStore.CursorPosition?,
+        resetRevision: Int = 0
+    ) {
+        // Nil until this view has applied something, so its very first paint is
+        // never read as a replacement — it lands on the newest line by the same
+        // rule every other first paint uses.
+        let bufferReplaced = appliedResetRevision.map { $0 != resetRevision } ?? false
+        appliedResetRevision = resetRevision
+
         let keys = identities(for: rows, cursor: cursor)
         let floorChanged = atHistoryFloor != self.atHistoryFloor
         let rowsChanged = keys != appliedKeys
@@ -427,7 +445,15 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // anything below decides where the viewport goes.
         updateBottomInset()
 
-        if insertedAbove > 0 {
+        if bufferReplaced {
+            // The whole buffer is new, so there is no "before" to preserve: whatever
+            // row this view was anchored on may be a different line that merely kept
+            // its identity, and the offset it implies is meaningless. Landing on the
+            // newest line is the only answer that is right — the reader asked for
+            // this terminal, not for the piece of it this view happened to be holding.
+            pendingLandingScroll = false
+            scrollToBottom()
+        } else if insertedAbove > 0 {
             collectionView.contentOffset.y = offsetBefore
                 + CGFloat(insertedAbove) * TerminalRowCell.rowHeight(for: fontSize)
         } else if pendingLandingScroll {

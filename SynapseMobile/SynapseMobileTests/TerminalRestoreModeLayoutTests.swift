@@ -26,7 +26,13 @@ struct TerminalRestoreModeLayoutTests {
     private let pane = CGRect(x: 0, y: 0, width: 393, height: 600)
 
     private func lines(_ count: Int) -> [DisplayRow] {
-        (0..<count).map { index in
+        lines(0..<count)
+    }
+
+    /// Rows carrying the terminal's own line indices, so one slice of a buffer can
+    /// be told from another — which is the whole of what the landing rules turn on.
+    private func lines(_ range: Range<Int>) -> [DisplayRow] {
+        range.map { index in
             DisplayRow(
                 id: "line\(index)",
                 text: "line \(index)",
@@ -219,6 +225,51 @@ struct TerminalRestoreModeLayoutTests {
                 #expect(cellHeight(in: normal.list) == cellHeight(in: differing.list))
             }
         }
+    }
+
+    /// A buffer that was replaced lands on the newest line, whatever this view held.
+    ///
+    /// The phone keeps a session's rows across visits, so entering one paints what
+    /// was already held and the attach snapshot then replaces all of it. A
+    /// replacement was indistinguishable from a page of history: the row the view
+    /// was anchored on is in the new rows too, only further down, so the anchor
+    /// rule fired — the reader kept a place in a buffer that no longer existed and
+    /// was left standing in the middle of it, with the newest lines below the fold
+    /// for the rest of the visit. Landing on the newest line is the only answer
+    /// that is right: they asked for this terminal, not for the piece of it this
+    /// view happened to be holding.
+    @Test func aReplacedBufferLandsOnTheNewestLine() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        // What the phone still holds from the last visit: the tail of the window.
+        view.apply(rows: lines(300..<320), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        // The attach snapshot: the whole window, these rows included.
+        view.apply(rows: lines(0..<500), atHistoryFloor: false, cursor: nil, resetRevision: 1)
+        list.layoutIfNeeded()
+
+        #expect(abs(list.contentOffset.y + list.bounds.height - list.contentSize.height) < 1)
+        #expect(visibleFrame(ofRow: 499, in: list)?.maxY == list.bounds.height)
+    }
+
+    /// The same rows arriving as history keep the reader's place instead.
+    ///
+    /// The pair of the test above, sharing its rows and differing only in whether
+    /// the buffer was replaced. Rows that reach back before what the reader holds
+    /// are scrollback, and dragging them to the bottom is the one thing that must
+    /// not happen — so the fix cannot be "always follow the tail on a rewrite".
+    @Test func historyAboveTheReaderKeepsTheirPlace() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(300..<500), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        // Reading the head of what the phone holds.
+        list.setContentOffset(.zero, animated: false)
+        list.layoutIfNeeded()
+
+        view.apply(rows: lines(0..<500), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        #expect(visibleFrame(ofRow: 300, in: list)?.minY == 0)
     }
 
     /// A reader who scrolled up to read something is not dragged back down.
