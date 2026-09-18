@@ -177,10 +177,18 @@ final class VoiceInputController {
         let capture = AudioCapture()
         capture.onInterrupted = { [weak self] in self?.handleInterruption() }
         do {
-            try capture.start()
+            // 起引擎是阻塞的，放在主线程之外做 —— 这一步正好落在「按住 说话」按下
+            // 的那一刻，占着主线程会把面板浮上来那一下冻住。
+            try await capture.startOffMainThread()
         } catch {
             AppLog.voice.warning("microphone capture failed to start.")
             phase = .failed(.network)
+            return
+        }
+        // 起引擎这段时间里用户可能已经取消了，或者又按了一次。那段录音没人认领，
+        // 别把它收进来 —— 它的麦克风还开着。
+        guard current == generation else {
+            capture.stop()
             return
         }
         self.capture = capture

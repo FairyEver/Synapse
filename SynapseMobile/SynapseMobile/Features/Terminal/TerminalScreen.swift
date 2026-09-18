@@ -438,15 +438,25 @@ struct TerminalScreen: View {
                             onCancelLocked: cancelLockedVoice
                         )
                         .fixedSize(horizontal: false, vertical: true)
-                        // **只淡入，不做位移也不缩放。** 面板浮上来那一刻正好撞上
-                        // `AudioCapture.start()`：它同步占着主线程去激活麦克风会话，
-                        // 任何要逐帧推进的动画都会在这里跳一下。淡入撞上同一件事只是
-                        // 稍微晚一点到，看不出破绽；缩放会明明白白地卡一下。
-                        .transition(.opacity)
+                        // 从下沿弹出来：小一点、淡一点起步，过冲一下再落定 ——
+                        // 系统那些弹出面板就是这一下。缩放的支点放在下沿，所以它是
+                        // 从工具栏那一条线上长出来的，不是从自己中间涨开的。
+                        //
+                        // 这一下能留着，是因为起麦克风已经不在主线程上了（见
+                        // `AudioCapture.startOffMainThread`）：逐帧推进的动画最怕
+                        // 主线程被占住，而这一下正好发生在按住的那一瞬间。
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .scale(scale: 0.88, anchor: .bottom).combined(with: .opacity)
+                        )
                     }
                 }
                 .frame(height: 0, alignment: .bottom)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: voicePresentation.panelVisible)
+                .animation(
+                    reduceMotion ? nil : .bouncy(duration: 0.38, extraBounce: 0.16),
+                    value: voicePresentation.panelVisible
+                )
             }
             // 坐标系开在**最外层**，把输入栏和浮层一起圈进来。
             //

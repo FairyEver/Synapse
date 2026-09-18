@@ -1,4 +1,8 @@
-import AVFoundation
+// `@preconcurrency`：这个工程默认每个类型都归主 actor 管，而 AVFoundation 那套类型
+// 没有并发标注（`AVAudioEngine`、`AVAudioPCMBuffer` 都不是 Sendable）。没有这个标注，
+// 把它们用在非主 actor 的地方会得到一堆推不出结论的警告 —— 而这里的用法是有结论的，
+// 见 `AudioCapture` 上面那段。
+@preconcurrency import AVFoundation
 import Foundation
 import UIKit
 
@@ -6,7 +10,10 @@ import UIKit
 ///
 /// 写入在 `AVAudioEngine` 的 tap 回调里，也就是音频线程上；取走在主线程的 200ms
 /// 定时器里。进出都过锁，音频线程不碰 `AudioCapture` 的任何属性。
-final class AsrPcmBuffer: @unchecked Sendable {
+///
+/// 与 `AudioCapture` 一样是 `nonisolated` 的：它的一半调用方在音频线程上，把这件
+/// 事说清楚比让它默认归主 actor 管要诚实。
+nonisolated final class AsrPcmBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
 
@@ -50,7 +57,15 @@ final class AsrPcmBuffer: @unchecked Sendable {
 ///
 /// 重采样用 `AVAudioConverter`，不手写循环。设备原生是 44.1k / 48k 的浮点，插值重
 /// 采样要跨批保留相位才不会有咔哒声，而这一步就在首字延迟的关键路径上。
-final class AudioCapture {
+///
+/// `nonisolated` 与 `@unchecked Sendable` 都是为了同一件事：让 `start()` 能挪到主线程
+/// 之外（见 `startOffMainThread`）。这个工程默认每个类型都归主 actor 管，而这个类是
+/// 一台音频设备的外壳 —— 它没有一行和界面有关，本该在哪条线程上跑都行。
+///
+/// 可变的那些状态同一时刻只被一条线程碰：控制器在 `start()` **返回之后**才把这个对象
+/// 收进 `capture`，而 `stop()` 只经由那个引用进来；音频线程那一条路上只碰 `pcm`，
+/// 它自带锁。
+nonisolated final class AudioCapture: @unchecked Sendable {
     /// 引擎要的格式：16k / 16bit / 单声道。`AVAudioFormat` 的 Int16 是本机序，
     /// iOS 上就是引擎认的小端。
     static let targetFormat = AVAudioFormat(
@@ -96,6 +111,12 @@ final class AudioCapture {
         }
     }
 
+    /// 起引擎。
+    ///
+    /// **这会阻塞几十到几百毫秒**：`setActive(true)` 要等音频硬件和路由就位，后面
+    /// 建 converter、装 tap、起引擎也都在同一条路上。在主线程上叫它，「按住 说话」
+    /// 按下去的那一刻就会冻住 —— 而那一刻正是面板要浮上来、输入栏要变红的时候。
+    /// 走 `startOffMainThread()`。
     func start() throws {
         do {
             try startSession()
@@ -104,6 +125,15 @@ final class AudioCapture {
             stop()
             throw error
         }
+    }
+
+    /// 起引擎，**不在主线程上**。
+    ///
+    /// 起引擎没有一句需要主线程：它不碰界面，只碰 `AVAudioSession` 和 `AVAudioEngine`。
+    /// 而它慢 —— 慢在等硬件，不是等 CPU，所以挪出去不占任何人的便宜，只是把那几十
+    /// 毫秒还给主线程。
+    func startOffMainThread() async throws {
+        try await Task.detached(priority: .userInitiated) { try self.start() }.value
     }
 
     func stop() {

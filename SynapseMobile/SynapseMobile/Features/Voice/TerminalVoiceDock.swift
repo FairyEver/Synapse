@@ -11,14 +11,13 @@ import SwiftUI
 /// 落点，滑动的总路程就只剩「输入栏到面板」这一段，滑到之后要选的那两半又是整块面板
 /// 那么大。省下的不只是距离，还有「往上再找一层」的那一次视线移动。
 ///
-/// 面板是**实色**的，不是毛玻璃 —— 这一条是试出来的，不是偏好。它浮在终端画面上，
-/// 而终端是一屏高对比的小字：材质把那些字糊进面板，出来的是一块带灰斑的脏底子
-/// （`.ultraThickMaterial` 也还灰着一档，实色才干净）。玻璃要好看得底下本来就是
-/// 一片模糊的均匀底色，这里不是。
+/// 面板是**一层**系统材质（`.regularMaterial`），不是实色。上一版脏在**叠了两层**：
+/// 面板一层材质、蒙层再压一层 `.thinMaterial`，两层糊出来的调子不一样，拼在一起
+/// 就是一块花底子。现在只有一层 —— 蒙层那一层是**不带模糊的压暗**（半透明的
+/// `Theme.paper`），既盖住了转写，又不多加一次糊。
 ///
 /// 动效只留在**手指底下**：两半之间的换场用短促的 `easeOut`（动画得跟着手指走，
-/// 不能自说自话），面板自己淡入。缩放那一下没要 —— 它正好撞上麦克风启动占住主线程
-/// 的那几十毫秒，会跳帧，而淡入撞上同一件事只是稍微晚一点、看不出破绽。
+/// 不能自说自话）。浮上来那一下在 `TerminalScreen` 里，是一个带回弹的弹簧。
 struct TerminalVoiceDock: View {
     let presentation: HoldToTalkPresentation
     /// 面板量出来的位置，报在**手势所用的那个坐标系**里 —— 左右两半的判定用的就是它。
@@ -128,8 +127,8 @@ struct TerminalVoiceDock: View {
             }
         }
         .padding(16)
-        // 实色。理由写在文件顶上：换成材质在这里会脏，而材质本身还贵（每帧重糊一次）。
-        .background(Theme.paper, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        // 系统材质，只有这一层（理由写在文件顶上）。
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay {
             // 玻璃与它身后的东西之间那条发丝线。材质本身不保证边界看得出来 ——
             // 底下的画面颜色接近时，没有这条线整块面板就没有形状。
@@ -261,7 +260,8 @@ struct TerminalVoiceDock: View {
                 .opacity(armed ? 1 : 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(armed ? fill : Color(uiColor: .secondarySystemBackground))
+        // 没压着的那半压一层不带模糊的薄纱 —— 它盖住的是转写，不是要再糊一次背景。
+        .background(armed ? fill : Theme.paper.opacity(0.5))
         // 一整半块蒙层是一个元素，不是「图标 + 字」两个：读屏读到它时要说的是「取消」，
         // 而不是先念一个没有名字的叉、再念「取消」。
         .accessibilityElement(children: .ignore)
