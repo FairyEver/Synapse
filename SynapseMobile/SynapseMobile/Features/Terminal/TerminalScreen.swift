@@ -7,6 +7,8 @@ struct TerminalScreen: View {
     @Environment(TerminalDisplaySettings.self) private var display
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    /// 「减弱动态效果」。录音面板浮上来那一下听它的：开着就只淡入，不做位移。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let sessionId: String
     @State private var draft = ""
@@ -425,15 +427,29 @@ struct TerminalScreen: View {
                 //
                 // 零高度还保证它**不参与布局**：进了 `VStack` 就会改变终端的可视高度，
                 // 进而让 `reportGridToDesktop` 往电脑上报一个错的格子数。
-                if voicePresentation.panelVisible {
-                    TerminalVoiceDock(
-                        presentation: voicePresentation,
-                        panelRect: $voicePanelRect,
-                        onCancelLocked: cancelLockedVoice
-                    )
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(height: 0, alignment: .bottom)
+                // 外面这层 `ZStack` 只是为了给 `animation` 找一个**常驻**的落脚点：
+                // 挂在条件视图自己身上是来不及的 —— 它被建出来的那一帧，动画还没人
+                // 去开。它跟原来那个 `.frame` 一样参与不了布局，面板照旧挂在框上方。
+                ZStack(alignment: .bottom) {
+                    if voicePresentation.panelVisible {
+                        TerminalVoiceDock(
+                            presentation: voicePresentation,
+                            panelRect: $voicePanelRect,
+                            onCancelLocked: cancelLockedVoice
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                        // 从下沿长出来、淡进来。位移交给 `scale` 而不是 `move`：后者
+                        // 会把整块面板先压在工具栏和输入栏上再滑上来，途经的每一帧都
+                        // 盖着那两排 —— 而它们正是这一刻还要能按的东西。
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .opacity.combined(with: .scale(scale: 0.94, anchor: .bottom))
+                        )
+                    }
                 }
+                .frame(height: 0, alignment: .bottom)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: voicePresentation.panelVisible)
             }
             // 坐标系开在**最外层**，把输入栏和浮层一起圈进来。
             //

@@ -11,9 +11,10 @@ import SwiftUI
 /// 落点，滑动的总路程就只剩「输入栏到面板」这一段，滑到之后要选的那两半又是整块面板
 /// 那么大。省下的不只是距离，还有「往上再找一层」的那一次视线移动。
 ///
-/// 尺度和颜色一律用苹果自己的：字体全是语义字号，颜色全是系统语义色或本 app 已有的
-/// 那一对（`Theme.ink` / `Theme.paper`），间距取 8 / 12 / 16 这几档。只有转写区的高度
-/// 写了常量，并在那里写明为什么是这个数。
+/// 质感与动效照苹果自己的做法，而不是另发明一套：面板是一层 `.regularMaterial`，
+/// 与 app 里另一块浮在内容之上的玻璃条（`NoticeBar`）同一个圆角、同一档材质；换场用
+/// 短促的 `easeOut`（手指正压着屏幕，动画得跟着手指走，不能自说自话），面板自己则用
+/// `.snappy` 从下沿长出来。系统里关掉「减弱动态效果」时只剩淡入淡出。
 struct TerminalVoiceDock: View {
     let presentation: HoldToTalkPresentation
     /// 面板量出来的位置，报在**手势所用的那个坐标系**里 —— 左右两半的判定用的就是它。
@@ -21,11 +22,18 @@ struct TerminalVoiceDock: View {
     /// 固定之后面板上那枚「取消」。
     let onCancelLocked: () -> Void
 
+    /// 「减弱动态效果」开着的时候，缩放和弹性都不该出现 —— 那是这个开关要拿掉的东西。
+    /// 留淡入淡出，因为它不产生位移。
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     /// 面板与屏幕左、右、下三边之间的距离。
     ///
     /// 三边同一个数：它们是同一种关系（浮层与屏幕边缘之间的距离）。下边这一份是后补的
     /// —— 少了它，面板的圆角正好顶在工具栏的上沿，看着像被工具栏切掉了一块。
     private static let gutter: CGFloat = 16
+
+    /// 浮层的圆角。与 `NoticeBar` 同一个数：app 里浮在内容之上的玻璃面是同一档。
+    private static let cornerRadius: CGFloat = 14
 
     /// 转写区的高度：正好三行正文。
     ///
@@ -41,9 +49,6 @@ struct TerminalVoiceDock: View {
     private static let barWidth: CGFloat = 3
     private static let barHeight: CGFloat = 16
 
-    /// 面板与蒙层的圆角。
-    private static let cornerRadius: CGFloat = 12
-
     /// 正在录音的那个记号色。
     ///
     /// 红是苹果自己给「正在录」的颜色（录屏、录音时状态栏那一颗就是它），整个面板
@@ -53,6 +58,19 @@ struct TerminalVoiceDock: View {
 
     /// 手势与面板共用的坐标系名字，与 `TerminalScreen` 里那一处必须是同一个字符串。
     private static let voiceSpace = "terminalVoice"
+
+    /// 手指在两半之间移动时那一下换场。
+    ///
+    /// **短、不弹、不回冲。** 手指正压着屏幕，这一下必须跟着手指走 —— 要的是「滑过去
+    /// 就立刻看到变了」，不是一场表演；有回冲的弹簧会让高亮慢半拍才落到手指底下。
+    private var armAnimation: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.16)
+    }
+
+    /// 蒙层盖上与撤走。比换场还短一点：它表示的是「手到了」这件事本身。
+    private var maskAnimation: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.15)
+    }
 
     var body: some View {
         panel
@@ -106,22 +124,25 @@ struct TerminalVoiceDock: View {
             }
         }
         .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                .fill(Theme.paper)
-                .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
-        }
+        // 一块浮在终端上面的玻璃，而不是一张实心卡片：底下的终端糊成一层底色透上来，
+        // 深色画面上不会突然出现一块死白。做法与 `NoticeBar` 一致。
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay {
+            // 玻璃与它身后的东西之间那条发丝线。材质本身不保证边界看得出来 ——
+            // 底下的画面颜色接近时，没有这条线整块面板就没有形状。
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 1)
+                .strokeBorder(Color(uiColor: .separator).opacity(0.5), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
         // 蒙层与面板同尺寸，所以直接盖在它上面。多一层 `overlay` 而不是让面板为它让位：
         // 手指压上来的那一刻，面板自己不能动 —— 判定用的正是它量出来的那块矩形。
         .overlay {
             if presentation.choicesVisible {
                 choiceMask
+                    .transition(.opacity)
             }
         }
+        .animation(maskAnimation, value: presentation.choicesVisible)
         // 量出来的位置报回给手势，报在**手势所用的同一个坐标系**里。
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.voiceSpace)) }
             action: { panelRect = $0 }
@@ -197,17 +218,31 @@ struct TerminalVoiceDock: View {
                 icon: "pin",
                 label: "固定",
                 armed: presentation.lockReady,
-                fill: Theme.ink
+                // `.opacity(1)` 不是多余的：`Theme.ink` 就是 `Color.primary`，而它当**填充**
+                // 用的时候按「主要前景」那一档算，画在材质上会透出底下的东西 —— 实测下来
+                // 是一块中间调的灰，「固定」两个字压在上面既不像选中、也读不清。加上这一档
+                // 才落成一个实色。app 里另外两个实心按钮（登录、开始对话）也是这么写的。
+                fill: Theme.ink.opacity(1)
             )
         }
+        // 先把两半裁进面板的圆角里，再垫一层比面板稠一档的材质：压着的那半是实心填充，
+        // 没压着的那半透出这层玻璃和底下的字 —— 「盖上来了一层」要看得出来是盖的。
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .background(
+            .thinMaterial,
+            in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+        )
+        .animation(armAnimation, value: presentation.cancelReady)
     }
 
     /// 蒙层的一半。
     ///
-    /// 压着的那一半填成实心并显出自己的名字，另一半退到后面去。这就是「已经滑到这个
-    /// 区域上了」的那条反馈：手指正压在上面，眼睛未必看得见它，所以给的是整半块变色
-    /// 这么大的变化；而此刻手指底下唯一需要读的东西，也就是这两个字。
+    /// **一次只画一样东西，而且都画在正中间**：手指还没滑过来时是图标，滑上来之后换成
+    /// 名字，一个淡出一个淡入，位置不动。两样摞着放（图标在上、名字在下面留着位）会让
+    /// 没选中的那半顶着一个偏上的图标、底下空着 —— 图标看着像从中间掉出去了。
+    ///
+    /// 没压着的那半用跟随苹果那套「未选中」的样子：图标是次要色、没有底色。压着的那半
+    /// 反过来 —— 整块实心加上对比色文字，一眼看出手指在哪。
     private func half(
         _ half: Half,
         icon: String,
@@ -215,21 +250,19 @@ struct TerminalVoiceDock: View {
         armed: Bool,
         fill: Color
     ) -> some View {
-        VStack(spacing: 8) {
+        ZStack {
             Image(systemName: icon)
-                .font(.title)
+                .font(.largeTitle)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(armed ? Theme.paper : Color.secondary)
+                .opacity(armed ? 0 : 1)
             Text(label)
-                .font(.subheadline.weight(.semibold))
-                // 一直占着位置、只是不显示：显出来会把这半块撑高，而它旁边那半不会
-                // 跟着动 —— 两半就不一样大了。
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(armed ? Theme.paper : Color.secondary)
                 .opacity(armed ? 1 : 0)
         }
-        // 未选中时读在那块系统灰底上，选中之后底色变成一块实心填充，字跟着换成那个填充
-        // 上读得出的颜色 —— 也就是 app 里其它实心按钮用的那一对（`Theme.ink` /
-        // `Theme.paper` 各自跟着外观走，两种模式下都读得出来）。
-        .foregroundStyle(armed ? Theme.paper : Theme.ink)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(armed ? fill : Color(uiColor: .secondarySystemBackground))
+        .background(armed ? fill : Color.clear)
         // 一整半块蒙层是一个元素，不是「图标 + 字」两个：读屏读到它时要说的是「取消」，
         // 而不是先念一个没有名字的叉、再念「取消」。
         .accessibilityElement(children: .ignore)
