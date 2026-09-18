@@ -69,7 +69,7 @@ export function createChunkUploader(deps: ChunkUploaderDeps): ChunkUploader {
         lastError = error
       }
     }
-    throw lastError instanceof Error ? lastError : new Error("分片上传失败。")
+    throw lastError instanceof Error ? lastError : new Error("录音分片发送失败。")
   }
 
   async function drain(force: boolean): Promise<void> {
