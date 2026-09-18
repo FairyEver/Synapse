@@ -1189,6 +1189,7 @@ export type SynapseBridge = {
       saveMinutes: (input: { meetingId: string; minutes: SynapseMeetingMinutes }) => Promise<void>
       playbackUrl: (input: { meetingId: string }) => Promise<{ url: string | null }>
       peaks: (input: { meetingId: string }) => Promise<{ peaks: string | null }>
+      generateMinutes: (input: { meetingId: string }) => Promise<SynapseMeetingMinutes>
     }
   }
   soundNotifier: {

@@ -191,10 +191,10 @@ describe("AppsModule", () => {
 
       const launcherItems = document.querySelectorAll("[data-app-launcher-item]")
       const firstAnimation = animationCalls[0]
-      const centerAnimation = animationCalls[7]
+      const centerAnimation = animationCalls[8]
 
-      expect(launcherItems).toHaveLength(16)
-      expect(animateElement).toHaveBeenCalledTimes(16)
+      expect(launcherItems).toHaveLength(17)
+      expect(animateElement).toHaveBeenCalledTimes(17)
       expect(firstAnimation).toBeTruthy()
       expect(centerAnimation).toBeTruthy()
       if (!firstAnimation || !centerAnimation) return

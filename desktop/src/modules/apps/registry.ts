@@ -16,6 +16,7 @@ import { usageMonitorAppManifest } from "@/modules/usage-analysis/app-manifest"
 import { workflowAppManifest } from "@/modules/workflow/app-manifest"
 import { launcherAppManifest } from "./launcher-app-manifest"
 import { connectorsAppManifest } from "../../../app-capabilities/connectors/renderer/app-manifest"
+import { meetingAppManifest } from "../meeting/app-manifest"
 import type { SynapseSystemAppManifest } from "./types"
 import { isSystemAppId } from "./types"
 import { isSystemAppEntryVisible } from "./visibility"
@@ -39,6 +40,7 @@ const systemApps = [
   usageMonitorAppManifest,
   modelPriceAppManifest,
   connectorsAppManifest,
+  meetingAppManifest,
 ] as const satisfies readonly SynapseSystemAppManifest[]
 
 export function listSystemApps(): readonly SynapseSystemAppManifest[] {

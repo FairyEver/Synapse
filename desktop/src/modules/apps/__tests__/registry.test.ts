@@ -31,6 +31,7 @@ describe("system app registry", () => {
       "usage-monitor",
       "model-price",
       "connectors",
+      "meeting",
     ])
   })
 

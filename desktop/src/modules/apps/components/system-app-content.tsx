@@ -25,6 +25,7 @@ import { SecretsModule } from "../../../../app-capabilities/secrets/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ConnectorsModule } from "../../../../app-capabilities/connectors/renderer"
+import { MeetingModule } from "@/modules/meeting"
 import { AppLauncherGrid } from "./app-launcher-grid"
 import { AppSwitchTransition } from "./app-switch-transition"
 import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
@@ -129,6 +130,7 @@ function SystemAppContent({
   if (appId === "usage-monitor") return <UsageMonitorModule />
   if (appId === "model-price") return <ModelPriceModule />
   if (appId === "connectors") return <ConnectorsModule />
+  if (appId === "meeting") return <MeetingModule />
 
   return assertNever(appId)
 }

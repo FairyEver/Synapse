@@ -23,6 +23,7 @@ const appEntrypoints = {
   "usage-monitor": { path: "../../usage-analysis/index.tsx", header: "window-shell" },
   "model-price": { path: "../../model-price/index.tsx", header: "window-shell" },
   connectors: { path: "../../../../app-capabilities/connectors/renderer/index.tsx", header: "window-shell" },
+  meeting: { path: "../../meeting/index.tsx", header: "module-page" },
 } as const satisfies Record<SynapseSystemAppId, { readonly path: string; readonly header: HeaderMode }>
 
 describe("system app header architecture", () => {

@@ -5,6 +5,7 @@ import type {
   MeetingSummaryDto,
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
+import type { MeetingMinutesGenerator } from "./minutes"
 import { createMeetingSpool, sweepStaleMeetingSpools, type MeetingSpool } from "./spool"
 
 /**
@@ -30,6 +31,8 @@ export type MeetingServiceDeps = {
   readonly logger?: {
     warn(message: string, meta?: Record<string, unknown>): void
   }
+  /** 纪要由 Agent 生成；没有可用运行时就不暴露这个入口。 */
+  readonly minutesGenerator?: MeetingMinutesGenerator
 }
 
 export type StartRecordingResult = {
@@ -227,7 +230,26 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     return { peaks: typeof body.peaks === "string" ? body.peaks : null }
   }
 
+  /**
+   * 一键生成纪要：拿逐字稿交给 Agent，整理成议题/结论/待办之后存下来。
+   *
+   * 生成结果直接落库而不是只回给界面——用户可能点完就切走，回来后纪要应该在那里。
+   */
+  async function generateMinutes(meetingId: string): Promise<MeetingMinutesDto> {
+    const generator = deps.minutesGenerator
+    if (!generator) throw new Error("纪要生成暂不可用。")
+    const detail = await getMeeting(meetingId)
+    const minutes = await generator.generate({
+      title: detail.title,
+      speakers: detail.speakers,
+      segments: detail.segments,
+    })
+    await saveMinutes(meetingId, minutes)
+    return minutes
+  }
+
   return {
+    generateMinutes,
     startRecording,
     uploadPart,
     completeRecording,

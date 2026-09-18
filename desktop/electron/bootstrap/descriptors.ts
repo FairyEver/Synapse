@@ -113,6 +113,7 @@ import {
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
 import { createVoiceService, type VoiceService } from "../../app-capabilities/voice/main/service"
+import { createMeetingMinutesGenerator } from "../modules/meeting/minutes"
 import { createMeetingService, type MeetingService } from "../modules/meeting/service"
 import {
   SCRIPT_RUNTIME_SERVICE_ID,
@@ -177,6 +178,8 @@ import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService, AgentRuntimeService, AGENT_RUNTIME_SERVICE_ID } from "../services/agent-runtime"
+import { DEFAULT_AGENT_WORKSPACE_PROJECT_ID } from "../../src/lib/default-agent-workspace"
+import { resolveDefaultAgentWorkspaceProject } from "../modules/agent/default-agent-workspace"
 import {
   AGENT_CONVERSATION_WINDOW_SERVICE_ID,
   createDefaultAgentConversationWindowService,
@@ -678,11 +681,39 @@ export const coreVoiceDescriptor: ServiceDescriptor<VoiceService> = {
 export const coreMeetingDescriptor: ServiceDescriptor<MeetingService> = {
   id: "core.meeting",
   criticality: "degraded",
+  dependsOn: ["core.project-containers"],
   create(ctx) {
+    const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
+    const logger = ctx.logger.child("meeting")
     return createMeetingService({
       fetchAuthenticated: (path, init, errorMessage) =>
         accountService.fetchAuthenticated(path, init, errorMessage),
-      logger: ctx.logger.child("meeting"),
+      logger,
+      // 纪要走现有 Agent 能力，不另写一套模型调用。会议不属于任何项目，所以跑在内置的
+      // 「本地对话」工作区里——那是专门给「没有项目」的场景准备的。
+      minutesGenerator: createMeetingMinutesGenerator({
+        projectId: DEFAULT_AGENT_WORKSPACE_PROJECT_ID,
+        logger,
+        sendScheduled: async (input) => {
+          const project = await resolveDefaultAgentWorkspaceProject()
+          const container = await containers.open(project.uuid, {
+            name: project.name,
+            workspacePath: project.localPath,
+          })
+          const agentRuntime = container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+          const result = await agentRuntime.sendScheduled({
+            projectId: project.uuid,
+            agentType: "claude-code",
+            mode: "bypassPermissions",
+            prompt: input.prompt,
+            sessionPolicy: "fresh",
+            timeoutMs: input.timeoutMs,
+            abortSignal: input.abortSignal,
+            sourcePlatform: "scheduled",
+          })
+          return { status: result.status, summary: result.summary, error: result.error }
+        },
+      }),
     })
   },
   async start(instance) {

@@ -4,7 +4,7 @@ import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createMeetingSpool } from "../spool"
-import { createMeetingService } from "../service"
+import { createMeetingService, type MeetingAuthenticatedFetch } from "../service"
 import { meetingIpcModule } from "../ipc"
 
 const roots: string[] = []
@@ -53,11 +53,11 @@ describe("会议 IPC 通道", () => {
 
 describe("分片的落盘顺序", () => {
   let root: string
-  let fetchAuthenticated: ReturnType<typeof vi.fn>
+  let fetchAuthenticated: MeetingAuthenticatedFetch
 
   beforeEach(async () => {
     root = await temporaryRoot()
-    fetchAuthenticated = vi.fn(async () => jsonResponse({}))
+    fetchAuthenticated = vi.fn(async () => jsonResponse({})) as unknown as MeetingAuthenticatedFetch
   })
 
   it("先落盘、再发请求、确认之后才删本地", async () => {

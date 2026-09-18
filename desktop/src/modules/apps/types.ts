@@ -17,6 +17,7 @@ export const SYSTEM_APP_IDS = [
   "usage-monitor",
   "model-price",
   "connectors",
+  "meeting",
 ] as const
 
 export type SynapseSystemAppId = (typeof SYSTEM_APP_IDS)[number]
@@ -40,6 +41,7 @@ export type SynapseSystemAppNamespace =
   | "usage_monitor"
   | "model_price"
   | "connectors"
+  | "meeting"
 export type ResourceRepositoryViewId = "skill" | "rule" | "prompt"
 export type UsageMonitorViewId = "cc" | "codex"
 export type DatabaseAppViewId = "tables" | "status" | "management"

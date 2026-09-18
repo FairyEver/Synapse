@@ -190,6 +190,13 @@ export const meetingIpcModule: IpcModule = {
       response: z.any(),
       handler: (ctx, request: z.infer<typeof meetingIdInputSchema>) => service(ctx).getPlaybackUrl(request.meetingId),
     },
+    generateMinutes: {
+      operationId: "app.meeting.minutes.generate",
+      kind: "invoke",
+      request: meetingIdInputSchema,
+      response: z.any(),
+      handler: (ctx, request: z.infer<typeof meetingIdInputSchema>) => service(ctx).generateMinutes(request.meetingId),
+    },
     getPeaks: {
       operationId: "app.meeting.peaks.get",
       kind: "invoke",

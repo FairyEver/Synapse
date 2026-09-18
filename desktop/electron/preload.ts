@@ -531,6 +531,7 @@ const synapseBridge: SynapseBridge = {
       saveMinutes: (input) => invoke(IPC_CHANNELS.meeting.saveMinutes)(input),
       playbackUrl: (input) => invoke(IPC_CHANNELS.meeting.getPlaybackUrl)(input),
       peaks: (input) => invoke(IPC_CHANNELS.meeting.getPeaks)(input),
+      generateMinutes: (input) => invoke(IPC_CHANNELS.meeting.generateMinutes)(input),
     },
   },
   soundNotifier: {
