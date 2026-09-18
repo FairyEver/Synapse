@@ -168,13 +168,14 @@ final class InputBarUITests: XCTestCase {
         cancel.tap()
         waitUntil(timeout: 5) { !cancel.exists }
         XCTAssertFalse(cancel.exists, "取消之后面板还挂着")
-        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "keyboard", "取消之后没有回键盘态")
-        XCTAssertTrue(app.textFields.firstMatch.exists, "取消之后没有把输入框还回来")
+        // §3.3（2026-09-18 改判）：收摊不改模式 —— 取消就是取消，要打字得点切换键。
+        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "voice", "取消之后把语音态一起收走了")
+        XCTAssertFalse(app.textFields.firstMatch.exists, "语音态还把输入框留在屏幕上")
         shot(app, "31-after-discard")
     }
 
-    /// §8 第 19 条：固定之后按「完成」也要回键盘态，走的与松手那条是同一条路。
-    func testFinishingALockedRecordingLeavesVoiceMode() throws {
+    /// §8 第 19 条：固定之后按「完成」之后仍在语音态，走的与松手那条是同一条路。
+    func testFinishingALockedRecordingStaysInVoiceMode() throws {
         let app = openTerminal()
         enterVoiceMode(app)
 
@@ -192,14 +193,35 @@ final class InputBarUITests: XCTestCase {
         XCTAssertEqual(hold.label, "完成", "固定之后那一格不是「完成」")
         hold.tap()
 
-        waitUntil(timeout: 8) { app.buttons["voice-mode-toggle"].value as? String == "keyboard" }
-        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "keyboard", "完成之后没有回键盘态")
+        // 模式不动（§3.3）：收尾之后这一格回到「按住 说话」，等着说下一句。
+        waitUntil(timeout: 8) { hold.exists && hold.label != "完成" }
+        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "voice", "完成之后把语音态一起收走了")
         shot(app, "32-after-confirm")
+    }
+
+    /// 说完一句（松手）之后仍在语音态，接着按住就能说下一句。
+    ///
+    /// 这条正是产品负责人在真机上判错的那一处：以前收尾会顺手把输入栏打回键盘态，
+    /// 说一句就得再点一次切换键。模拟器里说不出话（没有音频喂进去），所以这里走的
+    /// 是「松手 → 收尾」这段本身 —— 模式就是在这一步被改掉的。
+    func testReleasingLeavesTheBarInVoiceMode() throws {
+        let app = openTerminal()
+        enterVoiceMode(app)
+
+        let hold = app.descendants(matching: .any)["voice-hold"]
+        XCTAssertTrue(hold.waitForExistence(timeout: 5), "语音态没有「按住 说话」那一格")
+        hold.press(forDuration: 1.2)
+        // 收尾要走完才谈得上「说完了」：面板收掉就说明落定结束了（§4.6）。
+        waitUntil(timeout: 10) { !app.staticTexts["录音中"].exists }
+
+        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "voice", "松手之后被打回了键盘态")
+        XCTAssertTrue(hold.waitForExistence(timeout: 5), "说完之后「按住 说话」那一格不见了")
+        shot(app, "51-still-voice-after-release")
     }
 
     /// 输入栏记住上次选定的是哪种模式：再进终端、重开 App，都从它起手。
     ///
-    /// 记的是**选定**那一下，不是这一刻栏的样子 —— 说完一句之后回键盘态（§3.3）
+    /// 记的是**选定**那一下，不是这一刻栏的样子 —— 说完一句之后留在语音态（§3.3）
     /// 与滑走取消之后留在语音态，都不该改写它。所以下面先按切换键过去、再让一次
     /// 说话走完，重新进来时仍然是语音态。
     func testTheInputBarRemembersWhichModeWasLastChosen() throws {
