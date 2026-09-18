@@ -88,12 +88,15 @@
 | Usage Monitor | 是 | 否 | — |
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
+| Meeting | 是 | 否 | — |
 
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 
 Git 仍是普通 System App，不新增 MCP domain。其带恢复 journal 的原子 clone、仓库注册、状态与差异预览、主进程选择令牌、精确提交与按文件丢弃、同步、空仓库初始化与远端默认分支接入、缓存远程分支发现与 tracking 检出、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；仓库目录定位复用受权限与审计保护的 Shell IPC，设为项目复用系统设置的全局项目配置与添加流程。Agent 项目与 Git 仓库根路径精确匹配时，composer 可复用同一 Git IPC 执行确认后的全部改动提交及常用远端操作，并可定向打开对应 Git 工作台；该入口不经过 Agent、MCP 或通用命令执行。这不改变上表的 capability 或 MCP 数量。远程分支、空仓库初始化与文件丢弃能力不注册任意 Git 命令入口，也不扩展为 Workflow、Automation、MCP 或 Deep Link 表面。
 
 MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统设置中的 MCP 分类是全局 MCP Server 与外部客户端注册信息的唯一 UI 入口；它聚合当前全部已注册 domain，但不新增 capability 或 MCP tool。Connectors 是独立的 System App；客户端内置定义通过 `integration.kind` 选择 Driver，状态写入版本化的 Synapse DataRepository，并在内置 Claude SDK 会话创建时临时注入 MCP 和对应 Skill，不写入外部 Claude 配置。V1 仅支持无认证的 `http://127.0.0.1:<port>/<path>` Streamable HTTP MCP；探测必须完成 MCP 初始化、initialized 通知、`tools/list` 和必需工具校验，失败或超时不得启用。当前 Figma 定义使用 `http://127.0.0.1:3845/mcp` 和内置 `figma-skill`，Skill 不声明 Figma 写入能力。新对话把已启用的连接器 ID 固化到会话快照，并从同一份 Agent Contribution 加载 MCP 与 Skill；已有对话不会因之后启停而动态变化，最终 Query 缺少或连不上预期 MCP 时只降级该工具，不阻断普通对话。
+
+Meeting 是普通 System App，不新增 MCP domain：录音、逐字稿和纪要只通过桌面端与手机端的用户界面读写，没有注册 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link。它注册 16 个 UI 私有 IPC operation（`app.meeting.*`），用于录音起止、分片上报、会议读写、发言人与纪要保存；分片是裸字节，经主进程代理写入平台媒体对象存储，不进用户云盘。转写完成后服务端经既有 `broadcastToUser` 通知桌面端，并经 `MobilePushService` 的 `MEETING_TRANSCRIPTION` category 通知手机——两者都不改变上表的 capability 或 MCP 数量。
 
 ## MCP capability domain
 
