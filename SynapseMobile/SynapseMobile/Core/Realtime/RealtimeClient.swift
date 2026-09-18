@@ -11,6 +11,13 @@ enum RealtimeState: Equatable {
 
     var isConnected: Bool { self == .connected }
 
+    /// The socket is down and the client is retrying on its own. The one state whose
+    /// *end* nothing on screen marks.
+    var isWaiting: Bool {
+        if case .waiting = self { return true }
+        return false
+    }
+
     var label: String {
         switch self {
         case .idle: return "未连接"
@@ -282,6 +289,21 @@ final class RealtimeClient {
         )
     }
 
+    /// Marks the link up, and — when that ends an outage rather than opening the
+    /// session's first socket — says so.
+    ///
+    /// `waiting` is the one state whose end nothing on screen marks: the socket
+    /// dropped, the app is retrying by itself, and every screen goes on saying what it
+    /// was saying before. Coming back from the background does not pass through it —
+    /// that path is `idle` → `connecting` — so a phone put down and picked up again
+    /// does not buzz each time. Neither does the first connect of a launch, for the
+    /// same reason.
+    private func markConnected() {
+        let wasRecovering = state.isWaiting
+        state = .connected
+        if wasRecovering { Haptics.success() }
+    }
+
     private func handle(_ message: URLSessionWebSocketTask.Message) {
         let data: Data
         switch message {
@@ -294,7 +316,7 @@ final class RealtimeClient {
         switch envelope.type {
         case LiveMessageType.welcome:
             reconnectAttempt = 0
-            state = .connected
+            markConnected()
             onConnected?()
         case LiveMessageType.pong, LiveMessageType.mobileFrame,
              LiveMessageType.mobileSummary, LiveMessageType.mobileIntentResult,
@@ -303,7 +325,7 @@ final class RealtimeClient {
              LiveMessageType.mobileToolbar,
              LiveMessageType.mobileQuickPhrases:
             // Any server traffic proves the connection is healthy.
-            if !state.isConnected { state = .connected }
+            if !state.isConnected { markConnected() }
             dispatch(envelope)
         default:
             break

@@ -94,11 +94,19 @@ struct SessionListView: View {
         .alert("重命名终端", isPresented: isRenaming, presenting: renameTarget) { session in
             TextField("名称", text: $renameTitle)
             Button("取消", role: .cancel) {}
-            Button("保存") { model.rename(session.id, to: renameTitle) }
+            Button("保存") {
+                Haptics.commit()
+                model.rename(session.id, to: renameTitle)
+            }
         }
         .alert("删除这个终端？", isPresented: isDeleting, presenting: deleteTarget) { session in
             Button("取消", role: .cancel) {}
-            Button("删除", role: .destructive) { model.delete(session.id) }
+            Button("删除", role: .destructive) {
+                // The row it belonged to is behind the dialog, so nothing on screen
+                // marks the moment the choice is made.
+                Haptics.warning()
+                model.delete(session.id)
+            }
         } message: { _ in
             Text("会先停止终端，未完成的任务会中断。")
         }

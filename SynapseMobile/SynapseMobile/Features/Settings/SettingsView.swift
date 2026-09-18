@@ -77,6 +77,9 @@ struct SettingsView: View {
         .alert("退出登录？", isPresented: $showingSignOut) {
             Button("取消", role: .cancel) {}
             Button("退出", role: .destructive) {
+                // A dialog button gets no feedback of its own, and this one empties the
+                // app and returns it to the sign-in screen.
+                Haptics.warning()
                 Task { await model.signOut() }
             }
         } message: {

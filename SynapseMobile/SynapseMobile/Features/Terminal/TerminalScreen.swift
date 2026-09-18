@@ -323,6 +323,9 @@ struct TerminalScreen: View {
             // 挡的主要就是它。
             if heardNothing, notice == nil {
                 emptyVoiceMessage = VoiceInputController.Failure.noSpeech.message
+                // 这一句只有占位符在说，而占位符就在手指底下。中断与断网那两条走
+                // `raiseTerminalMessage`，由它自己震（见 `Haptics` 的「一声」）。
+                Haptics.warning()
             }
             if let notice { model.raiseTerminalMessage(notice, sessionId: sessionId) }
             return
@@ -540,17 +543,29 @@ struct TerminalScreen: View {
         .alert("重命名终端", isPresented: $showingRename) {
             TextField("名称", text: $renamingTitle)
             Button("取消", role: .cancel) {}
-            Button("保存") { model.rename(sessionId, to: renamingTitle) }
+            Button("保存") {
+                Haptics.commit()
+                model.rename(sessionId, to: renamingTitle)
+            }
         }
         .alert("停止这个终端？", isPresented: $showingStopConfirm) {
             Button("取消", role: .cancel) {}
-            Button("停止", role: .destructive) { model.stop(sessionId) }
+            Button("停止", role: .destructive) {
+                // A dialog button gets no feedback from the system, and this is the
+                // one in the app that cannot be undone.
+                Haptics.warning()
+                model.stop(sessionId)
+            }
         } message: {
             Text("终端将被停止，未保存的进程状态会丢失。")
         }
         .alert("这个终端正在等待操作", isPresented: $showingBusyConfirm) {
             Button("取消", role: .cancel) { pendingFiles = [] }
-            Button("仍然插入") { hand(pendingFiles, confirmed: true) }
+            Button("仍然插入") {
+                // Proceeding past a caution, so it is felt rather than merely done.
+                Haptics.warning()
+                hand(pendingFiles, confirmed: true)
+            }
         } message: {
             Text("它正在等你回答一个问题或输入密码，插入路径可能被当成回答。")
         }
@@ -692,7 +707,13 @@ struct TerminalScreen: View {
                     Text("重命名")
                 }
                 Button {
+                    // Nothing copied is nothing to confirm — the same rule the send
+                    // key follows. A terminal opened a moment ago has no output yet.
+                    guard !store.plainText.isEmpty else { return }
                     UIPasteboard.general.string = store.plainText
+                    // Copying is the archetype of a result the screen does not show:
+                    // the text leaves for the clipboard and nothing moves here.
+                    Haptics.success()
                     // The one message on this screen that is not a problem. It carries
                     // its own id so copying twice restarts one second rather than
                     // queueing a second confirmation.
@@ -1031,11 +1052,16 @@ struct TerminalScreen: View {
         case .cancelling:
             // 取消之后**留在语音态**：多半是想重说一遍，让人再按一次切换键没有道理
             // （§3.3）。`draft` 一个字不改 —— 这一格从来没碰过它。
+            Haptics.select()
             voice.cancel()
         case .locking:
             // 手指走了，录音继续：这一格换成录音会话栏，手可以去翻终端（§4.9）。
+            // 这一下是确认，「手走了它还在录」正是屏幕要说而手指挡住的话。
+            Haptics.commit()
             voiceGrid.lock(holding: DesktopGrid(columns: store.columns, rows: store.visibleRows))
         case .speaking:
+            // 松手本身不震：这一句有没有落地要等收尾回来才知道，落地那一下由
+            // `land(_:)` 给。在这里再给一次，就成了同一件事的两声。
             Task { await settleVoice() }
         }
     }
@@ -1046,6 +1072,7 @@ struct TerminalScreen: View {
     /// 猜测，而且猜错一次的代价不小：用户的语音态会连同偏好一起被抹掉。模式只由
     /// 切换键改这一条，没有例外 —— 要打字，切换键就在左边那一格。
     private func cancelLockedVoice() {
+        Haptics.select()
         voice.cancel()
         voiceGrid.unlock()
     }

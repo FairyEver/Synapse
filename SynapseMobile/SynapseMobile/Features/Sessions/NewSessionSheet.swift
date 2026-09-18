@@ -263,12 +263,20 @@ struct NewSessionSheet: View {
 
         switch outcome {
         case .created(let sessionId):
+            // Both halves of this are invisible from inside the sheet: the request can
+            // spend the full timeout before answering, and the sheet is where the user
+            // is looking either way.
+            Haptics.success()
             dismiss()
             onConversationStarted(sessionId)
         case .failed(let message):
             // The sheet stays up and the three rows keep what they show: the reader's
             // choices are the expensive part, and the reason is the thing they need in
             // order to change one of them.
+            //
+            // The reason lands inline rather than in the notice bar, so nothing else
+            // is going to feel it (see `Haptics`).
+            Haptics.failure()
             failure = message
         }
     }
@@ -284,6 +292,9 @@ struct NewSessionSheet: View {
         Section {
             ForEach(model.summary?.groups ?? []) { group in
                 Button {
+                    // This row has no confirm button behind it (see the comment above),
+                    // so the tap is the whole decision and is worth the weight of one.
+                    Haptics.commit()
                     dismiss()
                     onCreated(group.id)
                 } label: {

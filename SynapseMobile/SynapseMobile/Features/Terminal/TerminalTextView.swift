@@ -703,6 +703,12 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         onTap?()
     }
 
+    /// Whether this pinch has already been told it has run out of room.
+    ///
+    /// Per gesture, not per frame: the clamp is true on every callback while a finger
+    /// is held at the limit, and a buzz that repeats at 60Hz is not feedback.
+    private var pinchAtLimit = false
+
     /// Magnifies the desktop's grid past the fit.
     ///
     /// Only where there is something to magnify: the phone-driven mode is already at
@@ -711,10 +717,23 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// means the same thing after a rotation as before one.
     @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
         guard displayMode == .desktopDriven, desktopGrid != nil else { return }
+        // Identified before anything is scaled, so one pinch is one gesture from its
+        // first callback to its last.
+        if gesture.state == .began || gesture.state == .ended || gesture.state == .cancelled {
+            pinchAtLimit = false
+            return
+        }
         guard gesture.state == .changed else { return }
 
         let proposed = zoom * gesture.scale
         let clamped = min(TerminalDisplayConfig.maxZoom, max(TerminalDisplayConfig.minZoom, proposed))
+        // Asked for a size the canvas does not have. Felt at the moment the gesture
+        // first runs out of room; after that it simply stops following the fingers,
+        // which the fingers already know.
+        if abs(clamped - proposed) > 0.0001, !pinchAtLimit {
+            pinchAtLimit = true
+            Haptics.warning()
+        }
         guard abs(clamped - zoom) > 0.001 else { return }
 
         // Magnified about the fingers, not about the middle of the pane.
@@ -840,7 +859,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // Nothing is selected yet, so the reader is about to drag: scrolling must
         // not answer the same finger.
         collectionView.isScrollEnabled = false
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Haptics.selectionBegin()
         selectionOverlay.beginLoupe(
             at: point,
             caretRect: caretRect(for: position),
@@ -858,7 +877,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // One tick per row or column crossed, which is the feedback that makes a
         // selection feel like it is following the finger rather than lagging it.
         if previous != current.end {
-            UISelectionFeedbackGenerator().selectionChanged()
+            Haptics.select()
         }
         selectionOverlay.moveLoupe(to: point, caretRect: caretRect(for: position))
         refreshSelection()
@@ -958,7 +977,11 @@ extension TerminalCollectionView: UIEditMenuInteractionDelegate {
 
     /// Puts the selected cells on the pasteboard.
     private func copySelection() {
+        guard !selectedText.isEmpty else { return }
         UIPasteboard.general.string = selectedText
+        // The text leaves for the clipboard and the selection disappears, so the one
+        // thing that happened is the one thing this screen cannot show.
+        Haptics.success()
         clearSelection()
     }
 

@@ -125,10 +125,18 @@ struct TerminalRelayStrip: View {
     private func perform(_ action: TerminalAttachment.Action, on attachment: TerminalAttachment) {
         switch action {
         case .undoInsert:
+            // The backspaces land in the terminal, which is a pane this strip sits
+            // under — often scrolled somewhere else by now.
+            Haptics.select()
             onUndo([attachment.id])
         case .retry:
+            // No feedback of its own: a retry ends in the attachment's state, and
+            // `Haptics` already speaks for that from the model.
             onRetry(attachment.id)
         case .dismiss:
+            // The only action here that cannot be taken back: it takes the copy on the
+            // computer's drive with it.
+            Haptics.warning()
             onDismiss(attachment.id)
         }
     }

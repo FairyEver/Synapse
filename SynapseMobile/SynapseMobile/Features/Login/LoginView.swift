@@ -146,10 +146,19 @@ struct LoginView: View {
 
     private func submit() {
         guard !email.isEmpty, !password.isEmpty, !isSubmitting else { return }
+        // After the guard, on the same rule the send key follows: a submit with
+        // nothing to submit does nothing. The verdict is a round trip away and comes
+        // back below.
+        Haptics.commit()
         isSubmitting = true
         errorMessage = nil
         Task {
-            errorMessage = await model.signIn(email: email, password: password)
+            let rejected = await model.signIn(email: email, password: password)
+            // A rejected credential is written into the form, which is where the eyes
+            // already are only if the user has begun to suspect something. Success
+            // needs nothing here: the whole screen is replaced by the app.
+            if rejected != nil { Haptics.failure() }
+            errorMessage = rejected
             isSubmitting = false
         }
     }

@@ -135,6 +135,22 @@ final class SynapseAppModel {
             cancelNoticeTimer(dropped)
         }
         syncNoticeTimers()
+        // The bar is where every failure in the app ends up, so this is the one place
+        // that has to feel like one — a refusal that only changes a line of text is,
+        // from a finger's distance, indistinguishable from the press not registering.
+        //
+        // Two conditions, and both are about not crying wolf. `revision == 0` means the
+        // id was not already up, so a reconnect loop re-posting the same sentence
+        // restarts the message without restarting the buzz. Being in `armed` means it
+        // is on screen now rather than queued behind two others — a haptic that lands
+        // three seconds before its message reads as belonging to whatever the user was
+        // doing at the time. Only failures: a success that matters fires its own, at
+        // the call site that knows what succeeded (see `Haptics`).
+        if tone == .failure,
+           let posted = notices.armed.first(where: { $0.id == key }),
+           posted.revision == 0 {
+            Haptics.failure()
+        }
         // Posted from here rather than from the view: the bar is a transient overlay that
         // never takes focus, so an announcement is the only way the sentence is reached
         // at all — and doing it here means it happens once, however many screens happen
@@ -248,6 +264,12 @@ final class SynapseAppModel {
         terminalMessages.append(
             TerminalMessage(id: key, sessionId: sessionId, text: text, opensSettings: opensSettings)
         )
+        // Unlike the notice bar, every message on this list is a refusal — a command
+        // the computer would not take, a microphone that would not open, a file that
+        // would not read — and most of them land while the reason is behind the
+        // user's own hand. The early return above means a repeat of the same refusal
+        // restarts the sentence without restarting the buzz.
+        Haptics.failure()
         if terminalMessages.count > Self.maxTerminalMessages {
             terminalMessages.removeFirst(terminalMessages.count - Self.maxTerminalMessages)
         }
@@ -1633,12 +1655,33 @@ final class SynapseAppModel {
 
     private func update(_ attachmentId: String, _ change: (inout TerminalAttachment) -> Void) {
         guard let index = relayAttachments.firstIndex(where: { $0.id == attachmentId }) else { return }
-        change(&relayAttachments[index])
+        apply(change, at: index)
     }
 
     private func update(byDriveItemId itemId: String, _ change: (inout TerminalAttachment) -> Void) {
         guard let index = relayAttachments.firstIndex(where: { $0.driveItemId == itemId }) else { return }
+        apply(change, at: index)
+    }
+
+    /// Every attachment state change lands here, which is also where a failure is felt.
+    ///
+    /// Not at the four call sites that can fail an attachment — a new one would be
+    /// added some day and silently not buzz. Not on the state either, but on the
+    /// *transition* into it: this same path carries every progress tick, and a chip
+    /// whose reason gets rewritten is still the same failure.
+    ///
+    /// Only the failing half. A delivered file needs nothing done about it and says so
+    /// where it landed — the path appears in the terminal the user was just typing in
+    /// — and a batch of nine would turn a success into nine interruptions. A file that
+    /// did not make it is the one that leaves the user waiting for something that is
+    /// never coming, and by then they may have left the screen entirely, because the
+    /// transfer outlives it.
+    private func apply(_ change: (inout TerminalAttachment) -> Void, at index: Int) {
+        let wasFailed = relayAttachments[index].state.isFailed
         change(&relayAttachments[index])
+        if !wasFailed, relayAttachments[index].state.isFailed {
+            Haptics.failure()
+        }
     }
 
     private static func relayMessage(for error: Error) -> String {

@@ -575,7 +575,15 @@ struct TerminalKeyboardPanel: View {
         let modifier = effectiveModifier
         let supported = isSupported(character, isDigit: isDigit, modifier: modifier)
         return Button {
-            Haptics.select()
+            // A key the latched chord cannot reach is the one press on this board that
+            // does nothing at all, so it gets the refusal instead of the tick — the
+            // dimming and the orange readout are both above the user's thumb.
+            // Everything else is a step.
+            if supported {
+                Haptics.select()
+            } else {
+                Haptics.warning()
+            }
             press(character, isDigit: isDigit)
         } label: {
             Text(label(character, isDigit: isDigit, modifier: modifier))
