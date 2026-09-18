@@ -549,11 +549,24 @@ final class TerminalFlowUITests: XCTestCase {
         // changing page drops a latched modifier. It is the key that cycles Claude
         // Code's permission mode, which is why it earns a slot of its own.
         XCTAssertTrue(app.buttons["panelkey-Shift+Tab"].exists, "the common page has no ⇧tab")
-        app.buttons["panelkey-Shift+Tab"].tap()
+        // Waited for, not merely existed: the panel is still settling into the layout
+        // when it first appears, and a tap taken against the frame it had a moment ago
+        // lands where the key no longer is. Every other press in this file that follows
+        // an appearance waits first — this one did not.
         XCTAssertTrue(
-            waitForLabel(containing: "[mock] keys key:Shift+Tab", in: app, timeout: 20),
-            "⇧tab did not reach the computer"
+            waitForHittable(app.buttons["panelkey-Shift+Tab"], timeout: 10),
+            "the ⇧tab key never became pressable"
         )
+        app.buttons["panelkey-Shift+Tab"].tap()
+        if !waitForLabel(containing: "[mock] keys key:Shift+Tab", in: app, timeout: 20) {
+            // What the screen actually holds, because "did not reach the computer" has
+            // several causes that look identical from here: the key was never pressed,
+            // the press was refused, or the terminal is not showing what arrived. The
+            // last lines are the ones that answer it — a refusal prints its own marker.
+            capture(app, name: "22-shifttab-not-reached")
+            let visible = app.staticTexts.allElementsBoundByIndex.suffix(12).map(\.label)
+            XCTFail("⇧tab did not reach the computer; last lines: \(visible)")
+        }
 
         for (category, key) in [("方向", "panelkey-ArrowUp"), ("功能", "panelkey-PageUp"),
                                 ("全键盘", "panelkey-modifier-Ctrl")] {
@@ -974,6 +987,178 @@ final class TerminalFlowUITests: XCTestCase {
         return terminal
     }
 
+    /// The whole point of the restructure: the commands scroll, the two fixed keys do not.
+    ///
+    /// Before this, the bar was one `ScrollView` and the key at its leading edge slid off
+    /// the screen along with the commands — so the only control that opens the keyboard
+    /// panel became the one control that could not be found. The check that says the fix
+    /// works is that the keys' own frames do not move, not merely that they still exist.
+    func testTheTwoFixedKeysStayPutWhileTheCommandsScroll() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        // Fourteen commands — past one screen at any width, which is what a user with a
+        // list of their own has.
+        var many: [[String: Any]] = [
+            button("enter", "回车", "key", key: "Enter"),
+            button("interrupt", "Ctrl+C", "key", key: "Ctrl+C"),
+            button("slash-exit", "/exit", "command", text: "/exit", pressEnter: true),
+            button("slash-clear", "/clear", "command", text: "/clear", pressEnter: true),
+        ]
+        for index in 1...10 {
+            many.append(button(
+                "bulk-\(index)", "第\(index)条", "custom",
+                text: "pnpm run task-\(index)", pressEnter: true
+            ))
+        }
+        try setMockToolbar(many)
+
+        let keyboardKey = app.buttons["toolbar-keyboard"]
+        let panelKey = app.buttons["toolbar-all"]
+        XCTAssertTrue(panelKey.waitForExistence(timeout: 15), "the panel key never arrived")
+        let keyboardFrame = keyboardKey.frame
+        let panelFrame = panelKey.frame
+
+        let bar = app.scrollViews["toolbar-scroll"]
+        XCTAssertTrue(bar.exists, "the commands are not the scroll view")
+        bar.swipeLeft()
+        bar.swipeLeft()
+
+        // Scrolled to the far end: the last command is now on screen...
+        XCTAssertTrue(
+            app.buttons["toolbar-bulk-10"].waitForExistence(timeout: 10),
+            "the command strip never scrolled to the end"
+        )
+        // ...and the two keys are exactly where they were, still on screen.
+        XCTAssertTrue(keyboardKey.isHittable, "the keyboard key slid out of the bar")
+        XCTAssertTrue(panelKey.isHittable, "the panel key slid out of the bar")
+        XCTAssertEqual(keyboardKey.frame, keyboardFrame, "the keyboard key moved while the commands scrolled")
+        XCTAssertEqual(panelKey.frame, panelFrame, "the panel key moved while the commands scrolled")
+        capture(app, name: "21-fixed-keys-scrolled")
+
+        // Left as the tests that follow expect it.
+        try setMockToolbar([
+            button("enter", "回车", "key", key: "Enter"),
+            button("interrupt", "Ctrl+C", "key", key: "Ctrl+C"),
+            button("slash-exit", "/exit", "command", text: "/exit", pressEnter: true),
+            button("slash-clear", "/clear", "command", text: "/clear", pressEnter: true),
+            button("mock-deploy", "部署", "custom", text: "pnpm mock-deploy", pressEnter: true),
+            button("mock-port", "查端口", "custom", text: "lsof -i :3001", pressEnter: false),
+        ])
+    }
+
+    /// An edit on the computer reaches the phone, and the phone replaces rather than merges.
+    ///
+    /// The same event `testToolbarFollowsTheComputerWhenItsCommandsChange` pins down for
+    /// the commands, on the other list. A merge would leave a sentence the user deleted
+    /// on their computer showing forever on the phone.
+    func testPhraseEditsOnTheComputerReachThePhone() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        try setMockQuickPhrases([["id": "q1", "content": "第一版"]])
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        segment.buttons["快捷输入"].tap()
+        XCTAssertTrue(
+            app.staticTexts["phrase-row-q1"].waitForExistence(timeout: 15),
+            "the sentence never reached the phone"
+        )
+        XCTAssertEqual(app.staticTexts["phrase-row-q1"].label, "第一版")
+
+        // Edited on the computer, keeping its id — which is how a rename arrives.
+        try setMockQuickPhrases([["id": "q1", "content": "改过之后的那一句"]])
+        XCTAssertTrue(
+            waitForLabel(containing: "改过之后的那一句", in: app, timeout: 15),
+            "the phone is still showing the old sentence"
+        )
+
+        // Deleted, leaving a computer that has said it has none — an empty state, not the
+        // segment control disappearing, which is the other answer entirely.
+        try setMockQuickPhrases([])
+        XCTAssertTrue(
+            app.staticTexts["phrase-row-q1"].waitForNonExistence(timeout: 15),
+            "a sentence deleted on the computer is still on the phone"
+        )
+        XCTAssertTrue(app.staticTexts["shortcut-phrases-empty"].waitForExistence(timeout: 10))
+        XCTAssertTrue(segment.exists, "an empty list took the segments away with it")
+
+        // Left as the tests that follow expect it.
+        try setMockQuickPhrases(defaultMockQuickPhrases)
+    }
+
+    /// The panel comes back on the segment it was left on, across a relaunch.
+    ///
+    /// It is a setting rather than a per-visit choice, so it outlives the process — and
+    /// it is deliberately *not* corrected when the remembered segment is empty: swapping
+    /// the user's own last choice for another one silently is worse than letting them see
+    /// an empty state, because the empty state says why it is empty.
+    func testThePanelRemembersWhichSegmentWasLastOpen() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        // Set rather than assumed. What is being tested is that a *change* to the segment
+        // survives a close and a relaunch — not what it happened to be when this test
+        // started, which depends on every test that ran before it and on whatever the
+        // simulator's defaults still hold from the last run.
+        if !segment.buttons["快捷命令"].isSelected {
+            segment.buttons["快捷命令"].tap()
+        }
+        XCTAssertTrue(segment.buttons["快捷命令"].isSelected, "the panel would not go back to the commands")
+        segment.buttons["快捷输入"].tap()
+        XCTAssertTrue(
+            app.staticTexts["phrase-row-mock-log"].waitForExistence(timeout: 10),
+            "the sentences never appeared"
+        )
+
+        // Closed and reopened in the same run. The backdrop is the half of the screen
+        // above the sheet, minus the strip at the very top that belongs to the status bar.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        XCTAssertTrue(segment.waitForNonExistence(timeout: 10), "the panel did not close")
+        app.buttons["toolbar-all"].tap()
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel did not reopen")
+        XCTAssertTrue(
+            segment.buttons["快捷输入"].isSelected,
+            "the panel came back on a different segment"
+        )
+
+        // And across a relaunch, which is what makes it a setting rather than a courier.
+        app.terminate()
+        app.launch()
+        signIn(app)
+        // A relaunch may restore straight into the terminal it was on. Opening it again
+        // is what a launch from the list needs, and a no-op when it is already up.
+        if !app.buttons["toolbar-all"].waitForExistence(timeout: 5) {
+            openClaudeCodeTerminal(app)
+        }
+        app.buttons["toolbar-all"].tap()
+        let afterRelaunch = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(afterRelaunch.waitForExistence(timeout: 10), "the panel did not reopen after a relaunch")
+        XCTAssertTrue(
+            afterRelaunch.buttons["快捷输入"].isSelected,
+            "the remembered segment did not survive a relaunch"
+        )
+
+        // Put back on the commands: the tests that follow open the panel expecting them,
+        // and this preference is the app's own, not the mock's.
+        afterRelaunch.buttons["快捷命令"].tap()
+        XCTAssertTrue(app.buttons["shortcut-enter"].waitForExistence(timeout: 10))
+    }
+
     /// The panel's command section: the whole list at once, and it sends like the bar.
     func testTheCommandPanelShowsEveryCommandAndStillSendsOne() throws {
         let app = XCUIApplication()
@@ -985,6 +1170,15 @@ final class TerminalFlowUITests: XCTestCase {
         let panelKey = app.buttons["toolbar-all"]
         XCTAssertTrue(panelKey.waitForExistence(timeout: 15), "the bar has no key into the command panel")
         panelKey.tap()
+
+        // Which segment the panel opens on is a setting of the app's own that outlives
+        // this test, so this one asks for the commands rather than assuming they are what
+        // came up. The tests that switch segments leave it switched — deliberately, since
+        // that is what the setting is — and a test that assumed otherwise would pass or
+        // fail on the order it happened to run in.
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        segment.buttons["快捷命令"].tap()
 
         // Everything the computer offers, which is the point of the panel: the bar has
         // to be scrolled to be read, and this does not.
@@ -1007,6 +1201,15 @@ final class TerminalFlowUITests: XCTestCase {
             app.buttons["shortcut-enter"].waitForNonExistence(timeout: 10),
             "the panel stayed open after a command was sent"
         )
+
+        // Running a command focuses the input field, which raises the system keyboard —
+        // the same thing pressing a command on the bar does, and the reason the keyboard
+        // exists there at all. Left up, it is still animating into place when the next
+        // test in the class starts, and a key press that lands mid-transition goes
+        // nowhere. Put away here, the way a user puts it away and the way the other
+        // tests in this file leave the screen.
+        app.descendants(matching: .any)["terminal.text"]
+            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
 
         // Left as the bar's own test needs it: the mock outlives this run.
         try setMockToolbar([
@@ -1053,9 +1256,11 @@ final class TerminalFlowUITests: XCTestCase {
             "the sentence did not reach the input field: \(field.value as? String ?? "(nil)")"
         )
         // Not sent. The computer echoes every command it receives, so an echo is proof
-        // one went out — and there must not be one.
+        // one went out — and there must not be one. Matched on the sentence rather than
+        // on the echo prefix: the mock outlives this test and its terminal still holds
+        // the commands earlier tests sent, so the prefix on its own is always on screen.
         XCTAssertFalse(
-            waitForLabel(containing: "mock desktop received:", in: app, timeout: 3),
+            waitForLabel(containing: "received: 这次改动", in: app, timeout: 3),
             "tapping a sentence sent it"
         )
         // And the panel closed, so the reader is looking at what they are about to send.
@@ -1064,6 +1269,106 @@ final class TerminalFlowUITests: XCTestCase {
             "the panel stayed open over the field it just filled"
         )
         capture(app, name: "17-phrase-filled")
+    }
+
+    /// A computer too old to have been asked gets a one-section panel.
+    ///
+    /// The other half of the pair. "This computer has none" and "this computer has never
+    /// heard of these" are different answers, and they arrive as different things: an
+    /// empty list in the first case, no message at all in the second. Only the second
+    /// must leave the segment control off — a computer that cannot answer must not be
+    /// drawn as having answered "none", which a user reads as their own sentences having
+    /// gone missing.
+    ///
+    /// Run with a mock started `--no-toolbar`, which suppresses this message along with
+    /// the toolbar, and `SYNAPSE_TEST_OLD_DESKTOP=1` — the same arrangement
+    /// `testAnOldComputerStillGetsAUsableBar` uses, and for the same reason: a phone
+    /// cannot be told a computer is old, it can only fail to be told anything.
+    func testAnOldComputerGetsNoPhraseSegment() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["SYNAPSE_TEST_OLD_DESKTOP"] == "1",
+            "run with a mock desktop started --no-toolbar and SYNAPSE_TEST_OLD_DESKTOP=1"
+        )
+
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        app.buttons["toolbar-all"].tap()
+        XCTAssertTrue(
+            app.buttons["shortcut-enter"].waitForExistence(timeout: 10),
+            "the panel never opened, so the segment assertion below would prove nothing"
+        )
+        XCTAssertFalse(
+            app.segmentedControls["shortcut-panel-segment"].exists,
+            "a computer that never sent the sentences was drawn as having none"
+        )
+        XCTAssertFalse(
+            app.staticTexts["shortcut-phrases-empty"].exists,
+            "an unanswered computer was shown the empty state meant for one that answered"
+        )
+        capture(app, name: "20-panel-old-desktop")
+    }
+
+    /// The eye beside a sentence reads it; it does not use it.
+    ///
+    /// The two controls sit in the same row and mean opposite things — one puts the
+    /// sentence in the composer, the other only shows it — so the test that matters is
+    /// that pressing the eye leaves the composer exactly as it was. A sentence typed into
+    /// the field by someone who only wanted to read the end of it is the failure.
+    func testTheEyeShowsTheWholeSentenceWithoutUsingIt() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        segment.buttons["快捷输入"].tap()
+
+        // A sentence long enough that one line cannot hold it, which is the whole reason
+        // the key exists. The list shows the beginning; the preview shows all of it.
+        let long = "这次改动整理成提交说明，中文，说清楚改了什么、为什么改"
+        let row = app.staticTexts["phrase-row-mock-commit"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the sentences never appeared")
+        XCTAssertTrue(row.label.hasPrefix("这次改动整理成提交说明"), "the row is not the sentence it should be")
+
+        app.buttons["phrase-preview-mock-commit"].tap()
+
+        let preview = app.staticTexts["phrase-preview-text"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 10), "the preview never opened")
+        XCTAssertEqual(preview.label, long, "the preview is not showing the whole sentence")
+        capture(app, name: "19-phrase-preview")
+
+        // The field is untouched: reading a sentence is not using it.
+        let field = app.textFields.firstMatch
+        let before = field.value as? String ?? ""
+        XCTAssertFalse(before.contains("整理成提交说明"), "opening the preview filled the input field")
+
+        // Closing it comes back to the panel, still open and still on this segment —
+        // the preview floats over the panel rather than replacing it. Dismissed by the
+        // dimmed strip above it, which is one of the two ways the design allows and the
+        // one a test can aim at without guessing at the sheet's drag geometry. Aimed
+        // well below the top of the screen: a sheet leaves roughly half of it dimmed,
+        // and the first few percent belong to the status bar, which swallows touches
+        // rather than passing them on to the sheet underneath.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        XCTAssertTrue(
+            preview.waitForNonExistence(timeout: 10),
+            "the preview did not close"
+        )
+        XCTAssertTrue(
+            app.buttons["phrase-preview-mock-log"].waitForExistence(timeout: 10),
+            "closing the preview closed the panel behind it"
+        )
+        XCTAssertEqual(
+            segment.buttons["快捷输入"].isSelected, true,
+            "the panel came back on a different segment"
+        )
     }
 
     /// A computer that has none says so, and the phone shows an empty state — not an

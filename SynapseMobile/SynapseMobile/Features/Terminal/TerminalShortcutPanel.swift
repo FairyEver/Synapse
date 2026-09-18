@@ -53,6 +53,9 @@ struct TerminalShortcutPanel: View {
     /// empty and a jump says nothing at all.
     @AppStorage("terminal.shortcutPanel.segment") private var segmentRaw = ShortcutPanelSegment.commands.rawValue
 
+    /// The sentence whose full text is being read, if any.
+    @State private var previewing: MobileQuickPhrase?
+
     private var segment: Binding<ShortcutPanelSegment> {
         Binding(
             get: { ShortcutPanelSegment(rawValue: segmentRaw) ?? .commands },
@@ -79,7 +82,7 @@ struct TerminalShortcutPanel: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 6)
+                .padding(.bottom, 12)
                 .accessibilityIdentifier("shortcut-panel-segment")
             }
 
@@ -88,6 +91,11 @@ struct TerminalShortcutPanel: View {
             case .phrases: phraseList
             }
         }
+        // Room for the sheet's drag indicator, which the system draws *over* this content
+        // rather than above it — so without this the first thing in the panel is drawn
+        // under the grabber. The prototype's own number: ten above the grabber, five for
+        // it, eight below.
+        .padding(.top, 24)
         // The sheet's own base is the grouped grey, and it is set here rather than inside
         // either section so that switching segments cannot change it. It is also what the
         // command pills stand on: their resting fill is the plain background, and on a
@@ -98,6 +106,14 @@ struct TerminalShortcutPanel: View {
         // a shorter segment was chosen.
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        // A second sheet over this one rather than a replacement for it, so closing the
+        // preview comes back to the panel still open and still on the same segment — the
+        // reader was looking at one sentence, not leaving the list.
+        .sheet(item: $previewing) { phrase in
+            PhrasePreviewSheet(phrase: phrase)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: - 快捷命令
@@ -177,27 +193,76 @@ struct TerminalShortcutPanel: View {
         .listStyle(.insetGrouped)
     }
 
-    /// One sentence, on one line.
+    /// One sentence, and the key that shows the part of it a single line cannot.
     ///
-    /// The row is not a `Button`. It will hold a control of its own — the key that shows
-    /// the part of the sentence a single line cannot — and a button inside a button is
-    /// not something SwiftUI defines. Tapping it is a gesture rather than a button so
-    /// that the two can coexist.
+    /// The row is not a `Button`, and the preview key is one. A button inside a button
+    /// is not something SwiftUI defines, and the two do different things anyway: tapping
+    /// the row puts the sentence in the composer, while the key only shows it. The key
+    /// takes its own taps because it is the closer control, so the row's gesture never
+    /// sees them.
     private func row(_ phrase: MobileQuickPhrase) -> some View {
-        Text(phrase.content)
-            // One line always, ellipsised at the tail: a sentence allowed to wrap would
-            // turn the card into a wall and lose the whole point of the list, which is
-            // reading a dozen of them at a glance.
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // The whole row is the target, text and empty space alike — not just the
-            // sentence, which is one line of many and often shorter than the row.
-            .contentShape(Rectangle())
-            .onTapGesture {
+        HStack(spacing: 8) {
+            Text(phrase.content)
+                // One line always, ellipsised at the tail: a sentence allowed to wrap
+                // would turn the card into a wall and lose the whole point of the list,
+                // which is reading a dozen of them at a glance. What does not fit is
+                // what the eye beside it is for.
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // On the sentence rather than on the row: the row is an `HStack` with a
+                // button in it, and `HStack` is not something the accessibility tree has
+                // a name for. This is also the element a tap has to land on, which is
+                // what makes it the row's address rather than only its label.
+                .accessibilityIdentifier("phrase-row-\(phrase.id)")
+
+            Button {
                 Haptics.select()
-                onInsert(phrase)
+                previewing = phrase
+            } label: {
+                Image(systemName: "eye")
+                    .font(.system(size: 19))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
-            .accessibilityIdentifier("phrase-row-\(phrase.id)")
+            .buttonStyle(.plain)
+            .accessibilityLabel("看全文")
+            .accessibilityIdentifier("phrase-preview-\(phrase.id)")
+        }
+        // The whole row is the target, text and empty space alike — not just the
+        // sentence, which is one line of many and often shorter than the row.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Haptics.select()
+            onInsert(phrase)
+        }
+    }
+}
+
+/// One sentence, in full, read-only.
+///
+/// The answer to the ellipsis in the list: the part a single line could not hold is
+/// usually the part that decides whether this is the sentence you wanted.
+///
+/// No "use this" button, deliberately. The row behind already does that, and a second
+/// way in — from a sheet that is meant to be a glance — would make reading a sentence
+/// an act with consequences.
+private struct PhrasePreviewSheet: View {
+    let phrase: MobileQuickPhrase
+
+    var body: some View {
+        ScrollView {
+            Text(phrase.content)
+                .font(.body)
+                // Ordinary selectable text, so the system supplies long-press selection
+                // and copy. That is the whole interaction: the only thing to do with a
+                // sentence here is read it, and the only thing to do with a part of it
+                // is take it.
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .accessibilityIdentifier("phrase-preview-text")
+        }
     }
 }
