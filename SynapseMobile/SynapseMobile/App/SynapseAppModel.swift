@@ -399,6 +399,9 @@ final class SynapseAppModel {
         // These are another account's computers' commands, and nothing here is
         // persisted, so the next sign-in starts from the fallback as it should.
         toolbar.reset()
+        // 别名的坐标系是"这个人、这一份日志"。换个人接着数 `s3`，会让下一个人
+        // 以为那两份日志之间有什么关系。
+        DiagnosticLog.resetAliases()
         // Those are another account's computers' sentences, and nothing here persists.
         quickPhrases.reset()
         await apiClient.logout()
