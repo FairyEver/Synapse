@@ -74,7 +74,7 @@ struct HoldToTalkPresentationTests {
         #expect(value.controlsEnabled == false)
         #expect(value.panelVisible)
         #expect(value.tone == .normal)
-        #expect(value.hint == "上滑到面板 · 左取消 右固定")
+        #expect(value.hint == "上滑可取消或固定")
     }
 
     /// **蒙层不是一按就盖。** 它由「往上滑压到面板上」请出来 —— 一按就摆出两个选项，
@@ -88,8 +88,12 @@ struct HoldToTalkPresentationTests {
     }
 
     /// 面板里一个字都还没有时得说点什么，否则按住的那几秒是一片空白。
-    @Test func anEmptyPanelSaysItIsRecording() {
-        #expect(presentation(.listening).placeholder == "录音中")
+    ///
+    /// 说的是**用户该干什么**，不是「我在识别」—— 后者已经写在状态行上了，正文再写一遍
+    /// 就是同一句话在一屏上出现两次。
+    @Test func anEmptyPanelAsksForWords() {
+        #expect(presentation(.listening).placeholder == "请说话")
+        #expect(presentation(.listening).placeholder != presentation(.listening).stateText)
         #expect(presentation(.listening).text.isEmpty)
         #expect(presentation(.listening).text.caret == false)
     }
@@ -119,7 +123,7 @@ struct HoldToTalkPresentationTests {
         #expect(value.tone == .cancel)
         #expect(value.barLabel == "松手 取消")
         // 面板这一行此刻被蒙层盖着，它说什么是「手指不在面板上」时才需要管的事。
-        #expect(value.hint == "上滑到面板 · 左取消 右固定")
+        #expect(value.hint == "上滑可取消或固定")
     }
 
     @Test func pressingTheRightHalfReadiesTheLock() {
@@ -169,7 +173,7 @@ struct HoldToTalkPresentationTests {
         #expect(value.recording)
         #expect(value.panelVisible)
         #expect(value.placeholder == "没有听到声音")
-        #expect(value.hint == "上滑到面板 · 左取消 右固定")
+        #expect(value.hint == "上滑可取消或固定")
     }
 
     /// 已经听到的字比失败本身重要。
@@ -197,7 +201,7 @@ struct HoldToTalkPresentationTests {
         #expect(value.locked)
         #expect(value.panelVisible)
         #expect(value.choicesVisible == false)
-        #expect(value.stateText == "已固定 · 持续录音")
+        #expect(value.stateText == "已固定 · 持续识别")
         #expect(value.text.stable == "把日志拉出来")
         // 那一格画的已经是「完成」，不再是按住说话。
         #expect(value.barLabel == "完成")

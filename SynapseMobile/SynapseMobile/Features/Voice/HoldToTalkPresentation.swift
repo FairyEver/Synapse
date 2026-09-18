@@ -87,15 +87,28 @@ struct HoldToTalkPresentation: Equatable {
     /// 它只在**手指不在面板上**的时候看得见 —— 手指一压上去，整块面板就被蒙层盖住了。
     /// 所以这一句要说的是那两个去处在哪，而不是「松手会怎样」：后者已经写在输入栏那一格
     /// 上了（`barLabel`），这里再说一遍是同一件事在两处说。
-    static let idleHint = "上滑到面板 · 左取消 右固定"
+    ///
+    /// **不写「左」「右」。** 它只在按住的那几秒里露一次脸，要在一眼里读完；左右是滑上去
+    /// 之后蒙层自己摆出来的（那两半上就写着「取消」「固定」），不用提前背。
+    /// 也不写「面板」—— 屏幕上看不见这个名字。
+    static let idleHint = "上滑可取消或固定"
     static let lockedHint = "点击底部「完成」结束并发送"
 
     /// 面板第一行左边。
-    static let recordingState = "录音中"
-    static let lockedState = "已固定 · 持续录音"
+    ///
+    /// 说的是**这次交互在干什么**：把说的话变成字，不是「录下来」。声音是边收边转的，
+    /// 客户端与服务端都不落盘 —— 一个字都没认出来时也不会留下录音。
+    static let recordingState = "识别中"
+    static let lockedState = "已固定 · 持续识别"
 
-    /// 来电或切后台把这次录音打断了。
-    static let interruptedNotice = "录音被打断"
+    /// 来电或切后台把这次识别打断了。
+    static let interruptedNotice = "识别被打断"
+
+    /// 一个字都还没认出来时，面板正文里那句话。
+    ///
+    /// **与 `recordingState` 是两件事，不能复用**：状态行已经在说「识别中」，正文再写一遍
+    /// 就是同一句话在一屏上出现两次。正文这一格说的是用户现在该干什么。
+    static let emptyPlaceholder = "请说话"
 
     /// 麦克风权限被拒时那条提示。
     ///
@@ -135,9 +148,9 @@ struct HoldToTalkPresentation: Equatable {
         tone = locked ? .lock : (recording ? Self.toneFor(gesture) : .normal)
         self.text = text
         // 一个字都还没有时，面板里得说点什么，否则按住的那几秒是一片空白。
-        // 静音满 3 秒是控制器给的那条既有语义：录音继续，只是换一句话。
+        // 静音满 3 秒是控制器给的那条既有语义：识别继续，只是换一句话。
         placeholder = text.isEmpty
-            ? (phase == .failed(.noSpeech) ? VoiceInputController.Failure.noSpeech.message : Self.recordingState)
+            ? (phase == .failed(.noSpeech) ? VoiceInputController.Failure.noSpeech.message : Self.emptyPlaceholder)
             : ""
         hint = Self.hint(visible: listening || wrappingUp || locked, locked: locked, wrappingUp: wrappingUp)
         timerText = Self.timer(elapsed)

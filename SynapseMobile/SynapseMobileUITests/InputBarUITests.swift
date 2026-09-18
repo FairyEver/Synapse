@@ -159,9 +159,12 @@ final class InputBarUITests: XCTestCase {
         let cancel = app.buttons["voice-lock-cancel"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 6), "固定之后面板上没有出现「取消」")
         // 顶上那行不是废话：麦克风还开着这件事不写出来只能靠猜。
-        XCTAssertTrue(app.staticTexts["已固定 · 持续录音"].exists, "面板没有报「已固定」")
+        XCTAssertTrue(app.staticTexts["已固定 · 持续识别"].exists, "面板没有报「已固定」")
         // 手指走了，那层蒙层就该收起来 —— 留着它等于还在教人滑。
         XCTAssertFalse(app.descendants(matching: .any)["voice-zone-cancel"].exists, "固定之后蒙层还盖着")
+        // 面板自己也认一遍：`voice-panel` 这个 id 要在这里坐实能被查到，另一条测试才敢
+        // 拿「面板不在了」当收尾结束的信号（按面板上的字认，文案一改就恒为真）。
+        XCTAssertTrue(app.descendants(matching: .any)["voice-panel"].exists, "voice-panel 这个 id 查不到")
         XCTAssertEqual(hold.label, "完成", "固定之后那一格不是「完成」")
         shot(app, "30-locked")
 
@@ -212,7 +215,11 @@ final class InputBarUITests: XCTestCase {
         XCTAssertTrue(hold.waitForExistence(timeout: 5), "语音态没有「按住 说话」那一格")
         hold.press(forDuration: 1.2)
         // 收尾要走完才谈得上「说完了」：面板收掉就说明落定结束了（§4.6）。
-        waitUntil(timeout: 10) { !app.staticTexts["录音中"].exists }
+        //
+        // 认的是面板本身（`voice-panel`），不是上面那行字。按文案认的写法在文案一改之后
+        // 就恒为真 —— 面板还挂着，这条断言照样绿。
+        let panel = app.descendants(matching: .any)["voice-panel"]
+        waitUntil(timeout: 10) { !panel.exists }
 
         XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "voice", "松手之后被打回了键盘态")
         XCTAssertTrue(hold.waitForExistence(timeout: 5), "说完之后「按住 说话」那一格不见了")
