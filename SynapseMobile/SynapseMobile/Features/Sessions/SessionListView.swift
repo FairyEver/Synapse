@@ -4,8 +4,8 @@ import SwiftUI
 ///
 /// Rows answer "what is this terminal doing right now" without opening anything,
 /// which is the whole point of the phone: the common visit ends here, not in a
-/// terminal. That is why the last output line is on the row despite costing
-/// visual tidiness.
+/// terminal. That is why the last output line is on the row — and why the row
+/// gives it a line of its own even when it has nothing to put there.
 struct SessionListView: View {
     @Environment(SynapseAppModel.self) private var model
     @Environment(TerminalDisplaySettings.self) private var display
@@ -302,12 +302,12 @@ struct SessionRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.head)
-                    if !session.lastLine.isEmpty {
-                        Text(session.lastLine)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                    // Drawn whether or not there is anything to say, so that every
+                    // row is the same height.
+                    Text(session.rowLastLine)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     if session.attention.isWaiting {
                         Text(session.attention.kind == "approval" ? "等待确认" : "等待输入")
                             .font(.caption2.weight(.semibold))
@@ -333,6 +333,20 @@ struct SessionRow: View {
         if seconds < 3600 { return "\(seconds / 60) 分" }
         if seconds < 86_400 { return "\(seconds / 3600) 小时" }
         return "\(seconds / 86_400) 天"
+    }
+}
+
+extension MobileSummarySession {
+    /// The row's third line: the terminal's last readable output, or a space when
+    /// it has nothing readable on screen.
+    ///
+    /// A space rather than an empty string: this line exists to hold its height,
+    /// and a space is something to lay out where `""` is not. It is a space rather
+    /// than a frame height because a fixed point value would be wrong at every
+    /// Dynamic Type size but one, and it is drawn rather than skipped because a row
+    /// that comes and goes by a line makes the list jump every time a summary lands.
+    var rowLastLine: String {
+        lastLine.isEmpty ? " " : lastLine
     }
 }
 
