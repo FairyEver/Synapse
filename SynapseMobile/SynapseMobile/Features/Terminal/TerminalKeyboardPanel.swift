@@ -199,10 +199,30 @@ struct TerminalKeyPill: ViewModifier {
     /// Drawn inverted, the way iOS draws a held shift. This is not decoration: for a
     /// latched modifier it is the entire feedback the interaction has.
     var prominent: Bool = false
+    /// Drawn in the fill iOS uses for a control that is being pressed, for a key that
+    /// is held rather than latched — the toolbar's panel key, which stays down for as
+    /// long as the panel it opened is up.
+    ///
+    /// A shade below `prominent` on purpose: opening a panel is a state, not the
+    /// committing action `prominent` is reserved for, and inverting a key that is
+    /// merely open would make the toolbar's loudest control the one that does least.
+    var pressed: Bool = false
     /// The room between the label and the pill's edge. Ten keys have to share one row
     /// on the full keyboard, so its keys are about a third the width of these and
     /// cannot afford the padding a two-key row can.
     var horizontalPadding: CGFloat = 12
+
+    /// The pill's own fill, in the order of how loud the state is.
+    ///
+    /// These are the three system fills iOS is made of, and the reason to name them
+    /// rather than pick colours: `secondarySystemBackground` is the resting pill and
+    /// `systemFill` is what iOS draws under a press, so the held state needs no
+    /// definition of its own to look like one.
+    private var fill: Color {
+        if prominent { return Color.primary }
+        if pressed { return Color(uiColor: .systemFill) }
+        return Color(uiColor: .secondarySystemBackground)
+    }
 
     func body(content: Content) -> some View {
         content
@@ -212,9 +232,7 @@ struct TerminalKeyPill: ViewModifier {
             .padding(.vertical, 9)
             .frame(minWidth: minWidth, minHeight: 36)
             .background(
-                prominent
-                    ? Color.primary
-                    : Color(uiColor: .secondarySystemBackground),
+                fill,
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             // The pill is the control; this is the room around it. Applied after the
@@ -228,11 +246,13 @@ extension View {
     func terminalKeyPill(
         minWidth: CGFloat = 48,
         prominent: Bool = false,
+        pressed: Bool = false,
         horizontalPadding: CGFloat = 12
     ) -> some View {
         modifier(TerminalKeyPill(
             minWidth: minWidth,
             prominent: prominent,
+            pressed: pressed,
             horizontalPadding: horizontalPadding
         ))
     }

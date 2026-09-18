@@ -500,8 +500,8 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertFalse(app.buttons["toolbar-clear"].exists, "Clear was projected onto the phone")
         // Read-only: managing the commands belongs to the computer.
         XCTAssertEqual(
-            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'toolbar-'")).count, 7,
-            "the bar has an unexpected number of buttons (7 = keyboard icon + 6 commands)"
+            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'toolbar-'")).count, 8,
+            "the bar has an unexpected number of buttons (8 = two fixed keys + 6 commands)"
         )
         capture(app, name: "10-toolbar-mirrored")
 

@@ -17,6 +17,9 @@ struct TerminalScreen: View {
     @State private var renamingTitle = ""
     @State private var showingStopConfirm = false
     @State private var keyboardPanelPresented = false
+    /// Whether the command panel is open. The bar's right-hand key owns this, and the
+    /// panel that reads it is presented as a sheet at the end of the screen.
+    @State private var shortcutPanelPresented = false
     @FocusState private var inputFocused: Bool
 
     @State private var showingPhotoPicker = false
@@ -595,63 +598,99 @@ struct TerminalScreen: View {
         }
     }
 
-    /// The computer's own toolbar, mirrored.
+    /// The computer's own toolbar, mirrored: two fixed keys with the commands between
+    /// them.
     ///
-    /// These are the buttons the desktop shows under its terminal — its built-ins and
-    /// whatever the user added there — with its separators in the same places. The list
-    /// is read-only: adding, editing and deleting a command belong to the computer, and
-    /// there is deliberately no pencil here.
+    /// The commands are the desktop's — its built-ins and whatever the user added there
+    /// — with its separators in the same places. The list is read-only: adding, editing
+    /// and deleting a command belong to the computer, and there is deliberately no
+    /// pencil here.
     ///
-    /// The keyboard button at the front is the one thing that is this phone's own. It
-    /// opens the panel holding the keys a bare list of commands cannot express, which is
-    /// what the ten fixed keys that used to sit here were for.
+    /// Only the middle scrolls. The whole bar used to be one `ScrollView`, which meant
+    /// the key at its leading edge slid off the screen as soon as a user had more than
+    /// a few commands — so the one control that opens the keyboard panel became the
+    /// one control that could not be found. The two fixed keys are outside the scroll
+    /// for the same reason, and they are what gives the scroll its room: they hold
+    /// their intrinsic size while the scroll view, having none, takes whatever is left.
+    /// At the narrowest iPhone that remainder is still wider than a pill, so the scroll
+    /// gives way before either key is ever compressed.
+    ///
+    /// The two fixed keys are this phone's own and are not the same thing twice:
+    /// `⌘` opens the panel of keys the system keyboard cannot express, and `⇧` opens
+    /// the full list of commands, which is the answer to having scrolled past the one
+    /// you wanted. Neither is disabled with the terminal stopped — a stopped terminal
+    /// still has an input field and still has commands worth reading.
     private var accessoryBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                Button {
-                    Haptics.select()
-                    toggleKeyboardPanel()
-                } label: {
-                    Image(systemName: "keyboard")
-                        .font(.system(size: 16))
-                }
-                .terminalKeyPill()
-                .accessibilityLabel("打开键盘")
-                .accessibilityIdentifier("toolbar-keyboard")
-
-                divider
-
-                ForEach(Array(buttons.enumerated()), id: \.element.id) { index, button in
-                    // A separator wherever the computer's own list changes kind — before
-                    // the first slash command, and before the user's own — so the two
-                    // bars read as the same list rather than merely similar ones. The
-                    // group travels with the button precisely so this needs no rule.
-                    if index > 0, buttons[index - 1].group != button.group {
-                        divider
-                    }
-                    Button(button.label) {
-                        Haptics.select()
-                        model.runToolbarButton(button, sessionId: sessionId)
-                        inputFocused = true
-                    }
-                    .terminalKeyPill()
-                    .buttonStyle(.plain)
-                    .disabled(!isRunning)
-                    .opacity(isRunning ? 1 : 0.4)
-                    // Named by the button's own id, which is stable across renames —
-                    // a test has to be able to press the same command after its label
-                    // changed, and a label is the one thing here that is the user's.
-                    .accessibilityIdentifier("toolbar-\(button.id)")
-                }
+        HStack(spacing: 8) {
+            // 左固定：键盘面板。图标由 ⌨ 换成 ⌘，因为它下面的输入栏左端已经是一颗
+            // 键盘 —— 相邻两行同一个图形会被当成同一件事。换的只是脸：它开的还是
+            // 原来那个面板，`toggleKeyboardPanel()` 一个字没改。
+            Button {
+                Haptics.select()
+                toggleKeyboardPanel()
+            } label: {
+                Image(systemName: "command")
+                    .font(.system(size: 16))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 2)
+            .terminalKeyPill()
+            .accessibilityLabel("打开键盘")
+            .accessibilityIdentifier("toolbar-keyboard")
+
+            divider
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(buttons.enumerated()), id: \.element.id) { index, button in
+                        // A separator wherever the computer's own list changes kind —
+                        // before the first slash command, and before the user's own —
+                        // so the two bars read as the same list rather than merely
+                        // similar ones. The group travels with the button precisely so
+                        // this needs no rule. It scrolls with the commands because it is
+                        // the command list's own structure, not the bar's.
+                        if index > 0, buttons[index - 1].group != button.group {
+                            divider
+                        }
+                        Button(button.label) {
+                            Haptics.select()
+                            model.runToolbarButton(button, sessionId: sessionId)
+                            inputFocused = true
+                        }
+                        .terminalKeyPill()
+                        .buttonStyle(.plain)
+                        .disabled(!isRunning)
+                        .opacity(isRunning ? 1 : 0.4)
+                        // Named by the button's own id, which is stable across renames
+                        // — a test has to be able to press the same command after its
+                        // label changed, and a label is the one thing here that is the
+                        // user's.
+                        .accessibilityIdentifier("toolbar-\(button.id)")
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+            }
+            // Named so a test can scroll it: the commands are wider than the screen once
+            // a user has a few, and a control that has been scrolled past is one a test
+            // otherwise has to guess its way back to.
+            .accessibilityIdentifier("toolbar-scroll")
+
+            divider
+
+            // 右固定：全部指令。面板开着时保持按下态，所以这颗键自己也是「面板在开
+            // 着」的那条状态指示 —— 终端在面板后面继续跑，被盖住的正是它的最新几行。
+            Button {
+                Haptics.select()
+                shortcutPanelPresented.toggle()
+            } label: {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 16))
+            }
+            .terminalKeyPill(pressed: shortcutPanelPresented)
+            .accessibilityLabel("全部指令")
+            .accessibilityIdentifier("toolbar-all")
         }
+        .padding(.horizontal, 12)
         .background(Color(uiColor: .systemBackground))
-        // Named so a test can scroll it: the bar is wider than the screen once a user
-        // has a few commands, and a control that has been scrolled past is one a test
-        // otherwise has to guess its way back to.
-        .accessibilityIdentifier("toolbar-scroll")
     }
 
     /// The keys the system keyboard cannot express, in the slot the system keyboard
