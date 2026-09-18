@@ -75,7 +75,7 @@ struct HoldToTalkPresentationTests {
 
     /// 气泡里一个字都还没有时得说点什么，否则按住的那几秒是一片空白。
     @Test func anEmptyBubbleSaysItIsListening() {
-        #expect(presentation(.listening).bubblePlaceholder == "聆听中")
+        #expect(presentation(.listening).placeholder == "聆听中")
         #expect(presentation(.listening).bubbleText.isEmpty)
         #expect(presentation(.listening).bubbleText.caret == false)
     }
@@ -84,7 +84,7 @@ struct HoldToTalkPresentationTests {
         let value = presentation(.listening, spoken)
         #expect(value.bubbleText.stable == "把日志拉出来")
         #expect(value.bubbleText.caret)
-        #expect(value.bubblePlaceholder.isEmpty)
+        #expect(value.placeholder.isEmpty)
     }
 
     /// 未定稿的那半句用户已经在屏幕上看见了，所以它也要出现在气泡里。
@@ -92,7 +92,7 @@ struct HoldToTalkPresentationTests {
         let value = presentation(.listening, AsrTranscript(stable: "", unstable: "git sta"))
         #expect(value.bubbleText.unstable == "git sta")
         #expect(value.bubbleText.caret)
-        #expect(value.bubblePlaceholder.isEmpty)
+        #expect(value.placeholder.isEmpty)
     }
 
     // MARK: - 滑动
@@ -151,14 +151,14 @@ struct HoldToTalkPresentationTests {
         let value = presentation(.failed(.noSpeech))
         #expect(value.fieldPressed)
         #expect(value.bubbleVisible)
-        #expect(value.bubblePlaceholder == "没有听到声音")
+        #expect(value.placeholder == "没有听到声音")
         #expect(value.hint == "松开 转文字")
     }
 
     /// 已经听到的字比失败本身重要。
     @Test func aFailureKeepsWhatWasHeardOnScreen() {
         let value = presentation(.failed(.noSpeech), spoken)
-        #expect(value.bubblePlaceholder.isEmpty)
+        #expect(value.placeholder.isEmpty)
         #expect(value.bubbleText.stable == "把日志拉出来")
     }
 

@@ -70,8 +70,10 @@ struct HoldToTalkPresentation: Equatable {
     let bubbleVisible: Bool
     let bubbleTone: Tone
     let bubbleText: Transcript
-    /// 气泡主体为空时显示的那句话。空串表示主体一定有字。
-    let bubblePlaceholder: String
+    /// 一个字都还没有时，气泡或锁定栏里显示的那句话。空串表示主体一定有字。
+    ///
+    /// 两处共用同一份：它们显示的是同一段字，只是落在屏幕上的位置不同（§3.7、§4.9）。
+    let placeholder: String
     /// 气泡下方那行提示。
     let hint: String
 
@@ -84,6 +86,21 @@ struct HoldToTalkPresentation: Equatable {
     /// 文件里出现。
     static let lockCancelLabel = "放弃"
     static let lockConfirmLabel = "确定"
+
+    /// 按住时那一格的图例两端（§4.5）。箭头是它们的一部分：这一格在手指底下，字要
+    /// 一眼读得出该往哪边滑。
+    static let cancelLegend = "取消 ←"
+    static let lockLegend = "→ 锁定"
+
+    /// 来电或切后台把这次录音打断了（§5.5）。本次新增的唯一一条文案。
+    static let interruptedNotice = "录音被打断"
+
+    /// 麦克风权限被拒时那条提示（§4.8）。
+    ///
+    /// 与 `VoiceInputController.begin()` 里那句是同一句话。控制器这一轮一个字不改，
+    /// 所以这里放一份常量给切换键的预检用 —— 它要在**进语音态之前**就把话说了，而
+    /// 控制器那条路只走得通「已经按下去」之后。改文案时两处一起改。
+    static let microphoneDeniedNotice = "麦克风权限未开启 · 设置 › Synapse › 麦克风"
 
     init(
         phase: VoiceInputController.Phase,
@@ -121,7 +138,7 @@ struct HoldToTalkPresentation: Equatable {
         bubbleText = text
         // 一个字都还没有时，气泡里得说点什么，否则按住的那几秒是一片空白。
         // 静音满 3 秒是控制器给的那条既有语义（§5.4）：录音继续，只是换一句话。
-        bubblePlaceholder = text.isEmpty
+        placeholder = text.isEmpty
             ? (phase == .failed(.noSpeech) ? VoiceInputController.Failure.noSpeech.message : "聆听中")
             : ""
         hint = Self.hint(visible: bubbleVisible, wrappingUp: wrappingUp, gesture: gesture)

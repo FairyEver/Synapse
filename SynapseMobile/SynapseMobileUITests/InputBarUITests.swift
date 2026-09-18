@@ -100,6 +100,137 @@ final class InputBarUITests: XCTestCase {
         shot(app, "12-back-to-keyboard")
     }
 
+    /// §8 第 12 条：左区松手 = 这一段丢掉，而且**留在语音态**。
+    ///
+    /// 按住**期间**的样子（气泡浮出来、滑到左区提示变「松开 取消」、滑回来复原）在这
+    /// 里断言不了：`press(forDuration:thenDragTo:)` 是一次全程阻塞的调用，而 XCUITest
+    /// 的查询必须在主线程上跑，所以没有「按住不放、同时在旁边看」的写法。那几条由
+    /// 用例录屏留下的画面与 `HoldToTalkPresentationTests` 一起作证。
+    func testSlidingLeftCancelsAndStaysInVoiceMode() throws {
+        let app = openTerminal()
+        enterVoiceMode(app)
+
+        let hold = app.descendants(matching: .any)["voice-hold"]
+        let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        centre.press(forDuration: 1.0, thenDragTo: centre.withOffset(CGVector(dx: -120, dy: 0)))
+        settle(seconds: 1)
+
+        // 取消多半是想重说一遍，让人再按一次切换键没有道理 —— 所以它**不回**键盘态。
+        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "voice", "左滑取消之后离开了语音态")
+        XCTAssertEqual(hold.label, "按住 说话", "取消之后那一格没有回到待按的样子")
+        XCTAssertFalse(app.buttons["voice-lock-discard"].exists, "左滑取消不该进锁定态")
+        XCTAssertFalse(app.textFields.firstMatch.exists, "取消留在语音态，输入框不该回来")
+        shot(app, "22-after-cancel")
+    }
+
+    /// §8 第 8～11 条：按住期间气泡浮出来，滑动让气泡下方的提示跟着变。
+    ///
+    /// 只留下一段录屏与三张图 —— 断言不了（见上一条），但松手之前的画面在录屏里，
+    /// 有没有气泡、提示是哪一句，看得到。
+    func testCaptureTheHoldAndTheTwoGestures() throws {
+        let app = openTerminal()
+        enterVoiceMode(app)
+
+        let hold = app.descendants(matching: .any)["voice-hold"]
+        let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        shot(app, "50-voice-mode-before-holding")
+        centre.press(forDuration: 2.0, thenDragTo: centre.withOffset(CGVector(dx: -120, dy: 0)))
+        settle(seconds: 1)
+        shot(app, "51-after-dragging-left-and-releasing")
+    }
+
+    /// §8 第 17～20 条：右滑锁定之后输入栏换成录音会话栏，「✗ 放弃」整段丢掉、回键盘态。
+    func testSlidingRightLocksTheRecordingAndDiscardLeavesVoiceMode() throws {
+        let app = openTerminal()
+        enterVoiceMode(app)
+
+        let hold = app.descendants(matching: .any)["voice-hold"]
+        let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        centre.press(forDuration: 1.0, thenDragTo: centre.withOffset(CGVector(dx: 120, dy: 0)))
+
+        let discard = app.buttons["voice-lock-discard"]
+        let confirm = app.buttons["voice-lock-confirm"]
+        XCTAssertTrue(discard.waitForExistence(timeout: 6), "右滑锁定之后没有出现录音会话栏")
+        XCTAssertTrue(confirm.exists, "锁定栏右端没有「确定」")
+        // 顶上那行不是废话：麦克风还开着这件事不写出来只能靠猜（§4.9）。
+        XCTAssertTrue(app.staticTexts["录音中"].exists, "锁定栏没有报「录音中」")
+        // 手指走了，气泡的差事就此交给输入栏那一格。
+        XCTAssertFalse(app.descendants(matching: .any)["voice-bubble-text"].exists, "锁定之后气泡还挂着")
+        XCTAssertFalse(hold.exists, "锁定之后那一格还是「按住 说话」")
+        shot(app, "30-locked")
+
+        discard.tap()
+        waitUntil(timeout: 5) { !discard.exists }
+        XCTAssertFalse(discard.exists, "放弃之后锁定栏还在")
+        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "keyboard", "放弃之后没有回键盘态")
+        XCTAssertTrue(app.textFields.firstMatch.exists, "放弃之后没有把输入框还回来")
+        shot(app, "31-after-discard")
+    }
+
+    /// §8 第 19 条：「确定」收尾之后也要回键盘态，走的与松手那条是同一条路。
+    func testConfirmingALockedRecordingLeavesVoiceMode() throws {
+        let app = openTerminal()
+        enterVoiceMode(app)
+
+        let hold = app.descendants(matching: .any)["voice-hold"]
+        let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        centre.press(forDuration: 1.0, thenDragTo: centre.withOffset(CGVector(dx: 120, dy: 0)))
+
+        let confirm = app.buttons["voice-lock-confirm"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 6), "右滑锁定之后没有出现录音会话栏")
+        confirm.tap()
+
+        waitUntil(timeout: 8) { !confirm.exists }
+        XCTAssertFalse(confirm.exists, "点了确定锁定栏还在")
+        XCTAssertEqual(app.buttons["voice-mode-toggle"].value as? String, "keyboard", "确定之后没有回键盘态")
+        shot(app, "32-after-confirm")
+    }
+
+    /// §8 第 5 条：进语音态要顺手把键盘收走 —— 系统的与自绘的都收。
+    func testEnteringVoiceModePutsTheKeyboardsAway() throws {
+        let app = openTerminal()
+
+        // 先把自绘键盘面板叫起来。
+        let keyboardButton = app.buttons["toolbar-keyboard"]
+        XCTAssertTrue(keyboardButton.waitForExistence(timeout: 10), "工具栏上没有键盘键")
+        keyboardButton.tap()
+        XCTAssertTrue(app.buttons["toolbar-keyboard"].exists, "键盘面板没有打开")
+
+        enterVoiceMode(app)
+        // 面板里的键在语音态下不该还留在屏幕上。
+        XCTAssertFalse(app.staticTexts["esc"].exists || app.buttons["esc"].exists, "进语音态没有收起键盘面板")
+        shot(app, "40-voice-mode-without-panel")
+    }
+
+    private func enterVoiceMode(_ app: XCUIApplication) {
+        let toggle = app.buttons["voice-mode-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10), "输入栏上没有切换键")
+        guard toggle.value as? String != "voice" else { return }
+        toggle.tap()
+        waitUntil(timeout: 10) { (toggle.value as? String) == "voice" }
+        if (toggle.value as? String) != "voice" {
+            // 三种进不去的原因各自会浮一条提示条（§3.8）。把它们留下来，否则失败信息
+            // 只能说「没进去」，而这句话对麦克风被拒、断网、和停在键盘态同样成立。
+            shot(app, "13-toggle-never-became-voice")
+            attach("diag-app-tree", app.debugDescription)
+        }
+        XCTAssertEqual(toggle.value as? String, "voice", "点了切换键没进语音态")
+    }
+
+    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline, !condition() {
+            usleep(120_000)
+        }
+    }
+
+    private func attach(_ name: String, _ text: String) {
+        let attachment = XCTAttachment(string: text)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     // MARK: - Helpers
 
     /// 输入栏上四个位置的 frame，外加终端画布的高度。
