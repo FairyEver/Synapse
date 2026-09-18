@@ -512,6 +512,27 @@ const synapseBridge: SynapseBridge = {
       sign: (input = {}) => invoke(IPC_CHANNELS.voice.signSession)(input),
     },
   },
+  meeting: {
+    recording: {
+      start: (input = {}) => invoke(IPC_CHANNELS.meeting.startRecording)(input),
+      uploadPart: (input) => invoke(IPC_CHANNELS.meeting.uploadPart)(input),
+      complete: (input) => invoke(IPC_CHANNELS.meeting.completeRecording)(input),
+      cancel: (input) => invoke(IPC_CHANNELS.meeting.cancelRecording)(input),
+      pending: () => invoke(IPC_CHANNELS.meeting.findPendingRecording)(),
+      spooledParts: (input) => invoke(IPC_CHANNELS.meeting.readSpooledParts)(input),
+      remove: (input) => invoke(IPC_CHANNELS.meeting.deleteRecording)(input),
+    },
+    entry: {
+      list: () => invoke(IPC_CHANNELS.meeting.list)(),
+      get: (input) => invoke(IPC_CHANNELS.meeting.get)(input),
+      rename: (input) => invoke(IPC_CHANNELS.meeting.rename)(input),
+      speakerName: (input) => invoke(IPC_CHANNELS.meeting.nameSpeaker)(input),
+      retryTranscription: (input) => invoke(IPC_CHANNELS.meeting.retryTranscription)(input),
+      saveMinutes: (input) => invoke(IPC_CHANNELS.meeting.saveMinutes)(input),
+      playbackUrl: (input) => invoke(IPC_CHANNELS.meeting.getPlaybackUrl)(input),
+      peaks: (input) => invoke(IPC_CHANNELS.meeting.getPeaks)(input),
+    },
+  },
   soundNotifier: {
     settings: {
       get: () => invoke(IPC_CHANNELS.soundNotifier.getSettings)(),

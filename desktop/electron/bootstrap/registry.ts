@@ -44,6 +44,7 @@ import {
   coreEventBusDescriptor,
   coreExecutionIsolationDescriptor,
   coreLoggingDescriptor,
+  coreMeetingDescriptor,
   coreModelPriceDescriptor,
   coreProcessEnvironmentDescriptor,
   coreScriptRuntimeDescriptor,
@@ -152,6 +153,7 @@ export function buildServiceRegistry(
   registry.register(coreAgentPersonasDescriptor)
   registry.register(coreSoundNotifierDescriptor)
   registry.register(coreVoiceDescriptor)
+  registry.register(coreMeetingDescriptor)
   registry.register(coreSystemNotifierDescriptor)
   registry.register(coreProblemFeedbackDescriptor)
   registry.register(coreSystemNotifierIntegrationDescriptor)

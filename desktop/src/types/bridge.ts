@@ -86,6 +86,15 @@ import type {
 } from "../../app-capabilities/secrets/shared/schema"
 import type { ConnectorItem, ConnectorListResult } from "../../app-capabilities/connectors/shared/schema"
 import type {
+  SynapseMeetingDetail,
+  SynapseMeetingFinalizeInput,
+  SynapseMeetingMinutes,
+  SynapseMeetingPendingRecording,
+  SynapseMeetingRecordingStart,
+  SynapseMeetingSpooledPart,
+  SynapseMeetingSummary,
+} from "./meeting"
+import type {
   SynapseAgentPersona,
   SynapseAgentPersonaBuiltinModelUpdateInput,
   SynapseAgentPersonaChangedEvent,
@@ -1159,6 +1168,27 @@ export type SynapseBridge = {
     }
     session: {
       sign: (input?: SynapseVoiceSessionSignInput) => Promise<SynapseVoiceSignedSession>
+    }
+  }
+  meeting: {
+    recording: {
+      start: (input?: { title?: string }) => Promise<SynapseMeetingRecordingStart>
+      uploadPart: (input: { recordingId: string; partNumber: number; bytes: Uint8Array }) => Promise<void>
+      complete: (input: SynapseMeetingFinalizeInput & { recordingId: string }) => Promise<void>
+      cancel: (input: { recordingId: string }) => Promise<void>
+      pending: () => Promise<SynapseMeetingPendingRecording | null>
+      spooledParts: (input: { recordingId: string }) => Promise<SynapseMeetingSpooledPart[]>
+      remove: (input: { meetingId: string }) => Promise<void>
+    }
+    entry: {
+      list: () => Promise<SynapseMeetingSummary[]>
+      get: (input: { meetingId: string }) => Promise<SynapseMeetingDetail>
+      rename: (input: { meetingId: string; title: string }) => Promise<void>
+      speakerName: (input: { meetingId: string; speakerId: number; name: string | null }) => Promise<void>
+      retryTranscription: (input: { meetingId: string }) => Promise<void>
+      saveMinutes: (input: { meetingId: string; minutes: SynapseMeetingMinutes }) => Promise<void>
+      playbackUrl: (input: { meetingId: string }) => Promise<{ url: string | null }>
+      peaks: (input: { meetingId: string }) => Promise<{ peaks: string | null }>
     }
   }
   soundNotifier: {

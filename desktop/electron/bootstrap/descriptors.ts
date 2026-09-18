@@ -113,6 +113,7 @@ import {
 } from "../../app-capabilities/quick-input/shared/capability"
 import { createSecretsService, type SecretsService } from "../../app-capabilities/secrets/main/service"
 import { createVoiceService, type VoiceService } from "../../app-capabilities/voice/main/service"
+import { createMeetingService, type MeetingService } from "../modules/meeting/service"
 import {
   SCRIPT_RUNTIME_SERVICE_ID,
   ScriptRuntimeService,
@@ -671,6 +672,22 @@ export const coreVoiceDescriptor: ServiceDescriptor<VoiceService> = {
         accountService.fetchAuthenticated(path, init, errorMessage),
       logger: ctx.logger.child("voice"),
     })
+  },
+}
+
+export const coreMeetingDescriptor: ServiceDescriptor<MeetingService> = {
+  id: "core.meeting",
+  criticality: "degraded",
+  create(ctx) {
+    return createMeetingService({
+      fetchAuthenticated: (path, init, errorMessage) =>
+        accountService.fetchAuthenticated(path, init, errorMessage),
+      logger: ctx.logger.child("meeting"),
+    })
+  },
+  async start(instance) {
+    // 上一次运行留下的暂存到这个点早已过了可续的窗口，启动时收一次。
+    await instance.sweepStaleSpools()
   },
 }
 

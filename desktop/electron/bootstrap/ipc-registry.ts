@@ -50,6 +50,7 @@ import { jsonRepairIpcModule } from "../../app-capabilities/json-repair/main/ipc
 import { synapseSkillIpcModule } from "../../app-capabilities/synapse-skill/main/ipc"
 import { secretsIpcModule } from "../../app-capabilities/secrets/main/ipc"
 import { skillUninstallerIpcModule } from "../../app-capabilities/skill-uninstaller/main/ipc"
+import { meetingIpcModule } from "../modules/meeting/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -102,6 +103,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(systemNotifierIpcModule, ctx)
   registry.register(jsonRepairIpcModule, ctx)
   registry.register(synapseSkillIpcModule, ctx)
+  registry.register(meetingIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
 
   return registry
@@ -153,5 +155,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   systemNotifierIpcModule,
   jsonRepairIpcModule,
   synapseSkillIpcModule,
+  meetingIpcModule,
   opsIpcModule,
 ]

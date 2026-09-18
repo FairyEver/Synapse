@@ -115,6 +115,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.file-opener",
         "core.http-test",
         "core.logging",
+        "core.meeting",
         "core.mobile-gateway",
         "core.model-price",
         "core.network-registry",
