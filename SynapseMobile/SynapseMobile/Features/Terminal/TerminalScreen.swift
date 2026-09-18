@@ -438,18 +438,15 @@ struct TerminalScreen: View {
                             onCancelLocked: cancelLockedVoice
                         )
                         .fixedSize(horizontal: false, vertical: true)
-                        // 从下沿长出来、淡进来。位移交给 `scale` 而不是 `move`：后者
-                        // 会把整块面板先压在工具栏和输入栏上再滑上来，途经的每一帧都
-                        // 盖着那两排 —— 而它们正是这一刻还要能按的东西。
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .opacity.combined(with: .scale(scale: 0.94, anchor: .bottom))
-                        )
+                        // **只淡入，不做位移也不缩放。** 面板浮上来那一刻正好撞上
+                        // `AudioCapture.start()`：它同步占着主线程去激活麦克风会话，
+                        // 任何要逐帧推进的动画都会在这里跳一下。淡入撞上同一件事只是
+                        // 稍微晚一点到，看不出破绽；缩放会明明白白地卡一下。
+                        .transition(.opacity)
                     }
                 }
                 .frame(height: 0, alignment: .bottom)
-                .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: voicePresentation.panelVisible)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: voicePresentation.panelVisible)
             }
             // 坐标系开在**最外层**，把输入栏和浮层一起圈进来。
             //

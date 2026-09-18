@@ -11,10 +11,14 @@ import SwiftUI
 /// 落点，滑动的总路程就只剩「输入栏到面板」这一段，滑到之后要选的那两半又是整块面板
 /// 那么大。省下的不只是距离，还有「往上再找一层」的那一次视线移动。
 ///
-/// 质感与动效照苹果自己的做法，而不是另发明一套：面板是一层 `.regularMaterial`，
-/// 与 app 里另一块浮在内容之上的玻璃条（`NoticeBar`）同一个圆角、同一档材质；换场用
-/// 短促的 `easeOut`（手指正压着屏幕，动画得跟着手指走，不能自说自话），面板自己则用
-/// `.snappy` 从下沿长出来。系统里关掉「减弱动态效果」时只剩淡入淡出。
+/// 面板是**实色**的，不是毛玻璃 —— 这一条是试出来的，不是偏好。它浮在终端画面上，
+/// 而终端是一屏高对比的小字：材质把那些字糊进面板，出来的是一块带灰斑的脏底子
+/// （`.ultraThickMaterial` 也还灰着一档，实色才干净）。玻璃要好看得底下本来就是
+/// 一片模糊的均匀底色，这里不是。
+///
+/// 动效只留在**手指底下**：两半之间的换场用短促的 `easeOut`（动画得跟着手指走，
+/// 不能自说自话），面板自己淡入。缩放那一下没要 —— 它正好撞上麦克风启动占住主线程
+/// 的那几十毫秒，会跳帧，而淡入撞上同一件事只是稍微晚一点、看不出破绽。
 struct TerminalVoiceDock: View {
     let presentation: HoldToTalkPresentation
     /// 面板量出来的位置，报在**手势所用的那个坐标系**里 —— 左右两半的判定用的就是它。
@@ -124,9 +128,8 @@ struct TerminalVoiceDock: View {
             }
         }
         .padding(16)
-        // 一块浮在终端上面的玻璃，而不是一张实心卡片：底下的终端糊成一层底色透上来，
-        // 深色画面上不会突然出现一块死白。做法与 `NoticeBar` 一致。
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        // 实色。理由写在文件顶上：换成材质在这里会脏，而材质本身还贵（每帧重糊一次）。
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay {
             // 玻璃与它身后的东西之间那条发丝线。材质本身不保证边界看得出来 ——
             // 底下的画面颜色接近时，没有这条线整块面板就没有形状。
@@ -225,13 +228,9 @@ struct TerminalVoiceDock: View {
                 fill: Theme.ink.opacity(1)
             )
         }
-        // 先把两半裁进面板的圆角里，再垫一层比面板稠一档的材质：压着的那半是实心填充，
-        // 没压着的那半透出这层玻璃和底下的字 —— 「盖上来了一层」要看得出来是盖的。
+        // 两半裁进面板的圆角里，各自上色。压着的那半是实心填充，没压着的那半是一块
+        // 系统灰 —— 「盖上来了一层」是看得出来的，而它不靠透光来说这件事。
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
-        .background(
-            .thinMaterial,
-            in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-        )
         .animation(armAnimation, value: presentation.cancelReady)
     }
 
@@ -241,7 +240,7 @@ struct TerminalVoiceDock: View {
     /// 名字，一个淡出一个淡入，位置不动。两样摞着放（图标在上、名字在下面留着位）会让
     /// 没选中的那半顶着一个偏上的图标、底下空着 —— 图标看着像从中间掉出去了。
     ///
-    /// 没压着的那半用跟随苹果那套「未选中」的样子：图标是次要色、没有底色。压着的那半
+    /// 没压着的那半用苹果那套「未选中」的样子：系统灰底加一个次要色的图标。压着的那半
     /// 反过来 —— 整块实心加上对比色文字，一眼看出手指在哪。
     private func half(
         _ half: Half,
@@ -262,7 +261,7 @@ struct TerminalVoiceDock: View {
                 .opacity(armed ? 1 : 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(armed ? fill : Color.clear)
+        .background(armed ? fill : Color(uiColor: .secondarySystemBackground))
         // 一整半块蒙层是一个元素，不是「图标 + 字」两个：读屏读到它时要说的是「取消」，
         // 而不是先念一个没有名字的叉、再念「取消」。
         .accessibilityElement(children: .ignore)
