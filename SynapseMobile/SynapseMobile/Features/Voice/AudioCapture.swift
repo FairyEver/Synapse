@@ -76,6 +76,14 @@ final class AudioCapture {
     private var tapInstalled = false
     private var observers: [NSObjectProtocol] = []
 
+    /// 麦克风权限现在给着没有。读，不问。
+    ///
+    /// 给「进来时把上次选的语音态摆好」用：那个动作发生在用户**还没打算说话**的
+    /// 时候，弹系统授权框是答非所问 —— 问的那一次留给切换键（§3.8）。
+    static var isPermissionGranted: Bool {
+        AVAudioApplication.shared.recordPermission == .granted
+    }
+
     /// 问一次麦克风权限。
     ///
     /// iOS 17 起麦克风权限归 `AVAudioApplication` 管，`AVAudioSession` 上那个已经

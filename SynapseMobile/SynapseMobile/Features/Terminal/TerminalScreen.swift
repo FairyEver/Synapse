@@ -39,6 +39,12 @@ struct TerminalScreen: View {
     /// 输入栏现在是哪一种模式。语音不是栏上的一个按钮，而是这条栏的一个状态
     /// （设计文档 §3.2），所以它由这一格决定 —— 四个位置在两种模式下都不搬家。
     @State private var voiceMode = false
+    /// 用户**上次选定的**是哪种模式，跨终端、跨启动记着。
+    ///
+    /// 记的是切换键按下去那一下（`chooseVoiceMode`），不是上面那一格当下的值：说完
+    /// 一句之后一律回键盘态是 §3.3 的老规矩，那不是一次表态，照着它写等于把用户的
+    /// 选择抹掉。所以这个键只由「用户动了模式」这件事写。
+    @AppStorage("terminal.inputBar.voiceMode") private var voiceModePreferred = false
     /// 手指是否还压在「按住 说话」那一格上。
     ///
     /// `DragGesture` 只给按下、拖动、松开三种回调，「按下」在这一串里就是**第一次**
@@ -213,10 +219,21 @@ struct TerminalScreen: View {
     /// about, so a press that cannot record changes nothing at all (设计文档 §3.8).
     private func toggleVoiceMode() {
         guard !voiceMode else {
-            voiceMode = false
+            chooseVoiceMode(false)
             return
         }
         Task { await enterVoiceMode() }
+    }
+
+    /// 用户对模式的一次表态：改当下，也记住。
+    ///
+    /// 只有两处该调它 —— 切换键，和固定态里那个「取消」。收尾之后回键盘态（§3.3）
+    /// 与滑走取消之后留在语音态（§3.3）都是在这一轮里走到哪一步，不是用户的偏好，
+    /// 所以那两处照旧直接改 `voiceMode`。写错一处，用户的选择就会被一次说话抹掉，
+    /// 而症状要等到他下次进终端才看得见。
+    private func chooseVoiceMode(_ on: Bool) {
+        voiceMode = on
+        voiceModePreferred = on
     }
 
     private func enterVoiceMode() async {
@@ -242,6 +259,22 @@ struct TerminalScreen: View {
         }
         // 两个键盘和这个模式不能同时在：它们都会盖住手指马上要按住的那一格。
         dismissKeyboards()
+        chooseVoiceMode(true)
+    }
+
+    /// 进来时把上次留下的模式摆好。
+    ///
+    /// 只查，不问权限：进来的时候用户还没有要说话，系统授权框该出现在他按下切换键
+    /// 或按住那一格的时候（§3.8）。查不过就**静静留在键盘态** —— 提示条留给切换键
+    /// 那条路，否则每进一个终端都浮一条，看多了就成了背景板，而它要说的话（去开权限）
+    /// 在用户真打算说话的时候才听得进去。
+    ///
+    /// 查也不过就不写回偏好：记住的是用户的意图，能不能用是这一刻的事，权限补上、
+    /// 网络回来之后它自己就生效了。
+    private func restoreInputMode() {
+        guard voiceModePreferred, !voiceMode else { return }
+        guard AudioCapture.isPermissionGranted else { return }
+        if case .noServer = model.connectivity { return }
         voiceMode = true
     }
 
@@ -274,6 +307,8 @@ struct TerminalScreen: View {
         // 不出刚才是断网还是说完了。
         let notice = voiceInterruption()
         let heard = await voice.confirm()
+        // 直接改这一格，不走 `chooseVoiceMode`：这是一轮说完了，不是用户对模式表态
+        // ——写进去会把他选定的语音态抹成键盘态（§3.3）。
         voiceMode = false
 
         guard let heard else {
@@ -435,6 +470,9 @@ struct TerminalScreen: View {
         .onAppear {
             model.openTerminal(sessionId)
             refreshPasteboardImage()
+            // 摆在前两件之后、也不等任何异步：它只读已经给着的权限和当下的连接，
+            // 所以进来那一帧就已经是语音态，不会先画一下键盘态再翻过去。
+            restoreInputMode()
         }
         // Coming back to the front is how an image copied in another app — or on the
         // computer the user is sitting at — reaches this device's pasteboard while
@@ -973,7 +1011,8 @@ struct TerminalScreen: View {
     private func cancelLockedVoice() {
         voice.cancel()
         voiceGrid.unlock()
-        voiceMode = false
+        // 这也是用户对模式的表态 —— 收摊之后接着多半是打字，那下一次进来就该是键盘。
+        chooseVoiceMode(false)
     }
 
     /// 固定之后按「完成」：把这一段收掉，发出去。
