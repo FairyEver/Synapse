@@ -68,6 +68,7 @@ model User {
   agentPersonas                  AgentPersona[]
   agentPersonaPreferences        AgentPersonaPreference[]
   clientTelemetryEvents          ClientTelemetryEvent[]
+  meetings                       Meeting[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
 }
@@ -1063,4 +1064,123 @@ model SkillRepositoryInstallEvent {
 
   @@unique([userId, repositoryId, clientInstanceId])
   @@index([repositoryId])
+}
+
+// 会议记录。音频走平台媒体对象存储，不占用户云盘配额，也不出现在云盘列表、
+// 搜索和同步里；这里只存元数据与逐字稿。
+model Meeting {
+  id                   String   @id @default(cuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title                String   @db.VarChar(255)
+  startedAt            DateTime
+  durationMs           Int      @default(0)
+  status               String   @default("transcribing") @db.VarChar(32)
+  speakerCount         Int      @default(0)
+  failureReason        String?  @db.VarChar(1000)
+  minutesStatus        String   @default("none") @db.VarChar(32)
+  minutesJson          Json?
+  minutesFailureReason String?  @db.VarChar(1000)
+  minutesEditedAt      DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  recording            MeetingRecording?
+  transcriptionJob     MeetingTranscriptionJob?
+  segments             MeetingTranscriptSegment[]
+  speakers             MeetingSpeaker[]
+
+  @@index([userId, startedAt])
+  @@index([status, updatedAt])
+  @@index([userId, status, createdAt])
+}
+
+// 形状对齐 DocumentHostedImage：对象路径、内容类型、字节数、删除态。
+// `peaks` 是整段回放波形的振幅（每 100 毫秒一个字节，base64），录音仍在时不为空。
+model MeetingRecording {
+  id            String    @id @default(cuid())
+  meetingId     String    @unique
+  meeting       Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  storageKey    String    @unique
+  mimeType      String    @default("audio/mp4") @db.VarChar(128)
+  size          BigInt    @default(0)
+  durationMs    Int       @default(0)
+  peaks         String?
+  status        String    @default("pending") @db.VarChar(32)
+  deletedAt     DateTime?
+  deletePending Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([deletePending, updatedAt])
+}
+
+// 转写任务单独建表而不把状态塞进 Meeting：重试、分片续传和失败排查都要有地方落。
+// `taskId` 不能当业务唯一键——腾讯云明确不同日期可能重复 TaskId。
+model MeetingTranscriptionJob {
+  id              String          @id @default(cuid())
+  meetingId       String          @unique
+  meeting         Meeting         @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  storageKey      String
+  engineModelType String          @default("16k_zh_en_meeting") @db.VarChar(64)
+  parameters      Json?
+  taskId          String?         @db.VarChar(64)
+  status          String          @default("pending") @db.VarChar(32)
+  uploadId        String?
+  totalBytes      BigInt          @default(0)
+  attempts        Int             @default(0)
+  lastError       String?         @db.VarChar(1000)
+  submittedAt     DateTime?
+  completedAt     DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  parts           MeetingUploadPart[]
+
+  @@index([status, updatedAt])
+  @@index([status, expiresAt])
+}
+
+// 分片清单用独立表而不是 Json 列：中止时要按 partNumber 精确核对，续传时要跳过
+// 已确认写入的区间。
+model MeetingUploadPart {
+  id         String                  @id @default(cuid())
+  jobId      String
+  job        MeetingTranscriptionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  partNumber Int
+  etag       String                  @db.VarChar(128)
+  size       Int
+  createdAt  DateTime                @default(now())
+
+  @@unique([jobId, partNumber])
+  @@index([jobId])
+}
+
+model MeetingTranscriptSegment {
+  id           String   @id @default(cuid())
+  meetingId    String
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  segmentIndex Int
+  speakerId    Int      @default(0)
+  startMs      Int
+  endMs        Int
+  text         String
+  words        Json?
+  createdAt    DateTime @default(now())
+
+  @@unique([meetingId, segmentIndex])
+  @@index([meetingId, startMs])
+}
+
+// 说话人编号到真名的映射。腾讯云只给「发言人 1/2/3」，用户填一次名字全篇套用。
+model MeetingSpeaker {
+  id        String   @id @default(cuid())
+  meetingId String
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  speakerId Int
+  name      String?  @db.VarChar(64)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([meetingId, speakerId])
 }

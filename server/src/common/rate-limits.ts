@@ -10,3 +10,9 @@ export const UPDATE_INTENT_VERIFY_RATE_LIMIT_PER_MINUTE = 30
  * 客户端不需要频繁续签）。
  */
 export const VOICE_ASR_SESSION_RATE_LIMIT_PER_MINUTE = 30
+
+/**
+ * 会议录音的分片上传。一分钟按 1 MB 一片算，正常录音远到不了这个量；给得宽是因为
+ * 分片是连续流的，卡住一次会直接断掉正在进行的录音。
+ */
+export const MEETING_UPLOAD_RATE_LIMIT_PER_MINUTE = 600

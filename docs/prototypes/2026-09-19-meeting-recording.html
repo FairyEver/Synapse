@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synapse 会议记录 · 产品设计与交互原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --background:oklch(1 0 0);
+  --foreground:oklch(0.145 0 0);
+  --card:oklch(1 0 0);
+  --primary:oklch(0.205 0 0);
+  --primary-foreground:oklch(0.985 0 0);
+  --secondary:oklch(0.97 0 0);
+  --muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);
+  --accent:oklch(0.97 0 0);
+  --destructive:oklch(0.577 0.245 27.325);
+  --border:oklch(0.922 0 0);
+  --input:oklch(0.922 0 0);
+  --ring:oklch(0.708 0 0);
+  --sidebar:oklch(0.985 0 0);
+  --surface:oklch(0.965 0 0);
+  --radius:0.625rem;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --background:oklch(0.145 0 0);
+    --foreground:oklch(0.985 0 0);
+    --card:oklch(0.205 0 0);
+    --primary:oklch(0.922 0 0);
+    --primary-foreground:oklch(0.205 0 0);
+    --secondary:oklch(0.269 0 0);
+    --muted:oklch(0.269 0 0);
+    --muted-foreground:oklch(0.708 0 0);
+    --accent:oklch(0.269 0 0);
+    --destructive:oklch(0.704 0.191 22.216);
+    --border:oklch(1 0 0 / 10%);
+    --input:oklch(1 0 0 / 15%);
+    --ring:oklch(0.556 0 0);
+    --sidebar:oklch(0.205 0 0);
+    --surface:oklch(0.175 0 0);
+  }
+}
+[data-theme="dark"]{
+  --background:oklch(0.145 0 0);
+  --foreground:oklch(0.985 0 0);
+  --card:oklch(0.205 0 0);
+  --primary:oklch(0.922 0 0);
+  --primary-foreground:oklch(0.205 0 0);
+  --secondary:oklch(0.269 0 0);
+  --muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);
+  --accent:oklch(0.269 0 0);
+  --destructive:oklch(0.704 0.191 22.216);
+  --border:oklch(1 0 0 / 10%);
+  --input:oklch(1 0 0 / 15%);
+  --ring:oklch(0.556 0 0);
+  --sidebar:oklch(0.205 0 0);
+  --surface:oklch(0.175 0 0);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--background);color:var(--foreground);
+  font-size:14px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input{font:inherit;color:inherit}
+h1,h2,h3,h4{font-weight:600;line-height:1.35}
+
+/* ---------- shell ---------- */
+.shell{display:flex;height:100%}
+.sidebar{
+  width:208px;flex:none;background:var(--sidebar);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding:10px 8px;gap:2px;
+}
+.side-title{padding:8px 10px 10px;font-size:12px;color:var(--muted-foreground);font-weight:500}
+.side-item{
+  display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:calc(var(--radius) * .8);
+  font-size:13px;color:var(--foreground);opacity:.72;
+}
+.side-item.active{background:var(--accent);opacity:1;font-weight:500}
+.side-item .dot{width:15px;height:15px;flex:none;border-radius:4px;background:currentColor;opacity:.35}
+.side-item.active .dot{opacity:.75}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* ---------- topbar ---------- */
+.topbar{
+  height:48px;flex:none;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;padding:0 14px;
+}
+.seg{display:flex;gap:2px;background:var(--muted);padding:2px;border-radius:calc(var(--radius) * .9)}
+.seg button{
+  padding:5px 14px;border-radius:calc(var(--radius) * .7);font-size:13px;color:var(--muted-foreground);
+}
+.seg button[aria-selected="true"]{background:var(--card);color:var(--foreground);font-weight:500;box-shadow:0 1px 2px oklch(0 0 0/.06)}
+.spacer{flex:1}
+.icon-btn{
+  width:30px;height:30px;border-radius:calc(var(--radius) * .7);display:grid;place-items:center;
+  color:var(--muted-foreground);
+}
+.icon-btn:hover{background:var(--accent);color:var(--foreground)}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  height:34px;padding:0 14px;border-radius:calc(var(--radius) * .8);
+  font-size:13px;font-weight:500;border:1px solid transparent;white-space:nowrap;
+}
+.btn-primary{background:var(--primary);color:var(--primary-foreground)}
+.btn-outline{border-color:var(--border);background:var(--card)}
+.btn-outline:hover{background:var(--accent)}
+.btn-ghost{color:var(--muted-foreground)}
+.btn-ghost:hover{background:var(--accent);color:var(--foreground)}
+.btn-sm{height:28px;padding:0 10px;font-size:12.5px}
+.btn-destructive{background:var(--destructive);color:var(--background)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- surfaces ---------- */
+.scroll{flex:1;overflow-y:auto}
+.page{padding:22px 26px;max-width:940px}
+.page-wide{padding:22px 26px;max-width:none}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+.badge{
+  display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:6px;
+  font-size:11.5px;font-weight:500;background:var(--muted);color:var(--muted-foreground);
+}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* ---------- 原型：列表 ---------- */
+.list-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.list-head h2{font-size:17px}
+.mt-list{display:flex;flex-direction:column;gap:8px}
+.mt-item{
+  display:flex;align-items:center;gap:14px;padding:14px 16px;text-align:left;width:100%;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+}
+.mt-item:hover{background:var(--accent)}
+.mt-item .body{flex:1;min-width:0}
+.mt-item .title{font-weight:500;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mt-item .meta{font-size:12.5px;color:var(--muted-foreground);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mt-item .meta .sep{opacity:.4}
+.empty{padding:56px 0;text-align:center;color:var(--muted-foreground);font-size:13px}
+
+/* ---------- 原型：录音 ---------- */
+/* 波形用主题前景色，随深浅色主题走，不引入任何自定义颜色 */
+
+.rec{max-width:520px;margin:0 auto;padding:56px 26px 34px;display:flex;flex-direction:column;align-items:center}
+.rec-title{font-size:13px;color:var(--muted-foreground)}
+.rec-timer{font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.8px;margin:6px 0 26px}
+.rec-wave{width:100%;height:64px;background:var(--surface);border-radius:var(--radius);overflow:hidden}
+.rec-wave canvas{display:block;width:100%;height:100%}
+.rec-hint{height:20px;margin-top:12px;font-size:12.5px;color:var(--muted-foreground)}
+.rec-hint.warn{color:var(--destructive)}
+.rec-actions{display:flex;gap:10px;margin-top:20px}
+
+/* ---------- 原型：回放 ---------- */
+.dp{padding:16px 0 2px}
+.dp-wave{
+  position:relative;width:100%;height:76px;background:var(--surface);
+  border-radius:var(--radius);overflow:hidden;cursor:pointer;
+}
+.dp-wave canvas{display:block;width:100%;height:100%}
+.dp-playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--foreground);border-radius:1px;pointer-events:none}
+.dp-bar{display:flex;align-items:center;gap:10px;margin-top:12px}
+.dp-play{width:34px;height:34px;border-radius:50%;background:var(--muted);display:grid;place-items:center;flex:none}
+.dp-play:hover{background:var(--accent)}
+.dp-time{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--muted-foreground)}
+.vm-pb{width:13px;height:15px;position:relative;display:block}
+.vm-pb::before,.vm-pb::after{content:"";position:absolute;top:0;bottom:0;width:4px;border-radius:1.5px;background:var(--foreground)}
+.vm-pb::before{left:0}
+.vm-pb::after{right:0}
+.vm-tri{width:0;height:0;border-style:solid;border-width:7px 0 7px 12px;border-color:transparent;border-left-color:var(--foreground);display:block}
+.vm-deleted{
+  width:100%;padding:28px 0;text-align:center;background:var(--surface);
+  border-radius:var(--radius);font-size:13px;color:var(--muted-foreground);
+}
+
+/* ---------- 原型：技术详情（演示用浮层，不属于产品界面） ---------- */
+.tech{
+  position:fixed;left:16px;bottom:16px;z-index:60;width:292px;
+  background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px 14px;box-shadow:0 6px 24px oklch(0 0 0/.12);
+}
+.tech h4{font-size:12px;font-weight:600;margin-bottom:8px}
+.tech-row{display:flex;gap:10px;font-size:12px;padding:3px 0;font-variant-numeric:tabular-nums}
+.tech-row b{font-weight:500;color:var(--muted-foreground);width:92px;flex:none}
+.tech-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tech-note{margin-top:9px;padding-top:9px;border-top:1px solid var(--border);font-size:11.5px;line-height:1.6;color:var(--muted-foreground)}
+
+/* ---------- 原型：详情 ---------- */
+.detail-head{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start}
+.detail-head .t{flex:1;min-width:0}
+.detail-head h2{font-size:16px;margin-bottom:4px}
+.tabs{display:flex;gap:2px;padding:8px 22px 0;border-bottom:1px solid var(--border)}
+.tab{padding:8px 12px;font-size:13px;color:var(--muted-foreground);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--foreground);font-weight:500;border-bottom-color:var(--foreground)}
+.detail-player{padding:0 22px;border-bottom:1px solid var(--border)}
+
+.seg{display:flex;gap:14px;padding:14px 22px;border-bottom:1px solid var(--border)}
+.seg:last-child{border-bottom:none}
+.seg .who{width:76px;flex:none}
+.seg .who .name{font-size:13px;font-weight:500;margin-bottom:2px}
+.seg .who .ts{font-size:11.5px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.seg .who .ts:hover{color:var(--foreground);text-decoration:underline;cursor:pointer}
+.seg .text{flex:1;font-size:14px;line-height:1.75}
+.spk{display:inline-block;width:3px;height:14px;border-radius:2px;vertical-align:-2px;margin-right:6px}
+.spk1{background:oklch(0.58 0.13 248)}
+.spk2{background:oklch(0.66 0.1 154)}
+.spk3{background:oklch(0.7 0.11 78)}
+.spk4{background:oklch(0.61 0.11 304)}
+
+.minutes{padding:20px 22px 40px}
+.minutes h3{font-size:14px;margin:22px 0 10px}
+.minutes h3:first-child{margin-top:0}
+.minutes ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.minutes li{display:flex;gap:9px;font-size:13.5px;line-height:1.7}
+.minutes li .mk{flex:none;color:var(--muted-foreground)}
+.todo{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;line-height:1.7}
+.todo input{margin-top:4px;accent-color:var(--primary)}
+.todo .owner{margin-left:auto;font-size:12px;color:var(--muted-foreground);white-space:nowrap;padding-left:12px}
+.minutes .sub{font-size:12.5px;color:var(--muted-foreground);margin-bottom:14px}
+
+/* ---------- toast ---------- */
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);
+  background:var(--primary);color:var(--primary-foreground);padding:9px 16px;border-radius:calc(var(--radius)*.8);
+  font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------- 设计文档 ---------- */
+.doc{padding:30px 40px 80px;max-width:860px}
+.doc h1{font-size:23px;margin-bottom:6px}
+.doc .lede{color:var(--muted-foreground);font-size:13.5px;margin-bottom:30px}
+.doc h2{font-size:16px;margin:34px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+.doc h2:first-of-type{border-top:none;padding-top:0;margin-top:0}
+.doc h3{font-size:13.5px;margin:20px 0 8px;color:var(--foreground)}
+.doc p{font-size:13.5px;line-height:1.8;margin-bottom:10px;color:oklch(0.32 0 0)}
+.doc ul{list-style:none;display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.doc ul li{font-size:13.5px;line-height:1.75;padding-left:16px;position:relative;color:oklch(0.32 0 0)}
+.doc ul li::before{content:"";position:absolute;left:4px;top:9px;width:4px;height:4px;border-radius:50%;background:var(--muted-foreground)}
+.doc code{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;font-size:12px;
+  background:var(--muted);padding:1.5px 5px;border-radius:5px;
+}
+.doc table{width:100%;border-collapse:collapse;font-size:12.5px;margin:12px 0}
+.doc th,.doc td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.doc th{font-weight:500;color:var(--muted-foreground);font-size:12px;background:var(--surface)}
+.doc tr:last-child td{border-bottom:none}
+.callout{
+  border:1px solid var(--border);border-left:3px solid var(--foreground);border-radius:var(--radius);
+  padding:13px 16px;margin:14px 0;background:var(--surface);
+}
+.callout .h{font-size:13px;font-weight:600;margin-bottom:5px}
+.callout p{font-size:13px;margin:0;color:oklch(0.32 0 0)}
+.callout.warn{border-left-color:var(--destructive)}
+.pill{display:inline-block;padding:1px 7px;border-radius:5px;background:var(--muted);font-size:11.5px;font-weight:500}
+.pill.ok{background:oklch(0.66 0.1 154/.18);color:oklch(0.42 0.1 154)}
+.pill.no{background:var(--muted);color:var(--muted-foreground)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .doc p,:root:not([data-theme="light"]) .doc ul li,:root:not([data-theme="light"]) .callout p{color:oklch(0.8 0 0)}
+}
+[data-theme="dark"] .doc p,[data-theme="dark"] .doc ul li,[data-theme="dark"] .callout p{color:oklch(0.8 0 0)}
+.hide{display:none!important}
+@media (max-width:720px){.sidebar{display:none}.page,.doc{padding:18px 16px 60px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="side-title">Synapse</div>
+    <div class="side-item"><span class="dot"></span>工作台</div>
+    <div class="side-item active"><span class="dot"></span>会议记录</div>
+    <div class="side-item"><span class="dot"></span>对话</div>
+    <div class="side-item"><span class="dot"></span>终端</div>
+    <div class="side-item"><span class="dot"></span>云盘</div>
+    <div class="side-item"><span class="dot"></span>数据库</div>
+    <div class="side-item"><span class="dot"></span>工作流</div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="seg" role="tablist">
+        <button id="seg-doc" role="tab" aria-selected="true" onclick="setView('doc')">设计说明</button>
+        <button id="seg-proto" role="tab" aria-selected="false" onclick="setView('proto')">交互原型</button>
+      </div>
+      <div class="spacer"></div>
+      <div id="protoTools" class="hide" style="display:flex;align-items:center;gap:2px">
+        <button class="btn btn-ghost btn-sm" id="btnTech" onclick="toggleTech()">技术详情</button>
+        <button class="btn btn-ghost btn-sm" onclick="simulateTranscribed()">模拟转写完成</button>
+      </div>
+      <button class="icon-btn" onclick="toggleTheme()" title="切换深浅色">◐</button>
+    </div>
+
+    <!-- ============ 设计说明 ============ -->
+    <div id="view-doc" class="scroll">
+      <div class="doc">
+        <h1>会议记录</h1>
+        <p class="lede">录音 → 边录边传 → 异步转写 → 逐字稿与会议纪要。上传与转写都在后台，用户只看到「录音中」和结果两个状态。</p>
+
+        <h2>结论先行</h2>
+        <table>
+          <tr><th style="width:130px">项</th><th>结论</th></tr>
+          <tr><td>识别链路</td><td>录音文件识别 <code>CreateRecTask</code>（异步任务制）</td></tr>
+          <tr><td>引擎</td><td><code>16k_zh_en_meeting</code>（天籁 ASR，大模型 2.0 版）</td></tr>
+          <tr><td>关键参数</td><td><code>ChannelNum=1</code>　<code>SpeakerDiarization=1</code>　<code>SpeakerNumber=0</code>　<code>ResTextFormat=1</code>　<code>SourceType=0</code></td></tr>
+          <tr><td>单价</td><td>0.8 元/小时（后付费，月结），<b>无免费额度</b></td></tr>
+          <tr><td>单场成本</td><td>1.5 小时会议约 <b>1.2 元</b></td></tr>
+          <tr><td>音频存储</td><td>平台媒体存储（<code>meeting-recordings/</code>），与云盘无关，不占用户云盘空间</td></tr>
+          <tr><td>上传方式</td><td>边录边传，结束录音只补最后一片；界面上不出现上传</td></tr>
+          <tr><td>任务归属</td><td>Synapse 服务端持有，桌面端与手机端只是查看者</td></tr>
+        </table>
+
+        <h2>1. 端到端流程</h2>
+        <p>这条链路里最关键的一条分界线是：<b>提交任务之后，客户端的生死与转写结果无关</b>。</p>
+        <table>
+          <tr><th style="width:96px">阶段</th><th style="width:92px">执行方</th><th>做什么</th></tr>
+          <tr><td>录音</td><td>桌面端</td><td>取麦克风；音频每 2 秒切一片，一路算振幅画波形，一路编码</td></tr>
+          <tr><td>上传</td><td>桌面端<br>→ 服务端</td><td><b>与录音同时进行</b>：字节攒到 1 MB 就传一片，不等录完。结束时只补最后一片</td></tr>
+          <tr><td>提交</td><td>服务端</td><td>调 <code>CreateRecTask</code>，音频以 URL 形式交给腾讯云；写入转写任务记录</td></tr>
+          <tr><td>转写</td><td>腾讯云</td><td>异步识别，1 小时音频通常 3 分钟内完成，最长 3 小时</td></tr>
+          <tr><td>收结果</td><td>服务端</td><td>定时轮询 <code>DescribeTaskStatus</code>，把逐字稿按段落落库</td></tr>
+          <tr><td>通知</td><td>服务端</td><td>推给在线的桌面端；不在线则发手机推送</td></tr>
+          <tr><td>浏览</td><td>桌面/手机</td><td>读服务端接口，展示逐字稿与纪要</td></tr>
+        </table>
+        <div class="callout">
+          <div class="h">为什么任务不放在桌面端</div>
+          <p>放桌面端就得让 Synapse 一直开着、电脑不睡，一旦退出这条任务就断了。放服务端，用户点完「结束录音」就可以合上电脑，第二天打开结果就在那里。</p>
+        </div>
+
+        <h2>2. 为什么必须走异步接口</h2>
+        <p>腾讯云有三种长音频的转写方式，只有一种符合「上传后可以关机」：</p>
+        <table>
+          <tr><th style="width:150px">接口</th><th style="width:80px">调用方式</th><th>为什么不用</th></tr>
+          <tr><td>录音文件识别极速版</td><td>同步</td><td>请求发起后客户端必须挂住连接等结果，最长 2 小时。关机即前功尽弃</td></tr>
+          <tr><td>实时语音识别 V2</td><td>流式</td><td>必须边说边推流，只能录在线会议，且用户当场就得在线</td></tr>
+          <tr><td><b>录音文件识别</b></td><td><b>异步</b></td><td><b>选用</b>：提交即返回任务号，结果 24 小时内随时来取</td></tr>
+        </table>
+
+        <h2>3. 引擎选型</h2>
+        <p>「大模型版」不是独立产品，而是同一个接口里的引擎参数取值，按计费分 1.0 / 2.0 两档。会议场景只有两个候选：</p>
+        <table>
+          <tr><th style="width:170px">引擎</th><th>16k_zh_en_meeting<br><span class="pill ok">选用</span></th><th>16k_zh_en_2.0</th><th>16k_zh（通用）</th></tr>
+          <tr><td>定位</td><td>多人对话专用</td><td>通用高精度</td><td>通用</td></tr>
+          <tr><td>重叠发声</td><td>官方点名最优</td><td>未特化</td><td>未特化</td></tr>
+          <tr><td>中英混说</td><td>支持 + 31 种方言</td><td>支持 + 31 种方言</td><td>少量英语</td></tr>
+          <tr><td>说话人分离</td><td>支持</td><td>支持</td><td>支持</td></tr>
+          <tr><td>角色分离（认人）</td><td>不支持</td><td>支持（增值）</td><td>不支持</td></tr>
+          <tr><td>口语转书面语</td><td>不支持</td><td>不支持</td><td>支持（增值）</td></tr>
+          <tr><td>单价</td><td>0.8 元/时</td><td>0.8 元/时</td><td>1.75 元/时</td></tr>
+        </table>
+        <p><b>选 16k_zh_en_meeting。</b>它是唯一为多人对话训练、并被官方明确背书重叠发声场景的引擎，已用在腾讯会议与元宝录音笔上。开会时几个人抢话是常态，这一项比其他任何指标都重要。价格还比通用版便宜一半以上。</p>
+
+        <h3>两个必须知道的取舍</h3>
+        <ul>
+          <li><b>用不了「口语转书面语」。</b>那个增值参数只支持 <code>8k_zh</code> / <code>16k_zh</code>，大模型 2.0 引擎被排除在外。代价可以接受——把语气词、重复词的清理和结构化交给 Synapse 自己的 Agent 做，做得比这个参数更好，而且不额外收费。</li>
+          <li><b>用不了「角色分离」。</b><code>SpeakerDiarization=3</code> 靠声纹把说话人 ID 换成真名，但只支持另一款引擎，且要提前录一段本人声音、按 0.85 元/小时加收。做法改为：先拿到「发言人 1/2/3」，在界面上让用户填一次名字，全篇自动套用。</li>
+        </ul>
+        <div class="callout warn">
+          <div class="h">计费提醒</div>
+          <p>大模型 2.0 档没有免费额度，通用档每月 10 小时免费。按每月 20 场 1.5 小时会议算：大模型 2.0 是 24 元；扣掉 10 小时免费走通用档反而要 35 元。用量越大差距越大。</p>
+        </div>
+
+        <h2>4. 请求参数</h2>
+        <table>
+          <tr><th style="width:170px">参数</th><th style="width:70px">取值</th><th>原因</th></tr>
+          <tr><td><code>EngineModelType</code></td><td>16k_zh_en_meeting</td><td>会议专用引擎</td></tr>
+          <tr><td><code>ChannelNum</code></td><td>1</td><td>16k 音频只接受单声道，传 2 会被直接拒绝</td></tr>
+          <tr><td><code>SourceType</code></td><td>0</td><td>走 URL。base64 通道上限仅 5 MB，装不下会议</td></tr>
+          <tr><td><code>SpeakerDiarization</code></td><td>1</td><td>开启说话人分离，逐字稿按人分段的前提</td></tr>
+          <tr><td><code>SpeakerNumber</code></td><td>0</td><td>自动分离。16k 引擎不支持指定人数</td></tr>
+          <tr><td><code>ResTextFormat</code></td><td>1</td><td>带词级时间戳，用于点击跳转与全文搜索定位</td></tr>
+          <tr><td><code>FilterModal</code></td><td>1</td><td>过滤部分语气词（「嗯」「那个」）</td></tr>
+          <tr><td><code>FilterDirty</code></td><td>1</td><td>过滤脏词</td></tr>
+          <tr><td><code>ConvertNumMode</code></td><td>1</td><td>默认值，数字智能转成阿拉伯数字</td></tr>
+          <tr><td><code>HotwordList</code></td><td>动态</td><td>把参会人姓名、项目名、产品术语作为热词传入，上限 128 个</td></tr>
+          <tr><td><code>Url</code></td><td>音频地址</td><td>需公网可下载，且下载速度会影响成败</td></tr>
+        </table>
+
+        <h2>5. 存储：独立于云盘</h2>
+        <p>会议录音不放进用户的云盘，用户在自己的云盘里也看不到它。它和「在文档里粘贴的图片」走同一条存储链路——平台媒体存储，独立的桶、独立的对象路径。</p>
+        <table>
+          <tr><th style="width:130px">项</th><th>做法</th></tr>
+          <tr><td>存储位置</td><td>平台媒体 COS，对象路径 <code>meeting-recordings/&lt;录音ID&gt;</code>，与文档图片的 <code>document-images/</code> 平级</td></tr>
+          <tr><td>与云盘的关系</td><td>互不相干。不占用户云盘空间，不出现在云盘列表、搜索和同步里</td></tr>
+          <tr><td>上传方式</td><td>服务端代理分片写入对象存储。客户端把分片交给服务端，不持有存储凭证</td></tr>
+          <tr><td>上传后校验</td><td>服务端回查对象大小与文件头，通过后才记为可用</td></tr>
+          <tr><td>备份</td><td>维持现状：备份只带对象清单，不含音频内容</td></tr>
+          <tr><td>删除</td><td>硬删对象，记录保留删除状态——用户看得见「已删除」确实生效</td></tr>
+        </table>
+        <div class="callout">
+          <div class="h">脱离云盘配额不等于没有成本</div>
+          <p>音频是平台的存储开销。建议给单条录音设 5 小时上限（约 140 MB），录音到 4 小时时提示。用户看到的历史里，每条都能单独删。</p>
+        </div>
+
+        <h3>音频格式</h3>
+        <p>不受云盘单文件上限约束后，格式选择回到纯粹的工程取舍——录成压缩格式能把上传时间压到十分之一：</p>
+        <table>
+          <tr><th style="width:150px">格式</th><th style="width:110px">体积</th><th>结论</th></tr>
+          <tr><td>AAC / m4a 64 kbps</td><td>约 28 MB/时</td><td><b>选用</b>。浏览器原生支持，腾讯云也直接收</td></tr>
+          <tr><td>Opus 64 kbps</td><td>约 28 MB/时</td><td>同等体积，压缩率略优，容器格式要额外处理</td></tr>
+          <tr><td>WAV 16 bit</td><td>约 115 MB/时</td><td>不选。5 小时会议接近 600 MB，上传慢、占空间</td></tr>
+        </table>
+        <p>腾讯云接受的格式包含 wav、mp3、m4a、aac、flac、ogg-opus 等，m4a 在两边都通顺。</p>
+
+        <h2>6. 录音端</h2>
+        <p>现有语音输入模块的录音路径不能直接复用——它是为「按住说话、边说边出字」设计的，音频只在内存里过一遍就发走，不留文件。会议录音是另一条链路，仓库里编码器零使用，属于新增。</p>
+
+        <h3>界面：只回答两个问题</h3>
+        <p>录音时用户只需要确认两件事——是不是在录、麦克风到底听没听见。所以这一屏只放一个小波形、一个计时和两个按钮，不做专业录音软件那一套。</p>
+        <table>
+          <tr><th style="width:130px">元素</th><th>做法</th></tr>
+          <tr><td>实时波形</td><td>一条 64 像素高的小波形，贴着右边缘、从右往左长，只回看最近 5 秒。每个采样占的宽度固定，所以旧波形是从左边滚出去，不是把整段压进同一个框里。作用只有一个：证明麦克风在收音</td></tr>
+          <tr><td>没声音时</td><td>开头一直听不到声音，就在波形下方写一句「没有听到声音」——直接把结论说出来，不指望用户自己看波形判断</td></tr>
+          <tr><td>计时</td><td>大号等宽数字</td></tr>
+          <tr><td>操作</td><td>取消 / 完成，就这两个</td></tr>
+        </table>
+        <p><b>录音中不出现任何与上传有关的信息</b>，也没有暂停——会议中途要暂停的需求，远少于误触的成本。</p>
+
+        <h3>回放也做减法</h3>
+        <p>会议详情顶部一条可点击定位的波形加一个播放按钮就够了。没有时间刻度尺、没有缩略图、没有快进快退、没有倍速——逐字稿才是这一页的主体，音频是用来「听一下当时怎么说的」。</p>
+
+        <h3>波形必须是真数据</h3>
+        <p>波形要来自真实音频，不是随机柱状图。给麦克风流接一个分析节点，按帧取时域数据算振幅，画到画布上：</p>
+        <ul>
+          <li>录音中：同一路麦流同时喂给编码器和分析节点，分析节点每 33 毫秒产出一个振幅点。</li>
+          <li>回放中：用同一份振幅数组重画，不必重新解码音频。</li>
+        </ul>
+        <div class="callout warn">
+          <div class="h">不能用 AudioWorklet</div>
+          <p>生产环境渲染进程是 <code>file://</code> 页面，<code>audioWorklet.addModule</code> 会因跨源限制失败，而开发环境用 <code>http://localhost</code> 根本看不出来——现有语音输入模块正是因此退回 <code>ScriptProcessorNode</code>。波形分析走 <code>AnalyserNode</code>，不涉及模块加载，没有这个限制。</p>
+        </div>
+
+        <h3>波形库选型</h3>
+        <p>结论：<b>用 wavesurfer.js 7.x</b>。它的实时波形实现本身就是分析节点加定时轮询，整包里 <code>worklet</code> 零命中，所以上面那条限制对它不成立。</p>
+        <table>
+          <tr><th style="width:165px">候选</th><th>结论</th></tr>
+          <tr><td>wavesurfer.js 7.12.12</td><td><b>选用</b>。BSD-3，核心 11.7 KB gzip，官方 Record 插件做实时波形，可以直接喂振幅数组而不发网络请求</td></tr>
+          <tr><td>Peaks.js（BBC）</td><td>不用。不支持实时录音波形；LGPL-3 对闭源商用要额外处理；用 Blob Worker，在 <code>file://</code> 下的风险比 AudioWorklet 更隐蔽；开发已迁往 Codeberg</td></tr>
+          <tr><td>react-audio-visualize</td><td>不用。唯一同时有实时和回放两个组件，但停更两年，只吃音频文件不能喂振幅数组，只有柱状，没有播放头和定位</td></tr>
+        </table>
+        <p>原型用原生画布实现，保证断网也能双击打开；换到 wavesurfer.js 时，同一份绘制函数可以直接接管它的画布渲染。</p>
+        <p>配色统一用主题前景色，随深浅色主题走。语音备忘录的红色是它自己的品牌主色，Synapse 不引入自定义颜色——波形、播放头、播放/暂停图标全部用 <code>--foreground</code>。</p>
+
+        <h3>边录边传</h3>
+        <p>录音过程中每 2 秒产出一个音频分片，攒够阈值就传走一片，不等录完。<b>结束录音时只需要补齐最后一片</b>，所以「完成」是瞬间的，用户可以直接离开这个界面去做别的。</p>
+        <table>
+          <tr><th style="width:120px">环节</th><th>做法</th></tr>
+          <tr><td>分片来源</td><td>编码器按时长切片，每片 2 秒，同一路音频同时喂给振幅分析</td></tr>
+          <tr><td>上传单位</td><td>字节攒到 1 MB 传一片——这是对象存储分块上传的最小分片，约 128 秒音频</td></tr>
+          <tr><td>服务端</td><td>每片到达后写入同一个对象的对应区间，最后一片到达时合并完成</td></tr>
+          <tr><td>结束录音</td><td>补齐尾片、提交转写，界面立刻回到列表，全程不阻塞</td></tr>
+          <tr><td>取消录音</td><td>中止这次分块上传，已上传的分片一并丢弃</td></tr>
+        </table>
+        <div class="callout warn">
+          <div class="h">分块上传在仓库里是从零开始</div>
+          <p>全仓没有任何分块上传的先例，而且现在用的对象存储 SDK 只能签发整文件的上传地址，<b>签不了单个分片的地址</b>。所以推荐让服务端代理分片：客户端把分片交给服务端，服务端写进对象存储。</p>
+          <p>这样选还有个附带好处——服务端不需要引入任何音频处理工具。分片在对象存储那边合并是一次原子操作，不需要自己拼音频文件。</p>
+        </div>
+        <div class="callout warn">
+          <div class="h">取消时必须真正中止，否则分片会永久滞留</div>
+          <p>现有的上传会话过期清理只会删除整个对象，删不掉一次「未完成的分块上传」留在桶里的分片。取消录音必须额外走一步中止，否则用户每取消一次，就在对象存储里留下一笔按量计费的碎片。这一步同样要新写。</p>
+        </div>
+        <p>腾讯云单文件上限 5 小时，超过要在服务端分段落提交后拼接结果。</p>
+
+        <h2>7. 数据模型</h2>
+        <table>
+          <tr><th style="width:190px">表</th><th>用途</th></tr>
+          <tr><td><code>Meeting</code></td><td>一场会议：标题、开始时间、时长、状态。只记会议本身，不记音频位置</td></tr>
+          <tr><td><code>MeetingRecording</code></td><td>录音：对象路径、格式、字节数、时长、删除状态。形状对齐现有文档图片表</td></tr>
+          <tr><td><code>MeetingTranscriptionJob</code></td><td>转写任务：任务号、引擎、重试次数、提交与完成时间、失败原因</td></tr>
+          <tr><td><code>MeetingTranscriptSegment</code></td><td>逐字稿段落：说话人编号、起止毫秒、文本、词级时间戳</td></tr>
+          <tr><td><code>MeetingSpeaker</code></td><td>说话人编号到真名的映射，一场会议一条</td></tr>
+        </table>
+        <p>转写任务单独建表，而不是把状态塞进会议表，是为了让重试、并发控制和失败排查有地方落。仓库里已有「建表当队列 + 定时消费」的现成范式可以照抄。</p>
+
+        <h2>8. 失败与边界</h2>
+        <table>
+          <tr><th style="width:150px">情况</th><th>处理</th></tr>
+          <tr><td>录音中途退出</td><td>已传走的分片留在服务端，本机只留未上传的部分；重新进入时提示「发现一段未完成的录音」</td></tr>
+          <tr><td>取消录音</td><td>中止分块上传并丢弃已传分片，不留残留；这是新增的一步，不做会按量计费</td></tr>
+          <tr><td>分片上传中断</td><td>分片重传即可，已确认写入的区间不重传；网络恢复后自动继续</td></tr>
+          <tr><td>用户删除录音</td><td>对象立即硬删；正在转写的任务不受影响——腾讯云已在识别之前拉走了音频</td></tr>
+          <tr><td>提交任务失败</td><td>任务表保留记录，由定时轮询重试；音频不丢</td></tr>
+          <tr><td>转写失败</td><td>会议详情页显示失败原因与「重试」，重试不需要重新上传</td></tr>
+          <tr><td>任务号 24 小时后失效</td><td>结果一旦取回立即落库；超期未取回的重试一次，仍失败则提示用户</td></tr>
+          <tr><td>音频超过 5 小时</td><td>提交前按 5 小时切分，逐段提交后拼接结果</td></tr>
+          <tr><td>静音或无人说话</td><td>逐字稿为空，提示「这段录音里没有识别到语音」而不是显示空白页</td></tr>
+        </table>
+
+        <h2>9. 与现有承诺的冲突（需要你决策）</h2>
+        <div class="callout warn">
+          <div class="h">「Synapse 不会把声音存下来」</div>
+          <p>刚发出去的版本说明里写了这句话，用来解释语音输入面板改名的原因。会议记录要把录音完整保存、并交给腾讯云转写，方向和这句话相反。虽然那句话的适用范围是语音输入面板，但用户把两处放在一起读会困惑。</p>
+        </div>
+        <p>建议分开表述，而不是改掉原句——原句的适用范围本来就是语音输入面板：</p>
+        <ul>
+          <li>录音页说一次：「录音会保存，用于转写。」不出现云盘字样。</li>
+          <li>每条录音都能单独删除，删除入口就在会议详情的播放条上。</li>
+          <li>会议列表把「录音已删除」作为一条可见状态，让用户看得见删除确实生效。</li>
+        </ul>
+        <p>需要注意的是，录音不在云盘里，所以用户不会在云盘里"偶然发现"它——保存这件事只能靠这里说清楚，没有别的地方会替它说明。</p>
+
+        <h2>10. 落点</h2>
+        <table>
+          <tr><th style="width:90px">位置</th><th>要做的</th></tr>
+          <tr><td>服务端</td><td>新增 meeting 模块：会议、录音、转写任务三组表；录音走现有平台媒体存储，新增 <code>meeting-recordings/</code> 路径；新增分片接收与分块上传（含中止），这是仓库里没有的部分；补一个下载签名地址给腾讯云；定时轮询取结果、完成后通知桌面端与手机端</td></tr>
+          <tr><td>桌面端</td><td>新增会议模块并注册进模块清单；新增录音链路——编码器切片 + 分析节点取振幅 + 边录边传，都是新增代码；波形渲染可引入 wavesurfer.js</td></tr>
+          <tr><td>手机端</td><td>新增会议页，直接读服务端接口——转写发生在云端，不依赖桌面端在线</td></tr>
+          <tr><td>会话层</td><td>纪要生成复用现有 Agent 能力，转写完成后可一键生成</td></tr>
+        </table>
+
+        <h2>11. 待确认</h2>
+        <ul>
+          <li><b>手机端要不要支持录音。</b>当前设计只做「在手机上查看结果」。手机录音会牵出后台录音权限、中断处理、上传稳定性一整条链路，建议二期。</li>
+          <li><b>热词表是否对大模型 2.0 引擎生效。</b>官方热词文档的适用范围表述覆盖混合模型，但没有点名 2.0，上线前建议提工单确认。</li>
+          <li><b>要不要告诉用户「可以关闭电脑」。</b>这是转写不依赖本机的直接好处，但说出口就等于告诉用户处理不在本机进行，和「不感知存储在哪」的口径冲突。当前按不说的方案做，如果你觉得这个信息对用户价值更大，可以反过来。</li>
+          <li><b>录音要保留多久。</b>脱离云盘配额后没有天然的清理时机。建议默认长期保留、由用户手动删除，或提供「转写完成 N 天后自动删除录音」的选项。</li>
+          <li><b>给腾讯云的下载地址。</b>现有平台媒体存储只签发上传地址，需要补一个下载签名。腾讯云必须在链接有效期内把音频拉走，有效期要留足。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============ 交互原型 ============ -->
+    <div id="view-proto" class="scroll hide">
+
+      <!-- 列表 -->
+      <div id="s-list" class="page-wide">
+        <div class="page">
+          <div class="list-head">
+            <h2>会议记录</h2>
+            <button class="btn btn-primary" onclick="startRecording()">开始录音</button>
+          </div>
+          <div class="mt-list" id="meetingList"></div>
+        </div>
+      </div>
+
+      <!-- 录音中：一个小波形，作用只有一个——证明麦克风确实在收音 -->
+      <div id="s-recording" class="hide">
+        <div class="rec">
+          <div class="rec-title">新录音</div>
+          <div class="rec-timer" id="vmTimer">00:00</div>
+          <div class="rec-wave"><canvas id="vmCanvas"></canvas></div>
+          <div class="rec-hint" id="recHint"></div>
+          <div class="rec-actions">
+            <button class="btn btn-outline" onclick="cancelRecording()">取消</button>
+            <button class="btn btn-primary" onclick="finishRecording()">完成</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 详情 -->
+      <div id="s-detail" class="hide">
+        <div class="detail-head">
+          <div class="t">
+            <h2 id="dTitle">Q3 产品路线图评审</h2>
+            <div class="meta" style="font-size:12.5px;color:var(--muted-foreground)">
+              <span id="dMeta">今天 14:00 · 1 小时 12 分 · 4 位发言人</span>
+            </div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="go('list')">返回</button>
+        </div>
+        <div class="tabs">
+          <button class="tab" id="tab-minutes" aria-selected="true" onclick="setTab('minutes')">纪要</button>
+          <button class="tab" id="tab-transcript" aria-selected="false" onclick="setTab('transcript')">逐字稿</button>
+        </div>
+        <div class="detail-player">
+          <div class="dp" id="dPlayerBody">
+            <div class="dp-wave" id="dpWave" onclick="seekFromClick(event)">
+              <canvas id="dpCanvas"></canvas>
+              <div class="dp-playhead" id="dpPlayhead" style="left:0"></div>
+            </div>
+            <div class="dp-bar">
+              <button class="dp-play" onclick="togglePlayback()"><span class="vm-tri" id="dpPb"></span></button>
+              <span class="dp-time" id="dpTimer">00:00</span>
+              <span class="dp-time" id="dpTotal">/ 00:00</span>
+              <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="deleteRecording()">删除录音</button>
+            </div>
+          </div>
+          <div class="vm-deleted hide" id="dpDeleted">录音已删除 · 逐字稿和纪要保留</div>
+        </div>
+
+        <div id="pane-minutes" class="minutes">
+          <div class="sub">由逐字稿生成 · 可以编辑</div>
+
+          <h3>议题一：Q3 路线图排序</h3>
+          <ul>
+            <li><span class="mk">·</span><span>三个候选方向中，确定优先做「导出与分享」，其次是「批量操作」。「第三方集成」本季度不做。</span></li>
+            <li><span class="mk">·</span><span>导出要先覆盖 Markdown 与 PDF，Excel 放到后面，理由是前两个是当前反馈里出现最多的。</span></li>
+          </ul>
+
+          <h3>议题二：移动端与桌面端的能力对齐</h3>
+          <ul>
+            <li><span class="mk">·</span><span>移动端本期只做查看，不做编辑。编辑涉及冲突合并，成本远高于收益。</span></li>
+            <li><span class="mk">·</span><span>桌面端已有的搜索能力要在移动端补齐，这是当前投诉最多的点。</span></li>
+          </ul>
+
+          <h3>待办</h3>
+          <div style="display:flex;flex-direction:column;gap:11px;margin-top:4px">
+            <label class="todo"><input type="checkbox" checked><span>补一份导出的竞品对比，重点是 PDF 的样式控制能力</span><span class="owner">陈默 · 本周五</span></label>
+            <label class="todo"><input type="checkbox"><span>移动端搜索接口对齐桌面端，给出改动范围</span><span class="owner">李杨 · 下周三</span></label>
+            <label class="todo"><input type="checkbox"><span>把「三方集成」从本季度路线图移到下一季度</span><span class="owner">陈默 · 本周内</span></label>
+          </div>
+        </div>
+
+        <div id="pane-transcript" class="hide">
+          <div style="padding:14px 22px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+            <input placeholder="搜索逐字稿" style="flex:1;height:32px;border:1px solid var(--input);border-radius:calc(var(--radius)*.7);background:var(--background);padding:0 11px;font-size:13px">
+            <button class="btn btn-outline btn-sm">发言人命名</button>
+          </div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk1"></span>发言人 1</div><div class="ts">14:02:11</div></div><div class="text">今天主要过三件事，Q3 的路线图排序、移动端和桌面端的能力对齐，还有上次遗留的导出方案。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk2"></span>发言人 2</div><div class="ts">14:02:26</div></div><div class="text">导出我先说。上周客户那边又提了一次，他们要的是能直接拿去汇报的东西，不是一堆文件。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk1"></span>发言人 1</div><div class="ts">14:02:48</div></div><div class="text">那就是 PDF 优先。样式得可控，页眉页脚、目录这些。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk3"></span>发言人 3</div><div class="ts">14:03:05</div></div><div class="text">Markdown 也要。我们的用户里写文档的多，他们更在意能不能直接贴进现有的文档里。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk2"></span>发言人 2</div><div class="ts">14:03:31</div></div><div class="text">Excel 呢？我担心后面又有人说要。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk1"></span>发言人 1</div><div class="ts">14:03:40</div></div><div class="text">放后面。先把前两个做扎实，反馈里出现最多的就是这两个。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk4"></span>发言人 4</div><div class="ts">14:04:12</div></div><div class="text">第三方集成我提一句，如果这季度不做，得提前跟销售打招呼，他们已经在外面说了。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk1"></span>发言人 1</div><div class="ts">14:04:29</div></div><div class="text">好，那这条明确写进纪要：本季度不做，陈默你去同步销售。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk3"></span>发言人 3</div><div class="ts">14:05:02</div></div><div class="text">移动端这边，搜索是现在投诉最多的。桌面端能做的那套筛选，手机上基本都没有。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk spk2"></span>发言人 2</div><div class="ts">14:05:21</div></div><div class="text">编辑要不要一起做？用户在手机上有时候就想改两个字。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk1"></span>发言人 1</div><div class="ts">14:05:38</div></div><div class="text">编辑先不做。两台设备同时改要处理冲突合并，这块的成本比看起来高得多。本期只做查看和搜索。</div></div>
+          <div class="seg"><div class="who"><div class="name"><span class="spk4"></span>发言人 4</div><div class="ts">14:06:03</div></div><div class="text">同意，先把能看的看全了。</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="tech hide" id="tech">
+  <h4>技术详情 · 演示用，不属于产品界面</h4>
+  <div class="tech-row"><b>录音分片</b><span id="tChunks">0</span></div>
+  <div class="tech-row"><b>累计字节</b><span id="tBytes">0 KB</span></div>
+  <div class="tech-row"><b>已上传分片</b><span id="tParts">0</span></div>
+  <div class="tech-row"><b>对象路径</b><span id="tKey">—</span></div>
+  <div class="tech-note">原型不真正上传。已上传分片按真实实现的 1 MB 阈值折算。</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- 视图切换 ---------- */
+function setView(v){
+  document.getElementById('view-doc').classList.toggle('hide', v!=='doc');
+  document.getElementById('view-proto').classList.toggle('hide', v!=='proto');
+  document.getElementById('seg-doc').setAttribute('aria-selected', v==='doc');
+  document.getElementById('seg-proto').setAttribute('aria-selected', v==='proto');
+  document.getElementById('protoTools').classList.toggle('hide', v!=='proto');
+  if(v!=='proto') document.getElementById('tech').classList.add('hide');
+}
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme');
+  const dark = cur ? cur==='dark' : matchMedia('(prefers-color-scheme:dark)').matches;
+  document.documentElement.setAttribute('data-theme', dark?'light':'dark');
+  redrawAll();
+}
+function toggleTech(){ document.getElementById('tech').classList.toggle('hide') }
+
+/* ---------- 会议数据 ---------- */
+let meetings = [
+  {id:'m3', title:'客户对接会 · 恒远科技', when:'昨天 10:30', len:'48 分', state:'failed', note:'转写失败', rec:'kept', size:'22.1 MB'},
+  {id:'m2', title:'移动端体验对齐', when:'前天 16:00', len:'36 分', state:'done', note:'4 位发言人', rec:'deleted'},
+  {id:'m1', title:'周会 · 数据平台', when:'9 月 16 日 09:00', len:'25 分', state:'done', note:'3 位发言人', rec:'deleted'},
+];
+
+/** 列表行里显示的次要信息。录音还在时不必特意说，删除才值得标出来 */
+function metaOf(m){
+  return [m.when, m.len, m.note, m.rec==='deleted' ? '录音已删除' : null]
+    .filter(Boolean).join(' · ');
+}
+
+const STATE_BADGE = {
+  transcribing:'<span class="badge"><span class="badge-dot"></span>转写中</span>',
+  done:'<span class="badge">已完成</span>',
+  failed:'<span class="badge" style="color:var(--destructive)"><span class="badge-dot"></span>转写失败</span>',
+};
+
+function renderList(){
+  const el = document.getElementById('meetingList');
+  if(!meetings.length){ el.innerHTML = '<div class="empty">还没有会议记录</div>'; return; }
+  el.innerHTML = meetings.map(m=>`
+    <button class="mt-item" onclick="openMeeting('${m.id}')">
+      <div class="body">
+        <div class="title">${m.title}</div>
+        <div class="meta">
+          <span>${metaOf(m)}</span>
+          ${m.state==='failed'?'<span class="sep">·</span><span style="color:var(--destructive)">点击重试</span>':''}
+        </div>
+      </div>
+      ${STATE_BADGE[m.state]||''}
+    </button>`).join('');
+}
+
+/* ---------- 屏幕切换 ---------- */
+const SCREENS = ['list','recording','detail'];
+function go(name){
+  SCREENS.forEach(s=>document.getElementById('s-'+s).classList.toggle('hide', s!==name));
+  if(name === 'list') renderList();
+  if(name === 'recording') requestAnimationFrame(redrawAll);
+}
+
+/* ---------- 时间格式 ---------- */
+function fmtClock(ms){
+  const s = Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+
+/* ---------- 波形绘制 ---------- */
+/** 把振幅数组按当前画布宽度重采样成镜像条，画法和语音备忘录一致 */
+function drawWave(canvas, data, opts){
+  if(!canvas) return;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if(!w || !h) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w*dpr);
+  canvas.height = Math.round(h*dpr);
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  if(!data || !data.length) return;
+  const o = opts || {};
+  g.strokeStyle = getComputedStyle(document.body).getPropertyValue('--foreground').trim() || '#111';
+  g.globalAlpha = o.alpha == null ? 1 : o.alpha;
+  g.lineCap = 'round';
+  g.lineWidth = o.barW == null ? 1.5 : o.barW;
+  const gap = o.gap == null ? 1.1 : o.gap;
+  const gain = o.gain == null ? 0.9 : o.gain;
+  const mid = h/2;
+  const cols = Math.max(1, Math.floor(w/(g.lineWidth + gap)));
+  const step = data.length/cols;
+  for(let c=0;c<cols;c++){
+    const s = Math.floor(c*step);
+    const e = Math.min(data.length, Math.max(s+1, Math.ceil((c+1)*step)));
+    let m = 0;
+    for(let i=s;i<e;i++) if(data[i] > m) m = data[i];
+    const half = Math.max(1, m * mid * gain);
+    const x = c*(g.lineWidth + gap) + g.lineWidth/2;
+    g.beginPath();
+    g.moveTo(x, mid-half);
+    g.lineTo(x, mid+half);
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+
+/**
+ * 录音中的波形。
+ *
+ * 关键是**密度固定**：一个采样永远占同样宽的槽位，所以录得越久不会把整段压进同一个框里，
+ * 而是旧的从左边滚出去。框里能装多少个槽位由宽度决定，能装多少秒 = 槽位数 × PEAK_MS。
+ */
+const PEAK_MS = 28;            // 一个采样覆盖的音频时长
+const LIVE_WINDOW_MS = 5000;   // 波形只回看最近 5 秒
+
+function drawLiveWave(canvas, peaks){
+  if(!canvas) return;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if(!w || !h) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w*dpr);
+  canvas.height = Math.round(h*dpr);
+  const g = canvas.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  if(!peaks.length) return;
+
+  const barW = 1.5, gap = 1.1, colW = barW + gap;
+  // 槽位数同时受时间窗口和画布宽度限制，取小的那个，保证最新的柱子不会被挤出右边缘
+  const slots = Math.max(1, Math.min(Math.round(LIVE_WINDOW_MS / PEAK_MS), Math.floor(w / colW)));
+  const visible = peaks.length > slots ? peaks.slice(peaks.length - slots) : peaks;
+  // 贴着右边缘排：最新的在右边，早的往左排。装满之前左边的空位空着
+  const startCol = slots - visible.length;
+  const mid = h/2;
+
+  g.strokeStyle = getComputedStyle(document.body).getPropertyValue('--foreground').trim() || '#111';
+  g.lineCap = 'round';
+  g.lineWidth = barW;
+  for(let c=0;c<visible.length;c++){
+    const half = Math.max(1, visible[c] * mid * 0.9);
+    const x = (startCol + c)*colW + colW/2;
+    g.beginPath();
+    g.moveTo(x, mid-half);
+    g.lineTo(x, mid+half);
+    g.stroke();
+  }
+}
+
+/** 演示用：给没有真实录音的会议生成一条确定的语声包络 */
+function synthPeaks(seed, n){
+  let s = 2166136261;
+  for(let i=0;i<String(seed).length;i++){ s ^= String(seed).charCodeAt(i); s = Math.imul(s, 16777619) }
+  const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s/4294967296 };
+  const out = [];
+  let env = 0;
+  for(let i=0;i<n;i++){
+    const talking = Math.sin(i/n*Math.PI*9) > -0.25;
+    env = env*0.74 + rnd()*(talking ? 0.85 : 0.14)*0.26;
+    out.push(Math.min(1, Math.max(0.03, env)));
+  }
+  return out;
+}
+function peaksOf(m){ return (m.peaks && m.peaks.length) ? m.peaks : synthPeaks(m.id, 900) }
+
+function redrawAll(){
+  if(recState) drawLiveWave(document.getElementById('vmCanvas'), recState.peaks);
+  const m = meetings.find(x=>x.id===activeId);
+  if(m && !document.getElementById('s-detail').classList.contains('hide')){
+    drawWave(document.getElementById('dpCanvas'), peaksOf(m), {});
+  }
+}
+
+/* ---------- 录音 ---------- */
+const PART_BYTES = 1024*1024;   // 真实实现里分块上传的最小分片
+let recState = null;
+let micStream = null, audioCtx = null, analyser = null, mediaRec = null;
+let recRaf = null, recTick = null, lastPeakAt = 0, micOk = false;
+let smoothAmp = 0, demoPhase = 0, lastLoudAt = 0, everLoud = false;
+
+function elapsed(){ return recState ? Date.now() - recState.startedAt : 0 }
+
+function setHint(text, warn){
+  const el = document.getElementById('recHint');
+  if(!el) return;
+  el.textContent = text;
+  el.classList.toggle('warn', !!warn);
+}
+/** 只在一直没听到声音时提示。听到过一次就再也不提示，开会时不打扰 */
+function refreshHint(){
+  if(!micOk){ setHint('未取得麦克风权限，波形为示意', true); return }
+  if(!everLoud && Date.now() - lastLoudAt > 4000) setHint('没有听到声音', true);
+  else setHint('', false);
+}
+
+async function startRecording(){
+  recState = {
+    id: 'rec_' + Date.now().toString(36),
+    peaks: [], chunks: [], bytes: 0, parts: 0, startedAt: Date.now(),
+  };
+  activeId = null;
+  smoothAmp = 0; demoPhase = 0; lastPeakAt = 0; everLoud = false;
+
+  go('recording');
+  document.getElementById('vmTimer').textContent = '00:00';
+  setHint('正在启动麦克风', false);
+  setTechKey(recState.id);
+  updateTech();
+
+  micOk = false;
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    audioCtx.createMediaStreamSource(micStream).connect(analyser);
+    micOk = true;
+  }catch(error){
+    // 拿不到麦克风不阻断演示，下面走示意波形，界面上会说明
+    micStream = null;
+  }
+
+  try{
+    if(micStream && window.MediaRecorder){
+      const candidates = ['audio/mp4;codecs=mp4a.40.2','audio/mp4','audio/webm;codecs=opus','audio/webm'];
+      const mime = candidates.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+      mediaRec = new MediaRecorder(micStream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined);
+      mediaRec.ondataavailable = ev => { if(ev.data && ev.data.size) onAudioChunk(ev.data) };
+      mediaRec.start(2000);   // 每 2 秒产出一个分片，这就是边录边传的上传单位
+    }
+  }catch(error){
+    mediaRec = null;
+  }
+
+  // 计时从麦克风就绪开始，不把授权弹窗等待的时间算进去
+  recState.startedAt = Date.now();
+  lastLoudAt = Date.now();
+  setHint('', false);
+  recTick = setInterval(updateClock, 100);
+  recRaf = requestAnimationFrame(peakLoop);
+}
+
+function onAudioChunk(blob){
+  if(!recState) return;
+  recState.chunks.push(blob);
+  recState.bytes += blob.size;
+  recState.parts = Math.floor(recState.bytes / PART_BYTES);
+  updateTech();
+}
+
+function sampleAmp(){
+  let v;
+  if(micOk && analyser){
+    const buf = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for(let i=0;i<buf.length;i++) sum += buf[i]*buf[i];
+    v = Math.sqrt(sum/buf.length) * 6;
+  }else{
+    demoPhase += 0.16;
+    v = (Math.sin(demoPhase)*0.5 + 0.5) * (0.35 + Math.random()*0.55);
+  }
+  smoothAmp = Math.max(v, smoothAmp*0.82);   // 轻微平滑，让包络更像人声
+  return Math.min(1, Math.max(0.02, smoothAmp));
+}
+
+function peakLoop(){
+  if(!recState) return;
+  if(Date.now() - lastPeakAt >= PEAK_MS){
+    lastPeakAt = Date.now();
+    const amp = sampleAmp();
+    recState.peaks.push(amp);
+    if(amp > 0.1){ lastLoudAt = Date.now(); everLoud = true }
+    refreshHint();
+  }
+  drawLiveWave(document.getElementById('vmCanvas'), recState.peaks);
+  recRaf = requestAnimationFrame(peakLoop);
+}
+
+function updateClock(){
+  document.getElementById('vmTimer').textContent = fmtClock(elapsed());
+}
+
+function teardownAudio(){
+  if(recRaf){ cancelAnimationFrame(recRaf); recRaf = null }
+  if(recTick){ clearInterval(recTick); recTick = null }
+  try{ if(mediaRec && mediaRec.state !== 'inactive') mediaRec.stop() }catch(error){}
+  mediaRec = null;
+  if(micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null }
+  if(audioCtx){ audioCtx.close().catch(() => {}); audioCtx = null }
+  analyser = null;
+}
+
+/** 完成：最后一小段补齐后提交转写。整个过程都在后台，界面上不体现上传。 */
+function finishRecording(){
+  if(!recState) return;
+  const st = recState;
+  const ms = elapsed();
+  const peaks = st.peaks;
+  teardownAudio();
+  recState = null;
+
+  const m = {
+    id: 'm_' + Date.now().toString(36),
+    title: '新录音',
+    when: '刚刚',
+    len: fmtClock(ms),
+    ms: ms,
+    state: 'transcribing',
+    note: '转写中',
+    rec: 'kept',
+    size: (st.bytes/1024/1024).toFixed(1) + ' MB',
+    peaks: peaks,
+    chunks: st.chunks,
+    objectKey: 'meeting-recordings/' + st.id,
+  };
+  activeId = m.id;
+  meetings.unshift(m);
+  go('list');
+  toast('录音已保存');
+}
+
+/** 取消：本机丢弃，服务端把这次已经上传的分片一并删掉 */
+function cancelRecording(){
+  if(!recState) return;
+  teardownAudio();
+  recState = null;
+  go('list');
+  toast('录音已取消');
+}
+
+/* ---------- 技术详情（演示用） ---------- */
+function updateTech(){
+  document.getElementById('tChunks').textContent = recState ? recState.chunks.length + ' 片' : '—';
+  document.getElementById('tBytes').textContent = recState ? (recState.bytes/1024).toFixed(0) + ' KB' : '—';
+  document.getElementById('tParts').textContent = recState ? recState.parts + ' 片' : '—';
+}
+function setTechKey(id){
+  document.getElementById('tKey').textContent = id ? 'meeting-recordings/' + id : '—';
+}
+
+/* ---------- 模拟转写完成 ---------- */
+function simulateTranscribed(){
+  const m = meetings.find(x => x.state === 'transcribing');
+  if(!m){ toast('没有正在转写的会议'); return }
+  m.state = 'done';
+  m.note = '4 位发言人';
+  renderList();
+  toast('转写已完成');
+}
+
+/* ---------- 回放 ---------- */
+let dpAudio = null, dpRaf = null, dpPlaying = false, dpCur = 0, dpT0 = 0;
+
+function durationOf(m){
+  if(m.ms) return m.ms/1000;
+  const hit = /(\d+)\s*分/.exec(m.len || '');
+  return hit ? parseInt(hit[1], 10)*60 : 60;
+}
+
+function renderDetailPlayer(m){
+  const body = document.getElementById('dPlayerBody');
+  const deleted = document.getElementById('dpDeleted');
+  const gone = !m || m.rec === 'deleted';
+  body.classList.toggle('hide', gone);
+  deleted.classList.toggle('hide', !gone);
+  if(gone) return;
+  drawWave(document.getElementById('dpCanvas'), peaksOf(m), {});
+  document.getElementById('dpTotal').textContent = '/ ' + fmtClock(durationOf(m)*1000);
+  paintPlayhead();
+  setPlaying(false);
+}
+
+function paintPlayhead(){
+  const m = meetings.find(x => x.id === activeId);
+  const dur = m ? Math.max(0.1, durationOf(m)) : 1;
+  const pct = Math.max(0, Math.min(100, dpCur/dur*100));
+  document.getElementById('dpPlayhead').style.left = pct + '%';
+  document.getElementById('dpTimer').textContent = fmtClock(dpCur*1000);
+}
+
+function setPlaying(on){
+  dpPlaying = on;
+  const el = document.getElementById('dpPb');
+  if(el) el.className = on ? 'vm-pb' : 'vm-tri';
+}
+
+function togglePlayback(){
+  const m = meetings.find(x => x.id === activeId);
+  if(!m || m.rec === 'deleted') return;
+  if(dpPlaying){ stopPlayback(); return }
+  startPlayback(m);
+}
+
+function startPlayback(m){
+  // 刚录完的会议有真实音频，直接播；示例会议没有音频，只走时间轴
+  if(m.chunks && m.chunks.length && !m.audioUrl){
+    try{ m.audioUrl = URL.createObjectURL(new Blob(m.chunks, { type: m.chunks[0].type || 'audio/mp4' })) }
+    catch(error){ m.audioUrl = null }
+  }
+  if(m.audioUrl){
+    if(!dpAudio || dpAudio.dataset.for !== m.id){
+      if(dpAudio) dpAudio.pause();
+      dpAudio = new Audio(m.audioUrl);
+      dpAudio.dataset.for = m.id;
+    }
+    dpAudio.currentTime = dpCur;
+    dpAudio.play().catch(() => {});
+  }
+  dpT0 = Date.now();
+  setPlaying(true);
+  dpLoop();
+}
+
+function stopPlayback(){
+  if(dpAudio) dpAudio.pause();
+  if(dpRaf){ cancelAnimationFrame(dpRaf); dpRaf = null }
+  setPlaying(false);
+}
+
+function dpLoop(){
+  if(!dpPlaying) return;
+  const m = meetings.find(x => x.id === activeId);
+  if(!m){ stopPlayback(); return }
+  const dur = Math.max(0.1, durationOf(m));
+  if(dpAudio && isFinite(dpAudio.duration) && dpAudio.duration > 0){
+    dpCur = dpAudio.currentTime;
+  }else{
+    dpCur += (Date.now() - dpT0)/1000;
+    dpT0 = Date.now();
+  }
+  if(dpCur >= dur){ dpCur = dur; stopPlayback(); paintPlayhead(); return }
+  paintPlayhead();
+  dpRaf = requestAnimationFrame(dpLoop);
+}
+
+/** 点波形定位。没有比这更简单的定位方式了，不需要额外的快进按钮 */
+function seekFromClick(ev){
+  const m = meetings.find(x => x.id === activeId);
+  if(!m || m.rec === 'deleted') return;
+  const rect = document.getElementById('dpWave').getBoundingClientRect();
+  if(!rect.width) return;
+  const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left)/rect.width));
+  dpCur = pct * durationOf(m);
+  if(dpAudio) dpAudio.currentTime = dpCur;
+  paintPlayhead();
+}
+
+/* ---------- 详情 ---------- */
+function deleteRecording(){
+  const m = meetings.find(x => x.id === activeId);
+  if(!m || m.rec === 'deleted') return;
+  stopPlayback();
+  if(m.audioUrl){ URL.revokeObjectURL(m.audioUrl); m.audioUrl = null }
+  m.rec = 'deleted';
+  m.chunks = null;
+  dpCur = 0;
+  renderDetailPlayer(m);
+  toast('录音已删除');
+}
+
+function openMeeting(id){
+  const m = meetings.find(x => x.id === id);
+  if(!m) return;
+  if(m.state === 'transcribing'){ toast('转写中，完成后可以查看'); return }
+  if(m.state === 'failed'){ toast('转写失败，正在重试'); return }
+  stopPlayback();
+  if(dpAudio){ dpAudio.pause(); dpAudio = null }
+  dpCur = 0;
+  activeId = id;
+  document.getElementById('dTitle').textContent = m.title;
+  document.getElementById('dMeta').textContent = [m.when, m.len, m.note].join(' · ');
+  setTab('minutes');
+  go('detail');
+  requestAnimationFrame(() => renderDetailPlayer(m));   // 等布局完成，画布才有尺寸
+}
+
+function setTab(t){
+  document.getElementById('tab-minutes').setAttribute('aria-selected', t==='minutes');
+  document.getElementById('tab-transcript').setAttribute('aria-selected', t==='transcript');
+  document.getElementById('pane-minutes').classList.toggle('hide', t!=='minutes');
+  document.getElementById('pane-transcript').classList.toggle('hide', t!=='transcript');
+}
+
+/* ---------- toast ---------- */
+let toastId = null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastId);
+  toastId = setTimeout(()=>el.classList.remove('show'), 2400);
+}
+
+renderList();
+</script>
+</body>
+</html>

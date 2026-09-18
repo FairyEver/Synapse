@@ -16,6 +16,7 @@ import { HealthModule } from "./health/health.module"
 import { ClientTelemetryModule } from "./client-telemetry/client-telemetry.module"
 import { OpenApiModule } from "./open-api/open-api.module"
 import { LiveModule } from "./live/live.module"
+import { MeetingModule } from "./meeting/meeting.module"
 import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
@@ -93,6 +94,7 @@ type RequestLogObject = {
     ProblemFeedbackModule,
     UpdateIntentModule,
     VoiceModule,
+    MeetingModule,
     HealthModule,
   ],
   providers: [

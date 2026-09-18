@@ -139,6 +139,14 @@ const envSchema = z
     TENCENT_ASR_SECRET_KEY: optionalEnvString,
     TENCENT_ASR_ENGINE_MODEL_TYPE: optionalEnvString.default("Hy-ASR-3.0-preview"),
     TENCENT_ASR_HOTWORD_LIST: optionalEnvString,
+    // 会议录音走录音文件识别（异步），和实时识别是两套引擎，所以引擎名单独给一个
+    // 配置项。默认值就是会议专用档，一般不需要改。
+    TENCENT_ASR_MEETING_ENGINE_MODEL_TYPE: optionalEnvString.default("16k_zh_en_meeting"),
+    // 这个接口不区分区域，留空也成立；给个默认值只是让签名原文完整。
+    TENCENT_ASR_REGION: optionalEnvString.default("ap-guangzhou"),
+    // 会议转写轮询与碎片回收的开关。默认开着；排查问题时可以关掉，表里的任务会
+    // 原样留着，重新打开就继续跑。
+    MEETING_TRANSCRIPTION_ENABLED: z.enum(["true", "false"]).default("true"),
   })
   .superRefine((env, ctx) => {
     for (const group of cosConfigGroups) {
@@ -268,6 +276,9 @@ export interface ServerEnv {
   readonly tencentAsrSecretKey?: string
   readonly tencentAsrEngineModelType: string
   readonly tencentAsrHotwordList?: string
+  readonly tencentAsrMeetingEngineModelType: string
+  readonly tencentAsrRegion: string
+  readonly meetingTranscriptionEnabled: boolean
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
@@ -321,6 +332,9 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     tencentAsrSecretKey: result.data.TENCENT_ASR_SECRET_KEY,
     tencentAsrEngineModelType: result.data.TENCENT_ASR_ENGINE_MODEL_TYPE,
     tencentAsrHotwordList: result.data.TENCENT_ASR_HOTWORD_LIST,
+    tencentAsrMeetingEngineModelType: result.data.TENCENT_ASR_MEETING_ENGINE_MODEL_TYPE,
+    tencentAsrRegion: result.data.TENCENT_ASR_REGION,
+    meetingTranscriptionEnabled: result.data.MEETING_TRANSCRIPTION_ENABLED === "true",
   }
 }
 
