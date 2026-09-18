@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SynapseMobile 输入栏重构 · 原型</title>
+<style>
+  :root{
+    --ink:#000;
+    --ink2:#8a8a8e;
+    --ink3:#c7c7cc;
+    --sep:rgba(60,60,67,.29);
+    --surface:#ffffff;
+    --surface2:#f2f2f7;
+    --surface3:#e5e5ea;
+    --surface4:#d1d3d9;
+    --canvas:#1c1c1e;
+    --red:#ff3b30;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:var(--ui);
+    background:#f0f0f2;
+    color:var(--ink);
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    gap:56px;
+    padding:40px 32px 80px;
+    min-height:100vh;
+  }
+
+  /* ---------------- phone ---------------- */
+  .phone{
+    width:390px;height:844px;
+    flex:0 0 auto;
+    background:var(--surface);
+    border-radius:44px;
+    overflow:hidden;
+    display:flex;flex-direction:column;
+    position:relative;
+    box-shadow:0 0 0 10px #dcdce0, 0 24px 60px rgba(0,0,0,.18);
+  }
+  .statusbar{
+    height:44px;flex:0 0 44px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 26px 0 32px;
+    font-size:15px;font-weight:600;
+    position:relative;
+  }
+  .island{
+    position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    width:112px;height:30px;border-radius:16px;background:#000;
+  }
+  .status-right{display:flex;align-items:center;gap:5px;}
+  .bars{display:flex;align-items:flex-end;gap:1.5px;height:11px;}
+  .bars i{width:3px;background:#000;border-radius:1px;display:block;}
+  .bars i:nth-child(1){height:4px}.bars i:nth-child(2){height:6px}
+  .bars i:nth-child(3){height:8px}.bars i:nth-child(4){height:11px}
+  .batt{width:24px;height:12px;border:1.2px solid rgba(0,0,0,.35);border-radius:3.5px;position:relative;}
+  .batt::after{content:"";position:absolute;right:-3px;top:3.5px;width:1.6px;height:5px;background:rgba(0,0,0,.35);border-radius:0 1px 1px 0;}
+  .batt i{position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:66%;background:#000;border-radius:2px;display:block;}
+
+  .navbar{
+    height:44px;flex:0 0 44px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;
+    border-bottom:.5px solid var(--sep);
+  }
+  .navbar .t{font-size:16px;font-weight:600;}
+  .navbar .ic{color:var(--ink);opacity:.9;display:flex;}
+
+  /* ---------------- canvas ---------------- */
+  .canvas{
+    flex:1 1 auto;min-height:0;
+    background:var(--canvas);
+    color:#e6e6e8;
+    font-family:var(--mono);
+    font-size:11px;line-height:1.55;
+    padding:12px 12px 10px;
+    overflow:hidden;
+    position:relative;
+  }
+  .canvas .dim{color:#8e8e93;}
+  .canvas .grn{color:#5fd08a;}
+  .canvas .amb{color:#e0a458;}
+  .canvas .ln{white-space:pre-wrap;word-break:break-all;}
+
+  .notice{
+    position:absolute;left:12px;right:12px;bottom:12px;
+    background:rgba(58,58,60,.96);
+    color:#fff;font-family:var(--ui);font-size:13px;
+    border-radius:10px;padding:10px 12px;
+    display:flex;align-items:center;gap:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.35);
+  }
+  .notice span{flex:1}
+  .notice b{font-weight:600;text-decoration:underline;text-underline-offset:2px;}
+
+  /* ---------------- accessory bar ---------------- */
+  .accessory{
+    flex:0 0 auto;
+    display:flex;align-items:center;gap:8px;
+    padding:8px 12px;
+    background:var(--surface);
+    overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:none;
+  }
+  .accessory::-webkit-scrollbar{display:none}
+  .pill{
+    flex:0 0 auto;
+    font-family:var(--mono);font-size:13px;font-weight:500;
+    padding:9px 12px;border-radius:10px;
+    background:var(--surface2);color:var(--ink);
+    min-width:48px;text-align:center;white-space:nowrap;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  .pill.ghost{background:transparent;padding:9px 4px;min-width:0;}
+  .bar-sep{flex:0 0 auto;width:1px;height:16px;background:var(--sep);}
+
+  /* ---------------- input bar ---------------- */
+  .barwrap{position:relative;flex:0 0 auto;}
+  .inputbar{
+    display:flex;align-items:center;gap:8px;
+    padding:6px 12px;
+    background:var(--surface);
+    border-top:.5px solid rgba(60,60,67,.18);
+    min-height:56px;
+  }
+  .btn{
+    flex:0 0 44px;width:44px;height:44px;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink);cursor:pointer;
+    border:none;background:none;padding:0;
+  }
+  .btn.send{color:var(--ink)}
+  .btn.off{color:var(--ink3);cursor:default}
+  .btn.faded{opacity:.28;cursor:default}
+  .btn:active{opacity:.5}
+
+  .field{
+    flex:1 1 auto;min-width:0;
+    min-height:44px;
+    display:flex;align-items:center;
+    font-family:var(--mono);font-size:15px;
+    padding:0 14px;border-radius:9px;
+    background:transparent;
+    overflow:hidden;
+  }
+  .field.hold{
+    background:var(--surface2);
+    justify-content:center;
+    font-size:15px;
+    cursor:pointer;
+    touch-action:none;user-select:none;-webkit-user-select:none;
+  }
+  .field.hold.pressed{background:var(--surface3)}
+  .field .ph{color:var(--ink2);}
+  .field .txt{white-space:nowrap;overflow:hidden;text-overflow:clip;width:100%;}
+  .caret{display:inline-block;width:2px;height:17px;background:var(--ink);vertical-align:-3px;margin-left:1px;}
+  .field.holding{justify-content:flex-start;}
+
+  .unstable{color:var(--ink2)}
+
+  /* ---------------- bubble over the bar ---------------- */
+  .bubble-layer{
+    position:absolute;left:0;right:0;bottom:100%;
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    padding:0 28px 10px;
+    pointer-events:none;
+  }
+  .bubble{
+    position:relative;
+    background:var(--surface);
+    border-radius:12px;
+    padding:11px 14px;
+    max-width:100%;
+    font-family:var(--mono);font-size:14px;line-height:1.4;
+    box-shadow:0 4px 18px rgba(0,0,0,.16), 0 0 0 .5px rgba(0,0,0,.06);
+    max-height:58px;overflow:hidden;
+  }
+  .bubble::after{
+    content:"";position:absolute;left:50%;bottom:-5px;
+    width:12px;height:12px;margin-left:-6px;
+    background:inherit;transform:rotate(45deg);
+    border-radius:2px;
+  }
+  .bubble.cancel{background:var(--red);color:#fff;}
+  .bubble.cancel .unstable{color:rgba(255,255,255,.65)}
+  .bubble .empty{color:var(--ink2)}
+  .hintbar{
+    font-size:13px;font-weight:500;color:var(--ink);
+    background:rgba(255,255,255,.92);
+    padding:5px 12px;border-radius:20px;
+    box-shadow:0 2px 10px rgba(0,0,0,.12);
+  }
+  .hintbar.cancel{color:#fff;background:var(--red)}
+
+  /* ---------------- keyboards ---------------- */
+  .kbd{flex:0 0 auto;background:var(--surface4);padding:8px 3px 14px;user-select:none;}
+  .kbd .row{display:grid;grid-template-columns:0.72fr 1fr 1fr 1fr 0.9fr;gap:6px;margin-bottom:6px;padding:0 3px;}
+  .kbd .key{
+    height:42px;border-radius:6px;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:17px;font-weight:400;font-family:var(--ui);
+    box-shadow:0 .5px 0 rgba(0,0,0,.16);
+  }
+  .kbd .key.fn{background:#adb3bd;font-size:14px}
+  .kbd .key.accent{background:#0a84ff;color:#fff;font-size:15px}
+  .kbd .key.blank{background:transparent;box-shadow:none}
+  .kbd .key.sub{font-size:11px;color:#5b5b60}
+  .kbd .globe{height:32px;display:flex;align-items:center;justify-content:flex-start;padding-left:14px;font-size:20px;color:#3a3a3c}
+
+  .panel{background:var(--surface);padding:8px 14px 14px;}
+  .segmented{
+    display:flex;background:var(--surface2);border-radius:9px;padding:2px;margin-bottom:12px;
+  }
+  .segmented div{
+    flex:1;text-align:center;font-size:13px;font-weight:500;padding:6px 0;border-radius:7px;color:var(--ink);
+  }
+  .segmented div.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .panel .grid{display:flex;flex-direction:column;gap:4px}
+  .panel .grid .row2{display:flex;gap:4px;align-items:center}
+  .panel .grid .lbl{
+    font-family:var(--mono);font-size:13px;font-weight:500;
+    padding:9px 12px;border-radius:10px;background:var(--surface2);
+    min-width:48px;text-align:center;
+  }
+  .panel .spacer{flex:1}
+
+  /* ---------------- side controls ---------------- */
+  .side{width:360px;flex:0 0 auto;font-size:13px;}
+  .side h1{font-size:16px;margin:0 0 4px;font-weight:600;}
+  .side .lede{color:#5b5b60;line-height:1.6;margin:0 0 22px;}
+  .side h2{font-size:12px;font-weight:600;letter-spacing:.04em;color:#8a8a8e;margin:0 0 8px;text-transform:none;}
+  .grp{margin-bottom:22px;}
+  .switch{display:flex;background:#e6e6ea;border-radius:8px;padding:2px;margin-bottom:8px;}
+  .switch div{flex:1;text-align:center;padding:7px 4px;border-radius:6px;font-size:12.5px;cursor:pointer;color:#3a3a3c}
+  .switch div.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.13);font-weight:500}
+  .note{color:#8a8a8e;line-height:1.55;margin:0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{
+    border:1px solid #d6d6db;background:#fff;border-radius:20px;
+    padding:6px 12px;font-size:12.5px;cursor:pointer;color:#1c1c1e;
+  }
+  .chip.on{background:#1c1c1e;color:#fff;border-color:#1c1c1e}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  td{padding:7px 0;vertical-align:top;border-bottom:1px solid #e8e8ec;line-height:1.5}
+  td:first-child{color:#3a3a3c;width:42%;padding-right:12px}
+  td:last-child{color:#8a8a8e}
+  ol{margin:0;padding-left:18px;color:#3a3a3c;line-height:1.65}
+  ol li{margin-bottom:9px}
+  ol b{color:#1c1c1e}
+  .reset{
+    border:1px solid #d6d6db;background:#fff;border-radius:8px;padding:8px 14px;
+    font-size:12.5px;cursor:pointer;font-family:var(--ui);color:#1c1c1e;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+  <div class="statusbar">
+    <span>8:12</span>
+    <div class="island"></div>
+    <div class="status-right">
+      <div class="bars"><i></i><i></i><i></i><i></i></div>
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M1 4.2A10.6 10.6 0 0 1 15 4.2" stroke="#000" stroke-width="1.5" stroke-linecap="round"/><path d="M3.6 6.9a7 7 0 0 1 8.8 0" stroke="#000" stroke-width="1.5" stroke-linecap="round"/><path d="M6.2 9.5a3.3 3.3 0 0 1 3.6 0" stroke="#000" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <div class="batt"><i></i></div>
+    </div>
+  </div>
+
+  <div class="navbar">
+    <span class="ic"><svg width="12" height="20" viewBox="0 0 12 20" fill="none"><path d="M10 2 2.5 10 10 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <span class="t">Claude Code · Projects_Is</span>
+    <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></span>
+  </div>
+
+  <div class="canvas" id="canvas">
+    <div class="ln dim">● 会话已连接到 MacBook Pro</div>
+    <div class="ln">&nbsp;</div>
+    <div class="ln"><span class="grn">›</span> pnpm test</div>
+    <div class="ln dim">Running 9068 tests across 214 files…</div>
+    <div class="ln dim">Test Files  214 passed (214)</div>
+    <div class="ln dim">Tests       9068 passed (9068)</div>
+    <div class="ln">&nbsp;</div>
+    <div class="ln"><span class="amb">✻</span> Crunched for 24s</div>
+    <div class="ln">&nbsp;</div>
+    <div class="ln dim">› bypass permissions on (shift+tab to cycle)</div>
+    <div id="noticeSlot"></div>
+  </div>
+
+  <div class="accessory" id="accessory"></div>
+
+  <div class="barwrap">
+    <div class="bubble-layer" id="bubbleLayer"></div>
+    <div class="inputbar" id="inputbar"></div>
+  </div>
+
+  <div id="kbdSlot"></div>
+</div>
+
+<aside class="side">
+  <h1>SynapseMobile 输入栏重构</h1>
+  <p class="lede">照着微信底部输入栏的逻辑重做手机端的输入区：语音不再是输入框里的一个按钮，而是输入栏的一种模式。终端与 Agent 对话共用这一条栏。<br>直接在手机上按住那个「按住 说话」试。</p>
+
+  <div class="grp">
+    <h2>结构</h2>
+    <div class="switch" id="swLayout">
+      <div data-v="wechat" class="on">微信式（左端常驻切换键）</div>
+      <div data-v="current">现状（＋ 在最左、麦克风在框里）</div>
+    </div>
+    <h2>触发</h2>
+    <div class="switch" id="swTrigger">
+      <div data-v="hold" class="on">按住说话</div>
+      <div data-v="tap">点击开始 · 结束</div>
+    </div>
+    <p class="note">「点击开始·结束」是你 2026-09-16 拍的板，也是 PC 端现在的做法。两种都能试，见右侧待拍板第 1 条。</p>
+  </div>
+
+  <div class="grp">
+    <h2>键盘</h2>
+    <div class="switch" id="swKbd">
+      <div data-v="hidden" class="on">收起</div>
+      <div data-v="system">系统键盘</div>
+      <div data-v="panel">应用按键面板</div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <h2>异常场景（点切换键看反应）</h2>
+    <div class="chips" id="chips">
+      <div class="chip on" data-v="ok">正常</div>
+      <div class="chip" data-v="noperm">麦克风未授权</div>
+      <div class="chip" data-v="noconfig">识别未配置</div>
+      <div class="chip" data-v="offline">网络断开</div>
+      <div class="chip" data-v="nospeech">按住后没声音</div>
+    </div>
+  </div>
+
+  <div class="grp">
+    <h2>微信 → Synapse 的对应</h2>
+    <table>
+      <tr><td>左端「语音 / 键盘」常驻切换键</td><td>照搬</td></tr>
+      <tr><td>输入框右侧的麦克风快捷入口</td><td>去掉 —— 与左端切换键等价，两个入口只会让人猜哪个不一样</td></tr>
+      <tr><td>语音态输入框变「按住 说话」</td><td>照搬，宽度与位置不变</td></tr>
+      <tr><td>松开 → 发语音消息</td><td>松开 → 转文字，落进输入框由人确认后发送</td></tr>
+      <tr><td>「滑到这里 转文字」（右侧区）</td><td>砍掉 —— 恒定转文字后，右区没有第二个出口。只留上滑取消</td></tr>
+      <tr><td>录音时全屏变暗</td><td>不遮罩 —— 终端输出要能一边说一边看</td></tr>
+      <tr><td>波形气泡</td><td>实时转写气泡 —— 流式识别本来就有字可显示，不假装有波形</td></tr>
+      <tr><td>表情面板</td><td>不做</td></tr>
+      <tr><td>按住上限 60 秒</td><td>同（腾讯云引擎上限），到点自动收尾转文字</td></tr>
+    </table>
+  </div>
+
+  <div class="grp">
+    <h2>待拍板</h2>
+    <ol>
+      <li><b>手势：按住说话，还是点击开始·结束。</b>你两天前拍过「不是按住说话」，那是三端一起定的。iOS 单端改成按住，三端手势就不一致了 —— 要不要接受这个不一致？</li>
+      <li><b>＋ 从最左挪到输入框右侧。</b>这是微信的顺序，也让左端腾出来给切换键。不想动 ＋ 的话，切换键只能和 ＋ 挤在左边。</li>
+      <li><b>转文字落地后自动切回键盘态</b>（本原型）还是留在语音态连着说第二段？</li>
+      <li><b>录音时要不要遮罩终端。</b>原型选的是不遮罩 —— 终端在跑东西时还能看着。</li>
+    </ol>
+  </div>
+
+  <button class="reset" id="reset">重置</button>
+  <p class="note" style="margin-top:18px">键盘收起时，输入栏直接坐在屏幕底边；点输入框会起系统键盘，点工具栏最左边的 ⌨ 起应用自己的按键面板 —— 这两件事没动。</p>
+</aside>
+
+<script>
+(function(){
+  const SCRIPT = '跑一下 pnpm test，然后 git status 看看 SynapseMobile 改了什么';
+  const S = {
+    layout: 'wechat',
+    trigger: 'hold',
+    kbd: 'hidden',
+    mode: 'keyboard',      // keyboard | voice   （仅微信式结构有模式之分）
+    rec: null,             // { text, cancelArmed, empty, since }
+    draft: '',
+    phMsg: null,
+    notice: null,
+    scenario: 'ok'
+  };
+  let revealTimer = null;
+
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html !== undefined) n.innerHTML = html;
+    return n;
+  };
+
+  // ---------- icons ----------
+  const ICON = {
+    plus: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    mic: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="2.6" width="6" height="11.4" rx="3"/><path d="M5.6 11.6a6.4 6.4 0 0 0 12.8 0M12 18v3.4"/></svg>',
+    keyboard: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2.4" y="6" width="19.2" height="12" rx="2.6" stroke="currentColor" stroke-width="1.7"/><path d="M6.2 10h.01M9.6 10h.01M13 10h.01M16.4 10h.01M6.2 13.4h.01M9.6 13.4h.01M13 13.4h.01M16.4 13.4h.01M9.2 16.1h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    xmark: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    send: '<svg width="30" height="30" viewBox="0 0 28 28"><circle cx="14" cy="14" r="13" fill="currentColor"/><path d="M14 20.2V9m0 0-4.6 4.6M14 9l4.6 4.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+    check: '<svg width="30" height="30" viewBox="0 0 28 28"><circle cx="14" cy="14" r="13" fill="currentColor"/><path d="M8.4 14.4l3.6 3.6 7.2-7.4" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+  };
+
+  // ---------- pre-check ----------
+  function precheck(){
+    if (S.scenario === 'noperm')  return { text:'麦克风权限未开启 · 设置 › Synapse › 麦克风', action:'设置' };
+    if (S.scenario === 'noconfig') return { text:'语音识别未配置', action:null };
+    if (S.scenario === 'offline')  return { text:'网络已断开', action:null };
+    return null;
+  }
+
+  // ---------- recording ----------
+  function startRec(){
+    stopReveal();
+    S.rec = { text:'', cancelArmed:false, empty:false, since:Date.now() };
+    if (S.scenario === 'nospeech'){
+      setTimeout(()=>{ if (S.rec){ S.rec.empty = true; drawBubble(); } }, 1600);
+      drawAll();
+      return;
+    }
+    let i = 0;
+    revealTimer = setInterval(()=>{
+      if (!S.rec) return;
+      i++;
+      S.rec.text = SCRIPT.slice(0, i);
+      if (i >= SCRIPT.length){ stopReveal(); S.rec.empty = false; }
+      drawAll();
+    }, 95);
+    drawAll();
+  }
+  function stopReveal(){ if (revealTimer){ clearInterval(revealTimer); revealTimer = null; } }
+
+  function endRec(cancelled){
+    stopReveal();
+    const text = S.rec ? S.rec.text : '';
+    S.rec = null;
+    if (S.layout === 'wechat') S.mode = 'keyboard';
+    if (cancelled){
+      // 取消 = 回滚到按下之前
+    } else if (text){
+      S.draft = S.draft ? S.draft.replace(/\s+$/,'') + ' ' + text : text;
+      S.phMsg = null;
+    } else {
+      S.phMsg = '没有听到声音';
+    }
+    drawAll();
+  }
+
+  // ---------- bubble ----------
+  function drawBubble(){
+    const layer = $('bubbleLayer');
+    layer.innerHTML = '';
+    if (!S.rec) return;
+    const b = el('div', 'bubble' + (S.rec.cancelArmed ? ' cancel' : ''));
+    const hint = el('div', 'hintbar' + (S.rec.cancelArmed ? ' cancel' : ''));
+    hint.textContent = S.rec.cancelArmed ? '松开 取消' : '松开 转文字';
+    if (!S.rec.text){
+      b.innerHTML = '<span class="' + (S.rec.cancelArmed ? '' : 'empty') + '">'
+        + (S.rec.empty ? '没有听到声音' : (S.rec.cancelArmed ? '取消这次输入' : '聆听中')) + '</span>';
+    } else {
+      const stable = S.rec.text.slice(0, Math.max(0, S.rec.text.length - 3));
+      const unstable = S.rec.text.slice(Math.max(0, S.rec.text.length - 3));
+      b.innerHTML = escapeHtml(stable) + '<span class="unstable">' + escapeHtml(unstable) + '</span>'
+        + (S.rec.cancelArmed ? '' : '<span class="caret"></span>');
+    }
+    layer.appendChild(b);
+    layer.appendChild(hint);
+    // 永远看得到最新：滚到底
+    const inner = b;
+    requestAnimationFrame(()=>{ inner.scrollTop = inner.scrollHeight; });
+  }
+  function escapeHtml(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+  // ---------- input bar ----------
+  function drawBar(){
+    const bar = $('inputbar');
+    bar.innerHTML = '';
+    const wechat = S.layout === 'wechat';
+    const rec = S.rec;
+    const tapRec = rec && S.trigger === 'tap';
+    const holdRec = rec && S.trigger === 'hold';
+    const voiceMode = wechat && S.mode === 'voice';
+
+    const btn = (name, id, opts) => {
+      opts = opts || {};
+      const b = el('button', 'btn' + (opts.disabled ? ' off' : '') + (opts.faded ? ' faded' : ''));
+      b.innerHTML = ICON[name];
+      b.dataset.act = id;
+      if (opts.disabled || opts.faded) b.disabled = true;
+      return b;
+    };
+
+    // ---- left ----
+    if (wechat){
+      if (tapRec) bar.appendChild(btn('xmark','cancel'));
+      else bar.appendChild(btn(S.mode === 'voice' ? 'keyboard' : 'mic','toggle',{ faded: holdRec }));
+    } else {
+      if (rec) bar.appendChild(btn('xmark','cancel'));
+      else bar.appendChild(btn('plus','attach'));
+    }
+
+    // ---- middle ----
+    const field = el('div','field');
+    if (tapRec){
+      field.classList.add('holding');
+      field.innerHTML = transcriptHtml();
+    } else if (holdRec){
+      field.classList.add('hold','pressed','holding');
+      field.innerHTML = '<span class="ph">聆听中</span>';
+    } else if (wechat && S.mode === 'voice'){
+      field.classList.add('hold');
+      field.textContent = (S.trigger === 'hold') ? '按住 说话' : '点击 说话';
+    } else {
+      field.innerHTML = draftHtml();
+    }
+    bar.appendChild(field);
+
+    // ---- attach (微信式：输入框右侧) ----
+    if (wechat){
+      bar.appendChild(btn('plus','attach',{ faded: !!rec }));
+    }
+
+    // ---- mic (现状结构里在输入框右侧) ----
+    if (!wechat && !rec && !voiceMode){
+      bar.appendChild(btn('mic','tapmic'));
+    }
+
+    // ---- right ----
+    if (tapRec){
+      const enabled = !!S.rec.text;
+      bar.appendChild(btn('check','confirm',{ disabled: !enabled }));
+    } else if (holdRec || (wechat && voiceMode)){
+      bar.appendChild(btn('send','noop',{ disabled:true }));
+    } else {
+      const enabled = !!S.draft;
+      bar.appendChild(btn('send','send',{ disabled: !enabled }));
+    }
+
+    wireBar();
+  }
+
+  function draftHtml(){
+    if (S.draft) return '<span class="txt">' + escapeHtml(S.draft) + '</span><span class="caret"></span>';
+    const ph = S.phMsg || '输入命令';
+    return '<span class="ph">' + escapeHtml(ph) + '</span>';
+  }
+  function transcriptHtml(placeholderWhenEmpty){
+    if (!S.rec) return '';
+    if (!S.rec.text) return '<span class="ph">' + (S.rec.empty ? '没有听到声音' : '聆听中') + '</span>';
+    const t = S.rec.text;
+    const stable = t.slice(0, Math.max(0, t.length - 3));
+    const unstable = t.slice(Math.max(0, t.length - 3));
+    return '<span class="txt">' + escapeHtml(stable) + '<span class="unstable">' + escapeHtml(unstable) + '</span><span class="caret"></span></span>';
+  }
+
+  // ---------- wiring ----------
+  function wireBar(){
+    const bar = $('inputbar');
+    bar.querySelectorAll('[data-act]').forEach(node => {
+      const act = node.dataset.act;
+      if (act === 'toggle'){
+        node.onclick = () => {
+          if (S.mode === 'keyboard'){
+            const bad = precheck();
+            if (bad){ S.notice = bad; drawAll(); return; }
+            S.notice = null;
+            S.mode = 'voice';
+            S.phMsg = null;
+          } else {
+            S.mode = 'keyboard';
+          }
+          drawAll();
+        };
+      } else if (act === 'attach'){
+        node.onclick = () => flashNotice('照片 · 拍照 · 文件 · 粘贴图片');
+      } else if (act === 'cancel'){
+        if (S.trigger === 'hold') return;
+        node.onclick = () => endRec(true);
+      } else if (act === 'confirm'){
+        node.onclick = () => { if (S.rec && S.rec.text) endRec(false); };
+      } else if (act === 'send'){
+        node.onclick = () => {
+          if (!S.draft) return;
+          S.draft = ''; S.phMsg = null;
+          drawAll();
+        };
+      } else if (act === 'tapmic'){
+        node.onclick = () => {
+          const bad = precheck();
+          if (bad){ S.notice = bad; drawAll(); return; }
+          S.notice = null;
+          startRec();
+        };
+      }
+    });
+
+    // 点击开始：语音态下点那个「点击 说话」
+    const tapField = bar.querySelector('.field.hold');
+    if (tapField && !S.rec && S.trigger === 'tap'){
+      tapField.onclick = () => {
+        const bad = precheck();
+        if (bad){ S.notice = bad; drawAll(); return; }
+        S.notice = null;
+        startRec();
+      };
+    }
+
+    // 按住说话：指针按住 / 拖动 / 松开
+    const target = bar.querySelector('.field.hold');
+    if (target && !S.rec && S.trigger === 'hold' && S.layout === 'wechat' && S.mode === 'voice'){
+      let startY = null;
+      const down = e => {
+        e.preventDefault();
+        const bad = precheck();
+        if (bad){ S.notice = bad; drawAll(); return; }
+        S.notice = null;
+        startY = (e.touches ? e.touches[0].clientY : e.clientY);
+        startRec();
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+        window.addEventListener('pointercancel', up);
+      };
+      const move = e => {
+        if (!S.rec || startY === null) return;
+        const y = (e.touches ? e.touches[0].clientY : e.clientY);
+        const armed = (startY - y) > 70;
+        if (armed !== S.rec.cancelArmed){ S.rec.cancelArmed = armed; drawAll(); }
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        if (!S.rec) return;
+        endRec(S.rec.cancelArmed);
+        startY = null;
+      };
+      target.addEventListener('pointerdown', down);
+    }
+  }
+
+  // ---------- notice ----------
+  let noticeTimer = null;
+  function flashNotice(text, action){
+    S.notice = { text: text, action: action || null, transient: true };
+    drawNotice();
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(()=>{ if (S.notice && S.notice.transient){ S.notice = null; drawNotice(); } }, 2600);
+  }
+  function drawNotice(){
+    const slot = $('noticeSlot');
+    slot.innerHTML = '';
+    if (!S.notice) return;
+    const n = el('div','notice');
+    n.innerHTML = '<span>' + escapeHtml(S.notice.text) + '</span>'
+      + (S.notice.action ? '<b>' + escapeHtml(S.notice.action) + '</b>' : '');
+    slot.appendChild(n);
+  }
+
+  // ---------- accessory bar ----------
+  function drawAccessory(){
+    const a = $('accessory');
+    a.innerHTML = '';
+    const kb = el('div','pill','<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="2.4" y="6" width="19.2" height="12" rx="2.6" stroke="currentColor" stroke-width="1.7"/><path d="M6.2 10h.01M9.6 10h.01M13 10h.01M16.4 10h.01M6.2 13.4h.01M9.6 13.4h.01M13 13.4h.01M16.4 13.4h.01M9.2 16.1h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>');
+    kb.onclick = () => {
+      S.kbd = (S.kbd === 'panel') ? 'hidden' : 'panel';
+      drawAll();
+    };
+    a.appendChild(kb);
+    a.appendChild(el('div','bar-sep'));
+    ['回车','Ctrl+C','/exit','/clear'].forEach((t,i)=>{
+      if (i === 2) a.appendChild(el('div','bar-sep'));
+      const p = el('div','pill', t);
+      p.onclick = () => flashNotice('已发送 ' + t);
+      a.appendChild(p);
+    });
+  }
+
+  // ---------- keyboards ----------
+  function drawKeyboard(){
+    const slot = $('kbdSlot');
+    slot.innerHTML = '';
+    if (S.kbd === 'hidden') return;
+
+    if (S.kbd === 'system'){
+      const k = el('div','kbd');
+      const rows = [
+        ['，','@#','ABC','DEF','⌫'],
+        ['。','GHI','JKL','MNO','换行'],
+        ['？','PQRS','TUV','WXYZ','发送'],
+        ['！','符号','123','空格','中英']
+      ];
+      rows.forEach((r, ri) => {
+        const row = el('div','row');
+        r.forEach((label, ci) => {
+          const fn = ci === 4 || (ri === 3 && ci > 0) || (ri === 0 && ci === 0) || ci === 0;
+          const kk = el('div','key' + (fn ? ' fn' : ''), label);
+          if (ri === 2 && ci === 4) kk.className = 'key accent';
+          if (ri === 3 && ci === 3) kk.className = 'key';
+          row.appendChild(kk);
+        });
+        k.appendChild(row);
+      });
+      k.appendChild(el('div','globe','🌐'));
+      slot.appendChild(k);
+      return;
+    }
+
+    // 应用按键面板（TerminalKeyboardPanel 的「常用」页）
+    const p = el('div','panel');
+    const seg = el('div','segmented');
+    ['常用','方向','功能','全键盘'].forEach((t,i)=> seg.appendChild(el('div', i===0?'on':'', t)));
+    p.appendChild(seg);
+    const g = el('div','grid');
+    const r1 = el('div','row2');
+    r1.appendChild(el('div','lbl','esc'));
+    r1.appendChild(el('div','spacer'));
+    r1.appendChild(el('div','lbl','⇧tab'));
+    r1.appendChild(el('div','spacer'));
+    r1.appendChild(el('div','lbl','⌫'));
+    g.appendChild(r1);
+    const r2 = el('div','row2');
+    r2.appendChild(el('div','lbl','tab'));
+    r2.appendChild(el('div','spacer'));
+    r2.appendChild(el('div','lbl','回车'));
+    g.appendChild(r2);
+    p.appendChild(g);
+    const wrap = el('div','kbd');
+    wrap.style.background = '#fff';
+    wrap.style.height = '260px';
+    wrap.appendChild(p);
+    slot.appendChild(wrap);
+  }
+
+  // ---------- draw ----------
+  function drawAll(){ drawBar(); drawBubble(); drawNotice(); drawAccessory(); drawKeyboard(); }
+
+  // ---------- side controls ----------
+  function bindSwitch(id, key){
+    $(id).addEventListener('click', e => {
+      const v = e.target.dataset && e.target.dataset.v;
+      if (!v) return;
+      [...$(id).children].forEach(c => c.classList.toggle('on', c === e.target));
+      S[key] = v;
+      if (key === 'layout'){
+        // 现状结构里没有「语音态」，按住说话无处可落，只有点击开始·结束成立
+        if (v !== 'wechat') S.mode = 'keyboard';
+        setTrigger(v === 'wechat' ? S.trigger : 'tap');
+        $('swTrigger').style.opacity = (v === 'wechat') ? '1' : '.35';
+        $('swTrigger').style.pointerEvents = (v === 'wechat') ? 'auto' : 'none';
+      }
+      if (S.rec){ stopReveal(); S.rec = null; }
+      drawAll();
+    });
+  }
+  function setTrigger(v){
+    S.trigger = v;
+    [...$('swTrigger').children].forEach(c => c.classList.toggle('on', c.dataset.v === v));
+  }
+
+  bindSwitch('swLayout','layout');
+  bindSwitch('swTrigger','trigger');
+  bindSwitch('swKbd','kbd');
+
+  $('chips').addEventListener('click', e => {
+    const v = e.target.dataset && e.target.dataset.v;
+    if (!v) return;
+    [...$('chips').children].forEach(c => c.classList.toggle('on', c === e.target));
+    S.scenario = v;
+    S.notice = null;
+    S.mode = 'keyboard';
+    if (S.rec){ stopReveal(); S.rec = null; }
+    if (v === 'noperm') flashNotice('麦克风权限未开启 · 设置 › Synapse › 麦克风','设置');
+    if (v === 'noconfig') flashNotice('语音识别未配置');
+    if (v === 'offline') flashNotice('网络已断开');
+    drawAll();
+  });
+
+  $('reset').onclick = () => {
+    stopReveal();
+    S.layout='wechat'; S.trigger='hold'; S.kbd='hidden'; S.mode='keyboard';
+    S.rec=null; S.draft=''; S.phMsg=null; S.notice=null; S.scenario='ok';
+    document.querySelectorAll('.switch').forEach(sw => {
+      [...sw.children].forEach((c,i)=> c.classList.toggle('on', i===0));
+    });
+    $('swTrigger').style.opacity = '1';
+    $('swTrigger').style.pointerEvents = 'auto';
+    [...$('chips').children].forEach((c,i)=> c.classList.toggle('on', i===0));
+    drawAll();
+  };
+
+  drawAll();
+})();
+</script>
+</body>
+</html>
