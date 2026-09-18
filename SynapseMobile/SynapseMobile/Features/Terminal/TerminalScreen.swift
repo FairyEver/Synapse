@@ -750,8 +750,12 @@ struct TerminalScreen: View {
     /// you wanted. Neither is disabled with the terminal stopped — a stopped terminal
     /// still has an input field and still has commands worth reading.
     private var accessoryBar: some View {
-        // 两颗固定键与中间的指令条之间不留间距。它们没有底色，那颗 48pt 的点击框里
-        // 已经各留了十几点的空白 —— 这里再让出一道，边上就同时有了两段留白。
+        // 两颗固定键与中间的指令条之间不留间距。它们没有底色，那颗点击框里已经各留了
+        // 十几点的空白 —— 这里再让出一道，边上就同时有了两段留白。
+        //
+        // 点击框的宽是 `minimumTapTarget`，和下面输入栏两端的麦克风、发送键一样：两
+        // 行都是左右各 12pt 内边距加一颗这个宽的格子，所以上下两组图标的中心落在同一条
+        // 竖线上。它们原本是 48pt，比下面宽 4pt，两行的图标因此差着 2pt 对不齐。
         HStack(spacing: 0) {
             // 左固定：键盘面板。图标由 ⌨ 换成 ⌘，因为它下面的输入栏左端已经是一颗
             // 键盘 —— 相邻两行同一个图形会被当成同一件事。换的只是脸：它开的还是
@@ -765,7 +769,7 @@ struct TerminalScreen: View {
             }
             // 没有胶囊底：它不是一条指令，是工具栏上两颗钉住的键之一 —— 中间那排有底色、
             // 这两颗没有，区别靠底色就够，不必再拿留白去说。
-            .terminalKeyPill(bare: true)
+            .terminalKeyPill(minWidth: Metrics.minimumTapTarget, bare: true)
             // The panel's own keys have always been drawn plain, and these two were not:
             // the default button style is what put a press animation on a key that is
             // just a key. Nothing here is a link or a tinted action.
@@ -819,7 +823,11 @@ struct TerminalScreen: View {
                 Image(systemName: "chevron.up")
                     .font(.system(size: 16))
             }
-            .terminalKeyPill(pressed: shortcutPanelPresented, bare: true)
+            .terminalKeyPill(
+                minWidth: Metrics.minimumTapTarget,
+                pressed: shortcutPanelPresented,
+                bare: true
+            )
             .buttonStyle(.plain)
             .accessibilityLabel("全部指令")
             .accessibilityIdentifier("toolbar-all")
