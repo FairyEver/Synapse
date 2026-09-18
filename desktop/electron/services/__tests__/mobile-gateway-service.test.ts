@@ -11,6 +11,7 @@ import type {
 } from "@synapse/shared"
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
+import { terminalContractError } from "../../../app-capabilities/terminal/shared/errors"
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
 import type { TerminalLayoutNode } from "../../../app-capabilities/terminal/shared/workspace"
 import type { PermissionGuard } from "../../runtime/security/permission-guard"
@@ -128,13 +129,22 @@ class FakeTerminal {
     return [...this.workspaces.values()]
   }
 
+  /**
+   * The real service raises a `TerminalContractError` for an id it does not know,
+   * with the code in `payload` rather than on the error itself. The double raises the
+   * same class so a test observes the same error the gateway does — a plain object
+   * with a `code` field would take a different path through `classifyError`.
+   */
   getSession(input: { sessionId: string }): FakeSession {
     const session = this.sessions.get(input.sessionId)
-    if (!session) throw Object.assign(new Error("missing"), { code: "not_found" })
+    if (!session) throw terminalContractError("not_found", "not_found")
     return session
   }
 
   async readLineWindow(input: { sessionId: string; maxLines: number }) {
+    // A window is read off a live session in the real service, so an id it no longer
+    // has is a throw there too — not an empty window here.
+    if (!this.sessions.has(input.sessionId)) throw terminalContractError("not_found", "not_found")
     const all = this.lines.get(input.sessionId) ?? []
     const lines = all.slice(Math.max(0, all.length - input.maxLines))
     return {
@@ -822,6 +832,122 @@ describe("MobileGatewayService", () => {
     expect(harness.terminal.calls).toContain("deleteSession")
     expect(harness.terminal.calls).not.toContain("stopControlledSession")
     expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+  })
+
+  it("names the operation when a failure has no reason of its own, differently per operation", async () => {
+    /*
+     * One sentence used to answer for every unclassified failure — "操作没有完成。" —
+     * which names neither what was being done nor why it stopped, so the only reading
+     * available to whoever saw it was that the app breaks at random. What is left when
+     * nothing more specific can be said is the operation, which this layer does know.
+     */
+    const harness = createHarness()
+    await attach(harness)
+    vi.spyOn(harness.terminal, "renameSession").mockRejectedValue(new Error("boom"))
+    vi.spyOn(harness.terminal, "readLineWindow").mockRejectedValue(new Error("boom"))
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-rename",
+      kind: "rename",
+      sessionId: "sess-1",
+      title: "api",
+    }))
+    const renamed = harness.results.at(-1) as { result: { outcome: string; message: string } }
+
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+    const synced = harness.results.at(-1) as { result: { outcome: string; message: string } }
+
+    expect(renamed.result).toMatchObject({ outcome: "rejected" })
+    expect(synced.result).toMatchObject({ outcome: "rejected" })
+    expect(renamed.result.message).toBe("重命名这个终端没有完成。")
+    expect(synced.result.message).toBe("刷新终端列表没有完成。")
+    expect(renamed.result.message).not.toBe(synced.result.message)
+  })
+
+  it("says a terminal is gone when the phone names one the computer no longer has", async () => {
+    /*
+     * The reader's list can be a moment behind a delete on the computer, and a phone
+     * that was away can name a terminal closed in the meantime. Both mean the same
+     * thing to the person holding it, and both used to arrive as an unexplained
+     * failure: the lookup threw before the sentence written for this case was reached.
+     */
+    const harness = createHarness()
+    harness.terminal.sessions.delete("sess-1")
+
+    await attach(harness)
+
+    expect(harness.results.at(-1)).toMatchObject({
+      result: { outcome: "rejected", code: "lifecycle_conflict", message: "该终端已结束。" },
+    })
+  })
+
+  it("carries a terminal's own error code into the result, with words for it", async () => {
+    /*
+     * The code decides what the phone does with a refusal — `lease_preempted` is the
+     * one it may replay. A terminal contract error keeps its code in `payload`, out of
+     * reach of a plain property check, so every one of them arrived as `internal_error`
+     * and was answered with the sentence that explained nothing.
+     */
+    const harness = createHarness()
+    await attach(harness)
+    vi.spyOn(harness.terminal, "renameSession")
+      .mockRejectedValue(terminalContractError("not_found", "not_found"))
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-rename",
+      kind: "rename",
+      sessionId: "sess-1",
+      title: "api",
+    }))
+
+    expect(harness.results.at(-1)).toMatchObject({
+      result: { outcome: "rejected", code: "not_found", message: "这个终端在电脑上已经不在了。" },
+    })
+  })
+
+  it("treats deleting a terminal the computer already dropped as done", async () => {
+    // The state this intent asks for is the one the terminal is already in, so a
+    // second tap on something already deleted is not a failure to report.
+    const harness = createHarness()
+    harness.terminal.sessions.delete("sess-1")
+
+    await harness.gateway.handleIntent("phone-1", intent({
+      v: 1,
+      intentId: "i-delete",
+      kind: "delete",
+      sessionId: "sess-1",
+    }))
+
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+    expect(harness.terminal.calls).not.toContain("deleteSession")
+    expect(harness.terminal.calls).not.toContain("stopControlledSession")
+  })
+
+  it("drops a terminal the computer no longer has instead of failing the whole sync", async () => {
+    /*
+     * The phone re-attaches everything it had open, so a terminal the user closed on
+     * the computer while the phone was away arrives here as a stale attachment. That
+     * has to cost the one terminal rather than the sync: the sync is how the phone
+     * finds out the terminal is gone, so answering it with a failure would leave the
+     * phone with nothing — and with an error about a request it sent for itself.
+     */
+    const harness = createHarness()
+    await attach(harness)
+    harness.terminal.sessions.delete("sess-1")
+    const framesBefore = harness.frames.filter((entry) => entry.frame.sessionId === "sess-1").length
+
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync", kind: "sync" }))
+
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+    expect(harness.frames.filter((entry) => entry.frame.sessionId === "sess-1")).toHaveLength(framesBefore)
+
+    // And it stays dropped: the next sync does not try it a second time.
+    await harness.gateway.handleIntent("phone-1", intent({ v: 1, intentId: "i-sync-2", kind: "sync" }))
+
+    expect(harness.results.at(-1)).toMatchObject({ result: { outcome: "accepted" } })
+    expect(harness.frames.filter((entry) => entry.frame.sessionId === "sess-1")).toHaveLength(framesBefore)
   })
 
   it("renames a terminal and audits it", async () => {

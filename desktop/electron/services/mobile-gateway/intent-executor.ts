@@ -8,6 +8,7 @@ import type {
 } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
+import { TerminalContractError } from "../../../app-capabilities/terminal/shared/errors"
 import type { AuditSink, PermissionAction } from "../../runtime/security/permission-guard"
 import type { MobileAttachment } from "./attachment-registry"
 import { AttachmentRegistry, createAttachment } from "./attachment-registry"
@@ -146,7 +147,7 @@ export class MobileIntentExecutor {
         intentId: intent.intentId,
         outcome: "rejected",
         code: classifyError(error),
-        message: describeError(error),
+        message: describeError(error, intent),
       }
     }
     this.remember(cacheKey, result)
@@ -174,21 +175,25 @@ export class MobileIntentExecutor {
         this.deps.resendSummary()
         this.deps.sendToolbar()
         for (const attachment of registry.forClient(mobileClientInstanceId)) {
-          await this.deps.pushSnapshot(attachment)
+          await this.pushSnapshotOrForget(attachment)
         }
         return accepted(intent.intentId)
       }
 
       case "attach": {
         await this.deps.authorize("terminal.state.read", sessionResource(intent.sessionId))
-        const session = terminal.getSession({ sessionId: intent.sessionId })
-        if (session.status !== "running" && session.status !== "stopping") {
+        const session = findSession(terminal, intent.sessionId)
+        // No session at all and a session that has ended are the same answer to the
+        // phone: this terminal cannot be opened. Asking by exception would have made
+        // the first case an unexplained failure instead of this sentence.
+        if (!session || (session.status !== "running" && session.status !== "stopping")) {
           return {
             intentId: intent.intentId,
             outcome: "rejected",
             code: "lifecycle_conflict",
             message: "该终端已结束。",
-            sessionId: session.id,
+            // Named from the request, not from the session: there may be no session.
+            sessionId: intent.sessionId,
           }
         }
         // Opening a terminal is when a stale button list is most visible, and it is a
@@ -301,8 +306,8 @@ export class MobileIntentExecutor {
       case "delete": {
         await this.deps.authorize("terminal.session.delete", sessionResource(intent.sessionId))
         const attachment = registry.get(mobileClientInstanceId, intent.sessionId)
-        const session = terminal.getSession({ sessionId: intent.sessionId })
-        if (session.status === "running" || session.status === "stopping") {
+        const session = findSession(terminal, intent.sessionId)
+        if (session && (session.status === "running" || session.status === "stopping")) {
           // The service refuses to delete a live session (`lifecycle_conflict`), and
           // it must not be deleted a second time either: when the PTY exits, the
           // terminal service destroys the session itself and announces it. So for
@@ -311,11 +316,14 @@ export class MobileIntentExecutor {
             sessionId: intent.sessionId,
             idempotencyKey: intentKey(intent.intentId),
           }, controllerFor(mobileClientInstanceId, intent.sessionId))
-        } else {
+        } else if (session) {
           // Already ended but still listed: the service keeps those only so they
           // can be cleaned up explicitly.
           await terminal.deleteSession({ sessionId: intent.sessionId })
         }
+        // A session the desktop no longer has needs nothing: the state this intent
+        // asks for is the one it is already in, so a second tap on a terminal that
+        // is already gone is not an error to report.
         // The lease belongs to a session that is going away.
         if (attachment) await this.releaseLease(attachment)
         this.deps.requestSummary()
@@ -602,6 +610,23 @@ export class MobileIntentExecutor {
   }
 
   /**
+   * Sends one attachment's window, dropping the attachment when its session is gone.
+   *
+   * A phone that was away can still hold a terminal the user closed while it was
+   * gone, and that has to cost the one stale terminal rather than the whole sync:
+   * answering with a failure would leave the phone without the list it asked for,
+   * and that list is how it finds out the terminal is gone in the first place.
+   */
+  private async pushSnapshotOrForget(attachment: MobileAttachment): Promise<void> {
+    try {
+      await this.deps.pushSnapshot(attachment)
+    } catch (error) {
+      if (!isMissingSession(error)) throw error
+      this.deps.registry.detach(attachment.mobileClientInstanceId, attachment.sessionId)
+    }
+  }
+
+  /**
    * Takes the write lease if it is free. A busy lease is not an error: the phone
    * still gets to watch the terminal, it just cannot type until the other writer
    * lets go.
@@ -815,6 +840,10 @@ function leaseKey(prefix: string): string {
 
 function classifyError(error: unknown): string {
   if (error instanceof MobileIntentError) return error.code
+  // A terminal contract error carries its code in `payload`, out of reach of the
+  // plain property check below — so every one of them reported `internal_error`,
+  // including a `not_found` that is a perfectly ordinary thing for a phone to meet.
+  if (error instanceof TerminalContractError) return error.payload.code
   if (error && typeof error === "object" && "code" in error) {
     const code = (error as { code?: unknown }).code
     if (typeof code === "string") return code
@@ -822,7 +851,61 @@ function classifyError(error: unknown): string {
   return "internal_error"
 }
 
-function describeError(error: unknown): string {
+/**
+ * What a terminal contract code means to the person holding the phone.
+ *
+ * A translation table, not a classification: the codes belong to the terminal
+ * service, and every entry here has to be a statement the reader can act on. Unmapped
+ * codes are deliberately absent rather than approximated — they fall through to the
+ * operation's own sentence, which is honest about knowing less.
+ */
+const TERMINAL_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
+  not_found: "这个终端在电脑上已经不在了。",
+  control_busy: "电脑正在使用这个终端，请重试。",
+  lease_invalid: "这个终端的控制权已经变化，请重试。",
+  lease_expired: "终端控制权已过期，请重试。",
+  revision_conflict: "终端内容刚刚变了，请重试。",
+  lifecycle_conflict: "这个终端的状态刚刚变了，请重试。",
+  watermark_ahead: "终端输出有断档，请重新打开这个终端。",
+  persistence_unavailable: "电脑没能保存这次改动。",
+  quota_exceeded: "终端数量已达到上限。",
+  rate_limited: "操作太频繁，请稍后重试。",
+  idempotency_conflict: "这次操作已经处理过了。",
+  idempotency_expired: "这次操作已经过期，请重试。",
+  delivery_uncertain: "电脑是否收到不确定，请确认后再试。",
+  caller_identity_required: "手机身份没有通过电脑的校验。",
+}
+
+/**
+ * What was being attempted, for a failure that has no better words of its own.
+ *
+ * The sentence a reader got until now was one line for every one of these — "操作
+ * 没有完成。" — which names neither the operation nor the reason, so the only reading
+ * available is that the app breaks at random. Naming the operation is the least this
+ * layer can say and still be saying something.
+ */
+const UNFINISHED_OPERATION_MESSAGES: Readonly<Record<MobileIntent["kind"], string>> = {
+  attach: "打开这个终端没有完成。",
+  detach: "关闭这个终端没有完成。",
+  sync: "刷新终端列表没有完成。",
+  ping: "连接检查没有完成。",
+  unlock: "取回终端控制权没有完成。",
+  command: "命令没有送到终端。",
+  keys: "按键没有送到终端。",
+  stop: "停止这个终端没有完成。",
+  delete: "删除这个终端没有完成。",
+  history: "读取更早的输出没有完成。",
+  stopAll: "停止所有终端没有完成。",
+  rename: "重命名这个终端没有完成。",
+  resize: "调整终端大小没有完成。",
+  releaseGrid: "还原电脑端布局没有完成。",
+  create: "新建终端没有完成。",
+  launchCommand: "启动命令没有完成。",
+  createAgentConversation: "启动对话没有完成。",
+  fileUpload: "文件没有送到终端。",
+}
+
+function describeError(error: unknown, intent: MobileIntent): string {
   if (error instanceof MobileIntentError) return error.message
   // The relay's failures are all things the user can act on — the file was too
   // large, the cloud item was gone — so its own wording beats a generic one.
@@ -836,5 +919,39 @@ function describeError(error: unknown): string {
   if (error instanceof Error && (error as { readonly userFacing?: unknown }).userFacing === true) {
     return error.message
   }
-  return "操作没有完成。"
+  // A terminal code that has words of its own. Checked by identity rather than by a
+  // duck-typed `code` field so an unrelated error cannot borrow a terminal sentence.
+  if (error instanceof TerminalContractError) {
+    const message = TERMINAL_FAILURE_MESSAGES[error.payload.code]
+    if (message) return message
+  }
+  return UNFINISHED_OPERATION_MESSAGES[intent.kind]
+}
+
+/**
+ * Whether an error is the terminal service saying it does not know this session.
+ *
+ * A phone that was away can name a terminal the user closed while it was gone. That
+ * is a state, not a fault: it has its own sentence and its own handling at each call
+ * site, and treating it as an exception would replace both with a failure the reader
+ * cannot act on.
+ */
+function isMissingSession(error: unknown): boolean {
+  return error instanceof TerminalContractError && error.payload.code === "not_found"
+}
+
+/**
+ * The session, or `undefined` when the desktop no longer has it.
+ *
+ * `TerminalService.getSession` throws for an id it does not know, which is right for
+ * a caller that meant to read one and wrong for a caller that has to decide what to
+ * do about a terminal that is gone.
+ */
+function findSession(terminal: TerminalService, sessionId: string) {
+  try {
+    return terminal.getSession({ sessionId })
+  } catch (error) {
+    if (isMissingSession(error)) return undefined
+    throw error
+  }
 }

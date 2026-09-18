@@ -79,6 +79,29 @@ final class SynapseAppModel {
     /// Terminals the UI currently has open. Re-attached after every reconnect,
     /// because an attach sent before the socket is ready is dropped.
     private var openSessions: Set<String> = []
+
+    /// Attach intents in flight, by intent id, naming the terminal each is about.
+    ///
+    /// An attach has no write to be attributed by — nothing was typed into it — but
+    /// it does have a terminal it was about, and that is where a refusal belongs.
+    /// Without this the answer to "this terminal is gone" had nowhere to land but the
+    /// bottom of whatever screen the reader happened to be on.
+    private var pendingAttachments: [String: String] = [:]
+
+    /// Results nothing is waiting for, because the request was the app talking to
+    /// itself rather than the reader asking for something.
+    ///
+    /// The sync sent on every connect and the resize that re-asserts a grid claim are
+    /// bookkeeping: no reader action is pending on either, and no part of the screen
+    /// has "this request failed" as its subject — the list and the device row describe
+    /// the state that follows. Reporting them made opening the app look like a random
+    /// error. They are logged instead.
+    ///
+    /// A list rather than a set because a result can be lost with the connection, and
+    /// an id that never gets an answer must not live for the life of the app.
+    private var quietIntents: [String] = []
+    private static let maxQuietIntents = 16
+
     /// History requests in flight, so a lost reply cannot wedge the loader.
     private var pendingHistory: [String: String] = [:]
 
@@ -416,7 +439,22 @@ final class SynapseAppModel {
             if let sessionId = self.pendingHistory.removeValue(forKey: result.intentId) {
                 self.store(for: sessionId).endHistoryLoad()
             }
-            self.pendingIntentResults.removeValue(forKey: result.intentId)?(result)
+
+            if let index = self.quietIntents.firstIndex(of: result.intentId) {
+                self.quietIntents.remove(at: index)
+                if !result.isAccepted, !result.isNoOp, result.code != "no_result" {
+                    AppLog.network.warning("self-issued intent rejected: \(result.code ?? "unknown")")
+                }
+                return
+            }
+
+            // Whoever asked owns the answer, including deciding that there is nothing
+            // to say about it. Falling through as well is how one refusal came back as
+            // two messages — the caller's and a banner repeating it.
+            if let awaiting = self.pendingIntentResults.removeValue(forKey: result.intentId) {
+                awaiting(result)
+                return
+            }
 
             // A file transfer has its own idea of what a failure means — a refusal
             // because the computer is away is a wait, not an error — so it is
@@ -445,9 +483,25 @@ final class SynapseAppModel {
                 return
             }
 
+            // An attach is neither a write nor an awaited call, but it still names a
+            // terminal, and that is the screen the reader is looking at when it fails.
+            if let sessionId = self.pendingAttachments.removeValue(forKey: result.intentId) {
+                if !result.isAccepted, !result.isNoOp, result.code != "no_result" {
+                    self.raiseTerminalMessage(
+                        result.message ?? "这个终端打不开。",
+                        sessionId: sessionId
+                    )
+                }
+                return
+            }
+
             let write = self.pendingWrites.removeValue(forKey: result.intentId)
             if !result.isAccepted, !result.isNoOp, result.code != "no_result" {
-                let message = result.message ?? "操作没有完成。"
+                // The computer writes this one, and every refusal it can name comes
+                // with its own reason. The fallback says what is known here — who
+                // refused — rather than inventing a cause, which is what a sentence
+                // like "操作没有完成。" did.
+                let message = result.message ?? "电脑拒绝了这次操作，但没有说明原因。"
                 // Only a write this client can still name has a terminal to belong to.
                 // Creating a session or launching a command is awaited instead of
                 // queued, so its refusal arrives with nothing to attribute it to —
@@ -482,14 +536,11 @@ final class SynapseAppModel {
                 Task { await self.refreshDesktops() }
                 return
             }
-            self.realtime.requestSync(desktopClientInstanceId: desktop)
+            self.requestSync(on: desktop)
             // Re-attach everything the user still has open. Without this a terminal
             // entered from a notification stays blank until it is opened by hand.
             for sessionId in self.openSessions {
-                self.send(
-                    MobileIntentRequest(intentId: UUID().uuidString, kind: "attach", sessionId: sessionId),
-                    to: desktop
-                )
+                self.attach(sessionId, to: desktop)
             }
             // A claim on a terminal's grid does not survive the break — the desktop
             // drops it when the phone goes — so any terminal whose size this phone
@@ -551,7 +602,7 @@ final class SynapseAppModel {
                 if summary == nil {
                     summary = try? await apiClient.cachedSummary(desktopClientInstanceId: desktop)
                 }
-                realtime.requestSync(desktopClientInstanceId: desktop)
+                requestSync(on: desktop)
                 // Resolving a computer here is the third way one can come back —
                 // the other two being the socket reconnecting and presence pushing a
                 // new list — and it is the only one that happens when a computer
@@ -613,11 +664,22 @@ final class SynapseAppModel {
         sessions.first { $0.id == sessionId }
     }
 
+    /// Forgets everything about terminals the computer no longer lists.
+    ///
+    /// The list is the whole truth — the computer sends every session it has, not a
+    /// page of them — so a terminal missing from it is gone. That has to include
+    /// `openSessions`: leaving an id there meant re-attaching to a terminal the user
+    /// closed on the computer every time this app reconnected, for the rest of the
+    /// app's life, and each of those attaches came back as a refusal to show someone.
     private func pruneTerminalStores(keeping live: Set<String>) {
         for key in terminalStores.keys where !live.contains(key) {
             terminalStores.removeValue(forKey: key)
             preemptedSessions.remove(key)
         }
+        for sessionId in openSessions where !live.contains(sessionId) {
+            openSessions.remove(sessionId)
+        }
+        stopKeepAliveIfIdle()
     }
 
     // MARK: - Terminal actions
@@ -628,8 +690,18 @@ final class SynapseAppModel {
         guard let desktop = selectedDesktopClientInstanceId else { return }
         // Idempotent on the desktop, so re-opening is safe; if the socket is not up
         // yet the re-attach on connect covers it.
-        send(MobileIntentRequest(intentId: UUID().uuidString, kind: "attach", sessionId: sessionId),
-             to: desktop)
+        attach(sessionId, to: desktop)
+    }
+
+    /// Asks the desktop to attach, remembering which terminal the answer is about.
+    private func attach(_ sessionId: String, to desktopClientInstanceId: String) {
+        let intent = MobileIntentRequest(
+            intentId: UUID().uuidString,
+            kind: "attach",
+            sessionId: sessionId
+        )
+        pendingAttachments[intent.intentId] = sessionId
+        send(intent, to: desktopClientInstanceId)
     }
 
     /// Fetches one page of scrollback below what the terminal already shows.
@@ -995,17 +1067,19 @@ final class SynapseAppModel {
             else { return }
 
             self.requestedGrid[sessionId] = grid
-            self.send(
-                MobileIntentRequest(
-                    intentId: UUID().uuidString,
-                    kind: "resize",
-                    sessionId: sessionId,
-                    cols: grid.columns,
-                    rows: grid.rows,
-                    deviceLabel: deviceLabel
-                ),
-                to: desktop
+            let intent = MobileIntentRequest(
+                intentId: UUID().uuidString,
+                kind: "resize",
+                sessionId: sessionId,
+                cols: grid.columns,
+                rows: grid.rows,
+                deviceLabel: deviceLabel
             )
+            // Quiet like the sync: this is the phone stating a size it already shows
+            // locally, and a refusal leaves the screen as it was rather than telling
+            // the reader to do something.
+            self.rememberQuiet(intent.intentId)
+            self.send(intent, to: desktop)
         }
     }
 
@@ -1097,15 +1171,28 @@ final class SynapseAppModel {
         }
     }
 
+    /// Returns the new session's id, or `nil` after saying why in the notice bar.
+    ///
+    /// The caller only navigates or does not, so the refusal is answered here rather
+    /// than left to fall through to the generic result handling: that one reports a
+    /// failure it cannot attribute to anything, and the reader would get the reason
+    /// twice or not at all depending on which branch ran first.
     private func performReturningSession(_ intent: MobileIntentRequest) async -> String? {
         guard let desktop = selectedDesktopClientInstanceId, realtime.state.isConnected else {
             banner = "电脑离线。"
             return nil
         }
         guard let result = await awaitResult(of: intent, sentTo: desktop, timeoutSeconds: 10) else {
+            banner = "电脑一直没有回答，请重试。"
             return nil
         }
-        return result.isAccepted ? result.createdSessionId : nil
+        guard result.isAccepted, let created = result.createdSessionId else {
+            // The computer's own words for what it refused, which every failure it can
+            // name now carries.
+            banner = result.message ?? "电脑没有完成这个操作。"
+            return nil
+        }
+        return created
     }
 
     /// Sends one intent and waits for the desktop's answer, or resolves nil if the
@@ -1136,6 +1223,19 @@ final class SynapseAppModel {
 
     private func send(_ intent: MobileIntentRequest, to desktopClientInstanceId: String) {
         realtime.sendIntent(intent, desktopClientInstanceId: desktopClientInstanceId)
+    }
+
+    /// Asks the desktop for a fresh snapshot on this app's own behalf, not the
+    /// reader's — see `quietIntents` for what that means for the answer.
+    private func requestSync(on desktopClientInstanceId: String) {
+        rememberQuiet(realtime.requestSync(desktopClientInstanceId: desktopClientInstanceId))
+    }
+
+    private func rememberQuiet(_ intentId: String) {
+        quietIntents.append(intentId)
+        if quietIntents.count > Self.maxQuietIntents {
+            quietIntents.removeFirst(quietIntents.count - Self.maxQuietIntents)
+        }
     }
 
     // MARK: - Keepalive

@@ -143,7 +143,10 @@ final class RealtimeClient {
 
     /// Asks the cloud for a fresh snapshot. Sent on every reconnect because the
     /// app cannot know what changed while it was suspended.
-    func requestSync(desktopClientInstanceId: String) {
+    ///
+    /// Returns the intent id so the caller can decide what, if anything, to say about
+    /// the answer — this request is the app's own, not the reader's.
+    func requestSync(desktopClientInstanceId: String) -> String {
         sendIntent(
             MobileIntentRequest(intentId: UUID().uuidString, kind: "sync"),
             desktopClientInstanceId: desktopClientInstanceId
