@@ -22,9 +22,15 @@ export type TencentAsrCredentials = {
   readonly region?: string
 }
 
+/**
+ * 云 API 的错误体。
+ *
+ * 字段是**大写开头**的 `Code` / `Message`，不是小写的——这是实测出来的：按小写读会
+ * 得到一个 `undefined: undefined` 的报错，把真正的失败原因整个吞掉。
+ */
 export type TencentAsrError = {
-  readonly code: string
-  readonly message: string
+  readonly Code: string
+  readonly Message: string
 }
 
 /** 云 API 的错误是 200 包着 `Response.Error`，必须显式认出来，否则会被当成成功。 */
@@ -32,9 +38,9 @@ export class TencentAsrApiError extends Error {
   readonly code: string
 
   constructor(error: TencentAsrError) {
-    super(`${error.code}: ${error.message}`)
+    super(`${error.Code}: ${error.Message}`)
     this.name = "TencentAsrApiError"
-    this.code = error.code
+    this.code = error.Code
   }
 }
 
@@ -161,15 +167,22 @@ export type CreateRecTaskInput = {
   readonly hotwordList?: string
 }
 
-export type CreateRecTaskResult = {
-  readonly taskId: number
+/**
+ * 提交成功只回一个任务号，而且它**嵌在 `Data` 里面**。
+ *
+ * 实测返回：`{"RequestId":"…","Data":{"TaskId":16816512591}}`。
+ * 按顶层的 `TaskId` 读会拿到 `undefined`，于是下一句「取结果」被腾讯云判成「缺少必填
+ * 参数 TaskId」——报的是取结果的错，锅其实在提交那一步的读法。
+ */
+type CreateRecTaskResponse = {
+  readonly Data: { readonly TaskId: number }
 }
 
 export async function createRecTask(
   input: CreateRecTaskInput,
   credentials: TencentAsrCredentials,
   options: TencentAsrRequestOptions = {},
-): Promise<CreateRecTaskResult> {
+): Promise<{ readonly taskId: number }> {
   const payload: Record<string, unknown> = {
     EngineModelType: input.engineModelType,
     ChannelNum: input.channelNum,
@@ -184,18 +197,34 @@ export async function createRecTask(
   }
   // 热词表为空时整个字段不发：发一个空串会被判参数错误，代价远大于少几个热词。
   if (input.hotwordList) payload.HotwordList = input.hotwordList
-  return callApi<CreateRecTaskResult>("CreateRecTask", payload, credentials, options)
+  // 云端的分层结构只在这里出现一次，调用方拿到的是拍平之后的任务号。
+  const response = await callApi<CreateRecTaskResponse>("CreateRecTask", payload, credentials, options)
+  return { taskId: response.Data.TaskId }
+}
+
+/** 同样嵌在 `Data` 里，理由与 `CreateRecTask` 一致。 */
+type DescribeTaskStatusResponse = {
+  readonly Data: {
+    readonly TaskId: number
+    readonly Status: number
+    readonly StatusStr?: string
+    /** 纯文本结果。`ResTextFormat=1` 时结构化结果在 `ResultDetail` 里，这里往往仍是整段文本。 */
+    readonly Result?: string | null
+    readonly ResultDetail?: readonly RawSentenceDetail[] | null
+    readonly ErrorMsg?: string | null
+    readonly AudioDuration?: number | null
+  }
 }
 
 export type DescribeTaskStatusResult = {
-  readonly TaskId: number
-  readonly Status: number
-  readonly StatusStr?: string
-  /** 纯文本结果。`ResTextFormat=1` 时结构化结果在 `ResultDetail` 里，这里往往仍是整段文本。 */
-  readonly Result?: string | null
-  readonly ResultDetail?: readonly RawSentenceDetail[] | null
-  readonly ErrorMsg?: string | null
-  readonly AudioDuration?: number | null
+  readonly taskId: number
+  readonly status: number
+  readonly statusText: string
+  readonly result: string | null
+  /** 结构化结果，`ResTextFormat=1` 时才有；说话人与词级时间戳都在这里。 */
+  readonly detail: readonly RawSentenceDetail[] | null
+  readonly errorMessage: string | null
+  readonly audioDuration: number | null
 }
 
 /**
@@ -224,5 +253,19 @@ export async function describeTaskStatus(
   credentials: TencentAsrCredentials,
   options: TencentAsrRequestOptions = {},
 ): Promise<DescribeTaskStatusResult> {
-  return callApi<DescribeTaskStatusResult>("DescribeTaskStatus", { TaskId: taskId }, credentials, options)
+  const response = await callApi<DescribeTaskStatusResponse>(
+    "DescribeTaskStatus",
+    { TaskId: taskId },
+    credentials,
+    options,
+  )
+  return {
+    taskId: response.Data.TaskId,
+    status: response.Data.Status,
+    statusText: response.Data.StatusStr ?? "",
+    result: response.Data.Result ?? null,
+    detail: response.Data.ResultDetail ?? null,
+    errorMessage: response.Data.ErrorMsg ?? null,
+    audioDuration: response.Data.AudioDuration ?? null,
+  }
 }

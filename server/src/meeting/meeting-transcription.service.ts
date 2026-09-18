@@ -173,14 +173,19 @@ export class MeetingTranscriptionService {
 
     try {
       const status = await describeTaskStatus(Number(taskId), credentials)
-      if (status.Status === MEETING_TENCENT_TASK_STATUS.waiting || status.Status === MEETING_TENCENT_TASK_STATUS.doing) {
+      if (status.status === MEETING_TENCENT_TASK_STATUS.waiting || status.status === MEETING_TENCENT_TASK_STATUS.doing) {
         return
       }
-      if (status.Status === MEETING_TENCENT_TASK_STATUS.failed) {
-        await this.recordAttemptFailure(jobId, meetingId, new Error(status.ErrorMsg || "转写失败。"))
+      if (status.status === MEETING_TENCENT_TASK_STATUS.failed) {
+        await this.recordAttemptFailure(jobId, meetingId, new Error(status.errorMessage || "转写失败。"))
         return
       }
-      await this.storeResult(jobId, meetingId, status.Result ?? null)
+      // 结构化结果优先：`Result` 往往是没有时间戳的整段文本，说话人和词级时间戳只
+      // 存在于 `ResultDetail` 里。
+      const payload = status.detail && status.detail.length > 0
+        ? JSON.stringify({ ResultDetail: status.detail, Result: status.result })
+        : status.result
+      await this.storeResult(jobId, meetingId, payload)
     } catch (error) {
       await this.recordAttemptFailure(jobId, meetingId, error)
     }

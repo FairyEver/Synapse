@@ -14,13 +14,20 @@ const COLUMN = WAVE_BAR_WIDTH + WAVE_BAR_GAP
 
 describe("录音中的波形布局", () => {
   it("一个采样永远占同样宽的槽位，不随采样数量变化", () => {
-    // 这条就是「密度固定」本身。按画布宽度拉伸铺满的实现会让间距随数量变化——
-    // 录得越久把整段越压越扁，柱子之间的间距不再是常量。
+    // 这条就是「密度固定」本身。按数据长度撑开的实现会让柱子越铺越多、间距越来越小，
+    // 录得越久就是把整段越压越扁。
     const few = computeLiveWaveLayout(new Array(20).fill(0.5), 900)
     const many = computeLiveWaveLayout(new Array(170).fill(0.5), 900)
     const spacing = (bars: readonly { x: number }[]) => bars[1].x - bars[0].x
     expect(spacing(few.bars)).toBeCloseTo(COLUMN, 6)
     expect(spacing(many.bars)).toBeCloseTo(COLUMN, 6)
+
+    // 更硬的一条：柱子总数由**时间窗口**封顶，不是由有多少采样决定。录 10 分钟画布上
+    // 还是那 5 秒的柱子数，多出来的部分已经从左边滚出去了。
+    const windowSlots = Math.round(MEETING_LIVE_WINDOW_MS / MEETING_PEAK_MS)
+    const long = computeLiveWaveLayout(new Array(10_000).fill(0.5), 900)
+    expect(long.bars).toHaveLength(windowSlots)
+    expect(long.bars).toHaveLength(computeLiveWaveLayout(new Array(windowSlots).fill(0.5), 900).bars.length)
   })
 
   it("贴着右边缘排：装满之前左边的空位空着", () => {

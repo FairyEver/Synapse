@@ -180,15 +180,18 @@ describe("取结果", () => {
 
   it("结果落库：逐字稿按段落存，说话人建映射记录", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
+    // 用真实返回的形状：结构化结果在 `detail` 里，`result` 是没有时间戳的整段文本。
     describeTaskStatusMock.mockResolvedValue({
-      TaskId: 42,
-      Status: 2,
-      Result: JSON.stringify({
-        ResultDetail: [
-          { FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 },
-          { FinalSentence: "第二句", StartMs: 1200, EndMs: 2000, SpeakerId: 1 },
-        ],
-      }),
+      taskId: 42,
+      status: 2,
+      statusText: "success",
+      result: "第一句\n第二句",
+      detail: [
+        { FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 },
+        { FinalSentence: "第二句", StartMs: 1200, EndMs: 2000, SpeakerId: 1 },
+      ],
+      errorMessage: null,
+      audioDuration: 2,
     })
     await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
 
@@ -202,16 +205,20 @@ describe("取结果", () => {
   it("重跑一次不会让同一段话出现两遍", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
     describeTaskStatusMock.mockResolvedValue({
-      TaskId: 42,
-      Status: 2,
-      Result: JSON.stringify({ ResultDetail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }] }),
+      taskId: 42,
+      status: 2,
+      statusText: "success",
+      result: null,
+      detail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }],
+      errorMessage: null,
+      audioDuration: 1,
     })
     await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
     expect(prisma.meetingTranscriptSegment.deleteMany).toHaveBeenCalledWith({ where: { meetingId: "meeting-1" } })
   })
 
   it("还在跑就什么都不做，等下一轮", async () => {
-    describeTaskStatusMock.mockResolvedValue({ TaskId: 42, Status: 1 })
+    describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 1, statusText: "doing", result: null, detail: null, errorMessage: null, audioDuration: null })
     await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
     expect(prisma.meeting.update).not.toHaveBeenCalled()
     expect(prisma.meetingTranscriptionJob.update).not.toHaveBeenCalled()
@@ -219,7 +226,7 @@ describe("取结果", () => {
 
   it("失败时把腾讯云给的原因落下来", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
-    describeTaskStatusMock.mockResolvedValue({ TaskId: 42, Status: 3, ErrorMsg: "音频格式不支持" })
+    describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 3, statusText: "failed", result: null, detail: null, errorMessage: "音频格式不支持", audioDuration: null })
     await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
     expect(prisma.meetingTranscriptionJob.update.mock.calls[0][0].data.lastError).toContain("音频格式不支持")
   })
@@ -273,9 +280,13 @@ describe("收尾通知", () => {
   it("转写成功时同时告诉桌面端和手机", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
     describeTaskStatusMock.mockResolvedValue({
-      TaskId: 42,
-      Status: 2,
-      Result: JSON.stringify({ ResultDetail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }] }),
+      taskId: 42,
+      status: 2,
+      statusText: "success",
+      result: null,
+      detail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }],
+      errorMessage: null,
+      audioDuration: 1,
     })
     const { notifying, broadcastToUser, sendMeetingTranscription } = withNotifications()
     await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
@@ -291,7 +302,7 @@ describe("收尾通知", () => {
     // 会议多半是在电脑上录的，等转写完人已经离开电脑了；只因为桌面端在线就不推，
     // 手机侧永远收不到。
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
-    describeTaskStatusMock.mockResolvedValue({ TaskId: 42, Status: 2, Result: "{}" })
+    describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 2, statusText: "success", result: null, detail: [], errorMessage: null, audioDuration: null })
     const { notifying, sendMeetingTranscription } = withNotifications()
     await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
     expect(sendMeetingTranscription).toHaveBeenCalledTimes(1)
@@ -300,9 +311,13 @@ describe("收尾通知", () => {
   it("通知通道挂掉不影响转写结果落库", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
     describeTaskStatusMock.mockResolvedValue({
-      TaskId: 42,
-      Status: 2,
-      Result: JSON.stringify({ ResultDetail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }] }),
+      taskId: 42,
+      status: 2,
+      statusText: "success",
+      result: null,
+      detail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }],
+      errorMessage: null,
+      audioDuration: 1,
     })
     const notifying = new MeetingTranscriptionService(
       prisma as unknown as PrismaService,
