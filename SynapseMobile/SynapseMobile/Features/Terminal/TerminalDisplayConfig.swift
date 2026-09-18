@@ -75,6 +75,16 @@ enum TerminalDensity: String, CaseIterable, Codable, Sendable {
         case .spacious: "稀疏"
         }
     }
+
+    /// 日志里用的标签。放在这儿而不是日志那一层：它是对这个枚举的解释，
+    /// 将来加一档时改这一处就够了，不会漏掉某个调用点。
+    var diagnosticFlag: DiagnosticFlag {
+        switch self {
+        case .compact: .compact
+        case .normal: .normal
+        case .spacious: .spacious
+        }
+    }
 }
 
 /// The desktop's grid, as the phone last heard it.

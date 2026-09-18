@@ -1,0 +1,129 @@
+import CoreGraphics
+import Foundation
+import Testing
+import UIKit
+
+@testable import SynapseMobile
+
+/// 终端那组埋点到底会不会产出记录。
+///
+/// 前面几个套件验的是日志机制本身，这个验的是**它们接上了没有**。埋点最典型的
+/// 失效方式不是写错，是根本没被调用到 —— 而那在编译期、在其它测试里都看不出来，
+/// 要等到你拿到一份干净得像刚格式化的日志才发现。
+@MainActor
+struct TerminalDiagnosticTests {
+    private func makeDirectory() -> URL {
+        URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("term-diag-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    private func written(in directory: URL) -> String {
+        ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "log" }
+            .compactMap { try? String(contentsOf: $0, encoding: .utf8) }
+            .joined()
+    }
+
+    private func lines(_ count: Int) -> [DisplayRow] {
+        (0..<count).map { index in
+            DisplayRow(id: "line\(index)", text: "line \(index)", runs: [], lineIndex: index, isContinuation: false)
+        }
+    }
+
+    private func collectionView(in view: UIView) -> UICollectionView? {
+        if let found = view as? UICollectionView { return found }
+        for sub in view.subviews {
+            if let found = collectionView(in: sub) { return found }
+        }
+        return nil
+    }
+
+    /// 铺一屏行、滚一次，日志里应当既有行数也有滚动几何。
+    @Test func rowsAndScrollProduceRecords() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        DiagnosticLog.useSinkForTesting(sink)
+        defer { DiagnosticLog.useSinkForTesting(nil) }
+
+        let view = TerminalCollectionView(frame: CGRect(x: 0, y: 0, width: 393, height: 566))
+        view.applyLayout(displayMode: .phoneDriven, desktopGrid: nil, fontSize: TerminalDensity.normal.fontSize)
+        view.apply(rows: lines(200), atHistoryFloor: false, cursor: nil)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+
+        let list = try #require(collectionView(in: view))
+        list.delegate?.scrollViewDidScroll?(list)
+        sink.flushForTesting()
+
+        let text = written(in: directory)
+        #expect(text.contains("term.rows"), "铺行没有产出记录")
+        #expect(text.contains("term.scrollTick"), "滚动没有产出记录")
+        #expect(text.contains("isScrollEnabled=T"), "滚动几何里没有滚动开关这一项")
+    }
+
+    /// 一次拖动结束时的结论里，必须有"内容到底动没动"。
+    ///
+    /// 这是整份日志里最值钱的一个布尔：一次既没缩放也没选字的拖动，如果它是 F，
+    /// 那内容没动就只剩"手势被别的东西抢走了"这一种解释。
+    @Test func aDragEndsWithWhetherTheContentMoved() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        DiagnosticLog.useSinkForTesting(sink)
+        defer { DiagnosticLog.useSinkForTesting(nil) }
+
+        let view = TerminalCollectionView(frame: CGRect(x: 0, y: 0, width: 393, height: 566))
+        view.applyLayout(displayMode: .phoneDriven, desktopGrid: nil, fontSize: TerminalDensity.normal.fontSize)
+        view.apply(rows: lines(200), atHistoryFloor: false, cursor: nil)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+
+        let list = try #require(collectionView(in: view))
+        list.setContentOffset(CGPoint(x: 0, y: 500), animated: false)
+        list.delegate?.scrollViewWillBeginDragging?(list)
+        list.setContentOffset(CGPoint(x: 0, y: 300), animated: false)
+        list.delegate?.scrollViewDidEndDragging?(list, willDecelerate: false)
+        sink.flushForTesting()
+
+        let text = written(in: directory)
+        #expect(text.contains("gesture.outcome"))
+        #expect(text.contains("didMoveScrollOffset=T"), "挪了 200 点却被记成没动")
+    }
+
+    /// 拉回最新一行要记下**是谁触发的**。
+    ///
+    /// 滚不动那类报告里，"用户自己拖的"和"我们把视口拽回去的"在屏幕上一模一样，
+    /// 而这两件事的修法完全不同。
+    @Test func followingTheTailRecordsItsTrigger() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        DiagnosticLog.useSinkForTesting(sink)
+        defer { DiagnosticLog.useSinkForTesting(nil) }
+
+        let view = TerminalCollectionView(frame: CGRect(x: 0, y: 0, width: 393, height: 566))
+        view.applyLayout(displayMode: .phoneDriven, desktopGrid: nil, fontSize: TerminalDensity.normal.fontSize)
+        view.apply(rows: lines(200), atHistoryFloor: false, cursor: nil)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+
+        // 站到顶部，再送一批新行进来 —— 视图会跟着最新输出落回底部。
+        let list = try #require(collectionView(in: view))
+        list.setContentOffset(.zero, animated: false)
+        list.delegate?.scrollViewDidScroll?(list)
+        view.apply(rows: lines(240), atHistoryFloor: false, cursor: nil)
+        list.setNeedsLayout()
+        list.layoutIfNeeded()
+        sink.flushForTesting()
+
+        let text = written(in: directory)
+        #expect(text.contains("followGrab"), "跟随最新输出没有留下痕迹")
+    }
+}

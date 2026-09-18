@@ -511,6 +511,9 @@ struct TerminalScreen: View {
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             model.openTerminal(sessionId)
+            // 进终端这一条是后面所有终端记录的基线：没有它，那些 offset 与 inset
+            // 就没有"相对于什么"可言。
+            DiagnosticLog.record(.terminalEnter, terminalEnterFields())
             refreshPasteboardImage()
             // 摆在前两件之后、也不等任何异步：它只读已经给着的权限和当下的连接，
             // 所以进来那一帧就已经是语音态，不会先画一下键盘态再翻过去。
@@ -647,6 +650,29 @@ struct TerminalScreen: View {
             )
             .ignoresSafeArea()
         }
+    }
+
+    // MARK: - 诊断
+
+    /// 进终端时的基线。
+    ///
+    /// 单独一个函数而不是写成内联的数组字面量：那种写法会让类型检查器在一个
+    /// 混合了可选值、枚举与三元表达式的字面量上卡住（实测直接报
+    /// "unable to type-check this expression in reasonable time"）。
+    private func terminalEnterFields() -> [DiagnosticEntry] {
+        let mode: DiagnosticFlag = displayMode == .desktopDriven ? .desktopDriven : .phoneDriven
+        let sessionValue = DiagnosticLog.alias(.session, sessionId)
+        let title = SessionTitle(session?.title ?? "")
+        return [
+            DiagnosticEntry(.session, sessionValue),
+            DiagnosticEntry(.title, .title(title)),
+            DiagnosticEntry(.displayMode, .flag(mode)),
+            DiagnosticEntry(.density, .flag(display.density(for: sessionId).diagnosticFlag)),
+            DiagnosticEntry(.gridColumns, .int(session?.cols ?? 0)),
+            DiagnosticEntry(.gridRows, .int(session?.rows ?? 0)),
+            DiagnosticEntry(.rowCount, .int(store.rows.count)),
+            DiagnosticEntry(.atHistoryFloor, .bool(store.reachedHistoryFloor)),
+        ]
     }
 
     // MARK: - Bars

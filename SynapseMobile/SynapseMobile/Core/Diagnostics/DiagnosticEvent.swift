@@ -25,7 +25,7 @@ nonisolated enum DiagnosticLevel: String, Sendable, Comparable {
 nonisolated enum DiagnosticField: String, Sendable {
     // MARK: 环境
     case appVersion, buildNumber, osVersion, deviceModel, deviceName
-    case locale, timeZone, isSimulator, diskFreeBucket, processUptimeMs
+    case locale, timeZone, isSimulator, diskFreeBucket, systemUptimeMs
     case residentMB, availableMB, thermalState, lowPowerMode
     case orientation, boundsWidth, boundsHeight, safeAreaTop, safeAreaBottom
 
@@ -38,7 +38,7 @@ nonisolated enum DiagnosticField: String, Sendable {
 
     // MARK: 网络
     case attempt, delayMs, reason, status, durationMs
-    case session, kind, from, to, rowCount, gridColumns, gridRows, bytes, truncated
+    case session, kind, from, to, rowCount, gridColumns, gridRows, bytes, truncated, title
     case historyBefore, historyLimit, historyRows
     case desktopCount, sessionCount, gridOwner
 
@@ -200,7 +200,7 @@ nonisolated struct DiagnosticRecord: Equatable, Sendable {
     /// 两条只差耗时的记录不是"同一件事"，不该被折叠掉。
     private static let volatileFields: Set<DiagnosticField> = [
         .offsetY, .contentSizeHeight, .distanceFromBottom, .offsetBefore, .offsetAfter,
-        .distanceFromBottomBefore, .processUptimeMs, .residentMB, .availableMB,
+        .distanceFromBottomBefore, .systemUptimeMs, .residentMB, .availableMB,
         .translationY, .velocityY, .inputLength, .contentHeight,
         .repeatCount, .spanMs,
     ]

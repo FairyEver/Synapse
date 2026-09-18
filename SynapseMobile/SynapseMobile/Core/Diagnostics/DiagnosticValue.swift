@@ -48,6 +48,11 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     case portrait
     case landscape
 
+    // MARK: 磁盘余量（分档，不记精确值）
+    case diskLow
+    case diskTight
+    case diskPlenty
+
     // MARK: 输入栏与键盘
     case keyboard
     case voice
@@ -102,6 +107,7 @@ nonisolated enum DiagnosticFlag: String, Sendable {
     case contentGrew
     case insetChanged
     case landingScroll
+    case layoutResize
     case zoomReset
     case userDrag
     case unknownCause

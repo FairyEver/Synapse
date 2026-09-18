@@ -26,7 +26,7 @@ enum DiagnosticEnvironment {
             .init(.timeZone, .message(RedactedMessage(alreadyRedacted: TimeZone.current.identifier))),
             .init(.isSimulator, .bool(isSimulator)),
             .init(.diskFreeBucket, .flag(diskFreeBucket())),
-            .init(.processUptimeMs, .durationMs(Int(ProcessInfo.processInfo.systemUptime * 1000))),
+            .init(.systemUptimeMs, .durationMs(Int(ProcessInfo.processInfo.systemUptime * 1000))),
             .init(.thermalState, .message(RedactedMessage(alreadyRedacted: thermalStateName))),
             .init(.lowPowerMode, .bool(ProcessInfo.processInfo.isLowPowerModeEnabled)),
         ]
@@ -66,6 +66,11 @@ enum DiagnosticEnvironment {
     // MARK: - 取值
 
     private static func machineIdentifier() -> String {
+        // 模拟器上 `uname` 给的是**宿主机的架构**（`arm64`），不是机型号。
+        // 真机才是 `iPhone15,4` 这种。模拟器里读环境变量才是那个真值。
+        if isSimulator, let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] {
+            return simulated
+        }
         var systemInfo = utsname()
         uname(&systemInfo)
         let mirror = Mirror(reflecting: systemInfo.machine)
@@ -90,10 +95,9 @@ enum DiagnosticEnvironment {
         let values = try? home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         guard let bytes = values?.volumeAvailableCapacityForImportantUsage else { return .unknown }
         switch bytes {
-        case ..<(256 << 20): return .unavailable
-        case ..<(1 << 30): return .compact
-        case ..<(5 << 30): return .normal
-        default: return .ok
+        case ..<(256 << 20): return .diskLow
+        case ..<(1 << 30): return .diskTight
+        default: return .diskPlenty
         }
     }
 

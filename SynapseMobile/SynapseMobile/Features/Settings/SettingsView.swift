@@ -67,6 +67,29 @@ struct SettingsView: View {
                 }
             }
 
+            // 默认开着：让朋友复现一次不容易，"忘了先打开开关"是最没必要的一种浪费。
+            // 关掉只停记录，**不删已有日志** —— 两件事合成一个动作，用户会失去
+            // 刚表达过的那个意思。
+            //
+            // 用 `NavigationLink { destination }` 而不是 `Route`：`Route` 只有
+            // `.terminal` 一个 case，是给跨 tab 深链用的，改它要连带审 `handleRoute`
+            // 与 `NotificationRouter`；设置子页既不可深链也不需要状态恢复。
+            Section {
+                Toggle("记录诊断日志", isOn: Binding(
+                    get: { DiagnosticLog.isEnabled },
+                    set: { DiagnosticLog.isEnabled = $0 }
+                ))
+                NavigationLink {
+                    DiagnosticLogView()
+                } label: {
+                    Text("诊断日志")
+                }
+            } header: {
+                Text("诊断")
+            } footer: {
+                Text("只记录崩溃、网络与终端交互的元数据，不记录你输入的命令和终端里的内容。")
+            }
+
             Section {
                 Button("退出登录", role: .destructive) { showingSignOut = true }
             }

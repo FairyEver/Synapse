@@ -224,6 +224,10 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         if activeName.isEmpty {
             activeName = "synapse-\(launchStamp)-\(ProcessInfo.processInfo.processIdentifier).log"
         }
+        // 目录可能已经不在了：用户按下"删除全部日志"时整个目录一起删掉了。
+        // 少了这一句，删除之后这份日志就永远停在那里 —— 而失败的样子是静默的，
+        // 他要到下一次复现完、点导出，才会发现拿到的是个空文件。
+        guard createDirectoryIfNeeded() else { return nil }
         let url = directory.appendingPathComponent(activeName)
         let descriptor = Darwin.open(url.path, O_WRONLY | O_CREAT | O_APPEND, 0o600)
         guard descriptor >= 0 else { return nil }
@@ -233,8 +237,7 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
         if activeBytes == 0 {
             // 版本号不在这里写：它在每份日志开头的 `env.snapshot` 里已经有了，
             // 而那个值只读得主线程（`AppVersion` 读 bundle），这一层在后台队列上。
-            let header = "# \(DiagnosticLineRenderer.timestamp(Date())) 一行一条；"
-                + "字段说明见 docs/superpowers/specs/2026-09-19-mobile-diagnostic-log-design.md\n"
+            let header = "# 诊断日志 \(DiagnosticLineRenderer.timestamp(Date())) 一行一条\n"
             _ = header.withCString { Darwin.write(descriptor, $0, strlen($0)) }
         }
         return descriptor
@@ -283,6 +286,11 @@ nonisolated final class DiagnosticFileSink: @unchecked Sendable {
     private func pause() {
         closeActiveFile()
         paused = true
+    }
+
+    /// 只给测试用：立刻落盘，不等那一秒的定时器。
+    func flushForTesting() {
+        queue.sync { flushNow() }
     }
 
     // MARK: - 查询与导出

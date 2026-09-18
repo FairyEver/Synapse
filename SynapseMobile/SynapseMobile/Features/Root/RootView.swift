@@ -38,6 +38,12 @@ struct RootView: View {
             handleRoute(NotificationRouter.shared.consume())
         }
         .onChange(of: scenePhase) { _, phase in
+            // 会话标记是崩溃的第三种证据：进程被系统杀掉时不会留下任何遗言，
+            // 而"文件末尾没有 sessionClose"就是它来过又走了的唯一痕迹。
+            DiagnosticLog.record(
+                phase == .active ? .sessionOpen : .sessionClose,
+                [.init(.scenePhase, .flag(phase == .active ? .active : .inactive))]
+            )
             model.handleScenePhase(phase == .active)
         }
         .onChange(of: model.waitingSessions.count) { _, count in

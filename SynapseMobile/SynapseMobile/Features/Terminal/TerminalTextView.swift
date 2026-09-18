@@ -94,6 +94,12 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// blink without waiting for new rows to arrive.
     private var appliedRows: [DisplayRow] = []
     private var isPinnedToBottom = true
+    /// 一次拖动开始时的偏移。结束时与它比，才知道这次拖动**到底有没有让内容移动**
+    /// —— 这正是"拖不动"要问的那个问题。
+    private var dragStartOffsetY: CGFloat?
+    /// 上一次记进日志的缩放值。`applyCanvasTransform` 跑得很勤，只有在**变化时**
+    /// 记一条才有意义 —— 每次布局都记的话，日志里就只剩"没变化"。
+    private var lastLoggedZoom: CGFloat = 1
     /// Set when the grid changes, so the view lands on the computer's current
     /// screen at once rather than waiting for the next frame to carry it there.
     ///
@@ -259,8 +265,25 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
 
     private func applyCanvasTransform() {
         let magnified = zoom > 1.001
+        let scrollWasEnabled = collectionView.isScrollEnabled
         collectionView.isScrollEnabled = !magnified
         canvasPan?.isEnabled = magnified
+
+        // 第二条成因就在这里：放大之后滚动被主动关掉，拖动改成拖画布。记的是
+        // **关掉的那一刻**连同它之前的状态 —— 只看放大后的截图看不出滚动还会不会动。
+        if abs(zoom - lastLoggedZoom) > 0.001 {
+            DiagnosticLog.record(.terminalZoomChanged, [
+                .init(.zoomFrom, .scalar(Double(lastLoggedZoom))),
+                .init(.zoomTo, .scalar(Double(zoom))),
+                .init(.isScrollEnabled, .bool(collectionView.isScrollEnabled)),
+                .init(.wasPinned, .bool(scrollWasEnabled)),
+                .init(.cvPanEnabled, .bool(collectionView.panGestureRecognizer.isEnabled)),
+                .init(.canvasPanEnabled, .bool(canvasPan?.isEnabled ?? false)),
+                .init(.offsetY, .scalar(Double(collectionView.contentOffset.y))),
+                .init(.displayMode, .flag(displayMode == .desktopDriven ? .desktopDriven : .phoneDriven)),
+            ])
+            lastLoggedZoom = zoom
+        }
         guard displayMode == .desktopDriven else {
             canvas.transform = .identity
             collectionView.isScrollEnabled = true
@@ -337,7 +360,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // one of them does nothing every time.
         if bounds.height != lastLayoutHeight {
             lastLayoutHeight = bounds.height
-            if isPinnedToBottom { scrollToBottom() }
+            if isPinnedToBottom { scrollToBottom(trigger: .layoutResize) }
         }
     }
 
@@ -368,7 +391,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // on its own it would leave the content at the head of the range. Only while the
         // reader is at the bottom: an inset only ever changes on content too short to
         // have a scroll position to be partway through in the first place.
-        if isPinnedToBottom { scrollToBottom() }
+        if isPinnedToBottom { scrollToBottom(trigger: .insetChanged) }
     }
 
     /// The desktop wraps at its own width; only the phone knows how wide the
@@ -419,6 +442,19 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         let floorChanged = atHistoryFloor != self.atHistoryFloor
         let rowsChanged = keys != appliedKeys
         guard rowsChanged || floorChanged else { return }
+
+        // 第三条成因的判据：**手上到底有没有可滚的行**。
+        // `contentSizeHeight <= boundsHeight` 就是"拖上去也没东西可滚"，而它和
+        // "手势被吞了"在屏幕上完全一样。
+        DiagnosticLog.record(.terminalRows, [
+            .init(.rowCount, .int(rows.count)),
+            .init(.atHistoryFloor, .bool(atHistoryFloor)),
+            .init(.cellHeight, .scalar(Double(TerminalRowCell.rowHeight(for: fontSize)))),
+            .init(.contentSizeHeight, .scalar(Double(collectionView.contentSize.height))),
+            .init(.boundsHeight, .scalar(Double(collectionView.bounds.height))),
+            .init(.contentInsetTop, .scalar(Double(collectionView.contentInset.top))),
+        ])
+
         let cursorMoved = cursor != appliedCursor
         // A cursor that has just landed is drawn solid, whatever phase the blink
         // was in — so the phase is settled *before* the rows are keyed. Settling it
@@ -452,13 +488,13 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             // newest line is the only answer that is right — the reader asked for
             // this terminal, not for the piece of it this view happened to be holding.
             pendingLandingScroll = false
-            scrollToBottom()
+            scrollToBottom(trigger: .reset)
         } else if insertedAbove > 0 {
             collectionView.contentOffset.y = offsetBefore
                 + CGFloat(insertedAbove) * TerminalRowCell.rowHeight(for: fontSize)
         } else if pendingLandingScroll {
             pendingLandingScroll = false
-            scrollToBottom()
+            scrollToBottom(trigger: .landingScroll)
         } else if wasAtBottom {
             // Both modes, because both are a terminal: a reader sitting on the
             // newest line is watching output arrive, and a pane that stops at the
@@ -471,7 +507,7 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             // the picture on every frame and the reader saw it twitch. That padding
             // is gone, so content that fits cannot be scrolled at all and this is a
             // no-op until there is genuinely more to follow.
-            scrollToBottom()
+            scrollToBottom(trigger: .contentGrew)
         }
         if floorChanged {
             collectionView.collectionViewLayout.invalidateLayout()
@@ -605,11 +641,29 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         return appliedCursor?.column
     }
 
-    func scrollToBottom() {
+    /// 把视口拉回最新一行。
+    ///
+    /// `trigger` 只在诊断里有意义：它是把"用户自己拖的"和"我们把他拽回去的"分开的
+    /// 唯一依据。滚不动那类报告里，这两件事在屏幕上长得一模一样。
+    func scrollToBottom(trigger: DiagnosticFlag = .unknownCause) {
         guard !appliedKeys.isEmpty else { return }
+        let offsetBefore = collectionView.contentOffset.y
         let last = IndexPath(item: appliedKeys.count - 1, section: 0)
         collectionView.scrollToItem(at: last, at: .bottom, animated: false)
         isPinnedToBottom = true
+
+        let offsetAfter = collectionView.contentOffset.y
+        // 只记**真的挪动了视口**的那一次。每帧都跟着最新输出跑的时候它是个空操作，
+        // 把空操作也记下来，日志会被"什么也没发生"灌满。
+        guard abs(offsetAfter - offsetBefore) > 0.5 else { return }
+        DiagnosticLog.record(.terminalFollowGrab, [
+            .init(.trigger, .flag(trigger)),
+            .init(.offsetBefore, .scalar(Double(offsetBefore))),
+            .init(.offsetAfter, .scalar(Double(offsetAfter))),
+            .init(.contentSizeHeight, .scalar(Double(collectionView.contentSize.height))),
+            .init(.boundsHeight, .scalar(Double(collectionView.bounds.height))),
+            .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
+        ])
     }
 
     private func buildCollectionView() {
@@ -885,6 +939,14 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         // Nothing is selected yet, so the reader is about to drag: scrolling must
         // not answer the same finger.
         collectionView.isScrollEnabled = false
+        // 这一行是"滚不动"的第四个成因：长按半秒以上、漂移不超过十点，拖动就变成了
+        // 扩选而不是滚动，而屏幕上只多了一小块选中色。
+        DiagnosticLog.record(.terminalSelection, [
+            .init(.selectionPhase, .flag(.began)),
+            .init(.anchorRow, .int(position.row)),
+            .init(.anchorColumn, .int(position.column)),
+            .init(.isScrollEnabled, .bool(collectionView.isScrollEnabled)),
+        ])
         Haptics.selectionBegin()
         selectionOverlay.beginLoupe(
             at: point,
@@ -912,6 +974,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private func endSelection(at point: CGPoint) {
         collectionView.isScrollEnabled = true
         selectionOverlay.endLoupe()
+        DiagnosticLog.record(.terminalSelection, [
+            .init(.selectionPhase, .flag(.ended)),
+            .init(.isScrollEnabled, .bool(collectionView.isScrollEnabled)),
+            .init(.longPressState, .bool(selection.map { !$0.isEmpty } ?? false)),
+        ])
 
         // A press that never moved is how the reader meant to scroll, or to put the
         // keyboard away. Offering to copy one character would be a misread.
@@ -1080,7 +1147,36 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         // Follow new output only while the user is already at the bottom; if they
         // scrolled up to read something, leave them where they are.
         let distanceFromBottom = scrollView.contentSize.height - scrollView.contentOffset.y - scrollView.bounds.height
+        let wasPinned = isPinnedToBottom
         isPinnedToBottom = distanceFromBottom < 40
+
+        // 这条是滚动问题的底噪：它同时回答"手指在动而 offset 没动"（手势被吞）、
+        // "offset 在动但离底一直不到 40 点"（跟随一直没解除）这两个问题。
+        //
+        // 每次回调都调它，采样交给缓冲区 —— 120 Hz 的判断属于那一层，写在调用点上
+        // 就得在每个高频回调里各写一遍，而那正是漏的开始。
+        DiagnosticLog.record(.terminalScrollTick, [
+            .init(.offsetY, .scalar(Double(scrollView.contentOffset.y))),
+            .init(.contentSizeHeight, .scalar(Double(scrollView.contentSize.height))),
+            .init(.boundsHeight, .scalar(Double(scrollView.bounds.height))),
+            .init(.distanceFromBottom, .scalar(Double(distanceFromBottom))),
+            .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
+            .init(.isDragging, .bool(scrollView.isDragging)),
+            .init(.isDecelerating, .bool(scrollView.isDecelerating)),
+            .init(.isScrollEnabled, .bool(collectionView.isScrollEnabled)),
+            .init(.zoom, .scalar(Double(zoom))),
+            .init(.atHistoryFloor, .bool(atHistoryFloor)),
+            .init(.requestsInFlight, .bool(requestsInFlight)),
+        ])
+
+        if wasPinned != isPinnedToBottom {
+            DiagnosticLog.record(.terminalPinChanged, [
+                .init(.wasPinned, .bool(wasPinned)),
+                .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
+                .init(.distanceFromBottom, .scalar(Double(distanceFromBottom))),
+                .init(.trigger, .flag(scrollView.isDragging ? .userDrag : .contentGrew)),
+            ])
+        }
 
         // Reaching the top asks for the next page. One request at a time, and
         // never past the point the desktop has already said is the end.
@@ -1091,6 +1187,41 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         if scrollView.contentOffset.y < 240, !requestsInFlight, !atHistoryFloor, !appliedKeys.isEmpty {
             onRequestHistory?()
         }
+    }
+
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        dragStartOffsetY = scrollView.contentOffset.y
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        // 还会继续滑行的话，这次拖动还没结束 —— 结论要等它停下来。
+        guard !decelerate else { return }
+        logScrollOutcome(scrollView)
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        logScrollOutcome(scrollView)
+    }
+
+    /// 一次拖动结束时它到底做了什么。
+    ///
+    /// `didMoveScrollOffset` 是这份日志里最值钱的一个布尔：一次既没有缩放、也没有
+    /// 进入选字的拖动，如果它是 false，那内容没动的原因就只剩"手势被别的东西抢走了"。
+    private func logScrollOutcome(_ scrollView: UIScrollView) {
+        guard let start = dragStartOffsetY else { return }
+        dragStartOffsetY = nil
+        let delta = scrollView.contentOffset.y - start
+        DiagnosticLog.record(.terminalGestureOutcome, [
+            .init(.gestureKind, .flag(.scroll)),
+            .init(.gestureState, .flag(.ended)),
+            .init(.translationY, .scalar(Double(delta))),
+            .init(.didMoveScrollOffset, .bool(abs(delta) > 0.5)),
+            .init(.offsetY, .scalar(Double(scrollView.contentOffset.y))),
+            .init(.contentSizeHeight, .scalar(Double(scrollView.contentSize.height))),
+            .init(.boundsHeight, .scalar(Double(scrollView.bounds.height))),
+            .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
+            .init(.isScrollEnabled, .bool(collectionView.isScrollEnabled)),
+        ])
     }
 
     func collectionView(
