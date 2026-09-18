@@ -9,7 +9,9 @@ import SwiftUI
 /// one tap, and the layout is the point: a finger finds `esc` in the corner because it
 /// knows where the corner is, not because it read a label.
 ///
-/// The last category is a real keyboard rather than a picture of one. A modifier is
+/// The first category is a real keyboard rather than a picture of one — and it is the
+/// first one because it is the page that holds everything: the letters, the digits, the
+/// modifiers, and the five keys the system keyboard has no way to send. A modifier is
 /// latched by tapping it and the next letter completes the chord, which is the only
 /// vocabulary a touch screen has for "hold Ctrl and press C" — a `Button` reports a tap
 /// on the way up and has no state to read while a finger is still down.
@@ -90,100 +92,75 @@ private let keyboardPanelShiftedDigits: [Character: Character] = [
 /// sits is the whole design: `↑` above `↓` with `←` and `→` beside it is the arrow
 /// cluster, and `esc` belongs in the corner your thumb already knows.
 private enum KeyboardPanelCell {
-    /// A key that can be pressed. `title` is the compact form a phone keyboard uses —
-    /// `esc`, not `Escape`.
-    case key(MobileKey, title: String, width: CGFloat?)
-    /// Empty space that takes whatever is left, which is what pins a key to a side.
-    case gap
+    /// A key that can be pressed, drawn as a square of `side` points. `title` is the
+    /// compact form a phone keyboard uses — `esc`, not `Escape`.
+    case key(MobileKey, title: String, side: CGFloat)
     /// A hole the size of a key, so a row lines up with the one above it.
     case hole(CGFloat)
 }
 
+/// A block of keys: rows of cells. A page draws one or more of them, left to right.
+private typealias KeyboardPanelCluster = [[KeyboardPanelCell]]
+
 private struct KeyboardPanelCategory: Identifiable {
     let id: String
     let name: String
-    let rows: [[KeyboardPanelCell]]
-    /// Pushes the whole grid to one side, for the clusters that live on the right of
-    /// a real keyboard.
-    let alignedTrailing: Bool
+    /// This page's clusters, drawn left to right.
+    ///
+    /// Empty for the keyboard, which is not a cluster of keys at all: it is a ten-column
+    /// grid that spans the whole width, and `keyboardPage` is what draws it.
+    let clusters: [KeyboardPanelCluster]
 
-    init(
-        id: String,
-        name: String,
-        rows: [[KeyboardPanelCell]],
-        alignedTrailing: Bool = false
-    ) {
+    init(id: String, name: String, clusters: [KeyboardPanelCluster] = []) {
         self.id = id
         self.name = name
-        self.rows = rows
-        self.alignedTrailing = alignedTrailing
+        self.clusters = clusters
     }
 
-    /// A grid of fixed keys, drawn by hand rather than from `rows`.
-    var isFullKeyboard: Bool { id == Self.fullKeyboardId }
+    /// The whole board, drawn by hand rather than from `clusters`.
+    var isKeyboard: Bool { id == Self.keyboardId }
 
-    static let fullKeyboardId = "full"
+    static let keyboardId = "keyboard"
 }
 
+/// Two pages.
+///
+/// There were four — 常用 / 方向 / 功能 / 全键盘 — and the two a phone actually needs are
+/// made by folding them together: the five keys the board itself has no room for sit
+/// above it, and the arrows and the six-key cluster sit side by side.
+///
+/// 常用 existed because `esc` and its four neighbours had nowhere else to live. That was
+/// a fact about the old board rather than about terminals, and the board now draws them,
+/// so a page holding only them held nothing. Its keys are the first row here.
 private let keyboardPanelCategories: [KeyboardPanelCategory] = [
-    // The four corners of the board: Esc top-left, ⌫ top-right, Tab left, Return right
-    // and wider than the rest because that is the key your hand goes to blind.
-    //
-    // `⇧tab` sits between them because it has no other home: Shift is on the full
-    // keyboard page and Tab is on this one, and switching pages drops a latched
-    // modifier, so the two could never be combined. It is worth the middle slot —
-    // driving Claude Code from a phone means cycling its permission mode constantly.
+    // The board, with the five keys a phone keyboard cannot express laid across the top.
+    // `esc` is top-left because that is where the corner is on every keyboard anybody
+    // has ever used — and `⇧tab` is next to `tab` and worth its own key even now that
+    // Shift and Tab share a page: cycling Claude Code's permission mode should not cost
+    // two taps because the chord became expressible.
+    KeyboardPanelCategory(id: KeyboardPanelCategory.keyboardId, name: "键盘"),
     KeyboardPanelCategory(
-        id: "common",
-        name: "常用",
-        rows: [
-            // Two gaps rather than none: they take the leftover width between the three
-            // keys, so `esc` stays in the corner, `⌫` stays in the corner, and `⇧tab`
-            // lands in the middle rather than beside the first one.
+        id: "navigation",
+        name: "导航",
+        clusters: [
+            // The inverted T of the arrow cluster, on the left.
             [
-                .key(.escape, title: "esc", width: 78),
-                .gap,
-                .key(.shiftTab, title: "⇧tab", width: 92),
-                .gap,
-                .key(.backspace, title: "⌫", width: 78),
+                [.hole(56), .key(.arrowUp, title: "↑", side: 56), .hole(56)],
+                [.key(.arrowLeft, title: "←", side: 56),
+                 .key(.arrowDown, title: "↓", side: 56),
+                 .key(.arrowRight, title: "→", side: 56)],
             ],
+            // The six-key cluster that sits above the arrows on a real keyboard. Insert's
+            // slot is left as a hole rather than filled with something that is not there.
             [
-                .key(.tab, title: "tab", width: 96),
-                .gap,
-                .key(.enter, title: "回车", width: 112),
+                [.hole(56), .key(.home, title: "home", side: 56),
+                 .key(.pageUp, title: "pgup", side: 56)],
+                [.key(.delete, title: "del", side: 56),
+                 .key(.end, title: "end", side: 56),
+                 .key(.pageDown, title: "pgdn", side: 56)],
             ],
         ]
     ),
-    // The inverted T of the arrow cluster, on the right of a real keyboard.
-    KeyboardPanelCategory(
-        id: "arrows",
-        name: "方向",
-        rows: [
-            [.hole(56), .key(.arrowUp, title: "↑", width: 56), .hole(56)],
-            [.key(.arrowLeft, title: "←", width: 56),
-             .key(.arrowDown, title: "↓", width: 56),
-             .key(.arrowRight, title: "→", width: 56)],
-        ],
-        alignedTrailing: true
-    ),
-    // The six-key cluster above the arrows. Insert's slot is left as a hole rather than
-    // filled with something that is not there.
-    KeyboardPanelCategory(
-        id: "function",
-        name: "功能",
-        rows: [
-            [.hole(64), .key(.home, title: "home", width: 64),
-             .key(.pageUp, title: "pgup", width: 64)],
-            [.key(.delete, title: "del", width: 64),
-             .key(.end, title: "end", width: 64),
-             .key(.pageDown, title: "pgdn", width: 64)],
-        ],
-        alignedTrailing: true
-    ),
-    // The real keyboard. Its name says what it is rather than what it contains: the
-    // page it replaced was called 控制, which sounds like a control key and was in fact
-    // a whole board — one that drew twenty-six letters and could only press ten of them.
-    KeyboardPanelCategory(id: KeyboardPanelCategory.fullKeyboardId, name: "全键盘", rows: [])
 ]
 
 // MARK: - Shared key capsule
@@ -222,6 +199,19 @@ struct TerminalKeyPill: ViewModifier {
     /// on the full keyboard, so its keys are about a third the width of these and
     /// cannot afford the padding a two-key row can.
     var horizontalPadding: CGFloat = 12
+    /// The pill's height when it is drawn to a size rather than to its label.
+    ///
+    /// The board's keys are squares whose side comes from the screen width, so their
+    /// pill has to be told how tall it is instead of measuring itself — a `Text` has no
+    /// opinion about being square. Nil everywhere else, where the label decides.
+    var size: CGFloat? = nil
+    /// How tall the tappable box is. Nil means `Metrics.minimumTapTarget`.
+    ///
+    /// The board gives every key one row's worth of height instead: its keys are 34pt
+    /// squares four points apart, so 44 would push the rows apart again and buy nothing —
+    /// a 44pt box on a 38pt pitch overlaps its neighbours, and the overlap belongs to
+    /// whichever key is drawn on top.
+    var tapHeight: CGFloat? = nil
 
     /// The pill's own fill, in the order of how loud the state is.
     ///
@@ -251,15 +241,18 @@ struct TerminalKeyPill: ViewModifier {
             .font(.system(.subheadline, design: .monospaced, weight: .medium))
             .foregroundStyle(labelColor)
             .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, 9)
-            .frame(minWidth: minWidth, minHeight: 36)
+            // A sized pill takes its height from `size` instead: the label is centred in
+            // it, and padding it as well would make the two disagree.
+            .padding(.vertical, size == nil ? 9 : 0)
+            .frame(minWidth: minWidth, minHeight: size ?? 36)
+            .frame(height: size)
             .background(
                 fill,
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             // The pill is the control; this is the room around it. Applied after the
             // background so the pill keeps its own size and only the tappable box grows.
-            .frame(minHeight: Metrics.minimumTapTarget)
+            .frame(minHeight: tapHeight ?? Metrics.minimumTapTarget)
             .contentShape(Rectangle())
     }
 }
@@ -270,14 +263,18 @@ extension View {
         prominent: Bool = false,
         pressed: Bool = false,
         bare: Bool = false,
-        horizontalPadding: CGFloat = 12
+        horizontalPadding: CGFloat = 12,
+        size: CGFloat? = nil,
+        tapHeight: CGFloat? = nil
     ) -> some View {
         modifier(TerminalKeyPill(
             minWidth: minWidth,
             prominent: prominent,
             pressed: pressed,
             bare: bare,
-            horizontalPadding: horizontalPadding
+            horizontalPadding: horizontalPadding,
+            size: size,
+            tapHeight: tapHeight
         ))
     }
 }
@@ -323,16 +320,16 @@ struct TerminalKeyboardPanel: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 12)
 
-            if category.isFullKeyboard {
+            if category.isKeyboard {
                 readout
                     .padding(.bottom, 8)
-                fullKeyboard
+                keyboardPage
                 hint
             } else {
-                staticGrid
-                // The three shorter pages keep their keys at the top and leave the rest
-                // of the panel empty — the visible cost of one height for all four, and
-                // the reason a page change no longer moves what is above the panel.
+                clusterGrid
+                // The shorter page keeps its keys at the top and leaves the rest of the
+                // panel empty — the visible cost of one height for both pages, and what
+                // a page change costs to move nothing above the panel.
                 Spacer(minLength: 0)
             }
         }
@@ -357,16 +354,29 @@ struct TerminalKeyboardPanel: View {
         }
     }
 
-    // MARK: - Static pages
+    // MARK: - 导航页
 
-    private var staticGrid: some View {
+    /// 一页里的几块键簇，从左到右摆开，块与块之间的空档平分给了两侧。
+    ///
+    /// 两块都靠上：它们中间的空档是全页最高的一处，把键压在上面读起来才像一块键盘
+    /// 的下半部分，而不是一片散开在面板里的按钮。
+    private var clusterGrid: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(category.clusters.enumerated()), id: \.offset) { index, cluster in
+                if index > 0 { Spacer(minLength: 12) }
+                clusterView(cluster)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+    }
+
+    private func clusterView(_ cluster: KeyboardPanelCluster) -> some View {
         VStack(spacing: 4) {
-            ForEach(Array(category.rows.enumerated()), id: \.offset) { _, row in
+            ForEach(Array(cluster.enumerated()), id: \.offset) { _, row in
                 rowView(row)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .top)
-        .padding(.horizontal, 14)
     }
 
     private func rowView(_ row: [KeyboardPanelCell]) -> some View {
@@ -375,36 +385,44 @@ struct TerminalKeyboardPanel: View {
                 cellView(cell)
             }
         }
-        .frame(maxWidth: .infinity, alignment: category.alignedTrailing ? .trailing : .leading)
     }
 
     @ViewBuilder
     private func cellView(_ cell: KeyboardPanelCell) -> some View {
         switch cell {
-        case .gap:
-            Spacer(minLength: 0)
-        case .hole(let width):
+        case .hole(let side):
             // Invisible rather than absent: it holds the column so the row above lines up.
-            Color.clear.frame(width: width, height: 1)
-        case .key(let key, let title, let width):
-            keyView(key, title: title, width: width)
+            Color.clear.frame(width: side, height: 1)
+        case .key(let key, let title, let side):
+            sizedKey(key, title: title, width: side, height: side, tapHeight: side)
         }
     }
 
-    private func keyView(_ key: MobileKey, title: String, width: CGFloat?) -> some View {
+    /// 一颗按尺寸画的键。两页共用：导航页是 56pt 的正方形，键盘页最上面那行是等宽的
+    /// 宽键 —— 真键盘上的 `tab`、`⌫`、`回车` 本来也是宽键。
+    ///
+    /// 这一页没有修饰键可组合，所以键就是键。
+    private func sizedKey(
+        _ key: MobileKey,
+        title: String,
+        width: CGFloat,
+        height: CGFloat,
+        tapHeight: CGFloat
+    ) -> some View {
         Button {
             Haptics.select()
-            // A named key is a key: there is no modifier on this page to combine it
-            // with, and Shift+Tab — the one chord worth having here — has its own key
-            // above precisely because it cannot be composed across pages.
             onActions([.key(key)])
             lastPress = .send([.key(key)], detail: title)
         } label: {
             Text(title)
                 .frame(maxWidth: .infinity)
-                .terminalKeyPill(minWidth: width ?? 0)
+                .terminalKeyPill(
+                    minWidth: width,
+                    horizontalPadding: 4,
+                    size: height,
+                    tapHeight: tapHeight
+                )
                 .frame(width: width)
-                .frame(minHeight: 42)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
@@ -412,27 +430,63 @@ struct TerminalKeyboardPanel: View {
         .accessibilityIdentifier("panelkey-\(key.rawValue)")
     }
 
-    // MARK: - Full keyboard
+    // MARK: - 键盘页
 
     private let keyboardSpacing: CGFloat = 4
 
-    private var fullKeyboard: some View {
+    /// 一颗键边长到这么大就不再长了。
+    ///
+    /// 面板只有一档高度（见 `KeyboardPanelMetrics`），而正方形的键是跟着宽度长的：
+    /// 宽屏上放任它长，六行就会高过面板、压到终端上去。到了这个尺寸之后板子不再铺满
+    /// —— 它居中，四周留白，这比一个把面板顶破的键盘好看。
+    private let keyboardKeyCeiling: CGFloat = 34
+
+    /// 整块键盘：常用键一行、修饰键一行、数字一行、字母三行。
+    ///
+    /// 十列铺满整宽，所以字母键的边长由屏幕宽度定下来 —— iPhone 上正好是 34pt 的正
+    /// 方形。每一行的框比这个正方形高出一个缝的宽度，正方形在框里居中：行与行之间因此
+    /// 只隔着和左右一样的 4pt，而每颗键的点击区跟着长到 ≈38pt —— 上下各多出 2pt。
+    private var keyboardPage: some View {
         GeometryReader { proxy in
-            // Ten columns fill whatever width the page has, so the board scales from an
-            // iPhone to an iPad without a second layout. Fixed widths are what let the
-            // short rows be centred rather than stretched, which is the stagger that
-            // makes the letter block read as a keyboard.
-            let keyWidth = max(24, (proxy.size.width - keyboardSpacing * 9) / 10)
-            VStack(spacing: keyboardSpacing) {
-                modifierRow
-                digitRow(keyWidth: keyWidth)
+            let keyWidth = min(
+                keyboardKeyCeiling,
+                max(24, (proxy.size.width - keyboardSpacing * 9) / 10)
+            )
+            let rowHeight = keyWidth + keyboardSpacing
+            VStack(spacing: 0) {
+                commonRow(keyWidth: keyWidth, rowHeight: rowHeight)
+                modifierRow(keyWidth: keyWidth, rowHeight: rowHeight)
+                digitRow(keyWidth: keyWidth, rowHeight: rowHeight)
                 ForEach(Array(letterRows.enumerated()), id: \.offset) { _, row in
-                    letterRow(row, keyWidth: keyWidth)
+                    letterRow(row, keyWidth: keyWidth, rowHeight: rowHeight)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .padding(.horizontal, 14)
+    }
+
+    /// 系统键盘表达不出来的那五颗键，横在最上面一行。
+    ///
+    /// 五颗平分整宽而不是画成正方形：`tab`、`⌫`、`回车` 在真键盘上本来就是宽键，而
+    /// 一行里五颗等宽的长方块比五颗小方键更好按、也更好认。
+    private func commonRow(keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
+        let keys: [(key: MobileKey, title: String)] = [
+            (.escape, "esc"), (.tab, "tab"), (.shiftTab, "⇧tab"),
+            (.backspace, "⌫"), (.enter, "回车"),
+        ]
+        let width = (keyWidth * 10 + keyboardSpacing * 9 - keyboardSpacing * 4) / 5
+        return HStack(spacing: keyboardSpacing) {
+            ForEach(Array(keys.enumerated()), id: \.offset) { _, entry in
+                sizedKey(
+                    entry.key,
+                    title: entry.title,
+                    width: width,
+                    height: keyWidth,
+                    tapHeight: rowHeight
+                )
+            }
+        }
     }
 
     /// The three rows of a QWERTY board, lower case — what Shift turns into upper case.
@@ -446,17 +500,21 @@ struct TerminalKeyboardPanel: View {
 
     /// Fixed-width, so the two that belong to the left hand stay together and `Alt`
     /// stays where the right hand reaches for it, as on a real board.
-    private var modifierRow: some View {
+    private func modifierRow(keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
         HStack(spacing: keyboardSpacing) {
             ForEach([KeyboardPanelModifier.control, .shift]) { modifier in
-                modifierKey(modifier)
+                modifierKey(modifier, height: keyWidth, tapHeight: rowHeight)
             }
             Spacer(minLength: 0)
-            modifierKey(.alt)
+            modifierKey(.alt, height: keyWidth, tapHeight: rowHeight)
         }
     }
 
-    private func modifierKey(_ modifier: KeyboardPanelModifier) -> some View {
+    private func modifierKey(
+        _ modifier: KeyboardPanelModifier,
+        height: CGFloat,
+        tapHeight: CGFloat
+    ) -> some View {
         let isLatched = effectiveModifier == modifier
         let isLocked = lockedModifier == modifier
         return Button {
@@ -476,7 +534,13 @@ struct TerminalKeyboardPanel: View {
                 }
             }
             .font(.system(size: 12.5, weight: .medium))
-            .terminalKeyPill(minWidth: 62, prominent: isLatched, horizontalPadding: 8)
+            .terminalKeyPill(
+                minWidth: 62,
+                prominent: isLatched,
+                horizontalPadding: 8,
+                size: height,
+                tapHeight: tapHeight
+            )
             .frame(width: 62)
         }
         .buttonStyle(.plain)
@@ -485,24 +549,29 @@ struct TerminalKeyboardPanel: View {
         .accessibilityIdentifier("panelkey-modifier-\(modifier.rawValue)")
     }
 
-    private func digitRow(keyWidth: CGFloat) -> some View {
+    private func digitRow(keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
         HStack(spacing: keyboardSpacing) {
             ForEach(digitKeys, id: \.self) { digit in
-                characterKey(digit, isDigit: true, keyWidth: keyWidth)
+                characterKey(digit, isDigit: true, keyWidth: keyWidth, rowHeight: rowHeight)
             }
         }
     }
 
-    private func letterRow(_ row: [Character], keyWidth: CGFloat) -> some View {
+    private func letterRow(_ row: [Character], keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
         HStack(spacing: keyboardSpacing) {
             ForEach(row, id: \.self) { letter in
-                characterKey(letter, isDigit: false, keyWidth: keyWidth)
+                characterKey(letter, isDigit: false, keyWidth: keyWidth, rowHeight: rowHeight)
             }
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func characterKey(_ character: Character, isDigit: Bool, keyWidth: CGFloat) -> some View {
+    private func characterKey(
+        _ character: Character,
+        isDigit: Bool,
+        keyWidth: CGFloat,
+        rowHeight: CGFloat
+    ) -> some View {
         let modifier = effectiveModifier
         let supported = isSupported(character, isDigit: isDigit, modifier: modifier)
         return Button {
@@ -512,9 +581,14 @@ struct TerminalKeyboardPanel: View {
             Text(label(character, isDigit: isDigit, modifier: modifier))
                 .font(.system(size: 15))
                 .frame(maxWidth: .infinity)
-                .terminalKeyPill(minWidth: 0, horizontalPadding: 4)
-                // Height comes from the pill, which floors it at `minimumTapTarget`:
-                // a key that reads at 42pt still has to be hit by a finger.
+                // 正方形由 `size` 定，点击区由 `tapHeight` 定 —— 后者就是这一行的行高，
+                // 所以缝归缝、键归键，行与行之间不会重新长出空白。
+                .terminalKeyPill(
+                    minWidth: 0,
+                    horizontalPadding: 4,
+                    size: keyWidth,
+                    tapHeight: rowHeight
+                )
                 .frame(width: keyWidth)
         }
         .buttonStyle(.plain)
@@ -706,13 +780,21 @@ struct TerminalKeyboardPanel: View {
 enum KeyboardPanelMetrics {
     /// How much of the screen the panel occupies, the same on every page.
     ///
-    /// Sized for the tallest page — the full keyboard's four rows of modifiers, digits
-    /// and letters, with its readout above them and its hint below — and no taller, so
-    /// that the terminal stays visible above the keys being pressed to drive it.
+    /// Sized for the taller page — the keyboard's six rows: the five keys a phone cannot
+    /// otherwise send, the modifiers, the digits and three rows of letters, with the
+    /// readout above them and the hint below. Its rows are the tightest they can be:
+    /// every key is a 34pt square and the rows are 4pt apart, the same as the gap
+    /// between the keys, so the sum is what it is rather than a round number.
     ///
-    /// One height rather than one per page. The three shorter pages leave the rest of
-    /// the panel empty, and that waste is the price of a page change that moves nothing
+    ///     padding 8 + picker 32 + 12 + readout 26 + 8
+    ///       + board 6 × 37.8 + hint 9 + 15 + padding 14  ≈  351
+    ///
+    /// One height rather than one per page. The shorter page leaves the rest of the
+    /// panel empty, and that waste is the price of a page change that moves nothing
     /// under the reader's finger: a panel that grew and shrank pushed the toolbar, the
     /// input bar and the terminal up and down again with every category.
-    static let height: CGFloat = 370
+    ///
+    /// A narrower phone gets a shorter board than this and simply keeps the difference as
+    /// blank space at the bottom, so nothing is ever cut off.
+    static let height: CGFloat = 351
 }

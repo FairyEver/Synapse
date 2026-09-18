@@ -1,7 +1,8 @@
 # 终端键盘面板改造 · 产品设计文档
 
 > 状态：**定稿，可实施。** 两个关键决定已由产品负责人拍板（见 §3.2、§3.6）。
-> 界面原型：`docs/prototypes/2026-09-17-terminal-full-keyboard.html`（仓库内路径，用浏览器打开，可直接点）
+> **部分内容已被取代**：§5.1、§5.2、§5.4、§5.5、§8 里「不改方向 / 功能两页的几何」那一条、§9 的第 1 / 10 / 11 / 12 / 13 条 —— 见 `docs/superpowers/specs/2026-09-18-terminal-keyboard-two-pages-design.md`（四页并两页、方块键、面板高 351）。协议、按键白名单、修饰键锁存那几章仍然有效。
+> 界面原型：`docs/prototypes/2026-09-17-terminal-full-keyboard.html`（仓库内路径，用浏览器打开，可直接点）—— **停在本轮的样子，之后没有同步。**
 > 上一轮：`docs/superpowers/specs/2026-09-17-terminal-shortcut-sync-design.md`（仓库内路径）
 
 ---

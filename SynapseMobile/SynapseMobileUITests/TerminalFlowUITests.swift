@@ -553,13 +553,13 @@ final class TerminalFlowUITests: XCTestCase {
         )
         app.buttons["toolbar-keyboard"].tap()
         XCTAssertTrue(app.buttons["panelkey-Escape"].waitForExistence(timeout: 10), "the panel never opened")
-        capture(app, name: "11-keyboard-panel-common")
+        capture(app, name: "11-keyboard-panel-board")
 
-        // `⇧tab` has no iPhone keyboard of its own, and it cannot be composed in the
-        // panel either — Shift is on the full keyboard page and Tab is on this one, and
-        // changing page drops a latched modifier. It is the key that cycles Claude
-        // Code's permission mode, which is why it earns a slot of its own.
-        XCTAssertTrue(app.buttons["panelkey-Shift+Tab"].exists, "the common page has no ⇧tab")
+        // `⇧tab` has no iPhone keyboard of its own. Shift and Tab do share a page these
+        // days, but the key that cycles Claude Code's permission mode should not cost two
+        // taps because the chord became expressible, so it keeps a slot on the board's
+        // top row.
+        XCTAssertTrue(app.buttons["panelkey-Shift+Tab"].exists, "the board has no ⇧tab")
         // Waited for, not merely existed: the panel is still settling into the layout
         // when it first appears, and a tap taken against the frame it had a moment ago
         // lands where the key no longer is. Every other press in this file that follows
@@ -579,12 +579,23 @@ final class TerminalFlowUITests: XCTestCase {
             XCTFail("⇧tab did not reach the computer; last lines: \(visible)")
         }
 
-        for (category, key) in [("方向", "panelkey-ArrowUp"), ("功能", "panelkey-PageUp"),
-                                ("全键盘", "panelkey-modifier-Ctrl")] {
+        // Two pages now, and the second one carries both clusters — the arrows and the
+        // six-key block used to be pages of their own. A merge that quietly dropped one
+        // of them would still pass a check that only asked about the page it landed on,
+        // so both are asked for. The loop ends on the board, which is what the rest of
+        // this test presses.
+        for (category, key) in [("导航", "panelkey-ArrowUp"), ("导航", "panelkey-PageUp"),
+                                ("键盘", "panelkey-modifier-Ctrl")] {
             app.buttons[category].tap()
             XCTAssertTrue(app.buttons[key].waitForExistence(timeout: 5), "\(category) has no \(key)")
         }
-        capture(app, name: "12-keyboard-panel-full")
+        app.buttons["导航"].tap()
+        capture(app, name: "12-keyboard-panel-navigation")
+        app.buttons["键盘"].tap()
+        XCTAssertTrue(
+            app.buttons["panelkey-modifier-Ctrl"].waitForExistence(timeout: 5),
+            "the board did not come back"
+        )
 
         // The point of the page: a chord is two taps, and what the computer receives is
         // the combination rather than the letter. Latched first, then the letter.
