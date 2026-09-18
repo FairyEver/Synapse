@@ -448,6 +448,29 @@ struct TerminalScreen: View {
             )
             .ignoresSafeArea()
         }
+        .sheet(isPresented: $shortcutPanelPresented) {
+            TerminalShortcutPanel(
+                buttons: buttons,
+                // `nil` is a computer that has never described its sentences, which is
+                // not the same as one that has none — see `TerminalQuickPhrasesState`.
+                phrases: model.activeQuickPhrases,
+                isRunning: isRunning,
+                onRun: { button in
+                    shortcutPanelPresented = false
+                    model.runToolbarButton(button, sessionId: sessionId)
+                    inputFocused = true
+                },
+                onInsert: { phrase in
+                    shortcutPanelPresented = false
+                    // Into the field and nowhere else. Not sent, because a sentence is
+                    // text rather than an act and the user is about to read it back
+                    // before deciding; and not focused, because focusing is what raises
+                    // the system keyboard — which would cover the terminal at the exact
+                    // moment the reader is deciding whether to send.
+                    draft = phrase.content
+                }
+            )
+        }
         .sheet(isPresented: $showingDocumentPicker) {
             DocumentPicker(
                 onPicked: { urls in

@@ -934,6 +934,178 @@ final class TerminalFlowUITests: XCTestCase {
         )
     }
 
+    /// What this run's computer keeps in its 快捷输入 table.
+    ///
+    /// The same fixtures the mock starts with, so a test that changes them can put them
+    /// back — the mock outlives the test and the runs after it expect what they were
+    /// written against.
+    private var defaultMockQuickPhrases: [[String: Any]] {
+        [
+            ["id": "mock-log", "content": "用 Easy Worklog 初始化今天的工作日志"],
+            ["id": "mock-commit", "content": "这次改动整理成提交说明，中文，说清楚改了什么、为什么改"],
+            ["id": "mock-review", "content": "把这次改动按可读性、边界情况、错误处理三个方面复查一遍"],
+        ]
+    }
+
+    private func setMockQuickPhrases(_ phrases: [[String: Any]]) throws {
+        let body = try JSONSerialization.data(withJSONObject: phrases)
+        XCTAssertEqual(
+            post("/desktop/quick-phrases", body: body), 200,
+            "the mock desktop control channel is unreachable at \(controlBaseURL)"
+        )
+    }
+
+    /// Opens the terminal `claude-code` and waits for its toolbar to arrive.
+    ///
+    /// The first session is the only fixture nobody consumes, and the toolbar is the
+    /// last thing the phone needs before this screen is usable — see
+    /// `testToolbarMirrorsTheComputerAndTheKeyboardPanelSendsKeys` for why it is that
+    /// row and not another.
+    @discardableResult
+    private func openClaudeCodeTerminal(_ app: XCUIApplication) -> XCUIElement {
+        let terminals = app.tabBars.firstMatch
+        XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
+        let sessionRow = app.staticTexts["claude-code"]
+        XCTAssertTrue(sessionRow.waitForExistence(timeout: 25), "the claude-code session never appeared")
+        XCTAssertTrue(waitForHittable(sessionRow, timeout: 10), "the session never became tappable")
+        sessionRow.tap()
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 15), "terminal never appeared")
+        return terminal
+    }
+
+    /// The panel's command section: the whole list at once, and it sends like the bar.
+    func testTheCommandPanelShowsEveryCommandAndStillSendsOne() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        let panelKey = app.buttons["toolbar-all"]
+        XCTAssertTrue(panelKey.waitForExistence(timeout: 15), "the bar has no key into the command panel")
+        panelKey.tap()
+
+        // Everything the computer offers, which is the point of the panel: the bar has
+        // to be scrolled to be read, and this does not.
+        for id in ["shortcut-enter", "shortcut-interrupt", "shortcut-slash-exit", "shortcut-slash-clear",
+                   "shortcut-mock-deploy", "shortcut-mock-port"] {
+            XCTAssertTrue(app.buttons[id].waitForExistence(timeout: 10), "the panel is missing \(id)")
+        }
+        XCTAssertFalse(app.buttons["shortcut-clear"].exists, "Clear was projected onto the phone")
+        capture(app, name: "15-command-panel")
+
+        // A command sent from the panel crosses the socket exactly as one sent from the
+        // bar does — the two are views of one list, so a press has to mean one thing.
+        app.buttons["shortcut-mock-port"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:lsof -i :3001", in: app, timeout: 20),
+            "a command pressed in the panel did not reach the computer"
+        )
+        // And the panel is gone, the way it is for a command pressed on the bar.
+        XCTAssertTrue(
+            app.buttons["shortcut-enter"].waitForNonExistence(timeout: 10),
+            "the panel stayed open after a command was sent"
+        )
+
+        // Left as the bar's own test needs it: the mock outlives this run.
+        try setMockToolbar([
+            button("enter", "回车", "key", key: "Enter"),
+            button("interrupt", "Ctrl+C", "key", key: "Ctrl+C"),
+            button("slash-exit", "/exit", "command", text: "/exit", pressEnter: true),
+            button("slash-clear", "/clear", "command", text: "/clear", pressEnter: true),
+            button("mock-deploy", "部署", "custom", text: "pnpm mock-deploy", pressEnter: true),
+            button("mock-port", "查端口", "custom", text: "lsof -i :3001", pressEnter: false),
+        ])
+    }
+
+    /// The 快捷输入 segment: the computer's own sentences, and what tapping one does.
+    ///
+    /// The one thing this test is really about is what tapping a sentence must *not* do.
+    /// A command is an act and a sentence is text, so a tap puts the sentence in the
+    /// composer and stops there — it is not sent, and it does not raise the keyboard.
+    /// Getting that wrong would send, unread, a message the user had not looked at yet.
+    func testThePhraseSegmentFillsTheFieldWithoutSending() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "the panel has no segment control")
+        XCTAssertEqual(segment.buttons.count, 2, "the panel should offer two segments")
+
+        segment.buttons["快捷输入"].tap()
+        let row = app.staticTexts["phrase-row-mock-commit"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "the computer's sentences never appeared")
+        capture(app, name: "16-phrase-segment")
+
+        row.tap()
+
+        // In the field, exactly as the computer wrote it.
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "the input field is missing")
+        let expected = "这次改动整理成提交说明，中文，说清楚改了什么、为什么改"
+        XCTAssertTrue(
+            waitForValue(containing: expected, in: field, timeout: 10),
+            "the sentence did not reach the input field: \(field.value as? String ?? "(nil)")"
+        )
+        // Not sent. The computer echoes every command it receives, so an echo is proof
+        // one went out — and there must not be one.
+        XCTAssertFalse(
+            waitForLabel(containing: "mock desktop received:", in: app, timeout: 3),
+            "tapping a sentence sent it"
+        )
+        // And the panel closed, so the reader is looking at what they are about to send.
+        XCTAssertTrue(
+            app.segmentedControls["shortcut-panel-segment"].waitForNonExistence(timeout: 10),
+            "the panel stayed open over the field it just filled"
+        )
+        capture(app, name: "17-phrase-filled")
+    }
+
+    /// A computer that has none says so, and the phone shows an empty state — not an
+    /// empty panel, and not the segment control missing.
+    ///
+    /// This is one half of the pair the whole feature turns on. The other half — a
+    /// computer too old to send the message at all — cannot be reached from here: the
+    /// mock decides that when it starts (`--no-toolbar`), not while it runs. It is
+    /// covered by `TerminalQuickPhrasesState`'s own tests, and by running this suite
+    /// against a mock started that way.
+    func testAComputerWithNoPhrasesShowsAnEmptyState() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
+        app.launch()
+        signIn(app)
+        openClaudeCodeTerminal(app)
+
+        // The mock pushes the new list the moment it is set, the same way the real
+        // computer pushes an edit rather than waiting to be asked.
+        try setMockQuickPhrases([])
+
+        app.buttons["toolbar-all"].tap()
+        let segment = app.segmentedControls["shortcut-panel-segment"]
+        XCTAssertTrue(segment.waitForExistence(timeout: 10), "an empty list is an answer, so the segments stay")
+        segment.buttons["快捷输入"].tap()
+
+        XCTAssertTrue(
+            app.staticTexts["电脑上还没有快捷输入"].waitForExistence(timeout: 10),
+            "an empty list did not produce the empty state"
+        )
+        XCTAssertFalse(app.staticTexts["phrase-row-mock-log"].exists, "a sentence the computer no longer has is still here")
+        capture(app, name: "18-phrase-empty")
+
+        // Left as it was found: the mock outlives this run. `--no-toolbar` runs get a
+        // mock of their own and do not see this at all.
+        try setMockQuickPhrases(defaultMockQuickPhrases)
+        XCTAssertTrue(
+            app.staticTexts["phrase-row-mock-log"].waitForExistence(timeout: 10),
+            "the sentences were not restored for the tests that follow"
+        )
+    }
+
     /// Where the mock desktop listens for control commands.
     ///
     /// The test process runs inside the simulator, which shares the host's
@@ -1057,6 +1229,18 @@ final class TerminalFlowUITests: XCTestCase {
         let predicate = NSPredicate(format: "label CONTAINS %@", text)
         let element = app.staticTexts.matching(predicate).firstMatch
         return element.waitForExistence(timeout: timeout)
+    }
+
+    /// Waits for a field's own text to contain something.
+    ///
+    /// `XCUIElement.value` rather than `label`: a text field carries what it holds in
+    /// `value`, and its label is empty.
+    private func waitForValue(containing text: String, in element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "value CONTAINS %@", text)
+        return XCTWaiter().wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
+            timeout: timeout
+        ) == .completed
     }
 
     private func capture(_ app: XCUIApplication, name: String) {

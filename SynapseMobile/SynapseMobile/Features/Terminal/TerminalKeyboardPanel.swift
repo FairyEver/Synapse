@@ -207,6 +207,13 @@ struct TerminalKeyPill: ViewModifier {
     /// committing action `prominent` is reserved for, and inverting a key that is
     /// merely open would make the toolbar's loudest control the one that does least.
     var pressed: Bool = false
+    /// Drawn for a pill standing on a grouped background rather than on a bar.
+    ///
+    /// The resting fill is the secondary background, which is the same colour as a
+    /// grouped sheet — so a command drawn on the panel's grey would have no edge at
+    /// all. On that one surface the pill takes the plain background instead, which is
+    /// the same relationship the bar has with a sheet, the other way round.
+    var onGroupedBackground: Bool = false
     /// The room between the label and the pill's edge. Ten keys have to share one row
     /// on the full keyboard, so its keys are about a third the width of these and
     /// cannot afford the padding a two-key row can.
@@ -221,6 +228,7 @@ struct TerminalKeyPill: ViewModifier {
     private var fill: Color {
         if prominent { return Color.primary }
         if pressed { return Color(uiColor: .systemFill) }
+        if onGroupedBackground { return Color(uiColor: .systemBackground) }
         return Color(uiColor: .secondarySystemBackground)
     }
 
@@ -247,12 +255,14 @@ extension View {
         minWidth: CGFloat = 48,
         prominent: Bool = false,
         pressed: Bool = false,
+        onGroupedBackground: Bool = false,
         horizontalPadding: CGFloat = 12
     ) -> some View {
         modifier(TerminalKeyPill(
             minWidth: minWidth,
             prominent: prominent,
             pressed: pressed,
+            onGroupedBackground: onGroupedBackground,
             horizontalPadding: horizontalPadding
         ))
     }
