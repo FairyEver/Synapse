@@ -618,9 +618,9 @@ struct TerminalScreen: View {
         }
         .fullScreenCover(isPresented: $showingCamera) {
             CameraPicker(
-                onPicked: { image in
+                onPicked: { capture in
                     showingCamera = false
-                    Task { await intake(cameraImage: image) }
+                    Task { await intake(cameraCapture: capture) }
                 },
                 onCancelled: { showingCamera = false }
             )
@@ -1114,7 +1114,7 @@ struct TerminalScreen: View {
             Button {
                 showingPhotoPicker = true
             } label: {
-                Label("照片", systemImage: "photo")
+                Label("照片和视频", systemImage: "photo.on.rectangle")
             }
             // Hidden where there is no camera — the simulator, and any device
             // without one — rather than offered and then failing.
@@ -1196,7 +1196,7 @@ struct TerminalScreen: View {
     private func intake(providers: [NSItemProvider]) async {
         var files: [PickedFile] = []
         for provider in providers {
-            if let file = await TerminalFileIntake.prepare(imageProvider: provider) {
+            if let file = await TerminalFileIntake.prepare(provider: provider) {
                 files.append(file)
             }
         }
@@ -1213,9 +1213,16 @@ struct TerminalScreen: View {
         hand(files)
     }
 
-    private func intake(cameraImage: UIImage) async {
-        guard let file = await TerminalFileIntake.prepare(cameraImage: cameraImage) else {
-            model.raiseTerminalMessage("没有读取到可发送的图片。", sessionId: sessionId)
+    private func intake(cameraCapture: CameraCapture) async {
+        let file: PickedFile?
+        switch cameraCapture {
+        case .photo(let image):
+            file = await TerminalFileIntake.prepare(cameraImage: image)
+        case .video(let url):
+            file = await TerminalFileIntake.prepare(cameraVideo: url)
+        }
+        guard let file else {
+            model.raiseTerminalMessage("没有读取到可发送的文件。", sessionId: sessionId)
             return
         }
         hand([file])

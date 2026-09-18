@@ -5,43 +5,44 @@ import UniformTypeIdentifiers
 
 /// Turns what a system picker hands back into files this app can upload.
 ///
-/// All three sources converge here because the rest of the feature does not care
+/// All the sources converge here because the rest of the feature does not care
 /// where a file came from — the design's whole point is that picking a photo,
 /// shooting one and pasting one are the same channel with different first steps.
+/// Nor does it care what kind of file it is: the drive stores bytes and the
+/// desktop only splits the name, so a video takes the same path a picture does.
 enum TerminalFileIntake {
-    /// A photo-library item.
+    /// A photo-library item, still or moving.
     ///
     /// `loadFileRepresentation` hands over the asset's own file, and the URL it
     /// gives is only valid until the callback returns, so the copy has to happen
     /// inside it.
-    static func prepare(imageProvider provider: NSItemProvider) async -> PickedFile? {
-        let copied = await copyRepresentation(of: provider)
+    static func prepare(provider: NSItemProvider) async -> PickedFile? {
+        guard let type = representationType(of: provider) else { return nil }
+        let copied = await copyRepresentation(of: provider, as: type)
         guard let copied else { return nil }
-        return await normalizeImage(at: copied.url, name: copied.name)
+        return await normalizeLibraryFile(at: copied.url, name: copied.name)
     }
 
     /// A document the user chose. `asCopy: true` means the URL already points at a
     /// copy inside this app's container, so it can be read without a security scope.
     static func prepare(documentURL url: URL) async -> PickedFile? {
-        let name = url.lastPathComponent
-        let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("relay-\(UUID().uuidString)-\(name)")
-        do {
-            try FileManager.default.copyItem(at: url, to: destination)
-        } catch {
-            return nil
-        }
-        let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int64) ?? nil
-        guard let resolved = PreparedFile.standardized(destination, name: name, size: size ?? 0) else {
-            return nil
-        }
-        return resolved
+        copyFile(at: url, name: url.lastPathComponent)
     }
 
     /// A picture taken with the camera.
     static func prepare(cameraImage image: UIImage) async -> PickedFile? {
         let name = generatedFileName(prefix: "照片", extension: "jpg")
         return write(image: image, name: name, type: .jpeg)
+    }
+
+    /// A video recorded with the camera.
+    ///
+    /// The picker writes it into this app's own temporary directory under a name of
+    /// its own choosing. That name is kept out of the user's way and replaced with
+    /// the one a shot photo gets, so a clip arrives looking like something they
+    /// took rather than like a scratch file.
+    static func prepare(cameraVideo url: URL) async -> PickedFile? {
+        copyFile(at: url, name: generatedFileName(prefix: "视频", extension: "mov"))
     }
 
     /// A picture from the pasteboard.
@@ -55,9 +56,20 @@ enum TerminalFileIntake {
 
     // MARK: - Internals
 
-    private static func copyRepresentation(of provider: NSItemProvider) async -> (url: URL, name: String)? {
+    /// Which representation a library item is asked for.
+    ///
+    /// Image first, and deliberately so: a Live Photo offers both, and the still is
+    /// what this picker has always handed over. Taking the movie would quietly turn
+    /// a photo the user picked into a moving picture.
+    private static func representationType(of provider: NSItemProvider) -> UTType? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) { return .image }
+        if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) { return .movie }
+        return nil
+    }
+
+    private static func copyRepresentation(of provider: NSItemProvider, as type: UTType) async -> (url: URL, name: String)? {
         await withCheckedContinuation { continuation in
-            provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
+            provider.loadFileRepresentation(forTypeIdentifier: type.identifier) { url, _ in
                 guard let url else {
                     continuation.resume(returning: nil)
                     return
@@ -74,12 +86,27 @@ enum TerminalFileIntake {
         }
     }
 
+    /// Copies a file this app can already read into the temporary directory, under
+    /// the name the computer will see.
+    private static func copyFile(at url: URL, name: String) -> PickedFile? {
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("relay-\(UUID().uuidString)-\(name)")
+        do {
+            try FileManager.default.copyItem(at: url, to: destination)
+        } catch {
+            return nil
+        }
+        let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int64) ?? nil
+        return PreparedFile.standardized(destination, name: name, size: size ?? 0)
+    }
+
     /// Converts HEIC to JPEG, and passes everything else through untouched.
     ///
     /// iPhone photos are HEIC by default and most command-line tools and models
     /// cannot read it, so the file that reaches the computer has to be JPEG — with
     /// the extension to match, because the extension is what those tools believe.
-    private static func normalizeImage(at url: URL, name: String) async -> PickedFile? {
+    /// A video has no such problem, and takes the pass-through branch below.
+    private static func normalizeLibraryFile(at url: URL, name: String) async -> PickedFile? {
         guard isHeic(name) else {
             let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil
             return PreparedFile.standardized(url, name: name, size: size ?? 0)
@@ -143,7 +170,11 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var configuration = PHPickerConfiguration()
-        configuration.filter = .images
+        // Both, because a video is the same kind of thing to everything downstream:
+        // the drive stores its bytes and the desktop types its path. `.livePhotos`
+        // is left out on purpose — its asset carries a movie alongside the still,
+        // and a photo the user picked should stay a photo.
+        configuration.filter = .any(of: [.images, .videos])
         configuration.selectionLimit = selectionLimit
         // The image itself, not a transcoded rendition: the file has to arrive on
         // the computer as the bytes the user picked.
@@ -223,10 +254,19 @@ struct DocumentPicker: UIViewControllerRepresentable {
     }
 }
 
+/// What the camera handed back.
+///
+/// The shutter and the record button are the same screen with a mode switch, so one
+/// picker serves both and the delegate can be handed either.
+enum CameraCapture {
+    case photo(UIImage)
+    case video(URL)
+}
+
 /// The camera. The only source here that needs a usage description, because it is
 /// the only one that is not running in another process on the user's behalf.
 struct CameraPicker: UIViewControllerRepresentable {
-    let onPicked: (UIImage) -> Void
+    let onPicked: (CameraCapture) -> Void
     let onCancelled: () -> Void
 
     static var isAvailable: Bool {
@@ -236,7 +276,15 @@ struct CameraPicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let controller = UIImagePickerController()
         controller.sourceType = .camera
-        controller.mediaTypes = [UTType.image.identifier]
+        // Both, which is what puts the photo/video switch in the camera's own bar.
+        controller.mediaTypes = [UTType.image.identifier, UTType.movie.identifier]
+        // The default here is VGA, which is not worth the trip to the computer.
+        controller.videoQuality = .typeHigh
+        // A recording is stopped where the upload would have refused it. The picker's
+        // own default is ten minutes, several times what the relay carries, so
+        // without this the user could record for minutes and then be told the file
+        // is too big — a recording made entirely to be thrown away.
+        controller.videoMaximumDuration = AppConfiguration.relayCameraVideoSeconds
         controller.delegate = context.coordinator
         return controller
     }
@@ -248,10 +296,10 @@ struct CameraPicker: UIViewControllerRepresentable {
     }
 
     final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        private let onPicked: (UIImage) -> Void
+        private let onPicked: (CameraCapture) -> Void
         private let onCancelled: () -> Void
 
-        init(onPicked: @escaping (UIImage) -> Void, onCancelled: @escaping () -> Void) {
+        init(onPicked: @escaping (CameraCapture) -> Void, onCancelled: @escaping () -> Void) {
             self.onPicked = onPicked
             self.onCancelled = onCancelled
         }
@@ -260,11 +308,18 @@ struct CameraPicker: UIViewControllerRepresentable {
             _ picker: UIImagePickerController,
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
-            guard let image = info[.originalImage] as? UIImage else {
-                onCancelled()
+            if let image = info[.originalImage] as? UIImage {
+                onPicked(.photo(image))
                 return
             }
-            onPicked(image)
+            // A recording lands in this app's own temporary directory rather than in
+            // the library, so it is the intake's copy — not this URL — that has to
+            // outlive the picker.
+            if let url = info[.mediaURL] as? URL {
+                onPicked(.video(url))
+                return
+            }
+            onCancelled()
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {

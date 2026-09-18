@@ -89,13 +89,13 @@
 	  camera is the sole reason this key exists.
 	-->
 	<key>NSCameraUsageDescription</key>
-	<string>拍一张照片发给电脑上的终端。</string>
+	<string>拍照片或录像发给电脑上的终端。</string>
 	<!--
 	  Only the microphone. The transcription happens in the cloud rather than on
 	  device, so the app never touches the system's speech recogniser and has no
-	  reason to ask for it.
+	  reason to ask for it. Recording also uses it, for the sound on a video.
 	-->
 	<key>NSMicrophoneUsageDescription</key>
-	<string>用于把说的话转成文字填进终端输入框。</string>
+	<string>用于把说的话转成文字填进终端输入框，以及录像时收录声音。</string>
 </dict>
 </plist>

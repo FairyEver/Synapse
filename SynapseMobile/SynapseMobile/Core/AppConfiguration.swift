@@ -94,6 +94,16 @@ enum AppConfiguration {
     /// upload that was never going to be accepted.
     static let relayMaxFileBytes = 100 * 1024 * 1024
 
+    /// How long the camera lets a recording run before it stops on its own.
+    ///
+    /// Derived from `relayMaxFileBytes` rather than chosen, because the two are the
+    /// same limit seen from two sides: recording past what the relay carries only
+    /// produces a file that will be refused. The divisor is a generous H.264 1080p
+    /// bitrate — real recordings land under it, so the camera stops a little short
+    /// of the ceiling instead of a little past it.
+    static let relayCameraVideoSeconds: TimeInterval =
+        TimeInterval(relayMaxFileBytes / (2 * 1024 * 1024))
+
     /// One selection. The whole batch is uploaded to the same place and named in
     /// the same terminal, so a larger one is a burst of typing rather than a
     /// feature.

@@ -450,3 +450,70 @@ struct RelayCommitTests {
         #expect(committedAttachmentIds(attachments, sessionId: "s1").isEmpty)
     }
 }
+
+/// What the intake makes of a video.
+///
+/// A video is the same kind of thing as a picture to everything past the picker —
+/// the drive stores its bytes, the desktop splits its name — so the phone is the
+/// only side that has an opinion. It used to have two: the library offered stills
+/// only, and the intake asked each item for an image representation, which a video
+/// has none of. The first of those is a picker setting; this covers the second,
+/// which is the one that would drop a video silently.
+struct TerminalFileIntakeVideoTests {
+    /// A QuickTime header, which is also what the image branch would destroy.
+    private static let movieBytes: [UInt8] = [0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70]
+
+    private func temporaryFile(named name: String, bytes: [UInt8]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("intake-\(UUID().uuidString)-\(name)")
+        try Data(bytes).write(to: url)
+        return url
+    }
+
+    @Test func aVideoItemIsAskedForAsAMovieRatherThanDropped() async throws {
+        let source = try temporaryFile(named: "clip.mov", bytes: Self.movieBytes)
+        defer { try? FileManager.default.removeItem(at: source) }
+        // The same provider a real library item arrives as: built from the file.
+        let provider = try #require(NSItemProvider(contentsOf: source))
+
+        let file = try #require(
+            await TerminalFileIntake.prepare(provider: provider),
+            "a video provider was dropped — the intake asked for a representation it does not have"
+        )
+        #expect(file.name.hasSuffix(".mov"))
+        #expect(file.mimeType == "video/quicktime")
+    }
+
+    @Test func aMoviesBytesSurviveTheImageNormalizing() async throws {
+        let source = try temporaryFile(named: "clip.mov", bytes: Self.movieBytes)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let provider = try #require(NSItemProvider(contentsOf: source))
+
+        let file = try #require(await TerminalFileIntake.prepare(provider: provider))
+        // Only HEIC is re-encoded; anything else has to arrive byte for byte.
+        #expect(try Data(contentsOf: file.url) == Data(Self.movieBytes))
+        #expect(file.size == Int64(Self.movieBytes.count))
+    }
+
+    @Test func aCameraRecordingArrivesUnderANameTheUserWouldRecognize() async throws {
+        let source = try temporaryFile(named: "3A1B2C3D-4E5F.MOV", bytes: Self.movieBytes)
+        defer { try? FileManager.default.removeItem(at: source) }
+
+        let file = try #require(await TerminalFileIntake.prepare(cameraVideo: source))
+        // The picker's own scratch name is not one to hand a person.
+        #expect(file.name.hasPrefix("视频-"))
+        #expect(file.name.hasSuffix(".mov"))
+        #expect(!file.name.contains("3A1B2C3D"))
+    }
+
+    @Test func theCameraStopsRecordingWhereTheUploadWouldRefuseIt() {
+        // Recording past the relay's ceiling only produces a file that gets refused,
+        // so the two are the same limit seen from two sides and have to move
+        // together. At the bitrate the constant is derived with, a recording that
+        // runs its full length still fits.
+        let bytesAtFullLength = AppConfiguration.relayCameraVideoSeconds * 2 * 1024 * 1024
+        #expect(bytesAtFullLength <= Double(AppConfiguration.relayMaxFileBytes))
+        // And it is a real cap, not the picker's own ten minutes.
+        #expect(AppConfiguration.relayCameraVideoSeconds < 600)
+    }
+}

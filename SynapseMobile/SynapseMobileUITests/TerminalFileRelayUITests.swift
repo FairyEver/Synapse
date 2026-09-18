@@ -48,7 +48,7 @@ final class TerminalFileRelayUITests: XCTestCase {
         XCTAssertTrue(attach.waitForExistence(timeout: 15), "the input bar has no + button")
         attach.tap()
 
-        let photos = app.buttons["照片"]
+        let photos = app.buttons["照片和视频"]
         XCTAssertTrue(photos.waitForExistence(timeout: 8), "the source menu did not offer the photo library")
         photos.tap()
         capture(app, name: "01-photo-picker")
@@ -160,7 +160,7 @@ final class TerminalFileRelayUITests: XCTestCase {
         XCTAssertTrue(attach.waitForExistence(timeout: 15), "the input bar has no + button")
         attach.tap()
 
-        let photos = app.buttons["照片"]
+        let photos = app.buttons["照片和视频"]
         XCTAssertTrue(photos.waitForExistence(timeout: 8), "the source menu did not offer the photo library")
         photos.tap()
 
