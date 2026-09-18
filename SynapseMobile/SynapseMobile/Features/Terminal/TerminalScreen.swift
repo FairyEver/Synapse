@@ -16,7 +16,6 @@ struct TerminalScreen: View {
     /// state: it is a setting, and a copy here is how the two drift apart.
     private var fontSize: CGFloat { display.density(for: sessionId).fontSize }
     @State private var showingRename = false
-    @State private var renamingTitle = ""
     @State private var showingStopConfirm = false
     @State private var keyboardPanelPresented = false
     /// 键盘槽位正在滑进或滑出。
@@ -565,16 +564,13 @@ struct TerminalScreen: View {
             )
             voice.notice = nil
         }
-        .alert("重命名终端", isPresented: $showingRename) {
-            TextField("名称", text: $renamingTitle)
-            Button("取消", role: .cancel) {}
-            // 输入框不带旧名字，是空着打开的，所以「还没输」是常态而不是意外：
-            // 保存先灰着，有名字才让它可按。
-            Button("保存") {
+        .sheet(isPresented: $showingRename) {
+            // 这里和列表左滑进去的是同一个面板：同一个动作在两处出现两种样子，是同一
+            // 件事讲了两遍不一样的答案。
+            RenameSessionSheet(title: session?.title ?? "") { newName in
                 Haptics.commit()
-                model.rename(sessionId, to: renamingTitle)
+                model.rename(sessionId, to: newName)
             }
-            .disabled(renamingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .alert("停止这个终端？", isPresented: $showingStopConfirm) {
             Button("取消", role: .cancel) {}
@@ -726,9 +722,6 @@ struct TerminalScreen: View {
                     }
                 }
                 Button {
-                    // 不带旧名字：重命名就是写一个新名字，先把它从输入框里删掉再打
-                    // 是白干一遍。
-                    renamingTitle = ""
                     showingRename = true
                 } label: {
                     // 菜单里三行操作不带图标：上面那两组选项本来就只画文字，只有

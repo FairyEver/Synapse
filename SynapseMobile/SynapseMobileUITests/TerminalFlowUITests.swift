@@ -232,22 +232,33 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
         XCTAssertTrue(app.staticTexts["api-logs"].waitForExistence(timeout: 20), "session list never arrived")
 
-        // Rename. The alert opens empty — the old name is not carried in — and the
-        // list has to show the new one without leaving the screen.
+        // Rename. The sheet opens on the current name — most renames change a word
+        // or two — and the list has to show the new one without leaving the screen.
         revealSwipeActions(on: "api-logs", in: app)
         let renameButton = app.buttons["重命名"]
         XCTAssertTrue(renameButton.waitForExistence(timeout: 5), "swipe did not reveal rename")
         XCTAssertTrue(app.buttons["删除"].exists, "swipe did not reveal delete")
-        // The actions themselves, before the alert covers them.
+        // The actions themselves, before the sheet covers them.
         capture(app, name: "15-swipe-actions")
         renameButton.tap()
 
-        let nameField = app.textFields.firstMatch
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "rename never asked for a name")
-        // The field carries nothing to type over: an empty box is the whole point,
-        // and until something is in it there is no name to save.
-        let save = app.alerts.firstMatch.buttons["保存"]
-        XCTAssertFalse(save.isEnabled, "save was live with nothing to rename to")
+        XCTAssertTrue(
+            app.navigationBars["重命名终端"].waitForExistence(timeout: 5),
+            "rename never asked for a name"
+        )
+        let nameField = app.textFields["rename-field"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "rename opened no field")
+        // The old name is in the box, not left behind on the row: editing one word is
+        // what this is opened for, and there is a name to save from the first moment.
+        XCTAssertEqual(nameField.value as? String, "api-logs", "the old name was not carried into the field")
+        let save = app.buttons["保存"]
+        XCTAssertTrue(save.isEnabled, "save was grey with a name in the field")
+
+        // ✕ empties the field, which is the other thing a rename is: the whole name
+        // goes. With nothing left there is nothing to save, so the button greys out.
+        app.buttons["清空"].tap()
+        XCTAssertFalse(save.isEnabled, "save stayed live after the field was emptied")
+
         nameField.typeText("api-logs v2")
         XCTAssertTrue(save.isEnabled, "save stayed grey after a name was typed")
         save.tap()

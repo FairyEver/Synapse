@@ -12,7 +12,6 @@ struct SessionListView: View {
     @Binding var path: [Route]
     @State private var showingNewSession = false
     @State private var renameTarget: MobileSummarySession?
-    @State private var renameTitle = ""
     @State private var deleteTarget: MobileSummarySession?
     /// Tabs the user has closed. Absent means open, so the default needs no state.
     @State private var collapsedTabs: Set<String> = []
@@ -91,17 +90,11 @@ struct SessionListView: View {
                 }
             )
         }
-        .alert("重命名终端", isPresented: isRenaming, presenting: renameTarget) { session in
-            TextField("名称", text: $renameTitle)
-            Button("取消", role: .cancel) {}
-            // The field arrives empty, so "nothing typed yet" is the state it opens
-            // in rather than something the reader has to undo — save stays grey
-            // until there is a name to save.
-            Button("保存") {
+        .sheet(item: $renameTarget) { session in
+            RenameSessionSheet(title: session.title) { newName in
                 Haptics.commit()
-                model.rename(session.id, to: renameTitle)
+                model.rename(session.id, to: newName)
             }
-            .disabled(renameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .alert("删除这个终端？", isPresented: isDeleting, presenting: deleteTarget) { session in
             Button("取消", role: .cancel) {}
@@ -185,9 +178,6 @@ struct SessionListView: View {
             .tint(Color(uiColor: .systemRed))
 
             Button {
-                // Not the current title: renaming is writing a new name, and typing
-                // it is cheaper than clearing the old one out of the way first.
-                renameTitle = ""
                 renameTarget = session
             } label: {
                 Label("重命名", systemImage: "pencil")
@@ -197,11 +187,7 @@ struct SessionListView: View {
     }
 
     /// The alert dismisses by resetting its target, so clearing it is what closes
-    /// the sheet — the presenting value drives both.
-    private var isRenaming: Binding<Bool> {
-        Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })
-    }
-
+    /// the dialog — the presenting value drives both.
     private var isDeleting: Binding<Bool> {
         Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })
     }
