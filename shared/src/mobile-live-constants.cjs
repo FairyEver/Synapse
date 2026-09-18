@@ -54,6 +54,9 @@ exports.MOBILE_PROTOCOL_VERSION = 1
  *   readonly maxToolbarLabelLength: number,
  *   readonly maxToolbarTextLength: number,
  *   readonly maxToolbarBytes: number,
+ *   readonly maxQuickPhrases: number,
+ *   readonly maxQuickPhraseLength: number,
+ *   readonly maxQuickPhrasesBytes: number,
  * }}
  */
 exports.MOBILE_FRAME_LIMITS = {
@@ -102,6 +105,10 @@ exports.MOBILE_FRAME_LIMITS = {
   maxToolbarTextLength: 4096,
   /** Bounds one serialized toolbar payload, which is trimmed button-by-button. */
   maxToolbarBytes: 64 * 1024,
+  /** The 快捷输入 sentences; the count and byte bounds are the producer's clamp. */
+  maxQuickPhrases: 64,
+  maxQuickPhraseLength: 4096,
+  maxQuickPhrasesBytes: 64 * 1024,
 }
 
 /**

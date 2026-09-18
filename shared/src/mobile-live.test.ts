@@ -17,11 +17,13 @@ import {
   isMobileFramePayload,
   isMobileIntent,
   isMobileIntentResult,
+  isMobileQuickPhrasesPayload,
   isMobileSummaryPayload,
   isMobileTerminalFrame,
   isMobileToolbarPayload,
   isMobileTransferProgressPayload,
   type MobileIntent,
+  type MobileQuickPhrasesPayload,
   type MobileSummaryAgentGroup,
   type MobileSummaryAgentProvider,
   type MobileSummaryPayload,
@@ -80,6 +82,18 @@ function toolbar(overrides: Partial<MobileToolbarPayload> = {}): MobileToolbarPa
       { id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } },
       { id: "slash-exit", label: "/exit", group: "command", action: { type: "text", text: "/exit", pressEnter: true } },
       { id: "c1", label: "部署", group: "custom", action: { type: "text", text: "pnpm deploy", pressEnter: false } },
+    ],
+    ...overrides,
+  }
+}
+
+function quickPhrases(overrides: Partial<MobileQuickPhrasesPayload> = {}): MobileQuickPhrasesPayload {
+  return {
+    desktopClientInstanceId: "desktop-1",
+    revision: 1,
+    phrases: [
+      { id: "q1", content: "用 Easy Worklog 初始化今天的工作日志" },
+      { id: "q2", content: "这次改动整理成提交说明，中文，说清楚改了什么" },
     ],
     ...overrides,
   }
@@ -751,6 +765,79 @@ describe("mobile live protocol", () => {
     // the desktop's reverse lookup pick one of them silently.
     expect(MOBILE_KEYS).not.toContain("Ctrl+I")
     expect(MOBILE_KEYS).not.toContain("Ctrl+M")
+  })
+
+  it("routes the quick phrases through both sides of the relay", () => {
+    // One guard each way, and the two failures are the toolbar's two: rejected on the
+    // desktop's hop the cloud closes the socket and the computer reads as offline;
+    // rejected on the phone's hop the sentences never arrive, and a computer that has
+    // none looks exactly like one too old to have the feature.
+    expect(isLiveDesktopClientMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileQuickPhrases,
+      quickPhrases(),
+      envelopeMeta,
+    ))).toBe(true)
+    expect(isLiveMobileServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.mobileQuickPhrases,
+      quickPhrases(),
+      envelopeMeta,
+    ))).toBe(true)
+  })
+
+  it("accepts a computer with no phrases, and rejects a malformed one", () => {
+    expect(isMobileQuickPhrasesPayload(quickPhrases())).toBe(true)
+    // `[]` is a computer saying "I have none", which the phone draws its segments for
+    // and answers with an empty state. It is deliberately not the same answer as the
+    // message never arriving — that one leaves the phone with no second segment at
+    // all, because a computer too old to send this cannot have been asked about.
+    expect(isMobileQuickPhrasesPayload(quickPhrases({ phrases: [] }))).toBe(true)
+
+    // Absent rather than empty: without it a phone cannot tell which of its computers
+    // the sentences belong to.
+    const withoutDesktop: Record<string, unknown> = { ...quickPhrases() }
+    delete withoutDesktop.desktopClientInstanceId
+    expect(isMobileQuickPhrasesPayload(withoutDesktop)).toBe(false)
+    expect(isMobileQuickPhrasesPayload(quickPhrases({ desktopClientInstanceId: "" }))).toBe(false)
+    expect(isMobileQuickPhrasesPayload(quickPhrases({ revision: -1 }))).toBe(false)
+    expect(isMobileQuickPhrasesPayload(quickPhrases({ revision: 1.5 }))).toBe(false)
+    expect(isMobileQuickPhrasesPayload({ ...quickPhrases(), phrases: "none" })).toBe(false)
+    expect(isMobileQuickPhrasesPayload(quickPhrases({
+      phrases: undefined as unknown as MobileQuickPhrasesPayload["phrases"],
+    }))).toBe(false)
+
+    const limits = MOBILE_FRAME_LIMITS
+    const many = Array.from({ length: limits.maxQuickPhrases + 1 }, (_value, index) => ({
+      id: `p${index}`,
+      content: "整理成提交说明",
+    }))
+    expect(isMobileQuickPhrasesPayload(quickPhrases({ phrases: many }))).toBe(false)
+
+    const phrase = quickPhrases().phrases[0]
+    const malformed = [
+      // A sentence the computer could never have stored, and therefore could not have
+      // sent: its own entry validator requires a non-blank id and a non-blank body.
+      { ...phrase, id: "" },
+      { ...phrase, content: "" },
+      { ...phrase, content: "   " },
+      // Over the ceiling the phone's one-line row cannot hold, dropped whole rather
+      // than truncated — see `maxQuickPhraseLength`.
+      { ...phrase, content: "s".repeat(limits.maxQuickPhraseLength + 1) },
+      { ...phrase, content: undefined },
+      { ...phrase, id: "i".repeat(limits.maxToolbarButtonIdLength + 1) },
+      // Shapes neither end knows how to draw.
+      "整理成提交说明",
+      null,
+    ]
+    for (const malformedPhrase of malformed) {
+      expect(isMobileQuickPhrasesPayload(quickPhrases({
+        phrases: [malformedPhrase] as unknown as MobileQuickPhrasesPayload["phrases"],
+      }))).toBe(false)
+    }
+
+    // Every field is required and none arrived with a default, so the payload the
+    // desktop builds and the one this test builds serialize to the same bytes.
+    expect(Object.keys(quickPhrases())).toEqual(["desktopClientInstanceId", "revision", "phrases"])
+    expect(Object.keys(quickPhrases().phrases[0])).toEqual(["id", "content"])
   })
 
   it("adds no bytes to the messages that predate the toolbar", () => {

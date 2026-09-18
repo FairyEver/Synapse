@@ -183,6 +183,31 @@ export const MOBILE_FRAME_LIMITS = {
    * payload can never be the thing that closes the connection.
    */
   maxToolbarBytes: 64 * 1024,
+  /**
+   * The sentences a desktop mirrors onto a phone from its 快捷输入 app.
+   *
+   * `maxQuickPhrases` has nothing to restate: unlike a custom command, a stored
+   * phrase has no count limit on the desktop at all — the app's schema bounds only
+   * `content`, and only from below. This is therefore the *producer's* clamp, and
+   * it drops the tail rather than refusing the payload, so a user with an
+   * implausibly long table still gets a usable list. 64 is the toolbar's own count,
+   * which is the only precedent on this wire for "as many as a person would ever
+   * read through on a phone".
+   *
+   * `maxQuickPhraseLength` is `maxToolbarTextLength`'s value because a phrase and a
+   * custom command are the same kind of thing — one sentence the user wrote for
+   * themselves — and the phone holds them in the same kind of place. A phrase past
+   * it is dropped whole rather than truncated: a shortened sentence is no longer the
+   * one the user wrote, and they would send it believing otherwise.
+   *
+   * `maxQuickPhrasesBytes` is `maxToolbarBytes`'s value for the reason that bound
+   * gives: this is the same socket under the same 256 KiB `maxPayload`, and both
+   * messages are full snapshots the phone replaces wholesale, so both are trimmed
+   * entry-by-entry on their own budget instead of being split.
+   */
+  maxQuickPhrases: 64,
+  maxQuickPhraseLength: 4096,
+  maxQuickPhrasesBytes: 64 * 1024,
 } as const
 
 /** Style attribute bits packed into the fifth element of a run tuple. */
@@ -606,6 +631,50 @@ export interface MobileToolbarPayload {
 }
 
 /* ------------------------------------------------------------------ *
+ * Quick phrases
+ * ------------------------------------------------------------------ */
+
+/**
+ * One sentence the user keeps on their computer's 快捷输入 app, to be tapped into a
+ * phone's composer instead of typed.
+ *
+ * Deliberately not the desktop's own `QuickInputItem`: that entry carries
+ * `schemaVersion`, `sortOrder` and two timestamps, and a phone shows none of them —
+ * the list is drawn in the order the desktop sends, which is already `sortOrder`.
+ * Sending the entry itself would put three fields on the wire that no client reads.
+ *
+ * `id` is the desktop's own entry id, so a phone can key a row on something stable
+ * across sends; the bound is the one this wire already gives a user-item id.
+ */
+export interface MobileQuickPhrase {
+  readonly id: string
+  /** The user's own sentence, rendered verbatim. */
+  readonly content: string
+}
+
+/**
+ * The 快捷输入 sentences on one computer, fanned out to every phone of the account.
+ *
+ * A second message rather than a block on `MobileToolbarPayload`, even though both
+ * are "what this computer has for the toolbar": they come from two different apps,
+ * are stored in two different namespaces, and change on two different events. Riding
+ * along would mean a phrase edit re-sends every command button and vice versa, and —
+ * the part that decides it — would leave a desktop that has phrases but no custom
+ * actions unable to say so without also claiming something about buttons.
+ *
+ * Empty is a legitimate value and is *not* the same as absent, which is the whole
+ * reason a phone can draw its segments at all: `[]` says this computer has none,
+ * while a phone that has never received this message from this computer is looking
+ * at one too old to have any. Those are different answers and both are allowed.
+ */
+export interface MobileQuickPhrasesPayload {
+  readonly desktopClientInstanceId: string
+  /** The producer's own counter, bumped per send; not compared by the phone. */
+  readonly revision: number
+  readonly phrases: readonly MobileQuickPhrase[]
+}
+
+/* ------------------------------------------------------------------ *
  * Intent
  * ------------------------------------------------------------------ */
 
@@ -956,6 +1025,14 @@ export function isMobileToolbarPayload(value: unknown): value is MobileToolbarPa
   return (value.buttons as readonly unknown[]).every(isMobileToolbarButton)
 }
 
+export function isMobileQuickPhrasesPayload(value: unknown): value is MobileQuickPhrasesPayload {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.desktopClientInstanceId, 120)) return false
+  if (!nonNegativeInteger(value.revision)) return false
+  if (!boundedArray(value.phrases, MOBILE_FRAME_LIMITS.maxQuickPhrases)) return false
+  return (value.phrases as readonly unknown[]).every(isMobileQuickPhrase)
+}
+
 export function isMobilePresencePayload(value: unknown): value is MobilePresencePayload {
   if (!isRecord(value)) return false
   const ids = value.desktopClientInstanceIds
@@ -1095,6 +1172,20 @@ function isMobileToolbarAction(value: unknown): value is MobileToolbarAction {
       typeof value.pressEnter === "boolean"
   }
   return false
+}
+
+/**
+ * Bounded the way the desktop's own stored entry is, and by the same constants the
+ * toolbar button uses: an id and a body of text a user authored in one of the
+ * computer's apps. Both fields are non-empty because neither can be blank where it
+ * is stored — the entry's own validator requires a non-blank id and a non-blank
+ * body, so a payload that failed here could never have been produced by the
+ * computer that sent it.
+ */
+function isMobileQuickPhrase(value: unknown): value is MobileQuickPhrase {
+  if (!isRecord(value)) return false
+  if (!boundedString(value.id, MOBILE_FRAME_LIMITS.maxToolbarButtonIdLength)) return false
+  return boundedString(value.content, MOBILE_FRAME_LIMITS.maxQuickPhraseLength)
 }
 
 function isCursor(value: unknown): value is MobileTerminalCursor {

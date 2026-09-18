@@ -3,6 +3,7 @@ import {
   isMobileFramePayload,
   isMobileIntentPayload,
   isMobileIntentResultPayload,
+  isMobileQuickPhrasesPayload,
   isMobileSummaryPayload,
   isMobileToolbarPayload,
   isMobileTransferProgressPayload,
@@ -25,6 +26,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobileDetached: "mobile.detached",
   mobilePresence: "mobile.presence",
   mobileToolbar: "mobile.toolbar",
+  mobileQuickPhrases: "mobile.quickPhrases",
 } as const
 
 export const LIVE_HELLO_FIELD_LIMITS = {
@@ -78,6 +80,7 @@ export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntentResult, import("./mobile-live.js").MobileIntentResultPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileTransferProgress, import("./mobile-live.js").MobileTransferProgressPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileToolbar, import("./mobile-live.js").MobileToolbarPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileQuickPhrases, import("./mobile-live.js").MobileQuickPhrasesPayload>
 
 export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.welcome, LiveDesktopWelcomePayload>
@@ -108,6 +111,7 @@ export type LiveMobileServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileTransferProgress, import("./mobile-live.js").MobileTransferProgressPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobilePresence, import("./mobile-live.js").MobilePresencePayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileToolbar, import("./mobile-live.js").MobileToolbarPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileQuickPhrases, import("./mobile-live.js").MobileQuickPhrasesPayload>
 
 export function isLiveMobileClientMessage(value: unknown): value is LiveMobileClientMessage {
   if (!isLiveEnvelope(value)) return false
@@ -131,6 +135,7 @@ export function isLiveMobileServerMessage(value: unknown): value is LiveMobileSe
   }
   if (value.type === LIVE_MESSAGE_TYPES.mobilePresence) return isMobilePresencePayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileToolbar) return isMobileToolbarPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) return isMobileQuickPhrasesPayload(value.payload)
   return false
 }
 
@@ -165,6 +170,7 @@ export function isLiveDesktopClientMessage(value: unknown): value is LiveDesktop
     return isMobileTransferProgressPayload(value.payload)
   }
   if (value.type === LIVE_MESSAGE_TYPES.mobileToolbar) return isMobileToolbarPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) return isMobileQuickPhrasesPayload(value.payload)
   return false
 }
 
