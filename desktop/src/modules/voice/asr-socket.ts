@@ -51,6 +51,16 @@ export class AsrSocket {
     return this.accumulator.snapshot()
   }
 
+  /**
+   * 握手完成、现在送音频引擎真的收得下。
+   *
+   * 在它变 true 之前送出去的包会被 `send` 丢掉，所以调用方拿它当"这条连接开始计时"
+   * 的起点——引擎的 60 秒额度是从收到第一段采样开始算的，不是从 new WebSocket 算的。
+   */
+  get isOpen(): boolean {
+    return this.socket.readyState === WebSocket.OPEN
+  }
+
   send(chunk: Uint8Array<ArrayBuffer>): void {
     if (this.socket.readyState !== WebSocket.OPEN) return
     this.socket.send(chunk)

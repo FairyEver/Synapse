@@ -79,9 +79,46 @@ class FakeAudioContext {
   async close(): Promise<void> { this.state = "closed" }
 }
 
-function feed(samples: number): void {
-  const data = new Float32Array(samples).fill(0.25)
+function feed(samples: number, amplitude = 0.25): void {
+  const data = new Float32Array(samples).fill(amplitude)
   processor.onaudioprocess?.({ inputBuffer: { getChannelData: () => data } })
+}
+
+/**
+ * 按送包节奏喂够这些秒数的采样，并把假时钟推着走同样长。
+ *
+ * 采样是一拍一拍喂的，不是一次全塞进去：轮换的判定发生在**某一拍**上，塞成一整块
+ * 就分不出「这一拍是静音还是说话」了。
+ */
+async function speakFor(seconds: number, amplitude = 0.25): Promise<number> {
+  const ticks = Math.round((seconds * 1_000) / 200)
+  for (let index = 0; index < ticks; index += 1) {
+    feed(ASR_PCM_CHUNK_SAMPLES, amplitude)
+    await vi.advanceTimersByTimeAsync(200)
+  }
+  return ticks
+}
+
+/** 一路不停地说到计划点之后：暖连接建好了，但还没接棒。 */
+async function speakToWarming(text = "前半段") {
+  const opened = await beginSession()
+  const live = FakeSocket.instances[0]!
+  // 先出字：没有文本的话 3 秒一到就会一直报「没有听到声音」，把失败列表淹掉。
+  live.deliver({ code: 0, result: { slice_type: 1, index: 0, voice_text_str: text } })
+
+  const speaking = await speakFor(45)
+  const warming = await speakFor(4)
+  expect(FakeSocket.instances).toHaveLength(2)
+
+  return { ...opened, live, warm: FakeSocket.instances[1]!, ticks: speaking + warming }
+}
+
+/** 一路不停地说过硬顶：已经接棒，音频进的是第二条连接。 */
+async function speakPastTheCeiling(text = "前半段") {
+  const warmed = await speakToWarming(text)
+  const handedOver = await speakFor(3)
+
+  return { ...warmed, ticks: warmed.ticks + handedOver }
 }
 
 /** 让已排队的 promise 回调跑完，但不推进定时器。 */
@@ -255,5 +292,154 @@ describe("VoiceSession", () => {
     feed(ASR_PCM_CHUNK_SAMPLES)
     await vi.advanceTimersByTimeAsync(200)
     expect(FakeSocket.instances[0]!.binaryFrames.length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * 一条连接只能写 60 秒，所以说到一半要换一条接着写。这一组钉的是「用户什么都察觉
+ * 不到」：不弹错、不丢字、不重复、不空转，轮换期间还能正常收尾。
+ */
+describe("VoiceSession 换连接", () => {
+  it("说到计划点才开始预热，而且不给暖连接送音频", async () => {
+    await beginSession()
+    FakeSocket.instances[0]!.deliver({ code: 0, result: { slice_type: 1, index: 0, voice_text_str: "前半段" } })
+
+    await speakFor(45)
+    expect(FakeSocket.instances).toHaveLength(1)
+
+    await speakFor(4)
+    expect(FakeSocket.instances).toHaveLength(2)
+    // 暖连接只是建好等着。给它喂静音会白白烧掉引擎那 60 秒的额度。
+    expect(FakeSocket.instances[1]!.sent).toHaveLength(0)
+  })
+
+  it("一直不停就等到硬顶再接棒，旧的收尾、新的接着收", async () => {
+    const { live, warm } = await speakPastTheCeiling()
+
+    expect(live.sent.at(-1)).toBe(JSON.stringify({ type: "end" }))
+    expect(warm.binaryFrames.length).toBeGreaterThan(0)
+  })
+
+  it("每一拍只取一次采样，两条连接加起来刚好等于拍数", async () => {
+    // 取两次会在接缝处重发 200ms，少取一次会漏掉 200ms —— 两种都听不出来，
+    // 只能靠数帧。
+    const { live, warm, ticks } = await speakPastTheCeiling()
+
+    expect(live.binaryFrames.length + warm.binaryFrames.length).toBe(ticks)
+  })
+
+  it("旧连接收尾后正常关闭，不会被当成网络断开", async () => {
+    const { live, failures, transcripts } = await speakPastTheCeiling()
+
+    // 引擎收下 end、回了最后一句，然后自己关掉连接——这是轮换的正常结局。
+    live.onclose?.()
+    await flush()
+
+    expect(failures).not.toContain("network")
+    expect(transcripts.at(-1)?.combined).toContain("前半段")
+  })
+
+  it("新连接接着往下写，前缀一个字都没被顶掉", async () => {
+    const { warm, transcripts } = await speakPastTheCeiling()
+
+    warm.deliver({ code: 0, result: { slice_type: 1, index: 0, voice_text_str: "后半段" } })
+
+    expect(transcripts.at(-1)?.combined).toBe("前半段后半段")
+  })
+
+  it("接缝还没定稿时，新连接定稿的句子也只能排在它后面", async () => {
+    // 顺序比颜色重要：接缝的定稿会晚一两秒回来，那之前新连接先定稿很正常，
+    // 但把新连接挪到前面就是把用户说的话前后颠倒。
+    const { warm, transcripts } = await speakPastTheCeiling()
+
+    warm.deliver({ code: 0, result: { slice_type: 2, index: 0, voice_text_str: "后半段。" } })
+
+    expect(transcripts.at(-1)?.stable).toBe("")
+    expect(transcripts.at(-1)?.combined).toBe("前半段后半段。")
+  })
+
+  it("旧连接定稿时接缝被换掉，不是接在后面", async () => {
+    // 引擎收到 end 会把最后一句整个重写一遍，实测补过词、也改过错字。
+    const { live, transcripts } = await speakPastTheCeiling()
+
+    live.deliver({ code: 0, final: 1, result: { slice_type: 2, index: 0, voice_text_str: "前半段，说完了。" } })
+    await flush()
+
+    expect(transcripts.at(-1)?.stable).toBe("前半段，说完了。")
+    expect(transcripts.at(-1)?.combined).toBe("前半段，说完了。")
+  })
+
+  it("定稿之后再迟到的那几帧不改变已经发布的结果", async () => {
+    // 旧连接收尾完之后还会吐一两帧出来。让它盖回去，接缝处就会冒出重复或残缺的字。
+    const { live, transcripts } = await speakPastTheCeiling()
+    const settled = transcripts.at(-1)
+
+    live.deliver({ code: 0, result: { slice_type: 1, index: 0, voice_text_str: "迟到的半句" } })
+
+    expect(transcripts.at(-1)).toEqual(settled)
+  })
+
+  it("预热期间主连接断线，照旧报网络断开，暖连接一并关掉", async () => {
+    // 轮换不能把既有的失败语义改掉：主连接断了就是要告诉用户，不能因为
+    // 「反正还有一条暖的」就悄悄吞掉。
+    const { live, warm, failures } = await speakToWarming()
+
+    live.onclose?.()
+    await flush()
+
+    expect(failures).toContain("network")
+    expect(warm.readyState).toBe(3)
+  })
+
+  it("预热失败不冒到界面上，之后还会再试", async () => {
+    // 用户什么都没做错，主连接也还好好的，这时候弹错反而莫名其妙。
+    const { failures } = await beginSession()
+    const live = FakeSocket.instances[0]!
+    live.deliver({ code: 0, result: { slice_type: 1, index: 0, voice_text_str: "前半段" } })
+    const framesBefore = live.binaryFrames.length
+
+    // 第一次预热签名就失败。
+    signSession.mockRejectedValueOnce(new Error("签名接口挂了"))
+    await speakFor(48)
+
+    expect(failures).not.toContain("network")
+    expect(live.binaryFrames.length).toBeGreaterThan(framesBefore)
+    // 退避一下接着试，第二条连接就是重试那次建起来的——失败一次就放弃的话，
+    // 用户说到 60 秒还是会断。
+    expect(FakeSocket.instances).toHaveLength(2)
+  })
+
+  it("预热还没接棒就点完成：暖连接关掉，文本里是整段", async () => {
+    const { session, live, warm } = await speakToWarming()
+
+    const finishing = session.finish()
+    await flush()
+    expect(warm.readyState).toBe(3)
+
+    live.deliver({ code: 0, final: 1, result: { slice_type: 2, index: 0, voice_text_str: "前半段，说完了。" } })
+    await expect(finishing).resolves.toBe("前半段，说完了。")
+  })
+
+  it("接棒之后再收尾，接缝那一整段都在", async () => {
+    // 接缝是引擎改写过的版本，不是冻结时那份——两者实测长度都不一样。
+    const { session, live, warm } = await speakPastTheCeiling()
+    live.deliver({ code: 0, final: 1, result: { slice_type: 2, index: 0, voice_text_str: "前半段，说完了。" } })
+    await flush()
+
+    const finishing = session.finish()
+    await flush()
+    warm.deliver({ code: 0, final: 1, result: { slice_type: 2, index: 0, voice_text_str: "后半段。" } })
+
+    await expect(finishing).resolves.toBe("前半段，说完了。后半段。")
+  })
+
+  it("接棒之后取消，两条连接都关掉，文本全丢", async () => {
+    const { session, live, warm } = await speakPastTheCeiling()
+
+    session.cancel()
+
+    expect(live.readyState).toBe(3)
+    expect(warm.readyState).toBe(3)
+    await expect(session.finish()).resolves.toBe("")
   })
 })
