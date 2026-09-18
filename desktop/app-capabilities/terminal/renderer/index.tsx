@@ -226,6 +226,13 @@ export function TerminalModule({
     ? sessions.find((session) => session.id === activePane.sessionId) ?? null
     : null
   const terminalSessionStatus = activeSession?.status ?? null
+  /**
+   * 当前会话的格数归手机时整块锁住。
+   *
+   * pane 自己锁住的是面板：内容、输入、顶栏按钮。底部命令条在 pane 外面，得自己看这
+   * 个条件 —— 否则它一直是绕过锁的第二条路，按钮点一下就写进手机正在用的那个终端。
+   */
+  const sessionLockedByMobile = activeSession?.sizeOwner?.kind === "mobile"
 
   useEffect(() => {
     void terminalBridge.agentNotifications.reportActiveSession({
@@ -238,6 +245,13 @@ export function TerminalModule({
   useEffect(() => () => {
     void terminalBridge.agentNotifications.reportActiveSession({ sessionId: null }).catch(() => undefined)
   }, [terminalBridge])
+
+  useEffect(() => {
+    // 语音确认后是直接写进 PTY 的，锁住期间不能留着一条走到终端的路。已经开录的就在
+    // 这一刻结束：麦克风入口反正已经禁用，让转写条停在锁下面反而是一个点不动的陷阱。
+    if (!sessionLockedByMobile) return
+    voice.cancel()
+  }, [sessionLockedByMobile, voice.cancel])
 
   useEffect(() => {
     if (!activeWorkspace) return
@@ -1660,67 +1674,79 @@ export function TerminalModule({
                 </div>
               ) : null}
               {toolbarActions.length && !voicePresentation.active ? (
-                <div
-                  data-terminal-toolbar
-                  className="no-scrollbar flex min-h-10 shrink-0 items-center gap-1 overflow-x-auto border-t bg-card px-2.5 py-1.5 whitespace-nowrap"
-                >
-                  {toolbarActions.map((action) => (
-                    <div key={action.id} className="flex shrink-0 items-center gap-1">
-                      {action.id === "slash-exit" ? (
-                        <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
-                      ) : null}
+                // 包一层相对定位，好让锁的蒙层只盖命令条 —— 命令条本身是横向滚动容器，
+                // 蒙层放进去会跟着内容一起滚。
+                <div className="relative shrink-0">
+                  <div
+                    data-terminal-toolbar
+                    className="no-scrollbar flex min-h-10 items-center gap-1 overflow-x-auto border-t bg-card px-2.5 py-1.5 whitespace-nowrap"
+                  >
+                    {toolbarActions.map((action) => (
+                      <div key={action.id} className="flex shrink-0 items-center gap-1">
+                        {action.id === "slash-exit" ? (
+                          <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
+                          aria-label={action.ariaLabel}
+                          disabled={!isTerminalToolbarActionEnabled(action, terminalSessionStatus) || sessionLockedByMobile}
+                          onClick={() => { void runToolbarAction(action) }}
+                        >
+                          {action.label}
+                        </Button>
+                      </div>
+                    ))}
+                    <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
+                    <div data-terminal-custom-toolbar-actions className="flex shrink-0 items-center gap-1">
+                      {customToolbarActions.map((action) => (
+                        <Button
+                          key={action.id}
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
+                          aria-label={`${action.pressEnter ? "运行" : "输入"}快捷输入：${action.label}`}
+                          disabled={terminalSessionStatus !== "running" || sessionLockedByMobile}
+                          onClick={() => { void runCustomToolbarAction(action) }}
+                        >
+                          {action.label}
+                        </Button>
+                      ))}
                       <Button
                         type="button"
-                        size="sm"
+                        size="icon-xs"
                         variant="ghost"
-                        className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
-                        aria-label={action.ariaLabel}
-                        disabled={!isTerminalToolbarActionEnabled(action, terminalSessionStatus)}
-                        onClick={() => { void runToolbarAction(action) }}
+                        className="text-foreground/75 hover:text-foreground"
+                        aria-label="管理自定义快捷输入"
+                        disabled={sessionLockedByMobile}
+                        onClick={() => setToolbarManagerOpen(true)}
                       >
-                        {action.label}
+                        <Pencil />
                       </Button>
                     </div>
-                  ))}
-                  <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
-                  <div data-terminal-custom-toolbar-actions className="flex shrink-0 items-center gap-1">
-                    {customToolbarActions.map((action) => (
+                    {voice.available ? (
                       <Button
-                        key={action.id}
                         type="button"
-                        size="sm"
+                        size="icon-xs"
                         variant="ghost"
-                        className="h-7 rounded-md px-2 text-foreground/75 transition-[scale,background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.96]"
-                        aria-label={`${action.pressEnter ? "运行" : "输入"}快捷输入：${action.label}`}
-                        disabled={terminalSessionStatus !== "running"}
-                        onClick={() => { void runCustomToolbarAction(action) }}
+                        className="text-foreground/75 hover:text-foreground"
+                        aria-label="语音输入"
+                        disabled={terminalSessionStatus !== "running" || voice.state.phase === "recording" || sessionLockedByMobile}
+                        onClick={() => { void voice.start() }}
                       >
-                        {action.label}
+                        <Mic />
                       </Button>
-                    ))}
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      className="text-foreground/75 hover:text-foreground"
-                      aria-label="管理自定义快捷输入"
-                      onClick={() => setToolbarManagerOpen(true)}
-                    >
-                      <Pencil />
-                    </Button>
+                    ) : null}
                   </div>
-                  {voice.available ? (
-                    <Button
-                      type="button"
-                      size="icon-xs"
-                      variant="ghost"
-                      className="text-foreground/75 hover:text-foreground"
-                      aria-label="语音输入"
-                      disabled={terminalSessionStatus !== "running" || voice.state.phase === "recording"}
-                      onClick={() => { void voice.start() }}
-                    >
-                      <Mic />
-                    </Button>
+                  {sessionLockedByMobile ? (
+                    <div
+                      aria-hidden="true"
+                      data-terminal-toolbar-mobile-overlay
+                      className="absolute inset-0 z-10 bg-black/10"
+                    />
                   ) : null}
                 </div>
               ) : null}

@@ -701,42 +701,48 @@ function captureTerminalSplitLayouts(
  * terminal on every click on the header.
  */
 function TerminalPaneTitle({
+  disabled,
   onActive,
   onRename,
   title,
 }: {
+  readonly disabled: boolean
   readonly onActive: () => void
   readonly onRename: () => void
   readonly title: string
 }) {
+  const label = (
+    <span
+      className="truncate text-xs font-medium text-foreground/75"
+      data-track="terminal-pane-title"
+      onClick={disabled ? undefined : () => {
+        track({
+          component: "terminal",
+          name: "terminal.pane.title_select",
+          action: "select",
+          eventKey: "terminal.pane.title_select",
+        })
+        onActive()
+      }}
+      onDoubleClick={disabled ? undefined : () => {
+        track({
+          component: "terminal",
+          name: "terminal.pane.rename",
+          action: "open",
+          eventKey: "terminal.pane.rename",
+        })
+        onRename()
+      }}
+    >
+      {title}
+    </span>
+  )
+  // While a phone decides this terminal's grid the title is a label and nothing
+  // more: renaming it is a local edit to a session someone else is driving.
+  if (disabled) return label
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <span
-          className="truncate text-xs font-medium text-foreground/75"
-          data-track="terminal-pane-title"
-          onClick={() => {
-            track({
-              component: "terminal",
-              name: "terminal.pane.title_select",
-              action: "select",
-              eventKey: "terminal.pane.title_select",
-            })
-            onActive()
-          }}
-          onDoubleClick={() => {
-            track({
-              component: "terminal",
-              name: "terminal.pane.rename",
-              action: "open",
-              eventKey: "terminal.pane.rename",
-            })
-            onRename()
-          }}
-        >
-          {title}
-        </span>
-      </ContextMenuTrigger>
+      <ContextMenuTrigger asChild>{label}</ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onSelect={onRename}>
           <Pencil />
@@ -885,6 +891,8 @@ function TerminalPane({
   onShortcutRef.current = onShortcut
   const visibleRef = useRef(visible)
   visibleRef.current = visible
+  const remoteSizedRef = useRef(remoteSized)
+  remoteSizedRef.current = remoteSized
 
   useDismissOnPointerDownOutside(
     fileTreeOpen,
@@ -896,8 +904,13 @@ function TerminalPane({
   useEffect(() => {
     const xterm = xtermRef.current
     if (!xterm) return
-    xterm.options.disableStdin = session.status !== "running"
-  }, [session.status])
+    // A phone holding the grid also holds the input: keystrokes typed here land in
+    // a session someone else is driving, which is exactly what the claim is meant
+    // to keep the local side out of. `disableStdin` is the same switch that already
+    // stops input into a terminal that is not running — `writeTerminalInput`, the
+    // paste path and Shift+Enter all gate on it.
+    xterm.options.disableStdin = session.status !== "running" || remoteSized
+  }, [remoteSized, session.status])
 
   useEffect(() => {
     if (!visible || !projectionReady) return undefined
@@ -949,7 +962,9 @@ function TerminalPane({
       ...createTerminalRenderingOptions({
         appearanceSize: appearanceSizeRef.current,
         container,
-        disableStdin: sessionRef.current.status !== "running",
+        // Read through the ref: a pane mounted while a phone already holds the grid
+        // never sees this effect run again with a terminal to update.
+        disableStdin: sessionRef.current.status !== "running" || remoteSizedRef.current,
       }),
       cols: sessionRef.current.cols,
       rows: sessionRef.current.rows,
@@ -1416,6 +1431,9 @@ function TerminalPane({
       }
       return
     }
+    // A dropped path is typed into the shell, so it belongs to the lock with the
+    // keyboard. Moving panes around does not — it leaves the phone's grid alone.
+    if (remoteSized) return
     const workspacePathDrag = hasWorkspaceFileTreeDrag(event.dataTransfer)
     if (!workspacePathDrag && !isExternalFileDrag(event)) return
     if (workspacePathDrag && isWorkspaceFileTreeEvent(event)) {
@@ -1426,7 +1444,7 @@ function TerminalPane({
     if (workspacePathDrag) event.stopPropagation()
     event.dataTransfer.dropEffect = session.status === "running" ? "copy" : "none"
     setPathDropActive(session.status === "running")
-  }, [dragSourcePaneId, onPaneDragTargetChange, paneId, session.status])
+  }, [dragSourcePaneId, onPaneDragTargetChange, paneId, remoteSized, session.status])
 
   const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     const relatedTarget = event.relatedTarget
@@ -1447,6 +1465,10 @@ function TerminalPane({
       if (sourcePaneId && edge) {
         onMovePane(sourcePaneId, paneId, edge)
       }
+      return
+    }
+    if (remoteSized) {
+      setPathDropActive(false)
       return
     }
     const workspacePathTransfer = hasWorkspaceFileTreeDrag(event.dataTransfer)
@@ -1472,7 +1494,7 @@ function TerminalPane({
     }
     const paths = Array.from(event.dataTransfer.files ?? []).map((file) => shellBridge.filePathForDroppedFile(file))
     writeDroppedPaths(paths, "terminal.pane.drop_files")
-  }, [dragSourcePaneId, onActive, onMovePane, onPaneDragEnd, paneId, session.status, shellBridge, workspaceTreeBridge, writeDroppedPaths])
+  }, [dragSourcePaneId, onActive, onMovePane, onPaneDragEnd, paneId, remoteSized, session.status, shellBridge, workspaceTreeBridge, writeDroppedPaths])
 
   const handlePaneDragStart = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (event.target instanceof Element && event.target.closest("button")) {
@@ -1549,16 +1571,18 @@ function TerminalPane({
         data-terminal-pane-header
         data-track="terminal.pane.drag"
         data-track-native="true"
-        draggable
+        draggable={!remoteSized}
         onDragEnd={onPaneDragEnd}
         onDragStart={handlePaneDragStart}
         className={cn(
-          "flex h-7 shrink-0 cursor-grab items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
+          "flex h-7 shrink-0 items-center justify-between gap-2 border-b bg-card pl-2 pr-0.5",
+          remoteSized ? "cursor-default" : "cursor-grab",
           dragged && "cursor-grabbing",
         )}
       >
         <div className="flex min-w-0 items-center gap-0.5">
           <TerminalPaneTitle
+            disabled={remoteSized}
             onActive={onActive}
             onRename={() => onRenameSession(session.id, paneRootRef.current)}
             title={session.title}
@@ -1568,6 +1592,7 @@ function TerminalPane({
             type="button"
             size="icon-xs"
             variant="ghost"
+            disabled={remoteSized}
             aria-label={fileTreeOpen ? `关闭文件树：${session.title}` : `打开文件树：${session.title}`}
             title={fileTreeOpen ? "关闭文件树" : "打开文件树"}
             aria-pressed={fileTreeOpen}
@@ -1592,7 +1617,7 @@ function TerminalPane({
             title={equalizeActionLabel}
             data-track="terminal-pane-equalize"
             className="text-muted-foreground"
-            disabled={equalizeDisabled}
+            disabled={equalizeDisabled || remoteSized}
             onClick={(event) => {
               event.stopPropagation()
               onActive()
@@ -1613,7 +1638,7 @@ function TerminalPane({
             aria-pressed={maximized}
             data-track="terminal-pane-maximize"
             className="text-muted-foreground"
-            disabled={maximizeDisabled}
+            disabled={maximizeDisabled || remoteSized}
             onClick={(event) => {
               event.stopPropagation()
               onActive()
@@ -1632,7 +1657,7 @@ function TerminalPane({
             aria-label={`${closeActionLabel}：${session.title}`}
             title={closeActionLabel}
             className="text-muted-foreground hover:text-destructive"
-            disabled={closePending || (closing && platform !== "darwin")}
+            disabled={closePending || (closing && platform !== "darwin") || remoteSized}
             onClick={(event) => {
               event.stopPropagation()
               onShortcut("close-pane")
@@ -1727,44 +1752,46 @@ function TerminalPane({
             />
           </div>
         ) : null}
+        {mobileOwner ? (
+          // Covers the pane's content, header excepted: the header has to stay
+          // readable to say who holds the terminal and to offer the one local act
+          // worth making — giving the grid back — but its own controls are
+          // disabled while the claim stands. Everything the session *is* (output,
+          // input, file tree, paths dropped in from outside) is under this layer,
+          // which is what makes the claim legible instead of silently taking a
+          // phone's layout and typing at the same time.
+          <div
+            data-terminal-pane-mobile-overlay
+            role="status"
+            className="absolute inset-0 z-30 flex items-center justify-center bg-black/10"
+          >
+            {/*
+              An inverted surface, not the pane's own. The terminal app is scoped
+              dark, so `bg-card` here is the same near-black as the output behind
+              it and the message reads as more terminal text. On `bg-primary` it
+              cannot be mistaken for anything the shell printed.
+            */}
+            <Card size="sm" className="bg-primary text-primary-foreground shadow-lg">
+              <CardContent className="flex flex-col items-center gap-3">
+                <p className="font-medium">正在被 {mobileOwner.deviceLabel} 使用</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  data-track="terminal-pane-size-owner-reset"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onActive()
+                    releaseGridOwnershipRef.current?.(true)
+                  }}
+                >
+                  转移到电脑
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
       </div>
-      {mobileOwner ? (
-        // Covers the whole pane, header included: while a phone decides this
-        // terminal's grid, every local act on the pane is either meaningless or
-        // preempts the phone, and the only one worth offering is giving the grid
-        // back. Blocking the rest is what makes the claim legible instead of
-        // silently reverting the phone's layout the moment someone drags an edge.
-        <div
-          data-terminal-pane-mobile-overlay
-          role="status"
-          className="absolute inset-0 z-30 flex items-center justify-center bg-black/10"
-        >
-          {/*
-            An inverted surface, not the pane's own. The terminal app is scoped
-            dark, so `bg-card` here is the same near-black as the output behind
-            it and the message reads as more terminal text. On `bg-primary` it
-            cannot be mistaken for anything the shell printed.
-          */}
-          <Card size="sm" className="bg-primary text-primary-foreground shadow-lg">
-            <CardContent className="flex flex-col items-center gap-3">
-              <p className="font-medium">正在被 {mobileOwner.deviceLabel} 使用</p>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                data-track="terminal-pane-size-owner-reset"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onActive()
-                  releaseGridOwnershipRef.current?.(true)
-                }}
-              >
-                转移到电脑
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
     </div>
   )
 }

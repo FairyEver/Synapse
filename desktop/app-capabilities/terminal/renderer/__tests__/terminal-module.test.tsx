@@ -3517,6 +3517,162 @@ describe("TerminalModule", () => {
     expect(document.querySelector("[data-terminal-pane-mobile-overlay]")).toBeNull()
   })
 
+  it("locks the pane's own controls and its keyboard while a phone holds the grid", async () => {
+    // 手机持有格数时整块会话锁住。顶栏是唯一的例外 —— 留着认人（谁在用、要不要转移），
+    // 所以蒙层不盖它；但它自己的按钮和键盘一样是通往同一个会话的路，都要挡住。
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      cols: 45,
+      rows: 33,
+      sizeOwner: {
+        kind: "mobile",
+        deviceLabel: "iPhone",
+        mobileClientInstanceId: "client-1",
+        cols: 45,
+        rows: 33,
+      },
+    })]
+
+    await renderModule()
+
+    // 文件夹按钮就是标题里那一个：文件树开着的时候，本地看到的和手机看到的不是一回事。
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="打开文件树：开发终端"]')?.disabled)
+      .toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="关闭分屏：开发终端"]')?.disabled)
+      .toBe(true)
+    // 标题还在，但双击重命名和右键菜单都收走了。
+    const title = document.querySelector<HTMLElement>('[data-track="terminal-pane-title"]')
+    expect(title?.textContent).toBe("开发终端")
+    await act(async () => {
+      title?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(document.body.querySelector('input[aria-label="对话名称"]')).toBeNull()
+
+    // 蒙层盖的是内容区：顶栏不在它盖住的那个容器里。
+    const overlay = document.querySelector("[data-terminal-pane-mobile-overlay]")
+    const header = document.querySelector("[data-terminal-pane-header]")
+    expect(header).not.toBeNull()
+    expect(overlay?.parentElement?.contains(header)).toBe(false)
+
+    // 键盘是同一个终端的第二条路：锁住期间敲进去的字节不能落到手机上。
+    await act(async () => {
+      xtermState.instances[0]?.emitInput("rm -rf /tmp/keep\r")
+      await Promise.resolve()
+    })
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
+  it("locks only the pane the phone is driving", async () => {
+    // 对照：同一个分屏里另一个 pane 的按钮照常可用，说明上面那条禁用是归属带来的，
+    // 不是布局本身让它们不可点。
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const ownedSession = createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "被手机接管的终端",
+      sizeOwner: {
+        kind: "mobile",
+        deviceLabel: "iPhone",
+        mobileClientInstanceId: "client-1",
+        cols: 45,
+        rows: 33,
+      },
+    })
+    const freeSession = createSession({ id: "session-2", groupId: "group-1", title: "本地终端" })
+    bridgeState.sessions = [ownedSession, freeSession]
+    bridgeState.workspaces = [{
+      ...createWorkspace(ownedSession),
+      layout: {
+        type: "split",
+        splitId: "split-1",
+        direction: "horizontal",
+        ratio: 0.5,
+        first: { type: "leaf", paneId: "pane-session-1", sessionId: ownedSession.id },
+        second: { type: "leaf", paneId: "pane-session-2", sessionId: freeSession.id },
+      },
+      layoutRevision: 2,
+    }]
+
+    await renderModule()
+
+    for (const label of ["平分宽度", "最大化分屏", "关闭分屏"]) {
+      expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}：被手机接管的终端"]`)?.disabled)
+        .toBe(true)
+      expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}：本地终端"]`)?.disabled)
+        .toBe(false)
+    }
+  })
+
+  it("covers the command bar while a phone holds the grid, and uncovers it on release", async () => {
+    // 命令条在 pane 外面，得自己看归属；不然它一直是绕过锁的第二条路，点一下就把命令
+    // 写进手机正在用的那个终端。
+    voiceState.available = true
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({
+      id: "session-1",
+      groupId: "group-1",
+      title: "开发终端",
+      sizeOwner: {
+        kind: "mobile",
+        deviceLabel: "iPhone",
+        mobileClientInstanceId: "client-1",
+        cols: 45,
+        rows: 33,
+      },
+    })]
+
+    await renderModule()
+
+    const overlay = document.querySelector("[data-terminal-toolbar-mobile-overlay]")
+    expect(overlay).not.toBeNull()
+    // 盖住的正是那条工具栏本身。
+    expect(overlay?.parentElement?.querySelector("[data-terminal-toolbar]")).not.toBeNull()
+    for (const label of ["发送回车", "清空终端显示", "管理自定义快捷输入", "语音输入"]) {
+      expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(true)
+    }
+
+    await clickButton("转移到电脑")
+
+    expect(document.querySelector("[data-terminal-toolbar-mobile-overlay]")).toBeNull()
+    for (const label of ["发送回车", "清空终端显示", "管理自定义快捷输入", "语音输入"]) {
+      expect(document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.disabled).toBe(false)
+    }
+  })
+
+  it("ends an in-flight recording rather than leaving one under the lock", async () => {
+    // 语音确认后是直接写 PTY 的：锁住期间不能留一条走到终端的路，而转写条本身又会
+    // 顶掉被蒙层盖住的命令条和它的麦克风禁用，所以录音在归属到来的这一刻结束。
+    voiceState.available = true
+    voiceState.phase = "recording"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+
+    await renderModule()
+
+    expect(voiceState.cancel).not.toHaveBeenCalled()
+
+    await act(async () => {
+      bridgeState.sessionChangedListener?.({
+        ...getSession("session-1"),
+        sizeOwner: {
+          kind: "mobile",
+          deviceLabel: "iPhone",
+          mobileClientInstanceId: "client-1",
+          cols: 45,
+          rows: 33,
+        },
+        stateRevision: getSession("session-1").stateRevision + 1,
+      })
+      await Promise.resolve()
+    })
+
+    expect(voiceState.cancel).toHaveBeenCalled()
+  })
+
   it("leaves a phone's grid alone when the pane itself is resized", async () => {
     // Taking the grid back is the pane's own release, and nothing else. Dragging the
     // window or re-splitting the tab is not a statement about who should decide the
