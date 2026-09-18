@@ -9,6 +9,7 @@ import {
   isMobileTransferProgressPayload,
 } from "./mobile-live.js"
 import { isMobilePresencePayload } from "./mobile-live.js"
+import { isMeetingTranscriptionCompletedPayload } from "./meeting.js"
 import { isWebhookDeliveryReceivedPayload } from "./webhook.js"
 
 export const LIVE_MESSAGE_TYPES = {
@@ -27,6 +28,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobilePresence: "mobile.presence",
   mobileToolbar: "mobile.toolbar",
   mobileQuickPhrases: "mobile.quickPhrases",
+  meetingTranscriptionCompleted: "meeting.transcription.completed",
 } as const
 
 export const LIVE_HELLO_FIELD_LIMITS = {
@@ -88,6 +90,7 @@ export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.webhookDeliveryReceived, import("./webhook.js").WebhookDeliveryReceivedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileIntent, import("./mobile-live.js").MobileIntentPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileDetached, import("./mobile-live.js").MobileDetachedPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted, import("./meeting.js").MeetingTranscriptionCompletedPayload>
 
 /**
  * A phone reuses the desktop handshake (hello/welcome/ping/pong) so there is one
@@ -183,6 +186,9 @@ export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktop
   }
   if (value.type === LIVE_MESSAGE_TYPES.mobileIntent) return isMobileIntentPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.mobileDetached) return isMobileDetachedPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted) {
+    return isMeetingTranscriptionCompletedPayload(value.payload)
+  }
   return false
 }
 

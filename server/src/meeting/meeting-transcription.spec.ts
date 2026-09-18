@@ -28,7 +28,7 @@ type PrismaMock = {
   meetingRecording: { findMany: MockFn; update: MockFn }
   meetingTranscriptSegment: { deleteMany: MockFn; createMany: MockFn }
   meetingSpeaker: { upsert: MockFn }
-  meeting: { update: MockFn }
+  meeting: { update: MockFn; findUnique: MockFn }
   $transaction: MockFn
 }
 
@@ -53,7 +53,7 @@ function createPrismaMock(): PrismaMock {
     meetingRecording: { findMany: vi.fn(async () => []), update: vi.fn() },
     meetingTranscriptSegment: { deleteMany: vi.fn(), createMany: vi.fn() },
     meetingSpeaker: { upsert: vi.fn() },
-    meeting: { update: vi.fn() },
+    meeting: { update: vi.fn(), findUnique: vi.fn(async () => ({ userId: "user-1", title: "Q3 评审" })) },
     $transaction: vi.fn(),
   }
 }
@@ -251,6 +251,68 @@ describe("取结果", () => {
     expect(prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "failed" })
     expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({ status: "failed" })
     expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data.failureReason).toContain("一直失败")
+  })
+})
+
+describe("收尾通知", () => {
+  const runningJob = { status: "running", taskId: "42", expiresAt: new Date(Date.now() + 60_000) }
+
+  function withNotifications() {
+    const broadcastToUser = vi.fn(() => ({ onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0, clientResults: [] }))
+    const sendMeetingTranscription = vi.fn(async () => ({ sent: 1, failed: 0, skipped: false }))
+    const notifying = new MeetingTranscriptionService(
+      prisma as unknown as PrismaService,
+      storage as unknown as MeetingStoragePort,
+      config,
+      { broadcastToUser } as never,
+      { sendMeetingTranscription } as never,
+    )
+    return { notifying, broadcastToUser, sendMeetingTranscription }
+  }
+
+  it("转写成功时同时告诉桌面端和手机", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
+    describeTaskStatusMock.mockResolvedValue({
+      TaskId: 42,
+      Status: 2,
+      Result: JSON.stringify({ ResultDetail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }] }),
+    })
+    const { notifying, broadcastToUser, sendMeetingTranscription } = withNotifications()
+    await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+
+    expect(broadcastToUser).toHaveBeenCalledWith("user-1", expect.objectContaining({
+      type: "meeting.transcription.completed",
+      payload: expect.objectContaining({ meetingId: "meeting-1", status: "done" }),
+    }))
+    expect(sendMeetingTranscription).toHaveBeenCalledWith("user-1", expect.objectContaining({ meetingId: "meeting-1" }))
+  })
+
+  it("桌面端在线也照样推手机——手机是另一台设备", async () => {
+    // 会议多半是在电脑上录的，等转写完人已经离开电脑了；只因为桌面端在线就不推，
+    // 手机侧永远收不到。
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
+    describeTaskStatusMock.mockResolvedValue({ TaskId: 42, Status: 2, Result: "{}" })
+    const { notifying, sendMeetingTranscription } = withNotifications()
+    await notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+    expect(sendMeetingTranscription).toHaveBeenCalledTimes(1)
+  })
+
+  it("通知通道挂掉不影响转写结果落库", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
+    describeTaskStatusMock.mockResolvedValue({
+      TaskId: 42,
+      Status: 2,
+      Result: JSON.stringify({ ResultDetail: [{ FinalSentence: "第一句", StartMs: 0, EndMs: 1000, SpeakerId: 0 }] }),
+    })
+    const notifying = new MeetingTranscriptionService(
+      prisma as unknown as PrismaService,
+      storage as unknown as MeetingStoragePort,
+      config,
+      { broadcastToUser: () => { throw new Error("socket 挂了") } } as never,
+      { sendMeetingTranscription: async () => { throw new Error("APNs 挂了") } } as never,
+    )
+    await expect(notifying.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)).resolves.toBeUndefined()
+    expect(prisma.meeting.update.mock.calls[0][0].data).toMatchObject({ status: "done" })
   })
 })
 

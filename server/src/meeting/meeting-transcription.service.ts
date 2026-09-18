@@ -1,12 +1,17 @@
-import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common"
+import { Inject, Injectable, Logger, NotFoundException, Optional } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import {
+  createLiveEnvelope,
+  LIVE_MESSAGE_TYPES,
   MEETING_ASR_URL_TTL_SECONDS,
   MEETING_TENCENT_TASK_STATUS,
   MEETING_TRANSCRIPTION_MAX_ATTEMPTS,
   MEETING_TRANSCRIPTION_TTL_MS,
+  MeetingTranscriptionCompletedPayload,
 } from "@synapse/shared"
 
+import { LiveDesktopGateway } from "../live/live-desktop.gateway"
+import { MobilePushService } from "../mobile-live/mobile-push.service"
 import { PrismaService } from "../prisma/prisma.service"
 import { meetingConfigToken, type MeetingConfig } from "./meeting.config"
 import { MEETING_STORAGE_PORT, type MeetingStoragePort } from "./meeting-storage.service"
@@ -42,6 +47,9 @@ export class MeetingTranscriptionService {
     private readonly prisma: PrismaService,
     @Inject(MEETING_STORAGE_PORT) private readonly storage: MeetingStoragePort,
     @Inject(meetingConfigToken) private readonly config: MeetingConfig,
+    // 通知是锦上添花：推送通道不可用时转写照样要成功，所以两个都是可选的。
+    @Optional() private readonly liveDesktopGateway?: LiveDesktopGateway,
+    @Optional() private readonly mobilePush?: MobilePushService,
   ) {}
 
   /**
@@ -268,6 +276,7 @@ export class MeetingTranscriptionService {
         },
       })
     })
+    await this.notifyCompletion(meetingId, "done")
   }
 
   /**
@@ -294,6 +303,53 @@ export class MeetingTranscriptionService {
     await this.failJob(jobId, meetingId, message)
   }
 
+  /**
+   * 转写收尾之后告诉两边。
+   *
+   * 桌面端本来就每隔几秒轮询一次，这条实时消息只是让它当场就知道；手机是另一台设备，
+   * 转写往往在用户离开电脑之后才跑完，所以**手机始终推**，不因为桌面端在线就跳过。
+   */
+  private async notifyCompletion(meetingId: string, status: "done" | "failed"): Promise<void> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { userId: true, title: true },
+    })
+    if (!meeting) return
+    const payload: MeetingTranscriptionCompletedPayload = { meetingId, title: meeting.title, status }
+
+    if (this.liveDesktopGateway) {
+      try {
+        this.liveDesktopGateway.broadcastToUser(
+          meeting.userId,
+          createLiveEnvelope(LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted, payload, {
+            id: meetingId,
+            sentAt: new Date().toISOString(),
+          }),
+        )
+      } catch (error) {
+        this.logger.warn(
+          { meetingId, errorMessage: error instanceof Error ? error.message : String(error) },
+          "Meeting transcription broadcast failed",
+        )
+      }
+    }
+
+    if (!this.mobilePush) return
+    try {
+      await this.mobilePush.sendMeetingTranscription(meeting.userId, {
+        title: meeting.title,
+        body: status === "done" ? "转写已完成，逐字稿可以看了。" : "转写失败，可以重新试一次。",
+        meetingId,
+        detail: meeting.title,
+      })
+    } catch (error) {
+      this.logger.warn(
+        { meetingId, errorMessage: error instanceof Error ? error.message : String(error) },
+        "Meeting transcription push failed",
+      )
+    }
+  }
+
   private async failJob(jobId: string, meetingId: string, reason: string): Promise<void> {
     await this.prisma.meetingTranscriptionJob.update({
       where: { id: jobId },
@@ -303,5 +359,6 @@ export class MeetingTranscriptionService {
       where: { id: meetingId },
       data: { status: "failed", failureReason: reason.slice(0, 1000) },
     })
+    await this.notifyCompletion(meetingId, "failed")
   }
 }

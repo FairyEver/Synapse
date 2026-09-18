@@ -21,6 +21,7 @@ export type EventDomain =
   | "workflow"
   | "git"
   | "cheat-code"
+  | "meeting"
 
 export interface EventScope {
   readonly projectId?: string

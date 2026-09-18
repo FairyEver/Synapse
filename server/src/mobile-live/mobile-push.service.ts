@@ -25,6 +25,65 @@ export type TerminalApprovalPush = {
   readonly detail: string
 }
 
+/**
+ * A finished meeting transcription.
+ *
+ * The phone is a separate device from the desktop, so this is worth sending even
+ * when the desktop is online — the user is often away from the desk by the time
+ * a long recording finishes.
+ */
+/**
+ * What a push actually carries once it reaches APNs.
+ *
+ * `data` is merged into the payload root — that is where the app reads it back
+ * from `userInfo`, and it is per-category rather than inside `aps`.
+ */
+type PushContent = {
+  readonly title: string
+  readonly body: string
+  readonly category: string
+  readonly threadId: string
+  readonly data: Record<string, unknown>
+}
+
+function terminalApprovalContent(push: TerminalApprovalPush): PushContent {
+  return {
+    title: push.title,
+    body: push.body,
+    // Matches the category the app registers, so the lock screen offers
+    // approve/deny without opening the app.
+    category: "TERMINAL_APPROVAL",
+    threadId: push.sessionId,
+    data: {
+      desktopClientInstanceId: push.desktopClientInstanceId,
+      sessionId: push.sessionId,
+      sessionTitle: push.sessionTitle,
+      detail: push.detail,
+    },
+  }
+}
+
+function meetingTranscriptionContent(push: MeetingTranscriptionPush): PushContent {
+  return {
+    title: push.title,
+    body: push.body,
+    category: "MEETING_TRANSCRIPTION",
+    // 一场会议通知一条：同一个 thread 会覆盖而不是堆一屏。
+    threadId: push.meetingId,
+    data: {
+      meetingId: push.meetingId,
+      detail: push.detail,
+    },
+  }
+}
+
+export type MeetingTranscriptionPush = {
+  readonly title: string
+  readonly body: string
+  readonly meetingId: string
+  readonly detail: string
+}
+
 export type PushOutcome = {
   readonly sent: number
   readonly failed: number
@@ -62,6 +121,15 @@ export class MobilePushService {
    * token is reissued on reinstall, so a rejected one will never work again.
    */
   async sendTerminalApproval(userId: string, push: TerminalApprovalPush): Promise<PushOutcome> {
+    return this.sendToAllDevices(userId, terminalApprovalContent(push))
+  }
+
+  /** 转写收尾时通知手机。 */
+  async sendMeetingTranscription(userId: string, push: MeetingTranscriptionPush): Promise<PushOutcome> {
+    return this.sendToAllDevices(userId, meetingTranscriptionContent(push))
+  }
+
+  private async sendToAllDevices(userId: string, content: PushContent): Promise<PushOutcome> {
     if (!this.isConfigured()) {
       this.logger.warn({ reason: "not_configured" }, "Mobile push skipped")
       return { sent: 0, failed: 0, skipped: true }
@@ -73,7 +141,6 @@ export class MobilePushService {
     try {
       token = await this.authorizationToken()
     } catch (error) {
-      // A bad key is a deployment problem, not a per-device one; report once.
       this.logger.error({
         errorName: error instanceof Error ? error.name : typeof error,
       }, "Mobile push authorization failed")
@@ -83,7 +150,7 @@ export class MobilePushService {
     let sent = 0
     let failed = 0
     for (const target of targets) {
-      const status = await this.deliver(token, target.token, push)
+      const status = await this.deliver(token, target.token, content)
       if (status === "sent") {
         sent += 1
         await this.devices.recordPushAttempt(target.clientInstanceId, userId).catch(() => undefined)
@@ -100,22 +167,19 @@ export class MobilePushService {
   private async deliver(
     authorization: string,
     deviceToken: string,
-    push: TerminalApprovalPush,
+    content: PushContent,
   ): Promise<"sent" | "unregistered" | "failed"> {
     const host = this.env.apnsUseSandbox ? SANDBOX_HOST : PRODUCTION_HOST
     const body = JSON.stringify({
       aps: {
-        alert: { title: push.title, body: push.body },
+        alert: { title: content.title, body: content.body },
         sound: "default",
-        // Matches the category the app registers, so the lock screen offers
-        // approve/deny without opening the app.
-        category: "TERMINAL_APPROVAL",
-        "thread-id": push.sessionId,
+        // Matches the category the app registers, so the lock screen can offer
+        // per-category actions without opening the app.
+        category: content.category,
+        "thread-id": content.threadId,
       },
-      desktopClientInstanceId: push.desktopClientInstanceId,
-      sessionId: push.sessionId,
-      sessionTitle: push.sessionTitle,
-      detail: push.detail,
+      ...content.data,
     })
 
     return new Promise((resolve) => {

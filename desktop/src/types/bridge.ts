@@ -87,6 +87,7 @@ import type {
 import type { ConnectorItem, ConnectorListResult } from "../../app-capabilities/connectors/shared/schema"
 import type {
   SynapseMeetingDetail,
+  SynapseMeetingTranscriptionCompletedEvent,
   SynapseMeetingFinalizeInput,
   SynapseMeetingMinutes,
   SynapseMeetingPendingRecording,
@@ -1190,6 +1191,7 @@ export type SynapseBridge = {
       playbackUrl: (input: { meetingId: string }) => Promise<{ url: string | null }>
       peaks: (input: { meetingId: string }) => Promise<{ peaks: string | null }>
       generateMinutes: (input: { meetingId: string }) => Promise<SynapseMeetingMinutes>
+      onTranscriptionCompleted: (listener: (event: SynapseMeetingTranscriptionCompletedEvent) => void) => () => void
     }
   }
   soundNotifier: {

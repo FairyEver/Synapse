@@ -101,8 +101,10 @@ describe("downsampleMeetingPeaks", () => {
     expect(downsampleMeetingPeaks([0.1, 0.2, 0.3], 1)).toEqual([0.1, 0.2, 0.3])
   })
 
-  it("接受 Uint8Array，因为服务端是从 base64 解出来直接喂进来的", () => {
-    expect(downsampleMeetingPeaks(new Uint8Array([0, 10, 20, 30, 40]), 4)).toEqual([30 / 255, 40 / 255])
+  it("接受 Uint8Array，但不会替调用方换数值空间", () => {
+    // 这个函数是纯降采样，不管输入是 0-1 还是 0-255。把字节直接喂进来就会原样算出
+    // 0-255 的结果——需要换算的是 compactMeetingPeaks，不是它。
+    expect(downsampleMeetingPeaks(new Uint8Array([0, 10, 20, 30, 40]), 4)).toEqual([30, 40])
   })
 
   it("空数组返回空数组", () => {

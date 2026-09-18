@@ -36,3 +36,10 @@ export type SynapseMeetingSpooledPart = {
   readonly partNumber: number
   readonly bytes: Uint8Array
 }
+
+/** 转写收尾时从主进程推过来的一条应用内事件。 */
+export type SynapseMeetingTranscriptionCompletedEvent = {
+  readonly meetingId: string
+  readonly title: string
+  readonly status: "done" | "failed"
+}

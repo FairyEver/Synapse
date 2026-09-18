@@ -305,3 +305,28 @@ export function meetingPlaybackProgress(positionMs: number, durationMs: number):
   if (!Number.isFinite(durationMs) || durationMs <= 0) return 0
   return Math.max(0, Math.min(1, positionMs / durationMs))
 }
+
+/**
+ * 转写收尾时发给桌面端的通知载荷。
+ *
+ * 桌面端本来就在轮询，这条消息只是让它在转完的当下就知道——用户在别的界面做事时，
+ * 不该等下一次轮询才看到结果。
+ */
+export type MeetingTranscriptionCompletedPayload = {
+  readonly meetingId: string
+  readonly title: string
+  readonly status: "done" | "failed"
+}
+
+export function isMeetingTranscriptionCompletedPayload(
+  value: unknown,
+): value is MeetingTranscriptionCompletedPayload {
+  if (!value || typeof value !== "object") return false
+  const payload = value as Record<string, unknown>
+  return (
+    typeof payload.meetingId === "string" &&
+    payload.meetingId.length > 0 &&
+    typeof payload.title === "string" &&
+    (payload.status === "done" || payload.status === "failed")
+  )
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { SynapseMeetingDetail, SynapseMeetingSummary } from "@/types/meeting"
+import type { SynapseMeetingDetail, SynapseMeetingSummary, SynapseMeetingTranscriptionCompletedEvent } from "@/types/meeting"
 
 /**
  * 会议记录的数据入口。
@@ -111,4 +111,22 @@ export function useMeetingActions() {
   }, [])
 
   return { rename, nameSpeaker, removeRecording, retryTranscription }
+}
+
+/**
+ * 转写收尾时立刻刷新，而不是等下一次轮询。
+ *
+ * 轮询本来就兜得住（几秒之内也会变），这条实时消息是为了让用户在转完的当下就看到，
+ * 而不是盯着「转写中」再等一个周期。
+ */
+export function useTranscriptionCompletionSubscription(onCompleted: (event: SynapseMeetingTranscriptionCompletedEvent) => void): void {
+  const callback = useRef(onCompleted)
+  callback.current = onCompleted
+
+  useEffect(() => {
+    const unsubscribe = requireSynapseBridge().meeting.entry.onTranscriptionCompleted((event) => {
+      callback.current(event)
+    })
+    return unsubscribe
+  }, [])
 }

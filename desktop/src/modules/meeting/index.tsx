@@ -8,7 +8,13 @@ import type { SynapseMeetingPendingRecording } from "@/types/meeting"
 import { MeetingDetailView } from "./meeting-detail-view"
 import { MeetingListView } from "./meeting-list-view"
 import { MeetingRecordingView, type MeetingRecordingFinalize } from "./meeting-recording-view"
-import { useMeetingActions, useMeetingDetail, useMeetingList, useTranscriptionPolling } from "./hooks/use-meetings"
+import {
+  useMeetingActions,
+  useMeetingDetail,
+  useMeetingList,
+  useTranscriptionCompletionSubscription,
+  useTranscriptionPolling,
+} from "./hooks/use-meetings"
 
 /**
  * 会议记录。
@@ -47,6 +53,13 @@ export function MeetingModule() {
   )
 
   const refreshList = useCallback(() => setListRefreshKey((key) => key + 1), [])
+
+  useTranscriptionCompletionSubscription((event) => {
+    setListRefreshKey((key) => key + 1)
+    setDetailRefreshKey((key) => key + 1)
+    if (event.status === "done") notifications.success(`${event.title} 转写已完成`)
+    else notifications.error(`${event.title} 转写失败`)
+  })
 
   // 「发现一段未完成的录音」只在列表页查一次：那段录音可能来自上一次进程被杀。
   const loadPending = useCallback(async () => {

@@ -6,6 +6,7 @@ import { accountService } from "../services/account-service"
 import { editorInstallService } from "../services/editor-install-service"
 import { installStatusCacheService } from "../services/install-status-cache-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
+import { LiveMeetingTranscriptionHandler } from "../services/live-meeting-transcription-handler"
 import { LiveWebhookDeliveryHandler } from "../services/live-webhook-delivery-handler"
 import { createMainLogger, logStore } from "../services/log-store"
 import type { EventBus } from "../runtime/event-bus"
@@ -130,6 +131,13 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     }))
   } catch (error) {
     logger.warn("Live webhook delivery handler not installed.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+  }
+  try {
+    liveConnectionService.setMeetingTranscriptionHandler(new LiveMeetingTranscriptionHandler({ eventBus }))
+  } catch (error) {
+    logger.warn("Live meeting transcription handler not installed.", {
       errorName: error instanceof Error ? error.name : typeof error,
     })
   }

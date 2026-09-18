@@ -10,6 +10,7 @@ import type { SynapseAccountState } from "../../src/types/account"
 import type { SynapseLiveState } from "../../src/types/live"
 import type { EventBus } from "../runtime/event-bus"
 import type { AccountService } from "./account-service"
+import type { LiveMeetingTranscriptionHandler } from "./live-meeting-transcription-handler"
 import type { LiveWebhookDeliveryHandler } from "./live-webhook-delivery-handler"
 import { LiveClientIdStore } from "./live-client-id-store"
 import { createLiveReconnectDelay } from "./live-reconnect-policy"
@@ -40,6 +41,7 @@ type LiveConnectionServiceDeps = {
   readonly platform?: () => string
   readonly deviceName?: () => string
   readonly webhookDeliveryHandler?: Pick<LiveWebhookDeliveryHandler, "handle">
+  readonly meetingTranscriptionHandler?: Pick<LiveMeetingTranscriptionHandler, "handle">
 }
 
 export class LiveConnectionService {
@@ -54,6 +56,7 @@ export class LiveConnectionService {
   private readonly platform: () => string
   private readonly deviceName: () => string
   private webhookDeliveryHandler: Pick<LiveWebhookDeliveryHandler, "handle"> | null
+  private meetingTranscriptionHandler: Pick<LiveMeetingTranscriptionHandler, "handle"> | null
   private mobileIntentHandler: MobileIntentHandler | null = null
   private sharedProtocol: Awaited<typeof liveProtocolPromise> | null = null
   private eventBus: EventBus | null = null
@@ -88,6 +91,7 @@ export class LiveConnectionService {
     this.platform = deps.platform ?? (() => `${process.platform}-${process.arch}`)
     this.deviceName = deps.deviceName ?? (() => os.hostname())
     this.webhookDeliveryHandler = deps.webhookDeliveryHandler ?? null
+    this.meetingTranscriptionHandler = deps.meetingTranscriptionHandler ?? null
   }
 
   setEventBus(eventBus: EventBus): void {
@@ -96,6 +100,10 @@ export class LiveConnectionService {
 
   setWebhookDeliveryHandler(handler: Pick<LiveWebhookDeliveryHandler, "handle">): void {
     this.webhookDeliveryHandler = handler
+  }
+
+  setMeetingTranscriptionHandler(handler: Pick<LiveMeetingTranscriptionHandler, "handle">): void {
+    this.meetingTranscriptionHandler = handler
   }
 
   setMobileIntentHandler(handler: MobileIntentHandler): void {
@@ -326,6 +334,14 @@ export class LiveConnectionService {
         .catch((error: unknown) => {
           logger.warn("Live mobile intent handler failed.", this.liveErrorMetadata(error))
         })
+      return
+    }
+
+    if (parsed.type === LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
+      void this.meetingTranscriptionHandler?.handle(parsed.payload).catch((error: unknown) => {
+        logger.warn("Live meeting transcription handler failed.", this.liveErrorMetadata(error))
+      })
       return
     }
 

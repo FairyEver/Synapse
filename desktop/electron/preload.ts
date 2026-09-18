@@ -17,6 +17,7 @@ import type {
   AgentConversationOpenRequest,
 } from "../src/types/agent-navigation"
 import type { SynapseAccountStateChangedEvent } from "../src/types/account"
+import type { SynapseMeetingTranscriptionCompletedEvent } from "../src/types/meeting"
 import type { SynapseLiveStateChangedEvent } from "../src/types/live"
 import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
@@ -532,6 +533,11 @@ const synapseBridge: SynapseBridge = {
       playbackUrl: (input) => invoke(IPC_CHANNELS.meeting.getPlaybackUrl)(input),
       peaks: (input) => invoke(IPC_CHANNELS.meeting.getPeaks)(input),
       generateMinutes: (input) => invoke(IPC_CHANNELS.meeting.generateMinutes)(input),
+      onTranscriptionCompleted: createDomainEventPayloadSubscription<SynapseMeetingTranscriptionCompletedEvent>(
+        subscribe,
+        "meeting",
+        "meeting.transcriptionCompleted",
+      ),
     },
   },
   soundNotifier: {
