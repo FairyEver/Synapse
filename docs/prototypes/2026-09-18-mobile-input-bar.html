@@ -164,6 +164,35 @@
   .caret{display:inline-block;width:2px;height:17px;background:var(--ink);vertical-align:-3px;margin-left:1px;}
   .field.holding{justify-content:flex-start;}
 
+  /* 按住时那一格的三段手势指示 */
+  .zones{display:flex;align-items:center;width:100%;gap:6px;}
+  .zone{font-size:12px;color:var(--ink2);padding:4px 6px;border-radius:6px;white-space:nowrap;}
+  .zone.on{background:var(--surface3);color:var(--ink);font-weight:600;}
+  .zone.cancel.on{background:var(--red);color:#fff;}
+  .zone.lock.on{background:var(--ink);color:#fff;}
+  .zone-mid{flex:1;text-align:center;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;}
+
+  /* 锁定态：这一格变成录音栏 */
+  .lockbox{
+    flex:1 1 auto;min-width:0;
+    background:var(--surface2);border-radius:9px;
+    padding:8px 12px;display:flex;flex-direction:column;gap:3px;
+    max-height:106px;overflow:hidden;
+  }
+  .locklabel{font-size:11px;color:var(--ink2);}
+  .locktext{
+    font-family:var(--mono);font-size:14px;line-height:1.4;
+    overflow:hidden;color:var(--ink);word-break:break-word;
+  }
+  .btn-pill{
+    flex:0 0 auto;border:none;background:var(--ink);color:#fff;
+    font-size:14px;font-weight:500;font-family:var(--ui);
+    padding:0 16px;height:36px;border-radius:10px;cursor:pointer;
+  }
+  .btn-pill:active{opacity:.75}
+  /* 锁定态那一格：不再是自己拿笔画的输入框，而是一个容器 */
+  .field.bare{padding:0;background:transparent;min-height:0;align-items:stretch;}
+
   .unstable{color:var(--ink2)}
 
   /* ---------------- bubble over the bar ---------------- */
@@ -191,6 +220,9 @@
   }
   .bubble.cancel{background:var(--red);color:#fff;}
   .bubble.cancel .unstable{color:rgba(255,255,255,.65)}
+  .bubble.lock{background:var(--ink);color:#fff;}
+  .bubble.lock .unstable{color:rgba(255,255,255,.6)}
+  .hintbar.lock{background:var(--ink);color:#fff}
   .bubble .empty{color:var(--ink2)}
   .hintbar{
     font-size:13px;font-weight:500;color:var(--ink);
@@ -319,7 +351,13 @@
       <div data-v="hold" class="on">按住说话</div>
       <div data-v="tap">点击开始 · 结束</div>
     </div>
-    <p class="note">「点击开始·结束」是你 2026-09-16 拍的板，也是 PC 端现在的做法。两种都能试，见右侧待拍板第 1 条。</p>
+    <h2>松手之后</h2>
+    <div class="switch" id="swSend">
+      <div data-v="send" class="on">识别完就发送</div>
+      <div data-v="draft">落进输入框等确认</div>
+    </div>
+    <p class="note" id="sendNote">输入框里已经有字时，无论选哪个都不自动发送 —— 见待拍板第 2 条。</p>
+    <p class="note">按住时：<b>左滑取消</b>、<b>右滑锁定</b>。锁上之后手可以松开，继续说，说完点「确定」发送。</p>
   </div>
 
   <div class="grp">
@@ -348,22 +386,24 @@
       <tr><td>左端「语音 / 键盘」常驻切换键</td><td>照搬</td></tr>
       <tr><td>输入框右侧的麦克风快捷入口</td><td>去掉 —— 与左端切换键等价，两个入口只会让人猜哪个不一样</td></tr>
       <tr><td>语音态输入框变「按住 说话」</td><td>照搬，宽度与位置不变</td></tr>
-      <tr><td>松开 → 发语音消息</td><td>松开 → 转文字，落进输入框由人确认后发送</td></tr>
-      <tr><td>「滑到这里 转文字」（右侧区）</td><td>砍掉 —— 恒定转文字后，右区没有第二个出口。只留上滑取消</td></tr>
+      <tr><td>松开 → 发语音消息</td><td>松开 → 转文字 → 识别结束就发送</td></tr>
+      <tr><td>上滑到左区「取消」</td><td>左滑取消</td></tr>
+      <tr><td>「滑到这里 转文字」（右区）</td><td>右区改成<b>锁定</b> —— 恒定转文字之后，右区本来没有第二个出口，正好给锁定用</td></tr>
+      <tr><td>（微信没有锁定）</td><td>右滑锁定：手松开、继续说、说完点「确定」发送</td></tr>
       <tr><td>录音时全屏变暗</td><td>不遮罩 —— 终端输出要能一边说一边看</td></tr>
       <tr><td>波形气泡</td><td>实时转写气泡 —— 流式识别本来就有字可显示，不假装有波形</td></tr>
       <tr><td>表情面板</td><td>不做</td></tr>
-      <tr><td>按住上限 60 秒</td><td>同（腾讯云引擎上限），到点自动收尾转文字</td></tr>
+      <tr><td>按住时长</td><td>不设上限，按住多久都行（微信也是）；锁定态就是为长时间输入准备的</td></tr>
     </table>
   </div>
 
   <div class="grp">
     <h2>待拍板</h2>
     <ol>
-      <li><b>手势：按住说话，还是点击开始·结束。</b>你两天前拍过「不是按住说话」，那是三端一起定的。iOS 单端改成按住，三端手势就不一致了 —— 要不要接受这个不一致？</li>
-      <li><b>＋ 从最左挪到输入框右侧。</b>这是微信的顺序，也让左端腾出来给切换键。不想动 ＋ 的话，切换键只能和 ＋ 挤在左边。</li>
-      <li><b>转文字落地后自动切回键盘态</b>（本原型）还是留在语音态连着说第二段？</li>
-      <li><b>录音时要不要遮罩终端。</b>原型选的是不遮罩 —— 终端在跑东西时还能看着。</li>
+      <li><b>「识别完就发送」在终端上等于立刻执行命令。</b>这推翻了你 09-16 定的「终端只填命令行、不补回车」。终端要不要例外 —— 终端落地等确认，对话面松手即发送？</li>
+      <li><b>输入框里已经有字时不自动发送</b>（本原型的规则）：语音是来补全一句话的，就把转写追加进去等你确认；输入框是空的，才当成"说一整句就发出去"。这条要是觉得绕，可以改成无条件发送。</li>
+      <li><b>锁定态的转写要不要多行。</b>原型给了三行 —— 输入栏会长高，手机上终端可视区跟着变矮（桌面端不受影响）。要更稳就收成一行。</li>
+      <li><b>锁定的出口除了「确定」还要「放弃」</b>（本原型左侧那个 ✗）—— 不然录错了只能发出去才能脱身。</li>
     </ol>
   </div>
 
@@ -373,13 +413,21 @@
 
 <script>
 (function(){
-  const SCRIPT = '跑一下 pnpm test，然后 git status 看看 SynapseMobile 改了什么';
+  const SCRIPT = '跑一下 pnpm test，然后 git status 看看 SynapseMobile 改了什么。另外把终端键盘面板那块的用例也一起过一遍，有问题就顺手修掉';
+  /// 滑动判定阈值。设计文档要求它只定义一处，判定做成纯值 —— 原型里也照办。
+  const SLIDE_THRESHOLD = 70;
+  function gestureFor(dx){
+    if (dx <= -SLIDE_THRESHOLD) return 'cancel';
+    if (dx >= SLIDE_THRESHOLD) return 'lock';
+    return 'none';
+  }
   const S = {
     layout: 'wechat',
     trigger: 'hold',
     kbd: 'hidden',
     mode: 'keyboard',      // keyboard | voice   （仅微信式结构有模式之分）
-    rec: null,             // { text, cancelArmed, empty, since }
+    sendOnRelease: true,   // 松手识别完就发送；false = 只落进输入框
+    rec: null,             // { text, gesture: none|cancel|lock, locked, empty }
     draft: '',
     phMsg: null,
     notice: null,
@@ -416,7 +464,7 @@
   // ---------- recording ----------
   function startRec(){
     stopReveal();
-    S.rec = { text:'', cancelArmed:false, empty:false, since:Date.now() };
+    S.rec = { text:'', gesture:'none', locked:false, empty:false };
     if (S.scenario === 'nospeech'){
       setTimeout(()=>{ if (S.rec){ S.rec.empty = true; drawBubble(); } }, 1600);
       drawAll();
@@ -438,11 +486,18 @@
     stopReveal();
     const text = S.rec ? S.rec.text : '';
     S.rec = null;
-    if (S.layout === 'wechat') S.mode = 'keyboard';
+    // 取消留在语音态（多半是想重说一遍）；落地/发送之后回键盘态（要确认文字）
+    if (S.layout === 'wechat' && !cancelled) S.mode = 'keyboard';
     if (cancelled){
       // 取消 = 回滚到按下之前
     } else if (text){
-      S.draft = S.draft ? S.draft.replace(/\s+$/,'') + ' ' + text : text;
+      // 直接发送只在输入框本来是空的时候：里面有字说明用户在编辑，
+      // 这时候把他的半句话一起送出去是危险的。
+      if (S.sendOnRelease && !S.draft){
+        sendLine(text);
+      } else {
+        S.draft = S.draft ? S.draft.replace(/\s+$/,'') + ' ' + text : text;
+      }
       S.phMsg = null;
     } else {
       S.phMsg = '没有听到声音';
@@ -450,22 +505,33 @@
     drawAll();
   }
 
+  /// 把一句话发出去。原型里就是往终端画面上追加一行 + 一句回执。
+  function sendLine(text){
+    const canvas = $('canvas');
+    const slot = $('noticeSlot');
+    canvas.insertBefore(el('div','ln','<span class="grn">›</span> ' + escapeHtml(text)), slot);
+    canvas.insertBefore(el('div','ln dim','● 已发送到电脑'), slot);
+  }
+
   // ---------- bubble ----------
   function drawBubble(){
     const layer = $('bubbleLayer');
     layer.innerHTML = '';
-    if (!S.rec) return;
-    const b = el('div', 'bubble' + (S.rec.cancelArmed ? ' cancel' : ''));
-    const hint = el('div', 'hintbar' + (S.rec.cancelArmed ? ' cancel' : ''));
-    hint.textContent = S.rec.cancelArmed ? '松开 取消' : '松开 转文字';
+    // 锁定之后手指走了，气泡的差事交给输入栏那一格，它自己让位。
+    if (!S.rec || S.rec.locked) return;
+    const cancelling = S.rec.gesture === 'cancel';
+    const locking = S.rec.gesture === 'lock';
+    const b = el('div', 'bubble' + (cancelling ? ' cancel' : locking ? ' lock' : ''));
+    const hint = el('div', 'hintbar' + (cancelling ? ' cancel' : locking ? ' lock' : ''));
+    hint.textContent = cancelling ? '松开 取消' : locking ? '松开 锁定' : '松开 转文字';
     if (!S.rec.text){
-      b.innerHTML = '<span class="' + (S.rec.cancelArmed ? '' : 'empty') + '">'
-        + (S.rec.empty ? '没有听到声音' : (S.rec.cancelArmed ? '取消这次输入' : '聆听中')) + '</span>';
+      b.innerHTML = '<span class="' + (cancelling || locking ? '' : 'empty') + '">'
+        + (S.rec.empty ? '没有听到声音' : (cancelling ? '取消这次输入' : '聆听中')) + '</span>';
     } else {
       const stable = S.rec.text.slice(0, Math.max(0, S.rec.text.length - 3));
       const unstable = S.rec.text.slice(Math.max(0, S.rec.text.length - 3));
       b.innerHTML = escapeHtml(stable) + '<span class="unstable">' + escapeHtml(unstable) + '</span>'
-        + (S.rec.cancelArmed ? '' : '<span class="caret"></span>');
+        + (cancelling ? '' : '<span class="caret"></span>');
     }
     layer.appendChild(b);
     layer.appendChild(hint);
@@ -476,13 +542,52 @@
   function escapeHtml(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
   // ---------- input bar ----------
+  /// 转写正文（stable 常色 / unstable 次要色 / 光标），气泡和锁定栏共用一份。
+  function transcriptInner(){
+    const t = S.rec ? S.rec.text : '';
+    if (!t) return '<span class="ph">' + (S.rec && S.rec.empty ? '没有听到声音' : '聆听中') + '</span>';
+    const stable = t.slice(0, Math.max(0, t.length - 3));
+    const unstable = t.slice(Math.max(0, t.length - 3));
+    return escapeHtml(stable) + '<span class="unstable">' + escapeHtml(unstable) + '</span><span class="caret"></span>';
+  }
+
+  /// 整条栏只在结构变了的时候重建。
+  ///
+  /// 录音时每 95ms 就有一批新字，若每次都重建，「确定」会在手指按下的那一瞬间被换
+  /// 掉，click 就丢了 —— 所以字是就地刷的，结构不动。
+  let barKey = null;
+  function barSignature(){
+    return [S.layout, S.trigger, S.mode, S.draft, S.phMsg, S.sendOnRelease,
+            S.rec ? (S.rec.locked ? 'L' : 'R') + S.rec.gesture : '-'].join('|');
+  }
+  function updateBarLive(){
+    const t = document.querySelector('#inputbar .locktext');
+    if (t && S.rec){
+      t.innerHTML = transcriptInner();
+      requestAnimationFrame(()=>{ t.scrollTop = t.scrollHeight; });
+    }
+    const mid = document.querySelector('#inputbar .zone-mid');
+    if (mid && S.rec){
+      const g = S.rec.gesture;
+      mid.textContent = g === 'cancel' ? '松开 取消' : g === 'lock' ? '松开 锁定' : '聆听中';
+      const l = document.querySelector('#inputbar .zone.cancel');
+      const r = document.querySelector('#inputbar .zone.lock');
+      if (l) l.classList.toggle('on', g === 'cancel');
+      if (r) r.classList.toggle('on', g === 'lock');
+    }
+  }
+
   function drawBar(){
+    const key = barSignature();
+    if (key === barKey){ updateBarLive(); return; }
+    barKey = key;
     const bar = $('inputbar');
     bar.innerHTML = '';
     const wechat = S.layout === 'wechat';
     const rec = S.rec;
+    const locked = !!(rec && rec.locked);
     const tapRec = rec && S.trigger === 'tap';
-    const holdRec = rec && S.trigger === 'hold';
+    const holdRec = rec && S.trigger === 'hold' && !locked;
     const voiceMode = wechat && S.mode === 'voice';
 
     const btn = (name, id, opts) => {
@@ -495,7 +600,9 @@
     };
 
     // ---- left ----
-    if (wechat){
+    if (locked){
+      bar.appendChild(btn('xmark','abandon'));
+    } else if (wechat){
       if (tapRec) bar.appendChild(btn('xmark','cancel'));
       else bar.appendChild(btn(S.mode === 'voice' ? 'keyboard' : 'mic','toggle',{ faded: holdRec }));
     } else {
@@ -505,12 +612,28 @@
 
     // ---- middle ----
     const field = el('div','field');
-    if (tapRec){
+    if (locked){
+      // 锁定态：手指走了，转写回到输入栏本体，可以长高到三行
+      const box = el('div','lockbox');
+      box.appendChild(el('div','locklabel','录音中'));
+      const t = el('div','locktext');
+      t.innerHTML = transcriptInner();
+      box.appendChild(t);
+      field.appendChild(box);
+      field.classList.add('bare');
+      requestAnimationFrame(()=>{ t.scrollTop = t.scrollHeight; });
+    } else if (tapRec){
       field.classList.add('holding');
       field.innerHTML = transcriptHtml();
     } else if (holdRec){
+      // 按住时那一格是手势指示：左取消、中状态、右锁定
+      const g = S.rec.gesture;
       field.classList.add('hold','pressed','holding');
-      field.innerHTML = '<span class="ph">聆听中</span>';
+      field.innerHTML = '<div class="zones">'
+        + '<span class="zone cancel' + (g === 'cancel' ? ' on' : '') + '">取消</span>'
+        + '<span class="zone-mid">' + (g === 'cancel' ? '松开 取消' : g === 'lock' ? '松开 锁定' : '聆听中') + '</span>'
+        + '<span class="zone lock' + (g === 'lock' ? ' on' : '') + '">锁定</span>'
+        + '</div>';
     } else if (wechat && S.mode === 'voice'){
       field.classList.add('hold');
       field.textContent = (S.trigger === 'hold') ? '按住 说话' : '点击 说话';
@@ -520,7 +643,7 @@
     bar.appendChild(field);
 
     // ---- attach (微信式：输入框右侧) ----
-    if (wechat){
+    if (wechat && !locked){
       bar.appendChild(btn('plus','attach',{ faded: !!rec }));
     }
 
@@ -530,7 +653,11 @@
     }
 
     // ---- right ----
-    if (tapRec){
+    if (locked){
+      const b = el('button','btn-pill','确定');
+      b.dataset.act = 'finish';
+      bar.appendChild(b);
+    } else if (tapRec){
       const enabled = !!S.rec.text;
       bar.appendChild(btn('check','confirm',{ disabled: !enabled }));
     } else if (holdRec || (wechat && voiceMode)){
@@ -580,6 +707,10 @@
       } else if (act === 'cancel'){
         if (S.trigger === 'hold') return;
         node.onclick = () => endRec(true);
+      } else if (act === 'abandon'){
+        node.onclick = () => { if (S.layout === 'wechat') S.mode = 'keyboard'; endRec(true); };
+      } else if (act === 'finish'){
+        node.onclick = () => endRec(false);
       } else if (act === 'confirm'){
         node.onclick = () => { if (S.rec && S.rec.text) endRec(false); };
       } else if (act === 'send'){
@@ -612,31 +743,41 @@
     // 按住说话：指针按住 / 拖动 / 松开
     const target = bar.querySelector('.field.hold');
     if (target && !S.rec && S.trigger === 'hold' && S.layout === 'wechat' && S.mode === 'voice'){
-      let startY = null;
+      let startX = null;
       const down = e => {
         e.preventDefault();
         const bad = precheck();
         if (bad){ S.notice = bad; drawAll(); return; }
         S.notice = null;
-        startY = (e.touches ? e.touches[0].clientY : e.clientY);
+        startX = (e.touches ? e.touches[0].clientX : e.clientX);
         startRec();
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
         window.addEventListener('pointercancel', up);
       };
       const move = e => {
-        if (!S.rec || startY === null) return;
-        const y = (e.touches ? e.touches[0].clientY : e.clientY);
-        const armed = (startY - y) > 70;
-        if (armed !== S.rec.cancelArmed){ S.rec.cancelArmed = armed; drawAll(); }
+        if (!S.rec || S.rec.locked || startX === null) return;
+        const x = (e.touches ? e.touches[0].clientX : e.clientX);
+        const g = gestureFor(x - startX);
+        if (g !== S.rec.gesture){ S.rec.gesture = g; drawAll(); }
       };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         window.removeEventListener('pointercancel', up);
-        if (!S.rec) return;
-        endRec(S.rec.cancelArmed);
-        startY = null;
+        const rec = S.rec;
+        startX = null;
+        if (!rec || rec.locked) return;
+        if (rec.gesture === 'cancel'){
+          endRec(true);
+        } else if (rec.gesture === 'lock'){
+          // 锁定：录音不停，手指可以走了
+          rec.locked = true;
+          rec.gesture = 'none';
+          drawAll();
+        } else {
+          endRec(false);
+        }
       };
       target.addEventListener('pointerdown', down);
     }
@@ -744,7 +885,8 @@
       const v = e.target.dataset && e.target.dataset.v;
       if (!v) return;
       [...$(id).children].forEach(c => c.classList.toggle('on', c === e.target));
-      S[key] = v;
+      if (key === 'sendOnRelease') S.sendOnRelease = (v === 'send');
+      else S[key] = v;
       if (key === 'layout'){
         // 现状结构里没有「语音态」，按住说话无处可落，只有点击开始·结束成立
         if (v !== 'wechat') S.mode = 'keyboard';
@@ -763,6 +905,7 @@
 
   bindSwitch('swLayout','layout');
   bindSwitch('swTrigger','trigger');
+  bindSwitch('swSend','sendOnRelease');
   bindSwitch('swKbd','kbd');
 
   $('chips').addEventListener('click', e => {
@@ -781,7 +924,7 @@
 
   $('reset').onclick = () => {
     stopReveal();
-    S.layout='wechat'; S.trigger='hold'; S.kbd='hidden'; S.mode='keyboard';
+    S.layout='wechat'; S.trigger='hold'; S.sendOnRelease=true; S.kbd='hidden'; S.mode='keyboard';
     S.rec=null; S.draft=''; S.phMsg=null; S.notice=null; S.scenario='ok';
     document.querySelectorAll('.switch').forEach(sw => {
       [...sw.children].forEach((c,i)=> c.classList.toggle('on', i===0));
