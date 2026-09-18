@@ -11,10 +11,13 @@ import SwiftUI
 /// 落点，滑动的总路程就只剩「输入栏到面板」这一段，滑到之后要选的那两半又是整块面板
 /// 那么大。省下的不只是距离，还有「往上再找一层」的那一次视线移动。
 ///
-/// 面板是**一层**系统材质（`.regularMaterial`），不是实色。上一版脏在**叠了两层**：
-/// 面板一层材质、蒙层再压一层 `.thinMaterial`，两层糊出来的调子不一样，拼在一起
-/// 就是一块花底子。现在只有一层 —— 蒙层那一层是**不带模糊的压暗**（半透明的
-/// `Theme.paper`），既盖住了转写，又不多加一次糊。
+/// **没有一处是半透明的。** 面板用 `Theme.paper`（就是 `systemBackground`），浅色下
+/// 是白的、深色下是黑的，跟着系统走；蒙层那一半用系统的灰。材质试过两版都退回来了：
+/// 一是它把终端那些高对比小字糊成灰斑，二是材质上的文字会走「vibrancy」那一档 ——
+/// 屏幕上就是**字在、颜色却和底一样**，只剩红色的光标看得见。
+///
+/// 颜色一律写明、一律取自系统语义色：`Theme.ink` / `Theme.paper` 各自跟着明暗翻转，
+/// 没有一个地方靠继承。
 ///
 /// 动效只留在**手指底下**：两半之间的换场用短促的 `easeOut`（动画得跟着手指走，
 /// 不能自说自话）。浮上来那一下在 `TerminalScreen` 里，是一个带回弹的弹簧。
@@ -100,6 +103,7 @@ struct TerminalVoiceDock: View {
                 Text(presentation.timerText)
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
+                    .foregroundStyle(Theme.ink)
 
                 waveform
             }
@@ -114,7 +118,7 @@ struct TerminalVoiceDock: View {
             HStack(spacing: 8) {
                 Text(presentation.hint)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
 
                 if presentation.locked {
                     // 固定之后手指早走了，长录要收摊的话这是面板上唯一的退路。
@@ -127,13 +131,13 @@ struct TerminalVoiceDock: View {
             }
         }
         .padding(16)
-        // 系统材质，只有这一层（理由写在文件顶上）。
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        // 实色，跟着明暗走（理由写在文件顶上）。
+        .background(Theme.paper, in: RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay {
-            // 玻璃与它身后的东西之间那条发丝线。材质本身不保证边界看得出来 ——
-            // 底下的画面颜色接近时，没有这条线整块面板就没有形状。
+            // 面板与终端画面之间那条发丝线。深色下两块底色都不深不浅地挨着，没有这条
+            // 线整块面板就没有形状。
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                .strokeBorder(Color(uiColor: .separator).opacity(0.5), lineWidth: 1)
+                .strokeBorder(Color(uiColor: .separator), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
         // 蒙层与面板同尺寸，所以直接盖在它上面。多一层 `overlay` 而不是让面板为它让位：
@@ -153,16 +157,20 @@ struct TerminalVoiceDock: View {
     }
 
     /// 正在认出来的字：已定稿的正常色，还在变的次要色，末尾一根光标。
+    ///
+    /// **三段都写明颜色，一段都不靠继承。** 已定稿那一段曾经是唯一没有写明的一处
+    /// （气泡那版有，换成面板时丢了），它继承到的东西在不同的底子上不一定是字色 ——
+    /// 屏幕上就是「字在、看不见」。
     private var transcript: some View {
         let text: Text
         if presentation.text.isEmpty {
-            text = Text(verbatim: presentation.placeholder).foregroundStyle(.secondary)
+            text = Text(verbatim: presentation.placeholder).foregroundStyle(Color.secondary)
         } else {
             let caret = presentation.text.caret
                 ? Text(verbatim: "▏").foregroundStyle(Self.recordingColor)
                 : Text(verbatim: "")
-            text = Text(presentation.text.stable)
-                + Text(presentation.text.unstable).foregroundStyle(.secondary)
+            text = Text(presentation.text.stable).foregroundStyle(Theme.ink)
+                + Text(presentation.text.unstable).foregroundStyle(Color.secondary)
                 + caret
         }
         return text
@@ -221,14 +229,13 @@ struct TerminalVoiceDock: View {
                 label: "固定",
                 armed: presentation.lockReady,
                 // `.opacity(1)` 不是多余的：`Theme.ink` 就是 `Color.primary`，而它当**填充**
-                // 用的时候按「主要前景」那一档算，画在材质上会透出底下的东西 —— 实测下来
-                // 是一块中间调的灰，「固定」两个字压在上面既不像选中、也读不清。加上这一档
-                // 才落成一个实色。app 里另外两个实心按钮（登录、开始对话）也是这么写的。
+                // 用的时候按「主要前景」那一档算，不带着这个透明度就落不成实色 —— 实测下来
+                // 是一块中间调的灰，「固定」两个字压在上面既不像选中、也读不清。app 里另外
+                // 两个实心按钮（登录、开始对话）也是这么写的。
                 fill: Theme.ink.opacity(1)
             )
         }
-        // 两半裁进面板的圆角里，各自上色。压着的那半是实心填充，没压着的那半是一块
-        // 系统灰 —— 「盖上来了一层」是看得出来的，而它不靠透光来说这件事。
+        // 两半裁进面板的圆角里，各自上色 —— 两块都是实色，没有一处靠透光说话。
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .animation(armAnimation, value: presentation.cancelReady)
     }
@@ -260,8 +267,8 @@ struct TerminalVoiceDock: View {
                 .opacity(armed ? 1 : 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // 没压着的那半压一层不带模糊的薄纱 —— 它盖住的是转写，不是要再糊一次背景。
-        .background(armed ? fill : Theme.paper.opacity(0.5))
+        // 没压着的那半是一块系统灰，不透明 —— 它盖住的是转写，不该透出什么来。
+        .background(armed ? fill : Color(uiColor: .secondarySystemBackground))
         // 一整半块蒙层是一个元素，不是「图标 + 字」两个：读屏读到它时要说的是「取消」，
         // 而不是先念一个没有名字的叉、再念「取消」。
         .accessibilityElement(children: .ignore)

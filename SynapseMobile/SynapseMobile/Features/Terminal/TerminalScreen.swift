@@ -438,9 +438,9 @@ struct TerminalScreen: View {
                             onCancelLocked: cancelLockedVoice
                         )
                         .fixedSize(horizontal: false, vertical: true)
-                        // 从下沿弹出来：小一点、淡一点起步，过冲一下再落定 ——
-                        // 系统那些弹出面板就是这一下。缩放的支点放在下沿，所以它是
-                        // 从工具栏那一条线上长出来的，不是从自己中间涨开的。
+                        // 从下沿弹出来：小一点、淡一点起步，过冲一下就落定。缩放的支点
+                        // 放在下沿，所以它是从工具栏那一条线上长出来的，不是从自己中间
+                        // 涨开的。
                         //
                         // 这一下能留着，是因为起麦克风已经不在主线程上了（见
                         // `AudioCapture.startOffMainThread`）：逐帧推进的动画最怕
@@ -448,13 +448,14 @@ struct TerminalScreen: View {
                         .transition(
                             reduceMotion
                                 ? .opacity
-                                : .scale(scale: 0.88, anchor: .bottom).combined(with: .opacity)
+                                : .scale(scale: 0.9, anchor: .bottom).combined(with: .opacity)
                         )
                     }
                 }
                 .frame(height: 0, alignment: .bottom)
+                // 干脆的一下：过冲只有一点点，落定得快。再弹就是玩具了。
                 .animation(
-                    reduceMotion ? nil : .bouncy(duration: 0.38, extraBounce: 0.16),
+                    reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
                     value: voicePresentation.panelVisible
                 )
             }
@@ -952,10 +953,14 @@ struct TerminalScreen: View {
     /// 压着这一格，写在这里的字正好被自己的手盖住，而按住期间手一定压着。
     private func holdToTalk(_ presentation: HoldToTalkPresentation) -> some View {
         // 录着就是红的（苹果给「正在录」的颜色），固定之后翻成实心那一对，其余时候
-        // 是这根栏上普通的输入格。
+        // 是这根栏上普通的输入格。三种底都是实色，文字各自配一个在这个底上读得出来的
+        // 颜色 —— 明暗两边都成立。
+        //
+        // 固定那一种的 `.opacity(1)` 不是多余的：`Theme.ink` 就是 `Color.primary`，当
+        // **填充**用的时候按「主要前景」那一档算，不带着这个透明度就落不成实色。
         let fill: AnyShapeStyle = presentation.recording
             ? AnyShapeStyle(Color(uiColor: .systemRed))
-            : presentation.locked ? AnyShapeStyle(Theme.ink) : AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
+            : presentation.locked ? AnyShapeStyle(Theme.ink.opacity(1)) : AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
         return Text(presentation.barLabel)
             .font(.subheadline)
             .foregroundStyle(presentation.recording || presentation.locked ? Theme.paper : Theme.ink)
@@ -1133,16 +1138,6 @@ struct TerminalScreen: View {
         .opacity(presentation.barIsVoice ? 0.4 : 1)
         .accessibilityIdentifier("send")
         .accessibilityLabel("发送")
-    }
-
-    // MARK: - 手指上方的气泡
-
-    private func bubbleEcho(_ tone: HoldToTalkPresentation.Tone) -> Color {
-        switch tone {
-        case .normal: return Color.secondary
-        case .cancel: return .white.opacity(0.7)
-        case .lock: return Theme.paper.opacity(0.65)
-        }
     }
 
     private func sendDraft() {
