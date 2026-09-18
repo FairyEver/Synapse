@@ -217,6 +217,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -251,6 +252,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -284,6 +286,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
       handleDesktopPresence: presence,
     })
 
@@ -557,6 +560,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress,
       handleToolbar: vi.fn(),
+      handleQuickPhrases: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -598,6 +602,7 @@ describe("LiveDesktopGateway", () => {
       handleIntentResult: vi.fn(),
       handleTransferProgress: vi.fn(),
       handleToolbar,
+      handleQuickPhrases: vi.fn(),
       handleDesktopPresence: vi.fn(),
     })
 
@@ -618,6 +623,88 @@ describe("LiveDesktopGateway", () => {
       desktopClientInstanceId: "client-a",
       revision: 1,
       buttons: [{ id: "enter", label: "回车", group: "key", action: { type: "key", key: "Enter" } }],
+    })
+  })
+
+  it("hands a desktop's quick phrases to the relay instead of the unhandled fallback", () => {
+    /*
+     * The same fallback the toolbar's own case guards against, and the same silent
+     * failure: a type missing from `handleMobileRelayMessage` is only ever logged,
+     * so from the phone's side it is indistinguishable from a computer whose user
+     * has configured nothing — the second segment of the panel simply never appears,
+     * and nothing anywhere says why.
+     */
+    const socket = new FakeSocket()
+    const handleQuickPhrases = vi.fn()
+    const gateway = createGateway({
+      registry: { listOnlineByUser: vi.fn().mockReturnValue([createClient({ clientInstanceId: "client-a" })]) },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
+      handleQuickPhrases,
+      handleDesktopPresence: vi.fn(),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.mobileQuickPhrases,
+      id: "msg-quick-phrases",
+      sentAt: "2026-06-06T10:00:04.000Z",
+      payload: {
+        desktopClientInstanceId: "client-a",
+        revision: 1,
+        phrases: [{ id: "q1", content: "整理成提交说明" }],
+      },
+    }))
+
+    expect(handleQuickPhrases).toHaveBeenCalledWith("user-1", {
+      desktopClientInstanceId: "client-a",
+      revision: 1,
+      phrases: [{ id: "q1", content: "整理成提交说明" }],
+    })
+    // Not answered: a relayed family goes to the phones, never back to the sender as
+    // a pong. The welcome is the only thing this desktop should have heard.
+    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual(["live.welcome"])
+  })
+
+  it("relays a computer that has no quick phrases rather than dropping the message", () => {
+    // The empty list is the *answer* "this computer has none", and it is the only
+    // thing that tells a phone its second segment should exist but be empty. A
+    // gateway that treated it as a no-op would leave the phone unable to tell that
+    // computer apart from one too old to know about phrases at all.
+    const socket = new FakeSocket()
+    const handleQuickPhrases = vi.fn()
+    const gateway = createGateway({
+      registry: { listOnlineByUser: vi.fn().mockReturnValue([createClient({ clientInstanceId: "client-a" })]) },
+    })
+    gateway.setMobileRelayHandler({
+      handleSummary: vi.fn(),
+      handleFrame: vi.fn(),
+      handleIntentResult: vi.fn(),
+      handleTransferProgress: vi.fn(),
+      handleToolbar: vi.fn(),
+      handleQuickPhrases,
+      handleDesktopPresence: vi.fn(),
+    })
+
+    gateway.bindAuthenticatedSocket(socket as never, { userId: "user-1" })
+    socket.emit("message", JSON.stringify(helloFor("client-a")))
+    socket.emit("message", JSON.stringify({
+      type: LIVE_MESSAGE_TYPES.mobileQuickPhrases,
+      id: "msg-quick-phrases-empty",
+      sentAt: "2026-06-06T10:00:05.000Z",
+      payload: { desktopClientInstanceId: "client-a", revision: 2, phrases: [] },
+    }))
+
+    expect(handleQuickPhrases).toHaveBeenCalledWith("user-1", {
+      desktopClientInstanceId: "client-a",
+      revision: 2,
+      phrases: [],
     })
   })
 

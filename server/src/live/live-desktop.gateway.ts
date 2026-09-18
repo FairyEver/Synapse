@@ -10,6 +10,7 @@ import {
   type LiveDesktopServerMessage,
   type MobileFramePayload,
   type MobileIntentResultPayload,
+  type MobileQuickPhrasesPayload,
   type MobileSummaryPayload,
   type MobileToolbarPayload,
   type MobileTransferProgressPayload,
@@ -74,6 +75,19 @@ export interface LiveMobileRelayHandler {
    * offline is not a button.
    */
   readonly handleToolbar: (userId: string, payload: MobileToolbarPayload) => void
+  /**
+   * The 快捷输入 sentences one of a user's computers offers its phones.
+   *
+   * Separate from `handleToolbar` because the two come from two different desktop
+   * apps and change on two different events, and because the phone needs to tell
+   * the two apart: having received no phrases is a different answer from having
+   * received an empty list, and one handler carrying both would erase that.
+   *
+   * Never stored, for `handleToolbar`'s reason: a sentence belonging to a computer
+   * that has since gone away would put text in the phone's composer that its author
+   * can no longer edit.
+   */
+  readonly handleQuickPhrases: (userId: string, payload: MobileQuickPhrasesPayload) => void
   /**
    * One of the user's computers became reachable, or stopped being reachable.
    * Fired on every change, so it carries the current list rather than a delta.
@@ -427,7 +441,8 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
         || message.type === LIVE_MESSAGE_TYPES.mobileFrame
         || message.type === LIVE_MESSAGE_TYPES.mobileIntentResult
         || message.type === LIVE_MESSAGE_TYPES.mobileTransferProgress
-        || message.type === LIVE_MESSAGE_TYPES.mobileToolbar) {
+        || message.type === LIVE_MESSAGE_TYPES.mobileToolbar
+        || message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) {
         // Terminal payloads for phones go to the relay, not back to the sender.
         // Without a relay installed they are dropped rather than answered.
         this.handleMobileRelayMessage(auth.userId, message)
@@ -605,6 +620,10 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
       if (message.type === LIVE_MESSAGE_TYPES.mobileToolbar) {
         relay.handleToolbar(userId, message.payload)
+        return
+      }
+      if (message.type === LIVE_MESSAGE_TYPES.mobileQuickPhrases) {
+        relay.handleQuickPhrases(userId, message.payload)
         return
       }
       // Named rather than cast into the last handler that happens to accept this

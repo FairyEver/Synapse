@@ -134,3 +134,83 @@ describe("MobileLiveRelayService toolbar", () => {
     expect(() => service.handleToolbar("user-1", payload)).not.toThrow()
   })
 })
+
+/**
+ * The same fanout-and-forget shape as the toolbar, with one thing the toolbar cannot
+ * pin down: an empty list has to be *delivered*. That is what tells a phone its
+ * second segment exists and its user has not configured anything yet — as opposed to
+ * a computer that has never sent this message, which must leave the phone with no
+ * second segment at all.
+ */
+describe("MobileLiveRelayService quick phrases", () => {
+  function createHarness(phones: readonly string[] = ["phone-1", "phone-2"]) {
+    const sendToMobile = vi.fn((_input: Parameters<MobileLiveFanout["sendToMobile"]>[0]) => "sent" as const)
+    const fanout: MobileLiveFanout = { sendToMobile }
+    const service = new MobileLiveRelayService(
+      { listOnlineByUser: vi.fn(() => phones.map((clientInstanceId) => ({ clientInstanceId }))) } as never,
+      {} as never,
+      {} as never,
+    )
+    service.setFanout(fanout)
+    return { service, sendToMobile }
+  }
+
+  const payload = {
+    desktopClientInstanceId: "client-a",
+    revision: 1,
+    phrases: [{ id: "q1", content: "整理成提交说明" }],
+  }
+
+  it("reaches every phone of the account and no other account's", () => {
+    // Fanned out like the toolbar: the payload names its own computer, so a phone
+    // showing a different one discards it. The registry is asked by `userId`, which
+    // is what keeps one account's sentences away from another's.
+    const { service, sendToMobile } = createHarness()
+
+    service.handleQuickPhrases("user-1", payload)
+
+    expect(sendToMobile).toHaveBeenCalledTimes(2)
+    expect(sendToMobile.mock.calls.map((call) => call[0].clientInstanceId)).toEqual(["phone-1", "phone-2"])
+    expect(sendToMobile.mock.calls.every((call) => call[0].userId === "user-1")).toBe(true)
+    expect(sendToMobile.mock.calls[0]?.[0]).toMatchObject({
+      message: { type: "mobile.quickPhrases", payload },
+    })
+  })
+
+  it("delivers an empty list rather than treating it as nothing to say", () => {
+    const { service, sendToMobile } = createHarness(["phone-1"])
+
+    service.handleQuickPhrases("user-1", { ...payload, revision: 2, phrases: [] })
+
+    expect(sendToMobile).toHaveBeenCalledTimes(1)
+    expect(sendToMobile.mock.calls[0]?.[0].message.payload).toEqual({
+      desktopClientInstanceId: "client-a",
+      revision: 2,
+      phrases: [],
+    })
+  })
+
+  it("sends the list again on every call rather than remembering it", () => {
+    // Nothing is cached here, for the toolbar's reason: a list belonging to a
+    // computer that has since gone away would put the user's own sentences into a
+    // phone's composer with no machine left to run them on — and no way for their
+    // author to edit them. Deduplicating is the desktop's job, one layer closer to
+    // the change, where an idle computer costs zero traffic.
+    const { service, sendToMobile } = createHarness()
+
+    service.handleQuickPhrases("user-1", payload)
+    service.handleQuickPhrases("user-1", payload)
+
+    expect(sendToMobile).toHaveBeenCalledTimes(4)
+  })
+
+  it("stays quiet when no fanout is installed", () => {
+    const service = new MobileLiveRelayService(
+      { listOnlineByUser: vi.fn(() => []) } as never,
+      {} as never,
+      {} as never,
+    )
+
+    expect(() => service.handleQuickPhrases("user-1", payload)).not.toThrow()
+  })
+})

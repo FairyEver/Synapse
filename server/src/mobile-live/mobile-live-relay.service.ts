@@ -8,6 +8,7 @@ import {
   type MobileIntent,
   type MobileIntentResult,
   type MobileIntentResultPayload,
+  type MobileQuickPhrasesPayload,
   type MobileSummaryPayload,
   type MobileToolbarPayload,
   type MobileTransferProgressPayload,
@@ -76,6 +77,7 @@ export class MobileLiveRelayService implements OnModuleInit {
       handleIntentResult: (userId, payload) => this.handleIntentResult(userId, payload),
       handleTransferProgress: (userId, payload) => this.handleTransferProgress(userId, payload),
       handleToolbar: (userId, payload) => this.handleToolbar(userId, payload),
+      handleQuickPhrases: (userId, payload) => this.handleQuickPhrases(userId, payload),
       handleDesktopPresence: (userId, clientInstanceIds) =>
         this.handleDesktopPresence(userId, clientInstanceIds),
     })
@@ -197,6 +199,29 @@ export class MobileLiveRelayService implements OnModuleInit {
    */
   handleToolbar(userId: string, payload: MobileToolbarPayload): void {
     const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileToolbar, payload, envelopeMeta())
+    for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
+      this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
+    }
+  }
+
+  /**
+   * The 快捷输入 sentences one of the user's computers keeps, for its phones to tap
+   * into a composer instead of typing.
+   *
+   * Fanned out and not cached, on exactly `handleToolbar`'s terms: the payload names
+   * its own computer, so a phone looking at a different one filters it out for the
+   * cost of a comparison, and a phone that connects mid-session is answered by the
+   * desktop when its `sync` intent arrives rather than by anything held here. A cache
+   * would only ever serve a phone whose computer has since gone, and it would be
+   * wrong there: the sentences are the user's own text and its author could no longer
+   * change them.
+   *
+   * Not a request either — no `pendingIntents`, no result, no retry. A phone that
+   * misses this one asks again the next time it attaches, and until then it shows the
+   * last list it had, which is what the toolbar does.
+   */
+  handleQuickPhrases(userId: string, payload: MobileQuickPhrasesPayload): void {
+    const message = createLiveEnvelope(LIVE_MESSAGE_TYPES.mobileQuickPhrases, payload, envelopeMeta())
     for (const client of this.mobileRegistry.listOnlineByUser(userId)) {
       this.fanout?.sendToMobile({ userId, clientInstanceId: client.clientInstanceId, message })
     }
