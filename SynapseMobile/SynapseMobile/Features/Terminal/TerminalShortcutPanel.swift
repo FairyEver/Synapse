@@ -118,42 +118,42 @@ struct TerminalShortcutPanel: View {
 
     // MARK: - 快捷命令
 
-    /// The commands, wrapped rather than scrolled sideways.
+    /// The commands, one per row — the shape the sentences take one segment over.
     ///
-    /// A group per grid, with the rule between the grids: the line then spans the panel
-    /// on its own, which is the one thing a grid cannot be asked to draw inside itself.
-    /// It is also the same statement the bar's vertical line makes — cross it, and the
-    /// commands change kind — which is what keeps the two views of one list readable as
-    /// one list.
+    /// They were a two-column grid at first, on the argument that command labels are
+    /// short and a grid shows more of them at once. That argument does not survive a real
+    /// list: 「提交开发测试部署」 is an entirely ordinary name and it wraps inside its
+    /// cell, which makes that row twice the height of the one beside it and stops the
+    /// grid reading as a grid at all. One command per row, one line each, is what the
+    /// panel is shaped like now.
+    ///
+    /// A section per group, which is how a grouped list says "these are not the same
+    /// kind of thing" — the job the full-width rule used to do, done the way the system
+    /// does it. The rows are tinted rather than plain, unlike the sentences: these run
+    /// something, and every iOS list says so the same way.
     private var commands: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(Array(commandGroups.enumerated()), id: \.offset) { index, group in
-                    if index > 0 { Divider() }
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 88), spacing: 8)],
-                        spacing: 8
-                    ) {
-                        ForEach(group) { button in
-                            Button(button.label) {
-                                Haptics.select()
-                                onRun(button)
-                            }
-                            // White on the panel's grey, which is the bar's own pill the
-                            // other way round: the resting fill is the secondary
-                            // background, and that is exactly the colour of this sheet.
-                            .terminalKeyPill(onGroupedBackground: true)
-                            .buttonStyle(.plain)
-                            .disabled(!isRunning)
-                            .opacity(isRunning ? 1 : 0.4)
-                            .accessibilityIdentifier("shortcut-\(button.id)")
+        List {
+            ForEach(Array(commandGroups.enumerated()), id: \.offset) { _, group in
+                Section {
+                    ForEach(group) { button in
+                        Button(button.label) {
+                            Haptics.select()
+                            onRun(button)
                         }
+                        // One line always, ellipsised at the tail, for the reason the
+                        // sentences are: a label allowed to wrap would make one row
+                        // taller than its neighbours.
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        // Greyed by the system rather than by an opacity of ours, so a
+                        // stopped terminal looks like every other disabled row.
+                        .disabled(!isRunning)
+                        .accessibilityIdentifier("shortcut-\(button.id)")
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
+        .listStyle(.insetGrouped)
     }
 
     /// The buttons, split where the computer says the list changes kind.
@@ -261,7 +261,13 @@ private struct PhrasePreviewSheet: View {
                 // is take it.
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(.horizontal, 16)
+                // Room for the sheet's drag indicator, which is drawn over this content
+                // rather than above it — the same clearance the panel itself takes, and
+                // for the same reason. Without it the sentence starts underneath the
+                // grabber.
+                .padding(.top, 24)
+                .padding(.bottom, 16)
                 .accessibilityIdentifier("phrase-preview-text")
         }
     }

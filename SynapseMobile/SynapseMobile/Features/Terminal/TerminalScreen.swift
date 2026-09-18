@@ -735,6 +735,7 @@ struct TerminalScreen: View {
                     .font(.system(size: 16))
             }
             .terminalKeyPill(pressed: shortcutPanelPresented)
+            .buttonStyle(.plain)
             .accessibilityLabel("全部指令")
             .accessibilityIdentifier("toolbar-all")
         }
