@@ -5,8 +5,8 @@ import Foundation
 /// 与 `VoiceInputController` 同一个形状：不认识视图，只认识控制器交出来的状态，能被
 /// 单测完整覆盖。视图负责画，判定负责说 —— 文案只在这一个文件里出现一次。
 ///
-/// 这一版的排布照着产品负责人的可交互原型（`长按说话录音交互设计`）来：按住之后
-/// **输入栏上方浮出一层**，上面是两颗大方块（取消 / 固定），下面是录音面板。
+/// 这一版的排布：按住之后**输入栏上方浮出一块录音面板**；手指往上滑压到面板上，面板
+/// 上盖一层与它同样尺寸、左右一分为二的蒙层（左取消 / 右固定）。
 struct HoldToTalkPresentation: Equatable {
     /// 转写的两级呈现：已定稿的正常色，还在变的当前句次要色，末尾一个光标。
     struct Transcript: Equatable {
@@ -49,9 +49,9 @@ struct HoldToTalkPresentation: Equatable {
     let recording: Bool
     /// 输入栏那一格上写的字。
     let barLabel: String
-    /// 两颗方块出现了 —— 正在录、还没固定的时候。
-    let zonesVisible: Bool
-    /// 手指已经滑到某一颗上面。它决定两颗方块各自的样子。
+    /// 面板上那层蒙层盖上了 —— 手指正压着面板，松手会落在左半或右半。
+    let choicesVisible: Bool
+    /// 手指压在哪一半上。它决定蒙层两半各自的样子。
     let cancelReady: Bool
     let lockReady: Bool
     /// 录音面板出现了：录着、收尾中、或者已固定。
@@ -82,10 +82,12 @@ struct HoldToTalkPresentation: Equatable {
     static let releaseToPinLabel = "松手 固定"
     static let finishLabel = "完成"
 
-    /// 面板最后一行。默认那句把三条出路一次说完，省得用户去试。
-    static let idleHint = "上滑选择 取消 / 固定 · 松手发送"
-    static let cancelHint = "松手取消本次录音"
-    static let pinHint = "松手固定，继续说话"
+    /// 面板最后一行。
+    ///
+    /// 它只在**手指不在面板上**的时候看得见 —— 手指一压上去，整块面板就被蒙层盖住了。
+    /// 所以这一句要说的是那两个去处在哪，而不是「松手会怎样」：后者已经写在输入栏那一格
+    /// 上了（`barLabel`），这里再说一遍是同一件事在两处说。
+    static let idleHint = "上滑到面板 · 左取消 右固定"
     static let lockedHint = "点击底部「完成」结束并发送"
 
     /// 面板第一行左边。
@@ -109,7 +111,6 @@ struct HoldToTalkPresentation: Equatable {
         transcript: AsrTranscript = .empty,
         elapsed: TimeInterval = 0,
         gesture: HoldToTalkGesture.Outcome = .speaking,
-        zonesRevealed: Bool = false,
         locked: Bool = false
     ) {
         let text = Transcript(transcript)
@@ -124,8 +125,9 @@ struct HoldToTalkPresentation: Equatable {
         barIsVoice = voiceMode || phase != .idle
         recording = listening && !locked
         barLabel = Self.labelForBar(recording: listening && !locked, locked: locked, gesture: gesture)
-        // 两块由「往上滑」请出来，不是一按就亮 —— 所以录着还不够，还得用户表达过意图。
-        zonesVisible = recording && zonesRevealed
+        // 蒙层不是一按就盖：手指得真的压到面板上（`gesture` 就是「压在面板上」这件事
+        // 判出来的结果），所以录着还不够。
+        choicesVisible = recording && gesture != .speaking
         cancelReady = recording && gesture == .cancelling
         lockReady = recording && gesture == .locking
         panelVisible = listening || wrappingUp || locked
@@ -137,7 +139,7 @@ struct HoldToTalkPresentation: Equatable {
         placeholder = text.isEmpty
             ? (phase == .failed(.noSpeech) ? VoiceInputController.Failure.noSpeech.message : Self.recordingState)
             : ""
-        hint = Self.hint(visible: listening || wrappingUp || locked, locked: locked, wrappingUp: wrappingUp, gesture: gesture)
+        hint = Self.hint(visible: listening || wrappingUp || locked, locked: locked, wrappingUp: wrappingUp)
         timerText = Self.timer(elapsed)
         timerSeconds = max(0, Int(elapsed))
         controlsEnabled = !(listening || wrappingUp) && !locked
@@ -170,17 +172,12 @@ struct HoldToTalkPresentation: Equatable {
     private static func hint(
         visible: Bool,
         locked: Bool,
-        wrappingUp: Bool,
-        gesture: HoldToTalkGesture.Outcome
+        wrappingUp: Bool
     ) -> String {
         guard visible else { return "" }
         if locked { return lockedHint }
         if wrappingUp { return "转文字中" }
-        switch gesture {
-        case .cancelling: return cancelHint
-        case .locking: return pinHint
-        case .speaking: return idleHint
-        }
+        return idleHint
     }
 
     /// `00:07`。分和秒都补零，好在录音时数字不跳宽度。

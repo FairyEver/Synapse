@@ -5,7 +5,7 @@ import Testing
 
 /// 按住说话时浮层与输入栏各显示什么，以及说完之后那句字往哪里落。
 ///
-/// 每一条钉的都是「屏幕上会不会说错话」：固定了还在教人松手、手指走了两块方块还挂着、
+/// 每一条钉的都是「屏幕上会不会说错话」：固定了还在教人松手、手指走了蒙层还盖着、
 /// 一个字都没听到却把发送键点亮。判定顺序本身就是规格，所以顺序错了这里会红。
 struct HoldToTalkPresentationTests {
     private func presentation(
@@ -15,7 +15,6 @@ struct HoldToTalkPresentationTests {
         hasDraft: Bool = false,
         elapsed: TimeInterval = 0,
         gesture: HoldToTalkGesture.Outcome = .speaking,
-        zonesRevealed: Bool = false,
         locked: Bool = false
     ) -> HoldToTalkPresentation {
         HoldToTalkPresentation(
@@ -25,7 +24,6 @@ struct HoldToTalkPresentationTests {
             transcript: transcript,
             elapsed: elapsed,
             gesture: gesture,
-            zonesRevealed: zonesRevealed,
             locked: locked
         )
     }
@@ -38,7 +36,7 @@ struct HoldToTalkPresentationTests {
         let value = presentation(.idle, voiceMode: false)
         #expect(value.barIsVoice == false)
         #expect(value.recording == false)
-        #expect(value.zonesVisible == false)
+        #expect(value.choicesVisible == false)
         #expect(value.panelVisible == false)
         #expect(value.controlsEnabled)
     }
@@ -76,16 +74,17 @@ struct HoldToTalkPresentationTests {
         #expect(value.controlsEnabled == false)
         #expect(value.panelVisible)
         #expect(value.tone == .normal)
-        #expect(value.hint == "上滑选择 取消 / 固定 · 松手发送")
+        #expect(value.hint == "上滑到面板 · 左取消 右固定")
     }
 
-    /// **两块方块不是一按就亮。** 它们由「往上滑」请出来 —— 一按就摆出两个选项，等于
-    /// 在用户还没表达意图之前先替他决定这一句可能要说错。
-    @Test func theTwoBlocksWaitForTheUpwardSlide() {
-        #expect(presentation(.listening).zonesVisible == false)
-        #expect(presentation(.listening, zonesRevealed: true).zonesVisible)
-        // 固定之后手指早走了，两块没有存在的理由。
-        #expect(presentation(.listening, zonesRevealed: true, locked: true).zonesVisible == false)
+    /// **蒙层不是一按就盖。** 它由「往上滑压到面板上」请出来 —— 一按就摆出两个选项，
+    /// 等于在用户还没表达意图之前先替他决定这一句可能要说错。
+    @Test func theChoiceMaskWaitsForTheFingerToReachThePanel() {
+        #expect(presentation(.listening).choicesVisible == false)
+        #expect(presentation(.listening, gesture: .cancelling).choicesVisible)
+        #expect(presentation(.listening, gesture: .locking).choicesVisible)
+        // 固定之后手指早走了，蒙层没有存在的理由。
+        #expect(presentation(.listening, gesture: .locking, locked: true).choicesVisible == false)
     }
 
     /// 面板里一个字都还没有时得说点什么，否则按住的那几秒是一片空白。
@@ -110,33 +109,35 @@ struct HoldToTalkPresentationTests {
         #expect(value.placeholder.isEmpty)
     }
 
-    // MARK: - 滑到某一块上面
+    // MARK: - 压在面板的哪一半上
 
-    @Test func stoppingOnTheCancelBlockReadiesTheCancel() {
-        let value = presentation(.listening, spoken, gesture: .cancelling, zonesRevealed: true)
+    @Test func pressingTheLeftHalfReadiesTheCancel() {
+        let value = presentation(.listening, spoken, gesture: .cancelling)
+        #expect(value.choicesVisible)
         #expect(value.cancelReady)
         #expect(value.lockReady == false)
         #expect(value.tone == .cancel)
-        #expect(value.hint == "松手取消本次录音")
         #expect(value.barLabel == "松手 取消")
+        // 面板这一行此刻被蒙层盖着，它说什么是「手指不在面板上」时才需要管的事。
+        #expect(value.hint == "上滑到面板 · 左取消 右固定")
     }
 
-    @Test func stoppingOnThePinBlockReadiesTheLock() {
-        let value = presentation(.listening, spoken, gesture: .locking, zonesRevealed: true)
+    @Test func pressingTheRightHalfReadiesTheLock() {
+        let value = presentation(.listening, spoken, gesture: .locking)
+        #expect(value.choicesVisible)
         #expect(value.lockReady)
         #expect(value.cancelReady == false)
         #expect(value.tone == .lock)
-        #expect(value.hint == "松手固定，继续说话")
         #expect(value.barLabel == "松手 固定")
     }
 
-    /// 滑回两块之外要退干净：配色、提示、两块的高亮一起复原。
-    @Test func slidingBackUndoesAllThreeSignals() {
-        let value = presentation(.listening, spoken, gesture: .speaking, zonesRevealed: true)
+    /// 手指滑下面板要退干净：蒙层、配色、输入栏那一格的三个信号一起复原。
+    @Test func slidingBackOffThePanelUndoesAllOfThem() {
+        let value = presentation(.listening, spoken, gesture: .speaking)
+        #expect(value.choicesVisible == false)
         #expect(value.cancelReady == false)
         #expect(value.lockReady == false)
         #expect(value.tone == .normal)
-        #expect(value.hint == "上滑选择 取消 / 固定 · 松手发送")
         #expect(value.barLabel == "松手 发送")
     }
 
@@ -144,12 +145,12 @@ struct HoldToTalkPresentationTests {
 
     /// 手指已经松开了，这时候还摆着一句「松手取消」是一句作废的指导。
     @Test func wrappingUpIgnoresTheGesture() {
-        let value = presentation(.finalizing, spoken, gesture: .cancelling, zonesRevealed: true)
+        let value = presentation(.finalizing, spoken, gesture: .cancelling)
         #expect(value.hint == "转文字中")
         #expect(value.cancelReady == false)
         #expect(value.lockReady == false)
         #expect(value.tone == .normal)
-        #expect(value.zonesVisible == false)
+        #expect(value.choicesVisible == false)
     }
 
     /// 面板要留到文字落定为止：先消失再冒字是两段感。
@@ -168,7 +169,7 @@ struct HoldToTalkPresentationTests {
         #expect(value.recording)
         #expect(value.panelVisible)
         #expect(value.placeholder == "没有听到声音")
-        #expect(value.hint == "上滑选择 取消 / 固定 · 松手发送")
+        #expect(value.hint == "上滑到面板 · 左取消 右固定")
     }
 
     /// 已经听到的字比失败本身重要。
@@ -190,12 +191,12 @@ struct HoldToTalkPresentationTests {
 
     // MARK: - 固定
 
-    /// 固定之后手指走了，面板接着显示同一段字 —— 只是「走哪条路」那两块收起来了。
-    @Test func lockingKeepsThePanelAndTakesTheTwoBlocksAway() {
-        let value = presentation(.listening, spoken, zonesRevealed: true, locked: true)
+    /// 固定之后手指走了，面板接着显示同一段字 —— 只是那层「走哪条路」的蒙层收起来了。
+    @Test func lockingKeepsThePanelAndTakesTheChoiceMaskAway() {
+        let value = presentation(.listening, spoken, locked: true)
         #expect(value.locked)
         #expect(value.panelVisible)
-        #expect(value.zonesVisible == false)
+        #expect(value.choicesVisible == false)
         #expect(value.stateText == "已固定 · 持续录音")
         #expect(value.text.stable == "把日志拉出来")
         // 那一格画的已经是「完成」，不再是按住说话。
@@ -206,9 +207,10 @@ struct HoldToTalkPresentationTests {
     /// 固定之后手指不在了，手势就该停止说话 —— 否则「松手取消」会挂在一个已经
     /// 松开的屏幕上。
     @Test func aLockedBarStopsSpeakingForTheFinger() {
-        let value = presentation(.listening, spoken, gesture: .cancelling, zonesRevealed: true, locked: true)
+        let value = presentation(.listening, spoken, gesture: .cancelling, locked: true)
         #expect(value.cancelReady == false)
         #expect(value.lockReady == false)
+        #expect(value.choicesVisible == false)
         #expect(value.tone == .lock)
         #expect(value.controlsEnabled == false)
     }

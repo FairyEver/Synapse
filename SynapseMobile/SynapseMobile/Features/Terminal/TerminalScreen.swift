@@ -44,18 +44,15 @@ struct TerminalScreen: View {
     /// `DragGesture` 只给按下、拖动、松开三种回调，「按下」在这一串里就是**第一次**
     /// `onChanged` —— 没有单独的 down 事件，所以这个闩得自己记。
     @State private var holdLatched = false
-    /// 这次按住现在算哪一态。视图只负责把坐标喂进 `HoldToTalkGesture`，判定不在
+    /// 手指压到了面板的哪一半。视图只负责把坐标喂进 `HoldToTalkGesture`，判定不在
     /// 这里（设计文档 §6）。
     @State private var holdZone: HoldToTalkGesture.Outcome = .speaking
-    /// 两块方块亮出来了没。由往上滑请出来，不是一按就亮。
-    @State private var zonesShown = false
-    /// 两块方块**量出来的**位置，报在手势所用的那个坐标系里。
+    /// 录音面板**量出来的**位置，报在手势所用的那个坐标系里。
     ///
-    /// 不自己按宽度算：浮层的左右内边距、两块的间距、以及将来可能出现的任何变化都会
-    /// 让算式和实际差一点，而这一点正好决定手指停在边上时算不算选中。量出来就没有
-    /// 第二份真相。
-    @State private var cancelZoneRect: CGRect = .zero
-    @State private var lockZoneRect: CGRect = .zero
+    /// 不自己按宽度算：浮层的左右内边距、内边距、以及将来可能出现的任何变化都会让算式
+    /// 和实际差一点，而这一点正好决定手指停在边界上时算不算压上去了、压在哪一半。量
+    /// 出来就没有第二份真相 —— 蒙层画出来的那条中线，用的也是这一块。
+    @State private var voicePanelRect: CGRect = .zero
     /// 收尾只能走一次。失败可能与松手撞在一起，两个 `confirm()` 同时进来会把这段
     /// 录音提交两遍。
     @State private var settlingVoice = false
@@ -396,8 +393,7 @@ struct TerminalScreen: View {
                 if voicePresentation.panelVisible {
                     TerminalVoiceDock(
                         presentation: voicePresentation,
-                        cancelZoneRect: $cancelZoneRect,
-                        lockZoneRect: $lockZoneRect,
+                        panelRect: $voicePanelRect,
                         onCancelLocked: cancelLockedVoice
                     )
                     .fixedSize(horizontal: false, vertical: true)
@@ -852,7 +848,6 @@ struct TerminalScreen: View {
             transcript: voice.transcript,
             elapsed: voice.elapsed,
             gesture: holdZone,
-            zonesRevealed: zonesShown,
             locked: voiceGrid.isLocked
         )
     }
@@ -881,18 +876,11 @@ struct TerminalScreen: View {
         .accessibilityValue(presentation.barIsVoice ? "voice" : "keyboard")
     }
 
-    /// 按住期间两端给落点让出的宽度。
+    /// 语音态下顶上输入框那一格的东西：按住即录，上滑到面板选去路，松手落定。
     ///
-    /// 够宽到手指滑出去之后仍看得见落点，又不至于把中间那一格挤得说不了话。
-    private static let holdTargetsGutter: CGFloat = 76
-
-    /// 语音态下顶上输入框那一格的东西：按住即录，滑到两端选态，松手落定。
-    ///
-    /// 那一格本身只是被按住的地方。**两个落点画在整条栏的两端**（见 `inputBar`），不在
-    /// 这一格里面 —— 它们原先写在这一格的内侧，那是个错误：手指正压着这一格，写在这里
-    /// 的「取消 ←」和「→ 锁定」正好被自己的手盖住，用户看不到该往哪滑。提示只在按住
-    /// 期间有用，而按住期间手一定压着。挪到两端之后，滑出去、停在上面、松手这三步都
-    /// 发生在眼睛能看见的地方。
+    /// 那一格本身只是被按住的地方，也是**唯一写着「松手会发生什么」的地方** ——
+    /// 两个去路画在它上方的录音面板上（见 `TerminalVoiceDock`），不在这一格里：手指正
+    /// 压着这一格，写在这里的字正好被自己的手盖住，而按住期间手一定压着。
     private func holdToTalk(_ presentation: HoldToTalkPresentation) -> some View {
         // 录着就是红的（苹果给「正在录」的颜色），固定之后翻成实心那一对，其余时候
         // 是这根栏上普通的输入格。
@@ -919,52 +907,39 @@ struct TerminalScreen: View {
     /// `DragGesture(minimumDistance: 0)` 一步到位地给了按下、拖动、松开 —— 自己写
     /// UIKit 识别器只会多出一份要和 SwiftUI 布局对齐的状态。
     private var holdGesture: some Gesture {
-        // 位置报在**浮层所在的那个坐标系**里。要选的东西是上面那两块方块，判定就得
-        // 用它们真正的位置，而不是「手指往左滑了多少」—— 滑到哪一块上面是二维的事。
+        // 位置报在**浮层所在的那个坐标系**里。要选的东西是上面那块面板，判定就得用
+        // 它真正的位置，而不是「手指往哪边滑了多少」—— 压在哪一半上是二维的事。
         DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.voiceSpace))
             .onChanged { value in
                 if !holdLatched { beginHold() }
-                updateHold(at: value.location, from: value.startLocation.y)
+                updateHold(at: value.location)
             }
             .onEnded { _ in endHold() }
     }
 
-    /// 手指动了：先决定两块要不要亮出来，再决定它压在哪一块上。
+    /// 手指动了：它压在面板的左半还是右半，决定这一格现在说什么。
     ///
-    /// 两道阈值（原型 56 / 36）而不是一道：手指停在临界点上来回抖的时候，只有一道
-    /// 阈值会让两块一闪一闪。
-    private func updateHold(at point: CGPoint, from startY: CGFloat) {
-        let lifted = startY - point.y
-        if !zonesShown, lifted > Self.zoneReveal { zonesShown = true }
-        if zonesShown, lifted < Self.zoneRelease { zonesShown = false }
-
-        let next = zonesShown
-            ? HoldToTalkGesture.outcome(
-                at: point,
-                cancelZone: cancelZoneRect,
-                lockZone: lockZoneRect,
-                armed: holdZone
-            )
-            : .speaking
+    /// 判定只有一条 ——**压到面板上了没**。没压上去就是「松手发送」，压上去就按蒙层的
+    /// 左右分成取消 / 固定；所以「选左边」和「选右边」的总路程只有「输入栏到面板」这
+    /// 一段，而够得着的目标又是整块面板那么大的两半。
+    private func updateHold(at point: CGPoint) {
+        let next = HoldToTalkGesture.outcome(at: point, panel: voicePanelRect, armed: holdZone)
         // `onChanged` 每一帧都来，写一次状态就是一次整屏重算。
-        if next != holdZone { holdZone = next }
+        guard next != holdZone else { return }
+        holdZone = next
+        // 压上面板、换到另一半、掉回发送 —— 都是手指底下那层蒙层在变。手指这时候往往
+        // 压着屏幕，轻震一下是最省事的一条确认。
+        Haptics.select()
     }
 
-    /// 上滑多少才把两块亮出来，以及回落多少才收回去。
-    ///
-    /// 它是「我要选点什么」的那个起手动作，所以要比拇指一次抖动大得多；56 是原型给
-    /// 的数，正好与手势判定那两档外扩同一个量级。
-    private static let zoneReveal: CGFloat = 56
-    private static let zoneRelease: CGFloat = 36
-    /// 手势与两块方块共用的坐标系名字。
-    private static let voiceSpace = "terminalVoice" 
+    /// 手势与面板共用的坐标系名字。
+    private static let voiceSpace = "terminalVoice"
 
     private func beginHold() {
         holdLatched = true
         holdZone = .speaking
-        // 两块不是一按就亮：它们由「往上滑」这个动作请出来（`updateHold`）。一按就亮
+        // 蒙层不是一按就盖：它由「往上滑压到面板上」请出来（`updateHold`）。一按就盖
         // 等于在用户还没表达意图之前先摆出两个选项，而多数时候他要的只是说一句就发。
-        zonesShown = false
         // 上一次那句「没有听到声音」到此为止（§5.3）。
         emptyVoiceMessage = nil
         Haptics.record()
@@ -977,7 +952,6 @@ struct TerminalScreen: View {
         holdLatched = false
         let zone = holdZone
         holdZone = .speaking
-        zonesShown = false
 
         switch zone {
         case .cancelling:

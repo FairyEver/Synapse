@@ -2,41 +2,36 @@ import SwiftUI
 
 /// 按住说话时浮在输入栏上方的那一层。
 ///
-/// 形状照产品负责人的可交互原型（`长按说话录音交互设计`）：**上面两颗等宽的大方块**
-/// —— 手指上滑停在「取消」或「固定」上，松手就按停在哪一块办；**下面一块录音面板**
-/// —— 状态、计时、转写、以及把三条出路一次说完的一行提示。
+/// 只有一块**录音面板**：状态、计时、电平、转写，以及一行说清两个去处在哪的提示。
+/// 手指往上滑压到面板上，面板上就盖上一层与它**同样尺寸、左右一分为二**的蒙层 ——
+/// 左半「取消」、右半「固定」，压在哪一半，哪一半就填成实心并显出自己的名字。
+///
+/// 去路为什么长在**面板**上，而不是像上一版那样在面板上面另摆两颗方块：要够着那两颗
+/// 方块，手指得越过整块面板，而面板本身在按住期间是一块不接任何点击的空地 —— 拿它当
+/// 落点，滑动的总路程就只剩「输入栏到面板」这一段，滑到之后要选的那两半又是整块面板
+/// 那么大。省下的不只是距离，还有「往上再找一层」的那一次视线移动。
 ///
 /// 尺度和颜色一律用苹果自己的：字体全是语义字号，颜色全是系统语义色或本 app 已有的
-/// 那一对（`Theme.ink` / `Theme.paper`），间距取 8 / 12 / 16 这几档。只有原型里没有
-/// 对应物的两个高度写了常量，并在各自那里写明为什么是这个数。
-///
-/// 为什么做成浮层而不是像键盘那样占版面：这套交互要手指**停在某个位置**才选中，而那
-/// 两块必须和手指同时看得见。占版面会把终端挤上去，滑动过程中视线得在两处来回。
+/// 那一对（`Theme.ink` / `Theme.paper`），间距取 8 / 12 / 16 这几档。只有转写区的高度
+/// 写了常量，并在那里写明为什么是这个数。
 struct TerminalVoiceDock: View {
     let presentation: HoldToTalkPresentation
-    /// 两块方块的位置量出来报回去 —— 手势的命中判定用的就是它们。
-    @Binding var cancelZoneRect: CGRect
-    @Binding var lockZoneRect: CGRect
+    /// 面板量出来的位置，报在**手势所用的那个坐标系**里 —— 左右两半的判定用的就是它。
+    @Binding var panelRect: CGRect
     /// 固定之后面板上那枚「取消」。
     let onCancelLocked: () -> Void
 
-    /// 两颗方块之间的间距，以及方块与面板之间、整层与屏幕边缘之间的间距。
+    /// 面板与屏幕左、右、下三边之间的距离。
     ///
-    /// 三处都用 16：它们是同一种关系（两个并列的东西之间的距离），而 16 是这套界面
-    /// 里已经在用的档位，不引入新数值。
+    /// 三边同一个数：它们是同一种关系（浮层与屏幕边缘之间的距离）。下边这一份是后补的
+    /// —— 少了它，面板的圆角正好顶在工具栏的上沿，看着像被工具栏切掉了一块。
     private static let gutter: CGFloat = 16
-
-    /// 方块的高度。
-    ///
-    /// 它是**滑动目标**不是点按目标：手指在动，要够大够稳。取 88 = 两倍最小点按尺寸
-    /// （44），和系统对「一块大的、手指不用看就能停在上面」的取向一致。
-    private static let zoneHeight: CGFloat = 88
 
     /// 转写区的高度：正好三行正文。
     ///
     /// 固定而不是随字长，是因为按住的那几秒里每认出一个字面板就长高一点，手指底下
-    /// 正在滑的两块会跟着上下跳。三行是「够读到刚说的那句」和「不占掉太多终端」之间
-    /// 的取舍，按 `.body` 的行高算出来。
+    /// 正压着的那层蒙层会跟着上下跳。三行是「够读到刚说的那句」和「不占掉太多终端」
+    /// 之间的取舍，按 `.body` 的行高算出来。
     private static let transcriptHeight: CGFloat = 66
 
     /// 波形一根柱子的宽与高。
@@ -46,96 +41,23 @@ struct TerminalVoiceDock: View {
     private static let barWidth: CGFloat = 3
     private static let barHeight: CGFloat = 16
 
+    /// 面板与蒙层的圆角。
+    private static let cornerRadius: CGFloat = 12
+
     /// 正在录音的那个记号色。
     ///
     /// 红是苹果自己给「正在录」的颜色（录屏、录音时状态栏那一颗就是它），整个面板
-    /// 上那一点红、计时旁边的柱子都用它，两个方块里「取消」的实心填充也是它 ——
-    /// 这个界面上只有一个红，意思只有一个。
+    /// 上那一点红、计时旁边的柱子、以及蒙层左半的实心填充都用它 —— 这个界面上只有
+    /// 一个红，意思只有一个。
     private static let recordingColor = Color(uiColor: .systemRed)
 
-    /// 手势与方块共用的坐标系名字，与 `TerminalScreen` 里那一处必须是同一个字符串。
+    /// 手势与面板共用的坐标系名字，与 `TerminalScreen` 里那一处必须是同一个字符串。
     private static let voiceSpace = "terminalVoice"
 
     var body: some View {
-        VStack(spacing: Self.gutter) {
-            if presentation.zonesVisible {
-                HStack(spacing: Self.gutter) {
-                    zone(
-                        .cancel,
-                        icon: "xmark",
-                        label: "取消",
-                        armed: presentation.cancelReady,
-                        fill: Color(uiColor: .systemRed)
-                    )
-                    // 量出来的位置报回给手势，报在**手势所用的同一个坐标系**里。
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.voiceSpace)) }
-                        action: { cancelZoneRect = $0 }
-                    zone(
-                        .lock,
-                        icon: "pin",
-                        label: "固定",
-                        armed: presentation.lockReady,
-                        fill: Theme.ink
-                    )
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.voiceSpace)) }
-                        action: { lockZoneRect = $0 }
-                }
-            }
-
-            if presentation.panelVisible {
-                panel
-            }
-        }
-        .padding(.horizontal, Self.gutter)
-    }
-
-    // MARK: - 方块
-
-    private enum Zone { case cancel, lock }
-
-    /// 一颗方块。
-    ///
-    /// 静止时**只有图标**，手指滑进这一块才显出「取消 / 固定」两个字。两块挨着放，
-    /// 常驻的标签会把方块填满字；而真正需要读它的时刻是「手指已经停在上面、正在确认
-    /// 这是不是我想要的那块」—— 那一刻才显示，信息来得正好。
-    private func zone(
-        _ zone: Zone,
-        icon: String,
-        label: String,
-        armed: Bool,
-        fill: Color
-    ) -> some View {
-        // 另一块被选中时这一块退到后面去 —— 一眼看出手指现在压在哪一块上。
-        let dimmed = (presentation.cancelReady || presentation.lockReady) && !armed
-
-        return VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title)
-            Text(label)
-                .font(.subheadline.weight(.semibold))
-                // 一直占着位置、只是不显示：选中时字冒出来会把这颗方块撑高，而它旁边
-                // 那颗不会跟着动 —— 两块高度就不一样了。
-                .opacity(armed ? 1 : 0)
-        }
-        // 未选中时浮在终端的深色画面上，所以用白字；选中之后底色变成一块实心填充，
-        // 字跟着换成那个填充上读得出的颜色 —— 也就是 app 里其它实心按钮用的那一对。
-        .foregroundStyle(armed ? Theme.paper : .white)
-        .frame(maxWidth: .infinity, minHeight: Self.zoneHeight)
-        .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(armed ? AnyShapeStyle(fill) : AnyShapeStyle(.white.opacity(0.12)))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(.white.opacity(armed ? 0 : 0.2), lineWidth: 1)
-        }
-        .scaleEffect(armed ? 1.04 : 1)
-        .opacity(dimmed ? 0.55 : 1)
-        // 一颗方块是一个元素，不是「图标 + 字」两个：读屏读到它时要说的是「取消」，
-        // 而不是先念一个没有名字的叉、再念「取消」。
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier(zone == .cancel ? "voice-zone-cancel" : "voice-zone-pin")
-        .accessibilityLabel(label)
+        panel
+            .padding(.horizontal, Self.gutter)
+            .padding(.bottom, Self.gutter)
     }
 
     // MARK: - 面板
@@ -185,14 +107,24 @@ struct TerminalVoiceDock: View {
         }
         .padding(16)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .fill(Theme.paper)
                 .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .stroke(Color(uiColor: .separator).opacity(0.5), lineWidth: 1)
         }
+        // 蒙层与面板同尺寸，所以直接盖在它上面。多一层 `overlay` 而不是让面板为它让位：
+        // 手指压上来的那一刻，面板自己不能动 —— 判定用的正是它量出来的那块矩形。
+        .overlay {
+            if presentation.choicesVisible {
+                choiceMask
+            }
+        }
+        // 量出来的位置报回给手势，报在**手势所用的同一个坐标系**里。
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.voiceSpace)) }
+            action: { panelRect = $0 }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("voice-panel")
     }
@@ -241,5 +173,67 @@ struct TerminalVoiceDock: View {
             [0.58, 1.0, 0.62, 0.86, 0.46],
         ]
         return frames[max(0, presentation.timerSeconds) % frames.count]
+    }
+
+    // MARK: - 蒙层
+
+    private enum Half { case cancel, lock }
+
+    /// 手指压到面板上时盖上去的那一层。
+    ///
+    /// 中线与判定用的是同一条（同一块 `panelRect` 的 `midX`）—— 画出来的分界和判定的
+    /// 分界是同一处，不是两处各算一遍。
+    private var choiceMask: some View {
+        HStack(spacing: 0) {
+            half(
+                .cancel,
+                icon: "xmark",
+                label: "取消",
+                armed: presentation.cancelReady,
+                fill: Self.recordingColor
+            )
+            half(
+                .lock,
+                icon: "pin",
+                label: "固定",
+                armed: presentation.lockReady,
+                fill: Theme.ink
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+    }
+
+    /// 蒙层的一半。
+    ///
+    /// 压着的那一半填成实心并显出自己的名字，另一半退到后面去。这就是「已经滑到这个
+    /// 区域上了」的那条反馈：手指正压在上面，眼睛未必看得见它，所以给的是整半块变色
+    /// 这么大的变化；而此刻手指底下唯一需要读的东西，也就是这两个字。
+    private func half(
+        _ half: Half,
+        icon: String,
+        label: String,
+        armed: Bool,
+        fill: Color
+    ) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.title)
+            Text(label)
+                .font(.subheadline.weight(.semibold))
+                // 一直占着位置、只是不显示：显出来会把这半块撑高，而它旁边那半不会
+                // 跟着动 —— 两半就不一样大了。
+                .opacity(armed ? 1 : 0)
+        }
+        // 未选中时读在那块系统灰底上，选中之后底色变成一块实心填充，字跟着换成那个填充
+        // 上读得出的颜色 —— 也就是 app 里其它实心按钮用的那一对（`Theme.ink` /
+        // `Theme.paper` 各自跟着外观走，两种模式下都读得出来）。
+        .foregroundStyle(armed ? Theme.paper : Theme.ink)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(armed ? fill : Color(uiColor: .secondarySystemBackground))
+        // 一整半块蒙层是一个元素，不是「图标 + 字」两个：读屏读到它时要说的是「取消」，
+        // 而不是先念一个没有名字的叉、再念「取消」。
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier(half == .cancel ? "voice-zone-cancel" : "voice-zone-pin")
+        .accessibilityLabel(label)
     }
 }

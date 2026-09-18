@@ -100,23 +100,23 @@ final class InputBarUITests: XCTestCase {
         shot(app, "12-back-to-keyboard")
     }
 
-    /// §8 第 12 条：停在「取消」那一块上松手 = 这一段丢掉，而且**留在语音态**。
+    /// §8 第 12 条：压到面板左半松手 = 这一段丢掉，而且**留在语音态**。
     ///
-    /// 按住**期间**的样子（两块浮出来、滑上去高亮、滑回来复原）在这里断言不了：
+    /// 按住**期间**的样子（蒙层盖上来、压着的那半高亮、滑下来复原）在这里断言不了：
     /// `press(forDuration:thenDragTo:)` 是一次全程阻塞的调用，而 XCUITest 的查询必须在
     /// 主线程上跑，所以没有「按住不放、同时在旁边看」的写法。那几条由用例留下的截图与
     /// `HoldToTalkPresentationTests` 一起作证。
     ///
-    /// 两块在**面板之上**，所以手指要从输入栏往上滑过整块面板才够得着 —— 那个距离就是
-    /// `upToTheBlocks`，它由浮层那几段固定高度加起来得到。
+    /// 去路就在**面板本身**上，所以手指从输入栏往上滑到面板就够 —— 那个距离是
+    /// `upToThePanel`，由浮层那几段固定高度加起来得到。
     func testSlidingUpOntoCancelDropsItAndStaysInVoiceMode() throws {
         let app = openTerminal()
         enterVoiceMode(app)
 
         let hold = app.descendants(matching: .any)["voice-hold"]
         let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        // 不横着挪：这一格的中心正落在左边那块「取消」下面。
-        centre.press(forDuration: 1.0, thenDragTo: centre.withOffset(CGVector(dx: 0, dy: -Self.upToTheBlocks)))
+        // 不横着挪：这一格的中心落在屏幕中线左边，压上去就是面板的左半「取消」。
+        centre.press(forDuration: 1.0, thenDragTo: centre.withOffset(CGVector(dx: 0, dy: -Self.upToThePanel)))
         settle(seconds: 1)
 
         // 取消多半是想重说一遍，让人再按一次切换键没有道理 —— 所以它**不回**键盘态。
@@ -137,12 +137,12 @@ final class InputBarUITests: XCTestCase {
         let hold = app.descendants(matching: .any)["voice-hold"]
         let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         shot(app, "50-voice-mode-before-holding")
-        centre.press(forDuration: 2.0, thenDragTo: centre.withOffset(CGVector(dx: 0, dy: -Self.upToTheBlocks)))
+        centre.press(forDuration: 2.0, thenDragTo: centre.withOffset(CGVector(dx: 0, dy: -Self.upToThePanel)))
         settle(seconds: 1)
         shot(app, "51-after-dragging-up-and-releasing")
     }
 
-    /// §8 第 17～20 条：停在「固定」那一块上松手 = 录音继续，输入栏那一格变成「完成」，
+    /// §8 第 17～20 条：压到面板右半松手 = 录音继续，输入栏那一格变成「完成」，
     /// 面板上多一枚「取消」，按下去整段丢掉并回键盘态。
     func testStoppingOnPinLocksTheRecordingAndCancelGivesItUp() throws {
         let app = openTerminal()
@@ -150,18 +150,18 @@ final class InputBarUITests: XCTestCase {
 
         let hold = app.descendants(matching: .any)["voice-hold"]
         let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        // 往右上方滑：右边那一块是「固定」。
+        // 往右上方滑：越过屏幕中线就是面板的右半「固定」。
         centre.press(
             forDuration: 1.0,
-            thenDragTo: centre.withOffset(CGVector(dx: 120, dy: -Self.upToTheBlocks))
+            thenDragTo: centre.withOffset(CGVector(dx: 120, dy: -Self.upToThePanel))
         )
 
         let cancel = app.buttons["voice-lock-cancel"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 6), "固定之后面板上没有出现「取消」")
         // 顶上那行不是废话：麦克风还开着这件事不写出来只能靠猜。
         XCTAssertTrue(app.staticTexts["已固定 · 持续录音"].exists, "面板没有报「已固定」")
-        // 手指走了，那两块就该收起来 —— 留着它们等于还在教人滑。
-        XCTAssertFalse(app.descendants(matching: .any)["voice-zone-cancel"].exists, "固定之后两块方块还挂着")
+        // 手指走了，那层蒙层就该收起来 —— 留着它等于还在教人滑。
+        XCTAssertFalse(app.descendants(matching: .any)["voice-zone-cancel"].exists, "固定之后蒙层还盖着")
         XCTAssertEqual(hold.label, "完成", "固定之后那一格不是「完成」")
         shot(app, "30-locked")
 
@@ -182,7 +182,7 @@ final class InputBarUITests: XCTestCase {
         let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         centre.press(
             forDuration: 1.0,
-            thenDragTo: centre.withOffset(CGVector(dx: 120, dy: -Self.upToTheBlocks))
+            thenDragTo: centre.withOffset(CGVector(dx: 120, dy: -Self.upToThePanel))
         )
 
         XCTAssertTrue(
@@ -197,16 +197,48 @@ final class InputBarUITests: XCTestCase {
         shot(app, "32-after-confirm")
     }
 
-    /// 从输入栏那一格往上滑多远才够得着那两块。
+    /// 输入栏记住上次选定的是哪种模式：再进终端、重开 App，都从它起手。
     ///
-    /// 两块在**面板之上**：浮层从输入栏顶边往上长 —— 面板约 158（上下各 16 内边距，
-    /// 里面是状态行、三行转写、提示行），隔 16 是两块本身，各 88 高。所以浮层总高约
-    /// 262，两块占它最上面那 88；再算上输入栏那一格的中心在浮层下方约 76，够得着它们
-    /// 的偏移量落在 250～338 这一段里。取 290 是这一段的正中间，两边各留四十多点 ——
+    /// 记的是**选定**那一下，不是这一刻栏的样子 —— 说完一句之后回键盘态（§3.3）
+    /// 与滑走取消之后留在语音态，都不该改写它。所以下面先按切换键过去、再让一次
+    /// 说话走完，重新进来时仍然是语音态。
+    func testTheInputBarRemembersWhichModeWasLastChosen() throws {
+        let app = openTerminal()
+        enterVoiceMode(app)
+
+        // 关掉重开。这条偏好是 App 自己的，得活过一次启动才算记住。
+        app.terminate()
+        app.launch()
+        enterTerminal(app)
+        let toggle = app.buttons["voice-mode-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10), "输入栏上没有切换键")
+        XCTAssertEqual(toggle.value as? String, "voice", "记住的语音态没有再进终端时生效")
+        shot(app, "50-remembered-voice-mode")
+
+        // 反过来也要记住：切回键盘态，重开之后从键盘态起手。
+        // 这一步同时把偏好放回默认值，后面的用例（别的文件也在内）按键盘态起手。
+        setKeyboardMode(app)
+        app.terminate()
+        app.launch()
+        enterTerminal(app)
+        XCTAssertEqual(
+            app.buttons["voice-mode-toggle"].value as? String,
+            "keyboard",
+            "切回键盘态没有被记住"
+        )
+    }
+
+    /// 从输入栏那一格往上滑多远才压得到面板。
+    ///
+    /// 去路长在**面板本身**上（左半取消、右半固定），所以够得着的距离就是「输入栏
+    /// 那一格的中心」到「面板」这一段：中间隔着工具栏约 48、浮层的下边距 16，加上输入栏
+    /// 那一格中心到底边约 28；面板自己约 152 高（上下各 16 内边距，里面是状态行、三行
+    /// 转写、提示行）。于是往上走的距离落在 80～256 这一段里，取 170 是它的正中间，
+    /// 两侧各留八十多点 ——
     ///
     /// 这个数**故意写宽**而不是贴着边界取：浮层里任何一段高度变了，贴着边界取的数
     /// 会立刻掉出去，而落在中间的数还能容忍几十点的出入。
-    private static let upToTheBlocks: CGFloat = 290
+    private static let upToThePanel: CGFloat = 170
 
     /// §8 第 5 条：进语音态要顺手把键盘收走 —— 系统的与自绘的都收。
     func testEnteringVoiceModePutsTheKeyboardsAway() throws {
@@ -284,19 +316,41 @@ final class InputBarUITests: XCTestCase {
         return layout
     }
 
+    /// 开一个终端，并且**把输入栏摆回键盘态**。
+    ///
+    /// 摆而不是假定：输入栏记着上次选的是哪种模式，上一个用例、上一次运行留下了
+    /// 什么，与本次要验的东西无关。与 `testThePanelRemembersWhichSegmentWasLastOpen`
+    /// 是同一条约定 —— 记着的那个值是 App 自己的，用例自己把起手态摆好。
     private func openTerminal() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-SynapseAPIBaseURL", baseURL]
         app.launch()
+        enterTerminal(app)
+        setKeyboardMode(app)
+        return app
+    }
+
+    /// 走到某个终端里面。已经在里面的时候只等它出现 —— 重开 App 之后它可能直接
+    /// 恢复到上次那个终端，列表就不在屏幕上。
+    private func enterTerminal(_ app: XCUIApplication) {
         signIn(app)
+
+        let terminal = app.descendants(matching: .any)["terminal.text"]
+        guard !terminal.waitForExistence(timeout: 5) else { return }
 
         let row = app.staticTexts[sessionTitle]
         XCTAssertTrue(row.waitForExistence(timeout: 30), "会话列表里没有 \(sessionTitle)")
         row.tap()
-
-        let terminal = app.descendants(matching: .any)["terminal.text"]
         XCTAssertTrue(terminal.waitForExistence(timeout: 20), "终端没有出现")
-        return app
+    }
+
+    private func setKeyboardMode(_ app: XCUIApplication) {
+        let toggle = app.buttons["voice-mode-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10), "输入栏上没有切换键")
+        guard toggle.value as? String != "keyboard" else { return }
+        toggle.tap()
+        waitUntil(timeout: 10) { (toggle.value as? String) == "keyboard" }
+        XCTAssertEqual(toggle.value as? String, "keyboard", "没能把输入栏摆回键盘态")
     }
 
     private func signIn(_ app: XCUIApplication) {
