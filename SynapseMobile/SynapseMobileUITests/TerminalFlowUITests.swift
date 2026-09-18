@@ -232,8 +232,8 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(terminals.waitForExistence(timeout: 25), "no session list")
         XCTAssertTrue(app.staticTexts["api-logs"].waitForExistence(timeout: 20), "session list never arrived")
 
-        // Rename. The alert opens on the current name, and the list has to show
-        // the new one without leaving the screen.
+        // Rename. The alert opens empty — the old name is not carried in — and the
+        // list has to show the new one without leaving the screen.
         revealSwipeActions(on: "api-logs", in: app)
         let renameButton = app.buttons["重命名"]
         XCTAssertTrue(renameButton.waitForExistence(timeout: 5), "swipe did not reveal rename")
@@ -244,11 +244,13 @@ final class TerminalFlowUITests: XCTestCase {
 
         let nameField = app.textFields.firstMatch
         XCTAssertTrue(nameField.waitForExistence(timeout: 5), "rename never asked for a name")
-        // Tap past the end of the existing text so the caret lands at the end;
-        // tapping the centre would drop it mid-string and scramble the result.
-        nameField.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        nameField.typeText(" v2")
-        app.alerts.firstMatch.buttons["保存"].tap()
+        // The field carries nothing to type over: an empty box is the whole point,
+        // and until something is in it there is no name to save.
+        let save = app.alerts.firstMatch.buttons["保存"]
+        XCTAssertFalse(save.isEnabled, "save was live with nothing to rename to")
+        nameField.typeText("api-logs v2")
+        XCTAssertTrue(save.isEnabled, "save stayed grey after a name was typed")
+        save.tap()
         XCTAssertTrue(
             app.staticTexts["api-logs v2"].waitForExistence(timeout: 10),
             "the renamed row never appeared"

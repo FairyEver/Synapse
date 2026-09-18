@@ -543,10 +543,13 @@ struct TerminalScreen: View {
         .alert("重命名终端", isPresented: $showingRename) {
             TextField("名称", text: $renamingTitle)
             Button("取消", role: .cancel) {}
+            // 输入框不带旧名字，是空着打开的，所以「还没输」是常态而不是意外：
+            // 保存先灰着，有名字才让它可按。
             Button("保存") {
                 Haptics.commit()
                 model.rename(sessionId, to: renamingTitle)
             }
+            .disabled(renamingTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
         .alert("停止这个终端？", isPresented: $showingStopConfirm) {
             Button("取消", role: .cancel) {}
@@ -698,7 +701,9 @@ struct TerminalScreen: View {
                     }
                 }
                 Button {
-                    renamingTitle = session?.title ?? ""
+                    // 不带旧名字：重命名就是写一个新名字，先把它从输入框里删掉再打
+                    // 是白干一遍。
+                    renamingTitle = ""
                     showingRename = true
                 } label: {
                     // 菜单里三行操作不带图标：上面那两组选项本来就只画文字，只有
