@@ -724,8 +724,6 @@ struct TerminalScreen: View {
             .accessibilityLabel("打开键盘")
             .accessibilityIdentifier("toolbar-keyboard")
 
-            divider
-
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(Array(buttons.enumerated()), id: \.element.id) { index, button in
@@ -761,8 +759,6 @@ struct TerminalScreen: View {
             // a user has a few, and a control that has been scrolled past is one a test
             // otherwise has to guess its way back to.
             .accessibilityIdentifier("toolbar-scroll")
-
-            divider
 
             // 右固定：全部指令。面板开着时保持按下态，所以这颗键自己也是「面板在开
             // 着」的那条状态指示 —— 终端在面板后面继续跑，被盖住的正是它的最新几行。
