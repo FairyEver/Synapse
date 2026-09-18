@@ -40,7 +40,6 @@ export type StartRecordingResult = {
   readonly recordingId: string
   readonly uploadId: string
   readonly title: string
-  readonly resumedPartNumbers: readonly number[]
 }
 
 export type PendingRecording = {
@@ -91,7 +90,6 @@ export function createMeetingService(deps: MeetingServiceDeps) {
       recordingId: body.recordingId,
       uploadId: typeof body.uploadId === "string" ? body.uploadId : "",
       title: typeof body.title === "string" ? body.title : "新录音",
-      resumedPartNumbers: [],
     }
   }
 

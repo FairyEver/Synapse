@@ -9,6 +9,7 @@ import {
 import {
   compactMeetingPeaks,
   MEETING_DEFAULT_TITLE,
+  MEETING_MAX_DURATION_MS,
   MEETING_MAX_UPLOAD_PARTS,
   MEETING_RECORDING_MIME_TYPE,
   MEETING_RECORDING_PATH_PREFIX,
@@ -40,9 +41,6 @@ import { MEETING_STORAGE_PORT, type MeetingStoragePort } from "./meeting-storage
 
 /** 5 小时 64 kbps 大约 144 MB，留出余量挡住异常客户端。 */
 const MEETING_MAX_RECORDING_BYTES = 200 * 1024 * 1024
-
-/** 超过这个时长的录音不再接受新分片：5 小时是产品上限。 */
-const MEETING_MAX_DURATION_MS = 5 * 60 * 60 * 1000
 
 /** 回放地址只够打开一次播放器：它会被写进 audio 元素的 src，越短越好。 */
 const MEETING_PLAYBACK_URL_TTL_SECONDS = 5 * 60

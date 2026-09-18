@@ -21,7 +21,6 @@ export type SynapseMeetingRecordingStart = {
   readonly recordingId: string
   readonly uploadId: string
   readonly title: string
-  readonly resumedPartNumbers: readonly number[]
 }
 
 export type SynapseMeetingPendingRecording = {
