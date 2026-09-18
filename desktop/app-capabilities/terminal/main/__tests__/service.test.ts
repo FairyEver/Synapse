@@ -1347,6 +1347,66 @@ describe("TerminalService core", () => {
     expect(renamed.title).toBe("After")
   })
 
+  it("renames the conversation a phone renames by renaming the conversation's only terminal", async () => {
+    const { service } = await startedHarness()
+    const session = await service.createSession({ title: "Before" })
+    const conversation = service.getWorkspaceForSession({ sessionId: session.id })
+    const renamedConversations: string[] = []
+    service.events.on("domainChanged", (event: { eventType: string; objectId: string }) => {
+      if (event.eventType === "workspace.renamed") renamedConversations.push(event.objectId)
+    })
+
+    await service.renameSession({ sessionId: session.id, title: "After" })
+
+    expect(service.getWorkspace({ workspaceId: conversation.id }).title).toBe("After")
+    // The desktop draws the conversation's name from the workspace, so its sidebar only
+    // repaints because the rename is announced as a workspace change too.
+    expect(renamedConversations).toEqual([conversation.id])
+  })
+
+  it("renames a conversation's only terminal by renaming the conversation", async () => {
+    const { service } = await startedHarness()
+    const session = await service.createSession({ title: "Before" })
+    const conversation = service.getWorkspaceForSession({ sessionId: session.id })
+    const renamedSessions: string[] = []
+    service.events.on("sessionChanged", (payload: { id: string; title: string }) => {
+      if (payload.id === session.id) renamedSessions.push(payload.title)
+    })
+
+    await service.renameWorkspace({
+      workspaceId: conversation.id,
+      title: "After",
+      expectedLayoutRevision: conversation.layoutRevision,
+    })
+
+    expect(service.getSession({ sessionId: session.id }).title).toBe("After")
+    // The phone lists terminals, so it learns the new name only from this announcement.
+    expect(renamedSessions).toEqual(["After"])
+  })
+
+  it("keeps a split conversation's name and its terminals' names apart", async () => {
+    const { service } = await startedHarness()
+    const left = await service.createSession({ title: "Conversation" })
+    const conversation = service.getWorkspaceForSession({ sessionId: left.id })
+    const paneId = conversation.layout.type === "leaf" ? conversation.layout.paneId : ""
+    const split = await service.splitPane({
+      workspaceId: conversation.id,
+      paneId,
+      direction: "right",
+      expectedLayoutRevision: conversation.layoutRevision,
+    })
+
+    await service.renameSession({ sessionId: left.id, title: "Left only" })
+    expect(service.getWorkspace({ workspaceId: conversation.id }).title).toBe("Conversation")
+
+    await service.renameWorkspace({
+      workspaceId: conversation.id,
+      title: "Both panes",
+      expectedLayoutRevision: split.workspace.layoutRevision,
+    })
+    expect(service.getSession({ sessionId: left.id }).title).toBe("Left only")
+  })
+
   it("creates a group command without waiting for later terminal output to finish persisting", async () => {
     const store = controllableStore()
     const { service, pty } = await startedHarness(store)

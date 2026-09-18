@@ -692,6 +692,34 @@ export function createTerminalService(deps: {
   }
 
   /**
+   * The workspace a session is the only terminal of, when it is one.
+   *
+   * A one-pane workspace and its session are one conversation wearing two names: the
+   * desktop draws the workspace's title in the sidebar and the header tabs, the phone
+   * draws the session's in its list (a workspace reaches a phone only once it holds a
+   * split, see `summaryWorkspaces`). A rename on either surface therefore has to reach
+   * the other, or the new name lands on one side and the old one stays on the other.
+   *
+   * A split is the case where the two names mean different things on purpose: the
+   * workspace is then the tab and the terminals inside it are terminals of their own,
+   * so renaming a pane must leave the row above it alone.
+   */
+  function workspaceSolelyForSession(sessionId: string): TerminalWorkspace | undefined {
+    const workspace = getWorkspaceBySessionId(sessionId)
+    if (!workspace) return undefined
+    const panes = collectTerminalPaneLeaves(workspace.layout)
+    return panes.length === 1 && panes[0]?.sessionId === sessionId ? workspace : undefined
+  }
+
+  /** The mirror of {@link workspaceSolelyForSession}: the session a workspace holds alone. */
+  function soleSessionInWorkspace(workspace: TerminalWorkspace): TerminalSession | undefined {
+    const panes = collectTerminalPaneLeaves(workspace.layout)
+    if (panes.length !== 1) return undefined
+    const sessionId = panes[0]?.sessionId
+    return sessionId === undefined ? undefined : sessions.get(sessionId)
+  }
+
+  /**
    * Next "<group name> #<n>" title for a session that was not given an explicit name.
    * Numbers are per group and never recycled, so deleting a conversation leaves a gap.
    */
@@ -1313,11 +1341,7 @@ export function createTerminalService(deps: {
     return workspace
   }
 
-  async function renameWorkspace(input: TerminalRenameWorkspaceInput): Promise<TerminalWorkspace> {
-    const workspace = getWorkspaceOrThrow(input.workspaceId)
-    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
-    const title = input.title.trim()
-    if (title === workspace.title) return workspace
+  function applyWorkspaceTitle(workspace: TerminalWorkspace, title: string): TerminalWorkspace {
     const updated = {
       ...workspace,
       title,
@@ -1326,7 +1350,21 @@ export function createTerminalService(deps: {
     }
     workspaces.set(updated.id, updated)
     bumpDomain("workspace.renamed", updated.id, updated.layoutRevision)
+    return updated
+  }
+
+  async function renameWorkspace(input: TerminalRenameWorkspaceInput): Promise<TerminalWorkspace> {
+    const workspace = getWorkspaceOrThrow(input.workspaceId)
+    assertWorkspaceRevision(workspace, input.expectedLayoutRevision)
+    const title = input.title.trim()
+    if (title === workspace.title) return workspace
+    const updated = applyWorkspaceTitle(workspace, title)
+    // The conversation's only terminal goes by the same name, so it takes the new one
+    // too — otherwise the phone's list, which draws terminals, would keep the old one.
+    const sole = soleSessionInWorkspace(updated)
+    const renamedSession = sole && sole.title !== title ? applySessionTitle(sole, title) : undefined
     await flushPersist()
+    if (!lastPersistError && renamedSession) events.emit("sessionChanged", renamedSession)
     return updated
   }
 
@@ -2192,20 +2230,31 @@ export function createTerminalService(deps: {
     }
   }
 
+  function applySessionTitle(session: TerminalSession, title: string): TerminalSession {
+    const updated = {
+      ...session,
+      title,
+      metadataRevision: session.metadataRevision + 1,
+      stateRevision: session.stateRevision + 1,
+      updatedAt: now(),
+    }
+    sessions.set(updated.id, updated)
+    deps.agentNotifications?.renameSession(updated.id, updated.title)
+    bumpDomain("session.renamed", updated.id, updated.metadataRevision)
+    return updated
+  }
+
   async function renameSession(input: TerminalRenameSessionInput): Promise<TerminalSession> {
     const current = getSessionOrThrow(input.sessionId)
     const title = input.title.trim()
     if (title === current.title) return current
-    const updated = {
-      ...current,
-      title,
-      metadataRevision: current.metadataRevision + 1,
-      stateRevision: current.stateRevision + 1,
-      updatedAt: now(),
-    }
-    sessions.set(current.id, updated)
-    deps.agentNotifications?.renameSession(updated.id, updated.title)
-    bumpDomain("session.renamed", updated.id, updated.metadataRevision)
+    const updated = applySessionTitle(current, title)
+    // A conversation holding nothing but this terminal goes by the same name, and the
+    // desktop draws that name from the workspace; see `workspaceSolelyForSession`. A
+    // phone renames through this function, so without the rewrite below the new name
+    // would reach the phone's list alone and the desktop's sidebar would keep the old.
+    const workspace = workspaceSolelyForSession(current.id)
+    if (workspace && workspace.title !== title) applyWorkspaceTitle(workspace, title)
     await flushPersist()
     if (!lastPersistError) events.emit("sessionChanged", updated)
     return updated
