@@ -703,7 +703,9 @@ struct TerminalScreen: View {
     /// you wanted. Neither is disabled with the terminal stopped — a stopped terminal
     /// still has an input field and still has commands worth reading.
     private var accessoryBar: some View {
-        HStack(spacing: 8) {
+        // 两颗固定键与中间的指令条之间不留间距。它们没有底色，那颗 48pt 的点击框里
+        // 已经各留了十几点的空白 —— 这里再让出一道，边上就同时有了两段留白。
+        HStack(spacing: 0) {
             // 左固定：键盘面板。图标由 ⌨ 换成 ⌘，因为它下面的输入栏左端已经是一颗
             // 键盘 —— 相邻两行同一个图形会被当成同一件事。换的只是脸：它开的还是
             // 原来那个面板，`toggleKeyboardPanel()` 一个字没改。
@@ -714,8 +716,8 @@ struct TerminalScreen: View {
                 Image(systemName: "command")
                     .font(.system(size: 16))
             }
-            // 没有胶囊底：它不是一条指令，是工具栏上两颗钉住的键之一，与中间那排胶囊
-            // 分开才读得出这个区别。
+            // 没有胶囊底：它不是一条指令，是工具栏上两颗钉住的键之一 —— 中间那排有底色、
+            // 这两颗没有，区别靠底色就够，不必再拿留白去说。
             .terminalKeyPill(bare: true)
             // The panel's own keys have always been drawn plain, and these two were not:
             // the default button style is what put a press animation on a key that is
@@ -752,7 +754,8 @@ struct TerminalScreen: View {
                         .accessibilityIdentifier("toolbar-\(button.id)")
                     }
                 }
-                .padding(.horizontal, 8)
+                // 指令条自己不带左右内边距：它的两端挨着的是两颗固定键的框，不是
+                // 屏幕边，而两边本来就已经各留了空白。
                 .padding(.vertical, 2)
             }
             // Named so a test can scroll it: the commands are wider than the screen once
