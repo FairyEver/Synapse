@@ -9,6 +9,27 @@
  * Usage: node test/mock-desktop.mjs <email> <password> [baseUrl]
  *          [--contend <title>] [--control-port <port>] [--control-host <host>]
  *          [--splits] [--no-toolbar]
+ *
+ * What this double stands in for, and what it does not.
+ *
+ * A double is only worth what it does not lie about. Everything below is written to
+ * the gateway's actual answers — the outcome values, the refusal codes and their
+ * sentences, and above all the states a terminal is left in — because a test that
+ * reads the phone against a state the real computer never produces is green about
+ * nothing. Two rules follow from that and are worth keeping when editing this file:
+ *
+ *  - Every state a handler leaves behind has to be one the real desktop can be in.
+ *    A stopped terminal is *gone* from the list rather than left sitting in it, a
+ *    snapshot carries the gateway's own window rather than the whole buffer, and a
+ *    terminal that is not there is refused rather than pretended.
+ *  - A kind this double does not implement is refused as `mock_unimplemented_intent`,
+ *    never a plausible-looking success and never the quiet `no_op` that used to stand in
+ *    for "the computer did nothing". The kinds it answers are `sync`, `ping`, `attach`,
+ *    `detach`, `history`, `unlock`, `command`, `keys`, `stop`, `stopAll`, `delete`,
+ *    `rename`, `resize`, `releaseGrid` and `fileUpload`. The three it does not stand in
+ *    for — `create`, `createAgentConversation` and `launchCommand`, and with them the
+ *    whole New Terminal panel — are named in the refusal, so a test that needs one fails
+ *    saying so instead of passing on an answer no computer gives.
  */
 
 import { randomUUID } from "node:crypto"
@@ -157,6 +178,34 @@ function makeSession(id, title, cwd, initialLines) {
  */
 const SUMMARY_LAST_LINE_LIMIT = 120
 
+/**
+ * `DEFAULT_LINE_WINDOW` in `mobile-gateway-service.ts`: how many lines one snapshot
+ * carries.
+ *
+ * A snapshot is a *window*, not the buffer. The desktop keeps the scrollback and the
+ * phone pages back into it, which is what the `history` intent is for — so a double
+ * that hands over everything at once does not merely overshoot a constant, it makes
+ * the whole paging path unreachable from a test.
+ */
+const LINE_WINDOW_LINES = 500
+
+/** `MOBILE_FRAME_LIMITS.maxLinesPerFrame`. The relay closes the desktop's connection
+ *  over a frame that breaks it, so a double that can build one takes its own run down —
+ *  which is exactly what happened here once before, with an over-long `lastLine`. */
+const MAX_LINES_PER_FRAME = 512
+
+/** `MOBILE_FRAME_LIMITS.maxHistoryLines`: the most a single history page may carry. */
+const MAX_HISTORY_LINES = 500
+
+/**
+ * Sessions this phone has opened, which the gateway tracks per phone as attachments.
+ *
+ * Three intents are refused on an unattached terminal (`history`, `command`, `keys`),
+ * and `detach` is the only thing that takes one away again. Without the list a double
+ * cannot tell "the phone is looking at this" from "the phone is guessing at it".
+ */
+const attached = new Set()
+
 function buildSummary() {
   return {
     desktopClientInstanceId,
@@ -270,6 +319,31 @@ function sendQuickPhrases() {
   })))
 }
 
+/**
+ * Wraps one terminal frame in its envelope.
+ *
+ * Shared by every sender rather than written out at each: the shape is the gateway's,
+ * and a second copy of it is how the two drift apart. `cursor` defaults to the shape a
+ * history frame carries — a hidden cursor at the origin — and the senders that move the
+ * cursor say so themselves.
+ */
+function emitFrame(sessionId, frame) {
+  sendIfOpen(JSON.stringify(envelope("mobile.frame", {
+    desktopClientInstanceId,
+    mobileClientInstanceId: currentPhoneId ?? "unknown",
+    frame: {
+      v: 1,
+      sessionId,
+      cursor: { row: 0, col: 0, visible: false },
+      alt: false,
+      truncated: false,
+      seq: sessions.get(sessionId)?.lastOutputSeq ?? 1,
+      sizeRevision: 1,
+      ...frame,
+    },
+  })))
+}
+
 /** Emits frames as `suffix` updates, mirroring what the desktop gateway does. */
 function sendFrame(sessionId, from, lines, extra = {}) {
   const all = frames.get(sessionId) ?? []
@@ -280,24 +354,70 @@ function sendFrame(sessionId, from, lines, extra = {}) {
     session.lastLine = plainText(lines.at(-1)) || session.lastLine
     session.lastOutputSeq += 1
   }
-  sendIfOpen(JSON.stringify(envelope("mobile.frame", {
-    desktopClientInstanceId,
-    mobileClientInstanceId: currentPhoneId ?? "unknown",
-    frame: {
-      v: 1,
-      sessionId,
-      kind: "suffix",
-      from,
-      lines: lines.map(toWireLine),
-      total: all.length,
-      cursor: { row: all.length - 1, col: 0, visible: true },
-      alt: false,
-      truncated: false,
-      seq: session?.lastOutputSeq ?? 1,
-      sizeRevision: 1,
-      ...extra,
-    },
-  })))
+  emitFrame(sessionId, {
+    kind: "suffix",
+    from,
+    lines: lines.map(toWireLine),
+    total: all.length,
+    cursor: { row: all.length - 1, col: 0, visible: true },
+    ...extra,
+  })
+}
+
+/**
+ * The window a phone gets when it opens a terminal.
+ *
+ * A window ending at the newest line, not the whole buffer: `from` is the gateway index
+ * of its first line, and everything below it is what `history` pages back through. On a
+ * terminal shorter than the window the two are the same thing, which is why handing over
+ * the buffer looked right for as long as it did — and why the paging path could never be
+ * reached from a test, since `oldestIndex` was pinned at 0 and the phone had no reason to
+ * ask for anything.
+ *
+ * One frame, because the window is shorter than `maxLinesPerFrame`; the gateway only
+ * splits when a snapshot exceeds it.
+ */
+function sendSnapshot(sessionId) {
+  const all = frames.get(sessionId) ?? []
+  const from = Math.max(0, all.length - LINE_WINDOW_LINES)
+  emitFrame(sessionId, {
+    kind: "reset",
+    from,
+    // The window already fits in one frame; the slice is here so that raising the
+    // window above `maxLinesPerFrame` fails visibly here rather than by having the
+    // relay cut the connection, which is how this file has been bitten once already.
+    lines: all.slice(from, from + MAX_LINES_PER_FRAME).map(toWireLine),
+    total: all.length,
+    cursor: { row: all.length - 1, col: 0, visible: true },
+  })
+}
+
+/**
+ * One page of scrollback below what the phone already holds.
+ *
+ * `before` is the client's oldest index, so the page is `[before - count, before)`. An
+ * empty page is the honest answer once nothing older is held: the phone reads `from == 0`
+ * on a history frame as "this is the top of it" and stops asking, so a double that never
+ * answered would leave that state unreachable too.
+ */
+function sendHistoryPage(sessionId, before, limit) {
+  const all = frames.get(sessionId) ?? []
+  const requested = Math.max(1, Math.min(limit, MAX_HISTORY_LINES))
+  const count = Math.min(requested, before)
+  const page = count <= 0 ? [] : all.slice(Math.max(0, before - count), before)
+  if (page.length === 0) {
+    emitFrame(sessionId, { kind: "history", from: before, lines: [], total: all.length })
+    return
+  }
+  emitFrame(sessionId, {
+    kind: "history",
+    // `from` describes the lines actually in the frame rather than the ones asked
+    // for, which is how the gateway derives it: it has to name the range the phone is
+    // about to fill, and a page cut short by the floor names a shorter one.
+    from: before - page.length,
+    lines: page.map(toWireLine),
+    total: all.length,
+  })
 }
 
 /** `[text]` or `[text, runs]` with runs as `[start, length, fg, bg, flags]`. */
@@ -342,12 +462,82 @@ function startStreaming() {
  * Every refusal also prints a marker into the terminal. The UI test cannot see
  * the mock's internals, so that line is what proves the preemption path was
  * really exercised instead of silently skipped.
+ *
+ * One answer the real gateway gives here is left out. It reports a lease `attach` could
+ * not take as an accepted result carrying 「另一个客户端正在控制这个终端。」, and this double
+ * attaches without it. The reason is the fixture rather than the contract: contention is
+ * armed the moment the terminal is opened, so on a real desktop the sentence would come
+ * up at the moment the user starts typing, while here it would always be on screen before
+ * the test's first keystroke — a notice the reader never asked for, produced by the
+ * fixture's timing. Nothing asserts it either way today; a test that wants that screen
+ * has to bring the contention in a keystroke later, not read it into `attach`.
  */
 const contended = new Set()
 
 function armContention(sessionId) {
   const session = sessions.get(sessionId)
   if (session && contendTitles.includes(session.title)) contended.add(sessionId)
+}
+
+/*
+ * The computer's answers for a terminal it cannot act on, in the gateway's own words.
+ *
+ * These are not error handling bolted on for a double's convenience: each sentence is
+ * what the reader sees on the phone, and each state is one the phone has to render. A
+ * double that answers `accepted` to a terminal that is gone is not being lenient — it
+ * is deleting the case from the suite.
+ */
+function refuseMissing(sessionId) {
+  return {
+    outcome: "rejected",
+    code: "not_found",
+    message: "这个终端在电脑上已经不在了。",
+    sessionId,
+  }
+}
+
+/** The refusal for a terminal that is not there *to be opened*: ended, never existed. */
+function refuseEnded(sessionId) {
+  return {
+    outcome: "rejected",
+    code: "lifecycle_conflict",
+    message: "该终端已结束。",
+    sessionId,
+  }
+}
+
+function refuseUnattached(sessionId) {
+  return { outcome: "rejected", code: "not_attached", message: "请先打开这个终端。", sessionId }
+}
+
+/**
+ * Whether this phone may act on a terminal, or the answer to give back instead.
+ *
+ * `needsAttachment` is the difference between acting on a terminal and reading it:
+ * `history`, `command`, `keys` and `unlock` all require the phone to have it open, and
+ * the gateway refuses all four with the same sentence.
+ */
+function guardSession(sessionId, { needsAttachment = false } = {}) {
+  if (!sessions.has(sessionId)) return refuseMissing(sessionId)
+  if (needsAttachment && !attached.has(sessionId)) return refuseUnattached(sessionId)
+  return null
+}
+
+/**
+ * Ends a terminal the way the computer's own stop does.
+ *
+ * The row leaves the list rather than staying in it as an ended one. The stop kills the
+ * process, and the process exiting is what takes the session out of the list the summary
+ * is built from — the `ended` status exists only inside the desktop's exit handler and
+ * never reaches a summary. Leaving a row behind was this double promising the phone a
+ * state the real computer never puts it in, and a test that read the phone against it
+ * passed while the phone was showing something else entirely.
+ */
+function stopSession(sessionId) {
+  sessions.delete(sessionId)
+  frames.delete(sessionId)
+  attached.delete(sessionId)
+  contended.delete(sessionId)
 }
 
 function handleIntent(message) {
@@ -367,6 +557,14 @@ function handleIntent(message) {
     // nothing, and "unchanged since I last sent it" is not an answer to it.
     sendToolbar()
     sendQuickPhrases()
+    // And a fresh window for every terminal this phone holds open, which is how the
+    // real gateway answers a client that reconnects — it walks its own attachments and
+    // re-pushes each. A double that only sent the summary left a phone returning from a
+    // dropped connection holding a half-drawn screen, which is the state the real
+    // computer never leaves it in.
+    for (const sessionId of [...attached]) {
+      if (sessions.has(sessionId)) sendSnapshot(sessionId)
+    }
     reply({ outcome: "accepted" })
     return
   }
@@ -375,49 +573,79 @@ function handleIntent(message) {
     return
   }
   if (intent.kind === "attach") {
+    // Opening a terminal that is not there — because it was stopped, deleted, or never
+    // existed — is refused, and with the sentence the reader sees on a terminal whose
+    // process has exited. Accepting it was the double letting the phone open a screen
+    // for a session no computer has.
+    if (!sessions.has(intent.sessionId)) {
+      reply(refuseEnded(intent.sessionId))
+      return
+    }
+    attached.add(intent.sessionId)
     // Re-armed per attach so a test run is reproducible against a long-lived mock.
     armContention(intent.sessionId)
     sendToolbar()
     sendQuickPhrases()
+    // The window goes out before the answer does, which is the gateway's own order:
+    // it awaits the snapshot and only then returns the result. Sending the answer first
+    // would let the phone be seen working in an order the real computer never produces —
+    // the easy one, where a frame never has to be held for a terminal not yet open.
+    sendSnapshot(intent.sessionId)
     reply({ outcome: "accepted", sessionId: intent.sessionId })
-    const lines = frames.get(intent.sessionId) ?? []
-    sendIfOpen(JSON.stringify(envelope("mobile.frame", {
-      desktopClientInstanceId,
-      mobileClientInstanceId: payload.mobileClientInstanceId,
-      frame: {
-        v: 1,
-        sessionId: intent.sessionId,
-        kind: "reset",
-        from: 0,
-        lines: lines.map(toWireLine),
-        total: lines.length,
-        cursor: { row: lines.length - 1, col: 0, visible: true },
-        alt: false,
-        truncated: false,
-        seq: sessions.get(intent.sessionId)?.lastOutputSeq ?? 1,
-        sizeRevision: 1,
-      },
-    })))
+    return
+  }
+  if (intent.kind === "detach") {
+    // The one intent with no authorisation and no session lookup: the gateway answers
+    // it whatever the terminal's state, and the terminal itself is left untouched —
+    // the row stays exactly as it was, and only the phone's claim on it goes away.
+    attached.delete(intent.sessionId)
+    contended.delete(intent.sessionId)
+    reply({ outcome: "accepted", sessionId: intent.sessionId })
+    return
+  }
+  if (intent.kind === "history") {
+    const refused = guardSession(intent.sessionId, { needsAttachment: true })
+    if (refused) {
+      reply(refused)
+      return
+    }
+    // Page first, answer second — the order the gateway uses, same as `attach`.
+    sendHistoryPage(intent.sessionId, intent.before ?? 0, intent.limit ?? 0)
+    reply({ outcome: "accepted", sessionId: intent.sessionId })
     return
   }
   if (intent.kind === "unlock") {
     // How the phone takes the lease back. The gateway clears `leasePreempted`
     // here, so a mock that answered `no_op` would strand the retry.
+    const refused = guardSession(intent.sessionId, { needsAttachment: true })
+    if (refused) {
+      reply(refused)
+      return
+    }
     contended.delete(intent.sessionId)
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     return
   }
-  if ((intent.kind === "command" || intent.kind === "keys") && contended.has(intent.sessionId)) {
-    const current = frames.get(intent.sessionId) ?? []
-    sendFrame(intent.sessionId, current.length, [
-      `[mock] desktop took the lease and refused the ${intent.kind}`,
-    ])
-    reply({
-      outcome: "rejected",
-      code: "lease_preempted",
-      message: "桌面端正在使用这个终端。",
-    })
-    return
+  if (intent.kind === "command" || intent.kind === "keys") {
+    // A write goes to a terminal the phone has open, and to one that is still there.
+    // Both refusals come before the lease, which is the order the gateway checks them.
+    const refused = guardSession(intent.sessionId, { needsAttachment: true })
+    if (refused) {
+      reply(refused)
+      return
+    }
+    if (contended.has(intent.sessionId)) {
+      const current = frames.get(intent.sessionId) ?? []
+      sendFrame(intent.sessionId, current.length, [
+        `[mock] desktop took the lease and refused the ${intent.kind}`,
+      ])
+      reply({
+        outcome: "rejected",
+        code: "lease_preempted",
+        message: "桌面端正在使用这个终端。",
+      })
+      return
+    }
   }
   if (intent.kind === "keys") {
     // Approving the simulated permission prompt clears the attention badge, so
@@ -468,6 +696,22 @@ function handleIntent(message) {
      */
     const session = sessions.get(intent.sessionId)
     const landedPath = `${session?.cwd ?? "/tmp"}/${intent.fileName}`
+    /*
+     * The bytes land either way. What can fail is naming the path in the terminal, and
+     * the gateway reports that as an `accepted` result carrying the fact rather than as
+     * a refusal — the file really is on the computer, and the phone has to be able to
+     * say so while offering the way back. A double that could only ever succeed made
+     * that whole screen unreachable from a test.
+     */
+    if (!session || !attached.has(intent.sessionId)) {
+      reply({
+        outcome: "accepted",
+        sessionId: intent.sessionId,
+        landedPath,
+        message: "文件已落到电脑，但这个终端已经不在了，路径没有插入。",
+      })
+      return
+    }
     const current = frames.get(intent.sessionId) ?? []
     sendFrame(intent.sessionId, current.length, [`$ echo ${landedPath}`])
     sendSummary()
@@ -476,7 +720,11 @@ function handleIntent(message) {
   }
   if (intent.kind === "rename") {
     const session = sessions.get(intent.sessionId)
-    if (session) session.title = intent.title
+    if (!session) {
+      reply(refuseMissing(intent.sessionId))
+      return
+    }
+    session.title = intent.title
     sendSummary()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     return
@@ -486,26 +734,85 @@ function handleIntent(message) {
     // gateway stops it, and the PTY exiting is what removes it. Either way the
     // phone's row ends up gone, which is the part this double reproduces. Whether
     // the gateway picks stop or delete is covered by the gateway's own tests.
-    sessions.delete(intent.sessionId)
-    frames.delete(intent.sessionId)
+    //
+    // A terminal that is already gone is a no-op *success* here, unlike `stop`: the
+    // state this intent asks for is the one it is already in.
+    if (sessions.has(intent.sessionId)) stopSession(intent.sessionId)
     sendSummary()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     return
   }
   if (intent.kind === "stop") {
-    // Stopping a running terminal does not leave a row behind on the real desktop:
-    // the stop kills the PTY, and the exit is what takes the session out of the list
-    // this summary is built from. Leaving it here as `ended` was this double
-    // promising the phone a state the real computer never puts it in — and a test
-    // that read the phone against it passed while the phone was showing something
-    // else entirely.
-    sessions.delete(intent.sessionId)
-    frames.delete(intent.sessionId)
+    if (!sessions.has(intent.sessionId)) {
+      reply(refuseMissing(intent.sessionId))
+      return
+    }
+    stopSession(intent.sessionId)
     sendSummary()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     return
   }
-  reply({ outcome: "no_op" })
+  if (intent.kind === "stopAll") {
+    // Only the terminals *this phone* has open, not everything on the computer: the
+    // gateway walks its own attachment list for the client that asked. A double that
+    // stopped the lot would let a test pass over a phone that had stopped something
+    // it never opened.
+    for (const sessionId of [...attached]) stopSession(sessionId)
+    sendSummary()
+    reply({ outcome: "accepted" })
+    return
+  }
+  if (intent.kind === "resize") {
+    const session = sessions.get(intent.sessionId)
+    if (!session) {
+      reply(refuseMissing(intent.sessionId))
+      return
+    }
+    // The phone's claim on the grid, recorded the way the gateway records it: the
+    // summary names the owner, and the desktop stops refitting this terminal to its
+    // own layout while the claim stands. No lease is involved in either direction —
+    // sizing is not writing.
+    if (intent.cols) session.cols = intent.cols
+    if (intent.rows) session.rows = intent.rows
+    session.gridOwnerId = payload.mobileClientInstanceId
+    sendSummary()
+    reply({ outcome: "accepted", sessionId: intent.sessionId })
+    return
+  }
+  if (intent.kind === "releaseGrid") {
+    const session = sessions.get(intent.sessionId)
+    if (!session) {
+      reply(refuseMissing(intent.sessionId))
+      return
+    }
+    // Giving back a grid nobody claimed is a success, not a refusal. The gateway's
+    // own `desktop_grid_unknown` is for the narrower case of ownership it has no
+    // desktop grid to restore — a state this double cannot be in, and inventing a
+    // way into it would be the same mistake in the other direction.
+    delete session.gridOwnerId
+    sendSummary()
+    reply({ outcome: "accepted", sessionId: intent.sessionId })
+    return
+  }
+  /*
+   * A kind this double does not stand in for.
+   *
+   * Never `no_op`: that reads on the phone as "the computer did nothing", which is an
+   * answer it acts on, and it is how an entire flow gets tested against silence. Naming
+   * the double instead makes a test that needs one fail saying so. The kinds left out
+   * are `create`, `createAgentConversation` and `launchCommand` — the New Terminal panel,
+   * which needs the project and Provider lists this summary does not carry, and which the
+   * real-desktop suite exercises against a real computer anyway.
+   */
+  console.error(
+    `mock desktop received an intent it does not implement: ${intent.kind}`
+    + " — see this file's header for the kinds it stands in for",
+  )
+  reply({
+    outcome: "rejected",
+    code: "mock_unimplemented_intent",
+    message: `模拟桌面端还没有实现 ${intent.kind}，请用真机用例覆盖。`,
+  })
 }
 
 function disconnectDesktop() {
@@ -671,7 +978,6 @@ makeSession(buildSessionId, "build", "/Users/liy/code/synapse", [
   "",
 ])
 
-// Only when asked: two terminals sharing one tab.
 // Kept apart from the fixtures the other tests read, so ending it costs nobody else.
 makeSession(scratchSessionId, "scratch", "/Users/liy/code/scratch", [`$ sleep 30`, ""])
 
@@ -680,6 +986,7 @@ makeSession(scratchSessionId, "scratch", "/Users/liy/code/scratch", [`$ sleep 30
 // through `SYNAPSE_TEST_SESSION_TITLE`, and this is that title's default.
 makeSession(relaySessionId, "relay-test", "/Users/liy/code/relay", [`$ echo ready`, ""])
 
+// Only when asked: two terminals sharing one tab.
 if (splitFixturesEnabled) {
   makeSession(splitLeftId, "web-a", "/Users/liy/code/web", [`$ pnpm dev`, `  ready in 812 ms`, ""])
   makeSession(splitRightId, "web-b", "/Users/liy/code/web", [`$ pnpm test`, `  24 passed`, ""])
