@@ -91,6 +91,7 @@ final class RealtimeClient {
     var onPresence: (([String]) -> Void)?
     /// A computer's terminal buttons. A full snapshot, so it replaces what is held.
     var onToolbar: ((MobileToolbarPayload) -> Void)?
+    var onQuickPhrases: ((MobileQuickPhrasesPayload) -> Void)?
     /// Fires when the handshake completes, including after every reconnect.
     /// Anything that must be re-established per connection belongs here: a send
     /// issued before this point is dropped, not queued.
@@ -299,7 +300,8 @@ final class RealtimeClient {
              LiveMessageType.mobileSummary, LiveMessageType.mobileIntentResult,
              LiveMessageType.mobileTransferProgress,
              LiveMessageType.mobileDetached, LiveMessageType.mobilePresence,
-             LiveMessageType.mobileToolbar:
+             LiveMessageType.mobileToolbar,
+             LiveMessageType.mobileQuickPhrases:
             // Any server traffic proves the connection is healthy.
             if !state.isConnected { state = .connected }
             dispatch(envelope)
@@ -340,6 +342,10 @@ final class RealtimeClient {
         case LiveMessageType.mobileToolbar:
             if let payload = envelope.payload.decode(MobileToolbarPayload.self) {
                 onToolbar?(payload)
+            }
+        case LiveMessageType.mobileQuickPhrases:
+            if let payload = envelope.payload.decode(MobileQuickPhrasesPayload.self) {
+                onQuickPhrases?(payload)
             }
         default:
             break

@@ -47,6 +47,12 @@ const splitFixturesEnabled = rawArgs.includes("--splits")
  * supposed to show its own built-ins for it rather than an empty bar — without which a
  * phone has no way to confirm anything in a TUI. Worth being able to produce on demand,
  * because the two answers look identical from here.
+ *
+ * It suppresses `mobile.quickPhrases` too, and for the same reason rather than as a
+ * convenience: a computer from before this family existed has never sent either message,
+ * so one switch covers both halves of "an older computer". What it must not be is a way
+ * to produce "a computer with no sentences" — that is the empty list, which is a computer
+ * that *can* say so and says none.
  */
 const toolbarSuppressed = rawArgs.includes("--no-toolbar")
 const contendFlag = rawArgs.indexOf("--contend")
@@ -233,6 +239,38 @@ function sendToolbar() {
   })))
 }
 
+/*
+ * What this stand-in holds in its 快捷输入 table, and the sentences the UI tests tap.
+ *
+ * One of them is deliberately long enough that a one-line row cannot show it — the
+ * preview is the only way to read the rest, and a mock where every sentence fits would
+ * leave both the truncation and the eye button untested.
+ *
+ * An empty array is a real answer this double can give ("this computer has none"),
+ * which is a different answer from never sending the message at all — that is what
+ * `--no-toolbar` is for.
+ */
+let quickPhrases = [
+  { id: "mock-log", content: "用 Easy Worklog 初始化今天的工作日志" },
+  { id: "mock-commit", content: "这次改动整理成提交说明，中文，说清楚改了什么、为什么改" },
+  { id: "mock-review", content: "把这次改动按可读性、边界情况、错误处理三个方面复查一遍" },
+]
+
+let quickPhrasesRevision = 0
+
+function sendQuickPhrases() {
+  // Suppressed by the same switch as the toolbar, and that is the point of the switch:
+  // it stands for a computer from before this whole family existed, so such a computer
+  // has never sent either message.
+  if (toolbarSuppressed) return
+  quickPhrasesRevision += 1
+  sendIfOpen(JSON.stringify(envelope("mobile.quickPhrases", {
+    desktopClientInstanceId,
+    revision: quickPhrasesRevision,
+    phrases: quickPhrases,
+  })))
+}
+
 /** Emits frames as `suffix` updates, mirroring what the desktop gateway does. */
 function sendFrame(sessionId, from, lines, extra = {}) {
   const all = frames.get(sessionId) ?? []
@@ -329,6 +367,7 @@ function handleIntent(message) {
     // Unconditional, like the real desktop: a phone that has just connected holds
     // nothing, and "unchanged since I last sent it" is not an answer to it.
     sendToolbar()
+    sendQuickPhrases()
     reply({ outcome: "accepted" })
     return
   }
@@ -340,6 +379,7 @@ function handleIntent(message) {
     // Re-armed per attach so a test run is reproducible against a long-lived mock.
     armContention(intent.sessionId)
     sendToolbar()
+    sendQuickPhrases()
     reply({ outcome: "accepted", sessionId: intent.sessionId })
     const lines = frames.get(intent.sessionId) ?? []
     sendIfOpen(JSON.stringify(envelope("mobile.frame", {
@@ -534,6 +574,27 @@ function startControlServer(port) {
       })
       return
     }
+    /*
+     * Replaces this double's 快捷输入 table. Sent straight away, for the reason the
+     * toolbar route gives: what is being driven from here is the phone, and it does the
+     * same thing with a snapshot whenever it lands.
+     */
+    if (route === "/desktop/quick-phrases") {
+      let body = ""
+      request.on("data", (chunk) => { body += chunk })
+      request.on("end", () => {
+        try {
+          const parsed = JSON.parse(body || "[]")
+          if (!Array.isArray(parsed)) throw new Error("expected an array of phrases")
+          quickPhrases = parsed
+          sendQuickPhrases()
+          response.writeHead(200).end("ok")
+        } catch (error) {
+          response.writeHead(400).end(String(error?.message ?? error))
+        }
+      })
+      return
+    }
     response.writeHead(404).end()
   })
   server.listen(port, controlHost, () => {
@@ -562,6 +623,7 @@ function connect() {
       console.log(`mock desktop online as ${desktopClientInstanceId}`)
       sendSummary()
       sendToolbar()
+      sendQuickPhrases()
       return
     }
     if (message.type === "mobile.intent") handleIntent(message)

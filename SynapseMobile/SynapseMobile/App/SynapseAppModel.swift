@@ -25,6 +25,10 @@ final class SynapseAppModel {
     /// The buttons the last `mobile.toolbar` carried, and which computer sent them.
     /// See `TerminalToolbarState` for why one slot is enough.
     private var toolbar = TerminalToolbarState()
+    /// The sentences the last `mobile.quickPhrases` carried, and which computer sent
+    /// them. See `TerminalQuickPhrasesState` for why "none" and "never heard of it"
+    /// have to stay apart.
+    private var quickPhrases = TerminalQuickPhrasesState()
     /// Sessions where the desktop's own user typed and took the write lease back.
     /// The phone does not ask about this — the next write reclaims it.
     private var preemptedSessions: Set<String> = []
@@ -373,6 +377,8 @@ final class SynapseAppModel {
         // These are another account's computers' commands, and nothing here is
         // persisted, so the next sign-in starts from the fallback as it should.
         toolbar.reset()
+        // Those are another account's computers' sentences, and nothing here persists.
+        quickPhrases.reset()
         await apiClient.logout()
         authState = .signedOut
     }
@@ -521,6 +527,9 @@ final class SynapseAppModel {
         }
         realtime.onToolbar = { [weak self] payload in
             self?.toolbar.adopt(payload)
+        }
+        realtime.onQuickPhrases = { [weak self] payload in
+            self?.quickPhrases.adopt(payload)
         }
         realtime.onConnected = { [weak self] in
             guard let self else { return }
@@ -848,6 +857,17 @@ final class SynapseAppModel {
     /// no keyboard of its own, nothing could be confirmed in a TUI at all.
     var activeToolbarButtons: [MobileToolbarButton] {
         toolbar.buttons(forSelected: selectedDesktopClientInstanceId)
+    }
+
+    /// The 快捷输入 sentences for the computer being viewed, or `nil` for one that has
+    /// never described any.
+    ///
+    /// `nil` is not an empty list, and the panel shows them differently: an empty list
+    /// is a computer saying it has none, which the user can act on, while `nil` is a
+    /// computer too old to have been asked, which is not the user's configuration
+    /// missing and must not be drawn as though it were.
+    var activeQuickPhrases: [MobileQuickPhrase]? {
+        quickPhrases.phrases(forSelected: selectedDesktopClientInstanceId)
     }
 
     /// Runs one of the toolbar's buttons against a terminal.

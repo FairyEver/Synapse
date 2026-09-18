@@ -21,6 +21,12 @@ enum LiveMessageType {
     /// The command buttons a computer offers this phone. A family of its own rather
     /// than part of the summary, whose byte budget cannot carry them.
     static let mobileToolbar = "mobile.toolbar"
+    /// The sentences a computer's 快捷输入 app holds, for this phone to tap into its
+    /// composer. Beside the toolbar rather than part of it: the two come from two
+    /// different computer apps, and having none of these is not having no toolbar —
+    /// the toolbar has built-in buttons to fall back to and a sentence is the user's
+    /// own words, with nothing to stand in for them.
+    static let mobileQuickPhrases = "mobile.quickPhrases"
 }
 
 /// Which of the user's computers are reachable right now.
@@ -596,6 +602,52 @@ struct MobileToolbarPayload: Decodable {
         init(from decoder: Decoder) throws {
             value = try? MobileToolbarButton(from: decoder)
         }
+    }
+}
+
+// MARK: - Quick phrases
+
+/// One sentence the user keeps in their computer's 快捷输入 app.
+///
+/// Only the two fields a row draws. The computer's own entry also carries a schema
+/// version, a sort position and two timestamps, and the phone shows none of them —
+/// the list arrives in the computer's order, which is what the sort position was for.
+struct MobileQuickPhrase: Decodable, Identifiable, Hashable {
+    let id: String
+    /// The computer's own wording, rendered verbatim — it goes into the composer as a
+    /// draft the user is expected to send, so nothing here may tidy it up.
+    let content: String
+}
+
+/// The 快捷输入 sentences one computer holds.
+///
+/// A full snapshot every time: the client replaces what it holds, so a lost message
+/// costs nothing beyond waiting for the next one.
+struct MobileQuickPhrasesPayload: Decodable {
+    let desktopClientInstanceId: String
+    let revision: Int
+    let phrases: [MobileQuickPhrase]
+
+    init(desktopClientInstanceId: String, revision: Int, phrases: [MobileQuickPhrase]) {
+        self.desktopClientInstanceId = desktopClientInstanceId
+        self.revision = revision
+        self.phrases = phrases
+    }
+
+    private enum CodingKeys: String, CodingKey { case desktopClientInstanceId, revision, phrases }
+
+    /// Strict, unlike the toolbar's button list.
+    ///
+    /// The toolbar has to skip a button it cannot act on, because a newer computer may
+    /// name a key this build has never heard of, and failing the message over that one
+    /// button would freeze the whole bar. There is nothing here that can be newer than
+    /// this build: a sentence is two strings, and one that will not decode means the
+    /// message itself is malformed — the same thing a missing identity means.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        desktopClientInstanceId = try container.decode(String.self, forKey: .desktopClientInstanceId)
+        revision = try container.decode(Int.self, forKey: .revision)
+        phrases = try container.decode([MobileQuickPhrase].self, forKey: .phrases)
     }
 }
 
