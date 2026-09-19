@@ -1,3 +1,4 @@
+import { mkdir, stat } from "node:fs/promises"
 import type {
   MeetingDetailDto,
   MeetingFinalizeInput,
@@ -82,7 +83,11 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     }
     // 新录音用的是新的 recordingId，理论上不会有旧暂存；清一次是防御——真出现同名
     // 目录，说明上一次的清理没跑完，留着会把两段录音的分片混进同一次上传。
-    await spoolFor(body.recordingId).clear()
+    const spool = spoolFor(body.recordingId)
+    await spool.clear()
+    // 清完立刻把目录建回来：**目录本身就是「这条是本机录的」的凭据**。不建的话，在第一个
+    // 分片攒够（1 MB，约 128 秒）之前被杀，这条录音就再也认不出是本机录的。
+    await mkdir(spool.directory, { recursive: true })
     return {
       meetingId: body.meetingId,
       recordingId: body.recordingId,
@@ -156,9 +161,47 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     return (await response.json()) as MeetingDetailDto
   }
 
-  async function findPendingRecording(): Promise<PendingRecording> {
-    const response = await deps.fetchAuthenticated("/meetings/recordings/pending", {}, "读取未完成录音失败。")
-    return (await response.json()) as PendingRecording
+  /**
+   * 暂存目录在不在。
+   *
+   * 判据是**目录在不在**，不是「里面还有没有分片」：分片是服务端确认一片就删一片，所以
+   * 录到一半被杀时目录往往是空的。拿「有没有分片」当判据，会把本机自己录的那条判成别人
+   * 的——而那条从此再也没人收尾，永远停在「转写中」。
+   *
+   * 目录由 `startRecording` 建，收尾或取消时清掉，所以它就是「本机录了这一条」的凭据。
+   */
+  async function ownsSpool(recordingId: string): Promise<boolean> {
+    try {
+      await stat(spoolFor(recordingId).directory)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * 本机自己录的、还没收尾的那条。
+   *
+   * **按本机残片挑，不是按服务端的「最新一条」挑。** 手机和电脑现在录的是同一批数据，
+   * 而 `/recordings/pending` 只按账号过滤、默认只给最新的一条——照它返回的那条去收尾，
+   * 手机上正在录的那条就会被电脑抢掉：时长是按已传字节估的，波形是空的，手机后续的分片
+   * 也全都会失败。残片只在本机，所以「本机有这个 recordingId 的暂存目录」就是「这条是
+   * 本机录的」。
+   */
+  async function findOwnPendingRecording(): Promise<PendingRecording | null> {
+    const response = await deps.fetchAuthenticated(
+      "/meetings/recordings/pending?all=1",
+      {},
+      "读取未完成录音失败。",
+    )
+    const body = (await response.json()) as { items?: unknown }
+    if (!Array.isArray(body.items)) return null
+    for (const item of body.items as PendingRecording[]) {
+      if (await ownsSpool(item.recordingId)) return item
+    }
+    // 服务端说有几条没收尾，但一条都不是本机录的。**不是本机的就不要碰**：别的设备录的
+    // 那条，本机既没有字节也没有波形，抢过来收尾只会毁掉它。
+    return null
   }
 
   /** 上次没收尾的录音还留在本机的那几片。 */
@@ -188,7 +231,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
 
   async function runFinalize(): Promise<void> {
     try {
-      const pending = await findPendingRecording()
+      const pending = await findOwnPendingRecording()
       if (!pending) return
       for (const part of await readSpooledParts(pending.recordingId)) {
         await uploadPart(pending.recordingId, part.partNumber, part.bytes)
@@ -256,7 +299,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     cancelRecording,
     listMeetings,
     getMeeting,
-    findPendingRecording,
+    findOwnPendingRecording,
     readSpooledParts,
     finalizePendingRecording,
     renameMeeting,

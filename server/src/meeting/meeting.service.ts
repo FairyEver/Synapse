@@ -55,6 +55,19 @@ export function meetingRecordingStorageKey(recordingId: string): string {
   return `${MEETING_RECORDING_PATH_PREFIX}/${recordingId}`
 }
 
+/**
+ * 一次开了头、还没收尾的录音。
+ *
+ * `receivedBytes` 只够估一个时长出来，它是给「本机残片已经不全」的那一端用的兜底。
+ */
+export type PendingMeetingRecording = {
+  readonly meetingId: string
+  readonly recordingId: string
+  readonly title: string
+  readonly receivedBytes: number
+  readonly startedAt: string
+}
+
 type MeetingRow = {
   readonly id: string
   readonly title: string
@@ -312,29 +325,44 @@ export class MeetingService {
     return { receivedParts, receivedBytes }
   }
 
-  /** 上一次没收尾的录音，用于「发现一段未完成的录音」。 */
-  async findPendingRecording(userId: string): Promise<{
-    readonly meetingId: string
-    readonly recordingId: string
-    readonly title: string
-    readonly receivedBytes: number
-    readonly startedAt: string
-  } | null> {
-    const job = await this.prisma.meetingTranscriptionJob.findFirst({
+  /** 上一次没收尾的录音。没有就返回 null，不报错。 */
+  async findPendingRecording(userId: string): Promise<PendingMeetingRecording | null> {
+    const [first] = await this.pendingRecordings(userId)
+    return first ?? null
+  }
+
+  /**
+   * 所有还没收尾的录音。
+   *
+   * 一台设备只该收**自己录的那条**，所以它得先看得见全部，再按本机还留着的残片挑出
+   * 自己那条。只给最新一条的话，只要另一台设备录的那条更新，本机就永远看不到自己那
+   * 条——自己那条反而没人收尾。以前只有桌面端一个主体，这件事显不出来；手机端一上线
+   * 就有了两个。
+   */
+  async findPendingRecordings(userId: string): Promise<readonly PendingMeetingRecording[]> {
+    return this.pendingRecordings(userId)
+  }
+
+  private async pendingRecordings(userId: string): Promise<PendingMeetingRecording[]> {
+    const jobs = await this.prisma.meetingTranscriptionJob.findMany({
       where: { status: "pending", uploadId: { not: null }, meeting: { userId } },
       orderBy: { updatedAt: "desc" },
       include: { meeting: { include: { recording: true } } },
     })
-    if (!job?.meeting.recording || job.meeting.recording.status === UPLOAD_STATUS_READY || job.meeting.recording.status === "deleted") {
-      return null
+    const pending: PendingMeetingRecording[] = []
+    for (const job of jobs) {
+      const recording = job.meeting.recording
+      // 已经合并好的（ready）和已经删掉的都不算没收尾。
+      if (!recording || recording.status === UPLOAD_STATUS_READY || recording.status === "deleted") continue
+      pending.push({
+        meetingId: job.meetingId,
+        recordingId: recording.id,
+        title: job.meeting.title,
+        receivedBytes: Number(job.totalBytes),
+        startedAt: job.meeting.startedAt.toISOString(),
+      })
     }
-    return {
-      meetingId: job.meetingId,
-      recordingId: job.meeting.recording.id,
-      title: job.meeting.title,
-      receivedBytes: Number(job.totalBytes),
-      startedAt: job.meeting.startedAt.toISOString(),
-    }
+    return pending
   }
 
   /**

@@ -70,9 +70,21 @@ export class MeetingController {
     return this.meetings.list(request.user!.id)
   }
 
-  /** 上次没收尾的录音。没有就返回 null，不报错。 */
+  /**
+   * 上次没收尾的录音。没有就返回 null，不报错。
+   *
+   * `?all=1` 返回**全部**，形状是 `{ items: [...] }`。一台设备只该收自己录的那条，
+   * 而它没法凭空知道自己的 recordingId 是哪个——得先看见全部，再按本机还留着的残片
+   * 挑出自己那条。
+   *
+   * **无参数时的行为一字未动。** 线上还有旧版桌面端在调这个接口，把返回类型从对象
+   * 换成数组会让它们静默失效。
+   */
   @Get("/recordings/pending")
-  findPendingRecording(@Req() request: AuthenticatedUserRequest) {
+  async findPendingRecording(@Req() request: AuthenticatedUserRequest, @Query("all") all?: string) {
+    if (all) {
+      return { items: await this.meetings.findPendingRecordings(request.user!.id) }
+    }
     return this.meetings.findPendingRecording(request.user!.id)
   }
 

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, rm, stat } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -22,6 +22,16 @@ afterEach(async () => {
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+}
+
+/** 本机是不是录了这一条。判据是暂存目录在不在，与产品代码同一套。 */
+async function ownsSpoolDirectory(recordingId: string, root: string): Promise<boolean> {
+  try {
+    await stat(path.join(root, `synapse-meeting-recording-${recordingId}`))
+    return true
+  } catch {
+    return false
+  }
 }
 
 describe("录音 IPC 通道", () => {
@@ -142,23 +152,29 @@ describe("异常退出的静默收尾", () => {
     root = await temporaryRoot()
   })
 
-  /** 服务端说上一段没录完，本机还留着最后一片。 */
-  function stubServer(calls: { path: string; body: unknown }[]) {
+  /** 服务端说上一段没录完。本机有没有残片由测试自己摆。 */
+  function stubServer(calls: { path: string; body: unknown }[], pending: readonly unknown[] = [PENDING_R_1]) {
     return vi.fn(async (requestPath: string, init?: RequestInit) => {
       // 分片是裸字节，只有 JSON 请求才解析 body。
       const isJson = String(init?.headers && (init.headers as Record<string, string>)["content-type"]).includes("json")
       calls.push({ path: requestPath, body: isJson && init?.body ? JSON.parse(String(init.body)) : null })
-      if (requestPath === "/meetings/recordings/pending") {
-        return jsonResponse({
-          meetingId: "m-1",
-          recordingId: "r-1",
-          title: "Q3 评审",
-          receivedBytes: 8000,
-          startedAt: "2026-09-19T02:00:00.000Z",
-        })
-      }
+      if (requestPath === "/meetings/recordings/pending?all=1") return jsonResponse({ items: pending })
       return jsonResponse({})
     }) as unknown as MeetingAuthenticatedFetch
+  }
+
+  const PENDING_R_1 = {
+    meetingId: "m-1",
+    recordingId: "r-1",
+    title: "Q3 评审",
+    receivedBytes: 8000,
+    startedAt: "2026-09-19T02:00:00.000Z",
+  }
+
+  /** 服务端说没收尾、而且**本机确实录了**这一条。 */
+  async function ownThisRecording(recordingId: string, root: string): Promise<void> {
+    await createMeetingSpool(recordingId, root).stage(1, new Uint8Array([0]))
+    await createMeetingSpool(recordingId, root).confirm(1)
   }
 
   it("补上本机残留的那一片，再按正常录音收尾", async () => {
@@ -170,7 +186,7 @@ describe("异常退出的静默收尾", () => {
     await service.finalizePendingRecording()
 
     expect(calls.map((call) => call.path)).toEqual([
-      "/meetings/recordings/pending",
+      "/meetings/recordings/pending?all=1",
       "/meetings/recordings/r-1/parts/3",
       "/meetings/recordings/r-1/complete",
     ])
@@ -186,12 +202,52 @@ describe("异常退出的静默收尾", () => {
     const service = createMeetingService({
       fetchAuthenticated: vi.fn(async (requestPath: string) => {
         calls.push({ path: requestPath, body: null })
-        return jsonResponse(null)
+        return jsonResponse({ items: [] })
       }) as unknown as MeetingAuthenticatedFetch,
       spoolRoot: root,
     })
     await service.finalizePendingRecording()
-    expect(calls.map((call) => call.path)).toEqual(["/meetings/recordings/pending"])
+    expect(calls.map((call) => call.path)).toEqual(["/meetings/recordings/pending?all=1"])
+  })
+
+  it("别的设备录的那条不碰", async () => {
+    // 手机在录，用户在电脑上打开 Synapse。服务端会说「有一条没收尾」，但本机没有这条的
+    // 暂存目录——残片只在本机，本机既没有字节也没有波形，抢过来收尾只会用一个估算的
+    // 时长和一条平线把人家正在录的东西毁掉。
+    const calls: { path: string; body: unknown }[] = []
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+
+    await service.finalizePendingRecording()
+
+    expect(calls.map((call) => call.path)).toEqual(["/meetings/recordings/pending?all=1"])
+    expect(calls.some((call) => call.path.endsWith("/complete"))).toBe(false)
+  })
+
+  it("本机录的那条，即使暂存里一片都不剩也照样收尾", async () => {
+    // 分片是服务端确认一片就删一片，所以进程被杀时暂存往往是空的。拿「有没有分片」当
+    // 判据，会把本机自己录的那条判成别人的——那条从此永远停在「转写中」。
+    const calls: { path: string; body: unknown }[] = []
+    const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    await ownThisRecording("r-1", root)
+
+    await service.finalizePendingRecording()
+
+    expect(calls.map((call) => call.path)).toEqual([
+      "/meetings/recordings/pending?all=1",
+      "/meetings/recordings/r-1/complete",
+    ])
+  })
+
+  it("开始录音就把本机凭据立起来，不必等第一个分片攒够", async () => {
+    // 1 MB 分片约合 128 秒。不在一开始就把目录建起来，录到一半被杀的那些录音就再也认不
+    // 出是本机录的。
+    const service = createMeetingService({
+      fetchAuthenticated: async () =>
+        jsonResponse({ meetingId: "m-1", recordingId: "r-9", uploadId: "u-1", title: "新录音" }),
+      spoolRoot: root,
+    })
+    await service.startRecording({})
+    expect(await ownsSpoolDirectory("r-9", root)).toBe(true)
   })
 
   it("收尾失败不让调用方看见错误，应用照常起来", async () => {
@@ -210,6 +266,7 @@ describe("异常退出的静默收尾", () => {
   it("同时叫两次也只收尾一次", async () => {
     const calls: { path: string; body: unknown }[] = []
     const service = createMeetingService({ fetchAuthenticated: stubServer(calls), spoolRoot: root })
+    await ownThisRecording("r-1", root)
     await Promise.all([service.finalizePendingRecording(), service.finalizePendingRecording()])
     expect(calls.filter((call) => call.path === "/meetings/recordings/r-1/complete")).toHaveLength(1)
   })
