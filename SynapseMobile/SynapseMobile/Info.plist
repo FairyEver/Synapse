@@ -102,11 +102,24 @@
 	</dict>
 	<!--
 	  The only picker source that runs in this app's own process. Photos and Files
-	  are chosen inside system extensions and need no usage description, so the
-	  camera is the sole reason this key exists.
+	  are chosen inside system extensions and need no usage description of their
+	  own, so the camera is the reason this particular key exists.
 	-->
 	<key>NSCameraUsageDescription</key>
 	<string>拍照片或录像发给电脑上的终端。</string>
+	<!--
+	  Read for exactly one thing: the newest picture, offered above the input bar as
+	  a one-tap send. Every other way a photo reaches this app goes through
+	  `PHPickerViewController`, which runs out of process and shows the library
+	  without the app gaining access to it — but a picker only answers once someone
+	  has picked, so "the one just taken" cannot be asked of it.
+
+	  It is not asked for at launch. The prompt appears the first time the user has
+	  actually used the photo picker once; before that nothing here reads the library,
+	  and a denial costs nothing but the offer.
+	-->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>把刚拍的照片、刚截的图摆在输入栏上方，点一下发到电脑上的终端。</string>
 	<!--
 	  The microphone, for three things now: turning speech into text in the terminal
 	  input bar, the sound on a video, and recording. The last one is why this

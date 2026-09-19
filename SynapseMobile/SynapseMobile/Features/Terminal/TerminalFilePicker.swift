@@ -23,6 +23,17 @@ enum TerminalFileIntake {
         return await normalizeLibraryFile(at: copied.url, name: copied.name)
     }
 
+    /// 相册里已经知道是哪一张的图 —— 用户没进相册，App 自己找出来的那一张。
+    ///
+    /// 它和上面那条停在同一个地方（`normalizeLibraryFile`），这是有意的：气泡发出去
+    /// 的文件必须和从相册里挑出来的那一个长得一样，包括 HEIC 转 JPEG 这一步。
+    static func prepare(libraryAssetId: String) async -> PickedFile? {
+        guard let written = await TerminalRecentPhotoLibrary.writeOriginal(for: libraryAssetId) else {
+            return nil
+        }
+        return await normalizeLibraryFile(at: written.url, name: written.name)
+    }
+
     /// A document the user chose. `asCopy: true` means the URL already points at a
     /// copy inside this app's container, so it can be read without a security scope.
     static func prepare(documentURL url: URL) async -> PickedFile? {
@@ -161,11 +172,19 @@ private enum PreparedFile {
 
 /// The photo library.
 ///
-/// `PHPickerViewController` runs out of process, which is why it needs no photo
-/// permission — there is no usage-description key for it and none should be added.
+/// `PHPickerViewController` runs out of process, which is why **this** needs no photo
+/// permission and has no usage description of its own. The app does now hold one —
+/// for the newest-picture offer, which by definition cannot come from a picker the
+/// user has not opened yet (see `TerminalRecentPhotoLibrary`). This picker is
+/// unaffected by it: it would work the same with the permission denied.
+///
+/// The whole `PHPickerResult` is handed back rather than just its item provider,
+/// because the result also carries the library's own identifier for what was picked.
+/// That identifier is what keeps a picture the user just chose here from floating up
+/// as the newest one a moment later.
 struct PhotoLibraryPicker: UIViewControllerRepresentable {
     let selectionLimit: Int
-    let onPicked: ([NSItemProvider]) -> Void
+    let onPicked: ([PHPickerResult]) -> Void
     let onCancelled: () -> Void
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
@@ -192,10 +211,10 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
     }
 
     final class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        private let onPicked: ([NSItemProvider]) -> Void
+        private let onPicked: ([PHPickerResult]) -> Void
         private let onCancelled: () -> Void
 
-        init(onPicked: @escaping ([NSItemProvider]) -> Void, onCancelled: @escaping () -> Void) {
+        init(onPicked: @escaping ([PHPickerResult]) -> Void, onCancelled: @escaping () -> Void) {
             self.onPicked = onPicked
             self.onCancelled = onCancelled
         }
@@ -205,7 +224,7 @@ struct PhotoLibraryPicker: UIViewControllerRepresentable {
                 onCancelled()
                 return
             }
-            onPicked(results.map(\.itemProvider))
+            onPicked(results)
         }
     }
 }

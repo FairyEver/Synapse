@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -32,6 +33,13 @@ struct TerminalScreen: View {
     /// is used: the pasteboard changes while the app is not looking, there is no
     /// notification for that, and the menu that asks is built before it opens.
     @State private var pasteboardHoldsImage = false
+    /// 相册里最新的一张图，够新的那一小段时间里摆在输入栏上方（判定见
+    /// `TerminalRecentPhotoLibrary`）。nil 表示这次没有可提议的 —— 没授权、太旧、
+    /// 或者已经发过，三种情况在屏幕上都是同一件事：什么都不摆。
+    @State private var recentPhoto: RecentPhoto?
+    /// 到点把它收走的那班岗。没有它，一张五分钟后就不再成立的提议会一直挂在那里，
+    /// 直到用户碰巧做点什么让这个界面重算。
+    @State private var recentPhotoExpiry: Task<Void, Never>?
     /// Files picked but not yet sent, while the user is being asked whether a
     /// terminal that is waiting for input should really receive them.
     @State private var pendingFiles: [PickedFile] = []
@@ -469,12 +477,31 @@ struct TerminalScreen: View {
                                 : .scale(scale: 0.9, anchor: .bottom).combined(with: .opacity)
                         )
                     }
+
+                    // 最新那张图。和录音浮层共用这一格，理由相同：它也要浮在输入区
+                    // 之上而不占任何高度（占一行就会改掉报给电脑的格子数）。录音时
+                    // 让位 —— 那块面板铺满整条，底下压着一张缩略图，点下去就发走了。
+                    if let recentPhoto, !voicePresentation.panelVisible {
+                        recentPhotoBubble(recentPhoto)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .padding(.trailing, 12)
+                            .padding(.bottom, 8)
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity)
+                            )
+                    }
                 }
                 .frame(height: 0, alignment: .bottom)
                 // 干脆的一下：过冲只有一点点，落定得快。再弹就是玩具了。
                 .animation(
                     reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
                     value: voicePresentation.panelVisible
+                )
+                .animation(
+                    reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
+                    value: recentPhoto?.id
                 )
             }
             // 坐标系开在**最外层**，把输入栏和浮层一起圈进来。
@@ -515,6 +542,7 @@ struct TerminalScreen: View {
             // 就没有"相对于什么"可言。
             DiagnosticLog.record(.terminalEnter, terminalEnterFields())
             refreshPasteboardImage()
+            Task { await refreshRecentPhoto() }
             // 摆在前两件之后、也不等任何异步：它只读已经给着的权限和当下的连接，
             // 所以进来那一帧就已经是语音态，不会先画一下键盘态再翻过去。
             restoreInputMode()
@@ -523,13 +551,28 @@ struct TerminalScreen: View {
         // computer the user is sitting at — reaches this device's pasteboard while
         // this screen is the one being looked at.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshPasteboardImage() }
+            if phase == .active {
+                refreshPasteboardImage()
+                Task { await refreshRecentPhoto() }
+            }
+        }
+        // 在这块屏幕上截的图：截完就走开去别的 App 的那条路由 `scenePhase` 覆盖，
+        // 但这台手机屏幕上最常见的一种截图，是用户正看着终端时截下来要发给它的。
+        // 通知本身不带图，它只是「相册里刚刚多了一张」的提示；等一拍是因为截图的
+        // 入库在那一下之后才完成。
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.userDidTakeScreenshotNotification)) { _ in
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                await refreshRecentPhoto()
+            }
         }
         .onDisappear {
             // Leaving the screen ends the recording with it: a microphone left open
             // behind a pushed-back list is the kind of thing that only gets noticed
             // from the status bar.
             voice.cancel()
+            // 这一页走了，那班收气泡的岗就没有要收的东西了。
+            recentPhotoExpiry?.cancel()
             model.closeTerminal(sessionId)
         }
         // 终端没了，这个页面跟着走。停止、删除、在电脑上关掉、进程自己退出，最后都
@@ -599,9 +642,9 @@ struct TerminalScreen: View {
         .sheet(isPresented: $showingPhotoPicker) {
             PhotoLibraryPicker(
                 selectionLimit: AppConfiguration.relayMaxFileCount,
-                onPicked: { providers in
+                onPicked: { results in
                     showingPhotoPicker = false
-                    Task { await intake(providers: providers) }
+                    Task { await intake(results: results) }
                 },
                 onCancelled: { showingPhotoPicker = false }
             )
@@ -1235,16 +1278,122 @@ struct TerminalScreen: View {
         model.commitDeliveredAttachments(for: sessionId)
     }
 
+    // MARK: - 最新那张图
+
+    /// 相册里最新的一张，摆在输入栏上方等着被点。
+    ///
+    /// 只有图，没有名字也没有句子陪着：它自己就是它要说的那句话，而「你可能有张
+    /// 照片要发」是在替用户念一张他自己刚拍的图。点击目标的下限它本来就够（缩略图
+    /// 比 44 点大），所以不必再套一层框 —— 它浮在终端之上，多出来的每一平方点压掉的
+    /// 都是用户在读的行。
+    ///
+    /// 一圈边框而不是投影：这个 App 的层级靠线，不靠叠阴影（见 `SurfaceCard`）。这一
+    /// 圈在这里还多担一件事 —— 一张白底截图浮在浅色输入栏之上时，没有它就是一张边界
+    /// 不明的图。
+    private func recentPhotoBubble(_ photo: RecentPhoto) -> some View {
+        Button {
+            sendRecentPhoto(photo)
+        } label: {
+            Image(uiImage: photo.thumbnail)
+                .resizable()
+                .scaledToFill()
+                .frame(width: Self.recentPhotoBubbleSide, height: Self.recentPhotoBubbleSide)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color(uiColor: .separator), lineWidth: 1)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("recent-photo")
+        .accessibilityLabel("发送最近的照片")
+    }
+
+    private static let recentPhotoBubbleSide: CGFloat = 64
+
+    /// 重算这张提议。
+    ///
+    /// 几个时机的判定都收在这里，而不是各自算一遍：够不够新、是不是已经发过、有没有
+    /// 授权，三件事一起决定它出不出来，分开写必然会有一处漂开。
+    private func refreshRecentPhoto() async {
+        let photo = await TerminalRecentPhotoLibrary.latestOfferable()
+        recentPhoto = photo
+
+        recentPhotoExpiry?.cancel()
+        recentPhotoExpiry = nil
+        guard let photo else { return }
+
+        // 它自己到点消失，而不是等下一次重算：五分钟之后没有任何事情会发生，而一个
+        // 不会再成立的说法留在屏幕上，比不摆它更糟。
+        let remaining = photo.createdAt
+            .addingTimeInterval(recentPhotoFreshness)
+            .timeIntervalSinceNow
+        guard remaining > 0 else { return }
+        recentPhotoExpiry = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(remaining))
+            guard !Task.isCancelled else { return }
+            recentPhoto = nil
+        }
+    }
+
+    /// 点一下气泡：把那一张发出去，和从相册里选它是同一条路。
+    private func sendRecentPhoto(_ photo: RecentPhoto) {
+        // 点下去就算这一张用掉了，无论它最后有没有发出去：读文件失败、或者终端在等
+        // 回答时用户否掉了那个确认框，都会让同一张图再飘回来 —— 而让人对着一张自己
+        // 刚点过的图再点一次，比少一次提议更糟（第二次点是会真的发出去的）。
+        TerminalRecentPhotoLibrary.markDelivered(photo.id)
+        recentPhoto = nil
+        recentPhotoExpiry?.cancel()
+        recentPhotoExpiry = nil
+
+        Task {
+            guard let file = await TerminalFileIntake.prepare(libraryAssetId: photo.id) else {
+                model.raiseTerminalMessage("没有读取到可发送的图片。", sessionId: sessionId)
+                return
+            }
+            hand([file])
+        }
+    }
+
+    /// 用户用过一次「照片和视频」之后，才问相册权限。
+    ///
+    /// 时机是这一步的全部内容，所以它写在这里而不是写在一个「App 启动时」的地方。
+    /// 进来就是为了一张相册里的图 —— 此刻问「能不能读你的相册」有人答得上来；换到
+    /// 首次进终端时问，那是在为一个用户还不知道存在的功能索取权限。
+    ///
+    /// 用过的这一次本身也记一笔：他刚挑的那张可能正好就是最新的一张，不记的话授权
+    /// 一给，同一张图立刻从输入栏上方又浮出来。
+    private func offerRecentPhotoAccess() async {
+        guard TerminalRecentPhotoLibrary.isUndetermined else {
+            await refreshRecentPhoto()
+            return
+        }
+        await TerminalRecentPhotoLibrary.requestAccess()
+        await refreshRecentPhoto()
+    }
+
     // MARK: - Sending files to the computer
 
-    private func intake(providers: [NSItemProvider]) async {
+    private func intake(results: [PHPickerResult]) async {
         var files: [PickedFile] = []
-        for provider in providers {
-            if let file = await TerminalFileIntake.prepare(provider: provider) {
+        for result in results {
+            // 相册自己对这一张的称呼（有的话）。从「文件」里挑的、或者别的 App 导
+            // 出来的没有这个名字，那些本来也不会飘上来。
+            if let assetId = result.assetIdentifier {
+                TerminalRecentPhotoLibrary.markDelivered(assetId)
+            }
+            if let file = await TerminalFileIntake.prepare(provider: result.itemProvider) {
                 files.append(file)
             }
         }
+        // 挑完这一张，就是「用过一次照片和视频」了。文件先走，授权后问：中转条先
+        // 出现在屏幕上，接下来那个弹窗在问什么才有上下文。
+        let picked = !files.isEmpty
         hand(files)
+        // 终端在等回答时 `hand` 会先弹一个确认框，再叠一个系统授权框，用户会以为
+        // 自己点错了什么。那一次就算了 —— 下次用相册时还会走到这里。
+        if picked, !showingBusyConfirm { await offerRecentPhotoAccess() }
     }
 
     private func intake(urls: [URL]) async {
