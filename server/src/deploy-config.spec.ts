@@ -644,12 +644,32 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("return 302 /console/;")
   })
 
-  it("returns 404 before SPA fallback for retired team and invitation pages", () => {
+  it("returns 404 for retired invitation pages and legacy console team paths only", () => {
     const nginx = readRepoFile("server/nginx.conf")
-    const retiredRoutes = nginx.indexOf("(?:team-invite|(?:console|dashboard)/team-invite")
+    const notFoundMatchers = collectNginxNotFoundMatchers(nginx)
 
-    expect(retiredRoutes).toBeGreaterThan(0)
-    expect(nginx.slice(retiredRoutes, retiredRoutes + 220)).toContain("return 404;")
+    expect(notFoundMatchers.length).toBeGreaterThan(0)
+    for (const pathname of [
+      "/team-invite",
+      "/console/team-invite",
+      "/dashboard/team-invite",
+      "/invitations",
+      "/admin/invitations",
+      "/console/teams",
+      "/dashboard/teams",
+      "/dashboard/teams/legacy",
+    ]) {
+      expect(
+        notFoundMatchers.some((matcher) => matchesNginxLocation(matcher, pathname)),
+        `${pathname} 应该继续返回 404`,
+      ).toBe(true)
+    }
+    for (const pathname of ["/admin/teams", "/admin/teams/team-1"]) {
+      expect(
+        notFoundMatchers.filter((matcher) => matchesNginxLocation(matcher, pathname)),
+        `${pathname} 不应该被任何 404 规则拦住`,
+      ).toEqual([])
+    }
   })
 
   it("forwards public origin and websocket upgrade headers to the api server", () => {
@@ -694,4 +714,36 @@ function collectRepoFiles(
     }
   }
   return files
+}
+
+/** 摘出 nginx.conf 里所有以 `return 404;` 结束的 location 的匹配式，含嵌套块。 */
+function collectNginxNotFoundMatchers(nginx: string): string[] {
+  const lines = nginx.split("\n")
+  const matchers: string[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const opened = (lines[index] ?? "").match(/^\s*location\s+(.+?)\s*\{\s*$/u)
+    if (!opened) continue
+    let depth = 1
+    let cursor = index + 1
+    const body: string[] = []
+    while (cursor < lines.length && depth > 0) {
+      const current = lines[cursor] ?? ""
+      depth += (current.match(/\{/gu)?.length ?? 0) - (current.match(/\}/gu)?.length ?? 0)
+      if (depth > 0) body.push(current)
+      cursor += 1
+    }
+    if (body.join("\n").includes("return 404;")) matchers.push(opened[1] ?? "")
+  }
+  return matchers
+}
+
+/** 按 nginx location 的匹配语义判断一个请求路径会不会落进这条规则。 */
+function matchesNginxLocation(matcher: string, pathname: string): boolean {
+  const spec = matcher.trim()
+  if (spec.startsWith("~")) {
+    return new RegExp(spec.replace(/^~\*?\s*/u, ""), "u").test(pathname)
+  }
+  if (spec.startsWith("^~")) return pathname.startsWith(spec.slice(2).trim())
+  if (spec.startsWith("=")) return pathname === spec.slice(1).trim()
+  return pathname.startsWith(spec)
 }

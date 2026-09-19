@@ -15,9 +15,10 @@ export function isDriveBrowserSpaPath(pathname: string) {
 
 export function isRetiredTeamRoutePath(pathname: string) {
   const normalized = pathname.replace(/\/$/u, '') || '/'
-  if (normalized === '/team-invite') return true
-  if (/^\/(?:console|dashboard)\/team-invite$/u.test(normalized)) return true
-  return /^\/(?:admin|console|dashboard)\/(?:teams|invitations)(?:\/.*)?$/u.test(normalized)
+  // 邀请域永久下线
+  if (/^(?:\/(?:admin|console|dashboard))?\/(?:team-invite|invitations)(?:\/.*)?$/u.test(normalized)) return true
+  // 团队页只存在于管理后台；旧的控制台路径继续兜 404
+  return /^\/(?:console|dashboard)\/teams(?:\/.*)?$/u.test(normalized)
 }
 
 export function resolveLegacyDashboardDevRedirect(pathname: string) {

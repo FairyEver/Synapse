@@ -140,18 +140,22 @@ describe("dashboard Vite dev proxy", () => {
     expect(resolveLegacyDashboardDevRedirect("/console/auth/desktop")).toBeNull()
   })
 
-  it("returns 404 for retired team and invitation pages in dev", () => {
+  it("returns 404 for retired invitation pages and legacy console team paths in dev", () => {
     for (const path of [
       "/team-invite",
       "/console/team-invite",
       "/dashboard/team-invite",
-      "/admin/teams",
+      "/invitations",
       "/admin/invitations",
       "/console/teams",
+      "/dashboard/teams",
       "/dashboard/invitations/legacy",
     ]) {
-      expect(isRetiredTeamRoutePath(path)).toBe(true)
+      expect(isRetiredTeamRoutePath(path), `${path} 应该继续返回 404`).toBe(true)
     }
+    // 团队页回到了管理后台，开发和正式环境都不能再拦它
+    expect(isRetiredTeamRoutePath("/admin/teams")).toBe(false)
+    expect(isRetiredTeamRoutePath("/admin/teams/team-1")).toBe(false)
     expect(isRetiredTeamRoutePath("/admin/users")).toBe(false)
     expect(isRetiredTeamRoutePath("/console/settings")).toBe(false)
   })

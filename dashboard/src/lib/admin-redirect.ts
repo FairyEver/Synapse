@@ -2,6 +2,8 @@ const adminRoutePatterns = [
   /^\/system\/?$/u,
   /^\/telemetry\/?$/u,
   /^\/users\/?$/u,
+  /^\/teams\/?$/u,
+  /^\/teams\/[^/]+\/?$/u,
   /^\/devices\/?$/u,
   /^\/skill-repositories\/?$/u,
   /^\/webhook-deliveries\/?$/u,
