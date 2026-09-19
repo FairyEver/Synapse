@@ -2,6 +2,7 @@ import { useCallback } from "react"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "@/app-shell/logging"
+import { isMainAppWindow, requestOpenTerminalSession } from "@/app-shell/terminal-navigation"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { ProviderModelSelection } from "@/types/provider-model"
 
@@ -83,12 +84,15 @@ function useAgentProjectTerminalActions() {
       return false
     }
 
+    const openRequest = { requestId: createRequestId(), sessionId }
+    if (isMainAppWindow()) {
+      requestOpenTerminalSession(openRequest)
+      return true
+    }
+
     try {
       await bridge.apps.openSystemApp("terminal", {
-        terminalOpenRequest: {
-          requestId: createRequestId(),
-          sessionId,
-        },
+        terminalOpenRequest: openRequest,
       })
     } catch (rawError) {
       logger.warn("Claude Code terminal window open failed.", {

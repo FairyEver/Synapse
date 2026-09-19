@@ -8,6 +8,7 @@ import { KnowledgeBaseStorageMigrationDialog } from "@/app-shell/components/know
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { useAppConfig } from "@/app-shell/config"
 import { subscribeContentOpenRequest, type ContentOpenRequest } from "@/app-shell/content-navigation"
+import { subscribeOpenTerminalSession } from "@/app-shell/terminal-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { useKnowledgeBaseStorageMigration } from "@/app-shell/hooks/use-knowledge-base-storage-migration"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
@@ -56,7 +57,7 @@ import { isSystemAppEntryVisible } from "@/modules/apps/visibility"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transition"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
-import type { SynapseSystemAppId } from "@/modules/apps/types"
+import type { SynapseSystemAppId, SynapseSystemAppTerminalOpenRequest } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { SoundNotifierHost } from "../app-capabilities/sound-notifier/renderer/host"
 import { SynapseSkillUpdateDialogHost } from "../app-capabilities/synapse-skill/renderer/update-dialog"
@@ -85,6 +86,8 @@ function MainApp() {
   } | null>(null)
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
+  const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
+    useState<SynapseSystemAppTerminalOpenRequest | null>(null)
   const [launcherResetKey, setLauncherResetKey] = useState(0)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(initialWorkflowEntryVisible)
   const dock = useDockPreferences({ workflowEntryVisible })
@@ -273,6 +276,14 @@ function MainApp() {
     })
   }, [setActiveAppId])
 
+  useEffect(() => {
+    return subscribeOpenTerminalSession((request) => {
+      ensureBodyInteractable()
+      setActiveAppId("terminal", "notification")
+      setPendingTerminalOpenRequest(request)
+    })
+  }, [setActiveAppId])
+
   const handleUpdateOpenRequest = useCallback((request: SynapseAppUpdateOpenRequest) => {
     setActiveAppId("settings", "notification")
     requestOpenSettingsAbout()
@@ -344,6 +355,10 @@ function MainApp() {
                   }}
                   pendingAgentSession={pendingAgentSession}
                   onPendingAgentSessionConsumed={handlePendingAgentSessionConsumed}
+                  terminalOpenRequest={pendingTerminalOpenRequest}
+                  onTerminalOpenRequestConsumed={(requestId) => {
+                    setPendingTerminalOpenRequest((current) => current?.requestId === requestId ? null : current)
+                  }}
                 />
               </EmbeddedSystemAppShell>
             </AppSwitchTransition>

@@ -5,6 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
+import type { SynapseSystemAppTerminalOpenRequest } from "@/modules/apps/types"
 
 import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   },
   cheatCodeStateListener: null as null | ((state: { name: string; active: boolean }) => void),
   contentOpenRequestListener: null as null | ((request: ContentOpenRequest) => void),
+  terminalOpenRequestListener: null as null | ((request: SynapseSystemAppTerminalOpenRequest) => void),
   getStates: vi.fn(),
   lastDockProps: null as null | {
     apps: Array<{ id: string; name: string }>
@@ -24,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   lastSystemAppContentProps: null as null | {
     appId: string
     launcherResetKey?: number
+    terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
   },
   openSystemApp: vi.fn(async () => undefined),
   updateConfig: vi.fn(async () => undefined),
@@ -129,6 +132,17 @@ vi.mock("@/app-shell/content-navigation", () => ({
   },
 }))
 
+vi.mock("@/app-shell/terminal-navigation", () => ({
+  subscribeOpenTerminalSession: (
+    listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
+  ) => {
+    mocks.terminalOpenRequestListener = listener
+    return () => {
+      mocks.terminalOpenRequestListener = null
+    }
+  },
+}))
+
 vi.mock("@/app-shell/dialog-navigate", () => ({
   ensureBodyInteractable: vi.fn(),
 }))
@@ -190,14 +204,18 @@ vi.mock("@/modules/apps/components/system-app-content", async () => {
       launcherResetKey,
       resourceContentOpenRequest,
       onResourceContentOpenRequestConsumed,
+      terminalOpenRequest,
+      onTerminalOpenRequestConsumed,
     }: {
       appId: string
       launcherResetKey?: number
       resourceContentOpenRequest?: ContentOpenRequest | null
       onResourceContentOpenRequestConsumed?: (requestId: string) => void
+      terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
+      onTerminalOpenRequestConsumed?: (requestId: string) => void
     }) => {
       const { setSlot } = useSystemAppHeaderSlot()
-      mocks.lastSystemAppContentProps = { appId, launcherResetKey }
+      mocks.lastSystemAppContentProps = { appId, launcherResetKey, terminalOpenRequest }
 
       useEffect(() => {
         if (appId !== "settings") return undefined
@@ -217,6 +235,14 @@ vi.mock("@/modules/apps/components/system-app-content", async () => {
               onClick={() => onResourceContentOpenRequestConsumed?.(resourceContentOpenRequest.requestId)}
             >
               {resourceContentOpenRequest.contentType}:{resourceContentOpenRequest.kind}
+            </button>
+          ) : null}
+          {terminalOpenRequest ? (
+            <button
+              type="button"
+              onClick={() => onTerminalOpenRequestConsumed?.(terminalOpenRequest.requestId)}
+            >
+              terminal-session:{terminalOpenRequest.sessionId}
             </button>
           ) : null}
         </div>
@@ -245,6 +271,7 @@ let roots: Root[] = []
 beforeEach(() => {
   mocks.cheatCodeStateListener = null
   mocks.contentOpenRequestListener = null
+  mocks.terminalOpenRequestListener = null
   mocks.lastDockProps = null
   mocks.lastSystemAppContentProps = null
   mocks.currentConfig = {
@@ -410,6 +437,30 @@ describe("App workflow entry visibility", () => {
     expect(document.body.textContent).toContain("应用模块")
     expect(document.body.textContent).toContain("skill:detail")
     expect(mocks.openSystemApp).not.toHaveBeenCalled()
+  })
+
+  it("opens terminal sessions in the built-in Terminal app instead of a separate window", async () => {
+    mocks.getStates.mockResolvedValue({})
+
+    await renderApp()
+
+    await act(async () => {
+      mocks.terminalOpenRequestListener?.({ requestId: "request-1", sessionId: "session-1" })
+      await Promise.resolve()
+    })
+
+    expect(mocks.lastSystemAppContentProps).toMatchObject({ appId: "terminal" })
+    expect(document.body.textContent).toContain("terminal-session:session-1")
+    expect(mocks.openSystemApp).not.toHaveBeenCalled()
+
+    await act(async () => {
+      const consumed = Array.from(document.querySelectorAll("button"))
+        .find((button) => button.textContent === "terminal-session:session-1")
+      consumed?.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.lastSystemAppContentProps?.terminalOpenRequest).toBeNull()
   })
 
   it("hides the workflow entry when the initial cheat code state read fails after a visibility event", async () => {

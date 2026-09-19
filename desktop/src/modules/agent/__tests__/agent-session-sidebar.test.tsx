@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AgentSessionSidebar } from "../components/agent-session-sidebar"
 import { AgentSidebarSessionRow } from "../components/agent-sidebar-session-row"
 import { DEFAULT_AGENT_WORKSPACE_PROJECT } from "@/lib/default-agent-workspace"
+import { subscribeOpenTerminalSession } from "@/app-shell/terminal-navigation"
+import type { SynapseSystemAppTerminalOpenRequest } from "@/modules/apps/types"
 import type { SynapseAgentProvider } from "@/types/bridge"
 import * as createSessionName from "../create-session-name"
 
@@ -1020,22 +1022,31 @@ describe("AgentSessionSidebar", () => {
         apps: { openSystemApp },
       },
     })
-    await renderCreationSidebar(onCreateSession)
-
-    await act(async () => {
-      document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }))
-      await Promise.resolve()
+    const terminalOpenRequests: SynapseSystemAppTerminalOpenRequest[] = []
+    const unsubscribe = subscribeOpenTerminalSession((request) => {
+      terminalOpenRequests.push(request)
     })
+    try {
+      await renderCreationSidebar(onCreateSession)
+
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>("button[aria-label='新建对话']")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }))
+        await Promise.resolve()
+      })
+    } finally {
+      unsubscribe()
+    }
 
     expect(createClaudeCodeTerminal).toHaveBeenCalledWith({
       projectId: "project-1",
       providerId: "anthropic",
       modelTier: "sonnet",
     })
-    expect(openSystemApp).toHaveBeenCalledWith("terminal", {
-      terminalOpenRequest: { requestId: expect.any(String), sessionId: "terminal-session" },
-    })
+    expect(terminalOpenRequests).toEqual([
+      { requestId: expect.any(String), sessionId: "terminal-session" },
+    ])
+    expect(openSystemApp).not.toHaveBeenCalled()
     expect(onCreateSession).not.toHaveBeenCalled()
     expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
   })

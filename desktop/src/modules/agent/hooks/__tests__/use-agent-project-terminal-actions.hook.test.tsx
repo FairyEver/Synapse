@@ -15,18 +15,23 @@ vi.mock("@/app-shell/logging", () => ({
 }))
 
 import { useAgentProjectTerminalActions } from "../use-agent-project-terminal-actions"
+import { subscribeOpenTerminalSession } from "@/app-shell/terminal-navigation"
+import type { SynapseSystemAppTerminalOpenRequest } from "@/modules/apps/types"
 import type { ProviderModelSelection } from "@/types/provider-model"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const roots: Root[] = []
+const terminalOpenSubscriptions: Array<() => void> = []
 const selection: ProviderModelSelection = { providerId: "bailian", modelTier: "default" }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.history.replaceState({}, "", "/")
 })
 
 afterEach(async () => {
+  for (const unsubscribe of terminalOpenSubscriptions.splice(0)) unsubscribe()
   await act(async () => {
     for (const root of roots.splice(0)) root.unmount()
   })
@@ -46,14 +51,27 @@ async function renderHook(): Promise<{ readonly current: ReturnType<typeof useAg
   return result as { readonly current: ReturnType<typeof useAgentProjectTerminalActions> }
 }
 
+function collectTerminalOpenRequests(): SynapseSystemAppTerminalOpenRequest[] {
+  const requests: SynapseSystemAppTerminalOpenRequest[] = []
+  terminalOpenSubscriptions.push(subscribeOpenTerminalSession((request) => {
+    requests.push(request)
+  }))
+  return requests
+}
+
+function detachSidebarWindow(): void {
+  window.history.replaceState({}, "", "/?window=system-app&appId=agent")
+}
+
 describe("useAgentProjectTerminalActions", () => {
-  it("creates a Claude Code terminal with the selected provider and opens the terminal app", async () => {
+  it("creates a Claude Code terminal with the selected provider and opens it inside the app", async () => {
     const createClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "session-1" }))
     const openSystemApp = vi.fn(async () => undefined)
     bridgeMock.requireSynapseBridge.mockReturnValue({
       agent: { createClaudeCodeTerminal },
       apps: { openSystemApp },
     })
+    const requests = collectTerminalOpenRequests()
     const hook = await renderHook()
 
     let created = false
@@ -67,10 +85,30 @@ describe("useAgentProjectTerminalActions", () => {
       providerId: "bailian",
       modelTier: "default",
     })
-    expect(openSystemApp).toHaveBeenCalledWith("terminal", {
-      terminalOpenRequest: { requestId: expect.any(String), sessionId: "session-1" },
-    })
+    expect(requests).toEqual([{ requestId: expect.any(String), sessionId: "session-1" }])
+    expect(openSystemApp).not.toHaveBeenCalled()
     expect(toastMock.error).not.toHaveBeenCalled()
+  })
+
+  it("opens a Terminal window when the sidebar runs in a detached app window", async () => {
+    detachSidebarWindow()
+    const createClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "session-3" }))
+    const openSystemApp = vi.fn(async () => undefined)
+    bridgeMock.requireSynapseBridge.mockReturnValue({
+      agent: { createClaudeCodeTerminal },
+      apps: { openSystemApp },
+    })
+    const requests = collectTerminalOpenRequests()
+    const hook = await renderHook()
+
+    await act(async () => {
+      await hook.current.startClaudeCodeTerminal({ id: "project-1", selection })
+    })
+
+    expect(openSystemApp).toHaveBeenCalledWith("terminal", {
+      terminalOpenRequest: { requestId: expect.any(String), sessionId: "session-3" },
+    })
+    expect(requests).toEqual([])
   })
 
   it("reports a creation failure without opening the terminal", async () => {
@@ -82,6 +120,7 @@ describe("useAgentProjectTerminalActions", () => {
       agent: { createClaudeCodeTerminal },
       apps: { openSystemApp },
     })
+    const requests = collectTerminalOpenRequests()
     const hook = await renderHook()
 
     let created = true
@@ -91,6 +130,7 @@ describe("useAgentProjectTerminalActions", () => {
 
     expect(created).toBe(false)
     expect(openSystemApp).not.toHaveBeenCalled()
+    expect(requests).toEqual([])
     expect(toastMock.error).toHaveBeenCalledWith("无法在终端中启动 Claude Code。")
   })
 
@@ -112,6 +152,7 @@ describe("useAgentProjectTerminalActions", () => {
   })
 
   it("keeps the created session when the terminal window fails to open", async () => {
+    detachSidebarWindow()
     const createClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "session-2" }))
     const openSystemApp = vi.fn(async () => {
       throw new Error("window failed")
