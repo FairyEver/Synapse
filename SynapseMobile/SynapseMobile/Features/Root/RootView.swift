@@ -74,7 +74,7 @@ struct RootView: View {
                 MeetingListView()
                     .navigationDestination(for: Route.self, destination: destination)
             }
-            .tabItem { Label("会议", systemImage: "waveform") }
+            .tabItem { Label("录音", systemImage: "waveform") }
             .tag(Tab.meetings)
 
             NavigationStack(path: $inboxPath) {

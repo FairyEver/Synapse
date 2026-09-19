@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 会议列表。整行可点，点进去看逐字稿。
+/// 录音列表。整行可点，点进去看那一段转写文字。
 struct MeetingListView: View {
     @Environment(SynapseAppModel.self) private var model
 
@@ -8,7 +8,7 @@ struct MeetingListView: View {
         List {
             if model.meetings.meetings.isEmpty {
                 Section {
-                    Text(model.meetings.isLoading ? "正在读取…" : "还没有会议记录")
+                    Text(model.meetings.isLoading ? "正在读取…" : "还没有录音")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -30,7 +30,7 @@ struct MeetingListView: View {
                 }
             }
         }
-        .navigationTitle("会议记录")
+        .navigationTitle("录音")
         .refreshable { await model.reloadMeetings() }
         .task {
             await model.reloadMeetings()

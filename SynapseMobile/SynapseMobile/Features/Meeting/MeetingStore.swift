@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// 会议列表与详情的读取。
+/// 录音列表与详情的读取。
 ///
 /// 手机端**直连服务端**，不经过电脑：转写发生在云端，结果也在服务端，和电脑在不在
 /// 线没有关系。这是这个功能和手机端既有「电脑的远程视图」定位最大的不同。
@@ -31,7 +31,7 @@ final class MeetingStore {
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
-            errorMessage = "读取会议记录失败。"
+            errorMessage = "读取录音失败。"
         }
     }
 
@@ -51,12 +51,12 @@ final class MeetingStore {
             errorMessage = error.message
             return details[meetingId]
         } catch {
-            errorMessage = "读取会议详情失败。"
+            errorMessage = "读取录音详情失败。"
             return details[meetingId]
         }
     }
 
-    /// 退出登录时清干净：下一个账号不该看到上一个账号的会议。
+    /// 退出登录时清干净：下一个账号不该看到上一个账号的录音。
     func clear() {
         meetings = []
         details = [:]

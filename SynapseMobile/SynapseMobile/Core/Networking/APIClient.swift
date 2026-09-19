@@ -285,7 +285,7 @@ actor APIClient {
         try await send(path: "/voice/asr/session", method: "POST", body: EmptyBody())
     }
 
-    /// 会议列表。转写结果在服务端，和电脑在不在线无关。
+    /// 录音列表。转写结果在服务端，和电脑在不在线无关。
     func listMeetings() async throws -> [MeetingSummary] {
         struct Response: Decodable {
             let items: [MeetingSummary]

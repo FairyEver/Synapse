@@ -1,6 +1,6 @@
 import Foundation
 
-/// 服务端返回的一场会议。
+/// 服务端返回的一条录音。
 ///
 /// 字段与服务端 `MeetingSummaryDto` 一一对应：手机端只读，不做本地派生状态。
 struct MeetingSummary: Decodable, Identifiable, Hashable {
@@ -61,7 +61,10 @@ struct MeetingMinutes: Decodable, Hashable {
     let editedAt: String?
 }
 
-/// 详情比列表多出逐字稿与纪要，其余字段与列表一致。
+/// 详情比列表多出转写文字，其余字段与列表一致。
+///
+/// `speakers` / `minutes` 两端的界面都不再渲染，字段仍然保留、仍然必须能解码：
+/// 服务端照常返回，没升级到新版本的 App 打开详情页时就不会解码失败。
 struct MeetingDetail: Decodable, Hashable {
     let id: String
     let title: String
@@ -98,26 +101,28 @@ enum MeetingText {
         return "\(minutes / 60) 小时 \(minutes % 60) 分"
     }
 
-    /// 说话人在逐字稿里的显示名：填过真名就用真名，否则用编号。
-    static func speakerLabel(_ speakers: [MeetingSpeaker], _ speakerId: Int) -> String {
-        if let named = speakers.first(where: { $0.speakerId == speakerId })?.name,
-           !named.trimmingCharacters(in: .whitespaces).isEmpty {
-            return named
+    /// 转写文字：腾讯云按句返回，并成约 110 字一段才读得像一篇文章。
+    ///
+    /// 与电脑端的文字视图用同一套规则和同一个字数（`transcript-paragraphs.ts`），两端
+    /// 看起来才是同一份东西。
+    static func paragraphs(_ segments: [MeetingTranscriptSegment]) -> [String] {
+        var paragraphs: [String] = []
+        var current = ""
+        for segment in segments {
+            current += segment.text
+            if current.count >= 110 {
+                paragraphs.append(current)
+                current = ""
+            }
         }
-        return "发言人 \(speakerId + 1)"
+        if !current.isEmpty { paragraphs.append(current) }
+        return paragraphs
     }
 
-    /// 逐字稿里的时间戳，`mm:ss`。
-    static func clock(_ milliseconds: Int) -> String {
-        let seconds = max(0, milliseconds) / 1000
-        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
-    }
-
-    /// 列表的次要信息：时间 · 时长 · 发言人数 · 录音是否还在。
+    /// 列表的次要信息：时间 · 时长 · 录音是否还在。
     static func secondary(_ meeting: MeetingSummary) -> String {
         var parts = [relativeTime(meeting.startedAt)]
         if meeting.durationMs > 0 { parts.append(duration(meeting.durationMs)) }
-        if meeting.speakerCount > 0 { parts.append("\(meeting.speakerCount) 位发言人") }
         if meeting.recording.isDeleted { parts.append("录音已删除") }
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
