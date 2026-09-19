@@ -78,6 +78,33 @@ describe("右栏只剩语音和文字两个视图", () => {
     expect(source).toContain("disabled={paragraphs.length === 0}")
   })
 
+  it("语音视图里没有任何描述存储状态的字样", async () => {
+    // 缓存是**实现细节**：界面上不该出现它的存在，用户只感觉得到快慢。下面这些词一旦
+    // 出现，就是有人又想把这件事告诉用户了。查的是源码本身，注释里也不能写——写了就
+    // 分不清是渲染出来的还是交代为什么没渲染，这条闸就白设了。
+    const source = await moduleSource("meeting-playback.tsx")
+    for (const word of ["已下载", "已缓存", "离线", "本地", "云端", "服务器", "上传"]) {
+      expect(source).not.toContain(word)
+    }
+  })
+
+  it("载入态只说在下载，不说失败", async () => {
+    // 没网时「正在下载」会一直转，因为网一回来它确实会自己下完——写成失败就是错的。
+    const source = await moduleSource("meeting-playback.tsx")
+    expect(source).toContain("正在下载")
+    expect(source).toContain("重试")
+    for (const word of ["加载失败", "播放失败", "下载失败"]) {
+      expect(source).not.toContain(word)
+    }
+  })
+
+  it("列表行没有新增任何缓存标记", async () => {
+    const source = await moduleSource("meeting-list-view.tsx")
+    for (const word of ["已下载", "已缓存", "离线", "本地"]) {
+      expect(source).not.toContain(word)
+    }
+  })
+
   it("左栏就是一个列表：没有标题、搜索、按钮和提示条", async () => {
     const source = await moduleSource("meeting-list-view.tsx")
     for (const symbol of ["pendingNotice", "onResumePending", "onDiscardPending", "speakerCount", "Search", "Input"]) {
