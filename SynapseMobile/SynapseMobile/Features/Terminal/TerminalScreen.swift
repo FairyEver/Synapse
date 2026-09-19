@@ -40,7 +40,7 @@ struct TerminalScreen: View {
     /// 连续收放会留下两个睡着的任务，各自清标志、各自补报一次。
     @State private var chromeSettleTask: Task<Void, Never>?
     /// 这一页去掉安全区之后有多高。横屏时键盘面板按它限高（见
-    /// `KeyboardPanelMetrics.height(fitting:)`），别的什么都不用它。
+    /// `KeyboardPanelMetrics.height(rows:fitting:)`），别的什么都不用它。
     @State private var availableHeight: CGFloat = 0
     /// Whether the command panel is open. The bar's right-hand key owns this, and the
     /// panel that reads it is presented as a sheet at the end of the screen.
@@ -1212,9 +1212,10 @@ struct TerminalScreen: View {
         if keyboardPanelPresented {
             TerminalKeyboardPanel(
                 isEnabled: isRunning,
-                // 竖屏给满、横屏按可用高度压下来（`KeyboardPanelMetrics.height(fitting:)`）。
-                // 横屏那 384pt 加上两条栏会超出屏幕，顶栏会被挤出画面。
-                height: KeyboardPanelMetrics.height(fitting: availableHeight)
+                // 面板自己按**当前这一页**有几行定高（第一页 306、第二页 390），这里
+                // 只给上限：竖屏给满，横屏压下来。横屏那两档加上两条栏都会超出屏幕，
+                // 顶栏会被挤出画面 —— 而两页封在同一个上限上，横屏翻页仍然不动。
+                maxHeight: availableHeight
             ) { actions in
                 model.sendKeys(sessionId, actions)
                 // 按一颗键也是操作：面板本身让栏收不了，但按完这一下之后应当从头计时。

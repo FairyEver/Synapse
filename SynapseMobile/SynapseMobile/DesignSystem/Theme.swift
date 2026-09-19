@@ -53,6 +53,14 @@ enum Theme {
 
     static let running = Color(red: 0.11, green: 0.54, blue: 0.31)
 
+    /// 开关「开」的那条轨道。
+    ///
+    /// **不是 `ink`。** `ink` 是 `Color.primary`，深色下就是白色 —— 而 iOS 开关的圆点
+    /// 也是白的，于是轨道和圆点同色，一颗开着的开关看上去就是一块没有圆点的白方块
+    /// （2026-09-19 真机截图：整块内部量下来全是 255）。所以这里用 `ink` 在应用根上
+    /// 覆盖掉的那个平台默认值：系统绿，人人认得，也不必自己调一个色。
+    static let switchOn = Color(uiColor: .systemGreen)
+
     /// Same reasoning as `attention`: 5.3:1 on white, but only 3.2:1 on a dark list
     /// cell, so dark appearance gets a red of its own.
     static let failure = dynamic(

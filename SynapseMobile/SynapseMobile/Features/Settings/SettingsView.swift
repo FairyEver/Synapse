@@ -92,6 +92,9 @@ struct SettingsView: View {
                     get: { DiagnosticLog.isEnabled },
                     set: { DiagnosticLog.isEnabled = $0 }
                 ))
+                // 同一个根因：应用根的 tint 在深色下是白色，开关的圆点也是白的。
+                // 见 `Theme.switchOn`。
+                .tint(Theme.switchOn)
                 NavigationLink {
                     DiagnosticLogView()
                 } label: {

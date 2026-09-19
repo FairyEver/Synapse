@@ -589,14 +589,17 @@ final class TerminalFlowUITests: XCTestCase {
         // 第二页：符号行、功能键 F1–F12，以及它们右边那一片导航键。翻页靠板子底下那两
         // 个点 —— 板子本身也能滑，但滑动在 UI 测试里落点不稳，点是最确定的一条路。
         // 两页各问一次，是因为「并页时悄悄丢了一半」这种错，只问落点那一页是看不出来的。
+        // 「这一页在不在前面」问的是**能不能点到**，不是存不存在：`TabView` 会把两页
+        // 都建出来，没露面的那一页的键在无障碍树里照样存在，只是落在屏幕外面。
+        // 用 `waitForExistence` 问的话，`boardPage` 哪天又渲染错页了也照样是绿的。
         XCTAssertTrue(app.buttons["panelkey-page-1"].exists, "the board has no second page")
         app.buttons["panelkey-page-1"].tap()
         XCTAssertTrue(
-            app.buttons["panelkey-key-F1"].waitForExistence(timeout: 5),
+            waitForHittable(app.buttons["panelkey-key-F1"], timeout: 5),
             "the second page has no function keys"
         )
-        XCTAssertTrue(app.buttons["panelkey-key-PageUp"].exists, "the second page has no navigation block")
-        XCTAssertTrue(app.buttons["panelkey-dead-PrtScr"].exists, "the second page is missing the keys a terminal cannot send")
+        XCTAssertTrue(app.buttons["panelkey-key-PageUp"].isHittable, "the second page has no navigation block")
+        XCTAssertTrue(app.buttons["panelkey-dead-PrtScr"].isHittable, "the second page is missing the keys a terminal cannot send")
         capture(app, name: "12-keyboard-panel-function-page")
 
         // The function keys are the names this version added to the wire (38 → 51), so
@@ -635,10 +638,11 @@ final class TerminalFlowUITests: XCTestCase {
             XCTFail("⇧tab did not reach the computer; last lines: \(visible)")
         }
 
-        // Back to the first page, which is what the rest of this test presses.
+        // Back to the first page, which is what the rest of this test presses. 同上：
+        // 两页都在无障碍树里，只有「点得到」的那一页才是前面那一页。
         app.buttons["panelkey-page-0"].tap()
         XCTAssertTrue(
-            app.buttons["panelkey-key-Backspace"].waitForExistence(timeout: 5),
+            waitForHittable(app.buttons["panelkey-key-Backspace"], timeout: 5),
             "the board did not come back"
         )
 
@@ -821,6 +825,49 @@ final class TerminalFlowUITests: XCTestCase {
         XCTAssertTrue(escapeKey.waitForExistence(timeout: 10), "the panel never opened")
         capture(app, name: "17-panel-in-the-keyboard-slot")
         let withPanel = terminal.frame.height
+
+        // 板子得是一个网格：纵向的缝和横向的缝一样宽。
+        //
+        // 这是 2026-09-19 那次真机截图留下的回归项。当时一颗键的点击盒比键自己高
+        // 6pt（点击区），那 6pt 又以「布局高度」的形式被算了一遍，于是行距从 42 变成
+        // 48 —— 纵向的缝 12pt、横向还是 6pt，而同一块板子还因此比面板高了 36pt，
+        // 第二页要滚才够得着底行。
+        //
+        // 量的都是 a11y 框的位置，不是尺寸：点击盒归谁不影响「两颗键之间多高」。
+        let q = app.buttons["panelkey-letter-q"].frame
+        let a = app.buttons["panelkey-letter-a"].frame
+        let z = app.buttons["panelkey-letter-z"].frame
+        XCTAssertEqual(a.minY - q.minY, 42, accuracy: 1, "行距不是键高 36 + 键距 6")
+        XCTAssertEqual(z.minY - a.minY, 42, accuracy: 1, "三行字母的行距不均匀")
+
+        // 横向那一份由数字行反推：十列从第一颗的左沿铺到最后一颗的右沿，那段是
+        // 10 个键宽 + 9 道缝；而相邻两颗左沿之差是 1 个键宽 + 1 道缝。两个一减就是
+        // 一道缝 —— 这样写不必假定键有多宽，屏宽变了也成立。
+        let digitOne = app.buttons["panelkey-digit-1"].frame
+        let digitTwo = app.buttons["panelkey-digit-2"].frame
+        let digitZero = app.buttons["panelkey-digit-0"].frame
+        let columnPitch = digitTwo.minX - digitOne.minX
+        let keyWidth = (digitZero.maxX - digitOne.minX) - 9 * columnPitch
+        XCTAssertEqual(columnPitch - keyWidth, 6, accuracy: 1, "键距不是 6")
+        XCTAssertEqual((a.minY - q.minY) - 36, columnPitch - keyWidth, accuracy: 1,
+                       "纵向的缝和横向的缝不一样宽，板子就不是一个网格")
+
+        // 面板高度随页走：第一页四行、第二页六行，翻页时多出来的那两行还给终端。
+        app.buttons["panelkey-page-1"].tap()
+        XCTAssertTrue(
+            waitForHittable(app.buttons["panelkey-key-F1"], timeout: 10),
+            "the second page never came up"
+        )
+        capture(app, name: "17b-panel-second-page")
+        XCTAssertEqual(
+            withPanel - terminal.frame.height, 84, accuracy: 2,
+            "翻页没有把两行（2 × 42）的高度还给终端"
+        )
+        app.buttons["panelkey-page-0"].tap()
+        XCTAssertTrue(
+            waitForHittable(app.buttons["panelkey-letter-q"], timeout: 10),
+            "the first page never came back"
+        )
 
         // Down again from the same button. A keyboard button that cannot put its
         // keyboard away is the one thing a sheet could not offer.

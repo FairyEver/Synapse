@@ -264,10 +264,10 @@ struct TerminalKeyPill: ViewModifier {
     var size: CGFloat? = nil
     /// How tall the tappable box is. Nil means `Metrics.minimumTapTarget`.
     ///
-    /// The board gives every key one row's worth of height instead: its rows are six
-    /// points apart, so 44 would push them apart again and buy nothing — a 44pt box on a
-    /// 42pt pitch overlaps its neighbours, and the overlap belongs to whichever key is
-    /// drawn on top.
+    /// The board gives every key one row's worth of height instead (`rowPitch`), so the
+    /// box reaches into the six point seam on either side of the key and a finger that
+    /// lands in the seam still hits something. The board's rows carry **no spacing of
+    /// their own** for the same reason — see `TerminalKeyboardPanel.boardPage`.
     var tapHeight: CGFloat? = nil
 
     /// The pill's own fill, in the order of how loud the state is.
@@ -343,10 +343,11 @@ extension View {
 struct TerminalKeyboardPanel: View {
     /// Nil while the terminal is not running, which greys out every key.
     let isEnabled: Bool
-    /// How tall the panel is. Portrait hands it `KeyboardPanelMetrics.height` and the
-    /// panel is the size it has always been; landscape hands it something shorter
-    /// (see `KeyboardPanelMetrics.height(fitting:)`) and the board scrolls inside.
-    let height: CGFloat
+    /// How much room the screen can give the panel. The panel takes what the page it is
+    /// showing needs, up to this — portrait hands it the whole screen, landscape hands it
+    /// something shorter and the board scrolls inside
+    /// (see `KeyboardPanelMetrics.height(rows:fitting:)`).
+    let maxHeight: CGFloat
     let onActions: ([MobileKeyAction]) -> Void
     /// 手机键盘: the caller lowers this panel and raises the system keyboard. The panel
     /// cannot do it itself — it does not own either keyboard, and iOS will not draw our
@@ -381,6 +382,18 @@ struct TerminalKeyboardPanel: View {
         page == 0 ? keyboardPanelComputerRows : keyboardPanelFunctionRows
     }
 
+    /// How tall the panel is *right now*: what this page needs, capped by the room the
+    /// screen has.
+    ///
+    /// Per page rather than one number for both, which is the 2026-09-19 decision — the
+    /// page showing decides how much of the terminal it takes. 电脑键盘's two pages are
+    /// four rows and six, so a single height has to be the taller page's, and the shorter
+    /// one then sits on two rows' worth of empty panel. In a short screen both pages cap
+    /// at the same share of the room and a page change moves nothing.
+    private var panelHeight: CGFloat {
+        KeyboardPanelMetrics.height(rows: rows.count, fitting: maxHeight)
+    }
+
     var body: some View {
         // 面板在横屏里放不下整块键盘（可用高度只有竖屏的一半，而键盘本身没变矮），
         // 所以内容进一个滚动容器：**装得下的时候它不滚，装不下的时候它滚**。
@@ -388,13 +401,13 @@ struct TerminalKeyboardPanel: View {
         // 一段橡皮筋，而面板从来没有滚过。
         ScrollView(.vertical) {
             content
-                .frame(minHeight: height, alignment: .top)
+                .frame(minHeight: panelHeight, alignment: .top)
         }
         .scrollBounceBehavior(.basedOnSize)
         // It sits in the layout at the height it is given rather than sizing itself the
         // way a sheet did. It is a keyboard now: what is above it is the terminal being
         // watched, and what is below it is the bottom of the screen.
-        .frame(height: height)
+        .frame(height: panelHeight)
         // Its own surface, the same one the two bars above it wear — the panel, the
         // toolbar and the input bar are the light half of this screen together, and
         // the dark canvas is what they are all sitting on.
@@ -455,6 +468,9 @@ struct TerminalKeyboardPanel: View {
             HStack(spacing: 7) {
                 Toggle("组合键模式", isOn: $combinationMode)
                     .labelsHidden()
+                    // 应用根的 tint 是 `Theme.ink`，深色下是白色，和开关的圆点撞成一块
+                    // 没有圆点的白方块。见 `Theme.switchOn`。
+                    .tint(Theme.switchOn)
                     .onChange(of: combinationMode) { _, isOn in
                         // Turning the row off while a modifier is held would leave the
                         // state on with nothing on screen showing it.
@@ -523,20 +539,34 @@ struct TerminalKeyboardPanel: View {
     /// ends and the way a page settles are all things iOS already defines, and the dots
     /// below are drawn here only because the system's own are a different size and sit
     /// inside the pages rather than under them.
+    ///
+    /// Each page is built from **its own** rows, named here rather than read off `rows`:
+    /// a `TabView` builds both of its children on every pass, so a page that asked `rows`
+    /// what it was would always be told "the one you have selected" — both halves would
+    /// draw the same board, and the swipe would have nothing to slide in.
+    ///
+    /// The frame is the selected page's height (`panelHeight`), which means the page
+    /// being dragged in is clipped to it for the length of the drag and gets its last
+    /// two rows back when the swipe settles. The alternative — sizing to the taller page
+    /// — puts the empty space back on the shorter one, which is what 「随页走」 undid.
     private var board: some View {
         GeometryReader { proxy in
             TabView(selection: $page) {
-                boardPage(width: proxy.size.width).tag(0)
-                boardPage(width: proxy.size.width).tag(1)
+                boardPage(keyboardPanelComputerRows, width: proxy.size.width).tag(0)
+                boardPage(keyboardPanelFunctionRows, width: proxy.size.width).tag(1)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
         }
-        .frame(height: KeyboardPanelMetrics.boardHeight)
+        .frame(height: KeyboardPanelMetrics.boardHeight(rows: rows.count))
     }
 
-    private func boardPage(width: CGFloat) -> some View {
-        VStack(spacing: KeyboardPanelMetrics.rowGap) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+    private func boardPage(_ pageRows: [[KeyboardPanelKey]], width: CGFloat) -> some View {
+        // **没有行距。** 两颗相邻的键之间那道缝，是上面那颗键的点击盒比自己高出来的
+        // 那 6pt（`rowPitch`），不是这里再加一次间距。两个都算的话，纵向的缝就是 12pt
+        // 而横向还是 6pt —— 板子读起来就不是一个网格，而是几排按钮（2026-09-19 真机
+        // 截图，量的就是 12 对 6）。
+        VStack(spacing: 0) {
+            ForEach(Array(pageRows.enumerated()), id: \.offset) { _, row in
                 rowView(row, width: width)
             }
         }
@@ -604,7 +634,7 @@ struct TerminalKeyboardPanel: View {
                     prominent: prominent,
                     horizontalPadding: 2,
                     size: KeyboardPanelMetrics.keyHeight,
-                    tapHeight: KeyboardPanelMetrics.keyHeight + KeyboardPanelMetrics.rowGap
+                    tapHeight: KeyboardPanelMetrics.rowPitch
                 )
                 .frame(width: width)
         }
@@ -640,7 +670,7 @@ struct TerminalKeyboardPanel: View {
                     minWidth: 0,
                     horizontalPadding: 2,
                     size: KeyboardPanelMetrics.keyHeight,
-                    tapHeight: KeyboardPanelMetrics.keyHeight + KeyboardPanelMetrics.rowGap
+                    tapHeight: KeyboardPanelMetrics.rowPitch
                 )
                 .frame(width: width)
         }
@@ -827,25 +857,6 @@ struct TerminalKeyboardPanel: View {
 }
 
 enum KeyboardPanelMetrics {
-    /// How much of the screen the panel occupies, the same on every page.
-    ///
-    /// Sized for the taller page — 电脑键盘's second page, whose six rows are the symbol
-    /// row and then the function keys beside the navigation block. Its rows are 36pt
-    /// keys six points apart, so six of them come to 246; the rest is the two-tab switch,
-    /// the modifier row, and the dots under the board.
-    ///
-    ///     padding 8 + picker 32 + 12 + modifier 42 + 8
-    ///       + board 6 × 36 + 5 × 6 + dots 8 + 14 + padding 14  =  384
-    ///
-    /// One height rather than one per page. The first page is two rows shorter and leaves
-    /// the rest of the panel empty, and that waste is the price of a page change that
-    /// moves nothing under the reader's finger: a panel that grew and shrank pushed the
-    /// toolbar, the input bar and the terminal up and down again with every page.
-    ///
-    /// A narrower phone gets a shorter board than this and simply keeps the difference as
-    /// blank space at the bottom, so nothing is ever cut off.
-    static let height: CGFloat = 384
-
     /// One row of keys.
     static let keyHeight: CGFloat = 36
 
@@ -853,31 +864,71 @@ enum KeyboardPanelMetrics {
     /// read as a grid rather than as rows of buttons.
     static let rowGap: CGFloat = 6
 
-    /// Six rows: what the taller page has.
-    static let boardHeight: CGFloat = keyHeight * 6 + rowGap * 5
+    /// How far apart two rows are, and how tall one key's tappable box is.
+    ///
+    /// One number for both, and the board stacks rows with **no spacing of its own**
+    /// (`TerminalKeyboardPanel.boardPage`): the box is taller than the key by exactly one
+    /// gap, so the seam between two rows belongs to the box of the one above and a finger
+    /// that lands in it still hits a key. Counting the gap a second time as `VStack`
+    /// spacing is how the vertical seam came out at 12 points while the horizontal one
+    /// stayed 6 — a screenshot of the real thing, 2026-09-19.
+    static let rowPitch: CGFloat = keyHeight + rowGap
+
+    /// The two-tab switch above the board.
+    static let pickerHeight: CGFloat = 32
 
     /// Tall enough for a modifier key to read as one of the four across the row, and for
     /// its label to sit in the middle of it.
     static let modifierRowHeight: CGFloat = 42
 
+    /// How tall the board is when the page showing has this many rows.
+    ///
+    /// 电脑键盘's pages have four rows and six: the digits over the letters and Space and
+    /// Enter under the thumb on one, the symbol row and then the function keys beside the
+    /// navigation block on the other.
+    static func boardHeight(rows: Int) -> CGFloat {
+        rowPitch * CGFloat(rows)
+    }
+
+    /// How tall the panel is when the page showing has this many rows.
+    ///
+    ///     padding 8 + picker 32 + 12 + modifier 42 + 8
+    ///       + board + dots 8 + 14 + padding 14
+    ///
+    /// So 306 on the four-row page and 390 on the six-row one.
+    ///
+    /// **One height per page.** The taller page's height used to be the only one — a page
+    /// change that moved nothing under the reader's finger, bought with two rows' worth
+    /// of empty panel under the shorter page. The 2026-09-19 look at a real screenshot
+    /// priced that空 at 84 points of nothing under the Space bar, on the page people
+    /// actually type on, and 产品负责人 took the other side of it: the panel follows the
+    /// page. What moves is the terminal's bottom edge, on this phone only — the grid is
+    /// not reported to the computer while the panel is up (`TerminalScreen`).
+    static func height(rows: Int) -> CGFloat {
+        8 + (pickerHeight + 12) + (modifierRowHeight + 8) + boardHeight(rows: rows)
+            + (8 + 14) + 14
+    }
+
     /// What the panel actually takes, given how much room the screen has.
     ///
-    /// The one height above is a **portrait** height: 384 is a bit under half of a phone
-    /// held upright, and the same 384 is most of a phone held sideways, where the screen
-    /// is only about 372 points tall with the safe areas taken out. Left alone there, the
-    /// panel plus the two bars above it come to about 490 — the toolbar is pushed off the
-    /// top of the screen and the terminal gets nothing.
+    /// The heights above are **portrait** heights: 390 is a bit under half of a phone held
+    /// upright, and the same 390 is more than a phone held sideways has to give, where the
+    /// screen is only about 372 points tall with the safe areas taken out. Left alone
+    /// there, the panel plus the two bars above it come to about 490 — the toolbar is
+    /// pushed off the top of the screen and the terminal gets nothing.
     ///
     /// So in a short screen the panel takes a share of what there is and the board
     /// scrolls inside it (`TerminalKeyboardPanel`). The share is a bit over half because a
     /// keyboard the reader cannot reach the bottom of is closer to useless than one that
-    /// leaves the terminal four lines.
+    /// leaves the terminal four lines. Both pages cap at that same share, so a page change
+    /// on a short screen still moves nothing.
     ///
     /// `available <= 0` is "not measured yet", which happens on the first layout pass
     /// only: it takes the full height rather than a fraction of nothing, so the panel
     /// is never drawn collapsed for a frame.
-    static func height(fitting available: CGFloat) -> CGFloat {
-        guard available > 0 else { return height }
-        return min(height, available * 0.55)
+    static func height(rows: Int, fitting available: CGFloat) -> CGFloat {
+        let needed = height(rows: rows)
+        guard available > 0 else { return needed }
+        return min(needed, available * 0.55)
     }
 }
