@@ -4,6 +4,8 @@
 
 Use this domain when directly invoking MCP tools provided by Synapse system apps.
 
+Terminal is one of those apps: its tools are `app_terminal_*` and belong to this domain. The catalog's `domains` list holds top-level namespaces only, so the absence of a `terminal` entry there means nothing. Read `terminal/index.md` for anything about terminal sessions, tabs, groups, or a process asking about the terminal it is running inside.
+
 When an App capability is configured as a node inside a Workflow, use `workflow/index.md` instead. The Workflow guide owns node schemas, reserved bindings, graph edges, layout, definition validation, and run behavior. Do not read both guides merely because a Workflow node is backed by an App capability.
 
 ## Account Sign-in

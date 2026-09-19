@@ -6,6 +6,17 @@ Use Terminal tools to operate Synapse-managed interactive PTY sessions. Terminal
 
 Read `api-reference.md` before constructing requests. Read `examples.md` when translating a user goal into a multi-step Terminal workflow.
 
+## The terminal you are running inside
+
+When this process runs inside a Synapse terminal, that terminal is an object you can address like any other — it is not something you have to find first, and it is not a reason to create a session. Its own ids are already in the environment:
+
+- `SYNAPSE_SESSION_ID` — the session this process is running in. Send input to it with `app_terminal_session_input_command`, acquiring control first exactly as for any other session.
+- `SYNAPSE_WORKSPACE_ID` — the tab holding it. Read it with `app_terminal_workspace_get`, list its members with that tool's `sessionIds`, or change it with the `workspace_*` tools.
+
+A request such as "open codex in this terminal", "run this here", or "close this tab" is about those two ids. When neither variable is present, this process is not inside a Synapse terminal, so do not assume one.
+
+Terminal capabilities are registered under the **`app`** domain. The catalog's `domains` list holds top-level namespaces only and has no `terminal` entry, so its absence there is not evidence that Terminal tools are missing — search by intent or by the exact `app_terminal_*` name.
+
 ## Interpret the request
 
 - Translate the user's goal into the narrowest required operations. Creating, observing, reading output, controlling input, stopping, and deleting are separate permissions and separate decisions.
@@ -13,7 +24,7 @@ Read `api-reference.md` before constructing requests. Read `examples.md` when tr
 - A visible session is not automatically safe to control. Operate on an existing UI-created session only when the request identifies it or clearly asks to continue work there. Track ids created during the current task so later actions remain within the requested scope.
 - When the user pastes a Terminal reference (lines such as `workspace_id=...`, `session_ref=...`, `session_id=...` from the Terminal sidebar, a tab menu, or a pane header), pass that `session_id` to `app_terminal_session_open` to open or focus the session, or that `workspace_id` to `app_terminal_workspace_get` when the request is about the whole tab. The reference only holds while the session still exists in the current Synapse run; if it no longer resolves, report that instead of creating a replacement session.
 - A tab holds one or more sessions side by side. Use `app_terminal_workspace_list` / `app_terminal_workspace_get` to see which sessions share one tab, and `app_terminal_workspace_pane_create` / `app_terminal_workspace_rename` / `app_terminal_workspace_delete` to change it. Panes are addressed by the session they run, never by a pane id; `app_terminal_workspace_delete` normally stops every member session and has no force option, so confirm first when any of them is working.
-- The same paste often means "find the Claude Code session in that terminal and take it over". Read `tty` from `app_terminal_session_state_get` to resolve it — the recipe is in `examples.md` under "Take over the session a user pasted". Only `session_id` addresses anything; never match a session by title or by a name that merely looks close.
+- The same paste often means "find the Claude Code session in that terminal and take it over". Read `tty` from `app_terminal_session_state_get` to resolve it — the recipe is in `examples.md` under "Take over the session a user pasted". `session_id` addresses that session and `workspace_id` addresses its tab; never match a session by title or by a name that merely looks close.
 - Local Terminal MCP requires no separate authentication or Terminal grant. `supported` only describes platform availability; it does not expand the user's request. On `permission_denied`, report that a local policy blocked the operation instead of asking the user to log in or authorize Terminal in Synapse.
 - Terminal MCP is still in development and exposes one current contract. Do not send `contractVersion`, probe for a v1/v2 variant, or call removed aliases such as `app_terminal_session_read`, `app_terminal_session_write`, and `app_terminal_group_update_settings`. If current `app_terminal_*` tools are absent after Synapse was updated, ask the user to restart Synapse and open a new Codex task so the tool catalog is rebuilt.
 - Launch settings resolve as global, group, saved command, then explicit one-time override. They affect only newly created PTYs. A saved command's layer configures its whole new session before Synapse delivers the saved input sequence.

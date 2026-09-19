@@ -540,6 +540,30 @@ describe("SynapseSkillService", () => {
     expect(missingTools).toEqual([])
   })
 
+  /*
+   * 这条来自一次真机失败：终端里的 agent 读到 `domains` 列表里没有 `terminal`，就断定终端能力不存在，
+   * 于是放弃了「在这个终端里打开 codex」这种请求。指南必须主动说清两件事——终端工具挂在 `app` 域
+   * 下（域列表是顶层命名空间，缺 `terminal` 不等于缺工具），以及进程自己所在的终端怎么寻址。
+   * 少任何一句，同一个误判就会重演。
+   */
+  it("tells an agent how to address the terminal it is running inside", async () => {
+    const [skillText, terminalIndex, appIndex] = await Promise.all([
+      readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "terminal/index.md"), "utf8"),
+      readFile(path.join(systemPackageRoot, "app/index.md"), "utf8"),
+    ])
+
+    // 「我自己这个终端」必须被点名，否则 agent 只能去新建一个会话。
+    expect(terminalIndex).toContain("SYNAPSE_SESSION_ID")
+    expect(terminalIndex).toContain("SYNAPSE_WORKSPACE_ID")
+
+    // 三个入口都要把「没有 terminal 域」这个误判堵住。
+    for (const text of [skillText, terminalIndex, appIndex]) {
+      expect(text).toContain("app_terminal_")
+      expect(text.toLowerCase()).toContain("top-level namespace")
+    }
+  })
+
   it("documents current Workflow and Resource Repository contracts", async () => {
     const [workflowIndex, workflowApiText, contentIndex, contentApiText] = await Promise.all([
       readFile(path.join(systemPackageRoot, "workflow/index.md"), "utf8"),

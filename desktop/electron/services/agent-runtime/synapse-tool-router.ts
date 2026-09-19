@@ -158,7 +158,7 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Rules:",
   "- Never call an `app_*` name that `search` did not return, and never guess arguments.",
   "- If `search` returns no reliable match, search again with different words or with `domain`;",
-  "  do not invent a tool name. The returned `domains` list shows the domains that exist.",
+  "  do not invent a tool name. `domains` are top-level namespaces: Terminal's tools are `app_*`.",
   "- Prefer a small `limit` (for example 20) and continue with the returned `nextOffset` or",
   "  `nextCursor` rather than asking for one large page; big results are slow and costly.",
   "- Retired `database_*`, `drive_*`, `workflow_*`, `content_*`, `automation_*`,",

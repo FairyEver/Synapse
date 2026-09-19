@@ -25,7 +25,7 @@ First classify the user's intent, then read the matching domain file before usin
 - Model price rules and used-model pricing -> `model-price/index.md`
 - Local secrets and placeholder secret values -> `secrets/index.md`
 - Settings repositories -> `repository/index.md`
-- Synapse-managed Terminal launch settings, groups, saved commands, sessions, opening a session by its immutable id, retained output, observation, leases, semantic input, resize, stop, and deletion -> `terminal/index.md`
+- Synapse-managed Terminal launch settings, groups, tab layout, saved commands, sessions, opening a session by its immutable id, retained output, observation, leases, semantic input, resize, stop, and deletion -> `terminal/index.md`. These tools are `app_terminal_*` under the `app` domain; the catalog's `domains` list is top-level namespaces only, so it has no `terminal` entry. A process running inside a Synapse terminal addresses its own session through `SYNAPSE_SESSION_ID` and its tab through `SYNAPSE_WORKSPACE_ID`.
 - Account sign-in state and signing the desktop client back in, Synapse Agent conversation deep links, conversation creation, provider/model discovery and group discovery, plus other App-provided capabilities such as text file writing, text extraction, document generation, JSON repair, Sound Notifier playback, System Notifier notifications, and problem feedback -> `app/index.md`
 
 When there is specific evidence that Synapse itself or a built-in Synapse Skill violates a documented or otherwise verified product contract, read `app/index.md` before suggesting problem feedback. Do not suggest feedback for ordinary validation, permission, rate-limit, transient network, user-project, third-party, editor, speculative, or purely aesthetic issues.

@@ -198,6 +198,11 @@ describe("Published tool definitions", () => {
     expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("invoke")
     expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("app_*")
     expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("toolName")
+    /*
+     * 曾经这里只说「domains 列表展示了存在的域」。终端里的 agent 读到列表里没有 `terminal`，就据此
+     * 断定终端能力不存在。必须写明列表只装顶层命名空间，终端工具在 `app` 下。
+     */
+    expect(SYNAPSE_TOOL_ROUTER_INSTRUCTIONS).toContain("top-level namespaces")
   })
 
   it("keeps the worked example consistent with the page-size rule", () => {
