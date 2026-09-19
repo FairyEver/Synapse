@@ -776,8 +776,11 @@ final class TerminalFlowUITests: XCTestCase {
         )
         capture(app, name: "18-phone-keyboard")
         app.buttons["toolbar-keyboard"].tap()
+        // 用修饰键那一行当「面板回来了」的标记：两页都在，而面板每次都是从零构建的
+        // （`TerminalScreen` 里是 `if keyboardPanelPresented`），所以它回来时一定落在
+        // 第 0 页 —— 拿第 1 页的键（Caps、F1）当标记，测的是另一件事。
         XCTAssertTrue(
-            app.buttons["panelkey-caps"].waitForExistence(timeout: 10),
+            app.buttons["panelkey-modifier-Ctrl"].waitForExistence(timeout: 10),
             "the panel did not come back after switching to the phone keyboard"
         )
     }
