@@ -126,4 +126,50 @@ struct TerminalDiagnosticTests {
         let text = written(in: directory)
         #expect(text.contains("followGrab"), "跟随最新输出没有留下痕迹")
     }
+
+    /// 滑行那条路也要留下痕迹。
+    ///
+    /// 上面那条走的是「插不了值」的回落路径（视图没有窗口），而生产上走的是滑行：
+    /// 埋点最典型的失效方式不是写错，是接上了却没人走它。
+    @Test func theGlideRecordsItsTriggerToo() throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sink = try #require(DiagnosticFileSink(directory: directory))
+        sink.start()
+        DiagnosticLog.useSinkForTesting(sink)
+        defer { DiagnosticLog.useSinkForTesting(nil) }
+
+        let pane = CGRect(x: 0, y: 0, width: 393, height: 566)
+        let view = TerminalCollectionView(frame: pane)
+        view.applyLayout(
+            displayMode: .phoneDriven,
+            desktopGrid: nil,
+            fontSize: TerminalDensity.normal.fontSize
+        )
+        view.apply(rows: lines(200), atHistoryFloor: false, cursor: nil)
+
+        // 有窗口才有滑行 —— 没有窗口时视图会有意退回一步落位。
+        let window = UIWindow(frame: pane)
+        window.addSubview(view)
+        window.isHidden = false
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        defer {
+            view.removeFromSuperview()
+            window.isHidden = true
+        }
+
+        view.apply(rows: lines(240), atHistoryFloor: false, cursor: nil)
+        #expect(view.isFollowingPerFrame, "没有滑行，这条测试验的就不是那条路")
+
+        // 记录写在落定那一刻。
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline, view.isFollowingPerFrame {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        sink.flushForTesting()
+
+        #expect(written(in: directory).contains("followGrab"), "滑行没有留下痕迹")
+    }
 }

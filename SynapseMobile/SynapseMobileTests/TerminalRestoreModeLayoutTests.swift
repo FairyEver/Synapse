@@ -463,4 +463,128 @@ struct TerminalRestoreModeLayoutTests {
         #expect(abs(list.contentOffset.y + list.bounds.height - list.contentSize.height) < 1)
         #expect(visibleFrame(ofRow: 499, in: list)?.maxY == list.bounds.height)
     }
+
+    /// 把视图真的挂进一个窗口。
+    ///
+    /// 平滑跟随要一个屏幕刷新源，没有窗口就没有它 —— 视图会有意退回一步落位，于是
+    /// 「滑过去」与「跳过去」在没有窗口的测试里长得一样。这一条就是为那两者分开而立的。
+    private func inWindow(_ view: TerminalCollectionView) -> UIWindow {
+        let window = UIWindow(frame: pane)
+        window.addSubview(view)
+        view.frame = pane
+        window.isHidden = false
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        return window
+    }
+
+    /// 滑行要去的那个偏移，与一步落位落在同一处。
+    ///
+    /// 两件事必须落在同一点：滑行到位之后如果和 `scrollToItem(at: .bottom)` 差上一截，
+    /// 那截差就会在停下的一瞬间补上 —— 看起来正是这次要消掉的那一跳。
+    @Test func theGlideTargetIsWhereTheInstantLandingGoes() {
+        for count in [5, 200] {
+            let (view, list) = terminal(columns: 80, rows: 24)
+            view.apply(rows: lines(count), atHistoryFloor: false, cursor: nil)
+            list.layoutIfNeeded()
+
+            #expect(abs(view.bottomOffsetY - list.contentOffset.y) < 0.5)
+        }
+    }
+
+    /// 插值不冲过目标。
+    ///
+    /// 冲过去就是一次回弹，屏幕上比原来那记硬跳还糟。单调收敛是这条的性质本身，
+    /// 顺带也钉住了「到位之后不会再来回修正」。
+    @Test func theFollowStepNeverOvershoots() {
+        var y: CGFloat = 0
+        for _ in 0..<240 {
+            let next = TerminalCollectionView.followStep(from: y, to: 400, seconds: 1.0 / 60)
+            #expect(next >= y)
+            #expect(next <= 400)
+            y = next
+        }
+        #expect(abs(y - 400) < 1)
+    }
+
+    /// 同样的墙钟时间里走掉同样的距离：60 Hz 与 120 Hz 必须一样。
+    ///
+    /// 少了这一条，一个「每帧走固定比例」的实现也能让上面那条全绿 —— 而它在 120 Hz
+    /// 手机上会把滑行缩短一半，同一个动作在两台设备上快慢不同。
+    @Test func theFollowStepIsFrameRateIndependent() {
+        var slow: CGFloat = 0
+        for _ in 0..<30 { slow = TerminalCollectionView.followStep(from: slow, to: 400, seconds: 1.0 / 60) }
+        var fast: CGFloat = 0
+        for _ in 0..<60 { fast = TerminalCollectionView.followStep(from: fast, to: 400, seconds: 1.0 / 120) }
+
+        #expect(abs(slow - fast) < 1)
+    }
+
+    /// 跟随时新输出到达，视口不一步跳过去。
+    ///
+    /// 这就是读者报的那一幕：输出一批一批地到，每一批都把视口硬拽到底，屏幕上每 125
+    /// 毫秒跳一下。刚收到一帧的那一刻视口还在半路 —— 这一条断言的就是「还在半路」。
+    @Test func newOutputGlidesInsteadOfJumping() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(0..<200), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let window = inWindow(view)
+        defer { view.removeFromSuperview(); window.isHidden = true }
+
+        view.apply(rows: lines(0..<260), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        #expect(
+            list.contentOffset.y < view.bottomOffsetY - 1,
+            "新输出到的那一下视口就已经在底上了 —— 那是跳过去的"
+        )
+    }
+
+    /// 滑行会自己走到位，不会停在半路。
+    ///
+    /// 上面那条只说「没有跳」，一个干脆不动、或者动一半就停的实现也能满足它。
+    @Test func theGlideSettlesOnTheNewestLine() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(0..<200), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let window = inWindow(view)
+        defer { view.removeFromSuperview(); window.isHidden = true }
+
+        view.apply(rows: lines(0..<260), atHistoryFloor: false, cursor: nil)
+        // 等到它到位，或者判定它没到 —— 循环的判据要比断言严，否则会在「还差一点」
+        // 的那一刻退出，然后拿这个「还差一点」当失败，而它其实还在收敛。（这一条
+        // 第一版就是这么写的：循环用 > 1 退出、断言用 < 1，于是稳定地红。）
+        let deadline = Date().addingTimeInterval(1.0)
+        while Date() < deadline, abs(list.contentOffset.y - view.bottomOffsetY) > 0.5 {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+
+        // 半个点是上限，因为 `contentOffset` 只落在像素网格上（3x 屏是 1/3 点一格），而
+        // 越接近目标步子越小 —— 小到不足一格时四舍五入会把这一步退回去，视口就停在离
+        // 目标两格（2/3 点）的地方，永远到不了。
+        #expect(abs(list.contentOffset.y - view.bottomOffsetY) < 0.5, "没有落到最底")
+        #expect(abs((visibleFrame(ofRow: 259, in: list)?.maxY ?? 0) - list.bounds.height) < 1)
+    }
+
+    /// 安静下来之后，逐帧驱动器要自己停掉。
+    ///
+    /// 上面那条只说「落到底了」。一个永远停不下来的驱动器同样能让它绿 —— 而那是屏幕按
+    /// 刷新率一直醒着，终端闲置一整天也一样。
+    @Test func theFollowDriverStopsOnceItHasSettled() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(0..<200), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        let window = inWindow(view)
+        defer { view.removeFromSuperview(); window.isHidden = true }
+
+        view.apply(rows: lines(0..<260), atHistoryFloor: false, cursor: nil)
+        #expect(view.isFollowingPerFrame, "新输出到达时跟随没有起来")
+
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline, view.isFollowingPerFrame {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+
+        #expect(!view.isFollowingPerFrame, "静下来之后驱动器还在按刷新率转")
+    }
 }

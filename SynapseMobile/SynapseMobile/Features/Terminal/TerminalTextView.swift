@@ -180,6 +180,45 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// `true` means Reduce Motion shows a steady block with no timer at all.
     private var cursorPhaseOn = true
 
+    /// 平滑跟随所用的逐帧驱动器。
+    ///
+    /// 新输出是**一批一批**到的：桌面端大约每 1/8 秒送来一次，而每一次原来都是一记
+    /// `scrollToItem(animated: false)` —— 屏幕上就是每 125 毫秒跳一下。这里改成每一屏
+    /// 刷新走掉剩余距离的一小段：目标一直在动，而指数平滑天生跟得上移动的目标，不必为
+    /// 每一批重启一次动画。
+    private var followLink: CADisplayLink?
+    /// 平滑跟随要去的地方。非 nil 就表示「还在跟」。
+    private var followTargetOffsetY: CGFloat?
+    /// 到位之后是从哪一刻开始静下来的，用来决定何时把屏幕刷新还回去。
+    private var settledSince: CFTimeInterval?
+    /// 这一趟滑动从哪儿出发。见 `recordFollow`。
+    private var followStartedOffsetY: CGFloat?
+    /// 这一笔偏移是**我们**写的，不是读者的手写的。见 `stepFollow`。
+    private var isDrivingFollow = false
+    /// 给跟随加不加插值。
+    ///
+    /// 默认跟随系统的「减弱动态效果」。它单列成一个可写属性是因为那个系统开关读得出
+    /// 来、写不进去 —— 不留这一道口子，「关掉时应当一步到位」就没法在单测里验。
+    var animatesFollow = !UIAccessibility.isReduceMotionEnabled
+
+    /// 每帧走掉剩余距离的比例，按 60 Hz 归一，实际按这一帧的真实时长折算。
+    private static let followEasingPerFrame: CGFloat = 0.18
+    /// 比这更近就算到了。
+    ///
+    /// 不是随手取的一个小数。`contentOffset` 只落在屏幕的像素网格上（3x 屏是每 1/3 点
+    /// 一格），而越接近目标步子越小 —— 小到不足一格的时候四舍五入会把这一步原样退回
+    /// 去，视口就停在离目标**两格**的地方：看不出来，却又永远够不到「一个点以内」这种
+    /// 判据，于是「到位」这一步永远不发生，驱动器按刷新率一直转下去。所以它必须比两格
+    /// 还宽。1x 屏的两格是 2 点，3x 屏是 2/3 点。
+    private var followSettleDistance: CGFloat {
+        max(1, 3 / max(1, traitCollection.displayScale))
+    }
+    /// 到位之后还空转多久才停掉驱动器。
+    ///
+    /// 下一批输出往往几十毫秒后就到，那时从静止重新起步会看出一下停顿；可一直空转下去
+    /// 就是白白唤醒屏幕。这一段比批与批之间的间隔长，又短到不会让闲置的终端一直转。
+    private static let followIdleBeforeStopping: CFTimeInterval = 0.35
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
@@ -622,7 +661,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             // both drops a line above them and adds one below, and preserving their
             // place through the first half of that leaves them one line short of the
             // tail for as long as the output lasts.
-            scrollToBottom(trigger: .contentGrew)
+            //
+            // 这是唯一一条走插值的跟随路径 —— 新输出一批一批地到，一步一跳就是屏幕上
+            // 每 125 毫秒闪一下。别处（`reset`、切网格、inset 变化）仍然一次落位。
+            followNewestLine()
         } else if rowShift != 0 {
             collectionView.contentOffset.y = offsetBefore
                 + CGFloat(rowShift) * TerminalRowCell.rowHeight(for: fontSize)
@@ -761,8 +803,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     override func didMoveToWindow() {
         super.didMoveToWindow()
         // A timer that outlives the screen would keep waking the app for nothing.
+        // 逐帧驱动器也是 —— 而且它比定时器更贵：留着它，屏幕会一直按刷新率醒着。
         guard window != nil else {
             stopBlinking()
+            stopFollowing()
             return
         }
         // Leaving and coming back starts the cursor solid again. Only a blink that
@@ -854,9 +898,10 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     /// 唯一依据。滚不动那类报告里，这两件事在屏幕上长得一模一样。
     func scrollToBottom(trigger: DiagnosticFlag = .unknownCause) {
         guard !appliedKeys.isEmpty else { return }
+        // 一次落位，所以正在跑的平滑跟随没有要去的地方了。
+        stopFollowing()
         let offsetBefore = collectionView.contentOffset.y
-        let last = IndexPath(item: appliedKeys.count - 1, section: 0)
-        collectionView.scrollToItem(at: last, at: .bottom, animated: false)
+        landOnBottom()
         isPinnedToBottom = true
 
         let offsetAfter = collectionView.contentOffset.y
@@ -871,6 +916,163 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             .init(.boundsHeight, .scalar(Double(collectionView.bounds.height))),
             .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
         ])
+    }
+
+    /// 一步落到底，不做插值。
+    ///
+    /// `reset`、切网格、inset 变化这些地方仍然走它：那些不是「跟上新输出」，而是视口
+    /// 本来就要换一个位置，插值只会让画面从一段刚换掉的内容上滑过去。
+    private func landOnBottom() {
+        guard !appliedKeys.isEmpty else { return }
+        let last = IndexPath(item: appliedKeys.count - 1, section: 0)
+        collectionView.scrollToItem(at: last, at: .bottom, animated: false)
+    }
+
+    /// 逐帧驱动器还在不在转。
+    ///
+    /// 停下来之后它必须是 false：一个活着的 `CADisplayLink` 会让屏幕按刷新率一直醒着，
+    /// 而终端这时候可能已经闲置很久了。读它的是测试，这里没有别的地方看。
+    var isFollowingPerFrame: Bool { followLink != nil }
+
+    /// 视口贴到底时应当在的那个偏移。
+    ///
+    /// 与 `scrollToItem(at: .bottom)` 的落点一致 —— `TerminalRestoreModeLayoutTests`
+    /// 里两条关于底部与 inset 的断言正是这两个关系。差别在于这是一件随时可以问的算术，
+    /// 而 `scrollToItem` 问一次就得把视口挪一次。
+    var bottomOffsetY: CGFloat {
+        let ideal = collectionView.contentSize.height
+            + collectionView.contentInset.bottom
+            - collectionView.bounds.height
+        return max(-collectionView.contentInset.top, ideal)
+    }
+
+    /// 跟上最新一行，但不再一步跳过去。
+    ///
+    /// 唯一一条走插值的跟随路径，也就是「新输出到了」这一条。手指按在屏幕上时不插值：
+    /// 那一下视口归手指，正在滑行的位置不能被两股力量同时写。
+    private func followNewestLine() {
+        isPinnedToBottom = true
+        guard animatesFollow, window != nil,
+              !collectionView.isDragging, !collectionView.isDecelerating else {
+            // 插不了值的那几种情形（减弱动态效果、视图还不在窗口里、手指正按着）照旧
+            // 一步落位，诊断也照旧由它来记。
+            scrollToBottom(trigger: .contentGrew)
+            return
+        }
+        let target = bottomOffsetY
+        let from = collectionView.contentOffset.y
+        guard abs(target - from) > 0.5 else {
+            // 没有要去的地方 —— 缓冲区还不到一屏，或者视口本来就在那儿。
+            followTargetOffsetY = nil
+            return
+        }
+        if followLink == nil {
+            // 一趟滑动的起点。落定之后要用它记一条「视口是我们带走的」，而那一刻再去
+            // 问「刚才在哪」已经没有意义了。
+            followStartedOffsetY = from
+            let link = CADisplayLink(target: self, selector: #selector(stepFollow))
+            link.add(to: .main, forMode: .common)
+            followLink = link
+        }
+        followTargetOffsetY = target
+        settledSince = nil
+    }
+
+    /// 记下这一趟是**我们**把视口带走的。
+    ///
+    /// 滚不动那类报告里，「读者自己拖的」和「我们把视口拽回去的」在屏幕上一模一样，
+    /// 而这两件事的修法完全不同。两个偏移都是实测：起点在出发时留好，终点就是它停的
+    /// 地方 —— 一步跳的那种写法可以就地量，滑行不行。
+    private func recordFollow(_ target: CGFloat) {
+        guard let from = followStartedOffsetY else { return }
+        followStartedOffsetY = nil
+        DiagnosticLog.record(.terminalFollowGrab, [
+            .init(.trigger, .flag(.contentGrew)),
+            .init(.offsetBefore, .scalar(Double(from))),
+            .init(.offsetAfter, .scalar(Double(target))),
+            .init(.contentSizeHeight, .scalar(Double(collectionView.contentSize.height))),
+            .init(.boundsHeight, .scalar(Double(collectionView.bounds.height))),
+            .init(.isPinnedToBottom, .bool(isPinnedToBottom)),
+        ])
+    }
+
+    /// 一帧的插值。
+    ///
+    /// 纯函数，好让「不冲过目标」「单调收敛」「与帧率无关」这三件事各自可以被断言 ——
+    /// 前两件错了是抖动，第三件错了是同一段滑行在高刷屏上快一倍。
+    static func followStep(
+        from current: CGFloat,
+        to target: CGFloat,
+        seconds: TimeInterval
+    ) -> CGFloat {
+        guard seconds > 0 else { return current }
+        // 指数平滑：每帧走掉剩余距离的一个固定比例，剩下的越近就走得越慢 —— 所以不会
+        // 冲过目标，也不会在到达时停下来再重新起步。比例按这一帧的时长折算，120 Hz 与
+        // 60 Hz 在同样的墙钟时间里走掉同样的距离。
+        let portion = 1 - pow(1 - followEasingPerFrame, CGFloat(seconds) * 60)
+        return current + (target - current) * portion
+    }
+
+    @objc private func stepFollow() {
+        guard window != nil else {
+            stopFollowing()
+            return
+        }
+        // 手指自己动起来就让位。跟随是「没人管的时候跟着」，不是跟手抢。
+        guard !collectionView.isDragging, !collectionView.isDecelerating else {
+            stopFollowing()
+            return
+        }
+        guard let target = followTargetOffsetY else {
+            stopFollowing()
+            return
+        }
+
+        let current = collectionView.contentOffset.y
+        if abs(target - current) <= followSettleDistance {
+            // 到位。这一笔必须**把目标原样写下去**，不能就这么停手：`contentOffset` 只
+            // 落在屏幕的像素网格上（3x 屏就是每 1/3 点一格），而指数平滑越接近目标步子
+            // 越小 —— 小到不足一格的时候，四舍五入会把这一步原样退回去，视口就永远停在
+            // 离目标一两格的地方。差得看不出来，却也不肯停：判定「到了」的那个阈值够不
+            // 着，驱动器于是按刷新率一直转下去，而终端早就静止了。
+            if settledSince == nil {
+                writeFollowOffset(target)
+                settledSince = followLink?.timestamp ?? CACurrentMediaTime()
+                recordFollow(target)
+            } else if let settledSince, let now = followLink?.timestamp,
+                      now - settledSince > Self.followIdleBeforeStopping {
+                // 一直静着才把屏幕刷新还回去。下一批输出往往几十毫秒后就到，从静止重新
+                // 起步会看出一下停顿。
+                stopFollowing()
+            }
+            return
+        }
+        settledSince = nil
+
+        let seconds = followLink.map { $0.targetTimestamp - $0.timestamp } ?? (1.0 / 60)
+        writeFollowOffset(Self.followStep(from: current, to: target, seconds: seconds))
+    }
+
+    /// 写一笔**我们自己的**偏移。
+    ///
+    /// `setContentOffset` 会同步回调 `scrollViewDidScroll`，而那里按「离底多远」重算是否
+    /// 跟随 —— 滑行途中本来就要经过离底很远的位置，不打个招呼就会在半路把跟随关掉，这一
+    /// 批走到一半停住，下一批也不再跟。
+    private func writeFollowOffset(_ y: CGFloat) {
+        isDrivingFollow = true
+        collectionView.setContentOffset(
+            CGPoint(x: collectionView.contentOffset.x, y: y),
+            animated: false
+        )
+        isDrivingFollow = false
+    }
+
+    private func stopFollowing() {
+        followLink?.invalidate()
+        followLink = nil
+        followTargetOffsetY = nil
+        settledSince = nil
+        followStartedOffsetY = nil
     }
 
     private func buildCollectionView() {
@@ -1382,7 +1584,9 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
         lastScrollPaneHeight = scrollView.bounds.height
         lastScrollInsetTop = scrollView.contentInset.top
         let isReaderScrolling = scrollView.isDragging || scrollView.isDecelerating
-        if isReaderScrolling || !(paneChanged || insetChanged) {
+        // 我们自己的平滑跟随也在写 offset，它同样属于「不是读者的手」那一类 —— 滑行
+        // 本来就要经过离底很远的位置，让它按距离重算就会把跟随在半路关掉。
+        if isReaderScrolling || !(paneChanged || insetChanged || isDrivingFollow) {
             isPinnedToBottom = distanceFromBottom < 40
         } else if distanceFromBottom < 40 {
             isPinnedToBottom = true
@@ -1428,6 +1632,8 @@ extension TerminalCollectionView: UICollectionViewDelegateFlowLayout {
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        // 手指落下，这一下视口归它。跟随等它松手。
+        stopFollowing()
         dragStartOffsetY = scrollView.contentOffset.y
         // 报在**开始拖**这一下，而不是每次位移：调用方要的是"人在动"这个事实，
         // 而它在这段拖动的每一帧里都成立。逐帧报等于让上层按 120Hz 重算一遍状态。
