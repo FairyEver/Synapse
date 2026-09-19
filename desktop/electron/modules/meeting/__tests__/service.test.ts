@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -577,6 +577,23 @@ describe("ensure 音频", () => {
     })
     await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "unavailable" })
     expect(calls).not.toContain("/meetings/m-1/audio-url")
+  })
+
+  it("签名地址被拒（403）时不会把错误正文当成音频存下来", async () => {
+    // 对象存储拒绝时的正文是一小段 XML，不是音频。不看状态码就会把它写进缓存——
+    // 一个「有文件、大小也对不上」的坏缓存会一直被当成未命中反复重下。
+    const cacheRoot = path.join(root, "audio-cache")
+    // 服务端连大小都给不出来（详情那一步没取到）。这时没有尺寸可以对照，唯一的关口
+    // 就是 HTTP 状态码——少了它，这段 XML 会被当成一份 40 字节的「音频」存下来。
+    const service = buildService({
+      fetchAuthenticated: audioServer([], { id: "m-1", recording: { status: "ready", size: 0 } }),
+      fetchPublic: async () => new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 }),
+    })
+    await expect(service.ensureAudio("m-1")).resolves.toEqual({ state: "downloading" })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await expect(stat(path.join(cacheRoot, "m-1.m4a"))).rejects.toThrow()
+    const index = await readFile(path.join(cacheRoot, "index.json"), "utf8").catch(() => "")
+    expect(index).not.toContain("AccessDenied")
   })
 
   it("下到的字节数与服务端记的对不上：不当成缓存，退避后再来", async () => {

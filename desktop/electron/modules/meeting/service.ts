@@ -384,12 +384,16 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     await mkdir(deps.audioCacheRoot, { recursive: true })
     try {
       const response = await deps.fetchPublic(url)
+      // 签名地址过期、被拒的时候对方回的是一小段 XML 错误正文，不是音频。不看状态码就
+      // 会把它当音频存下来——那种文件大小对不上，下次照样重下，但白白写坏一次缓存。
+      if (!response.ok) throw new Error(`音频下载被拒绝（HTTP ${response.status}）。`)
       if (!response.body) throw new Error("音频响应为空。")
       const source = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0])
       // 先写临时文件再改名：中途断了不会在缓存目录里留下一个尺寸不对的 m4a——那种文件
       // 会被下一次的命中判据当成「大小对不上」重新下载，但留着本身就是个坑。
       await pipeline(source, createWriteStream(temporary, { flags: "w" }))
       const size = (await stat(temporary)).size
+      if (size === 0) throw new Error("音频响应没有内容。")
       // 服务端记的字节数与实际下到的对不上，说明这份音频是残的。当作失败，退避后再来。
       if (serverSize > 0 && size !== serverSize) throw new Error("音频大小与服务端记录不一致。")
       await rename(temporary, target)
