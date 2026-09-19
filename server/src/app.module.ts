@@ -21,6 +21,7 @@ import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
+import { TeamModule } from "./team/team.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
 import { WebhookModule } from "./webhooks/webhook.module"
@@ -95,6 +96,7 @@ type RequestLogObject = {
     UpdateIntentModule,
     VoiceModule,
     MeetingModule,
+    TeamModule,
     HealthModule,
   ],
   providers: [
