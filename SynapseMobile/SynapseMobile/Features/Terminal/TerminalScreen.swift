@@ -1207,7 +1207,7 @@ struct TerminalScreen: View {
             TerminalKeyboardPanel(
                 isEnabled: isRunning,
                 // 竖屏给满、横屏按可用高度压下来（`KeyboardPanelMetrics.height(fitting:)`）。
-                // 横屏那 351pt 加上两条栏会超出屏幕，顶栏会被挤出画面。
+                // 横屏那 384pt 加上两条栏会超出屏幕，顶栏会被挤出画面。
                 height: KeyboardPanelMetrics.height(fitting: availableHeight)
             ) { actions in
                 model.sendKeys(sessionId, actions)
@@ -1217,6 +1217,12 @@ struct TerminalScreen: View {
                 // the ordinary way to use it, and a panel that closed after each one
                 // would have to be reopened for each one.
                 if actions.contains(.key(.enter)) { model.commitDeliveredAttachments(for: sessionId) }
+            } onRequestSystemKeyboard: {
+                // 面板里的「手机键盘」不是另一页板子，是这块板子让位给系统键盘：
+                // iOS 不许我们自己的视图压在系统键盘之上，所以这里做的是键盘之间该做
+                // 的事 —— 收掉这一个，叫起那一个。先收再聚焦，两块键盘才不在路上撞见。
+                setKeyboardPanel(false)
+                inputFocused = true
             }
         }
     }

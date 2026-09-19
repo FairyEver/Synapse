@@ -1,166 +1,223 @@
 import SwiftUI
 
-/// The keys a phone has no other way to send, laid out where a keyboard has them.
+/// A whole computer keyboard, two pages of it, sitting where the system keyboard sits.
 ///
-/// The accessory bar shows the computer's own buttons; this is the other half of what
-/// that bar replaced. Ten fixed keys used to sit beside it, and removing them took away
-/// every key that is not a printable character — the arrows, Esc, Tab, Backspace — along
-/// with the two that a terminal cannot be driven without. They live here instead, behind
-/// one tap, and the layout is the point: a finger finds `esc` in the corner because it
-/// knows where the corner is, not because it read a label.
+/// This panel is not a set of shortcuts. It is a keyboard, drawn the way the board it
+/// stands in for is drawn: the digits over the letters, Space and Enter under the thumb,
+/// `esc` in the corner your finger already knows, and the function keys where a keyboard
+/// puts them. The layout is the interface — a key is found by where it is, not by reading
+/// it — so nothing here is a list of buttons that happens to be sorted.
 ///
-/// The first category is a real keyboard rather than a picture of one — and it is the
-/// first one because it is the page that holds everything: the letters, the digits, the
-/// modifiers, and the five keys the system keyboard has no way to send. A modifier is
-/// latched by tapping it and the next letter completes the chord, which is the only
-/// vocabulary a touch screen has for "hold Ctrl and press C" — a `Button` reports a tap
-/// on the way up and has no state to read while a finger is still down.
+/// Two tabs, and only two: **电脑键盘** is the board below, and **手机键盘** is the system
+/// keyboard the phone already has. The second one is not a mode — iOS will not let our own
+/// view sit on top of the system keyboard — so choosing it lowers this panel and raises
+/// that one, which is what a keyboard switch does everywhere else on the system.
 ///
-/// Read-only, deliberately. These are keys, not commands: there is nothing to add,
-/// rename or delete, and no menu on a long press.
+/// Four modifiers, and one of them does nothing. `⌘` is drawn because a computer keyboard
+/// has it there, but macOS's own terminal consumes it (⌘C copies, ⌘V pastes, ⌘K clears)
+/// and no byte of it reaches the PTY. It is dimmed like the other keys that have no byte
+/// — `PrtScr`, `ScrLK`, `Pause` — so the panel is a keyboard rather than a claim about
+/// what a terminal can do. 设计文档 §3.4.
+///
+/// A modifier is latched by tapping it and the next key completes the chord, which is the
+/// only vocabulary a touch screen has for "hold Ctrl and press C": a `Button` reports a
+/// tap on the way up and has no state to read while a finger is still down.
+///
+/// Read-only, deliberately. These are keys, not commands: there is nothing to add, rename
+/// or delete, and no menu on a long press.
+
+// MARK: - Tabs
+
+/// The two halves of the switch: our board, or the phone's own keyboard.
+private enum KeyboardPanelTab: String, CaseIterable, Identifiable {
+    case computer
+    case phone
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .computer: return "电脑键盘"
+        case .phone: return "手机键盘"
+        }
+    }
+}
 
 // MARK: - Modifiers
 
-/// The three modifiers the panel can hold down.
-///
-/// There is no Command, and that is a fact about macOS rather than a preference: the
-/// terminal app consumes ⌘ itself — ⌘C copies, ⌘V pastes, ⌘K clears — and no byte of it
-/// ever reaches the PTY. A Command key here would either do nothing or do something that
-/// belongs to a different feature. This panel sends a key; it does not run a command.
+/// The modifiers the panel can hold down, plus the one a computer keyboard has and a
+/// terminal cannot be told about.
 private enum KeyboardPanelModifier: String, CaseIterable, Identifiable {
     case control = "Ctrl"
     case shift = "Shift"
     case alt = "Alt"
+    /// Drawn, never latched. See the file comment.
+    case command = "⌘"
 
     var id: String { rawValue }
+
+    /// A key that is on the board because the board is a picture of a computer keyboard,
+    /// not because pressing it would do anything. Every one of these is dimmed and
+    /// answers with the refusal haptic; none of them is silently inert.
+    var isDead: Bool { self == .command }
 }
 
-/// What pressing one key of the full keyboard page sends.
-///
-/// `unavailable` exists so that no key on this panel can be a key that does nothing:
-/// the readout turns yellow and says why, which is the difference between a chord the
-/// terminal has no byte for and a panel that is broken.
-private enum KeyboardPanelPress {
-    case send([MobileKeyAction], detail: String)
-    case unavailable(String)
-}
+// MARK: - What a letter sends while Ctrl is latched
 
-/// What each control chord means, keyed by the letter that produces it.
+/// The chord each letter makes with Ctrl.
 ///
-/// Written out rather than derived from the alphabet, because the detail is the point:
-/// the readout carries both the byte and the meaning, which is how somebody using this
-/// panel twice learns what `^C` is. `I` and `M` are absent on purpose — see `press`.
-private let keyboardPanelControlChords: [Character: (key: MobileKey, detail: String)] = [
-    "a": (.controlA, "0x01 · 行首"),
-    "b": (.controlB, "0x02 · tmux 前缀"),
-    "c": (.controlC, "0x03 · 中断当前进程"),
-    "d": (.controlD, "0x04 · EOF · 退出"),
-    "e": (.controlE, "0x05 · 行尾"),
-    "f": (.controlF, "0x06 · 前进一个词 / 翻页"),
-    "g": (.controlG, "0x07 · 取消"),
-    "h": (.controlH, "0x08 · 退格（≠ ⌫）"),
-    "j": (.controlJ, "0x0a · 换行"),
-    "k": (.controlK, "0x0b · 删到行尾"),
-    "l": (.controlL, "0x0c · 清屏"),
-    "n": (.controlN, "0x0e · 下一条历史"),
-    "o": (.controlO, "0x0f · 忽略"),
-    "p": (.controlP, "0x10 · 上一条历史"),
-    "q": (.controlQ, "0x11 · 恢复输出"),
-    "r": (.controlR, "0x12 · 反向搜索历史"),
-    "s": (.controlS, "0x13 · 暂停输出"),
-    "t": (.controlT, "0x14 · 交换字符"),
-    "u": (.controlU, "0x15 · 删到行首"),
-    "v": (.controlV, "0x16 · 字面量插入"),
-    "w": (.controlW, "0x17 · 删一个词"),
-    "x": (.controlX, "0x18 · readline 前缀"),
-    "y": (.controlY, "0x19 · 粘贴"),
-    "z": (.controlZ, "0x1a · 挂起"),
-]
-
-/// The symbol each digit's key shows and sends while Shift is latched, as on the
-/// system keyboard. Same mapping, so nothing has to be learned twice.
-private let keyboardPanelShiftedDigits: [Character: Character] = [
-    "1": "!", "2": "@", "3": "#", "4": "$", "5": "%",
-    "6": "^", "7": "&", "8": "*", "9": "(", "0": ")",
+/// Written out rather than derived from the alphabet, because the letters are not
+/// interchangeable: `Ctrl+C` is the one this panel exists for and `Ctrl+D` ends the
+/// session. `I` and `M` are absent on purpose — see `resolve`.
+private let keyboardPanelControlChords: [Character: MobileKey] = [
+    "a": .controlA, "b": .controlB, "c": .controlC, "d": .controlD, "e": .controlE,
+    "f": .controlF, "g": .controlG, "h": .controlH, "j": .controlJ, "k": .controlK,
+    "l": .controlL, "n": .controlN, "o": .controlO, "p": .controlP, "q": .controlQ,
+    "r": .controlR, "s": .controlS, "t": .controlT, "u": .controlU, "v": .controlV,
+    "w": .controlW, "x": .controlX, "y": .controlY, "z": .controlZ,
 ]
 
 // MARK: - Layout model
 
-/// One cell in a category's grid.
+/// One key on the board.
 ///
-/// The grid is hand-built rather than derived from `MOBILE_KEYS`, because where a key
-/// sits is the whole design: `↑` above `↓` with `←` and `→` beside it is the arrow
-/// cluster, and `esc` belongs in the corner your thumb already knows.
-private enum KeyboardPanelCell {
-    /// A key that can be pressed, drawn as a square of `side` points. `title` is the
-    /// compact form a phone keyboard uses — `esc`, not `Escape`.
-    case key(MobileKey, title: String, side: CGFloat)
-    /// A hole the size of a key, so a row lines up with the one above it.
-    case hole(CGFloat)
-}
-
-/// A block of keys: rows of cells. A page draws one or more of them, left to right.
-private typealias KeyboardPanelCluster = [[KeyboardPanelCell]]
-
-private struct KeyboardPanelCategory: Identifiable {
-    let id: String
-    let name: String
-    /// This page's clusters, drawn left to right.
-    ///
-    /// Empty for the keyboard, which is not a cluster of keys at all: it is a ten-column
-    /// grid that spans the whole width, and `keyboardPage` is what draws it.
-    let clusters: [KeyboardPanelCluster]
-
-    init(id: String, name: String, clusters: [KeyboardPanelCluster] = []) {
-        self.id = id
-        self.name = name
-        self.clusters = clusters
+/// The board is written out as data rather than derived from `MOBILE_KEYS`, because where
+/// a key sits is the whole design: `↑` above `↓` with `←` and `→` beside it is the arrow
+/// cluster, and `PrtScr` belongs beside `Pause` whether or not it can be sent.
+private struct KeyboardPanelKey: Identifiable {
+    enum Kind {
+        /// Prints a character. `plain` is what it sends at rest, `shifted` under Shift —
+        /// the two legends a real keycap carries, and the same pair the system keyboard
+        /// shows on its number row.
+        case text(plain: String, shifted: String)
+        /// A key whose byte lives in the computer's `KEY_BYTES`.
+        case key(MobileKey)
+        /// Caps Lock: a client-side latch that capitalises letters and nothing else.
+        /// A terminal has no caps state and no byte for the key, but the effect a person
+        /// wants — capital letters — is plain text, so this needs no protocol at all.
+        case caps
+        /// A key a computer keyboard has and a terminal has no byte for.
+        case dead
+        /// A hole the size of a key, so a row lines up with the one above it.
+        case hole
     }
 
-    /// The whole board, drawn by hand rather than from `clusters`.
-    var isKeyboard: Bool { id == Self.keyboardId }
-
-    static let keyboardId = "keyboard"
+    /// Also the accessibility identifier's tail, so it has to be stable: the UI tests
+    /// address keys by it.
+    let id: String
+    let kind: Kind
+    /// Drawn instead of the legends when it is set — `Space`, `Esc`, `PgUp`. Written the
+    /// way a phone keyboard writes it rather than the way the protocol does.
+    var title: String = ""
+    /// How much of the row this key takes. 1 is a letter key, 1.5 is `Space` or `Enter`,
+    /// which are wide keys on a real board.
+    var weight: CGFloat = 1
 }
 
-/// Two pages.
+private func panelText(
+    _ id: String,
+    _ plain: String,
+    _ shifted: String? = nil,
+    title: String = "",
+    weight: CGFloat = 1
+) -> KeyboardPanelKey {
+    KeyboardPanelKey(
+        id: id,
+        kind: .text(plain: plain, shifted: shifted ?? plain),
+        title: title,
+        weight: weight
+    )
+}
+
+private func panelKey(_ key: MobileKey, _ title: String, weight: CGFloat = 1) -> KeyboardPanelKey {
+    KeyboardPanelKey(id: "key-\(key.rawValue)", kind: .key(key), title: title, weight: weight)
+}
+
+private func panelCaps() -> KeyboardPanelKey {
+    KeyboardPanelKey(id: "caps", kind: .caps, title: "Caps")
+}
+
+private func panelDead(_ name: String) -> KeyboardPanelKey {
+    KeyboardPanelKey(id: "dead-\(name)", kind: .dead, title: name)
+}
+
+private let keyboardPanelHole = KeyboardPanelKey(id: "hole", kind: .hole)
+
+/// The three letter rows of a QWERTY board.
 ///
-/// There were four — 常用 / 方向 / 功能 / 全键盘 — and the two a phone actually needs are
-/// made by folding them together: the five keys the board itself has no room for sit
-/// above it, and the arrows and the six-key cluster sit side by side.
+/// Drawn upper case, the way the board is: a real keycap has `Q` on it and prints `q`,
+/// and a phone keyboard does the same. Which one goes down the wire is `resolve`'s job —
+/// the cap does not repaint, so there is only ever one legend to read.
+private func panelLetterRow(_ letters: String) -> [KeyboardPanelKey] {
+    letters.map { letter in
+        panelText(
+            "letter-\(letter)",
+            String(letter),
+            String(letter).uppercased(),
+            title: String(letter).uppercased()
+        )
+    }
+}
+
+/// Page one of 电脑键盘: the digits over the letters, Space and Enter under the thumb.
+private let keyboardPanelComputerRows: [[KeyboardPanelKey]] = [
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map { digit in
+        panelText(
+            "digit-\(digit)",
+            digit,
+            ["!": "1", "@": "2", "#": "3", "$": "4", "%": "5",
+             "^": "6", "&": "7", "*": "8", "(": "9", ")": "0"]
+                .first { $0.value == digit }?.key
+        )
+    },
+    panelLetterRow("qwertyuiop"),
+    panelLetterRow("asdfghjkl") + [panelKey(.backspace, "⌫")],
+    panelLetterRow("zxcvbnm") + [
+        panelText("space", " ", " ", title: "Space", weight: 1.5),
+        panelKey(.enter, "Enter", weight: 1.5),
+    ],
+]
+
+/// Page two: the symbol row, and under it the twelve function keys beside the block a
+/// computer keyboard puts to their right.
 ///
-/// 常用 existed because `esc` and its four neighbours had nowhere else to live. That was
-/// a fact about the old board rather than about terminals, and the board now draws them,
-/// so a page holding only them held nothing. Its keys are the first row here.
-private let keyboardPanelCategories: [KeyboardPanelCategory] = [
-    // The board, with the five keys a phone keyboard cannot express laid across the top.
-    // `esc` is top-left because that is where the corner is on every keyboard anybody
-    // has ever used — and `⇧tab` is next to `tab` and worth its own key even now that
-    // Shift and Tab share a page: cycling Claude Code's permission mode should not cost
-    // two taps because the chord became expressible.
-    KeyboardPanelCategory(id: KeyboardPanelCategory.keyboardId, name: "键盘"),
-    KeyboardPanelCategory(
-        id: "navigation",
-        name: "导航",
-        clusters: [
-            // The inverted T of the arrow cluster, on the left.
-            [
-                [.hole(56), .key(.arrowUp, title: "↑", side: 56), .hole(56)],
-                [.key(.arrowLeft, title: "←", side: 56),
-                 .key(.arrowDown, title: "↓", side: 56),
-                 .key(.arrowRight, title: "→", side: 56)],
-            ],
-            // The six-key cluster that sits above the arrows on a real keyboard. Insert's
-            // slot is left as a hole rather than filled with something that is not there.
-            [
-                [.hole(56), .key(.home, title: "home", side: 56),
-                 .key(.pageUp, title: "pgup", side: 56)],
-                [.key(.delete, title: "del", side: 56),
-                 .key(.end, title: "end", side: 56),
-                 .key(.pageDown, title: "pgdn", side: 56)],
-            ],
-        ]
-    ),
+/// `PrtScr`, `ScrLK` and `Pause` are on the board and cannot be sent. They are kept
+/// because this page is a picture of the block they belong to, and a keyboard with a
+/// hole where three keys should be is harder to read than one that dims them.
+private let keyboardPanelFunctionRows: [[KeyboardPanelKey]] = [
+    [
+        panelText("symbol-equals", "="),
+        panelText("symbol-plusminus", "±"),
+        panelText("symbol-bracket-left", "[", "{"),
+        panelText("symbol-bracket-right", "]", "}"),
+        panelText("symbol-backslash", "\\", "|"),
+        panelText("symbol-semicolon", ";", ":"),
+        panelText("symbol-quote", "'", "\""),
+        panelText("symbol-comma", ",", "<"),
+        panelText("symbol-period", ".", ">"),
+        panelText("symbol-slash", "/", "?"),
+    ],
+    [
+        panelKey(.escape, "Esc"), panelKey(.tab, "Tab"),
+        panelText("symbol-grave", "`", "~"),
+        panelDead("PrtScr"), panelDead("ScrLK"), panelDead("Pause"),
+    ],
+    [
+        panelKey(.f1, "F1"), panelKey(.f2, "F2"), panelKey(.f3, "F3"),
+        panelKey(.insert, "Ins"), panelKey(.home, "Home"), panelKey(.pageUp, "PgUp"),
+    ],
+    [
+        panelKey(.f4, "F4"), panelKey(.f5, "F5"), panelKey(.f6, "F6"),
+        panelKey(.delete, "Del"), panelKey(.end, "End"), panelKey(.pageDown, "PgDn"),
+    ],
+    [
+        panelKey(.f7, "F7"), panelKey(.f8, "F8"), panelKey(.f9, "F9"),
+        panelCaps(), panelKey(.arrowUp, "↑"), keyboardPanelHole,
+    ],
+    [
+        panelKey(.f10, "F10"), panelKey(.f11, "F11"), panelKey(.f12, "F12"),
+        panelKey(.arrowLeft, "←"), panelKey(.arrowDown, "↓"), panelKey(.arrowRight, "→"),
+    ],
 ]
 
 // MARK: - Shared key capsule
@@ -201,16 +258,16 @@ struct TerminalKeyPill: ViewModifier {
     var horizontalPadding: CGFloat = 12
     /// The pill's height when it is drawn to a size rather than to its label.
     ///
-    /// The board's keys are squares whose side comes from the screen width, so their
+    /// The board's keys are rectangles whose size comes from the screen width, so their
     /// pill has to be told how tall it is instead of measuring itself — a `Text` has no
-    /// opinion about being square. Nil everywhere else, where the label decides.
+    /// opinion about being a key.
     var size: CGFloat? = nil
     /// How tall the tappable box is. Nil means `Metrics.minimumTapTarget`.
     ///
-    /// The board gives every key one row's worth of height instead: its keys are 34pt
-    /// squares four points apart, so 44 would push the rows apart again and buy nothing —
-    /// a 44pt box on a 38pt pitch overlaps its neighbours, and the overlap belongs to
-    /// whichever key is drawn on top.
+    /// The board gives every key one row's worth of height instead: its rows are six
+    /// points apart, so 44 would push them apart again and buy nothing — a 44pt box on a
+    /// 42pt pitch overlaps its neighbours, and the overlap belongs to whichever key is
+    /// drawn on top.
     var tapHeight: CGFloat? = nil
 
     /// The pill's own fill, in the order of how loud the state is.
@@ -281,7 +338,8 @@ extension View {
 
 // MARK: - Panel
 
-/// The panel itself: a category picker over the grid for whichever category is chosen.
+/// The panel itself: the two-tab switch, the modifier row, and whichever board page is
+/// showing.
 struct TerminalKeyboardPanel: View {
     /// Nil while the terminal is not running, which greys out every key.
     let isEnabled: Bool
@@ -290,8 +348,16 @@ struct TerminalKeyboardPanel: View {
     /// (see `KeyboardPanelMetrics.height(fitting:)`) and the board scrolls inside.
     let height: CGFloat
     let onActions: ([MobileKeyAction]) -> Void
+    /// 手机键盘: the caller lowers this panel and raises the system keyboard. The panel
+    /// cannot do it itself — it does not own either keyboard, and iOS will not draw our
+    /// view above the system one.
+    let onRequestSystemKeyboard: () -> Void
 
-    @State private var selectedCategoryId = keyboardPanelCategories[0].id
+    @State private var tab: KeyboardPanelTab = .computer
+    @State private var page: Int = 0
+    /// Whether the modifier row is live. Off, the row goes away and the board is a plain
+    /// character keyboard — which is what "组合键模式" means literally.
+    @State private var combinationMode = true
 
     /// The modifier that will combine with the next key, if any.
     ///
@@ -304,14 +370,16 @@ struct TerminalKeyboardPanel: View {
     /// chord several times. Stays until tapped again.
     @State private var lockedModifier: KeyboardPanelModifier?
     @State private var lastModifierTap: (modifier: KeyboardPanelModifier, at: Date)?
-    /// What the readout's right-hand side shows: the last thing this page sent.
-    @State private var lastPress: KeyboardPanelPress?
+    /// Caps Lock. Client-side only: it capitalises letters and changes nothing else.
+    @State private var capsLocked = false
 
-    private var category: KeyboardPanelCategory {
-        keyboardPanelCategories.first { $0.id == selectedCategoryId } ?? keyboardPanelCategories[0]
+    private var effectiveModifier: KeyboardPanelModifier? {
+        combinationMode ? (lockedModifier ?? latchedModifier) : nil
     }
 
-    private var effectiveModifier: KeyboardPanelModifier? { lockedModifier ?? latchedModifier }
+    private var rows: [[KeyboardPanelKey]] {
+        page == 0 ? keyboardPanelComputerRows : keyboardPanelFunctionRows
+    }
 
     var body: some View {
         // 面板在横屏里放不下整块键盘（可用高度只有竖屏的一半，而键盘本身没变矮），
@@ -320,9 +388,6 @@ struct TerminalKeyboardPanel: View {
         // 一段橡皮筋，而面板从来没有滚过。
         ScrollView(.vertical) {
             content
-                // 导航页那块靠 `Spacer(minLength: 0)` 把键压在上方、空出下半块。
-                // 滚动容器给子视图的是理想高度，Spacer 在那里展开为零 —— 少了这一句，
-                // 那一页的键会缩到顶部而下面的空白跟着消失。
                 .frame(minHeight: height, alignment: .top)
         }
         .scrollBounceBehavior(.basedOnSize)
@@ -338,206 +403,88 @@ struct TerminalKeyboardPanel: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            Picker("按键分类", selection: $selectedCategoryId) {
-                ForEach(keyboardPanelCategories) { category in
-                    Text(category.name).tag(category.id)
+            Picker("键盘", selection: $tab) {
+                ForEach(KeyboardPanelTab.allCases) { tab in
+                    Text(tab.title).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 14)
             .padding(.bottom, 12)
-
-            if category.isKeyboard {
-                readout
-                    .padding(.bottom, 8)
-                keyboardPage
-                hint
-            } else {
-                clusterGrid
-                // The shorter page keeps its keys at the top and leaves the rest of the
-                // panel empty — the visible cost of one height for both pages, and what
-                // a page change costs to move nothing above the panel.
-                Spacer(minLength: 0)
+            .onChange(of: tab) { _, newValue in
+                // 手机键盘 isn't a page of this panel — it is this panel leaving. The
+                // picker reports the tap before the caller lowers us, so there is
+                // nothing to undo when the panel comes back: it is built from scratch.
+                guard newValue == .phone else { return }
+                clearModifier()
+                onRequestSystemKeyboard()
             }
+
+            modifierRow
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+
+            board
+                .padding(.horizontal, 14)
+
+            // The shorter page keeps its keys at the top and leaves the rest of the panel
+            // empty — the visible cost of one height for both pages, and what a page
+            // change costs to move nothing above the panel.
+            Spacer(minLength: 0)
+
+            pageDots
+                .padding(.top, 8)
         }
         .padding(.top, 8)
         .padding(.bottom, 14)
-        // 高度与底色在 `body` 上：它们说的是面板的边框，而这一个说的是面板里有什么。
-        .onChange(of: selectedCategoryId) { _, _ in
+        .onChange(of: page) { _, _ in
             // Changing page is changing what the keys mean, so a latched modifier is
             // dropped rather than carried into a board it does not belong to.
             clearModifier()
-            // And so is the readout: it says what this page would send next, so a
-            // result left over from another page's key would be answering a question
-            // nobody asked. It reads as a prediction, not as a log.
-            lastPress = nil
         }
     }
 
-    // MARK: - 导航页
+    // MARK: - Modifier row
 
-    /// 一页里的几块键簇，从左到右摆开，块与块之间的空档平分给了两侧。
+    /// The switch, its label, and the four modifiers it governs.
     ///
-    /// 两块都靠上：它们中间的空档是全页最高的一处，把键压在上面读起来才像一块键盘
-    /// 的下半部分，而不是一片散开在面板里的按钮。
-    private var clusterGrid: some View {
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(category.clusters.enumerated()), id: \.offset) { index, cluster in
-                if index > 0 { Spacer(minLength: 12) }
-                clusterView(cluster)
+    /// The four share whatever room the label leaves, which puts Control under the left
+    /// thumb and ⌘ under the right, the way the board they stand in for does.
+    private var modifierRow: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 7) {
+                Toggle("组合键模式", isOn: $combinationMode)
+                    .labelsHidden()
+                    .onChange(of: combinationMode) { _, isOn in
+                        // Turning the row off while a modifier is held would leave the
+                        // state on with nothing on screen showing it.
+                        if !isOn { clearModifier() }
+                    }
+                Text("组合键模式")
+                    .font(.system(size: 12.5))
+                    .lineLimit(1)
             }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-    }
+            .fixedSize(horizontal: true, vertical: false)
 
-    private func clusterView(_ cluster: KeyboardPanelCluster) -> some View {
-        VStack(spacing: 4) {
-            ForEach(Array(cluster.enumerated()), id: \.offset) { _, row in
-                rowView(row)
-            }
-        }
-    }
-
-    private func rowView(_ row: [KeyboardPanelCell]) -> some View {
-        HStack(spacing: 4) {
-            ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                cellView(cell)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func cellView(_ cell: KeyboardPanelCell) -> some View {
-        switch cell {
-        case .hole(let side):
-            // Invisible rather than absent: it holds the column so the row above lines up.
-            Color.clear.frame(width: side, height: 1)
-        case .key(let key, let title, let side):
-            sizedKey(key, title: title, width: side, height: side, tapHeight: side)
-        }
-    }
-
-    /// 一颗按尺寸画的键。两页共用：导航页是 56pt 的正方形，键盘页最上面那行是等宽的
-    /// 宽键 —— 真键盘上的 `tab`、`⌫`、`回车` 本来也是宽键。
-    ///
-    /// 这一页没有修饰键可组合，所以键就是键。
-    private func sizedKey(
-        _ key: MobileKey,
-        title: String,
-        width: CGFloat,
-        height: CGFloat,
-        tapHeight: CGFloat
-    ) -> some View {
-        Button {
-            Haptics.select()
-            onActions([.key(key)])
-            lastPress = .send([.key(key)], detail: title)
-        } label: {
-            Text(title)
-                .frame(maxWidth: .infinity)
-                .terminalKeyPill(
-                    minWidth: width,
-                    horizontalPadding: 4,
-                    size: height,
-                    tapHeight: tapHeight
-                )
-                .frame(width: width)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.4)
-        .accessibilityIdentifier("panelkey-\(key.rawValue)")
-    }
-
-    // MARK: - 键盘页
-
-    private let keyboardSpacing: CGFloat = 4
-
-    /// 一颗键边长到这么大就不再长了。
-    ///
-    /// 面板只有一档高度（见 `KeyboardPanelMetrics`），而正方形的键是跟着宽度长的：
-    /// 宽屏上放任它长，六行就会高过面板、压到终端上去。到了这个尺寸之后板子不再铺满
-    /// —— 它居中，四周留白，这比一个把面板顶破的键盘好看。
-    private let keyboardKeyCeiling: CGFloat = 34
-
-    /// 整块键盘：常用键一行、修饰键一行、数字一行、字母三行。
-    ///
-    /// 十列铺满整宽，所以字母键的边长由屏幕宽度定下来 —— iPhone 上正好是 34pt 的正
-    /// 方形。每一行的框比这个正方形高出一个缝的宽度，正方形在框里居中：行与行之间因此
-    /// 只隔着和左右一样的 4pt，而每颗键的点击区跟着长到 ≈38pt —— 上下各多出 2pt。
-    private var keyboardPage: some View {
-        GeometryReader { proxy in
-            let keyWidth = min(
-                keyboardKeyCeiling,
-                max(24, (proxy.size.width - keyboardSpacing * 9) / 10)
-            )
-            let rowHeight = keyWidth + keyboardSpacing
-            VStack(spacing: 0) {
-                commonRow(keyWidth: keyWidth, rowHeight: rowHeight)
-                modifierRow(keyWidth: keyWidth, rowHeight: rowHeight)
-                digitRow(keyWidth: keyWidth, rowHeight: rowHeight)
-                ForEach(Array(letterRows.enumerated()), id: \.offset) { _, row in
-                    letterRow(row, keyWidth: keyWidth, rowHeight: rowHeight)
+            if combinationMode {
+                HStack(spacing: 6) {
+                    ForEach(KeyboardPanelModifier.allCases) { modifier in
+                        modifierKey(modifier)
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .padding(.horizontal, 14)
+        .frame(height: KeyboardPanelMetrics.modifierRowHeight)
     }
 
-    /// 系统键盘表达不出来的那五颗键，横在最上面一行。
-    ///
-    /// 五颗平分整宽而不是画成正方形：`tab`、`⌫`、`回车` 在真键盘上本来就是宽键，而
-    /// 一行里五颗等宽的长方块比五颗小方键更好按、也更好认。
-    private func commonRow(keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
-        let keys: [(key: MobileKey, title: String)] = [
-            (.escape, "esc"), (.tab, "tab"), (.shiftTab, "⇧tab"),
-            (.backspace, "⌫"), (.enter, "回车"),
-        ]
-        let width = (keyWidth * 10 + keyboardSpacing * 9 - keyboardSpacing * 4) / 5
-        return HStack(spacing: keyboardSpacing) {
-            ForEach(Array(keys.enumerated()), id: \.offset) { _, entry in
-                sizedKey(
-                    entry.key,
-                    title: entry.title,
-                    width: width,
-                    height: keyWidth,
-                    tapHeight: rowHeight
-                )
-            }
-        }
-    }
-
-    /// The three rows of a QWERTY board, lower case — what Shift turns into upper case.
-    private let letterRows: [[Character]] = [
-        ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-        ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-        ["z", "x", "c", "v", "b", "n", "m"],
-    ]
-
-    private let digitKeys: [Character] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
-
-    /// Fixed-width, so the two that belong to the left hand stay together and `Alt`
-    /// stays where the right hand reaches for it, as on a real board.
-    private func modifierRow(keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
-        HStack(spacing: keyboardSpacing) {
-            ForEach([KeyboardPanelModifier.control, .shift]) { modifier in
-                modifierKey(modifier, height: keyWidth, tapHeight: rowHeight)
-            }
-            Spacer(minLength: 0)
-            modifierKey(.alt, height: keyWidth, tapHeight: rowHeight)
-        }
-    }
-
-    private func modifierKey(
-        _ modifier: KeyboardPanelModifier,
-        height: CGFloat,
-        tapHeight: CGFloat
-    ) -> some View {
+    private func modifierKey(_ modifier: KeyboardPanelModifier) -> some View {
         let isLatched = effectiveModifier == modifier
         let isLocked = lockedModifier == modifier
         return Button {
+            guard !modifier.isDead else {
+                Haptics.warning()
+                return
+            }
             Haptics.select()
             tapModifier(modifier)
         } label: {
@@ -550,204 +497,280 @@ struct TerminalKeyboardPanel: View {
                     Circle()
                         .fill(Color(uiColor: .systemBackground))
                         .frame(width: 4, height: 4)
-                        .padding(.top, 3)
+                        .padding(.top, 4)
                 }
             }
-            .font(.system(size: 12.5, weight: .medium))
+            .font(.system(size: 14, weight: .medium))
             .terminalKeyPill(
-                minWidth: 62,
+                minWidth: 0,
                 prominent: isLatched,
-                horizontalPadding: 8,
-                size: height,
-                tapHeight: tapHeight
+                horizontalPadding: 6,
+                size: KeyboardPanelMetrics.modifierRowHeight,
+                tapHeight: KeyboardPanelMetrics.modifierRowHeight
             )
-            .frame(width: 62)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.4)
+        .opacity(isEnabled ? (modifier.isDead ? 0.35 : 1) : 0.4)
         .accessibilityIdentifier("panelkey-modifier-\(modifier.rawValue)")
     }
 
-    private func digitRow(keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
-        HStack(spacing: keyboardSpacing) {
-            ForEach(digitKeys, id: \.self) { digit in
-                characterKey(digit, isDigit: true, keyWidth: keyWidth, rowHeight: rowHeight)
+    // MARK: - Board
+
+    /// The two pages, side by side and swipeable.
+    ///
+    /// A `TabView` rather than a hand-rolled offset: the swipe, the rubber band at the
+    /// ends and the way a page settles are all things iOS already defines, and the dots
+    /// below are drawn here only because the system's own are a different size and sit
+    /// inside the pages rather than under them.
+    private var board: some View {
+        GeometryReader { proxy in
+            TabView(selection: $page) {
+                boardPage(width: proxy.size.width).tag(0)
+                boardPage(width: proxy.size.width).tag(1)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+        }
+        .frame(height: KeyboardPanelMetrics.boardHeight)
+    }
+
+    private func boardPage(width: CGFloat) -> some View {
+        VStack(spacing: KeyboardPanelMetrics.rowGap) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                rowView(row, width: width)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// A row of keys, each drawn as wide as its share of the row.
+    ///
+    /// Shares rather than a fixed width, because the two pages have different column
+    /// counts: ten digits have to fit the same edge to edge distance as six function
+    /// keys, and the function keys come out half again as wide without either page
+    /// knowing about the other.
+    private func rowView(_ row: [KeyboardPanelKey], width: CGFloat) -> some View {
+        let gap = KeyboardPanelMetrics.rowGap
+        let total = row.reduce(CGFloat.zero) { $0 + $1.weight }
+        let unit = max(0, (width - gap * CGFloat(row.count - 1)) / max(total, 1))
+        return HStack(spacing: gap) {
+            ForEach(row) { key in
+                keyView(key, width: unit * key.weight)
             }
         }
     }
 
-    private func letterRow(_ row: [Character], keyWidth: CGFloat, rowHeight: CGFloat) -> some View {
-        HStack(spacing: keyboardSpacing) {
-            ForEach(row, id: \.self) { letter in
-                characterKey(letter, isDigit: false, keyWidth: keyWidth, rowHeight: rowHeight)
+    @ViewBuilder
+    private func keyView(_ key: KeyboardPanelKey, width: CGFloat) -> some View {
+        switch key.kind {
+        case .hole:
+            // Invisible rather than absent: it holds the column so the row above lines up.
+            Color.clear.frame(width: width, height: KeyboardPanelMetrics.keyHeight)
+        case .text(let plain, let shifted):
+            characterKey(key, plain: plain, shifted: shifted, width: width)
+        case .key(let mobileKey):
+            let actions = resolveKey(mobileKey)
+            sizedKey(key, width: width, dimmed: actions == nil) {
+                guard let actions else { return }
+                onActions(actions)
+                releaseModifier()
             }
+        case .caps:
+            sizedKey(key, width: width, prominent: capsLocked) { capsLocked.toggle() }
+        case .dead:
+            sizedKey(key, width: width, dimmed: true) { Haptics.warning() }
         }
-        .frame(maxWidth: .infinity)
     }
 
-    private func characterKey(
-        _ character: Character,
-        isDigit: Bool,
-        keyWidth: CGFloat,
-        rowHeight: CGFloat
+    /// 一颗走 `MobileKey` 的键，或者一颗按客户端状态动作的键（Caps、以及没有字节的那几颗）。
+    private func sizedKey(
+        _ key: KeyboardPanelKey,
+        width: CGFloat,
+        prominent: Bool = false,
+        dimmed: Bool = false,
+        action: @escaping () -> Void
     ) -> some View {
-        let modifier = effectiveModifier
-        let supported = isSupported(character, isDigit: isDigit, modifier: modifier)
-        return Button {
-            // A key the latched chord cannot reach is the one press on this board that
-            // does nothing at all, so it gets the refusal instead of the tick — the
-            // dimming and the orange readout are both above the user's thumb.
-            // Everything else is a step.
-            if supported {
-                Haptics.select()
-            } else {
-                Haptics.warning()
-            }
-            press(character, isDigit: isDigit)
+        Button {
+            // A key the terminal has no byte for is the one press on this board that does
+            // nothing at all, so it gets the refusal instead of the tick.
+            if !dimmed { Haptics.select() }
+            action()
         } label: {
-            Text(label(character, isDigit: isDigit, modifier: modifier))
-                .font(.system(size: 15))
+            Text(key.title)
+                .font(.system(size: 12.5))
                 .frame(maxWidth: .infinity)
-                // 正方形由 `size` 定，点击区由 `tapHeight` 定 —— 后者就是这一行的行高，
-                // 所以缝归缝、键归键，行与行之间不会重新长出空白。
                 .terminalKeyPill(
                     minWidth: 0,
-                    horizontalPadding: 4,
-                    size: keyWidth,
-                    tapHeight: rowHeight
+                    prominent: prominent,
+                    horizontalPadding: 2,
+                    size: KeyboardPanelMetrics.keyHeight,
+                    tapHeight: KeyboardPanelMetrics.keyHeight + KeyboardPanelMetrics.rowGap
                 )
-                .frame(width: keyWidth)
+                .frame(width: width)
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        // A key this chord cannot reach is dimmed rather than silently inert, so the
-        // board always shows what the latched modifier can actually do.
-        .opacity(!isEnabled ? 0.4 : (supported ? 1 : 0.3))
-        .accessibilityIdentifier(
-            "panelkey-\(isDigit ? "digit" : "letter")-\(String(character))"
-        )
+        // A key that cannot be sent is dimmed rather than silently inert, so the board
+        // always shows what it can actually do.
+        .opacity(!isEnabled ? 0.4 : (dimmed ? 0.35 : 1))
+        .accessibilityIdentifier("panelkey-\(key.id)")
     }
 
-    private var readout: some View {
-        let pending: String
-        if let modifier = effectiveModifier {
-            pending = "\(modifier.rawValue) + _"
-        } else {
-            pending = "未锁修饰键 · 按字母就是直接输入"
+    /// A key that prints a character, with the two legends a real keycap carries.
+    ///
+    /// Both legends are drawn all the time, upper first — the same way the board this
+    /// stands in for is printed, and the same way a phone keyboard prints its number row.
+    /// Which one goes down the wire is decided at press time, not shown by repainting.
+    private func characterKey(
+        _ key: KeyboardPanelKey,
+        plain: String,
+        shifted: String,
+        width: CGFloat
+    ) -> some View {
+        // Caps capitalises letters and nothing else: on a real board it does not reach
+        // the number row, and a `(` where `9` was expected would be a nasty surprise.
+        let upper = isShifted || (capsLocked && isLetter(plain))
+        return Button {
+            Haptics.select()
+            press(key, plain: plain, shifted: shifted)
+        } label: {
+            legend(key, plain: plain, shifted: shifted, upper: upper)
+                .frame(maxWidth: .infinity)
+                .terminalKeyPill(
+                    minWidth: 0,
+                    horizontalPadding: 2,
+                    size: KeyboardPanelMetrics.keyHeight,
+                    tapHeight: KeyboardPanelMetrics.keyHeight + KeyboardPanelMetrics.rowGap
+                )
+                .frame(width: width)
         }
-
-        let result: String
-        var failed = false
-        switch lastPress {
-        case .send(_, let detail):
-            result = detail
-        case .unavailable(let reason):
-            result = reason
-            failed = true
-        case nil:
-            result = "按一个字母试试"
-        }
-
-        return HStack(spacing: 6) {
-            Text(pending)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(failed ? Color.orange : Color.primary)
-                .lineLimit(1)
-                .layoutPriority(1)
-            Text("→")
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.tertiary)
-            // The byte comes first so that a narrow phone truncates the explanation
-            // rather than the value — the value is the part that has to be checkable.
-            Text(result)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(failed ? Color.orange : Color.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 26)
-        .background(
-            Color(uiColor: .secondarySystemBackground),
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-        .padding(.horizontal, 14)
-        .accessibilityIdentifier("panelkey-readout")
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        // With Ctrl down, only a letter that has a chord can be sent. The rest dim, so
+        // the board answers "what can Ctrl do here" before anything is pressed.
+        .opacity(!isEnabled ? 0.4 : (isReachable(plain) ? 1 : 0.35))
+        .accessibilityIdentifier("panelkey-\(key.id)")
     }
 
-    private var hint: some View {
-        let text: String
-        if let locked = lockedModifier {
-            text = "\(locked.rawValue) 已锁定 · 再点一次解开"
-        } else if effectiveModifier != nil {
-            text = "已锁住 · 按一个字母完成组合，发完自动弹回 · 双击可锁定连按"
+    @ViewBuilder
+    private func legend(
+        _ key: KeyboardPanelKey,
+        plain: String,
+        shifted: String,
+        upper: Bool
+    ) -> some View {
+        if !key.title.isEmpty {
+            Text(key.title).font(.system(size: 12.5))
+        } else if plain == shifted {
+            Text(plain).font(.system(size: 14))
         } else {
-            text = "点一下修饰键锁住 → 再按字母 · 一次只锁一个"
+            // Shifted legend first, the way it is printed on the cap. Whichever one is
+            // going to be sent is the one drawn at full strength, so the key never sends
+            // a character it is not showing.
+            HStack(spacing: 3) {
+                Text(shifted).foregroundStyle(upper ? Color.primary : Color.secondary)
+                Text(plain).foregroundStyle(upper ? Color.secondary : Color.primary)
+            }
+            .font(.system(size: 13))
         }
-        return Text(text)
-            .font(.system(size: 10.5))
-            .foregroundStyle(.secondary)
-            .frame(height: 15)
-            .padding(.top, 9)
-            .padding(.horizontal, 14)
+    }
+
+    // MARK: - Page dots
+
+    /// Which of the two board pages is showing. Drawn rather than using the system's
+    /// because they have to sit under the board, not inside it.
+    private var pageDots: some View {
+        HStack(spacing: 7) {
+            ForEach(0..<2, id: \.self) { index in
+                Button {
+                    page = index
+                } label: {
+                    // The dot is drawn at 7pt; the box around it is what a finger aims
+                    // at, so it reaches the 44pt floor with the row's own padding.
+                    Circle()
+                        .fill(index == page ? Theme.ink : Color(uiColor: .tertiaryLabel))
+                        .frame(width: 7, height: 7)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("第 \(index + 1) 页")
+                .accessibilityIdentifier("panelkey-page-\(index)")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 14)
     }
 
     // MARK: - What a press sends
 
-    private func label(
-        _ character: Character,
-        isDigit: Bool,
-        modifier: KeyboardPanelModifier?
-    ) -> String {
-        // Shift is shown the way the system keyboard shows it — capital letters and the
-        // symbols above the digits — so the board never has to be explained.
-        guard modifier == .shift else { return String(character) }
-        return String(isDigit ? (keyboardPanelShiftedDigits[character] ?? character)
-                              : Character(String(character).uppercased()))
+    private var isShifted: Bool { effectiveModifier == .shift }
+
+    private func isLetter(_ character: String) -> Bool {
+        character.count == 1 && character.first.map { $0.isLetter } == true
     }
 
-    private func isSupported(
-        _ character: Character,
-        isDigit: Bool,
-        modifier: KeyboardPanelModifier?
-    ) -> Bool {
-        switch modifier {
-        case nil, .shift, .alt:
-            return true
-        case .control:
-            // `I` and `M` are reachable chords even though they are not in the table.
-            if !isDigit && (character == "i" || character == "m") { return true }
-            return keyboardPanelControlChords[character] != nil
+    /// Whether the key can be sent at all right now. Only Ctrl narrows the board — with
+    /// it down, a symbol has no chord and there is no byte for `Ctrl + ;`.
+    private func isReachable(_ plain: String) -> Bool {
+        guard effectiveModifier == .control else { return true }
+        guard let character = plain.first, plain.count == 1 else { return false }
+        // `I` and `M` are reachable chords even though they are not in the table.
+        if character == "i" || character == "m" { return true }
+        return keyboardPanelControlChords[character] != nil
+    }
+
+    /// What a key that carries a `MobileKey` sends under the latched modifier.
+    ///
+    /// The modifier row is on screen for both pages now, so these keys have to answer it
+    /// rather than ignore it — and the answer for most of them is "nothing", because the
+    /// terminal has no byte for `Ctrl + Enter` and sending the bare `Enter` instead would
+    /// submit the prompt the user was in the middle of writing. Refusing is the safe half
+    /// of that choice and it is the visible half: the key dims.
+    ///
+    /// `⇧tab` is the one shifted named key with a byte of its own, and it is the one that
+    /// matters — Claude Code cycles its permission mode on it. It gets no key of its own
+    /// on this board (a computer keyboard has no such key), so it is spelled the way the
+    /// board spells it: Shift, then Tab. 设计文档 §3.6.
+    private func resolveKey(_ key: MobileKey) -> [MobileKeyAction]? {
+        switch effectiveModifier {
+        case nil:
+            return [.key(key)]
+        case .shift:
+            return key == .tab ? [.key(.shiftTab)] : nil
+        case .alt:
+            // Alt is an Escape prefix, exactly as it is for a character — which is how
+            // `Alt + ←` reaches readline's "back one word".
+            return [.key(.escape), .key(key)]
+        case .control, .command:
+            return nil
         }
     }
 
-    private func press(_ character: Character, isDigit: Bool) {
-        let outcome = resolve(character, isDigit: isDigit)
-        lastPress = outcome
-        if case .send(let actions, _) = outcome {
+    private func press(_ key: KeyboardPanelKey, plain: String, shifted: String) {
+        if let actions = resolve(plain: plain, shifted: shifted) {
             onActions(actions)
         }
         releaseModifier()
     }
 
-    private func resolve(_ character: Character, isDigit: Bool) -> KeyboardPanelPress {
+    private func resolve(plain: String, shifted: String) -> [MobileKeyAction]? {
+        guard let character = plain.first, plain.count == 1 else { return [.text(plain)] }
+
         switch effectiveModifier {
         case nil:
             // No modifier means type it. That is what makes this panel usable for
             // answering a TUI's `y`/`n`, or a permission prompt's `1`/`2`/`3`, without
             // lowering the panel to reach the system keyboard.
-            return .send([.text(String(character))], detail: "文本 \(character)")
+            return [.text(capsLocked && character.isLetter ? shifted : plain)]
 
         case .shift:
-            let shifted = label(character, isDigit: isDigit, modifier: .shift)
-            return .send([.text(shifted)], detail: "文本 \(shifted)")
+            return [.text(shifted)]
 
         case .alt:
             // Alt is an Escape prefix in a terminal, and a chord is two actions in one
             // intent. Two intents would let the terminal act on the bare Escape first.
-            return .send([.key(.escape), .text(String(character))], detail: "ESC + \(character)")
+            return [.key(.escape), .text(plain)]
 
         case .control:
             // `Ctrl+I` is `\x09` and `Ctrl+M` is `\x0d` — the bytes Tab and Return
@@ -755,16 +778,14 @@ struct TerminalKeyboardPanel: View {
             // keys per sequence, and the toolbar projection reads that table backwards
             // and would quietly pick one. The chord is still available; it is just sent
             // as the key that owns the byte.
-            if !isDigit && character == "i" {
-                return .send([.key(.tab)], detail: "0x09 · 与 Tab 同一个字节")
-            }
-            if !isDigit && character == "m" {
-                return .send([.key(.enter)], detail: "0x0d · 与回车同一个字节")
-            }
-            guard let chord = keyboardPanelControlChords[character] else {
-                return .unavailable("Ctrl + \(character) 没有对应的字节")
-            }
-            return .send([.key(chord.key)], detail: chord.detail)
+            if character == "i" { return [.key(.tab)] }
+            if character == "m" { return [.key(.enter)] }
+            guard let chord = keyboardPanelControlChords[character] else { return nil }
+            return [.key(chord)]
+
+        case .command:
+            // Only reachable if it were latched, and it never is.
+            return nil
         }
     }
 
@@ -808,36 +829,49 @@ struct TerminalKeyboardPanel: View {
 enum KeyboardPanelMetrics {
     /// How much of the screen the panel occupies, the same on every page.
     ///
-    /// Sized for the taller page — the keyboard's six rows: the five keys a phone cannot
-    /// otherwise send, the modifiers, the digits and three rows of letters, with the
-    /// readout above them and the hint below. Its rows are the tightest they can be:
-    /// every key is a 34pt square and the rows are 4pt apart, the same as the gap
-    /// between the keys, so the sum is what it is rather than a round number.
+    /// Sized for the taller page — 电脑键盘's second page, whose six rows are the symbol
+    /// row and then the function keys beside the navigation block. Its rows are 36pt
+    /// keys six points apart, so six of them come to 246; the rest is the two-tab switch,
+    /// the modifier row, and the dots under the board.
     ///
-    ///     padding 8 + picker 32 + 12 + readout 26 + 8
-    ///       + board 6 × 37.8 + hint 9 + 15 + padding 14  ≈  351
+    ///     padding 8 + picker 32 + 12 + modifier 42 + 8
+    ///       + board 6 × 36 + 5 × 6 + dots 8 + 14 + padding 14  =  384
     ///
-    /// One height rather than one per page. The shorter page leaves the rest of the
-    /// panel empty, and that waste is the price of a page change that moves nothing
-    /// under the reader's finger: a panel that grew and shrank pushed the toolbar, the
-    /// input bar and the terminal up and down again with every category.
+    /// One height rather than one per page. The first page is two rows shorter and leaves
+    /// the rest of the panel empty, and that waste is the price of a page change that
+    /// moves nothing under the reader's finger: a panel that grew and shrank pushed the
+    /// toolbar, the input bar and the terminal up and down again with every page.
     ///
     /// A narrower phone gets a shorter board than this and simply keeps the difference as
     /// blank space at the bottom, so nothing is ever cut off.
-    static let height: CGFloat = 351
+    static let height: CGFloat = 384
+
+    /// One row of keys.
+    static let keyHeight: CGFloat = 36
+
+    /// Between keys and between rows, the same both ways — that is what makes the board
+    /// read as a grid rather than as rows of buttons.
+    static let rowGap: CGFloat = 6
+
+    /// Six rows: what the taller page has.
+    static let boardHeight: CGFloat = keyHeight * 6 + rowGap * 5
+
+    /// Tall enough for a modifier key to read as one of the four across the row, and for
+    /// its label to sit in the middle of it.
+    static let modifierRowHeight: CGFloat = 42
 
     /// What the panel actually takes, given how much room the screen has.
     ///
-    /// The one height above is a **portrait** height: 351 is a bit over a third of a
-    /// phone held upright, and the same 351 is most of a phone held sideways, where
-    /// the screen is only about 372 points tall with the safe areas taken out. Left
-    /// alone there, the panel plus the two bars above it come to about 455 — the
-    /// toolbar is pushed off the top of the screen and the terminal gets nothing.
+    /// The one height above is a **portrait** height: 384 is a bit under half of a phone
+    /// held upright, and the same 384 is most of a phone held sideways, where the screen
+    /// is only about 372 points tall with the safe areas taken out. Left alone there, the
+    /// panel plus the two bars above it come to about 490 — the toolbar is pushed off the
+    /// top of the screen and the terminal gets nothing.
     ///
     /// So in a short screen the panel takes a share of what there is and the board
-    /// scrolls inside it (`TerminalKeyboardPanel`). The share is a bit over half
-    /// because a keyboard the reader cannot reach the bottom of is closer to useless
-    /// than one that leaves the terminal four lines.
+    /// scrolls inside it (`TerminalKeyboardPanel`). The share is a bit over half because a
+    /// keyboard the reader cannot reach the bottom of is closer to useless than one that
+    /// leaves the terminal four lines.
     ///
     /// `available <= 0` is "not measured yet", which happens on the first layout pass
     /// only: it takes the full height rather than a fraction of nothing, so the panel

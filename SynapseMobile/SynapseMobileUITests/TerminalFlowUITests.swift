@@ -580,23 +580,51 @@ final class TerminalFlowUITests: XCTestCase {
             "the keyboard button never came back into view"
         )
         app.buttons["toolbar-keyboard"].tap()
-        XCTAssertTrue(app.buttons["panelkey-Escape"].waitForExistence(timeout: 10), "the panel never opened")
+        XCTAssertTrue(
+            app.buttons["panelkey-modifier-Ctrl"].waitForExistence(timeout: 10),
+            "the panel never opened"
+        )
         capture(app, name: "11-keyboard-panel-board")
 
-        // `⇧tab` has no iPhone keyboard of its own. Shift and Tab do share a page these
-        // days, but the key that cycles Claude Code's permission mode should not cost two
-        // taps because the chord became expressible, so it keeps a slot on the board's
-        // top row.
-        XCTAssertTrue(app.buttons["panelkey-Shift+Tab"].exists, "the board has no ⇧tab")
-        // Waited for, not merely existed: the panel is still settling into the layout
-        // when it first appears, and a tap taken against the frame it had a moment ago
-        // lands where the key no longer is. Every other press in this file that follows
-        // an appearance waits first — this one did not.
+        // 第二页：符号行、功能键 F1–F12，以及它们右边那一片导航键。翻页靠板子底下那两
+        // 个点 —— 板子本身也能滑，但滑动在 UI 测试里落点不稳，点是最确定的一条路。
+        // 两页各问一次，是因为「并页时悄悄丢了一半」这种错，只问落点那一页是看不出来的。
+        XCTAssertTrue(app.buttons["panelkey-page-1"].exists, "the board has no second page")
+        app.buttons["panelkey-page-1"].tap()
         XCTAssertTrue(
-            waitForHittable(app.buttons["panelkey-Shift+Tab"], timeout: 10),
-            "the ⇧tab key never became pressable"
+            app.buttons["panelkey-key-F1"].waitForExistence(timeout: 5),
+            "the second page has no function keys"
         )
-        app.buttons["panelkey-Shift+Tab"].tap()
+        XCTAssertTrue(app.buttons["panelkey-key-PageUp"].exists, "the second page has no navigation block")
+        XCTAssertTrue(app.buttons["panelkey-dead-PrtScr"].exists, "the second page is missing the keys a terminal cannot send")
+        capture(app, name: "12-keyboard-panel-function-page")
+
+        // The function keys are the names this version added to the wire (38 → 51), so
+        // one of them has to go all the way. Asserting the key is drawn would pass even
+        // if the cloud or the computer had never heard of the name.
+        app.buttons["panelkey-key-F1"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys key:F1", in: app, timeout: 20),
+            "a function key did not reach the computer"
+        )
+        // And the ones a terminal has no byte for: drawn on the board, but a press sends
+        // nothing at all. Waited out rather than checked immediately — an arrival would
+        // come back over the wire, so only silence after a round trip proves anything.
+        let lastLine = { app.staticTexts.allElementsBoundByIndex.last?.label ?? "" }
+        let beforeDead = lastLine()
+        app.buttons["panelkey-dead-PrtScr"].tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertEqual(lastLine(), beforeDead, "a key the terminal has no byte for was sent anyway")
+
+        // `⇧tab` 在这一版里没有自己的键 —— 电脑键盘上本来也没有这样一颗，这是照 ToDesk
+        // 的键位排的。它是 Claude Code 切权限模式用的那一颗，所以它必须拼得出来：修饰键
+        // 那一行两页都常驻，Tab 在第二页，于是 Shift + Tab 在两页里都成立。
+        XCTAssertTrue(
+            waitForHittable(app.buttons["panelkey-modifier-Shift"], timeout: 10),
+            "the modifier row never became pressable"
+        )
+        app.buttons["panelkey-modifier-Shift"].tap()
+        app.buttons["panelkey-key-Tab"].tap()
         if !waitForLabel(containing: "[mock] keys key:Shift+Tab", in: app, timeout: 20) {
             // What the screen actually holds, because "did not reach the computer" has
             // several causes that look identical from here: the key was never pressed,
@@ -607,21 +635,10 @@ final class TerminalFlowUITests: XCTestCase {
             XCTFail("⇧tab did not reach the computer; last lines: \(visible)")
         }
 
-        // Two pages now, and the second one carries both clusters — the arrows and the
-        // six-key block used to be pages of their own. A merge that quietly dropped one
-        // of them would still pass a check that only asked about the page it landed on,
-        // so both are asked for. The loop ends on the board, which is what the rest of
-        // this test presses.
-        for (category, key) in [("导航", "panelkey-ArrowUp"), ("导航", "panelkey-PageUp"),
-                                ("键盘", "panelkey-modifier-Ctrl")] {
-            app.buttons[category].tap()
-            XCTAssertTrue(app.buttons[key].waitForExistence(timeout: 5), "\(category) has no \(key)")
-        }
-        app.buttons["导航"].tap()
-        capture(app, name: "12-keyboard-panel-navigation")
-        app.buttons["键盘"].tap()
+        // Back to the first page, which is what the rest of this test presses.
+        app.buttons["panelkey-page-0"].tap()
         XCTAssertTrue(
-            app.buttons["panelkey-modifier-Ctrl"].waitForExistence(timeout: 5),
+            app.buttons["panelkey-key-Backspace"].waitForExistence(timeout: 5),
             "the board did not come back"
         )
 
@@ -722,6 +739,47 @@ final class TerminalFlowUITests: XCTestCase {
             "the lock did not release, so the next key was still a chord"
         )
         capture(app, name: "16-keyboard-panel-locked")
+
+        // Caps is the one key on the board that is pure client state: it capitalises
+        // letters and needs no name on the wire. Both halves are asserted, because a
+        // latch that never lets go is the failure a one-sided check would miss.
+        app.buttons["panelkey-page-1"].tap()
+        XCTAssertTrue(waitForHittable(app.buttons["panelkey-caps"], timeout: 10), "no Caps key")
+        app.buttons["panelkey-caps"].tap()
+        capture(app, name: "17-keyboard-panel-caps")
+        app.buttons["panelkey-page-0"].tap()
+        app.buttons["panelkey-letter-a"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:A", in: app, timeout: 20),
+            "Caps did not capitalise the next letter"
+        )
+        app.buttons["panelkey-page-1"].tap()
+        app.buttons["panelkey-caps"].tap()
+        app.buttons["panelkey-page-0"].tap()
+        app.buttons["panelkey-letter-a"].tap()
+        XCTAssertTrue(
+            waitForLabel(containing: "[mock] keys text:a", in: app, timeout: 20),
+            "Caps stayed on after being switched off"
+        )
+
+        // 「手机键盘」不是这块板子的另一页 —— iOS 不许我们自己的视图压在系统键盘之上
+        // —— 所以它做的是键盘之间该做的事：把这块收掉、把那块叫起来。收掉之后工具栏
+        // 那颗键还在原处，再点一次就回到电脑键盘。
+        app.buttons["手机键盘"].tap()
+        XCTAssertTrue(
+            app.buttons["panelkey-caps"].waitForNonExistence(timeout: 10),
+            "choosing the phone keyboard left the computer keyboard up"
+        )
+        XCTAssertTrue(
+            app.keyboards.firstMatch.waitForExistence(timeout: 10),
+            "the system keyboard never came up"
+        )
+        capture(app, name: "18-phone-keyboard")
+        app.buttons["toolbar-keyboard"].tap()
+        XCTAssertTrue(
+            app.buttons["panelkey-caps"].waitForExistence(timeout: 10),
+            "the panel did not come back after switching to the phone keyboard"
+        )
     }
 
     /// The panel is a keyboard, so it answers what a keyboard answers.
@@ -749,7 +807,9 @@ final class TerminalFlowUITests: XCTestCase {
         )
 
         let keyboardButton = app.buttons["toolbar-keyboard"]
-        let escapeKey = app.buttons["panelkey-Escape"]
+        // 用修饰键那一行当「面板开没开」的探针：它两页都在，而 `esc` 现在住在第二页，
+        // 面板是先落在第一页上的。
+        let escapeKey = app.buttons["panelkey-modifier-Ctrl"]
         XCTAssertTrue(waitForHittable(keyboardButton, timeout: 10), "no way into the panel")
 
         // Up, and showing that what is above it keeps its place: the toolbar and the
@@ -890,7 +950,7 @@ final class TerminalFlowUITests: XCTestCase {
         // 面板照旧打得开 —— 它里面是这颗手机自己认识的字，读一读不欠谁什么 —— 但一颗
         // 键都按不动：按下去就是一条没人接的 intent。
         app.buttons["toolbar-keyboard"].tap()
-        let escape = app.buttons["panelkey-Escape"]
+        let escape = app.buttons["panelkey-modifier-Ctrl"]
         XCTAssertTrue(escape.waitForExistence(timeout: 10), "the panel never opened")
         XCTAssertTrue(waitForDisabled(escape, timeout: 10), "a panel key is still live with no computer behind it")
         capture(app, name: "16-greyed-out-with-no-computer")
