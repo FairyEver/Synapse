@@ -19,7 +19,6 @@ describe("DashboardController", () => {
           status: "active",
           handle: "ada",
         },
-        teams: [],
       }),
     }
     const controller = new DashboardController(auth as never)
@@ -31,7 +30,6 @@ describe("DashboardController", () => {
         status: "active",
         handle: "ada",
       },
-      teams: [],
     })
     expect(auth.getMe).toHaveBeenCalledWith("user-1")
   })
@@ -45,7 +43,6 @@ describe("DashboardController", () => {
           status: "active",
           handle: "ada-lovelace",
         },
-        teams: [],
       }),
     }
     const controller = new DashboardController(auth as never)
@@ -62,7 +59,6 @@ describe("DashboardController", () => {
         status: "active",
         handle: "ada-lovelace",
       },
-      teams: [],
     })
     expect(auth.updateMyProfile).toHaveBeenCalledWith(
       "user-1",

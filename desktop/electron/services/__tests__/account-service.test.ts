@@ -1913,7 +1913,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -1928,32 +1928,8 @@ describe("AccountService", () => {
       throw new Error("expected authenticated account state")
     }
     expect(state.profile.user.email).toBe("u@example.com")
-    expect(state.profile).not.toHaveProperty("teams")
     expect((await namespace.getSingleton())?.refreshToken).toBe("refresh-1")
-    expect((await namespace.getSingleton())?.lastProfile).not.toHaveProperty("teams")
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
-  })
-
-  it("removes legacy team data from the encrypted account cache", async () => {
-    const { namespace, service } = await createTestAccountService({
-      fetch: vi.fn().mockRejectedValue(new TypeError("network unavailable")) as typeof fetch,
-    })
-    const legacyProfile = {
-      ...storedProfile,
-      teams: [{ id: "team-1", name: "Legacy", membershipId: "member-1", membershipRole: "owner" }],
-    }
-    await namespace.setSingleton({
-      refreshToken: "refresh-old",
-      lastProfile: legacyProfile,
-    })
-
-    const state = await service.refreshFromStorage()
-
-    expect(state).toMatchObject({ status: "authenticated", connectivity: "offline" })
-    expect(state).toHaveProperty("profile")
-    if (!("profile" in state) || !state.profile) throw new Error("expected cached account profile")
-    expect(state.profile).not.toHaveProperty("teams")
-    expect((await namespace.getSingleton())?.lastProfile).not.toHaveProperty("teams")
   })
 
   it("ignores stale auth callbacks after the user is already authenticated", async () => {
@@ -1964,7 +1940,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     }) as typeof fetch
@@ -2007,7 +1983,7 @@ describe("AccountService", () => {
           return jsonResponse({ accessToken: "secret-access", refreshToken: "secret-refresh" })
         }
         if (String(url).endsWith("/auth/me")) {
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -2156,7 +2132,6 @@ describe("AccountService", () => {
     )
 
     expect(state.status).toBe("authenticated")
-    expect(state).not.toHaveProperty("profile.teams")
     expect(calls).toEqual([
       expectedApiUrl("/auth/desktop/token"),
       expectedApiUrl("/auth/refresh"),
@@ -2192,7 +2167,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     }) as typeof fetch
@@ -2232,7 +2207,7 @@ describe("AccountService", () => {
         return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
       }
       if (String(url).endsWith("/auth/me")) {
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -2283,7 +2258,7 @@ describe("AccountService", () => {
         return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
       }
       if (String(url).endsWith("/auth/me")) {
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -2312,7 +2287,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-2" })
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -2412,7 +2387,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-2" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -2517,7 +2492,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -2548,7 +2523,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         if (String(url).endsWith("/console/webhooks?page=1&pageSize=100")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
@@ -2589,7 +2564,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         if (String(url).endsWith("/console/webhooks?page=1&pageSize=100")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
@@ -2721,7 +2696,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
         if (String(url).endsWith("/drive/items/item-1") && method === "GET") return jsonResponse(driveItemDto)
@@ -2834,7 +2809,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       if (String(url).endsWith("/drive/items?parentId=folder-1&offset=20&limit=10")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
@@ -2860,7 +2835,7 @@ describe("AccountService", () => {
         return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
       }
       if (String(url).endsWith("/auth/me")) {
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       if (String(url).endsWith("/drive/changes?cursor=41&limit=25&rootItemId=drive-root&rootPathHint=%2FDocs")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
@@ -2889,7 +2864,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me") && calls.filter((item) => item.endsWith("/auth/me")).length === 1) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         if (String(url).endsWith("/console/webhooks?page=1&pageSize=100") && calls.filter((item) => item.includes("/console/webhooks")).length === 1) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-old" })
@@ -2901,7 +2876,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         if (String(url).endsWith("/console/webhooks?page=1&pageSize=100")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
@@ -2940,7 +2915,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -2973,7 +2948,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       if (String(url).endsWith("/drive/items?offset=0")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
@@ -3153,7 +3128,7 @@ describe("AccountService", () => {
         }
         if (String(url).endsWith("/auth/me")) {
           expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,
@@ -3239,7 +3214,7 @@ describe("AccountService", () => {
           return jsonResponse({ accessToken: "secret-access", refreshToken: "secret-refresh-new" })
         }
         if (String(url).endsWith("/auth/me")) {
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         if (String(url).endsWith("/auth/logout")) return jsonResponse({})
         throw new Error(`unexpected url ${String(url)}`)
@@ -3456,7 +3431,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/me")) {
         expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -3530,7 +3505,7 @@ describe("AccountService", () => {
       if (String(url).endsWith("/auth/refresh")) return refreshResponse
       if (String(url).endsWith("/auth/logout")) return jsonResponse({})
       if (String(url).endsWith("/auth/me")) {
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -3559,7 +3534,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/logout")) return jsonResponse({})
       if (String(url).endsWith("/auth/me")) {
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -3600,7 +3575,7 @@ describe("AccountService", () => {
     const fetch = vi.fn(async (url) => {
       if (String(url).endsWith("/auth/desktop/token")) return exchangeResponse
       if (String(url).endsWith("/auth/me")) {
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -3630,7 +3605,7 @@ describe("AccountService", () => {
       }
       if (String(url).endsWith("/auth/logout")) return jsonResponse({})
       if (String(url).endsWith("/auth/me")) {
-        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
       }
       throw new Error(`unexpected url ${String(url)}`)
     })
@@ -3686,7 +3661,7 @@ describe("AccountService", () => {
               },
             })
           }
-          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
         }
         throw new Error(`unexpected url ${String(url)}`)
       }) as typeof fetch,

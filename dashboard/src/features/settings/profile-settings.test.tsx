@@ -144,7 +144,6 @@ function profile(overrides: Partial<Awaited<ReturnType<typeof dashboardApi.getMe
       status: 'active' as const,
       handle: 'liyang',
     },
-    teams: [],
     ...overrides,
   }
 }

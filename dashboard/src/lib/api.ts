@@ -286,8 +286,6 @@ export type DashboardMe = {
     status: 'active' | 'disabled'
     handle: string
   }
-  /** @deprecated Team support has been removed. Kept empty for one compatibility release. */
-  teams: []
 }
 
 export type DashboardApiKey = {

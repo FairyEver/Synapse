@@ -1308,7 +1308,7 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("returns the current user with an empty compatibility teams field", async () => {
+  it("returns the current user profile", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUniqueOrThrow.mockResolvedValue({
       id: "user-1",
@@ -1320,7 +1320,6 @@ describe("UserAuthService", () => {
 
     const expected: UserMeResponse = {
       user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada" },
-      teams: [],
     }
 
     await expect(service.getMe("user-1")).resolves.toEqual(expected)
@@ -1363,7 +1362,6 @@ describe("UserAuthService", () => {
         status: "active",
         handle: "new-name",
       },
-      teams: [],
     })
 
     expect(prisma.__tx.userHandleRedirect.findUnique).toHaveBeenCalledWith({
@@ -1494,7 +1492,6 @@ describe("UserAuthService", () => {
           status: "active",
           handle: "grace-hopper",
         },
-        teams: [],
       })
 
       expect(auditLog.record).toHaveBeenCalledWith({

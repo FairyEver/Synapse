@@ -49,8 +49,6 @@ export interface UserRegistrationResult {
 
 export interface UserMeResponse {
   readonly user: Pick<User, "id" | "email" | "status" | "handle">
-  /** @deprecated Team support has been removed. Kept empty for one compatibility release. */
-  readonly teams: readonly []
 }
 
 export type PasswordResetValidationResult =
@@ -172,7 +170,6 @@ function toUserMeResponse(user: {
       status: user.status,
       handle: user.handle,
     },
-    teams: [],
   }
 }
 

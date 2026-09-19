@@ -2477,12 +2477,7 @@ export class AccountService {
 
   private async readPersisted(message: string): Promise<PersistedAccount | null> {
     try {
-      const persisted = await this.namespace.getSingleton()
-      const sanitized = removeLegacyTeamProfileData(persisted)
-      if (sanitized !== persisted && sanitized) {
-        await this.namespace.setSingleton(sanitized)
-      }
-      return sanitized
+      return await this.namespace.getSingleton()
     } catch (error) {
       logger.warn(message, { error })
       return null
@@ -2688,16 +2683,6 @@ function authenticatedLogMeta(
     ...(reason ? { reason } : {}),
     status: "authenticated",
     userId: profile.user.id,
-  }
-}
-
-function removeLegacyTeamProfileData(persisted: PersistedAccount | null): PersistedAccount | null {
-  if (!persisted?.lastProfile || !("teams" in persisted.lastProfile)) return persisted
-  const lastProfile = { ...persisted.lastProfile } as Record<string, unknown>
-  delete lastProfile.teams
-  return {
-    ...persisted,
-    lastProfile: lastProfile as SynapseAccountProfile,
   }
 }
 
