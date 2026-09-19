@@ -138,6 +138,15 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
     private var lastLayoutInputs: LayoutInputs?
     private var atHistoryFloor = false
     private var requestsInFlight = false
+    /// How many of the keys the data source is holding this view can resolve a row
+    /// for.
+    ///
+    /// `push` writes the keys and the rows they stand for in one call, so this and
+    /// the collection view's own item count are two readings of one fact, and any
+    /// difference between them means a cell is about to be handed back still drawing
+    /// the line it was last used for. Read by the tests; nothing here consults it.
+    var resolvableRows: Int { rowsByKey.count }
+
     /// Reports how many monospace columns fit, so the wrap matches the phone.
     var onWidthChanged: ((Int) -> Void)?
     /// Reports how many rows the pane shows. Only the phone can measure this, and it
@@ -230,16 +239,28 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
 
     /// Re-measures every row at the current size.
     ///
-    /// Rebuilt rather than patched: the row cache is keyed by content, and a size
-    /// change alters every key whether or not the text moved. The cursor is drawn
-    /// solid afterwards rather than left at whatever phase the blink happened to be.
+    /// The size a row is drawn at is part of its identity, so a size change alters
+    /// every key whether or not one character of text moved. Both halves have to
+    /// travel together: the keys the data source is holding and the rows this view
+    /// resolves them with. `push` is the only thing that moves the two as one, so
+    /// the re-keying goes back through it.
+    ///
+    /// It used to clear both and leave the rebuild to whatever `apply` came next.
+    /// That works whenever a push is already on its way, and does nothing when one
+    /// is not — and `layoutSubviews` is the case with none. There the collection
+    /// view kept its old keys while the lookup went empty, so every cell it
+    /// recycled missed in the provider and was handed back unconfigured, still
+    /// holding the line it was last used for: a screenful of text from somewhere
+    /// else in the buffer, until the desktop happened to send another frame. On an
+    /// idle terminal there was no such frame, so it stayed that way.
     private func remeasureRows() {
-        appliedKeys = []
-        appliedRows = []
-        rowsByKey.removeAll()
         cursorPhaseOn = true
         applyCanvasLayout()
         collectionView.collectionViewLayout.invalidateLayout()
+        // The rows themselves have not changed here, only the size they are drawn
+        // at. Re-keying them is what makes the diff see a change it can act on and
+        // replace every cell on screen with one drawn at the new size.
+        push(rows: appliedRows, keys: identities(for: appliedRows, cursor: appliedCursor))
     }
 
     /// The size cells are actually drawn at.
@@ -559,16 +580,11 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         appliedCursor = cursor
         self.atHistoryFloor = atHistoryFloor
         let wasAtBottom = isPinnedToBottom
-        let previousFirstId = appliedRows.first?.id
-
-        // Loading a page inserts rows *above* the viewport. Without compensating,
-        // the content jumps by the height of the inserted page every time.
-        let insertedAbove: Int
-        if let previousFirstId, let newIndex = rows.firstIndex(where: { $0.id == previousFirstId }) {
-            insertedAbove = newIndex
-        } else {
-            insertedAbove = 0
-        }
+        // Rows entering or leaving *above* the viewport carry everything under them
+        // with them. Without compensating, the content jumps by the height of the
+        // change every time — a page of scrollback, or the line the store's cap just
+        // trimmed off the head.
+        let rowShift = shiftAbove(from: appliedRows, to: rows)
         let offsetBefore = collectionView.contentOffset.y
 
         push(rows: rows, keys: keys)
@@ -584,9 +600,6 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             // this terminal, not for the piece of it this view happened to be holding.
             pendingLandingScroll = false
             scrollToBottom(trigger: .reset)
-        } else if insertedAbove > 0 {
-            collectionView.contentOffset.y = offsetBefore
-                + CGFloat(insertedAbove) * TerminalRowCell.rowHeight(for: fontSize)
         } else if pendingLandingScroll {
             pendingLandingScroll = false
             scrollToBottom(trigger: .landingScroll)
@@ -602,7 +615,17 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
             // the picture on every frame and the reader saw it twitch. That padding
             // is gone, so content that fits cannot be scrolled at all and this is a
             // no-op until there is genuinely more to follow.
+            //
+            // This comes before the compensation below, and has to. A reader on the
+            // newest line is not holding a place in the buffer to be preserved: on a
+            // session long enough that the store is trimming its head, every frame
+            // both drops a line above them and adds one below, and preserving their
+            // place through the first half of that leaves them one line short of the
+            // tail for as long as the output lasts.
             scrollToBottom(trigger: .contentGrew)
+        } else if rowShift != 0 {
+            collectionView.contentOffset.y = offsetBefore
+                + CGFloat(rowShift) * TerminalRowCell.rowHeight(for: fontSize)
         }
         if floorChanged {
             collectionView.collectionViewLayout.invalidateLayout()
@@ -612,6 +635,37 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
         if cursorMoved {
             startBlinkTimer()
         }
+    }
+
+    /// How far the rows moved above the viewport between two reads of the buffer.
+    ///
+    /// Positive when rows appeared above it, negative when rows were taken away,
+    /// zero when nothing above it moved. Measured between the same row before and
+    /// after, which is the whole reason it answers for both directions: the row to
+    /// measure between is the first one this view had that is still here.
+    ///
+    /// Naming the first row outright — which is what this view did — answers for an
+    /// insertion and only for as long as the row it names survives one. The store
+    /// trims its own head on every frame once a long session is full, so the row it
+    /// named was routinely the one that had just gone; the search came up empty and
+    /// the reader got no compensation at all, leaving the buffer to slide under them
+    /// for as long as the output kept coming.
+    ///
+    /// Nothing but the one lookup is paid until that first row is missing, so the
+    /// ordinary insertion path is exactly as cheap as it was.
+    private func shiftAbove(from previous: [DisplayRow], to current: [DisplayRow]) -> Int {
+        guard !previous.isEmpty, !current.isEmpty else { return 0 }
+        if let first = previous.first,
+           let newIndex = current.firstIndex(where: { $0.id == first.id }) {
+            return newIndex
+        }
+        var indexByRowId: [String: Int] = [:]
+        indexByRowId.reserveCapacity(current.count)
+        for (index, row) in current.enumerated() { indexByRowId[row.id] = index }
+        for (oldIndex, row) in previous.enumerated() {
+            if let newIndex = indexByRowId[row.id] { return newIndex - oldIndex }
+        }
+        return 0
     }
 
     /// Hands `rows` to the data source under `keys`.
@@ -868,14 +922,23 @@ final class TerminalCollectionView: UIView, UICollectionViewDataSourcePrefetchin
                 withReuseIdentifier: TerminalRowCell.reuseIdentifier,
                 for: indexPath
             ) as! TerminalRowCell
-            if let row = self?.rowsByKey[key] {
-                cell.configure(
-                    row: row,
-                    fontSize: self?.fontSize ?? 14,
-                    cursorColumn: self?.cursorColumn(forRowAt: indexPath.item),
-                    selection: self?.selection?.columns(onRow: indexPath.item)
-                )
+            // A recycled cell arrives still holding the row it was last used for, so
+            // handing one back unconfigured draws a line from somewhere else in the
+            // buffer — which the reader sees as the terminal itself having jumped.
+            // `push` is the only writer of this lookup and it writes it in the same
+            // call that sets these keys, so a miss means one of them moved without
+            // the other: blanking the cell makes that read as the defect it is
+            // instead of as a line that belongs there.
+            guard let row = self?.rowsByKey[key] else {
+                cell.clear()
+                return cell
             }
+            cell.configure(
+                row: row,
+                fontSize: self?.fontSize ?? 14,
+                cursorColumn: self?.cursorColumn(forRowAt: indexPath.item),
+                selection: self?.selection?.columns(onRow: indexPath.item)
+            )
             return cell
         }
         dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
@@ -1490,6 +1553,22 @@ final class TerminalRowCell: UICollectionViewCell {
 
     static func rowHeight(for size: CGFloat) -> CGFloat {
         TerminalCellMetrics.rowHeight(forFontSize: size)
+    }
+
+    /// The line this cell is drawing.
+    ///
+    /// Internal so a test can tell a cell that was configured from a recycled one
+    /// handed back untouched — the two look identical from outside, and only one of
+    /// them is right.
+    var renderedText: String? { label.attributedText?.string }
+
+    /// Blanks a recycled cell, for the provider's lookup-miss path.
+    ///
+    /// The cell must not keep what it was last used for; an empty row is a visible
+    /// defect, and the previous occupant's text is an invisible one.
+    func clear() {
+        label.attributedText = nil
+        continuationBar.isHidden = true
     }
 
     func configure(

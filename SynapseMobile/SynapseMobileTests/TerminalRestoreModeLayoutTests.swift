@@ -375,4 +375,92 @@ struct TerminalRestoreModeLayoutTests {
 
         #expect(list.contentOffset.y == 0)
     }
+
+    /// 尺寸变了要重新量，但一行都不许弄丢。
+    ///
+    /// 行画在多大的字上是行标识符的一部分，所以字号一变，数据源手里的每个 key 都换了
+    /// 名字，必须整批重发。原来那一版是清空 key 与查找表、等下一次 `apply` 把它们一起
+    /// 重建 —— 而 `layoutSubviews` 这条路上没有下一次：数据源还攥着旧 key，查找表却是
+    /// 空的，于是每一个被回收的 cell 都在 provider 里落空、原样交回去。它身上带着上一次
+    /// 那行的字，屏幕上就是一批**来自缓冲区别处**的行；终端闲着的时候，不会再有任何一帧
+    /// 来纠正它。
+    ///
+    /// 两边分开数：一个是数据源自己报的条目数，一个是这个视图能解析出行数的 key 数。
+    @Test func aResizeKeepsEveryHeldKeyResolvable() {
+        let (view, list) = terminal(columns: 30, rows: 38)
+        view.apply(rows: lines(0..<200), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        #expect(view.resolvableRows == 200)
+
+        // 变大是重新拟合的那一种：窄终端由高说了算（见 `aTallerPaneIsFittedAgain`）。
+        resize(view, list, to: CGSize(width: pane.width, height: 900))
+
+        #expect(list.numberOfItems(inSection: 0) == 200)
+        #expect(view.resolvableRows == list.numberOfItems(inSection: 0))
+    }
+
+    /// 重算之后，屏幕上每一行还必须是它自己那一行。
+    @Test func aResizeLeavesEveryVisibleRowShowingItsOwnText() {
+        let (view, list) = terminal(columns: 30, rows: 38)
+        view.apply(rows: lines(0..<200), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+        // 先让这些 cell 都被用过一遍：回收出来的 cell 身上带着上一次那行的字，落空时
+        // 交回去的正是它。
+        list.setContentOffset(.zero, animated: false)
+        list.layoutIfNeeded()
+        list.setContentOffset(CGPoint(x: 0, y: list.contentSize.height), animated: false)
+        list.layoutIfNeeded()
+
+        resize(view, list, to: CGSize(width: pane.width, height: 900))
+        list.layoutIfNeeded()
+
+        var checked = 0
+        for indexPath in list.indexPathsForVisibleItems {
+            guard let cell = list.cellForItem(at: indexPath) as? TerminalRowCell else { continue }
+            #expect(cell.renderedText == "line \(indexPath.item)")
+            checked += 1
+        }
+        #expect(checked > 0, "没有一行可查就等于什么都没验")
+    }
+
+    /// 缓冲区到顶之后往回读的人，不该被一帧一帧地推走。
+    ///
+    /// 手机的缓冲上限一到，此后每进一行就要丢掉最老的一行，而丢掉的**全在视口上方**。
+    /// 补偿如果只认「先前的第一行」，那个锚点正是刚被丢掉的这一行，落空之后就不补偿了，
+    /// 于是每来一帧，读者眼皮底下的内容就往前滑一行 —— 输出的那几秒里一直在滑。
+    @Test func aTrimmedHeadDoesNotSlideTheReader() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(0..<500), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        // 读到中间停下，谁也不跟了。
+        list.setContentOffset(CGPoint(x: 0, y: 200), animated: false)
+        list.layoutIfNeeded()
+        let anchored = visibleFrame(ofRow: 200, in: list)?.minY
+        #expect(anchored != nil)
+
+        // 稳态的一帧：头掉 3 行，尾进 3 行，行数不变。
+        view.apply(rows: lines(3..<503), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        // 同一行（现在排在 197）还在屏幕上的同一处。
+        #expect(visibleFrame(ofRow: 197, in: list)?.minY == anchored)
+    }
+
+    /// 跟着最新行的读者照旧跟着：头部被裁掉不是把他留在离底三行的理由。
+    ///
+    /// 上面那条的另一半。补偿与「跟着最新行」在稳态下会给出不同的答案，所以这里钉住
+    /// 谁说了算 —— 少了它，一个对着被裁掉的头部做补偿、却不再跟最新行的实现也能让上面
+    /// 那条全绿，而那正是长会话里最该跟着最新行的时刻。
+    @Test func aTrimmedHeadStillLeavesTheFollowerAtTheNewestLine() {
+        let (view, list) = terminal(columns: 80, rows: 24)
+        view.apply(rows: lines(0..<500), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        view.apply(rows: lines(3..<503), atHistoryFloor: false, cursor: nil)
+        list.layoutIfNeeded()
+
+        #expect(abs(list.contentOffset.y + list.bounds.height - list.contentSize.height) < 1)
+        #expect(visibleFrame(ofRow: 499, in: list)?.maxY == list.bounds.height)
+    }
 }

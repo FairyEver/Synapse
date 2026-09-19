@@ -122,6 +122,44 @@ export function buildTerminalFrames(input: TerminalFrameInput): MobileTerminalFr
   return frames
 }
 
+export type SnapshotFrameInput = Omit<TerminalFrameInput, "kind" | "truncated">
+
+/**
+ * Splits a whole window into the frames that deliver it without ever leaving the
+ * phone showing a buffer that is only half built.
+ *
+ * The natural order to write a snapshot in is oldest chunk first, and that is the
+ * wrong one to watch it arrive in. The leading chunk is the one that carries
+ * `reset`, so the client throws away everything it holds and lands on the *oldest*
+ * lines in the window — a full window's worth of scrollback above where the reader
+ * was — and then walks back down as the remaining chunks land on top. On a phone
+ * that is the screen jumping away and coming back, once per chunk, every time a
+ * computer reattaches.
+ *
+ * So the newest chunk goes first, and it is the one that carries the `reset`: the
+ * client discards its buffer and lands on exactly the lines it was already looking
+ * at. The older chunks follow as `history` frames, which the client already knows
+ * how to insert above its viewport without moving it — the same path a page of
+ * scrollback takes when the reader pulls one in by hand. Nothing new has to be
+ * true on the phone for this to be right.
+ *
+ * It also gives back something the chunked reset had quietly taken away. A reset
+ * means "discard everything you hold", so a client that missed a chunk in the
+ * middle of one kept a hole that nothing would ever fill — the discard had already
+ * happened by the time the gap appeared. Ordered newest first, every intermediate
+ * state is whole, and the frames keep the self-healing property the rest of this
+ * protocol is built on.
+ */
+export function buildSnapshotFrames(input: SnapshotFrameInput): MobileTerminalFrame[] {
+  const chunks = buildTerminalFrames({ ...input, kind: "reset", truncated: false })
+  const newest = chunks[chunks.length - 1]
+  const older = chunks.slice(0, -1).reverse()
+  return [
+    { ...newest, kind: "reset" },
+    ...older.map((frame): MobileTerminalFrame => ({ ...frame, kind: "history" })),
+  ]
+}
+
 /**
  * Compacts one line into the wire tuple form. `runs` is omitted entirely when the
  * line is unstyled, which is the majority of terminal output and roughly halves

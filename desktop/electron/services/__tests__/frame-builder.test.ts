@@ -3,6 +3,7 @@ import { MOBILE_FRAME_LIMITS, MOBILE_RUN_FLAGS, isMobileTerminalFrame } from "@s
 
 import type { TerminalStyledLine } from "../../../app-capabilities/terminal/main/emulator"
 import {
+  buildSnapshotFrames,
   buildTerminalFrames,
   toLineWire,
   toWireColor,
@@ -211,5 +212,83 @@ describe("terminal frame builder", () => {
     }
 
     expect(toLineWire(line)).toEqual(["abcdefghij", [[8, 2, 3, -1, 0]]])
+  })
+})
+
+describe("terminal snapshot frames", () => {
+  const window = (count: number) => Array.from({ length: count }, (_, index) => plain(`line ${index}`))
+
+  /// The phone pins to the bottom of whatever it holds, so a client whose buffer is
+  /// momentarily only the *oldest* part of the window is a reader looking at the
+  /// wrong part of the terminal — which is what a reconnect used to show them, once
+  /// per chunk, until the last one landed.
+  it("never leaves the client holding a window whose newest line is not the newest", () => {
+    const lines = window(900)
+
+    const frames = buildSnapshotFrames({ ...base, lines, from: 0, total: lines.length })
+
+    expect(frames.length).toBeGreaterThan(1)
+    let newest = -1
+    for (const frame of frames) {
+      newest = frame.kind === "reset"
+        ? frame.from + frame.lines.length - 1
+        : Math.max(newest, frame.from + frame.lines.length - 1)
+      expect(newest).toBe(lines.length - 1)
+    }
+  })
+
+  it("lands the reset on the newest chunk and fills the rest in below it", () => {
+    const lines = window(900)
+
+    const frames = buildSnapshotFrames({ ...base, lines, from: 0, total: lines.length })
+
+    expect(frames[0].kind).toBe("reset")
+    expect(frames[0].from + frames[0].lines.length).toBe(lines.length)
+    // Each frame after it picks up immediately below the one before, so the older
+    // chunks read as scrollback arriving above the reader rather than as a rewrite.
+    for (let index = 1; index < frames.length; index += 1) {
+      expect(frames[index].kind).toBe("history")
+      expect(frames[index].from + frames[index].lines.length).toBe(frames[index - 1].from)
+    }
+  })
+
+  it("still tiles the whole window exactly once", () => {
+    const lines = window(500)
+
+    const frames = buildSnapshotFrames({ ...base, lines, from: 4_000, total: 4_500 })
+
+    const covered = frames.flatMap((frame) => frame.lines.map((_, offset) => frame.from + offset))
+    expect([...covered].sort((a, b) => a - b))
+      .toEqual(Array.from({ length: 500 }, (_, index) => 4_000 + index))
+    // And the window's own end is still where `total` says it is.
+    expect(frames[0].from + frames[0].lines.length).toBe(4_500)
+  })
+
+  it("never claims a truncation boundary, which would drop what it just sent", () => {
+    const lines = window(900)
+
+    const frames = buildSnapshotFrames({ ...base, lines, total: lines.length })
+
+    expect(frames.every((frame) => !frame.truncated)).toBe(true)
+  })
+
+  it("sends a window that fits as the single frame it is", () => {
+    const lines = window(10)
+
+    const frames = buildSnapshotFrames({ ...base, lines, total: lines.length })
+
+    expect(frames).toHaveLength(1)
+    expect(frames[0].kind).toBe("reset")
+    expect(frames[0].from).toBe(0)
+  })
+
+  it("keeps every frame of a snapshot within the socket budget", () => {
+    const lines = Array.from({ length: 2_000 }, (_, index) => plain(`line ${index} ${"x".repeat(40)}`))
+
+    for (const frame of buildSnapshotFrames({ ...base, lines, total: lines.length })) {
+      expect(isMobileTerminalFrame(frame)).toBe(true)
+      expect(Buffer.byteLength(JSON.stringify(frame), "utf8"))
+        .toBeLessThanOrEqual(MOBILE_FRAME_LIMITS.maxPayloadBytes)
+    }
   })
 })

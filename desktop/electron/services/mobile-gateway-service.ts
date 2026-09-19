@@ -27,7 +27,7 @@ import type { MobileAttachment } from "./mobile-gateway/attachment-registry"
 import { AttachmentRegistry } from "./mobile-gateway/attachment-registry"
 import { MOBILE_GATEWAY_ACTOR } from "./mobile-gateway/controller"
 import type { MobileFileRelay } from "./mobile-gateway/file-relay"
-import { buildTerminalFrames } from "./mobile-gateway/frame-builder"
+import { buildSnapshotFrames, buildTerminalFrames } from "./mobile-gateway/frame-builder"
 import type { ClaudeCodeConversationLaunch, MobileGatewayLogger } from "./mobile-gateway/intent-executor"
 import { MobileIntentError, MobileIntentExecutor } from "./mobile-gateway/intent-executor"
 import type { MobileGatewayTransport } from "./mobile-gateway/transport"
@@ -478,9 +478,8 @@ export class MobileGatewayService {
     const content = mustSnapshot ? attachment.tracker.snapshot() : update!
     attachment.needsSnapshot = false
 
-    const frames = buildTerminalFrames({
+    const shared = {
       sessionId: attachment.sessionId,
-      kind: mustSnapshot ? "reset" : "suffix",
       from: content.from,
       lines: content.lines,
       total: content.total,
@@ -499,10 +498,15 @@ export class MobileGatewayService {
         visible: window.cursor.visible,
       },
       alt: window.alt,
-      truncated: content.truncated,
       seq: window.throughOutputSeq,
       sizeRevision: window.sizeRevision,
-    })
+    }
+    // A snapshot carries a whole window and has to arrive newest-first, or the
+    // phone watches it reassemble itself from the far end. An ordinary update is
+    // already in the order it should be read.
+    const frames = mustSnapshot
+      ? buildSnapshotFrames(shared)
+      : buildTerminalFrames({ ...shared, kind: "suffix", truncated: content.truncated })
 
     // A snapshot is the recovery path, so it always goes out. Ordinary updates are
     // subject to the uplink budget: past it, the update is dropped and the next
@@ -542,9 +546,8 @@ export class MobileGatewayService {
     const snapshot = attachment.tracker.snapshot()
     attachment.needsSnapshot = false
     attachment.dirty = false
-    const frames = buildTerminalFrames({
+    const frames = buildSnapshotFrames({
       sessionId: attachment.sessionId,
-      kind: "reset",
       from: snapshot.from,
       lines: snapshot.lines,
       total: snapshot.total,
@@ -554,7 +557,6 @@ export class MobileGatewayService {
         visible: window.cursor.visible,
       },
       alt: window.alt,
-      truncated: false,
       seq: window.throughOutputSeq,
       sizeRevision: window.sizeRevision,
     })
