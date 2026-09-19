@@ -434,7 +434,7 @@ final class SynapseAppModel {
     }
 
     func signOut() async {
-        keepAliveTask?.cancel()
+        stopKeepAlive()
         realtime.disconnect(reason: .unauthenticated)
         terminalStores.removeAll()
         preemptedSessions.removeAll()
@@ -466,6 +466,19 @@ final class SynapseAppModel {
         playback.stop()
         // 听过留在本机的那些音频同理：它们是这个账号的录音，换个人登进来不该还在盘上。
         MeetingAudioCache.shared.clearAll()
+        // 这台手机上的推送归属也得一起交出去，而且要在 `logout()` 之前 —— 那一步会把凭据
+        // 清掉，之后就没有身份可以说这句话了。
+        //
+        // device token 是按 `(userId, clientInstanceId)` 记的，而 `clientInstanceId` 跨登录
+        // 不变：不说这一句，上一个账号的终端审批和转写通知会继续发给这台手机，正文里带着
+        // 会话标题和最后一行输出。下一个人点开还会用他的凭据去执行，静默失败。
+        do {
+            try await apiClient.unregisterPushToken()
+        } catch {
+            AppLog.network.warning(
+                "unregistering this device's push token failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
         await apiClient.logout()
         authState = .signedOut
     }
@@ -1587,13 +1600,21 @@ final class SynapseAppModel {
 
     /// The desktop holds a write lease for as long as a terminal is open, and has
     /// no other way to tell a phone that is merely idle from one that died.
+    /// 心跳只在这一个槽里，而且**取消它的每一条路都要把它置回 nil** —— 入口守卫是
+    /// `keepAliveTask == nil`，留下一具取消过（或自己跑完）的尸体在那儿，这一辈子就
+    /// 再也起不来了。那之后桌面端按空闲阈值释放写租约，用户每次按键都收到
+    /// `lease_preempted`，除了杀进程重开没有别的出路。
     private func startKeepAlive() {
         guard keepAliveTask == nil else { return }
         keepAliveTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(AppConfiguration.terminalKeepAliveInterval * 1_000_000_000))
                 if Task.isCancelled { return }
-                guard let self, let desktop = self.selectedDesktopClientInstanceId else { return }
+                guard let self else { return }
+                // 电脑还没解析出来不是「不用再心跳了」，只是「这一拍还没到」：用户开
+                // 终端常常早于设备列表回来。这里 `return` 会把任务留成一具尸体，让
+                // 心跳再也不发（见上面那段）。
+                guard let desktop = self.selectedDesktopClientInstanceId else { continue }
                 guard self.realtime.state.isConnected else { continue }
                 // A computer that has gone away is kept as the one being viewed, so
                 // this loop has to check for itself rather than relying on there being
@@ -1610,11 +1631,14 @@ final class SynapseAppModel {
         }
     }
 
+    /// 停掉心跳。取消与置 nil 必须成对：`startKeepAlive` 的守卫看的就是这个槽空不空。
+    private func stopKeepAlive() {
+        keepAliveTask?.cancel()
+        keepAliveTask = nil
+    }
+
     private func stopKeepAliveIfIdle() {
-        if openSessions.isEmpty {
-            keepAliveTask?.cancel()
-            keepAliveTask = nil
-        }
+        if openSessions.isEmpty { stopKeepAlive() }
     }
 
     // MARK: - Push
@@ -1690,7 +1714,26 @@ final class SynapseAppModel {
         }
         relayAttachments.append(contentsOf: uploads.map(\.1))
         for (file, attachment) in uploads { relayPendingFiles[attachment.id] = file }
-        Task { await drainRelayQueue() }
+        startRelayDrain()
+    }
+
+    /// 起一趟上传，如果还没有在跑的话。
+    ///
+    /// 闩门是必须的：`uploadAndDeliver` 里的每一步网络往返都会挂起，而挂起期间主
+    /// actor 是空的 —— 用户这时再选一个文件就会起第二趟，两趟都在 `.queued` 里看到
+    /// **同一个** attachment（状态要到进度回调才往前走），同一份字节于是上传两遍。
+    /// 第二份云盘对象没人记得住，`sweepRelayLedger` 永远回收不到它。
+    ///
+    /// 收尾那一段不能有 await：从「槽清空」到「再看一眼还有没有待传的」之间只要让出
+    /// 一次，这中间新加进来的文件就没人认领了。
+    private func startRelayDrain() {
+        guard relayDrainTask == nil else { return }
+        relayDrainTask = Task { [weak self] in
+            guard let self else { return }
+            await self.drainRelayQueue()
+            self.relayDrainTask = nil
+            if self.relayAttachments.contains(where: \.needsUpload) { self.startRelayDrain() }
+        }
     }
 
     /// Uploads whatever is waiting to go up, one file at a time.
@@ -1870,7 +1913,7 @@ final class SynapseAppModel {
             $0.state = attachment.driveItemId == nil ? .queued : .waitingForComputer
         }
         if attachment.driveItemId == nil {
-            Task { await drainRelayQueue() }
+            startRelayDrain()
         } else {
             deliver(attachmentId)
         }

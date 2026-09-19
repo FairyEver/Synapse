@@ -176,16 +176,14 @@ final class RealtimeClient {
     @discardableResult
     func sendIntent(_ intent: MobileIntentRequest, desktopClientInstanceId: String) -> String {
         guard let task, state.isConnected else { return intent.intentId }
-        let envelope = OutboundEnvelope.make(
+        guard let text = LiveWire.text(
             LiveMessageType.mobileIntent,
             MobileIntentPayloadOut(
                 desktopClientInstanceId: desktopClientInstanceId,
                 mobileClientInstanceId: clientInstanceId,
                 intent: intent
             )
-        )
-        guard let data = try? JSONEncoder().encode(envelope),
-              let text = String(data: data, encoding: .utf8) else {
+        ) else {
             return intent.intentId
         }
         task.send(.string(text)) { _ in }
@@ -244,7 +242,7 @@ final class RealtimeClient {
     }
 
     private func sendHello(on socket: URLSessionWebSocketTask) {
-        let envelope = OutboundEnvelope.make(
+        guard let text = LiveWire.text(
             LiveMessageType.hello,
             HelloPayload(
                 clientInstanceId: clientInstanceId,
@@ -252,9 +250,7 @@ final class RealtimeClient {
                 platform: "ios",
                 deviceName: deviceName
             )
-        )
-        guard let data = try? JSONEncoder().encode(envelope),
-              let text = String(data: data, encoding: .utf8) else { return }
+        ) else { return }
         socket.send(.string(text)) { _ in }
     }
 
@@ -264,12 +260,10 @@ final class RealtimeClient {
                 try? await Task.sleep(nanoseconds: UInt64(AppConfiguration.heartbeatInterval * 1_000_000_000))
                 if Task.isCancelled { return }
                 guard let self, self.generation == current else { return }
-                let envelope = OutboundEnvelope.make(
+                guard let text = LiveWire.text(
                     LiveMessageType.ping,
-                    PingPayload(sentAt: ISO8601DateFormatter().string(from: Date()))
-                )
-                guard let data = try? JSONEncoder().encode(envelope),
-                      let text = String(data: data, encoding: .utf8) else { continue }
+                    PingPayload(sentAt: ISO8601DateFormatter.wire.string(from: Date()))
+                ) else { continue }
                 socket.send(.string(text)) { _ in }
             }
         }
@@ -316,6 +310,25 @@ final class RealtimeClient {
         if wasRecovering { Haptics.success() }
     }
 
+    /// 服务端会发、这个客户端也处理得了的消息。
+    ///
+    /// 单独列出来是为了把「对面还活着」这件事限定在它们身上：认不出的 type 既不该
+    /// 被派发，也不该被当成连接健康的证据。
+    private static let knownMessageTypes: Set<String> = [
+        LiveMessageType.pong,
+        LiveMessageType.mobileFrame,
+        LiveMessageType.mobileSummary,
+        LiveMessageType.mobileIntentResult,
+        LiveMessageType.mobileTransferProgress,
+        LiveMessageType.mobileDetached,
+        LiveMessageType.mobilePresence,
+        LiveMessageType.mobileToolbar,
+        LiveMessageType.mobileQuickPhrases,
+    ]
+
+    /// 复用同一个解码器：每条下行消息都要解一次，而帧在终端持续输出时每秒到好几次。
+    private static let decoder = JSONDecoder()
+
     private func handle(_ message: URLSessionWebSocketTask.Message) {
         let data: Data
         switch message {
@@ -323,43 +336,33 @@ final class RealtimeClient {
         case .data(let raw): data = raw
         @unknown default: return
         }
-        guard let envelope = try? JSONDecoder().decode(LiveEnvelope.self, from: data) else { return }
+        guard let header = try? Self.decoder.decode(LiveEnvelopeType.self, from: data) else { return }
 
-        switch envelope.type {
-        case LiveMessageType.welcome:
+        if header.type == LiveMessageType.welcome {
             reconnectAttempt = 0
             markConnected()
             onConnected?()
-        case LiveMessageType.pong, LiveMessageType.mobileFrame,
-             LiveMessageType.mobileSummary, LiveMessageType.mobileIntentResult,
-             LiveMessageType.mobileTransferProgress,
-             LiveMessageType.mobileDetached, LiveMessageType.mobilePresence,
-             LiveMessageType.mobileToolbar,
-             LiveMessageType.mobileQuickPhrases:
-            // Any server traffic proves the connection is healthy.
-            if !state.isConnected { markConnected() }
-            dispatch(envelope)
-        default:
-            break
+            return
         }
-    }
+        guard Self.knownMessageTypes.contains(header.type) else { return }
+        // Any server traffic proves the connection is healthy.
+        if !state.isConnected { markConnected() }
 
-    private func dispatch(_ envelope: LiveEnvelope) {
-        switch envelope.type {
+        switch header.type {
         case LiveMessageType.mobileSummary:
-            if let payload = envelope.payload.decode(MobileSummaryPayload.self) {
+            if let payload = payload(MobileSummaryPayload.self, from: data) {
                 onSummary?(payload)
             }
         case LiveMessageType.mobileFrame:
-            if let payload = envelope.payload.decode(MobileFramePayload.self) {
+            if let payload = payload(MobileFramePayload.self, from: data) {
                 onFrame?(payload)
             }
         case LiveMessageType.mobileIntentResult:
-            if let payload = envelope.payload.decode(MobileIntentResultPayload.self) {
+            if let payload = payload(MobileIntentResultPayload.self, from: data) {
                 onIntentResult?(payload.result)
             }
         case LiveMessageType.mobileTransferProgress:
-            if let payload = envelope.payload.decode(MobileTransferProgressPayload.self) {
+            if let payload = payload(MobileTransferProgressPayload.self, from: data) {
                 onTransferProgress?(payload)
             }
         // `mobile.detached` is deliberately not handled. The server sends it to
@@ -370,20 +373,26 @@ final class RealtimeClient {
         // report a computer dropping and could not.
         // See server/src/mobile-live/mobile-live-relay.service.ts:249.
         case LiveMessageType.mobilePresence:
-            if let payload = envelope.payload.decode(MobilePresencePayload.self) {
+            if let payload = payload(MobilePresencePayload.self, from: data) {
                 onPresence?(payload.desktopClientInstanceIds)
             }
         case LiveMessageType.mobileToolbar:
-            if let payload = envelope.payload.decode(MobileToolbarPayload.self) {
+            if let payload = payload(MobileToolbarPayload.self, from: data) {
                 onToolbar?(payload)
             }
         case LiveMessageType.mobileQuickPhrases:
-            if let payload = envelope.payload.decode(MobileQuickPhrasesPayload.self) {
+            if let payload = payload(MobileQuickPhrasesPayload.self, from: data) {
                 onQuickPhrases?(payload)
             }
         default:
+            // `live.pong`：没有要派发的载荷，它作证的那件事上面已经做了。
             break
         }
+    }
+
+    /// 按已经读出来的 `type` 解具体载荷 —— 一次解析，不经中间那棵树。
+    private func payload<T: Decodable>(_ type: T.Type, from data: Data) -> T? {
+        (try? Self.decoder.decode(PayloadEnvelope<T>.self, from: data))?.payload
     }
 
     private func scheduleReconnect() {

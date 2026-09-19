@@ -59,75 +59,24 @@ struct ReachableDesktop: Identifiable, Equatable {
     var label: String { deviceName ?? clientInstanceId }
 }
 
-struct LiveEnvelope: Decodable {
+/// 一条下行消息的 `type`。先只解这一格，再按它去解具体载荷。
+///
+/// 载荷的形状由 `type` 决定，而 Swift 的 `Decodable` 不能在解到一半时改主意，所以
+/// 这条路要么走两趟，要么先把载荷物化成一份与类型无关的中间表示。这里走**两趟**。
+///
+/// 中间表示那条路（一个 `[String: JSONValue]` 树 + 编码回 Data 再解一次）看着只解
+/// 一遍，实际是**三遍**：建树、重新序列化、再解析。而 `JSONValue` 认类型靠的是连着
+/// `try?` 几个候选，**每失败一次就抛一个 `DecodingError`**，一条帧里每一行的 text
+/// 都要这么来一遍。帧是这条路上最重的载荷，终端持续输出时每秒到好几次，且全程在主
+/// actor 上（`RealtimeClient` 就是 `@MainActor`）。两趟直解比那三趟便宜得多，也不需要
+/// 一棵一次性的树。
+struct LiveEnvelopeType: Decodable {
     let type: String
-    let id: String
-    let sentAt: String
-    let payload: AnyPayload
 }
 
-/// Keeps the decoder generic: payload shape is decided by `type`, which the
-/// callers switch on.
-struct AnyPayload: Decodable {
-    let value: Any
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if let dict = try? container.decode([String: JSONValue].self) {
-            value = dict
-        } else {
-            value = [String: JSONValue]()
-        }
-    }
-
-    func decode<T: Decodable>(_ type: T.Type) -> T? {
-        guard let dict = value as? [String: JSONValue] else { return nil }
-        let encoder = JSONEncoder()
-        guard let data = try? encoder.encode(dict) else { return nil }
-        return try? JSONDecoder().decode(T.self, from: data)
-    }
-}
-
-/// A minimal `Codable` JSON tree, used to re-encode a decoded payload into a
-/// concrete type without decoding twice.
-enum JSONValue: Codable {
-    case string(String)
-    case number(Double)
-    case bool(Bool)
-    case object([String: JSONValue])
-    case array([JSONValue])
-    case null
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if container.decodeNil() {
-            self = .null
-        } else if let value = try? container.decode(Bool.self) {
-            self = .bool(value)
-        } else if let value = try? container.decode(Double.self) {
-            self = .number(value)
-        } else if let value = try? container.decode(String.self) {
-            self = .string(value)
-        } else if let value = try? container.decode([String: JSONValue].self) {
-            self = .object(value)
-        } else if let value = try? container.decode([JSONValue].self) {
-            self = .array(value)
-        } else {
-            self = .null
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        switch self {
-        case .string(let value): try container.encode(value)
-        case .number(let value): try container.encode(value)
-        case .bool(let value): try container.encode(value)
-        case .object(let value): try container.encode(value)
-        case .array(let value): try container.encode(value)
-        case .null: try container.encodeNil()
-        }
-    }
+/// 一次解析，直接落到具体类型。`type` 已经由 `LiveEnvelopeType` 判过。
+struct PayloadEnvelope<Payload: Decodable>: Decodable {
+    let payload: Payload
 }
 
 // MARK: - Summary
@@ -776,8 +725,23 @@ struct OutboundEnvelope<Payload: Encodable>: Encodable {
         OutboundEnvelope(
             type: type,
             id: UUID().uuidString,
-            sentAt: ISO8601DateFormatter().string(from: Date()),
+            // 单例那个 formatter，不要就地新建：这条路上一次按键就是一次（见 `wire`）。
+            sentAt: ISO8601DateFormatter.wire.string(from: Date()),
             payload: payload
         )
+    }
+}
+
+/// 出站那条路：信封 + 编码 + UTF-8，三处调用点原来是同一段代码各抄一遍。
+///
+/// 编码器同样复用 —— `JSONEncoder()` 不是免费的，而 ping 每 20 秒一次、按键每次都发。
+/// 全部在主 actor 上用，`JSONEncoder` 本身没有可变状态。
+enum LiveWire {
+    private static let encoder = JSONEncoder()
+
+    /// 一条可以直接交给 socket 的文本，编不出来时 nil（调用点各自决定要不要继续）。
+    static func text<P: Encodable>(_ type: String, _ payload: P) -> String? {
+        guard let data = try? encoder.encode(OutboundEnvelope.make(type, payload)) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 }

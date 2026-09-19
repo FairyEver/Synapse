@@ -26,6 +26,9 @@ struct TerminalScreen: View {
     @State private var keyboardPanelPresented = false
     /// 键盘槽位正在滑进或滑出。
     @State private var panelIsSettling = false
+    /// 面板落位后补报网格的那一班。与 `chromeSettleTask` 同一条道理：连续收放会留下
+    /// 两个睡着的任务，各自清标志、各自补报一次。
+    @State private var panelSettleTask: Task<Void, Never>?
     /// 三条栏收起来了 —— 这一页现在是全屏终端。
     @State private var chromeHidden = false
     /// 到点收栏的那班岗。任何一次操作都把它重新上一次。
@@ -238,10 +241,12 @@ struct TerminalScreen: View {
     /// 户从没选过的中间值。落位之后补报一次，且只报一次。
     private func setKeyboardPanel(_ presented: Bool) {
         guard keyboardPanelPresented != presented else { return }
+        panelSettleTask?.cancel()
         panelIsSettling = true
         withAnimation(.easeOut(duration: 0.26)) { keyboardPanelPresented = presented }
-        Task {
+        panelSettleTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 320_000_000)
+            guard !Task.isCancelled else { return }
             panelIsSettling = false
             reportGridToDesktop()
         }
@@ -723,6 +728,7 @@ struct TerminalScreen: View {
             // 收栏那两班岗也一样：这一页走了，它们要收的东西已经不在了。
             chromeIdleTask?.cancel()
             chromeSettleTask?.cancel()
+            panelSettleTask?.cancel()
             model.closeTerminal(sessionId)
         }
         // 终端没了，这个页面跟着走。停止、删除、在电脑上关掉、进程自己退出，最后都

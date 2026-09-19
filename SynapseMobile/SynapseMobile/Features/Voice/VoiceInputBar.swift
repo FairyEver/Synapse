@@ -87,8 +87,27 @@ final class VoiceInputController {
     private var loop: Task<Void, Never>?
     private var finalizeWaiter: CheckedContinuation<Void, Never>?
     private var startedAt = Date()
-    /// 一次录音的代号。异步的启动过程里用户可能已经按了取消，回来时要认得出。
+    /// 一次启动的代号。
+    ///
+    /// `begin()` 要跨三个 await（权限、签名、起引擎），这中间用户随时可能松手取消、
+    /// 再按一次，或者来电把采集打断。那些都只把界面收回去是不够的 —— 启动已经离开
+    /// 起点，回来时手里会多一个开着的麦克风，音频还在一路推到云端。
+    ///
+    /// 所以「谁有资格继续」只由这一个数说了算：请求启动时领一个号，**任何结束这种
+    /// 启动的动作也要把号推进一格**（`invalidateStart()`），回来的那一趟比对不上就
+    /// 自己收摊，一行状态都不许动。
     private var generation = 0
+
+    /// 作废所有还在起飞路上的启动，并返回一个新号给接下来那一次用。
+    ///
+    /// 号在**这里**推进、而不是在 `begin()` 开头推进，是为了让「先取消、后执行」也
+    /// 成立：`start()` 排的那个任务还没轮到跑的时候用户就松了手，如果号是 `begin()`
+    /// 自己发的，它醒来后发的号永远是最新的，那道守卫就白设了。
+    @discardableResult
+    private func invalidateStart() -> Int {
+        generation += 1
+        return generation
+    }
 
     // MARK: - 轮换
 
@@ -121,7 +140,8 @@ final class VoiceInputController {
     func start(signing: @escaping () async -> AsrSignOutcome) {
         guard phase == .idle else { return }
         self.signing = signing
-        Task { await begin() }
+        let token = invalidateStart()
+        Task { await begin(token: token) }
     }
 
     /// 失败之后再来一次。
@@ -130,11 +150,13 @@ final class VoiceInputController {
     /// 作废。
     func retry() {
         guard case .failed = phase else { return }
-        Task { await begin() }
+        let token = invalidateStart()
+        Task { await begin(token: token) }
     }
 
     /// 用户取消：丢弃全部文本，含已定稿部分。
     func cancel() {
+        invalidateStart()
         loop?.cancel()
         loop = nil
         teardown()
@@ -149,6 +171,10 @@ final class VoiceInputController {
     /// 件事，静悄悄地回到 idle 只会让人以为话说出去了。
     func confirm() async -> String? {
         guard isActive else { return nil }
+        // 这一轮到此为止，所以还在起飞路上的那次启动也到此为止：它已经没有采集可
+        // 收尾（`capture` 还是 nil），再往下走只会在收尾之后把麦克风打开，用户会看
+        // 到自己刚说完的话被一段新的录音盖掉。
+        invalidateStart()
         loop?.cancel()
         loop = nil
 
@@ -179,9 +205,11 @@ final class VoiceInputController {
 
     // MARK: - 一次录音
 
-    private func begin() async {
-        generation += 1
-        let current = generation
+    private func begin(token: Int) async {
+        // 号对不上，就是这次启动在排队的时候已经被取消了。在动任何状态**之前**退出去：
+        // 晚到的启动不只是白开一次麦克风，它还会把 `phase` 改回「正在听」、把已经定稿
+        // 的文本清掉 —— 用户看到的是刚说完的那句话被一段新录音顶掉。
+        guard token == generation else { return }
         teardown()
         transcript = .empty
         elapsed = 0
@@ -195,7 +223,7 @@ final class VoiceInputController {
             notice = "麦克风权限未开启 · 设置 › Synapse › 麦克风"
             return
         }
-        guard current == generation else { return }
+        guard token == generation else { return }
 
         let signed: AsrSignature
         switch await signing?() {
@@ -207,7 +235,7 @@ final class VoiceInputController {
             phase = .failed(.network)
             return
         }
-        guard current == generation else { return }
+        guard token == generation else { return }
 
         let capture = AudioCapture()
         capture.onInterrupted = { [weak self] in self?.handleInterruption() }
@@ -222,7 +250,7 @@ final class VoiceInputController {
         }
         // 起引擎这段时间里用户可能已经取消了，或者又按了一次。那段录音没人认领，
         // 别把它收进来 —— 它的麦克风还开着。
-        guard current == generation else {
+        guard token == generation else {
             capture.stop()
             return
         }
@@ -504,6 +532,10 @@ final class VoiceInputController {
         // 只打断还在录的那一段。收尾的那 1.2 秒里麦克风已经关了、连接也已经在关，
         // 这时候把用户刚说完的话丢掉才是真的损失。
         guard phase.isListening else { return }
+        // 打断同样要作废还在起飞路上的启动。`onInterrupted` 是在 `self.capture` 收下
+        // 之前就挂上的，所以这一次打断完全可能落在启动还没跑完的时候 —— 不作废，它
+        // 醒来照样把那个刚被打断的麦克风收进来。
+        invalidateStart()
         loop?.cancel()
         loop = nil
         teardown()

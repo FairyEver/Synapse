@@ -18,6 +18,13 @@ extension ISO8601DateFormatter {
         return formatter
     }()
 
+    /// 发出去的那种：不带毫秒，和这套协议一直以来发出去的形状一致。
+    ///
+    /// 单例是必须的，不是顺手：`OutboundEnvelope.make` 每条出站消息都调它，而终端
+    /// 键盘面板**每敲一个键**就发一条 intent。`ISO8601DateFormatter` 的构造成本远
+    /// 大于它格式化一次，每键新建一个就是每键一次的浪费。
+    static let wire: ISO8601DateFormatter = ISO8601DateFormatter()
+
     /// 两种都认。
     ///
     /// 兜底那一条不是多余的：不是每个时间戳都经过 JS 的 `toISOString()`（手写的
@@ -27,6 +34,6 @@ extension ISO8601DateFormatter {
     /// 顺序不能反：带毫秒的先试。`withFractionalSeconds` 读不带毫秒的同样能成功，
     /// 反过来则不成立。
     static func parseWireTimestamp(_ value: String) -> Date? {
-        withFractionalSeconds.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+        withFractionalSeconds.date(from: value) ?? wire.date(from: value)
     }
 }

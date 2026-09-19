@@ -227,7 +227,21 @@ final class MeetingRecordingSession {
             uploader?.enqueue(tail)
         }
         let fileURL = try? MeetingRecordingFiles.audioURL(recordingId: record.recordingId)
-        _ = await uploader?.finish(audioFile: fileURL)
+        // 尾片没送出去就**不要提交**。m4a 的 `moov` 就在那一片里，服务端拼出来的会是一段
+        // 谁也打不开的音频，而它照样会计费转写；更糟的是接着那句 `keepRecordedAudio` 会把
+        // 本机这份**完好的**文件归入缓存，`MeetingAudioCache` 再按大小对不上把它删掉——
+        // 唯一一份好副本就这么没了。
+        //
+        // 留着本机文件和待收尾记录，下次启动 `resolvePendingRecordings` 会把尾片补齐再提交。
+        // 界面上不出现询问，和下面那条 `catch` 同一个口径。断点续录那条路（`finalize`）一直
+        // 是这么做的，实时这条漏了。
+        guard await uploader?.finish(audioFile: fileURL) != false else {
+            AppLog.recording.warning(
+                "the recording's tail did not upload, leaving it for the next launch."
+            )
+            finishSaving(recordingId: record.recordingId)
+            return
+        }
 
         do {
             try await client.completeMeetingRecording(

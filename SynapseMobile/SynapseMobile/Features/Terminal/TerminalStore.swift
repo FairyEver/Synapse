@@ -84,6 +84,11 @@ final class TerminalStore {
     private let maxLines = 6_000
 
     private var lines: [Int: TerminalLine] = [:]
+    /// 还持有着的最高行号，-1 表示一行都没有。
+    ///
+    /// 记着它、而不是每帧 `lines.keys.max()`：那个是 O(n) 的扫描，而 `apply` 每帧都
+    /// 要跑一次裁剪判断。缓冲区到顶之后 n 就是 6000。
+    private var highestLineIndex = -1
     private var rowOffsetByLine: [Int: Int] = [:]
     /// Lowest line index still considered valid.
     private var firstLineIndex = 0
@@ -102,6 +107,7 @@ final class TerminalStore {
         lines.removeAll()
         rows.removeAll()
         rowOffsetByLine.removeAll()
+        highestLineIndex = -1
         firstLineIndex = 0
         rowsFirstLine = 0
         lastWrappedLine = -1
@@ -153,6 +159,7 @@ final class TerminalStore {
             lines.removeAll()
             rowOffsetByLine.removeAll()
             rows.removeAll()
+            highestLineIndex = -1
             lastWrappedLine = frame.from - 1
             firstLineIndex = frame.from
             rowsFirstLine = frame.from
@@ -170,10 +177,17 @@ final class TerminalStore {
         for offset in 0..<frame.lines.count {
             lines[frame.from + offset] = frame.lines[offset]
         }
+        if !frame.lines.isEmpty { highestLineIndex = max(highestLineIndex, frame.from + frame.lines.count - 1) }
         // Suffix semantics: anything past the frame's own content is gone.
         let voidFrom = frame.from + frame.lines.count
-        for key in lines.keys where key >= voidFrom {
-            lines.removeValue(forKey: key)
+        // 只走真正可能删到的那一段。以前是遍历**全部**键去找通常为 0 个匹配（上限
+        // 6000），而 `lines.keys` 这个视图持着字典的缓冲区 —— 只要真删掉一个键，
+        // `removeValue` 就会因为非唯一引用而把整份字典拷贝一遍。
+        if highestLineIndex >= voidFrom {
+            for key in voidFrom...highestLineIndex {
+                lines.removeValue(forKey: key)
+            }
+            highestLineIndex = voidFrom - 1
         }
 
         rewrap(from: frame.from)
@@ -271,6 +285,7 @@ final class TerminalStore {
         for offset in 0..<frame.lines.count {
             lines[frame.from + offset] = frame.lines[offset]
         }
+        highestLineIndex = max(highestLineIndex, frame.from + frame.lines.count - 1)
         if frame.from < firstLineIndex { firstLineIndex = frame.from }
         oldestIndex = firstLineIndex
         rebuildAllRows()
@@ -294,8 +309,13 @@ final class TerminalStore {
         }
         if lineIndex >= rowsFirstLine, let offset = rowOffsetByLine[lineIndex] {
             rows.removeSubrange(offset..<rows.count)
-            for key in rowOffsetByLine.keys where key >= lineIndex {
-                rowOffsetByLine.removeValue(forKey: key)
+            // 折过行的只有 `rowsFirstLine...lastWrappedLine` 这一段，按它收敛即可 ——
+            // 遍历整个字典的键既慢，又会在迭代中删除（`keys` 视图持着缓冲区，一次
+            // 删除就是一次整份拷贝）。
+            if lastWrappedLine >= lineIndex {
+                for key in lineIndex...lastWrappedLine {
+                    rowOffsetByLine.removeValue(forKey: key)
+                }
             }
             lastWrappedLine = lineIndex - 1
             appendWrapped(from: lineIndex)
@@ -326,12 +346,11 @@ final class TerminalStore {
     }
 
     private func trimToLimit() {
-        guard let highest = lines.keys.max(), highest - firstLineIndex > maxLines else { return }
-        let newFirst = highest - maxLines
-        for key in lines.keys where key < newFirst {
+        guard highestLineIndex - firstLineIndex > maxLines else { return }
+        let newFirst = highestLineIndex - maxLines
+        for key in firstLineIndex..<newFirst {
             lines.removeValue(forKey: key)
         }
-        // Cheapest correct response to dropping the head: re-wrap the tail.
         firstLineIndex = max(firstLineIndex, newFirst)
         // The cursor may never sit below what is still held. A page is served as
         // `[oldestIndex - count, oldestIndex)`, so a cursor left behind by the trim
@@ -341,7 +360,40 @@ final class TerminalStore {
         // never drawn.
         oldestIndex = max(oldestIndex, firstLineIndex)
         didTruncate = true
-        rebuildAllRows()
+        dropRowsBefore(newFirst)
+    }
+
+    /// 丢掉落在 `newFirst` 之前的行，把还留着的整体前移。
+    ///
+    /// 这里**不重折任何一行**，这是这一条的关键。裁剪丢的是头部，留下来的那些行的折法
+    /// 和标识符一个都没变，变的只是它们从第几行开始 —— 而原来那句 `rebuildAllRows()`
+    /// 会把最多 6000 行全部重新折一遍（每行一次 `Array(line.text)`、一次 id 字符串插值、
+    /// 两次 `String.hashValue`）。
+    ///
+    /// 而且这一条**每一帧**都在跑：第一次裁剪之后 `firstLineIndex == highestLineIndex -
+    /// maxLines`，此后只要再进一行，`highestLineIndex - firstLineIndex > maxLines` 就
+    /// 重新成立。也就是说长跑会话一旦过了上限（`tail -f`、构建日志、TUI 输出），就永久
+    /// 停在「每帧重折整个缓冲区」上。
+    private func dropRowsBefore(_ newFirst: Int) {
+        // 没有这一行的折行记录（缓冲区里有缺口）：退回整体重建，慢但一定对。
+        guard let dropRows = rowOffsetByLine[newFirst] else {
+            rebuildAllRows()
+            return
+        }
+        guard dropRows > 0 else {
+            rowsFirstLine = newFirst
+            refreshCursorPosition()
+            return
+        }
+        rows.removeFirst(dropRows)
+        rowOffsetByLine = Dictionary(
+            uniqueKeysWithValues: rowOffsetByLine.compactMap { key, value in
+                key >= newFirst ? (key, value - dropRows) : nil
+            }
+        )
+        rowsFirstLine = newFirst
+        // 行号整体前移了，游标落在第几行也跟着变。
+        refreshCursorPosition()
     }
 
     /// Splits one logical line into screen rows, keeping styling attached to the
