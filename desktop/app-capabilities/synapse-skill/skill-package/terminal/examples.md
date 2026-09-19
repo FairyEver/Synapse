@@ -44,6 +44,17 @@ Example request: "Check the Codex terminal, show me recent history, and tell me 
 4. Report `waiting`, `not_waiting`, or `unknown` with the returned reason, confidence, detection time, and evidence watermarks. Silence, an observe timeout, or a prompt-looking character is not enough to change `unknown`.
 5. Report every `gap`, `truncated`, `degraded`, or `hasMore` fact. Retained output is not guaranteed to be complete history.
 
+## Take over the session a user pasted
+
+Example request: "I opened another Claude Code in that terminal — go find it and supervise it", followed by a pasted Terminal reference.
+
+1. Take the `session_id` line from the pasted text; ask for the full three lines when it is incomplete. `workspace_id` and `session_ref` are for people — only `session_id` addresses anything, and `session_ref` cannot be reversed into an id.
+2. Call `app_terminal_session_state_get` with that id and read `tty` and `agent` along with lifecycle.
+3. Resolve which Claude Code session occupies that terminal: `ps -t <tty>` for the pid, then that pid's own session registry entry (`~/.claude/sessions/<pid>.json`) for its session name. Refuse to guess — if the device matches more than one process or the registry has no entry, report that instead of picking the closest-looking name.
+4. Talk to it the way its own tooling expects (its peer-message tool, addressed by the name you resolved) rather than polling its screen.
+5. Fall back to the terminal itself when the program there cannot take messages — a non-Claude program, or one where that capability is off: `app_terminal_session_view_get` to see it, then acquire control and `app_terminal_session_input_command` to say something. Report which path you used; they are not equivalent.
+6. Let `agent.state` decide whether speaking now is sensible: `working` is mid-turn, `needs_input` is a question a person should read first, `idle` is sitting at its prompt. An absent `agent` means no agent ever ran in that terminal.
+
 ## Continue Claude Code, Codex, or another interactive program
 
 Example request: "Tell the Agent in this terminal to continue fixing the tests."

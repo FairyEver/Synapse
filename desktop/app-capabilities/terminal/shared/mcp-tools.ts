@@ -93,6 +93,8 @@ const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
 
 const toolNotes: Readonly<Record<string, string>> = {
   "app.terminal.session.open": "Pass an immutable sessionId already returned by another Terminal tool. This tool returns no terminal output.",
+  "app.terminal.session_state.get": "`tty` is this session's PTY device: `ps -t <tty>` finds the process running inside it, which is how a pasted session reference is resolved to the Claude Code session occupying that terminal. `agent` reports that agent's own run state (`launching` never appears) with no prompt, answer, output, or tool-argument text. An absent `agent` means no agent ever ran here, or agent notifications are off — that is not the same as `state: \"ended\"`, which means one ran and has exited.",
+  "app.terminal.session_state.list": "Same per-session shape as `app.terminal.session_state.get`, including each session's `tty` and its agent's run state.",
 }
 
 export function buildTerminalMcpTools(): McpToolDefinition[] {
