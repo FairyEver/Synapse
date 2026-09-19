@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  applyTerminalSessionIdentity,
   resolveTerminalLaunchConfiguration,
   resolveTerminalEnvironment,
   resolveTerminalShellArgs,
   TerminalLaunchValidationError,
+  TERMINAL_SESSION_ID_ENV_KEY,
+  TERMINAL_WORKSPACE_ID_ENV_KEY,
 } from "../environment"
 
 describe("TerminalEnvironmentResolver", () => {
@@ -147,6 +150,45 @@ describe("TerminalEnvironmentResolver", () => {
     expect(() => resolveTerminalLaunchConfiguration({
       global: { environment: { TOO_LARGE: "x".repeat(32 * 1024 + 1) } },
     })).toThrow("too large")
+  })
+
+  it("reserves the session-identity keys in every user-configurable launch layer", () => {
+    // 与上面 TERM_PROGRAM 那组用例同一套断言，因为走的是同一条保留前缀规则。四个用户层
+    // 各写一遍：每一层都必须直接报错，而不是「写进去但被内置层盖掉」—— 后者会让人以为
+    // 配置生效了，直到在终端里 `env` 才发现不是。
+    for (const key of [TERMINAL_SESSION_ID_ENV_KEY, TERMINAL_WORKSPACE_ID_ENV_KEY]) {
+      const layers = [
+        { global: { environment: { [key]: "forged" } } },
+        { group: { environment: { [key]: "forged" } } },
+        { command: { environment: { [key]: "forged" } } },
+        { override: { environment: { [key]: "forged" } } },
+      ]
+      for (const layer of layers) {
+        expect(() => resolveTerminalLaunchConfiguration({ platform: "darwin", ...layer }))
+          .toThrow(TerminalLaunchValidationError)
+      }
+    }
+  })
+
+  it("injects the PTY session identity beneath the user-configurable layers", () => {
+    const result = resolveTerminalEnvironment({
+      platform: "darwin",
+      baseEnv: { HOME: "/Users/test", USER: "test", SHELL: "/bin/zsh", PATH: "/usr/bin" },
+      cwd: "/Users/test",
+      validateFilesystem: false,
+      overrides: { USER_API_TOKEN: "explicit" },
+    })
+
+    const identified = applyTerminalSessionIdentity(result.env, { sessionId: "session-1", workspaceId: "workspace-1" })
+    expect(identified).toMatchObject({
+      [TERMINAL_SESSION_ID_ENV_KEY]: "session-1",
+      [TERMINAL_WORKSPACE_ID_ENV_KEY]: "workspace-1",
+      TERM_PROGRAM: "Synapse",
+      USER_API_TOKEN: "explicit",
+    })
+    // 没有 workspace 时不写空值：消费者要能分辨「没有」和「空字符串」。
+    expect(applyTerminalSessionIdentity(result.env, { sessionId: "session-1" }))
+      .not.toHaveProperty(TERMINAL_WORKSPACE_ID_ENV_KEY)
   })
 
   it("provides a UTF-8 locale for macOS GUI environments without locale variables", () => {

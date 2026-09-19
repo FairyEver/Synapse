@@ -34,6 +34,41 @@ const WINDOWS_ENV_KEYS = [
 ] as const
 const TERMINAL_RESERVED_INTERNAL_ENV_PREFIXES = ["SYNAPSE_", "MCP_"] as const
 const TERMINAL_RESERVED_ENV_KEYS = new Set(["TERM_PROGRAM", "TERM_PROGRAM_VERSION"])
+
+/**
+ * 这个终端是谁：PTY 启动时写进进程身份的两条变量。
+ *
+ * 属于 Synapse 内置层，和 `TERM_PROGRAM` 同一层，位于工作区 / 分组 / 快捷命令 / 一次性
+ * 覆盖之下。`SYNAPSE_` 前缀在 {@link validateEnvironmentEntry} 里整体保留，所以用户层
+ * 写同名键不是「被内置值盖掉」，而是直接抛 `TerminalLaunchValidationError` —— 没有静默
+ * 失效的路径可走。
+ *
+ * 只在这一颗进程的环境里存在：不进会话记录、不进普通备份、不进加密 body。
+ */
+export const TERMINAL_SESSION_ID_ENV_KEY = "SYNAPSE_SESSION_ID"
+export const TERMINAL_WORKSPACE_ID_ENV_KEY = "SYNAPSE_WORKSPACE_ID"
+
+/**
+ * 把身份注入到已经解析好的启动环境里。
+ *
+ * 单独一个函数而不是塞进 {@link resolveTerminalEnvironment}，是因为 workspace 身份要等
+ * 会话记录建好、workspace 建出来之后才存在，而环境解析在那之前就完成了。两条变量始终
+ * 一起注入，作用域和优先级与内置层一致。
+ *
+ * `workspaceId` 缺省时不写空值：分屏出来的 pane 在它自己的进程启动之后才被挂到 workspace
+ * 上，那时进程环境已经定下来了。少一个键，比给消费者一个看起来像「空字符串 workspace」
+ * 的键好分辨。
+ */
+export function applyTerminalSessionIdentity(
+  env: Readonly<Record<string, string>>,
+  identity: { readonly sessionId: string; readonly workspaceId?: string },
+): Record<string, string> {
+  return {
+    ...env,
+    [TERMINAL_SESSION_ID_ENV_KEY]: identity.sessionId,
+    ...(identity.workspaceId ? { [TERMINAL_WORKSPACE_ID_ENV_KEY]: identity.workspaceId } : {}),
+  }
+}
 const TERMINAL_ENVIRONMENT_ENTRY_LIMIT = 256
 const TERMINAL_ENVIRONMENT_VALUE_BYTE_LIMIT = 32 * 1024
 const TERMINAL_ENVIRONMENT_TOTAL_BYTE_LIMIT = 256 * 1024

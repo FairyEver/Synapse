@@ -741,6 +741,49 @@ describe("TerminalService core", () => {
     expect(spawnPty.mock.lastCall?.[0].env).not.toHaveProperty("GROUP_ONLY")
   })
 
+  it("tells a PTY which session and workspace it is, without writing the identity down", async () => {
+    const cwd = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-identity-"))
+    const store = memoryStore()
+    const spawnPty = vi.fn(() => fakePty())
+    const service = createTerminalService({
+      store,
+      spawnPty,
+      resolveDefaultShell: () => "/bin/zsh",
+      resolveDefaultCwd: () => cwd,
+      resolveEffectivePath: () => "/usr/bin:/bin",
+      appVersion: "9.8.7",
+    })
+    await service.start()
+
+    const session = await service.createSession({ title: "Identity" })
+    const workspace = service.getWorkspaceForSession({ sessionId: session.id })
+    expect(spawnPty).toHaveBeenLastCalledWith(expect.objectContaining({
+      env: expect.objectContaining({
+        SYNAPSE_SESSION_ID: session.id,
+        SYNAPSE_WORKSPACE_ID: workspace.id,
+      }),
+    }))
+
+    // 身份是运行期的，不是配置：它只活在这一颗进程的环境里，落盘的会话记录里一个字都不该有，
+    // 否则它会跟着普通备份和加密 body 一起走。
+    expect(store.state.sessions.some((entry) =>
+      JSON.stringify(entry).includes("SYNAPSE_SESSION_ID"))).toBe(false)
+
+    // 分屏出来的 pane 在它自己的进程启动之后才被挂进 workspace，所以那一颗 PTY 只拿得到
+    // 会话身份。这是一条有意的边界，不是漏注入——用断言把它钉住，免得以后有人「顺手」
+    // 让它变一致却对不上真实时序。
+    const rootPane = workspace.layout.type === "leaf" ? workspace.layout : null
+    const split = await service.splitPane({
+      workspaceId: workspace.id,
+      paneId: rootPane!.paneId,
+      direction: "right",
+      expectedLayoutRevision: workspace.layoutRevision,
+    })
+    const splitEnv = spawnPty.mock.lastCall?.[0].env
+    expect(splitEnv).toMatchObject({ SYNAPSE_SESSION_ID: split.sessionId })
+    expect(splitEnv).not.toHaveProperty("SYNAPSE_WORKSPACE_ID")
+  })
+
   it("allows one MCP client to keep more than eight sessions running", async () => {
     const { service } = await startedHarness()
     for (let index = 0; index < 9; index += 1) {

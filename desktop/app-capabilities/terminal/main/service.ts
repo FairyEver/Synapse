@@ -100,6 +100,7 @@ import {
 import type { TerminalAgentNotificationService } from "./agent-notification-service"
 import { projectMobileToolbarButtons } from "./mobile-toolbar"
 import {
+  applyTerminalSessionIdentity,
   resolveTerminalEnvironment,
   resolveTerminalLaunchConfiguration,
   resolveTerminalShellArgs,
@@ -1099,11 +1100,21 @@ export function createTerminalService(deps: {
     unpublishedSessions.set(session.id, terminalDomainRevision)
     try {
       const defaultShellArgs = launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
+      /*
+       * 身份在这里注入而不是在 `resolveTerminalEnvironment` 里：新标签页的 workspace 到
+       * 这一步才建出来，而分屏出来的 pane 要到调用方的 `splitTerminalPane` 之后才归属
+       * workspace。前者的进程拿得到两条身份，后者只拿得到会话身份。
+       */
+      const sessionWorkspace = getWorkspaceBySessionId(session.id)
+      const launchEnvironment = applyTerminalSessionIdentity(environment.env, {
+        sessionId,
+        ...(sessionWorkspace ? { workspaceId: sessionWorkspace.id } : {}),
+      })
       const integration = deps.agentNotifications?.prepareSession({
         sessionId,
         title: session.title,
         shell: environment.shell,
-        env: environment.env,
+        env: launchEnvironment,
         defaultShellArgs,
       })
       const child = (deps.spawnPty ?? spawnNodePty)({
@@ -1112,7 +1123,7 @@ export function createTerminalService(deps: {
         cwd: environment.cwd,
         cols: session.cols,
         rows: session.rows,
-        env: integration?.env ?? environment.env,
+        env: integration?.env ?? launchEnvironment,
       })
       attachRuntime(session, child, buffer)
       await flushPersist()
