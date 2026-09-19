@@ -69,6 +69,7 @@ model User {
   agentPersonaPreferences        AgentPersonaPreference[]
   clientTelemetryEvents          ClientTelemetryEvent[]
   meetings                       Meeting[]
+  teamMemberships                TeamMembership[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
 }
@@ -1183,4 +1184,25 @@ model MeetingSpeaker {
   updatedAt DateTime @updatedAt
 
   @@unique([meetingId, speakerId])
+}
+
+// 管理员维护的组织关系。团队本身不承载任何权限或资源，只记录「谁属于哪些团队」。
+model Team {
+  id        String           @id @default(cuid())
+  name      String           @unique @db.VarChar(30)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  members   TeamMembership[]
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([userId])
 }
