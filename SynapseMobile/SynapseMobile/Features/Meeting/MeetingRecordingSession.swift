@@ -235,8 +235,9 @@ final class MeetingRecordingSession {
                 durationMs: durationMs,
                 peaks: peaks
             )
-            // 收尾成功才清本机：在那之前，这份文件是异常退出之后唯一的依据。
-            discardLocalFiles(record.recordingId)
+            // 收尾成功才动本机那份：在那之前，它是异常退出之后唯一的依据。这时候它不是被
+            // 删掉，是归入缓存——刚录完的这条回听要秒开。
+            keepRecordedAudio(record, peaks: peaks)
         } catch {
             // 音频已经在服务端了，这一步失败只是晚一点开始。留好本机文件，下次启动
             // 自动收尾，界面上不出现任何询问。
@@ -288,6 +289,23 @@ final class MeetingRecordingSession {
         recorder?.stop()
     }
 
+    /// 收尾成功：音频**留下**并归入本机缓存，只删掉待收尾记录。
+    ///
+    /// 录音期间音频本来就落在本机（决策三），收尾后删掉再从云端下回来纯属浪费——用户想马上
+    /// 回听刚录的那条，正是要秒开的那一下。归入缓存就是同一个目录里改个名（`moveItem`），
+    /// 零成本。
+    ///
+    /// `pending.json` 要照常删掉：`PendingMeetingRecordingStore.loadAll` 认的是「本机还有没有
+    /// 音频」，而这一份已经改名归入缓存了——记录留着只会让下次启动去收一条已经收完的录音。
+    private func keepRecordedAudio(_ record: PendingMeetingRecording, peaks: String) {
+        PendingMeetingRecordingStore.remove(recordingId: record.recordingId)
+        guard let source = try? MeetingRecordingFiles.audioURL(recordingId: record.recordingId) else { return }
+        MeetingAudioCache.shared.adopt(source, meetingId: record.meetingId, peaks: peaks)
+    }
+
+    /// 取消：本机这一份全部删掉，**不留缓存条目**。
+    ///
+    /// 与收尾成功那条路的区别是有意的：用户按的是取消，这条录音就不该在本机留下任何东西。
     private func discardLocalFiles(_ recordingId: String) {
         PendingMeetingRecordingStore.remove(recordingId: recordingId)
         if let url = try? MeetingRecordingFiles.audioURL(recordingId: recordingId) {
@@ -409,12 +427,14 @@ final class MeetingRecordingSession {
         guard await uploader.finish(audioFile: fileURL) else { return }
 
         do {
+            let encodedPeaks = MeetingPeaks.encode(peaks)
             try await client.completeMeetingRecording(
                 recordingId: record.recordingId,
                 durationMs: durationMs,
-                peaks: MeetingPeaks.encode(peaks)
+                peaks: encodedPeaks
             )
-            discardLocalFiles(record.recordingId)
+            // 同样归入缓存：这条也是刚录完的，回听要秒开。
+            keepRecordedAudio(record, peaks: encodedPeaks)
         } catch {
             AppLog.recording.warning(
                 "recovering a recording failed, it stays pending: \(error.localizedDescription, privacy: .public)"

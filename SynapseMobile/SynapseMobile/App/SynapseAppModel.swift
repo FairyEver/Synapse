@@ -526,9 +526,17 @@ final class SynapseAppModel {
         }
     }
 
-    /// 语音视图要的那两样：音频地址和波形。都是按需取的，不进列表的载荷。
-    func loadMeetingAudio(_ meetingId: String) async {
-        await playback.load(meetingId: meetingId, using: apiClient)
+    /// 语音视图要的那几样：音频和波形。都是按需取的，不进列表的载荷。
+    ///
+    /// 详情一起带过去是因为命中判据要服务端那份 `recording.size`：本机这份音频是不是还有
+    /// 效，得跟服务端对一次。
+    func loadMeetingAudio(_ detail: MeetingDetail) async {
+        await playback.load(meetingId: detail.id, serverSize: detail.recording.size, using: apiClient)
+    }
+
+    /// 载入态里那个「重试」：手动催一下，不取代自动恢复。
+    func retryMeetingAudio() async {
+        await playback.retry(using: apiClient)
     }
 
     func handleScenePhase(_ isActive: Bool) {

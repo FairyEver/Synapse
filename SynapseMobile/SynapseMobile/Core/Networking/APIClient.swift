@@ -418,6 +418,27 @@ actor APIClient {
         return response.peaks
     }
 
+    /// 把一段音频下到本机，落在 `destination`。
+    ///
+    /// 走 `URLSession.downloadTask` 而不是 `send`：这是一段字节，不是 JSON；而且地址是服务端
+    /// 现签的，凭据就在地址里，**不能再套一层 token**。
+    ///
+    /// 落盘这一步必须在这里当场做完：`downloadTask` 给的那个临时文件在下载方法返回之后
+    /// 随时会被系统收走（几兆的音频重下一次代价不小）。目标已存在时 `moveItem` 会失败，
+    /// 所以先清掉它——上一份要么是坏的，要么已经不作数了。
+    func downloadMeetingAudio(from url: URL, to destination: URL) async throws {
+        let (temporary, response) = try await session.download(from: url)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw APIError(status: http.statusCode, code: nil, message: "音频没能下载下来。")
+        }
+        try? FileManager.default.removeItem(at: destination)
+        do {
+            try FileManager.default.moveItem(at: temporary, to: destination)
+        } catch {
+            throw APIError(status: 0, code: nil, message: "音频没能存到本机。")
+        }
+    }
+
     /// Sends an intent over HTTP instead of the socket.
     ///
     /// Notification actions run without a live connection, so the request has to

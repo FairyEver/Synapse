@@ -174,9 +174,14 @@ struct MeetingDetailView: View {
 }
 
 /// 语音视图。
+///
+/// 四种状态：就绪（本机已有这份音频）、载入中（正在下）、载入超时（满 10 秒给一个
+/// 「重试」）、不可用（服务端说这条录音没了）。
 private struct MeetingAudioPane: View {
     @Environment(SynapseAppModel.self) private var model
     let detail: MeetingDetail
+    /// 载入满 10 秒才给出的那个出口。
+    @State private var showRetry = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -185,13 +190,51 @@ private struct MeetingAudioPane: View {
                 unavailable
             } else {
                 waveformCard
+                if model.playback.isLoading {
+                    loadingRow
+                }
                 controls
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 24)
-        .task { await model.loadMeetingAudio(detail.id) }
+        .task { await model.loadMeetingAudio(detail) }
+        // 计时挂在一个会变的 key 上：换一条录音、或者按下「重试」，都从这个数重新起算。
+        // `.task` 在这一屏消失时取消它，不需要另外收尾。
+        .task(id: model.playback.loadAttempt) { await armRetryAfterTenSeconds() }
+    }
+
+    /// 载入中：转圈 + 「正在下载」。
+    ///
+    /// **不说失败**：没网时它会一直转，因为网一回来它确实会自己下完。转满 10 秒补一个
+    /// 「重试」——那个是手动催一下，不取代自动恢复。
+    private var loadingRow: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("正在下载")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if showRetry {
+                Button("重试") {
+                    Haptics.commit()
+                    Task { await model.retryMeetingAudio() }
+                }
+                .font(.subheadline)
+                .accessibilityIdentifier("meeting-audio-retry")
+            }
+        }
+    }
+
+    /// 载入满了 10 秒就把「重试」露出来。后台那一路照旧在试，用户不动手也能好——这个按钮
+    /// 只是给等急了的人一个出口，不是「不点就永远好不了」。
+    private func armRetryAfterTenSeconds() async {
+        showRetry = false
+        try? await Task.sleep(for: .seconds(10))
+        guard !Task.isCancelled else { return }
+        showRetry = model.playback.isLoading
     }
 
     private var unavailable: some View {
@@ -208,11 +251,14 @@ private struct MeetingAudioPane: View {
     }
 
     /// 整段铺满宽度的一条：它的作用是一眼看完整个录音。点它任意位置跳到那儿。
+    ///
+    /// 载入中整条压暗：形状是真的（波形跟音频同时在取），但这时候它还播不了。
     private var waveformCard: some View {
         PlaybackWaveform(playback: model.playback)
             .frame(height: 128)
             .padding(.horizontal, 12)
             .surfaceCard()
+            .opacity(model.playback.isLoading ? 0.4 : 1)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -246,8 +292,11 @@ private struct MeetingAudioPane: View {
                 Image(systemName: model.playback.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(Theme.ink)
+                    // 载入中置灰：这会儿点它什么都不会发生。
+                    .opacity(model.playback.isLoading ? 0.35 : 1)
             }
             .buttonStyle(.plain)
+            .disabled(model.playback.isLoading)
             .accessibilityLabel(model.playback.isPlaying ? "暂停" : "播放")
 
             Button {

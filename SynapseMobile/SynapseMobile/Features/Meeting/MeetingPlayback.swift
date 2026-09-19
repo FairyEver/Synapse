@@ -8,6 +8,10 @@ import os
 /// 一整段铺满宽度的波形、播放头、播放键、前后 15 秒、当前 / 总时长。点波形任意位置
 /// 跳到那儿。**没有**时间刻度尺、缩略图、倍速、字幕跟随——那是电脑端明确去掉的东西。
 ///
+/// 播放走本机缓存（`MeetingAudioCache`）：本机有那份音频就直接播本机文件，一个字都不用
+/// 联网；没有才去云端下，下完再播本机那份。**界面上看不见缓存的存在**——没有「已缓存」
+/// 「离线」这类字样，快慢用户自己感觉得到。
+///
 /// 它与录音共用 `AVAudioSession`：这里**一个字都不设**。录音那条路设的是
 /// `.playAndRecord`，在那个类别下播放和录音可以同时在；而这里若为了「播放」把它改成
 /// `.playback`，正在录的那条就会被掐掉——从录音页进语音视图再出来，录音就没了。
@@ -17,52 +21,163 @@ final class MeetingPlayback {
     /// 前后 15 秒。一条录音动辄四十分钟以上，回退重听是刚需。
     static let skipSeconds: Double = 15
 
+    /// 下载没成之后隔多久再试。起手短一点，退到 15 秒就不再退：网回来几秒内就能自己接上，
+    /// 而真没网的时候每 15 秒一个请求也不算什么。
+    private static let initialRetryDelay: TimeInterval = 3
+    private static let maxRetryDelay: TimeInterval = 15
+
     private(set) var isPlaying = false
     private(set) var currentSeconds: Double = 0
     private(set) var durationSeconds: Double = 0
     /// 0–1 的振幅，**已经除以 255**。
     private(set) var peaks: [Double] = []
+    /// 本机还没有这份音频，正在下。界面据此进载入态：波形压暗、播放键禁用、下面一行转圈
+    /// 加「正在下载」。**它不是失败态**——网回来自会接着下完（见 `scheduleRetry`）。
     private(set) var isLoading = false
     /// 录音没了。历史数据里有，别的端也可能删过。
     private(set) var isUnavailable = false
+    /// 读不到音频的原因。**只进日志，不进界面**：载入态不说失败，它多半只是没网，而网回来
+    /// 自己就会好。写成「播放失败」会让用户去找一个不需要他解决的问题。
     private(set) var failureMessage: String?
+    /// 这一屏载入过几次。界面靠它决定「10 秒那个计时」要不要重新起算：按下「重试」也让它
+    /// 加一，用户才看得见那一下的反应。
+    private(set) var loadAttempt = 0
 
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var loadedMeetingId: String?
+    /// 服务端报的这条音频有多大。命中判据三件套里有一件是它，所以每次载入都要带着。
+    private var serverSize = 0
+    /// 本机那份缓存在哪、索引里怎么记。
+    private let cache: MeetingAudioCache
+    private var retryTask: Task<Void, Never>?
+    private var retryDelay = MeetingPlayback.initialRetryDelay
+    /// 正在试一次（下载在路上）。离开这一屏又回来时靠它判断要不要接着试。
+    private var isAttempting = false
+
+    init(cache: MeetingAudioCache = .shared) {
+        self.cache = cache
+    }
 
     var progress: Double {
         guard durationSeconds > 0 else { return 0 }
         return min(1, max(0, currentSeconds / durationSeconds))
     }
 
-    func load(meetingId: String, using client: APIClient) async {
-        guard loadedMeetingId != meetingId else { return }
-        loadedMeetingId = meetingId
-        teardownPlayer()
-        peaks = []
-        isUnavailable = false
-        failureMessage = nil
-        isLoading = true
-        defer { isLoading = false }
+    /// 打开一条录音。
+    ///
+    /// 本机有就直接播本机那份；没有就先下、下完再播。`serverSize` 是服务端详情里的
+    /// `recording.size`——命中判据三件套里的一件就是它。
+    func load(meetingId: String, serverSize: Int, using client: APIClient) async {
+        if loadedMeetingId != meetingId {
+            loadedMeetingId = meetingId
+            self.serverSize = serverSize
+            teardownPlayer()
+            peaks = []
+            isUnavailable = false
+            failureMessage = nil
+            isLoading = true
+            loadAttempt += 1
+            retryDelay = Self.initialRetryDelay
+            retryTask?.cancel()
+            retryTask = nil
+            await attempt(meetingId: meetingId, using: client)
+            return
+        }
+        // 还是这一条：播放器早就挂好了，重进这一屏什么都不用做。
+        //
+        // 例外是上一次还没下完就离开了这一屏——那时候重试那一路已经停掉（见 `stop`），
+        // 这里要把它接上，不然回来只剩一圈转到天荒地老的「正在下载」。
+        if isLoading, !isAttempting, retryTask == nil {
+            retryDelay = Self.initialRetryDelay
+            await attempt(meetingId: meetingId, using: client)
+        }
+    }
+
+    /// 载入态里那个「重试」：手动催一下。
+    ///
+    /// **不取代自动恢复**——后台那一路照旧在试，网回来自己就好，用户不动手也能好。这一下
+    /// 只是给等急了的人一个出口，顺手让「10 秒」那个计时重新起算，按下去看得见反应。
+    func retry(using client: APIClient) async {
+        guard let meetingId = loadedMeetingId, isLoading else { return }
+        retryTask?.cancel()
+        retryTask = nil
+        retryDelay = Self.initialRetryDelay
+        loadAttempt += 1
+        await attempt(meetingId: meetingId, using: client)
+    }
+
+    /// 试一次：先看本机有没有，没有才去云端下。
+    ///
+    /// 失败**不改变任何界面状态**，只安排下一次自动尝试：没网不是错误，是一个会自己好的
+    /// 状态。`failureMessage` 落进日志，界面上仍然只是「正在下载」。
+    private func attempt(meetingId: String, using client: APIClient) async {
+        isAttempting = true
+        defer { isAttempting = false }
+
+        // 命中判据三件套过了：播本机那份，一个字都不用联网。
+        if let cached = cache.cachedAudio(meetingId: meetingId, serverSize: serverSize) {
+            peaks = MeetingPeaks.decode(cache.peaks(meetingId: meetingId, serverSize: serverSize))
+            // 每次播放开始更新这条的「最后播放时间」，LRU 淘汰按它从早到晚删。
+            cache.markPlayed(meetingId: meetingId)
+            attachPlayer(cached)
+            isLoading = false
+            return
+        }
 
         do {
-            async let audioURL = client.meetingAudioURL(meetingId)
-            async let encodedPeaks = client.meetingPeaks(meetingId)
-            let (url, encoded) = try await (audioURL, encodedPeaks)
+            async let encodedPeaks = peaksFor(meetingId, using: client)
+            async let address = client.meetingAudioURL(meetingId)
+            // 波形先到就先画：下载那几秒里那条真实形状已经能看了，只是压暗着。
+            let encoded = await encodedPeaks
             peaks = MeetingPeaks.decode(encoded)
-            guard let url, let playerURL = URL(string: url) else {
+            guard let url = try await address, let remote = URL(string: url) else {
                 // 地址是 nil 代表录音已经不在服务端了。这不是错误，是一个要说明的状态。
                 isUnavailable = true
+                isLoading = false
                 return
             }
-            attachPlayer(playerURL)
-        } catch let error as APIError {
-            failureMessage = error.message
+            let destination = cache.audioURL(meetingId: meetingId)
+            try await client.downloadMeetingAudio(from: remote, to: destination)
+            cache.store(meetingId: meetingId, size: byteCount(destination), peaks: encoded ?? "")
+            attachPlayer(destination)
+            isLoading = false
         } catch {
-            failureMessage = "读不到这段录音的音频。"
+            let message = (error as? APIError)?.message ?? "读不到这段录音的音频。"
+            failureMessage = message
+            AppLog.recording.warning("meeting audio load failed, retrying: \(message, privacy: .public)")
+            scheduleRetry(meetingId: meetingId, using: client)
         }
+    }
+
+    /// 网回来自愈那一路：失败之后隔一会儿再试，直到下下来、拿到「录音没了」的答复，或者
+    /// 用户看的那条换了为止。
+    ///
+    /// 界面上这段时间仍然只是「正在下载」——它真的还在下，只是这会儿下不动。
+    private func scheduleRetry(meetingId: String, using client: APIClient) {
+        retryTask?.cancel()
+        let delay = retryDelay
+        retryDelay = min(Self.maxRetryDelay, retryDelay * 2)
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self, self.loadedMeetingId == meetingId else { return }
+            await self.attempt(meetingId: meetingId, using: client)
+        }
+    }
+
+    /// 波形拿不到不算这条录音读不到：它是配角，失败了照旧画一条空波形。
+    private func peaksFor(_ meetingId: String, using client: APIClient) async -> String? {
+        do {
+            return try await client.meetingPeaks(meetingId)
+        } catch {
+            return nil
+        }
+    }
+
+    /// 下下来的那份到底是几字节。取不到就退回服务端报的数——命中判据要的就是这两个相等。
+    private func byteCount(_ url: URL) -> Int {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int) ?? serverSize
     }
 
     func togglePlay() {
@@ -100,6 +215,10 @@ final class MeetingPlayback {
     func stop() {
         player?.pause()
         isPlaying = false
+        // 还没下完的那条也就此打住，不在这时候发请求。回来时 `load` 会把它接上，见那里
+        // 的注释。
+        retryTask?.cancel()
+        retryTask = nil
     }
 
     /// 那一条被删掉之后，播放器要跟着消失——留着一个播放一条不存在的音频的界面，比
@@ -107,10 +226,13 @@ final class MeetingPlayback {
     func forget(meetingId: String) {
         guard loadedMeetingId == meetingId else { return }
         loadedMeetingId = nil
+        retryTask?.cancel()
+        retryTask = nil
         teardownPlayer()
         peaks = []
         isUnavailable = false
         failureMessage = nil
+        isLoading = false
     }
 
     private func attachPlayer(_ url: URL) {

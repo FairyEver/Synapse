@@ -49,6 +49,11 @@ final class MeetingStore {
         do {
             meetings = try await client.listMeetings()
             errorMessage = nil
+            // 别的设备上删掉的那几条，本机不该还留着一份能播的副本——「删除」要跨端一致。
+            // 判据在缓存里：只在**返回条数少于上限**时才判，条数正好等于上限说明还有更早的
+            // 没返回，那时候不能把没露面的那些当删掉的。
+            let cache = MeetingAudioCache.shared
+            cache.pruneAgainstList(meetings.map(\.id), limit: MeetingAudioCache.listLimit)
         } catch let error as APIError {
             errorMessage = error.message
         } catch {
@@ -104,6 +109,8 @@ final class MeetingStore {
             // 待半秒，看着像没删掉。
             meetings.removeAll { $0.id == meetingId }
             details[meetingId] = nil
+            // 本机那份音频也跟着消失：「删除」必须真的删干净，不能这台设备删了、那台还能听。
+            MeetingAudioCache.shared.remove(meetingId: meetingId)
             await load(using: client)
             return true
         } catch let error as APIError {
