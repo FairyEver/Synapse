@@ -1820,8 +1820,12 @@ describe("MobileGatewayService", () => {
     const recovered = harness.frames.flatMap((entry) => entry.frame)
     expect(recovered[0].kind).toBe("reset")
     expect(recovered.at(-1)?.from).toBeGreaterThanOrEqual(0)
-    const tail = recovered.filter((frame) => frame.lines.length > 0).at(-1)
-    expect(tail?.lines.at(-1)?.[0]).toContain("line-99")
+    // The snapshot lands newest-first: the frame carrying `reset` is the newest
+    // chunk, and the older ones follow above it, so the recovery is read at the
+    // line the session actually ended on rather than the top of the window.
+    const newest = recovered.find((frame) => frame.lines.length > 0)
+    expect(newest?.kind).toBe("reset")
+    expect(newest?.lines.at(-1)?.[0]).toContain("line-99")
   })
 
   it("anchors gateway indices to the emulator's own so history can be named", async () => {
