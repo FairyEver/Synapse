@@ -142,7 +142,7 @@
 - Quick Input 是独立 System App。Agent 只消费其文本；composer 菜单固定向上展开，选择后追加到当前草稿末尾并保留输入焦点，不直接发送。不得恢复“直接发送”开关或塞回 slash menu。
 - Agent 项目路径与 Git System App 已登记仓库根路径精确匹配时，可在 composer 复用窄类型化 Git IPC；该入口不得经过 Agent 消息、slash command、MCP 或任意 Git 命令，提交仍必须使用仓库绑定的选择令牌。
 - Agent 已配置项目可通过窄类型化 Terminal IPC 以项目目录新建 UI 终端会话，再通过仅含 `sessionId` 的 System App 打开请求定位该会话；虚拟本地对话工作区不提供该入口，也不扩展为 MCP 或 Deep Link。
-- Agent 的每个项目在终端里有一个同名分组（`TerminalGroup.projectId` 指向项目，名字为「项目:」+ 项目名）。这条同步是**单向的一次性对账**：项目列表变化时补齐、改名、删除对应分组，除此之外两边互不干涉。项目分组不得改名或删除（菜单不提供），因为名字与存亡都由项目决定；用户自己建的分组不受同步影响。项目来源的会话落进该项目分组，**没有指明归属的会话只落进用户自己的分组**（`ensureDefaultGroup` 跳过项目分组），不得再按「列表第一个分组」落位。项目分组自带 `settings.defaultCwd` = 项目工作目录（托管知识库取运行目录，由调用方解析并确认存在；用户改过之后不再覆盖）。它不注册 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link，Terminal MCP 工具数量不变；`TerminalGroup.projectId` 只是既有分组记录的字段。
+- Agent 的每个项目在终端里有一个同名分组（`TerminalGroup.projectId` 指向项目，名字为「项目:」+ 项目名）。这条同步是**单向的一次性对账**：项目列表变化时补齐、改名、删除对应分组，除此之外两边互不干涉。项目分组不得改名或删除（菜单不提供），因为名字与存亡都由项目决定；用户自己建的分组不受同步影响。项目来源的会话落进该项目分组，**没有指明归属的会话只落进用户自己的分组**（`ensureDefaultGroup` 跳过项目分组），不得再按「列表第一个分组」落位。项目分组的 `settings.defaultCwd` 与名字一样由项目决定：始终等于项目工作目录（托管知识库取运行目录，由调用方解析；解析不到就清空该槽位回落到全局），分组设置里只读，其余启动设置（shell、环境变量、命令）仍归用户。它不注册 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link，Terminal MCP 工具数量不变；`TerminalGroup.projectId` 只是既有分组记录的字段。
 - Agent 项目文件树拖入对话时只把主进程解析后的选中路径以空格连接并插入草稿当前光标，不创建附件、不立即发送，也不扩展为公开 Capability、MCP 或 Deep Link。
 - 工作区辅助面板属于 Agent 工作区壳，不属于消息组件、全局 App shell 或 `SidebarContentLayout`。宽屏使用会话与辅助面板分栏，窄屏切换为详情视图；面板状态按会话隔离，文件 Diff 只是首个面板描述符。
 - 共享只读 Diff renderer 位于 `desktop/src/components/diff/`，Git 通过模块内 adapter 消费，Agent 不得跨模块导入 Git 内部实现。patch 生成与解析复用 desktop 直接生产依赖 `diff`。

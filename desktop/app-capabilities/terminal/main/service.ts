@@ -711,6 +711,24 @@ export function createTerminalService(deps: {
     return group
   }
 
+  /**
+   * The group settings a project dictates: everything the user set, plus the project's
+   * folder where the working directory goes.
+   *
+   * Without a folder — the caller could not resolve one, or it is not there — the slot
+   * is cleared rather than left holding a path nobody can open, which puts the group
+   * back on the global default.
+   */
+  function withProjectDefaultCwd(
+    current: TerminalGroupSettings | undefined,
+    projectCwd: string | undefined,
+  ): TerminalGroupSettings | undefined {
+    const next: TerminalGroupSettings = { ...current }
+    if (projectCwd) next.defaultCwd = projectCwd
+    else delete next.defaultCwd
+    return Object.keys(next).length ? next : undefined
+  }
+
   function findProjectGroup(projectId: string): TerminalGroup | undefined {
     return [...groups.values()]
       .filter((group) => group.projectId === projectId)
@@ -724,30 +742,30 @@ export function createTerminalService(deps: {
    * list, and a launch that names a project — so a project group is never created twice
    * and never named by two different rules. In memory only; the caller flushes.
    *
-   * The project's folder comes with it: a group that belongs to a project opens its
-   * terminals in that project unless the user has said otherwise. Only an empty slot is
-   * filled — a working directory somebody chose is theirs, and renaming a project is
-   * not a reason to move it.
+   * The project's folder comes with it, and stays the project's: a project group always
+   * opens its terminals in the folder the project points at, the same way its name is
+   * always the project's name. The working directory is therefore not the user's to
+   * set here — it moves when the project moves, and setting it in the app is what moves
+   * the project.
    */
   function upsertProjectGroup(source: TerminalProjectGroupSource): TerminalGroup {
     const name = `${TERMINAL_PROJECT_GROUP_NAME_PREFIX}${source.name}`.slice(0, TERMINAL_GROUP_NAME_MAX_LENGTH)
     const existing = findProjectGroup(source.projectId)
     const projectCwd = source.path ? path.resolve(source.path) : undefined
-    const settings = existing?.settings?.defaultCwd === undefined && projectCwd
-      ? { ...existing?.settings, defaultCwd: projectCwd }
-      : existing?.settings
+    const settings = withProjectDefaultCwd(existing?.settings, projectCwd)
     if (existing) {
       const renamed = existing.name !== name
-      const adopted = settings !== existing.settings
-      if (!renamed && !adopted) return existing
+      const moved = settings?.defaultCwd !== existing.settings?.defaultCwd
+      if (!renamed && !moved) return existing
       const updated = {
         ...existing,
         name,
         ...(settings ? { settings } : {}),
         updatedAt: now(),
         groupRevision: existing.groupRevision + 1,
-        launchRevision: existing.launchRevision + (adopted ? 1 : 0),
+        launchRevision: existing.launchRevision + (moved ? 1 : 0),
       }
+      if (!settings) delete updated.settings
       groups.set(updated.id, updated)
       bumpDomain(renamed ? "group.renamed" : "group.updated", updated.id, updated.groupRevision)
       return updated

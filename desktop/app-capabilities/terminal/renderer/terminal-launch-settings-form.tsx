@@ -16,6 +16,7 @@ export function TerminalLaunchSettingsForm({
   inheritedValue,
   inheritedLabel,
   choosingDirectory,
+  defaultCwdLocked = false,
   onChooseDirectory,
   onRevealEnvironmentValue,
   onCopyEnvironmentValue,
@@ -29,6 +30,11 @@ export function TerminalLaunchSettingsForm({
   readonly inheritedValue?: SynapseTerminalLaunchLayer
   readonly inheritedLabel: string
   readonly choosingDirectory?: boolean
+  /**
+   * The working directory is not this form's to set — on a project group it is the
+   * project's, and it moves when the project moves.
+   */
+  readonly defaultCwdLocked?: boolean
   readonly onChooseDirectory: () => void
   readonly onRevealEnvironmentValue: (key: string) => Promise<string | null>
   readonly onCopyEnvironmentValue: (key: string, value: string) => Promise<void>
@@ -67,14 +73,20 @@ export function TerminalLaunchSettingsForm({
               id="terminal-launch-cwd"
               aria-label="工作目录"
               value={value.defaultCwd ?? ""}
+              disabled={defaultCwdLocked}
               placeholder={inheritedValue?.defaultCwd ? `继承：${inheritedValue.defaultCwd}` : "继承系统默认"}
               onChange={(event) => update("defaultCwd", event.target.value || undefined)}
             />
-            <Button type="button" variant="outline" disabled={choosingDirectory} onClick={onChooseDirectory}>
-              <FolderOpen data-icon="inline-start" />
-              选择
-            </Button>
+            {defaultCwdLocked ? null : (
+              <Button type="button" variant="outline" disabled={choosingDirectory} onClick={onChooseDirectory}>
+                <FolderOpen data-icon="inline-start" />
+                选择
+              </Button>
+            )}
           </div>
+          {defaultCwdLocked ? (
+            <FieldDescription>跟随项目目录，要改请在设置里改项目路径。</FieldDescription>
+          ) : null}
         </Field>
       </TabsContent>
       <TabsContent value="environment" className="pt-3">

@@ -2539,6 +2539,22 @@ describe("TerminalModule", () => {
     expect(nameInput?.value).toBe("项目:Synapse")
     expect(nameInput?.disabled).toBe(true)
     expect(document.body.textContent).toContain("名称跟随项目")
+
+    // The working directory is the project's too, for the same reason.
+    const cwdInput = document.body.querySelector<HTMLInputElement>('input[aria-label="工作目录"]')
+    expect(cwdInput?.disabled).toBe(true)
+    expect(document.body.textContent).toContain("跟随项目目录")
+  })
+
+  it("leaves a group the user made fully theirs to set", async () => {
+    bridgeState.groups = [createGroup({ id: "group-mine", name: "部署" })]
+
+    await renderModule()
+    await clickGroupMenu("部署")
+    await clickMenuItem("设置")
+
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="分组名称"]')?.disabled).toBe(false)
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="工作目录"]')?.disabled).toBe(false)
   })
 
   it("adds edits and deletes commands from command management", async () => {

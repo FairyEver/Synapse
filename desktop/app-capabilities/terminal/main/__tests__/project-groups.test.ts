@@ -108,10 +108,10 @@ describe("terminal project groups", () => {
 
   /**
    * The working directory is what makes a project group worth having: open a terminal
-   * in it and it is already standing in the project. Only an empty slot is filled —
-   * once the user has chosen one, the project stops dictating it.
+   * in it and it is already standing in the project. It is the project's, like the
+   * name — so it follows the project rather than being set here.
    */
-  it("starts a project group in the project's own folder, until the user says otherwise", async () => {
+  it("starts a project group in the project's folder, and moves it when the project moves", async () => {
     const harness = await startedHarness()
 
     await harness.service.syncProjectGroups([harness.alpha])
@@ -121,15 +121,19 @@ describe("terminal project groups", () => {
     await harness.service.updateGroupSettings({
       groupId: group.id,
       name: group.name,
-      settings: { defaultCwd: os.tmpdir() },
+      settings: { defaultCwd: os.tmpdir(), environment: { KEEP: "me" } },
     })
     await harness.service.syncProjectGroups([{ ...harness.alpha, path: harness.beta.path }])
 
-    expect(projectGroupFor(harness.service, "project-alpha")?.settings?.defaultCwd).toBe(os.tmpdir())
+    const synced = projectGroupFor(harness.service, "project-alpha")
+    expect(synced?.settings?.defaultCwd).toBe(harness.beta.path)
+    // Everything else the group carries is still the user's.
+    expect(synced?.settings?.environment).toEqual({ KEEP: "me" })
   })
 
-  it("leaves a project group without a working directory when the caller has no folder for it", async () => {
+  it("drops the working directory when the caller has no folder for the project", async () => {
     const harness = await startedHarness()
+    await harness.service.syncProjectGroups([harness.alpha])
 
     await harness.service.syncProjectGroups([PROJECT_ALPHA])
 

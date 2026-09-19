@@ -1952,6 +1952,7 @@ export function TerminalModule({
               inheritedValue={globalLaunchSettings?.settings}
               inheritedLabel="全局"
               choosingDirectory={groupSettingsChoosingDirectory}
+              defaultCwdLocked={groupSettingsTarget?.projectId !== undefined}
               onChooseDirectory={() => { void chooseGroupSettingsDefaultCwd() }}
               onRevealEnvironmentValue={(key) => groupSettingsTarget
                 ? terminalBridge.launch.revealEnvironmentValue({ scope: "group", groupId: groupSettingsTarget.id, key })
