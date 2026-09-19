@@ -121,6 +121,15 @@ final class TerminalFlowUITests: XCTestCase {
         // Answering the prompt is a key press. Return is the computer's own built-in,
         // mirrored onto this bar — which is why it is here at all, and why it is
         // addressed by the computer's id for it rather than by a label this phone chose.
+        //
+        // 先收键盘：那一条栏在打字的时候是让位的（`toolbarStandDown`）—— 手在系统键盘上
+        // 的时候，眼前那一行指令按不到，也帮不上忙。点一下画布把它叫回来，这也是它
+        // 一直在的那条路。
+        terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        XCTAssertTrue(
+            waitForHittable(app.buttons["toolbar-enter"], timeout: 10),
+            "收起键盘之后，工具栏没有回来"
+        )
         app.buttons["toolbar-enter"].tap()
         XCTAssertTrue(
             waitForLabel(containing: "built in 4.21s", in: app, timeout: 15),

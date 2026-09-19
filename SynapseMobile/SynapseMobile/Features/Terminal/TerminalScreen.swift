@@ -15,6 +15,8 @@ struct TerminalScreen: View {
     /// 竖屏的 iPhone 与 iPad 都是 `.regular`，所以 iPad 一个字都不用改 —— 那条
     /// 「iPad 不专门适配」的口径还立着。
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// `verticalSizeClass` 的镜像，见 `isCompactHeight`。
+    @State private var compactHeight = false
 
     let sessionId: String
     @State private var draft = ""
@@ -255,7 +257,13 @@ struct TerminalScreen: View {
     // MARK: - 三条栏的收放
 
     /// 屏幕是矮的那一种。竖屏 iPhone 与 iPad 都是 `.regular`，所以这一条只对横屏成立。
-    private var isCompactHeight: Bool { verticalSizeClass == .compact }
+    ///
+    /// **读的是镜像（`compactHeight`），不是环境本身。** 环境值在**定时任务里读不出当下**：
+    /// `armChromeIdle` 起的那班岗捕获的是"上表那一刻"的视图值，而 `@Environment` 在捕获的
+    /// 副本里是一份快照（`@State` 不是 —— 它读的是共享的存储）。横屏那一班岗恰好在转屏
+    /// 前后上表，快照里还是竖屏，到点一读，结论就成了「竖屏不收栏」—— 表现是**横屏永远
+    /// 不收栏**。镜像在环境变化时跟着更新，谁读它读到的都是当下。
+    private var isCompactHeight: Bool { compactHeight }
 
     /// 键盘面板把工具栏和输入栏顶掉了。
     ///
@@ -269,6 +277,23 @@ struct TerminalScreen: View {
     /// 开在两条栏下面，退化成改造前那副样子 —— 难看，但不会丢一段录音。
     private var barsStandDown: Bool {
         keyboardPanelPresented && !voicePresentation.panelVisible
+    }
+
+    /// 工具栏（指令条那一行）此刻该不该在屏幕上。
+    ///
+    /// 它是一条**备用**的路：想按什么指令、想去拿自绘键盘，都从这里走。而下面三种时候
+    /// 它帮不上忙，只是占着一行 —— 后面两处是产品负责人 2026-09-20 在真机上点的：
+    ///
+    /// - **正在打字**：手在系统键盘上，眼前是输入框。要按指令先得把键盘收掉，
+    ///   而收掉之后它自己就回来了。
+    /// - **正在说话**：同一格地方要留给录音面板 —— 它挂在输入区之上，工具栏一走，
+    ///   它就往下落到那一行上，而不是把终端压得更矮。
+    /// - **键盘面板开着**：见 `barsStandDown`，那一种连输入栏一起让。
+    ///
+    /// 横屏是例外：那一条栏把顶栏并了进去（返回、标题、⋯ 都在里面），收掉它收掉的
+    /// 是出口，不是一行指令。所以这一条只管竖屏的自绘工具栏。
+    private var toolbarStandDown: Bool {
+        keyboardPanelPresented || inputFocused || voicePresentation.panelVisible
     }
 
     /// 这一刻三条栏可不可以收（判定本身在 `TerminalChromeConditions` 里，单测逐条走完）。
@@ -285,6 +310,7 @@ struct TerminalScreen: View {
                 || showingPhotoPicker || showingDocumentPicker || showingCamera
                 || shortcutPanelPresented,
             isPhotoBubbleUp: recentPhoto != nil,
+            isPortrait: !isCompactHeight,
             isSettling: chromeIsSettling,
             isAssistiveTechOn: UIAccessibility.isVoiceOverRunning
                 || UIAccessibility.isSwitchControlRunning
@@ -301,14 +327,21 @@ struct TerminalScreen: View {
     }
 
     /// 让三条栏在闲置到点之后收起来。
+    ///
+    /// **只有横屏会自己收**（2026-09-20 产品负责人定的）。竖屏的栏按屏幕剩下的地方算
+    /// 很便宜 —— 顶栏加输入栏在竖向的屏上是一行多一点 —— 而它们自己走掉这件事在那里
+    /// 只被读成「界面不见了」；要收就让人点名收，右上角菜单里的「全屏」。横屏不同：
+    /// 那里两条栏压掉的分量是竖屏的两倍，而点一下画布就能把它们叫回来。
+    ///
+    /// 竖屏那一条判定不在这个守卫上，在 `TerminalChromeConditions.isPortrait` 里 ——
+    /// 那一条要读在**到点那一下**，不能读在上表这一刻（转屏前后 `verticalSizeClass`
+    /// 会飘，读早了这一班岗就白排）。
     private func armChromeIdle() {
         chromeIdleTask?.cancel()
+        chromeIdleTask = nil
         // 已经收着了就没什么可等的。留着这一步，是因为**放下栏之后不该再起一班岗**：
         // 到点那次进去只会发现已经收着，白白多跑一轮。
-        guard !chromeHidden else {
-            chromeIdleTask = nil
-            return
-        }
+        guard !chromeHidden else { return }
         chromeIdleTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(AppConfiguration.terminalChromeIdleSeconds))
             guard !Task.isCancelled else { return }
@@ -510,157 +543,7 @@ struct TerminalScreen: View {
     var body: some View {
         @Bindable var model = model
 
-        VStack(spacing: 0) {
-            // 三条栏一起收放。判据见 `chromeConditions`：正在打字、正在说话、面板开着
-            // 的时候它们走不了，所以"栏收了而录音浮层还在"这种画面构造不出来。
-            if !chromeHidden {
-                topChrome
-            }
-            TerminalTextView(
-                store: store,
-                fontSize: fontSize,
-                displayMode: displayMode,
-                desktopGrid: desktopGrid,
-                revision: store.renderRevision,
-                onRequestHistory: { model.requestHistory(sessionId) },
-                // 点画布做两件事，顺序无关：收键盘，和把栏叫回来。栏收着的时候这两件
-                // 事不可能同时有对象（键盘开着栏就收不了），所以不会互相打架。
-                onTap: {
-                    revealChrome()
-                    dismissKeyboards()
-                },
-                // 拖着读历史也算操作。少了这一条，读一屏长输出读一半，栏会从手底下
-                // 收走 —— 而变化的不只是栏：画布变高，电脑那边的终端跟着重排，
-                // 正在读的这一屏就当着面跳了一下。
-                onUserScroll: noteChromeActivity
-            )
-            // 横屏左右各有一条安全区（灵动岛那一侧）。栏的底色铺出去，画布的底色也要
-            // 铺出去 —— 否则终端两边镶着两条系统色的边，而它们是同一块屏幕。
-            //
-            // 铺的是底色不是文字：文字照旧留在安全区里。HIG 的做法，而且灵动岛真的会
-            // 盖住最边上那两三列。
-            .background(Theme.terminalBackground.ignoresSafeArea(edges: .horizontal))
-            .onAppear { syncDisplayMode() }
-            .onChange(of: displayMode) { syncDisplayMode() }
-            .onChange(of: session?.cols) { syncDisplayMode() }
-            .onChange(of: session?.rows) { syncDisplayMode() }
-            // Both are measured by the view, so they are what the desktop is asked
-            // to adopt. Rotation and a dismissed keyboard both land here.
-            .onChange(of: store.columns) { reportGridToDesktop() }
-            .onChange(of: store.visibleRows) { reportGridToDesktop() }
-            .onChange(of: inputFocused) {
-                // Asking for the system keyboard is asking for the other one to go:
-                // only one of the two can be up, and this is the only place either is
-                // asked for by name. Tapping the field, and the toolbar buttons that
-                // type into it, all arrive here.
-                if inputFocused { keyboardPanelPresented = false }
-                reportGridToDesktop()
-                refreshPasteboardImage()
-            }
-            // Anchored to the canvas rather than to the screen, so the queue clears both
-            // the back button above it and the input bar below it. An overlay rather than
-            // an inset for a reason particular to this screen: a reserved strip would
-            // change `visibleRows`, which is reported to the desktop as a grid size, and a
-            // one-second notice would resize the PTY twice.
-            .noticeOverlay(model)
-            TerminalMessageList(
-                messages: terminalMessages,
-                onDismiss: { model.dismissTerminalMessage($0) }
-            )
-            TerminalRelayStrip(
-                attachments: relayAttachments,
-                onUndo: { model.undoTypedPaths($0) },
-                onDismiss: { model.dismissRelay($0) },
-                onRetry: { model.retryRelay($0) }
-            )
-            // One bar, two modes: typing, or talking. Voice is a mode of this bar rather
-            // than a button on it, so the four slots hold still and only what the field
-            // *is* changes. `accessoryBar` above stays live throughout — dictating and
-            // pressing a command are not mutually exclusive.
-            //
-            // 工具栏与输入栏合成一组，语音浮层就挂在这一组上：它浮在**整条输入区之上**，
-            // 也就是终端画面上。挂在这一组而不是挂输入栏，是因为按住说话时工具栏要保持
-            // 可用 —— 浮层压住那一排按钮，正是产品负责人指出过的问题。
-            if !chromeHidden && !barsStandDown {
-                VStack(spacing: 0) {
-                    // 横屏时工具栏已经并进上面那一行了，这里只剩输入栏。
-                    if !isCompactHeight { accessoryBar }
-                    inputBar
-                }
-                .overlay(alignment: .top) {
-                    // 位置靠一个**零高度的框**而不是 `alignmentGuide` 拿到：框的顶边就是
-                    // 这一组的顶边（`overlay` 的 `.top`），框自己 0 高，里面的浮层按
-                    // `.bottom` 对齐 —— 于是它整个挂在框上方。`alignmentGuide(.top)`
-                    // 在这里不生效：浮层会落到下方，一路顶着屏幕底边跑出去。
-                    //
-                    // 零高度还保证它**不参与布局**：进了 `VStack` 就会改变终端的可视高度，
-                    // 进而让 `reportGridToDesktop` 往电脑上报一个错的格子数。
-                    // 外面这层 `ZStack` 只是为了给 `animation` 找一个**常驻**的落脚点：
-                    // 挂在条件视图自己身上是来不及的 —— 它被建出来的那一帧，动画还没人
-                    // 去开。它跟原来那个 `.frame` 一样参与不了布局，面板照旧挂在框上方。
-                    ZStack(alignment: .bottom) {
-                        if voicePresentation.panelVisible {
-                            TerminalVoiceDock(
-                                presentation: voicePresentation,
-                                panelRect: $voicePanelRect,
-                                onCancelLocked: cancelLockedVoice
-                            )
-                            .fixedSize(horizontal: false, vertical: true)
-                            // 从下沿弹出来：小一点、淡一点起步，过冲一下就落定。缩放的支点
-                            // 放在下沿，所以它是从工具栏那一条线上长出来的，不是从自己中间
-                            // 涨开的。
-                            //
-                            // 这一下能留着，是因为起麦克风已经不在主线程上了（见
-                            // `AudioCapture.startOffMainThread`）：逐帧推进的动画最怕
-                            // 主线程被占住，而这一下正好发生在按住的那一瞬间。
-                            .transition(
-                                reduceMotion
-                                    ? .opacity
-                                    : .scale(scale: 0.9, anchor: .bottom).combined(with: .opacity)
-                            )
-                        }
-
-                        // 最新那张图。和录音浮层共用这一格，理由相同：它也要浮在输入区
-                        // 之上而不占任何高度（占一行就会改掉报给电脑的格子数）。录音时
-                        // 让位 —— 那块面板铺满整条，底下压着一张缩略图，点下去就发走了。
-                        if let recentPhoto, !voicePresentation.panelVisible {
-                            recentPhotoBubble(recentPhoto)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                                .padding(.trailing, 12)
-                                .padding(.bottom, 8)
-                                .transition(
-                                    reduceMotion
-                                        ? .opacity
-                                        : .scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity)
-                                )
-                        }
-                    }
-                    .frame(height: 0, alignment: .bottom)
-                    // 干脆的一下：过冲只有一点点，落定得快。再弹就是玩具了。
-                    .animation(
-                        reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
-                        value: voicePresentation.panelVisible
-                    )
-                    .animation(
-                        reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
-                        value: recentPhoto?.id
-                    )
-                }
-                // 坐标系开在**最外层**，把输入栏和浮层一起圈进来。
-                //
-                // 挂在那两格的 `VStack` 上是不够的：`overlay` 不是它的子视图，而是套在它
-                // 外面的另一层，浮层里的 `frame(in: .named(...))` 会量到零矩形 —— 而判定里
-                // 「零矩形永不命中」那条正好把零矩形挡掉，于是怎么滑都是「松手发送」。
-                .coordinateSpace(.named(Self.voiceSpace))
-            }
-            // Last, so that everything above it keeps its place and the terminal is
-            // what gives up the room — the same bargain the system keyboard makes.
-            //
-            // 它在收放的判断之外，因为它根本不可能和"栏收着"同时成立：闲置计时器收不走
-            // 面板开着时的栏（`isKeyboardPanelUp` 那条禁制），所以 `chromeHidden` 在
-            // `keyboardPanelPresented` 为真时一定是假。
-            keyboardPanel
-        }
+        terminalScreen
         // The bottom safe area is the input bar's surface, not the canvas's: it is
         // what shows through the keyboard's rounded top corners, and what shows under
         // the bar once the keyboard is down. Filled with the canvas colour it read as
@@ -700,7 +583,10 @@ struct TerminalScreen: View {
             // 摆在前两件之后、也不等任何异步：它只读已经给着的权限和当下的连接，
             // 所以进来那一帧就已经是语音态，不会先画一下键盘态再翻过去。
             restoreInputMode()
-            // 进来那一屏是带栏的：先让人看见这一页是什么，再让栏退场。
+            // 方向先抄进镜像：`onChange(of:)` 要等下一次变化才轮到它，而这一帧就要用。
+            compactHeight = verticalSizeClass == .compact
+            // 横屏：进来那一屏是带栏的，先让人看见这一页是什么，再让栏退场。
+            // 竖屏这一下什么都不做 —— 那里的栏不退场，见 `armChromeIdle`。
             armChromeIdle()
         }
         // 这一页去掉安全区之后有多高。量它只为横屏那条限高（键盘面板），不参与任何
@@ -716,6 +602,23 @@ struct TerminalScreen: View {
         // 关掉一块面板、收起键盘 —— 它们各自都不产生触摸事件，却都是"这一摊子完了"。
         .onChange(of: chromeConditions) { _, conditions in
             if conditions.mayAutoHide { armChromeIdle() }
+        }
+        // 转屏。两件事都在这一个入口里做完：先把方向抄进那个镜像（`isCompactHeight`），
+        // 再按新方向收拾收栏那一摊。
+        //
+        // - **转进横屏：上表。** 横屏会自己收栏，而这一页进来的时候多半还是竖屏，所以不
+        //   在这里补一次的话，转过去之后栏会一直挂着，直到用户碰点什么才想起来要收 ——
+        //   而横屏恰恰是最该收的那个方向。
+        // - **转回竖屏：把带过来的"收着"清掉。** 转屏不是收栏的一条路，可横屏那条路会
+        //   把状态带过界：人举着手机转过来，面对的会是一块没有栏也没有出口的屏幕，而
+        //   竖屏那一条恰恰是「栏一直在」。
+        .onChange(of: verticalSizeClass) { _, sizeClass in
+            compactHeight = sizeClass == .compact
+            if isCompactHeight {
+                armChromeIdle()
+            } else if chromeHidden {
+                setChrome(hidden: false)
+            }
         }
         // Coming back to the front is how an image copied in another app — or on the
         // computer the user is sitting at — reaches this device's pasteboard while
@@ -865,6 +768,164 @@ struct TerminalScreen: View {
                 onCancelled: { showingCamera = false }
             )
             .ignoresSafeArea()
+        }
+    }
+
+    /// 这一页的本体：三条栏、画布、键盘槽位。
+    ///
+    /// 单独抽成一个属性，不是因为它被用了两次，是为了**让编译器喘口气**：它和 `body`
+    /// 上那条长修饰链拼在同一个表达式里做类型检查，会超时（再挂一条 `.onChange` 就够了）。
+    private var terminalScreen: some View {
+        VStack(spacing: 0) {
+            // 三条栏一起收放。判据见 `chromeConditions`：正在打字、正在说话、面板开着
+            // 的时候它们走不了，所以"栏收了而录音浮层还在"这种画面构造不出来。
+            if !chromeHidden {
+                topChrome
+            }
+            TerminalTextView(
+                store: store,
+                fontSize: fontSize,
+                displayMode: displayMode,
+                desktopGrid: desktopGrid,
+                revision: store.renderRevision,
+                onRequestHistory: { model.requestHistory(sessionId) },
+                // 点画布做两件事，顺序无关：收键盘，和把栏叫回来。栏收着的时候这两件
+                // 事不可能同时有对象（键盘开着栏就收不了），所以不会互相打架。
+                onTap: {
+                    revealChrome()
+                    dismissKeyboards()
+                },
+                // 拖着读历史也算操作。少了这一条，读一屏长输出读一半，栏会从手底下
+                // 收走 —— 而变化的不只是栏：画布变高，电脑那边的终端跟着重排，
+                // 正在读的这一屏就当着面跳了一下。
+                onUserScroll: noteChromeActivity
+            )
+            // 横屏左右各有一条安全区（灵动岛那一侧）。栏的底色铺出去，画布的底色也要
+            // 铺出去 —— 否则终端两边镶着两条系统色的边，而它们是同一块屏幕。
+            //
+            // 铺的是底色不是文字：文字照旧留在安全区里。HIG 的做法，而且灵动岛真的会
+            // 盖住最边上那两三列。
+            .background(Theme.terminalBackground.ignoresSafeArea(edges: .horizontal))
+            .onAppear { syncDisplayMode() }
+            .onChange(of: displayMode) { syncDisplayMode() }
+            .onChange(of: session?.cols) { syncDisplayMode() }
+            .onChange(of: session?.rows) { syncDisplayMode() }
+            // Both are measured by the view, so they are what the desktop is asked
+            // to adopt. Rotation and a dismissed keyboard both land here.
+            .onChange(of: store.columns) { reportGridToDesktop() }
+            .onChange(of: store.visibleRows) { reportGridToDesktop() }
+            .onChange(of: inputFocused) {
+                // Asking for the system keyboard is asking for the other one to go:
+                // only one of the two can be up, and this is the only place either is
+                // asked for by name. Tapping the field, and the toolbar buttons that
+                // type into it, all arrive here.
+                if inputFocused { keyboardPanelPresented = false }
+                reportGridToDesktop()
+                refreshPasteboardImage()
+            }
+            // Anchored to the canvas rather than to the screen, so the queue clears both
+            // the back button above it and the input bar below it. An overlay rather than
+            // an inset for a reason particular to this screen: a reserved strip would
+            // change `visibleRows`, which is reported to the desktop as a grid size, and a
+            // one-second notice would resize the PTY twice.
+            .noticeOverlay(model)
+            TerminalMessageList(
+                messages: terminalMessages,
+                onDismiss: { model.dismissTerminalMessage($0) }
+            )
+            TerminalRelayStrip(
+                attachments: relayAttachments,
+                onUndo: { model.undoTypedPaths($0) },
+                onDismiss: { model.dismissRelay($0) },
+                onRetry: { model.retryRelay($0) }
+            )
+            // One bar, two modes: typing, or talking. Voice is a mode of this bar rather
+            // than a button on it, so the four slots hold still and only what the field
+            // *is* changes. `accessoryBar` above stays live throughout — dictating and
+            // pressing a command are not mutually exclusive.
+            //
+            // 工具栏与输入栏合成一组，语音浮层就挂在这一组上：它浮在**整条输入区之上**，
+            // 也就是终端画面上。挂在这一组而不是挂输入栏，是因为按住说话时工具栏要保持
+            // 可用 —— 浮层压住那一排按钮，正是产品负责人指出过的问题。
+            if !chromeHidden && !barsStandDown {
+                VStack(spacing: 0) {
+                    // 横屏时工具栏已经并进上面那一行了，这里只剩输入栏。
+                    if !isCompactHeight && !toolbarStandDown { accessoryBar }
+                    inputBar
+                }
+                .overlay(alignment: .top) {
+                    // 位置靠一个**零高度的框**而不是 `alignmentGuide` 拿到：框的顶边就是
+                    // 这一组的顶边（`overlay` 的 `.top`），框自己 0 高，里面的浮层按
+                    // `.bottom` 对齐 —— 于是它整个挂在框上方。`alignmentGuide(.top)`
+                    // 在这里不生效：浮层会落到下方，一路顶着屏幕底边跑出去。
+                    //
+                    // 零高度还保证它**不参与布局**：进了 `VStack` 就会改变终端的可视高度，
+                    // 进而让 `reportGridToDesktop` 往电脑上报一个错的格子数。
+                    // 外面这层 `ZStack` 只是为了给 `animation` 找一个**常驻**的落脚点：
+                    // 挂在条件视图自己身上是来不及的 —— 它被建出来的那一帧，动画还没人
+                    // 去开。它跟原来那个 `.frame` 一样参与不了布局，面板照旧挂在框上方。
+                    ZStack(alignment: .bottom) {
+                        if voicePresentation.panelVisible {
+                            TerminalVoiceDock(
+                                presentation: voicePresentation,
+                                panelRect: $voicePanelRect,
+                                onCancelLocked: cancelLockedVoice
+                            )
+                            .fixedSize(horizontal: false, vertical: true)
+                            // 从下沿弹出来：小一点、淡一点起步，过冲一下就落定。缩放的支点
+                            // 放在下沿，所以它是从工具栏那一条线上长出来的，不是从自己中间
+                            // 涨开的。
+                            //
+                            // 这一下能留着，是因为起麦克风已经不在主线程上了（见
+                            // `AudioCapture.startOffMainThread`）：逐帧推进的动画最怕
+                            // 主线程被占住，而这一下正好发生在按住的那一瞬间。
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .scale(scale: 0.9, anchor: .bottom).combined(with: .opacity)
+                            )
+                        }
+
+                        // 最新那张图。和录音浮层共用这一格，理由相同：它也要浮在输入区
+                        // 之上而不占任何高度（占一行就会改掉报给电脑的格子数）。录音时
+                        // 让位 —— 那块面板铺满整条，底下压着一张缩略图，点下去就发走了。
+                        if let recentPhoto, !voicePresentation.panelVisible {
+                            recentPhotoBubble(recentPhoto)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .padding(.trailing, 12)
+                                .padding(.bottom, 8)
+                                .transition(
+                                    reduceMotion
+                                        ? .opacity
+                                        : .scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity)
+                                )
+                        }
+                    }
+                    .frame(height: 0, alignment: .bottom)
+                    // 干脆的一下：过冲只有一点点，落定得快。再弹就是玩具了。
+                    .animation(
+                        reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
+                        value: voicePresentation.panelVisible
+                    )
+                    .animation(
+                        reduceMotion ? nil : .snappy(duration: 0.3, extraBounce: 0.1),
+                        value: recentPhoto?.id
+                    )
+                }
+                // 坐标系开在**最外层**，把输入栏和浮层一起圈进来。
+                //
+                // 挂在那两格的 `VStack` 上是不够的：`overlay` 不是它的子视图，而是套在它
+                // 外面的另一层，浮层里的 `frame(in: .named(...))` 会量到零矩形 —— 而判定里
+                // 「零矩形永不命中」那条正好把零矩形挡掉，于是怎么滑都是「松手发送」。
+                .coordinateSpace(.named(Self.voiceSpace))
+            }
+            // Last, so that everything above it keeps its place and the terminal is
+            // what gives up the room — the same bargain the system keyboard makes.
+            //
+            // 它在收放的判断之外 —— 面板不是被收放的那三条栏之一。有一个状态是两条规则
+            // 的交点：面板开着的时候点菜单里的「全屏」（那颗禁制挡的是计时器，挡不住人
+            // 点名）。那副样子是终端整屏、下面一块键盘，两边都还在，没有谁缺了谁。
+            keyboardPanel
         }
     }
 
@@ -1041,12 +1102,23 @@ struct TerminalScreen: View {
                     Label("本会话显示密度", systemImage: "textformat.size")
                 }
             }
+            // 全屏。竖屏收栏只有这一条路（三条栏在那里不自己走，见 `armChromeIdle`），
+            // 横屏也有 —— 两个方向都能把栏收起来，所以两处都该有这颗开关。
+            //
+            // 不做成「退出全屏」：菜单在顶栏上，而全屏的顶栏是没有的，所以这一行永远
+            // 只可能被读到一个方向。收起来之后要回来就点一下画布，这条手势本来就在。
+            Button {
+                Haptics.select()
+                setChrome(hidden: true)
+            } label: {
+                Text("全屏")
+            }
             Button {
                 noteChromeActivity()
                 showingRename = true
             } label: {
-                // 菜单里三行操作不带图标：上面那两组选项本来就只画文字，只有
-                // 这三行各多一个图标，摆在一起是两种样子。选中仍然由系统在对
+                // 菜单里这几行操作不带图标：上面那两组选项本来就只画文字，只有
+                // 这几行各多一个图标，摆在一起是两种样子。选中仍然由系统在对
                 // 勾那一列画出来，不靠图标区分。
                 Text("重命名")
             }

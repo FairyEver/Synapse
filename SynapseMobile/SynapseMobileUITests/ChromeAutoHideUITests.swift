@@ -1,14 +1,19 @@
 import XCTest
 
-/// 三条栏的自动收放：闲置到点收起来、点一下画布回来、手上有事的时候不收。
+/// 三条栏的收放：闲置到点收起来、点一下画布回来、手上有事的时候不收。
 ///
 /// 别的 UI 用例都把闲置时长顶到一小时（它们要的是"栏一直在"），所以那套用例**证明不了**
 /// 三秒这件事。这个文件反过来，让收放真的发生。
 ///
-/// **每碰一颗栏上的按钮之前都要先 `revealBars`。** 这不是绕路：这一页进来之后不做任何
-/// 事，三条栏自己就会走 —— 用例等终端画出来、等登录过去的那几秒，正好就是"闲置"。少了
-/// 那一下点击，失败会读成「输入栏上没有切换键」，而真实原因是用例自己在等的时候把它们
-/// 等走了。
+/// **而"自己收"只发生在横屏**（2026-09-20 产品负责人定的）：竖屏的栏一直在，收栏靠右上角
+/// 菜单里的「全屏」。所以讲计时的两条用例都先转过去，竖屏那一条讲的是相反的事 —— 等过去
+/// 什么都不该发生，以及那颗菜单项真的收得掉。
+///
+/// **每碰一颗栏上的按钮之前都要先 `revealBars`。** 这不是绕路：横屏那一页进来之后不做
+/// 任何事，三条栏自己就会走 —— 用例等终端画出来、等登录过去的那几秒，正好就是"闲置"。
+/// 少了那一下点击，失败会读成「输入栏上没有切换键」，而真实原因是用例自己在等的时候把
+/// 它们等走了。（竖屏那一页没有这回事，但 `revealBars` 照旧是"确认栏在、并点一下画布"
+/// 那条现成的写法。）
 ///
 /// 凭据从环境里来，测试文件不带密钥：
 ///
@@ -38,9 +43,14 @@ final class ChromeAutoHideUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// 闲置到点，三条栏自己让开；点一下画布，它们回来并且能接着用。
+    /// 横屏：闲置到点，三条栏自己让开；点一下画布，它们回来并且能接着用。
+    ///
+    /// 竖屏那一条见 `testPortraitKeepsTheBarsUntilTheMenuSaysFullScreen` —— 那边讲的是
+    /// 同一件事的反面：等过去什么都不发生。
     func testTheBarsTakeThemselvesAwayAndComeBackOnATap() throws {
         let app = openTerminal()
+        addTeardownBlock { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .landscapeLeft
         let toggle = app.buttons["voice-mode-toggle"]
         let keyboardKey = app.buttons["toolbar-keyboard"]
         let more = app.buttons["更多"]
@@ -72,14 +82,18 @@ final class ChromeAutoHideUITests: XCTestCase {
         XCTAssertFalse(toggle.exists, "叫回来之后不再计时了")
     }
 
-    /// 正在录的时候不收。
+    /// 横屏：正在录的时候不收。
     ///
     /// 走的「右滑固定」那条路而不是按住不放：手指离开屏幕之后**录音还在继续**，
     /// 而这一条比按住那几秒更严格 —— 固定态可以一直持续下去。两种态共用
     /// `isVoiceBusy` 这一个条件，而按住那一条的判定本身在 `TerminalChromeTests` 里
     /// 被逐条走完了。
+    ///
+    /// 横屏才问得出来：竖屏的计时器根本不排班，等多久都是绿的。
     func testARecordingInProgressKeepsTheBars() throws {
         let app = openTerminal()
+        addTeardownBlock { XCUIDevice.shared.orientation = .portrait }
+        XCUIDevice.shared.orientation = .landscapeLeft
         enterVoiceMode(app)
 
         let hold = app.descendants(matching: .any)["voice-hold"]
@@ -106,9 +120,9 @@ final class ChromeAutoHideUITests: XCTestCase {
     /// 自绘键盘面板开着的时候，工具栏与输入栏整条让位 —— 它是一座完整的电脑键盘，
     /// 键盘上面不该压着别的行。
     ///
-    /// 两件事一起验，因为它们是同一条设计的两面：栏让位，所以面板不会被收栏那套计时器
-    /// 带走（栏早就不在了，而 `isKeyboardPanelUp` 那条禁制仍然立着，收的是 `chromeHidden`
-    /// 那个标志）；而收面板的路只剩点画布一条 —— 点画布既收键盘，也把栏叫回来。
+    /// 往后等一段也是有内容的：竖屏的计时器虽然不排班，但**面板自己**不该被任何东西
+    /// 带走（`isKeyboardPanelUp` 那条禁制在横屏里就是干这个的）。这一段等的是"没有动静"。
+    /// 收面板的路只剩点画布一条 —— 点画布既收键盘，也把栏叫回来。
     func testTheKeyboardPanelTakesTheBarsPlace() throws {
         let app = openTerminal()
         revealBars(app)
@@ -126,9 +140,10 @@ final class ChromeAutoHideUITests: XCTestCase {
         XCTAssertFalse(keyboardKey.exists, "面板开着，工具栏还压在键盘上面")
         XCTAssertFalse(toggle.exists, "面板开着，输入栏还压在键盘上面")
 
-        // 闲置到点也不会把面板带走 —— 面板自己不在了的话，这一段就什么都不剩了。
+        // 等一段，面板和它顶掉的那两条都不该有动静。
         settle(seconds: Self.waitForHide)
-        XCTAssertTrue(probe.exists, "闲置到点了，键盘面板被一起收走了")
+        XCTAssertTrue(probe.exists, "等了一会儿，键盘面板自己被带走了")
+        XCTAssertFalse(toggle.exists, "等了一会儿，输入栏自己回来了")
 
         // 点键盘外侧那块画布：面板收掉，两条栏回来。
         let canvas = app.descendants(matching: .any)["terminal.text"]
@@ -137,6 +152,109 @@ final class ChromeAutoHideUITests: XCTestCase {
         XCTAssertTrue(probe.waitForNonExistence(timeout: 10), "点了画布，面板没有收掉")
         XCTAssertTrue(toggle.waitForExistence(timeout: 6), "收了面板，输入栏没有回来")
         XCTAssertTrue(keyboardKey.exists, "收了面板，工具栏没有回来")
+    }
+
+    /// 打字和说话的时候，工具栏让位；输入栏留下。
+    ///
+    /// 两处都是产品负责人 2026-09-20 在真机上点的：那两段时间里工具栏按不到，只是占着
+    /// 一行。留着输入栏是因为它在那两个状态下**就是**那个控件 —— 一个自己就是输入框，
+    /// 一个自己写着「松手 发送」。
+    func testTypingAndTalkingTakeTheToolbarAway() throws {
+        let app = openTerminal()
+        revealBars(app)
+
+        let keyboardKey = app.buttons["toolbar-keyboard"]
+        let toggle = app.buttons["voice-mode-toggle"]
+        XCTAssertTrue(keyboardKey.waitForExistence(timeout: 6), "工具栏上没有 ⌘")
+        XCTAssertTrue(toggle.exists, "输入栏上没有切换键")
+
+        // 点开输入框：工具栏走，输入栏留。
+        app.textFields.firstMatch.tap()
+        XCTAssertTrue(
+            keyboardKey.waitForNonExistence(timeout: 6),
+            "点开输入框之后，工具栏还占着一行"
+        )
+        XCTAssertTrue(
+            toggle.exists,
+            "点开输入框，输入栏也一起没了 —— 那是唯一能打字的地方"
+        )
+
+        // 收掉系统键盘：工具栏回来。
+        revealBars(app)
+        XCTAssertTrue(keyboardKey.waitForExistence(timeout: 6), "收起键盘之后工具栏没有回来")
+
+        // 录着的时候同样让位。走「右滑固定」那条路，是为了让手指离开屏幕之后录音还在，
+        // 断言才有得等 —— 按住不放的那几秒里问不了话。
+        enterVoiceMode(app)
+        let hold = app.descendants(matching: .any)["voice-hold"]
+        XCTAssertTrue(hold.waitForExistence(timeout: 6), "语音态没有「按住 说话」那一格")
+        let centre = hold.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        centre.press(forDuration: 1.0, thenDragTo: centre.withOffset(CGVector(dx: 120, dy: -160)))
+        XCTAssertTrue(
+            app.buttons["voice-lock-cancel"].waitForExistence(timeout: 8),
+            "固定之后面板上没有出现「取消」，这条路没走通"
+        )
+
+        XCTAssertTrue(
+            keyboardKey.waitForNonExistence(timeout: 6),
+            "录着的时候工具栏还占着一行"
+        )
+        XCTAssertTrue(hold.exists, "录着的时候「按住 说话」那一格不见了")
+
+        // 这一段取消掉，工具栏跟着回来。
+        app.buttons["voice-lock-cancel"].tap()
+        XCTAssertTrue(
+            keyboardKey.waitForExistence(timeout: 8),
+            "录音结束之后工具栏没有回来"
+        )
+    }
+
+    /// 竖屏的三条栏不会自己走；收栏靠右上角菜单里的「全屏」，点一下画布再回来。
+    ///
+    /// 两半都要问。只问前半（等过去还在）的话，一个"计时器压根没起来"的实现照样绿，
+    /// 而那正是这一条要区分的东西 —— 竖屏不是把三秒调长了，是不排这一班岗；只问后半
+    /// 的话，"靠计时器顺手把它收了"也会读成绿色。等的是横屏那一档的三秒，所以前半段
+    /// 对着的是同一个时长。
+    func testPortraitKeepsTheBarsUntilTheMenuSaysFullScreen() throws {
+        let app = openTerminal()
+        let toggle = app.buttons["voice-mode-toggle"]
+        let keyboardKey = app.buttons["toolbar-keyboard"]
+        let more = app.buttons["更多"]
+
+        revealBars(app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 6), "点了画布，输入栏也不在")
+        XCTAssertTrue(keyboardKey.exists, "点了画布，工具栏也不在")
+        XCTAssertTrue(more.exists, "点了画布，顶栏也不在")
+
+        // 什么都不做地等过去 —— 竖屏这里不该有任何动静。
+        settle(seconds: Self.waitForHide)
+
+        XCTAssertTrue(toggle.exists, "竖屏闲置到点了，输入栏自己走了")
+        XCTAssertTrue(keyboardKey.exists, "竖屏闲置到点了，工具栏自己走了")
+        XCTAssertTrue(more.exists, "竖屏闲置到点了，顶栏自己走了")
+
+        // 收栏改由人点名：右上角那颗 ⋯ 里的「全屏」。
+        more.tap()
+        XCTAssertTrue(app.buttons["全屏"].waitForExistence(timeout: 6), "更多菜单里没有「全屏」")
+        // 菜单是浮层，等它摆好再点 —— 刚出现那一帧点下去会落在菜单外面。
+        settle(seconds: 0.5)
+        app.buttons["全屏"].tap()
+
+        XCTAssertTrue(
+            toggle.waitForNonExistence(timeout: 6),
+            "点了「全屏」，三条栏没有收起来"
+        )
+        XCTAssertFalse(more.exists, "点了「全屏」，顶栏还在")
+
+        // 回来还是那一条：点一下画布。
+        revealBars(app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 6), "点了画布，栏没有回来")
+        XCTAssertTrue(keyboardKey.exists, "工具栏没有跟着回来")
+        XCTAssertTrue(more.exists, "顶栏没有跟着回来")
+
+        // 回来之后也不该有计时器接手 —— 竖屏的栏不走。
+        settle(seconds: Self.waitForHide)
+        XCTAssertTrue(toggle.exists, "从全屏回来之后，竖屏也开始自己收栏了")
     }
 
     /// 横屏把顶栏并进了工具栏：返回键与 ⌘ 落在同一行上。
@@ -186,6 +304,12 @@ final class ChromeAutoHideUITests: XCTestCase {
         app.launchArguments = [
             "-SynapseAPIBaseURL", baseURL,
             "-SynapseChromeIdleSeconds", String(Int(idleSeconds)),
+            // 输入栏从键盘态起手，理由同 `TerminalFlowUITests.barLaunchArguments`，
+            // 而这个文件还多一条：它自己有一条用例**故意**进语音态，而那个选择是
+            // `@AppStorage` 记着的，会跟着带到后面每一条用例去 —— 语音态下根本没有输入框，
+            // 于是下一条想点输入框的用例会以「找不到 TextField」红掉。参数域只钉本次启动，
+            // 不写回那个偏好，所以 `enterVoiceMode` 照旧切得动。
+            "-terminal.inputBar.voiceMode", "NO",
         ]
         app.launch()
         enterTerminal(app)

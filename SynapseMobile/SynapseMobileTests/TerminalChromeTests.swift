@@ -34,6 +34,14 @@ struct TerminalChromeTests {
         #expect(conditions.mayAutoHide == false)
     }
 
+    /// 竖屏的栏不自己走 —— 这一条与上面六条不同：那六条说的是"这一刻不方便收"，
+    /// 这一条说的是"这个方向上就不该自己收"。要收得人点名（右上角菜单里的「全屏」）。
+    @Test func portraitHoldsTheBars() {
+        var conditions = idle
+        conditions.isPortrait = true
+        #expect(conditions.mayAutoHide == false)
+    }
+
     /// 正在按住说话。这是产品负责人点名的那一条：手压着的时候界面不能动。
     @Test func aFingerOnTheHoldKeyHoldsTheBars() {
         var conditions = idle
@@ -80,12 +88,13 @@ struct TerminalChromeTests {
             { var c = idle; c.isVoiceBusy = true; return c }(),
             { var c = idle; c.isOverlayUp = true; return c }(),
             { var c = idle; c.isPhotoBubbleUp = true; return c }(),
+            { var c = idle; c.isPortrait = true; return c }(),
             { var c = idle; c.isSettling = true; return c }(),
             { var c = idle; c.isAssistiveTechOn = true; return c }(),
         ]
         for conditions in blocked {
             #expect(conditions.mayAutoHide == false)
         }
-        #expect(blocked.count == 7, "加了一条禁制就要跟着加在这里")
+        #expect(blocked.count == 8, "加了一条禁制就要跟着加在这里")
     }
 }

@@ -27,6 +27,19 @@ struct TerminalChromeConditions: Equatable {
     var isOverlayUp: Bool
     /// 输入栏上方那张"最新的一张图"还挂着。它也是一条栏，和三条栏存亡与共。
     var isPhotoBubbleUp: Bool
+    /// 屏幕是竖着的（竖屏 iPhone、iPad）。
+    ///
+    /// **竖屏的栏不自己走**（2026-09-20 产品负责人定的）：顶栏加输入栏在那个方向上只占
+    /// 一行多一点，而它们自己消失读起来是「界面不见了」，不是「腾地方了」—— 要收就点
+    /// 右上角菜单里的「全屏」。横屏相反，那两条占掉可用高度的近三成，所以"自己收"这一条
+    /// 只对横屏成立。
+    ///
+    /// 放在这个纯值里而不是留在 `armChromeIdle` 的守卫上，有两个理由。一是它就是这条
+    /// **判定**本身，而这里每一条都被单测逐条走完；二是**什么时候读它**：守卫是在"上表"
+    /// 那一刻读的，而转屏前后 `verticalSizeClass` 会飘 —— 上表时读到横屏、到点时其实已经
+    /// 不是，那一班岗就白排了（真机实测：三次上表只起来一次，还立刻被下一次取消）。
+    /// 读在**到点那一下**，读到的一定是当下。`TerminalScreen.armChromeIdle`。
+    var isPortrait: Bool
     /// 正在收或正在放的动画里。中途不重新计数 —— 那会把一次收栏拖成两次。
     var isSettling: Bool
     /// 读屏或切换控制开着。
@@ -42,13 +55,15 @@ struct TerminalChromeConditions: Equatable {
         isVoiceBusy: false,
         isOverlayUp: false,
         isPhotoBubbleUp: false,
+        isPortrait: false,
         isSettling: false,
         isAssistiveTechOn: false
     )
 
     /// 这一次闲置到点了，可不可以收。
     var mayAutoHide: Bool {
-        !isTyping
+        !isPortrait
+            && !isTyping
             && !isKeyboardPanelUp
             && !isVoiceBusy
             && !isOverlayUp
