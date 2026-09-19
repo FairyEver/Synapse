@@ -7,6 +7,7 @@ import { Logger, PinoLogger } from "nestjs-pino"
 import { AppModule } from "./app.module"
 import { AllExceptionsFilter } from "./common/all-exceptions.filter"
 import { registerHttpBodyParsers } from "./common/http-body-parser"
+import { registerHttpShutdownDeadline } from "./common/http-shutdown-deadline"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
 import { DriveCollaborationGateway } from "./drive/drive-collaboration.gateway"
@@ -46,6 +47,7 @@ async function bootstrap(): Promise<void> {
     app.get(MobileLiveGateway).attach(app.getHttpServer())
   }
   await app.listen(env.port)
+  registerHttpShutdownDeadline(app.getHttpServer())
 }
 
 void bootstrap()
