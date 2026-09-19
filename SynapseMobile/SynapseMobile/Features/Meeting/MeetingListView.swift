@@ -43,12 +43,19 @@ struct MeetingListView: View {
                             }
                         }
                         // 左滑露出删除。
+                        //
+                        // 这颗按钮要自己指定底色：左滑动作是全局 tint 唯一被当成**填充**
+                        // 用的地方——它用 tint 涂满按钮，再把图标和文字也用同一个颜色画上去。
+                        // 而主题色是 `Color.primary`，深色外观下就是白色，于是白底白图标，
+                        // 只剩一块没有图案的白方块（2026-09-19 真机截图）。取系统红，
+                        // 明暗两套外观都对，也不用自造颜色。终端会话列表那一处同理。
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
                                 deleteTarget = meeting
                             } label: {
                                 Label("删除", systemImage: "trash")
                             }
+                            .tint(Color(uiColor: .systemRed))
                         }
                     }
                 }
