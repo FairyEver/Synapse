@@ -22,6 +22,8 @@ export const TERMINAL_PERMISSION_FAMILIES = [
   "command.manage",
   "session.delete",
   "group.delete",
+  "workspace.manage",
+  "workspace.delete",
 ] as const
 
 export type TerminalPermissionFamily = typeof TERMINAL_PERMISSION_FAMILIES[number]
@@ -109,6 +111,22 @@ export const TERMINAL_CAPABILITY_CATALOG = [
   C({ id: "app.terminal.session.force_stop", title: "Force stop terminal session", description: "Explicitly request a distinct platform-supported forced termination path.", mutates: true, risk: "high", permissions: ["session.forceStop"] }),
   C({ id: "app.terminal.operation.get", title: "Get terminal operation", description: "Read a termination or deletion operation through authorization to its original resource.", mutates: false, risk: "normal", permissions: ["state.read"] }),
   C({ id: "app.terminal.session.delete", title: "Delete terminal session", description: "Compatibility cleanup for a still-present terminal-state session; terminal transitions normally auto-delete it, while running and stopping sessions conflict.", mutates: true, risk: "high", permissions: ["session.delete"] }),
+  /*
+   * 标签级工具。标签与分屏此前只有 UI 能碰，调用方连「哪几个会话在同一个标签里」都看不出；
+   * 这一组把标签作为可寻址对象补上，让「在某个标签里再开一格分屏」「整个关掉那个标签」这类
+   * 编排不必由人在界面上代做。
+   *
+   * 寻址仍然只认会话：pane 与 session 是 1:1，所以要切哪一格就用它承载的 `sessionId` 指明，
+   * 不另开一套 pane 寻址。布局树本身不出现在任何返回值里。
+   *
+   * 动作词受 `CAPABILITY_ACTIONS` 白名单约束：分屏只能是「创建一个 pane」，关掉一个标签在存储
+   * 上就是删掉那个 workspace，所以命名为 `workspace_pane.create` 与 `workspace.delete`。
+   */
+  C({ id: "app.terminal.workspace.list", title: "List terminal tabs", description: "List bounded Terminal tab summaries, each with the sessions that tab holds, so a caller can see which sessions share one tab's split layout. Pagination: cursor-based. Continue with nextCursor.", mutates: false, risk: "normal", permissions: ["discover"] }),
+  C({ id: "app.terminal.workspace.get", title: "Get terminal tab", description: "Read one Terminal tab summary and the sessions it holds by immutable workspace id.", mutates: false, risk: "normal", permissions: ["discover"] }),
+  C({ id: "app.terminal.workspace_pane.create", title: "Create a pane in a terminal tab", description: "Split the pane holding a session, inside the tab that holds it, creating one new session beside it. The pane is addressed by the session it runs because a pane and a session are one to one; the tab's layout revision must match.", mutates: true, risk: "high", permissions: ["workspace.manage"] }),
+  C({ id: "app.terminal.workspace.rename", title: "Rename terminal tab", description: "Rename a Terminal tab under its layout revision. A tab holding a single session follows that session's own rename, so this is only needed when the two must differ.", mutates: true, risk: "normal", permissions: ["workspace.manage"] }),
+  C({ id: "app.terminal.workspace.delete", title: "Delete terminal tab", description: "Delete a Terminal tab by normally stopping every session it holds. It never escalates to a forced stop; a tab whose sessions are still stopping reports what is left rather than waiting.", mutates: true, risk: "high", permissions: ["workspace.delete"] }),
 ] as const
 
 export const TERMINAL_CAPABILITY_IDS = TERMINAL_CAPABILITY_CATALOG.map((item) => item.id)

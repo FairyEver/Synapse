@@ -57,6 +57,11 @@ import {
   terminalSessionTargetSchema,
   terminalStopInputSchema,
   terminalViewInputSchema,
+  terminalWorkspaceDeleteInputSchema,
+  terminalWorkspaceListInputSchema,
+  terminalWorkspacePaneCreateInputSchema,
+  terminalWorkspaceRenameInputSchema,
+  terminalWorkspaceTargetSchema,
 } from "../shared/contract-schema"
 import {
   TerminalContractError,
@@ -90,6 +95,8 @@ const TERMINAL_PERMISSION_ACTIONS: Readonly<Record<TerminalPermissionFamily, Per
   "command.manage": "terminal.command.manage",
   "session.delete": "terminal.session.delete",
   "group.delete": "terminal.group.delete",
+  "workspace.manage": "terminal.workspace.manage",
+  "workspace.delete": "terminal.workspace.delete",
 }
 
 const TERMINAL_LAUNCH_SETTING_MUTATION_ACTIONS = new Set([
@@ -281,6 +288,9 @@ const PERSISTED_MUTATION_ACTIONS = new Set([
   "app.terminal.session_override.create",
   "app.terminal.session_metadata.rename",
   "app.terminal.session.delete",
+  "app.terminal.workspace_pane.create",
+  "app.terminal.workspace.rename",
+  "app.terminal.workspace.delete",
 ])
 
 async function dispatchAuthorizedCore(
@@ -615,6 +625,50 @@ async function dispatchAuthorizedCore(
     const input = terminalDeleteSessionInputSchema.parse(params)
     return service.deleteTerminalSession(input.sessionId, context.clientId ?? "unknown-client")
   }
+  if (action === "app.terminal.workspace.list") {
+    const input = terminalWorkspaceListInputSchema.parse(params)
+    const workspaces = service.listWorkspaces()
+      .filter((workspace) => !input.groupId || workspace.groupId === input.groupId)
+    return paginate(workspaces.map(workspaceSummary), input.limit, input.cursor, input, service.terminalDomainRevision)
+  }
+  if (action === "app.terminal.workspace.get") {
+    const input = terminalWorkspaceTargetSchema.parse(params)
+    return workspaceSummary(service.getWorkspace(input))
+  }
+  if (action === "app.terminal.workspace_pane.create") {
+    const input = terminalWorkspacePaneCreateInputSchema.parse(params)
+    const workspace = service.getWorkspace({ workspaceId: input.workspaceId })
+    // pane 与 session 是 1:1，所以调用方给 sessionId 就够定位要切的那一格；不在这个标签里
+    // 就当作找不到，而不是先在别处找那个会话。
+    const pane = collectTerminalPaneLeaves(workspace.layout)
+      .find((leaf) => leaf.sessionId === input.sessionId)
+    if (!pane) throw terminalContractError("not_found", "not_found")
+    const result = await service.splitPane({
+      workspaceId: input.workspaceId,
+      paneId: pane.paneId,
+      direction: input.direction,
+      expectedLayoutRevision: input.expectedLayoutRevision,
+      ...(input.cols === undefined ? {} : { cols: input.cols }),
+      ...(input.rows === undefined ? {} : { rows: input.rows }),
+    })
+    return { workspace: workspaceSummary(result.workspace), sessionId: result.sessionId }
+  }
+  if (action === "app.terminal.workspace.rename") {
+    const input = terminalWorkspaceRenameInputSchema.parse(params)
+    return workspaceSummary(await service.renameWorkspace({
+      workspaceId: input.workspaceId,
+      title: input.title,
+      expectedLayoutRevision: input.expectedLayoutRevision,
+    }))
+  }
+  if (action === "app.terminal.workspace.delete") {
+    const input = terminalWorkspaceDeleteInputSchema.parse(params)
+    // 不传 force：关掉一个标签只走正常终止，强杀不在这条路上（ADR 0049）。
+    return service.closeWorkspace({
+      workspaceId: input.workspaceId,
+      expectedLayoutRevision: input.expectedLayoutRevision,
+    })
+  }
   throw terminalContractError("unsupported", "capability")
 }
 
@@ -756,6 +810,9 @@ function controllerFor(context: DispatchContext, required = false): TerminalCont
 }
 
 function resourceFor(params: Record<string, unknown>): string {
+  // 排在 sessionId 之前：标签级调用同时带着 workspaceId 与 sessionId（分屏要指明切哪一格），
+  // 而它动的是标签这个对象。
+  if (typeof params.workspaceId === "string") return `terminal:workspace:${params.workspaceId}`
   if (typeof params.sessionId === "string") return `terminal:session:${params.sessionId}`
   if (typeof params.commandId === "string") return `terminal:command:${params.commandId}`
   if (typeof params.groupId === "string") return `terminal:group:${params.groupId}`
@@ -813,6 +870,29 @@ function workspaceIdBySessionId(service: TerminalService): Map<string, string> {
     for (const pane of collectTerminalPaneLeaves(workspace.layout)) map.set(pane.sessionId, workspace.id)
   }
   return map
+}
+
+/**
+ * 标签的对外投影。
+ *
+ * 刻意不带 `layout`：调用方要的是「这个标签下有哪几个会话」，不是布局树本身——把树交出去
+ * 等于把 Renderer 的内部结构升级成对外契约，以后动布局都要顾及它。pane id 同理不出场，
+ * 它是布局树里的局部标识，从没被任何对外接口用过。
+ *
+ * `sessionIds` 按布局先序遍历给出，也就是界面上从左到右、从上到下的读序。
+ */
+function workspaceSummary(workspace: ReturnType<TerminalService["getWorkspace"]>) {
+  return {
+    workspaceId: workspace.id,
+    groupId: workspace.groupId,
+    title: workspace.title,
+    pinned: workspace.pinned,
+    sessionIds: collectTerminalPaneLeaves(workspace.layout).map((pane) => pane.sessionId),
+    layoutRevision: workspace.layoutRevision,
+    closing: workspace.closing,
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt,
+  }
 }
 
 function sessionSummary(
@@ -985,7 +1065,12 @@ function paginate<T>(
 
 function pageIdentity(value: unknown): string {
   if (!isRecord(value)) return digest(value)
-  const stableId = value.sessionId ?? value.commandId ?? value.groupId ?? value.operationId ?? value.id
+  /*
+   * 顺序要紧：会话项现在也带着 `workspaceId`，同一个标签下分屏出来的会话共享这一个值。
+   * 它只能排在最后当兜底——标签摘要没有别的 id，而会话项永远先命中前面的 `sessionId`。
+   */
+  const stableId = value.sessionId ?? value.commandId ?? value.groupId ?? value.operationId
+    ?? value.workspaceId ?? value.id
   return typeof stableId === "string" ? stableId : digest(value)
 }
 

@@ -40,6 +40,11 @@ import {
   terminalSessionTargetSchema,
   terminalStopInputSchema,
   terminalViewInputSchema,
+  terminalWorkspaceDeleteInputSchema,
+  terminalWorkspaceListInputSchema,
+  terminalWorkspacePaneCreateInputSchema,
+  terminalWorkspaceRenameInputSchema,
+  terminalWorkspaceTargetSchema,
 } from "./contract-schema"
 
 const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
@@ -89,6 +94,11 @@ const schemaByCapabilityId: Readonly<Record<string, ZodType>> = {
   "app.terminal.session.force_stop": terminalStopInputSchema,
   "app.terminal.operation.get": terminalOperationGetInputSchema,
   "app.terminal.session.delete": terminalDeleteSessionInputSchema,
+  "app.terminal.workspace.list": terminalWorkspaceListInputSchema,
+  "app.terminal.workspace.get": terminalWorkspaceTargetSchema,
+  "app.terminal.workspace_pane.create": terminalWorkspacePaneCreateInputSchema,
+  "app.terminal.workspace.rename": terminalWorkspaceRenameInputSchema,
+  "app.terminal.workspace.delete": terminalWorkspaceDeleteInputSchema,
 }
 
 const toolNotes: Readonly<Record<string, string>> = {

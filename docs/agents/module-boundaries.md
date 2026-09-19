@@ -48,10 +48,12 @@
 - UI 中一个侧边栏标签对应一个持久化 workspace；workspace 使用递归二叉布局树组织 pane，每个叶子 pane 独占一个 session。分屏不增加侧边栏行；拖动 pane 顶栏只能投放到另一 pane 的四个边缘并重组布局树，不合并 session、也不在 pane 内新增标签层。关闭侧边栏标签必须删除整个 workspace、全部叶子 session 及其数据；关闭单个 pane 只删除对应 session，最后一个 pane 等同关闭 workspace。
 - session 进入 `ended`、`failed` 或 `lost` 后必须立即移除对应 pane，并删除会话标识、输出、检查点、操作和短期幂等数据；最后一个 pane 移除后 workspace 不得继续出现在侧边栏。终止态仅可用于唤醒已在等待的观察请求，之后按原 `sessionId` 查询必须返回 `not_found`。
 - Synapse 退出时必须终止并销毁所有 Terminal session，只保留全局设置、分组、快捷命令和工具栏操作。启动时必须清理任何旧版或异常遗留的 session/workspace 及关联数据，不恢复 PTY，不将旧记录转成 `lost`，不重放生命周期操作。
-- workspace 与 pane 是 UI/IPC 聚合；MCP 按不可变 `sessionId` 管理底层会话，并额外把「这个会话属于哪个标签」作为只读投影暴露（`session.list` / `session_summary.get` / `session_state.get` / `.list` 的 `workspaceId`）。该投影只报归属，不返回布局树、不暴露 pane id，也不新增工具；不得据此推断或修改 Renderer 布局。
+- workspace 与 pane 是 UI/IPC 聚合。MCP 按不可变 `sessionId` 管理底层会话，并把标签（workspace）补成可寻址对象：只读的 `workspace.list` / `workspace.get`（各标签持有的 `sessionIds`，按布局先序给出读序），以及写入的 `workspace_pane.create` / `workspace.rename` / `workspace.delete`。此外 `session.list` / `session_summary.get` / `session_state.get` / `.list` 各带一个只读 `workspaceId` 报出会话归属。
+- 标签寻址不引入第二套标识：pane 与 session 是 1:1，要切哪一格就用它承载的 `sessionId` 指明，`workspace_pane.create` 负责按当前布局把它解析成 pane。布局树与 pane id 一律不出现在任何请求或返回值里——调用方只能请求这三类改变，不能假定或直接改写 Renderer 的布局结构。
+- `workspace.delete` 只走正常终止：它不提供 `force`，也不替调用方补一个（ADR 0049），会话仍在停止中时如实报告剩余项而不是等待。标签级写入与手机持格（ADR 0219）的关系同会话级：被手机持格的那个会话所在标签不得由 MCP 写入。
 - pane 顶栏最大化只属于 Renderer 临时视图状态：沿目标 pane 的布局祖先路径将每个兄弟分支固定为 100px，进入前记录当前实时布局；切换到其它 pane、切换 workspace 或修改布局时必须还原。最大化状态和临时比例不得持久化，也不得新增 IPC/MCP 能力。
 - pane 顶栏平分操作以目标 pane 的直接父级方向为准，向上合并连续同方向 split，并将该组中的并列区段等宽或等高分配；正交方向子树视为一个区段且保持内部比例。平分结果必须作为一次原子 workspace 布局修订持久化；最大化期间触发时先退出最大化。该操作只属于 UI IPC，不新增 MCP 工具。
-- 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane。
+- 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane、`Cmd+R` 重命名当前会话；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane、`Ctrl+Shift+R` 重命名当前会话（`Ctrl+R` 归命令行的历史搜索）。`Cmd+R` 可用是因为应用菜单里没有「重新加载」：整页重载会丢掉未持久化的活动应用，界面回落成默认应用。
 - Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。
 - Terminal pane 文件树允许按系统平台使用 `Cmd/Ctrl` 切换选择、`Shift` 连续选择，并把全部选中路径拖入当前 session；路径必须由文件树 scope 在主进程解析，按现有终端路径规则转义后写入，不得伪造成外部文件或新增 MCP 工具。
 - Terminal 底部内置快捷输入由代码定义且只读；用户快捷输入是独立的应用级数据，只允许名称、单行输入内容和是否回车，通过 UI 私有 IPC 管理并加密存入 `app.terminal.toolbar-actions`。两者不得混存，也不得注册 MCP 工具。
@@ -62,12 +64,12 @@
 - 可点击 Agent 通知由 Terminal 业务模块拥有，不得改造成 System Notifier 回调或统一通知中心。除精确 session 位于当前焦点时抑制外，统一使用系统原生通知，不得改用 renderer 应用内通知。点击必须复用不可变 `sessionId` 的 System App 打开请求定位具体 workspace/pane；Codex Hook 信任必须由用户确认，不得绕过。
 - 终端字符宽度表以 Claude Code 的宽度库口径（`Bun.stringWidth`，等同 `string-width` / `emoji-regex`：`Emoji` 属性码点算 2 格）为准，渲染端与主进程 headless 仿真器必须共用同一张表；改装宽度表必须同时保证 MCP 读屏与序列化恢复的换行与渲染端一致。
 - `TERM_PROGRAM=Synapse` 与 `TERM_PROGRAM_VERSION` 是受保护宿主身份。环境变量明文只进入加密 body；结构化元数据和 MCP 只能记录键、`set/unset`、来源及 revision。
-- 终端会话定位是会话级纯导航，只接受不可变 `sessionId`，并复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane；会话不跨重启（ADR 0215），因此不提供任何 Deep Link，也不得扩展为命令执行、输出读取或 workspace/pane 引用。复制入口属于分屏：只出现在 pane 顶栏标题的右键菜单（以及顶部标签菜单），产出的是纯文本 `workspace_id` / `session_ref` / `session_id` 三行：ref 是由 `sessionId` 派生的本机短校验引用，供人识别；只有 `session_id` 可被外部寻址。复制入口的文案必须说明该引用只在本机本次运行期间有效。
+- 终端会话定位是会话级纯导航，只接受不可变 `sessionId`，并复用仅含 `sessionId` 的 System App 打开请求定位 workspace/pane；会话不跨重启（ADR 0215），因此不提供任何 Deep Link，也不得扩展为命令执行或输出读取；标签级寻址由独立的 `workspace.*` 能力承担，不由这个导航入口派生。复制入口属于分屏：pane 顶栏右侧按钮组有一颗「复制引用」，整条顶栏的右键菜单（以及顶部标签菜单）里也有同一项；顶栏标题上右键不弹菜单——那条同时是拖动分屏的把手，菜单会跟拖拽抢同一个手势——双击标题重命名保持不变。产出的是纯文本 `workspace_id` / `session_ref` / `session_id` 三行：ref 是由 `sessionId` 派生的本机短校验引用，供人识别；只有 `session_id` 可被外部寻址。复制入口的文案必须说明该引用只在本机本次运行期间有效。
 - 不得新增通用 `shell.exec`、MCP 专属终端、静默输入抢占、隐式停止删除或自动强杀旁路。
 - 终端标签（workspace）的置顶只通过 UI 私有 IPC 写入 workspace 记录既有字段：置顶只改变同分组内的排序，不得影响会话生命周期、布局或启动设置。它只活到本次运行结束——会话与 workspace 不跨重启（ADR 0215），刷新后的 workspace 是一张新面孔，因此不得承诺保留，也不得为此引入跨重启的 workspace 身份。侧栏标签列表与顶部标签只显示「需要你动手」的等待输入标记；不得再引入「有新消息」一类由原始输出事件推断的未读标记，它会随每次输出恒亮，反而稀释等待输入标记。
 - 生命周期、注意三态、写入租约、输入/尺寸修订和输出水位相互正交。loopback MCP 不要求 Terminal 专属 token，但传输层必须提供稳定 `clientId` 与 `controllerInstanceId` 约束租约、幂等、配额和审计。
 - 尺寸归属是独立于写入租约的运行时维度：只有手机自己的 resize 主张它，任何其它 resize（桌面 fit、自动化 resize、创建初始尺寸）都释放它，因此不需要额外的释放调用。归属变化即使格子数没变也必须广播，且不推进 `sizeRevision`。手机 detach 或超过更短的归属空闲阈值即释放；应用重启不恢复归属。同一会话只能有一个归属方，多端并发后写者胜，不做仲裁。完整规格见 `docs/adr/0216-coordinate-terminal-size-ownership-separately-from-leases.md`。
-- 手机终端有两种显示模式，属于手机端的呈现选择：优先移动端（手机上报自己的格数，PTY 随之重排，手机 1:1 渲染）与优先还原（PTY 不变，手机按桌面网格整帧缩放，可双指放大）。桌面端在归属为手机时抑制自身 fit，该会话同时整块锁住：内容区、键盘输入、拖入路径、pane 顶栏的文件夹/平分/最大化/关闭按钮、以及底部命令条（含麦克风）全部不可用，pane 内容区显示「正在被 X 使用」与「转移到电脑」按钮，pane 顶栏不盖蒙层但整体惰性。锁只针对该会话，同 workspace 的其它 pane、会话列表和应用顶栏不受影响。释放按钮只走 UI 私有 IPC，不新增 MCP 工具，也不改变 `app.terminal.session.resize` 的自动化契约。完整规格见 `docs/adr/0219-lock-the-terminal-while-a-phone-holds-the-grid.md`。
+- 手机终端有两种显示模式，属于手机端的呈现选择：优先移动端（手机上报自己的格数，PTY 随之重排，手机 1:1 渲染）与优先还原（PTY 不变，手机按桌面网格整帧缩放，可双指放大）。桌面端在归属为手机时抑制自身 fit，该会话同时整块锁住：内容区、键盘输入、拖入路径、pane 顶栏的文件夹/平分/最大化/关闭按钮、以及底部命令条（含麦克风）全部不可用（只读的「复制引用」与「复制全文」不在其列，它们不改动任何东西），pane 内容区显示「正在被 X 使用」与「转移到电脑」按钮，pane 顶栏不盖蒙层但整体惰性。锁只针对该会话，同 workspace 的其它 pane、会话列表和应用顶栏不受影响。释放按钮只走 UI 私有 IPC，不新增 MCP 工具，也不改变 `app.terminal.session.resize` 的自动化契约。完整规格见 `docs/adr/0219-lock-the-terminal-while-a-phone-holds-the-grid.md`。
 - 手机显示密度是设备级偏好，三档存「一个字符格子的宽×高」而不是行列数——行列数由单位尺寸与可用面积推导，所以换机型、换方向时观感密度不变。会话级覆盖只影响该会话且不落盘。密度属于手机设置，不在桌面设置中重复入口。
 - 手机端应用内反馈的落点是固定的，不得为同一类消息再开第二条通道：没有归属地且转瞬即逝的确认走底部通知条（`NoticeBar`）；有归属地的失败走引发它的位置——登录失败在表单内、终端操作失败在输入栏上方的常驻行（`TerminalMessageList`）、连接状态在设备行与空状态里。判断依据是该消息「有没有一个屏幕位置本来就在说这件事」。
 - 手机端不得为「应用自己发的请求」报错。连接时自动发出的 `sync`、为保持所属终端的重新 `attach`、重申尺寸归属的 `resize` 都不是用户发起的，没有待答的用户操作，也没有哪一块屏幕以「这个请求失败了」为主题——列表与设备行描述的是随后的状态。这些结果只记日志（`quietIntents`），用户没做任何操作就弹一条失败提示，是让应用看起来在随机出错。
@@ -140,7 +142,7 @@
 - Quick Input 是独立 System App。Agent 只消费其文本；composer 菜单固定向上展开，选择后追加到当前草稿末尾并保留输入焦点，不直接发送。不得恢复“直接发送”开关或塞回 slash menu。
 - Agent 项目路径与 Git System App 已登记仓库根路径精确匹配时，可在 composer 复用窄类型化 Git IPC；该入口不得经过 Agent 消息、slash command、MCP 或任意 Git 命令，提交仍必须使用仓库绑定的选择令牌。
 - Agent 已配置项目可通过窄类型化 Terminal IPC 以项目目录新建 UI 终端会话，再通过仅含 `sessionId` 的 System App 打开请求定位该会话；虚拟本地对话工作区不提供该入口，也不扩展为 MCP 或 Deep Link。
-- Agent 的每个项目在终端里有一个同名分组（`TerminalGroup.projectId` 指向项目，名字为「项目 」+ 项目名）。这条同步是**单向的一次性对账**：项目列表变化时补齐、改名、删除对应分组，除此之外两边互不干涉。项目分组不得改名或删除（菜单不提供），因为名字与存亡都由项目决定；用户自己建的分组不受同步影响。项目来源的会话落进该项目分组，**没有指明归属的会话只落进用户自己的分组**（`ensureDefaultGroup` 跳过项目分组），不得再按「列表第一个分组」落位。它不注册 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link，Terminal MCP 工具数量不变；`TerminalGroup.projectId` 只是既有分组记录的字段。
+- Agent 的每个项目在终端里有一个同名分组（`TerminalGroup.projectId` 指向项目，名字为「项目:」+ 项目名）。这条同步是**单向的一次性对账**：项目列表变化时补齐、改名、删除对应分组，除此之外两边互不干涉。项目分组不得改名或删除（菜单不提供），因为名字与存亡都由项目决定；用户自己建的分组不受同步影响。项目来源的会话落进该项目分组，**没有指明归属的会话只落进用户自己的分组**（`ensureDefaultGroup` 跳过项目分组），不得再按「列表第一个分组」落位。它不注册 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link，Terminal MCP 工具数量不变；`TerminalGroup.projectId` 只是既有分组记录的字段。
 - Agent 项目文件树拖入对话时只把主进程解析后的选中路径以空格连接并插入草稿当前光标，不创建附件、不立即发送，也不扩展为公开 Capability、MCP 或 Deep Link。
 - 工作区辅助面板属于 Agent 工作区壳，不属于消息组件、全局 App shell 或 `SidebarContentLayout`。宽屏使用会话与辅助面板分栏，窄屏切换为详情视图；面板状态按会话隔离，文件 Diff 只是首个面板描述符。
 - 共享只读 Diff renderer 位于 `desktop/src/components/diff/`，Git 通过模块内 adapter 消费，Agent 不得跨模块导入 Git 内部实现。patch 生成与解析复用 desktop 直接生产依赖 `diff`。

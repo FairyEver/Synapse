@@ -39,7 +39,7 @@
 | Sound Notifier | 否 | 否 | — | — | 1 | — |
 | Synapse Skill | 是 | 否 | — | — | — | — |
 | System Notifier | 否 | 否 | 1 | — | 1 | — |
-| Terminal | 是 | 是 | — | — | 44 | — |
+| Terminal | 是 | 是 | — | — | 49 | — |
 | Text Extractor | 否 | 否 | 1 | — | 2 | — |
 | Text File Writer | 否 | 否 | 1 | — | 1 | — |
 | Script Runtime | 否 | 否 | — | — | — | — |
@@ -57,20 +57,21 @@
 - `figma-skill` 是随桌面端打包的 Agent SDK Skill 插件，不注册独立 System App、MCP domain 或 MCP tool；由 Figma 内置连接器定义声明，并仅在该连接器启用后创建的新对话中按会话快照加载。
 - Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
-- Terminal 的 44 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
+- Terminal 的 49 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
 - Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 44。
 - Terminal 不注册任何 Deep Link：会话不跨重启（ADR 0215），带会话的链接在下一次启动时必然失效，所以没有可交付的链接形态。会话定位由 `app.terminal.session.open` 承担，只接受不可变 `sessionId` 并复用既有 System App 打开请求定位 workspace/pane；界面里的「复制引用」只产出纯文本的 `workspace_id` / `session_ref` / `session_id` 三行，不注册协议路由、不读取输出，也不新增应用页、Dock、Workflow 或 Automation 表面。
 - Agent 已配置项目可通过现有 Terminal UI IPC 在项目目录新建会话，并以仅含 `sessionId` 的 System App 请求打开或聚焦 Terminal；该入口不新增 MCP capability、tool 或 Deep Link。
 - 手机端可通过 mobile gateway 新增的 `createAgentConversation` 意图，让电脑在自己的某个项目目录里启动内置 Claude Code，并把它作为普通终端会话回给手机；供应商凭据仍只在主进程读取与使用，手机不接触任何密钥。`mobile.summary` 随之多出两个可选区块——项目目录与供应商摘要（只含 id、名称、是否电脑默认、档位与四个档位解析后的模型名，不含 `baseUrl` 或任何凭据字段）——它们复用 `app.agent.group.list` 背后的同一份项目列表，不新增选项目录。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。
-- Terminal 分屏 workspace/pane 仅属于现有 System App 的 UI IPC：创建、调整、平分与拖拽重排 pane 时，每个 pane 仍由一个既有 session 承载，因此不新增 MCP 工具，也不注册 workspace/pane MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
-- Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取、监听并解析拖拽选中项；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。文件树路径拖拽只写入 Agent 草稿或当前 Terminal session，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
-- Terminal 图片剪贴板落盘仅属于现有 System App 的 UI 私有 IPC，用于把临时 PNG 路径交给当前 PTY；不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
-- Terminal 用户快捷输入的增删改查仅属于现有 System App 的 UI 私有 IPC；执行仍复用当前 session 输入，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Terminal 标签（workspace）作为可寻址对象补了 5 个 MCP 工具，44 → 49 的来源就是这一组：只读的 `workspace.list` / `workspace.get`（各标签持有的 `sessionIds`，按布局先序），写入的 `workspace_pane.create`（创建一格分屏）/ `workspace.rename` / `workspace.delete`（关掉整个标签）。寻址沿用不可变 `sessionId`——pane 与 session 是 1:1，要切哪一格就用它承载的会话指明，这一层负责按当前布局解析成 pane；布局树与 pane id 不出现在任何请求或返回值里。`workspace.delete` 只走正常终止、不提供 `force`。权限族为 `terminal.workspace.manage`（分屏与改名）与 `terminal.workspace.delete`（关标签），两者不得互相推导。
+- Terminal 分屏的**比例调整、平分与拖拽重排**仍只属于现有 System App 的 UI IPC：它们改变既有 pane 的排列而不增减会话，不注册 MCP capability、tool 或 Deep Link。
+- Agent 对话与 Terminal pane 的工作目录文件树只通过受权限与审计保护的 UI 私有 IPC 读取、监听并解析拖拽选中项；Agent 使用项目目录，Terminal 优先使用 OSC 7 报告的实时目录并回退到会话启动目录。文件树路径拖拽只写入 Agent 草稿或当前 Terminal session，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 49。
+- Terminal 图片剪贴板落盘仅属于现有 System App 的 UI 私有 IPC，用于把临时 PNG 路径交给当前 PTY；不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 49。
+- Terminal 用户快捷输入的增删改查仅属于现有 System App 的 UI 私有 IPC；执行仍复用当前 session 输入，不注册 MCP capability、tool 或 Deep Link，Terminal MCP 工具数量保持 49。
 - 手机端终端快捷栏是上述同一批按钮的**只读投影**：主进程用终端服务自己的 `listMobileToolbarButtons()` 把内置注册表（在 `desktop/app-capabilities/terminal/shared/toolbar-actions.ts`）与用户的快捷输入投影成 `mobile.toolbar` 下行消息，手机不新增、不修改、不删除任何按钮，也不回写桌面配置。投影源是主进程内部方法而非 IPC 或 capability；手机按键一律走既有 `keys` / `command` 意图，不新增 intent。该入口不注册 System App、Dock、Workflow Node、Automation Action、MCP capability/tool 或 Deep Link：`app` domain 与 Terminal 的 MCP 工具数量均不变。
-- Terminal Agent 原生通知的设置、活动 session 上报与点击后的精确会话定位仅属于现有 System App 的 UI 私有 IPC；通知 Hook 入口是会话级 loopback 内部端口，不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。同一 Hook 事件还把"是否等待用户输入"写入会话既有 `attention`（`waiting` + `approval` / `agent_question` 等 kind，恢复时回到 `not_waiting`），仅在 Terminal 侧栏与顶部标签显示标记，并随既有 `state.get` / `observe` 暴露给 MCP 调用方；不新增存储字段、capability、tool 或审计对象。
-- Terminal 会话状态响应（`session_state.get` / `.list` / `session.observe` / `session_output.observe`）以及 `session.list` / `session_summary.get` 另外带三样只读内容：会话所在终端标签的 `workspaceId`（会话不在任何标签里时为 `null`。标签与分屏只活在 Renderer 的聚合层，这一项是唯一的读出口：只报归属，不返回布局树，也不因此获得任何改动布局的能力），会话自己的 PTY 设备名 `tty`（调用方据此 `ps -t` 认领跑在里面的进程，是「粘贴一段引用去找到对家 Claude Code」那一步的接点，不依赖 Agent 原生通知，Windows 无此设备时缺席），以及 `app.terminal.agent-sessions` 五态档案的投影块 `agent`（只含 `state` / `agentKind` / `version` / `lastActivityAt` / `stateChangedAt`；`transcriptPath` 指向用户整段对话、`pid` 与 agent 自己的会话 id 是宿主进程细节，一律不出进程，投影在通知服务内部完成，原始档案类型不越过服务边界）。`agent` 缺席（这里从来没有 agent，或 Agent 原生通知未开启）与 `state: "ended"`（跑过、已退出）是两件不同的事，不得合并。该投影不新增 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Terminal Agent 原生通知的设置、活动 session 上报与点击后的精确会话定位仅属于现有 System App 的 UI 私有 IPC；通知 Hook 入口是会话级 loopback 内部端口，不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 49。同一 Hook 事件还把"是否等待用户输入"写入会话既有 `attention`（`waiting` + `approval` / `agent_question` 等 kind，恢复时回到 `not_waiting`），仅在 Terminal 侧栏与顶部标签显示标记，并随既有 `state.get` / `observe` 暴露给 MCP 调用方；不新增存储字段、capability、tool 或审计对象。
+- Terminal 会话状态响应（`session_state.get` / `.list` / `session.observe` / `session_output.observe`）以及 `session.list` / `session_summary.get` 另外带三样只读内容：会话所在终端标签的 `workspaceId`（会话不在任何标签里时为 `null`。标签与分屏只活在 Renderer 的聚合层；这一项只报归属，标签本身另由 `workspace.list` / `.get` 提供，两者都不返回布局树），会话自己的 PTY 设备名 `tty`（调用方据此 `ps -t` 认领跑在里面的进程，是「粘贴一段引用去找到对家 Claude Code」那一步的接点，不依赖 Agent 原生通知，Windows 无此设备时缺席），以及 `app.terminal.agent-sessions` 五态档案的投影块 `agent`（只含 `state` / `agentKind` / `version` / `lastActivityAt` / `stateChangedAt`；`transcriptPath` 指向用户整段对话、`pid` 与 agent 自己的会话 id 是宿主进程细节，一律不出进程，投影在通知服务内部完成，原始档案类型不越过服务边界）。`agent` 缺席（这里从来没有 agent，或 Agent 原生通知未开启）与 `state: "ended"`（跑过、已退出）是两件不同的事，不得合并。该投影不新增 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link，Terminal MCP 工具数量保持 49。
 - Terminal 分组拖拽排序仅属于现有 System App 的 UI 私有 IPC：顺序写入分组既有 `sortOrder` 字段，不注册 MCP capability、tool、Workflow Node 或 Deep Link，不新增 Terminal MCP 工具。
-- Terminal 标签（workspace）的置顶仅属于现有 System App 的 UI 私有 IPC：写入 workspace 记录既有字段，只改变同分组内排序；它随 workspace 一起只活到本次运行结束（ADR 0215），不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 44。
+- Terminal 标签（workspace）的置顶仅属于现有 System App 的 UI 私有 IPC：写入 workspace 记录既有字段，只改变同分组内排序；它随 workspace 一起只活到本次运行结束（ADR 0215），不注册 MCP capability、tool、Workflow Node 或 Deep Link，Terminal MCP 工具数量保持 49。
 - Agent 侧栏项目分组顺序存放在全局配置 `global.agentProjectOrder`，只影响侧栏展示顺序，不重排 `config.global.projects`，不注册 MCP capability、tool 或 Deep Link，Agent Conversation 工具数量不变。
 
 ## 普通业务模块 System App

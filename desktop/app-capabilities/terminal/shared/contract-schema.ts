@@ -402,6 +402,43 @@ export const terminalSessionStateListInputSchema = terminalSessionListInputSchem
   lifecycle: terminalLifecycleSchema.optional(),
 }).strict()
 
+/*
+ * 标签（workspace）级的 MCP 输入。
+ *
+ * 布局树里一个 pane 与一个 session 是 1:1 的，所以分屏按 `sessionId` 指认要切哪个 pane，而不是
+ * 另开一套 pane 寻址：MCP 对外的对象始终是会话，pane 只是它此刻在标签里的位置。
+ */
+export const terminalWorkspaceListInputSchema = terminalPagedRequestSchema.extend({
+  groupId: z.string().uuid().optional(),
+}).strict()
+
+export const terminalWorkspaceTargetSchema = z.object({
+  workspaceId: z.string().uuid(),
+}).strict()
+
+export const terminalWorkspacePaneCreateInputSchema = z.object({
+  workspaceId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  direction: z.enum(["right", "down"]),
+  expectedLayoutRevision: z.number().int().positive(),
+  cols: z.number().int().positive().max(500).optional(),
+  rows: z.number().int().positive().max(200).optional(),
+  idempotencyKey: terminalIdempotencyKeySchema,
+}).strict()
+
+export const terminalWorkspaceRenameInputSchema = z.object({
+  workspaceId: z.string().uuid(),
+  title: z.string().trim().min(1).max(120),
+  expectedLayoutRevision: z.number().int().positive(),
+  idempotencyKey: terminalIdempotencyKeySchema,
+}).strict()
+
+export const terminalWorkspaceDeleteInputSchema = z.object({
+  workspaceId: z.string().uuid(),
+  expectedLayoutRevision: z.number().int().positive(),
+  idempotencyKey: terminalIdempotencyKeySchema,
+}).strict()
+
 export const terminalSessionRenameInputSchema = z.object({
   sessionId: z.string().uuid(),
   title: z.string().min(1).max(120),

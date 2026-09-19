@@ -424,6 +424,142 @@ describe("Terminal capability dispatcher", () => {
     expect(result).toMatchObject({ ok: true, data: { sessionId, workspaceId } })
   })
 
+  describe("terminal tabs", () => {
+    const workspaceId = "44444444-4444-4444-8444-444444444444"
+    const groupId = "55555555-5555-4555-8555-555555555555"
+    const firstSessionId = "11111111-1111-4111-8111-111111111111"
+    const secondSessionId = "22222222-2222-4222-8222-222222222222"
+
+    function workspaceFixture() {
+      return {
+        id: workspaceId,
+        groupId,
+        title: "开发",
+        pinned: false,
+        layout: {
+          type: "split" as const, splitId: "split-1", direction: "horizontal" as const, ratio: 0.5,
+          first: { type: "leaf" as const, paneId: "pane-1", sessionId: firstSessionId },
+          second: { type: "leaf" as const, paneId: "pane-2", sessionId: secondSessionId },
+        },
+        layoutRevision: 3,
+        closingPaneIds: [],
+        closing: false,
+        createdAt: "2026-09-19T00:00:00.000Z",
+        updatedAt: "2026-09-19T00:00:00.000Z",
+      }
+    }
+
+    it("lists the sessions each tab holds without handing out the layout tree", async () => {
+      const service = serviceStub({ listWorkspaces: vi.fn(() => [workspaceFixture()]) })
+      const dispatcher = createTerminalCapabilityDispatcher({ service, ...allowingSecurity() })
+
+      const result = await dispatcher.dispatch("app.terminal.workspace.list", {}, localMcpContext)
+      expect(result).toMatchObject({ ok: true })
+      if (!result.ok) throw new Error("Expected a successful tab list response")
+      const list = result.data as { items: Array<Record<string, unknown>> }
+      expect(list.items).toEqual([{
+        workspaceId, groupId, title: "开发", pinned: false,
+        sessionIds: [firstSessionId, secondSessionId],
+        layoutRevision: 3, closing: false,
+        createdAt: "2026-09-19T00:00:00.000Z", updatedAt: "2026-09-19T00:00:00.000Z",
+      }])
+      // 布局树与 pane id 是对外契约之外的东西，投影里一个字节都不该出现。
+      expect(JSON.stringify(list.items)).not.toContain("pane-1")
+      expect(JSON.stringify(list.items)).not.toContain("split-1")
+    })
+
+    it("filters the tab list by group", async () => {
+      const service = serviceStub({ listWorkspaces: vi.fn(() => [workspaceFixture()]) })
+      const dispatcher = createTerminalCapabilityDispatcher({ service, ...allowingSecurity() })
+
+      const other = await dispatcher.dispatch(
+        "app.terminal.workspace.list",
+        { groupId: "66666666-6666-4666-8666-666666666666" },
+        localMcpContext,
+      )
+      expect(other).toMatchObject({ ok: true, data: { items: [] } })
+    })
+
+    it("splits the pane holding the named session", async () => {
+      const workspace = workspaceFixture()
+      const splitPane = vi.fn(async () => ({
+        workspace,
+        paneId: "pane-3",
+        sessionId: "33333333-3333-4333-8333-333333333333",
+      }))
+      const service = serviceStub({ getWorkspace: vi.fn(() => workspace), splitPane })
+      const dispatcher = createTerminalCapabilityDispatcher({ service, ...allowingSecurity() })
+
+      const result = await dispatcher.dispatch("app.terminal.workspace_pane.create", {
+        workspaceId,
+        sessionId: secondSessionId,
+        direction: "down",
+        expectedLayoutRevision: 3,
+        idempotencyKey: "019f8a39-0000-7000-8000-000000000009",
+      }, localMcpContext)
+
+      expect(result).toMatchObject({ ok: true })
+      // 调用方只给了会话，落到哪一格由这一层按 1:1 关系解析。
+      expect(splitPane).toHaveBeenCalledWith({
+        workspaceId, paneId: "pane-2", direction: "down", expectedLayoutRevision: 3,
+      })
+    })
+
+    it("refuses to split when that session is not in the named tab", async () => {
+      const splitPane = vi.fn()
+      const service = serviceStub({ getWorkspace: vi.fn(() => workspaceFixture()), splitPane })
+      const dispatcher = createTerminalCapabilityDispatcher({ service, ...allowingSecurity() })
+
+      const result = await dispatcher.dispatch("app.terminal.workspace_pane.create", {
+        workspaceId,
+        sessionId: "99999999-9999-4999-8999-999999999999",
+        direction: "right",
+        expectedLayoutRevision: 3,
+        idempotencyKey: "019f8a39-0000-7000-8000-00000000000a",
+      }, localMcpContext)
+
+      expect(result).toMatchObject({ ok: false })
+      expect(splitPane).not.toHaveBeenCalled()
+    })
+
+    it("renames a tab", async () => {
+      const renameWorkspace = vi.fn(async () => ({ ...workspaceFixture(), title: "构建" }))
+      const service = serviceStub({ renameWorkspace })
+      const dispatcher = createTerminalCapabilityDispatcher({ service, ...allowingSecurity() })
+
+      const result = await dispatcher.dispatch("app.terminal.workspace.rename", {
+        workspaceId, title: "构建", expectedLayoutRevision: 3,
+        idempotencyKey: "019f8a39-0000-7000-8000-00000000000b",
+      }, localMcpContext)
+
+      expect(result).toMatchObject({ ok: true, data: { workspaceId, title: "构建" } })
+      expect(renameWorkspace).toHaveBeenCalledWith({
+        workspaceId, title: "构建", expectedLayoutRevision: 3,
+      })
+    })
+
+    /*
+     * 关掉一个标签等于批量停会话，所以这一条盯的是「没有强杀入口」：调用方给不出 force，
+     * 这一层也不会自己补一个上去（ADR 0049）。
+     */
+    it("deletes a tab through normal stops only", async () => {
+      const closeWorkspace = vi.fn(async () => ({
+        workspaceId, state: "closing" as const, remainingSessionIds: [firstSessionId, secondSessionId],
+      }))
+      const service = serviceStub({ closeWorkspace })
+      const dispatcher = createTerminalCapabilityDispatcher({ service, ...allowingSecurity() })
+
+      const result = await dispatcher.dispatch("app.terminal.workspace.delete", {
+        workspaceId, expectedLayoutRevision: 3,
+        idempotencyKey: "019f8a39-0000-7000-8000-00000000000c",
+      }, localMcpContext)
+
+      expect(result).toMatchObject({ ok: true, data: { workspaceId, state: "closing" } })
+      expect(closeWorkspace).toHaveBeenCalledWith({ workspaceId, expectedLayoutRevision: 3 })
+      expect(JSON.stringify(closeWorkspace.mock.calls)).not.toContain("force")
+    })
+  })
+
   it("binds semantic input to the trusted controller context, not a tool parameter", async () => {
     const service = serviceStub()
     const security = allowingSecurity()

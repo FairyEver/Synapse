@@ -74,7 +74,19 @@ An accepted input result proves only that Synapse delivered bytes to the PTY. Be
 
 - `app_terminal_session_open`: open or focus one existing local session in the Synapse Terminal window. Pass an immutable `sessionId` already returned by another Terminal tool; when the user pastes a Terminal reference, use its `session_id` line.
 
-A Terminal reference copied from the sidebar or tab context menu is plain text with one `key=value` per line: `workspace_id`, `session_ref`, and `session_id`. Only `session_id` addresses anything — the workspace and the checksummed `session_ref` are context for a person, and no tool accepts them. The result contains the resolved `sessionId` and nothing else: no output, no screen content, and no metadata. Sessions live only for the current Synapse run, so a reference stops resolving after its session ends or Synapse restarts; opening a stale one fails without creating or restarting a session. Never substitute a create call for a session that no longer resolves.
+A Terminal reference copied from the sidebar, a tab menu, or a pane header is plain text with one `key=value` per line: `workspace_id`, `session_ref`, and `session_id`. `session_id` addresses the session and `workspace_id` addresses the tab that holds it (see Tabs below); the checksummed `session_ref` is context for a person and no tool accepts it. The result contains the resolved `sessionId` and nothing else: no output, no screen content, and no metadata. Sessions live only for the current Synapse run, so a reference stops resolving after its session ends or Synapse restarts; opening a stale one fails without creating or restarting a session. Never substitute a create call for a session that no longer resolves.
+
+## Tabs
+
+A tab is the sidebar row that holds one or more sessions side by side. It has no stable reference of its own beyond `workspaceId`, and its layout tree and pane ids appear in no request or response — a tab is reported only as an id, a title, and the sessions it holds.
+
+- `app_terminal_workspace_list`: bounded tab summaries, each with the `sessionIds` it holds in layout order (left to right, top to bottom), optionally filtered by `groupId`. Pagination: cursor-based. Continue with `nextCursor`.
+- `app_terminal_workspace_get`: one tab summary by immutable `workspaceId`.
+- `app_terminal_workspace_pane_create`: create a pane beside an existing one, inside the tab that holds it. Address the pane by the `sessionId` it runs — a pane and a session are one to one, so no pane id is ever needed — and pass the tab's current `expectedLayoutRevision`. `direction` is `right` or `down`; optional `cols` / `rows` set the new session's initial size.
+- `app_terminal_workspace_rename`: rename a tab under its layout revision. A tab holding a single session already follows that session's own rename, so this is only needed when the two must differ.
+- `app_terminal_workspace_delete`: delete a tab by normally stopping every session it holds. There is no force option and nothing escalates; a tab whose sessions are still stopping returns `state: "closing"` with its `remainingSessionIds` rather than waiting.
+
+`workspace.delete` is the tab-level form of `session.stop`, not a shortcut around it: every member goes through normal termination. It ends work in progress in every pane of that tab at once, so confirm with the user before using it on a tab whose members are running.
 
 ## Lifecycle and deletion
 

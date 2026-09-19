@@ -56,6 +56,8 @@ export type PermissionAction =
   | "terminal.command.manage"
   | "terminal.session.delete"
   | "terminal.group.delete"
+  | "terminal.workspace.manage"
+  | "terminal.workspace.delete"
   | "notification.trigger"
   | "json.repair"
   | "clipboard.read"

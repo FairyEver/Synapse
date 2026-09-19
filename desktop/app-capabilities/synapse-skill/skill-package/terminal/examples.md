@@ -34,6 +34,29 @@ Example request: "Create a terminal in the Frontend group and run the dev server
 4. Acquire control, submit the single-line start command, and observe bounded output until startup is supported by evidence or a clear failure appears.
 5. Release the lease and leave the session running. A long-running server is not a failed task merely because the shell never exits.
 
+## Open a tab, start the user's agent in it, and greet it
+
+Example request: "In this group, open a new tab, start my Claude Code there, and say hello to it."
+
+1. Resolve the group with `app_terminal_group_list` and keep its `launchRevision`. Creating a session creates the tab that holds it, so this is also how a tab is opened.
+2. `app_terminal_session_create` with that `groupId` and `expectedLaunchRevision`, plus a fresh idempotency key. The result carries the new `sessionId`.
+3. Acquire control on that session and submit the user's own start command with `app_terminal_session_input_command`. Use the command they named — do not substitute one you assume starts their agent.
+4. Observe bounded output until the agent's own prompt is visible. An accepted command proves only PTY delivery, not that the agent is ready for input.
+5. Release the lease. Waiting for a startup costs more than a lease's lifetime, so acquire a fresh one before the greeting rather than sending it under a lease you can no longer vouch for.
+6. Send the greeting and observe that the agent took it.
+7. Report the tab's `workspaceId` and the session id so the user can refer to either later.
+
+## Work across every session in one tab
+
+Example request: "Look at that tab — how many terminals are in it, what is each running, and say hello to each Claude Code" — followed by a pasted reference.
+
+1. Take the `session_id` line and call `app_terminal_session_state_get`; read its `workspaceId`.
+2. `app_terminal_workspace_get` with that `workspaceId` gives every `sessionId` in the tab, in layout order.
+3. Read each member's `app_terminal_session_state_get` for its `agent` block and `tty` to say what is running. An absent `agent` means no agent ever ran there — never infer the program from the title.
+4. Speak to each one the way it expects: prefer the agent's own peer-messaging path when it is a Claude Code with that capability on, and fall back to `app_terminal_session_input_command` otherwise. Say which path each message took; they are not equivalent.
+5. Do not answer a pending approval on any of their behalf because the request was to say hello. Report which ones are `needs_input` instead.
+6. A member whose pane is gone has stopped existing — treat `not_found` as cleanup, not as an error to recover from.
+
 ## Inspect history and whether input is needed
 
 Example request: "Check the Codex terminal, show me recent history, and tell me whether it is waiting for me."
@@ -48,7 +71,7 @@ Example request: "Check the Codex terminal, show me recent history, and tell me 
 
 Example request: "I opened another Claude Code in that terminal — go find it and supervise it", followed by a pasted Terminal reference.
 
-1. Take the `session_id` line from the pasted text; ask for the full three lines when it is incomplete. `workspace_id` and `session_ref` are for people — only `session_id` addresses anything, and `session_ref` cannot be reversed into an id.
+1. Take the `session_id` line from the pasted text; ask for the full three lines when it is incomplete. `session_id` addresses the session and `workspace_id` addresses the tab holding it; `session_ref` is for people and cannot be reversed into an id.
 2. Call `app_terminal_session_state_get` with that id and read `tty` and `agent` along with lifecycle.
 3. Resolve which Claude Code session occupies that terminal: `ps -t <tty>` for the pid, then that pid's own session registry entry (`~/.claude/sessions/<pid>.json`) for its session name. Refuse to guess — if the device matches more than one process or the registry has no entry, report that instead of picking the closest-looking name.
 4. Talk to it the way its own tooling expects (its peer-message tool, addressed by the name you resolved) rather than polling its screen.
