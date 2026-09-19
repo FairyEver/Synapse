@@ -15,4 +15,6 @@ enum AppLog {
     static let network = Logger(subsystem: subsystem, category: "network")
     /// 语音输入：签名、连接、识别失败。
     static let voice = Logger(subsystem: subsystem, category: "voice")
+    /// 录音：采集、分片上传、异常退出后的收尾。
+    static let recording = Logger(subsystem: subsystem, category: "recording")
 }

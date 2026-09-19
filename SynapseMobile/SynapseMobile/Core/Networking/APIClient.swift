@@ -315,6 +315,73 @@ actor APIClient {
         return try await send(path: "/meetings/\(encoded)", method: "GET")
     }
 
+    // MARK: - 录音
+
+    /// 开一条录音。
+    ///
+    /// 服务端在这一步就把三张表建好、分块上传也开好了，所以从这一刻起「这条录音」在
+    /// 列表里已经存在——异常退出之后要收的就是它。
+    struct StartedRecording: Decodable {
+        let meetingId: String
+        let recordingId: String
+        let uploadId: String
+        let title: String
+    }
+
+    func startMeetingRecording(title: String?, startedAt: Date?) async throws -> StartedRecording {
+        struct Body: Encodable {
+            let title: String?
+            let startedAt: String?
+        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return try await send(
+            path: "/meetings/recordings",
+            method: "POST",
+            body: Body(title: title, startedAt: startedAt.map(formatter.string(from:)))
+        )
+    }
+
+    /// 传一个分片。
+    ///
+    /// 分片是**裸字节**，不套 multipart 表单：服务端原样把它转给对象存储，中间不做任
+    /// 何解析。`APIClient` 另外两个出口都会把 body 当成 JSON，所以这里窄开一个只发原
+    /// 始字节的口子，而不是绕开 `APIClient` 自己拼 URLSession——那样就绕开了 token
+    /// 刷新和 401 重试。
+    func uploadMeetingPart(recordingId: String, partNumber: Int, bytes: Data) async throws {
+        let _: EmptyResponse = try await perform(
+            path: "/meetings/recordings/\(escaped(recordingId))/parts/\(partNumber)",
+            method: "PUT",
+            encodedBody: bytes,
+            contentType: "application/octet-stream",
+            authenticated: true,
+            allowRefresh: true
+        )
+    }
+
+    /// 收尾：合并、提交转写。客户端拿到响应就可以回列表了。
+    ///
+    /// `peaks` 是波形振幅（0–255 字节）的 base64。
+    func completeMeetingRecording(recordingId: String, durationMs: Int, peaks: String) async throws {
+        struct Body: Encodable {
+            let durationMs: Int
+            let peaks: String
+        }
+        let _: EmptyResponse = try await send(
+            path: "/meetings/recordings/\(escaped(recordingId))/complete",
+            method: "POST",
+            body: Body(durationMs: durationMs, peaks: peaks)
+        )
+    }
+
+    /// 取消录音。服务端会**中止**这次分块上传，已传的分片一并丢弃，不留残留。
+    func cancelMeetingRecording(recordingId: String) async throws {
+        let _: EmptyResponse = try await send(
+            path: "/meetings/recordings/\(escaped(recordingId))",
+            method: "DELETE"
+        )
+    }
+
     /// Sends an intent over HTTP instead of the socket.
     ///
     /// Notification actions run without a live connection, so the request has to
@@ -533,6 +600,7 @@ actor APIClient {
         path: String,
         method: String,
         encodedBody: Data?,
+        contentType: String = "application/json",
         authenticated: Bool,
         allowRefresh: Bool
     ) async throws -> Response {
@@ -549,7 +617,7 @@ actor APIClient {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         if let encodedBody {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue(contentType, forHTTPHeaderField: "Content-Type")
             request.httpBody = encodedBody
         }
 
@@ -572,6 +640,7 @@ actor APIClient {
                     path: path,
                     method: method,
                     encodedBody: encodedBody,
+                    contentType: contentType,
                     authenticated: authenticated,
                     allowRefresh: false
                 )
