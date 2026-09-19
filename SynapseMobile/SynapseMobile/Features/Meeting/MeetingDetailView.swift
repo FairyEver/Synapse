@@ -190,10 +190,10 @@ private struct MeetingAudioPane: View {
                 unavailable
             } else {
                 waveformCard
+                controls
                 if model.playback.isLoading {
                     loadingRow
                 }
-                controls
             }
             Spacer(minLength: 0)
         }
