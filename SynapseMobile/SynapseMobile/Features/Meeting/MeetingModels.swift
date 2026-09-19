@@ -80,6 +80,9 @@ struct MeetingDetail: Decodable, Hashable {
     let segments: [MeetingTranscriptSegment]
     let minutes: MeetingMinutes?
     let minutesFailureReason: String?
+    /// 可空是**有意的**：服务端还没升级到带进度的那版时这个字段不存在，界面要退回那条
+    /// 不确定的条，而不是因为读不到字段就整页解码失败。
+    let transcription: MeetingTranscriptionProgress?
 }
 
 enum MeetingText {
@@ -90,6 +93,11 @@ enum MeetingText {
         case "failed": return "转写失败"
         default: return "转写中"
         }
+    }
+
+    /// 转写走到了哪一步。投出去了说「识别中」，还没投出去说「排队中」。
+    static func transcriptionStage(_ stage: String) -> String {
+        stage == "running" ? "识别中" : "排队中"
     }
 
     /// 录音页那口钟。**不是** `duration`——那个说的是「这条录音有多长」（48 分），

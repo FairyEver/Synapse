@@ -461,6 +461,61 @@ describe("详情仍然带着两端界面不再渲染的字段", () => {
   })
 })
 
+describe("转写进度", () => {
+  const meetingRow = {
+    id: "meeting-1",
+    userId: "user-1",
+    title: "Q3 评审",
+    startedAt: new Date("2026-09-19T02:00:00.000Z"),
+    durationMs: 120_000,
+    status: "transcribing",
+    speakerCount: 0,
+    failureReason: null,
+    minutesStatus: "none",
+    minutesJson: null,
+    minutesFailureReason: null,
+    minutesEditedAt: null,
+    createdAt: new Date("2026-09-19T02:00:00.000Z"),
+  }
+
+  beforeEach(() => {
+    prisma.meeting.findFirst.mockResolvedValue(meetingRow)
+    prisma.meetingRecording.findUnique.mockResolvedValue(recordingRow({ status: "ready" }))
+    prisma.meetingSpeaker.findMany.mockResolvedValue([])
+    prisma.meetingTranscriptSegment.findMany.mockResolvedValue([])
+  })
+
+  /** 估算的模型是「一分钟轮询下限 + 音频时长 × 0.3」：两分钟的录音就是 96 秒。 */
+  it("投出去之后按已等待的时长报进度，预期耗时跟着音频时长走", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue({
+      status: "running",
+      taskId: "42",
+      submittedAt: new Date(Date.now() - 30_000),
+    })
+
+    const detail = await service.get("user-1", "meeting-1")
+
+    expect(detail.transcription?.stage).toBe("running")
+    // 时钟从投递那一刻起算，不是从录音结束起算：排队等着被投出去的那几十秒不该算进
+    // 识别时间里，否则进度条一上来就凭空走了半格。
+    expect(detail.transcription?.elapsedMs).toBeGreaterThanOrEqual(29_000)
+    expect(detail.transcription?.elapsedMs).toBeLessThan(35_000)
+    expect(detail.transcription?.expectedMs).toBe(96_000)
+  })
+
+  it("还没投出去说排队中，计时归零", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue({
+      status: "pending",
+      taskId: null,
+      submittedAt: null,
+    })
+
+    const detail = await service.get("user-1", "meeting-1")
+
+    expect(detail.transcription).toMatchObject({ stage: "queued", elapsedMs: 0 })
+  })
+})
+
 describe("越权", () => {
   it("不是自己的会议一律当作不存在", async () => {
     prisma.meeting.findFirst.mockResolvedValue(null)

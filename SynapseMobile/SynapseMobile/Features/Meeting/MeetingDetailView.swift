@@ -14,6 +14,8 @@ struct MeetingDetailView: View {
     @State private var isRenaming = false
     @State private var draftTitle = ""
     @State private var showingDeleteConfirm = false
+    /// 手上这帧进度是什么时候拿到的。秒表在两次刷新之间从它往下走。
+    @State private var progressReceivedAt = Date()
 
     var body: some View {
         Group {
@@ -27,7 +29,10 @@ struct MeetingDetailView: View {
         .navigationTitle(model.meetings.detail(for: meetingId)?.title ?? "录音")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarMenu }
-        .task { await model.loadMeetingDetail(meetingId) }
+        .task {
+            await refreshDetail()
+            await pollWhileTranscribing()
+        }
         .onDisappear { model.playback.stop() }
         .alert("删除这条录音？", isPresented: $showingDeleteConfirm) {
             Button("删除", role: .destructive) {
@@ -42,6 +47,29 @@ struct MeetingDetailView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("「\(model.meetings.detail(for: meetingId)?.title ?? "")」的录音和文字会一起删除，无法恢复。")
+        }
+    }
+
+    /// 拉一次详情，并记下这一帧是什么时候到的——进度条那条秒表要从这里往下走。
+    private func refreshDetail() async {
+        await model.loadMeetingDetail(meetingId)
+        progressReceivedAt = Date()
+    }
+
+    /// 转写还在跑的时候，这一屏要自己变过来。
+    ///
+    /// 列表的轮询更新的是列表那份数据，**不会**把详情缓存一起刷新，所以光有列表轮询不够：
+    /// 停在详情页上看进度，条会冻在进这一屏时的那一刻；转完了文字也不会自己出现，得退出
+    /// 去再进来一次才看得见。
+    ///
+    /// 走的是同一套「没有在转的就退出循环」：不转的时候不留一路白跑的请求。`.task` 会在
+    /// 这一屏消失时取消它，不需要另外收尾。
+    private func pollWhileTranscribing() async {
+        while !Task.isCancelled,
+              model.meetings.detail(for: meetingId)?.status == "transcribing" {
+            try? await Task.sleep(for: .seconds(5))
+            if Task.isCancelled { return }
+            await refreshDetail()
         }
     }
 
@@ -82,7 +110,7 @@ struct MeetingDetailView: View {
             case .audio:
                 MeetingAudioPane(detail: detail)
             case .text:
-                MeetingTextPane(detail: detail)
+                MeetingTextPane(detail: detail, progressReceivedAt: progressReceivedAt)
             }
         }
     }
@@ -283,6 +311,8 @@ private struct PlaybackWaveform: View {
 private struct MeetingTextPane: View {
     @Environment(SynapseAppModel.self) private var model
     let detail: MeetingDetail
+    /// 这帧进度是什么时候拿到的。秒表在两次刷新之间从它往下走（见 `transcriptionProgress`）。
+    let progressReceivedAt: Date
 
     private var paragraphs: [String] { MeetingText.paragraphs(detail.segments) }
 
@@ -319,13 +349,18 @@ private struct MeetingTextPane: View {
     private var statusBanner: some View {
         switch detail.status {
         case "transcribing":
-            VStack(alignment: .leading, spacing: 8) {
-                // 进度条是**不确定**的：服务端不报百分比，编一个数字比不显示更糟。
-                ProgressView()
-                    .progressViewStyle(.linear)
-                Text("转写还在进行，完成后文字会自动补全。")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            // 还没投出去（或服务端还没升级到带进度的那版）时给不出任何时长，用那条不确定
+            // 的条表示「马上开始」，不编一个数出来。
+            if let progress = detail.transcription, progress.isRunning {
+                transcriptionProgress(progress)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                    Text("转写还在进行，完成后文字会自动补全。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         case "failed":
             VStack(alignment: .leading, spacing: 8) {
@@ -347,6 +382,36 @@ private struct MeetingTextPane: View {
             }
         default:
             EmptyView()
+        }
+    }
+
+    /// 转写中那一条会往前走的进度。
+    ///
+    /// 服务端给的是「已经等了多久」和一个按音频时长估出来的总时长，不是真实比例——腾讯云
+    /// 根本没有百分比（见 `MeetingTranscriptionProgressMath`）。秒表在两次刷新之间自己走：
+    /// `TimelineView` 每秒给一帧，不必自己养一个 `Timer`，也就没有要记得关掉的东西。
+    @ViewBuilder
+    private func transcriptionProgress(_ progress: MeetingTranscriptionProgress) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let elapsedMs = MeetingTranscriptionProgressMath.elapsedMs(
+                reported: progress.elapsedMs,
+                receivedAt: progressReceivedAt,
+                now: context.date
+            )
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView(value: MeetingTranscriptionProgressMath.fraction(
+                    elapsedMs: elapsedMs,
+                    expectedMs: progress.expectedMs
+                ))
+                .progressViewStyle(.linear)
+                Text("\(MeetingText.transcriptionStage(progress.stage)) · 已用 \(MeetingText.clock(elapsedMs))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Text("\(MeetingText.duration(detail.durationMs))的录音，预计 \(MeetingText.duration(progress.expectedMs))左右完成")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

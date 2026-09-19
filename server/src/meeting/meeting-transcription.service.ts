@@ -119,7 +119,11 @@ export class MeetingTranscriptionService {
           submittedAt: new Date(),
           // 任务号 24 小时后失效，过了这个点再取也取不回来，不如早点让用户看到失败。
           expiresAt: new Date(Date.now() + MEETING_TRANSCRIPTION_TTL_MS),
-          attempts: 0,
+          // **不要在这里把 attempts 归零。** 投递成功不代表这段音频没问题：同一份音频
+          // 可能每次都投得出去、每次都被引擎判失败。归零的话重试上限永远到不了，任务会
+          // 在「投出去 → 失败 → 退回队列」之间一分钟转一圈，无限重投也无限计费，而用户
+          // 那边永远停在「转写中」，等不到结果也等不到失败。归零只属于用户手动重试
+          // （`retryTranscription`）和一条新录音的起点。
           lastError: null,
         },
       })
@@ -177,7 +181,15 @@ export class MeetingTranscriptionService {
         return
       }
       if (status.status === MEETING_TENCENT_TASK_STATUS.failed) {
-        await this.recordAttemptFailure(jobId, meetingId, new Error(status.errorMessage || "转写失败。"))
+        // **取到结果之后的失败是终局，不重试。** 走到这里说明引擎真的跑过这段音频并拒绝
+        // 了它（「Invalid audio file!」就是这一类的代表），换一个任务号重新提交同一份
+        // 字节，结果只会一模一样。重试的预算是留给投递阶段抖动的，不该被这种确定性失败
+        // 一分钟后一分钟地耗掉——用户要的是**尽快**看到失败和那个「重试」按钮。
+        this.logger.warn(
+          { meetingId, errorMessage: status.errorMessage ?? "" },
+          "Meeting transcription task failed",
+        )
+        await this.failJob(jobId, meetingId, status.errorMessage || "转写失败。")
         return
       }
       // 结构化结果优先：`Result` 往往是没有时间戳的整段文本，说话人和词级时间戳只
@@ -285,10 +297,12 @@ export class MeetingTranscriptionService {
   }
 
   /**
-   * 记一次失败。
+   * 记一次**投递阶段**的失败。
    *
    * 没到上限就退回 `pending` 让下一轮重试——提交阶段失败通常是网络或配额抖动，重试
    * 一次就好了；到了上限才真正判失败，让用户看到失败原因和重试按钮。
+   *
+   * 取结果阶段的失败不走这里（见 `collectJob`）：那是终局，一次就判。
    */
   private async recordAttemptFailure(jobId: string, meetingId: string, error: unknown): Promise<void> {
     const message = error instanceof Error ? error.message : String(error)

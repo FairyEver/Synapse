@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common"
 import {
   compactMeetingPeaks,
+  estimateMeetingTranscriptionMs,
   MEETING_DEFAULT_TITLE,
   MEETING_MAX_DURATION_MS,
   MEETING_MAX_UPLOAD_PARTS,
@@ -20,6 +21,7 @@ import {
   type MeetingSpeakerDto,
   type MeetingStatus,
   type MeetingSummaryDto,
+  type MeetingTranscriptionProgressDto,
   type MeetingTranscriptSegmentDto,
   type MeetingTranscriptWordDto,
 } from "@synapse/shared"
@@ -128,6 +130,26 @@ function normalizeMeetingStatus(value: string): MeetingStatus {
   return value === "done" || value === "failed" ? value : "transcribing"
 }
 
+/**
+ * 这一刻的转写进度。
+ *
+ * 腾讯云只给四个状态，没有百分比，所以「进度」只能是**已经等了多久**比上一个估算出来的
+ * 总时长。时钟从 `submittedAt` 起算而不是从录音结束起算：排队等着被投出去的那几十秒不
+ * 该算进识别时间里。响应里带的是服务端此刻的已用时长，客户端在两次刷新之间接着它自己
+ * 往下走——两端时钟不齐的时候也不会算岔。
+ */
+function toTranscriptionProgressDto(
+  job: { readonly status: string; readonly taskId: string | null; readonly submittedAt: Date | null } | null,
+  durationMs: number,
+): MeetingTranscriptionProgressDto {
+  const running = job?.status === "running" && !!job.taskId
+  return {
+    stage: running ? "running" : "queued",
+    elapsedMs: running && job?.submittedAt ? Math.max(0, Date.now() - job.submittedAt.getTime()) : 0,
+    expectedMs: estimateMeetingTranscriptionMs(durationMs),
+  }
+}
+
 function normalizeMinutesStatus(value: string) {
   if (value === "generating" || value === "ready" || value === "failed") return value
   return "none" as const
@@ -183,10 +205,14 @@ export class MeetingService {
 
   async get(userId: string, meetingId: string): Promise<MeetingDetailDto> {
     const meeting = await this.requireMeeting(userId, meetingId)
-    const [recording, speakers, segments] = await Promise.all([
+    const [recording, speakers, segments, job] = await Promise.all([
       this.prisma.meetingRecording.findUnique({ where: { meetingId } }),
       this.prisma.meetingSpeaker.findMany({ where: { meetingId }, orderBy: { speakerId: "asc" } }),
       this.prisma.meetingTranscriptSegment.findMany({ where: { meetingId }, orderBy: { segmentIndex: "asc" } }),
+      this.prisma.meetingTranscriptionJob.findUnique({
+        where: { meetingId },
+        select: { status: true, taskId: true, submittedAt: true },
+      }),
     ])
     const speakerDtos: MeetingSpeakerDto[] = speakers.map((speaker) => ({
       speakerId: speaker.speakerId,
@@ -207,6 +233,7 @@ export class MeetingService {
       segments: segmentDtos,
       minutes: toMinutesDto(meeting as MeetingRow),
       minutesFailureReason: meeting.minutesFailureReason,
+      transcription: toTranscriptionProgressDto(job, meeting.durationMs),
     }
   }
 

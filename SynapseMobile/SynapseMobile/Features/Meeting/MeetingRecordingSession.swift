@@ -397,9 +397,16 @@ final class MeetingRecordingSession {
             },
             abort: { try? await client.cancelMeetingRecording(recordingId: record.recordingId) }
         )
-        // 传的是已经定稿的文件，字节已经不会变了，所以不必再核对一遍。
         await uploadFromFile(fileURL, skipping: record.uploadedParts, into: uploader)
-        guard await uploader.finish(audioFile: nil) else { return }
+        // **不能只从断点往后补，第 1 片也要过一遍。** 接着传的那些分片（第 2 片起）的字节
+        // 确实不会再变，但第 1 片不是：m4a 编码器把开头那 60 KB 留成占位区，`stop()` 时才
+        // 把 `moov` 和几个盒子的头补进去。上一个进程里发出去的第 1 片拿到的是**占位状态的
+        // 开头**，不重发的话收上去的是一段没有 `moov`、谁也打不开的音频。
+        //
+        // 传 `audioFile` 就是让它走收尾那套核对：本进程里没有摘要的分片会被当成「变过」重发
+        // （第 1 片正属此类），有摘要且对得上的不重传。收尾路径上那些已经传过的分片因此只多
+        // 出一次读盘，不会重传。
+        guard await uploader.finish(audioFile: fileURL) else { return }
 
         do {
             try await client.completeMeetingRecording(

@@ -1,6 +1,6 @@
-import { formatMeetingDuration } from "@synapse/shared"
+import { formatMeetingClock, formatMeetingDuration } from "@synapse/shared"
 import { Copy, MoreHorizontal } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { useAppNotifications } from "@/app-shell/notifications"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -19,6 +19,11 @@ import type { SynapseMeetingDetail } from "@/types/meeting"
 import { MeetingNotice } from "./meeting-notice"
 import { MeetingPlayback } from "./meeting-playback"
 import { formatStartedAt } from "./started-at"
+import {
+  transcriptionElapsedMs,
+  transcriptionProgressPercent,
+  transcriptionStageLabel,
+} from "./transcription-progress"
 import { joinTranscriptParagraphs } from "./transcript-paragraphs"
 
 /**
@@ -225,6 +230,51 @@ function VoiceView(props: {
 }
 
 /**
+ * 转写中那一条会往前走的进度。
+ *
+ * 腾讯云不给百分比，服务端给的也只有「已经等了多久」和一个按音频时长估出来的总时长
+ * （见 `transcription-progress.ts`），所以它不是真实比例，只负责让人看出在动、没死。
+ *
+ * 秒表在两次刷新之间自己走：`receivedAt` 记的是这帧数据到手的那一刻，每刷新一次换一个
+ * 新对象、`receivedAt` 跟着重置。用本机的时间差而不是本机挂钟去减服务端时间戳，设备
+ * 时钟不准也算得对。
+ */
+function TranscriptionProgress(props: { readonly meeting: SynapseMeetingDetail }) {
+  const { transcription } = props.meeting
+  const receivedAt = useMemo(() => Date.now(), [transcription])
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  // 还没投出去时给不出任何时长；服务端还没升级到带进度的那版时也走这里。两种情况都用
+  // 那条「在跑」的条，不编一个数出来。
+  if (transcription?.stage !== "running") {
+    return (
+      <div className="space-y-2">
+        <Progress value={null} className="animate-pulse" />
+        <p className="text-xs text-muted-foreground">转写还在进行，完成后文字会自动补全。</p>
+      </div>
+    )
+  }
+
+  const elapsedMs = transcriptionElapsedMs(transcription, receivedAt, now)
+  return (
+    <div className="space-y-2">
+      <Progress value={transcriptionProgressPercent(elapsedMs, transcription.expectedMs)} />
+      <p className="text-xs text-muted-foreground tabular-nums">
+        {transcriptionStageLabel(transcription)} · 已用 {formatMeetingClock(elapsedMs)}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        {formatMeetingDuration(props.meeting.durationMs)}的录音，预计 {formatMeetingDuration(transcription.expectedMs)}左右完成
+      </p>
+    </div>
+  )
+}
+
+/**
  * 文字：腾讯云返回什么就显示什么，按自然段排开。
  *
  * 这段文字有自己的卡片，不直接铺在页面底色上——语音那边的波形框已经有这层卡片，两边
@@ -261,13 +311,7 @@ function TextView(props: {
 
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4">
-      {transcribing ? (
-        <div className="space-y-2">
-          {/* 腾讯云不给百分比，所以这里只能是一条「在跑」的条，不编一个假的数值。 */}
-          <Progress value={null} className="animate-pulse" />
-          <p className="text-xs text-muted-foreground">转写还在进行，完成后文字会自动补全。</p>
-        </div>
-      ) : null}
+      {transcribing ? <TranscriptionProgress meeting={meeting} /> : null}
 
       {paragraphs.length > 0 ? (
         <div className="max-w-[700px] space-y-3">

@@ -71,8 +71,54 @@ export const MEETING_ASR_URL_TTL_SECONDS = 3600
 /** 腾讯云 `TaskId` 24 小时后失效，超过这个时间还没取回结果就不再重试。 */
 export const MEETING_TRANSCRIPTION_TTL_MS = 24 * 60 * 60 * 1000
 
-/** 转写任务的重试上限。投递阶段失败和取结果阶段失败共用这一个计数。 */
+/**
+ * 转写任务的重试上限。
+ *
+ * 只管**投递阶段**的失败——那一类通常是网络或配额抖动，重试一次就好。取结果阶段拿到
+ * 的失败是引擎已经真的跑过并拒绝了这段音频，同样的音频再提交一次结果只会一样，所以那
+ * 一类直接判失败，不进这个计数（见 `MeetingTranscriptionService.collectJob`）。
+ */
 export const MEETING_TRANSCRIPTION_MAX_ATTEMPTS = 5
+
+/**
+ * 转写耗时的粗估。
+ *
+ * 腾讯云既不给百分比也不说任务排在第几位，所以进度条只能拿「已经等了多久」去比一个估
+ * 出来的总时长。这两个数决定它的手感，也决定它什么时候开始骗人：
+ *
+ * - 服务端是每分钟轮询一次，**任何**一条录音都要等到下一个整分钟才可能被取回结果，
+ *   所以一分钟是下限；
+ * - 识别本身按音频时长走，取 0.3 倍——比实测偏慢一点。宁可条走得比真实慢，也不要它
+ *   在结果还没回来的时候先顶满。
+ *
+ * 它只用来画条，界面一律封顶在 95%：估算不是承诺。
+ */
+export const MEETING_TRANSCRIPTION_POLL_MS = 60_000
+export const MEETING_TRANSCRIPTION_ESTIMATE_RATIO = 0.3
+
+export function estimateMeetingTranscriptionMs(durationMs: number): number {
+  const audio = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0
+  return Math.round(MEETING_TRANSCRIPTION_POLL_MS + audio * MEETING_TRANSCRIPTION_ESTIMATE_RATIO)
+}
+
+/** 进度条画到多少就停。估算不是承诺，没出结果之前不许画满。 */
+export const MEETING_TRANSCRIPTION_PROGRESS_CAP = 0.95
+
+/**
+ * 转写任务此刻走到哪一步。
+ *
+ * `queued` 是「还没投出去」，正常路径上看不到它——录音一收尾就当场提交，只有提交失败
+ * 退回队列等下一轮时才会短暂停在这里。
+ */
+export type MeetingTranscriptionStage = "queued" | "running"
+
+export type MeetingTranscriptionProgressDto = {
+  readonly stage: MeetingTranscriptionStage
+  /** 从投递成功到服务端生成这个响应之间的毫秒数。客户端的秒表在两次刷新之间接着它走。 */
+  readonly elapsedMs: number
+  /** 按音频时长估的预期耗时。 */
+  readonly expectedMs: number
+}
 
 export type MeetingStatus = "transcribing" | "done" | "failed"
 export type MeetingRecordingStatus = "pending" | "ready" | "deleted"
@@ -148,6 +194,11 @@ export type MeetingDetailDto = MeetingSummaryDto & {
   readonly segments: readonly MeetingTranscriptSegmentDto[]
   readonly minutes: MeetingMinutesDto | null
   readonly minutesFailureReason: string | null
+  /**
+   * 转写进度。可空是**有意的**：客户端比服务端先装上去的时候这个字段还不存在，界面要
+   * 退回那条不确定的条，而不是因为读不到字段就崩。
+   */
+  readonly transcription?: MeetingTranscriptionProgressDto
 }
 
 /**

@@ -157,6 +157,19 @@ describe("提交转写任务", () => {
     expect(createRecTaskMock).not.toHaveBeenCalled()
   })
 
+  /**
+   * 「投得出去」和「这段音频没问题」是两件事。同一份坏音频每次都能投成功、每次都被引擎
+   * 判失败，所以成功的投递里**不能**重置 `attempts`——重置了重试上限就永远到不了，任务
+   * 会在「投出去 → 失败 → 退回队列」之间一分钟转一圈，用户既等不到结果也等不到失败。
+   * 计数只由用户手动重试和一条新录音清零。
+   */
+  it("重新投递不会把重试计数清零", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow())
+    await service.submit("meeting-1")
+    const update = prisma.meetingTranscriptionJob.update.mock.calls[0][0]
+    expect(update.data).not.toHaveProperty("attempts")
+  })
+
   it("录音已经删掉时不提交，并写明原因", async () => {
     prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow({ meeting: { recording: null } }))
     await service.submit("meeting-1")
@@ -229,6 +242,24 @@ describe("取结果", () => {
     describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 3, statusText: "failed", result: null, detail: null, errorMessage: "音频格式不支持", audioDuration: null })
     await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
     expect(prisma.meetingTranscriptionJob.update.mock.calls[0][0].data.lastError).toContain("音频格式不支持")
+  })
+
+  /**
+   * 引擎给 `Status=3` 是终局：它已经真的跑过这段音频并拒绝了它，换一个任务号重新提交同一
+   * 份字节结果只会一模一样。所以这里一次就判失败——用户要的是尽快看到失败和「重试」按钮，
+   * 而不是再等五分钟的自动重试。退回队列是投递阶段那类抖动才该走的（见上一条）。
+   */
+  it("引擎真的判失败就当场收尾，不退回队列重排", async () => {
+    prisma.meetingTranscriptionJob.findUnique.mockResolvedValue(jobRow(runningJob))
+    describeTaskStatusMock.mockResolvedValue({ taskId: 42, status: 3, statusText: "failed", result: null, detail: null, errorMessage: "Invalid audio file!", audioDuration: null })
+    await service.collectJob("job-1", "meeting-1", "42", runningJob.expiresAt)
+
+    const jobUpdate = prisma.meetingTranscriptionJob.update.mock.calls.at(-1)?.[0].data
+    expect(jobUpdate).toMatchObject({ status: "failed", lastError: "Invalid audio file!" })
+    expect(prisma.meeting.update.mock.calls.at(-1)?.[0].data).toMatchObject({
+      status: "failed",
+      failureReason: "Invalid audio file!",
+    })
   })
 
   it("超过 24 小时的任务不再去取，直接判超期", async () => {
